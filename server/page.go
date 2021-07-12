@@ -21,7 +21,7 @@ type Page struct {
 	Name               string
 	Text               versionedtext.VersionedText
 	Meta               string
-	RenderedPage       string
+	RenderedPage       string `json:"-"`
 	IsLocked           bool
 	PassphraseToUnlock string
 	UnlockedFor        string
@@ -162,7 +162,14 @@ func (p *Page) Save() error {
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(path.Join(p.Site.PathToData, encodeToBase32(strings.ToLower(p.Name))+".json"), bJSON, 0644)
+
+	err = ioutil.WriteFile(path.Join(p.Site.PathToData, encodeToBase32(strings.ToLower(p.Name))+".json"), bJSON, 0644)
+	if err != nil {
+		return err
+	}
+
+	// Write the current Markdown
+	return ioutil.WriteFile(path.Join(p.Site.PathToData, encodeToBase32(strings.ToLower(p.Name))+".md"), []byte(p.Text.CurrentText), 0644)
 }
 
 func (p *Page) ChildPageNames() []string {
@@ -191,5 +198,10 @@ func (p *Page) IsNew() bool {
 
 func (p *Page) Erase() error {
 	p.Site.Logger.Trace("Erasing " + p.Name)
-	return os.Remove(path.Join(p.Site.PathToData, encodeToBase32(strings.ToLower(p.Name))+".json"))
+
+	err := os.Remove(path.Join(p.Site.PathToData, encodeToBase32(strings.ToLower(p.Name))+".json"))
+	if err != nil {
+		return err
+	}
+	return os.Remove(path.Join(p.Site.PathToData, encodeToBase32(strings.ToLower(p.Name))+".md"))
 }
