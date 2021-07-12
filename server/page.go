@@ -18,16 +18,13 @@ import (
 type Page struct {
 	Site *Site
 
-	Name                    string
-	Text                    versionedtext.VersionedText
-	Meta                    string
-	RenderedPage            string
-	IsLocked                bool
-	PassphraseToUnlock      string
-	IsEncrypted             bool
-	IsPrimedForSelfDestruct bool
-	IsPublished             bool
-	UnlockedFor             string
+	Name               string
+	Text               versionedtext.VersionedText
+	Meta               string
+	RenderedPage       string
+	IsLocked           bool
+	PassphraseToUnlock string
+	UnlockedFor        string
 }
 
 func (p Page) LastEditTime() time.Time {
@@ -149,11 +146,6 @@ func (p *Page) Update(newText string) error {
 var rBracketPage = regexp.MustCompile(`\[\[(.*?)\]\]`)
 
 func (p *Page) Render() {
-	if p.IsEncrypted {
-		p.RenderedPage = "<code>" + p.Text.GetCurrent() + "</code>"
-		return
-	}
-
 	// Convert [[page]] to [page](/page/view)
 	currentText := p.Text.GetCurrent()
 	for _, s := range rBracketPage.FindAllString(currentText, -1) {
@@ -200,8 +192,4 @@ func (p *Page) IsNew() bool {
 func (p *Page) Erase() error {
 	p.Site.Logger.Trace("Erasing " + p.Name)
 	return os.Remove(path.Join(p.Site.PathToData, encodeToBase32(strings.ToLower(p.Name))+".json"))
-}
-
-func (p *Page) Published() bool {
-	return p.IsPublished
 }

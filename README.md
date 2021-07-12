@@ -13,7 +13,7 @@ alt="Version"></a> </p>
 
 <p align="center">A feature-rich wiki for minimalists</a></p>
 
-*cowyo* is a self-contained wiki server that makes jotting notes easy and _fast_. The most important feature here is _simplicity_. Other features include versioning, page locking, self-destructing messages, encryption, and listifying. You can [download *cowyo* as a single executable](https://github.com/schollz/cowyo/releases/latest) or install it with Go. Try it out at https://cowyo.com.
+*cowyo* is a self-contained wiki server that makes jotting notes easy and _fast_. The most important feature here is _simplicity_. Other features include versioning and page lockingg. You can [download *cowyo* as a single executable](https://github.com/schollz/cowyo/releases/latest) or install it with Go. Try it out at https://cowyo.com.
 
 There is now [a command-line tool, *cowyodel*](https://github.com/schollz/cowyodel) to interact with *cowyo* and transfer information between computers with only a code phrase: [schollz/cowyodel](https://github.com/schollz/cowyodel).
 
@@ -68,15 +68,11 @@ There are a couple of command-line flags that you can use to make *cowyo* your o
 cowyo -lock 123 -default-page index.html -css mystyle.css -diary
 ```
 
-The `-lock` flag will automatically lock every page with the passphrase "123". Also, the default behavior will be to redirect `/` to `/index.html`. Also, every page that is published will automatically redirect to `/mypage/read` which will show the custom CSS file if it is supplied with `-css`. The `-diary` flag allows you to generate a time-stamped page instead of a random named page when you select "New".
+The `-lock` flag will automatically lock every page with the passphrase "123". Also, the default behavior will be to redirect `/` to `/index.html`. 
 
 ## Usage
 
 *cowyo* is straightforward to use. Here are some of the basic features:
-
-### Publishing 
-
-If you hover the the top left button (the name of the page) you will see the option "Publish". Publishing will add the page to the `sitemap.xml` for crawlers to find. It will also default that page to go to the `/read` route so it can be easily viewed as a single page.
 
 ### View all the pages
 

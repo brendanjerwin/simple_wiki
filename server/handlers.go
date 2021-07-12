@@ -321,7 +321,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 	version := c.DefaultQuery("version", "ajksldfjl")
 	isLocked := pageIsLocked(p, c)
 
-	// Disallow anything but viewing locked/encrypted pages
+	// Disallow anything but viewing locked pages
 	if (isLocked) &&
 		(command[0:2] != "/v" && command[0:2] != "/r") {
 		c.Redirect(302, "/"+page+"/view")
@@ -329,7 +329,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 	}
 
 	if command == "/erase" {
-		if !isLocked && !p.IsEncrypted {
+		if !isLocked {
 			p.Erase()
 			c.Redirect(302, "/"+page+"/edit")
 		} else {
