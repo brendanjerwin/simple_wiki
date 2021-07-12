@@ -53,9 +53,6 @@ github.com/russross/blackfriday
 # github.com/russross/blackfriday/v2 v2.0.1
 ## explicit
 github.com/russross/blackfriday/v2
-# github.com/schollz/cryptopasta v0.0.0-20170217152710-dcd61c7d42a1
-## explicit
-github.com/schollz/cryptopasta
 # github.com/schollz/versionedtext v0.0.0-20180523061923-d8ce0957c254
 ## explicit
 github.com/schollz/versionedtext

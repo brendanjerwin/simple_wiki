@@ -57,8 +57,6 @@ github.com/russross/blackfriday v1.5.2 h1:HyvC0ARfnZBqnXwABFeSZHpKvJHJJfPz81GNue
 github.com/russross/blackfriday v1.5.2/go.mod h1:JO/DiYxRf+HjHt06OyowR9PTA263kcR/rfWxYHBV53g=
 github.com/russross/blackfriday/v2 v2.0.1 h1:lPqVAte+HuHNfhJ/0LC98ESWRz8afy9tM/0RK8m9o+Q=
 github.com/russross/blackfriday/v2 v2.0.1/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
-github.com/schollz/cryptopasta v0.0.0-20170217152710-dcd61c7d42a1 h1:CAVM5ALs/TKIa2ri7WMqge+m5wz/ItuiU6CFUPjZTjA=
-github.com/schollz/cryptopasta v0.0.0-20170217152710-dcd61c7d42a1/go.mod h1:sM7qObCXSAwGYckYHG4m0hP3PSCBcHmC7/w/kBwcwgM=
 github.com/schollz/versionedtext v0.0.0-20180523061923-d8ce0957c254 h1:/EgihFrDLhb/x7NLm8cWB7QTquw5gatR+y/jv2gLWsY=
 github.com/schollz/versionedtext v0.0.0-20180523061923-d8ce0957c254/go.mod h1:116sjYSGDGoVSTUCdO34dA1Yg1ZGbN2jk/aYThLfK60=
 github.com/sergi/go-diff v1.0.0 h1:Kpca3qRNrduNnOQeazBd0ysaKrUJiIuISHxogkT9RPQ=
