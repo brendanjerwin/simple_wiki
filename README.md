@@ -4,18 +4,11 @@
     src="/static/img/logo.png"
     width="260" height="80" border="0" alt="linkcrawler">
 <br>
-<a href="https://travis-ci.org/schollz/cowyo"><img
-src="https://img.shields.io/travis/schollz/cowyo.svg?style=flat-square"
-alt="Build Status"></a> <a
-href="https://github.com/schollz/cowyo/releases/latest"><img
-src="https://img.shields.io/badge/version-2.11.0-brightgreen.svg?style=flat-square"
-alt="Version"></a> </p>
+</p>
 
-<p align="center">A feature-rich wiki for minimalists</a></p>
+<p align="center">A simple wiki.</a></p>
 
 *cowyo* is a self-contained wiki server that makes jotting notes easy and _fast_. The most important feature here is _simplicity_. Other features include versioning and page lockingg. You can [download *cowyo* as a single executable](https://github.com/schollz/cowyo/releases/latest) or install it with Go. Try it out at https://cowyo.com.
-
-There is now [a command-line tool, *cowyodel*](https://github.com/schollz/cowyodel) to interact with *cowyo* and transfer information between computers with only a code phrase: [schollz/cowyodel](https://github.com/schollz/cowyodel).
 
 Getting Started
 ===============
