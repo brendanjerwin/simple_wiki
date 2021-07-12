@@ -15,7 +15,6 @@ require (
 	github.com/mattn/go-isatty v0.0.8 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.2
 	github.com/russross/blackfriday/v2 v2.0.1
-	github.com/schollz/cryptopasta v0.0.0-20170217152710-dcd61c7d42a1
 	github.com/schollz/versionedtext v0.0.0-20180523061923-d8ce0957c254
 	github.com/shurcooL/github_flavored_markdown v0.0.0-20181002035957-2122de532470
 	github.com/shurcooL/go v0.0.0-20190704215121-7189cc372560 // indirect
