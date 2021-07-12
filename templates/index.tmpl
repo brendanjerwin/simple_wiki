@@ -74,15 +74,6 @@
                                 {{ else }}
                                 <li class="pure-menu-item"><a href="/" class="pure-menu-link">New</a></li>
                                 {{ end }}
-                                {{ if .EditPage }}
-                                <li class="pure-menu-item"><a href="#" class="pure-menu-link" id="publishPage">
-                                {{- if .IsPublished -}}
-                                Unpublish
-                                {{- else -}}
-                                Publish
-                                {{- end -}}
-                                </a></li>
-                                {{ end }}
                                 <hr>
                                 {{ if (.IsLocked) }}
                                 {{ else }}
@@ -94,16 +85,8 @@
                             </ul>
                         </li>
 
-                        <li class="pure-menu-item pure-menu-has-children pure-menu-allow-hover  {{ with .ViewPage }}pure-menu-selected{{ end }}">
+                        <li class="pure-menu-item pure-menu-allow-hover  {{ with .ViewPage }}pure-menu-selected{{ end }}">
                             <a href="/{{ .Page }}/view"  class="pure-menu-link">View</a>
-                            <ul class="pure-menu-children">
-                            <li class="pure-menu-item">
-                        <a href="/{{ .Page }}/read" class="pure-menu-link">Current</a>
-                            </li>
-                            {{ range .RecentlyEdited}}
-                                <li class="pure-menu-item"><a  class="pure-menu-link" href="/{{.}}/read">{{.}}</a></li>
-                            {{ end }}
-                            </ul>
                         </li>
 
                         {{ if .IsLocked }}
@@ -140,7 +123,7 @@
                         >
                             <textarea
                                 autofocus
-                                placeholder="Use markdown to write your note! New: you can publish your note when you are done ({{ .Page }} -> Publish)."
+                                placeholder="Use markdown here."
                                 id="userInput"
                             >{{ .RawPage }}</textarea>
                         </form>

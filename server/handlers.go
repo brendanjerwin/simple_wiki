@@ -40,7 +40,6 @@ type Site struct {
 	Logger          *lumber.ConsoleLogger
 	MaxDocumentSize uint // in runes; about a 10mb limit by default
 	saveMut         sync.Mutex
-	sitemapUpToDate bool // TODO this makes everything use a pointer
 }
 
 func (s *Site) defaultLock() string {
@@ -137,18 +136,11 @@ func (s Site) Router() *gin.Engine {
 			Path:   "/login/",
 			RequireAuth: func(c *gin.Context) bool {
 				page := c.Param("page")
-				cmd := c.Param("command")
 
-				if page == "sitemap.xml" || page == "favicon.ico" || page == "static" || page == "uploads" {
+				if page == "favicon.ico" || page == "static" || page == "uploads" {
 					return false // no auth for these
 				}
 
-				if page != "" && cmd == "/read" {
-					p := s.Open(page)
-					if p != nil && p.IsPublished {
-						return false // Published pages don't require auth.
-					}
-				}
 				return true
 			},
 		}
@@ -175,10 +167,6 @@ func (s Site) Router() *gin.Engine {
 	router.POST("/relinquish", s.handlePageRelinquish) // relinquish returns the page no matter what (and destroys if nessecary)
 	router.POST("/exists", s.handlePageExists)
 	router.POST("/lock", s.handleLock)
-	router.POST("/publish", s.handlePublish)
-
-	// start long-processes as threads
-	go s.thread_SiteMap()
 
 	// Allow iframe/scripts in markup?
 	allowInsecureHtml = s.AllowInsecure
@@ -265,62 +253,11 @@ func getSetSessionID(c *gin.Context) (sid string) {
 	return sid
 }
 
-func (s *Site) thread_SiteMap() {
-	for {
-		if !s.sitemapUpToDate {
-			s.Logger.Info("Generating sitemap...")
-			s.sitemapUpToDate = true
-			ioutil.WriteFile(path.Join(s.PathToData, "sitemap.xml"), []byte(s.generateSiteMap()), 0644)
-			s.Logger.Info("..finished generating sitemap")
-		}
-		time.Sleep(time.Second)
-	}
-}
-
-func (s *Site) generateSiteMap() (sitemap string) {
-	files, _ := ioutil.ReadDir(s.PathToData)
-	lastEdited := make([]string, len(files))
-	names := make([]string, len(files))
-	i := 0
-	for _, f := range files {
-		names[i] = DecodeFileName(f.Name())
-		p := s.Open(names[i])
-		if p.IsPublished {
-			lastEdited[i] = time.Unix(p.Text.LastEditTime()/1000000000, 0).Format("2006-01-02")
-			i++
-		}
-	}
-	names = names[:i]
-	lastEdited = lastEdited[:i]
-	sitemap = ""
-	for i := range names {
-		sitemap += fmt.Sprintf(`
-	<url>
-	<loc>{{ .Request.Host }}/%s/read</loc>
-	<lastmod>%s</lastmod>
-	<changefreq>monthly</changefreq>
-	<priority>0.8</priority>
-	</url>
-	`, names[i], lastEdited[i])
-	}
-	sitemap += "</urlset>"
-	return
-}
-
 func (s *Site) handlePageRequest(c *gin.Context) {
 	page := c.Param("page")
 	command := c.Param("command")
 
-	if page == "sitemap.xml" {
-		siteMap, err := ioutil.ReadFile(path.Join(s.PathToData, "sitemap.xml"))
-		if err != nil {
-			c.Data(http.StatusInternalServerError, contentType("sitemap.xml"), []byte(""))
-		} else {
-			fmt.Fprintln(c.Writer, `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">`)
-			template.Must(template.New("sitemap").Parse(string(siteMap))).Execute(c.Writer, c)
-		}
-		return
-	} else if page == "favicon.ico" {
+	if page == "favicon.ico" {
 		data, _ := Asset("/static/img/cowyo/favicon.ico")
 		c.Data(http.StatusOK, contentType("/static/img/cowyo/favicon.ico"), data)
 		return
@@ -371,11 +308,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 
 	p := s.Open(page)
 	if len(command) < 2 {
-		if p.IsPublished {
-			c.Redirect(302, "/"+page+"/read")
-		} else {
-			c.Redirect(302, "/"+page+"/edit")
-		}
+		c.Redirect(302, "/"+page+"/view")
 		return
 	}
 
@@ -458,11 +391,6 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		}
 	}
 
-	// swap out /view for /read if it is published
-	if p.IsPublished {
-		rawHTML = strings.Replace(rawHTML, "/view", "/read", -1)
-	}
-
 	c.HTML(http.StatusOK, "index.tmpl", gin.H{
 		"EditPage":    command[0:2] == "/e", // /edit
 		"ViewPage":    command[0:2] == "/v", // /view
@@ -486,7 +414,6 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		"Route":              "/" + page + command,
 		"HasDotInName":       strings.Contains(page, "."),
 		"RecentlyEdited":     getRecentlyEdited(page, c),
-		"IsPublished":        p.IsPublished,
 		"CustomCSS":          len(s.Css) > 0,
 		"Debounce":           s.Debounce,
 		"DiaryMode":          s.Diary,
@@ -594,9 +521,6 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 		p.Update(json.NewText)
 		p.Save()
 		message = "Saved"
-		if p.IsPublished {
-			s.sitemapUpToDate = false
-		}
 		success = true
 	}
 	c.JSON(http.StatusOK, gin.H{"success": success, "message": message, "unix_time": time.Now().Unix()})
@@ -652,28 +576,6 @@ func (s *Site) handleLock(c *gin.Context) {
 		message = "Unlocked only for you"
 	}
 	p.Save()
-	c.JSON(http.StatusOK, gin.H{"success": true, "message": message})
-}
-
-func (s *Site) handlePublish(c *gin.Context) {
-	type QueryJSON struct {
-		Page    string `json:"page"`
-		Publish bool   `json:"publish"`
-	}
-
-	var json QueryJSON
-	if c.BindJSON(&json) != nil {
-		c.String(http.StatusBadRequest, "Problem binding keys")
-		return
-	}
-	p := s.Open(json.Page)
-	p.IsPublished = json.Publish
-	p.Save()
-	message := "Published"
-	if !p.IsPublished {
-		message = "Unpublished"
-	}
-	s.sitemapUpToDate = false
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": message})
 }
 

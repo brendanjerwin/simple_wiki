@@ -125,7 +125,6 @@ $(window).load(function() {
             url: '/publish',
             data: JSON.stringify({
                 page: window.cowyo.pageName,
-                publish: $('#publishPage').text() == "Publish"
             }),
             success: function(data) {
                 $('#saveEditButton').removeClass()
@@ -135,11 +134,6 @@ $(window).load(function() {
                     $('#saveEditButton').addClass("failure");
                 }
                 $('#saveEditButton').text(data.message);
-                if (data.message == "Unpublished") {
-                    $('#publishPage').text("Publish");
-                } else {
-                    $('#publishPage').text("Unpublish");
-                }
             },
             error: function(xhr, error) {
                 $('#saveEditButton').removeClass()
@@ -175,25 +169,6 @@ $(window).load(function() {
             lockPage(passphrase);
             // POST encrypt page
             // reload page
-        }
-    });
-
-    $("#publishPage").click(function(e) {
-        e.preventDefault();
-        var message = " This will add your page to the sitemap.xml so it will be indexed by search engines.";
-        if ($('#publishPage').text() == "Unpublish") {
-            message = "";
-        }
-        var confirmed = confirm("Are you sure?" + message);
-        if (confirmed == true) {
-            if ($('#publishPage').text() == "Unpublish") {
-                $('#saveEditButton').removeClass();
-                $("#saveEditButton").text("Unpublishing");
-            } else {
-                $('#saveEditButton').removeClass();
-                $("#saveEditButton").text("Publishing");
-            }
-            publishPage();
         }
     });
 
