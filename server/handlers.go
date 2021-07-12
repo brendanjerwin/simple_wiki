@@ -160,7 +160,7 @@ func (s Site) Router() *gin.Engine {
 
 	router.GET("/:page", func(c *gin.Context) {
 		page := c.Param("page")
-		c.Redirect(302, "/"+page+"/")
+		c.Redirect(302, "/"+page+"/view?"+c.Request.URL.RawQuery)
 	})
 	router.GET("/:page/*command", s.handlePageRequest)
 	router.POST("/update", s.handlePageUpdate)
@@ -306,11 +306,12 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		}
 	}
 
-	p := s.Open(page)
 	if len(command) < 2 {
 		c.Redirect(302, "/"+page+"/view")
 		return
 	}
+
+	p := s.OpenOrInit(page, c.Request)
 
 	// use the default lock
 	if s.defaultLock() != "" && p.IsNew() {
@@ -419,7 +420,6 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		"DiaryMode":          s.Diary,
 		"Date":               time.Now().Format("2006-01-02"),
 		"UnixTime":           time.Now().Unix(),
-		"ChildPageNames":     p.ChildPageNames(),
 		"AllowFileUploads":   s.Fileuploads,
 		"MaxUploadMB":        s.MaxUploadSize,
 	})

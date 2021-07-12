@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -49,6 +50,44 @@ func (s *Site) Open(name string) (p *Page) {
 	if err != nil {
 		p = new(Page)
 	}
+	return p
+}
+func (s *Site) OpenOrInit(name string, req *http.Request) (p *Page) {
+	bJSON, err := ioutil.ReadFile(path.Join(s.PathToData, encodeToBase32(strings.ToLower(name))+".json"))
+	if err != nil {
+		p = new(Page)
+		p.Site = s
+		p.Name = name
+
+		initialText := ""
+		title := ""
+		for pram, vals := range req.URL.Query() {
+			if pram == "__title" {
+				title = vals[0]
+			}
+			if strings.HasPrefix(pram, "__") {
+				initialText += strings.TrimPrefix(pram, "__") + ": " + vals[0] + "\n"
+			}
+		}
+
+		if initialText != "" {
+			initialText = "---\n" + initialText + "---\n"
+		}
+
+		if title != "" {
+			initialText += "\n# " + title + "\n"
+		}
+
+		p.Text = versionedtext.NewVersionedText(initialText)
+		p.Render()
+		p.Save()
+		return p
+	}
+	err = json.Unmarshal(bJSON, &p)
+	if err != nil {
+		panic(err)
+	}
+	p.Render()
 	return p
 }
 
@@ -170,26 +209,6 @@ func (p *Page) Save() error {
 
 	// Write the current Markdown
 	return ioutil.WriteFile(path.Join(p.Site.PathToData, encodeToBase32(strings.ToLower(p.Name))+".md"), []byte(p.Text.CurrentText), 0644)
-}
-
-func (p *Page) ChildPageNames() []string {
-	prefix := strings.ToLower(p.Name + ": ")
-	files, err := filepath.Glob(path.Join(p.Site.PathToData, "*"))
-	if err != nil {
-		panic("Filepath pattern cannot be malformed")
-	}
-
-	result := []string{}
-	for i := range files {
-		basename := filepath.Base(files[i])
-		if strings.HasSuffix(basename, ".json") {
-			cname, err := decodeFromBase32(basename[:len(basename)-len(".json")])
-			if err == nil && strings.HasPrefix(strings.ToLower(cname), prefix) {
-				result = append(result, cname)
-			}
-		}
-	}
-	return result
 }
 
 func (p *Page) IsNew() bool {
