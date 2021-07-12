@@ -16,7 +16,7 @@ import (
 
 // Page is the basic struct
 type Page struct {
-	Site *Site
+	Site *Site `json:"-"`
 
 	Name               string
 	Text               versionedtext.VersionedText
