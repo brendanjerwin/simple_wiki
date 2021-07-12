@@ -4,11 +4,13 @@ go 1.16
 
 require (
 	github.com/BurntSushi/toml v0.3.1
+	github.com/adrg/frontmatter v0.2.0
 	github.com/danielheath/gin-teeny-security v0.0.0-20180331042316-bb11804dd0e2
 	github.com/gin-contrib/multitemplate v0.0.0-20190528082104-30e424939505
 	github.com/gin-contrib/sessions v0.0.0-20190512062852-3cb4c4f2d615
 	github.com/gin-contrib/sse v0.1.0 // indirect
 	github.com/gin-gonic/gin v1.4.0
+	github.com/go-bindata/go-bindata v3.1.2+incompatible // indirect
 	github.com/jcelliott/lumber v0.0.0-20160324203708-dd349441af25
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/mattn/go-isatty v0.0.8 // indirect

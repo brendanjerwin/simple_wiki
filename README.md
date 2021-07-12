@@ -94,30 +94,11 @@ You can easily see previous versions of your documents.
 
 ![History](http://i.imgur.com/CxhRkyo.gif)
 
-### Lists
-
-You can easily make lists and check them off.
-
-![Lists](http://i.imgur.com/7xbauy8.gif)
-
 ### Locking
 
 Locking prevents other users from editing your pages without a passphrase.
 
 ![Locking](http://i.imgur.com/xwUFV8b.gif)
-
-### Encryption
-
-Encryption is performed using AES-256.
-
-![Encryption](http://i.imgur.com/rWoqoLB.gif)
-
-### Self-destructing pages
-
-Just like in mission impossible.
-
-![Self-destructing](http://i.imgur.com/upMxFQh.gif)
-
 
 ## Development
 

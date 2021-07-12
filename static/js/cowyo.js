@@ -86,32 +86,6 @@ $(window).load(function() {
         });
     }
 
-    function primeForSelfDestruct() {
-        $.ajax({
-            type: 'POST',
-            url: '/prime',
-            data: JSON.stringify({
-                page: window.cowyo.pageName,
-            }),
-            success: function(data) {
-                $('#saveEditButton').removeClass()
-                if (data.success == true) {
-                    $('#saveEditButton').addClass("success");
-                } else {
-                    $('#saveEditButton').addClass("failure");
-                }
-                $('#saveEditButton').text(data.message);
-            },
-            error: function(xhr, error) {
-                $('#saveEditButton').removeClass()
-                $('#saveEditButton').addClass("failure");
-                $('#saveEditButton').text(error);
-            },
-            contentType: "application/json",
-            dataType: 'json'
-        });
-    }
-
     function lockPage(passphrase) {
         $.ajax({
             type: 'POST',
@@ -177,92 +151,11 @@ $(window).load(function() {
         });
     }
 
-    function encryptPage(passphrase) {
-        $.ajax({
-            type: 'POST',
-            url: '/encrypt',
-            data: JSON.stringify({
-                page: window.cowyo.pageName,
-                passphrase: passphrase
-            }),
-            success: function(data) {
-                $('#saveEditButton').removeClass()
-                if (data.success == true) {
-                    $('#saveEditButton').addClass("success");
-                } else {
-                    $('#saveEditButton').addClass("failure");
-                }
-                $('#saveEditButton').text(data.message);
-
-                if (data.success == true && $('#encryptPage').text() == "Encrypt") {
-                    window.location = "/" + window.cowyo.pageName + "/view";
-                }
-                if (data.success == true && $('#encryptPage').text() == "Decrypt") {
-                    window.location = "/" + window.cowyo.pageName + "/edit";
-                }
-            },
-            error: function(xhr, error) {
-                $('#saveEditButton').removeClass()
-                $('#saveEditButton').addClass("failure");
-                $('#saveEditButton').text(error);
-            },
-            contentType: "application/json",
-            dataType: 'json'
-        });
-    }
-
-    function clearOld() {
-        $.ajax({
-            type: 'DELETE',
-            url: '/oldlist',
-            data: JSON.stringify({
-                page: window.cowyo.pageName
-            }),
-            success: function(data) {
-                $('#saveEditButton').removeClass()
-                if (data.success == true) {
-                    $('#saveEditButton').addClass("success");
-                } else {
-                    $('#saveEditButton').addClass("failure");
-                }
-                $('#saveEditButton').text(data.message);
-                if (data.success == true) {
-                    window.location = "/" + window.cowyo.pageName + "/list";
-                }
-            },
-            error: function(xhr, error) {
-                $('#saveEditButton').removeClass();
-                $('#saveEditButton').addClass("failure");
-                $('#saveEditButton').text(error);
-            },
-            contentType: "application/json",
-            dataType: 'json'
-        });
-    }
-
-    $("#encryptPage").click(function(e) {
-        e.preventDefault();
-        var passphrase = prompt("Please enter a passphrase. Note: Encrypting will remove all previous history.", "");
-        if (passphrase != null) {
-            encryptPage(passphrase);
-        }
-    });
-
     $("#erasePage").click(function(e) {
         e.preventDefault();
         var r = confirm("Are you sure you want to erase?");
         if (r == true) {
             window.location = "/" + window.cowyo.pageName + "/erase";
-        } else {
-            x = "You pressed Cancel!";
-        }
-    });
-
-    $("#selfDestructPage").click(function(e) {
-        e.preventDefault();
-        var r = confirm("This will erase the page the next time it is opened, are you sure you want to do that?");
-        if (r == true) {
-            primeForSelfDestruct();
         } else {
             x = "You pressed Cancel!";
         }
@@ -304,16 +197,6 @@ $(window).load(function() {
         }
     });
 
-    $("#clearOld").click(function(e) {
-        e.preventDefault();
-        var r = confirm("This will erase all cleared list items, are you sure you want to do that? (Versions will stay in history).");
-        if (r == true) {
-            clearOld()
-        } else {
-            x = "You pressed Cancel!";
-        }
-    });
-
     $("textarea").keydown(function(e) {
         if(e.keyCode === 9) { // tab was pressed
             // get caret position/selection
@@ -334,23 +217,6 @@ $(window).load(function() {
             // prevent the focus lose
             e.preventDefault();
         }
-    });
-
-    $('.deletable').click(function(event) {
-      event.preventDefault();
-      var lineNum = $(this).attr('id');
-
-      $.ajax({
-        url: "/listitem" + '?' + $.param({
-          "lineNum": lineNum,
-          "page": window.cowyo.pageName
-        }),
-        type: 'DELETE',
-        success: function() {
-          window.location.reload(true);
-        }
-      });
-      event.target.classList.add('deleting');
     });
 });
 

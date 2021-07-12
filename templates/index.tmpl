@@ -51,7 +51,6 @@
     <body id="pad" class="
         {{ if .EditPage }} EditPage {{ end }}
         {{ if .ViewPage }} ViewPage {{ end }}
-        {{ if .ListPage }} ListPage {{ end }}
         {{ if .HistoryPage }} HistoryPage {{ end }}
         {{ if .ReadPage }} ReadPage {{ end }}
         {{ if .DontKnowPage }} DontKnowPage {{ end }}
@@ -75,7 +74,6 @@
                                 {{ else }}
                                 <li class="pure-menu-item"><a href="/" class="pure-menu-link">New</a></li>
                                 {{ end }}
-                                <li class="pure-menu-item"><a href="https://github.com/schollz/cowyo" class="pure-menu-link">Source</a></li>
                                 {{ if .EditPage }}
                                 <li class="pure-menu-item"><a href="#" class="pure-menu-link" id="publishPage">
                                 {{- if .IsPublished -}}
@@ -86,13 +84,11 @@
                                 </a></li>
                                 {{ end }}
                                 <hr>
-                                {{ if (or (.IsLocked) (.IsEncrypted) )}}
+                                {{ if (.IsLocked) }}
                                 {{ else }}
-                                <li class="pure-menu-item"><a href="#" class="pure-menu-link" id="encryptPage">{{ if .IsEncrypted }}Decrypt{{ else }}Encrypt{{end}}</a></li>
                                 <li class="pure-menu-item"><a href="#" class="pure-menu-link" id="lockPage">{{ if .IsLocked }}Unlock{{ else }}Lock{{end}}</a></li>
                                 <li class="pure-menu-item"><a href="/{{ .Page }}/history" class="pure-menu-link">History</a></li>
                                 <hr>
-                                <li class="pure-menu-item"><a href="#" class="pure-menu-link" id="selfDestructPage">Self-destruct</a></li>
                                 <li class="pure-menu-item"><a href="#" class="pure-menu-link" id="erasePage">Erase</a></li>
                                 {{ end }}
                             </ul>
@@ -110,20 +106,10 @@
                             </ul>
                         </li>
 
-                        {{ if (or (.IsLocked) (.IsEncrypted) )}}
                         {{ if .IsLocked }}
                         <li class="pure-menu-item"><a href="#" class="pure-menu-link" id="lockPage">{{ if .IsLocked }}Unlock{{ else }}Lock{{end}}</a></li>
                         <li class="pure-menu-item" class="pure-menu-link"><a href="#"><span id="saveEditButton"></span></a></li>
-                        {{ else }}
-                        <li class="pure-menu-item"><a href="#" class="pure-menu-link" id="encryptPage">{{ if .IsEncrypted }}Decrypt{{ else }}Encrypt{{end}}</a></li>
-                        <li class="pure-menu-item" class="pure-menu-link"><a href="#"><span id="saveEditButton"></span></a></li>
-                        {{ end }}
                         {{else}}
-                        {{ if .ListPage }}
-                        <li class="pure-menu-item {{ with .ListPage }}pure-menu-selected{{ end }}"><a href="#" class="pure-menu-link" id="clearOld">Clear done</a></li>
-                        {{ else }}
-                        <li class="pure-menu-item {{ with .ListPage }}pure-menu-selected{{ end }}"><a href="/{{ .Page }}/list" class="pure-menu-link">List</a></li>
-                        {{ end }}
                         <li class="pure-menu-item {{ with .EditPage }}pure-menu-selected{{ end }}"><a href="/{{ .Page }}/edit" class="pure-menu-link"><span id="saveEditButton">Edit</span></a></li>
                         {{end}}
                     </ul>
@@ -185,19 +171,11 @@
                                 <li style="list-style: none;">
                                 <a href="/{{ $.Page }}/view?version={{$e}}">View</a>
                                 &nbsp;&nbsp;
-                                <a href="/{{ $.Page }}/list?version={{$e}}">List</a>
-                                &nbsp;&nbsp;
                                 <a href="/{{ $.Page }}/raw?version={{$e}}">Raw</a>
                                 &nbsp;&nbsp;
                                 {{index $.VersionsText $i}}&nbsp;({{if lt (index $.VersionsChangeSums $i) 0}}<span style="color:red">{{else}}<span style="color:green">+{{end}}{{index $.VersionsChangeSums $i}}</span>)</li>
                             {{end}}
                         </ul>
-                    {{ end }}
-
-                    {{ if .ListPage }}
-                          {{ range $index, $element := .ListItems }}
-                            {{ $element }}
-                          {{ end }}
                     {{ end }}
 
                     {{ if .DirectoryPage }}

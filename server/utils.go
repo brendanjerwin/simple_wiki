@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/adrg/frontmatter"
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/russross/blackfriday/v2"
 	"github.com/shurcooL/github_flavored_markdown"
@@ -156,8 +157,27 @@ func exists(path string) bool {
 	return !os.IsNotExist(err)
 }
 
-func MarkdownToHtml(s string) string {
-	unsafe := blackfriday.Run([]byte(s))
+type DoesntMatter struct{}
+
+func StripFrontmatter(s string) string {
+	doesnt_matter := &DoesntMatter{}
+	unsafe, _ := frontmatter.Parse(strings.NewReader(s), &doesnt_matter)
+	return string(unsafe)
+}
+
+func MarkdownToHtml(s string, handleFrontMatter bool) string {
+	var unsafe []byte
+	var err error
+	if handleFrontMatter {
+		doesnt_matter := &DoesntMatter{}
+		unsafe, err = frontmatter.Parse(strings.NewReader(s), &doesnt_matter)
+		if err != nil {
+			panic(err)
+		}
+	} else {
+		unsafe = []byte(s)
+	}
+	unsafe = blackfriday.Run(unsafe)
 	if allowInsecureHtml {
 		return string(unsafe)
 	}

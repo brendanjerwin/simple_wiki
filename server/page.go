@@ -160,7 +160,7 @@ func (p *Page) Render() {
 		currentText = strings.Replace(currentText, s, "["+s[2:len(s)-2]+"](/"+s[2:len(s)-2]+"/view)", 1)
 	}
 	p.Text.Update(currentText)
-	p.RenderedPage = MarkdownToHtml(p.Text.GetCurrent())
+	p.RenderedPage = MarkdownToHtml(p.Text.GetCurrent(), true)
 }
 
 func (p *Page) Save() error {

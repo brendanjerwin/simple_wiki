@@ -1,6 +1,9 @@
 # github.com/BurntSushi/toml v0.3.1
 ## explicit
 github.com/BurntSushi/toml
+# github.com/adrg/frontmatter v0.2.0
+## explicit
+github.com/adrg/frontmatter
 # github.com/danielheath/gin-teeny-security v0.0.0-20180331042316-bb11804dd0e2
 ## explicit
 github.com/danielheath/gin-teeny-security
@@ -20,6 +23,8 @@ github.com/gin-gonic/gin
 github.com/gin-gonic/gin/binding
 github.com/gin-gonic/gin/internal/json
 github.com/gin-gonic/gin/render
+# github.com/go-bindata/go-bindata v3.1.2+incompatible
+## explicit
 # github.com/golang/protobuf v1.3.1
 github.com/golang/protobuf/proto
 # github.com/gorilla/context v1.1.1
@@ -105,5 +110,5 @@ gopkg.in/go-playground/validator.v8
 # gopkg.in/urfave/cli.v1 v1.20.0
 ## explicit
 gopkg.in/urfave/cli.v1
-# gopkg.in/yaml.v2 v2.2.2
+# gopkg.in/yaml.v2 v2.3.0
 gopkg.in/yaml.v2
