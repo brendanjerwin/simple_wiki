@@ -341,7 +341,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 	} else if page == "uploads" {
 		if len(command) == 0 || command == "/" || command == "/edit" {
 			if !s.Fileuploads {
-				c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("Uploads are disabled on this server"))
+				c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("uploads are disabled on this server"))
 				return
 			}
 		} else {
@@ -679,7 +679,7 @@ func (s *Site) handlePublish(c *gin.Context) {
 
 func (s *Site) handleUpload(c *gin.Context) {
 	if !s.Fileuploads {
-		c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("Uploads are disabled on this server"))
+		c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("uploads are disabled on this server"))
 		return
 	}
 
