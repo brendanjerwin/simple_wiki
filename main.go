@@ -71,7 +71,7 @@ func main() {
 		},
 		cli.StringFlag{
 			Name:  "default-page",
-			Value: "",
+			Value: "home",
 			Usage: "show default-page/read instead of editing (default: show random editing)",
 		},
 		cli.BoolFlag{

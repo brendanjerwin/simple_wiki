@@ -316,7 +316,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 	if command == "/erase" {
 		if !isLocked {
 			p.Erase()
-			c.Redirect(302, "/"+page+"/edit")
+			c.Redirect(302, "/")
 		} else {
 			c.Redirect(302, "/"+page+"/view")
 		}

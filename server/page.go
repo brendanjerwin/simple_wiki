@@ -89,7 +89,10 @@ func (s *Site) OpenOrInit(identifier string, req *http.Request) (p *Page) {
 	if err != nil {
 		panic(err)
 	}
+	p.Site = s
+
 	p.Render()
+
 	return p
 }
 
