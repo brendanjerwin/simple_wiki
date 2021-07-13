@@ -18,11 +18,11 @@
             <link rel="stylesheet" type="text/css" href="/static/css/base-min.css">
             <link rel="stylesheet" type="text/css" href="/static/css/highlight.css">
             <link rel="stylesheet" type="text/css" href="/static/css/default.css">
+        {{ end }}
             <script type="text/javascript" src="/static/js/jquery-1.8.3.js"></script>
             <script src="/static/js/highlight.min.js"></script>
             <script type="text/javascript" src="/static/js/highlight.pack.js"></script>
             <script src="/static/js/dropzone.js"></script>
-        {{ end }}
 
         <title>{{ .Page }}</title>
 
@@ -57,11 +57,7 @@
                         <li class="pure-menu-item pure-menu-has-children pure-menu-allow-hover">
                             <a href="#" id="menuLink1" class="pure-menu-link">{{ .Page }}</a>
                             <ul class="pure-menu-children">
-                                {{ if .DiaryMode }}
-                                <li class="pure-menu-item"><a href="/{{ .Date }}/edit" class="pure-menu-link">New</a></li>
-                                {{ else }}
                                 <li class="pure-menu-item"><a href="/" class="pure-menu-link">New</a></li>
-                                {{ end }}
                                 <hr>
                                 {{ if (.IsLocked) }}
                                 {{ else }}

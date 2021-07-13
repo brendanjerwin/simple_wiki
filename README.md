@@ -27,7 +27,7 @@ and it will start a server listening  on `0.0.0.0:8050`. To view it, just go to 
 There are a couple of command-line flags that you can use to make *simple_wiki* your own micro-CMS. 
 
 ```
-simple_wiki -lock 123 -default-page index.html -css mystyle.css -diary
+simple_wiki -lock 123 -default-page index.html -css mystyle.css
 ```
 
 The `-lock` flag will automatically lock every page with the passphrase "123". Also, the default behavior will be to redirect `/` to `/index.html`. 

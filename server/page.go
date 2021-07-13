@@ -62,18 +62,18 @@ func (s *Site) OpenOrInit(identifier string, req *http.Request) (p *Page) {
 		p.Identifier = identifier
 
 		prams := req.URL.Query()
-		initialText := "identifier: " + identifier + "\n"
+		initialText := "identifier = \"" + identifier + "\"\n"
 		title := prams.Get("title")
 		for pram, vals := range prams {
 			if len(vals) > 1 {
-				initialText += pram + ":\n- " + strings.Join(vals, "\n- ") + "\n"
+				initialText += pram + " = [ \"" + strings.Join(vals, "\", \"") + "\"]\n"
 			} else if len(vals) == 1 {
-				initialText += pram + ": " + vals[0] + "\n"
+				initialText += pram + " = \"" + vals[0] + "\"\n"
 			}
 		}
 
 		if initialText != "" {
-			initialText = "---\n" + initialText + "---\n"
+			initialText = "+++\n" + initialText + "+++\n"
 		}
 
 		if title != "" {
