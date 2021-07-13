@@ -114,7 +114,7 @@ func (s Site) Router() *gin.Engine {
 	})
 
 	if hotTemplateReloading {
-		router.LoadHTMLGlob("templates/*.tmpl")
+		router.LoadHTMLGlob("server/templates/*.tmpl")
 	} else {
 		router.HTMLRender = s.loadTemplate()
 	}
