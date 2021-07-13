@@ -1,4 +1,4 @@
-module github.com/schollz/cowyo
+module github.com/brendanjerwin/simple_wiki
 
 go 1.16
 

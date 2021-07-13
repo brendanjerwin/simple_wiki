@@ -6,8 +6,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/jcelliott/lumber"
-	"github.com/schollz/cowyo/server"
 
 	cli "gopkg.in/urfave/cli.v1"
 )

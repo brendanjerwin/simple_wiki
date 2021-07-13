@@ -1,0 +1,6 @@
+This favicon was generated using the following font:
+
+- Font Title: Gruppo
+- Font Author: Copyright (c) 2010 Vernon Adams (vern@newtypography.co.uk). Available under the terms of the SIL OFL v1.1 from http://scripts.sil.org/OFL
+- Font Source: http://fonts.gstatic.com/s/gruppo/v11/WwkfxPmzE06v_ZWFWXDAOIEQUQ.ttf
+- Font License: SIL Open Font License, 1.1 (http://scripts.sil.org/OFL)

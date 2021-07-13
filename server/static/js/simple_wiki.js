@@ -27,7 +27,7 @@ $(window).load(function() {
     // This will apply the debounce effect on the keyup event
     // And it only fires 500ms or half a second after the user stopped typing
     var prevText = $('#userInput').val();
-    console.log("debounce: " + window.cowyo.debounceMS)
+    console.log("debounce: " + window.simple_wiki.debounceMS)
     $('#userInput').on('keyup', debounce(function() {
         if (prevText == $('#userInput').val()) {
             return // no changes
@@ -40,7 +40,7 @@ $(window).load(function() {
         $('#saveEditButton').removeClass()
         $('#saveEditButton').text("Saving")
         upload();
-    }, window.cowyo.debounceMS));
+    }, window.simple_wiki.debounceMS));
 
     var latestUpload = null, needAnother = false;
     function upload() {
@@ -54,7 +54,7 @@ $(window).load(function() {
             url: '/update',
             data: JSON.stringify({
                 new_text: $('#userInput').val(),
-                page: window.cowyo.pageName,
+                page: window.simple_wiki.pageName,
                 fetched_at: window.lastFetch,
             }),
             success: function(data) {
@@ -91,7 +91,7 @@ $(window).load(function() {
             type: 'POST',
             url: '/lock',
             data: JSON.stringify({
-                page: window.cowyo.pageName,
+                page: window.simple_wiki.pageName,
                 passphrase: passphrase
             }),
             success: function(data) {
@@ -103,10 +103,10 @@ $(window).load(function() {
                 }
                 $('#saveEditButton').text(data.message);
                 if (data.success == true && $('#lockPage').text() == "Lock") {
-                    window.location = "/" + window.cowyo.pageName + "/view";
+                    window.location = "/" + window.simple_wiki.pageName + "/view";
                 }
                 if (data.success == true && $('#lockPage').text() == "Unlock") {
-                    window.location = "/" + window.cowyo.pageName + "/edit";
+                    window.location = "/" + window.simple_wiki.pageName + "/edit";
                 }
             },
             error: function(xhr, error) {
@@ -123,7 +123,7 @@ $(window).load(function() {
         e.preventDefault();
         var r = confirm("Are you sure you want to erase?");
         if (r == true) {
-            window.location = "/" + window.cowyo.pageName + "/erase";
+            window.location = "/" + window.simple_wiki.pageName + "/erase";
         } else {
             x = "You pressed Cancel!";
         }

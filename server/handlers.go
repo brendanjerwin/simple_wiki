@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -126,7 +127,7 @@ func (s Site) Router() *gin.Engine {
 	if hotTemplateReloading {
 		router.LoadHTMLGlob("templates/*.tmpl")
 	} else {
-		router.HTMLRender = s.loadTemplates("index.tmpl")
+		router.HTMLRender = s.loadTemplate()
 	}
 
 	router.Use(sessions.Sessions("_session", s.SessionStore))
@@ -173,24 +174,17 @@ func (s Site) Router() *gin.Engine {
 	return router
 }
 
-func (s *Site) loadTemplates(list ...string) multitemplate.Render {
+func (s *Site) loadTemplate() multitemplate.Render {
 	r := multitemplate.New()
 
-	for _, x := range list {
-		templateString, err := Asset("templates/" + x)
-		if err != nil {
-			panic(err)
-		}
-
-		tmplMessage, err := template.New(x).Funcs(template.FuncMap{
-			"sniffContentType": s.sniffContentType,
-		}).Parse(string(templateString))
-		if err != nil {
-			panic(err)
-		}
-
-		r.Add(x, tmplMessage)
+	tmplMessage, err := template.New("index.tmpl").Funcs(template.FuncMap{
+		"sniffContentType": s.sniffContentType,
+	}).Parse(string(IndexTemplate))
+	if err != nil {
+		panic(err)
 	}
+
+	r.Add("index.tmpl", tmplMessage)
 
 	return r
 }
@@ -258,19 +252,21 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 	command := c.Param("command")
 
 	if page == "favicon.ico" {
-		data, _ := Asset("/static/img/cowyo/favicon.ico")
-		c.Data(http.StatusOK, contentType("/static/img/cowyo/favicon.ico"), data)
+		data, _ := StaticContent.ReadFile("static/img/favicon/favicon.ico")
+		c.Data(http.StatusOK, contentType("static/img/favicon/favicon.ico"), data)
 		return
 	} else if page == "static" {
-		filename := page + command
+		filename := "static/" + strings.TrimPrefix(command, "/")
 		var data []byte
 		if filename == "static/css/custom.css" {
 			data = s.Css
 		} else {
 			var errAssset error
-			data, errAssset = Asset(filename)
+			log.Printf("%s", filename)
+			data, errAssset = StaticContent.ReadFile(filename)
 			if errAssset != nil {
-				c.String(http.StatusInternalServerError, "Could not find data")
+				c.String(http.StatusNotFound, "Could not find data")
+				return
 			}
 		}
 		c.Data(http.StatusOK, contentType(filename), data)
@@ -373,7 +369,12 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE, UPDATE")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, X-Max")
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Data(200, contentType(p.Name), []byte(rawText))
+		c.Data(200, contentType(p.Identifier), []byte(rawText))
+		return
+	}
+
+	if strings.HasPrefix(command, "/frontmatter") {
+		c.Data(http.StatusOK, gin.MIMEJSON, p.FrontmatterJson)
 		return
 	}
 
