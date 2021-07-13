@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"os"
 	"path"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -319,7 +318,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		p.PassphraseToUnlock = s.defaultLock()
 	}
 
-	version := c.DefaultQuery("version", "ajksldfjl")
+	//version := c.DefaultQuery("version", "ajksldfjl")
 	isLocked := pageIsLocked(p, c)
 
 	// Disallow anything but viewing locked pages
@@ -342,14 +341,14 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 	rawHTML := p.RenderedPage
 
 	// Check to see if an old version is requested
-	versionInt, versionErr := strconv.Atoi(version)
-	if versionErr == nil && versionInt > 0 {
-		versionText, err := p.Text.GetPreviousByTimestamp(int64(versionInt))
-		if err == nil {
-			rawText = versionText
-			rawHTML = GithubMarkdownToHTML(rawText)
-		}
-	}
+	// versionInt, versionErr := strconv.Atoi(version)
+	// if versionErr == nil && versionInt > 0 {
+	// 	versionText, err := p.Text.GetPreviousByTimestamp(int64(versionInt))
+	// 	if err == nil {
+	// 		rawText = versionText
+	// 		rawHTML = GithubMarkdownToHTML(rawText)
+	// 	}
+	// }
 
 	// Get history
 	var versionsInt64 []int64
@@ -366,14 +365,19 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		versionsChangeSums = reverseSliceInt(versionsChangeSums)
 	}
 
-	if len(command) > 3 && command[0:3] == "/ra" {
+	if strings.HasPrefix(command, "/raw") {
 		c.Writer.Header().Set("Content-Type", "text/plain")
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Max-Age", "86400")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE, UPDATE")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, X-Max")
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Data(200, contentType(p.Identifier), []byte(rawText))
+		c.Data(http.StatusOK, contentType(p.Identifier), []byte(rawText))
+		return
+	}
+
+	if strings.HasPrefix(command, "/frontmatter") {
+		c.Data(http.StatusOK, gin.MIMEJSON, p.FrontmatterJson)
 		return
 	}
 
@@ -406,7 +410,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		"UploadPage":         page == "uploads",
 		"DirectoryEntries":   DirectoryEntries,
 		"Page":               page,
-		"RenderedPage":       template.HTML([]byte(rawHTML)),
+		"RenderedPage":       template.HTML(rawHTML),
 		"RawPage":            rawText,
 		"Versions":           versionsInt64,
 		"VersionsText":       versionsText,

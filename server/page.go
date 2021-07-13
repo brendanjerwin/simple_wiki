@@ -22,10 +22,11 @@ type Page struct {
 	Identifier         string
 	Text               versionedtext.VersionedText
 	Meta               string
-	RenderedPage       string `json:"-"`
+	RenderedPage       []byte `json:"-"`
 	IsLocked           bool
 	PassphraseToUnlock string
 	UnlockedFor        string
+	FrontmatterJson    []byte `json:"-"`
 }
 
 func (p Page) LastEditTime() time.Time {
@@ -52,6 +53,7 @@ func (s *Site) Open(identifier string) (p *Page) {
 	}
 	return p
 }
+
 func (s *Site) OpenOrInit(identifier string, req *http.Request) (p *Page) {
 	bJSON, err := ioutil.ReadFile(path.Join(s.PathToData, encodeToBase32(strings.ToLower(identifier))+".json"))
 	if err != nil {
@@ -59,14 +61,14 @@ func (s *Site) OpenOrInit(identifier string, req *http.Request) (p *Page) {
 		p.Site = s
 		p.Identifier = identifier
 
+		prams := req.URL.Query()
 		initialText := "identifier: " + identifier + "\n"
-		title := ""
-		for pram, vals := range req.URL.Query() {
-			if pram == "__title" {
-				title = vals[0]
-			}
-			if strings.HasPrefix(pram, "__") {
-				initialText += strings.TrimPrefix(pram, "__") + ": " + vals[0] + "\n"
+		title := prams.Get("title")
+		for pram, vals := range prams {
+			if len(vals) > 1 {
+				initialText += pram + ":\n- " + strings.Join(vals, "\n- ") + "\n"
+			} else if len(vals) == 1 {
+				initialText += pram + ": " + vals[0] + "\n"
 			}
 		}
 
@@ -191,7 +193,7 @@ func (p *Page) Render() {
 		currentText = strings.Replace(currentText, s, "["+s[2:len(s)-2]+"](/"+s[2:len(s)-2]+"/view)", 1)
 	}
 	p.Text.Update(currentText)
-	p.RenderedPage = MarkdownToHtml(p.Text.GetCurrent(), true)
+	p.RenderedPage, p.FrontmatterJson = MarkdownToHtmlAndJsonFrontmatter(p.Text.GetCurrent(), true)
 }
 
 func (p *Page) Save() error {
