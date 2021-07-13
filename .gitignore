@@ -25,6 +25,6 @@ _testmain.go
 *.prof
 
 data/*
-cowyo
+simple_wiki
 dist
 

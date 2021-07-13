@@ -19,13 +19,14 @@ import (
 type Page struct {
 	Site *Site `json:"-"`
 
-	Name               string
+	Identifier         string
 	Text               versionedtext.VersionedText
 	Meta               string
-	RenderedPage       string `json:"-"`
+	RenderedPage       []byte `json:"-"`
 	IsLocked           bool
 	PassphraseToUnlock string
 	UnlockedFor        string
+	FrontmatterJson    []byte `json:"-"`
 }
 
 func (p Page) LastEditTime() time.Time {
@@ -39,7 +40,7 @@ func (p Page) LastEditUnixTime() int64 {
 func (s *Site) Open(name string) (p *Page) {
 	p = new(Page)
 	p.Site = s
-	p.Name = name
+	p.Identifier = name
 	p.Text = versionedtext.NewVersionedText("")
 	p.Render()
 	bJSON, err := ioutil.ReadFile(path.Join(s.PathToData, encodeToBase32(strings.ToLower(name))+".json"))
@@ -52,21 +53,22 @@ func (s *Site) Open(name string) (p *Page) {
 	}
 	return p
 }
-func (s *Site) OpenOrInit(name string, req *http.Request) (p *Page) {
-	bJSON, err := ioutil.ReadFile(path.Join(s.PathToData, encodeToBase32(strings.ToLower(name))+".json"))
+
+func (s *Site) OpenOrInit(identifier string, req *http.Request) (p *Page) {
+	bJSON, err := ioutil.ReadFile(path.Join(s.PathToData, encodeToBase32(strings.ToLower(identifier))+".json"))
 	if err != nil {
 		p = new(Page)
 		p.Site = s
-		p.Name = name
+		p.Identifier = identifier
 
-		initialText := ""
-		title := ""
-		for pram, vals := range req.URL.Query() {
-			if pram == "__title" {
-				title = vals[0]
-			}
-			if strings.HasPrefix(pram, "__") {
-				initialText += strings.TrimPrefix(pram, "__") + ": " + vals[0] + "\n"
+		prams := req.URL.Query()
+		initialText := "identifier: " + identifier + "\n"
+		title := prams.Get("title")
+		for pram, vals := range prams {
+			if len(vals) > 1 {
+				initialText += pram + ":\n- " + strings.Join(vals, "\n- ") + "\n"
+			} else if len(vals) == 1 {
+				initialText += pram + ": " + vals[0] + "\n"
 			}
 		}
 
@@ -191,7 +193,7 @@ func (p *Page) Render() {
 		currentText = strings.Replace(currentText, s, "["+s[2:len(s)-2]+"](/"+s[2:len(s)-2]+"/view)", 1)
 	}
 	p.Text.Update(currentText)
-	p.RenderedPage = MarkdownToHtml(p.Text.GetCurrent(), true)
+	p.RenderedPage, p.FrontmatterJson = MarkdownToHtmlAndJsonFrontmatter(p.Text.GetCurrent(), true)
 }
 
 func (p *Page) Save() error {
@@ -202,25 +204,25 @@ func (p *Page) Save() error {
 		return err
 	}
 
-	err = ioutil.WriteFile(path.Join(p.Site.PathToData, encodeToBase32(strings.ToLower(p.Name))+".json"), bJSON, 0644)
+	err = ioutil.WriteFile(path.Join(p.Site.PathToData, encodeToBase32(strings.ToLower(p.Identifier))+".json"), bJSON, 0644)
 	if err != nil {
 		return err
 	}
 
 	// Write the current Markdown
-	return ioutil.WriteFile(path.Join(p.Site.PathToData, encodeToBase32(strings.ToLower(p.Name))+".md"), []byte(p.Text.CurrentText), 0644)
+	return ioutil.WriteFile(path.Join(p.Site.PathToData, encodeToBase32(strings.ToLower(p.Identifier))+".md"), []byte(p.Text.CurrentText), 0644)
 }
 
 func (p *Page) IsNew() bool {
-	return !exists(path.Join(p.Site.PathToData, encodeToBase32(strings.ToLower(p.Name))+".json"))
+	return !exists(path.Join(p.Site.PathToData, encodeToBase32(strings.ToLower(p.Identifier))+".json"))
 }
 
 func (p *Page) Erase() error {
-	p.Site.Logger.Trace("Erasing " + p.Name)
+	p.Site.Logger.Trace("Erasing " + p.Identifier)
 
-	err := os.Remove(path.Join(p.Site.PathToData, encodeToBase32(strings.ToLower(p.Name))+".json"))
+	err := os.Remove(path.Join(p.Site.PathToData, encodeToBase32(strings.ToLower(p.Identifier))+".json"))
 	if err != nil {
 		return err
 	}
-	return os.Remove(path.Join(p.Site.PathToData, encodeToBase32(strings.ToLower(p.Name))+".md"))
+	return os.Remove(path.Join(p.Site.PathToData, encodeToBase32(strings.ToLower(p.Identifier))+".md"))
 }

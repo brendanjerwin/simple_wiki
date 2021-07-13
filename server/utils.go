@@ -3,7 +3,9 @@ package server
 import (
 	"encoding/base32"
 	"encoding/hex"
+	"encoding/json"
 	"math/rand"
+	"mime"
 	"net/http"
 	"os"
 	"path"
@@ -24,9 +26,9 @@ var allowInsecureHtml bool
 
 func init() {
 	rand.Seed(time.Now().Unix())
-	animalsText, _ := Asset("static/text/animals")
+	animalsText, _ := StaticContent.ReadFile("static/text/animals")
 	animals = strings.Split(string(animalsText), ",")
-	adjectivesText, _ := Asset("static/text/adjectives")
+	adjectivesText, _ := StaticContent.ReadFile("static/text/adjectives")
 	adjectives = strings.Split(string(adjectivesText), "\n")
 }
 
@@ -63,19 +65,10 @@ func stringInSlice(s string, strings []string) bool {
 }
 
 func contentType(filename string) string {
-	switch {
-	case strings.Contains(filename, ".css"):
-		return "text/css"
-	case strings.Contains(filename, ".jpg"):
-		return "image/jpeg"
-	case strings.Contains(filename, ".png"):
-		return "image/png"
-	case strings.Contains(filename, ".js"):
-		return "application/javascript"
-	case strings.Contains(filename, ".xml"):
-		return "application/xml"
-	}
-	return "text/html"
+	nameParts := strings.Split(filename, ".")
+	mime.AddExtensionType(".md", "text/markdown")
+	mimeType := mime.TypeByExtension(nameParts[len(nameParts)-1])
+	return mimeType
 }
 
 func (s *Site) sniffContentType(name string) (string, error) {
@@ -157,21 +150,22 @@ func StripFrontmatter(s string) string {
 	return string(unsafe)
 }
 
-func MarkdownToHtml(s string, handleFrontMatter bool) string {
+func MarkdownToHtmlAndJsonFrontmatter(s string, handleFrontMatter bool) ([]byte, []byte) {
 	var unsafe []byte
 	var err error
+	matter := &map[string]interface{}{}
 	if handleFrontMatter {
-		doesnt_matter := &DoesntMatter{}
-		unsafe, err = frontmatter.Parse(strings.NewReader(s), &doesnt_matter)
+		unsafe, err = frontmatter.Parse(strings.NewReader(s), &matter)
 		if err != nil {
 			panic(err)
 		}
 	} else {
 		unsafe = []byte(s)
 	}
+	matterBytes, _ := json.Marshal(matter)
 	unsafe = blackfriday.Run(unsafe)
 	if allowInsecureHtml {
-		return string(unsafe)
+		return unsafe, matterBytes
 	}
 
 	pClean := bluemonday.UGCPolicy()
@@ -184,11 +178,11 @@ func MarkdownToHtml(s string, handleFrontMatter bool) string {
 	pClean.AllowAttrs("id").OnElements("a")
 	pClean.AllowDataURIImages()
 	html := pClean.SanitizeBytes(unsafe)
-	return string(html)
+	return html, matterBytes
 }
 
-func GithubMarkdownToHTML(s string) string {
-	return string(github_flavored_markdown.Markdown([]byte(s)))
+func GithubMarkdownToHTML(s string) []byte {
+	return github_flavored_markdown.Markdown([]byte(s))
 }
 
 func encodeToBase32(s string) string {
