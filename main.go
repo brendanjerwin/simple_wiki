@@ -41,7 +41,7 @@ func main() {
 			c.GlobalString("cookie-secret"),
 			c.GlobalString("access-code"),
 			c.GlobalBool("allow-insecure-markup"),
-			c.GlobalBool("allow-file-uploads"),
+			!c.GlobalBool("block-file-uploads"),
 			c.GlobalUint("max-upload-mb"),
 			c.GlobalUint("max-document-length"),
 			logger(c.GlobalBool("debug")),
@@ -103,8 +103,8 @@ func main() {
 			Usage: "random data to use for cookies; changing it will invalidate all sessions",
 		},
 		cli.BoolFlag{
-			Name:  "allow-file-uploads",
-			Usage: "Enable file uploads",
+			Name:  "block-file-uploads",
+			Usage: "Block file uploads",
 		},
 		cli.UintFlag{
 			Name:  "max-upload-mb",

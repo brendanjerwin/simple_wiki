@@ -6,7 +6,6 @@ import (
 	"html/template"
 	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -252,7 +251,6 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 			data = s.Css
 		} else {
 			var errAssset error
-			log.Printf("%s", filename)
 			data, errAssset = StaticContent.ReadFile(filename)
 			if errAssset != nil {
 				c.String(http.StatusNotFound, "Could not find data")
