@@ -25,33 +25,19 @@ func main() {
 		pathToData = c.GlobalString("data")
 		os.MkdirAll(pathToData, 0755)
 		host := c.GlobalString("host")
-		crt_f := c.GlobalString("cert") // crt flag
-		key_f := c.GlobalString("key")  // key flag
 		if host == "" {
 			host = GetLocalIP()
 		}
-		TLS := false
-		if crt_f != "" && key_f != "" {
-			TLS = true
-		}
-		if TLS {
-			fmt.Printf("\nRunning simple_wiki server (version %s) at https://%s:%s\n\n", version, host, c.GlobalString("port"))
-		} else {
-			fmt.Printf("\nRunning simple_wiki server (version %s) at http://%s:%s\n\n", version, host, c.GlobalString("port"))
-		}
+		fmt.Printf("\nRunning simple_wiki server (version %s) at http://%s:%s\n\n", version, host, c.GlobalString("port"))
 
 		server.Serve(
 			pathToData,
 			c.GlobalString("host"),
 			c.GlobalString("port"),
-			c.GlobalString("cert"),
-			c.GlobalString("key"),
-			TLS,
 			c.GlobalString("css"),
 			c.GlobalString("default-page"),
 			c.GlobalString("lock"),
 			c.GlobalInt("debounce"),
-			c.GlobalBool("diary"),
 			c.GlobalString("cookie-secret"),
 			c.GlobalString("access-code"),
 			c.GlobalBool("allow-insecure-markup"),
@@ -69,11 +55,6 @@ func main() {
 			Usage: "data folder to use",
 		},
 		cli.StringFlag{
-			Name:  "olddata",
-			Value: "",
-			Usage: "data folder for migrating",
-		},
-		cli.StringFlag{
 			Name:  "host",
 			Value: "",
 			Usage: "host to use",
@@ -82,16 +63,6 @@ func main() {
 			Name:  "port,p",
 			Value: "8050",
 			Usage: "port to use",
-		},
-		cli.StringFlag{
-			Name:  "cert",
-			Value: "",
-			Usage: "absolute path to SSL public sertificate",
-		},
-		cli.StringFlag{
-			Name:  "key",
-			Value: "",
-			Usage: "absolute path to SSL private key",
 		},
 		cli.StringFlag{
 			Name:  "css",
@@ -120,10 +91,6 @@ func main() {
 		cli.BoolFlag{
 			Name:  "debug, d",
 			Usage: "turn on debugging",
-		},
-		cli.BoolFlag{
-			Name:  "diary",
-			Usage: "turn diary mode (doing New will give a timestamped page)",
 		},
 		cli.StringFlag{
 			Name:  "access-code",

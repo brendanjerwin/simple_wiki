@@ -32,7 +32,6 @@ type Site struct {
 	DefaultPage     string
 	DefaultPassword string
 	Debounce        int
-	Diary           bool
 	SessionStore    cookie.Store
 	SecretCode      string
 	AllowInsecure   bool
@@ -57,14 +56,10 @@ func Serve(
 	filepathToData,
 	host,
 	port,
-	crt_path,
-	key_path string,
-	TLS bool,
 	cssFile string,
 	defaultPage string,
 	defaultPassword string,
 	debounce int,
-	diary bool,
 	secret string,
 	secretCode string,
 	allowInsecure bool,
@@ -91,7 +86,6 @@ func Serve(
 		DefaultPage:     defaultPage,
 		DefaultPassword: defaultPassword,
 		Debounce:        debounce,
-		Diary:           diary,
 		SessionStore:    cookie.NewStore([]byte(secret)),
 		SecretCode:      secretCode,
 		AllowInsecure:   allowInsecure,
@@ -101,11 +95,7 @@ func Serve(
 		MaxDocumentSize: maxDocumentSize,
 	}.Router()
 
-	if TLS {
-		http.ListenAndServeTLS(host+":"+port, crt_path, key_path, router)
-	} else {
-		panic(router.Run(host + ":" + port))
-	}
+	panic(router.Run(host + ":" + port))
 }
 
 func (s Site) Router() *gin.Engine {
@@ -418,7 +408,6 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		"RecentlyEdited":     getRecentlyEdited(page, c),
 		"CustomCSS":          len(s.Css) > 0,
 		"Debounce":           s.Debounce,
-		"DiaryMode":          s.Diary,
 		"Date":               time.Now().Format("2006-01-02"),
 		"UnixTime":           time.Now().Unix(),
 		"AllowFileUploads":   s.Fileuploads,

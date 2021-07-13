@@ -57,11 +57,7 @@
                         <li class="pure-menu-item pure-menu-has-children pure-menu-allow-hover">
                             <a href="#" id="menuLink1" class="pure-menu-link">{{ .Page }}</a>
                             <ul class="pure-menu-children">
-                                {{ if .DiaryMode }}
-                                <li class="pure-menu-item"><a href="/{{ .Date }}/edit" class="pure-menu-link">New</a></li>
-                                {{ else }}
                                 <li class="pure-menu-item"><a href="/" class="pure-menu-link">New</a></li>
-                                {{ end }}
                                 <hr>
                                 {{ if (.IsLocked) }}
                                 {{ else }}
