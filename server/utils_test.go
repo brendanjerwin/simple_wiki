@@ -1,6 +1,7 @@
 package server
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -30,5 +31,25 @@ func TestHashing(t *testing.T) {
 	err = CheckPasswordHash("1234lkjklj", p)
 	if err == nil {
 		t.Errorf("Should NOT be correct password")
+	}
+}
+
+func TestMarkdownToHtmlWithFrontmatter(t *testing.T) {
+	markdown := `
+---
+sample: "value"
+---
+
+# Hello
+	`
+
+	html := MarkdownToHtml(markdown, true)
+
+	if strings.Contains(html, "sample:") {
+		t.Errorf("Did not remove frontmatter.")
+	}
+
+	if !strings.Contains(html, "<h1>Hello</h1") {
+		t.Errorf("Did not include HTML")
 	}
 }

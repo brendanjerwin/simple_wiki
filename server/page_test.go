@@ -7,15 +7,15 @@ import (
 )
 
 func TestListFiles(t *testing.T) {
-	pathToData = "testdata"
+	pathToData := "testdata"
 	os.MkdirAll(pathToData, 0755)
 	defer os.RemoveAll(pathToData)
 	s := Site{PathToData: pathToData}
-	p := s.Open("testpage")
+	p := s.OpenOrInit("testpage")
 	p.Update("Some data")
-	p = s.Open("testpage2")
+	p = s.OpenOrInit("testpage2")
 	p.Update("A different bunch of data")
-	p = s.Open("testpage3")
+	p = s.OpenOrInit("testpage3")
 	p.Update("Not much else")
 	n := s.DirectoryList()
 	if len(n) != 3 {
@@ -34,11 +34,11 @@ func TestListFiles(t *testing.T) {
 }
 
 func TestGeneral(t *testing.T) {
-	pathToData = "testdata"
+	pathToData := "testdata"
 	os.MkdirAll(pathToData, 0755)
 	defer os.RemoveAll(pathToData)
 	s := Site{PathToData: pathToData}
-	p := s.Open("testpage")
+	p := s.OpenOrInit("testpage")
 	err := p.Update("**bold**")
 	if err != nil {
 		t.Error(err)
@@ -52,12 +52,12 @@ func TestGeneral(t *testing.T) {
 	}
 	p.Save()
 
-	p2 := s.Open("testpage")
+	p2 := s.OpenOrInit("testpage")
 	if strings.TrimSpace(p2.RenderedPage) != "<p><strong>bold</strong> and <em>italic</em></p>" {
 		t.Errorf("Did not render: '%s'", p2.RenderedPage)
 	}
 
-	p3 := s.Open("testpage: childpage")
+	p3 := s.OpenOrInit("testpage: childpage")
 	err = p3.Update("**child content**")
 	if err != nil {
 		t.Error(err)

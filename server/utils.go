@@ -2,7 +2,6 @@ package server
 
 import (
 	"encoding/base32"
-	"encoding/binary"
 	"encoding/hex"
 	"math/rand"
 	"net/http"
@@ -11,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/adrg/frontmatter"
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/russross/blackfriday/v2"
 	"github.com/shurcooL/github_flavored_markdown"
@@ -60,13 +60,6 @@ func stringInSlice(s string, strings []string) bool {
 		}
 	}
 	return false
-}
-
-// itob returns an 8-byte big endian representation of v.
-func itob(v int) []byte {
-	b := make([]byte, 8)
-	binary.BigEndian.PutUint64(b, uint64(v))
-	return b
 }
 
 func contentType(filename string) string {
@@ -156,8 +149,27 @@ func exists(path string) bool {
 	return !os.IsNotExist(err)
 }
 
-func MarkdownToHtml(s string) string {
-	unsafe := blackfriday.Run([]byte(s))
+type DoesntMatter struct{}
+
+func StripFrontmatter(s string) string {
+	doesnt_matter := &DoesntMatter{}
+	unsafe, _ := frontmatter.Parse(strings.NewReader(s), &doesnt_matter)
+	return string(unsafe)
+}
+
+func MarkdownToHtml(s string, handleFrontMatter bool) string {
+	var unsafe []byte
+	var err error
+	if handleFrontMatter {
+		doesnt_matter := &DoesntMatter{}
+		unsafe, err = frontmatter.Parse(strings.NewReader(s), &doesnt_matter)
+		if err != nil {
+			panic(err)
+		}
+	} else {
+		unsafe = []byte(s)
+	}
+	unsafe = blackfriday.Run(unsafe)
 	if allowInsecureHtml {
 		return string(unsafe)
 	}

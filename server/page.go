@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -16,18 +17,15 @@ import (
 
 // Page is the basic struct
 type Page struct {
-	Site *Site
+	Site *Site `json:"-"`
 
-	Name                    string
-	Text                    versionedtext.VersionedText
-	Meta                    string
-	RenderedPage            string
-	IsLocked                bool
-	PassphraseToUnlock      string
-	IsEncrypted             bool
-	IsPrimedForSelfDestruct bool
-	IsPublished             bool
-	UnlockedFor             string
+	Name               string
+	Text               versionedtext.VersionedText
+	Meta               string
+	RenderedPage       string `json:"-"`
+	IsLocked           bool
+	PassphraseToUnlock string
+	UnlockedFor        string
 }
 
 func (p Page) LastEditTime() time.Time {
@@ -52,6 +50,44 @@ func (s *Site) Open(name string) (p *Page) {
 	if err != nil {
 		p = new(Page)
 	}
+	return p
+}
+func (s *Site) OpenOrInit(name string, req *http.Request) (p *Page) {
+	bJSON, err := ioutil.ReadFile(path.Join(s.PathToData, encodeToBase32(strings.ToLower(name))+".json"))
+	if err != nil {
+		p = new(Page)
+		p.Site = s
+		p.Name = name
+
+		initialText := ""
+		title := ""
+		for pram, vals := range req.URL.Query() {
+			if pram == "__title" {
+				title = vals[0]
+			}
+			if strings.HasPrefix(pram, "__") {
+				initialText += strings.TrimPrefix(pram, "__") + ": " + vals[0] + "\n"
+			}
+		}
+
+		if initialText != "" {
+			initialText = "---\n" + initialText + "---\n"
+		}
+
+		if title != "" {
+			initialText += "\n# " + title + "\n"
+		}
+
+		p.Text = versionedtext.NewVersionedText(initialText)
+		p.Render()
+		p.Save()
+		return p
+	}
+	err = json.Unmarshal(bJSON, &p)
+	if err != nil {
+		panic(err)
+	}
+	p.Render()
 	return p
 }
 
@@ -149,18 +185,13 @@ func (p *Page) Update(newText string) error {
 var rBracketPage = regexp.MustCompile(`\[\[(.*?)\]\]`)
 
 func (p *Page) Render() {
-	if p.IsEncrypted {
-		p.RenderedPage = "<code>" + p.Text.GetCurrent() + "</code>"
-		return
-	}
-
 	// Convert [[page]] to [page](/page/view)
 	currentText := p.Text.GetCurrent()
 	for _, s := range rBracketPage.FindAllString(currentText, -1) {
 		currentText = strings.Replace(currentText, s, "["+s[2:len(s)-2]+"](/"+s[2:len(s)-2]+"/view)", 1)
 	}
 	p.Text.Update(currentText)
-	p.RenderedPage = MarkdownToHtml(p.Text.GetCurrent())
+	p.RenderedPage = MarkdownToHtml(p.Text.GetCurrent(), true)
 }
 
 func (p *Page) Save() error {
@@ -170,27 +201,14 @@ func (p *Page) Save() error {
 	if err != nil {
 		return err
 	}
-	return ioutil.WriteFile(path.Join(p.Site.PathToData, encodeToBase32(strings.ToLower(p.Name))+".json"), bJSON, 0644)
-}
 
-func (p *Page) ChildPageNames() []string {
-	prefix := strings.ToLower(p.Name + ": ")
-	files, err := filepath.Glob(path.Join(p.Site.PathToData, "*"))
+	err = ioutil.WriteFile(path.Join(p.Site.PathToData, encodeToBase32(strings.ToLower(p.Name))+".json"), bJSON, 0644)
 	if err != nil {
-		panic("Filepath pattern cannot be malformed")
+		return err
 	}
 
-	result := []string{}
-	for i := range files {
-		basename := filepath.Base(files[i])
-		if strings.HasSuffix(basename, ".json") {
-			cname, err := decodeFromBase32(basename[:len(basename)-len(".json")])
-			if err == nil && strings.HasPrefix(strings.ToLower(cname), prefix) {
-				result = append(result, cname)
-			}
-		}
-	}
-	return result
+	// Write the current Markdown
+	return ioutil.WriteFile(path.Join(p.Site.PathToData, encodeToBase32(strings.ToLower(p.Name))+".md"), []byte(p.Text.CurrentText), 0644)
 }
 
 func (p *Page) IsNew() bool {
@@ -199,9 +217,10 @@ func (p *Page) IsNew() bool {
 
 func (p *Page) Erase() error {
 	p.Site.Logger.Trace("Erasing " + p.Name)
-	return os.Remove(path.Join(p.Site.PathToData, encodeToBase32(strings.ToLower(p.Name))+".json"))
-}
 
-func (p *Page) Published() bool {
-	return p.IsPublished
+	err := os.Remove(path.Join(p.Site.PathToData, encodeToBase32(strings.ToLower(p.Name))+".json"))
+	if err != nil {
+		return err
+	}
+	return os.Remove(path.Join(p.Site.PathToData, encodeToBase32(strings.ToLower(p.Name))+".md"))
 }
