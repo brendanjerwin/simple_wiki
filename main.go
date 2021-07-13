@@ -17,7 +17,7 @@ var pathToData string
 
 func main() {
 	app := cli.NewApp()
-	app.Name = "cowyo"
+	app.Name = "simple_wiki"
 	app.Usage = "a simple wiki"
 	app.Version = version
 	app.Compiled = time.Now()
@@ -35,9 +35,9 @@ func main() {
 			TLS = true
 		}
 		if TLS {
-			fmt.Printf("\nRunning cowyo server (version %s) at https://%s:%s\n\n", version, host, c.GlobalString("port"))
+			fmt.Printf("\nRunning simple_wiki server (version %s) at https://%s:%s\n\n", version, host, c.GlobalString("port"))
 		} else {
-			fmt.Printf("\nRunning cowyo server (version %s) at http://%s:%s\n\n", version, host, c.GlobalString("port"))
+			fmt.Printf("\nRunning simple_wiki server (version %s) at http://%s:%s\n\n", version, host, c.GlobalString("port"))
 		}
 
 		server.Serve(
@@ -148,28 +148,6 @@ func main() {
 			Name:  "max-document-length",
 			Value: 100000000,
 			Usage: "Largest wiki page (in characters) allowed",
-		},
-	}
-	app.Commands = []cli.Command{
-		{
-			Name:    "migrate",
-			Aliases: []string{"m"},
-			Usage:   "migrate from the old cowyo",
-			Action: func(c *cli.Context) error {
-				pathToData = c.GlobalString("data")
-				pathToOldData := c.GlobalString("olddata")
-				if len(pathToOldData) == 0 {
-					fmt.Printf("You need to specify folder with -olddata")
-					return nil
-				}
-				os.MkdirAll(pathToData, 0755)
-				if !exists(pathToOldData) {
-					fmt.Printf("Can not find '%s', does it exist?", pathToOldData)
-					return nil
-				}
-				server.Migrate(pathToOldData, pathToData, logger(c.GlobalBool("debug")))
-				return nil
-			},
 		},
 	}
 
