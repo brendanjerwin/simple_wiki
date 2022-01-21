@@ -67,6 +67,8 @@ func stringInSlice(s string, strings []string) bool {
 func contentType(filename string) string {
 	nameParts := strings.Split(filename, ".")
 	mime.AddExtensionType(".md", "text/markdown")
+	mime.AddExtensionType(".heic", "image/heic")
+	mime.AddExtensionType(".heif", "image/heif")
 	mimeType := mime.TypeByExtension(nameParts[len(nameParts)-1])
 	return mimeType
 }
