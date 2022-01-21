@@ -134,16 +134,21 @@ func (d DirectoryEntry) Sys() interface{} {
 func (s *Site) DirectoryList() []os.FileInfo {
 	files, _ := ioutil.ReadDir(s.PathToData)
 	entries := make([]os.FileInfo, len(files))
-	for i, f := range files {
-		name := DecodeFileName(f.Name())
-		p := s.Open(name)
-		entries[i] = DirectoryEntry{
-			Path:       name,
-			Length:     len(p.Text.GetCurrent()),
-			Numchanges: p.Text.NumEdits(),
-			LastEdited: time.Unix(p.Text.LastEditTime()/1000000000, 0),
+	found := -1
+	for _, f := range files {
+		if strings.HasSuffix(f.Name(), ".json") {
+			name := DecodeFileName(f.Name())
+			p := s.Open(name)
+			found = found + 1
+			entries[found] = DirectoryEntry{
+				Path:       name,
+				Length:     len(p.Text.GetCurrent()),
+				Numchanges: p.Text.NumEdits(),
+				LastEdited: time.Unix(p.Text.LastEditTime()/1000000000, 0),
+			}
 		}
 	}
+	entries = entries[:found]
 	sort.Slice(entries, func(i, j int) bool { return entries[i].ModTime().After(entries[j].ModTime()) })
 	return entries
 }
