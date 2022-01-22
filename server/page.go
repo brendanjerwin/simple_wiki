@@ -201,7 +201,15 @@ func (p *Page) Render() {
 		currentText = strings.Replace(currentText, s, "["+s[2:len(s)-2]+"](/"+s[2:len(s)-2]+"/view)", 1)
 	}
 	p.Text.Update(currentText)
-	p.RenderedPage, p.FrontmatterJson = MarkdownToHtmlAndJsonFrontmatter(p.Text.GetCurrent(), true)
+
+	var renderedHtml []byte
+	var err error
+	renderedHtml, p.FrontmatterJson = MarkdownToHtmlAndJsonFrontmatter(p.Text.GetCurrent(), true)
+	p.RenderedPage, err = ExecuteTemplate(string(renderedHtml), p.FrontmatterJson)
+	if err != nil {
+		p.RenderedPage = []byte(err.Error())
+	}
+	p.RenderedPage = renderedHtml
 }
 
 func (p *Page) Save() error {

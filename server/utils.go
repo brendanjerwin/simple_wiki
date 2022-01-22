@@ -1,9 +1,11 @@
 package server
 
 import (
+	"bytes"
 	"encoding/base32"
 	"encoding/hex"
 	"encoding/json"
+	"html/template"
 	"math/rand"
 	"mime"
 	"net/http"
@@ -181,6 +183,52 @@ func MarkdownToHtmlAndJsonFrontmatter(s string, handleFrontMatter bool) ([]byte,
 	pClean.AllowDataURIImages()
 	html := pClean.SanitizeBytes(unsafe)
 	return html, matterBytes
+}
+
+type BasicFrontmatter struct {
+	Identifier string `json:"identifier"`
+}
+
+type TemplateContext struct {
+	Basic *BasicFrontmatter
+}
+
+func ConstructTemplateContextFromFrontmatter(frontmatter []byte) (*TemplateContext, error) {
+	basic := &BasicFrontmatter{}
+	err := json.Unmarshal(frontmatter, &basic)
+	if err != nil {
+		return nil, err
+	}
+
+	context := &TemplateContext{
+		Basic: basic,
+	}
+
+	return context, nil
+}
+
+func ExecuteTemplate(templateHtml string, frontmatter []byte) ([]byte, error) {
+	funcs := template.FuncMap{
+		"test": strings.Title,
+	}
+
+	tmpl, err := template.New("page").Funcs(funcs).Parse(templateHtml)
+	if err != nil {
+		return nil, err
+	}
+
+	context, err := ConstructTemplateContextFromFrontmatter(frontmatter)
+	if err != nil {
+		return nil, err
+	}
+
+	buf := &bytes.Buffer{}
+	err = tmpl.Execute(buf, context)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
 }
 
 func GithubMarkdownToHTML(s string) []byte {
