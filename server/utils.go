@@ -157,16 +157,24 @@ func StripFrontmatter(s string) string {
 func MarkdownToHtmlAndJsonFrontmatter(s string, handleFrontMatter bool) ([]byte, []byte) {
 	var unsafe []byte
 	var err error
+	var matterBytes []byte
+
 	matter := &map[string]interface{}{}
 	if handleFrontMatter {
 		unsafe, err = frontmatter.Parse(strings.NewReader(s), &matter)
 		if err != nil {
 			panic(err)
 		}
+		matterBytes, _ = json.Marshal(matter)
+
+		unsafe, err = ExecuteTemplate(string(unsafe), matterBytes)
+		if err != nil {
+			return []byte(err.Error()), nil
+		}
 	} else {
 		unsafe = []byte(s)
 	}
-	matterBytes, _ := json.Marshal(matter)
+
 	unsafe = blackfriday.Run(unsafe)
 	if allowInsecureHtml {
 		return unsafe, matterBytes
@@ -191,6 +199,7 @@ type BasicFrontmatter struct {
 
 type TemplateContext struct {
 	Basic *BasicFrontmatter
+	Map   map[string]interface{}
 }
 
 func ConstructTemplateContextFromFrontmatter(frontmatter []byte) (*TemplateContext, error) {
@@ -200,8 +209,15 @@ func ConstructTemplateContextFromFrontmatter(frontmatter []byte) (*TemplateConte
 		return nil, err
 	}
 
+	unstructured := make(map[string]interface{})
+	err = json.Unmarshal(frontmatter, &unstructured)
+	if err != nil {
+		return nil, err
+	}
+
 	context := &TemplateContext{
 		Basic: basic,
+		Map:   unstructured,
 	}
 
 	return context, nil

@@ -76,3 +76,27 @@ func TestExecuteTemplate(t *testing.T) {
 		t.Error("Did not render identifer into output")
 	}
 }
+
+func TestExecuteTemplateUnstructured(t *testing.T) {
+
+	frontmatter := `
+{
+"identifier": "1234",
+"foobar": "baz"
+}
+	`
+
+	templateHtml := `
+{{ index .Map "foobar" }}
+	`
+
+	rendered, err := ExecuteTemplate(templateHtml, []byte(frontmatter))
+
+	if err != nil {
+		t.Error(err)
+	}
+
+	if !strings.Contains(string(rendered), "baz") {
+		t.Error("Did not render data into output")
+	}
+}
