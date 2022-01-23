@@ -154,7 +154,7 @@ func StripFrontmatter(s string) string {
 	return string(unsafe)
 }
 
-func MarkdownToHtmlAndJsonFrontmatter(s string, handleFrontMatter bool) ([]byte, []byte) {
+func MarkdownToHtmlAndJsonFrontmatter(s string, handleFrontMatter bool, site *Site) ([]byte, []byte) {
 	var unsafe []byte
 	var err error
 	var matterBytes []byte
@@ -167,7 +167,7 @@ func MarkdownToHtmlAndJsonFrontmatter(s string, handleFrontMatter bool) ([]byte,
 		}
 		matterBytes, _ = json.Marshal(matter)
 
-		unsafe, err = ExecuteTemplate(string(unsafe), matterBytes)
+		unsafe, err = ExecuteTemplate(string(unsafe), matterBytes, site)
 		if err != nil {
 			return []byte(err.Error()), nil
 		}
@@ -193,18 +193,21 @@ func MarkdownToHtmlAndJsonFrontmatter(s string, handleFrontMatter bool) ([]byte,
 	return html, matterBytes
 }
 
-type BasicFrontmatter struct {
-	Identifier string `json:"identifier"`
+type InventoryFrontmatter struct {
+	Container string   `json:"container"`
+	Items     []string `json:"items"`
 }
 
 type TemplateContext struct {
-	Basic *BasicFrontmatter
-	Map   map[string]interface{}
+	Identifier string `json:"identifier"`
+	Title      string `json:"title"`
+	Map        map[string]interface{}
+	Inventory  *InventoryFrontmatter `json:"inventory"`
 }
 
 func ConstructTemplateContextFromFrontmatter(frontmatter []byte) (*TemplateContext, error) {
-	basic := &BasicFrontmatter{}
-	err := json.Unmarshal(frontmatter, &basic)
+	context := &TemplateContext{}
+	err := json.Unmarshal(frontmatter, &context)
 	if err != nil {
 		return nil, err
 	}
@@ -215,17 +218,55 @@ func ConstructTemplateContextFromFrontmatter(frontmatter []byte) (*TemplateConte
 		return nil, err
 	}
 
-	context := &TemplateContext{
-		Basic: basic,
-		Map:   unstructured,
-	}
+	context.Map = unstructured
 
 	return context, nil
 }
 
-func ExecuteTemplate(templateHtml string, frontmatter []byte) ([]byte, error) {
+func BuildShowInventoryContentsOf(site *Site) func(string) string {
+	return func(containerIdentifier string) string {
+		frontmatter, err := site.ReadFrontMatter(containerIdentifier)
+		if err != nil {
+			return "### [" + containerIdentifier + "](/" + containerIdentifier + ")\n" + `
+	Not Setup for Inventory
+			`
+		}
+
+		tmplString := `{{if index . "title"}}
+### [{{ index . "title" }}](/{{ index . "identifier" }})
+{{else}}
+### [{{ index . "identifier" }}](/{{ index . "identifier" }})
+{{end}}
+{{if index . "inventory"}}
+{{if index . "inventory" "items"}}
+{{ range index . "inventory" "items" }}
+  - {{ . }}
+{{end}}
+{{else}}
+	No Items
+{{end}}
+{{else}}
+	Not Setup for Inventory
+{{end}}
+`
+		tmpl, err := template.New("content").Parse(tmplString)
+		if err != nil {
+			return err.Error()
+		}
+
+		buf := &bytes.Buffer{}
+		err = tmpl.Execute(buf, frontmatter)
+		if err != nil {
+			return err.Error()
+		}
+
+		return buf.String()
+	}
+}
+
+func ExecuteTemplate(templateHtml string, frontmatter []byte, site *Site) ([]byte, error) {
 	funcs := template.FuncMap{
-		"test": strings.Title,
+		"ShowInventoryContentsOf": BuildShowInventoryContentsOf(site),
 	}
 
 	tmpl, err := template.New("page").Funcs(funcs).Parse(templateHtml)

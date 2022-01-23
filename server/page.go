@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/adrg/frontmatter"
 	"github.com/schollz/versionedtext"
 )
 
@@ -35,6 +37,21 @@ func (p Page) LastEditTime() time.Time {
 
 func (p Page) LastEditUnixTime() int64 {
 	return p.Text.LastEditTime() / 1000000000
+}
+
+func (s *Site) ReadFrontMatter(name string) (map[string]interface{}, error) {
+	content, err := ioutil.ReadFile(path.Join(s.PathToData, encodeToBase32(strings.ToLower(name))+".md"))
+	if err != nil {
+		return nil, err
+	}
+
+	matter := &map[string]interface{}{}
+	_, err = frontmatter.Parse(bytes.NewReader(content), &matter)
+	if err != nil {
+		return nil, err
+	}
+
+	return *matter, nil
 }
 
 func (s *Site) Open(name string) (p *Page) {
@@ -202,7 +219,7 @@ func (p *Page) Render() {
 	}
 	p.Text.Update(currentText)
 
-	p.RenderedPage, p.FrontmatterJson = MarkdownToHtmlAndJsonFrontmatter(p.Text.GetCurrent(), true)
+	p.RenderedPage, p.FrontmatterJson = MarkdownToHtmlAndJsonFrontmatter(p.Text.GetCurrent(), true, p.Site)
 }
 
 func (p *Page) Save() error {
