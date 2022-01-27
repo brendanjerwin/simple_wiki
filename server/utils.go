@@ -228,23 +228,27 @@ func ConstructTemplateContextFromFrontmatter(frontmatter []byte) (*TemplateConte
 
 func BuildShowInventoryContentsOf(site *Site) func(string) string {
 	linkTo := BuildLinkTo(site)
-	return func(containerIdentifier string) string {
+	isContainer := BuildIsContainer(site)
+	var showInventoryContentsOf (func(string) string)
+	showInventoryContentsOf = func(containerIdentifier string) string {
 		frontmatter, err := site.ReadFrontMatter(containerIdentifier)
 		if err != nil {
-			return "### [" + containerIdentifier + "](/" + containerIdentifier + ")\n" + `
+			return `
 	Not Setup for Inventory
 			`
 		}
 
-		tmplString := `{{if index . "title"}}
-### [{{ index . "title" }}](/{{ index . "identifier" }})
-{{else}}
-### [{{ index . "identifier" }}](/{{ index . "identifier" }})
-{{end}}
-{{if index . "inventory"}}
+		tmplString := `{{if index . "inventory"}}
 {{if index . "inventory" "items"}}
 {{ range index . "inventory" "items" }}
+{{if IsContainer .}}
+
+**{{LinkTo .}}**
+
+{{ShowInventoryContentsOf . }}
+{{else}}
   - {{LinkTo . }}
+{{end}}
 {{end}}
 {{else}}
 	No Items
@@ -254,7 +258,9 @@ func BuildShowInventoryContentsOf(site *Site) func(string) string {
 {{end}}
 `
 		funcs := template.FuncMap{
-			"LinkTo": linkTo,
+			"LinkTo":                  linkTo,
+			"ShowInventoryContentsOf": showInventoryContentsOf,
+			"IsContainer":             isContainer,
 		}
 
 		tmpl, err := template.New("content").Funcs(funcs).Parse(tmplString)
@@ -270,6 +276,8 @@ func BuildShowInventoryContentsOf(site *Site) func(string) string {
 
 		return buf.String()
 	}
+
+	return showInventoryContentsOf
 }
 
 func BuildLinkTo(site *Site) func(string) string {
@@ -298,10 +306,34 @@ func BuildLinkTo(site *Site) func(string) string {
 	}
 }
 
+func BuildIsContainer(site *Site) func(string) bool {
+	return func(identifier string) bool {
+		if identifier == "" {
+			return false
+		}
+		frontmatter, err := site.ReadFrontMatter(identifier)
+		if err != nil {
+			return false
+		}
+
+		if inventory, exist := frontmatter["inventory"]; exist {
+			switch inv := inventory.(type) {
+			case map[string]interface{}:
+				if _, exist := inv["items"]; exist {
+					return true
+				}
+			}
+		}
+
+		return false
+
+	}
+}
 func ExecuteTemplate(templateHtml string, frontmatter []byte, site *Site) ([]byte, error) {
 	funcs := template.FuncMap{
 		"ShowInventoryContentsOf": BuildShowInventoryContentsOf(site),
 		"LinkTo":                  BuildLinkTo(site),
+		"IsContainer":             BuildIsContainer(site),
 	}
 
 	tmpl, err := template.New("page").Funcs(funcs).Parse(templateHtml)
