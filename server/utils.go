@@ -5,13 +5,13 @@ import (
 	"encoding/base32"
 	"encoding/hex"
 	"encoding/json"
-	"html/template"
 	"math/rand"
 	"mime"
 	"net/http"
 	"os"
 	"path"
 	"strings"
+	"text/template"
 	"time"
 
 	"github.com/adrg/frontmatter"
@@ -175,7 +175,10 @@ func MarkdownToHtmlAndJsonFrontmatter(s string, handleFrontMatter bool, site *Si
 		unsafe = []byte(s)
 	}
 
-	unsafe = blackfriday.Run(unsafe)
+	r := blackfriday.NewHTMLRenderer(blackfriday.HTMLRendererParameters{
+		Flags: blackfriday.CommonHTMLFlags, //& blackfriday.Smartypants,
+	})
+	unsafe = blackfriday.Run(unsafe, blackfriday.WithRenderer(r))
 	if allowInsecureHtml {
 		return unsafe, matterBytes
 	}
@@ -224,6 +227,7 @@ func ConstructTemplateContextFromFrontmatter(frontmatter []byte) (*TemplateConte
 }
 
 func BuildShowInventoryContentsOf(site *Site) func(string) string {
+	linkTo := BuildLinkTo(site)
 	return func(containerIdentifier string) string {
 		frontmatter, err := site.ReadFrontMatter(containerIdentifier)
 		if err != nil {
@@ -240,7 +244,7 @@ func BuildShowInventoryContentsOf(site *Site) func(string) string {
 {{if index . "inventory"}}
 {{if index . "inventory" "items"}}
 {{ range index . "inventory" "items" }}
-  - {{ . }}
+  - {{LinkTo . }}
 {{end}}
 {{else}}
 	No Items
@@ -249,6 +253,36 @@ func BuildShowInventoryContentsOf(site *Site) func(string) string {
 	Not Setup for Inventory
 {{end}}
 `
+		funcs := template.FuncMap{
+			"LinkTo": linkTo,
+		}
+
+		tmpl, err := template.New("content").Funcs(funcs).Parse(tmplString)
+		if err != nil {
+			return err.Error()
+		}
+
+		buf := &bytes.Buffer{}
+		err = tmpl.Execute(buf, frontmatter)
+		if err != nil {
+			return err.Error()
+		}
+
+		return buf.String()
+	}
+}
+
+func BuildLinkTo(site *Site) func(string) string {
+	return func(identifier string) string {
+		if identifier == "" {
+			return "N/A"
+		}
+		frontmatter, err := site.ReadFrontMatter(identifier)
+		if err != nil {
+			return "[" + identifier + "](/" + identifier + ")"
+		}
+
+		tmplString := "{{if index . \"title\"}}[{{ index . \"title\" }}](/{{ index . \"identifier\" }}){{else}}[{{ index . \"identifier\" }}](/{{ index . \"identifier\" }}){{end}}"
 		tmpl, err := template.New("content").Parse(tmplString)
 		if err != nil {
 			return err.Error()
@@ -267,6 +301,7 @@ func BuildShowInventoryContentsOf(site *Site) func(string) string {
 func ExecuteTemplate(templateHtml string, frontmatter []byte, site *Site) ([]byte, error) {
 	funcs := template.FuncMap{
 		"ShowInventoryContentsOf": BuildShowInventoryContentsOf(site),
+		"LinkTo":                  BuildLinkTo(site),
 	}
 
 	tmpl, err := template.New("page").Funcs(funcs).Parse(templateHtml)

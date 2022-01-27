@@ -98,7 +98,6 @@ items = [
 
 ]
 
-
 `
 		}
 
@@ -106,14 +105,10 @@ items = [
 			initialText = "+++\n" + initialText + "+++\n"
 		}
 
-		initialText += "# {{or .Title .Identifier}}" + "\n\n"
+		initialText += "\n# {{or .Title .Identifier}}" + "\n"
 
 		if tmpl == "inv_item" {
-			initialText += `
-
-### Goes in: {{ .Inventory.Container }}
-
-			`
+			initialText += "### Goes in: {{LinkTo .Inventory.Container }}\n"
 		}
 
 		p.Text = versionedtext.NewVersionedText(initialText)
