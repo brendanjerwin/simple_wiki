@@ -59,9 +59,30 @@ body#pad.HasDotInName textarea {
   font-family: "Lucida Console", Monaco, monospace;
 }
 
-.markdown-body ul,
-.markdown-body ol {
-  padding-left: 3em;
+div#rendered ul,
+div#rendered ol {
+  padding-left: 2em;
+  line-height: 1.1;
+}
+
+div.pure-menu-horizontal {
+  background-color: lightgrey;
+  height: 2.75em;
+}
+
+div.pure-menu-horizontal hr {
+  margin: unset;
+}
+
+div.pure-menu-horizontal ul {
+  padding: unset;
+}
+
+div.pure-menu-horizontal ul.pure-menu-children {
+  width: 100%;
+  border: grey;
+  border-style: solid;
+  border-top-style: none;
 }
 
 @media (min-width: 5em) {
@@ -79,7 +100,7 @@ body#pad.HasDotInName textarea {
   .pure-menu-heading,
   .pure-menu-link {
     padding-left: 1.2em;
-    padding-right: em;
+    padding-right: 1.2em;
   }
   .ChildPageNames ul {
     grid-template-columns: repeat(1, 1fr);
