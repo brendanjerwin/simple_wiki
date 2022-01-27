@@ -1,9 +1,11 @@
 package server
 
 import (
+	"bytes"
 	"encoding/base32"
 	"encoding/hex"
 	"encoding/json"
+	"html/template"
 	"math/rand"
 	"mime"
 	"net/http"
@@ -67,6 +69,8 @@ func stringInSlice(s string, strings []string) bool {
 func contentType(filename string) string {
 	nameParts := strings.Split(filename, ".")
 	mime.AddExtensionType(".md", "text/markdown")
+	mime.AddExtensionType(".heic", "image/heic")
+	mime.AddExtensionType(".heif", "image/heif")
 	mimeType := mime.TypeByExtension(nameParts[len(nameParts)-1])
 	return mimeType
 }
@@ -150,19 +154,27 @@ func StripFrontmatter(s string) string {
 	return string(unsafe)
 }
 
-func MarkdownToHtmlAndJsonFrontmatter(s string, handleFrontMatter bool) ([]byte, []byte) {
+func MarkdownToHtmlAndJsonFrontmatter(s string, handleFrontMatter bool, site *Site) ([]byte, []byte) {
 	var unsafe []byte
 	var err error
+	var matterBytes []byte
+
 	matter := &map[string]interface{}{}
 	if handleFrontMatter {
 		unsafe, err = frontmatter.Parse(strings.NewReader(s), &matter)
 		if err != nil {
 			panic(err)
 		}
+		matterBytes, _ = json.Marshal(matter)
+
+		unsafe, err = ExecuteTemplate(string(unsafe), matterBytes, site)
+		if err != nil {
+			return []byte(err.Error()), nil
+		}
 	} else {
 		unsafe = []byte(s)
 	}
-	matterBytes, _ := json.Marshal(matter)
+
 	unsafe = blackfriday.Run(unsafe)
 	if allowInsecureHtml {
 		return unsafe, matterBytes
@@ -179,6 +191,101 @@ func MarkdownToHtmlAndJsonFrontmatter(s string, handleFrontMatter bool) ([]byte,
 	pClean.AllowDataURIImages()
 	html := pClean.SanitizeBytes(unsafe)
 	return html, matterBytes
+}
+
+type InventoryFrontmatter struct {
+	Container string   `json:"container"`
+	Items     []string `json:"items"`
+}
+
+type TemplateContext struct {
+	Identifier string `json:"identifier"`
+	Title      string `json:"title"`
+	Map        map[string]interface{}
+	Inventory  *InventoryFrontmatter `json:"inventory"`
+}
+
+func ConstructTemplateContextFromFrontmatter(frontmatter []byte) (*TemplateContext, error) {
+	context := &TemplateContext{}
+	err := json.Unmarshal(frontmatter, &context)
+	if err != nil {
+		return nil, err
+	}
+
+	unstructured := make(map[string]interface{})
+	err = json.Unmarshal(frontmatter, &unstructured)
+	if err != nil {
+		return nil, err
+	}
+
+	context.Map = unstructured
+
+	return context, nil
+}
+
+func BuildShowInventoryContentsOf(site *Site) func(string) string {
+	return func(containerIdentifier string) string {
+		frontmatter, err := site.ReadFrontMatter(containerIdentifier)
+		if err != nil {
+			return "### [" + containerIdentifier + "](/" + containerIdentifier + ")\n" + `
+	Not Setup for Inventory
+			`
+		}
+
+		tmplString := `{{if index . "title"}}
+### [{{ index . "title" }}](/{{ index . "identifier" }})
+{{else}}
+### [{{ index . "identifier" }}](/{{ index . "identifier" }})
+{{end}}
+{{if index . "inventory"}}
+{{if index . "inventory" "items"}}
+{{ range index . "inventory" "items" }}
+  - {{ . }}
+{{end}}
+{{else}}
+	No Items
+{{end}}
+{{else}}
+	Not Setup for Inventory
+{{end}}
+`
+		tmpl, err := template.New("content").Parse(tmplString)
+		if err != nil {
+			return err.Error()
+		}
+
+		buf := &bytes.Buffer{}
+		err = tmpl.Execute(buf, frontmatter)
+		if err != nil {
+			return err.Error()
+		}
+
+		return buf.String()
+	}
+}
+
+func ExecuteTemplate(templateHtml string, frontmatter []byte, site *Site) ([]byte, error) {
+	funcs := template.FuncMap{
+		"ShowInventoryContentsOf": BuildShowInventoryContentsOf(site),
+	}
+
+	tmpl, err := template.New("page").Funcs(funcs).Parse(templateHtml)
+	if err != nil {
+		return nil, err
+	}
+
+	context, err := ConstructTemplateContextFromFrontmatter(frontmatter)
+	if err != nil {
+		return nil, err
+	}
+
+	buf := &bytes.Buffer{}
+	err = tmpl.Execute(buf, context)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
 }
 
 func GithubMarkdownToHTML(s string) []byte {

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
 	"io/ioutil"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/adrg/frontmatter"
 	"github.com/schollz/versionedtext"
 )
 
@@ -35,6 +37,21 @@ func (p Page) LastEditTime() time.Time {
 
 func (p Page) LastEditUnixTime() int64 {
 	return p.Text.LastEditTime() / 1000000000
+}
+
+func (s *Site) ReadFrontMatter(name string) (map[string]interface{}, error) {
+	content, err := ioutil.ReadFile(path.Join(s.PathToData, encodeToBase32(strings.ToLower(name))+".md"))
+	if err != nil {
+		return nil, err
+	}
+
+	matter := &map[string]interface{}{}
+	_, err = frontmatter.Parse(bytes.NewReader(content), &matter)
+	if err != nil {
+		return nil, err
+	}
+
+	return *matter, nil
 }
 
 func (s *Site) Open(name string) (p *Page) {
@@ -134,16 +151,21 @@ func (d DirectoryEntry) Sys() interface{} {
 func (s *Site) DirectoryList() []os.FileInfo {
 	files, _ := ioutil.ReadDir(s.PathToData)
 	entries := make([]os.FileInfo, len(files))
-	for i, f := range files {
-		name := DecodeFileName(f.Name())
-		p := s.Open(name)
-		entries[i] = DirectoryEntry{
-			Path:       name,
-			Length:     len(p.Text.GetCurrent()),
-			Numchanges: p.Text.NumEdits(),
-			LastEdited: time.Unix(p.Text.LastEditTime()/1000000000, 0),
+	found := -1
+	for _, f := range files {
+		if strings.HasSuffix(f.Name(), ".json") {
+			name := DecodeFileName(f.Name())
+			p := s.Open(name)
+			found = found + 1
+			entries[found] = DirectoryEntry{
+				Path:       name,
+				Length:     len(p.Text.GetCurrent()),
+				Numchanges: p.Text.NumEdits(),
+				LastEdited: time.Unix(p.Text.LastEditTime()/1000000000, 0),
+			}
 		}
 	}
+	entries = entries[:found]
 	sort.Slice(entries, func(i, j int) bool { return entries[i].ModTime().After(entries[j].ModTime()) })
 	return entries
 }
@@ -196,7 +218,8 @@ func (p *Page) Render() {
 		currentText = strings.Replace(currentText, s, "["+s[2:len(s)-2]+"](/"+s[2:len(s)-2]+"/view)", 1)
 	}
 	p.Text.Update(currentText)
-	p.RenderedPage, p.FrontmatterJson = MarkdownToHtmlAndJsonFrontmatter(p.Text.GetCurrent(), true)
+
+	p.RenderedPage, p.FrontmatterJson = MarkdownToHtmlAndJsonFrontmatter(p.Text.GetCurrent(), true, p.Site)
 }
 
 func (p *Page) Save() error {

@@ -43,13 +43,60 @@ sample: "value"
 # Hello
 	`
 
-	html := MarkdownToHtml(markdown, true)
+	html, _ := MarkdownToHtmlAndJsonFrontmatter(markdown, true)
 
-	if strings.Contains(html, "sample:") {
+	if strings.Contains(string(html), "sample:") {
 		t.Errorf("Did not remove frontmatter.")
 	}
 
-	if !strings.Contains(html, "<h1>Hello</h1") {
+	if !strings.Contains(string(html), "<h1>Hello</h1") {
 		t.Errorf("Did not include HTML")
+	}
+}
+
+func TestExecuteTemplate(t *testing.T) {
+
+	frontmatter := `
+{
+"identifier": "1234"
+}
+	`
+
+	templateHtml := `
+{{ .Basic.Identifier }}
+	`
+
+	rendered, err := ExecuteTemplate(templateHtml, []byte(frontmatter))
+
+	if err != nil {
+		t.Error(err)
+	}
+
+	if !strings.Contains(string(rendered), "1234") {
+		t.Error("Did not render identifer into output")
+	}
+}
+
+func TestExecuteTemplateUnstructured(t *testing.T) {
+
+	frontmatter := `
+{
+"identifier": "1234",
+"foobar": "baz"
+}
+	`
+
+	templateHtml := `
+{{ index .Map "foobar" }}
+	`
+
+	rendered, err := ExecuteTemplate(templateHtml, []byte(frontmatter))
+
+	if err != nil {
+		t.Error(err)
+	}
+
+	if !strings.Contains(string(rendered), "baz") {
+		t.Error("Did not render data into output")
 	}
 }
