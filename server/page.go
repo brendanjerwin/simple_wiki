@@ -80,7 +80,7 @@ func (s *Site) OpenOrInit(identifier string, req *http.Request) (p *Page) {
 
 		prams := req.URL.Query()
 		initialText := "identifier = \"" + identifier + "\"\n"
-		title := prams.Get("title")
+		tmpl := prams.Get("tmpl")
 		for pram, vals := range prams {
 			if len(vals) > 1 {
 				initialText += pram + " = [ \"" + strings.Join(vals, "\", \"") + "\"]\n"
@@ -89,12 +89,31 @@ func (s *Site) OpenOrInit(identifier string, req *http.Request) (p *Page) {
 			}
 		}
 
+		if tmpl == "inv_item" {
+			initialText += `
+
+[inventory]
+container= ""
+items = [
+
+]
+
+
+`
+		}
+
 		if initialText != "" {
 			initialText = "+++\n" + initialText + "+++\n"
 		}
 
-		if title != "" {
-			initialText += "\n# " + title + "\n"
+		initialText += "# {{or .Title .Identifier}}" + "\n\n"
+
+		if tmpl == "inv_item" {
+			initialText += `
+
+### Goes in: {{ .Inventory.Container }}
+
+			`
 		}
 
 		p.Text = versionedtext.NewVersionedText(initialText)
