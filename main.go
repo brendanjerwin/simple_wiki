@@ -108,7 +108,7 @@ func main() {
 		},
 		cli.UintFlag{
 			Name:  "max-upload-mb",
-			Value: 2,
+			Value: 100,
 			Usage: "Largest file upload (in mb) allowed",
 		},
 		cli.UintFlag{

@@ -577,12 +577,14 @@ func (s *Site) handleUpload(c *gin.Context) {
 	defer file.Close()
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
+		s.Logger.Error("Failed to upload: %s", err.Error())
 		return
 	}
 
 	h := sha256.New()
 	if _, err := io.Copy(h, file); err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
+		s.Logger.Error("Failed to upload: %s", err.Error())
 		return
 	}
 
@@ -592,6 +594,7 @@ func (s *Site) handleUpload(c *gin.Context) {
 	outfile, err := os.Create(path.Join(s.PathToData, newName+".upload"))
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
+		s.Logger.Error("Failed to upload: %s", err.Error())
 		return
 	}
 
@@ -599,6 +602,7 @@ func (s *Site) handleUpload(c *gin.Context) {
 	_, err = io.Copy(outfile, file)
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
+		s.Logger.Error("Failed to upload: %s", err.Error())
 		return
 	}
 
