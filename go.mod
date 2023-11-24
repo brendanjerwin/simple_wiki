@@ -9,7 +9,7 @@ require (
 	github.com/gin-contrib/sessions v0.0.5
 	github.com/gin-gonic/gin v1.9.1
 	github.com/jcelliott/lumber v0.0.0-20160324203708-dd349441af25
-	github.com/microcosm-cc/bluemonday v1.0.17
+	github.com/microcosm-cc/bluemonday v1.0.26
 	github.com/russross/blackfriday/v2 v2.1.0
 	github.com/schollz/versionedtext v1.0.0
 	github.com/shurcooL/github_flavored_markdown v0.0.0-20210228213109-c3a9aa474629
