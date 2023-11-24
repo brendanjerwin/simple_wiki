@@ -43,7 +43,7 @@ sample: "value"
 # Hello
 	`
 
-	html, _ := MarkdownToHtmlAndJsonFrontmatter(markdown, true)
+	html, _ := MarkdownToHtmlAndJsonFrontmatter(markdown, true, &Site{})
 
 	if strings.Contains(string(html), "sample:") {
 		t.Errorf("Did not remove frontmatter.")
@@ -66,7 +66,7 @@ func TestExecuteTemplate(t *testing.T) {
 {{ .Basic.Identifier }}
 	`
 
-	rendered, err := ExecuteTemplate(templateHtml, []byte(frontmatter))
+	rendered, err := ExecuteTemplate(templateHtml, []byte(frontmatter), &Site{})
 
 	if err != nil {
 		t.Error(err)
@@ -90,7 +90,7 @@ func TestExecuteTemplateUnstructured(t *testing.T) {
 {{ index .Map "foobar" }}
 	`
 
-	rendered, err := ExecuteTemplate(templateHtml, []byte(frontmatter))
+	rendered, err := ExecuteTemplate(templateHtml, []byte(frontmatter), &Site{})
 
 	if err != nil {
 		t.Error(err)
