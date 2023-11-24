@@ -183,16 +183,16 @@ func MarkdownToHtmlAndJsonFrontmatter(s string, handleFrontMatter bool, site *Si
 		return unsafe, matterBytes
 	}
 
-	pClean := bluemonday.UGCPolicy()
-	pClean.AllowElements("img")
-	pClean.AllowElements("center")
-	pClean.AllowAttrs("alt").OnElements("img")
-	pClean.AllowAttrs("src").OnElements("img")
-	pClean.AllowAttrs("class").OnElements("a")
-	pClean.AllowAttrs("href").OnElements("a")
-	pClean.AllowAttrs("id").OnElements("a")
-	pClean.AllowDataURIImages()
-	html := pClean.SanitizeBytes(unsafe)
+	sanitizerPolicy := bluemonday.UGCPolicy()
+	sanitizerPolicy.AllowElements("img")
+	sanitizerPolicy.AllowElements("center")
+	sanitizerPolicy.AllowAttrs("alt").OnElements("img")
+	sanitizerPolicy.AllowAttrs("src").OnElements("img")
+	sanitizerPolicy.AllowAttrs("class").OnElements("a")
+	sanitizerPolicy.AllowAttrs("href").OnElements("a")
+	sanitizerPolicy.AllowAttrs("id").OnElements("a")
+	sanitizerPolicy.AllowDataURIImages()
+	html := sanitizerPolicy.SanitizeBytes(unsafe)
 	return html, matterBytes
 }
 
