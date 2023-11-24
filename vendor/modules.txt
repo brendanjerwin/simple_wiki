@@ -19,7 +19,6 @@ github.com/gin-contrib/multitemplate
 github.com/gin-contrib/sessions
 github.com/gin-contrib/sessions/cookie
 # github.com/gin-contrib/sse v0.1.0
-## explicit
 github.com/gin-contrib/sse
 # github.com/gin-gonic/gin v1.7.7
 ## explicit
@@ -118,10 +117,9 @@ golang.org/x/crypto/sha3
 ## explicit
 golang.org/x/net/html
 golang.org/x/net/html/atom
-# golang.org/x/sys v0.0.0-20220114195835-da31bd327af9
+# golang.org/x/sys v0.1.0
 ## explicit
 golang.org/x/sys/cpu
-golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/unix
 # golang.org/x/text v0.3.7
 golang.org/x/text/internal/language
@@ -157,10 +155,6 @@ google.golang.org/protobuf/reflect/protoregistry
 google.golang.org/protobuf/runtime/protoiface
 google.golang.org/protobuf/runtime/protoimpl
 google.golang.org/protobuf/types/descriptorpb
-# gopkg.in/go-playground/assert.v1 v1.2.1
-## explicit
-# gopkg.in/go-playground/validator.v8 v8.18.2
-## explicit
 # gopkg.in/urfave/cli.v1 v1.20.0
 ## explicit
 gopkg.in/urfave/cli.v1
