@@ -1,6 +1,7 @@
 package server
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -122,5 +123,60 @@ func TestRandomStringOfLength(t *testing.T) {
 		if result == result2 {
 			t.Errorf("Expected two different strings, but got the same: %s", result)
 		}
+	}
+}
+
+func TestStripFrontmatter(t *testing.T) {
+	testCases := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "Test with frontmatter",
+			input:    "---\ntitle: Test\n---\nThis is a test",
+			expected: "This is a test",
+		},
+		{
+			name:     "Test without frontmatter",
+			input:    "This is a test",
+			expected: "This is a test",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := StripFrontmatter(tc.input)
+			if result != tc.expected {
+				t.Errorf("expected: %s, got: %s", tc.expected, result)
+			}
+		})
+	}
+}
+func TestMarkdownToHTML(t *testing.T) {
+	testCases := []struct {
+		name     string
+		input    string
+		expected []byte
+	}{
+		{
+			name:     "Test with simple markdown",
+			input:    "**bold**",
+			expected: []byte("<p><strong>bold</strong></p>\n"),
+		},
+		{
+			name:     "Test with markdown link",
+			input:    "[link](http://example.com)",
+			expected: []byte("<p><a href=\"http://example.com\" rel=\"nofollow\">link</a></p>\n"),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := MarkdownToHTML(tc.input)
+			if !reflect.DeepEqual(result, tc.expected) {
+				t.Errorf("expected: %s, got: %s", tc.expected, result)
+			}
+		})
 	}
 }

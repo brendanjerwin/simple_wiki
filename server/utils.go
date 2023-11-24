@@ -357,7 +357,7 @@ func ExecuteTemplate(templateHtml string, frontmatter []byte, site *Site) ([]byt
 	return buf.Bytes(), nil
 }
 
-func GithubMarkdownToHTML(s string) []byte {
+func MarkdownToHTML(s string) []byte {
 	return github_flavored_markdown.Markdown([]byte(s))
 }
 

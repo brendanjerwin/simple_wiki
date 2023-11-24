@@ -331,7 +331,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		versionText, err := p.Text.GetPreviousByTimestamp(int64(versionInt))
 		if err == nil {
 			rawText = versionText
-			rawHTML = GithubMarkdownToHTML(rawText)
+			rawHTML = MarkdownToHTML(rawText)
 		}
 	}
 
