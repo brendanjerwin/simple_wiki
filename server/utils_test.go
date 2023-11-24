@@ -63,7 +63,7 @@ func TestExecuteTemplate(t *testing.T) {
 	`
 
 	templateHtml := `
-{{ .Basic.Identifier }}
+{{ .Identifier }}
 	`
 
 	rendered, err := ExecuteTemplate(templateHtml, []byte(frontmatter), &Site{})
