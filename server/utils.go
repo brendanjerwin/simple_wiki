@@ -23,11 +23,9 @@ import (
 
 var animals []string
 var adjectives []string
-var aboutPageText string
 var allowInsecureHtml bool
 
 func init() {
-	rand.Seed(time.Now().Unix())
 	animalsText, _ := StaticContent.ReadFile("static/text/animals")
 	animals = strings.Split(string(animalsText), ",")
 	adjectivesText, _ := StaticContent.ReadFile("static/text/adjectives")
