@@ -11,7 +11,7 @@ require (
 	github.com/jcelliott/lumber v0.0.0-20160324203708-dd349441af25
 	github.com/microcosm-cc/bluemonday v1.0.17
 	github.com/russross/blackfriday/v2 v2.1.0
-	github.com/schollz/versionedtext v0.0.0-20180523061923-d8ce0957c254
+	github.com/schollz/versionedtext v1.0.0
 	github.com/shurcooL/github_flavored_markdown v0.0.0-20210228213109-c3a9aa474629
 	golang.org/x/crypto v0.14.0
 	gopkg.in/urfave/cli.v1 v1.20.0

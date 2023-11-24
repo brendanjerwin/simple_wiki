@@ -111,9 +111,8 @@ github.com/russross/blackfriday v1.6.0 h1:KqfZb0pUVN2lYqZUYRddxF4OR8ZMURnJIG5Y3V
 github.com/russross/blackfriday v1.6.0/go.mod h1:ti0ldHuxg49ri4ksnFxlkCfN+hvslNlmVHqNRXXJNAY=
 github.com/russross/blackfriday/v2 v2.1.0 h1:JIOH55/0cWyOuilr9/qlrm0BSXldqnqwMsf35Ld67mk=
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
-github.com/schollz/versionedtext v0.0.0-20180523061923-d8ce0957c254 h1:/EgihFrDLhb/x7NLm8cWB7QTquw5gatR+y/jv2gLWsY=
-github.com/schollz/versionedtext v0.0.0-20180523061923-d8ce0957c254/go.mod h1:116sjYSGDGoVSTUCdO34dA1Yg1ZGbN2jk/aYThLfK60=
-github.com/sergi/go-diff v1.0.0/go.mod h1:0CfEIISq7TuYL3j771MWULgwwjU+GofnZX9QAmXWZgo=
+github.com/schollz/versionedtext v1.0.0 h1:CPSGKSTfm7U7uUpXwfTIdPmuHS56GXOjoEGziwQC0/g=
+github.com/schollz/versionedtext v1.0.0/go.mod h1:dwWDHWolYLnYO8ErrdcM7tv0fBlJ31Q8XO1z7MpwJIQ=
 github.com/sergi/go-diff v1.2.0 h1:XU+rvMAioB0UC3q1MFrIQy4Vo5/4VsRDQQXHsEya6xQ=
 github.com/sergi/go-diff v1.2.0/go.mod h1:STckp+ISIX8hZLjrqAeVduY0gWCT9IjLuqbuNXdaHfM=
 github.com/shurcooL/github_flavored_markdown v0.0.0-20210228213109-c3a9aa474629 h1:86e54L0i3pH3dAIA8OxBbfLrVyhoGpnNk1iJCigAWYs=
