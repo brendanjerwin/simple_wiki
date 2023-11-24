@@ -6,7 +6,7 @@ require (
 	github.com/adrg/frontmatter v0.2.0
 	github.com/danielheath/gin-teeny-security v0.0.0-20180331042316-bb11804dd0e2
 	github.com/gin-contrib/multitemplate v0.0.0-20220102045447-8a3ac507ec70
-	github.com/gin-contrib/sessions v0.0.4
+	github.com/gin-contrib/sessions v0.0.5
 	github.com/gin-gonic/gin v1.9.1
 	github.com/jcelliott/lumber v0.0.0-20160324203708-dd349441af25
 	github.com/microcosm-cc/bluemonday v1.0.17
