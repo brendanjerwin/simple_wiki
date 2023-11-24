@@ -100,3 +100,27 @@ func TestExecuteTemplateUnstructured(t *testing.T) {
 		t.Error("Did not render data into output")
 	}
 }
+func TestRandomStringOfLength(t *testing.T) {
+	tests := []struct {
+		length int
+	}{
+		{length: 5},
+		{length: 8},
+		{length: 10},
+		{length: 15},
+	}
+
+	for _, tt := range tests {
+		result, _ := RandomStringOfLength(tt.length)
+		result2, err := RandomStringOfLength(tt.length)
+		if err != nil {
+			t.Errorf("Error generating random string: %s", err)
+		}
+		if len(result) != tt.length {
+			t.Errorf("Expected string of length %d, but got length %d", tt.length, len(result))
+		}
+		if result == result2 {
+			t.Errorf("Expected two different strings, but got the same: %s", result)
+		}
+	}
+}

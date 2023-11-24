@@ -5,6 +5,7 @@ import (
 	"encoding/base32"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"math/rand"
 	"mime"
 	"net/http"
@@ -101,11 +102,14 @@ const (
 	letterIdxMax  = 63 / letterIdxBits   // # of letter indices fitting in 63 bits
 )
 
-// RandStringBytesMaskImprSrc prints a random string
-func RandStringBytesMaskImprSrc(n int) string {
-	b := make([]byte, n)
+// RandomStringOfLength prints a random string
+func RandomStringOfLength(l int) (string, error) {
+	if l <= 0 {
+		return "", errors.New("length must be greater than 0")
+	}
+	b := make([]byte, l)
 	// A src.Int63() generates 63 random bits, enough for letterIdxMax characters!
-	for i, cache, remain := n-1, src.Int63(), letterIdxMax; i >= 0; {
+	for i, cache, remain := l-1, src.Int63(), letterIdxMax; i >= 0; {
 		if remain == 0 {
 			cache, remain = src.Int63(), letterIdxMax
 		}
@@ -117,7 +121,7 @@ func RandStringBytesMaskImprSrc(n int) string {
 		remain--
 	}
 
-	return string(b)
+	return string(b), nil
 }
 
 // HashPassword generates a bcrypt hash of the password using work factor 14.

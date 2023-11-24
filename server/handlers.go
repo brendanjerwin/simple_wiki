@@ -229,7 +229,7 @@ func getSetSessionID(c *gin.Context) (sid string) {
 		sid = v.(string)
 	}
 	if v == nil || sid == "" {
-		sid = RandStringBytesMaskImprSrc(8)
+		sid, _ = RandomStringOfLength(8)
 		session.Set("sid", sid)
 		session.Save()
 	}
