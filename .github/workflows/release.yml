@@ -24,10 +24,10 @@ jobs:
               run: |
                 export GOOS=${{ matrix.goos }}
                 export GOARCH=${{ matrix.goarch }}
-                go build -v -o simple_wiki-${{ matrix.goos }}-${{ matrix.goarch }}
+                go build -v -o simple_wiki-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goarch == 'windows' && '.exe' || '' }}
 
             - name: Upload Release Asset
               uses: AButler/upload-release-assets@v3.0
               with:
-                files: "./simple_wiki-${{ matrix.goos }}-${{ matrix.goarch }}"
+                files: "./simple_wiki-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goarch == 'windows' && '.exe' || '' }}"
                 repo-token: ${{ secrets.GITHUB_TOKEN }}
