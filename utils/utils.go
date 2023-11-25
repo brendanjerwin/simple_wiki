@@ -1,35 +1,36 @@
-package server
+package utils
 
 import (
 	"bytes"
 	"encoding/base32"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"math/rand"
 	"mime"
-	"net/http"
 	"os"
-	"path"
 	"strings"
 	"text/template"
 	"time"
 
 	"github.com/adrg/frontmatter"
+	"github.com/brendanjerwin/simple_wiki/static"
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/russross/blackfriday/v2"
 	"github.com/shurcooL/github_flavored_markdown"
-	"golang.org/x/crypto/bcrypt"
 )
 
 var animals []string
 var adjectives []string
-var allowInsecureHtml bool
+var AllowInsecureHtml bool
+
+type IReadFrontMatter interface {
+	ReadFrontMatter(identifier string) (map[string]interface{}, error)
+}
 
 func init() {
-	animalsText, _ := StaticContent.ReadFile("static/text/animals")
+	animalsText, _ := static.StaticContent.ReadFile("text/animals")
 	animals = strings.Split(string(animalsText), ",")
-	adjectivesText, _ := StaticContent.ReadFile("static/text/adjectives")
+	adjectivesText, _ := static.StaticContent.ReadFile("text/adjectives")
 	adjectives = strings.Split(string(adjectivesText), "\n")
 }
 
@@ -41,7 +42,7 @@ func randomAdjective() string {
 	return strings.Replace(strings.Title(adjectives[rand.Intn(len(adjectives)-1)]), " ", "", -1)
 }
 
-func randomAlliterateCombo() (combo string) {
+func RandomAlliterateCombo() (combo string) {
 	combo = ""
 	// generate random alliteration thats not been used
 	for {
@@ -56,7 +57,7 @@ func randomAlliterateCombo() (combo string) {
 }
 
 // is there a string in a slice?
-func stringInSlice(s string, strings []string) bool {
+func StringInSlice(s string, strings []string) bool {
 	for _, k := range strings {
 		if s == k {
 			return true
@@ -65,32 +66,13 @@ func stringInSlice(s string, strings []string) bool {
 	return false
 }
 
-func contentType(filename string) string {
+func ContentTypeFromName(filename string) string {
 	nameParts := strings.Split(filename, ".")
 	mime.AddExtensionType(".md", "text/markdown")
 	mime.AddExtensionType(".heic", "image/heic")
 	mime.AddExtensionType(".heif", "image/heif")
 	mimeType := mime.TypeByExtension(nameParts[len(nameParts)-1])
 	return mimeType
-}
-
-func (s *Site) sniffContentType(name string) (string, error) {
-	file, err := os.Open(path.Join(s.PathToData, name))
-	if err != nil {
-		return "", err
-
-	}
-	defer file.Close()
-
-	// Only the first 512 bytes are used to sniff the content type.
-	buffer := make([]byte, 512)
-	_, err = file.Read(buffer)
-	if err != nil {
-		return "", err
-	}
-
-	// Always returns a valid content-type and "application/octet-stream" if no others seemed to match.
-	return http.DetectContentType(buffer), nil
 }
 
 var src = rand.NewSource(time.Now().UnixNano())
@@ -124,26 +106,8 @@ func RandomStringOfLength(l int) (string, error) {
 	return string(b), nil
 }
 
-// HashPassword generates a bcrypt hash of the password using work factor 14.
-// https://github.com/gtank/cryptopasta/blob/master/hash.go
-func HashPassword(password string) string {
-	hash, _ := bcrypt.GenerateFromPassword([]byte(password), 14)
-	return hex.EncodeToString(hash)
-}
-
-// CheckPassword securely compares a bcrypt hashed password with its possible
-// plaintext equivalent.  Returns nil on success, or an error on failure.
-// https://github.com/gtank/cryptopasta/blob/master/hash.go
-func CheckPasswordHash(password, hashedString string) error {
-	hash, err := hex.DecodeString(hashedString)
-	if err != nil {
-		return err
-	}
-	return bcrypt.CompareHashAndPassword(hash, []byte(password))
-}
-
-// exists returns whether the given file or directory exists or not
-func exists(path string) bool {
+// Exists returns whether the given file or directory Exists or not
+func Exists(path string) bool {
 	_, err := os.Stat(path)
 	return !os.IsNotExist(err)
 }
@@ -156,7 +120,7 @@ func StripFrontmatter(s string) string {
 	return string(unsafe)
 }
 
-func MarkdownToHtmlAndJsonFrontmatter(s string, handleFrontMatter bool, site *Site) ([]byte, []byte) {
+func MarkdownToHtmlAndJsonFrontmatter(s string, handleFrontMatter bool, site IReadFrontMatter) ([]byte, []byte) {
 	var unsafe []byte
 	var err error
 	var matterBytes []byte
@@ -181,7 +145,7 @@ func MarkdownToHtmlAndJsonFrontmatter(s string, handleFrontMatter bool, site *Si
 		Flags: blackfriday.CommonHTMLFlags, //& blackfriday.Smartypants,
 	})
 	unsafe = blackfriday.Run(unsafe, blackfriday.WithRenderer(r))
-	if allowInsecureHtml {
+	if AllowInsecureHtml {
 		return unsafe, matterBytes
 	}
 
@@ -228,7 +192,7 @@ func ConstructTemplateContextFromFrontmatter(frontmatter []byte) (*TemplateConte
 	return context, nil
 }
 
-func BuildShowInventoryContentsOf(site *Site) func(string) string {
+func BuildShowInventoryContentsOf(site IReadFrontMatter) func(string) string {
 	linkTo := BuildLinkTo(site)
 	isContainer := BuildIsContainer(site)
 	var showInventoryContentsOf (func(string) string)
@@ -282,7 +246,7 @@ func BuildShowInventoryContentsOf(site *Site) func(string) string {
 	return showInventoryContentsOf
 }
 
-func BuildLinkTo(site *Site) func(string) string {
+func BuildLinkTo(site IReadFrontMatter) func(string) string {
 	return func(identifier string) string {
 		if identifier == "" {
 			return "N/A"
@@ -308,7 +272,7 @@ func BuildLinkTo(site *Site) func(string) string {
 	}
 }
 
-func BuildIsContainer(site *Site) func(string) bool {
+func BuildIsContainer(site IReadFrontMatter) func(string) bool {
 	return func(identifier string) bool {
 		if identifier == "" {
 			return false
@@ -331,7 +295,7 @@ func BuildIsContainer(site *Site) func(string) bool {
 
 	}
 }
-func ExecuteTemplate(templateHtml string, frontmatter []byte, site *Site) ([]byte, error) {
+func ExecuteTemplate(templateHtml string, frontmatter []byte, site IReadFrontMatter) ([]byte, error) {
 	funcs := template.FuncMap{
 		"ShowInventoryContentsOf": BuildShowInventoryContentsOf(site),
 		"LinkTo":                  BuildLinkTo(site),
@@ -361,35 +325,35 @@ func MarkdownToHTML(s string) []byte {
 	return github_flavored_markdown.Markdown([]byte(s))
 }
 
-func encodeToBase32(s string) string {
-	return encodeBytesToBase32([]byte(s))
+func EncodeToBase32(s string) string {
+	return EncodeBytesToBase32([]byte(s))
 }
 
-func encodeBytesToBase32(s []byte) string {
+func EncodeBytesToBase32(s []byte) string {
 	return base32.StdEncoding.EncodeToString(s)
 }
 
-func decodeFromBase32(s string) (s2 string, err error) {
+func DecodeFromBase32(s string) (s2 string, err error) {
 	bString, err := base32.StdEncoding.DecodeString(s)
 	s2 = string(bString)
 	return
 }
 
-func reverseSliceInt64(s []int64) []int64 {
+func ReverseSliceInt64(s []int64) []int64 {
 	for i, j := 0, len(s)-1; i < j; i, j = i+1, j-1 {
 		s[i], s[j] = s[j], s[i]
 	}
 	return s
 }
 
-func reverseSliceString(s []string) []string {
+func ReverseSliceString(s []string) []string {
 	for i, j := 0, len(s)-1; i < j; i, j = i+1, j-1 {
 		s[i], s[j] = s[j], s[i]
 	}
 	return s
 }
 
-func reverseSliceInt(s []int) []int {
+func ReverseSliceInt(s []int) []int {
 	for i, j := 0, len(s)-1; i < j; i, j = i+1, j-1 {
 		s[i], s[j] = s[j], s[i]
 	}

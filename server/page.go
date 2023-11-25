@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/adrg/frontmatter"
+	"github.com/brendanjerwin/simple_wiki/utils"
 	"github.com/schollz/versionedtext"
 )
 
@@ -40,7 +41,7 @@ func (p Page) LastEditUnixTime() int64 {
 }
 
 func (s *Site) ReadFrontMatter(name string) (map[string]interface{}, error) {
-	content, err := ioutil.ReadFile(path.Join(s.PathToData, encodeToBase32(strings.ToLower(name))+".md"))
+	content, err := ioutil.ReadFile(path.Join(s.PathToData, utils.EncodeToBase32(strings.ToLower(name))+".md"))
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +61,7 @@ func (s *Site) Open(name string) (p *Page) {
 	p.Identifier = name
 	p.Text = versionedtext.NewVersionedText("")
 	p.Render()
-	bJSON, err := ioutil.ReadFile(path.Join(s.PathToData, encodeToBase32(strings.ToLower(name))+".json"))
+	bJSON, err := ioutil.ReadFile(path.Join(s.PathToData, utils.EncodeToBase32(strings.ToLower(name))+".json"))
 	if err != nil {
 		return
 	}
@@ -72,7 +73,7 @@ func (s *Site) Open(name string) (p *Page) {
 }
 
 func (s *Site) OpenOrInit(identifier string, req *http.Request) (p *Page) {
-	bJSON, err := ioutil.ReadFile(path.Join(s.PathToData, encodeToBase32(strings.ToLower(identifier))+".json"))
+	bJSON, err := ioutil.ReadFile(path.Join(s.PathToData, utils.EncodeToBase32(strings.ToLower(identifier))+".json"))
 	if err != nil {
 		p = new(Page)
 		p.Site = s
@@ -204,7 +205,7 @@ func (s *Site) UploadList() ([]os.FileInfo, error) {
 }
 
 func DecodeFileName(s string) string {
-	s2, _ := decodeFromBase32(strings.Split(s, ".")[0])
+	s2, _ := utils.DecodeFromBase32(strings.Split(s, ".")[0])
 	return s2
 }
 
@@ -233,7 +234,7 @@ func (p *Page) Render() {
 	}
 	p.Text.Update(currentText)
 
-	p.RenderedPage, p.FrontmatterJson = MarkdownToHtmlAndJsonFrontmatter(p.Text.GetCurrent(), true, p.Site)
+	p.RenderedPage, p.FrontmatterJson = utils.MarkdownToHtmlAndJsonFrontmatter(p.Text.GetCurrent(), true, p.Site)
 }
 
 func (p *Page) Save() error {
@@ -244,25 +245,25 @@ func (p *Page) Save() error {
 		return err
 	}
 
-	err = ioutil.WriteFile(path.Join(p.Site.PathToData, encodeToBase32(strings.ToLower(p.Identifier))+".json"), bJSON, 0644)
+	err = ioutil.WriteFile(path.Join(p.Site.PathToData, utils.EncodeToBase32(strings.ToLower(p.Identifier))+".json"), bJSON, 0644)
 	if err != nil {
 		return err
 	}
 
 	// Write the current Markdown
-	return ioutil.WriteFile(path.Join(p.Site.PathToData, encodeToBase32(strings.ToLower(p.Identifier))+".md"), []byte(p.Text.CurrentText), 0644)
+	return ioutil.WriteFile(path.Join(p.Site.PathToData, utils.EncodeToBase32(strings.ToLower(p.Identifier))+".md"), []byte(p.Text.CurrentText), 0644)
 }
 
 func (p *Page) IsNew() bool {
-	return !exists(path.Join(p.Site.PathToData, encodeToBase32(strings.ToLower(p.Identifier))+".json"))
+	return !utils.Exists(path.Join(p.Site.PathToData, utils.EncodeToBase32(strings.ToLower(p.Identifier))+".json"))
 }
 
 func (p *Page) Erase() error {
 	p.Site.Logger.Trace("Erasing " + p.Identifier)
 
-	err := os.Remove(path.Join(p.Site.PathToData, encodeToBase32(strings.ToLower(p.Identifier))+".json"))
+	err := os.Remove(path.Join(p.Site.PathToData, utils.EncodeToBase32(strings.ToLower(p.Identifier))+".json"))
 	if err != nil {
 		return err
 	}
-	return os.Remove(path.Join(p.Site.PathToData, encodeToBase32(strings.ToLower(p.Identifier))+".md"))
+	return os.Remove(path.Join(p.Site.PathToData, utils.EncodeToBase32(strings.ToLower(p.Identifier))+".md"))
 }

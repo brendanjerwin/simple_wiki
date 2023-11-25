@@ -1,4 +1,4 @@
-package server
+package utils
 
 import (
 	"reflect"
@@ -6,32 +6,28 @@ import (
 	"testing"
 )
 
+type MockReadFrontMatter struct {
+	Frontmatter map[string]interface{}
+}
+
+func (m *MockReadFrontMatter) ReadFrontMatter(markdown string) (map[string]interface{}, error) {
+	return m.Frontmatter, nil
+}
+
 func BenchmarkAlliterativeAnimal(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		randomAlliterateCombo()
+		RandomAlliterateCombo()
 	}
 }
 
 func TestReverseList(t *testing.T) {
 	s := []int64{1, 10, 2, 20}
-	if reverseSliceInt64(s)[0] != 20 {
+	if ReverseSliceInt64(s)[0] != 20 {
 		t.Errorf("Could not reverse: %v", s)
 	}
 	s2 := []string{"a", "b", "d", "c"}
-	if reverseSliceString(s2)[0] != "c" {
+	if ReverseSliceString(s2)[0] != "c" {
 		t.Errorf("Could not reverse: %v", s2)
-	}
-}
-
-func TestHashing(t *testing.T) {
-	p := HashPassword("1234")
-	err := CheckPasswordHash("1234", p)
-	if err != nil {
-		t.Errorf("Should be correct password")
-	}
-	err = CheckPasswordHash("1234lkjklj", p)
-	if err == nil {
-		t.Errorf("Should NOT be correct password")
 	}
 }
 
@@ -44,7 +40,7 @@ sample: "value"
 # Hello
 	`
 
-	html, _ := MarkdownToHtmlAndJsonFrontmatter(markdown, true, &Site{})
+	html, _ := MarkdownToHtmlAndJsonFrontmatter(markdown, true, &MockReadFrontMatter{})
 
 	if strings.Contains(string(html), "sample:") {
 		t.Errorf("Did not remove frontmatter.")
@@ -67,7 +63,7 @@ func TestExecuteTemplate(t *testing.T) {
 {{ .Identifier }}
 	`
 
-	rendered, err := ExecuteTemplate(templateHtml, []byte(frontmatter), &Site{})
+	rendered, err := ExecuteTemplate(templateHtml, []byte(frontmatter), &MockReadFrontMatter{})
 
 	if err != nil {
 		t.Error(err)
@@ -91,7 +87,7 @@ func TestExecuteTemplateUnstructured(t *testing.T) {
 {{ index .Map "foobar" }}
 	`
 
-	rendered, err := ExecuteTemplate(templateHtml, []byte(frontmatter), &Site{})
+	rendered, err := ExecuteTemplate(templateHtml, []byte(frontmatter), &MockReadFrontMatter{})
 
 	if err != nil {
 		t.Error(err)
