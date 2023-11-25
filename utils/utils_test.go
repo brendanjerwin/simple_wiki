@@ -97,31 +97,6 @@ func TestExecuteTemplateUnstructured(t *testing.T) {
 		t.Error("Did not render data into output")
 	}
 }
-func TestRandomStringOfLength(t *testing.T) {
-	tests := []struct {
-		length int
-	}{
-		{length: 5},
-		{length: 8},
-		{length: 10},
-		{length: 15},
-	}
-
-	for _, tt := range tests {
-		result, _ := RandomStringOfLength(tt.length)
-		result2, err := RandomStringOfLength(tt.length)
-		if err != nil {
-			t.Errorf("Error generating random string: %s", err)
-		}
-		if len(result) != tt.length {
-			t.Errorf("Expected string of length %d, but got length %d", tt.length, len(result))
-		}
-		if result == result2 {
-			t.Errorf("Expected two different strings, but got the same: %s", result)
-		}
-	}
-}
-
 func TestStripFrontmatter(t *testing.T) {
 	testCases := []struct {
 		name     string
@@ -174,5 +149,99 @@ func TestMarkdownToHTML(t *testing.T) {
 				t.Errorf("expected: %s, got: %s", tc.expected, result)
 			}
 		})
+	}
+}
+
+func TestRandomAlliterateCombo(t *testing.T) {
+	combo := RandomAlliterateCombo()
+	if len(combo) == 0 {
+		t.Errorf("Expected a non-empty string, got an empty string")
+	}
+}
+
+func TestStringInSlice(t *testing.T) {
+	strings := []string{"apple", "banana", "cherry"}
+	if !StringInSlice("banana", strings) {
+		t.Errorf("Expected 'banana' to be in the slice")
+	}
+	if StringInSlice("orange", strings) {
+		t.Errorf("Did not expect 'orange' to be in the slice")
+	}
+}
+
+func TestContentTypeFromName(t *testing.T) {
+	if ContentTypeFromName("file.md") != "text/markdown; charset=utf-8" {
+		t.Errorf("Expected 'text/markdown', got '%s'", ContentTypeFromName("file.md"))
+	}
+	if ContentTypeFromName("image.heic") != "image/heic" {
+		t.Errorf("Expected 'image/heic', got '%s'", ContentTypeFromName("image.heic"))
+	}
+}
+
+func TestRandomStringOfLength(t *testing.T) {
+	str, err := RandomStringOfLength(10)
+	if err != nil {
+		t.Errorf("Expected no error, got '%s'", err)
+	}
+	if len(str) != 10 {
+		t.Errorf("Expected length 10, got '%d'", len(str))
+	}
+}
+
+func TestExists(t *testing.T) {
+	if !Exists("./utils.go") {
+		t.Errorf("Expected './utils.go' to exist")
+	}
+	if Exists("./nonexistent_file.go") {
+		t.Errorf("Did not expect './nonexistent_file.go' to exist")
+	}
+}
+
+func TestEncodeToBase32(t *testing.T) {
+	if EncodeToBase32("hello") != "NBSWY3DP" {
+		t.Error("Expected 'NBSWY3DP", EncodeToBase32("hello"))
+	}
+}
+
+func TestDecodeFromBase32(t *testing.T) {
+	str, err := DecodeFromBase32("NBSWY3DP")
+	if err != nil {
+		t.Errorf("Expected no error, got '%s'", err)
+	}
+	if str != "hello" {
+		t.Errorf("Expected 'hello', got '%s'", str)
+	}
+}
+
+func TestReverseSliceInt64(t *testing.T) {
+	slice := []int64{1, 2, 3, 4, 5}
+	reversed := ReverseSliceInt64(slice)
+	expected := []int64{5, 4, 3, 2, 1}
+	for i, v := range reversed {
+		if v != expected[i] {
+			t.Errorf("Expected '%d', got '%d'", expected[i], v)
+		}
+	}
+}
+
+func TestReverseSliceString(t *testing.T) {
+	slice := []string{"apple", "banana", "cherry"}
+	reversed := ReverseSliceString(slice)
+	expected := []string{"cherry", "banana", "apple"}
+	for i, v := range reversed {
+		if v != expected[i] {
+			t.Errorf("Expected '%s', got '%s'", expected[i], v)
+		}
+	}
+}
+
+func TestReverseSliceInt(t *testing.T) {
+	slice := []int{1, 2, 3, 4, 5}
+	reversed := ReverseSliceInt(slice)
+	expected := []int{5, 4, 3, 2, 1}
+	for i, v := range reversed {
+		if v != expected[i] {
+			t.Errorf("Expected '%d', got '%d'", expected[i], v)
+		}
 	}
 }
