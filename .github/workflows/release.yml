@@ -11,9 +11,6 @@ jobs:
             matrix:
                 goos: [linux, windows]
                 goarch: [386, amd64, arm]
-                exclude:
-                    - goos: windows
-                    - goarch: arm
         steps:
             - name: Check out code
               uses: actions/checkout@v4
