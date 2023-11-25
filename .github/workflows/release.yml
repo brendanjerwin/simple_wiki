@@ -1,0 +1,38 @@
+name: Release
+
+on:
+    release:
+        types: [created]
+jobs:
+    build:
+        name: Build and Release Go Binary
+        runs-on: ubuntu-latest
+        strategy:
+            matrix:
+                goos: [linux, windows]
+                goarch: [386, amd64, arm]
+                exclude:
+                    - goos: windows
+                    - goarch: arm
+        steps:
+            - name: Check out code
+              uses: actions/checkout@v2
+
+            - name: Set up Go
+              uses: actions/setup-go@v2
+              with:
+                go-version: 1.21
+
+            - name: Build Go Binary
+              run: |
+                export GOOS=${{ matrix.goos }}
+                export GOARCH=${{ matrix.goarch }}
+                go build -v -o simple_wiki-${{ matrix.goos }}-${{ matrix.goarch }}
+
+            - name: Upload Release Asset
+              uses: actions/upload-release-asset@v1
+              with:
+                upload_url: ${{ github.event.release.upload_url }}
+                asset_path: ./simple_wiki-${{ matrix.goos }}-${{ matrix.goarch }}
+                asset_name: simple_wiki-${{ matrix.goos }}-${{ matrix.goarch }}
+                asset_content_type: application/octet-stream
