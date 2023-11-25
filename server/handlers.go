@@ -12,9 +12,11 @@ import (
 	"path"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
+	"github.com/brendanjerwin/simple_wiki/sec"
+	"github.com/brendanjerwin/simple_wiki/static"
+	"github.com/brendanjerwin/simple_wiki/utils"
 	secretRequired "github.com/danielheath/gin-teeny-security"
 	"github.com/gin-contrib/multitemplate"
 	"github.com/gin-contrib/sessions"
@@ -24,29 +26,6 @@ import (
 )
 
 const minutesToUnlock = 10.0
-
-type Site struct {
-	PathToData      string
-	Css             []byte
-	DefaultPage     string
-	DefaultPassword string
-	Debounce        int
-	SessionStore    cookie.Store
-	SecretCode      string
-	AllowInsecure   bool
-	Fileuploads     bool
-	MaxUploadSize   uint
-	Logger          *lumber.ConsoleLogger
-	MaxDocumentSize uint // in runes; about a 10mb limit by default
-	saveMut         sync.Mutex
-}
-
-func (s *Site) defaultLock() string {
-	if s.DefaultPassword == "" {
-		return ""
-	}
-	return HashPassword(s.DefaultPassword)
-}
 
 var hotTemplateReloading bool
 var LogLevel int = lumber.WARN
@@ -142,7 +121,7 @@ func (s Site) Router() *gin.Engine {
 		if s.DefaultPage != "" {
 			c.Redirect(302, "/"+s.DefaultPage+"/read")
 		} else {
-			c.Redirect(302, "/"+randomAlliterateCombo())
+			c.Redirect(302, "/"+utils.RandomAlliterateCombo())
 		}
 	})
 
@@ -159,7 +138,7 @@ func (s Site) Router() *gin.Engine {
 	router.POST("/lock", s.handleLock)
 
 	// Allow iframe/scripts in markup?
-	allowInsecureHtml = s.AllowInsecure
+	utils.AllowInsecureHtml = s.AllowInsecure
 	return router
 }
 
@@ -168,7 +147,7 @@ func (s *Site) loadTemplate() multitemplate.Render {
 
 	tmplMessage, err := template.New("index.tmpl").Funcs(template.FuncMap{
 		"sniffContentType": s.sniffContentType,
-	}).Parse(string(IndexTemplate))
+	}).Parse(string(static.IndexTemplate))
 	if err != nil {
 		panic(err)
 	}
@@ -229,7 +208,7 @@ func getSetSessionID(c *gin.Context) (sid string) {
 		sid = v.(string)
 	}
 	if v == nil || sid == "" {
-		sid, _ = RandomStringOfLength(8)
+		sid, _ = utils.RandomStringOfLength(8)
 		session.Set("sid", sid)
 		session.Save()
 	}
@@ -241,23 +220,23 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 	command := c.Param("command")
 
 	if page == "favicon.ico" {
-		data, _ := StaticContent.ReadFile("static/img/favicon/favicon.ico")
-		c.Data(http.StatusOK, contentType("static/img/favicon/favicon.ico"), data)
+		data, _ := static.StaticContent.ReadFile("img/favicon/favicon.ico")
+		c.Data(http.StatusOK, utils.ContentTypeFromName("img/favicon/favicon.ico"), data)
 		return
 	} else if page == "static" {
-		filename := "static/" + strings.TrimPrefix(command, "/")
+		filename := strings.TrimPrefix(command, "/")
 		var data []byte
-		if filename == "static/css/custom.css" {
+		if filename == "css/custom.css" {
 			data = s.Css
 		} else {
 			var errAssset error
-			data, errAssset = StaticContent.ReadFile(filename)
+			data, errAssset = static.StaticContent.ReadFile(filename)
 			if errAssset != nil {
 				c.String(http.StatusNotFound, "Could not find data")
 				return
 			}
 		}
-		c.Data(http.StatusOK, contentType(filename), data)
+		c.Data(http.StatusOK, utils.ContentTypeFromName(filename), data)
 		return
 	} else if page == "uploads" {
 		if len(command) == 0 || command == "/" || command == "/edit" {
@@ -272,7 +251,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 			}
 			pathname := path.Join(s.PathToData, command)
 
-			if allowInsecureHtml {
+			if utils.AllowInsecureHtml {
 				c.Header(
 					"Content-Disposition",
 					`inline; filename="`+c.DefaultQuery("filename", "upload")+`"`,
@@ -331,7 +310,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		versionText, err := p.Text.GetPreviousByTimestamp(int64(versionInt))
 		if err == nil {
 			rawText = versionText
-			rawHTML = MarkdownToHTML(rawText)
+			rawHTML = utils.MarkdownToHTML(rawText)
 		}
 	}
 
@@ -345,9 +324,9 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		for i, v := range versionsInt64 {
 			versionsText[i] = time.Unix(v/1000000000, 0).Format("Mon Jan 2 15:04:05 MST 2006")
 		}
-		versionsText = reverseSliceString(versionsText)
-		versionsInt64 = reverseSliceInt64(versionsInt64)
-		versionsChangeSums = reverseSliceInt(versionsChangeSums)
+		versionsText = utils.ReverseSliceString(versionsText)
+		versionsInt64 = utils.ReverseSliceInt64(versionsInt64)
+		versionsChangeSums = utils.ReverseSliceInt(versionsChangeSums)
 	}
 
 	if len(command) > 3 && command[0:3] == "/ra" {
@@ -357,7 +336,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE, UPDATE")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, X-Max")
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Data(200, contentType(p.Identifier), []byte(rawText))
+		c.Data(200, utils.ContentTypeFromName(p.Identifier), []byte(rawText))
 		return
 	}
 
@@ -422,7 +401,7 @@ func getRecentlyEdited(title string, c *gin.Context) []string {
 		recentlyEdited = title
 	} else {
 		editedThings = strings.Split(v.(string), "|||")
-		if !stringInSlice(title, editedThings) {
+		if !utils.StringInSlice(title, editedThings) {
 			recentlyEdited = v.(string) + "|||" + title
 		} else {
 			recentlyEdited = v.(string)
@@ -551,11 +530,11 @@ func (s *Site) handleLock(c *gin.Context) {
 	}
 	if !pageIsLocked(p, c) {
 		p.IsLocked = true
-		p.PassphraseToUnlock = HashPassword(json.Passphrase)
+		p.PassphraseToUnlock = sec.HashPassword(json.Passphrase)
 		p.UnlockedFor = ""
 		message = "Locked"
 	} else {
-		err2 := CheckPasswordHash(json.Passphrase, p.PassphraseToUnlock)
+		err2 := sec.CheckPasswordHash(json.Passphrase, p.PassphraseToUnlock)
 		if err2 != nil {
 			c.JSON(http.StatusOK, gin.H{"success": false, "message": "Can't unlock"})
 			return
@@ -588,7 +567,7 @@ func (s *Site) handleUpload(c *gin.Context) {
 		return
 	}
 
-	newName := "sha256-" + encodeBytesToBase32(h.Sum(nil))
+	newName := "sha256-" + utils.EncodeBytesToBase32(h.Sum(nil))
 
 	// Replaces any existing version, but sha256 collisions are rare as anything.
 	outfile, err := os.Create(path.Join(s.PathToData, newName+".upload"))

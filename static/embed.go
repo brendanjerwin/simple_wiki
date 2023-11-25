@@ -1,4 +1,4 @@
-package server
+package static
 
 import (
 	"embed"
@@ -7,5 +7,5 @@ import (
 //go:embed templates/index.tmpl
 var IndexTemplate string
 
-//go:embed static/**
+//go:embed **
 var StaticContent embed.FS
