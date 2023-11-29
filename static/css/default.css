@@ -1,23 +1,31 @@
+@import url('https://fonts.googleapis.com/css?family=Montserrat:400,700');
+
 body.ListPage span {
   cursor: pointer;
 }
+
 body {
   background: #fff;
 }
+
 .success {
   color: #5cb85c;
   font-weight: bold;
 }
+
 .failure {
   color: #d9534f;
   font-weight: bold;
 }
+
 .pure-menu a {
   color: #777;
 }
+
 .deleting {
   opacity: 0.5;
 }
+
 #wrap {
   position: absolute;
   top: 50px;
@@ -25,6 +33,7 @@ body {
   right: 0px;
   bottom: 0px;
 }
+
 #pad {
   height: 100%;
 }
@@ -68,6 +77,8 @@ div#rendered ol {
 div.pure-menu-horizontal {
   background-color: lightgrey;
   height: 2.75em;
+  padding-left: 1em;
+  font-family: 'Montserrat', sans-serif;
 }
 
 div.pure-menu-horizontal hr {
@@ -83,9 +94,12 @@ div.pure-menu-horizontal ul.pure-menu-children {
   border: grey;
   border-style: solid;
   border-top-style: none;
+  border-bottom-left-radius: 8px;
+  border-bottom-right-radius: 8px;
 }
 
 @media (min-width: 5em) {
+
   div#menu,
   div#rendered,
   .ChildPageNames,
@@ -93,20 +107,25 @@ div.pure-menu-horizontal ul.pure-menu-children {
     padding-left: 2%;
     padding-right: 2%;
   }
+
   .pure-menu .pure-menu-horizontal {
     max-width: 300px;
   }
+
   .pure-menu-disabled,
   .pure-menu-heading,
   .pure-menu-link {
     padding-left: 1.2em;
     padding-right: 1.2em;
   }
+
   .ChildPageNames ul {
     grid-template-columns: repeat(1, 1fr);
   }
 }
+
 @media (min-width: 50em) {
+
   div#menu,
   div#rendered,
   .ChildPageNames,
@@ -114,16 +133,20 @@ div.pure-menu-horizontal ul.pure-menu-children {
     padding-left: 10%;
     padding-right: 10%;
   }
+
   .pure-menu-disabled,
   .pure-menu-heading,
   .pure-menu-link {
     padding: 0.5em 1em;
   }
+
   .ChildPageNames ul {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
 @media (min-width: 70em) {
+
   div#menu,
   div#rendered,
   .ChildPageNames,
@@ -131,12 +154,14 @@ div.pure-menu-horizontal ul.pure-menu-children {
     padding-left: 15%;
     padding-right: 15%;
   }
+
   .ChildPageNames ul {
     grid-template-columns: repeat(3, 1fr);
   }
 }
 
 @media (min-width: 100em) {
+
   div#menu,
   div#rendered,
   .ChildPageNames,
@@ -144,6 +169,7 @@ div.pure-menu-horizontal ul.pure-menu-children {
     padding-left: 20%;
     padding-right: 20%;
   }
+
   .ChildPageNames ul {
     grid-template-columns: repeat(4, 1fr);
   }
