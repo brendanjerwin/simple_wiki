@@ -49,3 +49,27 @@ func TestGoldmarkRenderer_Render_Checkboxes(t *testing.T) {
 		t.Errorf("expected: %s, got: %s", expected, output)
 	}
 }
+
+func TestGoldmarkRenderer_Render_Emojis(t *testing.T) {
+	// Create a renderer
+	renderer := utils.GoldmarkRenderer{}
+
+	// Define a markdown string with an emoji
+	source := []byte("I am so happy :joy:")
+
+	// Call the Render method
+	output, err := renderer.Render(source)
+
+	// Check if there was an error
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Define the expected HTML output
+	expected := []byte("<p>I am so happy &#x1f602;</p>\n")
+
+	// Compare the expected output with the actual output
+	if string(expected) != string(output) {
+		t.Errorf("expected: %s, got: %s", expected, output)
+	}
+}

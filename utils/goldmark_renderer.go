@@ -4,16 +4,23 @@ import (
 	"bytes"
 
 	"github.com/yuin/goldmark"
+	"github.com/yuin/goldmark-emoji"
 	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/renderer/html"
+
+	"go.abhg.dev/goldmark/mermaid"
 )
 
 type GoldmarkRenderer struct{}
 
 func (b GoldmarkRenderer) Render(input []byte) ([]byte, error) {
 	md := goldmark.New(
-		goldmark.WithExtensions(extension.GFM),
+		goldmark.WithExtensions(
+			extension.GFM, 
+			emoji.Emoji,
+			$mermaid.Extender{},
+		),
 		goldmark.WithParserOptions(
 			parser.WithAutoHeadingID(),
 		),
