@@ -7,24 +7,26 @@ import (
 	"sync"
 
 	"github.com/brendanjerwin/simple_wiki/sec"
+	"github.com/brendanjerwin/simple_wiki/utils"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/jcelliott/lumber"
 )
 
 type Site struct {
-	PathToData      string
-	Css             []byte
-	DefaultPage     string
-	DefaultPassword string
-	Debounce        int
-	SessionStore    cookie.Store
-	SecretCode      string
-	AllowInsecure   bool
-	Fileuploads     bool
-	MaxUploadSize   uint
-	Logger          *lumber.ConsoleLogger
-	MaxDocumentSize uint // in runes; about a 10mb limit by default
-	saveMut         sync.Mutex
+	PathToData       string
+	Css              []byte
+	DefaultPage      string
+	DefaultPassword  string
+	Debounce         int
+	SessionStore     cookie.Store
+	SecretCode       string
+	AllowInsecure    bool
+	Fileuploads      bool
+	MaxUploadSize    uint
+	Logger           *lumber.ConsoleLogger
+	MarkdownRenderer utils.IRenderMarkdownToHtml
+	MaxDocumentSize  uint // in runes; about a 10mb limit by default
+	saveMut          sync.Mutex
 }
 
 func (s *Site) defaultLock() string {

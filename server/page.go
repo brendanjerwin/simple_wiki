@@ -234,7 +234,12 @@ func (p *Page) Render() {
 	}
 	p.Text.Update(currentText)
 
-	p.RenderedPage, p.FrontmatterJson = utils.MarkdownToHtmlAndJsonFrontmatter(p.Text.GetCurrent(), true, p.Site)
+	var err error
+	p.RenderedPage, p.FrontmatterJson, err = utils.MarkdownToHtmlAndJsonFrontmatter(p.Text.GetCurrent(), true, p.Site, p.Site.MarkdownRenderer)
+	if err != nil {
+		p.Site.Logger.Error(err.Error())
+		p.RenderedPage = []byte(err.Error())
+	}
 }
 
 func (p *Page) Save() error {

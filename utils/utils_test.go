@@ -40,7 +40,7 @@ sample: "value"
 # Hello
 	`
 
-	html, _ := MarkdownToHtmlAndJsonFrontmatter(markdown, true, &MockReadFrontMatter{})
+	html, _, _ := MarkdownToHtmlAndJsonFrontmatter(markdown, true, &MockReadFrontMatter{}, BlackfridayRenderer{})
 
 	if strings.Contains(string(html), "sample:") {
 		t.Errorf("Did not remove frontmatter.")

@@ -13,6 +13,7 @@ require (
 	github.com/russross/blackfriday/v2 v2.1.0
 	github.com/schollz/versionedtext v1.0.0
 	github.com/shurcooL/github_flavored_markdown v0.0.0-20210228213109-c3a9aa474629
+	github.com/yuin/goldmark v1.6.0
 	golang.org/x/crypto v0.15.0
 	gopkg.in/urfave/cli.v1 v1.20.0
 )

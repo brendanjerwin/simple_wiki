@@ -15,13 +15,17 @@ import (
 	"github.com/adrg/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/static"
 	"github.com/microcosm-cc/bluemonday"
-	"github.com/russross/blackfriday/v2"
 	"github.com/shurcooL/github_flavored_markdown"
 )
 
 var animals []string
 var adjectives []string
 var AllowInsecureHtml bool
+
+// IRenderMarkdownToHtml is an interface that abstracts the rendering process
+type IRenderMarkdownToHtml interface {
+	Render(input []byte) ([]byte, error)
+}
 
 type IReadFrontMatter interface {
 	ReadFrontMatter(identifier string) (map[string]interface{}, error)
@@ -121,7 +125,7 @@ func StripFrontmatter(s string) string {
 	return string(unsafe)
 }
 
-func MarkdownToHtmlAndJsonFrontmatter(s string, handleFrontMatter bool, site IReadFrontMatter) ([]byte, []byte) {
+func MarkdownToHtmlAndJsonFrontmatter(s string, handleFrontMatter bool, site IReadFrontMatter, renderer IRenderMarkdownToHtml) ([]byte, []byte, error) {
 	var unsafe []byte
 	var err error
 	var matterBytes []byte
@@ -130,24 +134,22 @@ func MarkdownToHtmlAndJsonFrontmatter(s string, handleFrontMatter bool, site IRe
 	if handleFrontMatter {
 		unsafe, err = frontmatter.Parse(strings.NewReader(s), &matter)
 		if err != nil {
-			panic(err)
+			return []byte(err.Error()), nil, err
 		}
 		matterBytes, _ = json.Marshal(matter)
 
 		unsafe, err = ExecuteTemplate(string(unsafe), matterBytes, site)
 		if err != nil {
-			return []byte(err.Error()), nil
+			return []byte(err.Error()), nil, err
 		}
 	} else {
 		unsafe = []byte(s)
 	}
 
-	r := blackfriday.NewHTMLRenderer(blackfriday.HTMLRendererParameters{
-		Flags: blackfriday.CommonHTMLFlags, //& blackfriday.Smartypants,
-	})
-	unsafe = blackfriday.Run(unsafe, blackfriday.WithRenderer(r))
+	unsafe, err = renderer.Render(unsafe)
+
 	if AllowInsecureHtml {
-		return unsafe, matterBytes
+		return unsafe, matterBytes, nil
 	}
 
 	sanitizerPolicy := bluemonday.UGCPolicy()
@@ -160,7 +162,8 @@ func MarkdownToHtmlAndJsonFrontmatter(s string, handleFrontMatter bool, site IRe
 	sanitizerPolicy.AllowAttrs("id").OnElements("a")
 	sanitizerPolicy.AllowDataURIImages()
 	html := sanitizerPolicy.SanitizeBytes(unsafe)
-	return html, matterBytes
+
+	return html, matterBytes, nil
 }
 
 type InventoryFrontmatter struct {
