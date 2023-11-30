@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"reflect"
 	"strings"
 	"testing"
 )
@@ -119,33 +118,6 @@ func TestStripFrontmatter(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result := StripFrontmatter(tc.input)
 			if result != tc.expected {
-				t.Errorf("expected: %s, got: %s", tc.expected, result)
-			}
-		})
-	}
-}
-func TestMarkdownToHTML(t *testing.T) {
-	testCases := []struct {
-		name     string
-		input    string
-		expected []byte
-	}{
-		{
-			name:     "Test with simple markdown",
-			input:    "**bold**",
-			expected: []byte("<p><strong>bold</strong></p>\n"),
-		},
-		{
-			name:     "Test with markdown link",
-			input:    "[link](http://example.com)",
-			expected: []byte("<p><a href=\"http://example.com\" rel=\"nofollow\">link</a></p>\n"),
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			result := MarkdownToHTML(tc.input)
-			if !reflect.DeepEqual(result, tc.expected) {
 				t.Errorf("expected: %s, got: %s", tc.expected, result)
 			}
 		})

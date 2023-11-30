@@ -20,7 +20,6 @@ type Site struct {
 	Debounce         int
 	SessionStore     cookie.Store
 	SecretCode       string
-	AllowInsecure    bool
 	Fileuploads      bool
 	MaxUploadSize    uint
 	Logger           *lumber.ConsoleLogger

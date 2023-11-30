@@ -40,7 +40,6 @@ func main() {
 			c.GlobalInt("debounce"),
 			c.GlobalString("cookie-secret"),
 			c.GlobalString("access-code"),
-			c.GlobalBool("allow-insecure-markup"),
 			!c.GlobalBool("block-file-uploads"),
 			c.GlobalUint("max-upload-mb"),
 			c.GlobalUint("max-document-length"),
@@ -73,10 +72,6 @@ func main() {
 			Name:  "default-page",
 			Value: "home",
 			Usage: "show default-page/read instead of editing (default: show random editing)",
-		},
-		cli.BoolFlag{
-			Name:  "allow-insecure-markup",
-			Usage: "Skip HTML sanitization",
 		},
 		cli.StringFlag{
 			Name:  "lock",

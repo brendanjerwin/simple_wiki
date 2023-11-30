@@ -40,7 +40,6 @@ func Serve(
 	debounce int,
 	secret string,
 	secretCode string,
-	allowInsecure bool,
 	fileuploads bool,
 	maxUploadSize uint,
 	maxDocumentSize uint,
@@ -66,7 +65,6 @@ func Serve(
 		Debounce:        debounce,
 		SessionStore:    cookie.NewStore([]byte(secret)),
 		SecretCode:      secretCode,
-		AllowInsecure:   allowInsecure,
 		Fileuploads:     fileuploads,
 		MaxUploadSize:   maxUploadSize,
 		Logger:          logger,
@@ -141,8 +139,6 @@ func (s Site) Router() *gin.Engine {
 	router.POST("/exists", s.handlePageExists)
 	router.POST("/lock", s.handleLock)
 
-	// Allow iframe/scripts in markup?
-	utils.AllowInsecureHtml = s.AllowInsecure
 	return router
 }
 
@@ -255,19 +251,10 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 			}
 			pathname := path.Join(s.PathToData, command)
 
-			if utils.AllowInsecureHtml {
-				c.Header(
-					"Content-Disposition",
-					`inline; filename="`+c.DefaultQuery("filename", "upload")+`"`,
-				)
-			} else {
-				// Prevent malicious html uploads by forcing type to plaintext and 'download-instead-of-view'
-				c.Header("Content-Type", "text/plain")
-				c.Header(
-					"Content-Disposition",
-					`attachment; filename="`+c.DefaultQuery("filename", "upload")+`"`,
-				)
-			}
+			c.Header(
+				"Content-Disposition",
+				`inline; filename="`+c.DefaultQuery("filename", "upload")+`"`,
+			)
 			c.File(pathname)
 			return
 		}
@@ -314,7 +301,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		versionText, err := p.Text.GetPreviousByTimestamp(int64(versionInt))
 		if err == nil {
 			rawText = versionText
-			rawHTML = utils.MarkdownToHTML(rawText)
+			rawHTML, _ = p.Site.MarkdownRenderer.Render([]byte(rawText))
 		}
 	}
 

@@ -14,13 +14,10 @@ import (
 
 	"github.com/adrg/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/static"
-	"github.com/microcosm-cc/bluemonday"
-	"github.com/shurcooL/github_flavored_markdown"
 )
 
 var animals []string
 var adjectives []string
-var AllowInsecureHtml bool
 
 // IRenderMarkdownToHtml is an interface that abstracts the rendering process
 type IRenderMarkdownToHtml interface {
@@ -126,42 +123,30 @@ func StripFrontmatter(s string) string {
 }
 
 func MarkdownToHtmlAndJsonFrontmatter(s string, handleFrontMatter bool, site IReadFrontMatter, renderer IRenderMarkdownToHtml) ([]byte, []byte, error) {
-	var unsafe []byte
-	var err error
+	var markdownBytes []byte
 	var matterBytes []byte
+	var err error
 
 	matter := &map[string]interface{}{}
 	if handleFrontMatter {
-		unsafe, err = frontmatter.Parse(strings.NewReader(s), &matter)
+		markdownBytes, err = frontmatter.Parse(strings.NewReader(s), &matter)
 		if err != nil {
 			return []byte(err.Error()), nil, err
 		}
 		matterBytes, _ = json.Marshal(matter)
 
-		unsafe, err = ExecuteTemplate(string(unsafe), matterBytes, site)
+		markdownBytes, err = ExecuteTemplate(string(markdownBytes), matterBytes, site)
 		if err != nil {
 			return []byte(err.Error()), nil, err
 		}
 	} else {
-		unsafe = []byte(s)
+		markdownBytes = []byte(s)
 	}
 
-	unsafe, err = renderer.Render(unsafe)
-
-	if AllowInsecureHtml {
-		return unsafe, matterBytes, nil
+	html, err := renderer.Render(markdownBytes)
+	if err != nil {
+		return nil, nil, err
 	}
-
-	sanitizerPolicy := bluemonday.UGCPolicy()
-	sanitizerPolicy.AllowElements("img")
-	sanitizerPolicy.AllowElements("center")
-	sanitizerPolicy.AllowAttrs("alt").OnElements("img")
-	sanitizerPolicy.AllowAttrs("src").OnElements("img")
-	sanitizerPolicy.AllowAttrs("class").OnElements("a")
-	sanitizerPolicy.AllowAttrs("href").OnElements("a")
-	sanitizerPolicy.AllowAttrs("id").OnElements("a")
-	sanitizerPolicy.AllowDataURIImages()
-	html := sanitizerPolicy.SanitizeBytes(unsafe)
 
 	return html, matterBytes, nil
 }
@@ -323,10 +308,6 @@ func ExecuteTemplate(templateHtml string, frontmatter []byte, site IReadFrontMat
 	}
 
 	return buf.Bytes(), nil
-}
-
-func MarkdownToHTML(s string) []byte {
-	return github_flavored_markdown.Markdown([]byte(s))
 }
 
 func EncodeToBase32(s string) string {
