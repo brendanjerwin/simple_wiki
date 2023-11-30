@@ -205,6 +205,9 @@ github.com/yuin/goldmark/util
 github.com/yuin/goldmark-emoji
 github.com/yuin/goldmark-emoji/ast
 github.com/yuin/goldmark-emoji/definition
+# go.abhg.dev/goldmark/mermaid v0.5.0
+## explicit; go 1.20
+go.abhg.dev/goldmark/mermaid
 # golang.org/x/arch v0.3.0
 ## explicit; go 1.17
 golang.org/x/arch/x86/x86asm
