@@ -81,6 +81,10 @@ func (s Site) Router() *gin.Engine {
 		s.Logger = lumber.NewConsoleLogger(lumber.TRACE)
 	}
 
+	if s.MarkdownRenderer == nil {
+		s.MarkdownRenderer = utils.GoldmarkRenderer{}
+	}
+
 	if hotTemplateReloading {
 		gin.SetMode(gin.DebugMode)
 	} else {

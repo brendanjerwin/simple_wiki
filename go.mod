@@ -13,6 +13,7 @@ require (
 	github.com/russross/blackfriday/v2 v2.1.0
 	github.com/schollz/versionedtext v1.0.0
 	github.com/shurcooL/github_flavored_markdown v0.0.0-20210228213109-c3a9aa474629
+	github.com/yuin/goldmark v1.6.0
 	golang.org/x/crypto v0.15.0
 	gopkg.in/urfave/cli.v1 v1.20.0
 )
@@ -53,6 +54,8 @@ require (
 	github.com/sourcegraph/syntaxhighlight v0.0.0-20170531221838-bd320f5d308e // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.2.11 // indirect
+	github.com/yuin/goldmark-emoji v1.0.2 // indirect
+	go.abhg.dev/goldmark/mermaid v0.5.0 // indirect
 	golang.org/x/arch v0.3.0 // indirect
 	golang.org/x/net v0.17.0 // indirect
 	golang.org/x/sys v0.14.0 // indirect
