@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"html/template"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -49,7 +48,7 @@ func Serve(
 	// collect custom CSS
 	if len(cssFile) > 0 {
 		var errRead error
-		customCSS, errRead = ioutil.ReadFile(cssFile)
+		customCSS, errRead = os.ReadFile(cssFile)
 		if errRead != nil {
 			fmt.Println(errRead)
 			return
