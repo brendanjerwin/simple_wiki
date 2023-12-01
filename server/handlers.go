@@ -218,6 +218,11 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 	page := c.Param("page")
 	command := c.Param("command")
 
+	//Prevent OWASP Path Traversal
+	if strings.Contains(command, string(os.PathSeparator)) {
+		c.String(http.StatusBadRequest, "command may not contain path separators")
+	}
+
 	if page == "favicon.ico" {
 		data, _ := static.StaticContent.ReadFile("img/favicon/favicon.ico")
 		c.Data(http.StatusOK, utils.ContentTypeFromName("img/favicon/favicon.ico"), data)
