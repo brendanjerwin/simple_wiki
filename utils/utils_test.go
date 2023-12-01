@@ -39,13 +39,13 @@ sample: "value"
 # Hello
 	`
 
-	html, _, _ := MarkdownToHtmlAndJsonFrontmatter(markdown, true, &MockReadFrontMatter{}, BlackfridayRenderer{})
+	html, _, _ := MarkdownToHtmlAndJsonFrontmatter(markdown, true, &MockReadFrontMatter{}, &GoldmarkRenderer{})
 
 	if strings.Contains(string(html), "sample:") {
 		t.Errorf("Did not remove frontmatter.")
 	}
 
-	if !strings.Contains(string(html), "<h1>Hello</h1") {
+	if !strings.Contains(string(html), ">Hello</h1") {
 		t.Errorf("Did not include HTML")
 	}
 }
