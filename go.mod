@@ -9,12 +9,11 @@ require (
 	github.com/gin-contrib/sessions v0.0.5
 	github.com/gin-gonic/gin v1.9.1
 	github.com/jcelliott/lumber v0.0.0-20160324203708-dd349441af25
-	github.com/russross/blackfriday/v2 v2.1.0
 	github.com/schollz/versionedtext v1.0.0
 	github.com/yuin/goldmark v1.6.0
 	github.com/yuin/goldmark-emoji v1.0.2
 	go.abhg.dev/goldmark/mermaid v0.5.0
-	golang.org/x/crypto v0.15.0
+	golang.org/x/crypto v0.16.0
 	gopkg.in/urfave/cli.v1 v1.20.0
 )
 
@@ -47,7 +46,7 @@ require (
 	go.abhg.dev/goldmark/wikilink v0.5.0 // indirect
 	golang.org/x/arch v0.3.0 // indirect
 	golang.org/x/net v0.17.0 // indirect
-	golang.org/x/sys v0.14.0 // indirect
+	golang.org/x/sys v0.15.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	google.golang.org/protobuf v1.30.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
