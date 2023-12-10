@@ -121,13 +121,15 @@ github.com/pelletier/go-toml/v2/unstable
 ## explicit; go 1.11
 # github.com/russross/blackfriday/v2 v2.1.0
 ## explicit
-github.com/russross/blackfriday/v2
 # github.com/schollz/versionedtext v1.0.0
 ## explicit
 github.com/schollz/versionedtext
 # github.com/sergi/go-diff v1.2.0
 ## explicit; go 1.12
 github.com/sergi/go-diff/diffmatchpatch
+# github.com/stoewer/go-strcase v1.3.0
+## explicit; go 1.11
+github.com/stoewer/go-strcase
 # github.com/twitchyliquid64/golang-asm v0.15.1
 ## explicit; go 1.13
 github.com/twitchyliquid64/golang-asm/asm/arch
@@ -169,6 +171,9 @@ github.com/yuin/goldmark-emoji/definition
 # go.abhg.dev/goldmark/mermaid v0.5.0
 ## explicit; go 1.20
 go.abhg.dev/goldmark/mermaid
+# go.abhg.dev/goldmark/wikilink v0.5.0
+## explicit; go 1.16
+go.abhg.dev/goldmark/wikilink
 # golang.org/x/arch v0.3.0
 ## explicit; go 1.17
 golang.org/x/arch/x86/x86asm

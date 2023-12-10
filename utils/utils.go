@@ -14,6 +14,7 @@ import (
 
 	"github.com/adrg/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/static"
+	"github.com/stoewer/go-strcase"
 )
 
 var animals []string
@@ -240,9 +241,16 @@ func BuildLinkTo(site IReadFrontMatter) func(string) string {
 		if identifier == "" {
 			return "N/A"
 		}
-		frontmatter, err := site.ReadFrontMatter(identifier)
+
+		var frontmatter, err = site.ReadFrontMatter(identifier)
 		if err != nil {
-			return "[" + identifier + "](/" + identifier + ")"
+			//Try again with a snake case identifier
+			frontmatter, err = site.ReadFrontMatter(strcase.SnakeCase(identifier))
+			if err != nil {
+				//Doesnt look like it exists yet, return a normal wikilink.
+				//It'll render and let the page get created.
+				return "[[" + identifier + "]]"
+			}
 		}
 
 		tmplString := "{{if index . \"title\"}}[{{ index . \"title\" }}](/{{ index . \"identifier\" }}){{else}}[{{ index . \"identifier\" }}](/{{ index . \"identifier\" }}){{end}}"

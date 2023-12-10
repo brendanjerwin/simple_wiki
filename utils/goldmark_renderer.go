@@ -9,7 +9,9 @@ import (
 	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/renderer/html"
 
+	"github.com/stoewer/go-strcase"
 	"go.abhg.dev/goldmark/mermaid"
+	"go.abhg.dev/goldmark/wikilink"
 )
 
 type GoldmarkRenderer struct{}
@@ -20,6 +22,9 @@ func (b GoldmarkRenderer) Render(input []byte) ([]byte, error) {
 			extension.GFM,
 			emoji.Emoji,
 			&mermaid.Extender{},
+			&wikilink.Extender{
+				Resolver: wikilinkResolver{},
+			},
 		),
 		goldmark.WithParserOptions(
 			parser.WithAutoHeadingID(),
@@ -35,4 +40,14 @@ func (b GoldmarkRenderer) Render(input []byte) ([]byte, error) {
 		return []byte{}, err
 	}
 	return buf.Bytes(), nil
+}
+
+type wikilinkResolver struct{}
+
+func (wikilinkResolver) ResolveWikilink(n *wikilink.Node) ([]byte, error) {
+	sourceTarget := string(n.Target)
+	snakeTarget := strcase.SnakeCase(sourceTarget)
+	relativeTarget := "/" + snakeTarget
+
+	return []byte(relativeTarget), nil
 }

@@ -8,7 +8,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -224,16 +223,7 @@ func (p *Page) Update(newText string) error {
 	return p.Save()
 }
 
-var rBracketPage = regexp.MustCompile(`\[\[(.*?)\]\]`)
-
 func (p *Page) Render() {
-	// Convert [[page]] to [page](/page/view)
-	currentText := p.Text.GetCurrent()
-	for _, s := range rBracketPage.FindAllString(currentText, -1) {
-		currentText = strings.Replace(currentText, s, "["+s[2:len(s)-2]+"](/"+s[2:len(s)-2]+"/view)", 1)
-	}
-	p.Text.Update(currentText)
-
 	var err error
 	p.RenderedPage, p.FrontmatterJson, err = utils.MarkdownToHtmlAndJsonFrontmatter(p.Text.GetCurrent(), true, p.Site, p.Site.MarkdownRenderer)
 	if err != nil {
