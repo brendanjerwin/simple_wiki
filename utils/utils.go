@@ -185,17 +185,16 @@ func ConstructTemplateContextFromFrontmatter(frontmatter []byte) (*TemplateConte
 }
 
 func BuildShowInventoryContentsOf(site IReadFrontMatter, currentPageFrontMatter FrontMatter) func(string) string {
-	linkTo := BuildLinkTo(site, currentPageFrontMatter)
 	isContainer := BuildIsContainer(site)
 	var showInventoryContentsOf (func(string) string)
 	showInventoryContentsOf = func(containerIdentifier string) string {
-		frontmatter, err := site.ReadFrontMatter(containerIdentifier)
+		containerFrontmatter, err := site.ReadFrontMatter(containerIdentifier)
 		if err != nil {
 			return `
 	Not Setup for Inventory
 			`
 		}
-
+		linkTo := BuildLinkTo(site, containerFrontmatter)
 		tmplString := `{{if index . "inventory"}}
 {{if index . "inventory" "items"}}
 {{ range index . "inventory" "items" }}
@@ -227,7 +226,7 @@ func BuildShowInventoryContentsOf(site IReadFrontMatter, currentPageFrontMatter 
 		}
 
 		buf := &bytes.Buffer{}
-		err = tmpl.Execute(buf, frontmatter)
+		err = tmpl.Execute(buf, containerFrontmatter)
 		if err != nil {
 			return err.Error()
 		}
