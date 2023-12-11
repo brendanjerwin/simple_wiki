@@ -2,6 +2,7 @@ package utils
 
 import (
 	"bytes"
+	"net/url"
 
 	"github.com/yuin/goldmark"
 	emoji "github.com/yuin/goldmark-emoji"
@@ -47,7 +48,8 @@ type wikilinkResolver struct{}
 func (wikilinkResolver) ResolveWikilink(n *wikilink.Node) ([]byte, error) {
 	sourceTarget := string(n.Target)
 	snakeTarget := strcase.SnakeCase(sourceTarget)
-	relativeTarget := "/" + snakeTarget
+	urlTarget := url.QueryEscape(sourceTarget)
+	relativeTarget := "/" + snakeTarget + "?title=" + urlTarget
 
 	return []byte(relativeTarget), nil
 }

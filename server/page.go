@@ -93,7 +93,6 @@ func (s *Site) OpenOrInit(identifier string, req *http.Request) (p *Page) {
 			initialText += `
 
 [inventory]
-container= ""
 items = [
 
 ]
