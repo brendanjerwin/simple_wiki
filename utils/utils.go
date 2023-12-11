@@ -256,9 +256,9 @@ func BuildLinkTo(site IReadFrontMatter, currentPageFrontMatter FrontMatter) func
 				if _, ok := currentPageFrontMatter["inventory"]; ok {
 					//special inventory item link with attributes
 					return "[" + identifier + "](/" + snake_identifier + "?tmpl=inv_item&inventory.container=" + currentPageFrontMatter["identifier"].(string) + "&title=" + url_encoded_identifier + ")"
-				} else {
-					return "[" + identifier + "](/" + snake_identifier + "?title=" + url_encoded_identifier + ")"
 				}
+
+				return "[" + identifier + "](/" + snake_identifier + "?title=" + url_encoded_identifier + ")"
 			}
 		}
 
