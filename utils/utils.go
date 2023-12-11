@@ -7,6 +7,7 @@ import (
 	"errors"
 	"math/rand"
 	"mime"
+	"net/url"
 	"os"
 	"strings"
 	"text/template"
@@ -25,8 +26,9 @@ type IRenderMarkdownToHtml interface {
 	Render(input []byte) ([]byte, error)
 }
 
+type FrontMatter = map[string]interface{}
 type IReadFrontMatter interface {
-	ReadFrontMatter(identifier string) (map[string]interface{}, error)
+	ReadFrontMatter(identifier string) (FrontMatter, error)
 }
 
 func init() {
@@ -182,8 +184,8 @@ func ConstructTemplateContextFromFrontmatter(frontmatter []byte) (*TemplateConte
 	return context, nil
 }
 
-func BuildShowInventoryContentsOf(site IReadFrontMatter) func(string) string {
-	linkTo := BuildLinkTo(site)
+func BuildShowInventoryContentsOf(site IReadFrontMatter, currentPageFrontMatter FrontMatter) func(string) string {
+	linkTo := BuildLinkTo(site, currentPageFrontMatter)
 	isContainer := BuildIsContainer(site)
 	var showInventoryContentsOf (func(string) string)
 	showInventoryContentsOf = func(containerIdentifier string) string {
@@ -236,7 +238,7 @@ func BuildShowInventoryContentsOf(site IReadFrontMatter) func(string) string {
 	return showInventoryContentsOf
 }
 
-func BuildLinkTo(site IReadFrontMatter) func(string) string {
+func BuildLinkTo(site IReadFrontMatter, currentPageFrontMatter FrontMatter) func(string) string {
 	return func(identifier string) string {
 		if identifier == "" {
 			return "N/A"
@@ -245,11 +247,18 @@ func BuildLinkTo(site IReadFrontMatter) func(string) string {
 		var frontmatter, err = site.ReadFrontMatter(identifier)
 		if err != nil {
 			//Try again with a snake case identifier
-			frontmatter, err = site.ReadFrontMatter(strcase.SnakeCase(identifier))
+			snake_identifier := strcase.SnakeCase(identifier)
+			url_encoded_identifier := url.QueryEscape(identifier)
+			frontmatter, err = site.ReadFrontMatter(snake_identifier)
 			if err != nil {
-				//Doesnt look like it exists yet, return a normal wikilink.
+				//Doesnt look like it exists yet, return a link.
 				//It'll render and let the page get created.
-				return "[[" + identifier + "]]"
+				if _, ok := currentPageFrontMatter["inventory"]; ok {
+					//special inventory item link with attributes
+					return "[" + identifier + "](/" + snake_identifier + "?tmpl=inv_item&inventory.container=" + currentPageFrontMatter["identifier"].(string) + "&title=" + url_encoded_identifier + ")"
+				} else {
+					return "[" + identifier + "](/" + snake_identifier + "?title=" + url_encoded_identifier + ")"
+				}
 			}
 		}
 
@@ -293,9 +302,14 @@ func BuildIsContainer(site IReadFrontMatter) func(string) bool {
 	}
 }
 func ExecuteTemplate(templateHtml string, frontmatter []byte, site IReadFrontMatter) ([]byte, error) {
+	unmarshalled_frontmatter := FrontMatter{}
+	err := json.Unmarshal(frontmatter, &unmarshalled_frontmatter)
+	if err != nil {
+		return nil, err
+	}
 	funcs := template.FuncMap{
-		"ShowInventoryContentsOf": BuildShowInventoryContentsOf(site),
-		"LinkTo":                  BuildLinkTo(site),
+		"ShowInventoryContentsOf": BuildShowInventoryContentsOf(site, unmarshalled_frontmatter),
+		"LinkTo":                  BuildLinkTo(site, unmarshalled_frontmatter),
 		"IsContainer":             BuildIsContainer(site),
 	}
 
