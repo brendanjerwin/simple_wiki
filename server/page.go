@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/adrg/frontmatter"
+	"github.com/brendanjerwin/simple_wiki/common"
 	"github.com/brendanjerwin/simple_wiki/utils"
 	"github.com/schollz/versionedtext"
 )
@@ -39,8 +40,8 @@ func (p Page) LastEditUnixTime() int64 {
 	return p.Text.LastEditTime() / 1000000000
 }
 
-func (s *Site) ReadFrontMatter(name string) (map[string]interface{}, error) {
-	content, err := ioutil.ReadFile(path.Join(s.PathToData, utils.EncodeToBase32(strings.ToLower(name))+".md"))
+func (s *Site) ReadFrontMatter(name string) (common.FrontMatter, error) {
+	content, err := os.ReadFile(path.Join(s.PathToData, utils.EncodeToBase32(strings.ToLower(name))+".md"))
 	if err != nil {
 		return nil, err
 	}
@@ -52,6 +53,21 @@ func (s *Site) ReadFrontMatter(name string) (map[string]interface{}, error) {
 	}
 
 	return *matter, nil
+}
+
+func (s *Site) ReadMarkdown(name string) (string, error) {
+	content, err := os.ReadFile(path.Join(s.PathToData, utils.EncodeToBase32(strings.ToLower(name))+".md"))
+	if err != nil {
+		return "", err
+	}
+
+	matter := &map[string]interface{}{}
+	markdownBytes, err := frontmatter.Parse(bytes.NewReader(content), &matter)
+	if err != nil {
+		return "", err
+	}
+
+	return string(markdownBytes), nil
 }
 
 func (s *Site) Open(name string) (p *Page) {

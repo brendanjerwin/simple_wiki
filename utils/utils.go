@@ -1,21 +1,19 @@
 package utils
 
 import (
-	"bytes"
 	"encoding/base32"
 	"encoding/json"
 	"errors"
 	"math/rand"
 	"mime"
-	"net/url"
 	"os"
 	"strings"
-	"text/template"
 	"time"
 
 	"github.com/adrg/frontmatter"
+	"github.com/brendanjerwin/simple_wiki/common"
 	"github.com/brendanjerwin/simple_wiki/static"
-	"github.com/stoewer/go-strcase"
+	"github.com/brendanjerwin/simple_wiki/templating"
 )
 
 var animals []string
@@ -24,11 +22,6 @@ var adjectives []string
 // IRenderMarkdownToHtml is an interface that abstracts the rendering process
 type IRenderMarkdownToHtml interface {
 	Render(input []byte) ([]byte, error)
-}
-
-type FrontMatter = map[string]interface{}
-type IReadFrontMatter interface {
-	ReadFrontMatter(identifier string) (FrontMatter, error)
 }
 
 func init() {
@@ -125,7 +118,7 @@ func StripFrontmatter(s string) string {
 	return string(unsafe)
 }
 
-func MarkdownToHtmlAndJsonFrontmatter(s string, handleFrontMatter bool, site IReadFrontMatter, renderer IRenderMarkdownToHtml) ([]byte, []byte, error) {
+func MarkdownToHtmlAndJsonFrontmatter(s string, handleFrontMatter bool, site common.IReadPages, renderer IRenderMarkdownToHtml) ([]byte, []byte, error) {
 	var markdownBytes []byte
 	var matterBytes []byte
 	var err error
@@ -138,7 +131,7 @@ func MarkdownToHtmlAndJsonFrontmatter(s string, handleFrontMatter bool, site IRe
 		}
 		matterBytes, _ = json.Marshal(matter)
 
-		markdownBytes, err = ExecuteTemplate(string(markdownBytes), matterBytes, site)
+		markdownBytes, err = templating.ExecuteTemplate(string(markdownBytes), *matter, site)
 		if err != nil {
 			return []byte(err.Error()), nil, err
 		}
@@ -152,183 +145,6 @@ func MarkdownToHtmlAndJsonFrontmatter(s string, handleFrontMatter bool, site IRe
 	}
 
 	return html, matterBytes, nil
-}
-
-type InventoryFrontmatter struct {
-	Container string   `json:"container"`
-	Items     []string `json:"items"`
-}
-
-type TemplateContext struct {
-	Identifier string `json:"identifier"`
-	Title      string `json:"title"`
-	Map        map[string]interface{}
-	Inventory  *InventoryFrontmatter `json:"inventory"`
-}
-
-func ConstructTemplateContextFromFrontmatter(frontmatter []byte) (*TemplateContext, error) {
-	context := &TemplateContext{}
-	err := json.Unmarshal(frontmatter, &context)
-	if err != nil {
-		return nil, err
-	}
-
-	unstructured := make(map[string]interface{})
-	err = json.Unmarshal(frontmatter, &unstructured)
-	if err != nil {
-		return nil, err
-	}
-
-	context.Map = unstructured
-
-	return context, nil
-}
-
-func BuildShowInventoryContentsOf(site IReadFrontMatter, currentPageFrontMatter FrontMatter) func(string) string {
-	isContainer := BuildIsContainer(site)
-	var showInventoryContentsOf (func(string) string)
-	showInventoryContentsOf = func(containerIdentifier string) string {
-		containerFrontmatter, err := site.ReadFrontMatter(containerIdentifier)
-		if err != nil {
-			return `
-	Not Setup for Inventory
-			`
-		}
-		linkTo := BuildLinkTo(site, containerFrontmatter)
-		tmplString := `{{if index . "inventory"}}
-{{if index . "inventory" "items"}}
-{{ range index . "inventory" "items" }}
-{{if IsContainer .}}
-
-**{{LinkTo .}}**
-
-{{ShowInventoryContentsOf . }}
-{{else}}
-  - {{LinkTo . }}
-{{end}}
-{{end}}
-{{else}}
-	No Items
-{{end}}
-{{else}}
-	Not Setup for Inventory
-{{end}}
-`
-		funcs := template.FuncMap{
-			"LinkTo":                  linkTo,
-			"ShowInventoryContentsOf": showInventoryContentsOf,
-			"IsContainer":             isContainer,
-		}
-
-		tmpl, err := template.New("content").Funcs(funcs).Parse(tmplString)
-		if err != nil {
-			return err.Error()
-		}
-
-		buf := &bytes.Buffer{}
-		err = tmpl.Execute(buf, containerFrontmatter)
-		if err != nil {
-			return err.Error()
-		}
-
-		return buf.String()
-	}
-
-	return showInventoryContentsOf
-}
-
-func BuildLinkTo(site IReadFrontMatter, currentPageFrontMatter FrontMatter) func(string) string {
-	return func(identifier string) string {
-		if identifier == "" {
-			return "N/A"
-		}
-
-		var frontmatter, err = site.ReadFrontMatter(identifier)
-		if err != nil {
-			//Try again with a snake case identifier
-			snake_identifier := strcase.SnakeCase(identifier)
-			url_encoded_identifier := url.QueryEscape(identifier)
-			frontmatter, err = site.ReadFrontMatter(snake_identifier)
-			if err != nil {
-				//Doesnt look like it exists yet, return a link.
-				//It'll render and let the page get created.
-				if _, ok := currentPageFrontMatter["inventory"]; ok {
-					//special inventory item link with attributes
-					return "[" + identifier + "](/" + snake_identifier + "?tmpl=inv_item&inventory.container=" + currentPageFrontMatter["identifier"].(string) + "&title=" + url_encoded_identifier + ")"
-				}
-
-				return "[" + identifier + "](/" + snake_identifier + "?title=" + url_encoded_identifier + ")"
-			}
-		}
-
-		tmplString := "{{if index . \"title\"}}[{{ index . \"title\" }}](/{{ index . \"identifier\" }}){{else}}[{{ index . \"identifier\" }}](/{{ index . \"identifier\" }}){{end}}"
-		tmpl, err := template.New("content").Parse(tmplString)
-		if err != nil {
-			return err.Error()
-		}
-
-		buf := &bytes.Buffer{}
-		err = tmpl.Execute(buf, frontmatter)
-		if err != nil {
-			return err.Error()
-		}
-
-		return buf.String()
-	}
-}
-
-func BuildIsContainer(site IReadFrontMatter) func(string) bool {
-	return func(identifier string) bool {
-		if identifier == "" {
-			return false
-		}
-		frontmatter, err := site.ReadFrontMatter(identifier)
-		if err != nil {
-			return false
-		}
-
-		if inventory, exist := frontmatter["inventory"]; exist {
-			switch inv := inventory.(type) {
-			case map[string]interface{}:
-				if _, exist := inv["items"]; exist {
-					return true
-				}
-			}
-		}
-
-		return false
-
-	}
-}
-func ExecuteTemplate(templateHtml string, frontmatter []byte, site IReadFrontMatter) ([]byte, error) {
-	unmarshalled_frontmatter := FrontMatter{}
-	err := json.Unmarshal(frontmatter, &unmarshalled_frontmatter)
-	if err != nil {
-		return nil, err
-	}
-	funcs := template.FuncMap{
-		"ShowInventoryContentsOf": BuildShowInventoryContentsOf(site, unmarshalled_frontmatter),
-		"LinkTo":                  BuildLinkTo(site, unmarshalled_frontmatter),
-		"IsContainer":             BuildIsContainer(site),
-	}
-
-	tmpl, err := template.New("page").Funcs(funcs).Parse(templateHtml)
-	if err != nil {
-		return nil, err
-	}
-
-	context, err := ConstructTemplateContextFromFrontmatter(frontmatter)
-	if err != nil {
-		return nil, err
-	}
-
-	buf := &bytes.Buffer{}
-	err = tmpl.Execute(buf, context)
-	if err != nil {
-		return nil, err
-	}
-
-	return buf.Bytes(), nil
 }
 
 func EncodeToBase32(s string) string {
