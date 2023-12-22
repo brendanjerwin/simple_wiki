@@ -3,14 +3,22 @@ package utils
 import (
 	"strings"
 	"testing"
+
+	"github.com/brendanjerwin/simple_wiki/common"
+	"github.com/brendanjerwin/simple_wiki/templating"
 )
 
 type MockReadFrontMatter struct {
 	Frontmatter map[string]interface{}
+	Markdown    string
 }
 
-func (m *MockReadFrontMatter) ReadFrontMatter(markdown string) (map[string]interface{}, error) {
+func (m *MockReadFrontMatter) ReadFrontMatter(identifer string) (map[string]interface{}, error) {
 	return m.Frontmatter, nil
+}
+
+func (m *MockReadFrontMatter) ReadMarkdown(identifer string) (string, error) {
+	return m.Markdown, nil
 }
 
 func BenchmarkAlliterativeAnimal(b *testing.B) {
@@ -52,17 +60,13 @@ sample: "value"
 
 func TestExecuteTemplate(t *testing.T) {
 
-	frontmatter := `
-{
-"identifier": "1234"
-}
-	`
+	frontmatter := common.FrontMatter{"identifier": "1234"}
 
 	templateHtml := `
 {{ .Identifier }}
 	`
 
-	rendered, err := ExecuteTemplate(templateHtml, []byte(frontmatter), &MockReadFrontMatter{})
+	rendered, err := templating.ExecuteTemplate(templateHtml, frontmatter, &MockReadFrontMatter{})
 
 	if err != nil {
 		t.Error(err)
@@ -75,18 +79,13 @@ func TestExecuteTemplate(t *testing.T) {
 
 func TestExecuteTemplateUnstructured(t *testing.T) {
 
-	frontmatter := `
-{
-"identifier": "1234",
-"foobar": "baz"
-}
-	`
+	frontmatter := common.FrontMatter{"identifier": "1234", "foobar": "baz"}
 
 	templateHtml := `
 {{ index .Map "foobar" }}
 	`
 
-	rendered, err := ExecuteTemplate(templateHtml, []byte(frontmatter), &MockReadFrontMatter{})
+	rendered, err := templating.ExecuteTemplate(templateHtml, frontmatter, &MockReadFrontMatter{})
 
 	if err != nil {
 		t.Error(err)

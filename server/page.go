@@ -61,7 +61,7 @@ func (s *Site) ReadMarkdown(name string) (string, error) {
 		return "", err
 	}
 
-	matter := &map[string]interface{}{}
+	matter := &common.FrontMatter{}
 	markdownBytes, err := frontmatter.Parse(bytes.NewReader(content), &matter)
 	if err != nil {
 		return "", err
