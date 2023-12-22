@@ -6,6 +6,7 @@ import (
 	"path"
 	"sync"
 
+	"github.com/brendanjerwin/simple_wiki/index"
 	"github.com/brendanjerwin/simple_wiki/sec"
 	"github.com/brendanjerwin/simple_wiki/utils"
 	"github.com/gin-contrib/sessions/cookie"
@@ -22,9 +23,10 @@ type Site struct {
 	SecretCode       string
 	Fileuploads      bool
 	MaxUploadSize    uint
+	MaxDocumentSize  uint // in runes; about a 10mb limit by default
 	Logger           *lumber.ConsoleLogger
 	MarkdownRenderer utils.IRenderMarkdownToHtml
-	MaxDocumentSize  uint // in runes; about a 10mb limit by default
+	FrontMatterIndex *index.FrontmatterIndex
 	saveMut          sync.Mutex
 }
 
@@ -52,4 +54,24 @@ func (s *Site) sniffContentType(name string) (string, error) {
 
 	// Always returns a valid content-type and "application/octet-stream" if no others seemed to match.
 	return http.DetectContentType(buffer), nil
+}
+
+func (s *Site) SetFrontMatterIndex(identifier string) error {
+	s.FrontMatterIndex.RemoveFrontmatterFromIndex(identifier)
+	frontmatter, err := s.ReadFrontMatter(identifier)
+	if err != nil {
+		return err
+	}
+	s.FrontMatterIndex.AddFrontmatterToIndex(identifier, frontmatter)
+
+	return nil
+}
+
+func (s *Site) InitializeFrontmatterIndex() {
+	s.FrontMatterIndex = index.NewFrontmatterIndex()
+
+	files := s.DirectoryList()
+	for _, file := range files {
+		s.SetFrontMatterIndex(file.Name())
+	}
 }

@@ -70,13 +70,13 @@ func (s *Site) ReadMarkdown(name string) (string, error) {
 	return string(markdownBytes), nil
 }
 
-func (s *Site) Open(name string) (p *Page) {
+func (s *Site) Open(identifier string) (p *Page) {
 	p = new(Page)
 	p.Site = s
-	p.Identifier = name
+	p.Identifier = identifier
 	p.Text = versionedtext.NewVersionedText("")
-	p.Render()
-	bJSON, err := ioutil.ReadFile(path.Join(s.PathToData, utils.EncodeToBase32(strings.ToLower(name))+".json"))
+	//p.Render()
+	bJSON, err := os.ReadFile(path.Join(s.PathToData, utils.EncodeToBase32(strings.ToLower(identifier))+".json"))
 	if err != nil {
 		return
 	}
@@ -178,7 +178,7 @@ func (d DirectoryEntry) Sys() interface{} {
 }
 
 func (s *Site) DirectoryList() []os.FileInfo {
-	files, _ := ioutil.ReadDir(s.PathToData)
+	files, _ := os.ReadDir(s.PathToData)
 	entries := make([]os.FileInfo, len(files))
 	found := -1
 	for _, f := range files {
@@ -255,13 +255,20 @@ func (p *Page) Save() error {
 		return err
 	}
 
-	err = ioutil.WriteFile(path.Join(p.Site.PathToData, utils.EncodeToBase32(strings.ToLower(p.Identifier))+".json"), bJSON, 0644)
+	err = os.WriteFile(path.Join(p.Site.PathToData, utils.EncodeToBase32(strings.ToLower(p.Identifier))+".json"), bJSON, 0644)
 	if err != nil {
 		return err
 	}
 
 	// Write the current Markdown
-	return ioutil.WriteFile(path.Join(p.Site.PathToData, utils.EncodeToBase32(strings.ToLower(p.Identifier))+".md"), []byte(p.Text.CurrentText), 0644)
+	err = os.WriteFile(path.Join(p.Site.PathToData, utils.EncodeToBase32(strings.ToLower(p.Identifier))+".md"), []byte(p.Text.CurrentText), 0644)
+	if err != nil {
+		return err
+	}
+
+	p.Site.SetFrontMatterIndex(p.Identifier)
+
+	return nil
 }
 
 func (p *Page) IsNew() bool {

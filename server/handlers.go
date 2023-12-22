@@ -57,7 +57,7 @@ func Serve(
 		fmt.Printf("Loaded CSS file, %d bytes\n", len(customCSS))
 	}
 
-	router := Site{
+	site := &Site{
 		PathToData:      filepathToData,
 		Css:             customCSS,
 		DefaultPage:     defaultPage,
@@ -67,14 +67,17 @@ func Serve(
 		SecretCode:      secretCode,
 		Fileuploads:     fileuploads,
 		MaxUploadSize:   maxUploadSize,
-		Logger:          logger,
 		MaxDocumentSize: maxDocumentSize,
-	}.Router()
+		Logger:          logger,
+	}
+
+	site.InitializeFrontmatterIndex()
+	router := site.Router()
 
 	panic(router.Run(host + ":" + port))
 }
 
-func (s Site) Router() *gin.Engine {
+func (s *Site) Router() *gin.Engine {
 	if s.Logger == nil {
 		s.Logger = lumber.NewConsoleLogger(lumber.TRACE)
 	}
