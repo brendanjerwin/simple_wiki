@@ -1,6 +1,13 @@
 package index
 
-import "github.com/brendanjerwin/simple_wiki/common"
+import (
+	"encoding/json"
+	"log"
+	"slices"
+	"strings"
+
+	"github.com/brendanjerwin/simple_wiki/common"
+)
 
 type DottedKeyPath = string
 type Value = string
@@ -19,21 +26,36 @@ type IQueryFrontmatterIndex interface {
 
 type FrontmatterIndex struct {
 	InvertedIndex map[DottedKeyPath]map[Value][]PageIdentifier
-	PageKeyMap    map[PageIdentifier]map[DottedKeyPath]bool
+	PageKeyMap    map[PageIdentifier]map[DottedKeyPath]map[Value]bool
 }
 
 func NewFrontmatterIndex() *FrontmatterIndex {
 	return &FrontmatterIndex{
 		InvertedIndex: make(map[DottedKeyPath]map[Value][]PageIdentifier),
-		PageKeyMap:    make(map[PageIdentifier]map[DottedKeyPath]bool),
+		PageKeyMap:    make(map[PageIdentifier]map[DottedKeyPath]map[Value]bool),
 	}
 }
 
 func (f *FrontmatterIndex) AddFrontmatterToIndex(identifier PageIdentifier, frontmatter common.FrontMatter) {
-	f.recursiveAdd("", identifier, frontmatter)
+	f.recursiveAdd(identifier, "", frontmatter)
 }
 
-func (f *FrontmatterIndex) recursiveAdd(keyPath string, identifier PageIdentifier, value interface{}) {
+func (f *FrontmatterIndex) saveToIndex(identifier PageIdentifier, keyPath DottedKeyPath, value Value) {
+	if f.InvertedIndex[keyPath] == nil {
+		f.InvertedIndex[keyPath] = make(map[Value][]PageIdentifier)
+	}
+	f.InvertedIndex[keyPath][value] = append(f.InvertedIndex[keyPath][value], identifier)
+
+	if f.PageKeyMap[identifier] == nil {
+		f.PageKeyMap[identifier] = make(map[DottedKeyPath]map[Value]bool)
+	}
+	if f.PageKeyMap[identifier][keyPath] == nil {
+		f.PageKeyMap[identifier][keyPath] = make(map[Value]bool)
+	}
+	f.PageKeyMap[identifier][keyPath][value] = true
+}
+
+func (f *FrontmatterIndex) recursiveAdd(identifier PageIdentifier, keyPath string, value interface{}) {
 	if keyPath == "identifier" {
 		return
 	}
@@ -48,40 +70,15 @@ func (f *FrontmatterIndex) recursiveAdd(keyPath string, identifier PageIdentifie
 				newKeyPath += "."
 			}
 			newKeyPath += key
-			f.recursiveAdd(newKeyPath, identifier, val)
+			f.recursiveAdd(identifier, newKeyPath, val)
 		}
 	case string:
-		if f.InvertedIndex[keyPath] == nil {
-			f.InvertedIndex[keyPath] = make(map[Value][]PageIdentifier)
-		}
-		if f.InvertedIndex[keyPath][v] == nil {
-			f.InvertedIndex[keyPath][v] = make([]PageIdentifier, 0)
-		}
-
-		f.InvertedIndex[keyPath][v] = append(f.InvertedIndex[keyPath][v], identifier)
-
-		if f.PageKeyMap[identifier] == nil {
-			f.PageKeyMap[identifier] = make(map[DottedKeyPath]bool)
-		}
-		f.PageKeyMap[identifier][keyPath] = true
-
+		f.saveToIndex(identifier, keyPath, v)
 	case []interface{}:
 		for _, array := range v {
 			switch str := array.(type) {
 			case string:
-				if f.InvertedIndex[keyPath] == nil {
-					f.InvertedIndex[keyPath] = make(map[Value][]PageIdentifier)
-				}
-				if f.InvertedIndex[keyPath][str] == nil {
-					f.InvertedIndex[keyPath][str] = make([]PageIdentifier, 0)
-				}
-
-				f.InvertedIndex[keyPath][str] = append(f.InvertedIndex[keyPath][str], identifier)
-
-				if f.PageKeyMap[identifier] == nil {
-					f.PageKeyMap[identifier] = make(map[DottedKeyPath]bool)
-				}
-				f.PageKeyMap[identifier][keyPath] = true
+				f.saveToIndex(identifier, keyPath, str)
 			default:
 				panic("frontmatter can only be a string, []string, or a map[string]interface{}")
 			}
@@ -92,8 +89,12 @@ func (f *FrontmatterIndex) recursiveAdd(keyPath string, identifier PageIdentifie
 }
 
 func (f *FrontmatterIndex) RemoveFrontmatterFromIndex(identifier PageIdentifier) {
-	for key := range f.PageKeyMap[identifier] {
-		delete(f.InvertedIndex[key], identifier)
+	for dotted_key_path := range f.PageKeyMap[identifier] {
+		for value := range f.PageKeyMap[identifier][dotted_key_path] {
+			identifiers := f.InvertedIndex[dotted_key_path][value]
+			identifiers = slices.DeleteFunc(identifiers, func(v string) bool { return v == identifier })
+			f.InvertedIndex[dotted_key_path][value] = identifiers
+		}
 	}
 	delete(f.PageKeyMap, identifier)
 }
@@ -111,9 +112,12 @@ func (f *FrontmatterIndex) QueryKeyExistence(dotted_key_path DottedKeyPath) []Pa
 }
 
 func (f *FrontmatterIndex) QueryPrefixMatch(dotted_key_path DottedKeyPath, value_prefix string) []PageIdentifier {
+	json_index, _ := json.Marshal(f.InvertedIndex)
+	string_index := string(json_index)
+	log.Println(string_index)
 	var identifiers_with_key []PageIdentifier
 	for indexed_value := range f.InvertedIndex[dotted_key_path] {
-		if indexed_value[:len(value_prefix)] == value_prefix {
+		if strings.HasPrefix(indexed_value, value_prefix) {
 			identifiers_with_key = append(identifiers_with_key, f.InvertedIndex[dotted_key_path][indexed_value]...)
 		}
 	}

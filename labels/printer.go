@@ -7,11 +7,12 @@ import (
 	"strings"
 
 	"github.com/brendanjerwin/simple_wiki/common"
+	"github.com/brendanjerwin/simple_wiki/index"
 	"github.com/brendanjerwin/simple_wiki/templating"
 	"github.com/karalabe/usb"
 )
 
-func PrintLabel(template_identifier string, identifer string, site common.IReadPages) error {
+func PrintLabel(template_identifier string, identifer string, site common.IReadPages, query index.IQueryFrontmatterIndex) error {
 	template_data, err := site.ReadMarkdown(template_identifier)
 	if err != nil {
 		return err
@@ -65,7 +66,7 @@ func PrintLabel(template_identifier string, identifer string, site common.IReadP
 		return err
 	}
 
-	zpl, err := templating.ExecuteTemplate(string(template_data), frontmatter, site)
+	zpl, err := templating.ExecuteTemplate(string(template_data), frontmatter, site, query)
 	if err != nil {
 		return err
 	}

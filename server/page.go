@@ -180,18 +180,18 @@ func (d DirectoryEntry) Sys() interface{} {
 func (s *Site) DirectoryList() []os.FileInfo {
 	files, _ := os.ReadDir(s.PathToData)
 	entries := make([]os.FileInfo, len(files))
-	found := -1
+	found := 0
 	for _, f := range files {
 		if strings.HasSuffix(f.Name(), ".json") {
 			name := DecodeFileName(f.Name())
 			p := s.Open(name)
-			found = found + 1
 			entries[found] = DirectoryEntry{
 				Path:       name,
 				Length:     len(p.Text.GetCurrent()),
 				Numchanges: p.Text.NumEdits(),
 				LastEdited: time.Unix(p.Text.LastEditTime()/1000000000, 0),
 			}
+			found = found + 1
 		}
 	}
 	entries = entries[:found]
@@ -240,7 +240,7 @@ func (p *Page) Update(newText string) error {
 
 func (p *Page) Render() {
 	var err error
-	p.RenderedPage, p.FrontmatterJson, err = utils.MarkdownToHtmlAndJsonFrontmatter(p.Text.GetCurrent(), true, p.Site, p.Site.MarkdownRenderer)
+	p.RenderedPage, p.FrontmatterJson, err = utils.MarkdownToHtmlAndJsonFrontmatter(p.Text.GetCurrent(), true, p.Site, p.Site.MarkdownRenderer, p.Site.FrontMatterIndex)
 	if err != nil {
 		p.Site.Logger.Error(err.Error())
 		p.RenderedPage = []byte(err.Error())

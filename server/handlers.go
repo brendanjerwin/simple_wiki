@@ -553,7 +553,7 @@ func (s *Site) handlePrintLabel(c *gin.Context) {
 		return
 	}
 
-	err := labels.PrintLabel(json.TemplateIdentifier, json.DataIdentifier, s)
+	err := labels.PrintLabel(json.TemplateIdentifier, json.DataIdentifier, s, s.FrontMatterIndex)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to print label: " + err.Error()})
 		return

@@ -7,6 +7,7 @@ import (
 	"text/template"
 
 	"github.com/brendanjerwin/simple_wiki/common"
+	"github.com/brendanjerwin/simple_wiki/index"
 	"github.com/stoewer/go-strcase"
 )
 
@@ -159,7 +160,8 @@ func BuildIsContainer(site common.IReadPages) func(string) bool {
 
 	}
 }
-func ExecuteTemplate(templateString string, frontmatter common.FrontMatter, site common.IReadPages) ([]byte, error) {
+
+func ExecuteTemplate(templateString string, frontmatter common.FrontMatter, site common.IReadPages, query index.IQueryFrontmatterIndex) ([]byte, error) {
 	templateContext, err := ConstructTemplateContextFromFrontmatter(frontmatter)
 	if err != nil {
 		return nil, err
@@ -168,6 +170,9 @@ func ExecuteTemplate(templateString string, frontmatter common.FrontMatter, site
 		"ShowInventoryContentsOf": BuildShowInventoryContentsOf(site, templateContext),
 		"LinkTo":                  BuildLinkTo(site, templateContext),
 		"IsContainer":             BuildIsContainer(site),
+		"FindBy":                  query.QueryExactMatch,
+		"FindByPrefix":            query.QueryPrefixMatch,
+		"FindByKeyExistence":      query.QueryKeyExistence,
 	}
 
 	tmpl, err := template.New("page").Funcs(funcs).Parse(templateString)
