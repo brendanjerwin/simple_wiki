@@ -24,7 +24,7 @@ jobs:
               run: |
                 export GOOS=${{ matrix.goos }}
                 export GOARCH=${{ matrix.goarch }}
-                export CGO_ENABLED=0
+                export CGO_ENABLED=1
                 go build -v -o simple_wiki-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.exe' || '' }}
 
             - name: Upload Release Asset
