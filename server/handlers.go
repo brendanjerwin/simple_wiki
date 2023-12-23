@@ -299,7 +299,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		return
 	}
 	rawText := p.Text.GetCurrent()
-	rawHTML := p.RenderedPage
+	contentHTML := p.RenderedPage
 
 	// Check to see if an old version is requested
 	versionInt, versionErr := strconv.Atoi(version)
@@ -307,9 +307,11 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		versionText, err := p.Text.GetPreviousByTimestamp(int64(versionInt))
 		if err == nil {
 			rawText = versionText
-			rawHTML, _ = p.Site.MarkdownRenderer.Render([]byte(rawText))
+			contentHTML, _ = p.Site.MarkdownRenderer.Render([]byte(rawText))
 		}
 	}
+
+	contentHTML = []byte(fmt.Sprintf("<article class='content' id='%s'>%s</article>", page, string(contentHTML)))
 
 	// Get history
 	var versionsInt64 []int64
@@ -371,7 +373,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		"UploadPage":         page == "uploads",
 		"DirectoryEntries":   DirectoryEntries,
 		"Page":               page,
-		"RenderedPage":       template.HTML([]byte(rawHTML)),
+		"RenderedPage":       template.HTML([]byte(contentHTML)),
 		"RawPage":            rawText,
 		"Versions":           versionsInt64,
 		"VersionsText":       versionsText,

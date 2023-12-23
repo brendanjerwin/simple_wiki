@@ -20,6 +20,7 @@ body {
 
 .pure-menu a {
   color: #777;
+  width: auto;
 }
 
 .deleting {
@@ -79,6 +80,8 @@ div.pure-menu-horizontal {
   height: 2.75em;
   padding-left: 1em;
   font-family: 'Montserrat', sans-serif;
+  width: auto;
+  ;
 }
 
 div.pure-menu-horizontal hr {
@@ -90,7 +93,7 @@ div.pure-menu-horizontal ul {
 }
 
 div.pure-menu-horizontal ul.pure-menu-children {
-  width: 100%;
+  width: auto;
   border: grey;
   border-style: solid;
   border-top-style: none;
