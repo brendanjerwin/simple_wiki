@@ -1,6 +1,7 @@
 package index
 
 import (
+	"log"
 	"slices"
 	"strings"
 
@@ -84,11 +85,11 @@ func (f *FrontmatterIndex) recursiveAdd(identifier PageIdentifier, keyPath strin
 			case string:
 				f.saveToIndex(identifier, keyPath, str)
 			default:
-				panic("frontmatter can only be a string, []string, or a map[string]interface{}")
+				log.Printf("frontmatter can only be a string, []string, or a map[string]interface{}. Page: %v Key: %v", identifier, keyPath)
 			}
 		}
 	default:
-		panic("frontmatter can only be a string, []string, or a map[string]interface{}")
+		log.Printf("frontmatter can only be a string, []string, or a map[string]interface{}. Page: %v Key: %v", identifier, keyPath)
 	}
 }
 
