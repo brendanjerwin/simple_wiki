@@ -218,9 +218,7 @@ function onUploadFinished(file) {
     var v = $('#userInput').val();
     var textBefore = v.substring(0, cursorPos);
     var textAfter = v.substring(cursorPos, v.length);
-    var message;
     if (cursorEnd > cursorPos) {
-        message = v.substring(cursorPos, cursorEnd);
         textAfter = v.substring(cursorEnd, v.length);
     }
     var prefix = '';
