@@ -7,6 +7,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type PageReference struct {
+	Identifier string `json:"identifier"`
+	Title      string `json:"title"`
+}
+
 func (s *Site) handlePrintLabel(c *gin.Context) {
 	type QueryJSON struct {
 		TemplateIdentifier string `json:"template_identifier" binding:"required"`
@@ -40,8 +45,8 @@ func (s *Site) handleFindBy(c *gin.Context) {
 		return
 	}
 
-	results := s.FrontMatterIndex.QueryExactMatch(req.DottedKeyPath, req.Value)
-
+	ids := s.FrontMatterIndex.QueryExactMatch(req.DottedKeyPath, req.Value)
+	results := s.createPageReferences(ids)
 	c.JSON(http.StatusOK, gin.H{"success": true, "ids": results})
 }
 
@@ -57,8 +62,8 @@ func (s *Site) handleFindByPrefix(c *gin.Context) {
 		return
 	}
 
-	results := s.FrontMatterIndex.QueryPrefixMatch(req.DottedKeyPath, req.ValuePrefix)
-
+	ids := s.FrontMatterIndex.QueryPrefixMatch(req.DottedKeyPath, req.ValuePrefix)
+	results := s.createPageReferences(ids)
 	c.JSON(http.StatusOK, gin.H{"success": true, "ids": results})
 }
 
@@ -73,7 +78,18 @@ func (s *Site) handleFindByKeyExistence(c *gin.Context) {
 		return
 	}
 
-	results := s.FrontMatterIndex.QueryKeyExistence(req.DottedKeyPath)
-
+	ids := s.FrontMatterIndex.QueryKeyExistence(req.DottedKeyPath)
+	results := s.createPageReferences(ids)
 	c.JSON(http.StatusOK, gin.H{"success": true, "ids": results})
+}
+
+func (s *Site) createPageReferences(ids []string) []PageReference {
+	results := make([]PageReference, len(ids))
+	for idx, id := range ids {
+		results[idx] = PageReference{
+			Identifier: id,
+			Title:      s.FrontMatterIndex.GetValue(id, "title"),
+		}
+	}
+	return results
 }

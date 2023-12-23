@@ -20,6 +20,8 @@ type IQueryFrontmatterIndex interface {
 	QueryExactMatch(dotted_key_path DottedKeyPath, value Value) []PageIdentifier
 	QueryKeyExistence(dotted_key_path DottedKeyPath) []PageIdentifier
 	QueryPrefixMatch(dotted_key_path DottedKeyPath, value_prefix string) []PageIdentifier
+
+	GetValue(identifier PageIdentifier, dotted_key_path DottedKeyPath) Value
 }
 
 type FrontmatterIndex struct {
@@ -69,7 +71,9 @@ func (f *FrontmatterIndex) recursiveAdd(identifier PageIdentifier, keyPath strin
 			}
 			newKeyPath += key
 
-			f.saveToIndex(identifier, newKeyPath, "") //This ensures that the QueryKeyExistence function works for all keys in the hierarchy
+			if _, isMap := val.(map[string]interface{}); isMap {
+				f.saveToIndex(identifier, newKeyPath, "") //This ensures that the QueryKeyExistence function works for all keys in the hierarchy
+			}
 			f.recursiveAdd(identifier, newKeyPath, val)
 		}
 	case string:
@@ -119,4 +123,11 @@ func (f *FrontmatterIndex) QueryPrefixMatch(dotted_key_path DottedKeyPath, value
 		}
 	}
 	return identifiers_with_key
+}
+
+func (f *FrontmatterIndex) GetValue(identifier PageIdentifier, dotted_key_path DottedKeyPath) Value {
+	for value := range f.PageKeyMap[identifier][dotted_key_path] {
+		return value
+	}
+	return ""
 }
