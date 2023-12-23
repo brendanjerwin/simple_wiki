@@ -27,7 +27,7 @@ jobs:
 
             - uses: awalsh128/cache-apt-pkgs-action@latest
               with:
-                packages: gcc-multilib build-essential gcc-arm-linux-gnueabihf
+                packages: gcc-multilib build-essential
                 version: 3
 
             - name: Build Go Binary
@@ -35,9 +35,6 @@ jobs:
                 export GOOS=${{ matrix.goos }}
                 export GOARCH=${{ matrix.goarch }}
                 export CGO_ENABLED=1
-                if [ "$GOARCH" = "arm" ]; then
-                  export CC=arm-linux-gnueabihf-gcc
-                fi
                 go build -v -o simple_wiki-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.exe' || '' }}
 
             - name: Upload Release Asset
