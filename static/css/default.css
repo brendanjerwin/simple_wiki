@@ -62,7 +62,7 @@ body#pad textarea {
   box-shadow: none;
   resize: none;
   font-size: 1em;
-  font-family: "Open Sans", "Segoe UI", Tahoma, Arial, sans-serif;
+  font-family: "Lucida Console", Monaco, monospace;
 }
 
 body#pad.HasDotInName textarea {
