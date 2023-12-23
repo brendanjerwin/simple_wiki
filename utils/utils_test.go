@@ -3,14 +3,43 @@ package utils
 import (
 	"strings"
 	"testing"
+
+	"github.com/brendanjerwin/simple_wiki/common"
+	"github.com/brendanjerwin/simple_wiki/templating"
 )
 
 type MockReadFrontMatter struct {
 	Frontmatter map[string]interface{}
+	Markdown    string
 }
 
-func (m *MockReadFrontMatter) ReadFrontMatter(markdown string) (map[string]interface{}, error) {
+func (m *MockReadFrontMatter) ReadFrontMatter(identifer string) (map[string]interface{}, error) {
 	return m.Frontmatter, nil
+}
+
+func (m *MockReadFrontMatter) ReadMarkdown(identifer string) (string, error) {
+	return m.Markdown, nil
+}
+
+// Mocks index.IQueryFrontmatterIndex
+type MockQueryFrontmatterIndex struct {
+	Results map[string][]string
+}
+
+func (m *MockQueryFrontmatterIndex) QueryExactMatch(keyPath string, value string) []string {
+	return m.Results[keyPath]
+}
+
+func (m *MockQueryFrontmatterIndex) QueryKeyExistence(keyPath string) []string {
+	return m.Results[keyPath]
+}
+
+func (m *MockQueryFrontmatterIndex) QueryPrefixMatch(keyPath string, valuePrefix string) []string {
+	return m.Results[keyPath]
+}
+
+func (m *MockQueryFrontmatterIndex) GetValue(identifier string, keyPath string) string {
+	return ""
 }
 
 func BenchmarkAlliterativeAnimal(b *testing.B) {
@@ -39,7 +68,7 @@ sample: "value"
 # Hello
 	`
 
-	html, _, _ := MarkdownToHtmlAndJsonFrontmatter(markdown, true, &MockReadFrontMatter{}, &GoldmarkRenderer{})
+	html, _, _ := MarkdownToHtmlAndJsonFrontmatter(markdown, true, &MockReadFrontMatter{}, &GoldmarkRenderer{}, &MockQueryFrontmatterIndex{})
 
 	if strings.Contains(string(html), "sample:") {
 		t.Errorf("Did not remove frontmatter.")
@@ -52,17 +81,13 @@ sample: "value"
 
 func TestExecuteTemplate(t *testing.T) {
 
-	frontmatter := `
-{
-"identifier": "1234"
-}
-	`
+	frontmatter := common.FrontMatter{"identifier": "1234"}
 
 	templateHtml := `
 {{ .Identifier }}
 	`
 
-	rendered, err := ExecuteTemplate(templateHtml, []byte(frontmatter), &MockReadFrontMatter{})
+	rendered, err := templating.ExecuteTemplate(templateHtml, frontmatter, &MockReadFrontMatter{}, &MockQueryFrontmatterIndex{})
 
 	if err != nil {
 		t.Error(err)
@@ -75,18 +100,13 @@ func TestExecuteTemplate(t *testing.T) {
 
 func TestExecuteTemplateUnstructured(t *testing.T) {
 
-	frontmatter := `
-{
-"identifier": "1234",
-"foobar": "baz"
-}
-	`
+	frontmatter := common.FrontMatter{"identifier": "1234", "foobar": "baz"}
 
 	templateHtml := `
 {{ index .Map "foobar" }}
 	`
 
-	rendered, err := ExecuteTemplate(templateHtml, []byte(frontmatter), &MockReadFrontMatter{})
+	rendered, err := templating.ExecuteTemplate(templateHtml, frontmatter, &MockReadFrontMatter{}, &MockQueryFrontmatterIndex{})
 
 	if err != nil {
 		t.Error(err)

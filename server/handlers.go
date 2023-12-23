@@ -56,7 +56,7 @@ func Serve(
 		fmt.Printf("Loaded CSS file, %d bytes\n", len(customCSS))
 	}
 
-	router := Site{
+	site := &Site{
 		PathToData:      filepathToData,
 		Css:             customCSS,
 		DefaultPage:     defaultPage,
@@ -66,14 +66,17 @@ func Serve(
 		SecretCode:      secretCode,
 		Fileuploads:     fileuploads,
 		MaxUploadSize:   maxUploadSize,
-		Logger:          logger,
 		MaxDocumentSize: maxDocumentSize,
-	}.Router()
+		Logger:          logger,
+	}
+
+	site.InitializeFrontmatterIndex()
+	router := site.Router()
 
 	panic(router.Run(host + ":" + port))
 }
 
-func (s Site) Router() *gin.Engine {
+func (s *Site) Router() *gin.Engine {
 	if s.Logger == nil {
 		s.Logger = lumber.NewConsoleLogger(lumber.TRACE)
 	}
@@ -137,6 +140,10 @@ func (s Site) Router() *gin.Engine {
 	router.POST("/relinquish", s.handlePageRelinquish) // relinquish returns the page no matter what (and destroys if nessecary)
 	router.POST("/exists", s.handlePageExists)
 	router.POST("/lock", s.handleLock)
+	router.POST("/api/print_label", s.handlePrintLabel)
+	router.GET("/api/find_by", s.handleFindBy)
+	router.GET("/api/find_by_prefix", s.handleFindByPrefix)
+	router.GET("/api/find_by_key_existence", s.handleFindByKeyExistence)
 
 	return router
 }
@@ -292,7 +299,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		return
 	}
 	rawText := p.Text.GetCurrent()
-	rawHTML := p.RenderedPage
+	contentHTML := p.RenderedPage
 
 	// Check to see if an old version is requested
 	versionInt, versionErr := strconv.Atoi(version)
@@ -300,9 +307,11 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		versionText, err := p.Text.GetPreviousByTimestamp(int64(versionInt))
 		if err == nil {
 			rawText = versionText
-			rawHTML, _ = p.Site.MarkdownRenderer.Render([]byte(rawText))
+			contentHTML, _ = p.Site.MarkdownRenderer.Render([]byte(rawText))
 		}
 	}
+
+	contentHTML = []byte(fmt.Sprintf("<article class='content' id='%s'>%s</article>", page, string(contentHTML)))
 
 	// Get history
 	var versionsInt64 []int64
@@ -364,7 +373,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		"UploadPage":         page == "uploads",
 		"DirectoryEntries":   DirectoryEntries,
 		"Page":               page,
-		"RenderedPage":       template.HTML([]byte(rawHTML)),
+		"RenderedPage":       template.HTML([]byte(contentHTML)),
 		"RawPage":            rawText,
 		"Versions":           versionsInt64,
 		"VersionsText":       versionsText,

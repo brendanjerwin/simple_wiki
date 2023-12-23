@@ -20,6 +20,7 @@ body {
 
 .pure-menu a {
   color: #777;
+  width: auto;
 }
 
 .deleting {
@@ -61,7 +62,7 @@ body#pad textarea {
   box-shadow: none;
   resize: none;
   font-size: 1em;
-  font-family: "Open Sans", "Segoe UI", Tahoma, Arial, sans-serif;
+  font-family: "Lucida Console", Monaco, monospace;
 }
 
 body#pad.HasDotInName textarea {
@@ -79,6 +80,7 @@ div.pure-menu-horizontal {
   height: 2.75em;
   padding-left: 1em;
   font-family: 'Montserrat', sans-serif;
+  width: auto;
 }
 
 div.pure-menu-horizontal hr {
@@ -90,7 +92,7 @@ div.pure-menu-horizontal ul {
 }
 
 div.pure-menu-horizontal ul.pure-menu-children {
-  width: 100%;
+  width: auto;
   border: grey;
   border-style: solid;
   border-top-style: none;

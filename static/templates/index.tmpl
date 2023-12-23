@@ -58,7 +58,7 @@
                             <a href="#" id="menuLink1" class="pure-menu-link">{{ .Page }}</a>
                             <ul class="pure-menu-children">
                                 <li class="pure-menu-item"><a href="/" class="pure-menu-link">Home</a></li>
-                                <hr>
+                                <hr id="utilityMenuSection">
                                 {{ if (.IsLocked) }}
                                 {{ else }}
                                 <li class="pure-menu-item"><a href="#" class="pure-menu-link" id="lockPage">{{ if .IsLocked }}Unlock{{ else }}Lock{{end}}</a></li>
