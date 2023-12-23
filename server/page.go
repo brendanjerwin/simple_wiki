@@ -123,7 +123,14 @@ items = [
 		initialText += "\n# {{or .Title .Identifier}}" + "\n"
 
 		if tmpl == "inv_item" {
-			initialText += "### Goes in: {{LinkTo .Inventory.Container }}\n"
+			initialText += `
+### Goes in: {{LinkTo .Inventory.Container }}
+
+{{if IsContainer .Identifier }}
+## Contents
+{{ ShowInventoryContentsOf .Identifier }}
+{{ end }}
+`
 		}
 
 		p.Text = versionedtext.NewVersionedText(initialText)
