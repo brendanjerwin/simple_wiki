@@ -173,21 +173,23 @@ $(window).load(function () {
 });
 
 function addPrintMenu() {
-    fetch('/api/find_by_key_existence?k=label_printer')
-        .then(response => response.json())
-        .then(data => {
-            data.ids.forEach(function (item) {
-                $("#utilityMenuSection").after(`
+    if ($('article.content').length != 0) {
+        fetch('/api/find_by_key_existence?k=label_printer')
+            .then(response => response.json())
+            .then(data => {
+                data.ids.forEach(function (item) {
+                    $("#utilityMenuSection").after(`
                     <li class="pure-menu-item">
                         <a href="#" class="pure-menu-link" onclick="printLabel('${item.identifier}')">Print ${item.title || item.identifier}</a>
                     </li>
                 `);
+                });
+                console.log(data);
+            })
+            .catch(error => {
+                console.error('Error:', error);
             });
-            console.log(data);
-        })
-        .catch(error => {
-            console.error('Error:', error);
-        });
+    }
 }
 
 function printLabel(template_identifier) {
