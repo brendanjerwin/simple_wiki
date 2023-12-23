@@ -1,7 +1,6 @@
 package labels
 
 import (
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -9,8 +8,12 @@ import (
 	"github.com/brendanjerwin/simple_wiki/common"
 	"github.com/brendanjerwin/simple_wiki/index"
 	"github.com/brendanjerwin/simple_wiki/templating"
-	"github.com/karalabe/usb"
 )
+
+type Printer interface {
+	Write([]byte) (int, error)
+	Close() error
+}
 
 func PrintLabel(template_identifier string, identifer string, site common.IReadPages, query index.IQueryFrontmatterIndex) error {
 	template_data, err := site.ReadMarkdown(template_identifier)
@@ -23,39 +26,18 @@ func PrintLabel(template_identifier string, identifer string, site common.IReadP
 		return err
 	}
 
-	printerValue, ok := template_frontmatter["label_printer"].(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("label_printer is not a map")
-	}
-
-	vendorValue, ok := printerValue["vendor"].(string)
-	if !ok {
-		return fmt.Errorf("vendor is not a string")
-	}
-
-	vendorValue = strings.TrimPrefix(vendorValue, "0x")
-	vendor, err := strconv.ParseUint(vendorValue, 16, 16)
+	config, err := configFromFrontmatter(template_frontmatter)
 	if err != nil {
-		return fmt.Errorf("failed to parse vendor: %v", err)
+		return err
 	}
 
-	productValue, ok := printerValue["product"].(string)
-	if !ok {
-		return fmt.Errorf("product is not a string")
+	var printer Printer
+	switch config.ConnectivityMode {
+	case USB:
+		printer, err = GetUSBPrinter(config)
+	case LP:
+		printer, err = GetLPPrinter(config)
 	}
-
-	productValue = strings.TrimPrefix(productValue, "0x")
-	product, err := strconv.ParseUint(productValue, 16, 16)
-	if err != nil {
-		return fmt.Errorf("failed to parse product: %v", err)
-	}
-
-	config := UsbConfig{
-		Vendor:  uint16(vendor),
-		Product: uint16(product),
-	}
-
-	printer, err := GetPrinter(config)
 	if err != nil {
 		return err
 	}
@@ -75,41 +57,83 @@ func PrintLabel(template_identifier string, identifer string, site common.IReadP
 	return err
 }
 
-type UsbConfig struct {
-	Vendor  uint16
-	Product uint16
+func configFromFrontmatter(template_frontmatter common.FrontMatter) (PrinterConfig, error) {
+	var err error
+
+	printerValue, ok := template_frontmatter["label_printer"].(map[string]interface{})
+	if !ok {
+		return PrinterConfig{}, fmt.Errorf("label_printer is not a map")
+	}
+
+	config := PrinterConfig{}
+	modeValue, ok := printerValue["mode"].(string)
+	if !ok {
+		return PrinterConfig{}, fmt.Errorf("mode is not a string")
+	}
+	config.ConnectivityMode, err = ParseConnectivityMode(modeValue)
+	if err != nil {
+		return PrinterConfig{}, err
+	}
+
+	switch config.ConnectivityMode {
+	case USB:
+		vendorValue, ok := printerValue["vendor"].(string)
+		if !ok {
+			return PrinterConfig{}, fmt.Errorf("vendor is not a string")
+		}
+
+		vendorValue = strings.TrimPrefix(vendorValue, "0x")
+		vendor, err := strconv.ParseUint(vendorValue, 16, 16)
+		if err != nil {
+			return PrinterConfig{}, fmt.Errorf("failed to parse vendor: %v", err)
+		}
+
+		productValue, ok := printerValue["product"].(string)
+		if !ok {
+			return PrinterConfig{}, fmt.Errorf("product is not a string")
+		}
+
+		productValue = strings.TrimPrefix(productValue, "0x")
+		product, err := strconv.ParseUint(productValue, 16, 16)
+		if err != nil {
+			return PrinterConfig{}, fmt.Errorf("failed to parse product: %v", err)
+		}
+
+		config.USBVendor = uint16(vendor)
+		config.USBProduct = uint16(product)
+
+	case LP:
+		lpPrinterName, ok := printerValue["name"].(string)
+		if !ok {
+			return PrinterConfig{}, fmt.Errorf("name is not a string")
+		}
+		config.LPPrinterName = lpPrinterName
+	}
+	return config, nil
 }
 
-type Printer = usb.Device
+type PrinterConfig struct {
+	ConnectivityMode ConnectivityMode
+	USBVendor        uint16
+	USBProduct       uint16
+	LPPrinterName    string
+}
 
-var (
-	ErrorDeviceNotFound           = errors.New("Can not detect any USB printer")
-	ErrorEndpointNotAccessable    = errors.New("Can not access endpoint")
-	ErrorVendorNotSpecified       = errors.New("Vendor ID is not specified")
-	ErrorPlatformDoesntSupportUsb = errors.New("Platform doesn't support USB")
+type ConnectivityMode int
+
+const (
+	Unset ConnectivityMode = iota
+	USB
+	LP
 )
 
-func GetPrinter(config UsbConfig) (Printer, error) {
-	if config.Vendor == 0 {
-		return nil, ErrorVendorNotSpecified
+func ParseConnectivityMode(mode string) (ConnectivityMode, error) {
+	switch strings.ToLower(mode) {
+	case "usb":
+		return USB, nil
+	case "lp":
+		return LP, nil
+	default:
+		return 0, fmt.Errorf("invalid connectivity mode: %s", mode)
 	}
-
-	if !usb.Supported() {
-		return nil, ErrorPlatformDoesntSupportUsb
-	}
-
-	devices, err := usb.EnumerateRaw(config.Vendor, config.Product)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(devices) == 0 {
-		return nil, ErrorDeviceNotFound
-	}
-
-	printer, err := devices[0].Open()
-	if err != nil {
-		return nil, err
-	}
-	return printer, nil
 }
