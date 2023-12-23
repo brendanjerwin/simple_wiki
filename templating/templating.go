@@ -161,6 +161,10 @@ func BuildIsContainer(site common.IReadPages) func(string) bool {
 	}
 }
 
+func LabelUrlForIdentifier(identifier string) string {
+	return "http://wiki.local/" + identifier
+}
+
 func ExecuteTemplate(templateString string, frontmatter common.FrontMatter, site common.IReadPages, query index.IQueryFrontmatterIndex) ([]byte, error) {
 	templateContext, err := ConstructTemplateContextFromFrontmatter(frontmatter)
 	if err != nil {
@@ -173,6 +177,7 @@ func ExecuteTemplate(templateString string, frontmatter common.FrontMatter, site
 		"FindBy":                  query.QueryExactMatch,
 		"FindByPrefix":            query.QueryPrefixMatch,
 		"FindByKeyExistence":      query.QueryKeyExistence,
+		"LabelUrlFor":             LabelUrlForIdentifier,
 	}
 
 	tmpl, err := template.New("page").Funcs(funcs).Parse(templateString)

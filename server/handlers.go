@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brendanjerwin/simple_wiki/labels"
 	"github.com/brendanjerwin/simple_wiki/sec"
 	"github.com/brendanjerwin/simple_wiki/static"
 	"github.com/brendanjerwin/simple_wiki/utils"
@@ -141,7 +140,10 @@ func (s *Site) Router() *gin.Engine {
 	router.POST("/relinquish", s.handlePageRelinquish) // relinquish returns the page no matter what (and destroys if nessecary)
 	router.POST("/exists", s.handlePageExists)
 	router.POST("/lock", s.handleLock)
-	router.POST("/print_label", s.handlePrintLabel)
+	router.POST("/api/print_label", s.handlePrintLabel)
+	router.GET("/api/find_by", s.handleFindBy)
+	router.GET("/api/find_by_prefix", s.handleFindByPrefix)
+	router.GET("/api/find_by_key_existence", s.handleFindByKeyExistence)
 
 	return router
 }
@@ -539,27 +541,6 @@ func (s *Site) handleLock(c *gin.Context) {
 	}
 	p.Save()
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": message})
-}
-
-func (s *Site) handlePrintLabel(c *gin.Context) {
-	type QueryJSON struct {
-		TemplateIdentifier string `json:"template_identifier"`
-		DataIdentifier     string `json:"data_identifier"`
-	}
-
-	var json QueryJSON
-	if c.BindJSON(&json) != nil {
-		c.String(http.StatusBadRequest, "Problem binding keys")
-		return
-	}
-
-	err := labels.PrintLabel(json.TemplateIdentifier, json.DataIdentifier, s, s.FrontMatterIndex)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to print label: " + err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Label printed."})
 }
 
 func (s *Site) handleUpload(c *gin.Context) {

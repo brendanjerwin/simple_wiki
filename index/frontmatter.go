@@ -1,8 +1,6 @@
 package index
 
 import (
-	"encoding/json"
-	"log"
 	"slices"
 	"strings"
 
@@ -70,6 +68,8 @@ func (f *FrontmatterIndex) recursiveAdd(identifier PageIdentifier, keyPath strin
 				newKeyPath += "."
 			}
 			newKeyPath += key
+
+			f.saveToIndex(identifier, newKeyPath, "") //This ensures that the QueryKeyExistence function works for all keys in the hierarchy
 			f.recursiveAdd(identifier, newKeyPath, val)
 		}
 	case string:
@@ -112,9 +112,6 @@ func (f *FrontmatterIndex) QueryKeyExistence(dotted_key_path DottedKeyPath) []Pa
 }
 
 func (f *FrontmatterIndex) QueryPrefixMatch(dotted_key_path DottedKeyPath, value_prefix string) []PageIdentifier {
-	json_index, _ := json.Marshal(f.InvertedIndex)
-	string_index := string(json_index)
-	log.Println(string_index)
 	var identifiers_with_key []PageIdentifier
 	for indexed_value := range f.InvertedIndex[dotted_key_path] {
 		if strings.HasPrefix(indexed_value, value_prefix) {
