@@ -148,8 +148,8 @@ func BuildIsContainer(site common.IReadPages) func(string) bool {
 		}
 
 		if inventory, exist := frontmatter["inventory"]; exist {
-			switch inv := inventory.(type) {
-			case map[string]interface{}:
+			inv, ok := inventory.(map[string]interface{})
+			if ok {
 				if _, exist := inv["items"]; exist {
 					return true
 				}
