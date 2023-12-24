@@ -3,7 +3,6 @@ package server
 import (
 	"bytes"
 	"encoding/json"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path"
@@ -40,8 +39,9 @@ func (p Page) LastEditUnixTime() int64 {
 	return p.Text.LastEditTime() / 1000000000
 }
 
-func (s *Site) ReadFrontMatter(name string) (common.FrontMatter, error) {
-	content, err := os.ReadFile(path.Join(s.PathToData, utils.EncodeToBase32(strings.ToLower(name))+".md"))
+func (s *Site) ReadFrontMatter(identifier string) (common.FrontMatter, error) {
+	identifier = common.MungeIdentifier(identifier)
+	content, err := os.ReadFile(path.Join(s.PathToData, utils.EncodeToBase32(strings.ToLower(identifier))+".md"))
 	if err != nil {
 		return nil, err
 	}
@@ -55,8 +55,9 @@ func (s *Site) ReadFrontMatter(name string) (common.FrontMatter, error) {
 	return *matter, nil
 }
 
-func (s *Site) ReadMarkdown(name string) (string, error) {
-	content, err := os.ReadFile(path.Join(s.PathToData, utils.EncodeToBase32(strings.ToLower(name))+".md"))
+func (s *Site) ReadMarkdown(identifier string) (string, error) {
+	identifier = common.MungeIdentifier(identifier)
+	content, err := os.ReadFile(path.Join(s.PathToData, utils.EncodeToBase32(strings.ToLower(identifier))+".md"))
 	if err != nil {
 		return "", err
 	}
@@ -71,6 +72,7 @@ func (s *Site) ReadMarkdown(name string) (string, error) {
 }
 
 func (s *Site) Open(identifier string) (p *Page) {
+	identifier = common.MungeIdentifier(identifier)
 	p = new(Page)
 	p.Site = s
 	p.Identifier = identifier
@@ -88,7 +90,8 @@ func (s *Site) Open(identifier string) (p *Page) {
 }
 
 func (s *Site) OpenOrInit(identifier string, req *http.Request) (p *Page) {
-	bJSON, err := ioutil.ReadFile(path.Join(s.PathToData, utils.EncodeToBase32(strings.ToLower(identifier))+".json"))
+	identifier = common.MungeIdentifier(identifier)
+	bJSON, err := os.ReadFile(path.Join(s.PathToData, utils.EncodeToBase32(strings.ToLower(identifier))+".json"))
 	if err != nil {
 		p = new(Page)
 		p.Site = s

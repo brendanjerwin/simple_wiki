@@ -10,7 +10,6 @@ import (
 
 	"github.com/brendanjerwin/simple_wiki/common"
 	"github.com/brendanjerwin/simple_wiki/index"
-	"github.com/stoewer/go-strcase"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -50,7 +49,7 @@ func ConstructTemplateContextFromFrontmatter(frontmatter common.FrontMatter, que
 
 	// Add existing items to the map
 	for _, item := range context.Inventory.Items {
-		uniqueItems[strcase.SnakeCase(item)] = true
+		uniqueItems[common.MungeIdentifier(item)] = true
 	}
 
 	// Add new items to the map
@@ -129,24 +128,20 @@ func BuildLinkTo(site common.IReadPages, currentPageTemplateContext TemplateCont
 			return "N/A"
 		}
 
-		var frontmatterForLinkedPage, err = site.ReadFrontMatter(identifierToLink)
+		identifierToLink = common.MungeIdentifier(identifierToLink)
+		frontmatterForLinkedPage, err := site.ReadFrontMatter(identifierToLink)
 		if err != nil {
-			//Try again with a snake case identifier
-			snakeIdentifierToLink := strcase.SnakeCase(identifierToLink)
-			frontmatterForLinkedPage, err = site.ReadFrontMatter(snakeIdentifierToLink)
-			if err != nil {
-				titleCaser := cases.Title(language.AmericanEnglish)
-				titleCasedTitle := titleCaser.String(strings.ReplaceAll(snakeIdentifierToLink, "_", " "))
-				urlEncodedTitle := url.QueryEscape(titleCasedTitle)
-				//Doesnt look like it exists yet, return a link.
-				//It'll render and let the page get created.
-				if isContainer(currentPageTemplateContext.Identifier) {
-					//special inventory item link with attributes
-					return "[" + titleCasedTitle + "](/" + snakeIdentifierToLink + "?tmpl=inv_item&inventory.container=" + currentPageTemplateContext.Identifier + "&title=" + urlEncodedTitle + ")"
-				}
-
-				return "[" + titleCasedTitle + "](/" + snakeIdentifierToLink + "?title=" + urlEncodedTitle + ")"
+			titleCaser := cases.Title(language.AmericanEnglish)
+			titleCasedTitle := titleCaser.String(strings.ReplaceAll(identifierToLink, "_", " "))
+			urlEncodedTitle := url.QueryEscape(titleCasedTitle)
+			//Doesnt look like it exists yet, return a link.
+			//It'll render and let the page get created.
+			if isContainer(currentPageTemplateContext.Identifier) {
+				//special inventory item link with attributes
+				return "[" + titleCasedTitle + "](/" + identifierToLink + "?tmpl=inv_item&inventory.container=" + currentPageTemplateContext.Identifier + "&title=" + urlEncodedTitle + ")"
 			}
+
+			return "[" + titleCasedTitle + "](/" + identifierToLink + "?title=" + urlEncodedTitle + ")"
 		}
 
 		tmplString := "{{if index . \"title\"}}[{{ index . \"title\" }}](/{{ index . \"identifier\" }}){{else}}[{{ index . \"identifier\" }}](/{{ index . \"identifier\" }}){{end}}"

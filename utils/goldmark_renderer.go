@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"net/url"
 
+	"github.com/brendanjerwin/simple_wiki/common"
 	"github.com/yuin/goldmark"
 	emoji "github.com/yuin/goldmark-emoji"
 	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/renderer/html"
 
-	"github.com/stoewer/go-strcase"
 	"go.abhg.dev/goldmark/mermaid"
 	"go.abhg.dev/goldmark/wikilink"
 )
@@ -47,9 +47,9 @@ type wikilinkResolver struct{}
 
 func (wikilinkResolver) ResolveWikilink(n *wikilink.Node) ([]byte, error) {
 	sourceTarget := string(n.Target)
-	snakeTarget := strcase.SnakeCase(sourceTarget)
+	mungedTarget := common.MungeIdentifier(sourceTarget)
 	urlTarget := url.QueryEscape(sourceTarget)
-	relativeTarget := "/" + snakeTarget + "?title=" + urlTarget
+	relativeTarget := "/" + mungedTarget + "?title=" + urlTarget
 
 	return []byte(relativeTarget), nil
 }
