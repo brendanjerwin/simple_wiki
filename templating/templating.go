@@ -10,6 +10,7 @@ import (
 
 	"github.com/brendanjerwin/simple_wiki/common"
 	"github.com/brendanjerwin/simple_wiki/index"
+	"github.com/stoewer/go-strcase"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -90,9 +91,11 @@ func BuildShowInventoryContentsOf(site common.IReadPages, query index.IQueryFron
 
 		tmplString := `
 {{ range .Inventory.Items }}
-{{ __Indent }} - {{ LinkTo . }}
 {{ if IsContainer . }}
+{{ __Indent }} - **{{ LinkTo . }}**
 {{ ShowInventoryContentsOf . }}
+{{ else }}
+{{ __Indent }} - {{ LinkTo . }}
 {{ end }}
 {{ end }}
 `
@@ -131,7 +134,7 @@ func BuildLinkTo(site common.IReadPages, currentPageTemplateContext TemplateCont
 		identifierToLink, frontmatterForLinkedPage, err := site.ReadFrontMatter(identifierToLink)
 		if err != nil {
 			titleCaser := cases.Title(language.AmericanEnglish)
-			titleCasedTitle := titleCaser.String(strings.ReplaceAll(identifierToLink, "_", " "))
+			titleCasedTitle := titleCaser.String(strings.ReplaceAll(strcase.SnakeCase(identifierToLink), "_", " "))
 			urlEncodedTitle := url.QueryEscape(titleCasedTitle)
 			//Doesnt look like it exists yet, return a link.
 			//It'll render and let the page get created.
@@ -143,6 +146,7 @@ func BuildLinkTo(site common.IReadPages, currentPageTemplateContext TemplateCont
 			return "[" + titleCasedTitle + "](/" + identifierToLink + "?title=" + urlEncodedTitle + ")"
 		}
 
+		//Linked Page Exists
 		tmplString := "{{if index . \"title\"}}[{{ index . \"title\" }}](/{{ index . \"identifier\" }}){{else}}[{{ index . \"identifier\" }}](/{{ index . \"identifier\" }}){{end}}"
 		tmpl, err := template.New("content").Parse(tmplString)
 		if err != nil {
