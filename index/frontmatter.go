@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/brendanjerwin/simple_wiki/common"
+	"github.com/stoewer/go-strcase"
 )
 
 type DottedKeyPath = string
@@ -61,6 +62,7 @@ func (f *FrontmatterIndex) recursiveAdd(identifier PageIdentifier, keyPath strin
 		return
 	}
 
+	identifier = strcase.SnakeCase(identifier)
 	//recursively build the dotted key path. a value in frontmatter can be either a string or a map[string]interface{}
 	//if it is a map[string]interface{}, then we need to recurse
 	switch v := value.(type) {
@@ -94,6 +96,7 @@ func (f *FrontmatterIndex) recursiveAdd(identifier PageIdentifier, keyPath strin
 }
 
 func (f *FrontmatterIndex) RemoveFrontmatterFromIndex(identifier PageIdentifier) {
+	identifier = strcase.SnakeCase(identifier)
 	for dotted_key_path := range f.PageKeyMap[identifier] {
 		for value := range f.PageKeyMap[identifier][dotted_key_path] {
 			identifiers := f.InvertedIndex[dotted_key_path][value]
@@ -127,6 +130,7 @@ func (f *FrontmatterIndex) QueryPrefixMatch(dotted_key_path DottedKeyPath, value
 }
 
 func (f *FrontmatterIndex) GetValue(identifier PageIdentifier, dotted_key_path DottedKeyPath) Value {
+	identifier = strcase.SnakeCase(identifier)
 	for value := range f.PageKeyMap[identifier][dotted_key_path] {
 		return value
 	}
