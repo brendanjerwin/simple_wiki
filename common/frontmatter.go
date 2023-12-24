@@ -2,6 +2,6 @@ package common
 
 type FrontMatter = map[string]interface{}
 type IReadPages interface {
-	ReadFrontMatter(identifier string) (FrontMatter, error)
-	ReadMarkdown(identifier string) (string, error)
+	ReadFrontMatter(requested_identifier string) (string, FrontMatter, error)
+	ReadMarkdown(requested_identifier string) (string, string, error)
 }

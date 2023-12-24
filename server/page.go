@@ -39,34 +39,34 @@ func (p Page) LastEditUnixTime() int64 {
 	return p.Text.LastEditTime() / 1000000000
 }
 
-func (s *Site) ReadFrontMatter(requested_identifier string) (common.FrontMatter, error) {
-	_, content, err := s.readFileByIdentifier(requested_identifier, "md")
+func (s *Site) ReadFrontMatter(requested_identifier string) (string, common.FrontMatter, error) {
+	identifier, content, err := s.readFileByIdentifier(requested_identifier, "md")
 	if err != nil {
-		return nil, err
+		return identifier, nil, err
 	}
 
 	matter := &map[string]interface{}{}
 	_, err = frontmatter.Parse(bytes.NewReader(content), &matter)
 	if err != nil {
-		return nil, err
+		return identifier, nil, err
 	}
 
-	return *matter, nil
+	return identifier, *matter, nil
 }
 
-func (s *Site) ReadMarkdown(requested_identifier string) (string, error) {
-	_, content, err := s.readFileByIdentifier(requested_identifier, "md")
+func (s *Site) ReadMarkdown(requested_identifier string) (string, string, error) {
+	identifier, content, err := s.readFileByIdentifier(requested_identifier, "md")
 	if err != nil {
-		return "", err
+		return identifier, "", err
 	}
 
 	matter := &common.FrontMatter{}
 	markdownBytes, err := frontmatter.Parse(bytes.NewReader(content), &matter)
 	if err != nil {
-		return "", err
+		return identifier, "", err
 	}
 
-	return string(markdownBytes), nil
+	return identifier, string(markdownBytes), nil
 }
 
 func (s *Site) Open(requested_identifier string) (p *Page) {

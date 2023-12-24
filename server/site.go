@@ -56,12 +56,13 @@ func (s *Site) sniffContentType(name string) (string, error) {
 	return http.DetectContentType(buffer), nil
 }
 
-func (s *Site) SetFrontMatterIndex(identifier string) error {
-	s.FrontMatterIndex.RemoveFrontmatterFromIndex(identifier)
-	frontmatter, err := s.ReadFrontMatter(identifier)
+func (s *Site) SetFrontMatterIndex(requested_identifier string) error {
+	s.FrontMatterIndex.RemoveFrontmatterFromIndex(requested_identifier)
+	identifier, frontmatter, err := s.ReadFrontMatter(requested_identifier)
 	if err != nil {
 		return err
 	}
+	s.FrontMatterIndex.RemoveFrontmatterFromIndex(identifier)
 	s.FrontMatterIndex.AddFrontmatterToIndex(identifier, frontmatter)
 
 	return nil

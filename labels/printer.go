@@ -16,12 +16,12 @@ type Printer interface {
 }
 
 func PrintLabel(template_identifier string, identifer string, site common.IReadPages, query index.IQueryFrontmatterIndex) error {
-	template_data, err := site.ReadMarkdown(template_identifier)
+	template_identifier, template_data, err := site.ReadMarkdown(template_identifier)
 	if err != nil {
 		return err
 	}
 
-	template_frontmatter, err := site.ReadFrontMatter(template_identifier)
+	template_identifier, template_frontmatter, err := site.ReadFrontMatter(template_identifier)
 	if err != nil {
 		return err
 	}
@@ -43,7 +43,7 @@ func PrintLabel(template_identifier string, identifer string, site common.IReadP
 	}
 	defer printer.Close()
 
-	frontmatter, err := site.ReadFrontMatter(identifer)
+	identifer, frontmatter, err := site.ReadFrontMatter(identifer)
 	if err != nil {
 		return err
 	}

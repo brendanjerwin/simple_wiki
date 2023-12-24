@@ -79,7 +79,7 @@ func BuildShowInventoryContentsOf(site common.IReadPages, query index.IQueryFron
 	isContainer := BuildIsContainer(query)
 
 	return func(containerIdentifier string) string {
-		containerFrontmatter, err := site.ReadFrontMatter(containerIdentifier)
+		containerIdentifier, containerFrontmatter, err := site.ReadFrontMatter(containerIdentifier)
 		if err != nil {
 			return err.Error()
 		}
@@ -128,8 +128,7 @@ func BuildLinkTo(site common.IReadPages, currentPageTemplateContext TemplateCont
 			return "N/A"
 		}
 
-		identifierToLink = common.MungeIdentifier(identifierToLink)
-		frontmatterForLinkedPage, err := site.ReadFrontMatter(identifierToLink)
+		identifierToLink, frontmatterForLinkedPage, err := site.ReadFrontMatter(identifierToLink)
 		if err != nil {
 			titleCaser := cases.Title(language.AmericanEnglish)
 			titleCasedTitle := titleCaser.String(strings.ReplaceAll(identifierToLink, "_", " "))
