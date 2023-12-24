@@ -13,12 +13,12 @@ type MockReadFrontMatter struct {
 	Markdown    string
 }
 
-func (m *MockReadFrontMatter) ReadFrontMatter(identifer string) (map[string]interface{}, error) {
-	return m.Frontmatter, nil
+func (m *MockReadFrontMatter) ReadFrontMatter(identifier string) (string, map[string]interface{}, error) {
+	return identifier, m.Frontmatter, nil
 }
 
-func (m *MockReadFrontMatter) ReadMarkdown(identifer string) (string, error) {
-	return m.Markdown, nil
+func (m *MockReadFrontMatter) ReadMarkdown(identifier string) (string, string, error) {
+	return identifier, m.Markdown, nil
 }
 
 // Mocks index.IQueryFrontmatterIndex
