@@ -11,6 +11,8 @@ import (
 	"github.com/brendanjerwin/simple_wiki/common"
 	"github.com/brendanjerwin/simple_wiki/index"
 	"github.com/stoewer/go-strcase"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 type InventoryFrontmatter struct {
@@ -48,19 +50,19 @@ func ConstructTemplateContextFromFrontmatter(frontmatter common.FrontMatter, que
 
 	// Add existing items to the map
 	for _, item := range context.Inventory.Items {
-		uniqueItems[item] = true
+		uniqueItems[strcase.SnakeCase(item)] = true
 	}
 
 	// Add new items to the map
 	itemsFromIndex := query.QueryExactMatch("inventory.container", context.Identifier)
 	for _, item := range itemsFromIndex {
-		uniqueItems[item] = true
-
 		// If there was an item that existed as a title in the list of items, remove it.
 		// This is to support the workflow of items first being listed directly on the inventory container,
 		// but later getting their own page and being linked to the inventory container through the inventory.container frontmatter key.
 		item_title := query.GetValue(item, "title")
 		delete(uniqueItems, item_title)
+
+		uniqueItems[item] = true
 	}
 
 	// Convert the map back to a slice
@@ -96,7 +98,7 @@ func BuildShowInventoryContentsOf(site common.IReadPages, query index.IQueryFron
 {{ end }}
 `
 		funcs := template.FuncMap{
-			"LinkTo":                  BuildLinkTo(site, containerTemplateContext),
+			"LinkTo":                  BuildLinkTo(site, containerTemplateContext, query),
 			"ShowInventoryContentsOf": BuildShowInventoryContentsOf(site, query, indent+1),
 			"IsContainer":             isContainer,
 			"FindBy":                  query.QueryExactMatch,
@@ -120,27 +122,30 @@ func BuildShowInventoryContentsOf(site common.IReadPages, query index.IQueryFron
 	}
 }
 
-func BuildLinkTo(site common.IReadPages, currentPageTemplateContext TemplateContext) func(string) string {
-	return func(identifier string) string {
-		if identifier == "" {
+func BuildLinkTo(site common.IReadPages, currentPageTemplateContext TemplateContext, query index.IQueryFrontmatterIndex) func(string) string {
+	isContainer := BuildIsContainer(query)
+	return func(identifierToLink string) string {
+		if identifierToLink == "" {
 			return "N/A"
 		}
 
-		var frontmatter, err = site.ReadFrontMatter(identifier)
+		var frontmatterForLinkedPage, err = site.ReadFrontMatter(identifierToLink)
 		if err != nil {
 			//Try again with a snake case identifier
-			snake_identifier := strcase.SnakeCase(identifier)
-			url_encoded_identifier := url.QueryEscape(identifier)
-			frontmatter, err = site.ReadFrontMatter(snake_identifier)
+			snakeIdentifierToLink := strcase.SnakeCase(identifierToLink)
+			frontmatterForLinkedPage, err = site.ReadFrontMatter(snakeIdentifierToLink)
 			if err != nil {
+				titleCaser := cases.Title(language.AmericanEnglish)
+				titleCasedTitle := titleCaser.String(strings.ReplaceAll(snakeIdentifierToLink, "_", " "))
+				urlEncodedTitle := url.QueryEscape(titleCasedTitle)
 				//Doesnt look like it exists yet, return a link.
 				//It'll render and let the page get created.
-				if _, ok := currentPageTemplateContext.Map["inventory"]; ok {
+				if isContainer(currentPageTemplateContext.Identifier) {
 					//special inventory item link with attributes
-					return "[" + identifier + "](/" + snake_identifier + "?tmpl=inv_item&inventory.container=" + currentPageTemplateContext.Identifier + "&title=" + url_encoded_identifier + ")"
+					return "[" + titleCasedTitle + "](/" + snakeIdentifierToLink + "?tmpl=inv_item&inventory.container=" + currentPageTemplateContext.Identifier + "&title=" + urlEncodedTitle + ")"
 				}
 
-				return "[" + identifier + "](/" + snake_identifier + "?title=" + url_encoded_identifier + ")"
+				return "[" + titleCasedTitle + "](/" + snakeIdentifierToLink + "?title=" + urlEncodedTitle + ")"
 			}
 		}
 
@@ -151,7 +156,7 @@ func BuildLinkTo(site common.IReadPages, currentPageTemplateContext TemplateCont
 		}
 
 		buf := &bytes.Buffer{}
-		err = tmpl.Execute(buf, frontmatter)
+		err = tmpl.Execute(buf, frontmatterForLinkedPage)
 		if err != nil {
 			return err.Error()
 		}
@@ -186,7 +191,7 @@ func ExecuteTemplate(templateString string, frontmatter common.FrontMatter, site
 
 	funcs := template.FuncMap{
 		"ShowInventoryContentsOf": BuildShowInventoryContentsOf(site, query, 0),
-		"LinkTo":                  BuildLinkTo(site, templateContext),
+		"LinkTo":                  BuildLinkTo(site, templateContext, query),
 		"IsContainer":             BuildIsContainer(query),
 		"FindBy":                  query.QueryExactMatch,
 		"FindByPrefix":            query.QueryPrefixMatch,
@@ -198,13 +203,8 @@ func ExecuteTemplate(templateString string, frontmatter common.FrontMatter, site
 		return nil, err
 	}
 
-	context, err := ConstructTemplateContextFromFrontmatter(frontmatter, query)
-	if err != nil {
-		return nil, err
-	}
-
 	buf := &bytes.Buffer{}
-	err = tmpl.Execute(buf, context)
+	err = tmpl.Execute(buf, templateContext)
 	if err != nil {
 		return nil, err
 	}
