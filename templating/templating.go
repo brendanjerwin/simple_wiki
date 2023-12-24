@@ -62,7 +62,7 @@ func ConstructTemplateContextFromFrontmatter(frontmatter common.FrontMatter, que
 		item_title := query.GetValue(item, "title")
 		delete(uniqueItems, item_title)
 
-		uniqueItems[item] = true
+		uniqueItems[strcase.SnakeCase(item)] = true
 	}
 
 	// Convert the map back to a slice
