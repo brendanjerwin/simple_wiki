@@ -22,31 +22,26 @@ type TemplateContext struct {
 	Identifier string `json:"identifier"`
 	Title      string `json:"title"`
 	Map        map[string]interface{}
-	Inventory  *InventoryFrontmatter `json:"inventory"`
+	Inventory  InventoryFrontmatter `json:"inventory"`
 }
 
-func ConstructTemplateContextFromFrontmatter(frontmatter common.FrontMatter, query index.IQueryFrontmatterIndex) (*TemplateContext, error) {
+func ConstructTemplateContextFromFrontmatter(frontmatter common.FrontMatter, query index.IQueryFrontmatterIndex) (TemplateContext, error) {
 	bytes, err := json.Marshal(frontmatter)
 	if err != nil {
-		return nil, err
+		return TemplateContext{}, err
 	}
 
-	context := &TemplateContext{}
+	context := TemplateContext{}
 	err = json.Unmarshal(bytes, &context)
 	if err != nil {
-		return nil, err
+		return TemplateContext{}, err
 	}
 
 	context.Map = frontmatter
 
-	if context.Inventory == nil {
-		context.Inventory = &InventoryFrontmatter{}
-	}
 	if context.Inventory.Items == nil {
 		context.Inventory.Items = []string{}
 	}
-
-	itemsFromIndex := query.QueryExactMatch("inventory.container", context.Identifier)
 
 	// Create a map to store unique items
 	uniqueItems := make(map[string]bool)
@@ -57,6 +52,7 @@ func ConstructTemplateContextFromFrontmatter(frontmatter common.FrontMatter, que
 	}
 
 	// Add new items to the map
+	itemsFromIndex := query.QueryExactMatch("inventory.container", context.Identifier)
 	for _, item := range itemsFromIndex {
 		uniqueItems[item] = true
 
@@ -93,7 +89,7 @@ func BuildShowInventoryContentsOf(site common.IReadPages, query index.IQueryFron
 
 		tmplString := `
 {{ range .Inventory.Items }}
-{{ Indent }} - {{ LinkTo . }}
+{{ __Indent }} - {{ LinkTo . }}
 {{ if IsContainer . }}
 {{ ShowInventoryContentsOf . }}
 {{ end }}
@@ -106,7 +102,7 @@ func BuildShowInventoryContentsOf(site common.IReadPages, query index.IQueryFron
 			"FindBy":                  query.QueryExactMatch,
 			"FindByPrefix":            query.QueryPrefixMatch,
 			"FindByKeyExistence":      query.QueryKeyExistence,
-			"Indent":                  func() string { return strings.Repeat(" ", indent*2) },
+			"__Indent":                func() string { return strings.Repeat(" ", indent*2) },
 		}
 
 		tmpl, err := template.New("content").Funcs(funcs).Parse(tmplString)
@@ -124,7 +120,7 @@ func BuildShowInventoryContentsOf(site common.IReadPages, query index.IQueryFron
 	}
 }
 
-func BuildLinkTo(site common.IReadPages, currentPageTemplateContext *TemplateContext) func(string) string {
+func BuildLinkTo(site common.IReadPages, currentPageTemplateContext TemplateContext) func(string) string {
 	return func(identifier string) string {
 		if identifier == "" {
 			return "N/A"
