@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/url"
+	"sort"
 	"strings"
 	"text/template"
 
@@ -24,7 +25,7 @@ type TemplateContext struct {
 	Inventory  *InventoryFrontmatter `json:"inventory"`
 }
 
-func ConstructTemplateContextFromFrontmatter(frontmatter common.FrontMatter) (*TemplateContext, error) {
+func ConstructTemplateContextFromFrontmatter(frontmatter common.FrontMatter, query index.IQueryFrontmatterIndex) (*TemplateContext, error) {
 	bytes, err := json.Marshal(frontmatter)
 	if err != nil {
 		return nil, err
@@ -37,9 +38,42 @@ func ConstructTemplateContextFromFrontmatter(frontmatter common.FrontMatter) (*T
 	}
 
 	context.Map = frontmatter
+
 	if context.Inventory == nil {
 		context.Inventory = &InventoryFrontmatter{}
 	}
+	if context.Inventory.Items == nil {
+		context.Inventory.Items = []string{}
+	}
+
+	itemsFromIndex := query.QueryExactMatch("inventory.container", context.Identifier)
+
+	// Create a map to store unique items
+	uniqueItems := make(map[string]bool)
+
+	// Add existing items to the map
+	for _, item := range context.Inventory.Items {
+		uniqueItems[item] = true
+	}
+
+	// Add new items to the map
+	for _, item := range itemsFromIndex {
+		uniqueItems[item] = true
+
+		// If there was an item that existed as a title in the list of items, remove it.
+		// This is to support the workflow of items first being listed directly on the inventory container,
+		// but later getting their own page and being linked to the inventory container through the inventory.container frontmatter key.
+		item_title := query.GetValue(item, "title")
+		delete(uniqueItems, item_title)
+	}
+
+	// Convert the map back to a slice
+	context.Inventory.Items = make([]string, 0, len(uniqueItems))
+	for item := range uniqueItems {
+		context.Inventory.Items = append(context.Inventory.Items, item)
+	}
+
+	sort.Strings(context.Inventory.Items)
 
 	return context, nil
 }
@@ -52,43 +86,9 @@ func BuildShowInventoryContentsOf(site common.IReadPages, query index.IQueryFron
 		if err != nil {
 			return err.Error()
 		}
-		containerTemplateContext, err := ConstructTemplateContextFromFrontmatter(containerFrontmatter)
+		containerTemplateContext, err := ConstructTemplateContextFromFrontmatter(containerFrontmatter, query)
 		if err != nil {
 			return err.Error()
-		}
-
-		if containerTemplateContext.Inventory == nil {
-			containerTemplateContext.Inventory = &InventoryFrontmatter{}
-		}
-		if containerTemplateContext.Inventory.Items == nil {
-			containerTemplateContext.Inventory.Items = []string{}
-		}
-
-		itemsFromIndex := query.QueryExactMatch("inventory.container", containerIdentifier)
-
-		// Create a map to store unique items
-		uniqueItems := make(map[string]bool)
-
-		// Add existing items to the map
-		for _, item := range containerTemplateContext.Inventory.Items {
-			uniqueItems[item] = true
-		}
-
-		// Add new items to the map
-		for _, item := range itemsFromIndex {
-			uniqueItems[item] = true
-
-			// If there was an item that existed as a title in the list of items, remove it.
-			// This is to support the workflow of items first being listed directly on the inventory container,
-			// but later getting their own page and being linked to the inventory container through the inventory.container frontmatter key.
-			item_title := query.GetValue(item, "title")
-			delete(uniqueItems, item_title)
-		}
-
-		// Convert the map back to a slice
-		containerTemplateContext.Inventory.Items = make([]string, 0, len(uniqueItems))
-		for item := range uniqueItems {
-			containerTemplateContext.Inventory.Items = append(containerTemplateContext.Inventory.Items, item)
 		}
 
 		tmplString := `
@@ -183,7 +183,7 @@ func BuildIsContainer(query index.IQueryFrontmatterIndex) func(string) bool {
 }
 
 func ExecuteTemplate(templateString string, frontmatter common.FrontMatter, site common.IReadPages, query index.IQueryFrontmatterIndex) ([]byte, error) {
-	templateContext, err := ConstructTemplateContextFromFrontmatter(frontmatter)
+	templateContext, err := ConstructTemplateContextFromFrontmatter(frontmatter, query)
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +202,7 @@ func ExecuteTemplate(templateString string, frontmatter common.FrontMatter, site
 		return nil, err
 	}
 
-	context, err := ConstructTemplateContextFromFrontmatter(frontmatter)
+	context, err := ConstructTemplateContextFromFrontmatter(frontmatter, query)
 	if err != nil {
 		return nil, err
 	}
