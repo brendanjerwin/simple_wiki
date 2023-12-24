@@ -39,9 +39,8 @@ func (p Page) LastEditUnixTime() int64 {
 	return p.Text.LastEditTime() / 1000000000
 }
 
-func (s *Site) ReadFrontMatter(identifier string) (common.FrontMatter, error) {
-	identifier = common.MungeIdentifier(identifier)
-	content, err := os.ReadFile(path.Join(s.PathToData, utils.EncodeToBase32(strings.ToLower(identifier))+".md"))
+func (s *Site) ReadFrontMatter(requested_identifier string) (common.FrontMatter, error) {
+	_, content, err := s.readFileByIdentifier(requested_identifier, "md")
 	if err != nil {
 		return nil, err
 	}
@@ -55,9 +54,8 @@ func (s *Site) ReadFrontMatter(identifier string) (common.FrontMatter, error) {
 	return *matter, nil
 }
 
-func (s *Site) ReadMarkdown(identifier string) (string, error) {
-	identifier = common.MungeIdentifier(identifier)
-	content, err := os.ReadFile(path.Join(s.PathToData, utils.EncodeToBase32(strings.ToLower(identifier))+".md"))
+func (s *Site) ReadMarkdown(requested_identifier string) (string, error) {
+	_, content, err := s.readFileByIdentifier(requested_identifier, "md")
 	if err != nil {
 		return "", err
 	}
@@ -71,17 +69,15 @@ func (s *Site) ReadMarkdown(identifier string) (string, error) {
 	return string(markdownBytes), nil
 }
 
-func (s *Site) Open(identifier string) (p *Page) {
-	identifier = common.MungeIdentifier(identifier)
+func (s *Site) Open(requested_identifier string) (p *Page) {
+	identifier, bJSON, err := s.readFileByIdentifier(requested_identifier, "json")
+	if err != nil {
+		return
+	}
 	p = new(Page)
 	p.Site = s
 	p.Identifier = identifier
 	p.Text = versionedtext.NewVersionedText("")
-	//p.Render()
-	bJSON, err := os.ReadFile(path.Join(s.PathToData, utils.EncodeToBase32(strings.ToLower(identifier))+".json"))
-	if err != nil {
-		return
-	}
 	err = json.Unmarshal(bJSON, &p)
 	if err != nil {
 		p = new(Page)
@@ -89,9 +85,8 @@ func (s *Site) Open(identifier string) (p *Page) {
 	return p
 }
 
-func (s *Site) OpenOrInit(identifier string, req *http.Request) (p *Page) {
-	identifier = common.MungeIdentifier(identifier)
-	bJSON, err := os.ReadFile(path.Join(s.PathToData, utils.EncodeToBase32(strings.ToLower(identifier))+".json"))
+func (s *Site) OpenOrInit(requested_identifier string, req *http.Request) (p *Page) {
+	identifier, bJSON, err := s.readFileByIdentifier(requested_identifier, "json")
 	if err != nil {
 		p = new(Page)
 		p.Site = s
@@ -150,6 +145,24 @@ items = [
 	p.Render()
 
 	return p
+}
+
+func (s *Site) readFileByIdentifier(identifier, extension string) (string, []byte, error) {
+
+	//First try with the munged identifier
+	munged_identifier := common.MungeIdentifier(identifier)
+	bJSON, err := os.ReadFile(path.Join(s.PathToData, utils.EncodeToBase32(strings.ToLower(munged_identifier))+"."+extension))
+	if err == nil {
+		return munged_identifier, bJSON, nil
+	}
+
+	//Then try with the original identifier if that didn't work (older files)
+	bJSON, err = os.ReadFile(path.Join(s.PathToData, utils.EncodeToBase32(strings.ToLower(identifier))+"."+extension))
+	if err == nil {
+		return identifier, bJSON, nil
+	}
+
+	return munged_identifier, nil, err
 }
 
 type DirectoryEntry struct {
