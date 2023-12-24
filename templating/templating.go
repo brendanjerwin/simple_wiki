@@ -37,6 +37,9 @@ func ConstructTemplateContextFromFrontmatter(frontmatter common.FrontMatter) (*T
 	}
 
 	context.Map = frontmatter
+	if context.Inventory == nil {
+		context.Inventory = &InventoryFrontmatter{}
+	}
 
 	return context, nil
 }
@@ -184,6 +187,7 @@ func ExecuteTemplate(templateString string, frontmatter common.FrontMatter, site
 	if err != nil {
 		return nil, err
 	}
+
 	funcs := template.FuncMap{
 		"ShowInventoryContentsOf": BuildShowInventoryContentsOf(site, query, 0),
 		"LinkTo":                  BuildLinkTo(site, templateContext),
