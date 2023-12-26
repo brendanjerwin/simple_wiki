@@ -24,7 +24,7 @@ func (s *Site) handlePrintLabel(c *gin.Context) {
 		return
 	}
 
-	err := labels.PrintLabel(json.TemplateIdentifier, json.DataIdentifier, s, s.FrontMatterIndex)
+	err := labels.PrintLabel(json.TemplateIdentifier, json.DataIdentifier, s, s.FrontmatterIndexQueryer)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to print label: " + err.Error()})
 		return
@@ -45,7 +45,7 @@ func (s *Site) handleFindBy(c *gin.Context) {
 		return
 	}
 
-	ids := s.FrontMatterIndex.QueryExactMatch(req.DottedKeyPath, req.Value)
+	ids := s.FrontmatterIndexQueryer.QueryExactMatch(req.DottedKeyPath, req.Value)
 	results := s.createPageReferences(ids)
 	c.JSON(http.StatusOK, gin.H{"success": true, "ids": results})
 }
@@ -62,7 +62,7 @@ func (s *Site) handleFindByPrefix(c *gin.Context) {
 		return
 	}
 
-	ids := s.FrontMatterIndex.QueryPrefixMatch(req.DottedKeyPath, req.ValuePrefix)
+	ids := s.FrontmatterIndexQueryer.QueryPrefixMatch(req.DottedKeyPath, req.ValuePrefix)
 	results := s.createPageReferences(ids)
 	c.JSON(http.StatusOK, gin.H{"success": true, "ids": results})
 }
@@ -78,7 +78,7 @@ func (s *Site) handleFindByKeyExistence(c *gin.Context) {
 		return
 	}
 
-	ids := s.FrontMatterIndex.QueryKeyExistence(req.DottedKeyPath)
+	ids := s.FrontmatterIndexQueryer.QueryKeyExistence(req.DottedKeyPath)
 	results := s.createPageReferences(ids)
 	c.JSON(http.StatusOK, gin.H{"success": true, "ids": results})
 }
@@ -88,8 +88,28 @@ func (s *Site) createPageReferences(ids []string) []PageReference {
 	for idx, id := range ids {
 		results[idx] = PageReference{
 			Identifier: id,
-			Title:      s.FrontMatterIndex.GetValue(id, "title"),
+			Title:      s.FrontmatterIndexQueryer.GetValue(id, "title"),
 		}
 	}
 	return results
+}
+
+func (s *Site) handleSearch(c *gin.Context) {
+	type Req struct {
+		Query string `form:"q" binding:"required"`
+	}
+
+	var req Req
+	if err := c.BindQuery(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Problem binding keys: " + err.Error()})
+		return
+	}
+
+	results, err := s.BleveIndexQueryer.Query(req.Query)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Problem querying index: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true, "results": results})
 }

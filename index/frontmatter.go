@@ -10,40 +10,47 @@ import (
 
 type DottedKeyPath = string
 type Value = string
-type PageIdentifier = string
-
-type IMaintainFrontmatterIndex interface {
-	AddFrontmatterToIndex(identifier PageIdentifier, frontmatter common.FrontMatter)
-	RemoveFrontmatterFromIndex(identifier PageIdentifier)
-}
 
 type IQueryFrontmatterIndex interface {
-	QueryExactMatch(dotted_key_path DottedKeyPath, value Value) []PageIdentifier
-	QueryKeyExistence(dotted_key_path DottedKeyPath) []PageIdentifier
-	QueryPrefixMatch(dotted_key_path DottedKeyPath, value_prefix string) []PageIdentifier
+	QueryExactMatch(dotted_key_path DottedKeyPath, value Value) []common.PageIdentifier
+	QueryKeyExistence(dotted_key_path DottedKeyPath) []common.PageIdentifier
+	QueryPrefixMatch(dotted_key_path DottedKeyPath, value_prefix string) []common.PageIdentifier
 
-	GetValue(identifier PageIdentifier, dotted_key_path DottedKeyPath) Value
+	GetValue(identifier common.PageIdentifier, dotted_key_path DottedKeyPath) Value
 }
 
 type FrontmatterIndex struct {
-	InvertedIndex map[DottedKeyPath]map[Value][]PageIdentifier
-	PageKeyMap    map[PageIdentifier]map[DottedKeyPath]map[Value]bool
+	InvertedIndex map[DottedKeyPath]map[Value][]common.PageIdentifier
+	PageKeyMap    map[common.PageIdentifier]map[DottedKeyPath]map[Value]bool
+	pageReader    common.IReadPages
 }
 
-func NewFrontmatterIndex() *FrontmatterIndex {
+func NewFrontmatterIndex(pageReader common.IReadPages) *FrontmatterIndex {
 	return &FrontmatterIndex{
-		InvertedIndex: make(map[DottedKeyPath]map[Value][]PageIdentifier),
-		PageKeyMap:    make(map[PageIdentifier]map[DottedKeyPath]map[Value]bool),
+		InvertedIndex: make(map[DottedKeyPath]map[Value][]common.PageIdentifier),
+		PageKeyMap:    make(map[common.PageIdentifier]map[DottedKeyPath]map[Value]bool),
+		pageReader:    pageReader,
 	}
 }
 
-func (f *FrontmatterIndex) AddFrontmatterToIndex(identifier PageIdentifier, frontmatter common.FrontMatter) {
-	f.recursiveAdd(identifier, "", frontmatter)
+func (f *FrontmatterIndex) AddPageToIndex(requested_identifier common.PageIdentifier) error {
+	munged_identifier := common.MungeIdentifier(requested_identifier)
+	identifier, frontmatter, err := f.pageReader.ReadFrontMatter(requested_identifier)
+	if err != nil {
+		return err
+	}
+
+	f.RemovePageFromIndex(identifier)
+	f.RemovePageFromIndex(requested_identifier)
+	f.RemovePageFromIndex(munged_identifier)
+
+	f.recursiveAdd(munged_identifier, "", frontmatter)
+	return nil
 }
 
-func (f *FrontmatterIndex) saveToIndex(identifier PageIdentifier, keyPath DottedKeyPath, value Value) {
+func (f *FrontmatterIndex) saveToIndex(identifier common.PageIdentifier, keyPath DottedKeyPath, value Value) {
 	if f.InvertedIndex[keyPath] == nil {
-		f.InvertedIndex[keyPath] = make(map[Value][]PageIdentifier)
+		f.InvertedIndex[keyPath] = make(map[Value][]common.PageIdentifier)
 	}
 	f.InvertedIndex[keyPath][value] = append(f.InvertedIndex[keyPath][value], identifier)
 
@@ -56,12 +63,11 @@ func (f *FrontmatterIndex) saveToIndex(identifier PageIdentifier, keyPath Dotted
 	f.PageKeyMap[identifier][keyPath][value] = true
 }
 
-func (f *FrontmatterIndex) recursiveAdd(identifier PageIdentifier, keyPath string, value interface{}) {
+func (f *FrontmatterIndex) recursiveAdd(identifier common.PageIdentifier, keyPath string, value interface{}) {
 	if keyPath == "identifier" {
 		return
 	}
 
-	identifier = common.MungeIdentifier(identifier)
 	//recursively build the dotted key path. a value in frontmatter can be either a string or a map[string]interface{}
 	//if it is a map[string]interface{}, then we need to recurse
 	switch v := value.(type) {
@@ -94,7 +100,7 @@ func (f *FrontmatterIndex) recursiveAdd(identifier PageIdentifier, keyPath strin
 	}
 }
 
-func (f *FrontmatterIndex) RemoveFrontmatterFromIndex(identifier PageIdentifier) {
+func (f *FrontmatterIndex) RemovePageFromIndex(identifier common.PageIdentifier) error {
 	identifier = common.MungeIdentifier(identifier)
 	for dotted_key_path := range f.PageKeyMap[identifier] {
 		for value := range f.PageKeyMap[identifier][dotted_key_path] {
@@ -104,22 +110,23 @@ func (f *FrontmatterIndex) RemoveFrontmatterFromIndex(identifier PageIdentifier)
 		}
 	}
 	delete(f.PageKeyMap, identifier)
+	return nil
 }
 
-func (f *FrontmatterIndex) QueryExactMatch(dotted_key_path DottedKeyPath, value Value) []PageIdentifier {
+func (f *FrontmatterIndex) QueryExactMatch(dotted_key_path DottedKeyPath, value Value) []common.PageIdentifier {
 	return f.InvertedIndex[dotted_key_path][value]
 }
 
-func (f *FrontmatterIndex) QueryKeyExistence(dotted_key_path DottedKeyPath) []PageIdentifier {
-	var identifiers_with_key []PageIdentifier
+func (f *FrontmatterIndex) QueryKeyExistence(dotted_key_path DottedKeyPath) []common.PageIdentifier {
+	var identifiers_with_key []common.PageIdentifier
 	for indexed_value := range f.InvertedIndex[dotted_key_path] {
 		identifiers_with_key = append(identifiers_with_key, f.InvertedIndex[dotted_key_path][indexed_value]...)
 	}
 	return identifiers_with_key
 }
 
-func (f *FrontmatterIndex) QueryPrefixMatch(dotted_key_path DottedKeyPath, value_prefix string) []PageIdentifier {
-	var identifiers_with_key []PageIdentifier
+func (f *FrontmatterIndex) QueryPrefixMatch(dotted_key_path DottedKeyPath, value_prefix string) []common.PageIdentifier {
+	var identifiers_with_key []common.PageIdentifier
 	for indexed_value := range f.InvertedIndex[dotted_key_path] {
 		if strings.HasPrefix(indexed_value, value_prefix) {
 			identifiers_with_key = append(identifiers_with_key, f.InvertedIndex[dotted_key_path][indexed_value]...)
@@ -128,7 +135,7 @@ func (f *FrontmatterIndex) QueryPrefixMatch(dotted_key_path DottedKeyPath, value
 	return identifiers_with_key
 }
 
-func (f *FrontmatterIndex) GetValue(identifier PageIdentifier, dotted_key_path DottedKeyPath) Value {
+func (f *FrontmatterIndex) GetValue(identifier common.PageIdentifier, dotted_key_path DottedKeyPath) Value {
 	identifier = common.MungeIdentifier(identifier)
 	for value := range f.PageKeyMap[identifier][dotted_key_path] {
 		return value
