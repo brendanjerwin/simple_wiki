@@ -300,7 +300,7 @@ func (p *Page) IsNew() bool {
 
 func (p *Page) Erase() error {
 	p.Site.Logger.Trace("Erasing " + p.Identifier)
-
+	p.Site.IndexMaintainer.RemovePageFromIndex(p.Identifier)
 	err := os.Remove(path.Join(p.Site.PathToData, utils.EncodeToBase32(strings.ToLower(p.Identifier))+".json"))
 	if err != nil {
 		return err
