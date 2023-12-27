@@ -7,6 +7,10 @@
         <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
         <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
         <link rel="manifest" href=/static/img/favicon/manifest.json>
+
+        <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+        <link href="/static/css/solid.min.css" rel="stylesheet">
+
         <meta name="theme-color" content="#fff">
 
         {{ if and .CustomCSS .ReadPage }}
@@ -25,6 +29,7 @@
             <script src="/static/js/dropzone.js"></script>
 
             <script type="module" src="/static/js/web-components/wiki-search.js"></script>
+            <script type="module" src="/static/js/web-components/wiki-search-results.js"></script>
 
         <title>{{ .Page }}</title>
 
@@ -82,6 +87,7 @@
                         <li class="pure-menu-item {{ with .EditPage }}pure-menu-selected{{ end }}"><a href="/{{ .Page }}/edit" class="pure-menu-link"><span id="saveEditButton">Edit</span></a></li>
                         {{end}}
                     </ul>
+                    
                     <wiki-search id="site-search" search-endpoint="/api/search"></wiki-search>
                 </div>
             {{ end }}

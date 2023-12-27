@@ -9,6 +9,25 @@ export class WikiSearch extends LitElement {
         margin: 0;
         max-width: 100%;
     }
+
+    :host([no-results]) div#container {
+        animation: shake 0.5s linear;
+    }
+
+    @keyframes shake {
+        0% { transform: translate(1px, 1px) rotate(0deg); }
+        10% { transform: translate(-1px, -2px) rotate(-1deg); }
+        20% { transform: translate(-3px, 0px) rotate(1deg); }
+        30% { transform: translate(3px, 2px) rotate(0deg); }
+        40% { transform: translate(1px, -1px) rotate(1deg); }
+        50% { transform: translate(-1px, 2px) rotate(-1deg); }
+        60% { transform: translate(-3px, 1px) rotate(0deg); }
+        70% { transform: translate(3px, 1px) rotate(-1deg); }
+        80% { transform: translate(-1px, -1px) rotate(1deg); }
+        90% { transform: translate(1px, 2px) rotate(0deg); }
+        100% { transform: translate(1px, -2px) rotate(-1deg); }
+    }
+
     form { 
         display: flex;
         justify-content: center;
@@ -44,15 +63,20 @@ export class WikiSearch extends LitElement {
     static properties = {
         searchEndpoint: { type: String, attribute: 'search-endpoint' },
         resultArrayPath: { type: String, attribute: 'result-array-path' },
+        results: { type: Array },
+        noResults: { type: Boolean, reflect: true, attribute: 'no-results' },
     };
 
     constructor() {
         super();
         this.resultArrayPath = "results";
+        this.results = [];
     }
 
     handleFormSubmit(e) {
         e.preventDefault();
+        this.noResults = false;
+
         const form = e.target;
         const search_term = form.q.value;
         const url = `${this.searchEndpoint}?q=${search_term}`;
@@ -62,28 +86,46 @@ export class WikiSearch extends LitElement {
             .then((data) => {
                 if (this.resultArrayPath) {
                     data = this.getNestedProperty(data, this.resultArrayPath);
+                    if (!Array.isArray(data)) {
+                        data = [];
+                    }
                 }
-                const event = new CustomEvent('search-results', {
-                    detail: data,
-                });
-                this.dispatchEvent(event);
+                this.results = data;
+                if (data.length > 0) {
+                    this.noResults = false;
+                } else {
+                    this.noResults = true;
+                }
             })
             .catch((error) => {
+                this.results = [];
                 console.error('Error:', error);
             });
     }
+
 
     getNestedProperty(obj, path) {
         return path.split('.').reduce((o, p) => (o && o[p]) ? o[p] : null, obj);
     }
 
+    handleSearchResultsClosed() {
+        this.results = [];
+    }
+
     render() {
         return html`
+        <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+        <link href="/static/css/solid.min.css" rel="stylesheet">
     <div id="container">
         <form @submit="${this.handleFormSubmit}">
             <input type="search" name="q" placeholder="Search..." required>
-            <button type="submit"><i class="fa fa-search"></i></button>
+            <button type="submit"><i class="fa-solid fa-search"></i></button>
         </form>
+        <wiki-search-results 
+            .results="${this.results}" 
+            .open="${this.results.length > 0}" 
+            @search-results-closed="${this.handleSearchResultsClosed}">
+        </wiki-search-results>
     </div>
         `;
     }
