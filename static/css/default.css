@@ -81,6 +81,9 @@ div.pure-menu-horizontal {
   padding-left: 1em;
   font-family: 'Montserrat', sans-serif;
   width: auto;
+
+  display: flex;
+  flex-direction: row;
 }
 
 div.pure-menu-horizontal hr {
@@ -100,9 +103,27 @@ div.pure-menu-horizontal ul.pure-menu-children {
   border-bottom-right-radius: 8px;
 }
 
+ul.pure-menu-list {
+  margin-bottom: 0;
+}
+
+@media (max-width: 600px) {
+  div.pure-menu-horizontal {
+    flex-direction: column;
+    height: auto;
+  }
+
+  div#wrap {
+    top: 4em;
+  }
+
+  div#menu {
+    height: 5em;
+  }
+}
+
 @media (min-width: 5em) {
 
-  div#menu,
   div#rendered,
   .ChildPageNames,
   body#pad textarea {
@@ -128,7 +149,6 @@ div.pure-menu-horizontal ul.pure-menu-children {
 
 @media (min-width: 50em) {
 
-  div#menu,
   div#rendered,
   .ChildPageNames,
   body#pad textarea {
@@ -149,7 +169,6 @@ div.pure-menu-horizontal ul.pure-menu-children {
 
 @media (min-width: 70em) {
 
-  div#menu,
   div#rendered,
   .ChildPageNames,
   body#pad textarea {
@@ -160,11 +179,11 @@ div.pure-menu-horizontal ul.pure-menu-children {
   .ChildPageNames ul {
     grid-template-columns: repeat(3, 1fr);
   }
+
 }
 
 @media (min-width: 100em) {
 
-  div#menu,
   div#rendered,
   .ChildPageNames,
   body#pad textarea {
@@ -191,4 +210,10 @@ div.pure-menu-horizontal ul.pure-menu-children {
 .ChildPageNames a {
   color: #0645ad;
   background: none;
+}
+
+/*---- Components ----*/
+wiki-search#site-search {
+  margin: auto;
+  margin-right: .25em;
 }
