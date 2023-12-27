@@ -14,20 +14,22 @@ import (
 )
 
 type Site struct {
-	PathToData       string
-	Css              []byte
-	DefaultPage      string
-	DefaultPassword  string
-	Debounce         int
-	SessionStore     cookie.Store
-	SecretCode       string
-	Fileuploads      bool
-	MaxUploadSize    uint
-	MaxDocumentSize  uint // in runes; about a 10mb limit by default
-	Logger           *lumber.ConsoleLogger
-	MarkdownRenderer utils.IRenderMarkdownToHtml
-	FrontMatterIndex *index.FrontmatterIndex
-	saveMut          sync.Mutex
+	PathToData              string
+	Css                     []byte
+	DefaultPage             string
+	DefaultPassword         string
+	Debounce                int
+	SessionStore            cookie.Store
+	SecretCode              string
+	Fileuploads             bool
+	MaxUploadSize           uint
+	MaxDocumentSize         uint // in runes; about a 10mb limit by default
+	Logger                  *lumber.ConsoleLogger
+	MarkdownRenderer        utils.IRenderMarkdownToHtml
+	IndexMaintainer         index.IMaintainIndex
+	FrontmatterIndexQueryer index.IQueryFrontmatterIndex
+	BleveIndexQueryer       index.IQueryBleveIndex
+	saveMut                 sync.Mutex
 }
 
 func (s *Site) defaultLock() string {
@@ -56,23 +58,24 @@ func (s *Site) sniffContentType(name string) (string, error) {
 	return http.DetectContentType(buffer), nil
 }
 
-func (s *Site) SetFrontMatterIndex(requested_identifier string) error {
-	s.FrontMatterIndex.RemoveFrontmatterFromIndex(requested_identifier)
-	identifier, frontmatter, err := s.ReadFrontMatter(requested_identifier)
+func (s *Site) InitializeIndexing() error {
+	frontmatterIndex := index.NewFrontmatterIndex(s)
+	bleveIndex, err := index.NewBleveIndex(s)
 	if err != nil {
 		return err
 	}
-	s.FrontMatterIndex.RemoveFrontmatterFromIndex(identifier)
-	s.FrontMatterIndex.AddFrontmatterToIndex(identifier, frontmatter)
+	multiMaintainer := index.NewMultiMaintainer(frontmatterIndex, bleveIndex)
 
-	return nil
-}
-
-func (s *Site) InitializeFrontmatterIndex() {
-	s.FrontMatterIndex = index.NewFrontmatterIndex()
+	s.FrontmatterIndexQueryer = frontmatterIndex
+	s.BleveIndexQueryer = bleveIndex
+	s.IndexMaintainer = multiMaintainer
 
 	files := s.DirectoryList()
 	for _, file := range files {
-		s.SetFrontMatterIndex(file.Name())
+		s.IndexMaintainer.AddPageToIndex(file.Name())
 	}
+
+	s.Logger.Info("Indexing complete. Added %v pages.", len(files))
+
+	return nil
 }

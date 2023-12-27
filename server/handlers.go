@@ -70,7 +70,11 @@ func Serve(
 		Logger:          logger,
 	}
 
-	site.InitializeFrontmatterIndex()
+	err := site.InitializeIndexing()
+	if err != nil {
+		logger.Error(err.Error())
+		panic(err.Error())
+	}
 	router := site.Router()
 
 	panic(router.Run(host + ":" + port))
@@ -144,7 +148,7 @@ func (s *Site) Router() *gin.Engine {
 	router.GET("/api/find_by", s.handleFindBy)
 	router.GET("/api/find_by_prefix", s.handleFindByPrefix)
 	router.GET("/api/find_by_key_existence", s.handleFindByKeyExistence)
-
+	router.GET("/api/search", s.handleSearch)
 	return router
 }
 
@@ -552,12 +556,12 @@ func (s *Site) handleUpload(c *gin.Context) {
 	}
 
 	file, info, err := c.Request.FormFile("file")
-	defer file.Close()
 	if err != nil {
 		c.AbortWithError(http.StatusInternalServerError, err)
 		s.Logger.Error("Failed to upload: %s", err.Error())
 		return
 	}
+	defer file.Close()
 
 	h := sha256.New()
 	if _, err := io.Copy(h, file); err != nil {
@@ -585,5 +589,4 @@ func (s *Site) handleUpload(c *gin.Context) {
 	}
 
 	c.Header("Location", "/uploads/"+newName+"?filename="+url.QueryEscape(info.Filename))
-	return
 }

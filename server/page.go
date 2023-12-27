@@ -263,7 +263,7 @@ func (p *Page) Update(newText string) error {
 
 func (p *Page) Render() {
 	var err error
-	p.RenderedPage, p.FrontmatterJson, err = utils.MarkdownToHtmlAndJsonFrontmatter(p.Text.GetCurrent(), true, p.Site, p.Site.MarkdownRenderer, p.Site.FrontMatterIndex)
+	p.RenderedPage, p.FrontmatterJson, err = utils.MarkdownToHtmlAndJsonFrontmatter(p.Text.GetCurrent(), true, p.Site, p.Site.MarkdownRenderer, p.Site.FrontmatterIndexQueryer)
 	if err != nil {
 		p.Site.Logger.Error(err.Error())
 		p.RenderedPage = []byte(err.Error())
@@ -289,7 +289,7 @@ func (p *Page) Save() error {
 		return err
 	}
 
-	p.Site.SetFrontMatterIndex(p.Identifier)
+	p.Site.IndexMaintainer.AddPageToIndex(p.Identifier)
 
 	return nil
 }
@@ -300,7 +300,7 @@ func (p *Page) IsNew() bool {
 
 func (p *Page) Erase() error {
 	p.Site.Logger.Trace("Erasing " + p.Identifier)
-
+	p.Site.IndexMaintainer.RemovePageFromIndex(p.Identifier)
 	err := os.Remove(path.Join(p.Site.PathToData, utils.EncodeToBase32(strings.ToLower(p.Identifier))+".json"))
 	if err != nil {
 		return err
