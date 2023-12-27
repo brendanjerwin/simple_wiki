@@ -7,6 +7,8 @@ import (
 	"sync"
 
 	"github.com/brendanjerwin/simple_wiki/index"
+	"github.com/brendanjerwin/simple_wiki/index/bleve"
+	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/sec"
 	"github.com/brendanjerwin/simple_wiki/utils"
 	"github.com/gin-contrib/sessions/cookie"
@@ -27,8 +29,8 @@ type Site struct {
 	Logger                  *lumber.ConsoleLogger
 	MarkdownRenderer        utils.IRenderMarkdownToHtml
 	IndexMaintainer         index.IMaintainIndex
-	FrontmatterIndexQueryer index.IQueryFrontmatterIndex
-	BleveIndexQueryer       index.IQueryBleveIndex
+	FrontmatterIndexQueryer frontmatter.IQueryFrontmatterIndex
+	BleveIndexQueryer       bleve.IQueryBleveIndex
 	saveMut                 sync.Mutex
 }
 
@@ -59,8 +61,8 @@ func (s *Site) sniffContentType(name string) (string, error) {
 }
 
 func (s *Site) InitializeIndexing() error {
-	frontmatterIndex := index.NewFrontmatterIndex(s)
-	bleveIndex, err := index.NewBleveIndex(s, frontmatterIndex)
+	frontmatterIndex := frontmatter.NewFrontmatterIndex(s)
+	bleveIndex, err := bleve.NewBleveIndex(s, frontmatterIndex)
 	if err != nil {
 		return err
 	}

@@ -12,7 +12,7 @@ import (
 
 	"github.com/adrg/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/common"
-	"github.com/brendanjerwin/simple_wiki/index"
+	frontmatterIdx "github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/static"
 	"github.com/brendanjerwin/simple_wiki/templating"
 )
@@ -119,7 +119,7 @@ func StripFrontmatter(s string) string {
 	return string(unsafe)
 }
 
-func MarkdownToHtmlAndJsonFrontmatter(s string, handleFrontMatter bool, site common.IReadPages, renderer IRenderMarkdownToHtml, query index.IQueryFrontmatterIndex) ([]byte, []byte, error) {
+func MarkdownToHtmlAndJsonFrontmatter(s string, handleFrontMatter bool, site common.IReadPages, renderer IRenderMarkdownToHtml, query frontmatterIdx.IQueryFrontmatterIndex) ([]byte, []byte, error) {
 	var markdownBytes []byte
 	var matterBytes []byte
 	var err error

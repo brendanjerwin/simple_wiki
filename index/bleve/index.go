@@ -1,23 +1,25 @@
-package index
+package bleve
 
 import (
-	"github.com/blevesearch/bleve"
+	bleveActual "github.com/blevesearch/bleve"
 	"github.com/brendanjerwin/simple_wiki/common"
+	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
+	"github.com/brendanjerwin/simple_wiki/templating"
 )
 
 type BleveIndex struct {
-	index              bleve.Index
+	index              bleveActual.Index
 	pageReader         common.IReadPages
-	frontmatterQueryer IQueryFrontmatterIndex
+	frontmatterQueryer frontmatter.IQueryFrontmatterIndex
 }
 
 type IQueryBleveIndex interface {
 	Query(query string) ([]SearchResult, error)
 }
 
-func NewBleveIndex(pageReader common.IReadPages, frontmatterQueryer IQueryFrontmatterIndex) (*BleveIndex, error) {
-	mapping := bleve.NewIndexMapping()
-	index, err := bleve.NewMemOnly(mapping)
+func NewBleveIndex(pageReader common.IReadPages, frontmatterQueryer frontmatter.IQueryFrontmatterIndex) (*BleveIndex, error) {
+	mapping := bleveActual.NewIndexMapping()
+	index, err := bleveActual.NewMemOnly(mapping)
 	if err != nil {
 		return nil, err
 	}
@@ -36,17 +38,21 @@ func (b *BleveIndex) AddPageToIndex(requested_identifier common.PageIdentifier) 
 		return err
 	}
 
-	_, page, err := b.pageReader.ReadFrontMatter(identifier)
+	_, frontmatter, err := b.pageReader.ReadFrontMatter(identifier)
 	if err != nil {
 		return err
 	}
-	page["content"] = markdown
+	renderedBytes, err := templating.ExecuteTemplate(markdown, frontmatter, b.pageReader, b.frontmatterQueryer)
+	if err != nil {
+		return err
+	}
+	frontmatter["content"] = string(renderedBytes)
 
 	b.index.Delete(identifier)
 	b.index.Delete(requested_identifier)
 	b.index.Delete(munged_identifier)
 
-	return b.index.Index(identifier, page)
+	return b.index.Index(identifier, frontmatter)
 }
 
 func (b *BleveIndex) RemovePageFromIndex(identifier common.PageIdentifier) error {
@@ -55,8 +61,8 @@ func (b *BleveIndex) RemovePageFromIndex(identifier common.PageIdentifier) error
 }
 
 func (b *BleveIndex) Query(query string) ([]SearchResult, error) {
-	q := bleve.NewQueryStringQuery(query)
-	search := bleve.NewSearchRequest(q)
+	q := bleveActual.NewQueryStringQuery(query)
+	search := bleveActual.NewSearchRequest(q)
 	bleveResults, err := b.index.Search(search)
 	if err != nil {
 		return nil, err

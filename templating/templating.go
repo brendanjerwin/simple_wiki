@@ -9,7 +9,7 @@ import (
 	"text/template"
 
 	"github.com/brendanjerwin/simple_wiki/common"
-	"github.com/brendanjerwin/simple_wiki/index"
+	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/stoewer/go-strcase"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -27,7 +27,7 @@ type TemplateContext struct {
 	Inventory  InventoryFrontmatter `json:"inventory"`
 }
 
-func ConstructTemplateContextFromFrontmatter(frontmatter common.FrontMatter, query index.IQueryFrontmatterIndex) (TemplateContext, error) {
+func ConstructTemplateContextFromFrontmatter(frontmatter common.FrontMatter, query frontmatter.IQueryFrontmatterIndex) (TemplateContext, error) {
 	bytes, err := json.Marshal(frontmatter)
 	if err != nil {
 		return TemplateContext{}, err
@@ -76,7 +76,7 @@ func ConstructTemplateContextFromFrontmatter(frontmatter common.FrontMatter, que
 	return context, nil
 }
 
-func BuildShowInventoryContentsOf(site common.IReadPages, query index.IQueryFrontmatterIndex, indent int) func(string) string {
+func BuildShowInventoryContentsOf(site common.IReadPages, query frontmatter.IQueryFrontmatterIndex, indent int) func(string) string {
 	isContainer := BuildIsContainer(query)
 
 	return func(containerIdentifier string) string {
@@ -124,7 +124,7 @@ func BuildShowInventoryContentsOf(site common.IReadPages, query index.IQueryFron
 	}
 }
 
-func BuildLinkTo(site common.IReadPages, currentPageTemplateContext TemplateContext, query index.IQueryFrontmatterIndex) func(string) string {
+func BuildLinkTo(site common.IReadPages, currentPageTemplateContext TemplateContext, query frontmatter.IQueryFrontmatterIndex) func(string) string {
 	isContainer := BuildIsContainer(query)
 	return func(identifierToLink string) string {
 		if identifierToLink == "" {
@@ -163,7 +163,7 @@ func BuildLinkTo(site common.IReadPages, currentPageTemplateContext TemplateCont
 	}
 }
 
-func BuildIsContainer(query index.IQueryFrontmatterIndex) func(string) bool {
+func BuildIsContainer(query frontmatter.IQueryFrontmatterIndex) func(string) bool {
 	return func(identifier string) bool {
 		if identifier == "" {
 			return false
@@ -181,7 +181,7 @@ func BuildIsContainer(query index.IQueryFrontmatterIndex) func(string) bool {
 	}
 }
 
-func ExecuteTemplate(templateString string, frontmatter common.FrontMatter, site common.IReadPages, query index.IQueryFrontmatterIndex) ([]byte, error) {
+func ExecuteTemplate(templateString string, frontmatter common.FrontMatter, site common.IReadPages, query frontmatter.IQueryFrontmatterIndex) ([]byte, error) {
 	templateContext, err := ConstructTemplateContextFromFrontmatter(frontmatter, query)
 	if err != nil {
 		return nil, err

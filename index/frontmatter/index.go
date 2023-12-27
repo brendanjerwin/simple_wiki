@@ -1,4 +1,4 @@
-package index
+package frontmatter
 
 import (
 	"log"

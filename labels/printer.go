@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/brendanjerwin/simple_wiki/common"
-	"github.com/brendanjerwin/simple_wiki/index"
+	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/templating"
 )
 
@@ -15,7 +15,7 @@ type Printer interface {
 	Close() error
 }
 
-func PrintLabel(template_identifier string, identifer string, site common.IReadPages, query index.IQueryFrontmatterIndex) error {
+func PrintLabel(template_identifier string, identifer string, site common.IReadPages, query frontmatter.IQueryFrontmatterIndex) error {
 	template_identifier, template_data, err := site.ReadMarkdown(template_identifier)
 	if err != nil {
 		return err
