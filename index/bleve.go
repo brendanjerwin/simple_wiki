@@ -6,15 +6,16 @@ import (
 )
 
 type BleveIndex struct {
-	index      bleve.Index
-	pageReader common.IReadPages
+	index              bleve.Index
+	pageReader         common.IReadPages
+	frontmatterQueryer IQueryFrontmatterIndex
 }
 
 type IQueryBleveIndex interface {
 	Query(query string) ([]SearchResult, error)
 }
 
-func NewBleveIndex(pageReader common.IReadPages) (*BleveIndex, error) {
+func NewBleveIndex(pageReader common.IReadPages, frontmatterQueryer IQueryFrontmatterIndex) (*BleveIndex, error) {
 	mapping := bleve.NewIndexMapping()
 	index, err := bleve.NewMemOnly(mapping)
 	if err != nil {
@@ -22,8 +23,9 @@ func NewBleveIndex(pageReader common.IReadPages) (*BleveIndex, error) {
 	}
 
 	return &BleveIndex{
-		index:      index,
-		pageReader: pageReader,
+		index:              index,
+		pageReader:         pageReader,
+		frontmatterQueryer: frontmatterQueryer,
 	}, nil
 }
 
@@ -64,6 +66,11 @@ func (b *BleveIndex) Query(query string) ([]SearchResult, error) {
 	for _, hit := range bleveResults.Hits {
 		result := SearchResult{
 			Identifier: hit.ID,
+			Title:      b.frontmatterQueryer.GetValue(hit.ID, "title"),
+		}
+
+		if result.Title == "" {
+			result.Title = result.Identifier
 		}
 
 		if hit.Fragments != nil && hit.Fragments["content"] != nil {
@@ -77,5 +84,6 @@ func (b *BleveIndex) Query(query string) ([]SearchResult, error) {
 
 type SearchResult struct {
 	Identifier common.PageIdentifier
+	Title      string
 	Fragment   string
 }

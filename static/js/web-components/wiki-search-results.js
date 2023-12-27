@@ -100,7 +100,7 @@ class WikiSearchResults extends LitElement {
                 <div class="title-bar">
                     <h2>Search Results</h2>
                 </div>
-                ${this.results.map(result => html`<a href="/${result.Identifier}">${result.Identifier}</a>`)}
+                ${this.results.map(result => html`<a href="/${result.Identifier}">${result.Title}</a>`)}
             </div>
         `;
     }

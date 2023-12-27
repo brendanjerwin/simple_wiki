@@ -60,7 +60,7 @@ func (s *Site) sniffContentType(name string) (string, error) {
 
 func (s *Site) InitializeIndexing() error {
 	frontmatterIndex := index.NewFrontmatterIndex(s)
-	bleveIndex, err := index.NewBleveIndex(s)
+	bleveIndex, err := index.NewBleveIndex(s, frontmatterIndex)
 	if err != nil {
 		return err
 	}
