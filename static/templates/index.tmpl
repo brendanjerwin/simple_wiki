@@ -82,7 +82,7 @@
                         <li class="pure-menu-item {{ with .EditPage }}pure-menu-selected{{ end }}"><a href="/{{ .Page }}/edit" class="pure-menu-link"><span id="saveEditButton">Edit</span></a></li>
                         {{end}}
                     </ul>
-                    <wiki-search id="site-search"></wiki-search>
+                    <wiki-search id="site-search" search-endpoint="/api/search"></wiki-search>
                 </div>
             {{ end }}
 
