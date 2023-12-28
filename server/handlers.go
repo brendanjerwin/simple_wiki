@@ -124,10 +124,9 @@ func (s *Site) Router() *gin.Engine {
 		router.Use(cfg.Middleware)
 	}
 
-	// router.Use(static.Serve("/static/", static.LocalFile("./static", true)))
 	router.GET("/", func(c *gin.Context) {
 		if s.DefaultPage != "" {
-			c.Redirect(302, "/"+s.DefaultPage+"/read")
+			c.Redirect(302, "/"+s.DefaultPage+"/view")
 		} else {
 			c.Redirect(302, "/"+utils.RandomAlliterateCombo())
 		}
