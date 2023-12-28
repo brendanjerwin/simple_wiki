@@ -24,6 +24,7 @@ type IQueryBleveIndex interface {
 
 func NewBleveIndex(pageReader common.IReadPages, frontmatterQueryer frontmatter.IQueryFrontmatterIndex) (*BleveIndex, error) {
 	mapping := bleveActual.NewIndexMapping()
+	mapping.DefaultAnalyzer = "en"
 	index, err := bleveActual.NewMemOnly(mapping)
 	if err != nil {
 		return nil, err
