@@ -10,6 +10,7 @@ require (
 	github.com/gin-contrib/sessions v0.0.5
 	github.com/gin-gonic/gin v1.9.1
 	github.com/jcelliott/lumber v0.0.0-20160324203708-dd349441af25
+	github.com/k3a/html2text v1.2.1
 	github.com/karalabe/usb v0.0.2
 	github.com/schollz/versionedtext v1.0.0
 	github.com/stoewer/go-strcase v1.3.0

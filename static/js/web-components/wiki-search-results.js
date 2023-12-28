@@ -1,4 +1,4 @@
-import { html, css, LitElement } from '/static/js/lit-all.min.js';
+import { html, css, LitElement, unsafeHTML } from '/static/js/lit-all.min.js';
 
 class WikiSearchResults extends LitElement {
     static styles = css`
@@ -17,11 +17,18 @@ class WikiSearchResults extends LitElement {
             z-index: 9999;
             background-color: white;
         }
+
+        div#results {
+            max-height: 600px;
+            overflow-y: auto;
+            width: 400px;
+        }
+
         a {
             display: block;
-            padding: 5px;
             margin: 5px;
             text-decoration: none;
+            font-weight: bold;
             border-radius: 5px;
             transition: background-color 0.3s ease;
             cursor: pointer;
@@ -45,6 +52,35 @@ class WikiSearchResults extends LitElement {
         }
         :host([open]) .popover {
             display: block;
+        }
+        .fragment {
+            background-color: #e8e8e8;
+            font-size: 12px;
+            margin: 5px;
+            margin-bottom: 10px;
+            padding: 5px;
+            width: auto; 
+            max-height: 500px; 
+            overflow: hidden;
+            border-radius: 5px;
+        }
+        .fragment br {
+            display: block;
+            content: "";
+            margin-top: 2px;
+        }
+        mark {
+            background-color: #ffff00;
+            color: black;
+            font-weight: bold;
+            border-radius: 4px;
+            padding: 2px 3px;
+        }
+
+        @media (max-width: 411px) {
+            div#results {
+                width: 98%;
+            }
         }
     `;
 
@@ -100,7 +136,12 @@ class WikiSearchResults extends LitElement {
                 <div class="title-bar">
                     <h2>Search Results</h2>
                 </div>
-                ${this.results.map(result => html`<a href="/${result.Identifier}">${result.Title}</a>`)}
+                <div id="results">
+                ${this.results.map(result => html`
+                    <a href="/${result.Identifier}">${result.Title}</a>
+                    <div class="fragment">${unsafeHTML(result.FragmentHTML) || "N/A"}</div> 
+                `)}
+                </div>
             </div>
         `;
     }

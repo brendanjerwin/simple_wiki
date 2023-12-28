@@ -36,6 +36,7 @@ export class WikiSearch extends LitElement {
         max-width: 500px;
         box-sizing: border-box;
     }
+
     input[type="search"] {
         flex-grow: 1 1 auto;
         padding: 5px;
@@ -44,7 +45,19 @@ export class WikiSearch extends LitElement {
         outline: none;
         font-size: 16px;
         max-width: 100%;
+        background-color: white;
     }
+
+    input[type="search"]:focus {
+        animation: pulse .8s 1;
+    }
+
+    @keyframes pulse {
+        0% { background-color: white; }
+        25% { background-color: #ffff00; }
+        100% { background-color: white; }
+    }
+
     button {
         padding: 5px 15px;
         border: none;
@@ -73,6 +86,25 @@ export class WikiSearch extends LitElement {
         this.results = [];
     }
 
+    connectedCallback() {
+        super.connectedCallback();
+
+
+        window.addEventListener('keydown', (e) => {
+            const searchInput = this.shadowRoot.querySelector('input[name="q"]');
+            // Check if Ctrl (or Cmd on Macs) and K keys were pressed
+            if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+                e.preventDefault();
+
+                searchInput.focus();
+            }
+        });
+    }
+
+    handleSearchInputFocused(e) {
+        e.target.select();
+    }
+
     handleFormSubmit(e) {
         e.preventDefault();
         this.noResults = false;
@@ -95,6 +127,8 @@ export class WikiSearch extends LitElement {
                     this.noResults = false;
                 } else {
                     this.noResults = true;
+                    const searchInput = this.shadowRoot.querySelector('input[name="q"]');
+                    searchInput.select();
                 }
             })
             .catch((error) => {
@@ -118,7 +152,7 @@ export class WikiSearch extends LitElement {
         <link href="/static/css/solid.min.css" rel="stylesheet">
     <div id="container">
         <form @submit="${this.handleFormSubmit}">
-            <input type="search" name="q" placeholder="Search..." required>
+            <input type="search" name="q" placeholder="Search..." required @focus="${this.handleSearchInputFocused}">
             <button type="submit"><i class="fa-solid fa-search"></i></button>
         </form>
         <wiki-search-results 

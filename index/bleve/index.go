@@ -1,10 +1,15 @@
 package bleve
 
 import (
+	"regexp"
+	"strings"
+
 	bleveActual "github.com/blevesearch/bleve"
 	"github.com/brendanjerwin/simple_wiki/common"
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/templating"
+	"github.com/brendanjerwin/simple_wiki/utils"
+	"github.com/k3a/html2text"
 )
 
 type BleveIndex struct {
@@ -31,6 +36,9 @@ func NewBleveIndex(pageReader common.IReadPages, frontmatterQueryer frontmatter.
 	}, nil
 }
 
+var linkRemoval = regexp.MustCompile(`<.*?>`)
+var repeatedNewlineRegex = regexp.MustCompile(`\s*\n\s*\n\s*\n(\s*\n)*`)
+
 func (b *BleveIndex) AddPageToIndex(requested_identifier common.PageIdentifier) error {
 	munged_identifier := common.MungeIdentifier(requested_identifier)
 	identifier, markdown, err := b.pageReader.ReadMarkdown(requested_identifier)
@@ -46,7 +54,19 @@ func (b *BleveIndex) AddPageToIndex(requested_identifier common.PageIdentifier) 
 	if err != nil {
 		return err
 	}
-	frontmatter["content"] = string(renderedBytes)
+	markdownRenderer := utils.GoldmarkRenderer{}
+	htmlBytes, err := markdownRenderer.Render(renderedBytes)
+	var content string
+	if err != nil {
+		content = string(renderedBytes)
+	} else {
+		content = html2text.HTML2TextWithOptions(string(htmlBytes), html2text.WithLinksInnerText(), html2text.WithUnixLineBreaks())
+		content = linkRemoval.ReplaceAllString(content, "")
+		content = strings.TrimSpace(content)
+		content = repeatedNewlineRegex.ReplaceAllString(content, "\n\n")
+	}
+
+	frontmatter["content"] = content
 
 	b.index.Delete(identifier)
 	b.index.Delete(requested_identifier)
@@ -60,9 +80,19 @@ func (b *BleveIndex) RemovePageFromIndex(identifier common.PageIdentifier) error
 	return b.index.Delete(identifier)
 }
 
+var newlineRegex = regexp.MustCompile("\n")
+
 func (b *BleveIndex) Query(query string) ([]SearchResult, error) {
-	q := bleveActual.NewQueryStringQuery(query)
+	titleQuery := bleveActual.NewMatchQuery(query)
+	titleQuery.SetField("title")
+	titleQuery.SetBoost(2.0)
+
+	overallQuery := bleveActual.NewQueryStringQuery(query)
+
+	q := bleveActual.NewDisjunctionQuery(titleQuery, overallQuery)
+
 	search := bleveActual.NewSearchRequest(q)
+	search.Highlight = bleveActual.NewHighlight()
 	bleveResults, err := b.index.Search(search)
 	if err != nil {
 		return nil, err
@@ -80,7 +110,8 @@ func (b *BleveIndex) Query(query string) ([]SearchResult, error) {
 		}
 
 		if hit.Fragments != nil && hit.Fragments["content"] != nil {
-			result.Fragment = hit.Fragments["content"][0]
+			result.FragmentHTML = hit.Fragments["content"][0]
+			result.FragmentHTML = newlineRegex.ReplaceAllString(result.FragmentHTML, "<br>")
 		}
 		results = append(results, result)
 	}
@@ -89,7 +120,7 @@ func (b *BleveIndex) Query(query string) ([]SearchResult, error) {
 }
 
 type SearchResult struct {
-	Identifier common.PageIdentifier
-	Title      string
-	Fragment   string
+	Identifier   common.PageIdentifier
+	Title        string
+	FragmentHTML string
 }
