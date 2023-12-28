@@ -150,17 +150,17 @@ export class WikiSearch extends LitElement {
         return html`
         <link href="/static/css/fontawesome.min.css" rel="stylesheet">
         <link href="/static/css/solid.min.css" rel="stylesheet">
-    <div id="container">
-        <form @submit="${this.handleFormSubmit}">
-            <input type="search" name="q" placeholder="Search..." required @focus="${this.handleSearchInputFocused}">
-            <button type="submit"><i class="fa-solid fa-search"></i></button>
-        </form>
-        <wiki-search-results 
-            .results="${this.results}" 
-            .open="${this.results.length > 0}" 
-            @search-results-closed="${this.handleSearchResultsClosed}">
-        </wiki-search-results>
-    </div>
+        <div id="container">
+            <form @submit="${this.handleFormSubmit}">
+                <input type="search" name="q" placeholder="Search..." required @focus="${this.handleSearchInputFocused}">
+                <button type="submit"><i class="fa-solid fa-search"></i></button>
+            </form>
+            <wiki-search-results 
+                .results="${this.results}" 
+                .open="${this.results.length > 0}" 
+                @search-results-closed="${this.handleSearchResultsClosed}">
+            </wiki-search-results>
+        </div>
         `;
     }
 }

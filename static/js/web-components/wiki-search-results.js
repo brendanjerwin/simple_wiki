@@ -40,6 +40,9 @@ class WikiSearchResults extends LitElement {
             outline: 2px solid #4d90fe;
         }
         .title-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
             border-top-right-radius: 10px;
             border-top-left-radius: 10px;
             background-color: #f8f8f8;
@@ -49,6 +52,13 @@ class WikiSearchResults extends LitElement {
         .title-bar h2 {
             font-size: 16px;
             margin: 0;
+        }
+        .title-bar button {
+            border: none;
+            background-color: transparent;
+            cursor: pointer;
+            font-size: 16px;
+            padding: 0;
         }
         :host([open]) .popover {
             display: block;
@@ -79,7 +89,7 @@ class WikiSearchResults extends LitElement {
 
         @media (max-width: 411px) {
             div#results {
-                width: 98%;
+                width: 97%;
             }
         }
     `;
@@ -108,12 +118,15 @@ class WikiSearchResults extends LitElement {
     handleClickOutside(event) {
         const path = event.composedPath();
         if (this.open && !path.includes(this.shadowRoot.querySelector('.popover'))) {
-            this.open = false;
-            this.dispatchEvent(new CustomEvent('search-results-closed', {
-                bubbles: true,
-                composed: true
-            }));
+            this.close();
         }
+    }
+
+    close() {
+        this.dispatchEvent(new CustomEvent('search-results-closed', {
+            bubbles: true,
+            composed: true
+        }));
     }
 
     handlePopoverClick(event) {
@@ -132,9 +145,12 @@ class WikiSearchResults extends LitElement {
 
     render() {
         return html`
+            <link href="/static/css/fontawesome.min.css" rel="stylesheet">
+            <link href="/static/css/solid.min.css" rel="stylesheet">
             <div class="popover" @click="${this.handlePopoverClick}">
                 <div class="title-bar">
-                    <h2>Search Results</h2>
+                    <h2><i class="fa-solid fa-search"></i> Search Results</h2>
+                    <button class="close" @click="${this.close}"><i class="fa-solid fa-xmark"></i></button>
                 </div>
                 <div id="results">
                 ${this.results.map(result => html`

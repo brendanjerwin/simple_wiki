@@ -102,10 +102,10 @@ $(window).load(function () {
                     $('#saveEditButton').addClass("failure");
                 }
                 $('#saveEditButton').text(data.message);
-                if (data.success == true && $('#lockPage').text() == "Lock") {
+                if (data.success == true && $('#lockPage').text().includes("Lock")) {
                     window.location = "/" + window.simple_wiki.pageName + "/view";
                 }
-                if (data.success == true && $('#lockPage').text() == "Unlock") {
+                if (data.success == true && $('#lockPage').text().includes("Unlock")) {
                     window.location = "/" + window.simple_wiki.pageName + "/edit";
                 }
             },
@@ -133,16 +133,7 @@ $(window).load(function () {
         e.preventDefault();
         var passphrase = prompt("Please enter a passphrase to lock", "");
         if (passphrase != null) {
-            if ($('#lockPage').text() == "Lock") {
-                $('#saveEditButton').removeClass();
-                $("#saveEditButton").text("Locking");
-            } else {
-                $('#saveEditButton').removeClass();
-                $("#saveEditButton").text("Unlocking");
-            }
             lockPage(passphrase);
-            // POST encrypt page
-            // reload page
         }
     });
 
