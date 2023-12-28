@@ -37,6 +37,9 @@ class WikiSearchResults extends LitElement {
             border-radius: 5px;
             transition: background-color 0.3s ease;
             cursor: pointer;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
         }
         .popover:not(:hover) a:focus {
             outline: 2px solid #4d90fe;
