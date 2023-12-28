@@ -14,6 +14,8 @@ class WikiSearchResults extends LitElement {
             left: 50%;
             transform: translate(-50%, -50%);
             max-height: 95%;
+            width: 400px;
+            max-width: 97%;
             border-radius: 10px;
             box-shadow: 0px 5px 15px rgba(0, 0, 0, 0.3);
             z-index: 9999;
@@ -25,7 +27,6 @@ class WikiSearchResults extends LitElement {
         div#results {
             max-height: 100%;
             overflow-y: auto;
-            width: 400px;
         }
 
         a {
