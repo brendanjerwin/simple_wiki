@@ -75,6 +75,22 @@ div#rendered ol {
   line-height: 1.1;
 }
 
+li.tools-menu {
+  margin-right: 1em;
+}
+
+li.pure-menu-selected {
+  background-color: #eeeeee;
+}
+
+.pure-menu-selected a {
+  border-bottom: 2px solid #6c757d;
+}
+
+.pure-menu-link {
+  color: black !important;
+}
+
 div.pure-menu-horizontal {
   background-color: lightgrey;
   height: 2.75em;
@@ -114,11 +130,15 @@ ul.pure-menu-list {
   }
 
   div#wrap {
-    top: 4em;
+    top: 5.5em;
   }
 
   div#menu {
-    height: 5em;
+    height: 5.5em;
+  }
+
+  wiki-search#site-search {
+    margin-top: .35em;
   }
 }
 
