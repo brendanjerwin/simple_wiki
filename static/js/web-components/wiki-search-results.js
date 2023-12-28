@@ -88,7 +88,7 @@ class WikiSearchResults extends LitElement {
             padding: 2px 3px;
         }
 
-        @media (max-width: 400px) {
+        @media (max-width: 410px) {
             div#results {
                 width: 97%;
             }
