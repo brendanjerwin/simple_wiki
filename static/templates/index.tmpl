@@ -87,8 +87,9 @@
                         <li class="pure-menu-item {{ with .EditPage }}pure-menu-selected{{ end }}"><a href="/{{ .Page }}/edit" class="pure-menu-link"><span id="saveEditButton"><i class="fas fa-pen-to-square"></i> Edit</span></a></li>
                         {{end}}
                     </ul>
-                    
+                    {{ if .ViewPage }}
                     <wiki-search id="site-search" search-endpoint="/api/search"></wiki-search>
+                    {{ end }}
                 </div>
             {{ end }}
 
@@ -185,16 +186,6 @@
                         </table>
                     {{ end }}
                 </div>
-                {{ if .ChildPageNames }}
-                    <section class="ChildPageNames">
-                        <h2>See also</h2>
-                        <ul>
-                        {{ range .ChildPageNames }}
-                            <li><a href="/{{ . }}/view">{{ . }}</a></li>
-                        {{ end }}
-                        </ul>
-                    </section>
-                {{ end }}
             </div>
         </article>
     </body>

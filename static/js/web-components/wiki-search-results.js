@@ -7,19 +7,23 @@ class WikiSearchResults extends LitElement {
             position: relative;
         }
         .popover {
+            flex-direction: column;
             display: none;
             position: fixed;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
+            max-height: 95%;
             border-radius: 10px;
             box-shadow: 0px 5px 15px rgba(0, 0, 0, 0.3);
             z-index: 9999;
             background-color: white;
         }
-
+        :host([open]) .popover {
+            display: flex;
+        }
         div#results {
-            max-height: 600px;
+            max-height: 100%;
             overflow-y: auto;
             width: 400px;
         }
@@ -60,9 +64,6 @@ class WikiSearchResults extends LitElement {
             font-size: 16px;
             padding: 0;
         }
-        :host([open]) .popover {
-            display: block;
-        }
         .fragment {
             background-color: #e8e8e8;
             font-size: 12px;
@@ -87,7 +88,7 @@ class WikiSearchResults extends LitElement {
             padding: 2px 3px;
         }
 
-        @media (max-width: 411px) {
+        @media (max-width: 400px) {
             div#results {
                 width: 97%;
             }

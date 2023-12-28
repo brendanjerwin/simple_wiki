@@ -122,18 +122,18 @@ ul.pure-menu-list {
   }
 }
 
+
 @media (min-width: 5em) {
 
   div#rendered,
-  .ChildPageNames,
   body#pad textarea {
     padding-left: 2%;
     padding-right: 2%;
   }
 
-  .pure-menu .pure-menu-horizontal {
+  /* .pure-menu .pure-menu-horizontal {
     max-width: 300px;
-  }
+  } */
 
   .pure-menu-disabled,
   .pure-menu-heading,
@@ -141,16 +141,12 @@ ul.pure-menu-list {
     padding-left: 1.2em;
     padding-right: 1.2em;
   }
-
-  .ChildPageNames ul {
-    grid-template-columns: repeat(1, 1fr);
-  }
 }
 
+/*
 @media (min-width: 50em) {
 
   div#rendered,
-  .ChildPageNames,
   body#pad textarea {
     padding-left: 10%;
     padding-right: 10%;
@@ -161,55 +157,24 @@ ul.pure-menu-list {
   .pure-menu-link {
     padding: 0.5em 1em;
   }
-
-  .ChildPageNames ul {
-    grid-template-columns: repeat(2, 1fr);
-  }
 }
-
+*/
 @media (min-width: 70em) {
 
   div#rendered,
-  .ChildPageNames,
   body#pad textarea {
     padding-left: 15%;
     padding-right: 15%;
   }
-
-  .ChildPageNames ul {
-    grid-template-columns: repeat(3, 1fr);
-  }
-
 }
 
 @media (min-width: 100em) {
 
   div#rendered,
-  .ChildPageNames,
   body#pad textarea {
     padding-left: 20%;
     padding-right: 20%;
   }
-
-  .ChildPageNames ul {
-    grid-template-columns: repeat(4, 1fr);
-  }
-}
-
-.ChildPageNames ul {
-  margin: 0.3em 0 0 1.6em;
-  padding: 0;
-  display: grid;
-  grid-gap: 0.5rem;
-}
-
-.ChildPageNames li {
-  margin: 0;
-}
-
-.ChildPageNames a {
-  color: #0645ad;
-  background: none;
 }
 
 /*---- Components ----*/

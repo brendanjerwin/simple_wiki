@@ -91,7 +91,7 @@ export class WikiSearch extends LitElement {
 
 
         window.addEventListener('keydown', (e) => {
-            const searchInput = this.shadowRoot.querySelector('input[name="q"]');
+            const searchInput = this.shadowRoot.querySelector('input[type="search"]');
             // Check if Ctrl (or Cmd on Macs) and K keys were pressed
             if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
                 e.preventDefault();
@@ -110,7 +110,7 @@ export class WikiSearch extends LitElement {
         this.noResults = false;
 
         const form = e.target;
-        const search_term = form.q.value;
+        const search_term = form.search.value;
         const url = `${this.searchEndpoint}?q=${search_term}`;
 
         fetch(url)
@@ -127,7 +127,7 @@ export class WikiSearch extends LitElement {
                     this.noResults = false;
                 } else {
                     this.noResults = true;
-                    const searchInput = this.shadowRoot.querySelector('input[name="q"]');
+                    const searchInput = this.shadowRoot.querySelector('input[type="search"]');
                     searchInput.select();
                 }
             })
@@ -151,8 +151,8 @@ export class WikiSearch extends LitElement {
         <link href="/static/css/fontawesome.min.css" rel="stylesheet">
         <link href="/static/css/solid.min.css" rel="stylesheet">
         <div id="container">
-            <form @submit="${this.handleFormSubmit}">
-                <input type="search" name="q" placeholder="Search..." required @focus="${this.handleSearchInputFocused}">
+            <form @submit="${this.handleFormSubmit}" action=".">
+                <input type="search" name="search" placeholder="Search..." required @focus="${this.handleSearchInputFocused}">
                 <button type="submit"><i class="fa-solid fa-search"></i></button>
             </form>
             <wiki-search-results 
