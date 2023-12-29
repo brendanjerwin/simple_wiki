@@ -222,6 +222,10 @@ github.com/pelletier/go-toml/v2/unstable
 github.com/philhofer/fwd
 # github.com/rogpeppe/go-internal v1.8.0
 ## explicit; go 1.11
+# github.com/sashabaranov/go-openai v1.17.9
+## explicit; go 1.18
+github.com/sashabaranov/go-openai
+github.com/sashabaranov/go-openai/internal
 # github.com/schollz/versionedtext v1.0.0
 ## explicit
 github.com/schollz/versionedtext

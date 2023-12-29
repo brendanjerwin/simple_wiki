@@ -1,0 +1,1 @@
+Tersely evaluate the immediately previous assistant response against instructions and Output Rules, identify any mistakes or failures to follow instructions, produce a corrected response. Also double-check the JSON output against rules. If no changes are necessary, respond with [[ALL GOOD]][[FIN]].
