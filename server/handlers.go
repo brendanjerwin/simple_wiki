@@ -13,6 +13,9 @@ import (
 	"strings"
 	"time"
 
+	openai "github.com/sashabaranov/go-openai"
+
+	llmEditor "github.com/brendanjerwin/simple_wiki/llm/editor"
 	"github.com/brendanjerwin/simple_wiki/sec"
 	"github.com/brendanjerwin/simple_wiki/static"
 	"github.com/brendanjerwin/simple_wiki/utils"
@@ -69,6 +72,9 @@ func Serve(
 		MaxDocumentSize: maxDocumentSize,
 		Logger:          logger,
 	}
+
+	openaiclient := openai.NewClient("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")
+	site.OpenAIEditor = llmEditor.NewOpenAIEditor(openaiclient, logger)
 
 	err := site.InitializeIndexing()
 	if err != nil {
@@ -148,6 +154,8 @@ func (s *Site) Router() *gin.Engine {
 	router.GET("/api/find_by_prefix", s.handleFindByPrefix)
 	router.GET("/api/find_by_key_existence", s.handleFindByKeyExistence)
 	router.GET("/api/search", s.handleSearch)
+	router.POST("/api/llm/edit/start", s.handleStartLlmEdit)
+	router.POST("/api/llm/edit/continue", s.handleContinueLlmEdit)
 	return router
 }
 

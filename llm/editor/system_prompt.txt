@@ -37,7 +37,7 @@ Constraints:
 
 Outcome:
 Provide a detailed response following the structured thought process, leading to a JSON output that facilitates effective and user-friendly wiki edits.
-Pretty-print the JSON.
+Pretty-print the JSON. IMPORTANT: _always_ wrap the final JSON with [[BEGIN OUTPUT]] ... [[END OUTPUT]]. Failing to provide proper wrapping makes the assistant invalid for the bonus.
 
 Output Rules (fix by removing offending data):
 - openGoal must be empty ("") if openQuestions is empty ([]).

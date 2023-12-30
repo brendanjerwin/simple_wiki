@@ -11,11 +11,13 @@ import (
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/sec"
 	"github.com/brendanjerwin/simple_wiki/utils"
+	llmEditor "github.com/brendanjerwin/simple_wiki/llm/editor"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/jcelliott/lumber"
 )
 
 type Site struct {
+	saveMut                 sync.Mutex
 	PathToData              string
 	Css                     []byte
 	DefaultPage             string
@@ -31,7 +33,7 @@ type Site struct {
 	IndexMaintainer         index.IMaintainIndex
 	FrontmatterIndexQueryer frontmatter.IQueryFrontmatterIndex
 	BleveIndexQueryer       bleve.IQueryBleveIndex
-	saveMut                 sync.Mutex
+	OpenAIEditor			llmEditor.OpenAIEditor
 }
 
 func (s *Site) defaultLock() string {
