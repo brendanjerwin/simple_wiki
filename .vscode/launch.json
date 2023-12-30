@@ -16,7 +16,8 @@
                 "-default-page",
                 "index"
             ],
-            "program": "${fileDirname}"
+            "program": "${fileDirname}",
+            "envFile": "${workspaceFolder}/.env",
         }
     ]
 }

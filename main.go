@@ -44,6 +44,7 @@ func main() {
 			c.GlobalUint("max-upload-mb"),
 			c.GlobalUint("max-document-length"),
 			logger(c.GlobalBool("debug")),
+			os.Getenv("OPENAI_API_KEY"),
 		)
 		return nil
 	}

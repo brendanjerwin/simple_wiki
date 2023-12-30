@@ -46,6 +46,7 @@ func Serve(
 	maxUploadSize uint,
 	maxDocumentSize uint,
 	logger *lumber.ConsoleLogger,
+	openaiApiKey string,
 ) {
 	var customCSS []byte
 	// collect custom CSS
@@ -73,7 +74,7 @@ func Serve(
 		Logger:          logger,
 	}
 
-	openaiclient := openai.NewClient("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")
+	openaiclient := openai.NewClient(openaiApiKey)
 	site.OpenAIEditor = llmEditor.NewOpenAIEditor(openaiclient, logger)
 
 	err := site.InitializeIndexing()
