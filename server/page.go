@@ -21,14 +21,10 @@ import (
 type Page struct {
 	Site *Site `json:"-"`
 
-	Identifier         string
-	Text               versionedtext.VersionedText
-	Meta               string
-	RenderedPage       []byte `json:"-"`
-	IsLocked           bool
-	PassphraseToUnlock string
-	UnlockedFor        string
-	FrontmatterJson    []byte `json:"-"`
+	Identifier      string
+	Text            versionedtext.VersionedText
+	RenderedPage    []byte `json:"-"`
+	FrontmatterJson []byte `json:"-"`
 }
 
 func (p Page) LastEditTime() time.Time {

@@ -9,9 +9,8 @@ import (
 	"github.com/brendanjerwin/simple_wiki/index"
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
-	"github.com/brendanjerwin/simple_wiki/sec"
-	"github.com/brendanjerwin/simple_wiki/utils"
 	llmEditor "github.com/brendanjerwin/simple_wiki/llm/editor"
+	"github.com/brendanjerwin/simple_wiki/utils"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/jcelliott/lumber"
 )
@@ -21,10 +20,8 @@ type Site struct {
 	PathToData              string
 	Css                     []byte
 	DefaultPage             string
-	DefaultPassword         string
 	Debounce                int
 	SessionStore            cookie.Store
-	SecretCode              string
 	Fileuploads             bool
 	MaxUploadSize           uint
 	MaxDocumentSize         uint // in runes; about a 10mb limit by default
@@ -33,14 +30,7 @@ type Site struct {
 	IndexMaintainer         index.IMaintainIndex
 	FrontmatterIndexQueryer frontmatter.IQueryFrontmatterIndex
 	BleveIndexQueryer       bleve.IQueryBleveIndex
-	OpenAIEditor			llmEditor.OpenAIEditor
-}
-
-func (s *Site) defaultLock() string {
-	if s.DefaultPassword == "" {
-		return ""
-	}
-	return sec.HashPassword(s.DefaultPassword)
+	OpenAIEditor            llmEditor.OpenAIEditor
 }
 
 func (s *Site) sniffContentType(name string) (string, error) {

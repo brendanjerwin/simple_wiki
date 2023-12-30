@@ -3,10 +3,13 @@ package editor
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	_ "embed"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -24,17 +27,33 @@ var systemPrompt string
 var qualityPrompt string
 
 // Interaction represents the result of an edit operation.
-type InteractionID int64
+type InteractionID string
+
+func generateInteractionID() (InteractionID, error) {
+	randBytes := make([]byte, 8)
+	_, err := rand.Read(randBytes)
+	if err != nil {
+		return "", err
+	}
+	randNum := binary.BigEndian.Uint64(randBytes)
+	interactionID := time.Now().UnixNano() + int64(randNum)
+
+	hash := sha256.Sum256([]byte(strconv.FormatInt(interactionID, 10)))
+	return InteractionID(fmt.Sprintf("%x", hash)), nil
+}
+
 type Interaction struct {
-	client             *openai.Client
-	logger             *lumber.ConsoleLogger
-	userCommand        string
-	pageContent        string
-	assistantResponses []string
-	LastResponse       *Response
-	Completed          bool
-	InteractionID      InteractionID
-	memory             Memory
+	client                    *openai.Client
+	logger                    *lumber.ConsoleLogger
+	userCommand               string
+	pageContent               string
+	assistantResponses        []string
+	PageIdentifier            common.PageIdentifier
+	PageAccessedTimestamp     time.Time
+	LastResponse              *Response
+	InteractionID             InteractionID
+	memory                    Memory
+	LastResponseQualityRounds int
 }
 
 type UserRequest struct {
@@ -49,22 +68,40 @@ type Memory struct {
 	OpenGoal      string   `json:"openGoal"`
 }
 
-type Response struct {
-	NewContent       string `json:"new_content,omitempty"`
-	SummaryOfChanges string `json:"summary_of_changes,omitempty"`
-	Memory           Memory `json:"memory"`
+func (m Memory) ToFrontmatterMap() map[string]interface{} {
+	memoryMap := make(map[string]interface{})
+	memoryMap["facts"] = m.Facts
+	return memoryMap
 }
 
-func newInteraction(client *openai.Client, logger *lumber.ConsoleLogger, userCommand string, memory Memory, content string) *Interaction {
+type Response struct {
+	NewContent     string `json:"new_content,omitempty"`
+	ResponseToUser string `json:"response_to_user,omitempty"`
+	Memory         Memory `json:"memory"`
+}
+
+func newInteraction(client *openai.Client, logger *lumber.ConsoleLogger, userCommand string, memory Memory, content string, pageIdentifier common.PageIdentifier, pageAccessedTimestamp time.Time) (*Interaction, error) {
 	interaction := &Interaction{
-		client:      client,
-		userCommand: userCommand,
-		memory:      memory,
-		pageContent: content,
-		logger:      logger,
+		client:                client,
+		userCommand:           userCommand,
+		memory:                memory,
+		pageContent:           content,
+		logger:                logger,
+		PageIdentifier:        pageIdentifier,
+		PageAccessedTimestamp: pageAccessedTimestamp,
 	}
+
+	id, err := generateInteractionID()
+	if err != nil {
+		return nil, err
+	}
+	interaction.InteractionID = id
 	interaction.freezeToRam()
-	return interaction
+	return interaction, nil
+}
+
+func (i *Interaction) clone(userCommand string, memory Memory) (*Interaction, error) {
+	return newInteraction(i.client, i.logger, userCommand, memory, i.pageContent, i.PageIdentifier, i.PageAccessedTimestamp)
 }
 
 var (
@@ -79,14 +116,6 @@ func (i *Interaction) freezeToRam() error {
 	globalRAMMutex.Lock()
 	defer globalRAMMutex.Unlock()
 
-	randBytes := make([]byte, 8)
-	_, err := rand.Read(randBytes)
-	if err != nil {
-		return err
-	}
-	randNum := binary.BigEndian.Uint64(randBytes)
-
-	i.InteractionID = InteractionID(time.Now().UnixNano() + int64(randNum))
 	globalRAM[i.InteractionID] = i
 	globalRAMInsertionTimestamp[i.InteractionID] = time.Now().UnixNano()
 
@@ -175,9 +204,6 @@ func (i Interaction) internalRespond(userStatement string, doQualityControl bool
 		qualityRoundCounter++
 	}
 
-	if i.Completed {
-		return nil, errors.New("cannot respond to completed interaction")
-	}
 	if userStatement == "" {
 		return nil, errors.New("user statement cannot be empty")
 	}
@@ -216,7 +242,7 @@ func (i Interaction) internalRespond(userStatement string, doQualityControl bool
 
 		// _AFTER_ the assistant responses, we add the quality prompt if needed.
 		messages = append(messages, openai.ChatCompletionMessage{
-			Role:    openai.ChatMessageRoleUser,
+			Role:    openai.ChatMessageRoleSystem,
 			Content: qualityPrompt,
 		})
 	}
@@ -252,19 +278,21 @@ func (i Interaction) internalRespond(userStatement string, doQualityControl bool
 		if err != nil {
 			return nil, err
 		}
-		nextInteraction := newInteraction(i.client, i.logger, userStatement, response.Memory, i.pageContent)
+		nextInteraction, err := i.clone(userStatement, response.Memory)
+		if err != nil {
+			return nil, err
+		}
 		nextInteraction.assistantResponses = append(i.assistantResponses, latestResponseMessage)
 		nextInteraction.LastResponse = &response
 
-		// If there are open questions, we need to ask them
-		if len(response.Memory.OpenQuestions) > 0 {
-			i.logger.Info("Open questions: %v", response.Memory.OpenQuestions)
-			nextInteraction.Completed = false
-			return nextInteraction, nil
-		}
+		// // If there are open questions, we need to ask them
+		// if len(response.Memory.OpenQuestions) > 0 {
+		// 	i.logger.Info("Open questions: %v", response.Memory.OpenQuestions)
+		// 	return nextInteraction, nil
+		// }
 
 		//otherwise its time to start quality control
-		i.logger.Info("Starting quality control round %v", qualityRoundCounter)
+		i.logger.Info("Starting quality control round %v", qualityRoundCounter+1)
 		return nextInteraction.internalRespond(userStatement, true, qualityRoundCounter, false, 0)
 	} else if containsAllGoodMarker(latestResponseMessage) {
 		//got all good, no more quality control is needed so take the last assistant response before this as the final response
@@ -273,31 +301,36 @@ func (i Interaction) internalRespond(userStatement string, doQualityControl bool
 		if err != nil {
 			return nil, err
 		}
-		nextInteraction := newInteraction(i.client, i.logger, userStatement, response.Memory, i.pageContent)
+		nextInteraction, err := i.clone(userStatement, response.Memory)
+		if err != nil {
+			return nil, err
+		}
 		nextInteraction.LastResponse = &response
-		nextInteraction.Completed = true
+		nextInteraction.LastResponseQualityRounds = qualityRoundCounter + 1
 		return nextInteraction, nil
 	} else {
-		i.logger.Error("Invalid response from assistant, no response marker. Retry: %v", retryCounter)
+		i.logger.Error("Invalid response from assistant, no response marker. Retry: %v", retryCounter+1)
 		return i.internalRespond(i.userCommand, false, 0, true, retryCounter)
 	}
 }
 
 // OpenAIEditor defines the methods for interacting with OpenAI.
 type OpenAIEditor interface {
-	PerformEdit(markdown, command string, frontMatter common.FrontMatter) (*Interaction, error)
+	PerformEdit(pageIdentifier common.PageIdentifier, command string) (*Interaction, error)
 }
 
 // OpenAIEditorImpl is the implementation of OpenAIEditor.
 type OpenAIEditorImpl struct {
-	client *openai.Client
-	logger *lumber.ConsoleLogger
+	client     *openai.Client
+	logger     *lumber.ConsoleLogger
+	pageReader common.IReadPages
 }
 
-func NewOpenAIEditor(client *openai.Client, logger *lumber.ConsoleLogger) OpenAIEditor {
+func NewOpenAIEditor(client *openai.Client, pageReader common.IReadPages, logger *lumber.ConsoleLogger) OpenAIEditor {
 	return OpenAIEditorImpl{
-		client: client,
-		logger: logger,
+		client:     client,
+		logger:     logger,
+		pageReader: pageReader,
 	}
 }
 
@@ -329,11 +362,23 @@ func memoryFromFrontMatter(frontMatter common.FrontMatter) (Memory, error) {
 	return memory, nil
 }
 
-func (e OpenAIEditorImpl) PerformEdit(markdown, command string, frontMatter common.FrontMatter) (*Interaction, error) {
+func (e OpenAIEditorImpl) PerformEdit(pageIdentifier common.PageIdentifier, command string) (*Interaction, error) {
+	pageAccessedTimestamp := time.Now()
+	identifier, markdown, err := e.pageReader.ReadMarkdown(pageIdentifier)
+	if err != nil {
+		return nil, err
+	}
+	_, frontMatter, err := e.pageReader.ReadFrontMatter(identifier)
+	if err != nil {
+		return nil, err
+	}
 	memory, err := memoryFromFrontMatter(frontMatter)
 	if err != nil {
 		return nil, err
 	}
-	interaction := newInteraction(e.client, e.logger, command, memory, markdown)
+	interaction, err := newInteraction(e.client, e.logger, command, memory, markdown, identifier, pageAccessedTimestamp)
+	if err != nil {
+		return nil, err
+	}
 	return interaction.Respond(command)
 }

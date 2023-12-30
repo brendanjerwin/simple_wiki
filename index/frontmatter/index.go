@@ -71,6 +71,7 @@ func (f *FrontmatterIndex) recursiveAdd(identifier common.PageIdentifier, keyPat
 	//recursively build the dotted key path. a value in frontmatter can be either a string or a map[string]interface{}
 	//if it is a map[string]interface{}, then we need to recurse
 	switch v := value.(type) {
+	case common.FrontMatter:
 	case map[string]interface{}:
 		for key, val := range v {
 			newKeyPath := keyPath

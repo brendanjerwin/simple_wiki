@@ -86,39 +86,6 @@ $(window).load(function () {
         });
     }
 
-    function lockPage(passphrase) {
-        $.ajax({
-            type: 'POST',
-            url: '/lock',
-            data: JSON.stringify({
-                page: window.simple_wiki.pageName,
-                passphrase: passphrase
-            }),
-            success: function (data) {
-                $('#saveEditButton').removeClass()
-                if (data.success == true) {
-                    $('#saveEditButton').addClass("success");
-                } else {
-                    $('#saveEditButton').addClass("failure");
-                }
-                $('#saveEditButton').text(data.message);
-                if (data.success == true && $('#lockPage').text().includes("Lock")) {
-                    window.location = "/" + window.simple_wiki.pageName + "/view";
-                }
-                if (data.success == true && $('#lockPage').text().includes("Unlock")) {
-                    window.location = "/" + window.simple_wiki.pageName + "/edit";
-                }
-            },
-            error: function (xhr, error) {
-                $('#saveEditButton').removeClass()
-                $('#saveEditButton').addClass("failure");
-                $('#saveEditButton').text(error);
-            },
-            contentType: "application/json",
-            dataType: 'json'
-        });
-    }
-
     $("#erasePage").click(function (e) {
         e.preventDefault();
         var r = confirm("Are you sure you want to erase?");
@@ -126,14 +93,6 @@ $(window).load(function () {
             window.location = "/" + window.simple_wiki.pageName + "/erase";
         } else {
             x = "You pressed Cancel!";
-        }
-    });
-
-    $("#lockPage").click(function (e) {
-        e.preventDefault();
-        var passphrase = prompt("Please enter a passphrase to lock", "");
-        if (passphrase != null) {
-            lockPage(passphrase);
         }
     });
 

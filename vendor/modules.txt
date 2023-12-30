@@ -107,7 +107,6 @@ github.com/couchbase/vellum/regexp
 github.com/couchbase/vellum/utf8
 # github.com/danielheath/gin-teeny-security v0.0.0-20180331042316-bb11804dd0e2
 ## explicit
-github.com/danielheath/gin-teeny-security
 # github.com/gabriel-vasile/mimetype v1.4.2
 ## explicit; go 1.20
 github.com/gabriel-vasile/mimetype

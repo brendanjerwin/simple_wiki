@@ -34,12 +34,9 @@ func main() {
 			pathToData,
 			c.GlobalString("host"),
 			c.GlobalString("port"),
-			c.GlobalString("css"),
 			c.GlobalString("default-page"),
-			c.GlobalString("lock"),
 			c.GlobalInt("debounce"),
 			c.GlobalString("cookie-secret"),
-			c.GlobalString("access-code"),
 			!c.GlobalBool("block-file-uploads"),
 			c.GlobalUint("max-upload-mb"),
 			c.GlobalUint("max-document-length"),
@@ -65,19 +62,9 @@ func main() {
 			Usage: "port to use",
 		},
 		cli.StringFlag{
-			Name:  "css",
-			Value: "",
-			Usage: "use a custom CSS file",
-		},
-		cli.StringFlag{
 			Name:  "default-page",
 			Value: "home",
 			Usage: "show default-page/read instead of editing (default: show random editing)",
-		},
-		cli.StringFlag{
-			Name:  "lock",
-			Value: "",
-			Usage: "password to lock editing all files (default: all pages unlocked)",
 		},
 		cli.IntFlag{
 			Name:  "debounce",
@@ -87,11 +74,6 @@ func main() {
 		cli.BoolFlag{
 			Name:  "debug, d",
 			Usage: "turn on debugging",
-		},
-		cli.StringFlag{
-			Name:  "access-code",
-			Value: "",
-			Usage: "Secret code to login with before accessing any wiki stuff",
 		},
 		cli.StringFlag{
 			Name:  "cookie-secret",

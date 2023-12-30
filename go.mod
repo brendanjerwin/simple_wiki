@@ -5,13 +5,13 @@ go 1.21
 require (
 	github.com/adrg/frontmatter v0.2.0
 	github.com/blevesearch/bleve v1.0.14
-	github.com/danielheath/gin-teeny-security v0.0.0-20180331042316-bb11804dd0e2
 	github.com/gin-contrib/multitemplate v0.0.0-20220102045447-8a3ac507ec70
 	github.com/gin-contrib/sessions v0.0.5
 	github.com/gin-gonic/gin v1.9.1
 	github.com/jcelliott/lumber v0.0.0-20160324203708-dd349441af25
 	github.com/k3a/html2text v1.2.1
 	github.com/karalabe/usb v0.0.2
+	github.com/pelletier/go-toml/v2 v2.0.8
 	github.com/sashabaranov/go-openai v1.17.9
 	github.com/schollz/versionedtext v1.0.0
 	github.com/stoewer/go-strcase v1.3.0
@@ -61,7 +61,6 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/mschoch/smat v0.2.0 // indirect
-	github.com/pelletier/go-toml/v2 v2.0.8 // indirect
 	github.com/philhofer/fwd v1.0.0 // indirect
 	github.com/rogpeppe/go-internal v1.8.0 // indirect
 	github.com/sergi/go-diff v1.2.0 // indirect
