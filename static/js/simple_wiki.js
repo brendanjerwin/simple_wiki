@@ -120,7 +120,28 @@ $(window).load(function () {
 
     //add print menu
     addPrintMenu();
+
+    wireUpLlmEditInvokedEventOnButtonPress();
+    wireUpRefreshOnLlmEditModeExitedEvent();
 });
+
+function raiseLlmEditInvokedEvent() {
+    var event = new CustomEvent('llm-edit-mode-invoked', { detail: { pageIdentifier: window.simple_wiki.pageName } });
+    window.dispatchEvent(event);
+}
+
+function wireUpLlmEditInvokedEventOnButtonPress() {
+    var button = document.getElementById("llmEditMenuButton");
+    if (button) {
+        button.addEventListener("click", raiseLlmEditInvokedEvent);
+    }
+}
+
+function wireUpRefreshOnLlmEditModeExitedEvent() {
+    window.addEventListener("llm-edit-mode-exited", function (e) {
+        window.location.reload();
+    });
+}
 
 function addPrintMenu() {
     if ($('article.content').length != 0) {

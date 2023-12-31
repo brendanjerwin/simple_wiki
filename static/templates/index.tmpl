@@ -29,8 +29,7 @@
             <script src="/static/js/dropzone.js"></script>
 
             <script type="module" src="/static/js/web-components/wiki-search.js"></script>
-            <script type="module" src="/static/js/web-components/wiki-search-results.js"></script>
-
+            <script type="module" src="/static/js/web-components/llm-edit-mode.js"></script>
         <title>{{ .Page }}</title>
 
         <script type='text/javascript'>
@@ -52,6 +51,11 @@
         {{ if .DirectoryPage }} DirectoryPage {{ end }}
         {{ if .HasDotInName }} HasDotInName {{ end }}
     ">
+        
+        {{ if .ViewPage }}
+        <llm-edit-mode></llm-edit-mode>
+        {{ end }}
+
         <article class="markdown-body">
 
             {{ if .ReadPage  }}
@@ -75,6 +79,10 @@
                         </li>
 
                         <li class="pure-menu-item {{ with .EditPage }}pure-menu-selected{{ end }}"><a href="/{{ .Page }}/edit" class="pure-menu-link"><span id="saveEditButton"><i class="fas fa-pen-to-square"></i> Edit</span></a></li>
+
+                        {{ if .ViewPage }}
+                        <li class="pure-menu-item"><button id="llmEditMenuButton" type="button"><i class="fas fa-robot"></i> LLM Edit</button></li>
+                        {{ end }}
                     </ul>
                     {{ if .ViewPage }}
                     <wiki-search id="site-search" search-endpoint="/api/search"></wiki-search>

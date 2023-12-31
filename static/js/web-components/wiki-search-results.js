@@ -1,6 +1,6 @@
 import { html, css, LitElement, unsafeHTML } from '/static/js/lit-all.min.js';
 
-class WikiSearchResults extends LitElement {
+export class WikiSearchResults extends LitElement {
     static styles = css`
         :host {
             display: block;

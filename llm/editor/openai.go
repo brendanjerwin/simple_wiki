@@ -251,7 +251,7 @@ func (i Interaction) internalRespond(userStatement string, doQualityControl bool
 	response, err := i.client.CreateChatCompletion(context.Background(), openai.ChatCompletionRequest{
 		Model:       openai.GPT4TurboPreview,
 		Messages:    messages,
-		Temperature: 1.0,
+		Temperature: 0.3,
 		Stop:        []string{"[[FIN]]"},
 	})
 	i.logger.Info("Got OpenAI Response")
@@ -285,13 +285,6 @@ func (i Interaction) internalRespond(userStatement string, doQualityControl bool
 		nextInteraction.assistantResponses = append(i.assistantResponses, latestResponseMessage)
 		nextInteraction.LastResponse = &response
 
-		// // If there are open questions, we need to ask them
-		// if len(response.Memory.OpenQuestions) > 0 {
-		// 	i.logger.Info("Open questions: %v", response.Memory.OpenQuestions)
-		// 	return nextInteraction, nil
-		// }
-
-		//otherwise its time to start quality control
 		i.logger.Info("Starting quality control round %v", qualityRoundCounter+1)
 		return nextInteraction.internalRespond(userStatement, true, qualityRoundCounter, false, 0)
 	} else if containsAllGoodMarker(latestResponseMessage) {

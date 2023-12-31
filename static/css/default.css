@@ -202,3 +202,7 @@ wiki-search#site-search {
   margin: auto;
   margin-right: .35em;
 }
+
+button#llmEditMenuButton {
+  margin-top: .25em;
+}

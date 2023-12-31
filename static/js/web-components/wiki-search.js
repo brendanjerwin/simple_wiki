@@ -1,4 +1,5 @@
 import { html, css, LitElement } from '/static/js/lit-all.min.js';
+import { WikiSearchResults } from './wiki-search-results.js';
 
 export class WikiSearch extends LitElement {
     static styles = css`

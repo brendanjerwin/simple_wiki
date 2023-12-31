@@ -6,6 +6,7 @@ import (
 
 	"github.com/brendanjerwin/simple_wiki/labels"
 	llmEditor "github.com/brendanjerwin/simple_wiki/llm/editor"
+	"github.com/brendanjerwin/simple_wiki/templating"
 	"github.com/gin-gonic/gin"
 )
 
@@ -122,10 +123,10 @@ func (s *Site) handleContinueLlmEdit(c *gin.Context) {
 		Answer        string                  `json:"answer" binding:"required"`
 	}
 	type Resp struct {
-		InteractionID    llmEditor.InteractionID `json:"interaction_id"`
-		OpenQuestions    []string                `json:"open_questions"`
-		NewContent       string                  `json:"new_content"`
-		SummaryOfChanges string                  `json:"summary_of_changes"`
+		InteractionID  llmEditor.InteractionID `json:"interaction_id"`
+		OpenQuestions  []string                `json:"open_questions"`
+		NewContentHtml string                  `json:"new_content"`
+		ResponseToUser string                  `json:"response_to_user"`
 	}
 
 	var req Req
@@ -151,8 +152,12 @@ func (s *Site) handleContinueLlmEdit(c *gin.Context) {
 
 	resp.OpenQuestions = interaction.LastResponse.Memory.OpenQuestions
 
-	resp.NewContent = interaction.LastResponse.NewContent
-	resp.SummaryOfChanges = interaction.LastResponse.ResponseToUser
+	err, html := s.renderAnyMarkdownAsPage(interaction.PageIdentifier, interaction.LastResponse.NewContent)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Problem rendering new content: " + err.Error()})
+	}
+	resp.NewContentHtml = string(html)
+	resp.ResponseToUser = interaction.LastResponse.ResponseToUser
 
 	c.JSON(http.StatusOK, gin.H{"success": true, "response": resp})
 }
@@ -163,10 +168,10 @@ func (s *Site) handleStartLlmEdit(c *gin.Context) {
 		EditPrompt     string `json:"edit_prompt" binding:"required"`
 	}
 	type Resp struct {
-		InteractionID    llmEditor.InteractionID `json:"interaction_id"`
-		OpenQuestions    []string                `json:"open_questions"`
-		NewContent       string                  `json:"new_content"`
-		SummaryOfChanges string                  `json:"summary_of_changes"`
+		InteractionID  llmEditor.InteractionID `json:"interaction_id"`
+		OpenQuestions  []string                `json:"open_questions"`
+		NewContentHtml string                  `json:"new_content"`
+		ResponseToUser string                  `json:"response_to_user"`
 	}
 
 	var req Req
@@ -186,10 +191,21 @@ func (s *Site) handleStartLlmEdit(c *gin.Context) {
 	}
 
 	resp.OpenQuestions = interaction.LastResponse.Memory.OpenQuestions
-	resp.NewContent = interaction.LastResponse.NewContent
-	resp.SummaryOfChanges = interaction.LastResponse.ResponseToUser
+	err, html := s.renderAnyMarkdownAsPage(req.PageIdentifier, interaction.LastResponse.NewContent)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Problem rendering new content: " + err.Error()})
+	}
+	resp.NewContentHtml = string(html)
+	resp.ResponseToUser = interaction.LastResponse.ResponseToUser
 
 	c.JSON(http.StatusOK, gin.H{"success": true, "response": resp})
+}
+
+func (s *Site) renderAnyMarkdownAsPage(pageIdent string, newMarkdown string) (error, []byte) {
+	_, frontmatter, err := s.ReadFrontMatter(pageIdent)
+	newContent, err := templating.ExecuteTemplate(newMarkdown, frontmatter, s, s.FrontmatterIndexQueryer)
+	html, err := s.MarkdownRenderer.Render(newContent)
+	return err, html
 }
 
 func (s *Site) handleSaveLlmEdit(c *gin.Context) {
