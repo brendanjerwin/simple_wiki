@@ -8,17 +8,17 @@ import (
 	"github.com/brendanjerwin/simple_wiki/templating"
 )
 
-type MockReadFrontMatter struct {
-	Frontmatter map[string]interface{}
+type MockReadPages struct {
 	Markdown    string
+	Frontmatter common.FrontMatter
 }
 
-func (m *MockReadFrontMatter) ReadFrontMatter(identifier string) (string, map[string]interface{}, error) {
-	return identifier, m.Frontmatter, nil
-}
-
-func (m *MockReadFrontMatter) ReadMarkdown(identifier string) (string, string, error) {
+func (m *MockReadPages) ReadMarkdown(identifier string) (string, string, error) {
 	return identifier, m.Markdown, nil
+}
+
+func (m *MockReadPages) ReadFrontMatter(identifier string) (string, common.FrontMatter, error) {
+	return identifier, m.Frontmatter, nil
 }
 
 // Mocks index.IQueryFrontmatterIndex
@@ -68,7 +68,8 @@ sample: "value"
 # Hello
 	`
 
-	html, _, _ := MarkdownToHtmlAndJsonFrontmatter(markdown, true, &MockReadFrontMatter{}, &GoldmarkRenderer{}, &MockQueryFrontmatterIndex{})
+	//(s string, handleFrontMatter bool, site common.IReadPages, renderer IRenderMarkdownToHtml, query frontmatterIdx.IQueryFrontmatterIndex)
+	html, _, _ := MarkdownToHtmlAndJsonFrontmatter(markdown, true, &MockReadPages{}, &GoldmarkRenderer{}, &MockQueryFrontmatterIndex{})
 
 	if strings.Contains(string(html), "sample:") {
 		t.Errorf("Did not remove frontmatter.")
@@ -87,7 +88,7 @@ func TestExecuteTemplate(t *testing.T) {
 {{ .Identifier }}
 	`
 
-	rendered, err := templating.ExecuteTemplate(templateHtml, frontmatter, &MockReadFrontMatter{}, &MockQueryFrontmatterIndex{})
+	rendered, err := templating.ExecuteTemplate(templateHtml, frontmatter, &MockReadPages{}, &MockQueryFrontmatterIndex{})
 
 	if err != nil {
 		t.Error(err)
@@ -106,7 +107,7 @@ func TestExecuteTemplateUnstructured(t *testing.T) {
 {{ index .Map "foobar" }}
 	`
 
-	rendered, err := templating.ExecuteTemplate(templateHtml, frontmatter, &MockReadFrontMatter{}, &MockQueryFrontmatterIndex{})
+	rendered, err := templating.ExecuteTemplate(templateHtml, frontmatter, &MockReadPages{}, &MockQueryFrontmatterIndex{})
 
 	if err != nil {
 		t.Error(err)
