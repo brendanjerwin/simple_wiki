@@ -72,19 +72,9 @@ func (f *FrontmatterIndex) recursiveAdd(identifier common.PageIdentifier, keyPat
 	//if it is a map[string]interface{}, then we need to recurse
 	switch v := value.(type) {
 	case common.FrontMatter:
+		addMap(v, keyPath, f, identifier)
 	case map[string]interface{}:
-		for key, val := range v {
-			newKeyPath := keyPath
-			if newKeyPath != "" {
-				newKeyPath += "."
-			}
-			newKeyPath += key
-
-			if _, isMap := val.(map[string]interface{}); isMap {
-				f.saveToIndex(identifier, newKeyPath, "") //This ensures that the QueryKeyExistence function works for all keys in the hierarchy
-			}
-			f.recursiveAdd(identifier, newKeyPath, val)
-		}
+		addMap(v, keyPath, f, identifier)
 	case string:
 		f.saveToIndex(identifier, keyPath, v)
 	case []interface{}:
@@ -98,6 +88,21 @@ func (f *FrontmatterIndex) recursiveAdd(identifier common.PageIdentifier, keyPat
 		}
 	default:
 		log.Printf("frontmatter can only be a string, []string, or a map[string]interface{}. Page: %v Key: %v", identifier, keyPath)
+	}
+}
+
+func addMap(v map[string]interface{}, keyPath string, f *FrontmatterIndex, identifier string) {
+	for key, val := range v {
+		newKeyPath := keyPath
+		if newKeyPath != "" {
+			newKeyPath += "."
+		}
+		newKeyPath += key
+
+		if _, isMap := val.(map[string]interface{}); isMap {
+			f.saveToIndex(identifier, newKeyPath, "")
+		}
+		f.recursiveAdd(identifier, newKeyPath, val)
 	}
 }
 
