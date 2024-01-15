@@ -81,7 +81,7 @@
                         <li class="pure-menu-item {{ with .EditPage }}pure-menu-selected{{ end }}"><a href="/{{ .Page }}/edit" class="pure-menu-link"><span id="saveEditButton"><i class="fas fa-pen-to-square"></i> Edit</span></a></li>
 
                         {{ if .ViewPage }}
-                        <li class="pure-menu-item"><button id="llmEditMenuButton" type="button"><i class="fas fa-robot"></i> LLM Edit</button></li>
+                        <li class="pure-menu-item llmEditMenuButton"><button id="llmEditMenuButton" type="button"><i class="fas fa-robot"></i> LLM Edit</button></li>
                         {{ end }}
                     </ul>
                     {{ if .ViewPage }}
