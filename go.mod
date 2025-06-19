@@ -1,6 +1,6 @@
 module github.com/brendanjerwin/simple_wiki
 
-go 1.21
+go 1.24
 
 require (
 	github.com/adrg/frontmatter v0.2.0
