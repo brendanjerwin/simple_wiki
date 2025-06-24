@@ -6,14 +6,18 @@ import (
 	"os"
 	"time"
 
+	"github.com/brendanjerwin/simple_wiki/internal/grpc/debug"
 	"github.com/brendanjerwin/simple_wiki/server"
+	"github.com/gin-gonic/gin"
+	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"github.com/jcelliott/lumber"
+	"google.golang.org/grpc"
 
 	cli "gopkg.in/urfave/cli.v1"
 )
 
-var version string
-var pathToData string
+var version string = "dev"
+var commit string = "n/a"
 
 func main() {
 	app := cli.NewApp()
@@ -22,18 +26,25 @@ func main() {
 	app.Version = version
 	app.Compiled = time.Now()
 	app.Action = func(c *cli.Context) error {
-		pathToData = c.GlobalString("data")
+		pathToData := c.GlobalString("data")
 		os.MkdirAll(pathToData, 0755)
-		host := c.GlobalString("host")
-		if host == "" {
-			host = GetLocalIP()
-		}
-		fmt.Printf("\nRunning simple_wiki server (version %s) at http://%s:%s\n\n", version, host, c.GlobalString("port"))
 
-		server.Serve(
+		// 1. Create the gRPC Server
+		grpcServer := grpc.NewServer()
+
+		// 2. Create and register your gRPC services
+		debugSvc := debug.NewServer(version, commit, app.Compiled)
+		debugSvc.RegisterWithServer(grpcServer)
+
+		// 3. Create the gRPC-web wrapper
+		wrappedGrpc := grpcweb.WrapServer(grpcServer,
+			// Enable CORS so browser clients can make requests
+			grpcweb.WithOriginFunc(func(origin string) bool { return true }),
+		)
+
+		// 4. Create the Gin router using our new router function
+		router := server.NewRouter(
 			pathToData,
-			c.GlobalString("host"),
-			c.GlobalString("port"),
 			c.GlobalString("css"),
 			c.GlobalString("default-page"),
 			c.GlobalString("lock"),
@@ -45,7 +56,19 @@ func main() {
 			c.GlobalUint("max-document-length"),
 			logger(c.GlobalBool("debug")),
 		)
-		return nil
+
+		// 5. Mount the gRPC-web wrapper on the Gin router
+		router.Any("/grpc/*path", gin.WrapH(wrappedGrpc))
+
+		// 6. Determine host and port, then start the server
+		host := c.GlobalString("host")
+		if host == "" {
+			host = GetLocalIP()
+		}
+		addr := fmt.Sprintf("%s:%s", host, c.GlobalString("port"))
+		fmt.Printf("\nRunning simple_wiki server (version %s) at http://%s\n\n", version, addr)
+
+		return router.Run(addr)
 	}
 	app.Flags = []cli.Flag{
 		cli.StringFlag{

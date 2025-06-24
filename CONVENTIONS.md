@@ -12,6 +12,8 @@
 
 - Make Uncle Bob proud.
 - prefer modern go. Update idioms to modern approaches as you see them. Boyscout rule.
+- Prefer standard Go idioms and approaches, such as using `go:generate` for code generation tasks.
+- Generated files **should be committed** to the repository. This ensures that developers can build and test the project without needing to have all code generation tools installed locally. Any files created or modified by `go generate ./...` should be included in commits.
 - prefer IoC approaches. Make \*-er interfaces for all the things!
 - take a defensive coding approach. Check inputs, assert preconditions and invariants. Assert assumptions.
 - For preconditions and invariants, prefer returning `error` over `panic`. Panics should be reserved for truly exceptional situations. For conditions that indicate a programming or configuration error, such as a missing dependency, functions should return an error. This allows the caller to handle the problem more gracefully.

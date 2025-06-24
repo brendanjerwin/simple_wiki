@@ -148,6 +148,54 @@
           "store_path": "/nix/store/5xvi25nqmbrg58aixp4zgczilfnp7pwg-go-1.24.3"
         }
       }
+    },
+    "markdownlint-cli@latest": {
+      "last_modified": "2025-06-20T02:24:11Z",
+      "resolved": "github:NixOS/nixpkgs/076e8c6678d8c54204abcb4b1b14c366835a58bb#markdownlint-cli",
+      "source": "devbox-search",
+      "version": "0.45.0",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/akplzh5hbai1z30ij2w5z627mv5j2290-markdownlint-cli-0.45.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/akplzh5hbai1z30ij2w5z627mv5j2290-markdownlint-cli-0.45.0"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/xxxqj6dy2x6wh6mlan7yy125s9sxh5qj-markdownlint-cli-0.45.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/xxxqj6dy2x6wh6mlan7yy125s9sxh5qj-markdownlint-cli-0.45.0"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/blxd1cpfl6ag0fhx26n4vhpb2pvw17vl-markdownlint-cli-0.45.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/blxd1cpfl6ag0fhx26n4vhpb2pvw17vl-markdownlint-cli-0.45.0"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/2y9k2i40hyxjh6rr39iwm9bapbvlw3fi-markdownlint-cli-0.45.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/2y9k2i40hyxjh6rr39iwm9bapbvlw3fi-markdownlint-cli-0.45.0"
+        }
+      }
     }
   }
 }

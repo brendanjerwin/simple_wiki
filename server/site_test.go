@@ -11,9 +11,7 @@ import (
 )
 
 var _ = Describe("Site Functions", func() {
-	var (
-		s *Site
-	)
+	var s *Site
 
 	BeforeEach(func() {
 		s = &Site{
@@ -50,9 +48,7 @@ var _ = Describe("Site Functions", func() {
 	})
 
 	Describe("sniffContentType", func() {
-		var (
-			pathToData string
-		)
+		var pathToData string
 
 		BeforeEach(func() {
 			pathToData = "testdata_site_sniff"
@@ -121,9 +117,7 @@ var _ = Describe("Site Functions", func() {
 		})
 
 		When("the file does not exist", func() {
-			var (
-				err error
-			)
+			var err error
 
 			BeforeEach(func() {
 				_, err = s.sniffContentType("nonexistent.file")

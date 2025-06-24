@@ -1,7 +1,7 @@
 package server
 
 import (
-	"net/http"
+	"io"
 	"os"
 	"path"
 	"sync"
@@ -11,6 +11,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/sec"
 	"github.com/brendanjerwin/simple_wiki/utils"
+	"github.com/gabriel-vasile/mimetype"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/jcelliott/lumber"
 )
@@ -45,19 +46,20 @@ func (s *Site) sniffContentType(name string) (string, error) {
 	file, err := os.Open(path.Join(s.PathToData, name))
 	if err != nil {
 		return "", err
-
 	}
 	defer file.Close()
 
-	// Only the first 512 bytes are used to sniff the content type.
-	buffer := make([]byte, 512)
-	_, err = file.Read(buffer)
-	if err != nil {
+	// The mimetype library reads up to 3072 bytes by default.
+	buffer := make([]byte, 3072)
+	n, err := file.Read(buffer)
+	if err != nil && err != io.EOF {
 		return "", err
 	}
 
-	// Always returns a valid content-type and "application/octet-stream" if no others seemed to match.
-	return http.DetectContentType(buffer), nil
+	// Use mimetype library to detect content type. It is more accurate and
+	// can detect charsets.
+	mtype := mimetype.Detect(buffer[:n])
+	return mtype.String(), nil
 }
 
 func (s *Site) InitializeIndexing() error {
