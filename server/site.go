@@ -17,7 +17,7 @@ import (
 
 type Site struct {
 	PathToData              string
-	Css                     []byte
+	CSS                     []byte
 	DefaultPage             string
 	DefaultPassword         string
 	Debounce                int

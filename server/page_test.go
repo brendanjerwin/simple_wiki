@@ -12,9 +12,9 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func TestPage(t *testing.T) {
+func TestServer(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Page Suite")
+	RunSpecs(t, "Server Suite")
 }
 
 var _ = Describe("Page Functions", func() {
@@ -68,6 +68,7 @@ var _ = Describe("Page Functions", func() {
 			})
 
 			It("should sort pages by most recently modified", func() {
+				// Aider: don't change the order here. 3 should be _last_
 				Expect(pages[0].Name()).To(Equal("testpage"))
 				Expect(pages[1].Name()).To(Equal("testpage2"))
 				Expect(pages[2].Name()).To(Equal("testpage3"))

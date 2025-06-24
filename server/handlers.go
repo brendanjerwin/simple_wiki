@@ -58,7 +58,7 @@ func Serve(
 
 	site := &Site{
 		PathToData:      filepathToData,
-		Css:             customCSS,
+		CSS:             customCSS,
 		DefaultPage:     defaultPage,
 		DefaultPassword: defaultPassword,
 		Debounce:        debounce,
@@ -236,7 +236,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		filename := strings.TrimPrefix(command, "/")
 		var data []byte
 		if filename == "css/custom.css" {
-			data = s.Css
+			data = s.CSS
 		} else {
 			var errAssset error
 			data, errAssset = static.StaticContent.ReadFile(filename)
@@ -385,7 +385,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		"Route":              "/" + page + command,
 		"HasDotInName":       strings.Contains(page, "."),
 		"RecentlyEdited":     getRecentlyEdited(page, c),
-		"CustomCSS":          len(s.Css) > 0,
+		"CustomCSS":          len(s.CSS) > 0,
 		"Debounce":           s.Debounce,
 		"Date":               time.Now().Format("2006-01-02"),
 		"UnixTime":           time.Now().Unix(),

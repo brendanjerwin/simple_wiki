@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"testing"
 
 	"github.com/brendanjerwin/simple_wiki/common"
 	bleve_index "github.com/brendanjerwin/simple_wiki/index/bleve"
@@ -63,10 +62,6 @@ func (m *mockBleveIndexQueryer) Query(query string) ([]bleve_index.SearchResult,
 	return nil, nil
 }
 
-func TestApiHandlers(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Api Handlers Suite")
-}
 
 var _ = Describe("API Handlers", func() {
 
