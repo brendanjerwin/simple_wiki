@@ -2,10 +2,8 @@ package main
 
 import (
 	"fmt"
-	"net"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/internal/grpc/debug"
@@ -66,7 +64,7 @@ func main() {
 
 		// 5. Create a multiplexer to route traffic to either gRPC or Gin.
 		multiplexedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if strings.HasPrefix(r.URL.Path, "/grpc/") {
+			if wrappedGrpc.IsGrpcWebRequest(r) || wrappedGrpc.IsGrpcWebSocketRequest(r) {
 				wrappedGrpc.ServeHTTP(w, r)
 				return
 			}
@@ -76,7 +74,7 @@ func main() {
 		// 6. Determine host and port, then start the server
 		host := c.GlobalString("host")
 		if host == "" {
-			host = GetLocalIP()
+			host = "0.0.0.0"
 		}
 		addr := fmt.Sprintf("%s:%s", host, c.GlobalString("port"))
 		fmt.Printf("\nRunning simple_wiki server (version %s) at http://%s\n\n", version, addr)
@@ -150,24 +148,6 @@ func main() {
 	}
 
 	app.Run(os.Args)
-}
-
-// GetLocalIP returns the local ip address
-func GetLocalIP() string {
-	addrs, err := net.InterfaceAddrs()
-	if err != nil {
-		return ""
-	}
-	bestIP := ""
-	for _, address := range addrs {
-		// check the address type and if it is not a loopback the display it
-		if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-			if ipnet.IP.To4() != nil {
-				return ipnet.IP.String()
-			}
-		}
-	}
-	return bestIP
 }
 
 // exists returns whether the given file or directory exists or not
