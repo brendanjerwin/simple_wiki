@@ -2,7 +2,9 @@
   "$schema": "https://raw.githubusercontent.com/jetify-com/devbox/0.14.2/.schema/devbox.schema.json",
   "packages": [
     "go@latest",
-    "ginkgo@latest"
+    "ginkgo@latest",
+    "buf@latest",
+    "markdownlint-cli@latest"
   ],
   "shell": {
     "init_hook": [
@@ -11,6 +13,9 @@
     "scripts": {
       "test": [
         "echo \"Error: no test specified\" && exit 1"
+      ],
+      "lint:md": [
+        "markdownlint --fix '**/*.md' --ignore vendor"
       ]
     }
   }

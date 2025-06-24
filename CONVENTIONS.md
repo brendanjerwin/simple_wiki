@@ -3,6 +3,7 @@
 <!--toc:start-->
 
 - [General](#general)
+- [Development Environment](#development-environment)
 - [Testing](#testing)
 - [Fixing Problems](#fixing-problems)
 <!--toc:end-->
@@ -29,6 +30,11 @@
     //...
   }
   ```
+
+## Development Environment
+
+- Use [Devbox](https://www.jetpack.io/devbox/) by Jetify to create isolated, reproducible development environments.
+- Add new dependencies via `devbox add <package>`. This ensures the `devbox.json` and `devbox.lock` files are updated correctly.
 
 ## TDD
 
