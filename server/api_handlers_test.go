@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/brendanjerwin/simple_wiki/common"
@@ -68,9 +69,12 @@ func TestApiHandlers(t *testing.T) {
 }
 
 var _ = Describe("API Handlers", func() {
+
 	Describe("Helpers", func() {
+
 		Describe("createPageReferences", func() {
-			Describe("When creating page references from a list of IDs", func() {
+			When("creating page references from a list of IDs", func() {
+
 				var s *Site
 				var ids []string
 				var actual []PageReference
@@ -100,15 +104,18 @@ var _ = Describe("API Handlers", func() {
 
 					Expect(actual).To(Equal(expected))
 				})
+
 			})
 		})
 
 		Describe("executeFrontmatterQuery", func() {
+
 			var s *Site
 			var w *httptest.ResponseRecorder
 			var c *gin.Context
 
 			BeforeEach(func() {
+
 				gin.SetMode(gin.TestMode)
 				s = &Site{
 					FrontmatterIndexQueryer: &mockFrontmatterIndexQueryer{
@@ -122,7 +129,36 @@ var _ = Describe("API Handlers", func() {
 				c, _ = gin.CreateTestContext(w)
 			})
 
-			Describe("When binding the request fails", func() {
+			When("the FrontmatterIndexQueryer is not initialized", func() {
+				var action func()
+
+				BeforeEach(func() {
+					s.FrontmatterIndexQueryer = nil
+					req, err := http.NewRequest(http.MethodGet, "/?k=key&v=val", nil)
+					Expect(err).NotTo(HaveOccurred())
+					c.Request = req
+					type TestReq struct {
+						Key string `form:"k" binding:"required"`
+						Val string `form:"v"`
+					}
+					var testReq TestReq
+
+					executor := func() []string {
+						Fail("executor should not be called")
+						return nil
+					}
+					action = func() {
+						s.executeFrontmatterQuery(c, &testReq, executor)
+					}
+				})
+
+				It("panics with a helpful message", func() {
+					Expect(action).To(PanicWith("Frontmatter index is not available"))
+				})
+			})
+
+			When("binding the request fails", func() {
+
 				BeforeEach(func() {
 					req, err := http.NewRequest(http.MethodGet, "/?v=val", nil)
 					Expect(err).NotTo(HaveOccurred())
@@ -150,7 +186,8 @@ var _ = Describe("API Handlers", func() {
 				})
 			})
 
-			Describe("When the query is successful", func() {
+			When("the query is successful", func() {
+
 				var response struct {
 					Success bool            `json:"success"`
 					IDs     []PageReference `json:"ids"`
@@ -201,6 +238,7 @@ var _ = Describe("API Handlers", func() {
 		var router *gin.Engine
 
 		Describe("handleFindBy", func() {
+
 			BeforeEach(func() {
 				gin.SetMode(gin.TestMode)
 				mockFmIndex := &mockFrontmatterIndexQueryer{
@@ -220,7 +258,8 @@ var _ = Describe("API Handlers", func() {
 				router.GET("/api/find_by", s.handleFindBy)
 			})
 
-			Describe("When a valid request is made", func() {
+			When("a valid request is made", func() {
+
 				var response struct {
 					Success bool            `json:"success"`
 					IDs     []PageReference `json:"ids"`
@@ -252,6 +291,7 @@ var _ = Describe("API Handlers", func() {
 		})
 
 		Describe("handleFindByPrefix", func() {
+
 			BeforeEach(func() {
 				gin.SetMode(gin.TestMode)
 				mockFmIndex := &mockFrontmatterIndexQueryer{
@@ -272,7 +312,8 @@ var _ = Describe("API Handlers", func() {
 				router.GET("/api/find_by_prefix", s.handleFindByPrefix)
 			})
 
-			Describe("When a valid request is made", func() {
+			When("a valid request is made", func() {
+
 				var response struct {
 					Success bool            `json:"success"`
 					IDs     []PageReference `json:"ids"`
@@ -305,6 +346,7 @@ var _ = Describe("API Handlers", func() {
 		})
 
 		Describe("handleFindByKeyExistence", func() {
+
 			BeforeEach(func() {
 				gin.SetMode(gin.TestMode)
 				mockFmIndex := &mockFrontmatterIndexQueryer{
@@ -324,7 +366,8 @@ var _ = Describe("API Handlers", func() {
 				router.GET("/api/find_by_key_existence", s.handleFindByKeyExistence)
 			})
 
-			Describe("When a valid request is made", func() {
+			When("a valid request is made", func() {
+
 				var response struct {
 					Success bool            `json:"success"`
 					IDs     []PageReference `json:"ids"`
@@ -356,14 +399,39 @@ var _ = Describe("API Handlers", func() {
 		})
 
 		Describe("handleSearch", func() {
+
 			BeforeEach(func() {
 				gin.SetMode(gin.TestMode)
+				s = &Site{}
 				w = httptest.NewRecorder()
 				router = gin.Default()
 				router.GET("/api/search", s.handleSearch)
 			})
 
-			Describe("When a valid request is made", func() {
+			When("the BleveIndexQueryer is not initialized", func() {
+				var (
+					c      *gin.Context
+					action func()
+				)
+
+				BeforeEach(func() {
+					c, _ = gin.CreateTestContext(w)
+					req, err := http.NewRequest(http.MethodGet, "/api/search?q=foo", nil)
+					Expect(err).NotTo(HaveOccurred())
+					c.Request = req
+
+					action = func() {
+						s.handleSearch(c)
+					}
+				})
+
+				It("panics with a helpful message", func() {
+					Expect(action).To(PanicWith("Search index is not available"))
+				})
+			})
+
+			When("a valid request is made", func() {
+
 				var response struct {
 					Success bool                       `json:"success"`
 					Results []bleve_index.SearchResult `json:"results"`
@@ -384,7 +452,7 @@ var _ = Describe("API Handlers", func() {
 							return nil, nil
 						},
 					}
-					s = &Site{BleveIndexQueryer: mockBleveIndex}
+					s.BleveIndexQueryer = mockBleveIndex
 					req, err := http.NewRequest(http.MethodGet, "/api/search?q=searchterm", nil)
 					Expect(err).NotTo(HaveOccurred())
 					router.ServeHTTP(w, req)
@@ -408,14 +476,15 @@ var _ = Describe("API Handlers", func() {
 				})
 			})
 
-			Describe("When the query fails", func() {
+			When("the query fails", func() {
+
 				BeforeEach(func() {
 					mockBleveIndex := &mockBleveIndexQueryer{
 						QueryFunc: func(query string) ([]bleve_index.SearchResult, error) {
 							return nil, fmt.Errorf("index is borked")
 						},
 					}
-					s = &Site{BleveIndexQueryer: mockBleveIndex}
+					s.BleveIndexQueryer = mockBleveIndex
 					req, err := http.NewRequest(http.MethodGet, "/api/search?q=searchterm", nil)
 					Expect(err).NotTo(HaveOccurred())
 					router.ServeHTTP(w, req)
@@ -427,6 +496,61 @@ var _ = Describe("API Handlers", func() {
 
 				It("returns a helpful error message", func() {
 					Expect(w.Body.String()).To(ContainSubstring("Problem querying index"))
+				})
+			})
+		})
+
+		Describe("handlePrintLabel", func() {
+
+			BeforeEach(func() {
+				gin.SetMode(gin.TestMode)
+				s = &Site{}
+				w = httptest.NewRecorder()
+				router = gin.Default()
+				router.POST("/api/print_label", s.handlePrintLabel)
+			})
+
+			When("the FrontmatterIndexQueryer is not initialized", func() {
+				var (
+					c      *gin.Context
+					action func()
+				)
+
+				BeforeEach(func() {
+					c, _ = gin.CreateTestContext(w)
+					body := strings.NewReader(`{"template_identifier": "t1", "data_identifier": "d1"}`)
+					req, err := http.NewRequest(http.MethodPost, "/api/print_label", body)
+					req.Header.Set("Content-Type", "application/json")
+					Expect(err).NotTo(HaveOccurred())
+					c.Request = req
+
+					action = func() {
+						s.handlePrintLabel(c)
+					}
+				})
+
+				It("panics with a helpful message", func() {
+					Expect(action).To(PanicWith("Frontmatter index is not available"))
+				})
+			})
+
+			When("binding the request fails", func() {
+
+				BeforeEach(func() {
+					s.FrontmatterIndexQueryer = &mockFrontmatterIndexQueryer{}
+					body := strings.NewReader(`not a valid json`)
+					req, err := http.NewRequest(http.MethodPost, "/api/print_label", body)
+					req.Header.Set("Content-Type", "application/json")
+					Expect(err).NotTo(HaveOccurred())
+					router.ServeHTTP(w, req)
+				})
+
+				It("returns http.StatusBadRequest", func() {
+					Expect(w.Code).To(Equal(http.StatusBadRequest))
+				})
+
+				It("returns a helpful error message", func() {
+					Expect(w.Body.String()).To(ContainSubstring("Problem binding keys"))
 				})
 			})
 		})
