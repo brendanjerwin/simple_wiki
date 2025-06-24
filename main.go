@@ -3,21 +3,25 @@ package main
 import (
 	"fmt"
 	"net"
+	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/internal/grpc/debug"
 	"github.com/brendanjerwin/simple_wiki/server"
-	"github.com/gin-gonic/gin"
 	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"github.com/jcelliott/lumber"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 
 	cli "gopkg.in/urfave/cli.v1"
 )
 
-var version string = "dev"
-var commit string = "n/a"
+var (
+	version string = "dev"
+	commit  string = "n/a"
+)
 
 func main() {
 	app := cli.NewApp()
@@ -35,6 +39,9 @@ func main() {
 		// 2. Create and register your gRPC services
 		debugSvc := debug.NewServer(version, commit, app.Compiled)
 		debugSvc.RegisterWithServer(grpcServer)
+
+		// Enable reflection for gRPC services
+		reflection.Register(grpcServer)
 
 		// 3. Create the gRPC-web wrapper
 		wrappedGrpc := grpcweb.WrapServer(grpcServer,
@@ -57,8 +64,14 @@ func main() {
 			logger(c.GlobalBool("debug")),
 		)
 
-		// 5. Mount the gRPC-web wrapper on the Gin router
-		router.Any("/grpc/*path", gin.WrapH(wrappedGrpc))
+		// 5. Create a multiplexer to route traffic to either gRPC or Gin.
+		multiplexedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.HasPrefix(r.URL.Path, "/grpc/") {
+				wrappedGrpc.ServeHTTP(w, r)
+				return
+			}
+			router.ServeHTTP(w, r)
+		})
 
 		// 6. Determine host and port, then start the server
 		host := c.GlobalString("host")
@@ -68,7 +81,7 @@ func main() {
 		addr := fmt.Sprintf("%s:%s", host, c.GlobalString("port"))
 		fmt.Printf("\nRunning simple_wiki server (version %s) at http://%s\n\n", version, addr)
 
-		return router.Run(addr)
+		return http.ListenAndServe(addr, multiplexedHandler)
 	}
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
@@ -168,5 +181,4 @@ func logger(debug bool) *lumber.ConsoleLogger {
 		return lumber.NewConsoleLogger(lumber.WARN)
 	}
 	return lumber.NewConsoleLogger(lumber.TRACE)
-
 }

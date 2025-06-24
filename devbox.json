@@ -4,7 +4,9 @@
     "go@latest",
     "ginkgo@latest",
     "buf@latest",
-    "markdownlint-cli@latest"
+    "markdownlint-cli@latest",
+    "evans@latest",
+    "grpcurl@latest"
   ],
   "shell": {
     "init_hook": [

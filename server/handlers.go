@@ -29,10 +29,8 @@ const minutesToUnlock = 10.0
 var hotTemplateReloading bool
 var LogLevel int = lumber.WARN
 
-func Serve(
-	filepathToData,
-	host,
-	port,
+func NewRouter(
+	filepathToData string,
 	cssFile string,
 	defaultPage string,
 	defaultPassword string,
@@ -43,7 +41,7 @@ func Serve(
 	maxUploadSize uint,
 	maxDocumentSize uint,
 	logger *lumber.ConsoleLogger,
-) {
+) *gin.Engine {
 	var customCSS []byte
 	// collect custom CSS
 	if len(cssFile) > 0 {
@@ -51,7 +49,7 @@ func Serve(
 		customCSS, errRead = os.ReadFile(cssFile)
 		if errRead != nil {
 			fmt.Println(errRead)
-			return
+			panic(errRead)
 		}
 		fmt.Printf("Loaded CSS file, %d bytes\n", len(customCSS))
 	}
@@ -75,9 +73,7 @@ func Serve(
 		logger.Error("Failed to initialize indexing: %v", err)
 		panic(err.Error())
 	}
-	router := site.Router()
-
-	panic(router.Run(host + ":" + port))
+	return site.Router()
 }
 
 func (s *Site) Router() *gin.Engine {

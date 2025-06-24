@@ -49,6 +49,54 @@
         }
       }
     },
+    "evans@latest": {
+      "last_modified": "2025-06-20T02:24:11Z",
+      "resolved": "github:NixOS/nixpkgs/076e8c6678d8c54204abcb4b1b14c366835a58bb#evans",
+      "source": "devbox-search",
+      "version": "0.10.11",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/1sp94y9zga7bmr5bc3i63zdxnkcc9lcj-evans-0.10.11",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/1sp94y9zga7bmr5bc3i63zdxnkcc9lcj-evans-0.10.11"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/7mpwrmgzmjwp2bgivfgahcrirahlymd6-evans-0.10.11",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/7mpwrmgzmjwp2bgivfgahcrirahlymd6-evans-0.10.11"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/96d75mchnmrabr5bvci9kngdz6hriv2d-evans-0.10.11",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/96d75mchnmrabr5bvci9kngdz6hriv2d-evans-0.10.11"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/jxhqh3gg84izlmq7n3k4a4spks29xg50-evans-0.10.11",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/jxhqh3gg84izlmq7n3k4a4spks29xg50-evans-0.10.11"
+        }
+      }
+    },
     "ginkgo@latest": {
       "last_modified": "2025-06-20T02:24:11Z",
       "resolved": "github:NixOS/nixpkgs/076e8c6678d8c54204abcb4b1b14c366835a58bb#ginkgo",
@@ -146,6 +194,54 @@
             }
           ],
           "store_path": "/nix/store/5xvi25nqmbrg58aixp4zgczilfnp7pwg-go-1.24.3"
+        }
+      }
+    },
+    "grpcurl@latest": {
+      "last_modified": "2025-06-20T02:24:11Z",
+      "resolved": "github:NixOS/nixpkgs/076e8c6678d8c54204abcb4b1b14c366835a58bb#grpcurl",
+      "source": "devbox-search",
+      "version": "1.9.3",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/a0bz2hwmx36xs642ax5z8dz00kzahl4s-grpcurl-1.9.3",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/a0bz2hwmx36xs642ax5z8dz00kzahl4s-grpcurl-1.9.3"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/gg8sm5pgpbnc4dd4jshdyr953yhsmssq-grpcurl-1.9.3",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/gg8sm5pgpbnc4dd4jshdyr953yhsmssq-grpcurl-1.9.3"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/rcsp33jfy23mpr1mp31mp3hbbj367qd5-grpcurl-1.9.3",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/rcsp33jfy23mpr1mp31mp3hbbj367qd5-grpcurl-1.9.3"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/x25iihfhkk8xmajp5nnn3xwf8af39bis-grpcurl-1.9.3",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/x25iihfhkk8xmajp5nnn3xwf8af39bis-grpcurl-1.9.3"
         }
       }
     },
