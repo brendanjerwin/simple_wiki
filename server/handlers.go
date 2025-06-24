@@ -72,7 +72,7 @@ func Serve(
 
 	err := site.InitializeIndexing()
 	if err != nil {
-		logger.Error(err.Error())
+		logger.Error("Failed to initialize indexing: %v", err)
 		panic(err.Error())
 	}
 	router := site.Router()
@@ -180,7 +180,7 @@ func (s *Site) handlePageRelinquish(c *gin.Context) {
 	var json QueryJSON
 	err := c.BindJSON(&json)
 	if err != nil {
-		s.Logger.Trace(err.Error())
+		s.Logger.Trace("Failed to bind JSON in handlePageRelinquish: %v", err)
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": "Wrong JSON"})
 		return
 	}
@@ -433,7 +433,7 @@ func (s *Site) handlePageExists(c *gin.Context) {
 	var json QueryJSON
 	err := c.BindJSON(&json)
 	if err != nil {
-		s.Logger.Trace(err.Error())
+		s.Logger.Trace("Failed to bind JSON in handlePageExists: %v", err)
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": "Wrong JSON", "exists": false})
 		return
 	}
@@ -456,7 +456,7 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 	var json QueryJSON
 	err := c.BindJSON(&json)
 	if err != nil {
-		s.Logger.Trace(err.Error())
+		s.Logger.Trace("Failed to bind JSON in handlePageUpdate: %v", err)
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": "Wrong JSON"})
 		return
 	}

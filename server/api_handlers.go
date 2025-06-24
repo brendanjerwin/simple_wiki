@@ -1,6 +1,8 @@
+// Package server implements the web server and API endpoints for simple_wiki.
 package server
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/brendanjerwin/simple_wiki/labels"
@@ -19,14 +21,14 @@ func (s *Site) handlePrintLabel(c *gin.Context) {
 	}
 
 	var json QueryJSON
-	if err := c.BindJSON(&json); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Problem binding keys: " + err.Error()})
+	if err := c.ShouldBindJSON(&json); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": fmt.Sprintf("Problem binding keys: %v", err)})
 		return
 	}
 
 	err := labels.PrintLabel(json.TemplateIdentifier, json.DataIdentifier, s, s.FrontmatterIndexQueryer)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to print label: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": fmt.Sprintf("Failed to print label: %v", err)})
 		return
 	}
 
@@ -40,14 +42,9 @@ func (s *Site) handleFindBy(c *gin.Context) {
 	}
 
 	var req Req
-	if err := c.BindQuery(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Problem binding keys: " + err.Error()})
-		return
-	}
-
-	ids := s.FrontmatterIndexQueryer.QueryExactMatch(req.DottedKeyPath, req.Value)
-	results := s.createPageReferences(ids)
-	c.JSON(http.StatusOK, gin.H{"success": true, "ids": results})
+	s.executeFrontmatterQuery(c, &req, func() []string {
+		return s.FrontmatterIndexQueryer.QueryExactMatch(req.DottedKeyPath, req.Value)
+	})
 }
 
 func (s *Site) handleFindByPrefix(c *gin.Context) {
@@ -57,14 +54,9 @@ func (s *Site) handleFindByPrefix(c *gin.Context) {
 	}
 
 	var req Req
-	if err := c.BindQuery(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Problem binding keys: " + err.Error()})
-		return
-	}
-
-	ids := s.FrontmatterIndexQueryer.QueryPrefixMatch(req.DottedKeyPath, req.ValuePrefix)
-	results := s.createPageReferences(ids)
-	c.JSON(http.StatusOK, gin.H{"success": true, "ids": results})
+	s.executeFrontmatterQuery(c, &req, func() []string {
+		return s.FrontmatterIndexQueryer.QueryPrefixMatch(req.DottedKeyPath, req.ValuePrefix)
+	})
 }
 
 func (s *Site) handleFindByKeyExistence(c *gin.Context) {
@@ -73,12 +65,18 @@ func (s *Site) handleFindByKeyExistence(c *gin.Context) {
 	}
 
 	var req Req
-	if err := c.BindQuery(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Problem binding keys: " + err.Error()})
+	s.executeFrontmatterQuery(c, &req, func() []string {
+		return s.FrontmatterIndexQueryer.QueryKeyExistence(req.DottedKeyPath)
+	})
+}
+
+func (s *Site) executeFrontmatterQuery(c *gin.Context, req any, queryExecutor func() []string) {
+	if err := c.ShouldBindQuery(req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": fmt.Sprintf("Problem binding keys: %v", err)})
 		return
 	}
 
-	ids := s.FrontmatterIndexQueryer.QueryKeyExistence(req.DottedKeyPath)
+	ids := queryExecutor()
 	results := s.createPageReferences(ids)
 	c.JSON(http.StatusOK, gin.H{"success": true, "ids": results})
 }
@@ -100,14 +98,14 @@ func (s *Site) handleSearch(c *gin.Context) {
 	}
 
 	var req Req
-	if err := c.BindQuery(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Problem binding keys: " + err.Error()})
+	if err := c.ShouldBindQuery(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": fmt.Sprintf("Problem binding keys: %v", err)})
 		return
 	}
 
 	results, err := s.BleveIndexQueryer.Query(req.Query)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Problem querying index: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": fmt.Sprintf("Problem querying index: %v", err)})
 		return
 	}
 

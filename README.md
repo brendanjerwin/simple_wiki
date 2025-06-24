@@ -1,40 +1,38 @@
+_simple_wiki_ is just that: a simple wiki.
 
-*simple_wiki* is just that: a simple wiki.
-
-Getting Started
-===============
+# Getting Started
 
 ## Install
 
-If you have go
+If you have Go:
 
 ```
-go get -u github.com/brendanjerwin/simple_wiki/...
+go install github.com/brendanjerwin/simple_wiki@latest
 ```
 
 ## Run
 
-To run just double click or from the command line:
+To run from the command line:
 
-```
+```shell
 simple_wiki
 ```
 
-and it will start a server listening  on `0.0.0.0:8050`. To view it, just go to http://localhost:8050 (the server prints out the local IP for your info if you want to do LAN networking). You can change the port with `-port X`, and you can listen *only* on localhost using `-host localhost`.
+and it will start a server listening on `0.0.0.0:8050`. To view it, just go to <http://localhost:8050> (the server prints out the local IP for your info if you want to do LAN networking). You can change the port with `-port X`, and you can listen _only_ on localhost using `-host localhost`.
 
 ## Server customization
 
-There are a couple of command-line flags that you can use to make *simple_wiki* your own micro-CMS. 
+There are a couple of command-line flags that you can use to make _simple_wiki_ your own micro-CMS.
 
 ```
 simple_wiki -lock 123 -default-page index.html -css mystyle.css
 ```
 
-The `-lock` flag will automatically lock every page with the passphrase "123". Also, the default behavior will be to redirect `/` to `/index.html`. 
+The `-lock` flag will automatically lock every page with the passphrase "123". Also, the default behavior will be to redirect `/` to `/index.html`.
 
 ## Usage
 
-*simple_wiki* is straightforward to use. Here are some of the basic features:
+_simple_wiki_ is straightforward to use. Here are some of the basic features:
 
 ### View all the pages
 
@@ -60,9 +58,8 @@ Locking prevents other users from editing your pages without a passphrase.
 
 ## Thanks
 
-To the original project I started from: https://github.com/schollz/cowyo 
+To the original project I started from: [cowyo](https://github.com/schollz/cowyo).
 
 ## License
 
 MIT
-
