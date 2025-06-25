@@ -8,7 +8,7 @@
 // versions:
 // 	protoc-gen-grpc-web v1.5.0
 // 	protoc              v0.0.0
-// source: api/v1/version.proto
+// source: api/v1/frontmatter.proto
 
 
 /* eslint-disable */
@@ -20,10 +20,10 @@ const grpc = {};
 grpc.web = require('grpc-web');
 
 
-var google_protobuf_timestamp_pb = require('google-protobuf/google/protobuf/timestamp_pb.js')
+var google_protobuf_struct_pb = require('google-protobuf/google/protobuf/struct_pb.js')
 const proto = {};
 proto.api = {};
-proto.api.v1 = require('./version_pb.js');
+proto.api.v1 = require('./frontmatter_pb.js');
 
 /**
  * @param {string} hostname
@@ -33,7 +33,7 @@ proto.api.v1 = require('./version_pb.js');
  * @struct
  * @final
  */
-proto.api.v1.VersionClient =
+proto.api.v1.FrontmatterClient =
     function(hostname, credentials, options) {
   if (!options) options = {};
   options.format = 'text';
@@ -59,7 +59,7 @@ proto.api.v1.VersionClient =
  * @struct
  * @final
  */
-proto.api.v1.VersionPromiseClient =
+proto.api.v1.FrontmatterPromiseClient =
     function(hostname, credentials, options) {
   if (!options) options = {};
   options.format = 'text';
@@ -80,61 +80,61 @@ proto.api.v1.VersionPromiseClient =
 /**
  * @const
  * @type {!grpc.web.MethodDescriptor<
- *   !proto.api.v1.GetVersionRequest,
- *   !proto.api.v1.GetVersionResponse>}
+ *   !proto.api.v1.GetFrontmatterRequest,
+ *   !proto.api.v1.GetFrontmatterResponse>}
  */
-const methodDescriptor_Version_GetVersion = new grpc.web.MethodDescriptor(
-  '/api.v1.Version/GetVersion',
+const methodDescriptor_Frontmatter_GetFrontmatter = new grpc.web.MethodDescriptor(
+  '/api.v1.Frontmatter/GetFrontmatter',
   grpc.web.MethodType.UNARY,
-  proto.api.v1.GetVersionRequest,
-  proto.api.v1.GetVersionResponse,
+  proto.api.v1.GetFrontmatterRequest,
+  proto.api.v1.GetFrontmatterResponse,
   /**
-   * @param {!proto.api.v1.GetVersionRequest} request
+   * @param {!proto.api.v1.GetFrontmatterRequest} request
    * @return {!Uint8Array}
    */
   function(request) {
     return request.serializeBinary();
   },
-  proto.api.v1.GetVersionResponse.deserializeBinary
+  proto.api.v1.GetFrontmatterResponse.deserializeBinary
 );
 
 
 /**
- * @param {!proto.api.v1.GetVersionRequest} request The
+ * @param {!proto.api.v1.GetFrontmatterRequest} request The
  *     request proto
  * @param {?Object<string, string>} metadata User defined
  *     call metadata
- * @param {function(?grpc.web.RpcError, ?proto.api.v1.GetVersionResponse)}
+ * @param {function(?grpc.web.RpcError, ?proto.api.v1.GetFrontmatterResponse)}
  *     callback The callback function(error, response)
- * @return {!grpc.web.ClientReadableStream<!proto.api.v1.GetVersionResponse>|undefined}
+ * @return {!grpc.web.ClientReadableStream<!proto.api.v1.GetFrontmatterResponse>|undefined}
  *     The XHR Node Readable Stream
  */
-proto.api.v1.VersionClient.prototype.getVersion =
+proto.api.v1.FrontmatterClient.prototype.getFrontmatter =
     function(request, metadata, callback) {
   return this.client_.rpcCall(this.hostname_ +
-      '/api.v1.Version/GetVersion',
+      '/api.v1.Frontmatter/GetFrontmatter',
       request,
       metadata || {},
-      methodDescriptor_Version_GetVersion,
+      methodDescriptor_Frontmatter_GetFrontmatter,
       callback);
 };
 
 
 /**
- * @param {!proto.api.v1.GetVersionRequest} request The
+ * @param {!proto.api.v1.GetFrontmatterRequest} request The
  *     request proto
  * @param {?Object<string, string>=} metadata User defined
  *     call metadata
- * @return {!Promise<!proto.api.v1.GetVersionResponse>}
+ * @return {!Promise<!proto.api.v1.GetFrontmatterResponse>}
  *     Promise that resolves to the response
  */
-proto.api.v1.VersionPromiseClient.prototype.getVersion =
+proto.api.v1.FrontmatterPromiseClient.prototype.getFrontmatter =
     function(request, metadata) {
   return this.client_.unaryCall(this.hostname_ +
-      '/api.v1.Version/GetVersion',
+      '/api.v1.Frontmatter/GetFrontmatter',
       request,
       metadata || {},
-      methodDescriptor_Version_GetVersion);
+      methodDescriptor_Frontmatter_GetFrontmatter);
 };
 
 

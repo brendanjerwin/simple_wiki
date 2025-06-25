@@ -34,25 +34,10 @@ func main() {
 		pathToData := c.GlobalString("data")
 		os.MkdirAll(pathToData, 0755)
 
-		// 1. Create the gRPC Server
 		grpcServer := grpc.NewServer()
 
-		// 2. Create and register your gRPC services
-		debugSvc := grpcApi.NewServer(version, commit, app.Compiled)
-		debugSvc.RegisterWithServer(grpcServer)
-
-		// Enable reflection for gRPC services
-		reflection.Register(grpcServer)
-
-		// 3. Create the gRPC-web wrapper
-		wrappedGrpc := grpcweb.WrapServer(grpcServer,
-			// Enable CORS so browser clients can make requests
-			grpcweb.WithOriginFunc(func(origin string) bool { return true }),
-		)
-
 		logger := makeLogger(c.GlobalBool("debug"))
-		// 4. Create the Gin router using our new router function
-		router := server.NewRouter(
+		site := server.NewSite(
 			pathToData,
 			c.GlobalString("css"),
 			c.GlobalString("default-page"),
@@ -65,6 +50,16 @@ func main() {
 			c.GlobalUint("max-document-length"),
 			logger,
 		)
+		ginRouter := site.GinRouter()
+		grpcApiServer := grpcApi.NewServer(version, commit, app.Compiled, site)
+		grpcApiServer.RegisterWithServer(grpcServer)
+
+		reflection.Register(grpcServer)
+
+		wrappedGrpc := grpcweb.WrapServer(grpcServer,
+			// Enable CORS so browser clients can make requests
+			grpcweb.WithOriginFunc(func(origin string) bool { return true }),
+		)
 
 		// 5. Create a multiplexer to route traffic to either gRPC or Gin.
 		multiplexedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -74,7 +69,7 @@ func main() {
 				return
 			}
 			logger.Debug("Gin request: %s %s", r.Method, r.URL.Path)
-			router.ServeHTTP(w, r)
+			ginRouter.ServeHTTP(w, r)
 		})
 
 		// 6. Determine host and port, then start the server

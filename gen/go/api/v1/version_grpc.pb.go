@@ -19,92 +19,92 @@ import (
 const _ = grpc.SupportPackageIsVersion8
 
 const (
-	VersionService_GetVersion_FullMethodName = "/api.v1.VersionService/GetVersion"
+	Version_GetVersion_FullMethodName = "/api.v1.Version/GetVersion"
 )
 
-// VersionServiceClient is the client API for VersionService service.
+// VersionClient is the client API for Version service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-type VersionServiceClient interface {
+type VersionClient interface {
 	// GetVersion returns the server version and build time.
 	GetVersion(ctx context.Context, in *GetVersionRequest, opts ...grpc.CallOption) (*GetVersionResponse, error)
 }
 
-type versionServiceClient struct {
+type versionClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewVersionServiceClient(cc grpc.ClientConnInterface) VersionServiceClient {
-	return &versionServiceClient{cc}
+func NewVersionClient(cc grpc.ClientConnInterface) VersionClient {
+	return &versionClient{cc}
 }
 
-func (c *versionServiceClient) GetVersion(ctx context.Context, in *GetVersionRequest, opts ...grpc.CallOption) (*GetVersionResponse, error) {
+func (c *versionClient) GetVersion(ctx context.Context, in *GetVersionRequest, opts ...grpc.CallOption) (*GetVersionResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetVersionResponse)
-	err := c.cc.Invoke(ctx, VersionService_GetVersion_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, Version_GetVersion_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// VersionServiceServer is the server API for VersionService service.
-// All implementations must embed UnimplementedVersionServiceServer
+// VersionServer is the server API for Version service.
+// All implementations must embed UnimplementedVersionServer
 // for forward compatibility
-type VersionServiceServer interface {
+type VersionServer interface {
 	// GetVersion returns the server version and build time.
 	GetVersion(context.Context, *GetVersionRequest) (*GetVersionResponse, error)
-	mustEmbedUnimplementedVersionServiceServer()
+	mustEmbedUnimplementedVersionServer()
 }
 
-// UnimplementedVersionServiceServer must be embedded to have forward compatible implementations.
-type UnimplementedVersionServiceServer struct {
+// UnimplementedVersionServer must be embedded to have forward compatible implementations.
+type UnimplementedVersionServer struct {
 }
 
-func (UnimplementedVersionServiceServer) GetVersion(context.Context, *GetVersionRequest) (*GetVersionResponse, error) {
+func (UnimplementedVersionServer) GetVersion(context.Context, *GetVersionRequest) (*GetVersionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetVersion not implemented")
 }
-func (UnimplementedVersionServiceServer) mustEmbedUnimplementedVersionServiceServer() {}
+func (UnimplementedVersionServer) mustEmbedUnimplementedVersionServer() {}
 
-// UnsafeVersionServiceServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to VersionServiceServer will
+// UnsafeVersionServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to VersionServer will
 // result in compilation errors.
-type UnsafeVersionServiceServer interface {
-	mustEmbedUnimplementedVersionServiceServer()
+type UnsafeVersionServer interface {
+	mustEmbedUnimplementedVersionServer()
 }
 
-func RegisterVersionServiceServer(s grpc.ServiceRegistrar, srv VersionServiceServer) {
-	s.RegisterService(&VersionService_ServiceDesc, srv)
+func RegisterVersionServer(s grpc.ServiceRegistrar, srv VersionServer) {
+	s.RegisterService(&Version_ServiceDesc, srv)
 }
 
-func _VersionService_GetVersion_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Version_GetVersion_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetVersionRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(VersionServiceServer).GetVersion(ctx, in)
+		return srv.(VersionServer).GetVersion(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: VersionService_GetVersion_FullMethodName,
+		FullMethod: Version_GetVersion_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(VersionServiceServer).GetVersion(ctx, req.(*GetVersionRequest))
+		return srv.(VersionServer).GetVersion(ctx, req.(*GetVersionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// VersionService_ServiceDesc is the grpc.ServiceDesc for VersionService service.
+// Version_ServiceDesc is the grpc.ServiceDesc for Version service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var VersionService_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "api.v1.VersionService",
-	HandlerType: (*VersionServiceServer)(nil),
+var Version_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "api.v1.Version",
+	HandlerType: (*VersionServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "GetVersion",
-			Handler:    _VersionService_GetVersion_Handler,
+			Handler:    _Version_GetVersion_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

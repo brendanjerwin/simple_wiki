@@ -1,34 +1,42 @@
-package debug
+package v1
 
 import (
 	"context"
 	"time"
 
+	"github.com/brendanjerwin/simple_wiki/common"
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// Server is the implementation of the DebugService.
+// Server is the implementation of the gRPC services.
 type Server struct {
-	apiv1.UnimplementedVersionServiceServer
-	Version   string
-	Commit    string
-	BuildTime time.Time
+	apiv1.UnimplementedVersionServer
+	apiv1.UnimplementedFrontmatterServer
+	Version    string
+	Commit     string
+	BuildTime  time.Time
+	PageReader common.PageReader
 }
 
 // NewServer creates a new debug server.
-func NewServer(version, commit string, buildTime time.Time) *Server {
+func NewServer(version, commit string, buildTime time.Time, pageReader common.PageReader) *Server {
 	return &Server{
-		Version:   version,
-		Commit:    commit,
-		BuildTime: buildTime,
+		Version:    version,
+		Commit:     commit,
+		BuildTime:  buildTime,
+		PageReader: pageReader,
 	}
 }
 
-// RegisterWithServer registers the debug service with the given gRPC server.
+// RegisterWithServer registers the gRPC services with the given gRPC server.
 func (s *Server) RegisterWithServer(grpcServer *grpc.Server) {
-	apiv1.RegisterVersionServiceServer(grpcServer, s)
+	apiv1.RegisterVersionServer(grpcServer, s)
+	apiv1.RegisterFrontmatterServer(grpcServer, s)
 }
 
 // GetVersion implements the GetVersion RPC.
@@ -37,5 +45,26 @@ func (s *Server) GetVersion(ctx context.Context, req *apiv1.GetVersionRequest) (
 		Version:   s.Version,
 		Commit:    s.Commit,
 		BuildTime: timestamppb.New(s.BuildTime),
+	}, nil
+}
+
+// GetFrontmatter implements the GetFrontmatter RPC.
+func (s *Server) GetFrontmatter(ctx context.Context, req *apiv1.GetFrontmatterRequest) (*apiv1.GetFrontmatterResponse, error) {
+	if s.PageReader == nil {
+		return nil, status.Error(codes.Internal, "PageReader not available")
+	}
+
+	_, fm, err := s.PageReader.ReadFrontMatter(req.Page)
+	if err != nil {
+		return nil, status.Errorf(codes.NotFound, "page not found: %s", req.Page)
+	}
+
+	structFm, err := structpb.NewStruct(fm)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to convert frontmatter to struct: %v", err)
+	}
+
+	return &apiv1.GetFrontmatterResponse{
+		Frontmatter: structFm,
 	}, nil
 }

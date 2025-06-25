@@ -26,10 +26,12 @@ import (
 
 const minutesToUnlock = 10.0
 
-var hotTemplateReloading bool
-var LogLevel int = lumber.WARN
+var (
+	hotTemplateReloading bool
+	LogLevel             int = lumber.WARN
+)
 
-func NewRouter(
+func NewSite(
 	filepathToData string,
 	cssFile string,
 	defaultPage string,
@@ -41,7 +43,7 @@ func NewRouter(
 	maxUploadSize uint,
 	maxDocumentSize uint,
 	logger *lumber.ConsoleLogger,
-) *gin.Engine {
+) *Site {
 	var customCSS []byte
 	// collect custom CSS
 	if len(cssFile) > 0 {
@@ -73,10 +75,10 @@ func NewRouter(
 		logger.Error("Failed to initialize indexing: %v", err)
 		panic(err.Error())
 	}
-	return site.Router()
+	return site
 }
 
-func (s *Site) Router() *gin.Engine {
+func (s *Site) GinRouter() *gin.Engine {
 	if s.Logger == nil {
 		s.Logger = lumber.NewConsoleLogger(lumber.TRACE)
 	}
@@ -164,7 +166,7 @@ func (s *Site) loadTemplate() multitemplate.Render {
 
 func pageIsLocked(p *Page, c *gin.Context) bool {
 	// it is easier to reason about when the page is actually unlocked
-	var unlocked = !p.IsLocked ||
+	unlocked := !p.IsLocked ||
 		(p.IsLocked && p.UnlockedFor == getSetSessionID(c))
 	return !unlocked
 }
@@ -196,7 +198,8 @@ func (s *Site) handlePageRelinquish(c *gin.Context) {
 		p.Erase()
 		message = "Relinquished and erased"
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true,
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
 		"name":    name,
 		"message": message,
 		"text":    text,
@@ -439,7 +442,6 @@ func (s *Site) handlePageExists(c *gin.Context) {
 	} else {
 		c.JSON(http.StatusOK, gin.H{"success": true, "message": json.Page + " not found", "exists": false})
 	}
-
 }
 
 func (s *Site) handlePageUpdate(c *gin.Context) {
