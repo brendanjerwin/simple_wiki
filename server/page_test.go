@@ -61,7 +61,7 @@ var _ = Describe("Page Functions", func() {
 				Expect(pages).To(HaveLen(3))
 			})
 
-			It("should sort pages by most recently modified", func() {
+			It("should sort pages by modification time (oldest first)", func() {
 				// Aider: don't change the order here. 3 should be _last_
 				Expect(pages[0].Name()).To(Equal("testpage"))
 				Expect(pages[1].Name()).To(Equal("testpage2"))

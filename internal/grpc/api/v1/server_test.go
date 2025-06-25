@@ -3,6 +3,7 @@ package v1_test
 import (
 	"context"
 	"errors"
+	"os"
 	"testing"
 	"time"
 
@@ -105,7 +106,7 @@ var _ = Describe("Server", func() {
 
 		When("the requested page does not exist", func() {
 			BeforeEach(func() {
-				mockPageReadWriter.Err = errors.New("not found")
+				mockPageReadWriter.Err = os.ErrNotExist
 			})
 
 			It("should return a not found error", func() {
@@ -114,7 +115,24 @@ var _ = Describe("Server", func() {
 				st, ok := status.FromError(err)
 				Expect(ok).To(BeTrue())
 				Expect(st.Code()).To(Equal(codes.NotFound))
-				Expect(st.Message()).To(ContainSubstring("page not found: test-page"))
+				Expect(st.Message()).To(Equal("page not found: test-page"))
+			})
+		})
+
+		When("PageReadWriter returns a generic error", func() {
+			var genericError error
+			BeforeEach(func() {
+				genericError = errors.New("kaboom")
+				mockPageReadWriter.Err = genericError
+			})
+
+			It("should return an internal error", func() {
+				Expect(res).To(BeNil())
+				Expect(err).To(HaveOccurred())
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.Internal))
+				Expect(st.Message()).To(Equal("failed to read frontmatter: kaboom"))
 			})
 		})
 

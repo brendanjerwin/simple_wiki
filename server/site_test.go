@@ -4,8 +4,10 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 
 	"github.com/brendanjerwin/simple_wiki/common"
+	"github.com/brendanjerwin/simple_wiki/utils"
 	"github.com/brendanjerwin/simple_wiki/sec"
 	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
@@ -27,9 +29,11 @@ var _ = Describe("Site", func() {
 		mockIndex = &MockIndexMaintainer{}
 
 		s = &Site{
-			Logger:          lumber.NewConsoleLogger(lumber.INFO),
-			PathToData:      tempDir,
-			IndexMaintainer: mockIndex,
+			Logger:                  lumber.NewConsoleLogger(lumber.INFO),
+			PathToData:              tempDir,
+			IndexMaintainer:         mockIndex,
+			MarkdownRenderer:        &utils.GoldmarkRenderer{},
+			FrontmatterIndexQueryer: &mockFrontmatterIndexQueryer{},
 		}
 	})
 
@@ -142,43 +146,65 @@ var _ = Describe("Site", func() {
 
 		BeforeEach(func() {
 			pageIdentifier = "test-page"
-			pagePath = filepath.Join(s.PathToData, "test-page.md")
+			// The PageReadWriter implementation reads from base32 encoded filenames
+			pagePath = filepath.Join(s.PathToData, utils.EncodeToBase32(strings.ToLower(string(pageIdentifier)))+".md")
 		})
 
 		Describe("ReadFrontMatter", func() {
 			When("the page does not exist", func() {
+				var err error
+
+				BeforeEach(func() {
+					_, _, err = s.ReadFrontMatter(pageIdentifier)
+				})
+
 				It("should return a not found error", func() {
-					_, _, err := s.ReadFrontMatter(pageIdentifier)
 					Expect(os.IsNotExist(err)).To(BeTrue())
 				})
 			})
 
 			When("the page exists without frontmatter", func() {
+				var (
+					fm  common.FrontMatter
+					err error
+				)
+
 				BeforeEach(func() {
-					err := os.WriteFile(pagePath, []byte("just markdown"), 0644)
+					fileErr := os.WriteFile(pagePath, []byte("just markdown"), 0644)
+					Expect(fileErr).NotTo(HaveOccurred())
+					_, fm, err = s.ReadFrontMatter(pageIdentifier)
+				})
+
+				It("should not return an error", func() {
 					Expect(err).NotTo(HaveOccurred())
 				})
 
 				It("should return empty frontmatter", func() {
-					_, fm, err := s.ReadFrontMatter(pageIdentifier)
-					Expect(err).NotTo(HaveOccurred())
 					Expect(fm).To(BeEmpty())
 				})
 			})
 
 			When("the page exists with frontmatter", func() {
+				var (
+					fm  common.FrontMatter
+					err error
+				)
+
 				BeforeEach(func() {
 					content := `---
 title: Test
 ---
 markdown content`
-					err := os.WriteFile(pagePath, []byte(content), 0644)
+					fileErr := os.WriteFile(pagePath, []byte(content), 0644)
+					Expect(fileErr).NotTo(HaveOccurred())
+					_, fm, err = s.ReadFrontMatter(pageIdentifier)
+				})
+
+				It("should not return an error", func() {
 					Expect(err).NotTo(HaveOccurred())
 				})
 
 				It("should return the parsed frontmatter", func() {
-					_, fm, err := s.ReadFrontMatter(pageIdentifier)
-					Expect(err).NotTo(HaveOccurred())
 					Expect(fm).To(Equal(common.FrontMatter{"title": "Test"}))
 				})
 			})
@@ -186,87 +212,115 @@ markdown content`
 
 		Describe("ReadMarkdown", func() {
 			When("the page does not exist", func() {
+				var err error
+
+				BeforeEach(func() {
+					_, _, err = s.ReadMarkdown(pageIdentifier)
+				})
+
 				It("should return a not found error", func() {
-					_, _, err := s.ReadMarkdown(pageIdentifier)
 					Expect(os.IsNotExist(err)).To(BeTrue())
 				})
 			})
 
 			When("the page exists without frontmatter", func() {
+				var (
+					md  common.Markdown
+					err error
+				)
+
 				BeforeEach(func() {
-					err := os.WriteFile(pagePath, []byte("just markdown"), 0644)
+					fileErr := os.WriteFile(pagePath, []byte("just markdown"), 0644)
+					Expect(fileErr).NotTo(HaveOccurred())
+					_, md, err = s.ReadMarkdown(pageIdentifier)
+				})
+
+				It("should not return an error", func() {
 					Expect(err).NotTo(HaveOccurred())
 				})
 
 				It("should return the full content as markdown", func() {
-					_, md, err := s.ReadMarkdown(pageIdentifier)
-					Expect(err).NotTo(HaveOccurred())
 					Expect(string(md)).To(Equal("just markdown"))
 				})
 			})
 
 			When("the page exists with frontmatter", func() {
+				var (
+					md  common.Markdown
+					err error
+				)
 				BeforeEach(func() {
 					content := `---
 title: Test
 ---
 markdown content`
-					err := os.WriteFile(pagePath, []byte(content), 0644)
+					fileErr := os.WriteFile(pagePath, []byte(content), 0644)
+					Expect(fileErr).NotTo(HaveOccurred())
+					_, md, err = s.ReadMarkdown(pageIdentifier)
+				})
+
+				It("should not return an error", func() {
 					Expect(err).NotTo(HaveOccurred())
 				})
 
 				It("should return only the markdown part", func() {
-					_, md, err := s.ReadMarkdown(pageIdentifier)
-					Expect(err).NotTo(HaveOccurred())
 					Expect(string(md)).To(Equal("markdown content"))
 				})
 			})
 		})
 
 		Describe("WriteFrontMatter", func() {
-			var newFm common.FrontMatter
+			var (
+				newFm common.FrontMatter
+				err   error
+			)
 
 			BeforeEach(func() {
 				newFm = common.FrontMatter{"title": "New Title"}
 			})
 
 			When("the page does not exist", func() {
-				It("should create a new page with the frontmatter and no markdown", func() {
-					err := s.WriteFrontMatter(pageIdentifier, newFm)
-					Expect(err).NotTo(HaveOccurred())
+				BeforeEach(func() {
+					err = s.WriteFrontMatter(pageIdentifier, newFm)
+				})
 
-					_, fm, err := s.ReadFrontMatter(pageIdentifier)
+				It("should not return an error", func() {
 					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("should create a new page with the frontmatter and no markdown", func() {
+					_, fm, fmErr := s.ReadFrontMatter(pageIdentifier)
+					Expect(fmErr).NotTo(HaveOccurred())
 					Expect(fm).To(Equal(newFm))
 
-					_, md, err := s.ReadMarkdown(pageIdentifier)
-					Expect(err).NotTo(HaveOccurred())
+					_, md, mdErr := s.ReadMarkdown(pageIdentifier)
+					Expect(mdErr).NotTo(HaveOccurred())
 					Expect(string(md)).To(BeEmpty())
 				})
 
 				It("should add the page to the index", func() {
-					err := s.WriteFrontMatter(pageIdentifier, newFm)
-					Expect(err).NotTo(HaveOccurred())
 					Expect(mockIndex.AddPageToIndexCalledWith).To(Equal(pageIdentifier))
 				})
 			})
 
 			When("the page exists with markdown but no frontmatter", func() {
 				BeforeEach(func() {
-					err := os.WriteFile(pagePath, []byte("existing markdown"), 0644)
+					fileErr := os.WriteFile(pagePath, []byte("existing markdown"), 0644)
+					Expect(fileErr).NotTo(HaveOccurred())
+					err = s.WriteFrontMatter(pageIdentifier, newFm)
+				})
+
+				It("should not return an error", func() {
 					Expect(err).NotTo(HaveOccurred())
 				})
 
 				It("should add the frontmatter and keep the markdown", func() {
-					err := s.WriteFrontMatter(pageIdentifier, newFm)
-					Expect(err).NotTo(HaveOccurred())
-
-					_, fm, err := s.ReadFrontMatter(pageIdentifier)
-					Expect(err).NotTo(HaveOccurred())
+					_, fm, fmErr := s.ReadFrontMatter(pageIdentifier)
+					Expect(fmErr).NotTo(HaveOccurred())
 					Expect(fm).To(Equal(newFm))
 
-					_, md, err := s.ReadMarkdown(pageIdentifier)
-					Expect(err).NotTo(HaveOccurred())
+					_, md, mdErr := s.ReadMarkdown(pageIdentifier)
+					Expect(mdErr).NotTo(HaveOccurred())
 					Expect(string(md)).To(Equal("existing markdown"))
 				})
 			})
@@ -277,49 +331,57 @@ markdown content`
 title: Old Title
 ---
 old markdown`
-					err := os.WriteFile(pagePath, []byte(content), 0644)
+					fileErr := os.WriteFile(pagePath, []byte(content), 0644)
+					Expect(fileErr).NotTo(HaveOccurred())
+					err = s.WriteFrontMatter(pageIdentifier, newFm)
+				})
+
+				It("should not return an error", func() {
 					Expect(err).NotTo(HaveOccurred())
 				})
 
 				It("should replace the frontmatter and keep the markdown", func() {
-					err := s.WriteFrontMatter(pageIdentifier, newFm)
-					Expect(err).NotTo(HaveOccurred())
-
-					_, fm, err := s.ReadFrontMatter(pageIdentifier)
-					Expect(err).NotTo(HaveOccurred())
+					_, fm, fmErr := s.ReadFrontMatter(pageIdentifier)
+					Expect(fmErr).NotTo(HaveOccurred())
 					Expect(fm).To(Equal(newFm))
 
-					_, md, err := s.ReadMarkdown(pageIdentifier)
-					Expect(err).NotTo(HaveOccurred())
+					_, md, mdErr := s.ReadMarkdown(pageIdentifier)
+					Expect(mdErr).NotTo(HaveOccurred())
 					Expect(string(md)).To(Equal("old markdown"))
 				})
 			})
 		})
 
 		Describe("WriteMarkdown", func() {
-			var newMd common.Markdown
+			var (
+				newMd common.Markdown
+				err   error
+			)
 
 			BeforeEach(func() {
 				newMd = "new markdown"
 			})
 
 			When("the page does not exist", func() {
-				It("should create a new page with the markdown and empty frontmatter", func() {
-					err := s.WriteMarkdown(pageIdentifier, newMd)
-					Expect(err).NotTo(HaveOccurred())
+				BeforeEach(func() {
+					err = s.WriteMarkdown(pageIdentifier, newMd)
+				})
 
-					_, fm, err := s.ReadFrontMatter(pageIdentifier)
+				It("should not return an error", func() {
 					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("should create a new page with the markdown and empty frontmatter", func() {
+					_, fm, fmErr := s.ReadFrontMatter(pageIdentifier)
+					Expect(fmErr).NotTo(HaveOccurred())
 					Expect(fm).To(BeEmpty())
 
-					_, md, err := s.ReadMarkdown(pageIdentifier)
-					Expect(err).NotTo(HaveOccurred())
+					_, md, mdErr := s.ReadMarkdown(pageIdentifier)
+					Expect(mdErr).NotTo(HaveOccurred())
 					Expect(string(md)).To(Equal(string(newMd)))
 				})
 
 				It("should add the page to the index", func() {
-					err := s.WriteMarkdown(pageIdentifier, newMd)
-					Expect(err).NotTo(HaveOccurred())
 					Expect(mockIndex.AddPageToIndexCalledWith).To(Equal(pageIdentifier))
 				})
 			})
@@ -330,20 +392,22 @@ old markdown`
 title: Existing Title
 ---
 `
-					err := os.WriteFile(pagePath, []byte(content), 0644)
+					fileErr := os.WriteFile(pagePath, []byte(content), 0644)
+					Expect(fileErr).NotTo(HaveOccurred())
+					err = s.WriteMarkdown(pageIdentifier, newMd)
+				})
+
+				It("should not return an error", func() {
 					Expect(err).NotTo(HaveOccurred())
 				})
 
 				It("should add the markdown and keep the frontmatter", func() {
-					err := s.WriteMarkdown(pageIdentifier, newMd)
-					Expect(err).NotTo(HaveOccurred())
-
-					_, fm, err := s.ReadFrontMatter(pageIdentifier)
-					Expect(err).NotTo(HaveOccurred())
+					_, fm, fmErr := s.ReadFrontMatter(pageIdentifier)
+					Expect(fmErr).NotTo(HaveOccurred())
 					Expect(fm).To(Equal(common.FrontMatter{"title": "Existing Title"}))
 
-					_, md, err := s.ReadMarkdown(pageIdentifier)
-					Expect(err).NotTo(HaveOccurred())
+					_, md, mdErr := s.ReadMarkdown(pageIdentifier)
+					Expect(mdErr).NotTo(HaveOccurred())
 					Expect(string(md)).To(Equal(string(newMd)))
 				})
 			})
@@ -354,20 +418,22 @@ title: Existing Title
 title: Existing Title
 ---
 old markdown`
-					err := os.WriteFile(pagePath, []byte(content), 0644)
+					fileErr := os.WriteFile(pagePath, []byte(content), 0644)
+					Expect(fileErr).NotTo(HaveOccurred())
+					err = s.WriteMarkdown(pageIdentifier, newMd)
+				})
+
+				It("should not return an error", func() {
 					Expect(err).NotTo(HaveOccurred())
 				})
 
 				It("should replace the markdown and keep the frontmatter", func() {
-					err := s.WriteMarkdown(pageIdentifier, newMd)
-					Expect(err).NotTo(HaveOccurred())
-
-					_, fm, err := s.ReadFrontMatter(pageIdentifier)
-					Expect(err).NotTo(HaveOccurred())
+					_, fm, fmErr := s.ReadFrontMatter(pageIdentifier)
+					Expect(fmErr).NotTo(HaveOccurred())
 					Expect(fm).To(Equal(common.FrontMatter{"title": "Existing Title"}))
 
-					_, md, err := s.ReadMarkdown(pageIdentifier)
-					Expect(err).NotTo(HaveOccurred())
+					_, md, mdErr := s.ReadMarkdown(pageIdentifier)
+					Expect(mdErr).NotTo(HaveOccurred())
 					Expect(string(md)).To(Equal(string(newMd)))
 				})
 			})

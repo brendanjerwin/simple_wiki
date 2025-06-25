@@ -78,8 +78,6 @@ var _ = Describe("API Handlers", func() {
 			})
 
 			When("the FrontmatterIndexQueryer is not initialized", func() {
-				var action func()
-
 				BeforeEach(func() {
 					s.FrontmatterIndexQueryer = nil
 					req, err := http.NewRequest(http.MethodGet, "/?k=key&v=val", nil)
@@ -95,13 +93,19 @@ var _ = Describe("API Handlers", func() {
 						Fail("executor should not be called")
 						return nil
 					}
-					action = func() {
-						s.executeFrontmatterQuery(c, &testReq, executor)
-					}
+					s.executeFrontmatterQuery(c, &testReq, executor)
 				})
 
-				It("panics with a helpful message", func() {
-					Expect(action).To(PanicWith("Frontmatter index is not available"))
+				It("returns a server error", func() {
+					Expect(w.Code).To(Equal(http.StatusInternalServerError))
+				})
+
+				It("returns a helpful error message in JSON", func() {
+					var response map[string]any
+					err := json.Unmarshal(w.Body.Bytes(), &response)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(response["success"]).To(BeFalse())
+					Expect(response["message"]).To(Equal("Frontmatter index is not available"))
 				})
 			})
 
@@ -357,24 +361,23 @@ var _ = Describe("API Handlers", func() {
 			})
 
 			When("the BleveIndexQueryer is not initialized", func() {
-				var (
-					c      *gin.Context
-					action func()
-				)
-
 				BeforeEach(func() {
-					c, _ = gin.CreateTestContext(w)
-					req, err := http.NewRequest(http.MethodGet, "/api/search?q=foo", nil)
+					s.BleveIndexQueryer = nil // ensure it's nil
+					req, err := http.NewRequest(http.MethodGet, "/api/search?q=searchterm", nil)
 					Expect(err).NotTo(HaveOccurred())
-					c.Request = req
-
-					action = func() {
-						s.handleSearch(c)
-					}
+					router.ServeHTTP(w, req)
 				})
 
-				It("panics with a helpful message", func() {
-					Expect(action).To(PanicWith("Search index is not available"))
+				It("returns http.StatusInternalServerError", func() {
+					Expect(w.Code).To(Equal(http.StatusInternalServerError))
+				})
+
+				It("returns a helpful error message", func() {
+					var response map[string]any
+					err := json.Unmarshal(w.Body.Bytes(), &response)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(response["success"]).To(BeFalse())
+					Expect(response["message"]).To(Equal("Search index is not available"))
 				})
 			})
 
@@ -459,26 +462,25 @@ var _ = Describe("API Handlers", func() {
 			})
 
 			When("the FrontmatterIndexQueryer is not initialized", func() {
-				var (
-					c      *gin.Context
-					action func()
-				)
-
 				BeforeEach(func() {
-					c, _ = gin.CreateTestContext(w)
+					s.FrontmatterIndexQueryer = nil
 					body := strings.NewReader(`{"template_identifier": "t1", "data_identifier": "d1"}`)
 					req, err := http.NewRequest(http.MethodPost, "/api/print_label", body)
 					req.Header.Set("Content-Type", "application/json")
 					Expect(err).NotTo(HaveOccurred())
-					c.Request = req
-
-					action = func() {
-						s.handlePrintLabel(c)
-					}
+					router.ServeHTTP(w, req)
 				})
 
-				It("panics with a helpful message", func() {
-					Expect(action).To(PanicWith("Frontmatter index is not available"))
+				It("returns http.StatusInternalServerError", func() {
+					Expect(w.Code).To(Equal(http.StatusInternalServerError))
+				})
+
+				It("returns a helpful error message", func() {
+					var response map[string]any
+					err := json.Unmarshal(w.Body.Bytes(), &response)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(response["success"]).To(BeFalse())
+					Expect(response["message"]).To(Equal("Frontmatter index is not available"))
 				})
 			})
 

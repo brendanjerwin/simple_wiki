@@ -2,6 +2,7 @@ package v1
 
 import (
 	"context"
+	"os"
 	"reflect"
 	"time"
 
@@ -90,7 +91,10 @@ func (s *Server) GetFrontmatter(ctx context.Context, req *apiv1.GetFrontmatterRe
 	var fm map[string]any
 	_, fm, err = s.PageReadWriter.ReadFrontMatter(req.Page)
 	if err != nil {
-		return nil, status.Errorf(codes.NotFound, "page not found: %s", req.Page)
+		if os.IsNotExist(err) {
+			return nil, status.Errorf(codes.NotFound, "page not found: %s", req.Page)
+		}
+		return nil, status.Errorf(codes.Internal, "failed to read frontmatter: %v", err)
 	}
 
 	var structFm *structpb.Struct

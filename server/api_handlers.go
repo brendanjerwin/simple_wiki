@@ -15,7 +15,10 @@ type PageReference struct {
 }
 
 func (s *Site) handlePrintLabel(c *gin.Context) {
-	s.requireFrontmatterIndex()
+	if s.FrontmatterIndexQueryer == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Frontmatter index is not available"})
+		return
+	}
 
 	type QueryJSON struct {
 		TemplateIdentifier string `json:"template_identifier" binding:"required"`
@@ -73,7 +76,10 @@ func (s *Site) handleFindByKeyExistence(c *gin.Context) {
 }
 
 func (s *Site) executeFrontmatterQuery(c *gin.Context, req any, queryExecutor func() []string) {
-	s.requireFrontmatterIndex()
+	if s.FrontmatterIndexQueryer == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Frontmatter index is not available"})
+		return
+	}
 
 	if err := c.ShouldBindQuery(req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": fmt.Sprintf("Problem binding keys: %v", err)})
@@ -96,22 +102,12 @@ func (s *Site) createPageReferences(ids []string) []PageReference {
 	return results
 }
 
-func (s *Site) require(component any, message string) {
-	if component == nil {
-		panic(message)
-	}
-}
-
-func (s *Site) requireFrontmatterIndex() {
-	s.require(s.FrontmatterIndexQueryer, "Frontmatter index is not available")
-}
-
-func (s *Site) requireBleveIndex() {
-	s.require(s.BleveIndexQueryer, "Search index is not available")
-}
 
 func (s *Site) handleSearch(c *gin.Context) {
-	s.requireBleveIndex()
+	if s.BleveIndexQueryer == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Search index is not available"})
+		return
+	}
 
 	type Req struct {
 		Query string `form:"q" binding:"required"`

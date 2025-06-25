@@ -1,18 +1,18 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
-	"net/http"
+	"fmt"
 	"os"
 	"path"
-	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/common"
 	"github.com/brendanjerwin/simple_wiki/utils"
 	"github.com/schollz/versionedtext"
+	"gopkg.in/yaml.v2"
 )
 
 // Page is the basic struct
@@ -27,6 +27,7 @@ type Page struct {
 	PassphraseToUnlock string
 	UnlockedFor        string
 	FrontmatterJson    []byte `json:"-"`
+	WasLoadedFromDisk  bool   `json:"-"`
 }
 
 func (p Page) LastEditTime() time.Time {
@@ -37,175 +38,22 @@ func (p Page) LastEditUnixTime() int64 {
 	return p.Text.LastEditTime() / 1000000000
 }
 
-func (s *Site) Open(requested_identifier string) (p *Page) {
-	identifier, bJSON, err := s.readFileByIdentifier(requested_identifier, "json")
-	if err != nil {
-		return
-	}
-	p = new(Page)
-	p.Site = s
-	p.Identifier = identifier
-	p.Text = versionedtext.NewVersionedText("")
-	err = json.Unmarshal(bJSON, &p)
-	if err != nil {
-		p = new(Page)
-	}
-	return p
-}
+func (p *Page) parse() (common.FrontMatter, common.Markdown, error) {
+	text := p.Text.GetCurrent()
 
-func (s *Site) OpenOrInit(requested_identifier string, req *http.Request) (p *Page) {
-	identifier, bJSON, err := s.readFileByIdentifier(requested_identifier, "json")
-	if err != nil {
-		p = new(Page)
-		p.Site = s
-		p.Identifier = identifier
-
-		prams := req.URL.Query()
-		initialText := "identifier = \"" + identifier + "\"\n"
-		tmpl := prams.Get("tmpl")
-		for pram, vals := range prams {
-			if len(vals) > 1 {
-				initialText += pram + " = [ \"" + strings.Join(vals, "\", \"") + "\"]\n"
-			} else if len(vals) == 1 {
-				initialText += pram + " = \"" + vals[0] + "\"\n"
-			}
-		}
-
-		if tmpl == "inv_item" {
-			initialText += `
-
-[inventory]
-items = [
-
-]
-
-`
-		}
-
-		if initialText != "" {
-			initialText = "+++\n" + initialText + "+++\n"
-		}
-
-		initialText += "\n# {{or .Title .Identifier}}" + "\n"
-
-		if tmpl == "inv_item" {
-			initialText += `
-### Goes in: {{LinkTo .Inventory.Container }}
-
-{{if IsContainer .Identifier }}
-## Contents
-{{ ShowInventoryContentsOf .Identifier }}
-{{ end }}
-`
-		}
-
-		p.Text = versionedtext.NewVersionedText(initialText)
-		p.Render()
-		p.Save()
-		return p
-	}
-	err = json.Unmarshal(bJSON, &p)
-	if err != nil {
-		panic(err)
-	}
-	p.Site = s
-
-	p.Render()
-
-	return p
-}
-
-func (s *Site) readFileByIdentifier(identifier, extension string) (string, []byte, error) {
-	// First try with the munged identifier
-	munged_identifier := common.MungeIdentifier(identifier)
-	bJSON, err := os.ReadFile(path.Join(s.PathToData, utils.EncodeToBase32(strings.ToLower(munged_identifier))+"."+extension))
-	if err == nil {
-		return munged_identifier, bJSON, nil
+	// check for frontmatter
+	parts := bytes.SplitN([]byte(text), []byte("---\n"), 3)
+	if len(parts) < 3 {
+		return make(common.FrontMatter), common.Markdown(text), nil
 	}
 
-	// Then try with the original identifier if that didn't work (older files)
-	bJSON, err = os.ReadFile(path.Join(s.PathToData, utils.EncodeToBase32(strings.ToLower(identifier))+"."+extension))
-	if err == nil {
-		return identifier, bJSON, nil
+	var fm common.FrontMatter
+	markdown := common.Markdown(parts[2])
+	if err := yaml.Unmarshal(parts[1], &fm); err != nil {
+		return nil, markdown, fmt.Errorf("failed to unmarshal frontmatter for %s: %v", p.Identifier, err)
 	}
 
-	return munged_identifier, nil, err
-}
-
-type DirectoryEntry struct {
-	Path       string
-	Length     int
-	Numchanges int
-	LastEdited time.Time
-}
-
-func (d DirectoryEntry) LastEditTime() string {
-	return d.LastEdited.Format("Mon Jan 2 15:04:05 MST 2006")
-}
-
-func (d DirectoryEntry) Name() string {
-	return d.Path
-}
-
-func (d DirectoryEntry) Size() int64 {
-	return int64(d.Length)
-}
-
-func (d DirectoryEntry) Mode() os.FileMode {
-	return os.ModePerm
-}
-
-func (d DirectoryEntry) ModTime() time.Time {
-	return d.LastEdited
-}
-
-func (d DirectoryEntry) IsDir() bool {
-	return false
-}
-
-func (d DirectoryEntry) Sys() interface{} {
-	return nil
-}
-
-func (s *Site) DirectoryList() []os.FileInfo {
-	files, _ := os.ReadDir(s.PathToData)
-	entries := make([]os.FileInfo, len(files))
-	found := 0
-	for _, f := range files {
-		if strings.HasSuffix(f.Name(), ".json") {
-			name := DecodeFileName(f.Name())
-			p := s.Open(name)
-			entries[found] = DirectoryEntry{
-				Path:       name,
-				Length:     len(p.Text.GetCurrent()),
-				Numchanges: p.Text.NumEdits(),
-				LastEdited: time.Unix(p.Text.LastEditTime()/1000000000, 0),
-			}
-			found = found + 1
-		}
-	}
-	entries = entries[:found]
-	sort.Slice(entries, func(i, j int) bool { return entries[i].ModTime().After(entries[j].ModTime()) })
-	return entries
-}
-
-type UploadEntry struct {
-	os.FileInfo
-}
-
-func (s *Site) UploadList() ([]os.FileInfo, error) {
-	paths, err := filepath.Glob(path.Join(s.PathToData, "sha256*"))
-	if err != nil {
-		return nil, err
-	}
-	result := make([]os.FileInfo, len(paths))
-	for i := range paths {
-		result[i], err = os.Stat(paths[i])
-		if err != nil {
-			return result, err
-		}
-	}
-	return result, nil
+	return fm, markdown, nil
 }
 
 func DecodeFileName(s string) string {
@@ -213,12 +61,8 @@ func DecodeFileName(s string) string {
 	return s2
 }
 
-// Update cleans the text and updates the versioned text
-// and generates a new render
+// Update overwrites the page's content with newText, saves the change, and re-renders the page.
 func (p *Page) Update(newText string) error {
-	// Trim space from end
-	newText = strings.TrimRight(newText, "\n\t ")
-
 	// Update the versioned text
 	p.Text.Update(newText)
 
@@ -262,7 +106,7 @@ func (p *Page) Save() error {
 }
 
 func (p *Page) IsNew() bool {
-	return !utils.Exists(path.Join(p.Site.PathToData, utils.EncodeToBase32(strings.ToLower(p.Identifier))+".json"))
+	return !p.WasLoadedFromDisk
 }
 
 func (p *Page) Erase() error {
