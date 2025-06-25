@@ -53,7 +53,7 @@ var _ = Describe("GoldmarkRenderer", func() {
 			})
 
 			It("should render checkboxes as disabled input elements", func() {
-				expected := "<ul>\n<li><input checked=\"\" disabled=\"\" type=\"checkbox\" /> Done</li>\n<li><input disabled=\"\" type=\"checkbox\" /> Not Done</li>\n</ul>\n"
+				expected := "<ul>\n<li><input checked=\"\" disabled=\"\" type=\"checkbox\"/> Done</li>\n<li><input disabled=\"\" type=\"checkbox\"/> Not Done</li>\n</ul>\n"
 				Expect(string(output)).To(Equal(expected))
 			})
 		})
@@ -68,7 +68,7 @@ var _ = Describe("GoldmarkRenderer", func() {
 			})
 
 			It("should render the emoji", func() {
-				expected := "<p>I am so happy &#x1f602;</p>\n"
+				expected := "<p>I am so happy 😂</p>\n"
 				Expect(string(output)).To(Equal(expected))
 			})
 		})
@@ -113,7 +113,7 @@ var _ = Describe("GoldmarkRenderer", func() {
 			})
 
 			It("should render an <a> tag", func() {
-				expected := "<p><a href=\"https://www.google.com\">https://www.google.com</a></p>\n"
+				expected := "<p><a href=\"https://www.google.com\" rel=\"nofollow\">https://www.google.com</a></p>\n"
 				Expect(string(output)).To(Equal(expected))
 			})
 		})
@@ -143,7 +143,7 @@ var _ = Describe("GoldmarkRenderer", func() {
 			})
 
 			It("should render a <br /> tag", func() {
-				expected := "<p>hello<br />\nworld</p>\n"
+				expected := "<p>hello<br/>\nworld</p>\n"
 				Expect(string(output)).To(Equal(expected))
 			})
 		})
@@ -157,8 +157,8 @@ var _ = Describe("GoldmarkRenderer", func() {
 				Expect(err).ToNot(HaveOccurred())
 			})
 
-			It("should escape the HTML", func() {
-				expected := "<p>&lt;div&gt;hello&lt;/div&gt;</p>\n"
+			It("should allow safe HTML", func() {
+				expected := "<div>hello</div>"
 				Expect(string(output)).To(Equal(expected))
 			})
 		})

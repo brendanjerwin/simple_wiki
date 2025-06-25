@@ -7,6 +7,10 @@ github.com/RoaringBitmap/roaring
 # github.com/adrg/frontmatter v0.2.0
 ## explicit; go 1.14
 github.com/adrg/frontmatter
+# github.com/aymerick/douceur v0.2.0
+## explicit
+github.com/aymerick/douceur/css
+github.com/aymerick/douceur/parser
 # github.com/blevesearch/bleve v1.0.14
 ## explicit; go 1.13
 github.com/blevesearch/bleve
@@ -186,6 +190,9 @@ github.com/google/pprof/profile
 # github.com/gorilla/context v1.1.1
 ## explicit
 github.com/gorilla/context
+# github.com/gorilla/css v1.0.1
+## explicit; go 1.20
+github.com/gorilla/css/scanner
 # github.com/gorilla/securecookie v1.1.1
 ## explicit
 github.com/gorilla/securecookie
@@ -227,6 +234,10 @@ github.com/leodido/go-urn
 # github.com/mattn/go-isatty v0.0.19
 ## explicit; go 1.15
 github.com/mattn/go-isatty
+# github.com/microcosm-cc/bluemonday v1.0.27
+## explicit; go 1.19
+github.com/microcosm-cc/bluemonday
+github.com/microcosm-cc/bluemonday/css
 # github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd
 ## explicit
 github.com/modern-go/concurrent
