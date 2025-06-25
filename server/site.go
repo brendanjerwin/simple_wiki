@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	adrgFrontmatter "github.com/adrg/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/common"
 	"github.com/brendanjerwin/simple_wiki/index"
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
@@ -337,12 +338,18 @@ func (s *Site) WriteMarkdown(identifier common.PageIdentifier, md common.Markdow
 }
 
 func (s *Site) ReadFrontMatter(identifier common.PageIdentifier) (common.PageIdentifier, common.FrontMatter, error) {
-	p := s.Open(string(identifier))
-	if p.IsNew() {
-		return identifier, nil, os.ErrNotExist
+	identifier, content, err := s.readFileByIdentifier(identifier, "md")
+	if err != nil {
+		return identifier, nil, err
 	}
-	fm, _, err := p.parse()
-	return common.PageIdentifier(p.Identifier), fm, err
+
+	matter := &map[string]any{}
+	_, err = adrgFrontmatter.Parse(bytes.NewReader(content), &matter)
+	if err != nil {
+		return identifier, nil, err
+	}
+
+	return identifier, *matter, nil
 }
 
 func (s *Site) ReadMarkdown(identifier common.PageIdentifier) (common.PageIdentifier, common.Markdown, error) {
