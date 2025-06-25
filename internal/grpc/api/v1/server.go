@@ -2,6 +2,7 @@ package v1
 
 import (
 	"context"
+	"reflect"
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/common"
@@ -13,7 +14,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
- // Server is the implementation of the gRPC services.
+// Server is the implementation of the gRPC services.
 type Server struct {
 	apiv1.UnimplementedVersionServer
 	apiv1.UnimplementedFrontmatterServer
@@ -24,14 +25,21 @@ type Server struct {
 }
 
 // ReplaceFrontmatter implements the ReplaceFrontmatter RPC.
-func (s *Server) ReplaceFrontmatter(ctx context.Context, req *apiv1.ReplaceFrontmatterRequest) (*apiv1.ReplaceFrontmatterResponse, error) {
-	if s.PageReadWriter == nil {
+func (s *Server) ReplaceFrontmatter(ctx context.Context, req *apiv1.ReplaceFrontmatterRequest) (resp *apiv1.ReplaceFrontmatterResponse, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = status.Errorf(codes.Internal, "panic during ReplaceFrontmatter: %v", r)
+		}
+	}()
+
+	v := reflect.ValueOf(s.PageReadWriter)
+	if s.PageReadWriter == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
 		return nil, status.Error(codes.Internal, "PageReadWriter not available")
 	}
 
 	fm := req.Frontmatter.AsMap()
 
-	err := s.PageReadWriter.WriteFrontMatter(req.Page, fm)
+	err = s.PageReadWriter.WriteFrontMatter(req.Page, fm)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to write frontmatter: %v", err)
 	}
@@ -66,18 +74,27 @@ func (s *Server) GetVersion(ctx context.Context, req *apiv1.GetVersionRequest) (
 	}, nil
 }
 
- // GetFrontmatter implements the GetFrontmatter RPC.
-func (s *Server) GetFrontmatter(ctx context.Context, req *apiv1.GetFrontmatterRequest) (*apiv1.GetFrontmatterResponse, error) {
-	if s.PageReadWriter == nil {
+// GetFrontmatter implements the GetFrontmatter RPC.
+func (s *Server) GetFrontmatter(ctx context.Context, req *apiv1.GetFrontmatterRequest) (resp *apiv1.GetFrontmatterResponse, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = status.Errorf(codes.Internal, "panic during GetFrontmatter: %v", r)
+		}
+	}()
+
+	v := reflect.ValueOf(s.PageReadWriter)
+	if s.PageReadWriter == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
 		return nil, status.Error(codes.Internal, "PageReadWriter not available")
 	}
 
-	_, fm, err := s.PageReadWriter.ReadFrontMatter(req.Page)
+	var fm map[string]any
+	_, fm, err = s.PageReadWriter.ReadFrontMatter(req.Page)
 	if err != nil {
 		return nil, status.Errorf(codes.NotFound, "page not found: %s", req.Page)
 	}
 
-	structFm, err := structpb.NewStruct(fm)
+	var structFm *structpb.Struct
+	structFm, err = structpb.NewStruct(fm)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to convert frontmatter to struct: %v", err)
 	}
