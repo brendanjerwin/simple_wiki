@@ -1,75 +1,180 @@
 package utils_test
 
 import (
-	"testing"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 
 	"github.com/brendanjerwin/simple_wiki/utils"
 )
 
-// test Render method happy path
-func TestGoldmarkRenderer_Render(t *testing.T) {
-	//create a renderer
-	renderer := utils.GoldmarkRenderer{}
-	//call Render method
-	source := []byte("test")
-	output, err := renderer.Render(source)
-	// add your assertions here
-	//verify that the method returned the expected value
+var _ = Describe("GoldmarkRenderer", func() {
+	var renderer *utils.GoldmarkRenderer
 
-	if err != nil {
-		t.Error(err)
-	}
+	BeforeEach(func() {
+		renderer = &utils.GoldmarkRenderer{}
+	})
 
-	expected := []byte("<p>test</p>\n")
-	if string(expected) != string(output) {
-		t.Errorf("expected: %s, got: %s", expected, output)
-	}
-}
+	It("should exist", func() {
+		Expect(renderer).NotTo(BeNil())
+	})
 
-func TestGoldmarkRenderer_Render_Checkboxes(t *testing.T) {
-	// Create a renderer
-	renderer := utils.GoldmarkRenderer{}
+	Describe("Render", func() {
+		var (
+			source []byte
+			output []byte
+			err    error
+		)
 
-	// Define a markdown string with checkboxes
-	source := []byte("- [x] Done\n- [ ] Not Done")
+		JustBeforeEach(func() {
+			output, err = renderer.Render(source)
+		})
 
-	// Call the Render method
-	output, err := renderer.Render(source)
+		When("rendering simple markdown", func() {
+			BeforeEach(func() {
+				source = []byte("test")
+			})
 
-	// Check if there was an error
-	if err != nil {
-		t.Error(err)
-	}
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
 
-	// Define the expected HTML output
-	expected := []byte("<ul>\n<li><input checked=\"\" disabled=\"\" type=\"checkbox\" /> Done</li>\n<li><input disabled=\"\" type=\"checkbox\" /> Not Done</li>\n</ul>\n")
+			It("should render a paragraph", func() {
+				Expect(string(output)).To(Equal("<p>test</p>\n"))
+			})
+		})
 
-	// Compare the expected output with the actual output
-	if string(expected) != string(output) {
-		t.Errorf("expected: %s, got: %s", expected, output)
-	}
-}
+		When("rendering markdown with checkboxes", func() {
+			BeforeEach(func() {
+				source = []byte("- [x] Done\n- [ ] Not Done")
+			})
 
-func TestGoldmarkRenderer_Render_Emojis(t *testing.T) {
-	// Create a renderer
-	renderer := utils.GoldmarkRenderer{}
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
 
-	// Define a markdown string with an emoji
-	source := []byte("I am so happy :joy:")
+			It("should render checkboxes as disabled input elements", func() {
+				expected := "<ul>\n<li><input checked=\"\" disabled=\"\" type=\"checkbox\" /> Done</li>\n<li><input disabled=\"\" type=\"checkbox\" /> Not Done</li>\n</ul>\n"
+				Expect(string(output)).To(Equal(expected))
+			})
+		})
 
-	// Call the Render method
-	output, err := renderer.Render(source)
+		When("rendering markdown with emojis", func() {
+			BeforeEach(func() {
+				source = []byte("I am so happy :joy:")
+			})
 
-	// Check if there was an error
-	if err != nil {
-		t.Error(err)
-	}
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
 
-	// Define the expected HTML output
-	expected := []byte("<p>I am so happy &#x1f602;</p>\n")
+			It("should render the emoji", func() {
+				expected := "<p>I am so happy &#x1f602;</p>\n"
+				Expect(string(output)).To(Equal(expected))
+			})
+		})
 
-	// Compare the expected output with the actual output
-	if string(expected) != string(output) {
-		t.Errorf("expected: %s, got: %s", expected, output)
-	}
-}
+		When("rendering markdown with a table", func() {
+			BeforeEach(func() {
+				source = []byte("| A | B |\n|---|---|\n| 1 | 2 |")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should render an HTML table", func() {
+				expected := "<table>\n<thead>\n<tr>\n<th>A</th>\n<th>B</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>1</td>\n<td>2</td>\n</tr>\n</tbody>\n</table>\n"
+				Expect(string(output)).To(Equal(expected))
+			})
+		})
+
+		When("rendering markdown with strikethrough", func() {
+			BeforeEach(func() {
+				source = []byte("~~deleted~~")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should render a <del> tag", func() {
+				expected := "<p><del>deleted</del></p>\n"
+				Expect(string(output)).To(Equal(expected))
+			})
+		})
+
+		When("rendering markdown with an autolink", func() {
+			BeforeEach(func() {
+				source = []byte("https://www.google.com")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should render an <a> tag", func() {
+				expected := "<p><a href=\"https://www.google.com\">https://www.google.com</a></p>\n"
+				Expect(string(output)).To(Equal(expected))
+			})
+		})
+
+		When("rendering markdown with headings", func() {
+			BeforeEach(func() {
+				source = []byte("# heading 1\n## heading 2")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should render h tags with ids", func() {
+				expected := "<h1 id=\"heading-1\">heading 1</h1>\n<h2 id=\"heading-2\">heading 2</h2>\n"
+				Expect(string(output)).To(Equal(expected))
+			})
+		})
+
+		When("rendering markdown with hard wraps", func() {
+			BeforeEach(func() {
+				source = []byte("hello\nworld")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should render a <br /> tag", func() {
+				expected := "<p>hello<br />\nworld</p>\n"
+				Expect(string(output)).To(Equal(expected))
+			})
+		})
+
+		When("rendering markdown with raw HTML", func() {
+			BeforeEach(func() {
+				source = []byte("<div>hello</div>")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should escape the HTML", func() {
+				expected := "<p>&lt;div&gt;hello&lt;/div&gt;</p>\n"
+				Expect(string(output)).To(Equal(expected))
+			})
+		})
+
+		When("rendering nil source", func() {
+			BeforeEach(func() {
+				source = nil
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should render empty string", func() {
+				Expect(string(output)).To(BeEmpty())
+			})
+		})
+	})
+})
