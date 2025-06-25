@@ -4,12 +4,15 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
-	"github.com/brendanjerwin/simple_wiki/internal/grpc/debug"
+	grpcApi "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
 	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"github.com/jcelliott/lumber"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
@@ -35,7 +38,7 @@ func main() {
 		grpcServer := grpc.NewServer()
 
 		// 2. Create and register your gRPC services
-		debugSvc := debug.NewServer(version, commit, app.Compiled)
+		debugSvc := grpcApi.NewServer(version, commit, app.Compiled)
 		debugSvc.RegisterWithServer(grpcServer)
 
 		// Enable reflection for gRPC services
@@ -47,6 +50,7 @@ func main() {
 			grpcweb.WithOriginFunc(func(origin string) bool { return true }),
 		)
 
+		logger := makeLogger(c.GlobalBool("debug"))
 		// 4. Create the Gin router using our new router function
 		router := server.NewRouter(
 			pathToData,
@@ -59,15 +63,17 @@ func main() {
 			!c.GlobalBool("block-file-uploads"),
 			c.GlobalUint("max-upload-mb"),
 			c.GlobalUint("max-document-length"),
-			logger(c.GlobalBool("debug")),
+			logger,
 		)
 
 		// 5. Create a multiplexer to route traffic to either gRPC or Gin.
 		multiplexedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if wrappedGrpc.IsGrpcWebRequest(r) || wrappedGrpc.IsGrpcWebSocketRequest(r) {
+			if strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
+				logger.Debug("gRPC-ish request: %s %s", r.Method, r.URL.Path)
 				wrappedGrpc.ServeHTTP(w, r)
 				return
 			}
+			logger.Debug("Gin request: %s %s", r.Method, r.URL.Path)
 			router.ServeHTTP(w, r)
 		})
 
@@ -79,7 +85,11 @@ func main() {
 		addr := fmt.Sprintf("%s:%s", host, c.GlobalString("port"))
 		fmt.Printf("\nRunning simple_wiki server (version %s) at http://%s\n\n", version, addr)
 
-		return http.ListenAndServe(addr, multiplexedHandler)
+		srv := &http.Server{
+			Addr:    addr,
+			Handler: h2c.NewHandler(multiplexedHandler, &http2.Server{}),
+		}
+		return srv.ListenAndServe()
 	}
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
@@ -150,13 +160,7 @@ func main() {
 	app.Run(os.Args)
 }
 
-// exists returns whether the given file or directory exists or not
-func exists(path string) bool {
-	_, err := os.Stat(path)
-	return !os.IsNotExist(err)
-}
-
-func logger(debug bool) *lumber.ConsoleLogger {
+func makeLogger(debug bool) *lumber.ConsoleLogger {
 	if !debug {
 		return lumber.NewConsoleLogger(lumber.WARN)
 	}

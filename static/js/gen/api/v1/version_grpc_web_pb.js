@@ -1,5 +1,5 @@
 /**
- * @fileoverview gRPC-Web generated client stub for server.v1
+ * @fileoverview gRPC-Web generated client stub for api.v1
  * @enhanceable
  * @public
  */
@@ -8,7 +8,7 @@
 // versions:
 // 	protoc-gen-grpc-web v1.5.0
 // 	protoc              v0.0.0
-// source: server/v1/debug.proto
+// source: api/v1/version.proto
 
 
 /* eslint-disable */
@@ -22,8 +22,8 @@ grpc.web = require('grpc-web');
 
 var google_protobuf_timestamp_pb = require('google-protobuf/google/protobuf/timestamp_pb.js')
 const proto = {};
-proto.server = {};
-proto.server.v1 = require('./debug_pb.js');
+proto.api = {};
+proto.api.v1 = require('./version_pb.js');
 
 /**
  * @param {string} hostname
@@ -33,7 +33,7 @@ proto.server.v1 = require('./debug_pb.js');
  * @struct
  * @final
  */
-proto.server.v1.DebugServiceClient =
+proto.api.v1.VersionServiceClient =
     function(hostname, credentials, options) {
   if (!options) options = {};
   options.format = 'text';
@@ -59,7 +59,7 @@ proto.server.v1.DebugServiceClient =
  * @struct
  * @final
  */
-proto.server.v1.DebugServicePromiseClient =
+proto.api.v1.VersionServicePromiseClient =
     function(hostname, credentials, options) {
   if (!options) options = {};
   options.format = 'text';
@@ -80,63 +80,63 @@ proto.server.v1.DebugServicePromiseClient =
 /**
  * @const
  * @type {!grpc.web.MethodDescriptor<
- *   !proto.server.v1.GetVersionRequest,
- *   !proto.server.v1.GetVersionResponse>}
+ *   !proto.api.v1.GetVersionRequest,
+ *   !proto.api.v1.GetVersionResponse>}
  */
-const methodDescriptor_DebugService_GetVersion = new grpc.web.MethodDescriptor(
-  '/server.v1.DebugService/GetVersion',
+const methodDescriptor_VersionService_GetVersion = new grpc.web.MethodDescriptor(
+  '/api.v1.VersionService/GetVersion',
   grpc.web.MethodType.UNARY,
-  proto.server.v1.GetVersionRequest,
-  proto.server.v1.GetVersionResponse,
+  proto.api.v1.GetVersionRequest,
+  proto.api.v1.GetVersionResponse,
   /**
-   * @param {!proto.server.v1.GetVersionRequest} request
+   * @param {!proto.api.v1.GetVersionRequest} request
    * @return {!Uint8Array}
    */
   function(request) {
     return request.serializeBinary();
   },
-  proto.server.v1.GetVersionResponse.deserializeBinary
+  proto.api.v1.GetVersionResponse.deserializeBinary
 );
 
 
 /**
- * @param {!proto.server.v1.GetVersionRequest} request The
+ * @param {!proto.api.v1.GetVersionRequest} request The
  *     request proto
  * @param {?Object<string, string>} metadata User defined
  *     call metadata
- * @param {function(?grpc.web.RpcError, ?proto.server.v1.GetVersionResponse)}
+ * @param {function(?grpc.web.RpcError, ?proto.api.v1.GetVersionResponse)}
  *     callback The callback function(error, response)
- * @return {!grpc.web.ClientReadableStream<!proto.server.v1.GetVersionResponse>|undefined}
+ * @return {!grpc.web.ClientReadableStream<!proto.api.v1.GetVersionResponse>|undefined}
  *     The XHR Node Readable Stream
  */
-proto.server.v1.DebugServiceClient.prototype.getVersion =
+proto.api.v1.VersionServiceClient.prototype.getVersion =
     function(request, metadata, callback) {
   return this.client_.rpcCall(this.hostname_ +
-      '/server.v1.DebugService/GetVersion',
+      '/api.v1.VersionService/GetVersion',
       request,
       metadata || {},
-      methodDescriptor_DebugService_GetVersion,
+      methodDescriptor_VersionService_GetVersion,
       callback);
 };
 
 
 /**
- * @param {!proto.server.v1.GetVersionRequest} request The
+ * @param {!proto.api.v1.GetVersionRequest} request The
  *     request proto
  * @param {?Object<string, string>=} metadata User defined
  *     call metadata
- * @return {!Promise<!proto.server.v1.GetVersionResponse>}
+ * @return {!Promise<!proto.api.v1.GetVersionResponse>}
  *     Promise that resolves to the response
  */
-proto.server.v1.DebugServicePromiseClient.prototype.getVersion =
+proto.api.v1.VersionServicePromiseClient.prototype.getVersion =
     function(request, metadata) {
   return this.client_.unaryCall(this.hostname_ +
-      '/server.v1.DebugService/GetVersion',
+      '/api.v1.VersionService/GetVersion',
       request,
       metadata || {},
-      methodDescriptor_DebugService_GetVersion);
+      methodDescriptor_VersionService_GetVersion);
 };
 
 
-module.exports = proto.server.v1;
+module.exports = proto.api.v1;
 

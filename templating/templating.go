@@ -76,7 +76,7 @@ func ConstructTemplateContextFromFrontmatter(frontmatter common.FrontMatter, que
 	return context, nil
 }
 
-func BuildShowInventoryContentsOf(site common.IReadPages, query frontmatter.IQueryFrontmatterIndex, indent int) func(string) string {
+func BuildShowInventoryContentsOf(site common.PageReader, query frontmatter.IQueryFrontmatterIndex, indent int) func(string) string {
 	isContainer := BuildIsContainer(query)
 
 	return func(containerIdentifier string) string {
@@ -124,7 +124,7 @@ func BuildShowInventoryContentsOf(site common.IReadPages, query frontmatter.IQue
 	}
 }
 
-func BuildLinkTo(site common.IReadPages, currentPageTemplateContext TemplateContext, query frontmatter.IQueryFrontmatterIndex) func(string) string {
+func BuildLinkTo(site common.PageReader, currentPageTemplateContext TemplateContext, query frontmatter.IQueryFrontmatterIndex) func(string) string {
 	isContainer := BuildIsContainer(query)
 	return func(identifierToLink string) string {
 		if identifierToLink == "" {
@@ -136,17 +136,17 @@ func BuildLinkTo(site common.IReadPages, currentPageTemplateContext TemplateCont
 			titleCaser := cases.Title(language.AmericanEnglish)
 			titleCasedTitle := titleCaser.String(strings.ReplaceAll(strcase.SnakeCase(identifierToLink), "_", " "))
 			urlEncodedTitle := url.QueryEscape(titleCasedTitle)
-			//Doesnt look like it exists yet, return a link.
-			//It'll render and let the page get created.
+			// Doesnt look like it exists yet, return a link.
+			// It'll render and let the page get created.
 			if isContainer(currentPageTemplateContext.Identifier) {
-				//special inventory item link with attributes
+				// special inventory item link with attributes
 				return "[" + titleCasedTitle + "](/" + identifierToLink + "?tmpl=inv_item&inventory.container=" + currentPageTemplateContext.Identifier + "&title=" + urlEncodedTitle + ")"
 			}
 
 			return "[" + titleCasedTitle + "](/" + identifierToLink + "?title=" + urlEncodedTitle + ")"
 		}
 
-		//Linked Page Exists
+		// Linked Page Exists
 		tmplString := "{{if index . \"title\"}}[{{ index . \"title\" }}](/{{ index . \"identifier\" }}){{else}}[{{ index . \"identifier\" }}](/{{ index . \"identifier\" }}){{end}}"
 		tmpl, err := template.New("content").Parse(tmplString)
 		if err != nil {
@@ -181,7 +181,7 @@ func BuildIsContainer(query frontmatter.IQueryFrontmatterIndex) func(string) boo
 	}
 }
 
-func ExecuteTemplate(templateString string, frontmatter common.FrontMatter, site common.IReadPages, query frontmatter.IQueryFrontmatterIndex) ([]byte, error) {
+func ExecuteTemplate(templateString string, frontmatter common.FrontMatter, site common.PageReader, query frontmatter.IQueryFrontmatterIndex) ([]byte, error) {
 	templateContext, err := ConstructTemplateContextFromFrontmatter(frontmatter, query)
 	if err != nil {
 		return nil, err

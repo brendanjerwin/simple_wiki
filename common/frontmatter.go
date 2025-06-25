@@ -1,10 +1,12 @@
 package common
 
-type PageIdentifier = string
-type Markdown = string
-type FrontMatter = map[string]interface{}
+type (
+	PageIdentifier = string
+	Markdown       = string
+	FrontMatter    = map[string]any
+)
 
-type IReadPages interface {
-	ReadFrontMatter(requested_identifier string) (PageIdentifier, FrontMatter, error)
-	ReadMarkdown(requested_identifier string) (PageIdentifier, Markdown, error)
+type PageReader interface {
+	ReadFrontMatter(requestedIdentifier PageIdentifier) (PageIdentifier, FrontMatter, error)
+	ReadMarkdown(requestedIdentifier PageIdentifier) (PageIdentifier, Markdown, error)
 }

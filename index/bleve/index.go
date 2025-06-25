@@ -14,7 +14,7 @@ import (
 
 type BleveIndex struct {
 	index              bleveActual.Index
-	pageReader         common.IReadPages
+	pageReader         common.PageReader
 	frontmatterQueryer frontmatter.IQueryFrontmatterIndex
 }
 
@@ -22,7 +22,7 @@ type IQueryBleveIndex interface {
 	Query(query string) ([]SearchResult, error)
 }
 
-func NewBleveIndex(pageReader common.IReadPages, frontmatterQueryer frontmatter.IQueryFrontmatterIndex) (*BleveIndex, error) {
+func NewBleveIndex(pageReader common.PageReader, frontmatterQueryer frontmatter.IQueryFrontmatterIndex) (*BleveIndex, error) {
 	mapping := bleveActual.NewIndexMapping()
 	mapping.DefaultAnalyzer = "en"
 	index, err := bleveActual.NewMemOnly(mapping)
@@ -37,8 +37,10 @@ func NewBleveIndex(pageReader common.IReadPages, frontmatterQueryer frontmatter.
 	}, nil
 }
 
-var linkRemoval = regexp.MustCompile(`<.*?>`)
-var repeatedNewlineRegex = regexp.MustCompile(`\s*\n\s*\n\s*\n(\s*\n)*`)
+var (
+	linkRemoval          = regexp.MustCompile(`<.*?>`)
+	repeatedNewlineRegex = regexp.MustCompile(`\s*\n\s*\n\s*\n(\s*\n)*`)
+)
 
 func (b *BleveIndex) AddPageToIndex(requested_identifier common.PageIdentifier) error {
 	munged_identifier := common.MungeIdentifier(requested_identifier)

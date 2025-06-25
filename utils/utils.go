@@ -17,8 +17,10 @@ import (
 	"github.com/brendanjerwin/simple_wiki/templating"
 )
 
-var animals []string
-var adjectives []string
+var (
+	animals    []string
+	adjectives []string
+)
 
 // IRenderMarkdownToHtml is an interface that abstracts the rendering process
 type IRenderMarkdownToHtml interface {
@@ -119,12 +121,12 @@ func StripFrontmatter(s string) string {
 	return string(unsafe)
 }
 
-func MarkdownToHtmlAndJsonFrontmatter(s string, handleFrontMatter bool, site common.IReadPages, renderer IRenderMarkdownToHtml, query frontmatterIdx.IQueryFrontmatterIndex) ([]byte, []byte, error) {
+func MarkdownToHtmlAndJsonFrontmatter(s string, handleFrontMatter bool, site common.PageReader, renderer IRenderMarkdownToHtml, query frontmatterIdx.IQueryFrontmatterIndex) ([]byte, []byte, error) {
 	var markdownBytes []byte
 	var matterBytes []byte
 	var err error
 
-	matter := &map[string]interface{}{}
+	matter := &map[string]any{}
 	if handleFrontMatter {
 		markdownBytes, err = frontmatter.Parse(strings.NewReader(s), &matter)
 		if err != nil {

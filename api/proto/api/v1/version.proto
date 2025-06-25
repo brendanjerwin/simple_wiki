@@ -1,13 +1,12 @@
 syntax = "proto3";
 
-package server.v1;
+package api.v1;
 
 import "google/protobuf/timestamp.proto";
 
-option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/server/v1;serverv1";
+option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
 
-// A debug service definition.
-service DebugService {
+service VersionService {
   // GetVersion returns the server version and build time.
   rpc GetVersion(GetVersionRequest) returns (GetVersionResponse) {}
 }
