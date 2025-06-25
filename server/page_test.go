@@ -3,7 +3,6 @@ package server
 import (
 	"net/http"
 	"os"
-	"testing"
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/utils"
@@ -11,11 +10,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
-
-func TestServer(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Server Suite")
-}
 
 var _ = Describe("Page Functions", func() {
 	var (

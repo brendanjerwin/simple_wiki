@@ -13,23 +13,41 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// Server is the implementation of the gRPC services.
+ // Server is the implementation of the gRPC services.
 type Server struct {
 	apiv1.UnimplementedVersionServer
 	apiv1.UnimplementedFrontmatterServer
-	Version    string
-	Commit     string
-	BuildTime  time.Time
-	PageReader common.PageReader
+	Version        string
+	Commit         string
+	BuildTime      time.Time
+	PageReadWriter common.PageReadWriter
+}
+
+// ReplaceFrontmatter implements the ReplaceFrontmatter RPC.
+func (s *Server) ReplaceFrontmatter(ctx context.Context, req *apiv1.ReplaceFrontmatterRequest) (*apiv1.ReplaceFrontmatterResponse, error) {
+	if s.PageReadWriter == nil {
+		return nil, status.Error(codes.Internal, "PageReadWriter not available")
+	}
+
+	fm := req.Frontmatter.AsMap()
+
+	err := s.PageReadWriter.WriteFrontMatter(req.Page, fm)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to write frontmatter: %v", err)
+	}
+
+	return &apiv1.ReplaceFrontmatterResponse{
+		Frontmatter: req.Frontmatter,
+	}, nil
 }
 
 // NewServer creates a new debug server.
-func NewServer(version, commit string, buildTime time.Time, pageReader common.PageReader) *Server {
+func NewServer(version, commit string, buildTime time.Time, pageReadWriter common.PageReadWriter) *Server {
 	return &Server{
-		Version:    version,
-		Commit:     commit,
-		BuildTime:  buildTime,
-		PageReader: pageReader,
+		Version:        version,
+		Commit:         commit,
+		BuildTime:      buildTime,
+		PageReadWriter: pageReadWriter,
 	}
 }
 
@@ -48,13 +66,13 @@ func (s *Server) GetVersion(ctx context.Context, req *apiv1.GetVersionRequest) (
 	}, nil
 }
 
-// GetFrontmatter implements the GetFrontmatter RPC.
+ // GetFrontmatter implements the GetFrontmatter RPC.
 func (s *Server) GetFrontmatter(ctx context.Context, req *apiv1.GetFrontmatterRequest) (*apiv1.GetFrontmatterResponse, error) {
-	if s.PageReader == nil {
-		return nil, status.Error(codes.Internal, "PageReader not available")
+	if s.PageReadWriter == nil {
+		return nil, status.Error(codes.Internal, "PageReadWriter not available")
 	}
 
-	_, fm, err := s.PageReader.ReadFrontMatter(req.Page)
+	_, fm, err := s.PageReadWriter.ReadFrontMatter(req.Page)
 	if err != nil {
 		return nil, status.Errorf(codes.NotFound, "page not found: %s", req.Page)
 	}

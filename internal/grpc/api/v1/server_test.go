@@ -21,21 +21,37 @@ func TestServer(t *testing.T) {
 	RunSpecs(t, "gRPC V1 Server Suite")
 }
 
-// MockPageReader satisfies the common.PageReader interface for testing.
-type MockPageReader struct {
-	Frontmatter common.FrontMatter
-	Markdown    common.Markdown
-	Err         error
+// MockPageReadWriter is a mock implementation of common.PageReadWriter for testing.
+type MockPageReadWriter struct {
+	Frontmatter        common.FrontMatter
+	Markdown           common.Markdown
+	Err                error
+	WrittenFrontmatter common.FrontMatter
+	WrittenMarkdown    common.Markdown
+	WrittenIdentifier  common.PageIdentifier
+	WriteErr           error
 }
 
-func (m *MockPageReader) ReadFrontMatter(identifier common.PageIdentifier) (common.PageIdentifier, common.FrontMatter, error) {
+func (m *MockPageReadWriter) ReadFrontMatter(identifier common.PageIdentifier) (common.PageIdentifier, common.FrontMatter, error) {
 	if m.Err != nil {
 		return "", nil, m.Err
 	}
 	return identifier, m.Frontmatter, nil
 }
 
-func (m *MockPageReader) ReadMarkdown(identifier common.PageIdentifier) (common.PageIdentifier, common.Markdown, error) {
+func (m *MockPageReadWriter) WriteFrontMatter(identifier common.PageIdentifier, fm common.FrontMatter) error {
+	m.WrittenIdentifier = identifier
+	m.WrittenFrontmatter = fm
+	return m.WriteErr
+}
+
+func (m *MockPageReadWriter) WriteMarkdown(identifier common.PageIdentifier, md common.Markdown) error {
+	m.WrittenIdentifier = identifier
+	m.WrittenMarkdown = md
+	return m.WriteErr
+}
+
+func (m *MockPageReadWriter) ReadMarkdown(identifier common.PageIdentifier) (common.PageIdentifier, common.Markdown, error) {
 	if m.Err != nil {
 		return "", "", m.Err
 	}
@@ -54,27 +70,27 @@ var _ = Describe("Server", func() {
 
 	Describe("GetFrontmatter", func() {
 		var (
-			req        *apiv1.GetFrontmatterRequest
-			res        *apiv1.GetFrontmatterResponse
-			err        error
-			mockReader *MockPageReader
+			req                *apiv1.GetFrontmatterRequest
+			res                *apiv1.GetFrontmatterResponse
+			err                error
+			mockPageReadWriter *MockPageReadWriter
 		)
 
 		BeforeEach(func() {
 			req = &apiv1.GetFrontmatterRequest{
 				Page: "test-page",
 			}
-			mockReader = &MockPageReader{}
+			mockPageReadWriter = &MockPageReadWriter{}
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("v0.0.0", "commit", time.Now(), mockReader)
+			server = v1.NewServer("v0.0.0", "commit", time.Now(), mockPageReadWriter)
 			res, err = server.GetFrontmatter(ctx, req)
 		})
 
-		When("the PageReader is not configured", func() {
+		When("the PageReadWriter is not configured", func() {
 			BeforeEach(func() {
-				mockReader = nil
+				mockPageReadWriter = nil
 			})
 
 			It("should return an internal error", func() {
@@ -83,13 +99,13 @@ var _ = Describe("Server", func() {
 				st, ok := status.FromError(err)
 				Expect(ok).To(BeTrue())
 				Expect(st.Code()).To(Equal(codes.Internal))
-				Expect(st.Message()).To(Equal("PageReader not available"))
+				Expect(st.Message()).To(Equal("PageReadWriter not available"))
 			})
 		})
 
 		When("the requested page does not exist", func() {
 			BeforeEach(func() {
-				mockReader.Err = errors.New("not found")
+				mockPageReadWriter.Err = errors.New("not found")
 			})
 
 			It("should return a not found error", func() {
@@ -110,7 +126,7 @@ var _ = Describe("Server", func() {
 					"title": "Test Page",
 					"tags":  []any{"test", "ginkgo"},
 				}
-				mockReader.Frontmatter = expectedFm
+				mockPageReadWriter.Frontmatter = expectedFm
 			})
 
 			It("should not return an error", func() {
@@ -122,6 +138,84 @@ var _ = Describe("Server", func() {
 				expectedStruct, err := structpb.NewStruct(expectedFm)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(res.Frontmatter).To(Equal(expectedStruct))
+			})
+		})
+	})
+
+	Describe("ReplaceFrontmatter", func() {
+		var (
+			req                *apiv1.ReplaceFrontmatterRequest
+			resp               *apiv1.ReplaceFrontmatterResponse
+			err                error
+			mockPageReadWriter *MockPageReadWriter
+			pageName           string
+			newFrontmatter     common.FrontMatter
+			newFrontmatterPb   *structpb.Struct
+		)
+
+		BeforeEach(func() {
+			pageName = "test-page"
+			newFrontmatter = common.FrontMatter{"title": "New Title", "tags": []any{"a", "b"}}
+			var err error
+			newFrontmatterPb, err = structpb.NewStruct(newFrontmatter)
+			Expect(err).NotTo(HaveOccurred())
+
+			mockPageReadWriter = &MockPageReadWriter{}
+
+			req = &apiv1.ReplaceFrontmatterRequest{
+				Page:        pageName,
+				Frontmatter: newFrontmatterPb,
+			}
+		})
+
+		JustBeforeEach(func() {
+			server = v1.NewServer("v0.0.0", "commit", time.Now(), mockPageReadWriter)
+			resp, err = server.ReplaceFrontmatter(ctx, req)
+		})
+
+		When("the PageReadWriter is not configured", func() {
+			BeforeEach(func() {
+				mockPageReadWriter = nil
+			})
+
+			It("should return an internal error", func() {
+				Expect(resp).To(BeNil())
+				Expect(err).To(HaveOccurred())
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.Internal))
+				Expect(st.Message()).To(Equal("PageReadWriter not available"))
+			})
+		})
+
+		When("writing the frontmatter fails", func() {
+			BeforeEach(func() {
+				mockPageReadWriter.WriteErr = errors.New("disk full")
+			})
+
+			It("should return an internal error", func() {
+				Expect(resp).To(BeNil())
+				Expect(err).To(HaveOccurred())
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.Internal))
+				Expect(st.Message()).To(ContainSubstring("failed to write frontmatter"))
+			})
+		})
+
+		When("the request is successful", func() {
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp).NotTo(BeNil())
+			})
+
+			It("should write the new frontmatter to the page", func() {
+				Expect(mockPageReadWriter.WrittenIdentifier).To(Equal(common.PageIdentifier(pageName)))
+				Expect(mockPageReadWriter.WrittenFrontmatter).To(Equal(newFrontmatter))
+			})
+
+			It("should return the new frontmatter", func() {
+				Expect(resp.Frontmatter).To(Equal(newFrontmatterPb))
 			})
 		})
 	})

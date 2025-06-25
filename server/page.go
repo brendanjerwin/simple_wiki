@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bytes"
 	"encoding/json"
 	"net/http"
 	"os"
@@ -11,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/adrg/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/common"
 	"github.com/brendanjerwin/simple_wiki/utils"
 	"github.com/schollz/versionedtext"
@@ -37,36 +35,6 @@ func (p Page) LastEditTime() time.Time {
 
 func (p Page) LastEditUnixTime() int64 {
 	return p.Text.LastEditTime() / 1000000000
-}
-
-func (s *Site) ReadFrontMatter(requested_identifier string) (string, common.FrontMatter, error) {
-	identifier, content, err := s.readFileByIdentifier(requested_identifier, "md")
-	if err != nil {
-		return identifier, nil, err
-	}
-
-	matter := &map[string]interface{}{}
-	_, err = frontmatter.Parse(bytes.NewReader(content), &matter)
-	if err != nil {
-		return identifier, nil, err
-	}
-
-	return identifier, *matter, nil
-}
-
-func (s *Site) ReadMarkdown(requested_identifier string) (string, string, error) {
-	identifier, content, err := s.readFileByIdentifier(requested_identifier, "md")
-	if err != nil {
-		return identifier, "", err
-	}
-
-	matter := &common.FrontMatter{}
-	markdownBytes, err := frontmatter.Parse(bytes.NewReader(content), &matter)
-	if err != nil {
-		return identifier, "", err
-	}
-
-	return identifier, string(markdownBytes), nil
 }
 
 func (s *Site) Open(requested_identifier string) (p *Page) {
@@ -148,15 +116,14 @@ items = [
 }
 
 func (s *Site) readFileByIdentifier(identifier, extension string) (string, []byte, error) {
-
-	//First try with the munged identifier
+	// First try with the munged identifier
 	munged_identifier := common.MungeIdentifier(identifier)
 	bJSON, err := os.ReadFile(path.Join(s.PathToData, utils.EncodeToBase32(strings.ToLower(munged_identifier))+"."+extension))
 	if err == nil {
 		return munged_identifier, bJSON, nil
 	}
 
-	//Then try with the original identifier if that didn't work (older files)
+	// Then try with the original identifier if that didn't work (older files)
 	bJSON, err = os.ReadFile(path.Join(s.PathToData, utils.EncodeToBase32(strings.ToLower(identifier))+"."+extension))
 	if err == nil {
 		return identifier, bJSON, nil
