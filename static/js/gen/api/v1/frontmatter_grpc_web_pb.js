@@ -138,5 +138,188 @@ proto.api.v1.FrontmatterPromiseClient.prototype.getFrontmatter =
 };
 
 
+/**
+ * @const
+ * @type {!grpc.web.MethodDescriptor<
+ *   !proto.api.v1.MergeFrontmatterRequest,
+ *   !proto.api.v1.MergeFrontmatterResponse>}
+ */
+const methodDescriptor_Frontmatter_MergeFrontmatter = new grpc.web.MethodDescriptor(
+  '/api.v1.Frontmatter/MergeFrontmatter',
+  grpc.web.MethodType.UNARY,
+  proto.api.v1.MergeFrontmatterRequest,
+  proto.api.v1.MergeFrontmatterResponse,
+  /**
+   * @param {!proto.api.v1.MergeFrontmatterRequest} request
+   * @return {!Uint8Array}
+   */
+  function(request) {
+    return request.serializeBinary();
+  },
+  proto.api.v1.MergeFrontmatterResponse.deserializeBinary
+);
+
+
+/**
+ * @param {!proto.api.v1.MergeFrontmatterRequest} request The
+ *     request proto
+ * @param {?Object<string, string>} metadata User defined
+ *     call metadata
+ * @param {function(?grpc.web.RpcError, ?proto.api.v1.MergeFrontmatterResponse)}
+ *     callback The callback function(error, response)
+ * @return {!grpc.web.ClientReadableStream<!proto.api.v1.MergeFrontmatterResponse>|undefined}
+ *     The XHR Node Readable Stream
+ */
+proto.api.v1.FrontmatterClient.prototype.mergeFrontmatter =
+    function(request, metadata, callback) {
+  return this.client_.rpcCall(this.hostname_ +
+      '/api.v1.Frontmatter/MergeFrontmatter',
+      request,
+      metadata || {},
+      methodDescriptor_Frontmatter_MergeFrontmatter,
+      callback);
+};
+
+
+/**
+ * @param {!proto.api.v1.MergeFrontmatterRequest} request The
+ *     request proto
+ * @param {?Object<string, string>=} metadata User defined
+ *     call metadata
+ * @return {!Promise<!proto.api.v1.MergeFrontmatterResponse>}
+ *     Promise that resolves to the response
+ */
+proto.api.v1.FrontmatterPromiseClient.prototype.mergeFrontmatter =
+    function(request, metadata) {
+  return this.client_.unaryCall(this.hostname_ +
+      '/api.v1.Frontmatter/MergeFrontmatter',
+      request,
+      metadata || {},
+      methodDescriptor_Frontmatter_MergeFrontmatter);
+};
+
+
+/**
+ * @const
+ * @type {!grpc.web.MethodDescriptor<
+ *   !proto.api.v1.ReplaceFrontmatterRequest,
+ *   !proto.api.v1.ReplaceFrontmatterResponse>}
+ */
+const methodDescriptor_Frontmatter_ReplaceFrontmatter = new grpc.web.MethodDescriptor(
+  '/api.v1.Frontmatter/ReplaceFrontmatter',
+  grpc.web.MethodType.UNARY,
+  proto.api.v1.ReplaceFrontmatterRequest,
+  proto.api.v1.ReplaceFrontmatterResponse,
+  /**
+   * @param {!proto.api.v1.ReplaceFrontmatterRequest} request
+   * @return {!Uint8Array}
+   */
+  function(request) {
+    return request.serializeBinary();
+  },
+  proto.api.v1.ReplaceFrontmatterResponse.deserializeBinary
+);
+
+
+/**
+ * @param {!proto.api.v1.ReplaceFrontmatterRequest} request The
+ *     request proto
+ * @param {?Object<string, string>} metadata User defined
+ *     call metadata
+ * @param {function(?grpc.web.RpcError, ?proto.api.v1.ReplaceFrontmatterResponse)}
+ *     callback The callback function(error, response)
+ * @return {!grpc.web.ClientReadableStream<!proto.api.v1.ReplaceFrontmatterResponse>|undefined}
+ *     The XHR Node Readable Stream
+ */
+proto.api.v1.FrontmatterClient.prototype.replaceFrontmatter =
+    function(request, metadata, callback) {
+  return this.client_.rpcCall(this.hostname_ +
+      '/api.v1.Frontmatter/ReplaceFrontmatter',
+      request,
+      metadata || {},
+      methodDescriptor_Frontmatter_ReplaceFrontmatter,
+      callback);
+};
+
+
+/**
+ * @param {!proto.api.v1.ReplaceFrontmatterRequest} request The
+ *     request proto
+ * @param {?Object<string, string>=} metadata User defined
+ *     call metadata
+ * @return {!Promise<!proto.api.v1.ReplaceFrontmatterResponse>}
+ *     Promise that resolves to the response
+ */
+proto.api.v1.FrontmatterPromiseClient.prototype.replaceFrontmatter =
+    function(request, metadata) {
+  return this.client_.unaryCall(this.hostname_ +
+      '/api.v1.Frontmatter/ReplaceFrontmatter',
+      request,
+      metadata || {},
+      methodDescriptor_Frontmatter_ReplaceFrontmatter);
+};
+
+
+/**
+ * @const
+ * @type {!grpc.web.MethodDescriptor<
+ *   !proto.api.v1.RemoveKeyAtPathRequest,
+ *   !proto.api.v1.RemoveKeyAtPathResponse>}
+ */
+const methodDescriptor_Frontmatter_RemoveKeyAtPath = new grpc.web.MethodDescriptor(
+  '/api.v1.Frontmatter/RemoveKeyAtPath',
+  grpc.web.MethodType.UNARY,
+  proto.api.v1.RemoveKeyAtPathRequest,
+  proto.api.v1.RemoveKeyAtPathResponse,
+  /**
+   * @param {!proto.api.v1.RemoveKeyAtPathRequest} request
+   * @return {!Uint8Array}
+   */
+  function(request) {
+    return request.serializeBinary();
+  },
+  proto.api.v1.RemoveKeyAtPathResponse.deserializeBinary
+);
+
+
+/**
+ * @param {!proto.api.v1.RemoveKeyAtPathRequest} request The
+ *     request proto
+ * @param {?Object<string, string>} metadata User defined
+ *     call metadata
+ * @param {function(?grpc.web.RpcError, ?proto.api.v1.RemoveKeyAtPathResponse)}
+ *     callback The callback function(error, response)
+ * @return {!grpc.web.ClientReadableStream<!proto.api.v1.RemoveKeyAtPathResponse>|undefined}
+ *     The XHR Node Readable Stream
+ */
+proto.api.v1.FrontmatterClient.prototype.removeKeyAtPath =
+    function(request, metadata, callback) {
+  return this.client_.rpcCall(this.hostname_ +
+      '/api.v1.Frontmatter/RemoveKeyAtPath',
+      request,
+      metadata || {},
+      methodDescriptor_Frontmatter_RemoveKeyAtPath,
+      callback);
+};
+
+
+/**
+ * @param {!proto.api.v1.RemoveKeyAtPathRequest} request The
+ *     request proto
+ * @param {?Object<string, string>=} metadata User defined
+ *     call metadata
+ * @return {!Promise<!proto.api.v1.RemoveKeyAtPathResponse>}
+ *     Promise that resolves to the response
+ */
+proto.api.v1.FrontmatterPromiseClient.prototype.removeKeyAtPath =
+    function(request, metadata) {
+  return this.client_.unaryCall(this.hostname_ +
+      '/api.v1.Frontmatter/RemoveKeyAtPath',
+      request,
+      metadata || {},
+      methodDescriptor_Frontmatter_RemoveKeyAtPath);
+};
+
+
 module.exports = proto.api.v1;
 

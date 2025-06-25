@@ -119,6 +119,410 @@ func (x *GetFrontmatterResponse) GetFrontmatter() *structpb.Struct {
 	return nil
 }
 
+// The request message for merging frontmatter.
+type MergeFrontmatterRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Page string `protobuf:"bytes,1,opt,name=page,proto3" json:"page,omitempty"`
+	// The frontmatter fields to merge.
+	Frontmatter *structpb.Struct `protobuf:"bytes,2,opt,name=frontmatter,proto3" json:"frontmatter,omitempty"`
+}
+
+func (x *MergeFrontmatterRequest) Reset() {
+	*x = MergeFrontmatterRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_api_v1_frontmatter_proto_msgTypes[2]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *MergeFrontmatterRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MergeFrontmatterRequest) ProtoMessage() {}
+
+func (x *MergeFrontmatterRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_frontmatter_proto_msgTypes[2]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MergeFrontmatterRequest.ProtoReflect.Descriptor instead.
+func (*MergeFrontmatterRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_frontmatter_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *MergeFrontmatterRequest) GetPage() string {
+	if x != nil {
+		return x.Page
+	}
+	return ""
+}
+
+func (x *MergeFrontmatterRequest) GetFrontmatter() *structpb.Struct {
+	if x != nil {
+		return x.Frontmatter
+	}
+	return nil
+}
+
+// The response message for merging frontmatter.
+type MergeFrontmatterResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Frontmatter *structpb.Struct `protobuf:"bytes,1,opt,name=frontmatter,proto3" json:"frontmatter,omitempty"`
+}
+
+func (x *MergeFrontmatterResponse) Reset() {
+	*x = MergeFrontmatterResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_api_v1_frontmatter_proto_msgTypes[3]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *MergeFrontmatterResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MergeFrontmatterResponse) ProtoMessage() {}
+
+func (x *MergeFrontmatterResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_frontmatter_proto_msgTypes[3]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MergeFrontmatterResponse.ProtoReflect.Descriptor instead.
+func (*MergeFrontmatterResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_frontmatter_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *MergeFrontmatterResponse) GetFrontmatter() *structpb.Struct {
+	if x != nil {
+		return x.Frontmatter
+	}
+	return nil
+}
+
+// A component of a path to a value in a nested structure. This allows
+// for structured traversal of JSON-like objects. For example, to access
+// the name of the first user in a structure like `{"users": [{"name": "John"}]}`,
+// the path would be `[PathComponent{key: "users"}, PathComponent{index: 0}, PathComponent{key: "name"}]`.
+type PathComponent struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// Types that are assignable to Component:
+	//
+	//	*PathComponent_Key
+	//	*PathComponent_Index
+	Component isPathComponent_Component `protobuf_oneof:"component"`
+}
+
+func (x *PathComponent) Reset() {
+	*x = PathComponent{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_api_v1_frontmatter_proto_msgTypes[4]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *PathComponent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PathComponent) ProtoMessage() {}
+
+func (x *PathComponent) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_frontmatter_proto_msgTypes[4]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PathComponent.ProtoReflect.Descriptor instead.
+func (*PathComponent) Descriptor() ([]byte, []int) {
+	return file_api_v1_frontmatter_proto_rawDescGZIP(), []int{4}
+}
+
+func (m *PathComponent) GetComponent() isPathComponent_Component {
+	if m != nil {
+		return m.Component
+	}
+	return nil
+}
+
+func (x *PathComponent) GetKey() string {
+	if x, ok := x.GetComponent().(*PathComponent_Key); ok {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *PathComponent) GetIndex() int32 {
+	if x, ok := x.GetComponent().(*PathComponent_Index); ok {
+		return x.Index
+	}
+	return 0
+}
+
+type isPathComponent_Component interface {
+	isPathComponent_Component()
+}
+
+type PathComponent_Key struct {
+	// A key for a map/object.
+	Key string `protobuf:"bytes,1,opt,name=key,proto3,oneof"`
+}
+
+type PathComponent_Index struct {
+	// An index for an array/list.
+	Index int32 `protobuf:"varint,2,opt,name=index,proto3,oneof"`
+}
+
+func (*PathComponent_Key) isPathComponent_Component() {}
+
+func (*PathComponent_Index) isPathComponent_Component() {}
+
+// The request for removing a key at a path.
+type RemoveKeyAtPathRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Page string `protobuf:"bytes,1,opt,name=page,proto3" json:"page,omitempty"`
+	// The path to the key to remove.
+	KeyPath []*PathComponent `protobuf:"bytes,2,rep,name=key_path,json=keyPath,proto3" json:"key_path,omitempty"`
+}
+
+func (x *RemoveKeyAtPathRequest) Reset() {
+	*x = RemoveKeyAtPathRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_api_v1_frontmatter_proto_msgTypes[5]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *RemoveKeyAtPathRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoveKeyAtPathRequest) ProtoMessage() {}
+
+func (x *RemoveKeyAtPathRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_frontmatter_proto_msgTypes[5]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoveKeyAtPathRequest.ProtoReflect.Descriptor instead.
+func (*RemoveKeyAtPathRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_frontmatter_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *RemoveKeyAtPathRequest) GetPage() string {
+	if x != nil {
+		return x.Page
+	}
+	return ""
+}
+
+func (x *RemoveKeyAtPathRequest) GetKeyPath() []*PathComponent {
+	if x != nil {
+		return x.KeyPath
+	}
+	return nil
+}
+
+// The response for removing a key at a path.
+type RemoveKeyAtPathResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// The updated frontmatter after removal.
+	Frontmatter *structpb.Struct `protobuf:"bytes,1,opt,name=frontmatter,proto3" json:"frontmatter,omitempty"`
+}
+
+func (x *RemoveKeyAtPathResponse) Reset() {
+	*x = RemoveKeyAtPathResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_api_v1_frontmatter_proto_msgTypes[6]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *RemoveKeyAtPathResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RemoveKeyAtPathResponse) ProtoMessage() {}
+
+func (x *RemoveKeyAtPathResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_frontmatter_proto_msgTypes[6]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RemoveKeyAtPathResponse.ProtoReflect.Descriptor instead.
+func (*RemoveKeyAtPathResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_frontmatter_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *RemoveKeyAtPathResponse) GetFrontmatter() *structpb.Struct {
+	if x != nil {
+		return x.Frontmatter
+	}
+	return nil
+}
+
+// The request for replacing frontmatter.
+type ReplaceFrontmatterRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Page string `protobuf:"bytes,1,opt,name=page,proto3" json:"page,omitempty"`
+	// The full frontmatter to set for the page.
+	Frontmatter *structpb.Struct `protobuf:"bytes,2,opt,name=frontmatter,proto3" json:"frontmatter,omitempty"`
+}
+
+func (x *ReplaceFrontmatterRequest) Reset() {
+	*x = ReplaceFrontmatterRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_api_v1_frontmatter_proto_msgTypes[7]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ReplaceFrontmatterRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReplaceFrontmatterRequest) ProtoMessage() {}
+
+func (x *ReplaceFrontmatterRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_frontmatter_proto_msgTypes[7]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReplaceFrontmatterRequest.ProtoReflect.Descriptor instead.
+func (*ReplaceFrontmatterRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_frontmatter_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ReplaceFrontmatterRequest) GetPage() string {
+	if x != nil {
+		return x.Page
+	}
+	return ""
+}
+
+func (x *ReplaceFrontmatterRequest) GetFrontmatter() *structpb.Struct {
+	if x != nil {
+		return x.Frontmatter
+	}
+	return nil
+}
+
+// The response for replacing frontmatter.
+type ReplaceFrontmatterResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// The updated frontmatter.
+	Frontmatter *structpb.Struct `protobuf:"bytes,1,opt,name=frontmatter,proto3" json:"frontmatter,omitempty"`
+}
+
+func (x *ReplaceFrontmatterResponse) Reset() {
+	*x = ReplaceFrontmatterResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_api_v1_frontmatter_proto_msgTypes[8]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *ReplaceFrontmatterResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReplaceFrontmatterResponse) ProtoMessage() {}
+
+func (x *ReplaceFrontmatterResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_frontmatter_proto_msgTypes[8]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReplaceFrontmatterResponse.ProtoReflect.Descriptor instead.
+func (*ReplaceFrontmatterResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_frontmatter_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ReplaceFrontmatterResponse) GetFrontmatter() *structpb.Struct {
+	if x != nil {
+		return x.Frontmatter
+	}
+	return nil
+}
+
 var File_api_v1_frontmatter_proto protoreflect.FileDescriptor
 
 var file_api_v1_frontmatter_proto_rawDesc = []byte{
@@ -134,17 +538,74 @@ var file_api_v1_frontmatter_proto_rawDesc = []byte{
 	0x6d, 0x61, 0x74, 0x74, 0x65, 0x72, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x17, 0x2e, 0x67,
 	0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x53,
 	0x74, 0x72, 0x75, 0x63, 0x74, 0x52, 0x0b, 0x66, 0x72, 0x6f, 0x6e, 0x74, 0x6d, 0x61, 0x74, 0x74,
-	0x65, 0x72, 0x32, 0x60, 0x0a, 0x0b, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x6d, 0x61, 0x74, 0x74, 0x65,
-	0x72, 0x12, 0x51, 0x0a, 0x0e, 0x47, 0x65, 0x74, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x6d, 0x61, 0x74,
-	0x74, 0x65, 0x72, 0x12, 0x1d, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74,
-	0x46, 0x72, 0x6f, 0x6e, 0x74, 0x6d, 0x61, 0x74, 0x74, 0x65, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65,
-	0x73, 0x74, 0x1a, 0x1e, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x46,
+	0x65, 0x72, 0x22, 0x68, 0x0a, 0x17, 0x4d, 0x65, 0x72, 0x67, 0x65, 0x46, 0x72, 0x6f, 0x6e, 0x74,
+	0x6d, 0x61, 0x74, 0x74, 0x65, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x12, 0x0a,
+	0x04, 0x70, 0x61, 0x67, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x70, 0x61, 0x67,
+	0x65, 0x12, 0x39, 0x0a, 0x0b, 0x66, 0x72, 0x6f, 0x6e, 0x74, 0x6d, 0x61, 0x74, 0x74, 0x65, 0x72,
+	0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x17, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e,
+	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x53, 0x74, 0x72, 0x75, 0x63, 0x74, 0x52,
+	0x0b, 0x66, 0x72, 0x6f, 0x6e, 0x74, 0x6d, 0x61, 0x74, 0x74, 0x65, 0x72, 0x22, 0x55, 0x0a, 0x18,
+	0x4d, 0x65, 0x72, 0x67, 0x65, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x6d, 0x61, 0x74, 0x74, 0x65, 0x72,
+	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x39, 0x0a, 0x0b, 0x66, 0x72, 0x6f, 0x6e,
+	0x74, 0x6d, 0x61, 0x74, 0x74, 0x65, 0x72, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x17, 0x2e,
+	0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e,
+	0x53, 0x74, 0x72, 0x75, 0x63, 0x74, 0x52, 0x0b, 0x66, 0x72, 0x6f, 0x6e, 0x74, 0x6d, 0x61, 0x74,
+	0x74, 0x65, 0x72, 0x22, 0x48, 0x0a, 0x0d, 0x50, 0x61, 0x74, 0x68, 0x43, 0x6f, 0x6d, 0x70, 0x6f,
+	0x6e, 0x65, 0x6e, 0x74, 0x12, 0x12, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28,
+	0x09, 0x48, 0x00, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x12, 0x16, 0x0a, 0x05, 0x69, 0x6e, 0x64, 0x65,
+	0x78, 0x18, 0x02, 0x20, 0x01, 0x28, 0x05, 0x48, 0x00, 0x52, 0x05, 0x69, 0x6e, 0x64, 0x65, 0x78,
+	0x42, 0x0b, 0x0a, 0x09, 0x63, 0x6f, 0x6d, 0x70, 0x6f, 0x6e, 0x65, 0x6e, 0x74, 0x22, 0x5e, 0x0a,
+	0x16, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x65, 0x4b, 0x65, 0x79, 0x41, 0x74, 0x50, 0x61, 0x74, 0x68,
+	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x12, 0x0a, 0x04, 0x70, 0x61, 0x67, 0x65, 0x18,
+	0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x70, 0x61, 0x67, 0x65, 0x12, 0x30, 0x0a, 0x08, 0x6b,
+	0x65, 0x79, 0x5f, 0x70, 0x61, 0x74, 0x68, 0x18, 0x02, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x15, 0x2e,
+	0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x50, 0x61, 0x74, 0x68, 0x43, 0x6f, 0x6d, 0x70, 0x6f,
+	0x6e, 0x65, 0x6e, 0x74, 0x52, 0x07, 0x6b, 0x65, 0x79, 0x50, 0x61, 0x74, 0x68, 0x22, 0x54, 0x0a,
+	0x17, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x65, 0x4b, 0x65, 0x79, 0x41, 0x74, 0x50, 0x61, 0x74, 0x68,
+	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x39, 0x0a, 0x0b, 0x66, 0x72, 0x6f, 0x6e,
+	0x74, 0x6d, 0x61, 0x74, 0x74, 0x65, 0x72, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x17, 0x2e,
+	0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e,
+	0x53, 0x74, 0x72, 0x75, 0x63, 0x74, 0x52, 0x0b, 0x66, 0x72, 0x6f, 0x6e, 0x74, 0x6d, 0x61, 0x74,
+	0x74, 0x65, 0x72, 0x22, 0x6a, 0x0a, 0x19, 0x52, 0x65, 0x70, 0x6c, 0x61, 0x63, 0x65, 0x46, 0x72,
+	0x6f, 0x6e, 0x74, 0x6d, 0x61, 0x74, 0x74, 0x65, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
+	0x12, 0x12, 0x0a, 0x04, 0x70, 0x61, 0x67, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04,
+	0x70, 0x61, 0x67, 0x65, 0x12, 0x39, 0x0a, 0x0b, 0x66, 0x72, 0x6f, 0x6e, 0x74, 0x6d, 0x61, 0x74,
+	0x74, 0x65, 0x72, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x17, 0x2e, 0x67, 0x6f, 0x6f, 0x67,
+	0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x53, 0x74, 0x72, 0x75,
+	0x63, 0x74, 0x52, 0x0b, 0x66, 0x72, 0x6f, 0x6e, 0x74, 0x6d, 0x61, 0x74, 0x74, 0x65, 0x72, 0x22,
+	0x57, 0x0a, 0x1a, 0x52, 0x65, 0x70, 0x6c, 0x61, 0x63, 0x65, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x6d,
+	0x61, 0x74, 0x74, 0x65, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x39, 0x0a,
+	0x0b, 0x66, 0x72, 0x6f, 0x6e, 0x74, 0x6d, 0x61, 0x74, 0x74, 0x65, 0x72, 0x18, 0x01, 0x20, 0x01,
+	0x28, 0x0b, 0x32, 0x17, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74,
+	0x6f, 0x62, 0x75, 0x66, 0x2e, 0x53, 0x74, 0x72, 0x75, 0x63, 0x74, 0x52, 0x0b, 0x66, 0x72, 0x6f,
+	0x6e, 0x74, 0x6d, 0x61, 0x74, 0x74, 0x65, 0x72, 0x32, 0xee, 0x02, 0x0a, 0x0b, 0x46, 0x72, 0x6f,
+	0x6e, 0x74, 0x6d, 0x61, 0x74, 0x74, 0x65, 0x72, 0x12, 0x51, 0x0a, 0x0e, 0x47, 0x65, 0x74, 0x46,
+	0x72, 0x6f, 0x6e, 0x74, 0x6d, 0x61, 0x74, 0x74, 0x65, 0x72, 0x12, 0x1d, 0x2e, 0x61, 0x70, 0x69,
+	0x2e, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x6d, 0x61, 0x74, 0x74,
+	0x65, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1e, 0x2e, 0x61, 0x70, 0x69, 0x2e,
+	0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x6d, 0x61, 0x74, 0x74, 0x65,
+	0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x12, 0x57, 0x0a, 0x10, 0x4d,
+	0x65, 0x72, 0x67, 0x65, 0x46, 0x72, 0x6f, 0x6e, 0x74, 0x6d, 0x61, 0x74, 0x74, 0x65, 0x72, 0x12,
+	0x1f, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x4d, 0x65, 0x72, 0x67, 0x65, 0x46, 0x72,
+	0x6f, 0x6e, 0x74, 0x6d, 0x61, 0x74, 0x74, 0x65, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
+	0x1a, 0x20, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x4d, 0x65, 0x72, 0x67, 0x65, 0x46,
 	0x72, 0x6f, 0x6e, 0x74, 0x6d, 0x61, 0x74, 0x74, 0x65, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
-	0x73, 0x65, 0x22, 0x00, 0x42, 0x3a, 0x5a, 0x38, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63,
-	0x6f, 0x6d, 0x2f, 0x62, 0x72, 0x65, 0x6e, 0x64, 0x61, 0x6e, 0x6a, 0x65, 0x72, 0x77, 0x69, 0x6e,
-	0x2f, 0x73, 0x69, 0x6d, 0x70, 0x6c, 0x65, 0x5f, 0x77, 0x69, 0x6b, 0x69, 0x2f, 0x67, 0x65, 0x6e,
-	0x2f, 0x67, 0x6f, 0x2f, 0x61, 0x70, 0x69, 0x2f, 0x76, 0x31, 0x3b, 0x61, 0x70, 0x69, 0x76, 0x31,
-	0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x73, 0x65, 0x22, 0x00, 0x12, 0x5d, 0x0a, 0x12, 0x52, 0x65, 0x70, 0x6c, 0x61, 0x63, 0x65, 0x46,
+	0x72, 0x6f, 0x6e, 0x74, 0x6d, 0x61, 0x74, 0x74, 0x65, 0x72, 0x12, 0x21, 0x2e, 0x61, 0x70, 0x69,
+	0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x70, 0x6c, 0x61, 0x63, 0x65, 0x46, 0x72, 0x6f, 0x6e, 0x74,
+	0x6d, 0x61, 0x74, 0x74, 0x65, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x22, 0x2e,
+	0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x70, 0x6c, 0x61, 0x63, 0x65, 0x46, 0x72,
+	0x6f, 0x6e, 0x74, 0x6d, 0x61, 0x74, 0x74, 0x65, 0x72, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
+	0x65, 0x22, 0x00, 0x12, 0x54, 0x0a, 0x0f, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x65, 0x4b, 0x65, 0x79,
+	0x41, 0x74, 0x50, 0x61, 0x74, 0x68, 0x12, 0x1e, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e,
+	0x52, 0x65, 0x6d, 0x6f, 0x76, 0x65, 0x4b, 0x65, 0x79, 0x41, 0x74, 0x50, 0x61, 0x74, 0x68, 0x52,
+	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1f, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e,
+	0x52, 0x65, 0x6d, 0x6f, 0x76, 0x65, 0x4b, 0x65, 0x79, 0x41, 0x74, 0x50, 0x61, 0x74, 0x68, 0x52,
+	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x00, 0x42, 0x3a, 0x5a, 0x38, 0x67, 0x69, 0x74,
+	0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x62, 0x72, 0x65, 0x6e, 0x64, 0x61, 0x6e, 0x6a,
+	0x65, 0x72, 0x77, 0x69, 0x6e, 0x2f, 0x73, 0x69, 0x6d, 0x70, 0x6c, 0x65, 0x5f, 0x77, 0x69, 0x6b,
+	0x69, 0x2f, 0x67, 0x65, 0x6e, 0x2f, 0x67, 0x6f, 0x2f, 0x61, 0x70, 0x69, 0x2f, 0x76, 0x31, 0x3b,
+	0x61, 0x70, 0x69, 0x76, 0x31, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -159,21 +620,40 @@ func file_api_v1_frontmatter_proto_rawDescGZIP() []byte {
 	return file_api_v1_frontmatter_proto_rawDescData
 }
 
-var file_api_v1_frontmatter_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_api_v1_frontmatter_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_api_v1_frontmatter_proto_goTypes = []interface{}{
-	(*GetFrontmatterRequest)(nil),  // 0: api.v1.GetFrontmatterRequest
-	(*GetFrontmatterResponse)(nil), // 1: api.v1.GetFrontmatterResponse
-	(*structpb.Struct)(nil),        // 2: google.protobuf.Struct
+	(*GetFrontmatterRequest)(nil),      // 0: api.v1.GetFrontmatterRequest
+	(*GetFrontmatterResponse)(nil),     // 1: api.v1.GetFrontmatterResponse
+	(*MergeFrontmatterRequest)(nil),    // 2: api.v1.MergeFrontmatterRequest
+	(*MergeFrontmatterResponse)(nil),   // 3: api.v1.MergeFrontmatterResponse
+	(*PathComponent)(nil),              // 4: api.v1.PathComponent
+	(*RemoveKeyAtPathRequest)(nil),     // 5: api.v1.RemoveKeyAtPathRequest
+	(*RemoveKeyAtPathResponse)(nil),    // 6: api.v1.RemoveKeyAtPathResponse
+	(*ReplaceFrontmatterRequest)(nil),  // 7: api.v1.ReplaceFrontmatterRequest
+	(*ReplaceFrontmatterResponse)(nil), // 8: api.v1.ReplaceFrontmatterResponse
+	(*structpb.Struct)(nil),            // 9: google.protobuf.Struct
 }
 var file_api_v1_frontmatter_proto_depIdxs = []int32{
-	2, // 0: api.v1.GetFrontmatterResponse.frontmatter:type_name -> google.protobuf.Struct
-	0, // 1: api.v1.Frontmatter.GetFrontmatter:input_type -> api.v1.GetFrontmatterRequest
-	1, // 2: api.v1.Frontmatter.GetFrontmatter:output_type -> api.v1.GetFrontmatterResponse
-	2, // [2:3] is the sub-list for method output_type
-	1, // [1:2] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	9,  // 0: api.v1.GetFrontmatterResponse.frontmatter:type_name -> google.protobuf.Struct
+	9,  // 1: api.v1.MergeFrontmatterRequest.frontmatter:type_name -> google.protobuf.Struct
+	9,  // 2: api.v1.MergeFrontmatterResponse.frontmatter:type_name -> google.protobuf.Struct
+	4,  // 3: api.v1.RemoveKeyAtPathRequest.key_path:type_name -> api.v1.PathComponent
+	9,  // 4: api.v1.RemoveKeyAtPathResponse.frontmatter:type_name -> google.protobuf.Struct
+	9,  // 5: api.v1.ReplaceFrontmatterRequest.frontmatter:type_name -> google.protobuf.Struct
+	9,  // 6: api.v1.ReplaceFrontmatterResponse.frontmatter:type_name -> google.protobuf.Struct
+	0,  // 7: api.v1.Frontmatter.GetFrontmatter:input_type -> api.v1.GetFrontmatterRequest
+	2,  // 8: api.v1.Frontmatter.MergeFrontmatter:input_type -> api.v1.MergeFrontmatterRequest
+	7,  // 9: api.v1.Frontmatter.ReplaceFrontmatter:input_type -> api.v1.ReplaceFrontmatterRequest
+	5,  // 10: api.v1.Frontmatter.RemoveKeyAtPath:input_type -> api.v1.RemoveKeyAtPathRequest
+	1,  // 11: api.v1.Frontmatter.GetFrontmatter:output_type -> api.v1.GetFrontmatterResponse
+	3,  // 12: api.v1.Frontmatter.MergeFrontmatter:output_type -> api.v1.MergeFrontmatterResponse
+	8,  // 13: api.v1.Frontmatter.ReplaceFrontmatter:output_type -> api.v1.ReplaceFrontmatterResponse
+	6,  // 14: api.v1.Frontmatter.RemoveKeyAtPath:output_type -> api.v1.RemoveKeyAtPathResponse
+	11, // [11:15] is the sub-list for method output_type
+	7,  // [7:11] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_api_v1_frontmatter_proto_init() }
@@ -206,6 +686,94 @@ func file_api_v1_frontmatter_proto_init() {
 				return nil
 			}
 		}
+		file_api_v1_frontmatter_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*MergeFrontmatterRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_api_v1_frontmatter_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*MergeFrontmatterResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_api_v1_frontmatter_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*PathComponent); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_api_v1_frontmatter_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*RemoveKeyAtPathRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_api_v1_frontmatter_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*RemoveKeyAtPathResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_api_v1_frontmatter_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*ReplaceFrontmatterRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_api_v1_frontmatter_proto_msgTypes[8].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*ReplaceFrontmatterResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+	}
+	file_api_v1_frontmatter_proto_msgTypes[4].OneofWrappers = []interface{}{
+		(*PathComponent_Key)(nil),
+		(*PathComponent_Index)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -213,7 +781,7 @@ func file_api_v1_frontmatter_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_api_v1_frontmatter_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
