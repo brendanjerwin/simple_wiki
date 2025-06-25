@@ -2,6 +2,7 @@ package v1
 
 import (
 	"context"
+	"maps"
 	"os"
 	"reflect"
 	"time"
@@ -25,20 +26,53 @@ type Server struct {
 	PageReadWriter common.PageReadWriter
 }
 
-// ReplaceFrontmatter implements the ReplaceFrontmatter RPC.
-func (s *Server) ReplaceFrontmatter(ctx context.Context, req *apiv1.ReplaceFrontmatterRequest) (resp *apiv1.ReplaceFrontmatterResponse, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			err = status.Errorf(codes.Internal, "panic during ReplaceFrontmatter: %v", r)
-		}
-	}()
-
+// MergeFrontmatter implements the MergeFrontmatter RPC.
+func (s *Server) MergeFrontmatter(ctx context.Context, req *apiv1.MergeFrontmatterRequest) (resp *apiv1.MergeFrontmatterResponse, err error) {
 	v := reflect.ValueOf(s.PageReadWriter)
 	if s.PageReadWriter == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
 		return nil, status.Error(codes.Internal, "PageReadWriter not available")
 	}
 
-	fm := req.Frontmatter.AsMap()
+	_, existingFm, err := s.PageReadWriter.ReadFrontMatter(req.Page)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, status.Errorf(codes.Internal, "failed to read frontmatter: %v", err)
+	}
+
+	if existingFm == nil {
+		existingFm = make(map[string]any)
+	}
+
+	if req.Frontmatter != nil {
+		newFm := req.Frontmatter.AsMap()
+		maps.Copy(existingFm, newFm)
+	}
+
+	err = s.PageReadWriter.WriteFrontMatter(req.Page, existingFm)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to write frontmatter: %v", err)
+	}
+
+	mergedFmStruct, err := structpb.NewStruct(existingFm)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to convert merged frontmatter to struct: %v", err)
+	}
+
+	return &apiv1.MergeFrontmatterResponse{
+		Frontmatter: mergedFmStruct,
+	}, nil
+}
+
+// ReplaceFrontmatter implements the ReplaceFrontmatter RPC.
+func (s *Server) ReplaceFrontmatter(ctx context.Context, req *apiv1.ReplaceFrontmatterRequest) (resp *apiv1.ReplaceFrontmatterResponse, err error) {
+	v := reflect.ValueOf(s.PageReadWriter)
+	if s.PageReadWriter == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
+		return nil, status.Error(codes.Internal, "PageReadWriter not available")
+	}
+
+	var fm map[string]any
+	if req.Frontmatter != nil {
+		fm = req.Frontmatter.AsMap()
+	}
 
 	err = s.PageReadWriter.WriteFrontMatter(req.Page, fm)
 	if err != nil {
@@ -48,6 +82,121 @@ func (s *Server) ReplaceFrontmatter(ctx context.Context, req *apiv1.ReplaceFront
 	return &apiv1.ReplaceFrontmatterResponse{
 		Frontmatter: req.Frontmatter,
 	}, nil
+}
+
+// RemoveKeyAtPath implements the RemoveKeyAtPath RPC.
+func (s *Server) RemoveKeyAtPath(ctx context.Context, req *apiv1.RemoveKeyAtPathRequest) (*apiv1.RemoveKeyAtPathResponse, error) {
+	v := reflect.ValueOf(s.PageReadWriter)
+	if s.PageReadWriter == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
+		return nil, status.Error(codes.Internal, "PageReadWriter not available")
+	}
+
+	if len(req.GetKeyPath()) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "key_path cannot be empty")
+	}
+
+	_, fm, err := s.PageReadWriter.ReadFrontMatter(req.Page)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, status.Errorf(codes.NotFound, "page not found: %s", req.Page)
+		}
+		return nil, status.Errorf(codes.Internal, "failed to read frontmatter: %v", err)
+	}
+
+	if fm == nil {
+		// Attempting to remove from a non-existent frontmatter. The path will not be found.
+		fm = make(map[string]any)
+	}
+
+	updatedFm, err := removeAtPath(fm, req.GetKeyPath())
+	if err != nil {
+		return nil, err
+	}
+
+	err = s.PageReadWriter.WriteFrontMatter(req.Page, updatedFm.(map[string]any))
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to write frontmatter: %v", err)
+	}
+
+	updatedFmStruct, err := structpb.NewStruct(updatedFm.(map[string]any))
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to convert updated frontmatter to struct: %v", err)
+	}
+
+	return &apiv1.RemoveKeyAtPathResponse{
+		Frontmatter: updatedFmStruct,
+	}, nil
+}
+
+// removeAtPath recursively traverses the data structure according to the path
+// and removes the element at the end of the path. It returns the modified data
+// structure. For slices, this may be a new slice instance.
+func removeAtPath(data any, path []*apiv1.PathComponent) (any, error) {
+	if len(path) == 0 {
+		// This should be caught by the public-facing method, but as a safeguard:
+		return nil, status.Error(codes.InvalidArgument, "path cannot be empty")
+	}
+
+	component := path[0]
+	remainingPath := path[1:]
+
+	switch v := data.(type) {
+	case map[string]any:
+		keyComp, ok := component.Component.(*apiv1.PathComponent_Key)
+		if !ok {
+			return nil, status.Errorf(codes.InvalidArgument, "path component is not a key for a map: %T", component.Component)
+		}
+		key := keyComp.Key
+
+		value, exists := v[key]
+		if !exists {
+			return nil, status.Errorf(codes.NotFound, "key '%s' not found", key)
+		}
+
+		if len(remainingPath) == 0 {
+			// Base case: remove key from map
+			delete(v, key)
+			return v, nil // return modified map
+		}
+
+		// Recursive step
+		newValue, err := removeAtPath(value, remainingPath)
+		if err != nil {
+			return nil, err
+		}
+		v[key] = newValue // Update map with potentially modified child.
+		return v, nil
+
+	case []any:
+		indexComp, ok := component.Component.(*apiv1.PathComponent_Index)
+		if !ok {
+			return nil, status.Errorf(codes.InvalidArgument, "path component is not an index for a slice: %T", component.Component)
+		}
+		idx := int(indexComp.Index)
+
+		if idx < 0 || idx >= len(v) {
+			return nil, status.Errorf(codes.OutOfRange, "index %d is out of range for slice of length %d", idx, len(v))
+		}
+
+		if len(remainingPath) == 0 {
+			// Base case: remove item from slice
+			newSlice := append(v[:idx], v[idx+1:]...)
+			return newSlice, nil // Return the new slice
+		}
+
+		// Recursive step
+		value := v[idx]
+		newValue, err := removeAtPath(value, remainingPath)
+		if err != nil {
+			return nil, err
+		}
+		v[idx] = newValue // Update slice with potentially modified child.
+		return v, nil
+
+	default:
+		// Trying to traverse deeper, but `data` is a primitive.
+		return nil, status.Error(codes.InvalidArgument, "path is deeper than data structure")
+	}
 }
 
 // NewServer creates a new debug server.
@@ -77,12 +226,6 @@ func (s *Server) GetVersion(ctx context.Context, req *apiv1.GetVersionRequest) (
 
 // GetFrontmatter implements the GetFrontmatter RPC.
 func (s *Server) GetFrontmatter(ctx context.Context, req *apiv1.GetFrontmatterRequest) (resp *apiv1.GetFrontmatterResponse, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			err = status.Errorf(codes.Internal, "panic during GetFrontmatter: %v", r)
-		}
-	}()
-
 	v := reflect.ValueOf(s.PageReadWriter)
 	if s.PageReadWriter == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
 		return nil, status.Error(codes.Internal, "PageReadWriter not available")

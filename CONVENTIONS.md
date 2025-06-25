@@ -12,6 +12,7 @@
 
 - Make Uncle Bob proud.
 - prefer modern go. Update idioms to modern approaches as you see them. Boyscout rule.
+- Prefer `any` over `interface{}` for clarity and to align with modern Go standards.
 - Prefer standard Go idioms and approaches, such as using `go:generate` for code generation tasks.
 - Generated files **should be committed** to the repository. This ensures that developers can build and test the project without needing to have all code generation tools installed locally. Any files created or modified by `go generate ./...` should be included in commits.
 - prefer IoC approaches. Make \*-er interfaces for all the things!
@@ -41,6 +42,43 @@
 ## TDD
 
 - Be Test-Driven. Write the test first, then write the code to make the tests pass.
+- When adding a function or method, follow a strict TDD workflow:
+  1.  First, add the function signature with a no-op implementation (a "skeleton").
+  2.  Next, write a failing test that defines the desired behavior.
+  3.  Finally, write the implementation code to make the test pass, then refactor.
+
+  This ensures that code is written to meet specific, testable requirements from the start.
+
+  **Example:** Adding a `Sum` function.
+
+  **Step 1: Create the skeleton function**
+
+  ```go
+  // Sum adds two integers.
+  func Sum(a, b int) int {
+      return 0 // No-op implementation
+  }
+  ```
+
+  **Step 2: Write a failing test**
+
+  ```go
+  // in sum_test.go
+  Describe("Sum", func() {
+      It("should add two numbers", func() {
+          Expect(Sum(2, 3)).To(Equal(5))
+      })
+  })
+  ```
+  Running the test at this point will fail, as expected.
+
+  **Step 3: Implement the function to pass the test**
+  ```go
+  // Sum adds two integers.
+  func Sum(a, b int) int {
+      return a + b
+  }
+  ```
 
 ## Testing
 
@@ -126,3 +164,4 @@
   ```
 
 - If a problem is due to an invalid parameter, don't just fix the parameter value. _also_ add an input validation to the function/method receiving the parameter such that the error being fixed is perfectly clear to the next developer.
+- Do not use `recover` to hide panics. A panic indicates a serious bug that should crash the program during development and be fixed. Catching panics in handlers can obfuscate the problem and make debugging difficult. Instead, write defensive code to prevent panics in the first place, for example by checking for `nil`.
