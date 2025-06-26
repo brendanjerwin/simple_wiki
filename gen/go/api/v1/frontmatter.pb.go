@@ -76,7 +76,7 @@ type GetFrontmatterResponse struct {
 	unknownFields protoimpl.UnknownFields
 
 	// google.protobuf.Struct is used to represent the frontmatter,
-	// which is a map[string]interface{}.
+	// which is a map[string]any.
 	Frontmatter *structpb.Struct `protobuf:"bytes,1,opt,name=frontmatter,proto3" json:"frontmatter,omitempty"`
 }
 
