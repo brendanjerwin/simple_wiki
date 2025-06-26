@@ -29,7 +29,7 @@ message GetFrontmatterRequest {
 // The response message containing the frontmatter.
 message GetFrontmatterResponse {
   // google.protobuf.Struct is used to represent the frontmatter,
-  // which is a map[string]interface{}.
+  // which is a map[string]any.
   google.protobuf.Struct frontmatter = 1;
 }
 

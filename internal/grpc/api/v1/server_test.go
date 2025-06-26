@@ -37,7 +37,7 @@ func HaveGrpcStatusWithSubstr(code codes.Code, substr string) types.GomegaMatche
 	return &gRPCStatusMatcher{expectedCode: code, expectedMsgPart: substr}
 }
 
-func (m *gRPCStatusMatcher) Match(actual interface{}) (success bool, err error) {
+func (m *gRPCStatusMatcher) Match(actual any) (success bool, err error) {
 	if actual == nil {
 		return false, nil
 	}
@@ -66,7 +66,7 @@ func (m *gRPCStatusMatcher) Match(actual interface{}) (success bool, err error) 
 	return true, nil
 }
 
-func (m *gRPCStatusMatcher) FailureMessage(actual interface{}) (message string) {
+func (m *gRPCStatusMatcher) FailureMessage(actual any) (message string) {
 	actualErr, ok := actual.(error)
 	if !ok {
 		return fmt.Sprintf("Expected an error, but got\n\t%#v", actual)
@@ -88,7 +88,7 @@ func (m *gRPCStatusMatcher) FailureMessage(actual interface{}) (message string) 
 	return fmt.Sprintf("%s\nto have code %s %s\nbut got code %s and message '%s'", gomegaFailureMessage, m.expectedCode, expectedMsgDesc, st.Code(), st.Message())
 }
 
-func (m *gRPCStatusMatcher) NegatedFailureMessage(actual interface{}) (message string) {
+func (m *gRPCStatusMatcher) NegatedFailureMessage(actual any) (message string) {
 	actualErr, ok := actual.(error)
 	if !ok {
 		return fmt.Sprintf("Expected not an error, but got\n\t%#v", actual)

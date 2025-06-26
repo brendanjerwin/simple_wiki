@@ -43,9 +43,10 @@
 
 - Be Test-Driven. Write the test first, then write the code to make the tests pass.
 - When adding a function or method, follow a strict TDD workflow:
-  1.  First, add the function signature with a no-op implementation (a "skeleton").
-  2.  Next, write a failing test that defines the desired behavior.
-  3.  Finally, write the implementation code to make the test pass, then refactor.
+
+  1. First, add the function signature with a no-op implementation (a "skeleton").
+  2. Next, write a failing test that defines the desired behavior.
+  3. Finally, write the implementation code to make the test pass, then refactor.
 
   This ensures that code is written to meet specific, testable requirements from the start.
 
@@ -70,9 +71,11 @@
       })
   })
   ```
+
   Running the test at this point will fail, as expected.
 
   **Step 3: Implement the function to pass the test**
+
   ```go
   // Sum adds two integers.
   func Sum(a, b int) int {
@@ -86,13 +89,14 @@
 - Don't do actions in the `It` blocks. The `It` blocks should only contain assertions. All setup (**Arrange**) and execution (**Act**) should be done in `BeforeEach` blocks within the `Describe` or `When` blocks. This allows for reusing context to add additional assertions later.
 
   **Bad:** Action inside the `It` block.
+
   ```go
   Describe("a component", func() {
     When("in a certain state", func() {
       It("should do a thing", func() {
         // Arrange
         component := setupComponent()
-        
+
         // Act
         result, err := component.DoSomething()
 
@@ -105,6 +109,7 @@
   ```
 
   **Good:** Action moved to `BeforeEach`.
+
   ```go
   Describe("a component", func() {
     When("in a certain state", func() {
@@ -113,7 +118,7 @@
         result    string
         err       error
       )
-      
+
       BeforeEach(func() {
         // Arrange
         component = setupComponent()
@@ -134,6 +139,7 @@
     })
   })
   ```
+
 - Use the `Describe` blocks first to describe the function/component being tested, then use nested `When` blocks to establish the scenarios. Besides the basic `It(text: "Should exist"` tests, everything should be in those nested "When" blocks.
 - Include a blank line between all the various Ginkgo blocks. This makes it easier to read the tests.
 
@@ -142,6 +148,7 @@
 - Do not obfuscate errors. When a function returns an error, inspect it to return an appropriate error to the caller. Do not wrap it in a generic error that hides the original cause or assumes a specific failure mode that may not be true. For example, if a read operation fails, don't automatically assume the file was "not found" if the underlying error could be something else, like a permissions issue.
 
   **Bad:**
+
   ```go
   // This is bad because it assumes any error from ReadFrontMatter means "not found".
   _, _, err := s.PageReadWriter.ReadFrontMatter(req.Page)
@@ -151,6 +158,7 @@
   ```
 
   **Good:**
+
   ```go
   // This is better. We check for a specific error type and handle it,
   // falling back to a more general error for unexpected cases.
@@ -165,3 +173,7 @@
 
 - If a problem is due to an invalid parameter, don't just fix the parameter value. _also_ add an input validation to the function/method receiving the parameter such that the error being fixed is perfectly clear to the next developer.
 - Do not use `recover` to hide panics. A panic indicates a serious bug that should crash the program during development and be fixed. Catching panics in handlers can obfuscate the problem and make debugging difficult. Instead, write defensive code to prevent panics in the first place, for example by checking for `nil`.
+
+## README
+
+- When updating the readme, match the tone of voice in the rest of the README. Its the face of the project. Marketing matters.

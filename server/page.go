@@ -1,18 +1,18 @@
 package server
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path"
 	"strings"
 	"time"
 
+	adrgFrontmatter "github.com/adrg/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/common"
 	"github.com/brendanjerwin/simple_wiki/utils"
 	"github.com/schollz/versionedtext"
-	"gopkg.in/yaml.v2"
 )
 
 // Page is the basic struct
@@ -40,20 +40,44 @@ func (p Page) LastEditUnixTime() int64 {
 
 func (p *Page) parse() (common.FrontMatter, common.Markdown, error) {
 	text := p.Text.GetCurrent()
-
-	// check for frontmatter
-	parts := bytes.SplitN([]byte(text), []byte("---\n"), 3)
-	if len(parts) < 3 {
-		return make(common.FrontMatter), common.Markdown(text), nil
-	}
+	reader := strings.NewReader(text)
 
 	var fm common.FrontMatter
-	markdown := common.Markdown(parts[2])
-	if err := yaml.Unmarshal(parts[1], &fm); err != nil {
-		return nil, markdown, fmt.Errorf("failed to unmarshal frontmatter for %s: %v", p.Identifier, err)
+	md, err := adrgFrontmatter.Parse(reader, &fm) // Auto-detect
+	if err != nil {
+		// Check if it was a TOML parsing error. This can happen if fences are '+++' but content is YAML-like.
+		// We can't consistently rely on the specific error type due to versioning issues, so we check the message.
+		if strings.Contains(err.Error(), "bare keys cannot contain") {
+			p.Site.Logger.Trace("TOML-like parse failed for %s, retrying with fences swapped to YAML. Error: %v", p.Identifier, err)
+			// Reset reader and read all content
+			_, seekErr := reader.Seek(0, io.SeekStart)
+			if seekErr != nil {
+				return nil, "", fmt.Errorf("failed to seek for parse retry: %w", seekErr)
+			}
+			contentBytes, readErr := io.ReadAll(reader)
+			if readErr != nil {
+				return nil, "", fmt.Errorf("failed to read content for parse retry: %w", readErr)
+			}
+			// Swap fences and retry parsing. Replace only the first two occurrences.
+			swappedContent := strings.Replace(string(contentBytes), "+++", "---", 2)
+			md, err = adrgFrontmatter.Parse(strings.NewReader(swappedContent), &fm)
+		}
 	}
 
-	return fm, markdown, nil
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			// This isn't an error, it just means there's no frontmatter.
+			return make(common.FrontMatter), common.Markdown(text), nil
+		}
+		// This wrapping is needed for the test to pass.
+		return nil, "", fmt.Errorf("failed to unmarshal frontmatter for %s: %w", p.Identifier, err)
+	}
+
+	if fm == nil {
+		fm = make(common.FrontMatter)
+	}
+
+	return fm, common.Markdown(md), nil
 }
 
 func DecodeFileName(s string) string {

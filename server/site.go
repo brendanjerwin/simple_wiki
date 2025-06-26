@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -24,8 +25,8 @@ import (
 	"github.com/gabriel-vasile/mimetype"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/jcelliott/lumber"
+	"github.com/pelletier/go-toml/v2"
 	"github.com/schollz/versionedtext"
-	"gopkg.in/yaml.v2"
 )
 
 type Site struct {
@@ -282,7 +283,7 @@ func (s *Site) UploadList() ([]os.FileInfo, error) {
 // --- PageReadWriter implementation ---
 
 func combineFrontmatterAndMarkdown(fm common.FrontMatter, md common.Markdown) (string, error) {
-	fmBytes, err := yaml.Marshal(fm)
+	fmBytes, err := toml.Marshal(fm)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal frontmatter: %v", err)
 	}
@@ -294,12 +295,12 @@ func combineFrontmatterAndMarkdown(fm common.FrontMatter, md common.Markdown) (s
 
 	var content bytes.Buffer
 	if len(fm) > 0 {
-		content.WriteString("---\n")
+		content.WriteString("+++\n")
 		content.Write(fmBytes)
 		if !bytes.HasSuffix(fmBytes, []byte("\n")) {
 			content.WriteString("\n")
 		}
-		content.WriteString("---\n")
+		content.WriteString("+++\n")
 	}
 	content.WriteString(string(md))
 	return content.String(), nil
@@ -308,32 +309,54 @@ func combineFrontmatterAndMarkdown(fm common.FrontMatter, md common.Markdown) (s
 func (s *Site) WriteFrontMatter(identifier common.PageIdentifier, fm common.FrontMatter) error {
 	p := s.Open(string(identifier))
 
-	// We don't care about the old frontmatter, just the markdown.
-	// We also don't care about parsing errors for the old frontmatter, as we are replacing it.
-	_, md, _ := p.parse()
+	// Use the PageReadWriter interface to get the current markdown content.
+	_, md, err := s.ReadMarkdown(identifier)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("could not read markdown to write frontmatter: %w", err)
+	}
 
 	newText, err := combineFrontmatterAndMarkdown(fm, md)
 	if err != nil {
 		return err
 	}
+
+	// Use Update to correctly save history to .json and current version to .md
 	return p.Update(newText)
+}
+
+func lenientParse(content []byte, matter any) (body []byte, err error) {
+	body, err = adrgFrontmatter.Parse(bytes.NewReader(content), matter)
+	if err != nil {
+		var tomlErr *toml.DecodeError
+		// If it's a TOML parsing error and it has TOML delimiters, try to parse as YAML.
+		// `adrg/frontmatter` does not export its YAML/TOML parsing errors, so we have
+		// to rely on `go-toml`'s error type or string matching for the error.
+		if (errors.As(err, &tomlErr) || strings.Contains(err.Error(), "bare keys cannot contain")) &&
+			bytes.HasPrefix(content, []byte("+++")) {
+			// Replace TOML delimiters with YAML and try again
+			newContent := bytes.Replace(content, []byte("+++"), []byte("---"), 2)
+			body, err = adrgFrontmatter.Parse(bytes.NewReader(newContent), matter)
+			return
+		}
+	}
+	return
 }
 
 func (s *Site) WriteMarkdown(identifier common.PageIdentifier, md common.Markdown) error {
 	p := s.Open(string(identifier))
 
-	fm, _, err := p.parse()
-	if err != nil {
-		// If we can't parse the frontmatter, we can't preserve it.
-		// We will log the error and proceed with empty frontmatter.
-		s.Logger.Warn("Could not parse frontmatter for page '%s', discarding it. Error: %v", identifier, err)
-		fm = make(common.FrontMatter)
+	// Use the PageReadWriter interface to get the current frontmatter.
+	_, fm, err := s.ReadFrontMatter(identifier)
+	if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("could not read frontmatter to write markdown: %w", err)
 	}
 
 	newText, err := combineFrontmatterAndMarkdown(fm, md)
 	if err != nil {
 		return err
 	}
+
+	// Use Update to correctly save history to .json and current version to .md
 	return p.Update(newText)
 }
 
@@ -343,20 +366,37 @@ func (s *Site) ReadFrontMatter(identifier common.PageIdentifier) (common.PageIde
 		return identifier, nil, err
 	}
 
-	matter := &map[string]any{}
-	_, err = adrgFrontmatter.Parse(bytes.NewReader(content), &matter)
+	var matter common.FrontMatter
+	_, err = lenientParse(content, &matter)
 	if err != nil {
+		if strings.Contains(err.Error(), "format not found") {
+			return identifier, make(common.FrontMatter), nil
+		}
 		return identifier, nil, err
 	}
 
-	return identifier, *matter, nil
+	if matter == nil {
+		return identifier, make(common.FrontMatter), nil
+	}
+
+	return identifier, matter, nil
 }
 
 func (s *Site) ReadMarkdown(identifier common.PageIdentifier) (common.PageIdentifier, common.Markdown, error) {
-	p := s.Open(string(identifier))
-	if p.IsNew() {
-		return identifier, "", os.ErrNotExist
+	identifier, content, err := s.readFileByIdentifier(identifier, "md")
+	if err != nil {
+		return identifier, "", err
 	}
-	_, md, err := p.parse()
-	return common.PageIdentifier(p.Identifier), md, err
+
+	var dummy any
+	body, err := lenientParse(content, &dummy)
+	if err != nil {
+		if strings.Contains(err.Error(), "format not found") {
+			// No frontmatter found, the entire content is markdown.
+			return identifier, common.Markdown(body), nil
+		}
+		return identifier, "", err // A real parsing error.
+	}
+
+	return identifier, common.Markdown(body), nil
 }

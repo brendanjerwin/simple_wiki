@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/brendanjerwin/simple_wiki/common"
-	"github.com/brendanjerwin/simple_wiki/utils"
 	"github.com/brendanjerwin/simple_wiki/sec"
+	"github.com/brendanjerwin/simple_wiki/utils"
 	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -348,6 +348,38 @@ old markdown`
 					_, md, mdErr := s.ReadMarkdown(pageIdentifier)
 					Expect(mdErr).NotTo(HaveOccurred())
 					Expect(string(md)).To(Equal("old markdown"))
+				})
+			})
+
+			When("the page exists with `+++` style frontmatter", func() {
+				BeforeEach(func() {
+					content := `+++
+title: Old Title
++++
+old markdown`
+					fileErr := os.WriteFile(pagePath, []byte(content), 0644)
+					Expect(fileErr).NotTo(HaveOccurred())
+					err = s.WriteFrontMatter(pageIdentifier, newFm)
+				})
+
+				It("should not return an error", func() {
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("should replace the frontmatter and keep the markdown", func() {
+					_, fm, fmErr := s.ReadFrontMatter(pageIdentifier)
+					Expect(fmErr).NotTo(HaveOccurred())
+					Expect(fm).To(Equal(newFm))
+
+					_, md, mdErr := s.ReadMarkdown(pageIdentifier)
+					Expect(mdErr).NotTo(HaveOccurred())
+					Expect(string(md)).To(Equal("old markdown"))
+				})
+
+				It("should not include the old frontmatter in the raw file", func() {
+					fileContent, readErr := os.ReadFile(pagePath)
+					Expect(readErr).NotTo(HaveOccurred())
+					Expect(string(fileContent)).NotTo(ContainSubstring("title: Old Title"))
 				})
 			})
 		})
