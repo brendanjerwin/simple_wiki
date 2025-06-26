@@ -6,7 +6,9 @@
     "buf@latest",
     "markdownlint-cli@latest",
     "evans@latest",
-    "grpcurl@latest"
+    "grpcurl@latest",
+    "podman@latest",
+    "rootlesskit@latest"
   ],
   "shell": {
     "init_hook": [

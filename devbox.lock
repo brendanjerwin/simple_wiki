@@ -292,6 +292,102 @@
           "store_path": "/nix/store/2y9k2i40hyxjh6rr39iwm9bapbvlw3fi-markdownlint-cli-0.45.0"
         }
       }
+    },
+    "podman@latest": {
+      "last_modified": "2025-06-22T15:15:55Z",
+      "resolved": "github:NixOS/nixpkgs/3078b9a9e75f1790e6d6ef9955fdc6a2d1740cc6#podman",
+      "source": "devbox-search",
+      "version": "5.5.1",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/q1c3s413c5mrx2jyivif3g45mnz79kab-podman-5.5.1",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/lyklg1cc050kal99qla3kz9i3vwpnzmx-podman-5.5.1-man",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/q1c3s413c5mrx2jyivif3g45mnz79kab-podman-5.5.1"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/gbdd90vvs52rvj34bcz898y1xsgrqwdn-podman-5.5.1",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/bpj0418xw21hfw1wbwnx1178kq686cp0-podman-5.5.1-man",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/gbdd90vvs52rvj34bcz898y1xsgrqwdn-podman-5.5.1"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/rnrzk3rxdm2a5056pn5d70vfq1c2nvxd-podman-5.5.1",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/6jbpkipk4zmg7cp170nc1hg6lyf50fyi-podman-5.5.1-man",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/rnrzk3rxdm2a5056pn5d70vfq1c2nvxd-podman-5.5.1"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/vqqs3qwm738f8wi51r9akqdyz17p3izi-podman-5.5.1",
+              "default": true
+            },
+            {
+              "name": "man",
+              "path": "/nix/store/q3fcc1mf7z2w9fn90a4qw26f5hlyzd96-podman-5.5.1-man",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/vqqs3qwm738f8wi51r9akqdyz17p3izi-podman-5.5.1"
+        }
+      }
+    },
+    "rootlesskit@latest": {
+      "last_modified": "2025-06-20T02:24:11Z",
+      "resolved": "github:NixOS/nixpkgs/076e8c6678d8c54204abcb4b1b14c366835a58bb#rootlesskit",
+      "source": "devbox-search",
+      "version": "2.3.5",
+      "systems": {
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/cl3yl2i66qsmnykpwsijw3r31xm89m39-rootlesskit-2.3.5",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/cl3yl2i66qsmnykpwsijw3r31xm89m39-rootlesskit-2.3.5"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/a7mpwcm3fw5cdrwxv1fx56m9jk79j7qf-rootlesskit-2.3.5",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/a7mpwcm3fw5cdrwxv1fx56m9jk79j7qf-rootlesskit-2.3.5"
+        }
+      }
     }
   }
 }
