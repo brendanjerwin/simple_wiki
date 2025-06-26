@@ -1,0 +1,697 @@
+{
+  "configuration" : { },
+  "description" : "Description",
+  "documentation" : { },
+  "id" : 1,
+  "lastModifiedAgent" : "structurizr-ui",
+  "lastModifiedDate" : "2025-06-26T21:48:38Z",
+  "model" : {
+    "people" : [ {
+      "description" : "A person using the wiki.",
+      "id" : "1",
+      "location" : "Unspecified",
+      "name" : "User",
+      "properties" : {
+        "structurizr.dsl.identifier" : "user"
+      },
+      "relationships" : [ {
+        "description" : "Makes HTTP requests",
+        "destinationId" : "5",
+        "id" : "26",
+        "sourceId" : "1",
+        "tags" : "Relationship"
+      }, {
+        "description" : "Makes HTTP requests",
+        "destinationId" : "3",
+        "id" : "27",
+        "linkedRelationshipId" : "26",
+        "sourceId" : "1"
+      }, {
+        "description" : "Makes HTTP requests",
+        "destinationId" : "2",
+        "id" : "28",
+        "linkedRelationshipId" : "26",
+        "sourceId" : "1"
+      } ],
+      "tags" : "Element,Person"
+    } ],
+    "softwareSystems" : [ {
+      "containers" : [ {
+        "components" : [ {
+          "description" : "Parses flags and bootstraps the application.",
+          "documentation" : { },
+          "id" : "4",
+          "name" : "Command Line Interface",
+          "properties" : {
+            "structurizr.dsl.identifier" : "wikisystem.goprocess.cli"
+          },
+          "relationships" : [ {
+            "description" : "Starts",
+            "destinationId" : "5",
+            "id" : "29",
+            "sourceId" : "4",
+            "tags" : "Relationship"
+          } ],
+          "tags" : "Element,Component",
+          "technology" : "Go (urfave/cli)"
+        }, {
+          "description" : "Routes incoming HTTP traffic to either gRPC or the Web Server based on content-type.",
+          "documentation" : { },
+          "id" : "5",
+          "name" : "Request Multiplexer",
+          "properties" : {
+            "structurizr.dsl.identifier" : "wikisystem.goprocess.multiplexer"
+          },
+          "relationships" : [ {
+            "description" : "Forwards Web/API traffic",
+            "destinationId" : "6",
+            "id" : "30",
+            "sourceId" : "5",
+            "tags" : "Relationship"
+          }, {
+            "description" : "Forwards gRPC traffic",
+            "destinationId" : "11",
+            "id" : "31",
+            "sourceId" : "5",
+            "tags" : "Relationship"
+          } ],
+          "tags" : "Element,Component",
+          "technology" : "Go (net/http)"
+        }, {
+          "description" : "Handles all non-gRPC HTTP traffic.",
+          "documentation" : { },
+          "id" : "6",
+          "name" : "Gin Web Server",
+          "properties" : {
+            "structurizr.dsl.identifier" : "wikisystem.goprocess.ginwebserver"
+          },
+          "relationships" : [ {
+            "description" : "Uses",
+            "destinationId" : "9",
+            "id" : "32",
+            "sourceId" : "6",
+            "tags" : "Relationship"
+          }, {
+            "description" : "Uses",
+            "destinationId" : "10",
+            "id" : "33",
+            "sourceId" : "6",
+            "tags" : "Relationship"
+          }, {
+            "description" : "Routes to",
+            "destinationId" : "7",
+            "id" : "34",
+            "sourceId" : "6",
+            "tags" : "Relationship"
+          }, {
+            "description" : "Routes to",
+            "destinationId" : "8",
+            "id" : "35",
+            "sourceId" : "6",
+            "tags" : "Relationship"
+          } ],
+          "tags" : "Element,Component",
+          "technology" : "Gin"
+        }, {
+          "description" : "Handles requests for viewing and editing pages.",
+          "documentation" : { },
+          "id" : "7",
+          "name" : "Web UI Handlers",
+          "properties" : {
+            "structurizr.dsl.identifier" : "wikisystem.goprocess.webhandlers"
+          },
+          "relationships" : [ {
+            "destinationId" : "14",
+            "id" : "37",
+            "sourceId" : "7",
+            "tags" : "Relationship"
+          } ],
+          "tags" : "Element,Component",
+          "technology" : "Go"
+        }, {
+          "description" : "Handles API requests for search and frontmatter queries.",
+          "documentation" : { },
+          "id" : "8",
+          "name" : "REST API Handlers",
+          "properties" : {
+            "structurizr.dsl.identifier" : "wikisystem.goprocess.apihandlers"
+          },
+          "relationships" : [ {
+            "destinationId" : "15",
+            "id" : "38",
+            "sourceId" : "8",
+            "tags" : "Relationship"
+          }, {
+            "destinationId" : "21",
+            "id" : "39",
+            "sourceId" : "8",
+            "tags" : "Relationship"
+          } ],
+          "tags" : "Element,Component",
+          "technology" : "Go"
+        }, {
+          "description" : "Manages user session cookies.",
+          "documentation" : { },
+          "id" : "9",
+          "name" : "Session Manager",
+          "properties" : {
+            "structurizr.dsl.identifier" : "wikisystem.goprocess.sessionmanager"
+          },
+          "tags" : "Element,Component",
+          "technology" : "Go (gin-contrib/sessions)"
+        }, {
+          "description" : "Protects the site with a secret code.",
+          "documentation" : { },
+          "id" : "10",
+          "name" : "Auth Middleware",
+          "properties" : {
+            "structurizr.dsl.identifier" : "wikisystem.goprocess.authmiddleware"
+          },
+          "tags" : "Element,Component",
+          "technology" : "Go"
+        }, {
+          "description" : "Handles all gRPC API requests.",
+          "documentation" : { },
+          "id" : "11",
+          "name" : "gRPC Server",
+          "properties" : {
+            "structurizr.dsl.identifier" : "wikisystem.goprocess.grpcserver"
+          },
+          "relationships" : [ {
+            "description" : "Routes to",
+            "destinationId" : "13",
+            "id" : "36",
+            "sourceId" : "11",
+            "tags" : "Relationship"
+          } ],
+          "tags" : "Element,Component",
+          "technology" : "gRPC"
+        }, {
+          "description" : "Provides the GetVersion RPC.",
+          "documentation" : { },
+          "id" : "12",
+          "name" : "Version Service",
+          "properties" : {
+            "structurizr.dsl.identifier" : "wikisystem.goprocess.versionservice"
+          },
+          "tags" : "Element,Component"
+        }, {
+          "description" : "Provides RPCs for manipulating page frontmatter.",
+          "documentation" : { },
+          "id" : "13",
+          "name" : "Frontmatter Service",
+          "properties" : {
+            "structurizr.dsl.identifier" : "wikisystem.goprocess.frontmatterservice"
+          },
+          "relationships" : [ {
+            "destinationId" : "14",
+            "id" : "40",
+            "sourceId" : "13",
+            "tags" : "Relationship"
+          } ],
+          "tags" : "Element,Component"
+        }, {
+          "description" : "Manages the lifecycle of wiki pages (CRUD).",
+          "documentation" : { },
+          "id" : "14",
+          "name" : "Page Manager",
+          "properties" : {
+            "structurizr.dsl.identifier" : "wikisystem.goprocess.pagemanager"
+          },
+          "relationships" : [ {
+            "description" : "Reads/Writes page files",
+            "destinationId" : "24",
+            "id" : "41",
+            "sourceId" : "14",
+            "tags" : "Relationship"
+          }, {
+            "description" : "Updates index on change",
+            "destinationId" : "15",
+            "id" : "44",
+            "sourceId" : "14",
+            "tags" : "Relationship"
+          }, {
+            "description" : "Renders markdown",
+            "destinationId" : "19",
+            "id" : "45",
+            "sourceId" : "14",
+            "tags" : "Relationship"
+          }, {
+            "description" : "Renders templates",
+            "destinationId" : "20",
+            "id" : "46",
+            "sourceId" : "14",
+            "tags" : "Relationship"
+          } ],
+          "tags" : "Element,Component",
+          "technology" : "Go"
+        }, {
+          "description" : "Manages all search indexes.",
+          "documentation" : { },
+          "id" : "15",
+          "name" : "Indexer",
+          "properties" : {
+            "structurizr.dsl.identifier" : "wikisystem.goprocess.indexer"
+          },
+          "tags" : "Element,Component"
+        }, {
+          "description" : "Coordinates all registered indexers.",
+          "documentation" : { },
+          "id" : "16",
+          "name" : "Multi-Maintainer",
+          "properties" : {
+            "structurizr.dsl.identifier" : "wikisystem.goprocess.multimaintainer"
+          },
+          "relationships" : [ {
+            "description" : "Maintains",
+            "destinationId" : "17",
+            "id" : "47",
+            "sourceId" : "16",
+            "tags" : "Relationship"
+          }, {
+            "description" : "Maintains",
+            "destinationId" : "18",
+            "id" : "48",
+            "sourceId" : "16",
+            "tags" : "Relationship"
+          } ],
+          "tags" : "Element,Component",
+          "technology" : "Go"
+        }, {
+          "description" : "Full-text search index for page content.",
+          "documentation" : { },
+          "id" : "17",
+          "name" : "Bleve Index",
+          "properties" : {
+            "structurizr.dsl.identifier" : "wikisystem.goprocess.bleveindex"
+          },
+          "tags" : "Element,Component",
+          "technology" : "Bleve"
+        }, {
+          "description" : "Index for querying structured data in frontmatter.",
+          "documentation" : { },
+          "id" : "18",
+          "name" : "Frontmatter Index",
+          "properties" : {
+            "structurizr.dsl.identifier" : "wikisystem.goprocess.frontmatterindex"
+          },
+          "tags" : "Element,Component",
+          "technology" : "Go"
+        }, {
+          "description" : "Converts Markdown text to HTML.",
+          "documentation" : { },
+          "id" : "19",
+          "name" : "Markdown Renderer",
+          "properties" : {
+            "structurizr.dsl.identifier" : "wikisystem.goprocess.markdownrenderer"
+          },
+          "tags" : "Element,Component",
+          "technology" : "Goldmark"
+        }, {
+          "description" : "Executes Go templates for dynamic content.",
+          "documentation" : { },
+          "id" : "20",
+          "name" : "Template Engine",
+          "properties" : {
+            "structurizr.dsl.identifier" : "wikisystem.goprocess.templateengine"
+          },
+          "tags" : "Element,Component",
+          "technology" : "Go"
+        }, {
+          "description" : "Client for interacting with external label printers.",
+          "documentation" : { },
+          "id" : "21",
+          "name" : "Label Printer Client",
+          "properties" : {
+            "structurizr.dsl.identifier" : "wikisystem.goprocess.labelprinterclient"
+          },
+          "relationships" : [ {
+            "description" : "Sends ZPL data",
+            "destinationId" : "25",
+            "id" : "49",
+            "sourceId" : "21",
+            "tags" : "Relationship"
+          } ],
+          "tags" : "Element,Component"
+        }, {
+          "description" : "Communicates with direct-connect USB printers.",
+          "documentation" : { },
+          "id" : "22",
+          "name" : "USB Printer Driver",
+          "properties" : {
+            "structurizr.dsl.identifier" : "wikisystem.goprocess.usbdriver"
+          },
+          "tags" : "Element,Component"
+        }, {
+          "description" : "Uses the 'lp' command-line tool to print.",
+          "documentation" : { },
+          "id" : "23",
+          "name" : "LP Printer Driver",
+          "properties" : {
+            "structurizr.dsl.identifier" : "wikisystem.goprocess.lpdriver"
+          },
+          "tags" : "Element,Component"
+        } ],
+        "description" : "The single Go process that runs the wiki.",
+        "documentation" : { },
+        "id" : "3",
+        "name" : "GoProcess",
+        "properties" : {
+          "structurizr.dsl.identifier" : "wikisystem.goprocess"
+        },
+        "relationships" : [ {
+          "description" : "Reads/Writes page files",
+          "destinationId" : "24",
+          "id" : "42",
+          "linkedRelationshipId" : "41",
+          "sourceId" : "3"
+        }, {
+          "description" : "Sends ZPL data",
+          "destinationId" : "25",
+          "id" : "50",
+          "linkedRelationshipId" : "49",
+          "sourceId" : "3"
+        } ],
+        "tags" : "Element,Container",
+        "technology" : "Go"
+      } ],
+      "description" : "A simple wiki application.",
+      "documentation" : { },
+      "id" : "2",
+      "location" : "Unspecified",
+      "name" : "Simple Wiki",
+      "properties" : {
+        "structurizr.dsl.identifier" : "wikisystem"
+      },
+      "relationships" : [ {
+        "description" : "Reads/Writes page files",
+        "destinationId" : "24",
+        "id" : "43",
+        "linkedRelationshipId" : "41",
+        "sourceId" : "2"
+      }, {
+        "description" : "Sends ZPL data",
+        "destinationId" : "25",
+        "id" : "51",
+        "linkedRelationshipId" : "49",
+        "sourceId" : "2"
+      } ],
+      "tags" : "Element,Software System"
+    }, {
+      "description" : "Stores page content and history as .md and .json files.",
+      "documentation" : { },
+      "id" : "24",
+      "location" : "Unspecified",
+      "name" : "File System",
+      "properties" : {
+        "structurizr.dsl.identifier" : "filesystem"
+      },
+      "tags" : "Element,Software System,External System"
+    }, {
+      "description" : "An external USB or network-connected label printer.",
+      "documentation" : { },
+      "id" : "25",
+      "location" : "Unspecified",
+      "name" : "Label Printer",
+      "properties" : {
+        "structurizr.dsl.identifier" : "labelprinter"
+      },
+      "tags" : "Element,Software System,External System"
+    } ]
+  },
+  "name" : "Name",
+  "properties" : {
+    "structurizr.dsl" : "d29ya3NwYWNlIHsKICAgICFpZGVudGlmaWVycyBoaWVyYXJjaGljYWwKCiAgICBtb2RlbCB7CiAgICAgICAgdXNlciA9IHBlcnNvbiAiVXNlciIgIkEgcGVyc29uIHVzaW5nIHRoZSB3aWtpLiIKCiAgICAgICAgd2lraVN5c3RlbSA9IHNvZnR3YXJlU3lzdGVtICJTaW1wbGUgV2lraSIgIkEgc2ltcGxlIHdpa2kgYXBwbGljYXRpb24uIiB7CiAgICAgICAgICAgIGdvUHJvY2VzcyA9IGNvbnRhaW5lciAiR29Qcm9jZXNzIiAiVGhlIHNpbmdsZSBHbyBwcm9jZXNzIHRoYXQgcnVucyB0aGUgd2lraS4iICJHbyIgewogICAgICAgICAgICAgICAgY2xpID0gY29tcG9uZW50ICJDb21tYW5kIExpbmUgSW50ZXJmYWNlIiAiUGFyc2VzIGZsYWdzIGFuZCBib290c3RyYXBzIHRoZSBhcHBsaWNhdGlvbi4iICJHbyAodXJmYXZlL2NsaSkiCiAgICAgICAgICAgICAgICBtdWx0aXBsZXhlciA9IGNvbXBvbmVudCAiUmVxdWVzdCBNdWx0aXBsZXhlciIgIlJvdXRlcyBpbmNvbWluZyBIVFRQIHRyYWZmaWMgdG8gZWl0aGVyIGdSUEMgb3IgdGhlIFdlYiBTZXJ2ZXIgYmFzZWQgb24gY29udGVudC10eXBlLiIgIkdvIChuZXQvaHR0cCkiCgogICAgICAgICAgICAgICAgZ2luV2ViU2VydmVyID0gY29tcG9uZW50ICJHaW4gV2ViIFNlcnZlciIgIkhhbmRsZXMgYWxsIG5vbi1nUlBDIEhUVFAgdHJhZmZpYy4iICJHaW4iCgogICAgICAgICAgICAgICAgd2ViSGFuZGxlcnMgPSBjb21wb25lbnQgIldlYiBVSSBIYW5kbGVycyIgIkhhbmRsZXMgcmVxdWVzdHMgZm9yIHZpZXdpbmcgYW5kIGVkaXRpbmcgcGFnZXMuIiAiR28iCiAgICAgICAgICAgICAgICBhcGlIYW5kbGVycyA9IGNvbXBvbmVudCAiUkVTVCBBUEkgSGFuZGxlcnMiICJIYW5kbGVzIEFQSSByZXF1ZXN0cyBmb3Igc2VhcmNoIGFuZCBmcm9udG1hdHRlciBxdWVyaWVzLiIgIkdvIgogICAgICAgICAgICAgICAgc2Vzc2lvbk1hbmFnZXIgPSBjb21wb25lbnQgIlNlc3Npb24gTWFuYWdlciIgIk1hbmFnZXMgdXNlciBzZXNzaW9uIGNvb2tpZXMuIiAiR28gKGdpbi1jb250cmliL3Nlc3Npb25zKSIKICAgICAgICAgICAgICAgIGF1dGhNaWRkbGV3YXJlID0gY29tcG9uZW50ICJBdXRoIE1pZGRsZXdhcmUiICJQcm90ZWN0cyB0aGUgc2l0ZSB3aXRoIGEgc2VjcmV0IGNvZGUuIiAiR28iCgogICAgICAgICAgICAgICAgZ3JwY1NlcnZlciA9IGNvbXBvbmVudCAiZ1JQQyBTZXJ2ZXIiICJIYW5kbGVzIGFsbCBnUlBDIEFQSSByZXF1ZXN0cy4iICJnUlBDIgogICAgICAgICAgICAgICAgdmVyc2lvblNlcnZpY2UgPSBjb21wb25lbnQgIlZlcnNpb24gU2VydmljZSIgIlByb3ZpZGVzIHRoZSBHZXRWZXJzaW9uIFJQQy4iCiAgICAgICAgICAgICAgICBmcm9udG1hdHRlclNlcnZpY2UgPSBjb21wb25lbnQgIkZyb250bWF0dGVyIFNlcnZpY2UiICJQcm92aWRlcyBSUENzIGZvciBtYW5pcHVsYXRpbmcgcGFnZSBmcm9udG1hdHRlci4iCgogICAgICAgICAgICAgICAgcGFnZU1hbmFnZXIgPSBjb21wb25lbnQgIlBhZ2UgTWFuYWdlciIgIk1hbmFnZXMgdGhlIGxpZmVjeWNsZSBvZiB3aWtpIHBhZ2VzIChDUlVEKS4iICJHbyIKICAgICAgICAgICAgICAgIAogICAgICAgICAgICAgICAgaW5kZXhlciA9IGNvbXBvbmVudCAiSW5kZXhlciIgIk1hbmFnZXMgYWxsIHNlYXJjaCBpbmRleGVzLiIgCiAgICAgICAgICAgICAgICBtdWx0aU1haW50YWluZXIgPSBjb21wb25lbnQgIk11bHRpLU1haW50YWluZXIiICJDb29yZGluYXRlcyBhbGwgcmVnaXN0ZXJlZCBpbmRleGVycy4iICJHbyIKICAgICAgICAgICAgICAgIGJsZXZlSW5kZXggPSBjb21wb25lbnQgIkJsZXZlIEluZGV4IiAiRnVsbC10ZXh0IHNlYXJjaCBpbmRleCBmb3IgcGFnZSBjb250ZW50LiIgIkJsZXZlIgogICAgICAgICAgICAgICAgZnJvbnRtYXR0ZXJJbmRleCA9IGNvbXBvbmVudCAiRnJvbnRtYXR0ZXIgSW5kZXgiICJJbmRleCBmb3IgcXVlcnlpbmcgc3RydWN0dXJlZCBkYXRhIGluIGZyb250bWF0dGVyLiIgIkdvIgogICAgICAgICAgICAgICAgbWFya2Rvd25SZW5kZXJlciA9IGNvbXBvbmVudCAiTWFya2Rvd24gUmVuZGVyZXIiICJDb252ZXJ0cyBNYXJrZG93biB0ZXh0IHRvIEhUTUwuIiAiR29sZG1hcmsiCiAgICAgICAgICAgICAgICB0ZW1wbGF0ZUVuZ2luZSA9IGNvbXBvbmVudCAiVGVtcGxhdGUgRW5naW5lIiAiRXhlY3V0ZXMgR28gdGVtcGxhdGVzIGZvciBkeW5hbWljIGNvbnRlbnQuIiAiR28iCiAgICAgICAgICAgICAgICAKICAgICAgICAgICAgICAgIGxhYmVsUHJpbnRlckNsaWVudCA9IGNvbXBvbmVudCAiTGFiZWwgUHJpbnRlciBDbGllbnQiICJDbGllbnQgZm9yIGludGVyYWN0aW5nIHdpdGggZXh0ZXJuYWwgbGFiZWwgcHJpbnRlcnMuIiAKICAgICAgICAgICAgICAgIHVzYkRyaXZlciA9IGNvbXBvbmVudCAiVVNCIFByaW50ZXIgRHJpdmVyIiAiQ29tbXVuaWNhdGVzIHdpdGggZGlyZWN0LWNvbm5lY3QgVVNCIHByaW50ZXJzLiIKICAgICAgICAgICAgICAgIGxwRHJpdmVyID0gY29tcG9uZW50ICJMUCBQcmludGVyIERyaXZlciIgIlVzZXMgdGhlICdscCcgY29tbWFuZC1saW5lIHRvb2wgdG8gcHJpbnQuIgogICAgICAgICAgICB9CiAgICAgICAgfQoKICAgICAgICBmaWxlU3lzdGVtID0gc29mdHdhcmVTeXN0ZW0gIkZpbGUgU3lzdGVtIiAiU3RvcmVzIHBhZ2UgY29udGVudCBhbmQgaGlzdG9yeSBhcyAubWQgYW5kIC5qc29uIGZpbGVzLiIgIkV4dGVybmFsIFN5c3RlbSIKICAgICAgICBsYWJlbFByaW50ZXIgPSBzb2Z0d2FyZVN5c3RlbSAiTGFiZWwgUHJpbnRlciIgIkFuIGV4dGVybmFsIFVTQiBvciBuZXR3b3JrLWNvbm5lY3RlZCBsYWJlbCBwcmludGVyLiIgIkV4dGVybmFsIFN5c3RlbSIKCiAgICAgICAgLy8gUmVsYXRpb25zaGlwcwogICAgICAgIHVzZXIgLT4gd2lraVN5c3RlbS5nb1Byb2Nlc3MubXVsdGlwbGV4ZXIgIk1ha2VzIEhUVFAgcmVxdWVzdHMiCiAgICAgICAgd2lraVN5c3RlbS5nb1Byb2Nlc3MuY2xpIC0+IHdpa2lTeXN0ZW0uZ29Qcm9jZXNzLm11bHRpcGxleGVyICJTdGFydHMiCgogICAgICAgIHdpa2lTeXN0ZW0uZ29Qcm9jZXNzLm11bHRpcGxleGVyIC0+IHdpa2lTeXN0ZW0uZ29Qcm9jZXNzLmdpbldlYlNlcnZlciAiRm9yd2FyZHMgV2ViL0FQSSB0cmFmZmljIgogICAgICAgIHdpa2lTeXN0ZW0uZ29Qcm9jZXNzLm11bHRpcGxleGVyIC0+IHdpa2lTeXN0ZW0uZ29Qcm9jZXNzLmdycGNTZXJ2ZXIgIkZvcndhcmRzIGdSUEMgdHJhZmZpYyIKCiAgICAgICAgd2lraVN5c3RlbS5nb1Byb2Nlc3MuZ2luV2ViU2VydmVyIC0+IHdpa2lTeXN0ZW0uZ29Qcm9jZXNzLnNlc3Npb25NYW5hZ2VyICJVc2VzIgogICAgICAgIHdpa2lTeXN0ZW0uZ29Qcm9jZXNzLmdpbldlYlNlcnZlciAtPiB3aWtpU3lzdGVtLmdvUHJvY2Vzcy5hdXRoTWlkZGxld2FyZSAiVXNlcyIKICAgICAgICB3aWtpU3lzdGVtLmdvUHJvY2Vzcy5naW5XZWJTZXJ2ZXIgLT4gd2lraVN5c3RlbS5nb1Byb2Nlc3Mud2ViSGFuZGxlcnMgIlJvdXRlcyB0byIKICAgICAgICB3aWtpU3lzdGVtLmdvUHJvY2Vzcy5naW5XZWJTZXJ2ZXIgLT4gd2lraVN5c3RlbS5nb1Byb2Nlc3MuYXBpSGFuZGxlcnMgIlJvdXRlcyB0byIKICAgICAgICB3aWtpU3lzdGVtLmdvUHJvY2Vzcy5ncnBjU2VydmVyIC0+IHdpa2lTeXN0ZW0uZ29Qcm9jZXNzLmZyb250bWF0dGVyU2VydmljZSAiUm91dGVzIHRvIgoKICAgICAgICB3aWtpU3lzdGVtLmdvUHJvY2Vzcy53ZWJIYW5kbGVycyAtPiB3aWtpU3lzdGVtLmdvUHJvY2Vzcy5wYWdlTWFuYWdlcgogICAgICAgIHdpa2lTeXN0ZW0uZ29Qcm9jZXNzLmFwaUhhbmRsZXJzIC0+IHdpa2lTeXN0ZW0uZ29Qcm9jZXNzLmluZGV4ZXIKICAgICAgICB3aWtpU3lzdGVtLmdvUHJvY2Vzcy5hcGlIYW5kbGVycyAtPiB3aWtpU3lzdGVtLmdvUHJvY2Vzcy5sYWJlbFByaW50ZXJDbGllbnQKCiAgICAgICAgd2lraVN5c3RlbS5nb1Byb2Nlc3MuZnJvbnRtYXR0ZXJTZXJ2aWNlIC0+IHdpa2lTeXN0ZW0uZ29Qcm9jZXNzLnBhZ2VNYW5hZ2VyCgogICAgICAgIHdpa2lTeXN0ZW0uZ29Qcm9jZXNzLnBhZ2VNYW5hZ2VyIC0+IGZpbGVTeXN0ZW0gIlJlYWRzL1dyaXRlcyBwYWdlIGZpbGVzIgogICAgICAgIHdpa2lTeXN0ZW0uZ29Qcm9jZXNzLnBhZ2VNYW5hZ2VyIC0+IHdpa2lTeXN0ZW0uZ29Qcm9jZXNzLmluZGV4ZXIgIlVwZGF0ZXMgaW5kZXggb24gY2hhbmdlIgogICAgICAgIHdpa2lTeXN0ZW0uZ29Qcm9jZXNzLnBhZ2VNYW5hZ2VyIC0+IHdpa2lTeXN0ZW0uZ29Qcm9jZXNzLm1hcmtkb3duUmVuZGVyZXIgIlJlbmRlcnMgbWFya2Rvd24iCiAgICAgICAgd2lraVN5c3RlbS5nb1Byb2Nlc3MucGFnZU1hbmFnZXIgLT4gd2lraVN5c3RlbS5nb1Byb2Nlc3MudGVtcGxhdGVFbmdpbmUgIlJlbmRlcnMgdGVtcGxhdGVzIgoKICAgICAgICB3aWtpU3lzdGVtLmdvUHJvY2Vzcy5tdWx0aU1haW50YWluZXIgLT4gd2lraVN5c3RlbS5nb1Byb2Nlc3MuYmxldmVJbmRleCAiTWFpbnRhaW5zIgogICAgICAgIHdpa2lTeXN0ZW0uZ29Qcm9jZXNzLm11bHRpTWFpbnRhaW5lciAtPiB3aWtpU3lzdGVtLmdvUHJvY2Vzcy5mcm9udG1hdHRlckluZGV4ICJNYWludGFpbnMiCgogICAgICAgIHdpa2lTeXN0ZW0uZ29Qcm9jZXNzLmxhYmVsUHJpbnRlckNsaWVudCAtPiBsYWJlbFByaW50ZXIgIlNlbmRzIFpQTCBkYXRhIgogICAgfQoKICAgIHZpZXdzIHsKICAgICAgICBzeXN0ZW1Db250ZXh0IHdpa2lTeXN0ZW0gIlN5c3RlbUNvbnRleHQiIHsKICAgICAgICAgICAgaW5jbHVkZSAqCiAgICAgICAgICAgIGF1dG9MYXlvdXQKICAgICAgICB9CgogICAgICAgIGNvbnRhaW5lciB3aWtpU3lzdGVtICJDb250YWluZXJzIiB7CiAgICAgICAgICAgIGluY2x1ZGUgKgogICAgICAgICAgICBhdXRvTGF5b3V0CiAgICAgICAgfQoKICAgICAgICAvLyBDb21wb25lbnQgVmlld3MKICAgICAgICBjb21wb25lbnQgd2lraVN5c3RlbS5nb1Byb2Nlc3MgIkNvbXBvbmVudHMiIHsKICAgICAgICAgICAgdGl0bGUgIlNpbXBsZSBXaWtpIENvbXBvbmVudHMiCiAgICAgICAgICAgIGluY2x1ZGUgKgogICAgICAgICAgICBhdXRvTGF5b3V0CiAgICAgICAgfQoKICAgICAgICBzdHlsZXMgewogICAgICAgICAgICBlbGVtZW50ICJTb2Z0d2FyZSBTeXN0ZW0iIHsKICAgICAgICAgICAgICAgIGJhY2tncm91bmQgIzExNjhiZAogICAgICAgICAgICAgICAgY29sb3IgI2ZmZmZmZgogICAgICAgICAgICB9CiAgICAgICAgICAgIGVsZW1lbnQgIkNvbnRhaW5lciIgewogICAgICAgICAgICAgICAgYmFja2dyb3VuZCAjNDM4ZGQ1CiAgICAgICAgICAgICAgICBjb2xvciAjZmZmZmZmCiAgICAgICAgICAgIH0KICAgICAgICAgICAgZWxlbWVudCAiQ29tcG9uZW50IiB7CiAgICAgICAgICAgICAgICBiYWNrZ3JvdW5kICM4NWJiZjAKICAgICAgICAgICAgICAgIGNvbG9yICMwMDAwMDAKICAgICAgICAgICAgfQogICAgICAgICAgICBlbGVtZW50ICJQZXJzb24iIHsKICAgICAgICAgICAgICAgIGJhY2tncm91bmQgIzA4NDI3YgogICAgICAgICAgICAgICAgY29sb3IgI2ZmZmZmZgogICAgICAgICAgICB9CiAgICAgICAgfQogICAgfQp9"
+  },
+  "views" : {
+    "componentViews" : [ {
+      "automaticLayout" : {
+        "applied" : true,
+        "edgeSeparation" : 0,
+        "implementation" : "Graphviz",
+        "nodeSeparation" : 300,
+        "rankDirection" : "TopBottom",
+        "rankSeparation" : 300,
+        "vertices" : false
+      },
+      "containerId" : "3",
+      "dimensions" : {
+        "height" : 3811,
+        "width" : 6009
+      },
+      "elements" : [ {
+        "id" : "1",
+        "x" : 199,
+        "y" : 185
+      }, {
+        "id" : "4",
+        "x" : 949,
+        "y" : 185
+      }, {
+        "id" : "5",
+        "x" : 949,
+        "y" : 785
+      }, {
+        "id" : "6",
+        "x" : 2449,
+        "y" : 1385
+      }, {
+        "id" : "7",
+        "x" : 1699,
+        "y" : 1985
+      }, {
+        "id" : "8",
+        "x" : 2449,
+        "y" : 1985
+      }, {
+        "id" : "9",
+        "x" : 3199,
+        "y" : 1985
+      }, {
+        "id" : "10",
+        "x" : 3949,
+        "y" : 1985
+      }, {
+        "id" : "11",
+        "x" : 949,
+        "y" : 1385
+      }, {
+        "id" : "12",
+        "x" : 3949,
+        "y" : 185
+      }, {
+        "id" : "13",
+        "x" : 949,
+        "y" : 1985
+      }, {
+        "id" : "14",
+        "x" : 1699,
+        "y" : 2585
+      }, {
+        "id" : "15",
+        "x" : 2449,
+        "y" : 3185
+      }, {
+        "id" : "16",
+        "x" : 3199,
+        "y" : 185
+      }, {
+        "id" : "17",
+        "x" : 3574,
+        "y" : 785
+      }, {
+        "id" : "18",
+        "x" : 2824,
+        "y" : 785
+      }, {
+        "id" : "19",
+        "x" : 949,
+        "y" : 3185
+      }, {
+        "id" : "20",
+        "x" : 1699,
+        "y" : 3185
+      }, {
+        "id" : "21",
+        "x" : 3462,
+        "y" : 2585
+      }, {
+        "id" : "22",
+        "x" : 2449,
+        "y" : 185
+      }, {
+        "id" : "23",
+        "x" : 1699,
+        "y" : 185
+      }, {
+        "id" : "24",
+        "x" : 4608,
+        "y" : 3185
+      }, {
+        "id" : "25",
+        "x" : 5358,
+        "y" : 3185
+      } ],
+      "externalContainerBoundariesVisible" : false,
+      "key" : "Components",
+      "order" : 3,
+      "relationships" : [ {
+        "id" : "26"
+      }, {
+        "id" : "29"
+      }, {
+        "id" : "30"
+      }, {
+        "id" : "31"
+      }, {
+        "id" : "32"
+      }, {
+        "id" : "33"
+      }, {
+        "id" : "34"
+      }, {
+        "id" : "35"
+      }, {
+        "id" : "36"
+      }, {
+        "id" : "37"
+      }, {
+        "id" : "38"
+      }, {
+        "id" : "39"
+      }, {
+        "id" : "40"
+      }, {
+        "id" : "41"
+      }, {
+        "id" : "44"
+      }, {
+        "id" : "45"
+      }, {
+        "id" : "46"
+      }, {
+        "id" : "47"
+      }, {
+        "id" : "48"
+      }, {
+        "id" : "49",
+        "vertices" : [ {
+          "x" : 5208,
+          "y" : 3185
+        } ]
+      } ],
+      "title" : "Simple Wiki Components"
+    } ],
+    "configuration" : {
+      "branding" : { },
+      "lastSavedView" : "Components",
+      "metadataSymbols" : "SquareBrackets",
+      "styles" : {
+        "elements" : [ {
+          "background" : "#1168bd",
+          "color" : "#ffffff",
+          "tag" : "Software System"
+        }, {
+          "background" : "#438dd5",
+          "color" : "#ffffff",
+          "tag" : "Container"
+        }, {
+          "background" : "#85bbf0",
+          "color" : "#000000",
+          "tag" : "Component"
+        }, {
+          "background" : "#08427b",
+          "color" : "#ffffff",
+          "tag" : "Person"
+        } ]
+      },
+      "terminology" : { }
+    },
+    "containerViews" : [ {
+      "automaticLayout" : {
+        "applied" : true,
+        "edgeSeparation" : 0,
+        "implementation" : "Graphviz",
+        "nodeSeparation" : 300,
+        "rankDirection" : "TopBottom",
+        "rankSeparation" : 300,
+        "vertices" : false
+      },
+      "dimensions" : {
+        "height" : 1900,
+        "width" : 1600
+      },
+      "elements" : [ {
+        "id" : "1",
+        "x" : 575,
+        "y" : 165
+      }, {
+        "id" : "3",
+        "x" : 575,
+        "y" : 765
+      }, {
+        "id" : "24",
+        "x" : 200,
+        "y" : 1365
+      }, {
+        "id" : "25",
+        "x" : 950,
+        "y" : 1365
+      } ],
+      "externalSoftwareSystemBoundariesVisible" : false,
+      "key" : "Containers",
+      "order" : 2,
+      "relationships" : [ {
+        "id" : "27"
+      }, {
+        "id" : "42"
+      }, {
+        "id" : "50"
+      } ],
+      "softwareSystemId" : "2"
+    } ],
+    "systemContextViews" : [ {
+      "automaticLayout" : {
+        "applied" : true,
+        "edgeSeparation" : 0,
+        "implementation" : "Graphviz",
+        "nodeSeparation" : 300,
+        "rankDirection" : "TopBottom",
+        "rankSeparation" : 300,
+        "vertices" : false
+      },
+      "dimensions" : {
+        "height" : 1900,
+        "width" : 1600
+      },
+      "elements" : [ {
+        "id" : "1",
+        "x" : 575,
+        "y" : 165
+      }, {
+        "id" : "2",
+        "x" : 575,
+        "y" : 765
+      }, {
+        "id" : "24",
+        "x" : 200,
+        "y" : 1365
+      }, {
+        "id" : "25",
+        "x" : 950,
+        "y" : 1365
+      } ],
+      "enterpriseBoundaryVisible" : true,
+      "key" : "SystemContext",
+      "order" : 1,
+      "relationships" : [ {
+        "id" : "28"
+      }, {
+        "id" : "43"
+      }, {
+        "id" : "51"
+      } ],
+      "softwareSystemId" : "2"
+    } ]
+  }
+}
