@@ -17,6 +17,7 @@ require (
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/onsi/ginkgo/v2 v2.23.4
 	github.com/onsi/gomega v1.36.3
+	github.com/pelletier/go-toml/v2 v2.0.8
 	github.com/schollz/versionedtext v1.0.0
 	github.com/stoewer/go-strcase v1.3.0
 	github.com/yuin/goldmark v1.6.0
@@ -29,7 +30,6 @@ require (
 	google.golang.org/grpc v1.65.0
 	google.golang.org/protobuf v1.36.5
 	gopkg.in/urfave/cli.v1 v1.20.0
-	gopkg.in/yaml.v2 v2.4.0
 )
 
 require (
@@ -74,7 +74,6 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/mschoch/smat v0.2.0 // indirect
-	github.com/pelletier/go-toml/v2 v2.0.8 // indirect
 	github.com/philhofer/fwd v1.0.0 // indirect
 	github.com/rs/cors v1.7.0 // indirect
 	github.com/sergi/go-diff v1.4.0 // indirect
@@ -89,6 +88,7 @@ require (
 	golang.org/x/sys v0.32.0 // indirect
 	golang.org/x/tools v0.31.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240528184218-531527333157 // indirect
+	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	nhooyr.io/websocket v1.8.6 // indirect
 )
