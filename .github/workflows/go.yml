@@ -39,7 +39,7 @@ jobs:
       - name: Compile test binaries
         run: |
           mkdir -p test-binaries
-          for pkg in $(go list ./... | grep -v vendor | grep -v /gen/); do
+          for pkg in $(go list -f '{{if .TestGoFiles}}{{.ImportPath}}{{end}}' ./... | grep -v vendor | grep -v /gen/); do
             go test -c -o "test-binaries/$(echo $pkg | tr '/' '-').test" $pkg
           done
       - name: Upload test binaries
@@ -65,8 +65,10 @@ jobs:
           mkdir -p coverage_temp
           for pkg in ${{ join(matrix.packages, ' ') }}; do
             TEST_BINARY_NAME=$(echo $pkg | tr '/' '-')
-            chmod +x ./test-binaries/$TEST_BINARY_NAME.test
-            ./test-binaries/$TEST_BINARY_NAME.test -test.coverprofile="coverage_temp/$TEST_BINARY_NAME.cover" &
+            if [ -f "./test-binaries/$TEST_BINARY_NAME.test" ]; then
+              chmod +x ./test-binaries/$TEST_BINARY_NAME.test
+              ./test-binaries/$TEST_BINARY_NAME.test -test.coverprofile="coverage_temp/$TEST_BINARY_NAME.cover" &
+            fi
           done
           wait
       - name: Upload coverage artifact
