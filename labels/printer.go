@@ -15,7 +15,7 @@ type Printer interface {
 	Close() error
 }
 
-func PrintLabel(template_identifier string, identifer string, site common.IReadPages, query frontmatter.IQueryFrontmatterIndex) error {
+func PrintLabel(template_identifier string, identifer string, site common.PageReader, query frontmatter.IQueryFrontmatterIndex) error {
 	template_identifier, template_data, err := site.ReadMarkdown(template_identifier)
 	if err != nil {
 		return err

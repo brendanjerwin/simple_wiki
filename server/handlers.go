@@ -26,13 +26,13 @@ import (
 
 const minutesToUnlock = 10.0
 
-var hotTemplateReloading bool
-var LogLevel int = lumber.WARN
+var (
+	hotTemplateReloading bool
+	LogLevel             int = lumber.WARN
+)
 
-func Serve(
-	filepathToData,
-	host,
-	port,
+func NewSite(
+	filepathToData string,
 	cssFile string,
 	defaultPage string,
 	defaultPassword string,
@@ -43,7 +43,7 @@ func Serve(
 	maxUploadSize uint,
 	maxDocumentSize uint,
 	logger *lumber.ConsoleLogger,
-) {
+) *Site {
 	var customCSS []byte
 	// collect custom CSS
 	if len(cssFile) > 0 {
@@ -51,14 +51,14 @@ func Serve(
 		customCSS, errRead = os.ReadFile(cssFile)
 		if errRead != nil {
 			fmt.Println(errRead)
-			return
+			panic(errRead)
 		}
 		fmt.Printf("Loaded CSS file, %d bytes\n", len(customCSS))
 	}
 
 	site := &Site{
 		PathToData:      filepathToData,
-		Css:             customCSS,
+		CSS:             customCSS,
 		DefaultPage:     defaultPage,
 		DefaultPassword: defaultPassword,
 		Debounce:        debounce,
@@ -72,15 +72,13 @@ func Serve(
 
 	err := site.InitializeIndexing()
 	if err != nil {
-		logger.Error(err.Error())
+		logger.Error("Failed to initialize indexing: %v", err)
 		panic(err.Error())
 	}
-	router := site.Router()
-
-	panic(router.Run(host + ":" + port))
+	return site
 }
 
-func (s *Site) Router() *gin.Engine {
+func (s *Site) GinRouter() *gin.Engine {
 	if s.Logger == nil {
 		s.Logger = lumber.NewConsoleLogger(lumber.TRACE)
 	}
@@ -168,7 +166,7 @@ func (s *Site) loadTemplate() multitemplate.Render {
 
 func pageIsLocked(p *Page, c *gin.Context) bool {
 	// it is easier to reason about when the page is actually unlocked
-	var unlocked = !p.IsLocked ||
+	unlocked := !p.IsLocked ||
 		(p.IsLocked && p.UnlockedFor == getSetSessionID(c))
 	return !unlocked
 }
@@ -180,12 +178,12 @@ func (s *Site) handlePageRelinquish(c *gin.Context) {
 	var json QueryJSON
 	err := c.BindJSON(&json)
 	if err != nil {
-		s.Logger.Trace(err.Error())
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "Wrong JSON"})
+		s.Logger.Trace("Failed to bind JSON in handlePageRelinquish: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Wrong JSON"})
 		return
 	}
 	if len(json.Page) == 0 {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "Must specify `page`"})
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Must specify `page`"})
 		return
 	}
 	message := "Relinquished"
@@ -200,7 +198,8 @@ func (s *Site) handlePageRelinquish(c *gin.Context) {
 		p.Erase()
 		message = "Relinquished and erased"
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true,
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
 		"name":    name,
 		"message": message,
 		"text":    text,
@@ -236,7 +235,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		filename := strings.TrimPrefix(command, "/")
 		var data []byte
 		if filename == "css/custom.css" {
-			data = s.Css
+			data = s.CSS
 		} else {
 			var errAssset error
 			data, errAssset = static.StaticContent.ReadFile(filename)
@@ -385,7 +384,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		"Route":              "/" + page + command,
 		"HasDotInName":       strings.Contains(page, "."),
 		"RecentlyEdited":     getRecentlyEdited(page, c),
-		"CustomCSS":          len(s.Css) > 0,
+		"CustomCSS":          len(s.CSS) > 0,
 		"Debounce":           s.Debounce,
 		"Date":               time.Now().Format("2006-01-02"),
 		"UnixTime":           time.Now().Unix(),
@@ -433,8 +432,8 @@ func (s *Site) handlePageExists(c *gin.Context) {
 	var json QueryJSON
 	err := c.BindJSON(&json)
 	if err != nil {
-		s.Logger.Trace(err.Error())
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "Wrong JSON", "exists": false})
+		s.Logger.Trace("Failed to bind JSON in handlePageExists: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Wrong JSON", "exists": false})
 		return
 	}
 	p := s.Open(json.Page)
@@ -443,7 +442,6 @@ func (s *Site) handlePageExists(c *gin.Context) {
 	} else {
 		c.JSON(http.StatusOK, gin.H{"success": true, "message": json.Page + " not found", "exists": false})
 	}
-
 }
 
 func (s *Site) handlePageUpdate(c *gin.Context) {
@@ -456,16 +454,16 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 	var json QueryJSON
 	err := c.BindJSON(&json)
 	if err != nil {
-		s.Logger.Trace(err.Error())
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "Wrong JSON"})
+		s.Logger.Trace("Failed to bind JSON in handlePageUpdate: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Wrong JSON"})
 		return
 	}
 	if uint(len(json.NewText)) > s.MaxDocumentSize {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "Too much"})
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Too much"})
 		return
 	}
 	if len(json.Page) == 0 {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "Must specify `page`"})
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Must specify `page`"})
 		return
 	}
 	s.Logger.Trace("Update: %v", json)

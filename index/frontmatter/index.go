@@ -8,8 +8,10 @@ import (
 	"github.com/brendanjerwin/simple_wiki/common"
 )
 
-type DottedKeyPath = string
-type Value = string
+type (
+	DottedKeyPath = string
+	Value         = string
+)
 
 type IQueryFrontmatterIndex interface {
 	QueryExactMatch(dotted_key_path DottedKeyPath, value Value) []common.PageIdentifier
@@ -22,10 +24,10 @@ type IQueryFrontmatterIndex interface {
 type FrontmatterIndex struct {
 	InvertedIndex map[DottedKeyPath]map[Value][]common.PageIdentifier
 	PageKeyMap    map[common.PageIdentifier]map[DottedKeyPath]map[Value]bool
-	pageReader    common.IReadPages
+	pageReader    common.PageReader
 }
 
-func NewFrontmatterIndex(pageReader common.IReadPages) *FrontmatterIndex {
+func NewFrontmatterIndex(pageReader common.PageReader) *FrontmatterIndex {
 	return &FrontmatterIndex{
 		InvertedIndex: make(map[DottedKeyPath]map[Value][]common.PageIdentifier),
 		PageKeyMap:    make(map[common.PageIdentifier]map[DottedKeyPath]map[Value]bool),
@@ -68,8 +70,8 @@ func (f *FrontmatterIndex) recursiveAdd(identifier common.PageIdentifier, keyPat
 		return
 	}
 
-	//recursively build the dotted key path. a value in frontmatter can be either a string or a map[string]interface{}
-	//if it is a map[string]interface{}, then we need to recurse
+	// recursively build the dotted key path. a value in frontmatter can be either a string or a map[string]interface{}
+	// if it is a map[string]interface{}, then we need to recurse
 	switch v := value.(type) {
 	case map[string]interface{}:
 		for key, val := range v {
@@ -80,7 +82,7 @@ func (f *FrontmatterIndex) recursiveAdd(identifier common.PageIdentifier, keyPat
 			newKeyPath += key
 
 			if _, isMap := val.(map[string]interface{}); isMap {
-				f.saveToIndex(identifier, newKeyPath, "") //This ensures that the QueryKeyExistence function works for all keys in the hierarchy
+				f.saveToIndex(identifier, newKeyPath, "") // This ensures that the QueryKeyExistence function works for all keys in the hierarchy
 			}
 			f.recursiveAdd(identifier, newKeyPath, val)
 		}

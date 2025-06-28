@@ -1,0 +1,10 @@
+version: "0.5"
+processes:
+  wiki:
+    command: go build -o simple_wiki . && ./simple_wiki
+    availability:
+      restart: "always"
+  structurizr-lite:
+    command: podman run --rm -p 8080:8080 -v $(pwd)/docs:/usr/local/structurizr -i docker.io/structurizr/lite
+    availability:
+      restart: "always"

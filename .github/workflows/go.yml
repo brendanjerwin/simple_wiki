@@ -1,3 +1,19 @@
+# This workflow is optimized for fast Go CI runs.
+#
+# It follows a three-stage parallel approach:
+# 1.  `generate-matrix`: A Go program at ./tools/generate_matrix.go dynamically
+#     creates a JSON matrix of test groups. This allows for flexible and
+#     automatic parallelization.
+# 2.  `build-tests`: This job compiles all test binaries in the project
+#     (with coverage enabled) and uploads them as a single artifact. This
+#     avoids redundant compilation in the parallel test jobs.
+# 3.  `test`: This job runs a matrix of parallel test groups based on the
+#     output of the `generate-matrix` job. Each parallel job downloads the
+#     pre-compiled test binaries and executes only its assigned subset of tests.
+#
+# Finally, the `combine_and_upload_coverage` job runs after all test jobs are
+# complete. It downloads all the individual coverage reports, merges them into
+# a single file, and uploads it to Codecov.
 name: Go
 
 on:
@@ -7,23 +23,94 @@ on:
     branches: [master]
 
 jobs:
-  build:
+  generate-matrix:
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.generate.outputs.matrix }}
     steps:
       - uses: actions/checkout@v2
-
       - name: Set up Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.21
+          go-version: 1.24
+      - name: Generate matrix
+        id: generate
+        run: go run ./tools/generate_matrix.go
 
-      - name: Build
-        run: go build -v ./...
+  build-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.24
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+      - name: Compile test binaries
+        run: |
+          mkdir -p test-binaries
+          for pkg in $(go list -f '{{if .TestGoFiles}}{{.ImportPath}}{{end}}' ./... | grep -v vendor | grep -v /gen/); do
+            go test -c -cover -o "test-binaries/$(echo $pkg | tr '/' '-').test" $pkg
+          done
+      - name: Upload test binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-binaries
+          path: test-binaries/
 
-      - name: Test
-        run: go test -v -coverprofile=coverage.txt ./...
+  test:
+    runs-on: ubuntu-latest
+    needs: [generate-matrix, build-tests]
+    strategy:
+      matrix: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v2
+      - name: Download test binaries
+        uses: actions/download-artifact@v4
+        with:
+          name: test-binaries
+          path: test-binaries/
+      - name: Test ${{ matrix.name }}
+        run: |
+          mkdir -p coverage_temp
+          for pkg in ${{ join(matrix.packages, ' ') }}; do
+            TEST_BINARY_NAME=$(echo $pkg | tr '/' '-')
+            if [ -f "./test-binaries/$TEST_BINARY_NAME.test" ]; then
+              chmod +x ./test-binaries/$TEST_BINARY_NAME.test
+              ./test-binaries/$TEST_BINARY_NAME.test -test.coverprofile="coverage_temp/$TEST_BINARY_NAME.cover" &
+            fi
+          done
+          wait
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-${{ matrix.name }}
+          path: coverage_temp
 
-      - name: Upload coverage reports to Codecov
+  combine_and_upload_coverage:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.24
+      - name: Download coverage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: coverage-artifacts
+      - name: Combine coverage
+        run: |
+          echo "mode: set" > coverage.txt
+          find coverage-artifacts -name "*.cover" -exec cat {} + | grep -v "mode: set" >> coverage.txt
+      - name: Upload combined coverage to Codecov
         uses: codecov/codecov-action@v3
         with:
           token: ${{ secrets.CODECOV_TOKEN }}

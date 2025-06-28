@@ -1,42 +1,105 @@
 package sec
 
-import "testing"
+import (
+	"testing"
 
-func TestHashAndCheckPassword(t *testing.T) {
-	password := "mySecurePassword"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+)
 
-	// Hash the password
-	hashedPassword := HashPassword(password)
-
-	// Check the hashed password
-	err := CheckPasswordHash(password, hashedPassword)
-
-	if err != nil {
-		t.Errorf("Failed to verify the password: %v", err)
-	}
+func TestSec(t *testing.T) {
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "Sec Suite")
 }
 
-func TestHashAndCheckPasswordEdgeCases(t *testing.T) {
-	// Test with incorrect password
-	password := "mySecurePassword"
-	wrongPassword := "wrongPassword"
-	hashedPassword := HashPassword(password)
-	err := CheckPasswordHash(wrongPassword, hashedPassword)
-	if err == nil {
-		t.Errorf("Expected an error when checking the wrong password, but didn't get one")
-	}
+var _ = Describe("HashPassword and CheckPasswordHash", func() {
 
-	// Test with blank password
-	blankPassword := ""
-	hashedBlankPassword := HashPassword(blankPassword)
-	err = CheckPasswordHash(blankPassword, hashedBlankPassword)
-	if err != nil {
-		t.Errorf("Failed to verify the blank password: %v", err)
-	}
+	var (
+		password       string
+		hashedPassword string
+		err            error
+	)
 
-	// Test with blank hashed password
-	err = CheckPasswordHash(password, "")
-	if err == nil {
-		t.Errorf("Expected an error when checking with a blank hashed password, but didn't get one")
-	}
-}
+	Describe("with a valid password hash", func() {
+
+		BeforeEach(func() {
+			password = "mySecurePassword"
+			hashedPassword = HashPassword(password)
+		})
+
+		When("the password is correct", func() {
+
+			BeforeEach(func() {
+				err = CheckPasswordHash(password, hashedPassword)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		When("the password is incorrect", func() {
+
+			BeforeEach(func() {
+				err = CheckPasswordHash("wrongPassword", hashedPassword)
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(MatchError("crypto/bcrypt: hashedPassword is not the hash of the given password"))
+			})
+		})
+	})
+
+	When("the password is blank", func() {
+
+		BeforeEach(func() {
+			password = ""
+			hashedPassword = HashPassword(password)
+
+			err = CheckPasswordHash(password, hashedPassword)
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	When("the hashed password is blank", func() {
+
+		BeforeEach(func() {
+			password = "mySecurePassword"
+
+			err = CheckPasswordHash(password, "")
+		})
+
+		It("should return an error", func() {
+			Expect(err).To(MatchError("crypto/bcrypt: hashedSecret too short to be a bcrypted password"))
+		})
+	})
+
+	When("the password is too long", func() {
+
+		BeforeEach(func() {
+			// A password longer than 72 bytes, which is bcrypt's limit.
+			password = "This password is way too long to be hashed by bcrypt, it should be more than 72 bytes"
+			Expect(len(password)).To(BeNumerically(">", 72))
+			hashedPassword = HashPassword(password)
+			err = CheckPasswordHash(password, hashedPassword)
+		})
+
+		It("should return an error because the hash will be invalid", func() {
+			Expect(err).To(MatchError("crypto/bcrypt: hashedSecret too short to be a bcrypted password"))
+		})
+	})
+
+	When("the hashed string is not a valid hex string", func() {
+
+		BeforeEach(func() {
+			err = CheckPasswordHash("any password", "not-a-valid-hex-string")
+		})
+
+		It("should return an error", func() {
+			Expect(err).To(MatchError("encoding/hex: invalid byte: U+006E 'n'"))
+		})
+	})
+})

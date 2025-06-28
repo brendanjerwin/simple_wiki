@@ -2,18 +2,27 @@ package main
 
 import (
 	"fmt"
-	"net"
+	"net/http"
 	"os"
+	"strings"
 	"time"
 
+	grpcApi "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
 	"github.com/brendanjerwin/simple_wiki/server"
+	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"github.com/jcelliott/lumber"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
 
 	cli "gopkg.in/urfave/cli.v1"
 )
 
-var version string
-var pathToData string
+var (
+	version string = "dev"
+	commit  string = "n/a"
+)
 
 func main() {
 	app := cli.NewApp()
@@ -22,18 +31,14 @@ func main() {
 	app.Version = version
 	app.Compiled = time.Now()
 	app.Action = func(c *cli.Context) error {
-		pathToData = c.GlobalString("data")
+		pathToData := c.GlobalString("data")
 		os.MkdirAll(pathToData, 0755)
-		host := c.GlobalString("host")
-		if host == "" {
-			host = GetLocalIP()
-		}
-		fmt.Printf("\nRunning simple_wiki server (version %s) at http://%s:%s\n\n", version, host, c.GlobalString("port"))
 
-		server.Serve(
+		grpcServer := grpc.NewServer()
+
+		logger := makeLogger(c.GlobalBool("debug"))
+		site := server.NewSite(
 			pathToData,
-			c.GlobalString("host"),
-			c.GlobalString("port"),
 			c.GlobalString("css"),
 			c.GlobalString("default-page"),
 			c.GlobalString("lock"),
@@ -43,9 +48,43 @@ func main() {
 			!c.GlobalBool("block-file-uploads"),
 			c.GlobalUint("max-upload-mb"),
 			c.GlobalUint("max-document-length"),
-			logger(c.GlobalBool("debug")),
+			logger,
 		)
-		return nil
+		ginRouter := site.GinRouter()
+		grpcApiServer := grpcApi.NewServer(version, commit, app.Compiled, site)
+		grpcApiServer.RegisterWithServer(grpcServer)
+
+		reflection.Register(grpcServer)
+
+		wrappedGrpc := grpcweb.WrapServer(grpcServer,
+			// Enable CORS so browser clients can make requests
+			grpcweb.WithOriginFunc(func(origin string) bool { return true }),
+		)
+
+		// 5. Create a multiplexer to route traffic to either gRPC or Gin.
+		multiplexedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
+				logger.Debug("gRPC-ish request: %s %s", r.Method, r.URL.Path)
+				wrappedGrpc.ServeHTTP(w, r)
+				return
+			}
+			logger.Debug("Gin request: %s %s", r.Method, r.URL.Path)
+			ginRouter.ServeHTTP(w, r)
+		})
+
+		// 6. Determine host and port, then start the server
+		host := c.GlobalString("host")
+		if host == "" {
+			host = "0.0.0.0"
+		}
+		addr := fmt.Sprintf("%s:%s", host, c.GlobalString("port"))
+		fmt.Printf("\nRunning simple_wiki server (version %s) at http://%s\n\n", version, addr)
+
+		srv := &http.Server{
+			Addr:    addr,
+			Handler: h2c.NewHandler(multiplexedHandler, &http2.Server{}),
+		}
+		return srv.ListenAndServe()
 	}
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
@@ -116,34 +155,9 @@ func main() {
 	app.Run(os.Args)
 }
 
-// GetLocalIP returns the local ip address
-func GetLocalIP() string {
-	addrs, err := net.InterfaceAddrs()
-	if err != nil {
-		return ""
-	}
-	bestIP := ""
-	for _, address := range addrs {
-		// check the address type and if it is not a loopback the display it
-		if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
-			if ipnet.IP.To4() != nil {
-				return ipnet.IP.String()
-			}
-		}
-	}
-	return bestIP
-}
-
-// exists returns whether the given file or directory exists or not
-func exists(path string) bool {
-	_, err := os.Stat(path)
-	return !os.IsNotExist(err)
-}
-
-func logger(debug bool) *lumber.ConsoleLogger {
+func makeLogger(debug bool) *lumber.ConsoleLogger {
 	if !debug {
 		return lumber.NewConsoleLogger(lumber.WARN)
 	}
 	return lumber.NewConsoleLogger(lumber.TRACE)
-
 }

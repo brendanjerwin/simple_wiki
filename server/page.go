@@ -1,17 +1,15 @@
 package server
 
 import (
-	"bytes"
 	"encoding/json"
-	"net/http"
+	"fmt"
+	"io"
 	"os"
 	"path"
-	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
-	"github.com/adrg/frontmatter"
+	adrgFrontmatter "github.com/adrg/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/common"
 	"github.com/brendanjerwin/simple_wiki/utils"
 	"github.com/schollz/versionedtext"
@@ -29,6 +27,7 @@ type Page struct {
 	PassphraseToUnlock string
 	UnlockedFor        string
 	FrontmatterJson    []byte `json:"-"`
+	WasLoadedFromDisk  bool   `json:"-"`
 }
 
 func (p Page) LastEditTime() time.Time {
@@ -39,206 +38,46 @@ func (p Page) LastEditUnixTime() int64 {
 	return p.Text.LastEditTime() / 1000000000
 }
 
-func (s *Site) ReadFrontMatter(requested_identifier string) (string, common.FrontMatter, error) {
-	identifier, content, err := s.readFileByIdentifier(requested_identifier, "md")
+func (p *Page) parse() (common.FrontMatter, common.Markdown, error) {
+	text := p.Text.GetCurrent()
+	reader := strings.NewReader(text)
+
+	var fm common.FrontMatter
+	md, err := adrgFrontmatter.Parse(reader, &fm) // Auto-detect
 	if err != nil {
-		return identifier, nil, err
-	}
-
-	matter := &map[string]interface{}{}
-	_, err = frontmatter.Parse(bytes.NewReader(content), &matter)
-	if err != nil {
-		return identifier, nil, err
-	}
-
-	return identifier, *matter, nil
-}
-
-func (s *Site) ReadMarkdown(requested_identifier string) (string, string, error) {
-	identifier, content, err := s.readFileByIdentifier(requested_identifier, "md")
-	if err != nil {
-		return identifier, "", err
-	}
-
-	matter := &common.FrontMatter{}
-	markdownBytes, err := frontmatter.Parse(bytes.NewReader(content), &matter)
-	if err != nil {
-		return identifier, "", err
-	}
-
-	return identifier, string(markdownBytes), nil
-}
-
-func (s *Site) Open(requested_identifier string) (p *Page) {
-	identifier, bJSON, err := s.readFileByIdentifier(requested_identifier, "json")
-	if err != nil {
-		return
-	}
-	p = new(Page)
-	p.Site = s
-	p.Identifier = identifier
-	p.Text = versionedtext.NewVersionedText("")
-	err = json.Unmarshal(bJSON, &p)
-	if err != nil {
-		p = new(Page)
-	}
-	return p
-}
-
-func (s *Site) OpenOrInit(requested_identifier string, req *http.Request) (p *Page) {
-	identifier, bJSON, err := s.readFileByIdentifier(requested_identifier, "json")
-	if err != nil {
-		p = new(Page)
-		p.Site = s
-		p.Identifier = identifier
-
-		prams := req.URL.Query()
-		initialText := "identifier = \"" + identifier + "\"\n"
-		tmpl := prams.Get("tmpl")
-		for pram, vals := range prams {
-			if len(vals) > 1 {
-				initialText += pram + " = [ \"" + strings.Join(vals, "\", \"") + "\"]\n"
-			} else if len(vals) == 1 {
-				initialText += pram + " = \"" + vals[0] + "\"\n"
+		// Check if it was a TOML parsing error. This can happen if fences are '+++' but content is YAML-like.
+		// We can't consistently rely on the specific error type due to versioning issues, so we check the message.
+		if strings.Contains(err.Error(), "bare keys cannot contain") {
+			p.Site.Logger.Trace("TOML-like parse failed for %s, retrying with fences swapped to YAML. Error: %v", p.Identifier, err)
+			// Reset reader and read all content
+			_, seekErr := reader.Seek(0, io.SeekStart)
+			if seekErr != nil {
+				return nil, "", fmt.Errorf("failed to seek for parse retry: %w", seekErr)
 			}
-		}
-
-		if tmpl == "inv_item" {
-			initialText += `
-
-[inventory]
-items = [
-
-]
-
-`
-		}
-
-		if initialText != "" {
-			initialText = "+++\n" + initialText + "+++\n"
-		}
-
-		initialText += "\n# {{or .Title .Identifier}}" + "\n"
-
-		if tmpl == "inv_item" {
-			initialText += `
-### Goes in: {{LinkTo .Inventory.Container }}
-
-{{if IsContainer .Identifier }}
-## Contents
-{{ ShowInventoryContentsOf .Identifier }}
-{{ end }}
-`
-		}
-
-		p.Text = versionedtext.NewVersionedText(initialText)
-		p.Render()
-		p.Save()
-		return p
-	}
-	err = json.Unmarshal(bJSON, &p)
-	if err != nil {
-		panic(err)
-	}
-	p.Site = s
-
-	p.Render()
-
-	return p
-}
-
-func (s *Site) readFileByIdentifier(identifier, extension string) (string, []byte, error) {
-
-	//First try with the munged identifier
-	munged_identifier := common.MungeIdentifier(identifier)
-	bJSON, err := os.ReadFile(path.Join(s.PathToData, utils.EncodeToBase32(strings.ToLower(munged_identifier))+"."+extension))
-	if err == nil {
-		return munged_identifier, bJSON, nil
-	}
-
-	//Then try with the original identifier if that didn't work (older files)
-	bJSON, err = os.ReadFile(path.Join(s.PathToData, utils.EncodeToBase32(strings.ToLower(identifier))+"."+extension))
-	if err == nil {
-		return identifier, bJSON, nil
-	}
-
-	return munged_identifier, nil, err
-}
-
-type DirectoryEntry struct {
-	Path       string
-	Length     int
-	Numchanges int
-	LastEdited time.Time
-}
-
-func (d DirectoryEntry) LastEditTime() string {
-	return d.LastEdited.Format("Mon Jan 2 15:04:05 MST 2006")
-}
-
-func (d DirectoryEntry) Name() string {
-	return d.Path
-}
-
-func (d DirectoryEntry) Size() int64 {
-	return int64(d.Length)
-}
-
-func (d DirectoryEntry) Mode() os.FileMode {
-	return os.ModePerm
-}
-
-func (d DirectoryEntry) ModTime() time.Time {
-	return d.LastEdited
-}
-
-func (d DirectoryEntry) IsDir() bool {
-	return false
-}
-
-func (d DirectoryEntry) Sys() interface{} {
-	return nil
-}
-
-func (s *Site) DirectoryList() []os.FileInfo {
-	files, _ := os.ReadDir(s.PathToData)
-	entries := make([]os.FileInfo, len(files))
-	found := 0
-	for _, f := range files {
-		if strings.HasSuffix(f.Name(), ".json") {
-			name := DecodeFileName(f.Name())
-			p := s.Open(name)
-			entries[found] = DirectoryEntry{
-				Path:       name,
-				Length:     len(p.Text.GetCurrent()),
-				Numchanges: p.Text.NumEdits(),
-				LastEdited: time.Unix(p.Text.LastEditTime()/1000000000, 0),
+			contentBytes, readErr := io.ReadAll(reader)
+			if readErr != nil {
+				return nil, "", fmt.Errorf("failed to read content for parse retry: %w", readErr)
 			}
-			found = found + 1
+			// Swap fences and retry parsing. Replace only the first two occurrences.
+			swappedContent := strings.Replace(string(contentBytes), "+++", "---", 2)
+			md, err = adrgFrontmatter.Parse(strings.NewReader(swappedContent), &fm)
 		}
 	}
-	entries = entries[:found]
-	sort.Slice(entries, func(i, j int) bool { return entries[i].ModTime().After(entries[j].ModTime()) })
-	return entries
-}
 
-type UploadEntry struct {
-	os.FileInfo
-}
-
-func (s *Site) UploadList() ([]os.FileInfo, error) {
-	paths, err := filepath.Glob(path.Join(s.PathToData, "sha256*"))
 	if err != nil {
-		return nil, err
-	}
-	result := make([]os.FileInfo, len(paths))
-	for i := range paths {
-		result[i], err = os.Stat(paths[i])
-		if err != nil {
-			return result, err
+		if strings.Contains(err.Error(), "not found") {
+			// This isn't an error, it just means there's no frontmatter.
+			return make(common.FrontMatter), common.Markdown(text), nil
 		}
+		// This wrapping is needed for the test to pass.
+		return nil, "", fmt.Errorf("failed to unmarshal frontmatter for %s: %w", p.Identifier, err)
 	}
-	return result, nil
+
+	if fm == nil {
+		fm = make(common.FrontMatter)
+	}
+
+	return fm, common.Markdown(md), nil
 }
 
 func DecodeFileName(s string) string {
@@ -246,12 +85,8 @@ func DecodeFileName(s string) string {
 	return s2
 }
 
-// Update cleans the text and updates the versioned text
-// and generates a new render
+// Update overwrites the page's content with newText, saves the change, and re-renders the page.
 func (p *Page) Update(newText string) error {
-	// Trim space from end
-	newText = strings.TrimRight(newText, "\n\t ")
-
 	// Update the versioned text
 	p.Text.Update(newText)
 
@@ -265,7 +100,7 @@ func (p *Page) Render() {
 	var err error
 	p.RenderedPage, p.FrontmatterJson, err = utils.MarkdownToHtmlAndJsonFrontmatter(p.Text.GetCurrent(), true, p.Site, p.Site.MarkdownRenderer, p.Site.FrontmatterIndexQueryer)
 	if err != nil {
-		p.Site.Logger.Error(err.Error())
+		p.Site.Logger.Error("Error rendering page: %v", err)
 		p.RenderedPage = []byte(err.Error())
 	}
 }
@@ -295,11 +130,11 @@ func (p *Page) Save() error {
 }
 
 func (p *Page) IsNew() bool {
-	return !utils.Exists(path.Join(p.Site.PathToData, utils.EncodeToBase32(strings.ToLower(p.Identifier))+".json"))
+	return !p.WasLoadedFromDisk
 }
 
 func (p *Page) Erase() error {
-	p.Site.Logger.Trace("Erasing " + p.Identifier)
+	p.Site.Logger.Trace("Erasing %s", p.Identifier)
 	p.Site.IndexMaintainer.RemovePageFromIndex(p.Identifier)
 	err := os.Remove(path.Join(p.Site.PathToData, utils.EncodeToBase32(strings.ToLower(p.Identifier))+".json"))
 	if err != nil {

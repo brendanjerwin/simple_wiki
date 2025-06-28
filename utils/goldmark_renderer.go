@@ -3,8 +3,10 @@ package utils
 import (
 	"bytes"
 	"net/url"
+	"regexp"
 
 	"github.com/brendanjerwin/simple_wiki/common"
+	"github.com/microcosm-cc/bluemonday"
 	"github.com/yuin/goldmark"
 	emoji "github.com/yuin/goldmark-emoji"
 	"github.com/yuin/goldmark/extension"
@@ -33,6 +35,7 @@ func (b GoldmarkRenderer) Render(input []byte) ([]byte, error) {
 		goldmark.WithRendererOptions(
 			html.WithHardWraps(),
 			html.WithXHTML(),
+			html.WithUnsafe(),
 		),
 	)
 
@@ -40,7 +43,12 @@ func (b GoldmarkRenderer) Render(input []byte) ([]byte, error) {
 	if err := md.Convert(input, &buf); err != nil {
 		return []byte{}, err
 	}
-	return buf.Bytes(), nil
+	p := bluemonday.UGCPolicy()
+	// Allow GFM task list checkboxes
+	p.AllowElements("input")
+	p.AllowAttrs("type").Matching(regexp.MustCompile(`^checkbox$`)).OnElements("input")
+	p.AllowAttrs("disabled", "checked").OnElements("input")
+	return p.SanitizeBytes(buf.Bytes()), nil
 }
 
 type wikilinkResolver struct{}

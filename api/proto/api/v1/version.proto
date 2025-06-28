@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package api.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
+
+service Version {
+  // GetVersion returns the server version and build time.
+  rpc GetVersion(GetVersionRequest) returns (GetVersionResponse) {}
+}
+
+// The request message for the GetVersion RPC.
+message GetVersionRequest {}
+
+// The response message for the GetVersion RPC.
+message GetVersionResponse {
+  string version = 1;
+  string commit = 2;
+  google.protobuf.Timestamp build_time = 3;
+}

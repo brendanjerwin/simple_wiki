@@ -1,0 +1,86 @@
+syntax = "proto3";
+
+package api.v1;
+
+import "google/protobuf/struct.proto";
+
+option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
+
+// The Frontmatter service definition.
+service Frontmatter {
+  // Gets the frontmatter for a given page.
+  rpc GetFrontmatter(GetFrontmatterRequest) returns (GetFrontmatterResponse) {}
+
+  // Merges the given frontmatter with the existing frontmatter for a page.
+  rpc MergeFrontmatter(MergeFrontmatterRequest) returns (MergeFrontmatterResponse) {}
+
+  // Replaces the entire frontmatter for a given page.
+  rpc ReplaceFrontmatter(ReplaceFrontmatterRequest) returns (ReplaceFrontmatterResponse) {}
+
+  // Removes a key from the frontmatter at a given path.
+  rpc RemoveKeyAtPath(RemoveKeyAtPathRequest) returns (RemoveKeyAtPathResponse) {}
+}
+
+// The request message containing the page name.
+message GetFrontmatterRequest {
+  string page = 1;
+}
+
+// The response message containing the frontmatter.
+message GetFrontmatterResponse {
+  // google.protobuf.Struct is used to represent the frontmatter,
+  // which is a map[string]any.
+  google.protobuf.Struct frontmatter = 1;
+}
+
+// The request message for merging frontmatter.
+message MergeFrontmatterRequest {
+  string page = 1;
+  // The frontmatter fields to merge.
+  google.protobuf.Struct frontmatter = 2;
+}
+
+// The response message for merging frontmatter.
+message MergeFrontmatterResponse {
+  google.protobuf.Struct frontmatter = 1;
+}
+
+ // A component of a path to a value in a nested structure. This allows
+// for structured traversal of JSON-like objects. For example, to access
+// the name of the first user in a structure like `{"users": [{"name": "John"}]}`,
+// the path would be `[PathComponent{key: "users"}, PathComponent{index: 0}, PathComponent{key: "name"}]`.
+message PathComponent {
+  oneof component {
+    // A key for a map/object.
+    string key = 1;
+    // An index for an array/list.
+    int32 index = 2;
+  }
+}
+
+// The request for removing a key at a path.
+message RemoveKeyAtPathRequest {
+  string page = 1;
+  // The path to the key to remove.
+  repeated PathComponent key_path = 2;
+}
+
+// The response for removing a key at a path.
+message RemoveKeyAtPathResponse {
+  // The updated frontmatter after removal.
+  google.protobuf.Struct frontmatter = 1;
+}
+
+
+// The request for replacing frontmatter.
+message ReplaceFrontmatterRequest {
+  string page = 1;
+  // The full frontmatter to set for the page.
+  google.protobuf.Struct frontmatter = 2;
+}
+
+// The response for replacing frontmatter.
+message ReplaceFrontmatterResponse {
+  // The updated frontmatter.
+  google.protobuf.Struct frontmatter = 1;
+}
