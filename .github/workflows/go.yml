@@ -12,24 +12,26 @@ jobs:
     strategy:
       matrix:
         group:
-          - name: group-A
+          - name: group-1
             packages:
               - github.com/brendanjerwin/simple_wiki/server
-              - github.com/brendanjerwin/simple_wiki/index
-              - github.com/brendanjerwin/simple_wiki/labels
               - github.com/brendanjerwin/simple_wiki/static
-          - name: group-B
+              - github.com/brendanjerwin/simple_wiki/index/frontmatter
+          - name: group-2
             packages:
               - github.com/brendanjerwin/simple_wiki
-              - github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1
               - github.com/brendanjerwin/simple_wiki/common
               - github.com/brendanjerwin/simple_wiki/templating
-          - name: group-C
+          - name: group-3
             packages:
+              - github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1
               - github.com/brendanjerwin/simple_wiki/utils
+              - github.com/brendanjerwin/simple_wiki/labels
+          - name: group-4
+            packages:
               - github.com/brendanjerwin/simple_wiki/index/bleve
               - github.com/brendanjerwin/simple_wiki/sec
-              - github.com/brendanjerwin/simple_wiki/index/frontmatter
+              - github.com/brendanjerwin/simple_wiki/index
     steps:
       - uses: actions/checkout@v2
 
