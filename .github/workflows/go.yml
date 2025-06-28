@@ -55,9 +55,8 @@ jobs:
           mkdir -p coverage_temp
           for pkg in ${{ join(matrix.group.packages, ' ') }};
           do
-            COVER_FILE=$(echo $pkg | tr '/' '-').cover
-            TEST_ENV=true go test -race -coverprofile=$COVER_FILE $pkg &
-            mv $COVER_FILE coverage_temp/
+            COVER_FILE=$(echo $pkg | tr '/' '-')
+            TEST_ENV=true go test -race -coverprofile=coverage_temp/$COVER_FILE.cover $pkg &
           done
           wait
 
