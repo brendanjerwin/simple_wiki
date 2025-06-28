@@ -19,6 +19,18 @@
 - take a defensive coding approach. Check inputs, assert preconditions and invariants. Assert assumptions.
 - For preconditions and invariants, prefer returning `error` over `panic`. Panics should be reserved for truly exceptional situations. For conditions that indicate a programming or configuration error, such as a missing dependency, functions should return an error. This allows the caller to handle the problem more gracefully.
 
+- When adding a new component to the system, ensure it is also added to the C4 model in `docs/workspace.dsl`. This keeps our architectural documentation up-to-date. Each component should include a `properties` block specifying the source file.
+
+  **Example:**
+
+  ```dsl
+  myNewComponent = component "My New Component" "Does something awesome." "Go" {
+      properties {
+          file "internal/path/to/my_new_component.go"
+      }
+  }
+  ```
+
   When checking for a dependency within an HTTP handler, you should check for the dependency and return an appropriate HTTP error if it's missing.
 
   Example:
