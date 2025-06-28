@@ -9,6 +9,15 @@ import (
 	"strings"
 )
 
+type Group struct {
+	Name     string   `json:"name"`
+	Packages []string `json:"packages"`
+}
+
+type Matrix struct {
+	Include []Group `json:"include"`
+}
+
 func main() {
 	cmd := exec.Command("go", "list", "./...")
 	stdout, err := cmd.StdoutPipe()
@@ -38,15 +47,6 @@ func main() {
 		groups[i%numGroups] = append(groups[i%numGroups], pkg)
 	}
 
-	type Group {
-		Name     string   `json:"name"`
-		Packages []string `json:"packages"`
-	}
-
-	type Matrix {
-		Include []Group `json:"include"`
-	}
-
 	var matrix Matrix
 	for i, groupPackages := range groups {
 		if len(groupPackages) > 0 {
@@ -62,5 +62,18 @@ func main() {
 		panic(err)
 	}
 
-	fmt.Printf("::set-output name=matrix::%s\n", string(jsonMatrix))
+	outputFile := os.Getenv("GITHUB_OUTPUT")
+	if outputFile == "" {
+		// Fallback for local testing
+		fmt.Println(string(jsonMatrix))
+		return
+	}
+	f, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+	if _, err := f.WriteString(fmt.Sprintf("matrix=%s\n", string(jsonMatrix))); err != nil {
+		panic(err)
+	}
 }
