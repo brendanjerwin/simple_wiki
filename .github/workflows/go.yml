@@ -52,21 +52,20 @@ jobs:
       - name: Test ${{ matrix.group.name }}
         id: run_tests
         run: |
-          COVER_FILES_LIST=""
+          mkdir -p coverage_temp
           for pkg in ${{ join(matrix.group.packages, ' ') }};
           do
             COVER_FILE=$(echo $pkg | tr '/' '-').cover
             TEST_ENV=true go test -race -coverprofile=$COVER_FILE $pkg &
-            COVER_FILES_LIST="$COVER_FILES_LIST $COVER_FILE"
+            mv $COVER_FILE coverage_temp/
           done
           wait
-          echo "::set-output name=cover_files_list::$COVER_FILES_LIST"
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report-${{ matrix.group.name }}
-          path: ${{ steps.run_tests.outputs.cover_files_list }}
+          path: coverage_temp
 
   combine_and_upload_coverage:
     runs-on: ubuntu-latest
