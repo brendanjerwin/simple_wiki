@@ -7,35 +7,8 @@ on:
     branches: [master]
 
 jobs:
-  test:
+  build:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        group:
-          - name: group-1
-            packages:
-              - github.com/brendanjerwin/simple_wiki/server
-              - github.com/brendanjerwin/simple_wiki/index/frontmatter
-          - name: group-2
-            packages:
-              - github.com/brendanjerwin/simple_wiki
-              - github.com/brendanjerwin/simple_wiki/static
-          - name: group-3
-            packages:
-              - github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1
-              - github.com/brendanjerwin/simple_wiki/templating
-          - name: group-4
-            packages:
-              - github.com/brendanjerwin/simple_wiki/utils
-              - github.com/brendanjerwin/simple_wiki/common
-          - name: group-5
-            packages:
-              - github.com/brendanjerwin/simple_wiki/index/bleve
-              - github.com/brendanjerwin/simple_wiki/labels
-          - name: group-6
-            packages:
-              - github.com/brendanjerwin/simple_wiki/sec
-              - github.com/brendanjerwin/simple_wiki/index
     steps:
       - uses: actions/checkout@v2
 
@@ -54,6 +27,64 @@ jobs:
 
       - name: Build
         run: go build -v ./...
+
+      - name: Cache Go build
+        uses: actions/cache@v4
+        with:
+          path: ./
+          key: ${{ runner.os }}-go-build-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-go-build-
+
+  test:
+    runs-on: ubuntu-latest
+    needs: build
+    strategy:
+      matrix:
+        group:
+          - name: group-1
+            packages:
+              - github.com/brendanjerwin/simple_wiki/server
+              - github.com/brendanjerwin/simple_wiki/static
+              - github.com/brendanjerwin/simple_wiki/index/frontmatter
+          - name: group-2
+            packages:
+              - github.com/brendanjerwin/simple_wiki
+              - github.com/brendanjerwin/simple_wiki/common
+              - github.com/brendanjerwin/simple_wiki/templating
+          - name: group-3
+            packages:
+              - github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1
+              - github.com/brendanjerwin/simple_wiki/utils
+              - github.com/brendanjerwin/simple_wiki/labels
+          - name: group-4
+            packages:
+              - github.com/brendanjerwin/simple_wiki/index/bleve
+              - github.com/brendanjerwin/simple_wiki/sec
+              - github.com/brendanjerwin/simple_wiki/index
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.24
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Restore Go build
+        uses: actions/cache@v4
+        with:
+          path: ./
+          key: ${{ runner.os }}-go-build-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-go-build-
 
       - name: Test ${{ matrix.group.name }}
         id: run_tests
