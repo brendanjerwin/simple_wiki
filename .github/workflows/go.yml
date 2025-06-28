@@ -22,8 +22,8 @@ jobs:
 
       - name: Test
         run: |
-          # Exclude vendor directories from test coverage
-          for d in $(go list ./... | grep -v vendor); do
+          # Exclude vendor and generated directories from test coverage
+          for d in $(go list ./... | grep -v vendor | grep -v /gen/); do
             go test -race -coverprofile=${d//\//-}.cover $d
           done
 
