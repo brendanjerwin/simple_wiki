@@ -21,7 +21,7 @@ jobs:
         id: generate
         run: go run ./tools/generate_matrix.go
 
-  build:
+  build-tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -36,62 +36,37 @@ jobs:
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
-      - name: Build
-        run: go build -v ./...
-
-  prime-test-cache:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - name: Set up Go
-        uses: actions/setup-go@v2
+      - name: Compile test binaries
+        run: |
+          mkdir -p test-binaries
+          for pkg in $(go list ./... | grep -v vendor | grep -v /gen/); do
+            go test -c -o "test-binaries/$(echo $pkg | tr '/' '-').test" $pkg
+          done
+      - name: Upload test binaries
+        uses: actions/upload-artifact@v4
         with:
-          go-version: 1.24
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-      - name: Compile tests to prime cache
-        run: go test -c $(go list ./... | grep -v vendor | grep -v /gen/)
-      - name: Cache Go build cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/go-build
-          key: ${{ runner.os }}-go-build-cache-${{ github.sha }}
+          name: test-binaries
+          path: test-binaries/
 
   test:
     runs-on: ubuntu-latest
-    needs: [generate-matrix, prime-test-cache]
+    needs: [generate-matrix, build-tests]
     strategy:
       matrix: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v2
-      - name: Set up Go
-        uses: actions/setup-go@v2
+      - name: Download test binaries
+        uses: actions/download-artifact@v4
         with:
-          go-version: 1.24
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-      - name: Restore Go build cache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/go-build
-          key: ${{ runner.os }}-go-build-cache-${{ github.sha }}
+          name: test-binaries
+          path: test-binaries/
       - name: Test ${{ matrix.name }}
         run: |
           mkdir -p coverage_temp
-          for pkg in ${{ join(matrix.packages, ' ') }};
-          do
-            COVER_FILE=$(echo $pkg | tr '/' '-')
-            TEST_ENV=true go test -race -coverprofile=coverage_temp/$COVER_FILE.cover $pkg &
+          for pkg in ${{ join(matrix.packages, ' ') }}; do
+            TEST_BINARY_NAME=$(echo $pkg | tr '/' '-')
+            chmod +x ./test-binaries/$TEST_BINARY_NAME.test
+            ./test-binaries/$TEST_BINARY_NAME.test -test.coverprofile="coverage_temp/$TEST_BINARY_NAME.cover" &
           done
           wait
       - name: Upload coverage artifact
