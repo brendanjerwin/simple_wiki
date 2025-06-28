@@ -45,21 +45,25 @@ jobs:
           - name: group-1
             packages:
               - github.com/brendanjerwin/simple_wiki/server
-              - github.com/brendanjerwin/simple_wiki/static
               - github.com/brendanjerwin/simple_wiki/index/frontmatter
           - name: group-2
             packages:
               - github.com/brendanjerwin/simple_wiki
-              - github.com/brendanjerwin/simple_wiki/common
-              - github.com/brendanjerwin/simple_wiki/templating
+              - github.com/brendanjerwin/simple_wiki/static
           - name: group-3
             packages:
               - github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1
-              - github.com/brendanjerwin/simple_wiki/utils
-              - github.com/brendanjerwin/simple_wiki/labels
+              - github.com/brendanjerwin/simple_wiki/templating
           - name: group-4
             packages:
+              - github.com/brendanjerwin/simple_wiki/utils
+              - github.com/brendanjerwin/simple_wiki/common
+          - name: group-5
+            packages:
               - github.com/brendanjerwin/simple_wiki/index/bleve
+              - github.com/brendanjerwin/simple_wiki/labels
+          - name: group-6
+            packages:
               - github.com/brendanjerwin/simple_wiki/sec
               - github.com/brendanjerwin/simple_wiki/index
     steps:
