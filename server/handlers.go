@@ -179,11 +179,11 @@ func (s *Site) handlePageRelinquish(c *gin.Context) {
 	err := c.BindJSON(&json)
 	if err != nil {
 		s.Logger.Trace("Failed to bind JSON in handlePageRelinquish: %v", err)
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "Wrong JSON"})
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Wrong JSON"})
 		return
 	}
 	if len(json.Page) == 0 {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "Must specify `page`"})
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Must specify `page`"})
 		return
 	}
 	message := "Relinquished"
@@ -433,7 +433,7 @@ func (s *Site) handlePageExists(c *gin.Context) {
 	err := c.BindJSON(&json)
 	if err != nil {
 		s.Logger.Trace("Failed to bind JSON in handlePageExists: %v", err)
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "Wrong JSON", "exists": false})
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Wrong JSON", "exists": false})
 		return
 	}
 	p := s.Open(json.Page)
@@ -455,15 +455,15 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 	err := c.BindJSON(&json)
 	if err != nil {
 		s.Logger.Trace("Failed to bind JSON in handlePageUpdate: %v", err)
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "Wrong JSON"})
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Wrong JSON"})
 		return
 	}
 	if uint(len(json.NewText)) > s.MaxDocumentSize {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "Too much"})
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Too much"})
 		return
 	}
 	if len(json.Page) == 0 {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "Must specify `page`"})
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Must specify `page`"})
 		return
 	}
 	s.Logger.Trace("Update: %v", json)
