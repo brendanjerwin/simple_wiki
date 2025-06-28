@@ -44,14 +44,18 @@ jobs:
         run: go build -v ./...
 
       - name: Test ${{ matrix.package }}
+        id: run_tests
         run: |
-          TEST_ENV=true go test -race -coverprofile=${{ matrix.package | replace('/', '-') }}.cover ${{ matrix.package }}
+          # Replace slashes with hyphens for the coverprofile filename
+          COVER_FILENAME=$(echo "${{ matrix.package }}" | tr '/' '-')
+          TEST_ENV=true go test -race -coverprofile=$COVER_FILENAME.cover ${{ matrix.package }}
+          echo "::set-output name=cover_filename::$COVER_FILENAME"
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v3
         with:
-          name: coverage-report-${{ matrix.package | replace('/', '-') }}
-          path: ${{ matrix.package | replace('/', '-') }}.cover
+          name: coverage-report-${{ steps.run_tests.outputs.cover_filename }}
+          path: ${{ steps.run_tests.outputs.cover_filename }}.cover
 
   combine_and_upload_coverage:
     runs-on: ubuntu-latest
