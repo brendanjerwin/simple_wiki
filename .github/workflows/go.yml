@@ -7,8 +7,23 @@ on:
     branches: [master]
 
 jobs:
-  build:
+  test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        package:
+          - github.com/brendanjerwin/simple_wiki
+          - github.com/brendanjerwin/simple_wiki/common
+          - github.com/brendanjerwin/simple_wiki/index
+          - github.com/brendanjerwin/simple_wiki/index/bleve
+          - github.com/brendanjerwin/simple_wiki/index/frontmatter
+          - github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1
+          - github.com/brendanjerwin/simple_wiki/labels
+          - github.com/brendanjerwin/simple_wiki/sec
+          - github.com/brendanjerwin/simple_wiki/server
+          - github.com/brendanjerwin/simple_wiki/static
+          - github.com/brendanjerwin/simple_wiki/templating
+          - github.com/brendanjerwin/simple_wiki/utils
     steps:
       - uses: actions/checkout@v2
 
@@ -28,22 +43,38 @@ jobs:
       - name: Build
         run: go build -v ./...
 
-      - name: Test
+      - name: Test ${{ matrix.package }}
         run: |
-          # Exclude vendor and generated directories from test coverage
-          # Run tests for each package in parallel
-          for d in $(go list ./... | grep -v vendor | grep -v /gen/); do
-            TEST_ENV=true go test -race -coverprofile=${d//\//-}.cover $d &
-          done
-          wait
+          TEST_ENV=true go test -race -coverprofile=${{ matrix.package | replace('/', '-') }}.cover ${{ matrix.package }}
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-report-${{ matrix.package | replace('/', '-') }}
+          path: ${{ matrix.package | replace('/', '-') }}.cover
+
+  combine_and_upload_coverage:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.24
+
+      - name: Download coverage artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: coverage-artifacts
 
       - name: Combine coverage
         run: |
           echo "mode: set" > coverage.txt
-          grep -h -v "mode: set" *.cover >> coverage.txt
-          rm -f *.cover
+          find coverage-artifacts -name "*.cover" -exec cat {} + | grep -v "mode: set" >> coverage.txt
 
-      - name: Upload coverage reports to Codecov
+      - name: Upload combined coverage to Codecov
         uses: codecov/codecov-action@v3
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
