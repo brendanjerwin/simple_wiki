@@ -152,6 +152,20 @@
   })
   ```
 
+- When asserting an error, check for the specific error type or message. Do not just check that an error is not `nil`. This ensures that the test is validating the specific error that is expected to be returned.
+
+  **Bad:**
+
+  ```go
+  Expect(err).To(HaveOccurred())
+  ```
+
+  **Good:**
+
+  ```go
+  Expect(err).To(MatchError("specific error message"))
+  ```
+
 - Use the `Describe` blocks first to describe the function/component being tested, then use nested `When` blocks to establish the scenarios. Besides the basic `It(text: "Should exist"` tests, everything should be in those nested "When" blocks.
 - Include a blank line between all the various Ginkgo blocks. This makes it easier to read the tests.
 
