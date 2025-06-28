@@ -1,3 +1,19 @@
+# This workflow is optimized for fast Go CI runs.
+#
+# It follows a three-stage parallel approach:
+# 1.  `generate-matrix`: A Go program at ./tools/generate_matrix.go dynamically
+#     creates a JSON matrix of test groups. This allows for flexible and
+#     automatic parallelization.
+# 2.  `build-tests`: This job compiles all test binaries in the project
+#     (with coverage enabled) and uploads them as a single artifact. This
+#     avoids redundant compilation in the parallel test jobs.
+# 3.  `test`: This job runs a matrix of parallel test groups based on the
+#     output of the `generate-matrix` job. Each parallel job downloads the
+#     pre-compiled test binaries and executes only its assigned subset of tests.
+#
+# Finally, the `combine_and_upload_coverage` job runs after all test jobs are
+# complete. It downloads all the individual coverage reports, merges them into
+# a single file, and uploads it to Codecov.
 name: Go
 
 on:
