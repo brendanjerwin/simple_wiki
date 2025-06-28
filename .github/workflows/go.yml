@@ -15,13 +15,23 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v2
         with:
-          go-version: 1.21
+          go-version: 1.24
 
       - name: Build
         run: go build -v ./...
 
       - name: Test
-        run: go test -v -coverprofile=coverage.txt ./...
+        run: |
+          # Exclude vendor directories from test coverage
+          for d in $(go list ./... | grep -v vendor); do
+            go test -race -coverprofile=${d//\//-}.cover $d
+          done
+
+      - name: Combine coverage
+        run: |
+          echo "mode: set" > coverage.txt
+          grep -h -v "mode: set" *.cover >> coverage.txt
+          rm -f *.cover
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v3
