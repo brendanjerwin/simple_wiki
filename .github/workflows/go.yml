@@ -33,7 +33,7 @@ jobs:
           # Exclude vendor and generated directories from test coverage
           # Run tests for each package in parallel
           for d in $(go list ./... | grep -v vendor | grep -v /gen/); do
-            go test -race -coverprofile=${d//\//-}.cover $d &
+            TEST_ENV=true go test -race -coverprofile=${d//\//-}.cover $d &
           done
           wait
 

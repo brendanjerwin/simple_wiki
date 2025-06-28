@@ -2,6 +2,7 @@ package sec
 
 import (
 	"encoding/hex"
+	"os"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -9,7 +10,11 @@ import (
 // HashPassword generates a bcrypt hash of the password using work factor 14.
 // https://github.com/gtank/cryptopasta/blob/master/hash.go
 func HashPassword(password string) string {
-	hash, _ := bcrypt.GenerateFromPassword([]byte(password), 14)
+	cost := 14
+	if os.Getenv("TEST_ENV") == "true" {
+		cost = bcrypt.MinCost
+	}
+	hash, _ := bcrypt.GenerateFromPassword([]byte(password), cost)
 	return hex.EncodeToString(hash)
 }
 
