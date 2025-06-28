@@ -40,19 +40,27 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        package:
-          - github.com/brendanjerwin/simple_wiki
-          - github.com/brendanjerwin/simple_wiki/common
-          - github.com/brendanjerwin/simple_wiki/index
-          - github.com/brendanjerwin/simple_wiki/index/bleve
-          - github.com/brendanjerwin/simple_wiki/index/frontmatter
-          - github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1
-          - github.com/brendanjerwin/simple_wiki/labels
-          - github.com/brendanjerwin/simple_wiki/sec
-          - github.com/brendanjerwin/simple_wiki/server
-          - github.com/brendanjerwin/simple_wiki/static
-          - github.com/brendanjerwin/simple_wiki/templating
-          - github.com/brendanjerwin/simple_wiki/utils
+        group:
+          - name: group-1
+            packages:
+              - github.com/brendanjerwin/simple_wiki/server
+              - github.com/brendanjerwin/simple_wiki/static
+              - github.com/brendanjerwin/simple_wiki/index/frontmatter
+          - name: group-2
+            packages:
+              - github.com/brendanjerwin/simple_wiki
+              - github.com/brendanjerwin/simple_wiki/common
+              - github.com/brendanjerwin/simple_wiki/templating
+          - name: group-3
+            packages:
+              - github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1
+              - github.com/brendanjerwin/simple_wiki/utils
+              - github.com/brendanjerwin/simple_wiki/labels
+          - name: group-4
+            packages:
+              - github.com/brendanjerwin/simple_wiki/index/bleve
+              - github.com/brendanjerwin/simple_wiki/sec
+              - github.com/brendanjerwin/simple_wiki/index
     steps:
       - uses: actions/checkout@v2
 
@@ -69,18 +77,22 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
-      - name: Test ${{ matrix.package }}
+      - name: Test ${{ matrix.group.name }}
         id: run_tests
         run: |
-          COVER_FILE=$(echo ${{ matrix.package }} | tr '/' '-').cover
-          TEST_ENV=true go test -race -coverprofile=$COVER_FILE ${{ matrix.package }}
-          echo "::set-output name=cover_filename::$COVER_FILE"
+          mkdir -p coverage_temp
+          for pkg in ${{ join(matrix.group.packages, ' ') }};
+          do
+            COVER_FILE=$(echo $pkg | tr '/' '-')
+            TEST_ENV=true go test -race -coverprofile=coverage_temp/$COVER_FILE.cover $pkg &
+          done
+          wait
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-report-${{ steps.run_tests.outputs.cover_filename }}
-          path: ${{ steps.run_tests.outputs.cover_filename }}
+          name: coverage-report-${{ matrix.group.name }}
+          path: coverage_temp
 
   combine_and_upload_coverage:
     runs-on: ubuntu-latest
