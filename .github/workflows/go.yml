@@ -17,15 +17,25 @@ jobs:
         with:
           go-version: 1.24
 
+      - name: Cache Go modules
+        uses: actions/cache@v2
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
       - name: Build
         run: go build -v ./...
 
       - name: Test
         run: |
           # Exclude vendor and generated directories from test coverage
+          # Run tests for each package in parallel
           for d in $(go list ./... | grep -v vendor | grep -v /gen/); do
-            go test -race -coverprofile=${d//\//-}.cover $d
+            go test -race -coverprofile=${d//\//-}.cover $d &
           done
+          wait
 
       - name: Combine coverage
         run: |
