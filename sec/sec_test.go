@@ -45,7 +45,7 @@ var _ = Describe("HashPassword and CheckPasswordHash", func() {
 			})
 
 			It("should return an error", func() {
-				Expect(err).To(HaveOccurred())
+				Expect(err).To(MatchError("crypto/bcrypt: hashedPassword is not the hash of the given password"))
 			})
 		})
 	})
@@ -73,7 +73,7 @@ var _ = Describe("HashPassword and CheckPasswordHash", func() {
 		})
 
 		It("should return an error", func() {
-			Expect(err).To(HaveOccurred())
+			Expect(err).To(MatchError("crypto/bcrypt: hashedSecret too short to be a bcrypted password"))
 		})
 	})
 
@@ -88,7 +88,7 @@ var _ = Describe("HashPassword and CheckPasswordHash", func() {
 		})
 
 		It("should return an error because the hash will be invalid", func() {
-			Expect(err).To(HaveOccurred())
+			Expect(err).To(MatchError("crypto/bcrypt: hashedSecret too short to be a bcrypted password"))
 		})
 	})
 
@@ -99,8 +99,7 @@ var _ = Describe("HashPassword and CheckPasswordHash", func() {
 		})
 
 		It("should return an error", func() {
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("invalid byte"))
+			Expect(err).To(MatchError("encoding/hex: invalid byte: U+006E 'n'"))
 		})
 	})
 })
