@@ -25,12 +25,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-
       - name: Set up Go
         uses: actions/setup-go@v2
         with:
           go-version: 1.24
-
       - name: Cache Go modules
         uses: actions/cache@v4
         with:
@@ -38,31 +36,43 @@ jobs:
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
-
       - name: Build
         run: go build -v ./...
 
-      - name: Cache Go build
+  prime-test-cache:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.24
+      - name: Cache Go modules
         uses: actions/cache@v4
         with:
-          path: ./
-          key: ${{ runner.os }}-go-build-${{ github.sha }}
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
-            ${{ runner.os }}-go-build-
+            ${{ runner.os }}-go-
+      - name: Compile tests to prime cache
+        run: go test -c $(go list ./... | grep -v vendor | grep -v /gen/)
+      - name: Cache Go build cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/go-build
+          key: ${{ runner.os }}-go-build-cache-${{ github.sha }}
 
   test:
     runs-on: ubuntu-latest
-    needs: generate-matrix
+    needs: [generate-matrix, prime-test-cache]
     strategy:
       matrix: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v2
-
       - name: Set up Go
         uses: actions/setup-go@v2
         with:
           go-version: 1.24
-
       - name: Cache Go modules
         uses: actions/cache@v4
         with:
@@ -70,9 +80,12 @@ jobs:
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
-
+      - name: Restore Go build cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/go-build
+          key: ${{ runner.os }}-go-build-cache-${{ github.sha }}
       - name: Test ${{ matrix.name }}
-        id: run_tests
         run: |
           mkdir -p coverage_temp
           for pkg in ${{ join(matrix.packages, ' ') }};
@@ -81,7 +94,6 @@ jobs:
             TEST_ENV=true go test -race -coverprofile=coverage_temp/$COVER_FILE.cover $pkg &
           done
           wait
-
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
         with:
@@ -93,22 +105,18 @@ jobs:
     needs: test
     steps:
       - uses: actions/checkout@v2
-
       - name: Set up Go
         uses: actions/setup-go@v2
         with:
           go-version: 1.24
-
       - name: Download coverage artifacts
         uses: actions/download-artifact@v4
         with:
           path: coverage-artifacts
-
       - name: Combine coverage
         run: |
           echo "mode: set" > coverage.txt
           find coverage-artifacts -name "*.cover" -exec cat {} + | grep -v "mode: set" >> coverage.txt
-
       - name: Upload combined coverage to Codecov
         uses: codecov/codecov-action@v3
         with:
