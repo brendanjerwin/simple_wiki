@@ -110,8 +110,8 @@ export class WikiSearch extends LitElement {
     this.noResults = false;
 
     const form = e.target;
-    const search_term = form.search.value;
-    const url = `${this.searchEndpoint}?q=${search_term}`;
+    const searchTerm = form.search.value;
+    const url = `${this.searchEndpoint}?q=${searchTerm}`;
 
     fetch(url)
       .then((response) => response.json())
