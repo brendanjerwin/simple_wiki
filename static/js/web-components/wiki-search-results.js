@@ -1,7 +1,7 @@
-import { html, css, LitElement, unsafeHTML } from '/static/js/lit-all.min.js';
+import { html, css, LitElement, unsafeHTML } from '/static/vendor/js/lit-all.min.js';
 
 class WikiSearchResults extends LitElement {
-    static styles = css`
+  static styles = css`
         :host {
             display: block;
             position: relative;
@@ -99,57 +99,57 @@ class WikiSearchResults extends LitElement {
         }
     `;
 
-    static properties = {
-        results: { type: Array },
-        open: { type: Boolean, reflect: true }
-    };
+  static properties = {
+    results: { type: Array },
+    open: { type: Boolean, reflect: true }
+  };
 
-    constructor() {
-        super();
-        this.results = [];
-        this.open = false;
+  constructor() {
+    super();
+    this.results = [];
+    this.open = false;
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    document.addEventListener('click', this.handleClickOutside.bind(this));
+  }
+
+  disconnectedCallback() {
+    document.removeEventListener('click', this.handleClickOutside.bind(this));
+    super.disconnectedCallback();
+  }
+
+  handleClickOutside(event) {
+    const path = event.composedPath();
+    if (this.open && !path.includes(this.shadowRoot.querySelector('.popover'))) {
+      this.close();
     }
+  }
 
-    connectedCallback() {
-        super.connectedCallback();
-        document.addEventListener('click', this.handleClickOutside.bind(this));
+  close() {
+    this.dispatchEvent(new CustomEvent('search-results-closed', {
+      bubbles: true,
+      composed: true
+    }));
+  }
+
+  handlePopoverClick(event) {
+    // Stop the click event from bubbling up to the document
+    event.stopPropagation();
+  }
+
+  updated(changedProperties) {
+    if (changedProperties.has('results') && this.results.length > 0) {
+      const firstLink = this.shadowRoot.querySelector('a');
+      if (firstLink) {
+        firstLink.focus();
+      }
     }
+  }
 
-    disconnectedCallback() {
-        document.removeEventListener('click', this.handleClickOutside.bind(this));
-        super.disconnectedCallback();
-    }
-
-    handleClickOutside(event) {
-        const path = event.composedPath();
-        if (this.open && !path.includes(this.shadowRoot.querySelector('.popover'))) {
-            this.close();
-        }
-    }
-
-    close() {
-        this.dispatchEvent(new CustomEvent('search-results-closed', {
-            bubbles: true,
-            composed: true
-        }));
-    }
-
-    handlePopoverClick(event) {
-        // Stop the click event from bubbling up to the document
-        event.stopPropagation();
-    }
-
-    updated(changedProperties) {
-        if (changedProperties.has('results') && this.results.length > 0) {
-            const firstLink = this.shadowRoot.querySelector('a');
-            if (firstLink) {
-                firstLink.focus();
-            }
-        }
-    }
-
-    render() {
-        return html`
+  render() {
+    return html`
             <link href="/static/css/fontawesome.min.css" rel="stylesheet">
             <link href="/static/css/solid.min.css" rel="stylesheet">
             <div class="popover" @click="${this.handlePopoverClick}">
@@ -165,7 +165,7 @@ class WikiSearchResults extends LitElement {
                 </div>
             </div>
         `;
-    }
+  }
 }
 
 customElements.define('wiki-search-results', WikiSearchResults);

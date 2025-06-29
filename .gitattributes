@@ -1,1 +1,5 @@
-static/* linguist-vendored
+static/vendor/** linguist-vendored
+static/js/gen/** linguist-generated
+
+vendor/** linguist-vendored
+gen/** linguist-generated
