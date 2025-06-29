@@ -1,7 +1,7 @@
-import { html, css, LitElement } from '/static/js/lit-all.min.js';
+import { html, css, LitElement } from '/static/vendor/js/lit-all.min.js';
 
 export class WikiSearch extends LitElement {
-    static styles = css`
+  static styles = css`
     div#container {
         position: relative;
         display: inline-block;
@@ -73,81 +73,81 @@ export class WikiSearch extends LitElement {
     }
     `;
 
-    static properties = {
-        searchEndpoint: { type: String, attribute: 'search-endpoint' },
-        resultArrayPath: { type: String, attribute: 'result-array-path' },
-        results: { type: Array },
-        noResults: { type: Boolean, reflect: true, attribute: 'no-results' },
-    };
+  static properties = {
+    searchEndpoint: { type: String, attribute: 'search-endpoint' },
+    resultArrayPath: { type: String, attribute: 'result-array-path' },
+    results: { type: Array },
+    noResults: { type: Boolean, reflect: true, attribute: 'no-results' },
+  };
 
-    constructor() {
-        super();
-        this.resultArrayPath = "results";
-        this.results = [];
-    }
+  constructor() {
+    super();
+    this.resultArrayPath = "results";
+    this.results = [];
+  }
 
-    connectedCallback() {
-        super.connectedCallback();
+  connectedCallback() {
+    super.connectedCallback();
 
 
-        window.addEventListener('keydown', (e) => {
-            const searchInput = this.shadowRoot.querySelector('input[type="search"]');
-            // Check if Ctrl (or Cmd on Macs) and K keys were pressed
-            if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-                e.preventDefault();
-
-                searchInput.focus();
-            }
-        });
-    }
-
-    handleSearchInputFocused(e) {
-        e.target.select();
-    }
-
-    handleFormSubmit(e) {
+    window.addEventListener('keydown', (e) => {
+      const searchInput = this.shadowRoot.querySelector('input[type="search"]');
+      // Check if Ctrl (or Cmd on Macs) and K keys were pressed
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault();
-        this.noResults = false;
 
-        const form = e.target;
-        const search_term = form.search.value;
-        const url = `${this.searchEndpoint}?q=${search_term}`;
+        searchInput.focus();
+      }
+    });
+  }
 
-        fetch(url)
-            .then((response) => response.json())
-            .then((data) => {
-                if (this.resultArrayPath) {
-                    data = this.getNestedProperty(data, this.resultArrayPath);
-                    if (!Array.isArray(data)) {
-                        data = [];
-                    }
-                }
-                this.results = data;
-                if (data.length > 0) {
-                    this.noResults = false;
-                } else {
-                    this.noResults = true;
-                    const searchInput = this.shadowRoot.querySelector('input[type="search"]');
-                    searchInput.select();
-                }
-            })
-            .catch((error) => {
-                this.results = [];
-                console.error('Error:', error);
-            });
-    }
+  handleSearchInputFocused(e) {
+    e.target.select();
+  }
 
+  handleFormSubmit(e) {
+    e.preventDefault();
+    this.noResults = false;
 
-    getNestedProperty(obj, path) {
-        return path.split('.').reduce((o, p) => (o && o[p]) ? o[p] : null, obj);
-    }
+    const form = e.target;
+    const searchTerm = form.search.value;
+    const url = `${this.searchEndpoint}?q=${searchTerm}`;
 
-    handleSearchResultsClosed() {
+    fetch(url)
+      .then((response) => response.json())
+      .then((data) => {
+        if (this.resultArrayPath) {
+          data = this.getNestedProperty(data, this.resultArrayPath);
+          if (!Array.isArray(data)) {
+            data = [];
+          }
+        }
+        this.results = data;
+        if (data.length > 0) {
+          this.noResults = false;
+        } else {
+          this.noResults = true;
+          const searchInput = this.shadowRoot.querySelector('input[type="search"]');
+          searchInput.select();
+        }
+      })
+      .catch((error) => {
         this.results = [];
-    }
+        console.error('Error:', error);
+      });
+  }
 
-    render() {
-        return html`
+
+  getNestedProperty(obj, path) {
+    return path.split('.').reduce((o, p) => (o && o[p]) ? o[p] : null, obj);
+  }
+
+  handleSearchResultsClosed() {
+    this.results = [];
+  }
+
+  render() {
+    return html`
         <link href="/static/css/fontawesome.min.css" rel="stylesheet">
         <link href="/static/css/solid.min.css" rel="stylesheet">
         <div id="container">
@@ -162,6 +162,6 @@ export class WikiSearch extends LitElement {
             </wiki-search-results>
         </div>
         `;
-    }
+  }
 }
 customElements.define('wiki-search', WikiSearch);
