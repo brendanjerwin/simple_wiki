@@ -335,8 +335,8 @@ github.com/ugorji/go/codec
 # github.com/willf/bitset v1.1.10
 ## explicit
 github.com/willf/bitset
-# github.com/yuin/goldmark v1.6.0
-## explicit; go 1.18
+# github.com/yuin/goldmark v1.7.12
+## explicit; go 1.22
 github.com/yuin/goldmark
 github.com/yuin/goldmark/ast
 github.com/yuin/goldmark/extension
