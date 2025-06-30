@@ -23,7 +23,7 @@ require (
 	github.com/yuin/goldmark v1.7.12
 	github.com/yuin/goldmark-emoji v1.0.2
 	go.abhg.dev/goldmark/mermaid v0.5.0
-	go.abhg.dev/goldmark/wikilink v0.5.0
+	go.abhg.dev/goldmark/wikilink v0.6.0
 	golang.org/x/crypto v0.39.0
 	golang.org/x/net v0.40.0
 	golang.org/x/text v0.26.0

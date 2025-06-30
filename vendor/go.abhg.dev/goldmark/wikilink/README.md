@@ -1,7 +1,7 @@
 # goldmark-wikilink
 
 [![Go Reference](https://pkg.go.dev/badge/go.abhg.dev/goldmark/wikilink.svg)](https://pkg.go.dev/go.abhg.dev/goldmark/wikilink)
-[![Go](https://github.com/abhinav/goldmark-wikilink/actions/workflows/go.yml/badge.svg)](https://github.com/abhinav/goldmark-wikilink/actions/workflows/go.yml)
+[![CI](https://github.com/abhinav/goldmark-wikilink/actions/workflows/ci.yml/badge.svg)](https://github.com/abhinav/goldmark-wikilink/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/abhinav/goldmark-wikilink/branch/main/graph/badge.svg?token=W98KYF8SPE)](https://codecov.io/gh/abhinav/goldmark-wikilink)
 
 goldmark-wikilink is an extension for the [goldmark] Markdown parser that
@@ -12,7 +12,7 @@ and `![[...]]`-style embedded wiki links.
 
 **Demo**:
 A web-based demonstration of the extension is available at
-<https://abhinav.github.io/goldmark-hashtag/demo/>.
+<https://abhinav.github.io/goldmark-wikilink/demo/>.
 
 ## Installation
 
@@ -28,7 +28,7 @@ To use goldmark-wikilink, import the `wikilink` package.
 import "go.abhg.dev/goldmark/wikilink"
 ```
 
-Then include the `wiklink.Extender` in the list of extensions
+Then include the `wikilink.Extender` in the list of extensions
 that you build your [`goldmark.Markdown`] with.
 
   [`goldmark.Markdown`]: https://pkg.go.dev/github.com/yuin/goldmark#Markdown
@@ -36,7 +36,7 @@ that you build your [`goldmark.Markdown`] with.
 ```go
 goldmark.New(
   goldmark.WithExtensions(
-    &wiklink.Extender{},
+    &wikilink.Extender{},
   ),
   // ...
 )
@@ -61,7 +61,7 @@ to your `wikilink.Extender` when you install it.
 goldmark.New(
   goldmark.WithExtensions(
     // ...
-    &wiklink.Extender{
+    &wikilink.Extender{
       Resolver: myresolver,
     },
   ),
