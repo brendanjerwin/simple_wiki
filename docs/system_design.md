@@ -1,4 +1,4 @@
-## System Design
+# System Design
 
 When a page is saved, its contents are saved to a .json file acting as a database of history for that page. The current version of the page is saved as a .md file.
 
