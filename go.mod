@@ -25,7 +25,7 @@ require (
 	go.abhg.dev/goldmark/mermaid v0.5.0
 	go.abhg.dev/goldmark/wikilink v0.6.0
 	golang.org/x/crypto v0.39.0
-	golang.org/x/net v0.40.0
+	golang.org/x/net v0.41.0
 	golang.org/x/text v0.26.0
 	google.golang.org/grpc v1.65.0
 	google.golang.org/protobuf v1.36.6
