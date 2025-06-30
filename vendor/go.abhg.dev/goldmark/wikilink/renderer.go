@@ -3,6 +3,7 @@ package wikilink
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"path/filepath"
 	"sync"
 
@@ -92,32 +93,32 @@ func (r *Renderer) enter(w util.BufWriter, n *Node, src []byte) (ast.WalkStatus,
 	img := resolveAsImage(n)
 	if !img {
 		r.hasDest.Store(n, struct{}{})
-		w.WriteString(`<a href="`)
-		w.Write(util.URLEscape(dest, true /* resolve references */))
-		w.WriteString(`">`)
+		_, _ = w.WriteString(`<a href="`)
+		_, _ = w.Write(util.URLEscape(dest, true /* resolve references */))
+		_, _ = w.WriteString(`">`)
 		return ast.WalkContinue, nil
 	}
 
-	w.WriteString(`<img src="`)
-	w.Write(util.URLEscape(dest, true /* resolve references */))
+	_, _ = w.WriteString(`<img src="`)
+	_, _ = w.Write(util.URLEscape(dest, true /* resolve references */))
 	// The label portion of the link becomes the alt text
 	// only if it isn't the same as the target.
 	// This way, [[foo.jpg]] does not become alt="foo.jpg",
 	// but [[foo.jpg|bar]] does become alt="bar".
 	if n.ChildCount() == 1 {
-		label := n.FirstChild().Text(src)
+		label := nodeText(src, n.FirstChild())
 		if !bytes.Equal(label, n.Target) {
-			w.WriteString(`" alt="`)
-			w.Write(util.EscapeHTML(label))
+			_, _ = w.WriteString(`" alt="`)
+			_, _ = w.Write(util.EscapeHTML(label))
 		}
 	}
-	w.WriteString(`">`)
+	_, _ = w.WriteString(`">`)
 	return ast.WalkSkipChildren, nil
 }
 
 func (r *Renderer) exit(w util.BufWriter, n *Node) {
 	if _, ok := r.hasDest.LoadAndDelete(n); ok {
-		w.WriteString("</a>")
+		_, _ = w.WriteString("</a>")
 	}
 }
 
@@ -135,5 +136,24 @@ func resolveAsImage(n *Node) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func nodeText(src []byte, n ast.Node) []byte {
+	var buf bytes.Buffer
+	writeNodeText(src, &buf, n)
+	return buf.Bytes()
+}
+
+func writeNodeText(src []byte, dst io.Writer, n ast.Node) {
+	switch n := n.(type) {
+	case *ast.Text:
+		_, _ = dst.Write(n.Segment.Value(src))
+	case *ast.String:
+		_, _ = dst.Write(n.Value)
+	default:
+		for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+			writeNodeText(src, dst, c)
+		}
 	}
 }

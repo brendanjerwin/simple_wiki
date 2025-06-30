@@ -378,8 +378,8 @@ github.com/yuin/goldmark-emoji/definition
 # go.abhg.dev/goldmark/mermaid v0.5.0
 ## explicit; go 1.20
 go.abhg.dev/goldmark/mermaid
-# go.abhg.dev/goldmark/wikilink v0.5.0
-## explicit; go 1.16
+# go.abhg.dev/goldmark/wikilink v0.6.0
+## explicit; go 1.20
 go.abhg.dev/goldmark/wikilink
 # go.etcd.io/bbolt v1.3.5
 ## explicit; go 1.12
