@@ -19,7 +19,7 @@ require (
 	github.com/onsi/gomega v1.36.3
 	github.com/pelletier/go-toml/v2 v2.2.3
 	github.com/schollz/versionedtext v1.0.0
-	github.com/stoewer/go-strcase v1.3.0
+	github.com/stoewer/go-strcase v1.3.1
 	github.com/yuin/goldmark v1.7.12
 	github.com/yuin/goldmark-emoji v1.0.2
 	go.abhg.dev/goldmark/mermaid v0.5.0
