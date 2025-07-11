@@ -1,21 +1,28 @@
 // For format details, see https://aka.ms/devcontainer.json. For config options, see the
 // README at: https://github.com/devcontainers/templates/tree/main/src/go
 {
-	"name": "Simple Wiki with Devbox",
-	// Use a base image that supports devbox installation
+	"name": "Simple Wiki with Devbox-compatible Environment",
+	// Use a base image that supports the tools we need
 	"image": "mcr.microsoft.com/devcontainers/base:ubuntu",
 	// Features to add to the dev container. More info: https://containers.dev/features.
 	"features": {
 		"ghcr.io/devcontainers/features/git:1": {},
-		"ghcr.io/devcontainers/features/github-cli:1": {}
+		"ghcr.io/devcontainers/features/github-cli:1": {},
+		"ghcr.io/devcontainers/features/go:1": {
+			"version": "latest"
+		},
+		"ghcr.io/devcontainers/features/node:1": {
+			"version": "lts"
+		},
+		"ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
 	},
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
 	"forwardPorts": [
 		8050,
 		8080
 	],
-	// Install devbox and initialize the environment
-	"postCreateCommand": ".devcontainer/install-devbox.sh",
+	// Install additional packages that match devbox.json
+	"postCreateCommand": ".devcontainer/setup-devbox-packages.sh",
 	"postStartCommand": "git config --global --add safe.directory ${containerWorkspaceFolder}",
 	// Configure tool-specific properties.
 	"customizations": {
