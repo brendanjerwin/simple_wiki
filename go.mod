@@ -27,7 +27,7 @@ require (
 	golang.org/x/crypto v0.39.0
 	golang.org/x/net v0.40.0
 	golang.org/x/text v0.26.0
-	google.golang.org/grpc v1.65.0
+	google.golang.org/grpc v1.73.0
 	google.golang.org/protobuf v1.36.6
 	gopkg.in/urfave/cli.v1 v1.20.0
 )
@@ -88,7 +88,7 @@ require (
 	golang.org/x/arch v0.16.0 // indirect
 	golang.org/x/sys v0.33.0 // indirect
 	golang.org/x/tools v0.33.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20240528184218-531527333157 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250324211829-b45e905df463 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	nhooyr.io/websocket v1.8.6 // indirect
