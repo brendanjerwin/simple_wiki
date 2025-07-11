@@ -1,3 +1,25 @@
 {
-  "packageManager": "yarn@4.0.2"
+  "packageManager": "yarn@4.0.2",
+  "name": "simple_wiki",
+  "version": "1.0.0",
+  "description": "_simple_wiki_ is just that: a simple wiki.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@testing-library/dom": "^10.4.0",
+    "@vitest/browser": "^3.2.4",
+    "happy-dom": "^18.0.1",
+    "jsdom": "^26.1.0",
+    "vitest": "^3.2.4"
+  }
 }
