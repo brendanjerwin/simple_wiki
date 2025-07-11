@@ -80,6 +80,8 @@ func (p *Page) parse() (common.FrontMatter, common.Markdown, error) {
 	return fm, common.Markdown(md), nil
 }
 
+// DecodeFileName decodes a base32-encoded filename and returns the original page name.
+// It extracts the filename part before the extension and decodes it from base32.
 func DecodeFileName(s string) string {
 	s2, _ := utils.DecodeFromBase32(strings.Split(s, ".")[0])
 	return s2

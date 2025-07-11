@@ -24,7 +24,9 @@ var _ = Describe("HashPassword and CheckPasswordHash", func() {
 
 		BeforeEach(func() {
 			password = "mySecurePassword"
-			hashedPassword = HashPassword(password)
+			var hashErr error
+			hashedPassword, hashErr = HashPassword(password)
+			Expect(hashErr).NotTo(HaveOccurred())
 		})
 
 		When("the password is correct", func() {
@@ -54,7 +56,9 @@ var _ = Describe("HashPassword and CheckPasswordHash", func() {
 
 		BeforeEach(func() {
 			password = ""
-			hashedPassword = HashPassword(password)
+			var hashErr error
+			hashedPassword, hashErr = HashPassword(password)
+			Expect(hashErr).NotTo(HaveOccurred())
 
 			err = CheckPasswordHash(password, hashedPassword)
 		})
@@ -83,12 +87,18 @@ var _ = Describe("HashPassword and CheckPasswordHash", func() {
 			// A password longer than 72 bytes, which is bcrypt's limit.
 			password = "This password is way too long to be hashed by bcrypt, it should be more than 72 bytes"
 			Expect(len(password)).To(BeNumerically(">", 72))
-			hashedPassword = HashPassword(password)
-			err = CheckPasswordHash(password, hashedPassword)
+			var hashErr error
+			hashedPassword, hashErr = HashPassword(password)
+			if hashErr != nil {
+				err = hashErr
+			} else {
+				err = CheckPasswordHash(password, hashedPassword)
+			}
 		})
 
-		It("should return an error because the hash will be invalid", func() {
-			Expect(err).To(MatchError("crypto/bcrypt: hashedSecret too short to be a bcrypted password"))
+		It("should return an error because bcrypt cannot handle passwords longer than 72 bytes", func() {
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("bcrypt"))
 		})
 	})
 

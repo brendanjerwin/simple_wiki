@@ -9,6 +9,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// PageReference represents a minimal page reference containing just the identifier and title.
+// It's used for API responses that need lightweight page information.
 type PageReference struct {
 	Identifier string `json:"identifier"`
 	Title      string `json:"title"`
@@ -101,7 +103,6 @@ func (s *Site) createPageReferences(ids []string) []PageReference {
 	}
 	return results
 }
-
 
 func (s *Site) handleSearch(c *gin.Context) {
 	if s.BleveIndexQueryer == nil {

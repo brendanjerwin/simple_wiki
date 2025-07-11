@@ -529,8 +529,13 @@ func (s *Site) handleLock(c *gin.Context) {
 		return
 	}
 	if !pageIsLocked(p, c) {
+		hashedPassword, err := sec.HashPassword(json.Passphrase)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to hash password"})
+			return
+		}
 		p.IsLocked = true
-		p.PassphraseToUnlock = sec.HashPassword(json.Passphrase)
+		p.PassphraseToUnlock = hashedPassword
 		p.UnlockedFor = ""
 		message = "Locked"
 	} else {

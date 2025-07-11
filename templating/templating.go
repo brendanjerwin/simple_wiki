@@ -15,11 +15,15 @@ import (
 	"golang.org/x/text/language"
 )
 
+// InventoryFrontmatter represents the inventory structure in frontmatter.
+// It contains the container reference and a list of items.
 type InventoryFrontmatter struct {
 	Container string   `json:"container"`
 	Items     []string `json:"items"`
 }
 
+// TemplateContext provides the data structure for template rendering.
+// It contains page metadata and inventory information.
 type TemplateContext struct {
 	Identifier string `json:"identifier"`
 	Title      string `json:"title"`
@@ -27,6 +31,8 @@ type TemplateContext struct {
 	Inventory  InventoryFrontmatter `json:"inventory"`
 }
 
+// ConstructTemplateContextFromFrontmatter creates a TemplateContext from frontmatter data.
+// It converts the frontmatter into a structured template context that can be used for rendering.
 func ConstructTemplateContextFromFrontmatter(frontmatter common.FrontMatter, query frontmatter.IQueryFrontmatterIndex) (TemplateContext, error) {
 	bytes, err := json.Marshal(frontmatter)
 	if err != nil {
@@ -76,6 +82,8 @@ func ConstructTemplateContextFromFrontmatter(frontmatter common.FrontMatter, que
 	return context, nil
 }
 
+// BuildShowInventoryContentsOf returns a function that generates a formatted inventory listing
+// for a given container identifier. It recursively displays nested containers with indentation.
 func BuildShowInventoryContentsOf(site common.PageReader, query frontmatter.IQueryFrontmatterIndex, indent int) func(string) string {
 	isContainer := BuildIsContainer(query)
 
@@ -124,6 +132,8 @@ func BuildShowInventoryContentsOf(site common.PageReader, query frontmatter.IQue
 	}
 }
 
+// BuildLinkTo returns a function that generates HTML links to other pages.
+// It handles both regular pages and containers, creating appropriate anchor tags.
 func BuildLinkTo(site common.PageReader, currentPageTemplateContext TemplateContext, query frontmatter.IQueryFrontmatterIndex) func(string) string {
 	isContainer := BuildIsContainer(query)
 	return func(identifierToLink string) string {
@@ -163,6 +173,8 @@ func BuildLinkTo(site common.PageReader, currentPageTemplateContext TemplateCont
 	}
 }
 
+// BuildIsContainer returns a function that checks if a given identifier represents a container.
+// A container is a page that has inventory items associated with it.
 func BuildIsContainer(query frontmatter.IQueryFrontmatterIndex) func(string) bool {
 	return func(identifier string) bool {
 		if identifier == "" {
@@ -181,6 +193,8 @@ func BuildIsContainer(query frontmatter.IQueryFrontmatterIndex) func(string) boo
 	}
 }
 
+// ExecuteTemplate processes a template string with the given frontmatter and returns the rendered output.
+// It provides template functions for inventory management and page linking.
 func ExecuteTemplate(templateString string, frontmatter common.FrontMatter, site common.PageReader, query frontmatter.IQueryFrontmatterIndex) ([]byte, error) {
 	templateContext, err := ConstructTemplateContextFromFrontmatter(frontmatter, query)
 	if err != nil {

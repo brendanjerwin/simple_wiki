@@ -52,7 +52,13 @@ func (s *Site) defaultLock() string {
 	if s.DefaultPassword == "" {
 		return ""
 	}
-	return sec.HashPassword(s.DefaultPassword)
+	hashedPassword, err := sec.HashPassword(s.DefaultPassword)
+	if err != nil {
+		// Log error but continue with empty password to prevent app crash
+		s.Logger.Error("Failed to hash default password: %v", err)
+		return ""
+	}
+	return hashedPassword
 }
 
 func (s *Site) sniffContentType(name string) (string, error) {

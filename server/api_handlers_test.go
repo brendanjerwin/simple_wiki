@@ -14,8 +14,6 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-
-
 var _ = Describe("API Handlers", func() {
 
 	Describe("Helpers", func() {

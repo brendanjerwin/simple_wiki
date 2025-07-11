@@ -9,13 +9,16 @@ import (
 
 // HashPassword generates a bcrypt hash of the password using work factor 14.
 // https://github.com/gtank/cryptopasta/blob/master/hash.go
-func HashPassword(password string) string {
+func HashPassword(password string) (string, error) {
 	cost := 14
 	if os.Getenv("TEST_ENV") == "true" {
 		cost = bcrypt.MinCost
 	}
-	hash, _ := bcrypt.GenerateFromPassword([]byte(password), cost)
-	return hex.EncodeToString(hash)
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), cost)
+	if err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hash), nil
 }
 
 // CheckPassword securely compares a bcrypt hashed password with its possible
