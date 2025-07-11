@@ -4,7 +4,11 @@ export default defineConfig({
   test: {
     environment: 'happy-dom',
     globals: true,
-    setupFiles: ['./test/setup.js']
+    setupFiles: ['./test/setup.js'],
+    coverage: {
+      reporter: ['text', 'html', 'lcov'],
+      reportsDirectory: './coverage'
+    }
   },
   resolve: {
     alias: {
