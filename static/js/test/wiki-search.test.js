@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { WikiSearch } from '../static/js/web-components/wiki-search.js';
+import { WikiSearch } from '../web-components/wiki-search.js';
 
 // Mock the lit-all.min.js import since it's not available in test environment
 vi.mock('/static/vendor/js/lit-all.min.js', () => {

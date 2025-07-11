@@ -12,7 +12,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '/static/vendor/js/lit-all.min.js': new URL('./static/vendor/js/lit-all.min.js', import.meta.url).pathname
+      '/static/vendor/js/lit-all.min.js': new URL('../vendor/js/lit-all.min.js', import.meta.url).pathname
     }
   }
 });
