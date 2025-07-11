@@ -6,7 +6,7 @@ require (
 	github.com/adrg/frontmatter v0.2.0
 	github.com/blevesearch/bleve v1.0.14
 	github.com/danielheath/gin-teeny-security v0.0.0-20180331042316-bb11804dd0e2
-	github.com/gabriel-vasile/mimetype v1.4.8
+	github.com/gabriel-vasile/mimetype v1.4.9
 	github.com/gin-contrib/multitemplate v1.1.1
 	github.com/gin-contrib/sessions v1.0.4
 	github.com/gin-gonic/gin v1.10.1
