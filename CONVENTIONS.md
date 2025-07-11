@@ -55,7 +55,7 @@
 ## Frontend JavaScript
 
 - All JavaScript frontend code should be located under the `static/js` directory.
-- Organize frontend JavaScript files within appropriate subdirectories under `static/js` (e.g., `web-components`, `gen`).
+- Organize frontend JavaScript files within appropriate subdirectories under `static/js` (e.g., `web-components`, `utils`).
 
 ## TDD
 
