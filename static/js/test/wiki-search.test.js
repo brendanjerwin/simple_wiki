@@ -1,245 +1,198 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { csrFixture, cleanupFixtures } from '@lit-labs/testing/fixtures.js';
+import { html } from 'lit';
 import { WikiSearch } from '../web-components/wiki-search.js';
-
-// Mock the lit-all.min.js import since it's not available in test environment
-vi.mock('/static/vendor/js/lit-all.min.js', () => {
-  // Create a minimal mock of LitElement
-  class MockLitElement extends HTMLElement {
-    static properties = {};
-    static styles = {};
-    
-    constructor() {
-      super();
-      this.attachShadow({ mode: 'open' });
-    }
-    
-    connectedCallback() {
-      this.render();
-    }
-    
-    disconnectedCallback() {
-      // Override in implementations
-    }
-    
-    render() {
-      return '';
-    }
-    
-    // Simple template literal handler
-    static html(strings, ...values) {
-      return strings.reduce((result, string, i) => {
-        return result + string + (values[i] || '');
-      }, '');
-    }
-    
-    static css(strings, ...values) {
-      return strings.reduce((result, string, i) => {
-        return result + string + (values[i] || '');
-      }, '');
-    }
-  }
-  
-  const html = MockLitElement.html;
-  const css = MockLitElement.css;
-  
-  return {
-    html,
-    css,
-    LitElement: MockLitElement
-  };
-});
 
 describe('WikiSearch', () => {
   let wikiSearch;
-  let mockEventListener;
   
   beforeEach(() => {
-    // Clear any existing custom elements
-    if (customElements.get('wiki-search')) {
-      // Can't undefine, so we'll work with the existing one
-    } else {
-      customElements.define('wiki-search', WikiSearch);
-    }
-    
-    // Create a new instance
+    // Setup fresh component for each test
     wikiSearch = new WikiSearch();
-    
-    // Mock addEventListener and removeEventListener
-    mockEventListener = vi.fn();
-    const originalAddEventListener = window.addEventListener;
-    const originalRemoveEventListener = window.removeEventListener;
-    
-    // Track event listeners
-    const eventListeners = new Map();
-    
-    window.addEventListener = vi.fn((type, listener, options) => {
-      eventListeners.set(type, listener);
-      return originalAddEventListener.call(window, type, listener, options);
-    });
-    
-    window.removeEventListener = vi.fn((type, listener, options) => {
-      eventListeners.delete(type);
-      return originalRemoveEventListener.call(window, type, listener, options);
-    });
-    
-    // Store references for cleanup
-    wikiSearch._originalAddEventListener = originalAddEventListener;
-    wikiSearch._originalRemoveEventListener = originalRemoveEventListener;
-    wikiSearch._eventListeners = eventListeners;
   });
   
   afterEach(() => {
-    // Clean up event listeners
-    if (wikiSearch._eventListeners) {
-      wikiSearch._eventListeners.clear();
-    }
-    
-    // Restore original methods
-    if (wikiSearch._originalAddEventListener) {
-      window.addEventListener = wikiSearch._originalAddEventListener;
-    }
-    if (wikiSearch._originalRemoveEventListener) {
-      window.removeEventListener = wikiSearch._originalRemoveEventListener;
-    }
-    
-    // Remove element from DOM
-    if (wikiSearch && wikiSearch.parentNode) {
-      wikiSearch.parentNode.removeChild(wikiSearch);
-    }
+    cleanupFixtures();
   });
-  
-  it('should create an instance', () => {
-    expect(wikiSearch).toBeInstanceOf(WikiSearch);
+
+  it('should exist', () => {
+    expect(WikiSearch).toBeDefined();
   });
-  
-  it('should bind the keydown handler in constructor', () => {
-    expect(wikiSearch._handleKeydown).toBeDefined();
-    expect(typeof wikiSearch._handleKeydown).toBe('function');
+
+  describe('constructor', () => {
+    it('should bind the keydown handler', () => {
+      expect(wikiSearch._handleKeydown).toBeDefined();
+      expect(typeof wikiSearch._handleKeydown).toBe('function');
+    });
+
+    it('should initialize with default properties', () => {
+      expect(wikiSearch.resultArrayPath).toBe('results');
+      expect(wikiSearch.results).toEqual([]);
+    });
   });
-  
-  it('should add event listener when connected', () => {
-    // Mock shadowRoot for the component
-    wikiSearch.shadowRoot.innerHTML = '<input type="search" />';
+
+  describe('when component is connected to DOM', () => {
+    let addEventListenerSpy;
     
-    // Append to DOM to trigger connectedCallback
-    document.body.appendChild(wikiSearch);
-    
-    // Verify that addEventListener was called
-    expect(window.addEventListener).toHaveBeenCalledWith('keydown', wikiSearch._handleKeydown);
-  });
-  
-  it('should remove event listener when disconnected', () => {
-    // Mock shadowRoot for the component
-    wikiSearch.shadowRoot.innerHTML = '<input type="search" />';
-    
-    // Append to DOM to trigger connectedCallback
-    document.body.appendChild(wikiSearch);
-    
-    // Remove from DOM to trigger disconnectedCallback
-    document.body.removeChild(wikiSearch);
-    
-    // Verify that removeEventListener was called
-    expect(window.removeEventListener).toHaveBeenCalledWith('keydown', wikiSearch._handleKeydown);
-  });
-  
-  it('should handle keydown event correctly', () => {
-    // Mock shadowRoot with search input
-    const mockInput = document.createElement('input');
-    mockInput.type = 'search';
-    mockInput.focus = vi.fn();
-    
-    wikiSearch.shadowRoot.appendChild(mockInput);
-    vi.spyOn(wikiSearch.shadowRoot, 'querySelector').mockReturnValue(mockInput);
-    
-    // Create mock event
-    const mockEvent = {
-      ctrlKey: true,
-      key: 'k',
-      preventDefault: vi.fn()
-    };
-    
-    // Call the handler
-    wikiSearch._handleKeydown(mockEvent);
-    
-    // Verify preventDefault was called and input was focused
-    expect(mockEvent.preventDefault).toHaveBeenCalled();
-    expect(mockInput.focus).toHaveBeenCalled();
-  });
-  
-  it('should handle keydown event with metaKey (Mac)', () => {
-    // Mock shadowRoot with search input
-    const mockInput = document.createElement('input');
-    mockInput.type = 'search';
-    mockInput.focus = vi.fn();
-    
-    wikiSearch.shadowRoot.appendChild(mockInput);
-    vi.spyOn(wikiSearch.shadowRoot, 'querySelector').mockReturnValue(mockInput);
-    
-    // Create mock event with metaKey (Mac)
-    const mockEvent = {
-      metaKey: true,
-      key: 'k',
-      preventDefault: vi.fn()
-    };
-    
-    // Call the handler
-    wikiSearch._handleKeydown(mockEvent);
-    
-    // Verify preventDefault was called and input was focused
-    expect(mockEvent.preventDefault).toHaveBeenCalled();
-    expect(mockInput.focus).toHaveBeenCalled();
-  });
-  
-  it('should not handle keydown event for wrong key combination', () => {
-    // Mock shadowRoot with search input
-    const mockInput = document.createElement('input');
-    mockInput.type = 'search';
-    mockInput.focus = vi.fn();
-    
-    wikiSearch.shadowRoot.appendChild(mockInput);
-    vi.spyOn(wikiSearch.shadowRoot, 'querySelector').mockReturnValue(mockInput);
-    
-    // Create mock event with wrong key
-    const mockEvent = {
-      ctrlKey: true,
-      key: 'j',
-      preventDefault: vi.fn()
-    };
-    
-    // Call the handler
-    wikiSearch._handleKeydown(mockEvent);
-    
-    // Verify preventDefault was NOT called and input was NOT focused
-    expect(mockEvent.preventDefault).not.toHaveBeenCalled();
-    expect(mockInput.focus).not.toHaveBeenCalled();
-  });
-  
-  it('should prevent memory leak by properly managing event listeners', () => {
-    // Mock shadowRoot for the component
-    wikiSearch.shadowRoot.innerHTML = '<input type="search" />';
-    
-    // Test multiple connect/disconnect cycles
-    for (let i = 0; i < 3; i++) {
-      // Connect
+    beforeEach(() => {
+      addEventListenerSpy = vi.spyOn(window, 'addEventListener');
       document.body.appendChild(wikiSearch);
-      expect(window.addEventListener).toHaveBeenCalledWith('keydown', wikiSearch._handleKeydown);
-      
-      // Disconnect
+    });
+    
+    afterEach(() => {
+      if (wikiSearch.parentNode) {
+        wikiSearch.parentNode.removeChild(wikiSearch);
+      }
+      addEventListenerSpy.mockRestore();
+    });
+
+    it('should add keydown event listener', () => {
+      expect(addEventListenerSpy).toHaveBeenCalledWith('keydown', wikiSearch._handleKeydown);
+    });
+  });
+
+  describe('when component is disconnected from DOM', () => {
+    let removeEventListenerSpy;
+    
+    beforeEach(() => {
+      removeEventListenerSpy = vi.spyOn(window, 'removeEventListener');
+      document.body.appendChild(wikiSearch);
       document.body.removeChild(wikiSearch);
-      expect(window.removeEventListener).toHaveBeenCalledWith('keydown', wikiSearch._handleKeydown);
-    }
+    });
     
-    // Verify the same handler function is used (bound in constructor)
-    const addCalls = window.addEventListener.mock.calls.filter(call => call[0] === 'keydown');
-    const removeCalls = window.removeEventListener.mock.calls.filter(call => call[0] === 'keydown');
+    afterEach(() => {
+      removeEventListenerSpy.mockRestore();
+    });
+
+    it('should remove keydown event listener', () => {
+      expect(removeEventListenerSpy).toHaveBeenCalledWith('keydown', wikiSearch._handleKeydown);
+    });
+  });
+
+  describe('when keydown event is triggered', () => {
+    let mockInput;
+    let mockEvent;
     
-    // All calls should use the same bound function
-    expect(addCalls.length).toBe(3);
-    expect(removeCalls.length).toBe(3);
+    beforeEach(() => {
+      // Ensure component is connected and has shadowRoot
+      document.body.appendChild(wikiSearch);
+      
+      // Create mock input element
+      mockInput = document.createElement('input');
+      mockInput.type = 'search';
+      mockInput.focus = vi.fn();
+      
+      // Mock querySelector to return our mock input
+      vi.spyOn(wikiSearch.shadowRoot, 'querySelector').mockReturnValue(mockInput);
+    });
     
-    // Verify it's the same function reference
-    const firstHandler = addCalls[0][1];
-    expect(addCalls.every(call => call[1] === firstHandler)).toBe(true);
-    expect(removeCalls.every(call => call[1] === firstHandler)).toBe(true);
+    afterEach(() => {
+      // Clean up
+      if (wikiSearch.parentNode) {
+        wikiSearch.parentNode.removeChild(wikiSearch);
+      }
+    });
+
+    describe('when Ctrl+K is pressed', () => {
+      beforeEach(() => {
+        mockEvent = {
+          ctrlKey: true,
+          key: 'k',
+          preventDefault: vi.fn()
+        };
+        
+        wikiSearch._handleKeydown(mockEvent);
+      });
+
+      it('should prevent default behavior', () => {
+        expect(mockEvent.preventDefault).toHaveBeenCalled();
+      });
+
+      it('should focus the search input', () => {
+        expect(mockInput.focus).toHaveBeenCalled();
+      });
+    });
+
+    describe('when Cmd+K is pressed (Mac)', () => {
+      beforeEach(() => {
+        mockEvent = {
+          metaKey: true,
+          key: 'k',
+          preventDefault: vi.fn()
+        };
+        
+        wikiSearch._handleKeydown(mockEvent);
+      });
+
+      it('should prevent default behavior', () => {
+        expect(mockEvent.preventDefault).toHaveBeenCalled();
+      });
+
+      it('should focus the search input', () => {
+        expect(mockInput.focus).toHaveBeenCalled();
+      });
+    });
+
+    describe('when wrong key combination is pressed', () => {
+      beforeEach(() => {
+        mockEvent = {
+          ctrlKey: true,
+          key: 'j',
+          preventDefault: vi.fn()
+        };
+        
+        wikiSearch._handleKeydown(mockEvent);
+      });
+
+      it('should not prevent default behavior', () => {
+        expect(mockEvent.preventDefault).not.toHaveBeenCalled();
+      });
+
+      it('should not focus the search input', () => {
+        expect(mockInput.focus).not.toHaveBeenCalled();
+      });
+    });
+  });
+
+  describe('when component undergoes multiple connect/disconnect cycles', () => {
+    let addEventListenerSpy;
+    let removeEventListenerSpy;
+    
+    beforeEach(() => {
+      addEventListenerSpy = vi.spyOn(window, 'addEventListener');
+      removeEventListenerSpy = vi.spyOn(window, 'removeEventListener');
+      
+      // Test multiple connect/disconnect cycles
+      for (let i = 0; i < 3; i++) {
+        document.body.appendChild(wikiSearch);
+        document.body.removeChild(wikiSearch);
+      }
+    });
+    
+    afterEach(() => {
+      addEventListenerSpy.mockRestore();
+      removeEventListenerSpy.mockRestore();
+    });
+
+    it('should add event listener for each connect', () => {
+      expect(addEventListenerSpy).toHaveBeenCalledTimes(3);
+    });
+
+    it('should remove event listener for each disconnect', () => {
+      expect(removeEventListenerSpy).toHaveBeenCalledTimes(3);
+    });
+
+    it('should use the same bound function for all event listeners', () => {
+      const addCalls = addEventListenerSpy.mock.calls.filter(call => call[0] === 'keydown');
+      const removeCalls = removeEventListenerSpy.mock.calls.filter(call => call[0] === 'keydown');
+      
+      expect(addCalls.length).toBe(3);
+      expect(removeCalls.length).toBe(3);
+      
+      // Verify it's the same function reference
+      const firstHandler = addCalls[0][1];
+      expect(addCalls.every(call => call[1] === firstHandler)).toBe(true);
+      expect(removeCalls.every(call => call[1] === firstHandler)).toBe(true);
+    });
   });
 });
