@@ -4,6 +4,7 @@
 
 - [General](#general)
 - [Development Environment](#development-environment)
+- [Frontend JavaScript](#frontend-javascript)
 - [Testing](#testing)
 - [Fixing Problems](#fixing-problems)
 <!--toc:end-->
@@ -50,6 +51,11 @@
 
 - Use [Devbox](https://www.jetpack.io/devbox/) by Jetify to create isolated, reproducible development environments.
 - Add new dependencies via `devbox add <package>`. This ensures the `devbox.json` and `devbox.lock` files are updated correctly.
+
+## Frontend JavaScript
+
+- All JavaScript frontend code should be located under the `static/js` directory.
+- Organize frontend JavaScript files within appropriate subdirectories under `static/js` (e.g., `web-components`, `gen`).
 
 ## TDD
 
