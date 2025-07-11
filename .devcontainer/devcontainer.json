@@ -1,20 +1,32 @@
 // For format details, see https://aka.ms/devcontainer.json. For config options, see the
 // README at: https://github.com/devcontainers/templates/tree/main/src/go
 {
-	"name": "Go",
-	// Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
-	"image": "mcr.microsoft.com/devcontainers/go:1.21-bookworm",
+	"name": "Simple Wiki with Devbox",
+	// Use a base image that supports devbox installation
+	"image": "mcr.microsoft.com/devcontainers/base:ubuntu",
 	// Features to add to the dev container. More info: https://containers.dev/features.
-	// "features": {},
+	"features": {
+		"ghcr.io/devcontainers/features/git:1": {},
+		"ghcr.io/devcontainers/features/github-cli:1": {}
+	},
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
 	"forwardPorts": [
-		8050
+		8050,
+		8080
 	],
-	"postStartCommand": "git config --global --add safe.directory ${containerWorkspaceFolder}"
-	// Use 'postCreateCommand' to run commands after the container is created.
-	// "postCreateCommand": "go version",
+	// Install devbox and initialize the environment
+	"postCreateCommand": ".devcontainer/install-devbox.sh",
+	"postStartCommand": "git config --global --add safe.directory ${containerWorkspaceFolder}",
 	// Configure tool-specific properties.
-	// "customizations": {},
-	// Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
-	// "remoteUser": "root"
+	"customizations": {
+		"vscode": {
+			"extensions": [
+				"golang.go",
+				"ms-vscode.vscode-json",
+				"redhat.vscode-yaml"
+			]
+		}
+	},
+	// Use the vscode user (non-root)
+	"remoteUser": "vscode"
 }
