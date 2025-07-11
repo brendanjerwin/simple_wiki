@@ -13,13 +13,13 @@ The testing infrastructure uses:
 
 ```bash
 # Run all tests once
-npm test
+bun test
 
 # Run tests in watch mode
-npm run test:watch
+bun run test:watch
 
 # Run tests with coverage
-npm run test:coverage
+bun run test:coverage
 ```
 
 ## Test Files

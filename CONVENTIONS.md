@@ -55,7 +55,8 @@
 ## Frontend JavaScript
 
 - All JavaScript frontend code and project files should be located under the `static/js` directory.
-- This includes JavaScript source files, test files, configuration files (e.g., `vitest.config.js`), and package management files (e.g., `package.json`, `package-lock.json`).
+- This includes JavaScript source files, test files, configuration files (e.g., `vitest.config.js`), and package management files (e.g., `package.json`, `bun.lock`).
+- Use Bun as the package manager for modern JavaScript tooling and faster performance.
 - Since this is primarily a Go project, JavaScript is only for the frontend portion and should be contained within the `static/js` directory.
 - Organize frontend JavaScript files within appropriate subdirectories under `static/js` (e.g., `web-components`, `utils`, `test`).
 
