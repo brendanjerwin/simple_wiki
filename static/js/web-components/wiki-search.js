@@ -84,21 +84,28 @@ export class WikiSearch extends LitElement {
     super();
     this.resultArrayPath = "results";
     this.results = [];
+    this._handleKeydown = this._handleKeydown.bind(this);
   }
 
   connectedCallback() {
     super.connectedCallback();
 
+    window.addEventListener('keydown', this._handleKeydown);
+  }
 
-    window.addEventListener('keydown', (e) => {
-      const searchInput = this.shadowRoot.querySelector('input[type="search"]');
-      // Check if Ctrl (or Cmd on Macs) and K keys were pressed
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-        e.preventDefault();
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    window.removeEventListener('keydown', this._handleKeydown);
+  }
 
-        searchInput.focus();
-      }
-    });
+  _handleKeydown(e) {
+    const searchInput = this.shadowRoot.querySelector('input[type="search"]');
+    // Check if Ctrl (or Cmd on Macs) and K keys were pressed
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+
+      searchInput.focus();
+    }
   }
 
   handleSearchInputFocused(e) {
