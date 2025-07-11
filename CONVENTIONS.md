@@ -58,7 +58,8 @@
 - This includes JavaScript source files, test files, configuration files (e.g., `vitest.config.js`), and package management files (e.g., `package.json`, `bun.lock`).
 - Use Bun as the package manager for modern JavaScript tooling and faster performance.
 - Since this is primarily a Go project, JavaScript is only for the frontend portion and should be contained within the `static/js` directory.
-- Organize frontend JavaScript files within appropriate subdirectories under `static/js` (e.g., `web-components`, `utils`, `test`).
+- Organize frontend JavaScript files within appropriate subdirectories under `static/js` (e.g., `web-components`, `utils`).
+- Test files should be placed next to the production code they test, using the `.test.js` suffix. For example, `wiki-search.js` should have its tests in `wiki-search.test.js` in the same directory.
 
 ## TDD
 

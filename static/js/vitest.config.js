@@ -4,7 +4,7 @@ export default defineConfig({
   test: {
     environment: 'happy-dom',
     globals: true,
-    setupFiles: ['./test/setup.js'],
+    setupFiles: ['./setup.js'],
     coverage: {
       reporter: ['text', 'html', 'lcov'],
       reportsDirectory: './coverage'

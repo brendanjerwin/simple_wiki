@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { csrFixture, cleanupFixtures } from '@lit-labs/testing/fixtures.js';
 import { html } from 'lit';
-import { WikiSearch } from '../web-components/wiki-search.js';
+import { WikiSearch } from './wiki-search.js';
 
 describe('WikiSearch', () => {
   let wikiSearch;
