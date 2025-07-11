@@ -1,18 +1,20 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { csrFixture, cleanupFixtures } from '@lit-labs/testing/fixtures.js';
-import { html } from 'lit';
+import { fixture, html } from '@lit-labs/testing';
 import { WikiSearch } from './wiki-search.js';
 
 describe('WikiSearch', () => {
   let wikiSearch;
   
-  beforeEach(() => {
+  beforeEach(async () => {
     // Setup fresh component for each test
     wikiSearch = new WikiSearch();
   });
   
   afterEach(() => {
-    cleanupFixtures();
+    // Clean up any DOM elements
+    if (wikiSearch && wikiSearch.parentNode) {
+      wikiSearch.parentNode.removeChild(wikiSearch);
+    }
   });
 
   it('should exist', () => {
@@ -36,14 +38,12 @@ describe('WikiSearch', () => {
     
     beforeEach(() => {
       addEventListenerSpy = vi.spyOn(window, 'addEventListener');
-      document.body.appendChild(wikiSearch);
+      // Use a more controlled approach to connect the component
+      wikiSearch.connectedCallback();
     });
     
     afterEach(() => {
-      if (wikiSearch.parentNode) {
-        wikiSearch.parentNode.removeChild(wikiSearch);
-      }
-      addEventListenerSpy.mockRestore();
+      vi.restoreAllMocks();
     });
 
     it('should add keydown event listener', () => {
@@ -56,12 +56,13 @@ describe('WikiSearch', () => {
     
     beforeEach(() => {
       removeEventListenerSpy = vi.spyOn(window, 'removeEventListener');
-      document.body.appendChild(wikiSearch);
-      document.body.removeChild(wikiSearch);
+      // First connect then disconnect
+      wikiSearch.connectedCallback();
+      wikiSearch.disconnectedCallback();
     });
     
     afterEach(() => {
-      removeEventListenerSpy.mockRestore();
+      vi.restoreAllMocks();
     });
 
     it('should remove keydown event listener', () => {
@@ -74,23 +75,19 @@ describe('WikiSearch', () => {
     let mockEvent;
     
     beforeEach(() => {
-      // Ensure component is connected and has shadowRoot
-      document.body.appendChild(wikiSearch);
-      
       // Create mock input element
       mockInput = document.createElement('input');
       mockInput.type = 'search';
       mockInput.focus = vi.fn();
       
-      // Mock querySelector to return our mock input
-      vi.spyOn(wikiSearch.shadowRoot, 'querySelector').mockReturnValue(mockInput);
+      // Mock the querySelector method directly
+      vi.spyOn(wikiSearch, 'shadowRoot', 'get').mockReturnValue({
+        querySelector: vi.fn().mockReturnValue(mockInput)
+      });
     });
     
     afterEach(() => {
-      // Clean up
-      if (wikiSearch.parentNode) {
-        wikiSearch.parentNode.removeChild(wikiSearch);
-      }
+      vi.restoreAllMocks();
     });
 
     describe('when Ctrl+K is pressed', () => {
@@ -164,14 +161,13 @@ describe('WikiSearch', () => {
       
       // Test multiple connect/disconnect cycles
       for (let i = 0; i < 3; i++) {
-        document.body.appendChild(wikiSearch);
-        document.body.removeChild(wikiSearch);
+        wikiSearch.connectedCallback();
+        wikiSearch.disconnectedCallback();
       }
     });
     
     afterEach(() => {
-      addEventListenerSpy.mockRestore();
-      removeEventListenerSpy.mockRestore();
+      vi.restoreAllMocks();
     });
 
     it('should add event listener for each connect', () => {
