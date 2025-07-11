@@ -7,7 +7,7 @@ require (
 	github.com/blevesearch/bleve v1.0.14
 	github.com/danielheath/gin-teeny-security v0.0.0-20180331042316-bb11804dd0e2
 	github.com/gabriel-vasile/mimetype v1.4.8
-	github.com/gin-contrib/multitemplate v0.0.0-20220102045447-8a3ac507ec70
+	github.com/gin-contrib/multitemplate v1.1.1
 	github.com/gin-contrib/sessions v1.0.4
 	github.com/gin-gonic/gin v1.10.1
 	github.com/improbable-eng/grpc-web v0.15.0
