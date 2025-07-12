@@ -9,15 +9,20 @@ export default defineConfig({
   test: {
     environment: 'happy-dom',
     globals: true,
-    setupFiles: ['./setup.js'],
+    setupFiles: [resolve(__dirname, './setup.js')],
     coverage: {
       reporter: ['text', 'html', 'lcov'],
-      reportsDirectory: './coverage'
+      reportsDirectory: resolve(__dirname, './coverage')
     }
   },
   resolve: {
     alias: {
       '/static/vendor/js/lit-all.min.js': resolve(__dirname, '../vendor/js/lit-all.min.js')
+    }
+  },
+  server: {
+    fs: {
+      allow: ['..']
     }
   }
 });
