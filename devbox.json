@@ -8,7 +8,8 @@
     "evans@latest",
     "grpcurl@latest",
     "podman@latest",
-    "rootlesskit@latest"
+    "rootlesskit@latest",
+    "bun@latest"
   ],
   "shell": {
     "init_hook": [
