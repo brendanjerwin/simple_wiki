@@ -30,3 +30,13 @@ simple_wiki.exe
 dist
 .aider*
 docs/.structurizr/*
+
+# Node modules and npm/yarn files
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Test coverage
+coverage/

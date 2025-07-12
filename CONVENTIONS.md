@@ -4,6 +4,7 @@
 
 - [General](#general)
 - [Development Environment](#development-environment)
+- [Frontend JavaScript](#frontend-javascript)
 - [Testing](#testing)
 - [Fixing Problems](#fixing-problems)
 <!--toc:end-->
@@ -50,6 +51,15 @@
 
 - Use [Devbox](https://www.jetpack.io/devbox/) by Jetify to create isolated, reproducible development environments.
 - Add new dependencies via `devbox add <package>`. This ensures the `devbox.json` and `devbox.lock` files are updated correctly.
+
+## Frontend JavaScript
+
+- All JavaScript frontend code and project files should be located under the `static/js` directory.
+- This includes JavaScript source files, test files, configuration files (e.g., `vitest.config.js`), and package management files (e.g., `package.json`, `bun.lock`).
+- Use Bun as the package manager for modern JavaScript tooling and faster performance.
+- Since this is primarily a Go project, JavaScript is only for the frontend portion and should be contained within the `static/js` directory.
+- Organize frontend JavaScript files within appropriate subdirectories under `static/js` (e.g., `web-components`, `utils`).
+- Test files should be placed next to the production code they test, using the `.test.js` suffix. For example, `wiki-search.js` should have its tests in `wiki-search.test.js` in the same directory.
 
 ## TDD
 
