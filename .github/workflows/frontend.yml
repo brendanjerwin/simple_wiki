@@ -20,4 +20,3 @@ jobs:
       
       - name: Run frontend tests
         run: devbox run fe:test
-        working-directory: ./static/js
