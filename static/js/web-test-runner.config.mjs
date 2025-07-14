@@ -12,4 +12,11 @@ export default {
       executablePath: chromiumPath,
     }),
   ],
+  coverage: true,
+  coverageConfig: {
+    report: true,
+    reportDir: 'coverage',
+    reporters: ['lcov', 'json'],
+    exclude: ['node_modules/**'],
+  },
 };

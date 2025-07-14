@@ -18,10 +18,7 @@
     ],
     "scripts": {
       "fe:test": [
-        "cd static/js && bun install && bun test"
-      ],
-      "fe:test:ci": [
-        "export CHROMIUM_BIN=$(which chromium) && echo \"DEBUG: CHROMIUM_BIN is $CHROMIUM_BIN\" && cd static/js && bun install && bun test"
+        "export CHROMIUM_BIN=$(which chromium) && cd static/js && bun install && bun run test:wtr ${CI_COVERAGE:+--coverage}"
       ],
       "lint:md": [
         "markdownlint --fix '**/*.md' --ignore vendor"
