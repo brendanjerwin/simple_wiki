@@ -25,15 +25,3 @@ jobs:
       - name: Run frontend tests
         run: bun test
         working-directory: ./static/js
-      
-      - name: Run frontend tests with coverage
-        run: bun run test:coverage
-        working-directory: ./static/js
-      
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: ./static/js/coverage/lcov.info
-          flags: frontend
-          name: frontend-coverage

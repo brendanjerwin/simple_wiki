@@ -9,7 +9,8 @@
     "grpcurl@latest",
     "podman@latest",
     "rootlesskit@latest",
-    "bun@latest"
+    "bun@latest",
+    "chromium@latest"
   ],
   "shell": {
     "init_hook": [
