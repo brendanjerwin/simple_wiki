@@ -1,0 +1,25 @@
+codecov:
+  token: ${{ secrets.CODECOV_TOKEN }}
+  ci:
+    - "github"
+
+flags:
+  javascript:
+    paths:
+      - static/js/
+  go:
+    paths:
+      - "**/*.go"
+
+parsers:
+  go:
+    gocov:
+      - coverage.txt
+  javascript:
+    lcov:
+      - static/js/coverage/lcov.info
+
+comment:
+  layout: "header, diff, files, footer"
+  behavior: default
+  require_changes: false

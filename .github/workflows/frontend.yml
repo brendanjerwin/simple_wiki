@@ -28,3 +28,4 @@ jobs:
         with:
           directory: ./static/js/coverage
           token: ${{ secrets.CODECOV_TOKEN }}
+          flags: javascript
