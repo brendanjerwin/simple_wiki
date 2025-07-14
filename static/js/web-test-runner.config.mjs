@@ -15,6 +15,7 @@ function getChromiumPath() {
 }
 
 const chromiumPath = getChromiumPath();
+console.log('Chromium Path:', chromiumPath);
 
 export default {
   files: './web-components/**/*.test.js',
