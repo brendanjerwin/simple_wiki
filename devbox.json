@@ -20,6 +20,9 @@
       "fe:test": [
         "cd static/js && bun install && bun test"
       ],
+      "fe:test:ci": [
+        "export CHROMIUM_BIN=$(which chromium) && echo \"DEBUG: CHROMIUM_BIN is $CHROMIUM_BIN\" && cd static/js && bun install && bun test"
+      ],
       "lint:md": [
         "markdownlint --fix '**/*.md' --ignore vendor"
       ]
