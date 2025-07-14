@@ -18,7 +18,7 @@
     ],
     "scripts": {
       "fe:test": [
-        "bun test --cwd static/js"
+        "cd static/js && bun install && bun test"
       ],
       "lint:md": [
         "markdownlint --fix '**/*.md' --ignore vendor"
