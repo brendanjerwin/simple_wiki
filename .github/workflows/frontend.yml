@@ -18,5 +18,9 @@ jobs:
         with:
           enable_cache: 'true'
       
+      - name: Install dependencies
+        run: devbox run bun install
+        working-directory: ./static/js
+      
       - name: Run frontend tests
         run: devbox run fe:test
