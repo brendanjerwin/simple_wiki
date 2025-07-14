@@ -17,8 +17,8 @@
       "echo 'Welcome to devbox!' > /dev/null"
     ],
     "scripts": {
-      "test": [
-        "echo \"Error: no test specified\" && exit 1"
+      "fe:test": [
+        "bun test --cwd static/js"
       ],
       "lint:md": [
         "markdownlint --fix '**/*.md' --ignore vendor"
