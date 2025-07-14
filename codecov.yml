@@ -1,5 +1,4 @@
 codecov:
-  token: ${{ secrets.CODECOV_TOKEN }}
   ci:
     - "github"
 
