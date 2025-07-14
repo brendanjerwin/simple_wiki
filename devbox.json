@@ -18,7 +18,7 @@
     ],
     "scripts": {
       "fe:test": [
-        "cd static/js && bun install && bun test"
+        "export CHROMIUM_BIN=$(which chromium) && cd static/js && bun install && bun run test:wtr"
       ],
       "lint:md": [
         "markdownlint --fix '**/*.md' --ignore vendor"
