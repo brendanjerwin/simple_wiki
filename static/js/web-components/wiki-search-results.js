@@ -152,8 +152,8 @@ class WikiSearchResults extends LitElement {
 
   render() {
     return html`
-            <link href="/static/css/fontawesome.min.css" rel="stylesheet">
-            <link href="/static/css/solid.min.css" rel="stylesheet">
+            <link href="/static/vendor/css/fontawesome.min.css" rel="stylesheet">
+    <link href="/static/vendor/css/solid.min.css" rel="stylesheet">
             <div class="popover" @click="${this.handlePopoverClick}">
                 <div class="title-bar">
                     <h2><i class="fa-solid fa-search"></i> Search Results</h2>

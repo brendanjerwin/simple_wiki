@@ -155,8 +155,8 @@ export class WikiSearch extends LitElement {
 
   render() {
     return html`
-        <link href="/static/css/fontawesome.min.css" rel="stylesheet">
-        <link href="/static/css/solid.min.css" rel="stylesheet">
+        <link href="/static/vendor/css/fontawesome.min.css" rel="stylesheet">
+    <link href="/static/vendor/css/solid.min.css" rel="stylesheet">
         <div id="container">
             <form @submit="${this.handleFormSubmit}" action=".">
                 <input type="search" name="search" placeholder="Search..." required @focus="${this.handleSearchInputFocused}">
