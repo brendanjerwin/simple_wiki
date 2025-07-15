@@ -70,4 +70,46 @@ describe('WikiSearchResults', () => {
       expect(removeEventListenerSpy).to.have.been.calledWith('click', boundHandler);
     });
   });
+
+  describe('handleClickOutside', () => {
+    beforeEach(async () => {
+      el.open = true;
+      await el.updateComplete;
+    });
+
+    it('should close when clicking outside the popover', () => {
+      const closeStub = sinon.stub(el, 'close');
+      const mockEvent = {
+        composedPath: () => []
+      };
+      
+      el.handleClickOutside(mockEvent);
+      
+      expect(closeStub).to.have.been.calledOnce;
+    });
+
+    it('should not close when clicking inside the popover', () => {
+      const closeStub = sinon.stub(el, 'close');
+      const popover = el.shadowRoot.querySelector('.popover');
+      const mockEvent = {
+        composedPath: () => [popover]
+      };
+      
+      el.handleClickOutside(mockEvent);
+      
+      expect(closeStub).to.not.have.been.called;
+    });
+
+    it('should not close when component is not open', () => {
+      el.open = false;
+      const closeStub = sinon.stub(el, 'close');
+      const mockEvent = {
+        composedPath: () => []
+      };
+      
+      el.handleClickOutside(mockEvent);
+      
+      expect(closeStub).to.not.have.been.called;
+    });
+  });
 });
