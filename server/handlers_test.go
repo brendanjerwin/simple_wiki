@@ -62,7 +62,7 @@ var _ = Describe("Handlers", func() {
 		})
 
 		When("the page is relinquished successfully", func() {
-			var response map[string]interface{}
+			var response map[string]any
 			var pageName string
 
 			BeforeEach(func() {
@@ -108,7 +108,7 @@ var _ = Describe("Handlers", func() {
 		})
 
 		When("the page exists", func() {
-			var response map[string]interface{}
+			var response map[string]any
 			var pageName string
 
 			BeforeEach(func() {
@@ -135,7 +135,7 @@ var _ = Describe("Handlers", func() {
 		})
 
 		When("the page does not exist", func() {
-			var response map[string]interface{}
+			var response map[string]any
 			var pageName string
 
 			BeforeEach(func() {
@@ -187,7 +187,7 @@ var _ = Describe("Handlers", func() {
 
 		When("the document is too large", func() {
 			BeforeEach(func() {
-				body, _ := json.Marshal(map[string]interface{}{
+				body, _ := json.Marshal(map[string]any{
 					"page":     "test-update",
 					"new_text": string(make([]byte, 2048)),
 				})
@@ -202,7 +202,7 @@ var _ = Describe("Handlers", func() {
 		})
 
 		When("the page is updated successfully", func() {
-			var response map[string]interface{}
+			var response map[string]any
 			var pageName string
 			var newText string
 
@@ -213,7 +213,7 @@ var _ = Describe("Handlers", func() {
 				p.Update("some content")
 				p.Save()
 
-				body, _ := json.Marshal(map[string]interface{}{
+				body, _ := json.Marshal(map[string]any{
 					"page":       pageName,
 					"new_text":   newText,
 					"fetched_at": time.Now().Unix(),

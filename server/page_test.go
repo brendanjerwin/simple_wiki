@@ -179,7 +179,7 @@ This is the markdown content.`
 			It("should correctly parse the frontmatter", func() {
 				Expect(frontmatter).To(HaveKeyWithValue("title", "Test Page"))
 				Expect(frontmatter).To(HaveKey("tags"))
-				Expect(frontmatter["tags"]).To(BeEquivalentTo([]interface{}{"one", "two"}))
+				Expect(frontmatter["tags"]).To(BeEquivalentTo([]any{"one", "two"}))
 			})
 
 			It("should return the content after the frontmatter as markdown", func() {
