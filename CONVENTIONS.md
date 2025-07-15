@@ -108,6 +108,37 @@
 
 This section outlines best practices for testing, applicable across different programming languages used in the project. The core principles emphasize test-driven development (TDD), clear test structure, and meaningful assertions.
 
+### Running the Application
+
+The application can be run locally using `devbox services`, which manages the development environment and builds the frontend code automatically.
+
+- **Start the Application**:
+
+  ```bash
+  devbox services start
+  ```
+
+- **Stop the Application**:
+
+  ```bash
+  devbox services stop
+  ```
+
+The `devbox services` command uses the configuration defined in `process-compose.yml` to:
+- Run `go generate ./...` to build the frontend code
+- Start the wiki application with `go run main.go`
+- Optionally start additional services like Structurizr Lite for documentation
+
+This is the recommended way to run and test the application during development.
+
+Alternatively, you can use:
+
+```bash
+devbox services up
+```
+
+to start the process manager with all services.
+
 ### Running Tests
 
 Tests for both frontend (JavaScript) and Go can be run using `devbox` scripts, ensuring a consistent environment.
