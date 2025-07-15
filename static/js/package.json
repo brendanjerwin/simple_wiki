@@ -8,6 +8,8 @@
     "doc": "docs"
   },
   "scripts": {
+    "prebuild": "rm -rf dist && mkdir -p dist",
+    "build": "bun build ./web-components/wiki-search.js --outfile ./dist/web-components.js --target browser",
     "test": "web-test-runner",
     "test:wtr": "web-test-runner"
   },
