@@ -1,7 +1,7 @@
 version: "0.5"
 processes:
   wiki:
-    command: go build -o simple_wiki . && ./simple_wiki
+    command: go generate ./... ; go run main.go
     availability:
       restart: "always"
   structurizr-lite:
