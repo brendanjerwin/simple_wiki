@@ -108,6 +108,26 @@
 
 This section outlines best practices for testing, applicable across different programming languages used in the project. The core principles emphasize test-driven development (TDD), clear test structure, and meaningful assertions.
 
+### Running Tests
+
+Tests for both frontend (JavaScript) and backend (Go) can be run using `devbox` scripts, ensuring a consistent environment.
+
+- **Frontend Tests (JavaScript)**:
+
+  To run all frontend tests:
+
+  ```bash
+  devbox run fe:test
+  ```
+
+- **Go Tests**:
+
+  To run all Go tests:
+
+  ```bash
+  devbox run go:test
+  ```
+
 - Prefer Context-Specification style for testing. Nest `describe` blocks to build up context. Don't bother with `context` blocks.
 - Don't do actions in the `It` blocks. The `It` blocks should only contain assertions. All setup (**Arrange**) and execution (**Act**) should be done in `BeforeEach` blocks (or equivalent, depending on the testing framework) within the `Describe` or `When` blocks. This allows for reusing context to add additional assertions later.
 
