@@ -220,6 +220,49 @@ Tests for both frontend (JavaScript) and Go can be run using `devbox` scripts, e
   ```
 
 - Use the `Describe` blocks first to describe the function/component being tested, then use nested `When` blocks to establish the scenarios. Besides the basic `It(text: "Should exist"` tests, everything should be in those nested "When" blocks.
+- **Important**: Use "when" in `describe` block descriptions to establish scenarios, not in `it` block descriptions. The `it` blocks should describe the expected behavior or outcome.
+  
+  **Bad:**
+  ```javascript
+  it('should close when clicking outside', () => {
+    // ... test code
+  });
+  ```
+  
+  **Good:**
+  ```javascript
+  describe('when clicking outside', () => {
+    beforeEach(() => {
+      // ... setup and action
+    });
+    
+    it('should close the popover', () => {
+      // ... assertion only
+    });
+  });
+  ```
+
+- **Event Handler Wiring Tests**: For web components that add/remove event listeners, always test that the event handlers are properly wired up. Use spies to verify that `addEventListener` and `removeEventListener` are called with the correct parameters and function references.
+
+  **Example:**
+  ```javascript
+  describe('when component is connected to DOM', () => {
+    let addEventListenerSpy;
+    
+    beforeEach(async () => {
+      addEventListenerSpy = sinon.spy(document, 'addEventListener');
+      // Re-create the element to trigger connectedCallback
+      el = await fixture(html`<my-component></my-component>`);
+      await el.updateComplete;
+    });
+    
+    it('should add event listener with correct parameters', () => {
+      expect(addEventListenerSpy).to.have.been.calledWith('click', el._handleClick);
+    });
+  });
+  ```
+
+  This ensures the event listeners are properly registered and prevents memory leaks from incorrectly bound functions.
 - Include a blank line between all the various Ginkgo blocks. This makes it easier to read the tests.
 
 - Prefer Gomego/Ginkgo for testing in Go.
@@ -293,6 +336,7 @@ Tests for both frontend (JavaScript) and Go can be run using `devbox` scripts, e
   ```
 
 - Use the `Describe` blocks first to describe the function/component being tested, then use nested `When` blocks to establish the scenarios. Besides the basic `It(text: "Should exist"` tests, everything should be in those nested "When" blocks.
+- **Important**: Use "when" in `describe` block descriptions to establish scenarios, not in `it` block descriptions. The `it` blocks should describe the expected behavior or outcome.
 - Include a blank line between all the various Ginkgo blocks. This makes it easier to read the tests.
 - For a detailed checklist of test file conformance, refer to [Test File Conformance Checklist](docs/TEST_FILE_CHECKLIST.md).
 
