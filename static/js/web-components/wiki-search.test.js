@@ -18,7 +18,9 @@ describe('WikiSearch', () => {
     expect(el).to.exist;
   });
 
+
   describe('constructor', () => {
+
     it('should bind the keydown handler', () => {
       expect(el._handleKeydown).to.be.a('function');
     });
@@ -28,6 +30,7 @@ describe('WikiSearch', () => {
       expect(el.results).to.deep.equal([]);
     });
   });
+
 
   describe('when component is connected to DOM', () => {
     let addEventListenerSpy;
@@ -43,6 +46,7 @@ describe('WikiSearch', () => {
       expect(addEventListenerSpy).to.have.been.calledWith('keydown', el._handleKeydown);
     });
   });
+
 
   describe('when component is disconnected from DOM', () => {
     let removeEventListenerSpy;
@@ -61,6 +65,7 @@ describe('WikiSearch', () => {
       expect(removeEventListenerSpy).to.have.been.calledWith('keydown', el._handleKeydown);
     });
   });
+
 
   describe('when keydown event is triggered', () => {
     let searchInput;
@@ -92,6 +97,7 @@ describe('WikiSearch', () => {
       });
     });
 
+
     describe('when Cmd+K is pressed (Mac)', () => {
       beforeEach(() => {
         mockEvent = new KeyboardEvent('keydown', {
@@ -111,6 +117,7 @@ describe('WikiSearch', () => {
         expect(focusSpy).to.have.been.calledOnce;
       });
     });
+
 
     describe('when wrong key combination is pressed', () => {
       beforeEach(() => {

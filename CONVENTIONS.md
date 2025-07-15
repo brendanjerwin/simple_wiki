@@ -17,29 +17,32 @@
 - **Standard Idioms and Tooling**: Prefer standard idioms and approaches for the language in use. Leverage appropriate code generation tools when beneficial (e.g., `go:generate` for Go). For JavaScript, utilize tools like `bun build` for bundling and `web-test-runner` for testing.
 - Generated files **should be committed** to the repository. This ensures that developers can build and test the project without needing to have all code generation tools installed locally. Any files created or modified by `go generate ./...` should be included in commits.
 - prefer IoC approaches. Make \*-er interfaces for all the things!
-    - **Defensive Error Handling**: Take a defensive coding approach. Check inputs, assert preconditions, and enforce invariants. For recoverable issues, prefer returning an error or throwing an
-  exception rather than causing a program crash (panic). Crashes/panics should be reserved for truly exceptional and unrecoverable situations. This allows the caller to handle the problem more
-  gracefully.
 
-    **Go Example (Returning Error)**:
-    ```go
-    func MyFunction(input int) error {
-        if input < 0 {
-            return fmt.Errorf("input cannot be negative")
-        }
-        // ...
-        return nil
-    }
-    ```
+  - **Defensive Error Handling**: Take a defensive coding approach. Check inputs, assert preconditions, and enforce invariants. For recoverable issues, prefer returning an error or throwing an
+    exception rather than causing a program crash (panic). Crashes/panics should be reserved for truly exceptional and unrecoverable situations. This allows the caller to handle the problem more
+    gracefully.
 
-    **JavaScript Example (Throwing Exception)**:
-    ```javascript
-    function myFunction(input) {
-      if (input < 0) {
-          throw new Error('Input cannot be negative');
+  **Go Example (Returning Error)**:
+
+  ```go
+  func MyFunction(input int) error {
+      if input < 0 {
+          return fmt.Errorf("input cannot be negative")
       }
       // ...
-      return true;
+      return nil
+  }
+  ```
+
+  **JavaScript Example (Throwing Exception)**:
+
+  ```javascript
+  function myFunction(input) {
+    if (input < 0) {
+      throw new Error("Input cannot be negative");
+    }
+    // ...
+    return true;
   }
   ```
 
@@ -101,103 +104,107 @@
   }
   ```
 
-   108→## Testing
-   109→
-   110→This section outlines best practices for testing, applicable across different programming languages used in the project. The core principles emphasize test-driven development (TDD), clear test structure, and meaningful assertions.
-   111→
-   112→- Prefer Context-Specification style for testing. Nest `describe` blocks to build up context. Don't bother with `context` blocks.
-   113→- Don't do actions in the `It` blocks. The `It` blocks should only contain assertions. All setup (**Arrange**) and execution (**Act**) should be done in `BeforeEach` blocks (or equivalent, depending on the testing framework) within the `Describe` or `When` blocks. This allows for reusing context to add additional assertions later.
-   114→
-   115→  **Bad:** Action inside the `It` block (Go example).
-   116→
-   117→  ```go
-   118→  Describe("a component", func() {
-   119→    When("in a certain state", func() {
-   120→      It("should do a thing", func() {
-   121→        // Arrange
-   122→        component := setupComponent()
-   123→
-   124→        // Act
-   125→        result, err := component.DoSomething()
-   126→
-   127→        // Assert
-   128→        Expect(err).NotTo(HaveOccurred())
-   129→        Expect(result).To(Equal("expected result"))
-   130→      })
-   131→    })
-   132→  })
-   133→  ```
-   134→
-   135→  **Good:** Action moved to `BeforeEach` (Go example).
-   136→
-   137→  ```go
-   138→  Describe("a component", func() {
-   139→    When("in a certain state", func() {
-   140→      var (
-   141→        component *Component
-   142→        result    string
-   143→        err       error
-   144→      )
-   145→
-   146→      BeforeEach(func() {
-   147→        // Arrange
-   148→        component = setupComponent()
-   149→
-   150→        // Act
-   151→        result, err = component.DoSomething()
-   152→      })
-   153→
-   154→      It("should not return an error", func() {
-   155→        // Assert
-   156→        Expect(err).NotTo(HaveOccurred())
-   157→      })
-   158→
-   159→      It("should return the correct result", func() {
-   160→        // Assert
-   161→        Expect(result).To(Equal("expected result"))
-   162→      })
-   163→    })
-   164→  })
-   165→  ```
-   166→
-   167→  **Good:** Action moved to `beforeEach` (JavaScript Example `static/js/web-components/wiki-search.test.js`).
-   168→
-   169→  ```javascript
-   170→  describe('when component is connected to DOM', () => {
-   171→    let addEventListenerSpy;
-   172→    
-   173→    beforeEach(async () => {
-   174→      addEventListenerSpy = sinon.spy(window, 'addEventListener');
-   175→      // Re-create the element to trigger connectedCallback
-   176→      el = await fixture(html`<wiki-search></wiki-search>`);
-   177→      await el.updateComplete;
-   178→    });
-   179→    
-   180→    it('should add keydown event listener', () => {
-   181→      expect(addEventListenerSpy).to.have.been.calledWith('keydown', el._handleKeydown);
-   182→    });
-   183→  });
-   184→  ```
-   185→
-   186→- When asserting an error, check for the specific error type or message. Do not just check that an error is not `nil`. This ensures that the test is validating the specific error that is expected to be returned.
-   187→
-   188→  **Bad:** (Go example)
-   189→
-   190→  ```go
-   191→  Expect(err).To(HaveOccurred())
-   192→  ```
-   193→
-   194→  **Good:** (Go example)
-   195→
-   196→  ```go
-   197→  Expect(err).To(MatchError("specific error message"))
-   198→  ```
-   199→
-   200→- Use the `Describe` blocks first to describe the function/component being tested, then use nested `When` blocks to establish the scenarios. Besides the basic `It(text: "Should exist"` tests, everything should be in those nested "When" blocks.
-   201→- Include a blank line between all the various Ginkgo blocks. This makes it easier to read the tests.
+## Testing
 
-- Prefer Gomego/Ginkgo for testing. Context-Specification style. Nest `describe` blocks to build up context. Don't bother with `context` blocks.
-- Don't do actions in the `It` blocks. The `It` blocks should only contain assertions. All setup (**Arrange**) and execution (**Act**) should be done in `BeforeEach` blocks within the `Describe` or `When` blocks. This allows for reusing context to add additional assertions later.
+This section outlines best practices for testing, applicable across different programming languages used in the project. The core principles emphasize test-driven development (TDD), clear test structure, and meaningful assertions.
+
+- Prefer Context-Specification style for testing. Nest `describe` blocks to build up context. Don't bother with `context` blocks.
+- Don't do actions in the `It` blocks. The `It` blocks should only contain assertions. All setup (**Arrange**) and execution (**Act**) should be done in `BeforeEach` blocks (or equivalent, depending on the testing framework) within the `Describe` or `When` blocks. This allows for reusing context to add additional assertions later.
+
+  **Bad:** Action inside the `It` block (Go example).
+
+  ```go
+  Describe("a component", func() {
+    When("in a certain state", func() {
+      It("should do a thing", func() {
+        // Arrange
+        component := setupComponent()
+
+        // Act
+        result, err := component.DoSomething()
+
+        // Assert
+        Expect(err).NotTo(HaveOccurred())
+        Expect(result).To(Equal("expected result"))
+      })
+    })
+  })
+  ```
+
+  **Good:** Action moved to `BeforeEach` (Go example).
+
+  ```go
+  Describe("a component", func() {
+    When("in a certain state", func() {
+      var (
+        component *Component
+        result    string
+        err       error
+      )
+
+      BeforeEach(func() {
+        // Arrange
+        component = setupComponent()
+
+        // Act
+        result, err = component.DoSomething()
+      })
+
+      It("should not return an error", func() {
+        // Assert
+        Expect(err).NotTo(HaveOccurred())
+      })
+
+      It("should return the correct result", func() {
+        // Assert
+        Expect(result).To(Equal("expected result"))
+      })
+    })
+  })
+  ```
+
+  **Good:** Action moved to `beforeEach` (JavaScript Example `static/js/web-components/wiki-search.test.js`).
+
+  ```javascript
+  describe("when component is connected to DOM", () => {
+    let addEventListenerSpy;
+
+    beforeEach(async () => {
+      addEventListenerSpy = sinon.spy(window, "addEventListener");
+      // Re-create the element to trigger connectedCallback
+      el = await fixture(html`<wiki-search></wiki-search>`);
+      await el.updateComplete;
+    });
+
+    it("should add keydown event listener", () => {
+      expect(addEventListenerSpy).to.have.been.calledWith(
+        "keydown",
+        el._handleKeydown,
+      );
+    });
+  });
+  ```
+
+- When asserting an error, check for the specific error type or message. Do not just check that an error is not `nil`. This ensures that the test is validating the specific error that is expected to be returned.
+
+  **Bad:** (Go example)
+
+  ```go
+  Expect(err).To(HaveOccurred())
+  ```
+
+  **Good:** (Go example)
+
+  ```go
+  Expect(err).To(MatchError("specific error message"))
+  ```
+
+- Use the `Describe` blocks first to describe the function/component being tested, then use nested `When` blocks to establish the scenarios. Besides the basic `It(text: "Should exist"` tests, everything should be in those nested "When" blocks.
+- Include a blank line between all the various Ginkgo blocks. This makes it easier to read the tests.
+
+- Prefer Gomego/Ginkgo for testing in Go.
+- Use a Context-Specification style. Nest `describe` blocks to build up context. Don't bother with `context` blocks in frameworks that provide them.
+- Don't do actions in the `It` blocks. The `It` blocks should only contain assertions. All setup (**Arrange**) and execution (**Act**) should be done in `BeforeEach` blocks within the `Describe` or `When` blocks (`When` blocks if provided by the framework of course. Put "When" in the description of the `Describe` block if `When` blocks aren't available). This allows for reusing context to add additional assertions later.
 
   **Bad:** Action inside the `It` block.
 
@@ -267,6 +274,7 @@
 
 - Use the `Describe` blocks first to describe the function/component being tested, then use nested `When` blocks to establish the scenarios. Besides the basic `It(text: "Should exist"` tests, everything should be in those nested "When" blocks.
 - Include a blank line between all the various Ginkgo blocks. This makes it easier to read the tests.
+- For a detailed checklist of test file conformance, refer to [Test File Conformance Checklist](docs/TEST_FILE_CHECKLIST.md).
 
 ## Fixing Problems
 
