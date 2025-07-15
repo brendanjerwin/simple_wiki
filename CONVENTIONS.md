@@ -294,6 +294,11 @@ Tests for both frontend (JavaScript) and Go can be run using `devbox` scripts, e
   ```
 
   This ensures the event listeners are properly registered and prevents memory leaks from incorrectly bound functions.
+
+- **Comprehensive Testing**: Tests should validate the entire user-facing functionality, not just internal implementation details. When unit tests are green, we should be confident the whole app works. For example, when testing a search component, verify not only that results are processed correctly but also that the results view component becomes visible to the user.
+
+- **Documentation of Testing Principles**: When you discover important testing principles or patterns that ensure comprehensive coverage, document them in this CONVENTIONS.md file. This builds a comprehensive guide for future developers and helps maintain consistent testing practices across the project.
+
 - Include a blank line between all the various Ginkgo blocks. This makes it easier to read the tests.
 
 - Prefer Gomego/Ginkgo for testing in Go.
