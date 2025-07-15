@@ -1,4 +1,5 @@
 import { html, css, LitElement } from 'lit';
+import { sharedStyles } from './shared-styles.js';
 
 export class WikiSearch extends LitElement {
   static styles = css`
@@ -155,8 +156,7 @@ export class WikiSearch extends LitElement {
 
   render() {
     return html`
-        <link href="/static/css/fontawesome.min.css" rel="stylesheet">
-        <link href="/static/css/solid.min.css" rel="stylesheet">
+        ${sharedStyles}
         <div id="container">
             <form @submit="${this.handleFormSubmit}" action=".">
                 <input type="search" name="search" placeholder="Search..." required @focus="${this.handleSearchInputFocused}">
