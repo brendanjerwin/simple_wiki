@@ -65,15 +65,15 @@ func (f *FrontmatterIndex) saveToIndex(identifier common.PageIdentifier, keyPath
 	f.PageKeyMap[identifier][keyPath][value] = true
 }
 
-func (f *FrontmatterIndex) recursiveAdd(identifier common.PageIdentifier, keyPath string, value interface{}) {
+func (f *FrontmatterIndex) recursiveAdd(identifier common.PageIdentifier, keyPath string, value any) {
 	if keyPath == "identifier" {
 		return
 	}
 
-	// recursively build the dotted key path. a value in frontmatter can be either a string or a map[string]interface{}
-	// if it is a map[string]interface{}, then we need to recurse
+	// recursively build the dotted key path. a value in frontmatter can be either a string or a map[string]any
+	// if it is a map[string]any, then we need to recurse
 	switch v := value.(type) {
-	case map[string]interface{}:
+	case map[string]any:
 		for key, val := range v {
 			newKeyPath := keyPath
 			if newKeyPath != "" {
@@ -81,24 +81,24 @@ func (f *FrontmatterIndex) recursiveAdd(identifier common.PageIdentifier, keyPat
 			}
 			newKeyPath += key
 
-			if _, isMap := val.(map[string]interface{}); isMap {
+			if _, isMap := val.(map[string]any); isMap {
 				f.saveToIndex(identifier, newKeyPath, "") // This ensures that the QueryKeyExistence function works for all keys in the hierarchy
 			}
 			f.recursiveAdd(identifier, newKeyPath, val)
 		}
 	case string:
 		f.saveToIndex(identifier, keyPath, v)
-	case []interface{}:
+	case []any:
 		for _, array := range v {
 			switch str := array.(type) {
 			case string:
 				f.saveToIndex(identifier, keyPath, str)
 			default:
-				log.Printf("frontmatter can only be a string, []string, or a map[string]interface{}. Page: %v Key: %v", identifier, keyPath)
+				log.Printf("frontmatter can only be a string, []string, or a map[string]any. Page: %v Key: %v (type: %T)", identifier, keyPath, array)
 			}
 		}
 	default:
-		log.Printf("frontmatter can only be a string, []string, or a map[string]interface{}. Page: %v Key: %v", identifier, keyPath)
+		log.Printf("frontmatter can only be a string, []string, or a map[string]any. Page: %v Key: %v (type: %T)", identifier, keyPath, v)
 	}
 }
 

@@ -235,7 +235,7 @@ func (d DirectoryEntry) IsDir() bool {
 	return false
 }
 
-func (d DirectoryEntry) Sys() interface{} {
+func (d DirectoryEntry) Sys() any {
 	return nil
 }
 

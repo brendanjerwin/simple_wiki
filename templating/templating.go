@@ -23,7 +23,7 @@ type InventoryFrontmatter struct {
 type TemplateContext struct {
 	Identifier string `json:"identifier"`
 	Title      string `json:"title"`
-	Map        map[string]interface{}
+	Map        map[string]any
 	Inventory  InventoryFrontmatter `json:"inventory"`
 }
 

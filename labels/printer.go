@@ -60,7 +60,7 @@ func PrintLabel(template_identifier string, identifer string, site common.PageRe
 func configFromFrontmatter(template_frontmatter common.FrontMatter) (PrinterConfig, error) {
 	var err error
 
-	printerValue, ok := template_frontmatter["label_printer"].(map[string]interface{})
+	printerValue, ok := template_frontmatter["label_printer"].(map[string]any)
 	if !ok {
 		return PrinterConfig{}, fmt.Errorf("label_printer is not a map")
 	}
