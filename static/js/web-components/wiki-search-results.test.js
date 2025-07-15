@@ -29,14 +29,42 @@ describe('WikiSearchResults', () => {
     });
   });
 
-  describe('memory leak test', () => {
-    it('should use the same function reference for bound handler', () => {
-      // After the fix, the bound function should be stored and reused
-      const element = el;
-      const boundFn = element._handleClickOutside;
+  describe('functionality verification', () => {
+    it('should close when clicking outside', async () => {
+      el.open = true;
+      el.results = [{ Identifier: 'test', Title: 'Test', FragmentHTML: 'Test content' }];
+      await el.updateComplete;
+
+      // Mock the close method
+      const closeSpy = sinon.spy(el, 'close');
       
-      // This should be the same reference each time
-      expect(boundFn).to.equal(element._handleClickOutside);
+      // Simulate clicking outside (event won't include the popover)
+      const mockEvent = {
+        composedPath: () => []
+      };
+      
+      el._handleClickOutside(mockEvent);
+      
+      expect(closeSpy).to.have.been.calledOnce;
+    });
+    
+    it('should not close when clicking inside popover', async () => {
+      el.open = true;
+      el.results = [{ Identifier: 'test', Title: 'Test', FragmentHTML: 'Test content' }];
+      await el.updateComplete;
+
+      // Mock the close method
+      const closeSpy = sinon.spy(el, 'close');
+      
+      // Simulate clicking inside (event includes the popover)
+      const mockPopover = el.shadowRoot.querySelector('.popover');
+      const mockEvent = {
+        composedPath: () => [mockPopover]
+      };
+      
+      el._handleClickOutside(mockEvent);
+      
+      expect(closeSpy).to.not.have.been.called;
     });
   });
 });
