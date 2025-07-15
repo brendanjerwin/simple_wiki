@@ -30,6 +30,39 @@ describe('WikiSearchResults', () => {
     });
   });
 
+  describe('when component is connected to DOM', () => {
+    let addEventListenerSpy;
+    
+    beforeEach(async () => {
+      addEventListenerSpy = sinon.spy(document, 'addEventListener');
+      // Re-create the element to trigger connectedCallback
+      el = await fixture(html`<wiki-search-results></wiki-search-results>`);
+      await el.updateComplete;
+    });
+    
+    it('should add click event listener', () => {
+      expect(addEventListenerSpy).to.have.been.calledWith('click', el._handleClickOutside);
+    });
+  });
+
+  describe('when component is disconnected from DOM', () => {
+    let removeEventListenerSpy;
+    
+    beforeEach(async () => {
+      removeEventListenerSpy = sinon.spy(document, 'removeEventListener');
+      // Re-create and then remove the element to trigger disconnectedCallback
+      el = await fixture(html`<wiki-search-results></wiki-search-results>`);
+      await el.updateComplete;
+      el.remove();
+      // Wait for the next microtask to ensure disconnectedCallback runs
+      await el.updateComplete;
+    });
+    
+    it('should remove click event listener', () => {
+      expect(removeEventListenerSpy).to.have.been.calledWith('click', el._handleClickOutside);
+    });
+  });
+
   describe('when click outside event is triggered', () => {
     let closeSpy;
     

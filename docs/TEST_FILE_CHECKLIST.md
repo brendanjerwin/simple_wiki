@@ -11,6 +11,12 @@ To ensure consistency and readability, all test files should adhere to the follo
     -   All other `It` blocks are placed within `When` blocks.
     -   **Important**: Use "when" in `describe` block descriptions to establish scenarios, not in `it` block descriptions. The `it` blocks should describe the expected behavior or outcome.
 
+-   **Event Handler Wiring Tests:**
+    -   For web components that add/remove event listeners in `connectedCallback`/`disconnectedCallback`, always include tests that verify the event handlers are properly wired up.
+    -   Use spies to verify that `addEventListener` and `removeEventListener` are called with the correct parameters and function references.
+    -   This ensures the event listeners are properly registered and prevents memory leaks from incorrectly bound functions.
+    -   Follow the pattern established in `wiki-search.test.js` for testing event listener registration/deregistration.
+
 -   **No Actions in `It` Blocks:**
     -   `It` blocks contain only assertions.
     -   All setup (Arrange) and execution (Act) are performed in `BeforeEach` (or equivalent, e.g., `beforeEach` in JavaScript) blocks within the `Describe` or `When` blocks.
