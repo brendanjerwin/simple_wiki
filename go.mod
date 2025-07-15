@@ -21,7 +21,7 @@ require (
 	github.com/schollz/versionedtext v1.0.0
 	github.com/stoewer/go-strcase v1.3.1
 	github.com/yuin/goldmark v1.7.12
-	github.com/yuin/goldmark-emoji v1.0.2
+	github.com/yuin/goldmark-emoji v1.0.6
 	go.abhg.dev/goldmark/mermaid v0.5.0
 	go.abhg.dev/goldmark/wikilink v0.6.0
 	golang.org/x/crypto v0.40.0
