@@ -130,7 +130,7 @@ export class WikiSearch extends LitElement {
             data = [];
           }
         }
-        this.results = data;
+        this.results = [...data];
         if (data.length > 0) {
           this.noResults = false;
         } else {
