@@ -1,5 +1,6 @@
 import { html, css, LitElement } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
+import { sharedStyles } from './shared-styles.js';
 
 class WikiSearchResults extends LitElement {
   static styles = css`
@@ -152,8 +153,7 @@ class WikiSearchResults extends LitElement {
 
   render() {
     return html`
-            <link href="/static/vendor/css/fontawesome.min.css" rel="stylesheet">
-    <link href="/static/vendor/css/solid.min.css" rel="stylesheet">
+            ${sharedStyles}
             <div class="popover" @click="${this.handlePopoverClick}">
                 <div class="title-bar">
                     <h2><i class="fa-solid fa-search"></i> Search Results</h2>
