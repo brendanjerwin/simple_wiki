@@ -1,4 +1,4 @@
-import { html, css, LitElement, unsafeHTML } from '/static/vendor/js/lit-all.min.js';
+import { html, css, LitElement, unsafeHTML } from 'lit';
 
 class WikiSearchResults extends LitElement {
   static styles = css`
