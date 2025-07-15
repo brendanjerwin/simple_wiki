@@ -110,7 +110,7 @@ This section outlines best practices for testing, applicable across different pr
 
 ### Running Tests
 
-Tests for both frontend (JavaScript) and backend (Go) can be run using `devbox` scripts, ensuring a consistent environment.
+Tests for both frontend (JavaScript) and Go can be run using `devbox` scripts, ensuring a consistent environment.
 
 - **Frontend Tests (JavaScript)**:
 
