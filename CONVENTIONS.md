@@ -220,6 +220,27 @@ Tests for both frontend (JavaScript) and Go can be run using `devbox` scripts, e
   ```
 
 - Use the `Describe` blocks first to describe the function/component being tested, then use nested `When` blocks to establish the scenarios. Besides the basic `It(text: "Should exist"` tests, everything should be in those nested "When" blocks.
+- **Important**: Use "when" in `describe` block descriptions to establish scenarios, not in `it` block descriptions. The `it` blocks should describe the expected behavior or outcome.
+  
+  **Bad:**
+  ```javascript
+  it('should close when clicking outside', () => {
+    // ... test code
+  });
+  ```
+  
+  **Good:**
+  ```javascript
+  describe('when clicking outside', () => {
+    beforeEach(() => {
+      // ... setup and action
+    });
+    
+    it('should close the popover', () => {
+      // ... assertion only
+    });
+  });
+  ```
 - Include a blank line between all the various Ginkgo blocks. This makes it easier to read the tests.
 
 - Prefer Gomego/Ginkgo for testing in Go.
@@ -293,6 +314,7 @@ Tests for both frontend (JavaScript) and Go can be run using `devbox` scripts, e
   ```
 
 - Use the `Describe` blocks first to describe the function/component being tested, then use nested `When` blocks to establish the scenarios. Besides the basic `It(text: "Should exist"` tests, everything should be in those nested "When" blocks.
+- **Important**: Use "when" in `describe` block descriptions to establish scenarios, not in `it` block descriptions. The `it` blocks should describe the expected behavior or outcome.
 - Include a blank line between all the various Ginkgo blocks. This makes it easier to read the tests.
 - For a detailed checklist of test file conformance, refer to [Test File Conformance Checklist](docs/TEST_FILE_CHECKLIST.md).
 

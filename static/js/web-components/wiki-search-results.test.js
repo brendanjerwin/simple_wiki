@@ -19,6 +19,7 @@ describe('WikiSearchResults', () => {
   });
 
   describe('constructor', () => {
+
     it('should initialize with default properties', () => {
       expect(el.results).to.deep.equal([]);
       expect(el.open).to.equal(false);
@@ -29,42 +30,47 @@ describe('WikiSearchResults', () => {
     });
   });
 
-  describe('functionality verification', () => {
-    it('should close when clicking outside', async () => {
-      el.open = true;
-      el.results = [{ Identifier: 'test', Title: 'Test', FragmentHTML: 'Test content' }];
-      await el.updateComplete;
-
-      // Mock the close method
-      const closeSpy = sinon.spy(el, 'close');
-      
-      // Simulate clicking outside (event won't include the popover)
-      const mockEvent = {
-        composedPath: () => []
-      };
-      
-      el._handleClickOutside(mockEvent);
-      
-      expect(closeSpy).to.have.been.calledOnce;
-    });
+  describe('when click outside event is triggered', () => {
+    let closeSpy;
     
-    it('should not close when clicking inside popover', async () => {
+    beforeEach(async () => {
       el.open = true;
       el.results = [{ Identifier: 'test', Title: 'Test', FragmentHTML: 'Test content' }];
       await el.updateComplete;
+      closeSpy = sinon.spy(el, 'close');
+    });
 
-      // Mock the close method
-      const closeSpy = sinon.spy(el, 'close');
+    describe('when clicking outside the popover', () => {
+      let mockEvent;
       
-      // Simulate clicking inside (event includes the popover)
-      const mockPopover = el.shadowRoot.querySelector('.popover');
-      const mockEvent = {
-        composedPath: () => [mockPopover]
-      };
+      beforeEach(() => {
+        // Simulate clicking outside (event won't include the popover)
+        mockEvent = {
+          composedPath: () => []
+        };
+        el._handleClickOutside(mockEvent);
+      });
+
+      it('should close the popover', () => {
+        expect(closeSpy).to.have.been.calledOnce;
+      });
+    });
+
+    describe('when clicking inside the popover', () => {
+      let mockEvent;
       
-      el._handleClickOutside(mockEvent);
-      
-      expect(closeSpy).to.not.have.been.called;
+      beforeEach(() => {
+        // Simulate clicking inside (event includes the popover)
+        const mockPopover = el.shadowRoot.querySelector('.popover');
+        mockEvent = {
+          composedPath: () => [mockPopover]
+        };
+        el._handleClickOutside(mockEvent);
+      });
+
+      it('should not close the popover', () => {
+        expect(closeSpy).to.not.have.been.called;
+      });
     });
   });
 });
