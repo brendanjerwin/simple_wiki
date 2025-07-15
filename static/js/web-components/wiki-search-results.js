@@ -1,4 +1,5 @@
-import { html, css, LitElement, unsafeHTML } from 'lit';
+import { html, css, LitElement } from 'lit';
+import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 
 class WikiSearchResults extends LitElement {
   static styles = css`
@@ -108,15 +109,16 @@ class WikiSearchResults extends LitElement {
     super();
     this.results = [];
     this.open = false;
+    this.handleClickOutside = this.handleClickOutside.bind(this);
   }
 
   connectedCallback() {
     super.connectedCallback();
-    document.addEventListener('click', this.handleClickOutside.bind(this));
+    document.addEventListener('click', this.handleClickOutside);
   }
 
   disconnectedCallback() {
-    document.removeEventListener('click', this.handleClickOutside.bind(this));
+    document.removeEventListener('click', this.handleClickOutside);
     super.disconnectedCallback();
   }
 
