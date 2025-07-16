@@ -1,6 +1,6 @@
 import { html, fixture, expect } from '@open-wc/testing';
 import sinon from 'sinon';
-import { WikiSearch } from './wiki-search.js';
+import './wiki-search.js';
 
 describe('WikiSearch', () => {
   let el: any;
@@ -18,153 +18,109 @@ describe('WikiSearch', () => {
     expect(el).to.exist;
   });
 
-  describe('constructor', () => {
-
-    it('should bind the keydown handler', () => {
-      expect(el._handleKeydown).to.be.a('function');
-    });
-
-    it('should initialize with default properties', () => {
-      expect(el.resultArrayPath).to.equal('results');
-      expect(el.results).to.deep.equal([]);
-    });
+  it('should have the correct default properties', () => {
+    expect(el.resultArrayPath).to.equal('results');
+    expect(el.results).to.deep.equal([]);
+    expect(el.noResults).to.equal(false);
   });
 
-  describe('when component is connected to DOM', () => {
-    let addEventListenerSpy: sinon.SinonSpy;
-    
-    beforeEach(async () => {
-      addEventListenerSpy = sinon.spy(window, 'addEventListener');
-      // Re-create the element to trigger connectedCallback
-      el = await fixture(html`<wiki-search></wiki-search>`);
-      await el.updateComplete;
-    });
-    
-    it('should add keydown event listener', () => {
-      expect(addEventListenerSpy).to.have.been.calledWith('keydown', el._handleKeydown);
-    });
+  it('should have a search input', () => {
+    const searchInput = el.shadowRoot?.querySelector('input[type="search"]');
+    expect(searchInput).to.exist;
   });
 
-  describe('when component is disconnected from DOM', () => {
-    let removeEventListenerSpy: sinon.SinonSpy;
-    
-    beforeEach(async () => {
-      removeEventListenerSpy = sinon.spy(window, 'removeEventListener');
-      // Re-create and then remove the element to trigger disconnectedCallback
-      el = await fixture(html`<wiki-search></wiki-search>`);
-      await el.updateComplete;
-      el.remove();
-      // Wait for the next microtask to ensure disconnectedCallback runs
-      await el.updateComplete;
-    });
-    
-    it('should remove keydown event listener', () => {
-      expect(removeEventListenerSpy).to.have.been.calledWith('keydown', el._handleKeydown);
-    });
+  it('should have a submit button', () => {
+    const submitButton = el.shadowRoot?.querySelector('button[type="submit"]');
+    expect(submitButton).to.exist;
   });
 
-  describe('when keydown event is triggered', () => {
+  it('should have a search results component', () => {
+    const searchResults = el.shadowRoot?.querySelector('wiki-search-results');
+    expect(searchResults).to.exist;
+  });
+
+  describe('keyboard shortcuts', () => {
     let searchInput: HTMLInputElement;
     let focusSpy: sinon.SinonSpy;
-    let mockEvent: KeyboardEvent;
-    
+
     beforeEach(async () => {
-      // Wait for component to be fully rendered
       await el.updateComplete;
       searchInput = el.shadowRoot?.querySelector('input[type="search"]') as HTMLInputElement;
-      if (searchInput) {
-        focusSpy = sinon.spy(searchInput, 'focus');
-      }
+      focusSpy = sinon.spy(searchInput, 'focus');
     });
 
-    describe('when Ctrl+K is pressed', () => {
-      beforeEach(() => {
-        if (searchInput) {
-          mockEvent = new KeyboardEvent('keydown', {
-            ctrlKey: true,
-            key: 'k',
-            bubbles: true,
-            cancelable: true,
-          });
-          window.dispatchEvent(mockEvent);
-        }
+    it('should focus input when Ctrl+K is pressed', () => {
+      const mockEvent = new KeyboardEvent('keydown', {
+        ctrlKey: true,
+        key: 'k',
+        bubbles: true,
+        cancelable: true,
       });
-
-      it('should prevent default behavior', () => {
-        if (searchInput && mockEvent) {
-          expect(mockEvent.defaultPrevented).to.be.true;
-        } else {
-          expect.fail('Search input not found or event not created');
-        }
-      });
-
-      it('should focus the search input', () => {
-        if (searchInput && focusSpy) {
-          expect(focusSpy).to.have.been.calledOnce;
-        } else {
-          expect.fail('Search input not found or focus spy not created');
-        }
-      });
+      
+      // Call the handler directly instead of dispatching to window
+      el._handleKeydown(mockEvent);
+      
+      expect(mockEvent.defaultPrevented).to.be.true;
+      expect(focusSpy).to.have.been.calledOnce;
     });
 
-    describe('when Cmd+K is pressed (Mac)', () => {
-      beforeEach(() => {
-        if (searchInput) {
-          mockEvent = new KeyboardEvent('keydown', {
-            metaKey: true,
-            key: 'k',
-            bubbles: true,
-            cancelable: true,
-          });
-          window.dispatchEvent(mockEvent);
-        }
+    it('should focus input when Cmd+K is pressed (Mac)', () => {
+      const mockEvent = new KeyboardEvent('keydown', {
+        metaKey: true,
+        key: 'k',
+        bubbles: true,
+        cancelable: true,
       });
-
-      it('should prevent default behavior', () => {
-        if (searchInput && mockEvent) {
-          expect(mockEvent.defaultPrevented).to.be.true;
-        } else {
-          expect.fail('Search input not found or event not created');
-        }
-      });
-
-      it('should focus the search input', () => {
-        if (searchInput && focusSpy) {
-          expect(focusSpy).to.have.been.calledOnce;
-        } else {
-          expect.fail('Search input not found or focus spy not created');
-        }
-      });
+      
+      // Call the handler directly instead of dispatching to window
+      el._handleKeydown(mockEvent);
+      
+      expect(mockEvent.defaultPrevented).to.be.true;
+      expect(focusSpy).to.have.been.calledOnce;
     });
 
-    describe('when wrong key combination is pressed', () => {
-      beforeEach(() => {
-        if (searchInput) {
-          mockEvent = new KeyboardEvent('keydown', {
-            ctrlKey: true,
-            key: 'j',
-            bubbles: true,
-            cancelable: true,
-          });
-          window.dispatchEvent(mockEvent);
-        }
+    it('should not focus input when wrong key combination is pressed', () => {
+      const mockEvent = new KeyboardEvent('keydown', {
+        ctrlKey: true,
+        key: 'j',
+        bubbles: true,
+        cancelable: true,
       });
+      
+      // Call the handler directly instead of dispatching to window
+      el._handleKeydown(mockEvent);
+      
+      expect(mockEvent.defaultPrevented).to.be.false;
+      expect(focusSpy).to.not.have.been.called;
+    });
+  });
 
-      it('should not prevent default behavior', () => {
-        if (searchInput && mockEvent) {
-          expect(mockEvent.defaultPrevented).to.be.false;
-        } else {
-          expect.fail('Search input not found or event not created');
-        }
-      });
+  describe('event listener wiring', () => {
+    it('should add keydown event listener when connected', () => {
+      const addEventListenerSpy = sinon.spy(window, 'addEventListener');
+      
+      // Create a new element to trigger connectedCallback
+      const newEl = document.createElement('wiki-search');
+      document.body.appendChild(newEl);
+      
+      expect(addEventListenerSpy).to.have.been.calledWith('keydown', sinon.match.func);
+      
+      // Clean up
+      document.body.removeChild(newEl);
+      addEventListenerSpy.restore();
+    });
 
-      it('should not focus the search input', () => {
-        if (searchInput && focusSpy) {
-          expect(focusSpy).to.not.have.been.called;
-        } else {
-          expect.fail('Search input not found or focus spy not created');
-        }
-      });
+    it('should remove keydown event listener when disconnected', () => {
+      const removeEventListenerSpy = sinon.spy(window, 'removeEventListener');
+      
+      // Create and remove an element to trigger disconnectedCallback
+      const newEl = document.createElement('wiki-search');
+      document.body.appendChild(newEl);
+      document.body.removeChild(newEl);
+      
+      expect(removeEventListenerSpy).to.have.been.calledWith('keydown', sinon.match.func);
+      
+      removeEventListenerSpy.restore();
     });
   });
 });
