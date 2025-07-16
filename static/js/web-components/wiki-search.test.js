@@ -189,6 +189,11 @@ describe('WikiSearch', () => {
         const resultsComponent = el.shadowRoot.querySelector('wiki-search-results');
         expect(resultsComponent.open).to.be.true;
       });
+
+      it('should have wiki-search-results custom element properly defined', () => {
+        const resultsComponent = el.shadowRoot.querySelector('wiki-search-results');
+        expect(resultsComponent).to.be.an.instanceof(customElements.get('wiki-search-results'));
+      });
     });
 
     describe('when search returns empty results', () => {
