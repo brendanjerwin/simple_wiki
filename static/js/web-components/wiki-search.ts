@@ -88,7 +88,10 @@ export class WikiSearch extends LitElement {
     noResults: { type: Boolean, reflect: true, attribute: 'no-results' },
   };
 
-  private _handleKeydown: (e: KeyboardEvent) => void;
+  declare searchEndpoint?: string;
+  declare resultArrayPath?: string;
+  declare results: SearchResult[];
+  declare noResults: boolean;
 
   constructor() {
     super();

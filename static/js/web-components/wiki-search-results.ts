@@ -112,6 +112,9 @@ class WikiSearchResults extends LitElement {
     open: { type: Boolean, reflect: true }
   };
 
+  declare results: SearchResult[];
+  declare open: boolean;
+
   private _handleClickOutside: (event: Event) => void;
 
   constructor() {
