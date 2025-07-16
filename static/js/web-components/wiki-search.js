@@ -1,5 +1,6 @@
 import { html, css, LitElement } from 'lit';
 import { sharedStyles } from './shared-styles.js';
+import './wiki-search-results.js';
 
 export class WikiSearch extends LitElement {
   static styles = css`
@@ -130,7 +131,7 @@ export class WikiSearch extends LitElement {
             data = [];
           }
         }
-        this.results = data;
+        this.results = [...data];
         if (data.length > 0) {
           this.noResults = false;
         } else {
