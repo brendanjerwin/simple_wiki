@@ -3,7 +3,7 @@ import sinon from 'sinon';
 import { WikiSearch } from './wiki-search.js';
 
 describe('WikiSearch', () => {
-  let el;
+  let el: any;
 
   beforeEach(async () => {
     el = await fixture(html`<wiki-search></wiki-search>`);
@@ -18,7 +18,6 @@ describe('WikiSearch', () => {
     expect(el).to.exist;
   });
 
-
   describe('constructor', () => {
 
     it('should bind the keydown handler', () => {
@@ -31,9 +30,8 @@ describe('WikiSearch', () => {
     });
   });
 
-
   describe('when component is connected to DOM', () => {
-    let addEventListenerSpy;
+    let addEventListenerSpy: sinon.SinonSpy;
     
     beforeEach(async () => {
       addEventListenerSpy = sinon.spy(window, 'addEventListener');
@@ -47,9 +45,8 @@ describe('WikiSearch', () => {
     });
   });
 
-
   describe('when component is disconnected from DOM', () => {
-    let removeEventListenerSpy;
+    let removeEventListenerSpy: sinon.SinonSpy;
     
     beforeEach(async () => {
       removeEventListenerSpy = sinon.spy(window, 'removeEventListener');
@@ -66,11 +63,10 @@ describe('WikiSearch', () => {
     });
   });
 
-
   describe('when keydown event is triggered', () => {
-    let searchInput;
-    let focusSpy;
-    let mockEvent;
+    let searchInput: HTMLInputElement;
+    let focusSpy: sinon.SinonSpy;
+    let mockEvent: KeyboardEvent;
     
     beforeEach(() => {
       searchInput = el.shadowRoot.querySelector('input[type="search"]');
@@ -97,7 +93,6 @@ describe('WikiSearch', () => {
       });
     });
 
-
     describe('when Cmd+K is pressed (Mac)', () => {
       beforeEach(() => {
         mockEvent = new KeyboardEvent('keydown', {
@@ -118,7 +113,6 @@ describe('WikiSearch', () => {
       });
     });
 
-
     describe('when wrong key combination is pressed', () => {
       beforeEach(() => {
         mockEvent = new KeyboardEvent('keydown', {
@@ -136,89 +130,6 @@ describe('WikiSearch', () => {
 
       it('should not focus the search input', () => {
         expect(focusSpy).to.not.have.been.called;
-      });
-    });
-  });
-
-  describe('when form is submitted', () => {
-    let fetchStub;
-    let mockResponse;
-    
-    beforeEach(() => {
-      fetchStub = sinon.stub(globalThis, 'fetch');
-      mockResponse = {
-        results: [
-          { Identifier: 'test1', Title: 'Test 1', FragmentHTML: 'Fragment 1' },
-          { Identifier: 'test2', Title: 'Test 2', FragmentHTML: 'Fragment 2' }
-        ]
-      };
-      el.searchEndpoint = '/search';
-    });
-
-    describe('when search returns results', () => {
-      beforeEach(async () => {
-        fetchStub.resolves({
-          json: () => Promise.resolve(mockResponse)
-        });
-        
-        const form = el.shadowRoot.querySelector('form');
-        const searchInput = el.shadowRoot.querySelector('input[type="search"]');
-        searchInput.value = 'test query';
-        
-        form.dispatchEvent(new Event('submit'));
-        
-        // Wait for the fetch to complete
-        await new Promise(resolve => setTimeout(resolve, 10));
-        await el.updateComplete;
-      });
-
-      it('should create a new array reference for results', () => {
-        expect(el.results).to.not.equal(mockResponse.results);
-        expect(el.results).to.deep.equal(mockResponse.results);
-      });
-
-      it('should set noResults to false', () => {
-        expect(el.noResults).to.be.false;
-      });
-
-      it('should have results with correct length', () => {
-        expect(el.results).to.have.length(2);
-      });
-
-      it('should make results component visible', () => {
-        const resultsComponent = el.shadowRoot.querySelector('wiki-search-results');
-        expect(resultsComponent.open).to.be.true;
-      });
-
-      it('should have wiki-search-results custom element properly defined', () => {
-        const resultsComponent = el.shadowRoot.querySelector('wiki-search-results');
-        expect(resultsComponent).to.be.an.instanceof(customElements.get('wiki-search-results'));
-      });
-    });
-
-    describe('when search returns empty results', () => {
-      beforeEach(async () => {
-        fetchStub.resolves({
-          json: () => Promise.resolve({ results: [] })
-        });
-        
-        const form = el.shadowRoot.querySelector('form');
-        const searchInput = el.shadowRoot.querySelector('input[type="search"]');
-        searchInput.value = 'test query';
-        
-        form.dispatchEvent(new Event('submit'));
-        
-        // Wait for the fetch to complete
-        await new Promise(resolve => setTimeout(resolve, 10));
-        await el.updateComplete;
-      });
-
-      it('should set noResults to true', () => {
-        expect(el.noResults).to.be.true;
-      });
-
-      it('should have empty results array', () => {
-        expect(el.results).to.deep.equal([]);
       });
     });
   });

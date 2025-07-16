@@ -3,7 +3,7 @@ import sinon from 'sinon';
 import './wiki-search-results.js';
 
 describe('WikiSearchResults', () => {
-  let el;
+  let el: any;
 
   beforeEach(async () => {
     el = await fixture(html`<wiki-search-results></wiki-search-results>`);
@@ -31,7 +31,7 @@ describe('WikiSearchResults', () => {
   });
 
   describe('when component is connected to DOM', () => {
-    let addEventListenerSpy;
+    let addEventListenerSpy: sinon.SinonSpy;
     
     beforeEach(async () => {
       addEventListenerSpy = sinon.spy(document, 'addEventListener');
@@ -46,7 +46,7 @@ describe('WikiSearchResults', () => {
   });
 
   describe('when component is disconnected from DOM', () => {
-    let removeEventListenerSpy;
+    let removeEventListenerSpy: sinon.SinonSpy;
     
     beforeEach(async () => {
       removeEventListenerSpy = sinon.spy(document, 'removeEventListener');
@@ -64,7 +64,7 @@ describe('WikiSearchResults', () => {
   });
 
   describe('when click outside event is triggered', () => {
-    let closeSpy;
+    let closeSpy: sinon.SinonSpy;
     
     beforeEach(async () => {
       el.open = true;
@@ -74,7 +74,7 @@ describe('WikiSearchResults', () => {
     });
 
     describe('when clicking outside the popover', () => {
-      let mockEvent;
+      let mockEvent: any;
       
       beforeEach(() => {
         // Simulate clicking outside (event won't include the popover)
@@ -90,7 +90,7 @@ describe('WikiSearchResults', () => {
     });
 
     describe('when clicking inside the popover', () => {
-      let mockEvent;
+      let mockEvent: any;
       
       beforeEach(() => {
         // Simulate clicking inside (event includes the popover)

@@ -2,6 +2,12 @@ import { html, css, LitElement } from 'lit';
 import { sharedStyles } from './shared-styles.js';
 import './wiki-search-results.js';
 
+interface SearchResult {
+  Identifier: string;
+  Title: string;
+  FragmentHTML?: string;
+}
+
 export class WikiSearch extends LitElement {
   static styles = css`
     div#container {
@@ -82,16 +88,18 @@ export class WikiSearch extends LitElement {
     noResults: { type: Boolean, reflect: true, attribute: 'no-results' },
   };
 
+  private _handleKeydown: (e: KeyboardEvent) => void;
+
   constructor() {
     super();
     this.resultArrayPath = "results";
     this.results = [];
+    this.noResults = false;
     this._handleKeydown = this._handleKeydown.bind(this);
   }
 
   connectedCallback() {
     super.connectedCallback();
-
     window.addEventListener('keydown', this._handleKeydown);
   }
 
@@ -100,26 +108,33 @@ export class WikiSearch extends LitElement {
     window.removeEventListener('keydown', this._handleKeydown);
   }
 
-  _handleKeydown(e) {
-    const searchInput = this.shadowRoot.querySelector('input[type="search"]');
+  private _handleKeydown(e: KeyboardEvent) {
+    const searchInput = this.shadowRoot!.querySelector('input[type="search"]') as HTMLInputElement;
     // Check if Ctrl (or Cmd on Macs) and K keys were pressed
     if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
       e.preventDefault();
-
       searchInput.focus();
     }
   }
 
-  handleSearchInputFocused(e) {
-    e.target.select();
+  handleSearchInputFocused(e: Event) {
+    const target = e.target as HTMLInputElement;
+    target.select();
   }
 
-  handleFormSubmit(e) {
+  handleFormSubmit(e: Event) {
     e.preventDefault();
     this.noResults = false;
 
-    const form = e.target;
-    const searchTerm = form.search.value;
+    const form = e.target as HTMLFormElement;
+    const formData = new FormData(form);
+    const searchTerm = formData.get('search') as string;
+    
+    if (!this.searchEndpoint) {
+      console.error('Search endpoint not configured');
+      return;
+    }
+    
     const url = `${this.searchEndpoint}?q=${searchTerm}`;
 
     fetch(url)
@@ -136,7 +151,7 @@ export class WikiSearch extends LitElement {
           this.noResults = false;
         } else {
           this.noResults = true;
-          const searchInput = this.shadowRoot.querySelector('input[type="search"]');
+          const searchInput = this.shadowRoot!.querySelector('input[type="search"]') as HTMLInputElement;
           searchInput.select();
         }
       })
@@ -146,8 +161,7 @@ export class WikiSearch extends LitElement {
       });
   }
 
-
-  getNestedProperty(obj, path) {
+  getNestedProperty(obj: any, path: string): any {
     return path.split('.').reduce((o, p) => (o && o[p]) ? o[p] : null, obj);
   }
 

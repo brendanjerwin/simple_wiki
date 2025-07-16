@@ -2,6 +2,12 @@ import { html, css, LitElement } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { sharedStyles } from './shared-styles.js';
 
+interface SearchResult {
+  Identifier: string;
+  Title: string;
+  FragmentHTML?: string;
+}
+
 class WikiSearchResults extends LitElement {
   static styles = css`
         :host {
@@ -106,6 +112,8 @@ class WikiSearchResults extends LitElement {
     open: { type: Boolean, reflect: true }
   };
 
+  private _handleClickOutside: (event: Event) => void;
+
   constructor() {
     super();
     this.results = [];
@@ -123,9 +131,9 @@ class WikiSearchResults extends LitElement {
     super.disconnectedCallback();
   }
 
-  handleClickOutside(event) {
-    const path = event.composedPath();
-    if (this.open && !path.includes(this.shadowRoot.querySelector('.popover'))) {
+  handleClickOutside(event: Event) {
+    const path = (event as any).composedPath();
+    if (this.open && !path.includes(this.shadowRoot!.querySelector('.popover'))) {
       this.close();
     }
   }
@@ -137,14 +145,14 @@ class WikiSearchResults extends LitElement {
     }));
   }
 
-  handlePopoverClick(event) {
+  handlePopoverClick(event: Event) {
     // Stop the click event from bubbling up to the document
     event.stopPropagation();
   }
 
-  updated(changedProperties) {
+  updated(changedProperties: Map<string, any>) {
     if (changedProperties.has('results') && this.results.length > 0) {
-      const firstLink = this.shadowRoot.querySelector('a');
+      const firstLink = this.shadowRoot!.querySelector('a');
       if (firstLink) {
         firstLink.focus();
       }
