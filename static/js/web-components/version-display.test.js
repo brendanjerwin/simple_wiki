@@ -47,8 +47,8 @@ describe('VersionDisplay', () => {
     it('should be positioned fixed at bottom right', () => {
       const styles = getComputedStyle(el);
       expect(styles.position).to.equal('fixed');
-      expect(styles.bottom).to.equal('20px');
-      expect(styles.right).to.equal('20px');
+      expect(styles.bottom).to.equal('5px');
+      expect(styles.right).to.equal('5px');
     });
   });
 
@@ -101,11 +101,10 @@ describe('VersionDisplay', () => {
       expect(el.error).to.equal(''); // No error when successful
     });
 
-    it('should render version information in the panel', () => {
+    it('should render version information in horizontal layout', () => {
       const panel = el.shadowRoot.querySelector('.version-panel');
       expect(panel).to.exist;
       expect(panel.classList.contains('loading')).to.be.false;
-      expect(panel.classList.contains('error')).to.be.false; // No error when successful
       
       const versionInfo = panel.querySelector('.version-info');
       expect(versionInfo).to.exist;
@@ -114,15 +113,15 @@ describe('VersionDisplay', () => {
       expect(values).to.have.length(3);
       expect(values[0].textContent).to.equal('dev');
       expect(values[1].textContent).to.equal('local-dev');
-      expect(values[2].textContent).to.not.equal('Loading...');
+      expect(values[2].textContent).to.not.equal('...');
     });
 
-    it('should display proper labels in error state', () => {
+    it('should display proper labels in horizontal layout', () => {
       const labels = el.shadowRoot.querySelectorAll('.label');
       expect(labels).to.have.length(3);
-      expect(labels[0].textContent).to.equal('Version:');
-      expect(labels[1].textContent).to.equal('Commit:');
-      expect(labels[2].textContent).to.equal('Built:');
+      expect(labels[0].textContent).to.equal('v');
+      expect(labels[1].textContent).to.equal('@');
+      expect(labels[2].textContent).to.equal('built');
     });
   });
 
@@ -138,22 +137,17 @@ describe('VersionDisplay', () => {
       await el.updateComplete;
     });
 
-    it('should display fallback data with error message', () => {
-      expect(el.version).to.equal('dev');
-      expect(el.commit).to.equal('local-dev');
-      expect(el.error).to.contain('Using fallback data');
-      expect(el.error).to.contain('Network error');
+    it('should be blank when fetch fails', () => {
+      expect(el.version).to.equal('');
+      expect(el.commit).to.equal('');
+      expect(el.buildTime).to.equal('');
+      expect(el.error).to.equal('Network error');
       expect(el.loading).to.be.false;
     });
 
-    it('should render error panel', () => {
+    it('should not render anything when error occurs', () => {
       const panel = el.shadowRoot.querySelector('.version-panel');
-      expect(panel).to.exist;
-      expect(panel.classList.contains('error')).to.be.true;
-      
-      const errorMessage = panel.querySelector('.error-message');
-      expect(errorMessage).to.exist;
-      expect(errorMessage.textContent).to.contain('Using fallback data');
+      expect(panel).to.not.exist;
     });
   });
 
@@ -173,10 +167,10 @@ describe('VersionDisplay', () => {
       await el.updateComplete;
     });
 
-    it('should display fallback data with HTTP error', () => {
-      expect(el.version).to.equal('dev');
-      expect(el.commit).to.equal('local-dev');
-      expect(el.error).to.contain('Using fallback data');
+    it('should be blank when HTTP response is not ok', () => {
+      expect(el.version).to.equal('');
+      expect(el.commit).to.equal('');
+      expect(el.buildTime).to.equal('');
       expect(el.error).to.contain('HTTP 500');
       expect(el.loading).to.be.false;
     });
@@ -201,9 +195,9 @@ describe('VersionDisplay', () => {
     it('should display loading text', () => {
       const values = el.shadowRoot.querySelectorAll('.value');
       expect(values).to.have.length(3);
-      expect(values[0].textContent).to.equal('Loading...');
-      expect(values[1].textContent).to.equal('Loading...');
-      expect(values[2].textContent).to.equal('Loading...');
+      expect(values[0].textContent).to.equal('...');
+      expect(values[1].textContent).to.equal('...');
+      expect(values[2].textContent).to.equal('...');
     });
   });
 
@@ -237,10 +231,10 @@ describe('VersionDisplay', () => {
       await el.updateComplete;
     });
 
-    it('should have semi-transparent background', () => {
+    it('should have more transparent background', () => {
       const panel = el.shadowRoot.querySelector('.version-panel');
       const styles = getComputedStyle(panel);
-      expect(styles.backgroundColor).to.equal('rgba(0, 0, 0, 0.7)');
+      expect(styles.backgroundColor).to.equal('rgba(0, 0, 0, 0.2)');
     });
 
     it('should have monospace font', () => {

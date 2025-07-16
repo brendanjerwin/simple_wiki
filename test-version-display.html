@@ -33,16 +33,16 @@
         <h1>Version Display Component Test</h1>
         
         <div class="note">
-            <strong>Note:</strong> The version display component should appear as a semi-transparent panel in the bottom-right corner of the screen. It will attempt to fetch version information via gRPC-web, but will fall back to mock data if the server is not available.
+            <strong>Note:</strong> The version display component should appear as a small, transparent horizontal bar in the bottom-right corner of the screen. It will attempt to fetch version information via gRPC-web, but will remain blank if the server is not available.
         </div>
         
         <p>This page demonstrates the <code>&lt;version-display&gt;</code> web component integration. The component should:</p>
         <ul>
-            <li>Appear in the bottom-right corner</li>
-            <li>Have a semi-transparent dark background</li>
-            <li>Display version, commit, and build time information</li>
-            <li>Show loading states during fetch operations</li>
-            <li>Gracefully handle errors with fallback data</li>
+            <li>Appear as a small horizontal bar in the bottom-right corner with minimal margin</li>
+            <li>Have a very transparent background that darkens on hover</li>
+            <li>Display version, commit, and build time information in a single row</li>
+            <li>Show loading indicators during fetch operations</li>
+            <li>Remain blank if the server is not available (no fallback data)</li>
         </ul>
         
         <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>

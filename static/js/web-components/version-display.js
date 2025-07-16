@@ -4,56 +4,53 @@ export class VersionDisplay extends LitElement {
   static styles = css`
     :host {
       position: fixed;
-      bottom: 20px;
-      right: 20px;
+      bottom: 5px;
+      right: 5px;
       z-index: 1000;
       font-family: monospace;
-      font-size: 12px;
-      line-height: 1.4;
+      font-size: 11px;
+      line-height: 1.2;
     }
 
     .version-panel {
-      background-color: rgba(0, 0, 0, 0.7);
+      background-color: rgba(0, 0, 0, 0.2);
       color: white;
-      padding: 10px;
-      border-radius: 5px;
-      max-width: 300px;
-      backdrop-filter: blur(5px);
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
-      transition: opacity 0.3s ease;
+      padding: 4px 8px;
+      border-radius: 3px;
+      backdrop-filter: blur(3px);
+      transition: background-color 0.3s ease, opacity 0.3s ease;
+      white-space: nowrap;
+    }
+
+    .version-panel:hover {
+      background-color: rgba(0, 0, 0, 0.6);
     }
 
     .version-panel.loading {
       opacity: 0.5;
     }
 
-    .version-panel.error {
-      background-color: rgba(139, 0, 0, 0.7);
-    }
-
     .version-info {
       display: flex;
-      flex-direction: column;
-      gap: 5px;
+      gap: 12px;
+      align-items: center;
     }
 
-    .version-info div {
-      word-break: break-all;
+    .version-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
     }
 
     .label {
-      font-weight: bold;
+      font-weight: normal;
       color: #ccc;
+      font-size: 10px;
     }
 
     .value {
-      margin-left: 10px;
       color: #fff;
-    }
-
-    .error-message {
-      color: #ffcccb;
-      font-style: italic;
+      font-size: 11px;
     }
   `;
 
@@ -142,53 +139,36 @@ export class VersionDisplay extends LitElement {
       this.buildTime = new Date(response.buildTime).toLocaleString();
     } catch (error) {
       console.error('Failed to fetch version:', error);
-      // Fallback to mock data for demo purposes
-      this.version = 'dev';
-      this.commit = 'local-dev';
-      this.buildTime = new Date().toLocaleString();
-      this.error = `Using fallback data (${error.message})`;
+      // Don't show fallback data - leave blank if not working
+      this.version = '';
+      this.commit = '';
+      this.buildTime = '';
+      this.error = error.message;
     } finally {
       this.loading = false;
     }
   }
 
   render() {
-    if (this.error) {
-      return html`
-        <div class="version-panel error">
-          <div class="version-info">
-            <div>
-              <span class="label">Version:</span>
-              <span class="value">${this.version || 'Loading...'}</span>
-            </div>
-            <div>
-              <span class="label">Commit:</span>
-              <span class="value">${this.commit || 'Loading...'}</span>
-            </div>
-            <div>
-              <span class="label">Built:</span>
-              <span class="value">${this.buildTime || 'Loading...'}</span>
-            </div>
-          </div>
-          <div class="error-message">${this.error}</div>
-        </div>
-      `;
+    // If there's an error or no data, don't show anything
+    if (this.error || (!this.version && !this.commit && !this.buildTime && !this.loading)) {
+      return html``;
     }
 
     return html`
       <div class="version-panel ${this.loading ? 'loading' : ''}">
         <div class="version-info">
-          <div>
-            <span class="label">Version:</span>
-            <span class="value">${this.version || 'Loading...'}</span>
+          <div class="version-item">
+            <span class="label">v</span>
+            <span class="value">${this.version || '...'}</span>
           </div>
-          <div>
-            <span class="label">Commit:</span>
-            <span class="value">${this.commit || 'Loading...'}</span>
+          <div class="version-item">
+            <span class="label">@</span>
+            <span class="value">${this.commit || '...'}</span>
           </div>
-          <div>
-            <span class="label">Built:</span>
-            <span class="value">${this.buildTime || 'Loading...'}</span>
+          <div class="version-item">
+            <span class="label">built</span>
+            <span class="value">${this.buildTime || '...'}</span>
           </div>
         </div>
       </div>
