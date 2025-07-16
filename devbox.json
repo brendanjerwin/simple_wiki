@@ -10,8 +10,7 @@
     "podman@latest",
     "rootlesskit@latest",
     "bun@latest",
-    "chromium@latest",
-    "process-compose@latest"
+    "chromium@latest"
   ],
   "shell": {
     "init_hook": [
