@@ -1,7 +1,93 @@
 import { html, css, LitElement } from 'lit';
-import { GetVersionRequest } from '../gen/api/v1/version_pb_simple.js';
+
+// Constants for the gRPC-web endpoint
+export const GRPC_WEB_ENDPOINT = '/api.v1.Version/GetVersion';
+
+// Simple protobuf parser for the GetVersionResponse
+function parseGetVersionResponse(buffer) {
+  const view = new DataView(buffer);
+  let offset = 0;
+  
+  // Skip gRPC-web frame header (5 bytes)
+  offset += 5;
+  
+  const result = {
+    version: '',
+    commit: '',
+    buildTime: null
+  };
+  
+  // Parse protobuf message
+  while (offset < buffer.byteLength - 5) { // -5 for trailer
+    const tag = view.getUint8(offset++);
+    const fieldNumber = tag >> 3;
+    const wireType = tag & 0x07;
+    
+    if (wireType === 2) { // Length-delimited
+      const length = view.getUint8(offset++);
+      const value = new TextDecoder().decode(new Uint8Array(buffer, offset, length));
+      offset += length;
+      
+      switch (fieldNumber) {
+        case 1: // version
+          result.version = value;
+          break;
+        case 2: // commit
+          result.commit = value;
+          break;
+        case 3: // build_time (timestamp)
+          // For now, skip timestamp parsing
+          break;
+      }
+    }
+  }
+  
+  return result;
+}
 
 export class VersionDisplay extends LitElement {
+  // Simple protobuf parser for the GetVersionResponse
+  static parseGetVersionResponse(buffer) {
+    const view = new DataView(buffer);
+    let offset = 0;
+    
+    // Skip gRPC-web frame header (5 bytes)
+    offset += 5;
+    
+    const result = {
+      version: '',
+      commit: '',
+      buildTime: null
+    };
+    
+    // Parse protobuf message
+    while (offset < buffer.byteLength - 5) { // -5 for trailer
+      const tag = view.getUint8(offset++);
+      const fieldNumber = tag >> 3;
+      const wireType = tag & 0x07;
+      
+      if (wireType === 2) { // Length-delimited
+        const length = view.getUint8(offset++);
+        const value = new TextDecoder().decode(new Uint8Array(buffer, offset, length));
+        offset += length;
+        
+        switch (fieldNumber) {
+          case 1: // version
+            result.version = value;
+            break;
+          case 2: // commit
+            result.commit = value;
+            break;
+          case 3: // build_time (timestamp)
+            // For now, skip timestamp parsing
+            break;
+        }
+      }
+    }
+    
+    return result;
+  }
+
   static styles = css`
     :host {
       position: fixed;
@@ -82,22 +168,34 @@ export class VersionDisplay extends LitElement {
     this.error = '';
     
     try {
-      const request = new GetVersionRequest();
-      const response = await fetch('/api.v1.Version/GetVersion', {
+      // Create a properly formatted gRPC-web request
+      const request = new Uint8Array([
+        0x00, // gRPC-web frame header: uncompressed message
+        0x00, 0x00, 0x00, 0x00 // message length: 0 (empty GetVersionRequest)
+      ]);
+      
+      const response = await fetch(GRPC_WEB_ENDPOINT, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/grpc-web+proto',
+          'Accept': 'application/grpc-web+proto'
         },
-        body: new Uint8Array(0), // Empty request body
+        body: request
       });
       
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
       
-      // For now, this will fail and show blank (as intended)
-      // In a real implementation, we'd parse the grpc-web response
-      throw new Error('gRPC-web endpoint not available');
+      // Parse the gRPC-web response
+      const data = await response.arrayBuffer();
+      const result = VersionDisplay.parseGetVersionResponse(data);
+      
+      // Update the component with the response
+      this.version = result.version;
+      this.commit = result.commit;
+      this.buildTime = result.buildTime ? new Date(result.buildTime).toISOString() : '';
+      
     } catch (error) {
       console.error('Failed to fetch version:', error);
       // Don't show fallback data - leave blank if not working

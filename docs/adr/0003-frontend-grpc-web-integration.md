@@ -16,21 +16,20 @@ We will implement a modern gRPC-web client pattern using Connect-ES and @bufbuil
 
 ### 1. Frontend gRPC-web Client Architecture
 
-**Decision**: Use Connect-ES with @bufbuild/protobuf for modern ES module-based gRPC-web client implementation.
+**Decision**: Use a simple gRPC-web client implementation with manual protobuf parsing for better compatibility.
 
 **Rationale**:
-- Connect-ES provides native ES module support, eliminating CommonJS compatibility issues
-- @bufbuild/protobuf offers modern TypeScript-first protobuf implementation
-- Generated code is type-safe and conforms to protocol buffer contracts
-- Better developer experience with modern tooling and error handling
-- Established pattern for future service integrations
+- Eliminates complex dependency management issues between Connect-ES and @bufbuild/protobuf versions
+- Provides full control over the gRPC-web request format and response parsing
+- Reduces bundle size by avoiding heavy client libraries
+- Maintains compatibility with existing gRPC-web server infrastructure
+- Clear, predictable error handling without library abstractions
 
 **Implementation**:
-- Configure `buf.gen.yaml` with `buf.build/bufbuild/es:v2.6.0` and `buf.build/connectrpc/es:v1.6.1` plugins
-- Generate ES module-compatible protobuf files with `target=js+dts` option
-- Use `createGrpcWebTransport()` and `createClient()` from Connect-ES
-- Implement proper type-safe request/response handling with generated protobuf types
-- Replace legacy dependencies (`google-protobuf`, `grpc-web`) with modern alternatives
+- Direct fetch() calls to gRPC-web endpoints with proper headers
+- Manual protobuf response parsing for GetVersionResponse
+- Endpoint URL generation from proto definitions (using generated constants)
+- Proper gRPC-web framing for request/response handling
 
 ### 2. Version Display Component
 
@@ -51,28 +50,24 @@ We will implement a modern gRPC-web client pattern using Connect-ES and @bufbuil
 
 ### 3. Frontend Build Integration
 
-**Decision**: Create a unified build process that includes all web components.
+**Decision**: Use existing build process with minimal dependencies.
 
 **Implementation**:
-- Update `package.json` to use Connect-ES and @bufbuild/protobuf dependencies:
-  - `@bufbuild/protobuf": "^2.6.0"`
-  - `@connectrpc/connect": "^1.6.1"`
-  - `@connectrpc/connect-web": "^1.6.1"`
-- Generate ES module protobuf files using modern buf plugins
-- Add version-display component to main template (`index.tmpl`)
-- Ensure component is always visible across all pages
+- Use standard `lit` for web components
+- Generate endpoint URLs from proto definitions
+- Manual protobuf parsing to avoid dependency conflicts
+- Integrate with existing npm/bun build pipeline
 
 ### 4. Testing Strategy
 
-**Decision**: Implement comprehensive unit tests with high coverage.
+**Decision**: Implement comprehensive unit and integration tests.
 
 **Approach**:
-- Mock Connect client for testing gRPC-web requests using `sinon.stub()`
-- Test all component states: loading, success, error
-- Verify styling and positioning requirements (5px margins, opacity values)
-- Test type-safe protobuf message handling with generated types
-- Test "no fallback data" behavior - component remains blank on errors
-- Aim for high code coverage on code that matters
+- Mock gRPC-web endpoints for unit testing
+- Create integration tests that verify gRPC-web request format
+- Test protobuf parsing with known response formats
+- Verify error handling when endpoints are unavailable
+- Test endpoint URL generation from proto definitions
 
 ### 5. Error Handling
 
@@ -100,24 +95,6 @@ We will implement a modern gRPC-web client pattern using Connect-ES and @bufbuil
 - Generated files must be kept in sync with protocol changes
 - Connect-ES is a newer technology with smaller ecosystem
 - Migration required from legacy `google-protobuf` and `grpc-web` dependencies
-
-### Dependency Migration
-The implementation required migrating from legacy gRPC-web dependencies to modern Connect-ES:
-
-**Removed**:
-- `google-protobuf": "^3.21.4"`
-- `grpc-web": "^1.5.0"`
-
-**Added**:
-- `@bufbuild/protobuf": "^2.6.0"`
-- `@connectrpc/connect": "^1.6.1"`
-- `@connectrpc/connect-web": "^1.6.1"`
-
-**Buffer Generation Migration**:
-- Old: `buf.build/protocolbuffers/js:v3.21.2` with `import_style=commonjs`
-- New: `buf.build/bufbuild/es:v2.6.0` with `target=js+dts`
-- Old: `buf.build/grpc/web:v1.5.0` with `import_style=commonjs,mode=grpcwebtext`
-- New: `buf.build/connectrpc/es:v1.6.1` with `target=js+dts`
 
 ## Future Considerations
 
