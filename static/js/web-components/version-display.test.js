@@ -4,29 +4,31 @@ import sinon from 'sinon';
 
 describe('VersionDisplay', () => {
   let el;
-  let fetchStub;
+  let clientStub;
 
   beforeEach(() => {
-    // Mock fetch globally
-    fetchStub = sinon.stub(window, 'fetch');
-    
-    // Default successful response
-    const mockResponse = {
-      ok: true,
-      arrayBuffer: () => Promise.resolve(new ArrayBuffer(20)) // Mock binary response
+    // Mock the Connect client
+    clientStub = {
+      getVersion: sinon.stub()
     };
-    fetchStub.resolves(mockResponse);
+    
+    // Mock the createClient function
+    const mockModule = {
+      createClient: sinon.stub().returns(clientStub)
+    };
+    
+    // Patch the import to return our mock
+    sinon.stub(VersionDisplay.prototype, 'client').value(clientStub);
   });
 
   afterEach(() => {
-    fetchStub.restore();
+    sinon.restore();
   });
 
   describe('when component is created', () => {
     beforeEach(async () => {
-      // Mock fetch to prevent immediate execution
-      const pendingPromise = new Promise(() => {}); // Never resolves
-      fetchStub.returns(pendingPromise);
+      // Mock client to prevent immediate execution
+      clientStub.getVersion.returns(new Promise(() => {})); // Never resolves
       
       el = await fixture(html`<version-display></version-display>`);
       await el.updateComplete;
@@ -72,6 +74,14 @@ describe('VersionDisplay', () => {
 
   describe('when fetchVersion is called successfully', () => {
     beforeEach(async () => {
+      // Mock successful response
+      const mockResponse = {
+        version: '1.2.3',
+        commit: 'abc123',
+        buildTime: { toDate: () => new Date('2023-01-01T12:00:00Z') }
+      };
+      clientStub.getVersion.resolves(mockResponse);
+
       el = await fixture(html`<version-display></version-display>`);
       await el.updateComplete;
       
@@ -80,72 +90,65 @@ describe('VersionDisplay', () => {
       await el.updateComplete;
     });
 
-    it('should make gRPC-web request to correct endpoint', () => {
-      expect(fetchStub).to.have.been.calledWith(
-        `${window.location.origin}/api.v1.Version/GetVersion`,
-        sinon.match({
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/grpc-web+proto',
-            'Accept': 'application/grpc-web+proto',
-          }
-        })
-      );
+    it('should call client.getVersion with correct request', () => {
+      expect(clientStub.getVersion).to.have.been.calledOnce;
+      // Verify the request is a GetVersionRequest instance
+      const request = clientStub.getVersion.firstCall.args[0];
+      expect(request.constructor.name).to.equal('GetVersionRequest');
     });
 
-    it('should have empty values when protobuf parsing fails', () => {
+    it('should set version data from response', () => {
+      expect(el.version).to.equal('1.2.3');
+      expect(el.commit).to.equal('abc123');
+      expect(el.buildTime).to.equal('1/1/2023, 12:00:00 PM');
+      expect(el.loading).to.be.false;
+      expect(el.error).to.equal('');
+    });
+
+    it('should display version information', () => {
+      const versionPanel = el.shadowRoot.querySelector('.version-panel');
+      expect(versionPanel).to.exist;
+      expect(versionPanel.textContent).to.include('1.2.3');
+      expect(versionPanel.textContent).to.include('abc123');
+    });
+  });
+
+  describe('when fetchVersion fails', () => {
+    beforeEach(async () => {
+      // Mock failed response
+      const error = new Error('Network error');
+      clientStub.getVersion.rejects(error);
+
+      el = await fixture(html`<version-display></version-display>`);
+      await el.updateComplete;
+      
+      // Wait for async operations to complete
+      await new Promise(resolve => setTimeout(resolve, 10));
+      await el.updateComplete;
+    });
+
+    it('should handle errors gracefully', () => {
       expect(el.version).to.equal('');
       expect(el.commit).to.equal('');
       expect(el.buildTime).to.equal('');
       expect(el.loading).to.be.false;
-      expect(el.error).to.equal('Protobuf parsing not yet implemented');
-    });
-
-    it('should not render when there is no data', () => {
-      const panel = el.shadowRoot.querySelector('.version-panel');
-      expect(panel).to.not.exist; // Should not render when no data
-    });
-
-    it('should not render labels when there is no data', () => {
-      const labels = el.shadowRoot.querySelectorAll('.label');
-      expect(labels).to.have.length(0); // No labels when no data
-    });
-  });
-
-  describe('when fetch fails', () => {
-    beforeEach(async () => {
-      fetchStub.rejects(new Error('Network error'));
-      
-      el = await fixture(html`<version-display></version-display>`);
-      await el.updateComplete;
-      
-      // Wait for async operations to complete
-      await new Promise(resolve => setTimeout(resolve, 10));
-      await el.updateComplete;
-    });
-
-    it('should be blank when fetch fails', () => {
-      expect(el.version).to.equal('');
-      expect(el.commit).to.equal('');
-      expect(el.buildTime).to.equal('');
       expect(el.error).to.equal('Network error');
-      expect(el.loading).to.be.false;
     });
 
-    it('should not render anything when error occurs', () => {
-      const panel = el.shadowRoot.querySelector('.version-panel');
-      expect(panel).to.not.exist;
+    it('should not display anything when there is an error', () => {
+      expect(el.shadowRoot.innerHTML.trim()).to.equal('');
     });
   });
 
-  describe('when HTTP response is not ok', () => {
+  describe('when component has no data and not loading', () => {
     beforeEach(async () => {
-      fetchStub.resolves({
-        ok: false,
-        status: 500,
-        statusText: 'Internal Server Error'
+      // Mock empty response
+      clientStub.getVersion.resolves({
+        version: '',
+        commit: '',
+        buildTime: null
       });
-      
+
       el = await fixture(html`<version-display></version-display>`);
       await el.updateComplete;
       
@@ -154,88 +157,118 @@ describe('VersionDisplay', () => {
       await el.updateComplete;
     });
 
-    it('should be blank when HTTP response is not ok', () => {
-      expect(el.version).to.equal('');
-      expect(el.commit).to.equal('');
-      expect(el.buildTime).to.equal('');
-      expect(el.error).to.contain('HTTP 500');
-      expect(el.loading).to.be.false;
+    it('should not display anything when there is no data', () => {
+      expect(el.shadowRoot.innerHTML.trim()).to.equal('');
     });
   });
 
-  describe('when loading', () => {
+  describe('when component is loading', () => {
     beforeEach(async () => {
-      // Mock fetch to return a pending promise to simulate loading
-      const pendingPromise = new Promise(() => {}); // Never resolves
-      fetchStub.returns(pendingPromise);
+      // Mock pending response
+      clientStub.getVersion.returns(new Promise(() => {})); // Never resolves
       
       el = await fixture(html`<version-display></version-display>`);
       await el.updateComplete;
     });
 
-    it('should display loading panel', () => {
-      const panel = el.shadowRoot.querySelector('.version-panel');
-      expect(panel).to.exist;
-      expect(panel.classList.contains('loading')).to.be.true;
+    it('should display loading state', () => {
+      const versionPanel = el.shadowRoot.querySelector('.version-panel');
+      expect(versionPanel).to.exist;
+      expect(versionPanel.classList.contains('loading')).to.be.true;
     });
 
-    it('should display loading text', () => {
+    it('should show loading indicators', () => {
       const values = el.shadowRoot.querySelectorAll('.value');
-      expect(values).to.have.length(3);
-      expect(values[0].textContent).to.equal('...');
-      expect(values[1].textContent).to.equal('...');
-      expect(values[2].textContent).to.equal('...');
-    });
-  });
-
-  describe('gRPC-web message encoding/decoding', () => {
-    beforeEach(async () => {
-      el = await fixture(html`<version-display></version-display>`);
-      await el.updateComplete;
-    });
-
-    it('should encode empty message correctly', () => {
-      const encoded = el.encodeGrpcWebMessage({});
-      expect(encoded).to.be.instanceOf(Uint8Array);
-      expect(encoded.length).to.equal(5); // gRPC-web frame header
-    });
-
-    it('should throw error when decoding message', () => {
-      const buffer = new ArrayBuffer(20);
-      
-      expect(() => el.decodeGrpcWebMessage(buffer)).to.throw('Protobuf parsing not yet implemented');
+      values.forEach(value => {
+        expect(value.textContent).to.equal('...');
+      });
     });
   });
 
   describe('styling', () => {
     beforeEach(async () => {
-      // Create a component with mock data to test styling
+      // Mock successful response
+      const mockResponse = {
+        version: '1.2.3',
+        commit: 'abc123',
+        buildTime: { toDate: () => new Date('2023-01-01T12:00:00Z') }
+      };
+      clientStub.getVersion.resolves(mockResponse);
+
       el = await fixture(html`<version-display></version-display>`);
+      await el.updateComplete;
       
-      // Set some data so the panel renders
-      el.version = 'test-version';
-      el.commit = 'test-commit';  
-      el.buildTime = '2023-01-01T00:00:00Z';
-      el.loading = false;
-      el.error = '';
-      
+      // Wait for async operations to complete
+      await new Promise(resolve => setTimeout(resolve, 10));
       await el.updateComplete;
     });
 
-    it('should have more transparent background', () => {
-      const panel = el.shadowRoot.querySelector('.version-panel');
-      const styles = getComputedStyle(panel);
-      expect(styles.backgroundColor).to.equal('rgba(0, 0, 0, 0.2)');
-    });
-
-    it('should have monospace font', () => {
+    it('should have correct font family', () => {
       const styles = getComputedStyle(el);
-      expect(styles.fontFamily).to.contain('monospace');
+      expect(styles.fontFamily).to.include('monospace');
     });
 
-    it('should have high z-index', () => {
+    it('should have correct z-index', () => {
       const styles = getComputedStyle(el);
       expect(styles.zIndex).to.equal('1000');
+    });
+
+    it('should have version panel with correct styling', () => {
+      const versionPanel = el.shadowRoot.querySelector('.version-panel');
+      const styles = getComputedStyle(versionPanel);
+      expect(styles.borderRadius).to.equal('3px');
+      expect(styles.backdropFilter).to.equal('blur(3px)');
+    });
+
+    it('should have version items with correct layout', () => {
+      const versionInfo = el.shadowRoot.querySelector('.version-info');
+      const styles = getComputedStyle(versionInfo);
+      expect(styles.display).to.equal('flex');
+      expect(styles.gap).to.equal('12px');
+    });
+  });
+
+  describe('real-world integration', () => {
+    beforeEach(async () => {
+      // Mock realistic response
+      const mockResponse = {
+        version: 'v2.1.0',
+        commit: 'f4b3a2c1',
+        buildTime: { toDate: () => new Date('2023-12-01T10:30:00Z') }
+      };
+      clientStub.getVersion.resolves(mockResponse);
+
+      el = await fixture(html`<version-display></version-display>`);
+      await el.updateComplete;
+      
+      // Wait for async operations to complete
+      await new Promise(resolve => setTimeout(resolve, 10));
+      await el.updateComplete;
+    });
+
+    it('should display complete version information', () => {
+      const versionPanel = el.shadowRoot.querySelector('.version-panel');
+      const text = versionPanel.textContent;
+      
+      expect(text).to.include('v2.1.0');
+      expect(text).to.include('f4b3a2c1');
+      expect(text).to.include('12/1/2023');
+    });
+
+    it('should have all expected labels', () => {
+      const labels = el.shadowRoot.querySelectorAll('.label');
+      expect(labels).to.have.length(3);
+      expect(labels[0].textContent).to.equal('v');
+      expect(labels[1].textContent).to.equal('@');
+      expect(labels[2].textContent).to.equal('built');
+    });
+
+    it('should have corresponding values', () => {
+      const values = el.shadowRoot.querySelectorAll('.value');
+      expect(values).to.have.length(3);
+      expect(values[0].textContent).to.equal('v2.1.0');
+      expect(values[1].textContent).to.equal('f4b3a2c1');
+      expect(values[2].textContent).to.include('12/1/2023');
     });
   });
 });

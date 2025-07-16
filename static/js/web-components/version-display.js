@@ -1,4 +1,8 @@
 import { html, css, LitElement } from 'lit';
+import { createGrpcWebTransport } from '@connectrpc/connect-web';
+import { createClient } from '@connectrpc/connect';
+import { Version } from '../gen/api/v1/version_connect.js';
+import { GetVersionRequest } from '../gen/api/v1/version_pb.js';
 
 export class VersionDisplay extends LitElement {
   static styles = css`
@@ -69,6 +73,12 @@ export class VersionDisplay extends LitElement {
     this.buildTime = '';
     this.loading = false;
     this.error = '';
+    
+    // Initialize gRPC-web client
+    this.transport = createGrpcWebTransport({
+      baseUrl: window.location.origin,
+    });
+    this.client = createClient(Version, this.transport);
   }
 
   connectedCallback() {
@@ -76,63 +86,17 @@ export class VersionDisplay extends LitElement {
     this.fetchVersion();
   }
 
-  // Simple gRPC-web request implementation
-  async makeGrpcWebRequest(service, method, requestData = {}) {
-    const url = `${window.location.origin}/${service}/${method}`;
-    
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/grpc-web+proto',
-          'Accept': 'application/grpc-web+proto',
-        },
-        body: this.encodeGrpcWebMessage(requestData),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const responseData = await response.arrayBuffer();
-      return this.decodeGrpcWebMessage(responseData);
-    } catch (error) {
-      console.error('gRPC-web request failed:', error);
-      throw error;
-    }
-  }
-
-  // Simple encoding for empty request (GetVersionRequest has no fields)
-  encodeGrpcWebMessage(data) {
-    // For GetVersionRequest, we send an empty message
-    return new Uint8Array([0, 0, 0, 0, 0]); // gRPC-web frame header + empty message
-  }
-
-  // Simple decoding for GetVersionResponse
-  decodeGrpcWebMessage(buffer) {
-    // This is a simplified decoder - in a real implementation, 
-    // we'd need to properly parse the protobuf message
-    const view = new DataView(buffer);
-    
-    // Skip gRPC-web frame header (5 bytes)
-    const messageLength = view.getUint32(1, false);
-    
-    // TODO: Implement proper protobuf parsing when gRPC service is available
-    // For now, throw error since we don't have working protobuf parsing
-    throw new Error('Protobuf parsing not yet implemented');
-  }
-
   async fetchVersion() {
     this.loading = true;
     this.error = '';
     
     try {
-      // Try to make a simple gRPC-web request
-      const response = await this.makeGrpcWebRequest('api.v1.Version', 'GetVersion');
+      const request = new GetVersionRequest();
+      const response = await this.client.getVersion(request);
       
       this.version = response.version;
       this.commit = response.commit;
-      this.buildTime = new Date(response.buildTime).toLocaleString();
+      this.buildTime = response.buildTime?.toDate().toLocaleString() || '';
     } catch (error) {
       console.error('Failed to fetch version:', error);
       // Don't show fallback data - leave blank if not working

@@ -12,49 +12,49 @@ The existing infrastructure already supports gRPC-web via the `improbable-eng/gr
 
 ## Decision
 
-We will implement a simplified gRPC-web client pattern for frontend components, focusing on practical usability over strict protocol adherence.
+We will implement a modern gRPC-web client pattern using Connect-ES and @bufbuild/protobuf for ES module compatibility.
 
 ### 1. Frontend gRPC-web Client Architecture
 
-**Decision**: Use a simplified fetch-based gRPC-web implementation rather than the generated client libraries.
+**Decision**: Use Connect-ES with @bufbuild/protobuf for modern ES module-based gRPC-web client implementation.
 
 **Rationale**:
-- The generated gRPC-web client libraries use CommonJS, which creates complexity in our ES module-based frontend build system
-- A simplified implementation provides better control over error handling and debugging
-- Direct fetch implementation allows for better error handling and debugging
-- Testing is simpler with direct fetch mocking
+- Connect-ES provides native ES module support, eliminating CommonJS compatibility issues
+- @bufbuild/protobuf offers modern TypeScript-first protobuf implementation
+- Generated code is type-safe and conforms to protocol buffer contracts
+- Better developer experience with modern tooling and error handling
+- Established pattern for future service integrations
 
 **Implementation**:
-- Create a custom `makeGrpcWebRequest()` method that handles gRPC-web protocol headers
-- Use fetch API with appropriate `Content-Type: application/grpc-web+proto` headers
-- Display clear error messages when requests fail
-- Component remains blank when gRPC services are unavailable
+- Configure `buf.gen.yaml` with `buf.build/bufbuild/es` and `buf.build/connectrpc/es` plugins
+- Generate ES module-compatible protobuf files
+- Use `createGrpcWebTransport()` and `createClient()` from Connect-ES
+- Implement proper type-safe request/response handling
 
 ### 2. Version Display Component
 
 **Decision**: Create a `<version-display>` web component that demonstrates gRPC-web integration.
 
 **Features**:
-- Positioned as a semi-transparent panel in bottom-right corner
+- Positioned as a low-profile, semi-transparent panel in bottom-right corner
 - Fetches version, commit hash, and build time from the `Version` gRPC service
 - Shows loading states and error handling
 - Remains blank when gRPC requests fail
 - Styled with monospace font for developer-friendly display
 
 **Styling Approach**:
-- Fixed positioning (`position: fixed; bottom: 20px; right: 20px`)
-- Semi-transparent background (`rgba(0, 0, 0, 0.7)`)
-- Backdrop blur effect for modern appearance
+- Fixed positioning (`position: fixed; bottom: 5px; right: 5px`)
+- Highly transparent background (`rgba(0, 0, 0, 0.2)`) with hover darkening
+- Minimal footprint with single-row horizontal layout
 - High z-index (1000) to ensure visibility above other content
-- Responsive design that works on various screen sizes
 
 ### 3. Frontend Build Integration
 
 **Decision**: Create a unified build process that includes all web components.
 
 **Implementation**:
-- Add `main.js` entry point that imports all web components
-- Update build script to bundle from single entry point
+- Update `package.json` to use Connect-ES and @bufbuild/protobuf dependencies
+- Generate ES module protobuf files using modern buf plugins
 - Add version-display component to main template (`index.tmpl`)
 - Ensure component is always visible across all pages
 
@@ -63,10 +63,10 @@ We will implement a simplified gRPC-web client pattern for frontend components, 
 **Decision**: Implement comprehensive unit tests with high coverage.
 
 **Approach**:
-- Mock fetch API for testing gRPC-web requests
+- Mock Connect client for testing gRPC-web requests
 - Test all component states: loading, success, error
 - Verify styling and positioning requirements
-- Test gRPC-web message encoding/decoding logic
+- Test type-safe protobuf message handling
 - Aim for high code coverage on code that matters
 
 ### 5. Error Handling
@@ -82,21 +82,21 @@ We will implement a simplified gRPC-web client pattern for frontend components, 
 ## Consequences
 
 ### Positive
-- Clean separation of concerns between gRPC-web integration and UI components
-- Simplified testing and debugging compared to generated client libraries
+- Native ES module support eliminates CommonJS compatibility issues
+- Type-safe protobuf messages ensure contract compliance
+- Modern tooling provides better developer experience
 - Clear error handling prevents misleading user experience
 - Pattern can be easily replicated for other gRPC services
 - High test coverage ensures reliability
 
 ### Negative
-- Custom gRPC-web implementation may need updates if protocol changes
-- Requires proper protobuf parsing implementation for production use
-- Limited functionality for complex message types without proper protobuf support
+- Requires updated build tooling and dependencies
+- Generated files must be kept in sync with protocol changes
+- Connect-ES is a newer technology with smaller ecosystem
 
 ## Future Considerations
 
-1. **Enhanced Protobuf Support**: Consider implementing proper protobuf parsing or using alternative code generation tools (protoc-gen-js, protoc-gen-ts, or other generators) for production use
+1. **Service Expansion**: Apply this pattern to other gRPC services as needed
 2. **Performance Optimization**: Monitor gRPC-web request performance and optimize as needed
 3. **Error Reporting**: Consider adding error reporting/telemetry for production debugging
-4. **Component Library**: Expand pattern to create reusable gRPC-web utility functions
-5. **Authentication**: Add authentication headers to gRPC-web requests as needed
+4. **Authentication**: Add authentication headers to gRPC-web requests as needed
