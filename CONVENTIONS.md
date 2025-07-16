@@ -50,6 +50,8 @@
 
 - Use [Devbox](https://www.jetpack.io/devbox/) by Jetify to create isolated, reproducible development environments.
 - Add new dependencies via `devbox add <package>`. This ensures the `devbox.json` and `devbox.lock` files are updated correctly.
+- Use either `devbox shell` (for an interactive shell) or `devbox run <command>` (for running specific commands) to work within the Devbox environment.
+- When possible, use scripts defined in `devbox.json` to run commands.
 
 ## Frontend JavaScript
 
@@ -125,6 +127,7 @@ The application can be run locally using `devbox services`, which manages the de
   ```
 
 The `devbox services` command uses the configuration defined in `process-compose.yml` to:
+
 - Run `go generate ./...` to build the frontend code
 - Start the wiki application with `go run main.go`
 - Optionally start additional services like Structurizr Lite for documentation
@@ -252,22 +255,24 @@ Tests for both frontend (JavaScript) and Go can be run using `devbox` scripts, e
 
 - Use the `Describe` blocks first to describe the function/component being tested, then use nested `When` blocks to establish the scenarios. Besides the basic `It(text: "Should exist"` tests, everything should be in those nested "When" blocks.
 - **Important**: Use "when" in `describe` block descriptions to establish scenarios, not in `it` block descriptions. The `it` blocks should describe the expected behavior or outcome.
-  
+
   **Bad:**
+
   ```javascript
-  it('should close when clicking outside', () => {
+  it("should close when clicking outside", () => {
     // ... test code
   });
   ```
-  
+
   **Good:**
+
   ```javascript
-  describe('when clicking outside', () => {
+  describe("when clicking outside", () => {
     beforeEach(() => {
       // ... setup and action
     });
-    
-    it('should close the popover', () => {
+
+    it("should close the popover", () => {
       // ... assertion only
     });
   });
@@ -276,19 +281,23 @@ Tests for both frontend (JavaScript) and Go can be run using `devbox` scripts, e
 - **Event Handler Wiring Tests**: For web components that add/remove event listeners, always test that the event handlers are properly wired up. Use spies to verify that `addEventListener` and `removeEventListener` are called with the correct parameters and function references.
 
   **Example:**
+
   ```javascript
-  describe('when component is connected to DOM', () => {
+  describe("when component is connected to DOM", () => {
     let addEventListenerSpy;
-    
+
     beforeEach(async () => {
-      addEventListenerSpy = sinon.spy(document, 'addEventListener');
+      addEventListenerSpy = sinon.spy(document, "addEventListener");
       // Re-create the element to trigger connectedCallback
       el = await fixture(html`<my-component></my-component>`);
       await el.updateComplete;
     });
-    
-    it('should add event listener with correct parameters', () => {
-      expect(addEventListenerSpy).to.have.been.calledWith('click', el._handleClick);
+
+    it("should add event listener with correct parameters", () => {
+      expect(addEventListenerSpy).to.have.been.calledWith(
+        "click",
+        el._handleClick,
+      );
     });
   });
   ```
