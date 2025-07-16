@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Version Display Component Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f0f0f0;
+        }
+        .content {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+        }
+        .note {
+            background-color: #e7f3ff;
+            padding: 15px;
+            border-left: 4px solid #2196F3;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="content">
+        <h1>Version Display Component Test</h1>
+        
+        <div class="note">
+            <strong>Note:</strong> The version display component should appear as a semi-transparent panel in the bottom-right corner of the screen. It will attempt to fetch version information via gRPC-web, but will fall back to mock data if the server is not available.
+        </div>
+        
+        <p>This page demonstrates the <code>&lt;version-display&gt;</code> web component integration. The component should:</p>
+        <ul>
+            <li>Appear in the bottom-right corner</li>
+            <li>Have a semi-transparent dark background</li>
+            <li>Display version, commit, and build time information</li>
+            <li>Show loading states during fetch operations</li>
+            <li>Gracefully handle errors with fallback data</li>
+        </ul>
+        
+        <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
+        
+        <p>Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.</p>
+    </div>
+    
+    <!-- Version display component -->
+    <version-display></version-display>
+    
+    <!-- Load the bundled web components -->
+    <script type="module" src="/static/js/dist/web-components.js"></script>
+</body>
+</html>
