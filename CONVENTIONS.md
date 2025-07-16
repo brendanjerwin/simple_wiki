@@ -415,6 +415,11 @@ Tests for both frontend (JavaScript) and Go can be run using `devbox` scripts, e
 
 - If a problem is due to an invalid parameter, don't just fix the parameter value. _also_ add an input validation to the function/method receiving the parameter such that the error being fixed is perfectly clear to the next developer.
 - Do not use `recover` to hide panics. A panic indicates a serious bug that should crash the program during development and be fixed. Catching panics in handlers can obfuscate the problem and make debugging difficult. Instead, write defensive code to prevent panics in the first place, for example by checking for `nil`.
+- **Never Hide Broken Functionality**: Do not make systems appear to work when they are actually broken. This includes:
+  - Avoid showing fallback data that looks like real data when services are unavailable
+  - Prefer clear error messages over misleading success states
+  - Components should remain blank or show clear error states rather than fake data
+  - This principle helps identify real problems quickly and prevents false confidence in broken systems
 
 ## README
 
