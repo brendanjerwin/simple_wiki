@@ -2,11 +2,24 @@ import { html, fixture, expect } from '@open-wc/testing';
 import sinon from 'sinon';
 import './wiki-search-results.js';
 
+interface WikiSearchResultsElement extends HTMLElement {
+  results: Array<{
+    Identifier: string;
+    Title: string;
+    FragmentHTML?: string;
+  }>;
+  open: boolean;
+  _handleClickOutside: (event: Event) => void;
+  close: () => void;
+  updateComplete: Promise<boolean>;
+  shadowRoot: ShadowRoot;
+}
+
 describe('WikiSearchResults', () => {
-  let el: any;
+  let el: WikiSearchResultsElement;
 
   beforeEach(async () => {
-    el = await fixture(html`<wiki-search-results></wiki-search-results>`);
+    el = await fixture(html`<wiki-search-results></wiki-search-results>`) as WikiSearchResultsElement;
     await el.updateComplete;
   });
 
@@ -35,7 +48,7 @@ describe('WikiSearchResults', () => {
     beforeEach(async () => {
       addEventListenerSpy = sinon.spy(document, 'addEventListener');
       // Re-create the element to trigger connectedCallback
-      el = await fixture(html`<wiki-search-results></wiki-search-results>`);
+      el = await fixture(html`<wiki-search-results></wiki-search-results>`) as WikiSearchResultsElement;
       await el.updateComplete;
     });
     
@@ -50,7 +63,7 @@ describe('WikiSearchResults', () => {
     beforeEach(async () => {
       removeEventListenerSpy = sinon.spy(document, 'removeEventListener');
       // Re-create and then remove the element to trigger disconnectedCallback
-      el = await fixture(html`<wiki-search-results></wiki-search-results>`);
+      el = await fixture(html`<wiki-search-results></wiki-search-results>`) as WikiSearchResultsElement;
       await el.updateComplete;
       el.remove();
       // Wait for the next microtask to ensure disconnectedCallback runs
@@ -64,7 +77,7 @@ describe('WikiSearchResults', () => {
 
   describe('when clicking outside the popover', () => {
     let closeSpy: sinon.SinonSpy;
-    let mockEvent: any;
+    let mockEvent: Event & { composedPath(): EventTarget[] };
     
     beforeEach(async () => {
       el.open = true;
@@ -75,7 +88,7 @@ describe('WikiSearchResults', () => {
       // Simulate clicking outside (event won't include the popover)
       mockEvent = {
         composedPath: () => []
-      };
+      } as Event & { composedPath(): EventTarget[] };
       el._handleClickOutside(mockEvent);
     });
 
@@ -86,7 +99,7 @@ describe('WikiSearchResults', () => {
 
   describe('when clicking inside the popover', () => {
     let closeSpy: sinon.SinonSpy;
-    let mockEvent: any;
+    let mockEvent: Event & { composedPath(): EventTarget[] };
     
     beforeEach(async () => {
       el.open = true;
@@ -98,7 +111,7 @@ describe('WikiSearchResults', () => {
       const mockPopover = el.shadowRoot.querySelector('.popover');
       mockEvent = {
         composedPath: () => [mockPopover]
-      };
+      } as Event & { composedPath(): EventTarget[] };
       el._handleClickOutside(mockEvent);
     });
 

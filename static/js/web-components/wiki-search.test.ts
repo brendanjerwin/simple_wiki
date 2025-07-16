@@ -2,11 +2,25 @@ import { html, fixture, expect } from '@open-wc/testing';
 import sinon from 'sinon';
 import './wiki-search.js';
 
+interface WikiSearchElement extends HTMLElement {
+  searchEndpoint?: string;
+  resultArrayPath?: string;
+  results: Array<{
+    Identifier: string;
+    Title: string;
+    FragmentHTML?: string;
+  }>;
+  noResults: boolean;
+  _handleKeydown: (event: KeyboardEvent) => void;
+  updateComplete: Promise<boolean>;
+  shadowRoot: ShadowRoot;
+}
+
 describe('WikiSearch', () => {
-  let el: any;
+  let el: WikiSearchElement;
 
   beforeEach(async () => {
-    el = await fixture(html`<wiki-search></wiki-search>`);
+    el = await fixture(html`<wiki-search></wiki-search>`) as WikiSearchElement;
     await el.updateComplete;
   });
 
@@ -131,7 +145,7 @@ describe('WikiSearch', () => {
     beforeEach(async () => {
       addEventListenerSpy = sinon.spy(window, 'addEventListener');
       // Re-create the element to trigger connectedCallback
-      el = await fixture(html`<wiki-search></wiki-search>`);
+      el = await fixture(html`<wiki-search></wiki-search>`) as WikiSearchElement;
       await el.updateComplete;
     });
 
@@ -146,7 +160,7 @@ describe('WikiSearch', () => {
     beforeEach(async () => {
       removeEventListenerSpy = sinon.spy(window, 'removeEventListener');
       // Re-create and then remove the element to trigger disconnectedCallback
-      el = await fixture(html`<wiki-search></wiki-search>`);
+      el = await fixture(html`<wiki-search></wiki-search>`) as WikiSearchElement;
       await el.updateComplete;
       el.remove();
       // Wait for the next microtask to ensure disconnectedCallback runs

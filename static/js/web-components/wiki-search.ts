@@ -164,8 +164,8 @@ export class WikiSearch extends LitElement {
       });
   }
 
-  getNestedProperty(obj: any, path: string): any {
-    return path.split('.').reduce((o, p) => (o && o[p]) ? o[p] : null, obj);
+  getNestedProperty(obj: unknown, path: string): unknown {
+    return path.split('.').reduce((o: unknown, p: string) => (o && typeof o === 'object' && p in o) ? (o as Record<string, unknown>)[p] : null, obj);
   }
 
   handleSearchResultsClosed() {

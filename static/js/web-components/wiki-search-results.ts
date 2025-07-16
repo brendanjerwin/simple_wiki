@@ -135,7 +135,7 @@ class WikiSearchResults extends LitElement {
   }
 
   handleClickOutside(event: Event) {
-    const path = (event as any).composedPath();
+    const path = (event as Event & { composedPath(): EventTarget[] }).composedPath();
     if (this.open && !path.includes(this.shadowRoot!.querySelector('.popover'))) {
       this.close();
     }
@@ -153,7 +153,7 @@ class WikiSearchResults extends LitElement {
     event.stopPropagation();
   }
 
-  updated(changedProperties: Map<string, any>) {
+  updated(changedProperties: Map<PropertyKey, unknown>) {
     if (changedProperties.has('results') && this.results.length > 0) {
       const firstLink = this.shadowRoot!.querySelector('a');
       if (firstLink) {
