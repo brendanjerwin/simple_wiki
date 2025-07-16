@@ -87,6 +87,7 @@ describe('WikiSearchResults', () => {
       
       // Simulate clicking outside (event won't include the popover)
       mockEvent = {
+        ...new Event('click'),
         composedPath: () => []
       } as Event & { composedPath(): EventTarget[] };
       el._handleClickOutside(mockEvent);
@@ -110,6 +111,7 @@ describe('WikiSearchResults', () => {
       // Simulate clicking inside (event includes the popover)
       const mockPopover = el.shadowRoot.querySelector('.popover');
       mockEvent = {
+        ...new Event('click'),
         composedPath: () => [mockPopover]
       } as Event & { composedPath(): EventTarget[] };
       el._handleClickOutside(mockEvent);

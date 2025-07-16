@@ -9,7 +9,7 @@ interface SearchResult {
 }
 
 class WikiSearchResults extends LitElement {
-  static styles = css`
+  static override styles = css`
         :host {
             display: block;
             position: relative;
@@ -107,7 +107,7 @@ class WikiSearchResults extends LitElement {
         }
     `;
 
-  static properties = {
+  static override properties = {
     results: { type: Array },
     open: { type: Boolean, reflect: true }
   };
@@ -124,19 +124,20 @@ class WikiSearchResults extends LitElement {
     this._handleClickOutside = this.handleClickOutside.bind(this);
   }
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
     document.addEventListener('click', this._handleClickOutside);
   }
 
-  disconnectedCallback() {
+  override disconnectedCallback() {
     document.removeEventListener('click', this._handleClickOutside);
     super.disconnectedCallback();
   }
 
   handleClickOutside(event: Event) {
     const path = (event as Event & { composedPath(): EventTarget[] }).composedPath();
-    if (this.open && !path.includes(this.shadowRoot!.querySelector('.popover'))) {
+    const popover = this.shadowRoot!.querySelector('.popover');
+    if (this.open && popover && !path.includes(popover)) {
       this.close();
     }
   }
@@ -153,7 +154,7 @@ class WikiSearchResults extends LitElement {
     event.stopPropagation();
   }
 
-  updated(changedProperties: Map<PropertyKey, unknown>) {
+  override updated(changedProperties: Map<PropertyKey, unknown>) {
     if (changedProperties.has('results') && this.results.length > 0) {
       const firstLink = this.shadowRoot!.querySelector('a');
       if (firstLink) {
@@ -162,7 +163,7 @@ class WikiSearchResults extends LitElement {
     }
   }
 
-  render() {
+  override render() {
     return html`
             ${sharedStyles}
             <div class="popover" @click="${this.handlePopoverClick}">

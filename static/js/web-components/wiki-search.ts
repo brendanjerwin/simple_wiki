@@ -9,7 +9,7 @@ interface SearchResult {
 }
 
 export class WikiSearch extends LitElement {
-  static styles = css`
+  static override styles = css`
     div#container {
         position: relative;
         display: inline-block;
@@ -81,7 +81,7 @@ export class WikiSearch extends LitElement {
     }
     `;
 
-  static properties = {
+  static override properties = {
     searchEndpoint: { type: String, attribute: 'search-endpoint' },
     resultArrayPath: { type: String, attribute: 'result-array-path' },
     results: { type: Array },
@@ -101,12 +101,12 @@ export class WikiSearch extends LitElement {
     this._handleKeydown = this._handleKeydown.bind(this);
   }
 
-  connectedCallback() {
+  override connectedCallback() {
     super.connectedCallback();
     window.addEventListener('keydown', this._handleKeydown);
   }
 
-  disconnectedCallback() {
+  override disconnectedCallback() {
     super.disconnectedCallback();
     window.removeEventListener('keydown', this._handleKeydown);
   }
@@ -172,7 +172,7 @@ export class WikiSearch extends LitElement {
     this.results = [];
   }
 
-  render() {
+  override render() {
     return html`
         ${sharedStyles}
         <div id="container">
