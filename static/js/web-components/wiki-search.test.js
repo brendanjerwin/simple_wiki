@@ -184,6 +184,11 @@ describe('WikiSearch', () => {
       it('should have results with correct length', () => {
         expect(el.results).to.have.length(2);
       });
+
+      it('should make results component visible', () => {
+        const resultsComponent = el.shadowRoot.querySelector('wiki-search-results');
+        expect(resultsComponent.open).to.be.true;
+      });
     });
 
     describe('when search returns empty results', () => {
