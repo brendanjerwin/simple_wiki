@@ -93,35 +93,22 @@ describe('VersionDisplay', () => {
       );
     });
 
-    it('should display decoded version information', () => {
-      expect(el.version).to.equal('dev');
-      expect(el.commit).to.equal('local-dev');
-      expect(el.buildTime).to.be.a('string');
+    it('should have empty values when protobuf parsing fails', () => {
+      expect(el.version).to.equal('');
+      expect(el.commit).to.equal('');
+      expect(el.buildTime).to.equal('');
       expect(el.loading).to.be.false;
-      expect(el.error).to.equal(''); // No error when successful
+      expect(el.error).to.equal('Protobuf parsing not yet implemented');
     });
 
-    it('should render version information in horizontal layout', () => {
+    it('should not render when there is no data', () => {
       const panel = el.shadowRoot.querySelector('.version-panel');
-      expect(panel).to.exist;
-      expect(panel.classList.contains('loading')).to.be.false;
-      
-      const versionInfo = panel.querySelector('.version-info');
-      expect(versionInfo).to.exist;
-      
-      const values = versionInfo.querySelectorAll('.value');
-      expect(values).to.have.length(3);
-      expect(values[0].textContent).to.equal('dev');
-      expect(values[1].textContent).to.equal('local-dev');
-      expect(values[2].textContent).to.not.equal('...');
+      expect(panel).to.not.exist; // Should not render when no data
     });
 
-    it('should display proper labels in horizontal layout', () => {
+    it('should not render labels when there is no data', () => {
       const labels = el.shadowRoot.querySelectorAll('.label');
-      expect(labels).to.have.length(3);
-      expect(labels[0].textContent).to.equal('v');
-      expect(labels[1].textContent).to.equal('@');
-      expect(labels[2].textContent).to.equal('built');
+      expect(labels).to.have.length(0); // No labels when no data
     });
   });
 
@@ -213,21 +200,25 @@ describe('VersionDisplay', () => {
       expect(encoded.length).to.equal(5); // gRPC-web frame header
     });
 
-    it('should decode message and return mock data', () => {
+    it('should throw error when decoding message', () => {
       const buffer = new ArrayBuffer(20);
-      const decoded = el.decodeGrpcWebMessage(buffer);
       
-      expect(decoded).to.have.property('version');
-      expect(decoded).to.have.property('commit');
-      expect(decoded).to.have.property('buildTime');
-      expect(decoded.version).to.equal('dev');
-      expect(decoded.commit).to.equal('local-dev');
+      expect(() => el.decodeGrpcWebMessage(buffer)).to.throw('Protobuf parsing not yet implemented');
     });
   });
 
   describe('styling', () => {
     beforeEach(async () => {
+      // Create a component with mock data to test styling
       el = await fixture(html`<version-display></version-display>`);
+      
+      // Set some data so the panel renders
+      el.version = 'test-version';
+      el.commit = 'test-commit';  
+      el.buildTime = '2023-01-01T00:00:00Z';
+      el.loading = false;
+      el.error = '';
+      
       await el.updateComplete;
     });
 

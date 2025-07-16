@@ -117,13 +117,9 @@ export class VersionDisplay extends LitElement {
     // Skip gRPC-web frame header (5 bytes)
     const messageLength = view.getUint32(1, false);
     
-    // For now, return mock data since proper protobuf parsing is complex
-    // In a real implementation, this would parse the actual protobuf response
-    return {
-      version: 'dev',
-      commit: 'local-dev',
-      buildTime: new Date().toISOString(),
-    };
+    // TODO: Implement proper protobuf parsing when gRPC service is available
+    // For now, throw error since we don't have working protobuf parsing
+    throw new Error('Protobuf parsing not yet implemented');
   }
 
   async fetchVersion() {

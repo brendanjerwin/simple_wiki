@@ -21,14 +21,14 @@ We will implement a simplified gRPC-web client pattern for frontend components, 
 **Rationale**:
 - The generated gRPC-web client libraries use CommonJS, which creates complexity in our ES module-based frontend build system
 - A simplified implementation provides better control over error handling and debugging
-- The overhead of protobuf parsing can be avoided for simple use cases by using mock data with graceful fallback
+- Direct fetch implementation allows for better error handling and debugging
 - Testing is simpler with direct fetch mocking
 
 **Implementation**:
 - Create a custom `makeGrpcWebRequest()` method that handles gRPC-web protocol headers
 - Use fetch API with appropriate `Content-Type: application/grpc-web+proto` headers
-- Implement graceful fallback to mock data when gRPC requests fail
-- Provide clear error messaging for debugging
+- Display clear error messages when requests fail
+- Component remains blank when gRPC services are unavailable
 
 ### 2. Version Display Component
 
@@ -38,7 +38,7 @@ We will implement a simplified gRPC-web client pattern for frontend components, 
 - Positioned as a semi-transparent panel in bottom-right corner
 - Fetches version, commit hash, and build time from the `Version` gRPC service
 - Shows loading states and error handling
-- Uses fallback data when gRPC requests fail
+- Remains blank when gRPC requests fail
 - Styled with monospace font for developer-friendly display
 
 **Styling Approach**:
@@ -64,59 +64,38 @@ We will implement a simplified gRPC-web client pattern for frontend components, 
 
 **Approach**:
 - Mock fetch API for testing gRPC-web requests
-- Test all component states: loading, success, error, fallback
+- Test all component states: loading, success, error
 - Verify styling and positioning requirements
 - Test gRPC-web message encoding/decoding logic
-- Achieve >95% code coverage
+- Aim for high code coverage on code that matters
 
-### 5. Error Handling and Fallback
+### 5. Error Handling
 
-**Decision**: Implement graceful degradation with useful fallback data.
+**Decision**: Implement clear error handling with no fallback data.
 
 **Behavior**:
-- When gRPC request fails, show fallback version information
-- Display error message in semi-transparent error state
-- Continue showing version data even in error state
-- Log errors to console for debugging
+- When gRPC request fails, component remains blank
+- Error messages are logged to console for debugging
+- Component does not display misleading fallback data
+- Clear indication when services are unavailable
 
 ## Consequences
 
 ### Positive
 - Clean separation of concerns between gRPC-web integration and UI components
 - Simplified testing and debugging compared to generated client libraries
-- Graceful error handling provides good user experience
+- Clear error handling prevents misleading user experience
 - Pattern can be easily replicated for other gRPC services
 - High test coverage ensures reliability
 
 ### Negative
 - Custom gRPC-web implementation may need updates if protocol changes
-- Mock data fallback means component works even when gRPC is broken (could hide real issues)
-- Simplified protobuf handling limits functionality for complex message types
-
-### Neutral
-- Future components can follow this pattern or evolve to use generated clients if needed
-- Implementation can be enhanced with proper protobuf parsing if requirements change
-
-## Implementation Notes
-
-### Dependencies Added
-- `google-protobuf`: For potential future protobuf parsing
-- `grpc-web`: For gRPC-web protocol support (though not directly used in simplified implementation)
-
-### Files Created
-- `static/js/web-components/version-display.js`: Main component implementation
-- `static/js/web-components/version-display.test.js`: Comprehensive test suite
-- `static/js/main.js`: Unified entry point for all components
-- `static/templates/index.tmpl`: Updated to include version display
-
-### Test Coverage
-- 43 total frontend tests passing
-- 95.21% code coverage achieved
-- Tests cover all major code paths and error conditions
+- Requires proper protobuf parsing implementation for production use
+- Limited functionality for complex message types without proper protobuf support
 
 ## Future Considerations
 
-1. **Enhanced Protobuf Support**: If complex message types are needed, consider implementing proper protobuf parsing or using generated client libraries
+1. **Enhanced Protobuf Support**: Consider implementing proper protobuf parsing or using alternative code generation tools (protoc-gen-js, protoc-gen-ts, or other generators) for production use
 2. **Performance Optimization**: Monitor gRPC-web request performance and optimize as needed
 3. **Error Reporting**: Consider adding error reporting/telemetry for production debugging
 4. **Component Library**: Expand pattern to create reusable gRPC-web utility functions
