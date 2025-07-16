@@ -68,68 +68,102 @@ describe('WikiSearch', () => {
     let focusSpy: sinon.SinonSpy;
     let mockEvent: KeyboardEvent;
     
-    beforeEach(() => {
-      searchInput = el.shadowRoot.querySelector('input[type="search"]');
-      focusSpy = sinon.spy(searchInput, 'focus');
+    beforeEach(async () => {
+      // Wait for component to be fully rendered
+      await el.updateComplete;
+      searchInput = el.shadowRoot?.querySelector('input[type="search"]') as HTMLInputElement;
+      if (searchInput) {
+        focusSpy = sinon.spy(searchInput, 'focus');
+      }
     });
 
     describe('when Ctrl+K is pressed', () => {
       beforeEach(() => {
-        mockEvent = new KeyboardEvent('keydown', {
-          ctrlKey: true,
-          key: 'k',
-          bubbles: true,
-          cancelable: true,
-        });
-        window.dispatchEvent(mockEvent);
+        if (searchInput) {
+          mockEvent = new KeyboardEvent('keydown', {
+            ctrlKey: true,
+            key: 'k',
+            bubbles: true,
+            cancelable: true,
+          });
+          window.dispatchEvent(mockEvent);
+        }
       });
 
       it('should prevent default behavior', () => {
-        expect(mockEvent.defaultPrevented).to.be.true;
+        if (searchInput && mockEvent) {
+          expect(mockEvent.defaultPrevented).to.be.true;
+        } else {
+          expect.fail('Search input not found or event not created');
+        }
       });
 
       it('should focus the search input', () => {
-        expect(focusSpy).to.have.been.calledOnce;
+        if (searchInput && focusSpy) {
+          expect(focusSpy).to.have.been.calledOnce;
+        } else {
+          expect.fail('Search input not found or focus spy not created');
+        }
       });
     });
 
     describe('when Cmd+K is pressed (Mac)', () => {
       beforeEach(() => {
-        mockEvent = new KeyboardEvent('keydown', {
-          metaKey: true,
-          key: 'k',
-          bubbles: true,
-          cancelable: true,
-        });
-        window.dispatchEvent(mockEvent);
+        if (searchInput) {
+          mockEvent = new KeyboardEvent('keydown', {
+            metaKey: true,
+            key: 'k',
+            bubbles: true,
+            cancelable: true,
+          });
+          window.dispatchEvent(mockEvent);
+        }
       });
 
       it('should prevent default behavior', () => {
-        expect(mockEvent.defaultPrevented).to.be.true;
+        if (searchInput && mockEvent) {
+          expect(mockEvent.defaultPrevented).to.be.true;
+        } else {
+          expect.fail('Search input not found or event not created');
+        }
       });
 
       it('should focus the search input', () => {
-        expect(focusSpy).to.have.been.calledOnce;
+        if (searchInput && focusSpy) {
+          expect(focusSpy).to.have.been.calledOnce;
+        } else {
+          expect.fail('Search input not found or focus spy not created');
+        }
       });
     });
 
     describe('when wrong key combination is pressed', () => {
       beforeEach(() => {
-        mockEvent = new KeyboardEvent('keydown', {
-          ctrlKey: true,
-          key: 'j',
-          bubbles: true,
-          cancelable: true,
-        });
-        window.dispatchEvent(mockEvent);
+        if (searchInput) {
+          mockEvent = new KeyboardEvent('keydown', {
+            ctrlKey: true,
+            key: 'j',
+            bubbles: true,
+            cancelable: true,
+          });
+          window.dispatchEvent(mockEvent);
+        }
       });
 
       it('should not prevent default behavior', () => {
-        expect(mockEvent.defaultPrevented).to.be.false;
+        if (searchInput && mockEvent) {
+          expect(mockEvent.defaultPrevented).to.be.false;
+        } else {
+          expect.fail('Search input not found or event not created');
+        }
       });
 
       it('should not focus the search input', () => {
-        expect(focusSpy).to.not.have.been.called;
+        if (searchInput && focusSpy) {
+          expect(focusSpy).to.not.have.been.called;
+        } else {
+          expect.fail('Search input not found or focus spy not created');
+        }
       });
     });
   });
