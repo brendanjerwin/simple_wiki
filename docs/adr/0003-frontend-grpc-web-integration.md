@@ -26,10 +26,11 @@ We will implement a modern gRPC-web client pattern using Connect-ES and @bufbuil
 - Established pattern for future service integrations
 
 **Implementation**:
-- Configure `buf.gen.yaml` with `buf.build/bufbuild/es` and `buf.build/connectrpc/es` plugins
-- Generate ES module-compatible protobuf files
+- Configure `buf.gen.yaml` with `buf.build/bufbuild/es:v2.6.0` and `buf.build/connectrpc/es:v1.6.1` plugins
+- Generate ES module-compatible protobuf files with `target=js+dts` option
 - Use `createGrpcWebTransport()` and `createClient()` from Connect-ES
-- Implement proper type-safe request/response handling
+- Implement proper type-safe request/response handling with generated protobuf types
+- Replace legacy dependencies (`google-protobuf`, `grpc-web`) with modern alternatives
 
 ### 2. Version Display Component
 
@@ -53,7 +54,10 @@ We will implement a modern gRPC-web client pattern using Connect-ES and @bufbuil
 **Decision**: Create a unified build process that includes all web components.
 
 **Implementation**:
-- Update `package.json` to use Connect-ES and @bufbuild/protobuf dependencies
+- Update `package.json` to use Connect-ES and @bufbuild/protobuf dependencies:
+  - `@bufbuild/protobuf": "^2.6.0"`
+  - `@connectrpc/connect": "^1.6.1"`
+  - `@connectrpc/connect-web": "^1.6.1"`
 - Generate ES module protobuf files using modern buf plugins
 - Add version-display component to main template (`index.tmpl`)
 - Ensure component is always visible across all pages
@@ -63,10 +67,11 @@ We will implement a modern gRPC-web client pattern using Connect-ES and @bufbuil
 **Decision**: Implement comprehensive unit tests with high coverage.
 
 **Approach**:
-- Mock Connect client for testing gRPC-web requests
+- Mock Connect client for testing gRPC-web requests using `sinon.stub()`
 - Test all component states: loading, success, error
-- Verify styling and positioning requirements
-- Test type-safe protobuf message handling
+- Verify styling and positioning requirements (5px margins, opacity values)
+- Test type-safe protobuf message handling with generated types
+- Test "no fallback data" behavior - component remains blank on errors
 - Aim for high code coverage on code that matters
 
 ### 5. Error Handling
@@ -74,10 +79,11 @@ We will implement a modern gRPC-web client pattern using Connect-ES and @bufbuil
 **Decision**: Implement clear error handling with no fallback data.
 
 **Behavior**:
-- When gRPC request fails, component remains blank
+- When gRPC request fails, component remains blank (no DOM output)
 - Error messages are logged to console for debugging
-- Component does not display misleading fallback data
-- Clear indication when services are unavailable
+- Component does not display misleading fallback data (aligns with CONVENTIONS.md principle)
+- Clear indication when services are unavailable without fake data
+- Respects "Never Hide Broken Functionality" design principle
 
 ## Consequences
 
@@ -93,6 +99,25 @@ We will implement a modern gRPC-web client pattern using Connect-ES and @bufbuil
 - Requires updated build tooling and dependencies
 - Generated files must be kept in sync with protocol changes
 - Connect-ES is a newer technology with smaller ecosystem
+- Migration required from legacy `google-protobuf` and `grpc-web` dependencies
+
+### Dependency Migration
+The implementation required migrating from legacy gRPC-web dependencies to modern Connect-ES:
+
+**Removed**:
+- `google-protobuf": "^3.21.4"`
+- `grpc-web": "^1.5.0"`
+
+**Added**:
+- `@bufbuild/protobuf": "^2.6.0"`
+- `@connectrpc/connect": "^1.6.1"`
+- `@connectrpc/connect-web": "^1.6.1"`
+
+**Buffer Generation Migration**:
+- Old: `buf.build/protocolbuffers/js:v3.21.2` with `import_style=commonjs`
+- New: `buf.build/bufbuild/es:v2.6.0` with `target=js+dts`
+- Old: `buf.build/grpc/web:v1.5.0` with `import_style=commonjs,mode=grpcwebtext`
+- New: `buf.build/connectrpc/es:v1.6.1` with `target=js+dts`
 
 ## Future Considerations
 
