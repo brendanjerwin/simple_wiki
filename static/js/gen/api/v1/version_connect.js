@@ -24,4 +24,4 @@ export const Version = {
       kind: MethodKind.Unary,
     },
   }
-} as const;
+};

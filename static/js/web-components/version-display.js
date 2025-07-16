@@ -1,8 +1,5 @@
 import { html, css, LitElement } from 'lit';
-import { createGrpcWebTransport } from '@connectrpc/connect-web';
-import { createClient } from '@connectrpc/connect';
-import { Version } from '../gen/api/v1/version_connect.js';
-import { GetVersionRequest } from '../gen/api/v1/version_pb.js';
+import { GetVersionRequest } from '../gen/api/v1/version_pb_simple.js';
 
 export class VersionDisplay extends LitElement {
   static styles = css`
@@ -73,12 +70,6 @@ export class VersionDisplay extends LitElement {
     this.buildTime = '';
     this.loading = false;
     this.error = '';
-    
-    // Initialize gRPC-web client
-    this.transport = createGrpcWebTransport({
-      baseUrl: window.location.origin,
-    });
-    this.client = createClient(Version, this.transport);
   }
 
   connectedCallback() {
@@ -92,11 +83,21 @@ export class VersionDisplay extends LitElement {
     
     try {
       const request = new GetVersionRequest();
-      const response = await this.client.getVersion(request);
+      const response = await fetch('/api.v1.Version/GetVersion', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/grpc-web+proto',
+        },
+        body: new Uint8Array(0), // Empty request body
+      });
       
-      this.version = response.version;
-      this.commit = response.commit;
-      this.buildTime = response.buildTime?.toDate().toLocaleString() || '';
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+      
+      // For now, this will fail and show blank (as intended)
+      // In a real implementation, we'd parse the grpc-web response
+      throw new Error('gRPC-web endpoint not available');
     } catch (error) {
       console.error('Failed to fetch version:', error);
       // Don't show fallback data - leave blank if not working

@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import type { BinaryReadOptions, FieldList, JsonReadOptions, JsonValue, PartialMessage, PlainMessage } from "@bufbuild/protobuf";
+import { BinaryReadOptions, FieldList, JsonReadOptions, JsonValue, PartialMessage, PlainMessage } from "@bufbuild/protobuf";
 import { Message, proto3, Timestamp } from "@bufbuild/protobuf";
 
 /**
@@ -11,30 +11,30 @@ import { Message, proto3, Timestamp } from "@bufbuild/protobuf";
  *
  * @generated from message api.v1.GetVersionRequest
  */
-export class GetVersionRequest extends Message<GetVersionRequest> {
-  constructor(data?: PartialMessage<GetVersionRequest>) {
+export class GetVersionRequest extends Message {
+  constructor(data) {
     super();
     proto3.util.initPartial(data, this);
   }
 
-  static readonly runtime = proto3;
-  static readonly typeName = "api.v1.GetVersionRequest";
-  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+  static runtime = proto3;
+  static typeName = "api.v1.GetVersionRequest";
+  static fields = proto3.util.newFieldList(() => [
   ]);
 
-  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GetVersionRequest {
+  static fromBinary(bytes, options) {
     return new GetVersionRequest().fromBinary(bytes, options);
   }
 
-  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): GetVersionRequest {
+  static fromJson(jsonValue, options) {
     return new GetVersionRequest().fromJson(jsonValue, options);
   }
 
-  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): GetVersionRequest {
+  static fromJsonString(jsonString, options) {
     return new GetVersionRequest().fromJsonString(jsonString, options);
   }
 
-  static equals(a: GetVersionRequest | PlainMessage<GetVersionRequest> | undefined, b: GetVersionRequest | PlainMessage<GetVersionRequest> | undefined): boolean {
+  static equals(a, b) {
     return proto3.util.equals(GetVersionRequest, a, b);
   }
 }
@@ -44,7 +44,7 @@ export class GetVersionRequest extends Message<GetVersionRequest> {
  *
  * @generated from message api.v1.GetVersionResponse
  */
-export class GetVersionResponse extends Message<GetVersionResponse> {
+export class GetVersionResponse extends Message {
   /**
    * @generated from field: string version = 1;
    */
@@ -58,34 +58,34 @@ export class GetVersionResponse extends Message<GetVersionResponse> {
   /**
    * @generated from field: google.protobuf.Timestamp build_time = 3;
    */
-  buildTime?: Timestamp;
+  buildTime;
 
-  constructor(data?: PartialMessage<GetVersionResponse>) {
+  constructor(data) {
     super();
     proto3.util.initPartial(data, this);
   }
 
-  static readonly runtime = proto3;
-  static readonly typeName = "api.v1.GetVersionResponse";
-  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+  static runtime = proto3;
+  static typeName = "api.v1.GetVersionResponse";
+  static fields = proto3.util.newFieldList(() => [
     { no: 1, name: "version", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "commit", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 3, name: "build_time", kind: "message", T: Timestamp },
   ]);
 
-  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GetVersionResponse {
+  static fromBinary(bytes, options) {
     return new GetVersionResponse().fromBinary(bytes, options);
   }
 
-  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): GetVersionResponse {
+  static fromJson(jsonValue, options) {
     return new GetVersionResponse().fromJson(jsonValue, options);
   }
 
-  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): GetVersionResponse {
+  static fromJsonString(jsonString, options) {
     return new GetVersionResponse().fromJsonString(jsonString, options);
   }
 
-  static equals(a: GetVersionResponse | PlainMessage<GetVersionResponse> | undefined, b: GetVersionResponse | PlainMessage<GetVersionResponse> | undefined): boolean {
+  static equals(a, b) {
     return proto3.util.equals(GetVersionResponse, a, b);
   }
 }

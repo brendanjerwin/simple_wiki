@@ -26,9 +26,6 @@
     "sinon": "^21.0.0"
   },
   "dependencies": {
-    "@bufbuild/protobuf": "^2.6.0",
-    "@connectrpc/connect": "^1.6.1",
-    "@connectrpc/connect-web": "^1.6.1",
     "lit": "^3.3.1"
   }
 }

@@ -27,4 +27,4 @@ export const Frontmatter = {
     },
     // Additional methods would be defined here...
   }
-} as const;
+};

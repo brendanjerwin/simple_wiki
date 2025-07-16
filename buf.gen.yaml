@@ -9,10 +9,10 @@ plugins:
     out: gen/go
     opt: paths=source_relative
 
-  # JavaScript/TypeScript ES modules plugins for browser clients
-  - plugin: buf.build/bufbuild/es:v2.6.0
+  # JavaScript ES modules plugins for browser clients
+  - plugin: buf.build/bufbuild/es:v1.10.0
     out: static/js/gen
-    opt: target=js+dts
+    opt: target=js
   - plugin: buf.build/connectrpc/es:v1.6.1
     out: static/js/gen
-    opt: target=js+dts
+    opt: target=js

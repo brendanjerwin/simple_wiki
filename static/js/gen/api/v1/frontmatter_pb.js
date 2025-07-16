@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import type { BinaryReadOptions, FieldList, JsonReadOptions, JsonValue, PartialMessage, PlainMessage } from "@bufbuild/protobuf";
+import { BinaryReadOptions, FieldList, JsonReadOptions, JsonValue, PartialMessage, PlainMessage } from "@bufbuild/protobuf";
 import { Message, proto3, Struct } from "@bufbuild/protobuf";
 
 /**
@@ -11,36 +11,36 @@ import { Message, proto3, Struct } from "@bufbuild/protobuf";
  *
  * @generated from message api.v1.GetFrontmatterRequest
  */
-export class GetFrontmatterRequest extends Message<GetFrontmatterRequest> {
+export class GetFrontmatterRequest extends Message {
   /**
    * @generated from field: string page = 1;
    */
   page = "";
 
-  constructor(data?: PartialMessage<GetFrontmatterRequest>) {
+  constructor(data) {
     super();
     proto3.util.initPartial(data, this);
   }
 
-  static readonly runtime = proto3;
-  static readonly typeName = "api.v1.GetFrontmatterRequest";
-  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+  static runtime = proto3;
+  static typeName = "api.v1.GetFrontmatterRequest";
+  static fields = proto3.util.newFieldList(() => [
     { no: 1, name: "page", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
-  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GetFrontmatterRequest {
+  static fromBinary(bytes, options) {
     return new GetFrontmatterRequest().fromBinary(bytes, options);
   }
 
-  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): GetFrontmatterRequest {
+  static fromJson(jsonValue, options) {
     return new GetFrontmatterRequest().fromJson(jsonValue, options);
   }
 
-  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): GetFrontmatterRequest {
+  static fromJsonString(jsonString, options) {
     return new GetFrontmatterRequest().fromJsonString(jsonString, options);
   }
 
-  static equals(a: GetFrontmatterRequest | PlainMessage<GetFrontmatterRequest> | undefined, b: GetFrontmatterRequest | PlainMessage<GetFrontmatterRequest> | undefined): boolean {
+  static equals(a, b) {
     return proto3.util.equals(GetFrontmatterRequest, a, b);
   }
 }
@@ -50,39 +50,39 @@ export class GetFrontmatterRequest extends Message<GetFrontmatterRequest> {
  *
  * @generated from message api.v1.GetFrontmatterResponse
  */
-export class GetFrontmatterResponse extends Message<GetFrontmatterResponse> {
+export class GetFrontmatterResponse extends Message {
   /**
    * google.protobuf.Struct is used to represent the frontmatter,
    * which is a map[string]any.
    *
    * @generated from field: google.protobuf.Struct frontmatter = 1;
    */
-  frontmatter?: Struct;
+  frontmatter;
 
-  constructor(data?: PartialMessage<GetFrontmatterResponse>) {
+  constructor(data) {
     super();
     proto3.util.initPartial(data, this);
   }
 
-  static readonly runtime = proto3;
-  static readonly typeName = "api.v1.GetFrontmatterResponse";
-  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+  static runtime = proto3;
+  static typeName = "api.v1.GetFrontmatterResponse";
+  static fields = proto3.util.newFieldList(() => [
     { no: 1, name: "frontmatter", kind: "message", T: Struct },
   ]);
 
-  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GetFrontmatterResponse {
+  static fromBinary(bytes, options) {
     return new GetFrontmatterResponse().fromBinary(bytes, options);
   }
 
-  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): GetFrontmatterResponse {
+  static fromJson(jsonValue, options) {
     return new GetFrontmatterResponse().fromJson(jsonValue, options);
   }
 
-  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): GetFrontmatterResponse {
+  static fromJsonString(jsonString, options) {
     return new GetFrontmatterResponse().fromJsonString(jsonString, options);
   }
 
-  static equals(a: GetFrontmatterResponse | PlainMessage<GetFrontmatterResponse> | undefined, b: GetFrontmatterResponse | PlainMessage<GetFrontmatterResponse> | undefined): boolean {
+  static equals(a, b) {
     return proto3.util.equals(GetFrontmatterResponse, a, b);
   }
 }
