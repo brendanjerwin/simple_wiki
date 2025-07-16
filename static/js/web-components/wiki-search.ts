@@ -138,7 +138,7 @@ export class WikiSearch extends LitElement {
       return;
     }
     
-    const url = `${this.searchEndpoint}?q=${searchTerm}`;
+    const url = `${this.searchEndpoint}?q=${encodeURIComponent(searchTerm)}`;
 
     fetch(url)
       .then((response) => response.json())

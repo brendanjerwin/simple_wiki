@@ -12,6 +12,7 @@ interface WikiSearchElement extends HTMLElement {
   }>;
   noResults: boolean;
   _handleKeydown: (event: KeyboardEvent) => void;
+  handleFormSubmit: (event: Event) => void;
   updateComplete: Promise<boolean>;
   shadowRoot: ShadowRoot;
 }
@@ -169,6 +170,35 @@ describe('WikiSearch', () => {
 
     it('should remove keydown event listener', () => {
       expect(removeEventListenerSpy).to.have.been.calledWith('keydown', el._handleKeydown);
+    });
+  });
+
+  describe('when searching with special characters', () => {
+    let fetchStub: sinon.SinonStub;
+
+    beforeEach(async () => {
+      el.searchEndpoint = 'https://example.com/search';
+      fetchStub = sinon.stub(window, 'fetch');
+      fetchStub.resolves(new Response(JSON.stringify({ results: [] })));
+      await el.updateComplete;
+    });
+
+    it('should encode special characters in search term', async () => {
+      const searchInput = el.shadowRoot?.querySelector('input[type="search"]') as HTMLInputElement;
+      const form = el.shadowRoot?.querySelector('form') as HTMLFormElement;
+      
+      // Set search term with special characters
+      searchInput.value = 'test & query with spaces';
+      
+      // Create form submit event with form as target
+      const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+      Object.defineProperty(submitEvent, 'target', { value: form, writable: false });
+      
+      // Trigger form submit
+      el.handleFormSubmit(submitEvent);
+      
+      // Check that fetch was called with properly encoded URL
+      expect(fetchStub).to.have.been.calledWith('https://example.com/search?q=test%20%26%20query%20with%20spaces');
     });
   });
 });
