@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-const defaultNumGroups = 4
+const numGroups = 4
 
 type Group struct {
 	Name     string   `json:"name"`
@@ -43,7 +43,6 @@ func main() {
 		panic(err)
 	}
 
-	numGroups := defaultNumGroups
 	groups := make([][]string, numGroups)
 	for i, pkg := range packages {
 		groups[i%numGroups] = append(groups[i%numGroups], pkg)
