@@ -85,6 +85,7 @@ export class VersionDisplay extends LitElement {
   declare version?: GetVersionResponse;
   declare loading: boolean;
   declare error?: string;
+  private debounceTimer?: number;
 
   private client = createClient(Version, createGrpcWebTransport({
     baseUrl: window.location.origin,
@@ -102,8 +103,25 @@ export class VersionDisplay extends LitElement {
     this.addEventListener('mouseenter', this.handleMouseEnter.bind(this));
   }
 
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    // Clean up debounce timer
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = undefined;
+    }
+  }
+
   private handleMouseEnter(): void {
-    this.loadVersion();
+    // Clear any existing debounce timer
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+    }
+    
+    // Set a new debounce timer (300ms delay)
+    this.debounceTimer = setTimeout(() => {
+      this.loadVersion();
+    }, 300);
   }
 
   private async loadVersion(): Promise<void> {

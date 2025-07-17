@@ -5,9 +5,23 @@ import * as sinon from 'sinon';
 
 describe('VersionDisplay', () => {
   let el: VersionDisplay;
+  let getVersionStub: sinon.SinonStub;
+  const mockResponse = {
+    version: '1.2.3',
+    commit: 'abc123def456',
+    buildTime: { toDate: () => new Date('2023-01-01T12:00:00Z') }
+  };
 
   beforeEach(async () => {
     el = await fixture(html`<version-display></version-display>`);
+    // Stub the gRPC client immediately to prevent network requests
+    getVersionStub = sinon.stub(el['client'], 'getVersion').resolves(mockResponse);
+  });
+
+  afterEach(() => {
+    if (getVersionStub) {
+      getVersionStub.restore();
+    }
   });
 
   it('should exist', () => {
@@ -48,21 +62,10 @@ describe('VersionDisplay', () => {
   });
 
   describe('when gRPC response is successful', () => {
-    let getVersionStub: sinon.SinonStub;
-    const mockResponse = {
-      version: '1.2.3',
-      commit: 'abc123def456',
-      buildTime: { toDate: () => new Date('2023-01-01T12:00:00Z') }
-    };
-
     beforeEach(async () => {
-      getVersionStub = sinon.stub(el['client'], 'getVersion').resolves(mockResponse);
+      getVersionStub.resolves(mockResponse);
       await el['loadVersion']();
       await el.updateComplete;
-    });
-
-    afterEach(() => {
-      getVersionStub.restore();
     });
 
     it('should not show loading state', () => {
@@ -94,17 +97,12 @@ describe('VersionDisplay', () => {
   });
 
   describe('when gRPC response fails', () => {
-    let getVersionStub: sinon.SinonStub;
     const mockError = new Error('Network error');
 
     beforeEach(async () => {
-      getVersionStub = sinon.stub(el['client'], 'getVersion').rejects(mockError);
+      getVersionStub.rejects(mockError);
       await el['loadVersion']();
       await el.updateComplete;
-    });
-
-    afterEach(() => {
-      getVersionStub.restore();
     });
 
     it('should not show loading state', () => {
@@ -125,16 +123,10 @@ describe('VersionDisplay', () => {
   });
 
   describe('when gRPC response fails with unknown error', () => {
-    let getVersionStub: sinon.SinonStub;
-
     beforeEach(async () => {
-      getVersionStub = sinon.stub(el['client'], 'getVersion').callsFake(() => Promise.reject('Unknown error'));
+      getVersionStub.callsFake(() => Promise.reject('Unknown error'));
       await el['loadVersion']();
       await el.updateComplete;
-    });
-
-    afterEach(() => {
-      getVersionStub.restore();
     });
 
     it('should not show loading state', () => {
@@ -150,20 +142,14 @@ describe('VersionDisplay', () => {
   });
 
   describe('when loading state is active', () => {
-    let getVersionStub: sinon.SinonStub;
-
     beforeEach(async () => {
       // Create a promise that won't resolve during the test
       const promise = new Promise(() => {
         // This promise never resolves, keeping the component in loading state
       });
-      getVersionStub = sinon.stub(el['client'], 'getVersion').returns(promise);
+      getVersionStub.returns(promise);
       el['loadVersion']();
       await el.updateComplete;
-    });
-
-    afterEach(() => {
-      getVersionStub.restore();
     });
 
     it('should show loading state', () => {
@@ -187,6 +173,8 @@ describe('VersionDisplay', () => {
     let loadVersionSpy: sinon.SinonSpy;
 
     beforeEach(async () => {
+      // Reset stub to default behavior
+      getVersionStub.resolves(mockResponse);
       loadVersionSpy = sinon.spy(el, 'loadVersion' as keyof VersionDisplay);
       await el.updateComplete;
     });
@@ -209,6 +197,8 @@ describe('VersionDisplay', () => {
       loadVersionSpy = sinon.spy(VersionDisplay.prototype, 'loadVersion' as keyof VersionDisplay);
       // Re-create the element to trigger connectedCallback
       el = await fixture(html`<version-display></version-display>`);
+      // Reset stub to default behavior
+      getVersionStub.resolves(mockResponse);
       await el.updateComplete;
     });
 

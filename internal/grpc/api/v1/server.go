@@ -272,11 +272,15 @@ func (s *Server) LoggingInterceptor() grpc.UnaryServerInterceptor {
 		}
 
 		if s.Logger != nil {
+			clientIP := getClientIP(ctx)
+			if clientIP == "" {
+				clientIP = "unknown"
+			}
 			s.Logger.Warn("[GRPC] %s | %s | %v | %s",
 				statusCode,
 				duration,
 				info.FullMethod,
-				getClientIP(ctx),
+				clientIP,
 			)
 		}
 
@@ -285,9 +289,10 @@ func (s *Server) LoggingInterceptor() grpc.UnaryServerInterceptor {
 }
 
 // getClientIP attempts to extract the client IP from the gRPC context.
+// Returns an empty string if the client IP cannot be determined.
 func getClientIP(ctx context.Context) string {
-	// This is a simplified implementation
-	// In production, you might want to check for X-Forwarded-For headers
-	// or other proxy-related headers
-	return "unknown"
+	// Currently, gRPC context does not provide direct access to client IP
+	// for gRPC-Web requests. This would require additional middleware
+	// or peer information extraction that is not yet implemented.
+	return ""
 }

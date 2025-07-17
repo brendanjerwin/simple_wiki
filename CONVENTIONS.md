@@ -419,6 +419,8 @@ Tests for both frontend (JavaScript) and Go can be run using `devbox` scripts, e
   - Avoid showing fallback data that looks like real data when services are unavailable
   - Prefer clear error messages over misleading success states
   - Components should remain blank or show clear error states rather than fake data
+  - **Don't return fake placeholder values**: Functions should return empty strings, nil, or appropriate zero values rather than fake data like "unknown" or "placeholder" that could mislead developers
+  - **Be explicit about limitations**: If a function cannot provide the requested data, it should clearly indicate this through its return value and/or documentation
   - This principle helps identify real problems quickly and prevents false confidence in broken systems
 
 ### Required Before Each Commit
