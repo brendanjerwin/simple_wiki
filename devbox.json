@@ -32,6 +32,9 @@
       "go:test": [
         "go test ./..."
       ],
+      "go:lint": [
+        "revive -config revive.toml ./..."
+      ],
       "lint:everything": [
         "if git status --porcelain api/proto | grep -q '.'; then buf generate; else echo 'No changes in api/proto, skipping buf generate.'; fi",
         "go mod tidy",
