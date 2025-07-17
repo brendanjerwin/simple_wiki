@@ -572,3 +572,4 @@ nhooyr.io/websocket/internal/errd
 nhooyr.io/websocket/internal/wsjs
 nhooyr.io/websocket/internal/xsync
 # github.com/karalabe/usb => github.com/brendanjerwin/usb v0.0.0-20231222144018-09a9b6ae5f52
+# github.com/brendanjerwin/simple_wiki/wikiidentifiers => ./wikiidentifiers

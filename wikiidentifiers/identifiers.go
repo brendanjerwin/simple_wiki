@@ -1,5 +1,5 @@
 // Package common provides common utilities for the simple_wiki project.
-package common
+package wikiidentifiers
 
 import (
 	"regexp"

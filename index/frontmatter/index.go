@@ -6,7 +6,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/brendanjerwin/simple_wiki/common"
+	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
 type (
@@ -18,32 +19,32 @@ type (
 
 // IQueryFrontmatterIndex defines the interface for querying the frontmatter index.
 type IQueryFrontmatterIndex interface {
-	QueryExactMatch(dottedKeyPath DottedKeyPath, value Value) []common.PageIdentifier
-	QueryKeyExistence(dottedKeyPath DottedKeyPath) []common.PageIdentifier
-	QueryPrefixMatch(dottedKeyPath DottedKeyPath, valuePrefix string) []common.PageIdentifier
+		QueryExactMatch(dottedKeyPath DottedKeyPath, value Value) []wikipage.PageIdentifier
+	QueryKeyExistence(dottedKeyPath DottedKeyPath) []wikipage.PageIdentifier
+	QueryPrefixMatch(dottedKeyPath DottedKeyPath, valuePrefix string) []wikipage.PageIdentifier
 
-	GetValue(identifier common.PageIdentifier, dottedKeyPath DottedKeyPath) Value
+	GetValue(identifier wikipage.PageIdentifier, dottedKeyPath DottedKeyPath) Value
 }
 
 // Index is a struct that maintains an inverted index of frontmatter keys and values.
 type Index struct {
-	InvertedIndex map[DottedKeyPath]map[Value][]common.PageIdentifier
-	PageKeyMap    map[common.PageIdentifier]map[DottedKeyPath]map[Value]bool
-	pageReader    common.PageReader
+		InvertedIndex map[DottedKeyPath]map[Value][]wikipage.PageIdentifier
+	PageKeyMap    map[wikipage.PageIdentifier]map[DottedKeyPath]map[Value]bool
+	pageReader    wikipage.PageReader
 }
 
 // NewIndex creates a new FrontmatterIndex.
-func NewIndex(pageReader common.PageReader) *Index {
+func NewIndex(pageReader wikipage.PageReader) *Index {
 	return &Index{
-		InvertedIndex: make(map[DottedKeyPath]map[Value][]common.PageIdentifier),
-		PageKeyMap:    make(map[common.PageIdentifier]map[DottedKeyPath]map[Value]bool),
+		InvertedIndex: make(map[DottedKeyPath]map[Value][]wikipage.PageIdentifier),
+		PageKeyMap:    make(map[wikipage.PageIdentifier]map[DottedKeyPath]map[Value]bool),
 		pageReader:    pageReader,
 	}
 }
 
 // AddPageToIndex adds a page's frontmatter to the index.
-func (f *Index) AddPageToIndex(requestedIdentifier common.PageIdentifier) error {
-	mungedIdentifier := common.MungeIdentifier(requestedIdentifier)
+func (f *Index) AddPageToIndex(requestedIdentifier wikipage.PageIdentifier) error {
+	mungedIdentifier := wikiidentifiers.MungeIdentifier(requestedIdentifier)
 	identifier, frontmatter, err := f.pageReader.ReadFrontMatter(requestedIdentifier)
 	if err != nil {
 		return err
@@ -57,22 +58,22 @@ func (f *Index) AddPageToIndex(requestedIdentifier common.PageIdentifier) error 
 	return nil
 }
 
-func (f *Index) saveToIndex(identifier common.PageIdentifier, keyPath DottedKeyPath, value Value) {
+func (f *Index) saveToIndex(identifier wikipage.PageIdentifier, keyPath DottedKeyPath, value Value) {
 	if f.InvertedIndex[keyPath] == nil {
-		f.InvertedIndex[keyPath] = make(map[Value][]common.PageIdentifier)
-	}
-	f.InvertedIndex[keyPath][value] = append(f.InvertedIndex[keyPath][value], identifier)
+			f.InvertedIndex[keyPath] = make(map[Value][]wikipage.PageIdentifier)
+		}
+		f.InvertedIndex[keyPath][value] = append(f.InvertedIndex[keyPath][value], identifier)
 
-	if f.PageKeyMap[identifier] == nil {
-		f.PageKeyMap[identifier] = make(map[DottedKeyPath]map[Value]bool)
-	}
-	if f.PageKeyMap[identifier][keyPath] == nil {
-		f.PageKeyMap[identifier][keyPath] = make(map[Value]bool)
-	}
-	f.PageKeyMap[identifier][keyPath][value] = true
+		if f.PageKeyMap[identifier] == nil {
+			f.PageKeyMap[identifier] = make(map[DottedKeyPath]map[Value]bool)
+		}
+		if f.PageKeyMap[identifier][keyPath] == nil {
+			f.PageKeyMap[identifier][keyPath] = make(map[Value]bool)
+		}
+		f.PageKeyMap[identifier][keyPath][value] = true
 }
 
-func (f *Index) recursiveAdd(identifier common.PageIdentifier, keyPath string, value any) {
+func (f *Index) recursiveAdd(identifier wikipage.PageIdentifier, keyPath string, value any) {
 	if keyPath == "identifier" {
 		return
 	}
@@ -110,8 +111,8 @@ func (f *Index) recursiveAdd(identifier common.PageIdentifier, keyPath string, v
 }
 
 // RemovePageFromIndex removes a page's frontmatter from the index.
-func (f *Index) RemovePageFromIndex(identifier common.PageIdentifier) error {
-	identifier = common.MungeIdentifier(identifier)
+func (f *Index) RemovePageFromIndex(identifier wikipage.PageIdentifier) error {
+	identifier = wikiidentifiers.MungeIdentifier(identifier)
 	for dottedKeyPath := range f.PageKeyMap[identifier] {
 		for value := range f.PageKeyMap[identifier][dottedKeyPath] {
 			identifiers := f.InvertedIndex[dottedKeyPath][value]
@@ -124,13 +125,13 @@ func (f *Index) RemovePageFromIndex(identifier common.PageIdentifier) error {
 }
 
 // QueryExactMatch queries the index for exact matches of a key-value pair.
-func (f *Index) QueryExactMatch(dottedKeyPath DottedKeyPath, value Value) []common.PageIdentifier {
+func (f *Index) QueryExactMatch(dottedKeyPath DottedKeyPath, value Value) []wikipage.PageIdentifier {
 	return f.InvertedIndex[dottedKeyPath][value]
 }
 
 // QueryKeyExistence queries the index for the existence of a key.
-func (f *Index) QueryKeyExistence(dottedKeyPath DottedKeyPath) []common.PageIdentifier {
-	var identifiersWithKey []common.PageIdentifier
+func (f *Index) QueryKeyExistence(dottedKeyPath DottedKeyPath) []wikipage.PageIdentifier {
+	var identifiersWithKey []wikipage.PageIdentifier
 	for indexedValue := range f.InvertedIndex[dottedKeyPath] {
 		identifiersWithKey = append(identifiersWithKey, f.InvertedIndex[dottedKeyPath][indexedValue]...)
 	}
@@ -138,8 +139,8 @@ func (f *Index) QueryKeyExistence(dottedKeyPath DottedKeyPath) []common.PageIden
 }
 
 // QueryPrefixMatch queries the index for keys with a given prefix.
-func (f *Index) QueryPrefixMatch(dottedKeyPath DottedKeyPath, valuePrefix string) []common.PageIdentifier {
-	var identifiersWithKey []common.PageIdentifier
+func (f *Index) QueryPrefixMatch(dottedKeyPath DottedKeyPath, valuePrefix string) []wikipage.PageIdentifier {
+	var identifiersWithKey []wikipage.PageIdentifier
 	for indexedValue := range f.InvertedIndex[dottedKeyPath] {
 		if strings.HasPrefix(indexedValue, valuePrefix) {
 			identifiersWithKey = append(identifiersWithKey, f.InvertedIndex[dottedKeyPath][indexedValue]...)
@@ -149,8 +150,8 @@ func (f *Index) QueryPrefixMatch(dottedKeyPath DottedKeyPath, valuePrefix string
 }
 
 // GetValue retrieves the value of a frontmatter key for a given page.
-func (f *Index) GetValue(identifier common.PageIdentifier, dottedKeyPath DottedKeyPath) Value {
-	identifier = common.MungeIdentifier(identifier)
+func (f *Index) GetValue(identifier wikipage.PageIdentifier, dottedKeyPath DottedKeyPath) Value {
+	identifier = wikiidentifiers.MungeIdentifier(identifier)
 	for value := range f.PageKeyMap[identifier][dottedKeyPath] {
 		return value
 	}

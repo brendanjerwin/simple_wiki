@@ -3,13 +3,13 @@ package server
 
 import (
 	"encoding/json"
-	"fmt"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 
-	"github.com/brendanjerwin/simple_wiki/common"
-	bleve_index "github.com/brendanjerwin/simple_wiki/index/bleve"
+	"github.com/brendanjerwin/simple_wiki/index/bleve"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/gin-gonic/gin"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -368,16 +368,16 @@ var _ = Describe("API Handlers", func() {
 			When("a valid request is made", func() {
 				var response struct {
 					Success bool                       `json:"success"`
-					Results []bleve_index.SearchResult `json:"results"`
+					Results []bleve.SearchResult `json:"results"`
 				}
 
 				BeforeEach(func() {
 					mockBleveIndex := &mockBleveIndexQueryer{
-						QueryFunc: func(query string) ([]bleve_index.SearchResult, error) {
+						QueryFunc: func(query string) ([]bleve.SearchResult, error) {
 							if query == "searchterm" {
-								return []bleve_index.SearchResult{
+								return []bleve.SearchResult{
 									{
-										Identifier:   common.PageIdentifier("id1"),
+										Identifier:   wikipage.PageIdentifier("id1"),
 										Title:        "Title 1",
 										FragmentHTML: "fragment",
 									},
@@ -405,7 +405,7 @@ var _ = Describe("API Handlers", func() {
 
 				It("returns the search results", func() {
 					Expect(response.Results).To(Equal(
-						[]bleve_index.SearchResult{{Identifier: common.PageIdentifier("id1"), Title: "Title 1", FragmentHTML: "fragment"}},
+						[]bleve.SearchResult{{Identifier: wikipage.PageIdentifier("id1"), Title: "Title 1", FragmentHTML: "fragment"}},
 					))
 				})
 			})
@@ -413,8 +413,8 @@ var _ = Describe("API Handlers", func() {
 			When("the query fails", func() {
 				BeforeEach(func() {
 					mockBleveIndex := &mockBleveIndexQueryer{
-						QueryFunc: func(query string) ([]bleve_index.SearchResult, error) {
-							return nil, fmt.Errorf("index is borked")
+						QueryFunc: func(query string) ([]bleve.SearchResult, error) {
+							return nil, errors.New("index is borked")
 						},
 					}
 					s.BleveIndexQueryer = mockBleveIndex

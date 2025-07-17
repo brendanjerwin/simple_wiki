@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/brendanjerwin/simple_wiki/common"
 	"github.com/brendanjerwin/simple_wiki/sec"
 	"github.com/brendanjerwin/simple_wiki/utils"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -140,7 +140,7 @@ var _ = Describe("Site", func() {
 
 	Describe("PageReadWriter implementation", func() {
 		var (
-			pageIdentifier common.PageIdentifier
+			pageIdentifier wikipage.PageIdentifier
 			pagePath       string
 		)
 
@@ -165,7 +165,7 @@ var _ = Describe("Site", func() {
 
 			When("the page exists without frontmatter", func() {
 				var (
-					fm  common.FrontMatter
+										fm  wikipage.FrontMatter
 					err error
 				)
 
@@ -186,7 +186,7 @@ var _ = Describe("Site", func() {
 
 			When("the page exists with frontmatter", func() {
 				var (
-					fm  common.FrontMatter
+										fm  wikipage.FrontMatter
 					err error
 				)
 
@@ -205,7 +205,7 @@ markdown content`
 				})
 
 				It("should return the parsed frontmatter", func() {
-					Expect(fm).To(Equal(common.FrontMatter{"title": "Test"}))
+					Expect(fm).To(Equal(wikipage.FrontMatter{"title": "Test"}))
 				})
 			})
 		})
@@ -225,7 +225,7 @@ markdown content`
 
 			When("the page exists without frontmatter", func() {
 				var (
-					md  common.Markdown
+					md  wikipage.Markdown
 					err error
 				)
 
@@ -246,7 +246,7 @@ markdown content`
 
 			When("the page exists with frontmatter", func() {
 				var (
-					md  common.Markdown
+					md  wikipage.Markdown
 					err error
 				)
 				BeforeEach(func() {
@@ -271,12 +271,12 @@ markdown content`
 
 		Describe("WriteFrontMatter", func() {
 			var (
-				newFm common.FrontMatter
+				newFm wikipage.FrontMatter
 				err   error
 			)
 
 			BeforeEach(func() {
-				newFm = common.FrontMatter{"title": "New Title"}
+				newFm = wikipage.FrontMatter{"title": "New Title"}
 			})
 
 			When("the page does not exist", func() {
@@ -386,7 +386,7 @@ old markdown`
 
 		Describe("WriteMarkdown", func() {
 			var (
-				newMd common.Markdown
+				newMd wikipage.Markdown
 				err   error
 			)
 
@@ -436,7 +436,7 @@ title: Existing Title
 				It("should add the markdown and keep the frontmatter", func() {
 					_, fm, fmErr := s.ReadFrontMatter(pageIdentifier)
 					Expect(fmErr).NotTo(HaveOccurred())
-					Expect(fm).To(Equal(common.FrontMatter{"title": "Existing Title"}))
+					Expect(fm).To(Equal(wikipage.FrontMatter{"title": "Existing Title"}))
 
 					_, md, mdErr := s.ReadMarkdown(pageIdentifier)
 					Expect(mdErr).NotTo(HaveOccurred())
@@ -462,7 +462,7 @@ old markdown`
 				It("should replace the markdown and keep the frontmatter", func() {
 					_, fm, fmErr := s.ReadFrontMatter(pageIdentifier)
 					Expect(fmErr).NotTo(HaveOccurred())
-					Expect(fm).To(Equal(common.FrontMatter{"title": "Existing Title"}))
+					Expect(fm).To(Equal(wikipage.FrontMatter{"title": "Existing Title"}))
 
 					_, md, mdErr := s.ReadMarkdown(pageIdentifier)
 					Expect(mdErr).NotTo(HaveOccurred())

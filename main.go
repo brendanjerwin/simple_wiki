@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	grpcApi "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
+	grpcapi "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
 	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"github.com/jcelliott/lumber"
@@ -22,10 +22,13 @@ import (
 var (
 	version = "dev"
 	commit  = "n/a"
+	logger  *lumber.ConsoleLogger
 )
 
+var app *cli.App
+
 func main() {
-	app := cli.NewApp()
+	app = cli.NewApp()
 	app.Name = "simple_wiki"
 	app.Usage = "a simple wiki"
 	app.Version = version
@@ -36,7 +39,8 @@ func main() {
 			return err
 		}
 
-		logger := makeLogger(c.GlobalBool("debug"))
+		grpcServer := grpc.NewServer()
+		logger = makeLogger(c.GlobalBool("debug"))
 		site := server.NewSite(
 			pathToData,
 			c.GlobalString("css"),
@@ -51,9 +55,7 @@ func main() {
 			logger,
 		)
 		ginRouter := site.GinRouter()
-		grpcAPIServer := grpcApi.NewServer(version, commit, app.Compiled, site, logger)
-
-		// Add logging interceptor to gRPC server
+		grpcAPIServer := grpcapi.NewServer(version, commit, app.Compiled, site, logger)
 		grpcServer := grpc.NewServer(grpc.UnaryInterceptor(grpcAPIServer.LoggingInterceptor()))
 		grpcAPIServer.RegisterWithServer(grpcServer)
 
@@ -81,7 +83,7 @@ func main() {
 			host = "0.0.0.0"
 		}
 		addr := fmt.Sprintf("%s:%s", host, c.GlobalString("port"))
-		fmt.Printf("\nRunning simple_wiki server (version %s) at http://%s\n\n", version, addr)
+logger.Info("Running simple_wiki server (version %s) at http://%s", version, addr)
 
 		srv := &http.Server{
 			Addr:    addr,
@@ -89,7 +91,22 @@ func main() {
 		}
 		return srv.ListenAndServe()
 	}
-	app.Flags = []cli.Flag{
+	app.Flags = getFlags()
+
+	if err := app.Run(os.Args); err != nil {
+		logger.Error("Error running app: %v", err)
+		os.Exit(1)
+	}
+}
+
+const (
+	defaultDebounce          = 500
+	defaultMaxUploadMB       = 100
+	defaultMaxDocumentLength = 100000000
+)
+
+func getFlags() []cli.Flag {
+	return []cli.Flag{
 		cli.StringFlag{
 			Name:  "data",
 			Value: "data",
@@ -122,7 +139,7 @@ func main() {
 		},
 		cli.IntFlag{
 			Name:  "debounce",
-			Value: 500,
+			Value: defaultDebounce,
 			Usage: "debounce time for saving data, in milliseconds",
 		},
 		cli.BoolFlag{
@@ -145,19 +162,14 @@ func main() {
 		},
 		cli.UintFlag{
 			Name:  "max-upload-mb",
-			Value: 100,
+			Value: defaultMaxUploadMB,
 			Usage: "Largest file upload (in mb) allowed",
 		},
 		cli.UintFlag{
 			Name:  "max-document-length",
-			Value: 100000000,
+			Value: defaultMaxDocumentLength,
 			Usage: "Largest wiki page (in characters) allowed",
 		},
-	}
-
-	if err := app.Run(os.Args); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
 	}
 }
 

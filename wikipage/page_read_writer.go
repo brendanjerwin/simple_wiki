@@ -1,4 +1,4 @@
-package common
+package wikipage
 
 // PageIdentifier is the unique identifier for a page.
 type PageIdentifier = string

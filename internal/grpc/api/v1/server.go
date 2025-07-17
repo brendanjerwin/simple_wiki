@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/brendanjerwin/simple_wiki/common"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/jcelliott/lumber"
 	"google.golang.org/grpc"
@@ -24,12 +24,12 @@ type Server struct {
 	Version        string
 	Commit         string
 	BuildTime      time.Time
-	PageReadWriter common.PageReadWriter
+	PageReadWriter wikipage.PageReadWriter
 	Logger         *lumber.ConsoleLogger
 }
 
 // MergeFrontmatter implements the MergeFrontmatter RPC.
-func (s *Server) MergeFrontmatter(ctx context.Context, req *apiv1.MergeFrontmatterRequest) (resp *apiv1.MergeFrontmatterResponse, err error) {
+func (s *Server) MergeFrontmatter(_ context.Context, req *apiv1.MergeFrontmatterRequest) (resp *apiv1.MergeFrontmatterResponse, err error) {
 	v := reflect.ValueOf(s.PageReadWriter)
 	if s.PageReadWriter == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
 		return nil, status.Error(codes.Internal, "PageReadWriter not available")
@@ -65,7 +65,7 @@ func (s *Server) MergeFrontmatter(ctx context.Context, req *apiv1.MergeFrontmatt
 }
 
 // ReplaceFrontmatter implements the ReplaceFrontmatter RPC.
-func (s *Server) ReplaceFrontmatter(ctx context.Context, req *apiv1.ReplaceFrontmatterRequest) (resp *apiv1.ReplaceFrontmatterResponse, err error) {
+func (s *Server) ReplaceFrontmatter(_ context.Context, req *apiv1.ReplaceFrontmatterRequest) (resp *apiv1.ReplaceFrontmatterResponse, err error) {
 	v := reflect.ValueOf(s.PageReadWriter)
 	if s.PageReadWriter == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
 		return nil, status.Error(codes.Internal, "PageReadWriter not available")
@@ -201,8 +201,8 @@ func removeAtPath(data any, path []*apiv1.PathComponent) (any, error) {
 	}
 }
 
-// NewServer creates a new debug server.
-func NewServer(version, commit string, buildTime time.Time, pageReadWriter common.PageReadWriter, logger *lumber.ConsoleLogger) *Server {
+// NewServer creates a new debug server
+func NewServer(version, commit string, buildTime time.Time, pageReadWriter wikipage.PageReadWriter, logger *lumber.ConsoleLogger) *Server {
 	return &Server{
 		Version:        version,
 		Commit:         commit,
@@ -219,7 +219,7 @@ func (s *Server) RegisterWithServer(grpcServer *grpc.Server) {
 }
 
 // GetVersion implements the GetVersion RPC.
-func (s *Server) GetVersion(ctx context.Context, req *apiv1.GetVersionRequest) (*apiv1.GetVersionResponse, error) {
+func (s *Server) GetVersion(_ context.Context, _ *apiv1.GetVersionRequest) (*apiv1.GetVersionResponse, error) {
 	return &apiv1.GetVersionResponse{
 		Version:   s.Version,
 		Commit:    s.Commit,
@@ -228,7 +228,7 @@ func (s *Server) GetVersion(ctx context.Context, req *apiv1.GetVersionRequest) (
 }
 
 // GetFrontmatter implements the GetFrontmatter RPC.
-func (s *Server) GetFrontmatter(ctx context.Context, req *apiv1.GetFrontmatterRequest) (resp *apiv1.GetFrontmatterResponse, err error) {
+func (s *Server) GetFrontmatter(_ context.Context, req *apiv1.GetFrontmatterRequest) (resp *apiv1.GetFrontmatterResponse, err error) {
 	v := reflect.ValueOf(s.PageReadWriter)
 	if s.PageReadWriter == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
 		return nil, status.Error(codes.Internal, "PageReadWriter not available")
