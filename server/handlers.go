@@ -2,6 +2,7 @@ package server
 
 import (
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
@@ -16,7 +17,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/sec"
 	"github.com/brendanjerwin/simple_wiki/static"
 	"github.com/brendanjerwin/simple_wiki/utils"
-	secretRequired "github.com/danielheath/gin-teeny-security"
+	ginteenysecurity "github.com/danielheath/gin-teeny-security"
 	"github.com/gin-contrib/multitemplate"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
@@ -25,6 +26,22 @@ import (
 )
 
 const minutesToUnlock = 10.0
+
+const (
+	// HTTP status codes
+	httpStatusFound        = 302
+	httpStatusOK           = 200
+	
+	// Magic numbers
+	maxSecretAttempts      = 8
+	maxCacheControl       = 60
+	maxContentLength      = 3
+	
+	// String constants
+	rootPath              = "/"
+	uploadFailureMessage  = "Failed to upload: %s"
+	uploadsPage           = "uploads"
+)
 
 var (
 	hotTemplateReloading bool
@@ -50,10 +67,10 @@ func NewSite(
 		var errRead error
 		customCSS, errRead = os.ReadFile(cssFile)
 		if errRead != nil {
-			fmt.Println(errRead)
+			_, _ = fmt.Println(errRead)
 			panic(errRead)
 		}
-		fmt.Printf("Loaded CSS file, %d bytes\n", len(customCSS))
+		_, _ = fmt.Printf("Loaded CSS file, %d bytes\n", len(customCSS))
 	}
 
 	site := &Site{
@@ -107,18 +124,18 @@ func (s *Site) GinRouter() *gin.Engine {
 
 	router.Use(sessions.Sessions("_session", s.SessionStore))
 	if s.SecretCode != "" {
-		cfg := &secretRequired.Config{
+		cfg := &ginteenysecurity.Config{
 			Secret: s.SecretCode,
 			Path:   "/login/",
 			RequireAuth: func(c *gin.Context) bool {
 				page := c.Param("page")
 
 				switch page {
-				case "favicon.ico", "static", "uploads":
+				case "favicon.ico", "static", uploadsPage:
 					return false // no auth for these
+				default:
+					return true
 				}
-
-				return true
 			},
 		}
 		router.Use(cfg.Middleware)
@@ -126,9 +143,9 @@ func (s *Site) GinRouter() *gin.Engine {
 
 	router.GET("/", func(c *gin.Context) {
 		if s.DefaultPage != "" {
-			c.Redirect(302, "/"+s.DefaultPage+"/view")
+			c.Redirect(httpStatusFound, "/"+s.DefaultPage+"/view")
 		} else {
-			c.Redirect(302, "/"+utils.RandomAlliterateCombo())
+			c.Redirect(httpStatusFound, "/"+utils.RandomAlliterateCombo())
 		}
 	})
 
@@ -136,7 +153,7 @@ func (s *Site) GinRouter() *gin.Engine {
 
 	router.GET("/:page", func(c *gin.Context) {
 		page := c.Param("page")
-		c.Redirect(302, "/"+page+"/view?"+c.Request.URL.RawQuery)
+		c.Redirect(httpStatusFound, "/"+page+"/view?"+c.Request.URL.RawQuery)
 	})
 	router.GET("/:page/*command", s.handlePageRequest)
 	router.POST("/update", s.handlePageUpdate)
@@ -215,10 +232,12 @@ func getSetSessionID(c *gin.Context) (sid string) {
 		v       = session.Get("sid")
 	)
 	if v != nil {
-		sid = v.(string)
+		if sidStr, ok := v.(string); ok {
+			sid = sidStr
+		}
 	}
 	if v == nil || sid == "" {
-		sid, _ = utils.RandomStringOfLength(8)
+		sid, _ = utils.RandomStringOfLength(maxSecretAttempts)
 		session.Set("sid", sid)
 		_ = session.Save()
 	}
@@ -243,17 +262,16 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 			var errAssset error
 			data, errAssset = static.StaticContent.ReadFile(filename)
 			if errAssset != nil {
-
 				c.String(http.StatusNotFound, "Could not find data")
 				return
 			}
 		}
 		c.Data(http.StatusOK, utils.ContentTypeFromName(filename), data)
 		return
-	case "uploads":
-		if len(command) == 0 || command == "/" || command == "/edit" {
+	case uploadsPage:
+		if len(command) == 0 || command == rootPath || command == "/edit" {
 			if !s.Fileuploads {
-				_ = c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("uploads are disabled on this server"))
+				_ = c.AbortWithError(http.StatusInternalServerError, errors.New("uploads are disabled on this server"))
 				return
 			}
 		} else {
@@ -270,10 +288,12 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 			c.File(pathname)
 			return
 		}
+	default:
+		// General page handling continues below
 	}
 
 	if len(command) < 2 {
-		c.Redirect(302, "/"+page+"/view")
+		c.Redirect(httpStatusFound, "/"+page+"/view")
 		return
 	}
 
@@ -291,16 +311,16 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 	// Disallow anything but viewing locked pages
 	if (isLocked) &&
 		(command[0:2] != "/v" && command[0:2] != "/r") {
-		c.Redirect(302, "/"+page+"/view")
+		c.Redirect(httpStatusFound, "/"+page+"/view")
 		return
 	}
 
 	if command == "/erase" {
 		if !isLocked {
 			_ = p.Erase()
-			c.Redirect(302, "/")
+			c.Redirect(httpStatusFound, rootPath)
 		} else {
-			c.Redirect(302, "/"+page+"/view")
+			c.Redirect(httpStatusFound, "/"+page+"/view")
 		}
 		return
 	}
@@ -324,7 +344,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 	var versionsChangeSums []int
 	var versionsText []string
 	if command[0:2] == "/h" {
-		versionsInt64, versionsChangeSums = p.Text.GetMajorSnapshotsAndChangeSums(60) // get snapshots 60 seconds apart
+		versionsInt64, versionsChangeSums = p.Text.GetMajorSnapshotsAndChangeSums(maxCacheControl) // get snapshots 60 seconds apart
 		versionsText = make([]string, len(versionsInt64))
 		for i, v := range versionsInt64 {
 			versionsText[i] = time.Unix(v/1000000000, 0).Format("Mon Jan 2 15:04:05 MST 2006")
@@ -334,14 +354,14 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		versionsChangeSums = utils.ReverseSliceInt(versionsChangeSums)
 	}
 
-	if len(command) > 3 && command[0:3] == "/ra" {
+	if len(command) > maxContentLength && command[0:maxContentLength] == "/ra" {
 		c.Writer.Header().Set("Content-Type", "text/plain")
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Max-Age", "86400")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE, UPDATE")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, X-Max")
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Data(200, utils.ContentTypeFromName(p.Identifier), []byte(rawText))
+		c.Data(httpStatusOK, utils.ContentTypeFromName(p.Identifier), []byte(rawText))
 		return
 	}
 
@@ -350,22 +370,27 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		return
 	}
 
-	var DirectoryEntries []os.FileInfo
+	var directoryEntries []os.FileInfo
 	if page == "ls" {
 		command = "/view"
-		DirectoryEntries = s.DirectoryList()
+		directoryEntries = s.DirectoryList()
 	}
-	if page == "uploads" {
+	if page == uploadsPage {
 		command = "/view"
 		var err error
-		DirectoryEntries, err = s.UploadList()
+		directoryEntries, err = s.UploadList()
 		if err != nil {
 			_ = c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
 	}
 
-	c.HTML(http.StatusOK, "index.tmpl", gin.H{
+	templateData := s.buildTemplateData(page, command, directoryEntries, contentHTML, rawText, versionsInt64, versionsText, versionsChangeSums, isLocked, c)
+	c.HTML(http.StatusOK, "index.tmpl", templateData)
+}
+
+func (s *Site) buildTemplateData(page, command string, directoryEntries []os.FileInfo, contentHTML []byte, rawText string, versionsInt64 []int64, versionsText []string, versionsChangeSums []int, isLocked bool, c *gin.Context) gin.H {
+	return gin.H{
 		"EditPage":    command[0:2] == "/e", // /edit
 		"ViewPage":    command[0:2] == "/v", // /view
 		"HistoryPage": command[0:2] == "/h", // /history
@@ -375,9 +400,9 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 			command[0:2] != "/l" &&
 			command[0:2] != "/r" &&
 			command[0:2] != "/h",
-		"DirectoryPage":      page == "ls" || page == "uploads",
-		"UploadPage":         page == "uploads",
-		"DirectoryEntries":   DirectoryEntries,
+		"DirectoryPage":      page == "ls" || page == uploadsPage,
+		"UploadPage":         page == uploadsPage,
+		"DirectoryEntries":   directoryEntries,
 		"Page":               page,
 		"RenderedPage":       template.HTML([]byte(contentHTML)),
 		"RawPage":            rawText,
@@ -394,7 +419,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		"UnixTime":           time.Now().Unix(),
 		"AllowFileUploads":   s.Fileuploads,
 		"MaxUploadMB":        s.MaxUploadSize,
-	})
+	}
 }
 
 func getRecentlyEdited(title string, c *gin.Context) []string {
@@ -405,11 +430,13 @@ func getRecentlyEdited(title string, c *gin.Context) []string {
 	if v == nil {
 		recentlyEdited = title
 	} else {
-		editedThings = strings.Split(v.(string), "|||")
-		if !utils.StringInSlice(title, editedThings) {
-			recentlyEdited = v.(string) + "|||" + title
-		} else {
-			recentlyEdited = v.(string)
+		if recentlyEditedStr, ok := v.(string); ok {
+			editedThings = strings.Split(recentlyEditedStr, "|||")
+			if !utils.StringInSlice(title, editedThings) {
+				recentlyEdited = recentlyEditedStr + "|||" + title
+			} else {
+				recentlyEdited = recentlyEditedStr
+			}
 		}
 	}
 	session.Set("recentlyEdited", recentlyEdited)
@@ -525,7 +552,6 @@ func (s *Site) handleLock(c *gin.Context) {
 		p.UnlockedFor != sessionID &&
 		p.UnlockedFor != "" &&
 		sinceLastEdit.Minutes() < minutesToUnlock {
-
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": fmt.Sprintf("This page is being edited by someone else! Will unlock automatically %2.0f minutes after the last change.", minutesToUnlock-sinceLastEdit.Minutes()),
@@ -552,14 +578,14 @@ func (s *Site) handleLock(c *gin.Context) {
 
 func (s *Site) handleUpload(c *gin.Context) {
 	if !s.Fileuploads {
-		_ = c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("uploads are disabled on this server"))
+		_ = c.AbortWithError(http.StatusInternalServerError, errors.New("uploads are disabled on this server"))
 		return
 	}
 
 	file, info, err := c.Request.FormFile("file")
 	if err != nil {
 		_ = c.AbortWithError(http.StatusInternalServerError, err)
-		s.Logger.Error("Failed to upload: %s", err.Error())
+		s.Logger.Error(uploadFailureMessage, err.Error())
 		return
 	}
 	defer func() { _ = file.Close() }()
@@ -567,7 +593,7 @@ func (s *Site) handleUpload(c *gin.Context) {
 	h := sha256.New()
 	if _, err := io.Copy(h, file); err != nil {
 		_ = c.AbortWithError(http.StatusInternalServerError, err)
-		s.Logger.Error("Failed to upload: %s", err.Error())
+		s.Logger.Error(uploadFailureMessage, err.Error())
 		return
 	}
 
@@ -577,7 +603,7 @@ func (s *Site) handleUpload(c *gin.Context) {
 	outfile, err := os.Create(path.Join(s.PathToData, newName+".upload"))
 	if err != nil {
 		_ = c.AbortWithError(http.StatusInternalServerError, err)
-		s.Logger.Error("Failed to upload: %s", err.Error())
+		s.Logger.Error(uploadFailureMessage, err.Error())
 		return
 	}
 
@@ -585,7 +611,7 @@ func (s *Site) handleUpload(c *gin.Context) {
 	_, err = io.Copy(outfile, file)
 	if err != nil {
 		_ = c.AbortWithError(http.StatusInternalServerError, err)
-		s.Logger.Error("Failed to upload: %s", err.Error())
+		s.Logger.Error(uploadFailureMessage, err.Error())
 		return
 	}
 
