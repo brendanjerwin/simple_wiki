@@ -1,6 +1,7 @@
 import { html, fixture, expect } from '@open-wc/testing';
 import { VersionDisplay } from './version-display.js';
 import './version-display.js';
+import * as sinon from 'sinon';
 
 describe('VersionDisplay', () => {
   let el: VersionDisplay;
@@ -43,6 +44,213 @@ describe('VersionDisplay', () => {
     it('should have fixed position styling', () => {
       const styles = getComputedStyle(el);
       expect(styles.position).to.equal('fixed');
+    });
+  });
+
+  describe('when gRPC response is successful', () => {
+    let getVersionStub: sinon.SinonStub;
+    const mockResponse = {
+      version: '1.2.3',
+      commit: 'abc123def456',
+      buildTime: { toDate: () => new Date('2023-01-01T12:00:00Z') }
+    };
+
+    beforeEach(async () => {
+      getVersionStub = sinon.stub(el['client'], 'getVersion').resolves(mockResponse);
+      await el['loadVersion']();
+      await el.updateComplete;
+    });
+
+    afterEach(() => {
+      getVersionStub.restore();
+    });
+
+    it('should not show loading state', () => {
+      const loading = el.shadowRoot?.querySelector('.loading');
+      expect(loading).to.not.exist;
+    });
+
+    it('should not show error state', () => {
+      const error = el.shadowRoot?.querySelector('.error');
+      expect(error).to.not.exist;
+    });
+
+    it('should display version information', () => {
+      const versionRow = el.shadowRoot?.querySelector('.version-row');
+      expect(versionRow).to.exist;
+      expect(versionRow?.textContent).to.contain('1.2.3');
+    });
+
+    it('should display commit hash', () => {
+      const commitElement = el.shadowRoot?.querySelector('.commit');
+      expect(commitElement).to.exist;
+      expect(commitElement?.textContent).to.contain('abc123d');
+    });
+
+    it('should display build time', () => {
+      const versionInfo = el.shadowRoot?.querySelector('.version-info');
+      expect(versionInfo?.textContent).to.contain('Jan 1, 2023');
+    });
+  });
+
+  describe('when gRPC response fails', () => {
+    let getVersionStub: sinon.SinonStub;
+    const mockError = new Error('Network error');
+
+    beforeEach(async () => {
+      getVersionStub = sinon.stub(el['client'], 'getVersion').rejects(mockError);
+      await el['loadVersion']();
+      await el.updateComplete;
+    });
+
+    afterEach(() => {
+      getVersionStub.restore();
+    });
+
+    it('should not show loading state', () => {
+      const loading = el.shadowRoot?.querySelector('.loading');
+      expect(loading).to.not.exist;
+    });
+
+    it('should show error state', () => {
+      const error = el.shadowRoot?.querySelector('.error');
+      expect(error).to.exist;
+      expect(error?.textContent).to.contain('Network error');
+    });
+
+    it('should not display version information', () => {
+      const versionRow = el.shadowRoot?.querySelector('.version-row');
+      expect(versionRow).to.not.exist;
+    });
+  });
+
+  describe('when gRPC response fails with unknown error', () => {
+    let getVersionStub: sinon.SinonStub;
+
+    beforeEach(async () => {
+      getVersionStub = sinon.stub(el['client'], 'getVersion').callsFake(() => Promise.reject('Unknown error'));
+      await el['loadVersion']();
+      await el.updateComplete;
+    });
+
+    afterEach(() => {
+      getVersionStub.restore();
+    });
+
+    it('should not show loading state', () => {
+      const loading = el.shadowRoot?.querySelector('.loading');
+      expect(loading).to.not.exist;
+    });
+
+    it('should show generic error message', () => {
+      const error = el.shadowRoot?.querySelector('.error');
+      expect(error).to.exist;
+      expect(error?.textContent).to.contain('Failed to load version');
+    });
+  });
+
+  describe('when loading state is active', () => {
+    let getVersionStub: sinon.SinonStub;
+
+    beforeEach(async () => {
+      // Create a promise that won't resolve during the test
+      const promise = new Promise(() => {
+        // This promise never resolves, keeping the component in loading state
+      });
+      getVersionStub = sinon.stub(el['client'], 'getVersion').returns(promise);
+      el['loadVersion']();
+      await el.updateComplete;
+    });
+
+    afterEach(() => {
+      getVersionStub.restore();
+    });
+
+    it('should show loading state', () => {
+      const loading = el.shadowRoot?.querySelector('.loading');
+      expect(loading).to.exist;
+      expect(loading?.textContent).to.contain('Loading version...');
+    });
+
+    it('should not show error state', () => {
+      const error = el.shadowRoot?.querySelector('.error');
+      expect(error).to.not.exist;
+    });
+
+    it('should not show version information', () => {
+      const versionRow = el.shadowRoot?.querySelector('.version-row');
+      expect(versionRow).to.not.exist;
+    });
+  });
+
+  describe('when mouse enters component', () => {
+    let loadVersionSpy: sinon.SinonSpy;
+
+    beforeEach(async () => {
+      loadVersionSpy = sinon.spy(el, 'loadVersion' as keyof VersionDisplay);
+      await el.updateComplete;
+    });
+
+    afterEach(() => {
+      loadVersionSpy.restore();
+    });
+
+    it('should call loadVersion on mouseenter', () => {
+      const mouseEnterEvent = new MouseEvent('mouseenter');
+      el.dispatchEvent(mouseEnterEvent);
+      expect(loadVersionSpy).to.have.been.calledOnce;
+    });
+  });
+
+  describe('when component is connected to DOM', () => {
+    let loadVersionSpy: sinon.SinonSpy;
+
+    beforeEach(async () => {
+      loadVersionSpy = sinon.spy(VersionDisplay.prototype, 'loadVersion' as keyof VersionDisplay);
+      // Re-create the element to trigger connectedCallback
+      el = await fixture(html`<version-display></version-display>`);
+      await el.updateComplete;
+    });
+
+    afterEach(() => {
+      loadVersionSpy.restore();
+    });
+
+    it('should call loadVersion when connected', () => {
+      expect(loadVersionSpy).to.have.been.called;
+    });
+  });
+
+  describe('when formatting commit hash', () => {
+    it('should truncate long commit hashes', () => {
+      const longCommit = 'abcdefghijklmnopqrstuvwxyz123456789';
+      const result = el['formatCommit'](longCommit);
+      expect(result).to.equal('abcdefg');
+    });
+
+    it('should not truncate short commit hashes', () => {
+      const shortCommit = 'abc123';
+      const result = el['formatCommit'](shortCommit);
+      expect(result).to.equal('abc123');
+    });
+  });
+
+  describe('when formatting timestamp', () => {
+    it('should format valid timestamp', () => {
+      const mockTimestamp = { toDate: () => new Date('2023-01-01T12:00:00Z') };
+      const result = el['formatTimestamp'](mockTimestamp as { toDate: () => Date });
+      expect(result).to.contain('Jan 1, 2023');
+    });
+
+    it('should handle undefined timestamp', () => {
+      const result = el['formatTimestamp'](undefined);
+      expect(result).to.equal('Unknown');
+    });
+
+    it('should handle invalid timestamp', () => {
+      const mockTimestamp = { toDate: () => { throw new Error('Invalid date'); } };
+      const result = el['formatTimestamp'](mockTimestamp as { toDate: () => Date });
+      expect(result).to.equal('Invalid date');
     });
   });
 });

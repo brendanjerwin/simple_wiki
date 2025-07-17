@@ -17,6 +17,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/types"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -699,6 +700,135 @@ var _ = Describe("Server", func() {
 					Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "path is deeper than data structure"))
 					Expect(resp).To(BeNil())
 				})
+			})
+		})
+	})
+
+	Describe("LoggingInterceptor", func() {
+		var (
+			server  *v1.Server
+			logger  *lumber.ConsoleLogger
+			ctx     context.Context
+			req     interface{}
+			info    *grpc.UnaryServerInfo
+			handler grpc.UnaryHandler
+		)
+
+		BeforeEach(func() {
+			ctx = context.Background()
+			req = &apiv1.GetVersionRequest{}
+			info = &grpc.UnaryServerInfo{
+				FullMethod: "/api.v1.Version/GetVersion",
+			}
+
+			// Create a mock logger
+			logger = lumber.NewConsoleLogger(lumber.INFO)
+
+			server = v1.NewServer("test-version", "test-commit", time.Now(), nil, logger)
+		})
+
+		When("a successful gRPC call is made", func() {
+			var (
+				resp interface{}
+				err  error
+			)
+
+			BeforeEach(func() {
+				handler = func(ctx context.Context, req interface{}) (interface{}, error) {
+					time.Sleep(10 * time.Millisecond) // Simulate some work
+					return &apiv1.GetVersionResponse{Version: "test"}, nil
+				}
+
+				interceptor := server.LoggingInterceptor()
+				resp, err = interceptor(ctx, req, info, handler)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return the response", func() {
+				Expect(resp).NotTo(BeNil())
+				Expect(resp).To(BeAssignableToTypeOf(&apiv1.GetVersionResponse{}))
+			})
+		})
+
+		When("a gRPC call fails", func() {
+			var (
+				resp interface{}
+				err  error
+			)
+
+			BeforeEach(func() {
+				handler = func(ctx context.Context, req interface{}) (interface{}, error) {
+					time.Sleep(5 * time.Millisecond) // Simulate some work
+					return nil, status.Error(codes.Internal, "test error")
+				}
+
+				interceptor := server.LoggingInterceptor()
+				resp, err = interceptor(ctx, req, info, handler)
+			})
+
+			It("should return the error", func() {
+				Expect(err).To(HaveOccurred())
+				Expect(err).To(HaveGrpcStatus(codes.Internal, "test error"))
+			})
+
+			It("should return nil response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("a handler panics", func() {
+			var (
+				err error
+			)
+
+			BeforeEach(func() {
+				handler = func(ctx context.Context, req interface{}) (interface{}, error) {
+					panic("test panic")
+				}
+
+				interceptor := server.LoggingInterceptor()
+
+				// Capture the panic
+				defer func() {
+					if r := recover(); r != nil {
+						err = status.Error(codes.Internal, "panic occurred")
+					}
+				}()
+
+				_, err = interceptor(ctx, req, info, handler)
+			})
+
+			It("should propagate the panic", func() {
+				Expect(err).To(HaveOccurred())
+			})
+		})
+
+		When("logger is nil", func() {
+			var (
+				resp interface{}
+				err  error
+			)
+
+			BeforeEach(func() {
+				server = v1.NewServer("test-version", "test-commit", time.Now(), nil, nil)
+
+				handler = func(ctx context.Context, req interface{}) (interface{}, error) {
+					return &apiv1.GetVersionResponse{Version: "test"}, nil
+				}
+
+				interceptor := server.LoggingInterceptor()
+				resp, err = interceptor(ctx, req, info, handler)
+			})
+
+			It("should not panic", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return the response", func() {
+				Expect(resp).NotTo(BeNil())
 			})
 		})
 	})

@@ -98,6 +98,12 @@ export class VersionDisplay extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.loadVersion();
+    // Add hover event listener to reload version
+    this.addEventListener('mouseenter', this.handleMouseEnter.bind(this));
+  }
+
+  private handleMouseEnter(): void {
+    this.loadVersion();
   }
 
   private async loadVersion(): Promise<void> {
