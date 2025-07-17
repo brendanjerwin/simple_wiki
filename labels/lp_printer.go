@@ -44,6 +44,6 @@ func (p *LPPrinter) Write(data []byte) (int, error) {
 }
 
 // Close closes the LP printer.
-func (p *LPPrinter) Close() error {
+func (LPPrinter) Close() error {
 	return nil
 }

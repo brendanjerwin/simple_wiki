@@ -5,18 +5,19 @@ import (
 	"regexp"
 	"strings"
 
-	bleveActual "github.com/blevesearch/bleve"
-	"github.com/brendanjerwin/simple_wiki/common"
+		"github.com/blevesearch/bleve"
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/templating"
-	"github.com/brendanjerwin/simple_wiki/utils"
+	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
+	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/k3a/html2text"
 )
 
 // Index is a Bleve search index implementation.
 type Index struct {
-	index              bleveActual.Index
-	pageReader         common.PageReader
+	index              bleve.Index
+	pageReader         wikipage.PageReader
 	frontmatterQueryer frontmatter.IQueryFrontmatterIndex
 }
 
@@ -26,10 +27,10 @@ type IQueryBleveIndex interface {
 }
 
 // NewIndex creates a new BleveIndex.
-func NewIndex(pageReader common.PageReader, frontmatterQueryer frontmatter.IQueryFrontmatterIndex) (*Index, error) {
-	mapping := bleveActual.NewIndexMapping()
+func NewIndex(pageReader wikipage.PageReader, frontmatterQueryer frontmatter.IQueryFrontmatterIndex) (*Index, error) {
+	mapping := bleve.NewIndexMapping()
 	mapping.DefaultAnalyzer = "en"
-	index, err := bleveActual.NewMemOnly(mapping)
+	index, err := bleve.NewMemOnly(mapping)
 	if err != nil {
 		return nil, err
 	}
@@ -47,22 +48,22 @@ var (
 )
 
 // AddPageToIndex adds a page to the Bleve index.
-func (b *Index) AddPageToIndex(requestedIdentifier common.PageIdentifier) error {
-	mungedIdentifier := common.MungeIdentifier(requestedIdentifier)
+func (b *Index) AddPageToIndex(requestedIdentifier wikipage.PageIdentifier) error {
+	mungedIdentifier := wikiidentifiers.MungeIdentifier(requestedIdentifier)
 	identifier, markdown, err := b.pageReader.ReadMarkdown(requestedIdentifier)
 	if err != nil {
 		return err
 	}
 
-	_, frontmatter, err := b.pageReader.ReadFrontMatter(identifier)
+	_, pageFrontmatter, err := b.pageReader.ReadFrontMatter(identifier)
 	if err != nil {
 		return err
 	}
-	renderedBytes, err := templating.ExecuteTemplate(markdown, frontmatter, b.pageReader, b.frontmatterQueryer)
+	renderedBytes, err := templating.ExecuteTemplate(markdown, pageFrontmatter, b.pageReader, b.frontmatterQueryer)
 	if err != nil {
 		return err
 	}
-	markdownRenderer := utils.GoldmarkRenderer{}
+	markdownRenderer := goldmarkrenderer.GoldmarkRenderer{}
 	htmlBytes, err := markdownRenderer.Render(renderedBytes)
 	var content string
 	if err != nil {
@@ -74,18 +75,18 @@ func (b *Index) AddPageToIndex(requestedIdentifier common.PageIdentifier) error 
 		content = repeatedNewlineRegex.ReplaceAllString(content, "\n\n")
 	}
 
-	frontmatter["content"] = content
+	pageFrontmatter["content"] = content
 
 	_ = b.index.Delete(identifier)
 	_ = b.index.Delete(requestedIdentifier)
 	_ = b.index.Delete(mungedIdentifier)
 
-	return b.index.Index(identifier, frontmatter)
+	return b.index.Index(identifier, pageFrontmatter)
 }
 
 // RemovePageFromIndex removes a page from the Bleve index.
-func (b *Index) RemovePageFromIndex(identifier common.PageIdentifier) error {
-	identifier = common.MungeIdentifier(identifier)
+func (b *Index) RemovePageFromIndex(identifier wikipage.PageIdentifier) error {
+	identifier = wikiidentifiers.MungeIdentifier(identifier)
 	return b.index.Delete(identifier)
 }
 
@@ -93,16 +94,16 @@ var newlineRegex = regexp.MustCompile("\n")
 
 // Query searches the Bleve index.
 func (b *Index) Query(query string) ([]SearchResult, error) {
-	titleQuery := bleveActual.NewMatchQuery(query)
+	titleQuery := bleve.NewMatchQuery(query)
 	titleQuery.SetField("title")
 	titleQuery.SetBoost(2.0)
 
-	overallQuery := bleveActual.NewQueryStringQuery(query)
+	overallQuery := bleve.NewQueryStringQuery(query)
 
-	q := bleveActual.NewDisjunctionQuery(titleQuery, overallQuery)
+	q := bleve.NewDisjunctionQuery(titleQuery, overallQuery)
 
-	search := bleveActual.NewSearchRequest(q)
-	search.Highlight = bleveActual.NewHighlight()
+	search := bleve.NewSearchRequest(q)
+	search.Highlight = bleve.NewHighlight()
 	bleveResults, err := b.index.Search(search)
 	if err != nil {
 		return nil, err
@@ -131,7 +132,7 @@ func (b *Index) Query(query string) ([]SearchResult, error) {
 
 // SearchResult represents a search result from the Bleve index.
 type SearchResult struct {
-	Identifier   common.PageIdentifier
+	Identifier   wikipage.PageIdentifier
 	Title        string
 	FragmentHTML string
 }

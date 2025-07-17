@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brendanjerwin/simple_wiki/common"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
-	v1 "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
+	"github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/types"
@@ -116,37 +116,37 @@ func TestServer(t *testing.T) {
 	RunSpecs(t, "gRPC V1 Server Suite")
 }
 
-// MockPageReadWriter is a mock implementation of common.PageReadWriter for testing.
+// MockPageReadWriter is a mock implementation of wikipage.PageReadWriter for testing.
 type MockPageReadWriter struct {
-	Frontmatter        common.FrontMatter
-	Markdown           common.Markdown
+	Frontmatter        wikipage.FrontMatter
+	Markdown           wikipage.Markdown
 	Err                error
-	WrittenFrontmatter common.FrontMatter
-	WrittenMarkdown    common.Markdown
-	WrittenIdentifier  common.PageIdentifier
+	WrittenFrontmatter wikipage.FrontMatter
+	WrittenMarkdown    wikipage.Markdown
+	WrittenIdentifier  wikipage.PageIdentifier
 	WriteErr           error
 }
 
-func (m *MockPageReadWriter) ReadFrontMatter(identifier common.PageIdentifier) (common.PageIdentifier, common.FrontMatter, error) {
+func (m *MockPageReadWriter) ReadFrontMatter(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
 	if m.Err != nil {
 		return "", nil, m.Err
 	}
 	return identifier, m.Frontmatter, nil
 }
 
-func (m *MockPageReadWriter) WriteFrontMatter(identifier common.PageIdentifier, fm common.FrontMatter) error {
+func (m *MockPageReadWriter) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
 	m.WrittenIdentifier = identifier
 	m.WrittenFrontmatter = fm
 	return m.WriteErr
 }
 
-func (m *MockPageReadWriter) WriteMarkdown(identifier common.PageIdentifier, md common.Markdown) error {
+func (m *MockPageReadWriter) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Markdown) error {
 	m.WrittenIdentifier = identifier
 	m.WrittenMarkdown = md
 	return m.WriteErr
 }
 
-func (m *MockPageReadWriter) ReadMarkdown(identifier common.PageIdentifier) (common.PageIdentifier, common.Markdown, error) {
+func (m *MockPageReadWriter) ReadMarkdown(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
 	if m.Err != nil {
 		return "", "", m.Err
 	}
@@ -299,12 +299,12 @@ var _ = Describe("Server", func() {
 
 		When("the page does not exist", func() {
 			var newFrontmatterPb *structpb.Struct
-			var newFrontmatter common.FrontMatter
+			var newFrontmatter wikipage.FrontMatter
 
 			BeforeEach(func() {
 				mockPageReadWriter.Err = os.ErrNotExist
 
-				newFrontmatter = common.FrontMatter{"title": "New Title"}
+				newFrontmatter = wikipage.FrontMatter{"title": "New Title"}
 				var err error
 				newFrontmatterPb, err = structpb.NewStruct(newFrontmatter)
 				Expect(err).NotTo(HaveOccurred())
@@ -316,7 +316,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should write the new frontmatter", func() {
-				Expect(mockPageReadWriter.WrittenIdentifier).To(Equal(common.PageIdentifier(pageName)))
+				Expect(mockPageReadWriter.WrittenIdentifier).To(Equal(wikipage.PageIdentifier(pageName)))
 				Expect(mockPageReadWriter.WrittenFrontmatter).To(Equal(newFrontmatter))
 			})
 
@@ -326,15 +326,15 @@ var _ = Describe("Server", func() {
 		})
 
 		When("the page exists", func() {
-			var existingFrontmatter common.FrontMatter
-			var newFrontmatter common.FrontMatter
-			var mergedFrontmatter common.FrontMatter
+			var existingFrontmatter wikipage.FrontMatter
+			var newFrontmatter wikipage.FrontMatter
+			var mergedFrontmatter wikipage.FrontMatter
 
 			BeforeEach(func() {
-				existingFrontmatter = common.FrontMatter{"title": "Old Title", "tags": []any{"old"}}
-				newFrontmatter = common.FrontMatter{"title": "New Title", "author": "test"}
+				existingFrontmatter = wikipage.FrontMatter{"title": "Old Title", "tags": []any{"old"}}
+				newFrontmatter = wikipage.FrontMatter{"title": "New Title", "author": "test"}
 
-				mergedFrontmatter = common.FrontMatter{
+				mergedFrontmatter = wikipage.FrontMatter{
 					"title":  "New Title",
 					"tags":   []any{"old"},
 					"author": "test",
@@ -351,7 +351,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should write the merged frontmatter", func() {
-				Expect(mockPageReadWriter.WrittenIdentifier).To(Equal(common.PageIdentifier(pageName)))
+				Expect(mockPageReadWriter.WrittenIdentifier).To(Equal(wikipage.PageIdentifier(pageName)))
 				Expect(mockPageReadWriter.WrittenFrontmatter).To(Equal(mergedFrontmatter))
 			})
 
@@ -370,13 +370,13 @@ var _ = Describe("Server", func() {
 			err                error
 			mockPageReadWriter *MockPageReadWriter
 			pageName           string
-			newFrontmatter     common.FrontMatter
+			newFrontmatter     wikipage.FrontMatter
 			newFrontmatterPb   *structpb.Struct
 		)
 
 		BeforeEach(func() {
 			pageName = "test-page"
-			newFrontmatter = common.FrontMatter{"title": "New Title", "tags": []any{"a", "b"}}
+			newFrontmatter = wikipage.FrontMatter{"title": "New Title", "tags": []any{"a", "b"}}
 			var err error
 			newFrontmatterPb, err = structpb.NewStruct(newFrontmatter)
 			Expect(err).NotTo(HaveOccurred())
@@ -426,7 +426,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should write the new frontmatter to the page", func() {
-				Expect(mockPageReadWriter.WrittenIdentifier).To(Equal(common.PageIdentifier(pageName)))
+				Expect(mockPageReadWriter.WrittenIdentifier).To(Equal(wikipage.PageIdentifier(pageName)))
 				Expect(mockPageReadWriter.WrittenFrontmatter).To(Equal(newFrontmatter))
 			})
 
@@ -449,7 +449,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should write nil frontmatter", func() {
-				Expect(mockPageReadWriter.WrittenIdentifier).To(Equal(common.PageIdentifier(pageName)))
+				Expect(mockPageReadWriter.WrittenIdentifier).To(Equal(wikipage.PageIdentifier(pageName)))
 				Expect(mockPageReadWriter.WrittenFrontmatter).To(BeNil())
 			})
 
@@ -527,9 +527,9 @@ var _ = Describe("Server", func() {
 		})
 
 		When("removing a key successfully", func() {
-			var initialFm common.FrontMatter
+			var initialFm wikipage.FrontMatter
 			BeforeEach(func() {
-				initialFm = common.FrontMatter{
+				initialFm = wikipage.FrontMatter{
 					"a": "b",
 					"c": map[string]any{
 						"d": "e",
@@ -540,12 +540,12 @@ var _ = Describe("Server", func() {
 			})
 
 			When("from the top-level map", func() {
-				var expectedFm common.FrontMatter
+				var expectedFm wikipage.FrontMatter
 				BeforeEach(func() {
 					req.KeyPath = []*apiv1.PathComponent{
 						{Component: &apiv1.PathComponent_Key{Key: "a"}},
 					}
-					expectedFm = common.FrontMatter{
+					expectedFm = wikipage.FrontMatter{
 						"c": map[string]any{
 							"d": "e",
 						},
@@ -569,13 +569,13 @@ var _ = Describe("Server", func() {
 			})
 
 			When("from a nested map", func() {
-				var expectedFm common.FrontMatter
+				var expectedFm wikipage.FrontMatter
 				BeforeEach(func() {
 					req.KeyPath = []*apiv1.PathComponent{
 						{Component: &apiv1.PathComponent_Key{Key: "c"}},
 						{Component: &apiv1.PathComponent_Key{Key: "d"}},
 					}
-					expectedFm = common.FrontMatter{
+					expectedFm = wikipage.FrontMatter{
 						"a": "b",
 						"c": map[string]any{},
 						"f": []any{"g", "h", map[string]any{"i": "j"}},
@@ -598,13 +598,13 @@ var _ = Describe("Server", func() {
 			})
 
 			When("from a slice", func() {
-				var expectedFm common.FrontMatter
+				var expectedFm wikipage.FrontMatter
 				BeforeEach(func() {
 					req.KeyPath = []*apiv1.PathComponent{
 						{Component: &apiv1.PathComponent_Key{Key: "f"}},
 						{Component: &apiv1.PathComponent_Index{Index: 1}},
 					}
-					expectedFm = common.FrontMatter{
+					expectedFm = wikipage.FrontMatter{
 						"a": "b",
 						"c": map[string]any{
 							"d": "e",
@@ -631,7 +631,7 @@ var _ = Describe("Server", func() {
 
 		When("the path is invalid", func() {
 			BeforeEach(func() {
-				mockPageReadWriter.Frontmatter = common.FrontMatter{
+				mockPageReadWriter.Frontmatter = wikipage.FrontMatter{
 					"a": "b",
 					"f": []any{"g"},
 				}

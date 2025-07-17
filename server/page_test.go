@@ -6,9 +6,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/brendanjerwin/simple_wiki/common"
-
 	"github.com/brendanjerwin/simple_wiki/utils"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
+
 	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -132,8 +132,8 @@ var _ = Describe("Page Functions", func() {
 	Describe("Page.parse", func() {
 		var (
 			p           *Page
-			frontmatter common.FrontMatter
-			markdown    common.Markdown
+			frontmatter wikipage.FrontMatter
+			markdown    wikipage.Markdown
 			err         error
 		)
 

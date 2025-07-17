@@ -15,8 +15,9 @@ import (
 	"sync"
 	"time"
 
-	adrgFrontmatter "github.com/adrg/frontmatter"
-	"github.com/brendanjerwin/simple_wiki/common"
+	adrgfrontmatter "github.com/adrg/frontmatter"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
+	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/brendanjerwin/simple_wiki/index"
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
@@ -103,7 +104,7 @@ func (s *Site) InitializeIndexing() error {
 
 func (s *Site) readFileByIdentifier(identifier, extension string) (string, []byte, error) {
 	// First try with the munged identifier
-	mungedIdentifier := common.MungeIdentifier(identifier)
+	mungedIdentifier := wikiidentifiers.MungeIdentifier(identifier)
 	b, err := os.ReadFile(path.Join(s.PathToData, utils.EncodeToBase32(strings.ToLower(mungedIdentifier))+"."+extension))
 	if err == nil {
 		return mungedIdentifier, b, nil
@@ -297,7 +298,7 @@ func (s *Site) UploadList() ([]os.FileInfo, error) {
 
 // --- PageReadWriter implementation ---
 
-func combineFrontmatterAndMarkdown(fm common.FrontMatter, md common.Markdown) (string, error) {
+func combineFrontmatterAndMarkdown(fm wikipage.FrontMatter, md wikipage.Markdown) (string, error) {
 	fmBytes, err := toml.Marshal(fm)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal frontmatter: %v", err)
@@ -322,7 +323,7 @@ func combineFrontmatterAndMarkdown(fm common.FrontMatter, md common.Markdown) (s
 }
 
 // WriteFrontMatter writes the frontmatter for a page.
-func (s *Site) WriteFrontMatter(identifier common.PageIdentifier, fm common.FrontMatter) error {
+func (s *Site) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
 	p := s.Open(string(identifier))
 
 	// Use the PageReadWriter interface to get the current markdown content.
@@ -341,7 +342,7 @@ func (s *Site) WriteFrontMatter(identifier common.PageIdentifier, fm common.Fron
 }
 
 func lenientParse(content []byte, matter any) (body []byte, err error) {
-	body, err = adrgFrontmatter.Parse(bytes.NewReader(content), matter)
+	body, err = adrgfrontmatter.Parse(bytes.NewReader(content), matter)
 	if err != nil {
 		var tomlErr *toml.DecodeError
 		// If it's a TOML parsing error and it has TOML delimiters, try to parse as YAML.
@@ -351,7 +352,7 @@ func lenientParse(content []byte, matter any) (body []byte, err error) {
 			bytes.HasPrefix(content, []byte("+++")) {
 			// Replace TOML delimiters with YAML and try again
 			newContent := bytes.Replace(content, []byte("+++"), []byte("---"), 2)
-			body, err = adrgFrontmatter.Parse(bytes.NewReader(newContent), matter)
+			body, err = adrgfrontmatter.Parse(bytes.NewReader(newContent), matter)
 			return
 		}
 	}
@@ -359,7 +360,7 @@ func lenientParse(content []byte, matter any) (body []byte, err error) {
 }
 
 // WriteMarkdown writes the markdown content for a page.
-func (s *Site) WriteMarkdown(identifier common.PageIdentifier, md common.Markdown) error {
+func (s *Site) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Markdown) error {
 	p := s.Open(string(identifier))
 
 	// Use the PageReadWriter interface to get the current frontmatter.
@@ -378,30 +379,30 @@ func (s *Site) WriteMarkdown(identifier common.PageIdentifier, md common.Markdow
 }
 
 // ReadFrontMatter reads the frontmatter for a page.
-func (s *Site) ReadFrontMatter(identifier common.PageIdentifier) (common.PageIdentifier, common.FrontMatter, error) {
+func (s *Site) ReadFrontMatter(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
 	identifier, content, err := s.readFileByIdentifier(identifier, "md")
 	if err != nil {
 		return identifier, nil, err
 	}
 
-	var matter common.FrontMatter
+	var matter wikipage.FrontMatter
 	_, err = lenientParse(content, &matter)
 	if err != nil {
 		if strings.Contains(err.Error(), "format not found") {
-			return identifier, make(common.FrontMatter), nil
+			return identifier, make(wikipage.FrontMatter), nil
 		}
 		return identifier, nil, err
 	}
 
 	if matter == nil {
-		return identifier, make(common.FrontMatter), nil
+		return identifier, make(wikipage.FrontMatter), nil
 	}
 
 	return identifier, matter, nil
 }
 
 // ReadMarkdown reads the markdown content for a page.
-func (s *Site) ReadMarkdown(identifier common.PageIdentifier) (common.PageIdentifier, common.Markdown, error) {
+func (s *Site) ReadMarkdown(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
 	identifier, content, err := s.readFileByIdentifier(identifier, "md")
 	if err != nil {
 		return identifier, "", err
@@ -412,10 +413,10 @@ func (s *Site) ReadMarkdown(identifier common.PageIdentifier) (common.PageIdenti
 	if err != nil {
 		if strings.Contains(err.Error(), "format not found") {
 			// No frontmatter found, the entire content is markdown.
-			return identifier, common.Markdown(body), nil
+			return identifier, wikipage.Markdown(body), nil
 		}
 		return identifier, "", err // A real parsing error.
 	}
 
-	return identifier, common.Markdown(body), nil
+	return identifier, wikipage.Markdown(body), nil
 }

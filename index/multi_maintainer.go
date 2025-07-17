@@ -3,7 +3,7 @@ package index
 import (
 	"errors"
 
-	"github.com/brendanjerwin/simple_wiki/common"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
 // MultiMaintainer is an index maintainer that delegates to multiple other maintainers.
@@ -17,7 +17,7 @@ func NewMultiMaintainer(maintainers ...IMaintainIndex) *MultiMaintainer {
 }
 
 // AddPageToIndex adds a page to all underlying indexes.
-func (m *MultiMaintainer) AddPageToIndex(identifier common.PageIdentifier) error {
+func (m *MultiMaintainer) AddPageToIndex(identifier wikipage.PageIdentifier) error {
 	errs := []error{}
 	for _, maintainer := range m.Maintainers {
 		err := maintainer.AddPageToIndex(identifier)
@@ -30,7 +30,7 @@ func (m *MultiMaintainer) AddPageToIndex(identifier common.PageIdentifier) error
 }
 
 // RemovePageFromIndex removes a page from all underlying indexes.
-func (m *MultiMaintainer) RemovePageFromIndex(identifier common.PageIdentifier) error {
+func (m *MultiMaintainer) RemovePageFromIndex(identifier wikipage.PageIdentifier) error {
 	errs := []error{}
 	for _, maintainer := range m.Maintainers {
 		err := maintainer.RemovePageFromIndex(identifier)

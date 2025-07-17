@@ -1,13 +1,19 @@
 package labels
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 
-	"github.com/brendanjerwin/simple_wiki/common"
+		"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/templating"
+)
+
+const (
+	// bitSize for parsing uints from hex strings.
+	bitSize = 16
 )
 
 // Printer defines the interface for a label printer.
@@ -17,7 +23,7 @@ type Printer interface {
 }
 
 // PrintLabel prints a label using the specified template and identifier.
-func PrintLabel(templateIdentifier string, identifier string, site common.PageReader, query frontmatter.IQueryFrontmatterIndex) error {
+func PrintLabel(templateIdentifier string, identifier string, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex) error {
 	templateIdentifier, templateData, err := site.ReadMarkdown(templateIdentifier)
 	if err != nil {
 		return err
@@ -25,8 +31,7 @@ func PrintLabel(templateIdentifier string, identifier string, site common.PageRe
 
 	_, templateFrontmatter, err := site.ReadFrontMatter(templateIdentifier)
 	if err != nil {
-		return err
-	}
+		return err	}
 
 	config, err := configFromFrontmatter(templateFrontmatter)
 	if err != nil {
@@ -39,18 +44,20 @@ func PrintLabel(templateIdentifier string, identifier string, site common.PageRe
 		printer, err = GetUSBPrinter(config)
 	case LP:
 		printer, err = GetLPPrinter(config)
+	default:
+		return fmt.Errorf("unknown connectivity mode: %v", config.ConnectivityMode)
 	}
 	if err != nil {
 		return err
 	}
 	defer func() { _ = printer.Close() }()
 
-	_, frontmatter, err := site.ReadFrontMatter(identifier)
+		_, pageFrontmatter, err := site.ReadFrontMatter(identifier)
 	if err != nil {
 		return err
 	}
 
-	zpl, err := templating.ExecuteTemplate(string(templateData), frontmatter, site, query)
+	zpl, err := templating.ExecuteTemplate(string(templateData), pageFrontmatter, site, query)
 	if err != nil {
 		return err
 	}
@@ -59,18 +66,18 @@ func PrintLabel(templateIdentifier string, identifier string, site common.PageRe
 	return err
 }
 
-func configFromFrontmatter(templateFrontmatter common.FrontMatter) (PrinterConfig, error) {
+func configFromFrontmatter(templateFrontmatter wikipage.FrontMatter) (PrinterConfig, error) {
 	var err error
 
 	printerValue, ok := templateFrontmatter["label_printer"].(map[string]any)
 	if !ok {
-		return PrinterConfig{}, fmt.Errorf("label_printer is not a map")
+		return PrinterConfig{}, errors.New("label_printer is not a map")
 	}
 
 	config := PrinterConfig{}
 	modeValue, ok := printerValue["mode"].(string)
 	if !ok {
-		return PrinterConfig{}, fmt.Errorf("mode is not a string")
+		return PrinterConfig{}, errors.New("mode is not a string")
 	}
 	config.ConnectivityMode, err = ParseConnectivityMode(modeValue)
 	if err != nil {
@@ -81,22 +88,22 @@ func configFromFrontmatter(templateFrontmatter common.FrontMatter) (PrinterConfi
 	case USB:
 		vendorValue, ok := printerValue["vendor"].(string)
 		if !ok {
-			return PrinterConfig{}, fmt.Errorf("vendor is not a string")
+			return PrinterConfig{}, errors.New("vendor is not a string")
 		}
 
 		vendorValue = strings.TrimPrefix(vendorValue, "0x")
-		vendor, err := strconv.ParseUint(vendorValue, 16, 16)
+		vendor, err := strconv.ParseUint(vendorValue, bitSize, bitSize)
 		if err != nil {
 			return PrinterConfig{}, fmt.Errorf("failed to parse vendor: %v", err)
 		}
 
 		productValue, ok := printerValue["product"].(string)
 		if !ok {
-			return PrinterConfig{}, fmt.Errorf("product is not a string")
+			return PrinterConfig{}, errors.New("product is not a string")
 		}
 
 		productValue = strings.TrimPrefix(productValue, "0x")
-		product, err := strconv.ParseUint(productValue, 16, 16)
+		product, err := strconv.ParseUint(productValue, bitSize, bitSize)
 		if err != nil {
 			return PrinterConfig{}, fmt.Errorf("failed to parse product: %v", err)
 		}
@@ -107,9 +114,11 @@ func configFromFrontmatter(templateFrontmatter common.FrontMatter) (PrinterConfi
 	case LP:
 		lpPrinterName, ok := printerValue["name"].(string)
 		if !ok {
-			return PrinterConfig{}, fmt.Errorf("name is not a string")
+			return PrinterConfig{}, errors.New("name is not a string")
 		}
 		config.LPPrinterName = lpPrinterName
+	default:
+		return PrinterConfig{}, fmt.Errorf("unknown connectivity mode: %v", config.ConnectivityMode)
 	}
 	return config, nil
 }

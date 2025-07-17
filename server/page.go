@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	adrgFrontmatter "github.com/adrg/frontmatter"
-	"github.com/brendanjerwin/simple_wiki/common"
+	adrgfrontmatter "github.com/adrg/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/utils"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/schollz/versionedtext"
 )
 
@@ -40,12 +40,12 @@ func (p Page) LastEditUnixTime() int64 {
 	return p.Text.LastEditTime() / 1000000000
 }
 
-func (p *Page) parse() (common.FrontMatter, common.Markdown, error) {
+func (p *Page) parse() (wikipage.FrontMatter, wikipage.Markdown, error) {
 	text := p.Text.GetCurrent()
 	reader := strings.NewReader(text)
 
-	var fm common.FrontMatter
-	md, err := adrgFrontmatter.Parse(reader, &fm) // Auto-detect
+	var fm wikipage.FrontMatter
+	md, err := adrgfrontmatter.Parse(reader, &fm) // Auto-detect
 	if err != nil {
 		// Check if it was a TOML parsing error. This can happen if fences are '+++' but content is YAML-like.
 		// We can't consistently rely on the specific error type due to versioning issues, so we check the message.
@@ -62,24 +62,24 @@ func (p *Page) parse() (common.FrontMatter, common.Markdown, error) {
 			}
 			// Swap fences and retry parsing. Replace only the first two occurrences.
 			swappedContent := strings.Replace(string(contentBytes), "+++", "---", 2)
-			md, err = adrgFrontmatter.Parse(strings.NewReader(swappedContent), &fm)
+			md, err = adrgfrontmatter.Parse(strings.NewReader(swappedContent), &fm)
 		}
 	}
 
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			// This isn't an error, it just means there's no frontmatter.
-			return make(common.FrontMatter), common.Markdown(text), nil
+			return make(wikipage.FrontMatter), wikipage.Markdown(text), nil
 		}
 		// This wrapping is needed for the test to pass.
 		return nil, "", fmt.Errorf("failed to unmarshal frontmatter for %s: %w", p.Identifier, err)
 	}
 
 	if fm == nil {
-		fm = make(common.FrontMatter)
+		fm = make(wikipage.FrontMatter)
 	}
 
-	return fm, common.Markdown(md), nil
+	return fm, wikipage.Markdown(md), nil
 }
 
 // DecodeFileName decodes a filename from base32.

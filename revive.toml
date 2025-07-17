@@ -1,0 +1,37 @@
+# revive.toml
+# Configuration for revive linter
+
+# Default severity for rules
+severity = "warning"
+
+# Enable all rules
+enableAllRules = true
+
+[rule.line-length-limit]
+disabled = true
+
+[rule.cognitive-complexity]
+Arguments = [15]
+
+[rule.cyclomatic]
+Arguments = [15]
+
+[rule.package-comments]
+disabled = true
+
+[rule.exported]
+disabled = true
+
+[rule.comment-spacings]
+disabled = true
+
+[rule.argument-limit]
+disabled = true
+
+[rule.add-constant]
+arguments = [
+  { maxLitCount = "3", allowStrs = "\"\"", allowInts = "0,1,2", allowFloats = "0.0,0.,1.0,1.,2.0,2.", ignoreFuncs = "os\\.*,fmt\\.Println,make" },
+]
+
+[rule.max-public-structs]
+disabled = true
