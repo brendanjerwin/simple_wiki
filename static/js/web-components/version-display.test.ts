@@ -13,7 +13,7 @@ describe('VersionDisplay', () => {
     el.error = undefined;
     el.version = {
       version: '1.2.3',
-      commit: 'abc123def456', 
+      commit: 'abc123def456',
       buildTime: { toDate: () => new Date('2023-01-01T12:00:00Z') }
     } as any;
     await el.updateComplete;
@@ -37,8 +37,7 @@ describe('VersionDisplay', () => {
       el.loading = false;
       el.error = undefined;
       el.version = {
-        version: '1.2.3',
-        commit: 'abc123def456', 
+        commit: 'thisiscommithash',
         buildTime: { toDate: () => new Date('2023-01-01T12:00:00Z') }
       } as any;
       await el.updateComplete;
@@ -57,7 +56,7 @@ describe('VersionDisplay', () => {
     it('should display version information', () => {
       const versionRow = el.shadowRoot?.querySelector('.version-row');
       expect(versionRow).to.exist;
-      expect(versionRow?.textContent).to.contain('1.2.3');
+      expect(versionRow?.textContent).to.contain('thisisc');
     });
   });
 
@@ -98,7 +97,7 @@ describe('VersionDisplay', () => {
 
     it('should show loading state', () => {
       const loadingElements = el.shadowRoot?.querySelectorAll('.loading');
-      expect(loadingElements).to.have.length(3);
+      expect(loadingElements).to.have.length(2);
       loadingElements?.forEach(element => {
         expect(element.textContent).to.contain('Loading...');
       });
@@ -111,14 +110,13 @@ describe('VersionDisplay', () => {
 
     it('should show version row structure during loading', () => {
       const versionRows = el.shadowRoot?.querySelectorAll('.version-row');
-      expect(versionRows).to.have.length(3);
-      
+      expect(versionRows).to.have.length(2);
+
       // Check that the labels are present
       const labels = el.shadowRoot?.querySelectorAll('.label');
-      expect(labels).to.have.length(3);
-      expect(labels?.[0]?.textContent).to.contain('Version:');
-      expect(labels?.[1]?.textContent).to.contain('Commit:');
-      expect(labels?.[2]?.textContent).to.contain('Built:');
+      expect(labels).to.have.length(2);
+      expect(labels?.[0]?.textContent).to.contain('Commit:');
+      expect(labels?.[1]?.textContent).to.contain('Built:');
     });
   });
 

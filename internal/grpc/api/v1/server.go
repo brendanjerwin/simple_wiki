@@ -7,8 +7,8 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/brendanjerwin/simple_wiki/wikipage"
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -221,7 +221,6 @@ func (s *Server) RegisterWithServer(grpcServer *grpc.Server) {
 // GetVersion implements the GetVersion RPC.
 func (s *Server) GetVersion(_ context.Context, _ *apiv1.GetVersionRequest) (*apiv1.GetVersionResponse, error) {
 	return &apiv1.GetVersionResponse{
-		Version:   s.Version,
 		Commit:    s.Commit,
 		BuildTime: timestamppb.New(s.BuildTime),
 	}, nil

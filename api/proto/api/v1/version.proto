@@ -16,7 +16,6 @@ message GetVersionRequest {}
 
 // The response message for the GetVersion RPC.
 message GetVersionResponse {
-  string version = 1;
-  string commit = 2;
-  google.protobuf.Timestamp build_time = 3;
+  string commit = 1;
+  google.protobuf.Timestamp build_time = 2;
 }

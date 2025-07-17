@@ -135,7 +135,7 @@ export class VersionDisplay extends LitElement {
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
     }
-    
+
     // Set a new debounce timer (300ms delay)
     this.debounceTimer = setTimeout(() => {
       this.loadVersion();
@@ -147,7 +147,7 @@ export class VersionDisplay extends LitElement {
       this.loading = true;
       this.error = undefined;
       this.requestUpdate();
-      
+
       const response = await this.client.getVersion(new GetVersionRequest());
       this.version = response;
     } catch (err) {
@@ -160,7 +160,7 @@ export class VersionDisplay extends LitElement {
 
   private formatTimestamp(timestamp?: Timestamp): string {
     if (!timestamp) return 'Unknown';
-    
+
     try {
       const date = timestamp.toDate();
       return date.toLocaleDateString('en-US', {
@@ -186,10 +186,6 @@ export class VersionDisplay extends LitElement {
         <div class="version-info">
           ${this.loading ? html`
             <div class="version-row">
-              <span class="label">Version:</span>
-              <span class="value loading">Loading...</span>
-            </div>
-            <div class="version-row">
               <span class="label">Commit:</span>
               <span class="value loading">Loading...</span>
             </div>
@@ -200,10 +196,6 @@ export class VersionDisplay extends LitElement {
           ` : this.error ? html`
             <div class="error">${this.error}</div>
           ` : html`
-            <div class="version-row">
-              <span class="label">Version:</span>
-              <span class="value">${this.version?.version || 'Unknown'}</span>
-            </div>
             <div class="version-row">
               <span class="label">Commit:</span>
               <span class="value commit">${this.formatCommit(this.version?.commit || '')}</span>

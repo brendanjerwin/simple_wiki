@@ -46,17 +46,12 @@ export class GetVersionRequest extends Message<GetVersionRequest> {
  */
 export class GetVersionResponse extends Message<GetVersionResponse> {
   /**
-   * @generated from field: string version = 1;
-   */
-  version = "";
-
-  /**
-   * @generated from field: string commit = 2;
+   * @generated from field: string commit = 1;
    */
   commit = "";
 
   /**
-   * @generated from field: google.protobuf.Timestamp build_time = 3;
+   * @generated from field: google.protobuf.Timestamp build_time = 2;
    */
   buildTime?: Timestamp;
 
@@ -68,9 +63,8 @@ export class GetVersionResponse extends Message<GetVersionResponse> {
   static readonly runtime: typeof proto3 = proto3;
   static readonly typeName = "api.v1.GetVersionResponse";
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
-    { no: 1, name: "version", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 2, name: "commit", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 3, name: "build_time", kind: "message", T: Timestamp },
+    { no: 1, name: "commit", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "build_time", kind: "message", T: Timestamp },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GetVersionResponse {

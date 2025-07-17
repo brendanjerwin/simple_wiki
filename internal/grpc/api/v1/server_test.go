@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/brendanjerwin/simple_wiki/wikipage"
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	v1 "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -736,7 +736,7 @@ var _ = Describe("Server", func() {
 			BeforeEach(func() {
 				handler = func(ctx context.Context, req interface{}) (interface{}, error) {
 					time.Sleep(10 * time.Millisecond) // Simulate some work
-					return &apiv1.GetVersionResponse{Version: "test"}, nil
+					return &apiv1.GetVersionResponse{Commit: "test"}, nil
 				}
 
 				interceptor := server.LoggingInterceptor()
@@ -780,9 +780,7 @@ var _ = Describe("Server", func() {
 		})
 
 		When("a handler panics", func() {
-			var (
-				err error
-			)
+			var err error
 
 			BeforeEach(func() {
 				handler = func(ctx context.Context, req interface{}) (interface{}, error) {
@@ -816,7 +814,7 @@ var _ = Describe("Server", func() {
 				server = v1.NewServer("test-version", "test-commit", time.Now(), nil, nil)
 
 				handler = func(ctx context.Context, req interface{}) (interface{}, error) {
-					return &apiv1.GetVersionResponse{Version: "test"}, nil
+					return &apiv1.GetVersionResponse{Commit: "test"}, nil
 				}
 
 				interceptor := server.LoggingInterceptor()
