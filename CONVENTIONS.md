@@ -423,6 +423,54 @@ Tests for both frontend (JavaScript) and Go can be run using `devbox` scripts, e
   - **Be explicit about limitations**: If a function cannot provide the requested data, it should clearly indicate this through its return value and/or documentation
   - This principle helps identify real problems quickly and prevents false confidence in broken systems
 
+  **Bad (TypeScript):**
+
+  ```typescript
+  function formatTimestamp(timestamp?: Timestamp): string {
+    if (!timestamp) return 'Unknown';
+    try {
+      return timestamp.toDate().toLocaleDateString();
+    } catch {
+      return 'Invalid date';  // This hides the real problem
+    }
+  }
+  ```
+
+  **Good (TypeScript):**
+
+  ```typescript
+  function formatTimestamp(timestamp: Timestamp): string {
+    // Let the function throw if timestamp is invalid - don't hide the error
+    const date = timestamp.toDate();
+    return date.toLocaleDateString();
+  }
+  
+  // Usage - handle the null case at the call site
+  const formatted = buildTime ? formatTimestamp(buildTime) : '';
+  ```
+
+- **Avoid Nullable Function Parameters**: Nullable parameters (`param?: Type`) should be rare for function parameters. It's preferable to force an exception at the source of the problem rather than handle null cases inside functions. This makes the code more predictable and helps identify issues earlier.
+
+  **Bad (TypeScript):**
+
+  ```typescript
+  function processUser(user?: User): string {
+    if (!user) return 'No user';
+    return user.name;
+  }
+  ```
+
+  **Good (TypeScript):**
+
+  ```typescript
+  function processUser(user: User): string {
+    return user.name;
+  }
+  
+  // Handle the null case at the call site
+  const result = user ? processUser(user) : 'No user';
+  ```
+
 ### Required Before Each Commit
 
 - Run the tests, builds, and linters. You can use `devbox run lint:everything` for that.

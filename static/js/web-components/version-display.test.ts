@@ -1,5 +1,7 @@
 import { html, fixture, expect } from '@open-wc/testing';
 import { VersionDisplay } from './version-display.js';
+import { GetVersionResponse } from '../gen/api/v1/version_pb.js';
+import { Timestamp } from '@bufbuild/protobuf';
 import './version-display.js';
 
 describe('VersionDisplay', () => {
@@ -10,10 +12,18 @@ describe('VersionDisplay', () => {
     // Set initial state manually to avoid network requests
     el.loading = false;
     el.error = undefined;
-    el.version = {
+    
+    // Create a proper mock timestamp
+    const mockTimestamp = new Timestamp({
+      seconds: BigInt(Math.floor(new Date('2023-01-01T12:00:00Z').getTime() / 1000)),
+      nanos: 0
+    });
+    
+    el.version = new GetVersionResponse({
       commit: 'abc123def456',
-      buildTime: { toDate: () => new Date('2023-01-01T12:00:00Z') }
-    } as unknown;
+      buildTime: mockTimestamp
+    });
+    
     await el.updateComplete;
   });
 
@@ -134,20 +144,12 @@ describe('VersionDisplay', () => {
 
   describe('when formatting timestamp', () => {
     it('should format valid timestamp', () => {
-      const mockTimestamp = { toDate: () => new Date('2023-01-01T12:00:00Z') };
-      const result = el['formatTimestamp'](mockTimestamp as { toDate: () => Date });
+      const mockTimestamp = new Timestamp({
+        seconds: BigInt(Math.floor(new Date('2023-01-01T12:00:00Z').getTime() / 1000)),
+        nanos: 0
+      });
+      const result = el['formatTimestamp'](mockTimestamp);
       expect(result).to.contain('Jan 1, 2023');
-    });
-
-    it('should handle undefined timestamp', () => {
-      const result = el['formatTimestamp'](undefined);
-      expect(result).to.equal('Unknown');
-    });
-
-    it('should handle invalid timestamp', () => {
-      const mockTimestamp = { toDate: () => { throw new Error('Invalid date'); } };
-      const result = el['formatTimestamp'](mockTimestamp as { toDate: () => Date });
-      expect(result).to.equal('Invalid date');
     });
   });
 });

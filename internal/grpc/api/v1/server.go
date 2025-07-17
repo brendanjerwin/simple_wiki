@@ -269,27 +269,13 @@ func (s *Server) LoggingInterceptor() grpc.UnaryServerInterceptor {
 		}
 
 		if s.Logger != nil {
-			clientIP := getClientIP(ctx)
-			if clientIP == "" {
-				clientIP = "unknown"
-			}
-			s.Logger.Warn("[GRPC] %s | %s | %v | %s",
+			s.Logger.Warn("[GRPC] %s | %s | %v",
 				statusCode,
 				duration,
 				info.FullMethod,
-				clientIP,
 			)
 		}
 
 		return resp, err
 	}
-}
-
-// getClientIP attempts to extract the client IP from the gRPC context.
-// Returns an empty string if the client IP cannot be determined.
-func getClientIP(ctx context.Context) string {
-	// Currently, gRPC context does not provide direct access to client IP
-	// for gRPC-Web requests. This would require additional middleware
-	// or peer information extraction that is not yet implemented.
-	return ""
 }

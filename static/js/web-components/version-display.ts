@@ -6,6 +6,8 @@ import { GetVersionRequest, GetVersionResponse } from '../gen/api/v1/version_pb.
 import { Timestamp } from '@bufbuild/protobuf';
 
 export class VersionDisplay extends LitElement {
+  static readonly DEBOUNCE_DELAY = 300;
+
   static override styles = css`
     :host {
       position: fixed;
@@ -97,7 +99,7 @@ export class VersionDisplay extends LitElement {
   declare version?: GetVersionResponse;
   declare loading: boolean;
   declare error?: string;
-  private debounceTimer?: number;
+  private debounceTimer?: ReturnType<typeof setTimeout>;
 
   private client = createClient(Version, createGrpcWebTransport({
     baseUrl: window.location.origin,
@@ -136,10 +138,10 @@ export class VersionDisplay extends LitElement {
       clearTimeout(this.debounceTimer);
     }
 
-    // Set a new debounce timer (300ms delay)
+    // Set a new debounce timer
     this.debounceTimer = setTimeout(() => {
       this.loadVersion();
-    }, 300);
+    }, VersionDisplay.DEBOUNCE_DELAY);
   }
 
   private async loadVersion(): Promise<void> {
@@ -158,21 +160,15 @@ export class VersionDisplay extends LitElement {
     }
   }
 
-  private formatTimestamp(timestamp?: Timestamp): string {
-    if (!timestamp) return 'Unknown';
-
-    try {
-      const date = timestamp.toDate();
-      return date.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-      });
-    } catch {
-      return 'Invalid date';
-    }
+  private formatTimestamp(timestamp: Timestamp): string {
+    const date = timestamp.toDate();
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
   }
 
   private formatCommit(commit: string): string {
@@ -202,7 +198,7 @@ export class VersionDisplay extends LitElement {
             </div>
             <div class="version-row">
               <span class="label">Built:</span>
-              <span class="value">${this.formatTimestamp(this.version?.buildTime)}</span>
+              <span class="value">${this.version?.buildTime ? this.formatTimestamp(this.version.buildTime) : ''}</span>
             </div>
           `}
         </div>
