@@ -185,7 +185,18 @@ export class VersionDisplay extends LitElement {
         <div class="hover-overlay"></div>
         <div class="version-info">
           ${this.loading ? html`
-            <div class="loading">Loading version...</div>
+            <div class="version-row">
+              <span class="label">Version:</span>
+              <span class="value loading">Loading...</span>
+            </div>
+            <div class="version-row">
+              <span class="label">Commit:</span>
+              <span class="value loading">Loading...</span>
+            </div>
+            <div class="version-row">
+              <span class="label">Built:</span>
+              <span class="value loading">Loading...</span>
+            </div>
           ` : this.error ? html`
             <div class="error">${this.error}</div>
           ` : html`

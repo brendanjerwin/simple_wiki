@@ -158,9 +158,11 @@ describe('VersionDisplay', () => {
     });
 
     it('should show loading state', () => {
-      const loading = el.shadowRoot?.querySelector('.loading');
-      expect(loading).to.exist;
-      expect(loading?.textContent).to.contain('Loading version...');
+      const loadingElements = el.shadowRoot?.querySelectorAll('.loading');
+      expect(loadingElements).to.have.length(3);
+      loadingElements?.forEach(element => {
+        expect(element.textContent).to.contain('Loading...');
+      });
     });
 
     it('should not show error state', () => {
@@ -168,9 +170,16 @@ describe('VersionDisplay', () => {
       expect(error).to.not.exist;
     });
 
-    it('should not show version information', () => {
-      const versionRow = el.shadowRoot?.querySelector('.version-row');
-      expect(versionRow).to.not.exist;
+    it('should show version row structure during loading', () => {
+      const versionRows = el.shadowRoot?.querySelectorAll('.version-row');
+      expect(versionRows).to.have.length(3);
+      
+      // Check that the labels are present
+      const labels = el.shadowRoot?.querySelectorAll('.label');
+      expect(labels).to.have.length(3);
+      expect(labels?.[0]?.textContent).to.contain('Version:');
+      expect(labels?.[1]?.textContent).to.contain('Commit:');
+      expect(labels?.[2]?.textContent).to.contain('Built:');
     });
   });
 
