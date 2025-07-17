@@ -36,8 +36,6 @@ func main() {
 			return err
 		}
 
-		grpcServer := grpc.NewServer()
-
 		logger := makeLogger(c.GlobalBool("debug"))
 		site := server.NewSite(
 			pathToData,
@@ -53,7 +51,10 @@ func main() {
 			logger,
 		)
 		ginRouter := site.GinRouter()
-		grpcAPIServer := grpcApi.NewServer(version, commit, app.Compiled, site)
+		grpcAPIServer := grpcApi.NewServer(version, commit, app.Compiled, site, logger)
+
+		// Add logging interceptor to gRPC server
+		grpcServer := grpc.NewServer(grpc.UnaryInterceptor(grpcAPIServer.LoggingInterceptor()))
 		grpcAPIServer.RegisterWithServer(grpcServer)
 
 		reflection.Register(grpcServer)

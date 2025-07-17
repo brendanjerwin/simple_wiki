@@ -13,6 +13,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/common"
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	v1 "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
+	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/onsi/gomega/types"
@@ -179,7 +180,7 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("v0.0.0", "commit", time.Now(), mockPageReadWriter)
+			server = v1.NewServer("v0.0.0", "commit", time.Now(), mockPageReadWriter, lumber.NewConsoleLogger(lumber.WARN))
 			res, err = server.GetFrontmatter(ctx, req)
 		})
 
@@ -260,7 +261,7 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("v0.0.0", "commit", time.Now(), mockPageReadWriter)
+			server = v1.NewServer("v0.0.0", "commit", time.Now(), mockPageReadWriter, lumber.NewConsoleLogger(lumber.WARN))
 			resp, err = server.MergeFrontmatter(ctx, req)
 		})
 
@@ -390,7 +391,7 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("v0.0.0", "commit", time.Now(), mockPageReadWriter)
+			server = v1.NewServer("v0.0.0", "commit", time.Now(), mockPageReadWriter, lumber.NewConsoleLogger(lumber.WARN))
 			resp, err = server.ReplaceFrontmatter(ctx, req)
 		})
 
@@ -477,7 +478,7 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("v0.0.0", "commit", time.Now(), mockPageReadWriter)
+			server = v1.NewServer("v0.0.0", "commit", time.Now(), mockPageReadWriter, lumber.NewConsoleLogger(lumber.WARN))
 			resp, err = server.RemoveKeyAtPath(ctx, req)
 		})
 

@@ -9,8 +9,8 @@ export class VersionDisplay extends LitElement {
   static override styles = css`
     :host {
       position: fixed;
-      bottom: 10px;
-      right: 10px;
+      bottom: 2px;
+      right: 2px;
       z-index: 1000;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
         'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
@@ -21,15 +21,13 @@ export class VersionDisplay extends LitElement {
     }
 
     .version-panel {
-      background: rgba(0, 0, 0, 0.1);
-      backdrop-filter: blur(10px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 6px;
-      padding: 8px 12px;
-      opacity: 0.3;
+      background: #2d2d2d;
+      border: 1px solid #404040;
+      border-radius: 4px;
+      padding: 4px 8px;
+      opacity: 0.2;
       transition: opacity 0.3s ease;
-      max-width: 300px;
-      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
     }
 
     .version-panel:hover {
@@ -38,42 +36,43 @@ export class VersionDisplay extends LitElement {
 
     .version-info {
       display: flex;
-      flex-direction: column;
-      gap: 2px;
-      color: #333;
+      flex-direction: row;
+      align-items: center;
+      gap: 12px;
+      color: white;
+      white-space: nowrap;
     }
 
     .version-row {
       display: flex;
-      justify-content: space-between;
       align-items: center;
       white-space: nowrap;
     }
 
     .label {
-      font-weight: 500;
-      color: #666;
-      margin-right: 8px;
+      font-weight: bold;
+      color: white;
+      margin-right: 4px;
     }
 
     .value {
       font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
-      color: #333;
+      color: #ccc;
       font-size: 10px;
     }
 
     .commit {
-      max-width: 100px;
+      max-width: 70px;
       overflow: hidden;
       text-overflow: ellipsis;
     }
 
     .error {
-      color: #d32f2f;
+      color: #ff6b6b;
     }
 
     .loading {
-      color: #666;
+      color: #ccc;
     }
   `;
 

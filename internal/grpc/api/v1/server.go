@@ -9,6 +9,7 @@ import (
 
 	"github.com/brendanjerwin/simple_wiki/common"
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
+	"github.com/jcelliott/lumber"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -24,6 +25,7 @@ type Server struct {
 	Commit         string
 	BuildTime      time.Time
 	PageReadWriter common.PageReadWriter
+	Logger         *lumber.ConsoleLogger
 }
 
 // MergeFrontmatter implements the MergeFrontmatter RPC.
@@ -200,12 +202,13 @@ func removeAtPath(data any, path []*apiv1.PathComponent) (any, error) {
 }
 
 // NewServer creates a new debug server.
-func NewServer(version, commit string, buildTime time.Time, pageReadWriter common.PageReadWriter) *Server {
+func NewServer(version, commit string, buildTime time.Time, pageReadWriter common.PageReadWriter, logger *lumber.ConsoleLogger) *Server {
 	return &Server{
 		Version:        version,
 		Commit:         commit,
 		BuildTime:      buildTime,
 		PageReadWriter: pageReadWriter,
+		Logger:         logger,
 	}
 }
 
@@ -249,4 +252,42 @@ func (s *Server) GetFrontmatter(ctx context.Context, req *apiv1.GetFrontmatterRe
 	return &apiv1.GetFrontmatterResponse{
 		Frontmatter: structFm,
 	}, nil
+}
+
+// LoggingInterceptor returns a gRPC unary interceptor for logging method calls.
+func (s *Server) LoggingInterceptor() grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+		start := time.Now()
+
+		// Call the method
+		resp, err := handler(ctx, req)
+
+		// Log the request in a format similar to Gin
+		duration := time.Since(start)
+		statusCode := codes.OK
+		if err != nil {
+			if st, ok := status.FromError(err); ok {
+				statusCode = st.Code()
+			}
+		}
+
+		if s.Logger != nil {
+			s.Logger.Info("[GRPC] %s | %s | %v | %s",
+				statusCode,
+				duration,
+				info.FullMethod,
+				getClientIP(ctx),
+			)
+		}
+
+		return resp, err
+	}
+}
+
+// getClientIP attempts to extract the client IP from the gRPC context.
+func getClientIP(ctx context.Context) string {
+	// This is a simplified implementation
+	// In production, you might want to check for X-Forwarded-For headers
+	// or other proxy-related headers
+	return "unknown"
 }
