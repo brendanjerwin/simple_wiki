@@ -46,6 +46,11 @@ describe('VersionDisplay', () => {
       expect(panel).to.exist;
     });
 
+    it('should display hover overlay', () => {
+      const overlay = el.shadowRoot?.querySelector('.hover-overlay');
+      expect(overlay).to.exist;
+    });
+
     it('should show loading state or error state initially', () => {
       const loading = el.shadowRoot?.querySelector('.loading');
       const error = el.shadowRoot?.querySelector('.error');
@@ -183,9 +188,12 @@ describe('VersionDisplay', () => {
       loadVersionSpy.restore();
     });
 
-    it('should call loadVersion on mouseenter', () => {
+    it('should call loadVersion on mouseenter to overlay', () => {
+      const overlay = el.shadowRoot?.querySelector('.hover-overlay');
+      expect(overlay).to.exist;
+      
       const mouseEnterEvent = new MouseEvent('mouseenter');
-      el.dispatchEvent(mouseEnterEvent);
+      overlay?.dispatchEvent(mouseEnterEvent);
       expect(loadVersionSpy).to.have.been.calledOnce;
     });
   });

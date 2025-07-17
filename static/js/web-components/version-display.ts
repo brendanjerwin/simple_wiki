@@ -28,10 +28,22 @@ export class VersionDisplay extends LitElement {
       opacity: 0.2;
       transition: opacity 0.3s ease;
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+      position: relative;
     }
 
     .version-panel:hover {
       opacity: 0.9;
+    }
+
+    .hover-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 1;
+      background: transparent;
+      cursor: pointer;
     }
 
     .version-info {
@@ -99,8 +111,14 @@ export class VersionDisplay extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.loadVersion();
-    // Add hover event listener to reload version
-    this.addEventListener('mouseenter', this.handleMouseEnter.bind(this));
+  }
+
+  override firstUpdated(): void {
+    // Add hover event listener to the overlay after the component is first rendered
+    const overlay = this.shadowRoot?.querySelector('.hover-overlay');
+    if (overlay) {
+      overlay.addEventListener('mouseenter', this.handleMouseEnter.bind(this));
+    }
   }
 
   override disconnectedCallback(): void {
@@ -164,6 +182,7 @@ export class VersionDisplay extends LitElement {
   override render() {
     return html`
       <div class="version-panel">
+        <div class="hover-overlay"></div>
         <div class="version-info">
           ${this.loading ? html`
             <div class="loading">Loading version...</div>
