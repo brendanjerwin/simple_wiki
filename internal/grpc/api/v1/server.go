@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/brendanjerwin/simple_wiki/common"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -23,7 +23,7 @@ type Server struct {
 	Version        string
 	Commit         string
 	BuildTime      time.Time
-	PageReadWriter common.PageReadWriter
+	PageReadWriter wikipage.PageReadWriter
 }
 
 // MergeFrontmatter implements the MergeFrontmatter RPC.
@@ -200,7 +200,7 @@ func removeAtPath(data any, path []*apiv1.PathComponent) (any, error) {
 }
 
 // NewServer creates a new debug server.
-func NewServer(version, commit string, buildTime time.Time, pageReadWriter common.PageReadWriter) *Server {
+func NewServer(version, commit string, buildTime time.Time, pageReadWriter wikipage.PageReadWriter) *Server {
 	return &Server{
 		Version:        version,
 		Commit:         commit,

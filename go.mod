@@ -95,3 +95,5 @@ require (
 )
 
 replace github.com/karalabe/usb => github.com/brendanjerwin/usb v0.0.0-20231222144018-09a9b6ae5f52
+
+replace github.com/brendanjerwin/simple_wiki/wikiidentifiers => ./wikiidentifiers

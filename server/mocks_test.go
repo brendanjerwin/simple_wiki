@@ -1,23 +1,23 @@
 package server
 
 import (
-	"github.com/brendanjerwin/simple_wiki/common"
 	"github.com/brendanjerwin/simple_wiki/index"
 	bleve_index "github.com/brendanjerwin/simple_wiki/index/bleve"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
 // MockIndexMaintainer is a mock implementation of index.IMaintainIndex for testing.
 type MockIndexMaintainer struct {
-	AddPageToIndexCalledWith      common.PageIdentifier
-	RemovePageFromIndexCalledWith common.PageIdentifier
+	AddPageToIndexCalledWith      wikipage.PageIdentifier
+	RemovePageFromIndexCalledWith wikipage.PageIdentifier
 }
 
-func (m *MockIndexMaintainer) AddPageToIndex(identifier common.PageIdentifier) error {
+func (m *MockIndexMaintainer) AddPageToIndex(identifier wikipage.PageIdentifier) error {
 	m.AddPageToIndexCalledWith = identifier
 	return nil
 }
 
-func (m *MockIndexMaintainer) RemovePageFromIndex(identifier common.PageIdentifier) error {
+func (m *MockIndexMaintainer) RemovePageFromIndex(identifier wikipage.PageIdentifier) error {
 	m.RemovePageFromIndexCalledWith = identifier
 	return nil
 }

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	grpcApi "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
+	grpcapi "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
 	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"github.com/jcelliott/lumber"
@@ -24,8 +24,10 @@ var (
 	commit  = "n/a"
 )
 
+var app *cli.App
+
 func main() {
-	app := cli.NewApp()
+	app = cli.NewApp()
 	app.Name = "simple_wiki"
 	app.Usage = "a simple wiki"
 	app.Version = version
@@ -53,7 +55,7 @@ func main() {
 			logger,
 		)
 		ginRouter := site.GinRouter()
-		grpcAPIServer := grpcApi.NewServer(version, commit, app.Compiled, site)
+		grpcAPIServer := grpcapi.NewServer(version, commit, app.Compiled, site)
 		grpcAPIServer.RegisterWithServer(grpcServer)
 
 		reflection.Register(grpcServer)
@@ -80,7 +82,7 @@ func main() {
 			host = "0.0.0.0"
 		}
 		addr := fmt.Sprintf("%s:%s", host, c.GlobalString("port"))
-		fmt.Printf("\nRunning simple_wiki server (version %s) at http://%s\n\n", version, addr)
+		_ = fmt.Sprintf("\nRunning simple_wiki server (version %s) at http://%s\n\n", version, addr)
 
 		srv := &http.Server{
 			Addr:    addr,
@@ -88,7 +90,11 @@ func main() {
 		}
 		return srv.ListenAndServe()
 	}
-	app.Flags = []cli.Flag{
+	app.Flags = getFlags()
+}
+
+func getFlags() []cli.Flag {
+	return []cli.Flag{
 		cli.StringFlag{
 			Name:  "data",
 			Value: "data",
@@ -153,11 +159,6 @@ func main() {
 			Usage: "Largest wiki page (in characters) allowed",
 		},
 	}
-
-	if err := app.Run(os.Args); err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
 }
 
 func makeLogger(debug bool) *lumber.ConsoleLogger {
@@ -165,4 +166,11 @@ func makeLogger(debug bool) *lumber.ConsoleLogger {
 		return lumber.NewConsoleLogger(lumber.WARN)
 	}
 	return lumber.NewConsoleLogger(lumber.TRACE)
+}
+
+func init() {
+	if err := app.Run(os.Args); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 }

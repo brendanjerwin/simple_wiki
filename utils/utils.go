@@ -14,10 +14,10 @@ import (
 	"golang.org/x/text/language"
 
 	"github.com/adrg/frontmatter"
-	"github.com/brendanjerwin/simple_wiki/common"
 	frontmatterIdx "github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/static"
 	"github.com/brendanjerwin/simple_wiki/templating"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
 var (
@@ -124,7 +124,7 @@ func StripFrontmatter(s string) string {
 	return string(unsafe)
 }
 
-func MarkdownToHtmlAndJsonFrontmatter(s string, handleFrontMatter bool, site common.PageReader, renderer IRenderMarkdownToHtml, query frontmatterIdx.IQueryFrontmatterIndex) ([]byte, []byte, error) {
+func MarkdownToHtmlAndJsonFrontmatter(s string, handleFrontMatter bool, site wikipage.PageReader, renderer IRenderMarkdownToHtml, query frontmatterIdx.IQueryFrontmatterIndex) ([]byte, []byte, error) {
 	var markdownBytes []byte
 	var matterBytes []byte
 	var err error

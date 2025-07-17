@@ -3,7 +3,7 @@ package utils_test
 import (
 	"testing"
 
-	"github.com/brendanjerwin/simple_wiki/common"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/templating"
 	. "github.com/brendanjerwin/simple_wiki/utils"
@@ -17,37 +17,37 @@ func TestUtils(t *testing.T) {
 }
 
 type MockReadFrontMatter struct {
-	Frontmatter common.FrontMatter
-	Markdown    common.Markdown
+	Frontmatter wikipage.FrontMatter
+	Markdown    wikipage.Markdown
 }
 
-func (m *MockReadFrontMatter) ReadFrontMatter(identifier common.PageIdentifier) (common.PageIdentifier, common.FrontMatter, error) {
+func (m *MockReadFrontMatter) ReadFrontMatter(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
 	return identifier, m.Frontmatter, nil
 }
 
-func (m *MockReadFrontMatter) ReadMarkdown(identifier common.PageIdentifier) (common.PageIdentifier, common.Markdown, error) {
+func (m *MockReadFrontMatter) ReadMarkdown(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
 	return identifier, m.Markdown, nil
 }
 
 // Mocks index.IQueryFrontmatterIndex
 type MockQueryFrontmatterIndex struct {
-	Results        map[string][]common.PageIdentifier
+	Results        map[string][]wikipage.PageIdentifier
 	GetValueResult frontmatter.Value
 }
 
-func (m *MockQueryFrontmatterIndex) QueryExactMatch(keyPath frontmatter.DottedKeyPath, value frontmatter.Value) []common.PageIdentifier {
+func (m *MockQueryFrontmatterIndex) QueryExactMatch(keyPath frontmatter.DottedKeyPath, value frontmatter.Value) []wikipage.PageIdentifier {
 	return m.Results[string(keyPath)]
 }
 
-func (m *MockQueryFrontmatterIndex) QueryKeyExistence(keyPath frontmatter.DottedKeyPath) []common.PageIdentifier {
+func (m *MockQueryFrontmatterIndex) QueryKeyExistence(keyPath frontmatter.DottedKeyPath) []wikipage.PageIdentifier {
 	return m.Results[string(keyPath)]
 }
 
-func (m *MockQueryFrontmatterIndex) QueryPrefixMatch(keyPath frontmatter.DottedKeyPath, valuePrefix string) []common.PageIdentifier {
+func (m *MockQueryFrontmatterIndex) QueryPrefixMatch(keyPath frontmatter.DottedKeyPath, valuePrefix string) []wikipage.PageIdentifier {
 	return m.Results[string(keyPath)]
 }
 
-func (m *MockQueryFrontmatterIndex) GetValue(identifier common.PageIdentifier, keyPath frontmatter.DottedKeyPath) frontmatter.Value {
+func (m *MockQueryFrontmatterIndex) GetValue(identifier wikipage.PageIdentifier, keyPath frontmatter.DottedKeyPath) frontmatter.Value {
 	return m.GetValueResult
 }
 
@@ -108,16 +108,16 @@ sample: "value"
 
 	Describe("templating.ExecuteTemplate", func() {
 		var (
-			theFrontmatter common.FrontMatter
+			theFrontmatter wikipage.FrontMatter
 			rendered       []byte
 			err            error
 		)
-		var site common.PageReader = &MockReadFrontMatter{}
+		var site wikipage.PageReader = &MockReadFrontMatter{}
 		var query frontmatter.IQueryFrontmatterIndex = &MockQueryFrontmatterIndex{}
 
 		Describe("When using a simple template", func() {
 			BeforeEach(func() {
-				theFrontmatter = common.FrontMatter{"identifier": "1234"}
+				theFrontmatter = wikipage.FrontMatter{"identifier": "1234"}
 				templateHtml := `{{ .Identifier }}`
 				rendered, err = templating.ExecuteTemplate(templateHtml, theFrontmatter, site, query)
 			})
@@ -131,7 +131,7 @@ sample: "value"
 
 		Describe("When using an unstructured map", func() {
 			BeforeEach(func() {
-				theFrontmatter = common.FrontMatter{"identifier": "1234", "foobar": "baz"}
+				theFrontmatter = wikipage.FrontMatter{"identifier": "1234", "foobar": "baz"}
 				templateHTML := `{{ index .Map "foobar" }}`
 				rendered, err = templating.ExecuteTemplate(templateHTML, theFrontmatter, site, query)
 			})

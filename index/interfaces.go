@@ -2,11 +2,11 @@
 package index
 
 import (
-	"github.com/brendanjerwin/simple_wiki/common"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
 // IMaintainIndex defines the interface for maintaining a wiki page index.
 type IMaintainIndex interface {
-	AddPageToIndex(identifier common.PageIdentifier) error
-	RemovePageFromIndex(identifier common.PageIdentifier) error
+	AddPageToIndex(identifier wikipage.PageIdentifier) error
+	RemovePageFromIndex(identifier wikipage.PageIdentifier) error
 }

@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"regexp"
 
-	"github.com/brendanjerwin/simple_wiki/common"
+	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/yuin/goldmark"
 	emoji "github.com/yuin/goldmark-emoji"
@@ -56,7 +56,7 @@ type wikilinkResolver struct{}
 
 func (wikilinkResolver) ResolveWikilink(n *wikilink.Node) ([]byte, error) {
 	sourceTarget := string(n.Target)
-	mungedTarget := common.MungeIdentifier(sourceTarget)
+	mungedTarget := wikiidentifiers.MungeIdentifier(sourceTarget)
 	urlTarget := url.QueryEscape(sourceTarget)
 	relativeTarget := "/" + mungedTarget + "?title=" + urlTarget
 

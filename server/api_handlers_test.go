@@ -8,8 +8,8 @@ import (
 	"net/http/httptest"
 	"strings"
 
-	"github.com/brendanjerwin/simple_wiki/common"
 	bleve_index "github.com/brendanjerwin/simple_wiki/index/bleve"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/gin-gonic/gin"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -377,7 +377,7 @@ var _ = Describe("API Handlers", func() {
 							if query == "searchterm" {
 								return []bleve_index.SearchResult{
 									{
-										Identifier:   common.PageIdentifier("id1"),
+										Identifier:   wikipage.PageIdentifier("id1"),
 										Title:        "Title 1",
 										FragmentHTML: "fragment",
 									},
@@ -405,7 +405,7 @@ var _ = Describe("API Handlers", func() {
 
 				It("returns the search results", func() {
 					Expect(response.Results).To(Equal(
-						[]bleve_index.SearchResult{{Identifier: common.PageIdentifier("id1"), Title: "Title 1", FragmentHTML: "fragment"}},
+						[]bleve_index.SearchResult{{Identifier: wikipage.PageIdentifier("id1"), Title: "Title 1", FragmentHTML: "fragment"}},
 					))
 				})
 			})

@@ -8,8 +8,9 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/brendanjerwin/simple_wiki/common"
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
+	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/stoewer/go-strcase"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -27,7 +28,7 @@ type TemplateContext struct {
 	Inventory  InventoryFrontmatter `json:"inventory"`
 }
 
-func ConstructTemplateContextFromFrontmatter(frontmatter common.FrontMatter, query frontmatter.IQueryFrontmatterIndex) (TemplateContext, error) {
+func ConstructTemplateContextFromFrontmatter(frontmatter wikipage.FrontMatter, query frontmatter.IQueryFrontmatterIndex) (TemplateContext, error) {
 	bytes, err := json.Marshal(frontmatter)
 	if err != nil {
 		return TemplateContext{}, err
@@ -50,7 +51,7 @@ func ConstructTemplateContextFromFrontmatter(frontmatter common.FrontMatter, que
 
 	// Add existing items to the map
 	for _, item := range context.Inventory.Items {
-		uniqueItems[common.MungeIdentifier(item)] = true
+		uniqueItems[wikiidentifiers.MungeIdentifier(item)] = true
 	}
 
 	// Add new items to the map
@@ -76,7 +77,7 @@ func ConstructTemplateContextFromFrontmatter(frontmatter common.FrontMatter, que
 	return context, nil
 }
 
-func BuildShowInventoryContentsOf(site common.PageReader, query frontmatter.IQueryFrontmatterIndex, indent int) func(string) string {
+func BuildShowInventoryContentsOf(site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, indent int) func(string) string {
 	isContainer := BuildIsContainer(query)
 
 	return func(containerIdentifier string) string {
@@ -124,7 +125,7 @@ func BuildShowInventoryContentsOf(site common.PageReader, query frontmatter.IQue
 	}
 }
 
-func BuildLinkTo(site common.PageReader, currentPageTemplateContext TemplateContext, query frontmatter.IQueryFrontmatterIndex) func(string) string {
+func BuildLinkTo(site wikipage.PageReader, currentPageTemplateContext TemplateContext, query frontmatter.IQueryFrontmatterIndex) func(string) string {
 	isContainer := BuildIsContainer(query)
 	return func(identifierToLink string) string {
 		if identifierToLink == "" {
@@ -182,7 +183,7 @@ func BuildIsContainer(query frontmatter.IQueryFrontmatterIndex) func(string) boo
 }
 
 // ExecuteTemplate executes a template string with the given frontmatter and site context.
-func ExecuteTemplate(templateString string, frontmatter common.FrontMatter, site common.PageReader, query frontmatter.IQueryFrontmatterIndex) ([]byte, error) {
+func ExecuteTemplate(templateString string, frontmatter wikipage.FrontMatter, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex) ([]byte, error) {
 	templateContext, err := ConstructTemplateContextFromFrontmatter(frontmatter, query)
 	if err != nil {
 		return nil, err
