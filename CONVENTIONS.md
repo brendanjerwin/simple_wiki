@@ -427,6 +427,28 @@ Tests for both frontend (JavaScript) and Go can be run using `devbox` scripts, e
 - Run the application and ensure you can interact with it.
 - Examine any recently written tests to ensure they conform to the testing guidance.
 
+## Architecture Decision Records (ADRs)
+
+ADRs should document significant architectural decisions that have long-term implications for the system design. Use ADRs for:
+
+- **Significant architectural choices**: Technology stack decisions, database choices, communication patterns between services
+- **Design patterns**: Adoption of specific architectural patterns (e.g., event sourcing, CQRS, microservices vs monolith)
+- **Cross-cutting concerns**: Logging, monitoring, security, authentication strategies
+- **Trade-offs with consequences**: Decisions where there are clear alternatives with different pros/cons
+- **Decisions that could be questioned later**: Choices that future developers might wonder "why did we do it this way?"
+
+**Do NOT create ADRs for:**
+
+- Simple component implementations
+- UI styling decisions  
+- Routine feature additions
+- Standard library usage
+- Minor refactoring decisions
+- Implementation details that don't affect overall architecture
+
+**Example of ADR-worthy decision**: "We chose gRPC-Web over REST for frontend-backend communication"  
+**Example of non-ADR decision**: "We implemented a version display component in the bottom-right corner"
+
 ## README
 
 - When updating the readme, match the tone of voice in the rest of the README. Its the face of the project. Marketing matters.

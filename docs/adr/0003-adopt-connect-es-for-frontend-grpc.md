@@ -22,6 +22,7 @@ The newer Connect-ES approach offers modern TypeScript-first gRPC client capabil
 We will adopt Connect-ES (`@connectrpc/connect` and `@connectrpc/connect-web`) as the primary frontend gRPC client technology, replacing the legacy gRPC-Web implementation.
 
 The implementation includes:
+
 - Using `buf.build/bufbuild/es` for TypeScript protobuf message generation
 - Using `buf.build/connectrpc/es` for Connect-ES client generation
 - Modern TypeScript clients with better tree-shaking and bundle optimization
@@ -29,6 +30,7 @@ The implementation includes:
 ## Consequences
 
 ### Positive
+
 - Modern TypeScript-first API with better type safety
 - Smaller bundle sizes through better tree-shaking
 - Simplified client setup and configuration
@@ -36,10 +38,12 @@ The implementation includes:
 - Future-proof approach aligned with Buf's current recommendations
 
 ### Negative
+
 - Breaking change from existing gRPC-Web implementation
 - Requires updates to build tooling and configuration
 - New dependency on Connect-ES libraries
 
 ### Neutral
+
 - Generated files structure changes from `.js` to `.ts`
 - Client creation API changes but remains straightforward
