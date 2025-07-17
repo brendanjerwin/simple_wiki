@@ -56,7 +56,7 @@ func main() {
 		)
 		ginRouter := site.GinRouter()
 		grpcAPIServer := grpcapi.NewServer(version, commit, app.Compiled, site, logger)
-		grpcServer := grpc.NewServer(grpc.UnaryInterceptor(grpcAPIServer.LoggingInterceptor()))
+		grpcServer = grpc.NewServer(grpc.UnaryInterceptor(grpcAPIServer.LoggingInterceptor()))
 		grpcAPIServer.RegisterWithServer(grpcServer)
 
 		reflection.Register(grpcServer)
@@ -83,7 +83,7 @@ func main() {
 			host = "0.0.0.0"
 		}
 		addr := fmt.Sprintf("%s:%s", host, c.GlobalString("port"))
-logger.Info("Running simple_wiki server (version %s) at http://%s", version, addr)
+		logger.Info("Running simple_wiki server (version %s) at http://%s", version, addr)
 
 		srv := &http.Server{
 			Addr:    addr,
