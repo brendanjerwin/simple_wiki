@@ -413,7 +413,7 @@ var _ = Describe("API Handlers", func() {
 			When("the query fails", func() {
 				BeforeEach(func() {
 					mockBleveIndex := &mockBleveIndexQueryer{
-						QueryFunc: func(query string) ([]bleve.SearchResult, error) {
+						QueryFunc: func(_ string) ([]bleve.SearchResult, error) {
 							return nil, errors.New("index is borked")
 						},
 					}

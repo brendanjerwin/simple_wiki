@@ -269,12 +269,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		c.Data(http.StatusOK, utils.ContentTypeFromName(filename), data)
 		return
 	case uploadsPage:
-		if len(command) == 0 || command == rootPath || command == "/edit" {
-			if !s.Fileuploads {
-				_ = c.AbortWithError(http.StatusInternalServerError, errors.New("uploads are disabled on this server"))
-				return
-			}
-		} else {
+		if !(len(command) == 0 || command == rootPath || command == "/edit") {
 			command = command[1:]
 			if !strings.HasSuffix(command, ".upload") {
 				command = command + ".upload"
@@ -286,6 +281,10 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 				"inline; filename=\""+c.DefaultQuery("filename", "upload")+"\"",
 			)
 			c.File(pathname)
+			return
+		}
+		if !s.Fileuploads {
+			_ = c.AbortWithError(http.StatusInternalServerError, errors.New("uploads are disabled on this server"))
 			return
 		}
 	default:
@@ -324,35 +323,12 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		}
 		return
 	}
-	rawText := p.Text.GetCurrent()
-	contentHTML := p.RenderedPage
-
-	// Check to see if an old version is requested
-	versionInt, versionErr := strconv.Atoi(version)
-	if versionErr == nil && versionInt > 0 {
-		versionText, err := p.Text.GetPreviousByTimestamp(int64(versionInt))
-		if err == nil {
-			rawText = versionText
-			contentHTML, _ = p.Site.MarkdownRenderer.Render([]byte(rawText))
-		}
-	}
+	rawText, contentHTML := s.getPageContent(p, version)
 
 	contentHTML = []byte(fmt.Sprintf("<article class='content' id='%s'>%s</article>", page, string(contentHTML)))
 
 	// Get history
-	var versionsInt64 []int64
-	var versionsChangeSums []int
-	var versionsText []string
-	if command[0:2] == "/h" {
-		versionsInt64, versionsChangeSums = p.Text.GetMajorSnapshotsAndChangeSums(maxCacheControl) // get snapshots 60 seconds apart
-		versionsText = make([]string, len(versionsInt64))
-		for i, v := range versionsInt64 {
-			versionsText[i] = time.Unix(v/1000000000, 0).Format("Mon Jan 2 15:04:05 MST 2006")
-		}
-		versionsText = utils.ReverseSliceString(versionsText)
-		versionsInt64 = utils.ReverseSliceInt64(versionsInt64)
-		versionsChangeSums = utils.ReverseSliceInt(versionsChangeSums)
-	}
+	versionsInt64, versionsChangeSums, versionsText := s.getVersionHistory(command, p)
 
 	if len(command) > maxContentLength && command[0:maxContentLength] == "/ra" {
 		c.Writer.Header().Set("Content-Type", "text/plain")
@@ -370,6 +346,33 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		return
 	}
 
+	directoryEntries, command, err := s.getDirectoryEntries(page, command)
+	if err != nil {
+		_ = c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+
+	templateData := s.buildTemplateData(page, command, directoryEntries, contentHTML, rawText, versionsInt64, versionsText, versionsChangeSums, isLocked, c)
+	c.HTML(http.StatusOK, "index.tmpl", templateData)
+}
+
+func (*Site) getPageContent(p *Page, version string) (rawText string, contentHTML []byte) {
+	rawText = p.Text.GetCurrent()
+	contentHTML = p.RenderedPage
+
+	// Check to see if an old version is requested
+	versionInt, versionErr := strconv.Atoi(version)
+	if versionErr == nil && versionInt > 0 {
+		versionText, err := p.Text.GetPreviousByTimestamp(int64(versionInt))
+		if err == nil {
+			rawText = versionText
+			contentHTML, _ = p.Site.MarkdownRenderer.Render([]byte(rawText))
+		}
+	}
+	return rawText, contentHTML
+}
+
+func (s *Site) getDirectoryEntries(page, command string) ([]os.FileInfo, string, error) {
 	var directoryEntries []os.FileInfo
 	if page == "ls" {
 		command = "/view"
@@ -380,13 +383,24 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		var err error
 		directoryEntries, err = s.UploadList()
 		if err != nil {
-			_ = c.AbortWithError(http.StatusInternalServerError, err)
-			return
+			return nil, command, err
 		}
 	}
+	return directoryEntries, command, nil
+}
 
-	templateData := s.buildTemplateData(page, command, directoryEntries, contentHTML, rawText, versionsInt64, versionsText, versionsChangeSums, isLocked, c)
-	c.HTML(http.StatusOK, "index.tmpl", templateData)
+func (*Site) getVersionHistory(command string, p *Page) (versionsInt64 []int64, versionsChangeSums []int, versionsText []string) {
+	if command[0:2] == "/h" {
+		versionsInt64, versionsChangeSums = p.Text.GetMajorSnapshotsAndChangeSums(maxCacheControl) // get snapshots 60 seconds apart
+		versionsText = make([]string, len(versionsInt64))
+		for i, v := range versionsInt64 {
+			versionsText[i] = time.Unix(v/1000000000, 0).Format("Mon Jan 2 15:04:05 MST 2006")
+		}
+		versionsText = utils.ReverseSliceString(versionsText)
+		versionsInt64 = utils.ReverseSliceInt64(versionsInt64)
+		versionsChangeSums = utils.ReverseSliceInt(versionsChangeSums)
+	}
+	return versionsInt64, versionsChangeSums, versionsText
 }
 
 func (s *Site) buildTemplateData(page, command string, directoryEntries []os.FileInfo, contentHTML []byte, rawText string, versionsInt64 []int64, versionsText []string, versionsChangeSums []int, isLocked bool, c *gin.Context) gin.H {

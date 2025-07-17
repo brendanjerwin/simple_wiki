@@ -14,7 +14,6 @@ func TestSec(t *testing.T) {
 }
 
 var _ = Describe("HashPassword and CheckPasswordHash", func() {
-
 	var (
 		password       string
 		hashedPassword string
@@ -22,14 +21,12 @@ var _ = Describe("HashPassword and CheckPasswordHash", func() {
 	)
 
 	Describe("with a valid password hash", func() {
-
 		BeforeEach(func() {
 			password = "mySecurePassword"
 			hashedPassword = HashPassword(password)
 		})
 
 		When("the password is correct", func() {
-
 			BeforeEach(func() {
 				err = CheckPasswordHash(password, hashedPassword)
 			})
@@ -40,7 +37,6 @@ var _ = Describe("HashPassword and CheckPasswordHash", func() {
 		})
 
 		When("the password is incorrect", func() {
-
 			BeforeEach(func() {
 				err = CheckPasswordHash("wrongPassword", hashedPassword)
 			})
@@ -52,7 +48,6 @@ var _ = Describe("HashPassword and CheckPasswordHash", func() {
 	})
 
 	When("the password is blank", func() {
-
 		BeforeEach(func() {
 			password = ""
 			hashedPassword = HashPassword(password)
@@ -66,7 +61,6 @@ var _ = Describe("HashPassword and CheckPasswordHash", func() {
 	})
 
 	When("the hashed password is blank", func() {
-
 		BeforeEach(func() {
 			password = "mySecurePassword"
 
@@ -79,7 +73,6 @@ var _ = Describe("HashPassword and CheckPasswordHash", func() {
 	})
 
 	When("the password is too long", func() {
-
 		BeforeEach(func() {
 			// A password longer than 72 bytes, which is bcrypt's limit.
 			password = "This password is way too long to be hashed by bcrypt, it should be more than 72 bytes"
@@ -94,7 +87,6 @@ var _ = Describe("HashPassword and CheckPasswordHash", func() {
 	})
 
 	When("the hashed string is not a valid hex string", func() {
-
 		BeforeEach(func() {
 			err = CheckPasswordHash("any password", "not-a-valid-hex-string")
 		})
