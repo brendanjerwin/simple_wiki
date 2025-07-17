@@ -83,7 +83,7 @@ func main() {
 			host = "0.0.0.0"
 		}
 		addr := fmt.Sprintf("%s:%s", host, c.GlobalString("port"))
-		_ = fmt.Sprintf("\nRunning simple_wiki server (version %s) at http://%s\n\n", version, addr)
+logger.Info("Running simple_wiki server (version %s) at http://%s", version, addr)
 
 		srv := &http.Server{
 			Addr:    addr,
