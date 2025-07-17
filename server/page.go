@@ -102,7 +102,7 @@ func (p *Page) Update(newText string) error {
 // Render renders the page content to HTML and extracts frontmatter.
 func (p *Page) Render() {
 	var err error
-	p.RenderedPage, p.FrontmatterJSON, err = utils.MarkdownToHtmlAndJsonFrontmatter(p.Text.GetCurrent(), true, p.Site, p.Site.MarkdownRenderer, p.Site.FrontmatterIndexQueryer)
+	p.RenderedPage, p.FrontmatterJSON, err = utils.MarkdownToHTMLAndJSONFrontmatter(p.Text.GetCurrent(), p.Site, p.Site.MarkdownRenderer, p.Site.FrontmatterIndexQueryer)
 	if err != nil {
 		p.Site.Logger.Error("Error rendering page: %v", err)
 		p.RenderedPage = []byte(err.Error())

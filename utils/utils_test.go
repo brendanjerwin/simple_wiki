@@ -6,14 +6,15 @@ import (
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/templating"
-	. "github.com/brendanjerwin/simple_wiki/utils"
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
+	"github.com/brendanjerwin/simple_wiki/utils"
+	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
+	"github.com/onsi/ginkgo/v2"
+	"github.com/onsi/gomega"
 )
 
 func TestUtils(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "Utils Suite")
+	gomega.RegisterFailHandler(ginkgo.Fail)
+	ginkgo.RunSpecs(t, "Utils Suite")
 }
 
 type MockReadFrontMatter struct {
@@ -35,7 +36,7 @@ type MockQueryFrontmatterIndex struct {
 	GetValueResult frontmatter.Value
 }
 
-func (m *MockQueryFrontmatterIndex) QueryExactMatch(keyPath frontmatter.DottedKeyPath, value frontmatter.Value) []wikipage.PageIdentifier {
+func (m *MockQueryFrontmatterIndex) QueryExactMatch(keyPath frontmatter.DottedKeyPath, _ frontmatter.Value) []wikipage.PageIdentifier {
 	return m.Results[string(keyPath)]
 }
 
@@ -43,48 +44,48 @@ func (m *MockQueryFrontmatterIndex) QueryKeyExistence(keyPath frontmatter.Dotted
 	return m.Results[string(keyPath)]
 }
 
-func (m *MockQueryFrontmatterIndex) QueryPrefixMatch(keyPath frontmatter.DottedKeyPath, valuePrefix string) []wikipage.PageIdentifier {
+func (m *MockQueryFrontmatterIndex) QueryPrefixMatch(keyPath frontmatter.DottedKeyPath, _ string) []wikipage.PageIdentifier {
 	return m.Results[string(keyPath)]
 }
 
-func (m *MockQueryFrontmatterIndex) GetValue(identifier wikipage.PageIdentifier, keyPath frontmatter.DottedKeyPath) frontmatter.Value {
+func (m *MockQueryFrontmatterIndex) GetValue(_ wikipage.PageIdentifier, _ frontmatter.DottedKeyPath) frontmatter.Value {
 	return m.GetValueResult
 }
 
-var _ = Describe("Utils", func() {
-	Describe("ReverseSlice", func() {
-		Describe("ReverseSliceInt64", func() {
-			It("should reverse a slice of int64", func() {
+var _ = ginkgo.Describe("Utils", func() {
+	ginkgo.Describe("ReverseSlice", func() {
+		ginkgo.Describe("ReverseSliceInt64", func() {
+			ginkgo.It("should reverse a slice of int64", func() {
 				slice := []int64{1, 2, 3, 4, 5}
-				reversed := ReverseSliceInt64(slice)
-				Expect(reversed).To(Equal([]int64{5, 4, 3, 2, 1}))
+				reversed := utils.ReverseSliceInt64(slice)
+				gomega.Expect(reversed).To(gomega.Equal([]int64{5, 4, 3, 2, 1}))
 			})
 		})
 
-		Describe("ReverseSliceString", func() {
-			It("should reverse a slice of strings", func() {
+		ginkgo.Describe("ReverseSliceString", func() {
+			ginkgo.It("should reverse a slice of strings", func() {
 				slice := []string{"apple", "banana", "cherry"}
-				reversed := ReverseSliceString(slice)
-				Expect(reversed).To(Equal([]string{"cherry", "banana", "apple"}))
+				reversed := utils.ReverseSliceString(slice)
+				gomega.Expect(reversed).To(gomega.Equal([]string{"cherry", "banana", "apple"}))
 			})
 		})
 
-		Describe("ReverseSliceInt", func() {
-			It("should reverse a slice of int", func() {
+		ginkgo.Describe("ReverseSliceInt", func() {
+			ginkgo.It("should reverse a slice of int", func() {
 				slice := []int{1, 2, 3, 4, 5}
-				reversed := ReverseSliceInt(slice)
-				Expect(reversed).To(Equal([]int{5, 4, 3, 2, 1}))
+				reversed := utils.ReverseSliceInt(slice)
+				gomega.Expect(reversed).To(gomega.Equal([]int{5, 4, 3, 2, 1}))
 			})
 		})
 	})
 
-	Describe("MarkdownToHtmlAndJsonFrontmatter", func() {
+	ginkgo.Describe("MarkdownToHTMLAndJSONFrontmatter", func() {
 		var (
 			markdown string
 			html     []byte
 		)
 
-		BeforeEach(func() {
+		ginkgo.BeforeEach(func() {
 			markdown = `
 ---
 sample: "value"
@@ -93,20 +94,20 @@ sample: "value"
 # Hello
 	`
 			var err error
-			html, _, err = MarkdownToHtmlAndJsonFrontmatter(markdown, true, &MockReadFrontMatter{}, &GoldmarkRenderer{}, &MockQueryFrontmatterIndex{})
-			Expect(err).NotTo(HaveOccurred())
+			html, _, err = utils.MarkdownToHTMLAndJSONFrontmatter(markdown, &MockReadFrontMatter{}, &goldmarkrenderer.GoldmarkRenderer{}, &MockQueryFrontmatterIndex{})
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
 		})
 
-		It("should remove frontmatter from the output", func() {
-			Expect(string(html)).NotTo(ContainSubstring("sample:"))
+		ginkgo.It("should remove frontmatter from the output", func() {
+			gomega.Expect(string(html)).NotTo(gomega.ContainSubstring("sample:"))
 		})
 
-		It("should render the markdown to HTML", func() {
-			Expect(string(html)).To(ContainSubstring(">Hello</h1"))
+		ginkgo.It("should render the markdown to HTML", func() {
+			gomega.Expect(string(html)).To(gomega.ContainSubstring(">Hello</h1"))
 		})
 	})
 
-	Describe("templating.ExecuteTemplate", func() {
+	ginkgo.Describe("templating.ExecuteTemplate", func() {
 		var (
 			theFrontmatter wikipage.FrontMatter
 			rendered       []byte
@@ -115,111 +116,111 @@ sample: "value"
 		var site wikipage.PageReader = &MockReadFrontMatter{}
 		var query frontmatter.IQueryFrontmatterIndex = &MockQueryFrontmatterIndex{}
 
-		Describe("When using a simple template", func() {
-			BeforeEach(func() {
+		ginkgo.Describe("When using a simple template", func() {
+			ginkgo.BeforeEach(func() {
 				theFrontmatter = wikipage.FrontMatter{"identifier": "1234"}
-				templateHtml := `{{ .Identifier }}`
-				rendered, err = templating.ExecuteTemplate(templateHtml, theFrontmatter, site, query)
+				templateHTML := `{{ .Identifier }}`
+				rendered, err = templating.ExecuteTemplate(templateHTML, theFrontmatter, site, query)
 			})
-			It("should not return an error", func() {
-				Expect(err).NotTo(HaveOccurred())
+			ginkgo.It("should not return an error", func() {
+				gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			})
-			It("should render identifier into output", func() {
-				Expect(string(rendered)).To(ContainSubstring("1234"))
+			ginkgo.It("should render identifier into output", func() {
+				gomega.Expect(string(rendered)).To(gomega.ContainSubstring("1234"))
 			})
 		})
 
-		Describe("When using an unstructured map", func() {
-			BeforeEach(func() {
+		ginkgo.Describe("When using an unstructured map", func() {
+			ginkgo.BeforeEach(func() {
 				theFrontmatter = wikipage.FrontMatter{"identifier": "1234", "foobar": "baz"}
 				templateHTML := `{{ index .FrontmatterMap "foobar" }}`
 				rendered, err = templating.ExecuteTemplate(templateHTML, theFrontmatter, site, query)
 			})
-			It("should not return an error", func() {
-				Expect(err).NotTo(HaveOccurred())
+			ginkgo.It("should not return an error", func() {
+				gomega.Expect(err).NotTo(gomega.HaveOccurred())
 			})
-			It("should render unstructured data into output", func() {
-				Expect(string(rendered)).To(ContainSubstring("baz"))
+			ginkgo.It("should render unstructured data into output", func() {
+				gomega.Expect(string(rendered)).To(gomega.ContainSubstring("baz"))
 			})
 		})
 	})
 
-	Describe("StripFrontmatter", func() {
-		DescribeTable("when stripping frontmatter",
+	ginkgo.Describe("StripFrontmatter", func() {
+		ginkgo.DescribeTable("when stripping frontmatter",
 			func(input string, expected string) {
-				Expect(StripFrontmatter(input)).To(Equal(expected))
+				gomega.Expect(utils.StripFrontmatter(input)).To(gomega.Equal(expected))
 			},
-			Entry("with frontmatter", "---\ntitle: Test\n---\nThis is a test", "This is a test"),
-			Entry("without frontmatter", "This is a test", "This is a test"),
+			ginkgo.Entry("with frontmatter", "---\ntitle: Test\n---\nThis is a test", "This is a test"),
+			ginkgo.Entry("without frontmatter", "This is a test", "This is a test"),
 		)
 	})
 
-	Describe("RandomAlliterateCombo", func() {
-		It("should return a non-empty string", func() {
-			combo := RandomAlliterateCombo()
-			Expect(combo).NotTo(BeEmpty())
+	ginkgo.Describe("utils.RandomAlliterateCombo", func() {
+		ginkgo.It("should return a non-empty string", func() {
+			combo := utils.RandomAlliterateCombo()
+			gomega.Expect(combo).NotTo(gomega.BeEmpty())
 		})
 	})
 
-	Describe("StringInSlice", func() {
+	ginkgo.Describe("utils.StringInSlice", func() {
 		var sl []string
-		BeforeEach(func() {
+		ginkgo.BeforeEach(func() {
 			sl = []string{"apple", "banana", "cherry"}
 		})
-		Describe("When the string is in the slice", func() {
-			It("should return true", func() {
-				Expect(StringInSlice("banana", sl)).To(BeTrue())
+		ginkgo.Describe("When the string is in the slice", func() {
+			ginkgo.It("should return true", func() {
+				gomega.Expect(utils.StringInSlice("banana", sl)).To(gomega.BeTrue())
 			})
 		})
-		Describe("When the string is not in the slice", func() {
-			It("should return false", func() {
-				Expect(StringInSlice("orange", sl)).To(BeFalse())
+		ginkgo.Describe("When the string is not in the slice", func() {
+			ginkgo.It("should return false", func() {
+				gomega.Expect(utils.StringInSlice("orange", sl)).To(gomega.BeFalse())
 			})
 		})
 	})
 
-	Describe("ContentTypeFromName", func() {
-		DescribeTable("when given a filename",
+	ginkgo.Describe("ContentTypeFromName", func() {
+		ginkgo.DescribeTable("when given a filename",
 			func(filename, expectedContentType string) {
-				Expect(ContentTypeFromName(filename)).To(Equal(expectedContentType))
+				gomega.Expect(utils.ContentTypeFromName(filename)).To(gomega.Equal(expectedContentType))
 			},
-			Entry("for a markdown file", "file.md", "text/markdown; charset=utf-8"),
-			Entry("for a heic file", "image.heic", "image/heic"),
+			ginkgo.Entry("for a markdown file", "file.md", "text/markdown; charset=utf-8"),
+			ginkgo.Entry("for a heic file", "image.heic", "image/heic"),
 		)
 	})
 
-	Describe("RandomStringOfLength", func() {
-		It("should return a string of the specified length", func() {
-			str, err := RandomStringOfLength(10)
-			Expect(err).NotTo(HaveOccurred())
-			Expect(len(str)).To(Equal(10))
+	ginkgo.Describe("utils.RandomStringOfLength", func() {
+		ginkgo.It("should return a string of the specified length", func() {
+			str, err := utils.RandomStringOfLength(10)
+			gomega.Expect(err).NotTo(gomega.HaveOccurred())
+			gomega.Expect(len(str)).To(gomega.Equal(10))
 		})
 	})
 
-	Describe("Exists", func() {
-		Describe("When the file exists", func() {
-			It("should return true", func() {
-				Expect(Exists("./utils.go")).To(BeTrue(), "Expected file utils.go to exist in current directory for test.")
+	ginkgo.Describe("Exists", func() {
+		ginkgo.Describe("When the file exists", func() {
+			ginkgo.It("should return true", func() {
+				gomega.Expect(utils.Exists("./utils.go")).To(gomega.BeTrue(), "Expected file utils.go to exist in current directory for test.")
 			})
 		})
-		Describe("When the file does not exist", func() {
-			It("should return false", func() {
-				Expect(Exists("./nonexistent_file.go")).To(BeFalse())
+		ginkgo.Describe("When the file does not exist", func() {
+			ginkgo.It("should return false", func() {
+				gomega.Expect(utils.Exists("./nonexistent_file.go")).To(gomega.BeFalse())
 			})
 		})
 	})
 
-	Describe("Base32 encoding/decoding", func() {
-		Describe("EncodeToBase32", func() {
-			It("should encode a string to base32", func() {
-				Expect(EncodeToBase32("hello")).To(Equal("NBSWY3DP"))
+	ginkgo.Describe("Base32 encoding/decoding", func() {
+		ginkgo.Describe("utils.EncodeToBase32", func() {
+			ginkgo.It("should encode a string to base32", func() {
+				gomega.Expect(utils.EncodeToBase32("hello")).To(gomega.Equal("NBSWY3DP"))
 			})
 		})
-		Describe("DecodeFromBase32", func() {
-			It("should decode a base32 string", func() {
-				str, err := DecodeFromBase32("NBSWY3DP")
-				Expect(err).NotTo(HaveOccurred())
-				Expect(str).To(Equal("hello"))
+		ginkgo.Describe("utils.DecodeFromBase32", func() {
+			ginkgo.It("should decode a base32 string", func() {
+				str, err := utils.DecodeFromBase32("NBSWY3DP")
+				gomega.Expect(err).NotTo(gomega.HaveOccurred())
+				gomega.Expect(str).To(gomega.Equal("hello"))
 			})
 		})
 	})

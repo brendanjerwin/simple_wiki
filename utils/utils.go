@@ -25,8 +25,8 @@ var (
 	adjectives []string
 )
 
-// IRenderMarkdownToHtml is an interface that abstracts the rendering process
-type IRenderMarkdownToHtml interface {
+// IRenderMarkdownToHTML is an interface that abstracts the rendering process
+type IRenderMarkdownToHTML interface {
 	Render(input []byte) ([]byte, error)
 }
 
@@ -45,18 +45,19 @@ func randomAdjective() string {
 	return strings.ReplaceAll(cases.Title(language.English).String(adjectives[rand.Intn(len(adjectives)-1)]), " ", "")
 }
 
-func RandomAlliterateCombo() (combo string) {
-	combo = ""
+func RandomAlliterateCombo() string {
+	combo := ""
 	// generate random alliteration thats not been used
 	for {
 		animal := randomAnimal()
 		adjective := randomAdjective()
-		if animal[0] == adjective[0] && len(animal)+len(adjective) < 18 { //&& stringInSlice(strings.ToLower(adjective+animal), takenNames) == false {
+		const maxComboLength = 18
+		if animal[0] == adjective[0] && len(animal)+len(adjective) < maxComboLength { //&& stringInSlice(strings.ToLower(adjective+animal), takenNames) == false {
 			combo = adjective + animal
 			break
 		}
 	}
-	return
+	return combo
 }
 
 // is there a string in a slice?
@@ -119,38 +120,32 @@ func Exists(path string) bool {
 type DoesntMatter struct{}
 
 func StripFrontmatter(s string) string {
-	doesnt_matter := &DoesntMatter{}
-	unsafe, _ := frontmatter.Parse(strings.NewReader(s), &doesnt_matter)
+	doesntMatter := &DoesntMatter{}
+	unsafe, _ := frontmatter.Parse(strings.NewReader(s), &doesntMatter)
 	return string(unsafe)
 }
 
-func MarkdownToHtmlAndJsonFrontmatter(s string, handleFrontMatter bool, site wikipage.PageReader, renderer IRenderMarkdownToHtml, query fmindex.IQueryFrontmatterIndex) ([]byte, []byte, error) {
+func MarkdownToHTMLAndJSONFrontmatter(s string, site wikipage.PageReader, renderer IRenderMarkdownToHTML, query fmindex.IQueryFrontmatterIndex) (html []byte, matter []byte, err error) {
 	var markdownBytes []byte
-	var matterBytes []byte
-	var err error
 
-	matter := &map[string]any{}
-	if handleFrontMatter {
-		markdownBytes, err = frontmatter.Parse(strings.NewReader(s), &matter)
-		if err != nil {
-			return []byte(err.Error()), nil, err
-		}
-		matterBytes, _ = json.Marshal(matter)
+	matterMap := &map[string]any{}
+	markdownBytes, err = frontmatter.Parse(strings.NewReader(s), &matterMap)
+	if err != nil {
+		return []byte(err.Error()), nil, err
+	}
+	matter, _ = json.Marshal(matterMap)
 
-		markdownBytes, err = templating.ExecuteTemplate(string(markdownBytes), *matter, site, query)
-		if err != nil {
-			return []byte(err.Error()), nil, err
-		}
-	} else {
-		markdownBytes = []byte(s)
+	markdownBytes, err = templating.ExecuteTemplate(string(markdownBytes), *matterMap, site, query)
+	if err != nil {
+		return []byte(err.Error()), nil, err
 	}
 
-	html, err := renderer.Render(markdownBytes)
+	html, err = renderer.Render(markdownBytes)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return html, matterBytes, nil
+	return html, matter, nil
 }
 
 func EncodeToBase32(s string) string {
@@ -164,7 +159,7 @@ func EncodeBytesToBase32(s []byte) string {
 func DecodeFromBase32(s string) (s2 string, err error) {
 	bString, err := base32.StdEncoding.DecodeString(s)
 	s2 = string(bString)
-	return
+	return s2, err
 }
 
 func ReverseSliceInt64(s []int64) []int64 {

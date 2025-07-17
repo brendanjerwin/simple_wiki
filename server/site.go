@@ -43,7 +43,7 @@ type Site struct {
 	MaxUploadSize           uint
 	MaxDocumentSize         uint // in runes; about a 10mb limit by default
 	Logger                  *lumber.ConsoleLogger
-	MarkdownRenderer        utils.IRenderMarkdownToHtml
+	MarkdownRenderer        utils.IRenderMarkdownToHTML
 	IndexMaintainer         index.IMaintainIndex
 	FrontmatterIndexQueryer frontmatter.IQueryFrontmatterIndex
 	BleveIndexQueryer       bleve.IQueryBleveIndex
