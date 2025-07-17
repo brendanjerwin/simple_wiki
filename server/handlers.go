@@ -17,6 +17,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/sec"
 	"github.com/brendanjerwin/simple_wiki/static"
 	"github.com/brendanjerwin/simple_wiki/utils"
+	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
 	ginteenysecurity "github.com/danielheath/gin-teeny-security"
 	"github.com/gin-contrib/multitemplate"
 	"github.com/gin-contrib/sessions"
@@ -102,7 +103,7 @@ func (s *Site) GinRouter() *gin.Engine {
 	}
 
 	if s.MarkdownRenderer == nil {
-		s.MarkdownRenderer = utils.GoldmarkRenderer{}
+		s.MarkdownRenderer = goldmarkrenderer.GoldmarkRenderer{}
 	}
 
 	if hotTemplateReloading {

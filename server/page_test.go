@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/brendanjerwin/simple_wiki/utils"
+	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 
 	"github.com/jcelliott/lumber"
@@ -27,7 +27,7 @@ var _ = Describe("Page Functions", func() {
 		Expect(err).NotTo(HaveOccurred())
 		s = &Site{
 			PathToData:       pathToData,
-			MarkdownRenderer: &utils.GoldmarkRenderer{},
+			MarkdownRenderer: &goldmarkrenderer.GoldmarkRenderer{},
 			Logger:           lumber.NewConsoleLogger(lumber.INFO),
 		}
 		err = s.InitializeIndexing()

@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/brendanjerwin/simple_wiki/utils"
+	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/templating"
@@ -93,7 +94,7 @@ sample: "value"
 # Hello
 	`
 			var err error
-			html, _, err = utils.MarkdownToHTMLAndJSONFrontmatter(markdown, &MockReadFrontMatter{}, &utils.GoldmarkRenderer{}, &MockQueryFrontmatterIndex{})
+			html, _, err = utils.MarkdownToHTMLAndJSONFrontmatter(markdown, &MockReadFrontMatter{}, &goldmarkrenderer.GoldmarkRenderer{}, &MockQueryFrontmatterIndex{})
 			Expect(err).NotTo(HaveOccurred())
 		})
 

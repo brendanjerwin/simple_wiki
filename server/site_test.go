@@ -8,6 +8,7 @@ import (
 
 	"github.com/brendanjerwin/simple_wiki/sec"
 	"github.com/brendanjerwin/simple_wiki/utils"
+	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
@@ -32,7 +33,7 @@ var _ = Describe("Site", func() {
 			Logger:                  lumber.NewConsoleLogger(lumber.INFO),
 			PathToData:              tempDir,
 			IndexMaintainer:         mockIndex,
-			MarkdownRenderer:        &utils.GoldmarkRenderer{},
+			MarkdownRenderer:        &goldmarkrenderer.GoldmarkRenderer{},
 			FrontmatterIndexQueryer: &mockFrontmatterIndexQueryer{},
 		}
 	})
