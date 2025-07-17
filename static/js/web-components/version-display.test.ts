@@ -1,7 +1,6 @@
 import { html, fixture, expect } from '@open-wc/testing';
 import { VersionDisplay } from './version-display.js';
 import './version-display.js';
-import * as sinon from 'sinon';
 
 describe('VersionDisplay', () => {
   let el: VersionDisplay;
@@ -12,10 +11,9 @@ describe('VersionDisplay', () => {
     el.loading = false;
     el.error = undefined;
     el.version = {
-      version: '1.2.3',
       commit: 'abc123def456',
       buildTime: { toDate: () => new Date('2023-01-01T12:00:00Z') }
-    } as any;
+    } as unknown;
     await el.updateComplete;
   });
 
@@ -39,7 +37,7 @@ describe('VersionDisplay', () => {
       el.version = {
         commit: 'thisiscommithash',
         buildTime: { toDate: () => new Date('2023-01-01T12:00:00Z') }
-      } as any;
+      } as unknown;
       await el.updateComplete;
     });
 

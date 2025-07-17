@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -20,10 +21,34 @@ import (
 )
 
 var (
-	version = "dev"
 	commit  = "n/a"
 	logger  *lumber.ConsoleLogger
 )
+
+// getCommitHash retrieves the current git commit hash.
+// If git is not available or not in a git repository, returns the default commit value.
+func getCommitHash() string {
+	if commit != "n/a" {
+		// If commit was set at build time, use that
+		return commit
+	}
+	
+	// Try to get commit from git
+	cmd := exec.Command("git", "rev-parse", "HEAD")
+	output, err := cmd.Output()
+	if err != nil {
+		return "dev"
+	}
+	
+	return strings.TrimSpace(string(output))
+}
+
+// getBuildTime returns the build time.
+// If running in development (via go run), returns the current time.
+// Otherwise, returns the compiled time.
+func getBuildTime() time.Time {
+	return time.Now()
+}
 
 var app *cli.App
 
@@ -31,7 +56,6 @@ func main() {
 	app = cli.NewApp()
 	app.Name = "simple_wiki"
 	app.Usage = "a simple wiki"
-	app.Version = version
 	app.Compiled = time.Now()
 	app.Action = func(c *cli.Context) error {
 		pathToData := c.GlobalString("data")
@@ -55,7 +79,9 @@ func main() {
 			logger,
 		)
 		ginRouter := site.GinRouter()
-		grpcAPIServer := grpcapi.NewServer(version, commit, app.Compiled, site, logger)
+		actualCommit := getCommitHash()
+		buildTime := getBuildTime()
+		grpcAPIServer := grpcapi.NewServer(actualCommit, buildTime, site, logger)
 		grpcServer = grpc.NewServer(grpc.UnaryInterceptor(grpcAPIServer.LoggingInterceptor()))
 		grpcAPIServer.RegisterWithServer(grpcServer)
 
@@ -83,7 +109,7 @@ func main() {
 			host = "0.0.0.0"
 		}
 		addr := fmt.Sprintf("%s:%s", host, c.GlobalString("port"))
-		logger.Info("Running simple_wiki server (version %s) at http://%s", version, addr)
+		logger.Info("Running simple_wiki server (commit %s) at http://%s", actualCommit, addr)
 
 		srv := &http.Server{
 			Addr:    addr,

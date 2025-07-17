@@ -21,7 +21,6 @@ import (
 type Server struct {
 	apiv1.UnimplementedVersionServer
 	apiv1.UnimplementedFrontmatterServer
-	Version        string
 	Commit         string
 	BuildTime      time.Time
 	PageReadWriter wikipage.PageReadWriter
@@ -202,9 +201,8 @@ func removeAtPath(data any, path []*apiv1.PathComponent) (any, error) {
 }
 
 // NewServer creates a new debug server
-func NewServer(version, commit string, buildTime time.Time, pageReadWriter wikipage.PageReadWriter, logger *lumber.ConsoleLogger) *Server {
+func NewServer(commit string, buildTime time.Time, pageReadWriter wikipage.PageReadWriter, logger *lumber.ConsoleLogger) *Server {
 	return &Server{
-		Version:        version,
 		Commit:         commit,
 		BuildTime:      buildTime,
 		PageReadWriter: pageReadWriter,

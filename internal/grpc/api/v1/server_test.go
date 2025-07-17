@@ -181,7 +181,7 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("v0.0.0", "commit", time.Now(), mockPageReadWriter, lumber.NewConsoleLogger(lumber.WARN))
+			server = v1.NewServer("commit", time.Now(), mockPageReadWriter, lumber.NewConsoleLogger(lumber.WARN))
 			res, err = server.GetFrontmatter(ctx, req)
 		})
 
@@ -262,7 +262,7 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("v0.0.0", "commit", time.Now(), mockPageReadWriter, lumber.NewConsoleLogger(lumber.WARN))
+			server = v1.NewServer("commit", time.Now(), mockPageReadWriter, lumber.NewConsoleLogger(lumber.WARN))
 			resp, err = server.MergeFrontmatter(ctx, req)
 		})
 
@@ -392,7 +392,7 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("v0.0.0", "commit", time.Now(), mockPageReadWriter, lumber.NewConsoleLogger(lumber.WARN))
+			server = v1.NewServer("commit", time.Now(), mockPageReadWriter, lumber.NewConsoleLogger(lumber.WARN))
 			resp, err = server.ReplaceFrontmatter(ctx, req)
 		})
 
@@ -479,7 +479,7 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("v0.0.0", "commit", time.Now(), mockPageReadWriter, lumber.NewConsoleLogger(lumber.WARN))
+			server = v1.NewServer("commit", time.Now(), mockPageReadWriter, lumber.NewConsoleLogger(lumber.WARN))
 			resp, err = server.RemoveKeyAtPath(ctx, req)
 		})
 
@@ -724,7 +724,7 @@ var _ = Describe("Server", func() {
 			// Create a mock logger
 			logger = lumber.NewConsoleLogger(lumber.INFO)
 
-			server = v1.NewServer("test-version", "test-commit", time.Now(), nil, logger)
+			server = v1.NewServer("test-commit", time.Now(), nil, logger)
 		})
 
 		When("a successful gRPC call is made", func() {
@@ -811,7 +811,7 @@ var _ = Describe("Server", func() {
 			)
 
 			BeforeEach(func() {
-				server = v1.NewServer("test-version", "test-commit", time.Now(), nil, nil)
+				server = v1.NewServer("test-commit", time.Now(), nil, nil)
 
 				handler = func(ctx context.Context, req interface{}) (interface{}, error) {
 					return &apiv1.GetVersionResponse{Commit: "test"}, nil
