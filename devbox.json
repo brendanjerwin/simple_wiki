@@ -23,11 +23,17 @@
       "fe:test": [
         "export CHROMIUM_BIN=$(which chromium) && cd static/js && bun install && bun run test:wtr ${CI_COVERAGE:+--coverage}"
       ],
+      "fe:lint": [
+        "cd static/js && bun install && bun run -- eslint . --ext .ts --max-warnings 0"
+      ],
       "lint:md": [
         "markdownlint --fix '**/*.md' --ignore vendor"
       ],
       "go:test": [
         "go test ./..."
+      ],
+      "go:lint": [
+        "revive -config revive.toml -set_exit_status ./..."
       ],
       "lint:everything": [
         "if git status --porcelain api/proto | grep -q '.'; then buf generate; else echo 'No changes in api/proto, skipping buf generate.'; fi",
