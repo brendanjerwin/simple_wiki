@@ -1,6 +1,54 @@
 {
   "lockfile_version": "1",
   "packages": {
+    "ast-grep@latest": {
+      "last_modified": "2025-07-13T22:45:35Z",
+      "resolved": "github:NixOS/nixpkgs/a421ac6595024edcfbb1ef950a3712b89161c359#ast-grep",
+      "source": "devbox-search",
+      "version": "0.38.6",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/jkw7dyrxs8xwcswjpwhpbhx9glrixgik-ast-grep-0.38.6",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/jkw7dyrxs8xwcswjpwhpbhx9glrixgik-ast-grep-0.38.6"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/1aml1wm5c5svax4z2zpa0jmn4l1l120g-ast-grep-0.38.6",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/1aml1wm5c5svax4z2zpa0jmn4l1l120g-ast-grep-0.38.6"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/zwcfif64iy59qz7y7gdn7g7zxjd6bf4i-ast-grep-0.38.6",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/zwcfif64iy59qz7y7gdn7g7zxjd6bf4i-ast-grep-0.38.6"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/x846dnvb5hr41asgdgdb7m287xmrffz8-ast-grep-0.38.6",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/x846dnvb5hr41asgdgdb7m287xmrffz8-ast-grep-0.38.6"
+        }
+      }
+    },
     "buf@latest": {
       "last_modified": "2025-06-20T02:24:11Z",
       "resolved": "github:NixOS/nixpkgs/076e8c6678d8c54204abcb4b1b14c366835a58bb#buf",

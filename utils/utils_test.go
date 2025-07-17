@@ -132,7 +132,7 @@ sample: "value"
 		Describe("When using an unstructured map", func() {
 			BeforeEach(func() {
 				theFrontmatter = wikipage.FrontMatter{"identifier": "1234", "foobar": "baz"}
-				templateHTML := `{{ index .Map "foobar" }}`
+				templateHTML := `{{ index .FrontmatterMap "foobar" }}`
 				rendered, err = templating.ExecuteTemplate(templateHTML, theFrontmatter, site, query)
 			})
 			It("should not return an error", func() {

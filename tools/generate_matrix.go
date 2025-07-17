@@ -65,7 +65,7 @@ func main() {
 	outputFile := os.Getenv("GITHUB_OUTPUT")
 	if outputFile == "" {
 		// Fallback for local testing
-		fmt.Println(string(jsonMatrix))
+		_, _ = fmt.Println(string(jsonMatrix))
 		return
 	}
 	f, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)

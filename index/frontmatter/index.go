@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	wikiidentifiers "github.com/brendanjerwin/simple_wiki/wikiidentifiers"
+	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 

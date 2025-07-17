@@ -22,6 +22,7 @@ import (
 var (
 	version = "dev"
 	commit  = "n/a"
+	logger  *lumber.ConsoleLogger
 )
 
 var app *cli.App
@@ -40,7 +41,7 @@ func main() {
 
 		grpcServer := grpc.NewServer()
 
-		logger := makeLogger(c.GlobalBool("debug"))
+		logger = makeLogger(c.GlobalBool("debug"))
 		site := server.NewSite(
 			pathToData,
 			c.GlobalString("css"),
@@ -93,6 +94,12 @@ func main() {
 	app.Flags = getFlags()
 }
 
+const (
+	defaultDebounce = 500
+	defaultMaxUploadMB = 100
+	defaultMaxDocumentLength = 100000000
+)
+
 func getFlags() []cli.Flag {
 	return []cli.Flag{
 		cli.StringFlag{
@@ -127,7 +134,7 @@ func getFlags() []cli.Flag {
 		},
 		cli.IntFlag{
 			Name:  "debounce",
-			Value: 500,
+			Value: defaultDebounce,
 			Usage: "debounce time for saving data, in milliseconds",
 		},
 		cli.BoolFlag{
@@ -150,12 +157,12 @@ func getFlags() []cli.Flag {
 		},
 		cli.UintFlag{
 			Name:  "max-upload-mb",
-			Value: 100,
+			Value: defaultMaxUploadMB,
 			Usage: "Largest file upload (in mb) allowed",
 		},
 		cli.UintFlag{
 			Name:  "max-document-length",
-			Value: 100000000,
+			Value: defaultMaxDocumentLength,
 			Usage: "Largest wiki page (in characters) allowed",
 		},
 	}
@@ -170,7 +177,7 @@ func makeLogger(debug bool) *lumber.ConsoleLogger {
 
 func init() {
 	if err := app.Run(os.Args); err != nil {
-		fmt.Println(err)
+		logger.Error("Error running app: %v", err)
 		os.Exit(1)
 	}
 }

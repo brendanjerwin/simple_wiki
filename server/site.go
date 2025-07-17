@@ -15,9 +15,9 @@ import (
 	"sync"
 	"time"
 
-	adrgFrontmatter "github.com/adrg/frontmatter"
-	wikipage "github.com/brendanjerwin/simple_wiki/wikipage"
-	wikiidentifiers "github.com/brendanjerwin/simple_wiki/wikiidentifiers"
+	adrgfrontmatter "github.com/adrg/frontmatter"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
+	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/brendanjerwin/simple_wiki/index"
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
@@ -342,7 +342,7 @@ func (s *Site) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.
 }
 
 func lenientParse(content []byte, matter any) (body []byte, err error) {
-	body, err = adrgFrontmatter.Parse(bytes.NewReader(content), matter)
+	body, err = adrgfrontmatter.Parse(bytes.NewReader(content), matter)
 	if err != nil {
 		var tomlErr *toml.DecodeError
 		// If it's a TOML parsing error and it has TOML delimiters, try to parse as YAML.
@@ -352,7 +352,7 @@ func lenientParse(content []byte, matter any) (body []byte, err error) {
 			bytes.HasPrefix(content, []byte("+++")) {
 			// Replace TOML delimiters with YAML and try again
 			newContent := bytes.Replace(content, []byte("+++"), []byte("---"), 2)
-			body, err = adrgFrontmatter.Parse(bytes.NewReader(newContent), matter)
+			body, err = adrgfrontmatter.Parse(bytes.NewReader(newContent), matter)
 			return
 		}
 	}

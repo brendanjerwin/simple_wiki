@@ -24,23 +24,23 @@ type InventoryFrontmatter struct {
 type TemplateContext struct {
 	Identifier string `json:"identifier"`
 	Title      string `json:"title"`
-	Map        map[string]any
+	FrontmatterMap        map[string]any
 	Inventory  InventoryFrontmatter `json:"inventory"`
 }
 
-func ConstructTemplateContextFromFrontmatter(frontmatter wikipage.FrontMatter, query frontmatter.IQueryFrontmatterIndex) (TemplateContext, error) {
-	bytes, err := json.Marshal(frontmatter)
+func ConstructTemplateContextFromFrontmatter(fm wikipage.FrontMatter, query frontmatter.IQueryFrontmatterIndex) (TemplateContext, error) {
+	fmBytes, err := json.Marshal(fm)
 	if err != nil {
 		return TemplateContext{}, err
 	}
 
 	context := TemplateContext{}
-	err = json.Unmarshal(bytes, &context)
+	err = json.Unmarshal(fmBytes, &context)
 	if err != nil {
 		return TemplateContext{}, err
 	}
 
-	context.Map = frontmatter
+				context.FrontmatterMap = fm
 
 	if context.Inventory.Items == nil {
 		context.Inventory.Items = []string{}
@@ -183,8 +183,8 @@ func BuildIsContainer(query frontmatter.IQueryFrontmatterIndex) func(string) boo
 }
 
 // ExecuteTemplate executes a template string with the given frontmatter and site context.
-func ExecuteTemplate(templateString string, frontmatter wikipage.FrontMatter, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex) ([]byte, error) {
-	templateContext, err := ConstructTemplateContextFromFrontmatter(frontmatter, query)
+func ExecuteTemplate(templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex) ([]byte, error) {
+	templateContext, err := ConstructTemplateContextFromFrontmatter(fm, query)
 	if err != nil {
 		return nil, err
 	}

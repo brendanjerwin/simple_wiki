@@ -12,7 +12,8 @@
     "bun@latest",
     "chromium@latest",
     "go-tools",
-    "revive@latest"
+    "revive@latest",
+    "ast-grep@latest"
   ],
   "shell": {
     "init_hook": [

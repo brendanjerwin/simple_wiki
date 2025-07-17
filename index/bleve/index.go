@@ -5,12 +5,12 @@ import (
 	"regexp"
 	"strings"
 
-		bleve "github.com/blevesearch/bleve"
+		"github.com/blevesearch/bleve"
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/templating"
-	"github.com/brendanjerwin/simple_wiki/utils"
-	wikiidentifiers "github.com/brendanjerwin/simple_wiki/wikiidentifiers"
-	wikipage "github.com/brendanjerwin/simple_wiki/wikipage"
+	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
+	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/k3a/html2text"
 )
 
@@ -63,7 +63,7 @@ func (b *Index) AddPageToIndex(requestedIdentifier wikipage.PageIdentifier) erro
 	if err != nil {
 		return err
 	}
-	markdownRenderer := utils.GoldmarkRenderer{}
+	markdownRenderer := goldmarkrenderer.GoldmarkRenderer{}
 	htmlBytes, err := markdownRenderer.Render(renderedBytes)
 	var content string
 	if err != nil {

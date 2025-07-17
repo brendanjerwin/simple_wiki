@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-		wikipage "github.com/brendanjerwin/simple_wiki/wikipage"
+		"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/templating"
 )

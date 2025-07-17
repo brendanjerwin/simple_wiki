@@ -10,8 +10,10 @@ import (
 
 // HashPassword generates a bcrypt hash of the password using work factor 14.
 // https://github.com/gtank/cryptopasta/blob/master/hash.go
+const bcryptCost = 14
+
 func HashPassword(password string) string {
-	cost := 14
+	cost := bcryptCost
 	if os.Getenv("TEST_ENV") == "true" {
 		cost = bcrypt.MinCost
 	}

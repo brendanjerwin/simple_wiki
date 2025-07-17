@@ -2,7 +2,7 @@ package server
 
 import (
 	"github.com/brendanjerwin/simple_wiki/index"
-	bleve_index "github.com/brendanjerwin/simple_wiki/index/bleve"
+	"github.com/brendanjerwin/simple_wiki/index/bleve"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
@@ -65,10 +65,10 @@ func (m *mockFrontmatterIndexQueryer) QueryKeyExistence(key string) []string {
 }
 
 type mockBleveIndexQueryer struct {
-	QueryFunc func(query string) ([]bleve_index.SearchResult, error)
+	QueryFunc func(query string) ([]bleve.SearchResult, error)
 }
 
-func (m *mockBleveIndexQueryer) Query(query string) ([]bleve_index.SearchResult, error) {
+func (m *mockBleveIndexQueryer) Query(query string) ([]bleve.SearchResult, error) {
 	if m.QueryFunc != nil {
 		return m.QueryFunc(query)
 	}

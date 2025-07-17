@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	adrgFrontmatter "github.com/adrg/frontmatter"
+	adrgfrontmatter "github.com/adrg/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/utils"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/schollz/versionedtext"
@@ -45,7 +45,7 @@ func (p *Page) parse() (wikipage.FrontMatter, wikipage.Markdown, error) {
 	reader := strings.NewReader(text)
 
 	var fm wikipage.FrontMatter
-	md, err := adrgFrontmatter.Parse(reader, &fm) // Auto-detect
+	md, err := adrgfrontmatter.Parse(reader, &fm) // Auto-detect
 	if err != nil {
 		// Check if it was a TOML parsing error. This can happen if fences are '+++' but content is YAML-like.
 		// We can't consistently rely on the specific error type due to versioning issues, so we check the message.
@@ -62,7 +62,7 @@ func (p *Page) parse() (wikipage.FrontMatter, wikipage.Markdown, error) {
 			}
 			// Swap fences and retry parsing. Replace only the first two occurrences.
 			swappedContent := strings.Replace(string(contentBytes), "+++", "---", 2)
-			md, err = adrgFrontmatter.Parse(strings.NewReader(swappedContent), &fm)
+			md, err = adrgfrontmatter.Parse(strings.NewReader(swappedContent), &fm)
 		}
 	}
 
