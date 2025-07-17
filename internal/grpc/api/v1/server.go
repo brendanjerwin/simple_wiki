@@ -272,7 +272,7 @@ func (s *Server) LoggingInterceptor() grpc.UnaryServerInterceptor {
 		}
 
 		if s.Logger != nil {
-			s.Logger.Info("[GRPC] %s | %s | %v | %s",
+			s.Logger.Warn("[GRPC] %s | %s | %v | %s",
 				statusCode,
 				duration,
 				info.FullMethod,
