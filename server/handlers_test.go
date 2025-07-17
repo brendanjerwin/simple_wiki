@@ -1,3 +1,4 @@
+//revive:disable:dot-imports
 package server_test
 
 import (
@@ -32,7 +33,7 @@ var _ = Describe("Handlers", func() {
 	})
 
 	AfterEach(func() {
-		os.RemoveAll(tmpDir)
+		_ = os.RemoveAll(tmpDir)
 	})
 
 	Describe("handlePageRelinquish", func() {
@@ -68,14 +69,14 @@ var _ = Describe("Handlers", func() {
 			BeforeEach(func() {
 				pageName = "test-relinquish"
 				p := site.Open(pageName)
-				p.Update("some content")
-				p.Save()
+				_ = p.Update("some content")
+				_ = p.Save()
 
 				body, _ := json.Marshal(map[string]string{"page": pageName})
 				req, _ := http.NewRequest(http.MethodPost, "/relinquish", bytes.NewBuffer(body))
 				req.Header.Set("Content-Type", "application/json")
 				router.ServeHTTP(w, req)
-				json.Unmarshal(w.Body.Bytes(), &response)
+				_ = json.Unmarshal(w.Body.Bytes(), &response)
 			})
 
 			It("should return a 200 status code", func() {
@@ -114,14 +115,14 @@ var _ = Describe("Handlers", func() {
 			BeforeEach(func() {
 				pageName = "test-exists"
 				p := site.Open(pageName)
-				p.Update("some content")
-				p.Save()
+				_ = p.Update("some content")
+				_ = p.Save()
 
 				body, _ := json.Marshal(map[string]string{"page": pageName})
 				req, _ := http.NewRequest(http.MethodPost, "/exists", bytes.NewBuffer(body))
 				req.Header.Set("Content-Type", "application/json")
 				router.ServeHTTP(w, req)
-				json.Unmarshal(w.Body.Bytes(), &response)
+				_ = json.Unmarshal(w.Body.Bytes(), &response)
 			})
 
 			It("should return a 200 status code", func() {
@@ -145,7 +146,7 @@ var _ = Describe("Handlers", func() {
 				req, _ := http.NewRequest(http.MethodPost, "/exists", bytes.NewBuffer(body))
 				req.Header.Set("Content-Type", "application/json")
 				router.ServeHTTP(w, req)
-				json.Unmarshal(w.Body.Bytes(), &response)
+				_ = json.Unmarshal(w.Body.Bytes(), &response)
 			})
 
 			It("should return a 200 status code", func() {
@@ -210,8 +211,8 @@ var _ = Describe("Handlers", func() {
 				pageName = "test-update"
 				newText = "new content"
 				p := site.Open(pageName)
-				p.Update("some content")
-				p.Save()
+				_ = p.Update("some content")
+				_ = p.Save()
 
 				body, _ := json.Marshal(map[string]any{
 					"page":       pageName,
@@ -221,7 +222,7 @@ var _ = Describe("Handlers", func() {
 				req, _ := http.NewRequest(http.MethodPost, "/update", bytes.NewBuffer(body))
 				req.Header.Set("Content-Type", "application/json")
 				router.ServeHTTP(w, req)
-				json.Unmarshal(w.Body.Bytes(), &response)
+				_ = json.Unmarshal(w.Body.Bytes(), &response)
 			})
 
 			It("should return a 200 status code", func() {

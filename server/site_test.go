@@ -38,7 +38,7 @@ var _ = Describe("Site", func() {
 	})
 
 	AfterEach(func() {
-		os.RemoveAll(tempDir)
+		_ = os.RemoveAll(tempDir)
 	})
 
 	Describe("defaultLock", func() {

@@ -1,12 +1,12 @@
-_simple_wiki_ is just that: a simple wiki.
+# simple_wiki is just that: a simple wiki
 
-# Getting Started
+## Getting Started
 
 ## Install
 
 If you have Go:
 
-```
+```go
 go install github.com/brendanjerwin/simple_wiki@latest
 ```
 
@@ -24,7 +24,7 @@ and it will start a server listening on `0.0.0.0:8050`. To view it, just go to <
 
 There are a couple of command-line flags that you can use to make _simple_wiki_ your own micro-CMS.
 
-```
+```shell
 simple_wiki -lock 123 -default-page index.html -css mystyle.css
 ```
 
@@ -55,8 +55,6 @@ You can easily see previous versions of your documents.
 Locking prevents other users from editing your pages without a passphrase.
 
 ![Locking](http://i.imgur.com/xwUFV8b.gif)
-
-
 
 ## Thanks
 

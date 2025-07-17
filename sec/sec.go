@@ -1,3 +1,4 @@
+// Package sec provides security related utilities.
 package sec
 
 import (
@@ -18,7 +19,7 @@ func HashPassword(password string) string {
 	return hex.EncodeToString(hash)
 }
 
-// CheckPassword securely compares a bcrypt hashed password with its possible
+// CheckPasswordHash securely compares a bcrypt hashed password with its possible
 // plaintext equivalent.  Returns nil on success, or an error on failure.
 // https://github.com/gtank/cryptopasta/blob/master/hash.go
 func CheckPasswordHash(password, hashedString string) error {

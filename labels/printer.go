@@ -10,23 +10,25 @@ import (
 	"github.com/brendanjerwin/simple_wiki/templating"
 )
 
+// Printer defines the interface for a label printer.
 type Printer interface {
 	Write([]byte) (int, error)
 	Close() error
 }
 
-func PrintLabel(template_identifier string, identifer string, site common.PageReader, query frontmatter.IQueryFrontmatterIndex) error {
-	template_identifier, template_data, err := site.ReadMarkdown(template_identifier)
+// PrintLabel prints a label using the specified template and identifier.
+func PrintLabel(templateIdentifier string, identifier string, site common.PageReader, query frontmatter.IQueryFrontmatterIndex) error {
+	templateIdentifier, templateData, err := site.ReadMarkdown(templateIdentifier)
 	if err != nil {
 		return err
 	}
 
-	template_identifier, template_frontmatter, err := site.ReadFrontMatter(template_identifier)
+	_, templateFrontmatter, err := site.ReadFrontMatter(templateIdentifier)
 	if err != nil {
 		return err
 	}
 
-	config, err := configFromFrontmatter(template_frontmatter)
+	config, err := configFromFrontmatter(templateFrontmatter)
 	if err != nil {
 		return err
 	}
@@ -41,14 +43,14 @@ func PrintLabel(template_identifier string, identifer string, site common.PageRe
 	if err != nil {
 		return err
 	}
-	defer printer.Close()
+	defer func() { _ = printer.Close() }()
 
-	identifer, frontmatter, err := site.ReadFrontMatter(identifer)
+	_, frontmatter, err := site.ReadFrontMatter(identifier)
 	if err != nil {
 		return err
 	}
 
-	zpl, err := templating.ExecuteTemplate(string(template_data), frontmatter, site, query)
+	zpl, err := templating.ExecuteTemplate(string(templateData), frontmatter, site, query)
 	if err != nil {
 		return err
 	}
@@ -57,10 +59,10 @@ func PrintLabel(template_identifier string, identifer string, site common.PageRe
 	return err
 }
 
-func configFromFrontmatter(template_frontmatter common.FrontMatter) (PrinterConfig, error) {
+func configFromFrontmatter(templateFrontmatter common.FrontMatter) (PrinterConfig, error) {
 	var err error
 
-	printerValue, ok := template_frontmatter["label_printer"].(map[string]any)
+	printerValue, ok := templateFrontmatter["label_printer"].(map[string]any)
 	if !ok {
 		return PrinterConfig{}, fmt.Errorf("label_printer is not a map")
 	}
@@ -112,6 +114,7 @@ func configFromFrontmatter(template_frontmatter common.FrontMatter) (PrinterConf
 	return config, nil
 }
 
+// PrinterConfig holds the configuration for a printer.
 type PrinterConfig struct {
 	ConnectivityMode ConnectivityMode
 	USBVendor        uint16
@@ -119,14 +122,19 @@ type PrinterConfig struct {
 	LPPrinterName    string
 }
 
+// ConnectivityMode represents the printer's connectivity mode.
 type ConnectivityMode int
 
 const (
+	// Unset connectivity mode.
 	Unset ConnectivityMode = iota
+	// USB connectivity mode.
 	USB
+	// LP connectivity mode.
 	LP
 )
 
+// ParseConnectivityMode parses a string into a ConnectivityMode.
 func ParseConnectivityMode(mode string) (ConnectivityMode, error) {
 	switch strings.ToLower(mode) {
 	case "usb":

@@ -1,3 +1,4 @@
+//revive:disable:dot-imports
 package server
 
 import (
@@ -14,15 +15,10 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-
-
 var _ = Describe("API Handlers", func() {
-
 	Describe("Helpers", func() {
-
 		Describe("createPageReferences", func() {
 			When("creating page references from a list of IDs", func() {
-
 				var s *Site
 				var ids []string
 				var actual []PageReference
@@ -52,18 +48,15 @@ var _ = Describe("API Handlers", func() {
 
 					Expect(actual).To(Equal(expected))
 				})
-
 			})
 		})
 
 		Describe("executeFrontmatterQuery", func() {
-
 			var s *Site
 			var w *httptest.ResponseRecorder
 			var c *gin.Context
 
 			BeforeEach(func() {
-
 				gin.SetMode(gin.TestMode)
 				s = &Site{
 					FrontmatterIndexQueryer: &mockFrontmatterIndexQueryer{
@@ -110,7 +103,6 @@ var _ = Describe("API Handlers", func() {
 			})
 
 			When("binding the request fails", func() {
-
 				BeforeEach(func() {
 					req, err := http.NewRequest(http.MethodGet, "/?v=val", nil)
 					Expect(err).NotTo(HaveOccurred())
@@ -139,7 +131,6 @@ var _ = Describe("API Handlers", func() {
 			})
 
 			When("the query is successful", func() {
-
 				var response struct {
 					Success bool            `json:"success"`
 					IDs     []PageReference `json:"ids"`
@@ -190,7 +181,6 @@ var _ = Describe("API Handlers", func() {
 		var router *gin.Engine
 
 		Describe("handleFindBy", func() {
-
 			BeforeEach(func() {
 				gin.SetMode(gin.TestMode)
 				mockFmIndex := &mockFrontmatterIndexQueryer{
@@ -211,7 +201,6 @@ var _ = Describe("API Handlers", func() {
 			})
 
 			When("a valid request is made", func() {
-
 				var response struct {
 					Success bool            `json:"success"`
 					IDs     []PageReference `json:"ids"`
@@ -243,7 +232,6 @@ var _ = Describe("API Handlers", func() {
 		})
 
 		Describe("handleFindByPrefix", func() {
-
 			BeforeEach(func() {
 				gin.SetMode(gin.TestMode)
 				mockFmIndex := &mockFrontmatterIndexQueryer{
@@ -265,7 +253,6 @@ var _ = Describe("API Handlers", func() {
 			})
 
 			When("a valid request is made", func() {
-
 				var response struct {
 					Success bool            `json:"success"`
 					IDs     []PageReference `json:"ids"`
@@ -298,7 +285,6 @@ var _ = Describe("API Handlers", func() {
 		})
 
 		Describe("handleFindByKeyExistence", func() {
-
 			BeforeEach(func() {
 				gin.SetMode(gin.TestMode)
 				mockFmIndex := &mockFrontmatterIndexQueryer{
@@ -319,7 +305,6 @@ var _ = Describe("API Handlers", func() {
 			})
 
 			When("a valid request is made", func() {
-
 				var response struct {
 					Success bool            `json:"success"`
 					IDs     []PageReference `json:"ids"`
@@ -351,7 +336,6 @@ var _ = Describe("API Handlers", func() {
 		})
 
 		Describe("handleSearch", func() {
-
 			BeforeEach(func() {
 				gin.SetMode(gin.TestMode)
 				s = &Site{}
@@ -382,7 +366,6 @@ var _ = Describe("API Handlers", func() {
 			})
 
 			When("a valid request is made", func() {
-
 				var response struct {
 					Success bool                       `json:"success"`
 					Results []bleve_index.SearchResult `json:"results"`
@@ -428,7 +411,6 @@ var _ = Describe("API Handlers", func() {
 			})
 
 			When("the query fails", func() {
-
 				BeforeEach(func() {
 					mockBleveIndex := &mockBleveIndexQueryer{
 						QueryFunc: func(query string) ([]bleve_index.SearchResult, error) {
@@ -452,7 +434,6 @@ var _ = Describe("API Handlers", func() {
 		})
 
 		Describe("handlePrintLabel", func() {
-
 			BeforeEach(func() {
 				gin.SetMode(gin.TestMode)
 				s = &Site{}
@@ -485,7 +466,6 @@ var _ = Describe("API Handlers", func() {
 			})
 
 			When("binding the request fails", func() {
-
 				BeforeEach(func() {
 					s.FrontmatterIndexQueryer = &mockFrontmatterIndexQueryer{}
 					body := strings.NewReader(`not a valid json`)

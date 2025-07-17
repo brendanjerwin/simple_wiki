@@ -1,4 +1,8 @@
 {
   "default": true,
-  "MD013": false
+  "MD013": false,
+  "ignore": [
+    "node_modules",
+    "vendor"
+  ]
 }

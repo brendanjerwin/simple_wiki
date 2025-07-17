@@ -1,3 +1,4 @@
+// Package frontmatter provides functionality for indexing and querying page frontmatter.
 package frontmatter
 
 import (
@@ -9,48 +10,54 @@ import (
 )
 
 type (
+	// DottedKeyPath represents a dot-separated path to a frontmatter key.
 	DottedKeyPath = string
-	Value         = string
+	// Value represents the value of a frontmatter key.
+	Value = string
 )
 
+// IQueryFrontmatterIndex defines the interface for querying the frontmatter index.
 type IQueryFrontmatterIndex interface {
-	QueryExactMatch(dotted_key_path DottedKeyPath, value Value) []common.PageIdentifier
-	QueryKeyExistence(dotted_key_path DottedKeyPath) []common.PageIdentifier
-	QueryPrefixMatch(dotted_key_path DottedKeyPath, value_prefix string) []common.PageIdentifier
+	QueryExactMatch(dottedKeyPath DottedKeyPath, value Value) []common.PageIdentifier
+	QueryKeyExistence(dottedKeyPath DottedKeyPath) []common.PageIdentifier
+	QueryPrefixMatch(dottedKeyPath DottedKeyPath, valuePrefix string) []common.PageIdentifier
 
-	GetValue(identifier common.PageIdentifier, dotted_key_path DottedKeyPath) Value
+	GetValue(identifier common.PageIdentifier, dottedKeyPath DottedKeyPath) Value
 }
 
-type FrontmatterIndex struct {
+// Index is a struct that maintains an inverted index of frontmatter keys and values.
+type Index struct {
 	InvertedIndex map[DottedKeyPath]map[Value][]common.PageIdentifier
 	PageKeyMap    map[common.PageIdentifier]map[DottedKeyPath]map[Value]bool
 	pageReader    common.PageReader
 }
 
-func NewFrontmatterIndex(pageReader common.PageReader) *FrontmatterIndex {
-	return &FrontmatterIndex{
+// NewIndex creates a new FrontmatterIndex.
+func NewIndex(pageReader common.PageReader) *Index {
+	return &Index{
 		InvertedIndex: make(map[DottedKeyPath]map[Value][]common.PageIdentifier),
 		PageKeyMap:    make(map[common.PageIdentifier]map[DottedKeyPath]map[Value]bool),
 		pageReader:    pageReader,
 	}
 }
 
-func (f *FrontmatterIndex) AddPageToIndex(requested_identifier common.PageIdentifier) error {
-	munged_identifier := common.MungeIdentifier(requested_identifier)
-	identifier, frontmatter, err := f.pageReader.ReadFrontMatter(requested_identifier)
+// AddPageToIndex adds a page's frontmatter to the index.
+func (f *Index) AddPageToIndex(requestedIdentifier common.PageIdentifier) error {
+	mungedIdentifier := common.MungeIdentifier(requestedIdentifier)
+	identifier, frontmatter, err := f.pageReader.ReadFrontMatter(requestedIdentifier)
 	if err != nil {
 		return err
 	}
 
-	f.RemovePageFromIndex(identifier)
-	f.RemovePageFromIndex(requested_identifier)
-	f.RemovePageFromIndex(munged_identifier)
+	_ = f.RemovePageFromIndex(identifier)
+	_ = f.RemovePageFromIndex(requestedIdentifier)
+	_ = f.RemovePageFromIndex(mungedIdentifier)
 
-	f.recursiveAdd(munged_identifier, "", frontmatter)
+	f.recursiveAdd(mungedIdentifier, "", frontmatter)
 	return nil
 }
 
-func (f *FrontmatterIndex) saveToIndex(identifier common.PageIdentifier, keyPath DottedKeyPath, value Value) {
+func (f *Index) saveToIndex(identifier common.PageIdentifier, keyPath DottedKeyPath, value Value) {
 	if f.InvertedIndex[keyPath] == nil {
 		f.InvertedIndex[keyPath] = make(map[Value][]common.PageIdentifier)
 	}
@@ -65,7 +72,7 @@ func (f *FrontmatterIndex) saveToIndex(identifier common.PageIdentifier, keyPath
 	f.PageKeyMap[identifier][keyPath][value] = true
 }
 
-func (f *FrontmatterIndex) recursiveAdd(identifier common.PageIdentifier, keyPath string, value any) {
+func (f *Index) recursiveAdd(identifier common.PageIdentifier, keyPath string, value any) {
 	if keyPath == "identifier" {
 		return
 	}
@@ -102,44 +109,49 @@ func (f *FrontmatterIndex) recursiveAdd(identifier common.PageIdentifier, keyPat
 	}
 }
 
-func (f *FrontmatterIndex) RemovePageFromIndex(identifier common.PageIdentifier) error {
+// RemovePageFromIndex removes a page's frontmatter from the index.
+func (f *Index) RemovePageFromIndex(identifier common.PageIdentifier) error {
 	identifier = common.MungeIdentifier(identifier)
-	for dotted_key_path := range f.PageKeyMap[identifier] {
-		for value := range f.PageKeyMap[identifier][dotted_key_path] {
-			identifiers := f.InvertedIndex[dotted_key_path][value]
+	for dottedKeyPath := range f.PageKeyMap[identifier] {
+		for value := range f.PageKeyMap[identifier][dottedKeyPath] {
+			identifiers := f.InvertedIndex[dottedKeyPath][value]
 			identifiers = slices.DeleteFunc(identifiers, func(v string) bool { return v == identifier })
-			f.InvertedIndex[dotted_key_path][value] = identifiers
+			f.InvertedIndex[dottedKeyPath][value] = identifiers
 		}
 	}
 	delete(f.PageKeyMap, identifier)
 	return nil
 }
 
-func (f *FrontmatterIndex) QueryExactMatch(dotted_key_path DottedKeyPath, value Value) []common.PageIdentifier {
-	return f.InvertedIndex[dotted_key_path][value]
+// QueryExactMatch queries the index for exact matches of a key-value pair.
+func (f *Index) QueryExactMatch(dottedKeyPath DottedKeyPath, value Value) []common.PageIdentifier {
+	return f.InvertedIndex[dottedKeyPath][value]
 }
 
-func (f *FrontmatterIndex) QueryKeyExistence(dotted_key_path DottedKeyPath) []common.PageIdentifier {
-	var identifiers_with_key []common.PageIdentifier
-	for indexed_value := range f.InvertedIndex[dotted_key_path] {
-		identifiers_with_key = append(identifiers_with_key, f.InvertedIndex[dotted_key_path][indexed_value]...)
+// QueryKeyExistence queries the index for the existence of a key.
+func (f *Index) QueryKeyExistence(dottedKeyPath DottedKeyPath) []common.PageIdentifier {
+	var identifiersWithKey []common.PageIdentifier
+	for indexedValue := range f.InvertedIndex[dottedKeyPath] {
+		identifiersWithKey = append(identifiersWithKey, f.InvertedIndex[dottedKeyPath][indexedValue]...)
 	}
-	return identifiers_with_key
+	return identifiersWithKey
 }
 
-func (f *FrontmatterIndex) QueryPrefixMatch(dotted_key_path DottedKeyPath, value_prefix string) []common.PageIdentifier {
-	var identifiers_with_key []common.PageIdentifier
-	for indexed_value := range f.InvertedIndex[dotted_key_path] {
-		if strings.HasPrefix(indexed_value, value_prefix) {
-			identifiers_with_key = append(identifiers_with_key, f.InvertedIndex[dotted_key_path][indexed_value]...)
+// QueryPrefixMatch queries the index for keys with a given prefix.
+func (f *Index) QueryPrefixMatch(dottedKeyPath DottedKeyPath, valuePrefix string) []common.PageIdentifier {
+	var identifiersWithKey []common.PageIdentifier
+	for indexedValue := range f.InvertedIndex[dottedKeyPath] {
+		if strings.HasPrefix(indexedValue, valuePrefix) {
+			identifiersWithKey = append(identifiersWithKey, f.InvertedIndex[dottedKeyPath][indexedValue]...)
 		}
 	}
-	return identifiers_with_key
+	return identifiersWithKey
 }
 
-func (f *FrontmatterIndex) GetValue(identifier common.PageIdentifier, dotted_key_path DottedKeyPath) Value {
+// GetValue retrieves the value of a frontmatter key for a given page.
+func (f *Index) GetValue(identifier common.PageIdentifier, dottedKeyPath DottedKeyPath) Value {
 	identifier = common.MungeIdentifier(identifier)
-	for value := range f.PageKeyMap[identifier][dotted_key_path] {
+	for value := range f.PageKeyMap[identifier][dottedKeyPath] {
 		return value
 	}
 	return ""

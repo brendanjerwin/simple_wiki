@@ -1,3 +1,4 @@
+// Package bleve provides a Bleve search index implementation.
 package bleve
 
 import (
@@ -12,17 +13,20 @@ import (
 	"github.com/k3a/html2text"
 )
 
-type BleveIndex struct {
+// Index is a Bleve search index implementation.
+type Index struct {
 	index              bleveActual.Index
 	pageReader         common.PageReader
 	frontmatterQueryer frontmatter.IQueryFrontmatterIndex
 }
 
+// IQueryBleveIndex defines the interface for querying the Bleve index.
 type IQueryBleveIndex interface {
 	Query(query string) ([]SearchResult, error)
 }
 
-func NewBleveIndex(pageReader common.PageReader, frontmatterQueryer frontmatter.IQueryFrontmatterIndex) (*BleveIndex, error) {
+// NewIndex creates a new BleveIndex.
+func NewIndex(pageReader common.PageReader, frontmatterQueryer frontmatter.IQueryFrontmatterIndex) (*Index, error) {
 	mapping := bleveActual.NewIndexMapping()
 	mapping.DefaultAnalyzer = "en"
 	index, err := bleveActual.NewMemOnly(mapping)
@@ -30,7 +34,7 @@ func NewBleveIndex(pageReader common.PageReader, frontmatterQueryer frontmatter.
 		return nil, err
 	}
 
-	return &BleveIndex{
+	return &Index{
 		index:              index,
 		pageReader:         pageReader,
 		frontmatterQueryer: frontmatterQueryer,
@@ -42,9 +46,10 @@ var (
 	repeatedNewlineRegex = regexp.MustCompile(`\s*\n\s*\n\s*\n(\s*\n)*`)
 )
 
-func (b *BleveIndex) AddPageToIndex(requested_identifier common.PageIdentifier) error {
-	munged_identifier := common.MungeIdentifier(requested_identifier)
-	identifier, markdown, err := b.pageReader.ReadMarkdown(requested_identifier)
+// AddPageToIndex adds a page to the Bleve index.
+func (b *Index) AddPageToIndex(requestedIdentifier common.PageIdentifier) error {
+	mungedIdentifier := common.MungeIdentifier(requestedIdentifier)
+	identifier, markdown, err := b.pageReader.ReadMarkdown(requestedIdentifier)
 	if err != nil {
 		return err
 	}
@@ -71,21 +76,23 @@ func (b *BleveIndex) AddPageToIndex(requested_identifier common.PageIdentifier) 
 
 	frontmatter["content"] = content
 
-	b.index.Delete(identifier)
-	b.index.Delete(requested_identifier)
-	b.index.Delete(munged_identifier)
+	_ = b.index.Delete(identifier)
+	_ = b.index.Delete(requestedIdentifier)
+	_ = b.index.Delete(mungedIdentifier)
 
 	return b.index.Index(identifier, frontmatter)
 }
 
-func (b *BleveIndex) RemovePageFromIndex(identifier common.PageIdentifier) error {
+// RemovePageFromIndex removes a page from the Bleve index.
+func (b *Index) RemovePageFromIndex(identifier common.PageIdentifier) error {
 	identifier = common.MungeIdentifier(identifier)
 	return b.index.Delete(identifier)
 }
 
 var newlineRegex = regexp.MustCompile("\n")
 
-func (b *BleveIndex) Query(query string) ([]SearchResult, error) {
+// Query searches the Bleve index.
+func (b *Index) Query(query string) ([]SearchResult, error) {
 	titleQuery := bleveActual.NewMatchQuery(query)
 	titleQuery.SetField("title")
 	titleQuery.SetBoost(2.0)
@@ -122,6 +129,7 @@ func (b *BleveIndex) Query(query string) ([]SearchResult, error) {
 	return results, nil
 }
 
+// SearchResult represents a search result from the Bleve index.
 type SearchResult struct {
 	Identifier   common.PageIdentifier
 	Title        string

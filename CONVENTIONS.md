@@ -421,6 +421,12 @@ Tests for both frontend (JavaScript) and Go can be run using `devbox` scripts, e
   - Components should remain blank or show clear error states rather than fake data
   - This principle helps identify real problems quickly and prevents false confidence in broken systems
 
+### Required Before Each Commit
+
+- Run the tests, builds, and linters. You can use `devbox run lint:everything` for that.
+- Run the application and ensure you can interact with it.
+- Examine any recently written tests to ensure they conform to the testing guidance.
+
 ## README
 
 - When updating the readme, match the tone of voice in the rest of the README. Its the face of the project. Marketing matters.
