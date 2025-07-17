@@ -23,6 +23,9 @@
       "fe:test": [
         "export CHROMIUM_BIN=$(which chromium) && cd static/js && bun install && bun run test:wtr ${CI_COVERAGE:+--coverage}"
       ],
+      "fe:lint": [
+        "cd static/js && bun install && bun run lint"
+      ],
       "lint:md": [
         "markdownlint --fix '**/*.md' --ignore vendor"
       ],
