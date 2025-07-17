@@ -92,11 +92,16 @@ func main() {
 		return srv.ListenAndServe()
 	}
 	app.Flags = getFlags()
+
+	if err := app.Run(os.Args); err != nil {
+		logger.Error("Error running app: %v", err)
+		os.Exit(1)
+	}
 }
 
 const (
-	defaultDebounce = 500
-	defaultMaxUploadMB = 100
+	defaultDebounce          = 500
+	defaultMaxUploadMB       = 100
 	defaultMaxDocumentLength = 100000000
 )
 
@@ -173,11 +178,4 @@ func makeLogger(debug bool) *lumber.ConsoleLogger {
 		return lumber.NewConsoleLogger(lumber.WARN)
 	}
 	return lumber.NewConsoleLogger(lumber.TRACE)
-}
-
-func init() {
-	if err := app.Run(os.Args); err != nil {
-		logger.Error("Error running app: %v", err)
-		os.Exit(1)
-	}
 }
