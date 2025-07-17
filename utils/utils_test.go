@@ -3,10 +3,10 @@ package utils_test
 import (
 	"testing"
 
+	"github.com/brendanjerwin/simple_wiki/utils"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/templating"
-	. "github.com/brendanjerwin/simple_wiki/utils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -56,7 +56,7 @@ var _ = Describe("Utils", func() {
 		Describe("ReverseSliceInt64", func() {
 			It("should reverse a slice of int64", func() {
 				slice := []int64{1, 2, 3, 4, 5}
-				reversed := ReverseSliceInt64(slice)
+				reversed := utils.ReverseSliceInt64(slice)
 				Expect(reversed).To(Equal([]int64{5, 4, 3, 2, 1}))
 			})
 		})
@@ -64,7 +64,7 @@ var _ = Describe("Utils", func() {
 		Describe("ReverseSliceString", func() {
 			It("should reverse a slice of strings", func() {
 				slice := []string{"apple", "banana", "cherry"}
-				reversed := ReverseSliceString(slice)
+				reversed := utils.ReverseSliceString(slice)
 				Expect(reversed).To(Equal([]string{"cherry", "banana", "apple"}))
 			})
 		})
@@ -72,13 +72,13 @@ var _ = Describe("Utils", func() {
 		Describe("ReverseSliceInt", func() {
 			It("should reverse a slice of int", func() {
 				slice := []int{1, 2, 3, 4, 5}
-				reversed := ReverseSliceInt(slice)
+				reversed := utils.ReverseSliceInt(slice)
 				Expect(reversed).To(Equal([]int{5, 4, 3, 2, 1}))
 			})
 		})
 	})
 
-	Describe("MarkdownToHTMLAndJSONFrontmatter", func() {
+	Describe("utils.MarkdownToHTMLAndJSONFrontmatter", func() {
 		var (
 			markdown string
 			html     []byte
@@ -93,7 +93,7 @@ sample: "value"
 # Hello
 	`
 			var err error
-			html, _, err = MarkdownToHTMLAndJSONFrontmatter(markdown, &MockReadFrontMatter{}, &GoldmarkRenderer{}, &MockQueryFrontmatterIndex{})
+			html, _, err = utils.MarkdownToHTMLAndJSONFrontmatter(markdown, &MockReadFrontMatter{}, &utils.GoldmarkRenderer{}, &MockQueryFrontmatterIndex{})
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -118,8 +118,8 @@ sample: "value"
 		Describe("When using a simple template", func() {
 			BeforeEach(func() {
 				theFrontmatter = wikipage.FrontMatter{"identifier": "1234"}
-				templateHtml := `{{ .Identifier }}`
-				rendered, err = templating.ExecuteTemplate(templateHtml, theFrontmatter, site, query)
+				templateHTML := `{{ .Identifier }}`
+				rendered, err = templating.ExecuteTemplate(templateHTML, theFrontmatter, site, query)
 			})
 			It("should not return an error", func() {
 				Expect(err).NotTo(HaveOccurred())
@@ -144,80 +144,80 @@ sample: "value"
 		})
 	})
 
-	Describe("StripFrontmatter", func() {
+	Describe("utils.StripFrontmatter", func() {
 		DescribeTable("when stripping frontmatter",
 			func(input string, expected string) {
-				Expect(StripFrontmatter(input)).To(Equal(expected))
+				Expect(utils.StripFrontmatter(input)).To(Equal(expected))
 			},
 			Entry("with frontmatter", "---\ntitle: Test\n---\nThis is a test", "This is a test"),
 			Entry("without frontmatter", "This is a test", "This is a test"),
 		)
 	})
 
-	Describe("RandomAlliterateCombo", func() {
+	Describe("utils.RandomAlliterateCombo", func() {
 		It("should return a non-empty string", func() {
-			combo := RandomAlliterateCombo()
+			combo := utils.RandomAlliterateCombo()
 			Expect(combo).NotTo(BeEmpty())
 		})
 	})
 
-	Describe("StringInSlice", func() {
+	Describe("utils.StringInSlice", func() {
 		var sl []string
 		BeforeEach(func() {
 			sl = []string{"apple", "banana", "cherry"}
 		})
 		Describe("When the string is in the slice", func() {
 			It("should return true", func() {
-				Expect(StringInSlice("banana", sl)).To(BeTrue())
+				Expect(utils.StringInSlice("banana", sl)).To(BeTrue())
 			})
 		})
 		Describe("When the string is not in the slice", func() {
 			It("should return false", func() {
-				Expect(StringInSlice("orange", sl)).To(BeFalse())
+				Expect(utils.StringInSlice("orange", sl)).To(BeFalse())
 			})
 		})
 	})
 
-	Describe("ContentTypeFromName", func() {
+	Describe("utils.ContentTypeFromName", func() {
 		DescribeTable("when given a filename",
 			func(filename, expectedContentType string) {
-				Expect(ContentTypeFromName(filename)).To(Equal(expectedContentType))
+				Expect(utils.ContentTypeFromName(filename)).To(Equal(expectedContentType))
 			},
 			Entry("for a markdown file", "file.md", "text/markdown; charset=utf-8"),
 			Entry("for a heic file", "image.heic", "image/heic"),
 		)
 	})
 
-	Describe("RandomStringOfLength", func() {
+	Describe("utils.RandomStringOfLength", func() {
 		It("should return a string of the specified length", func() {
-			str, err := RandomStringOfLength(10)
+			str, err := utils.RandomStringOfLength(10)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(len(str)).To(Equal(10))
 		})
 	})
 
-	Describe("Exists", func() {
+	Describe("utils.Exists", func() {
 		Describe("When the file exists", func() {
 			It("should return true", func() {
-				Expect(Exists("./utils.go")).To(BeTrue(), "Expected file utils.go to exist in current directory for test.")
+				Expect(utils.Exists("./utils.go")).To(BeTrue(), "Expected file utils.go to exist in current directory for test.")
 			})
 		})
 		Describe("When the file does not exist", func() {
 			It("should return false", func() {
-				Expect(Exists("./nonexistent_file.go")).To(BeFalse())
+				Expect(utils.Exists("./nonexistent_file.go")).To(BeFalse())
 			})
 		})
 	})
 
 	Describe("Base32 encoding/decoding", func() {
-		Describe("EncodeToBase32", func() {
+		Describe("utils.EncodeToBase32", func() {
 			It("should encode a string to base32", func() {
-				Expect(EncodeToBase32("hello")).To(Equal("NBSWY3DP"))
+				Expect(utils.EncodeToBase32("hello")).To(Equal("NBSWY3DP"))
 			})
 		})
-		Describe("DecodeFromBase32", func() {
+		Describe("utils.DecodeFromBase32", func() {
 			It("should decode a base32 string", func() {
-				str, err := DecodeFromBase32("NBSWY3DP")
+				str, err := utils.DecodeFromBase32("NBSWY3DP")
 				Expect(err).NotTo(HaveOccurred())
 				Expect(str).To(Equal("hello"))
 			})

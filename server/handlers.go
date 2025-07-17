@@ -250,43 +250,14 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 
 	switch page {
 	case "favicon.ico":
-		data, _ := static.StaticContent.ReadFile("img/favicon/favicon.ico")
-		c.Data(http.StatusOK, utils.ContentTypeFromName("img/favicon/favicon.ico"), data)
+		s.handleFavicon(c)
 		return
 	case "static":
-		filename := strings.TrimPrefix(command, "/")
-		var data []byte
-		if filename == "css/custom.css" {
-			data = s.CSS
-		} else {
-			var errAssset error
-			data, errAssset = static.StaticContent.ReadFile(filename)
-			if errAssset != nil {
-				c.String(http.StatusNotFound, "Could not find data")
-				return
-			}
-		}
-		c.Data(http.StatusOK, utils.ContentTypeFromName(filename), data)
+		s.handleStatic(c, command)
 		return
 	case uploadsPage:
-		if !(len(command) == 0 || command == rootPath || command == "/edit") {
-			command = command[1:]
-			if !strings.HasSuffix(command, ".upload") {
-				command = command + ".upload"
-			}
-			pathname := path.Join(s.PathToData, command)
-
-			c.Header(
-				"Content-Disposition",
-				"inline; filename=\""+c.DefaultQuery("filename", "upload")+"\"",
-			)
-			c.File(pathname)
-			return
-		}
-		if !s.Fileuploads {
-			_ = c.AbortWithError(http.StatusInternalServerError, errors.New("uploads are disabled on this server"))
-			return
-		}
+		s.handleUploads(c, command)
+		return
 	default:
 		// General page handling continues below
 	}
@@ -323,26 +294,18 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		}
 		return
 	}
-	rawText, contentHTML := s.getPageContent(p, version)
 
+	rawText, contentHTML := s.getPageContent(p, version)
 	contentHTML = []byte(fmt.Sprintf("<article class='content' id='%s'>%s</article>", page, string(contentHTML)))
 
 	// Get history
 	versionsInt64, versionsChangeSums, versionsText := s.getVersionHistory(command, p)
 
-	if len(command) > maxContentLength && command[0:maxContentLength] == "/ra" {
-		c.Writer.Header().Set("Content-Type", "text/plain")
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Max-Age", "86400")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE, UPDATE")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, X-Max")
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Data(httpStatusOK, utils.ContentTypeFromName(p.Identifier), []byte(rawText))
+	if s.handleRawContent(c, command, p, rawText) {
 		return
 	}
 
-	if strings.HasPrefix(command, "/frontmatter") {
-		c.Data(http.StatusOK, gin.MIMEJSON, p.FrontmatterJSON)
+	if s.handleFrontmatter(c, command, p) {
 		return
 	}
 
@@ -630,4 +593,68 @@ func (s *Site) handleUpload(c *gin.Context) {
 	}
 
 	c.Header("Location", "/uploads/"+newName+"?filename="+url.QueryEscape(info.Filename))
+}
+
+func (*Site) handleFavicon(c *gin.Context) {
+	data, _ := static.StaticContent.ReadFile("img/favicon/favicon.ico")
+	c.Data(http.StatusOK, utils.ContentTypeFromName("img/favicon/favicon.ico"), data)
+}
+
+func (s *Site) handleStatic(c *gin.Context, command string) {
+	filename := strings.TrimPrefix(command, "/")
+	var data []byte
+	if filename == "css/custom.css" {
+		data = s.CSS
+	} else {
+		var errAssset error
+		data, errAssset = static.StaticContent.ReadFile(filename)
+		if errAssset != nil {
+			c.String(http.StatusNotFound, "Could not find data")
+			return
+		}
+	}
+	c.Data(http.StatusOK, utils.ContentTypeFromName(filename), data)
+}
+
+func (s *Site) handleUploads(c *gin.Context, command string) {
+	if !(len(command) == 0 || command == rootPath || command == "/edit") {
+		command = command[1:]
+		if !strings.HasSuffix(command, ".upload") {
+			command = command + ".upload"
+		}
+		pathname := path.Join(s.PathToData, command)
+
+		c.Header(
+			"Content-Disposition",
+			"inline; filename=\""+c.DefaultQuery("filename", "upload")+"\"",
+		)
+		c.File(pathname)
+		return
+	}
+	if !s.Fileuploads {
+		_ = c.AbortWithError(http.StatusInternalServerError, errors.New("uploads are disabled on this server"))
+		return
+	}
+}
+
+func (*Site) handleRawContent(c *gin.Context, command string, p *Page, rawText string) bool {
+	if len(command) > maxContentLength && command[0:maxContentLength] == "/ra" {
+		c.Writer.Header().Set("Content-Type", "text/plain")
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Max-Age", "86400")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE, UPDATE")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, X-Max")
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		c.Data(httpStatusOK, utils.ContentTypeFromName(p.Identifier), []byte(rawText))
+		return true
+	}
+	return false
+}
+
+func (*Site) handleFrontmatter(c *gin.Context, command string, p *Page) bool {
+	if strings.HasPrefix(command, "/frontmatter") {
+		c.Data(http.StatusOK, gin.MIMEJSON, p.FrontmatterJSON)
+		return true
+	}
+	return false
 }

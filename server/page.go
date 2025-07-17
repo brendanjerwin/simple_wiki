@@ -15,6 +15,8 @@ import (
 	"github.com/schollz/versionedtext"
 )
 
+const nanosecondsPerSecond = 1000000000
+
 // Page is the basic struct
 type Page struct {
 	Site *Site `json:"-"`
@@ -37,7 +39,7 @@ func (p Page) LastEditTime() time.Time {
 
 // LastEditUnixTime returns the last edit time of the page in Unix nanoseconds.
 func (p Page) LastEditUnixTime() int64 {
-	return p.Text.LastEditTime() / 1000000000
+	return p.Text.LastEditTime() / nanosecondsPerSecond
 }
 
 func (p *Page) parse() (wikipage.FrontMatter, wikipage.Markdown, error) {
