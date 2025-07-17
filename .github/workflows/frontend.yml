@@ -7,6 +7,20 @@ on:
     branches: [main]
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Devbox
+        uses: jetify-com/devbox-install-action@v0.12.0
+        with:
+          enable-cache: 'true'
+      
+      - name: Run frontend linting
+        run: devbox run fe:lint
+        
   test:
     runs-on: ubuntu-latest
     
