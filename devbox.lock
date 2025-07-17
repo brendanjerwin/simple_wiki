@@ -233,6 +233,10 @@
       "last_modified": "2025-06-27T03:16:46Z",
       "resolved": "github:NixOS/nixpkgs/80d50fc87924c2a0d346372d242c27973cf8cdbf?lastModified=1750994206&narHash=sha256-3u6rEbIX9CN%2F5A5%2Fmc3u0wIO1geZ0EhjvPBXmRDHqWM%3D"
     },
+    "go-tools": {
+      "resolved": "github:NixOS/nixpkgs/80d50fc87924c2a0d346372d242c27973cf8cdbf?narHash=sha256-3u6rEbIX9CN%2F5A5%2Fmc3u0wIO1geZ0EhjvPBXmRDHqWM%3D#go-tools",
+      "source": "nixpkg"
+    },
     "go@latest": {
       "last_modified": "2025-06-20T02:24:11Z",
       "resolved": "github:NixOS/nixpkgs/076e8c6678d8c54204abcb4b1b14c366835a58bb#go",
@@ -278,54 +282,6 @@
             }
           ],
           "store_path": "/nix/store/mdn9hnvf0qmxywbrpbywmxww2adxdn5v-go-1.24.4"
-        }
-      }
-    },
-    "golangci-lint@latest": {
-      "last_modified": "2025-07-13T22:45:35Z",
-      "resolved": "github:NixOS/nixpkgs/a421ac6595024edcfbb1ef950a3712b89161c359#golangci-lint",
-      "source": "devbox-search",
-      "version": "2.2.1",
-      "systems": {
-        "aarch64-darwin": {
-          "outputs": [
-            {
-              "name": "out",
-              "path": "/nix/store/namswriskm70dlij7l7way690afaaapr-golangci-lint-2.2.1",
-              "default": true
-            }
-          ],
-          "store_path": "/nix/store/namswriskm70dlij7l7way690afaaapr-golangci-lint-2.2.1"
-        },
-        "aarch64-linux": {
-          "outputs": [
-            {
-              "name": "out",
-              "path": "/nix/store/47ynwm90xp4m1cckil7yiqpbi1k7b9kq-golangci-lint-2.2.1",
-              "default": true
-            }
-          ],
-          "store_path": "/nix/store/47ynwm90xp4m1cckil7yiqpbi1k7b9kq-golangci-lint-2.2.1"
-        },
-        "x86_64-darwin": {
-          "outputs": [
-            {
-              "name": "out",
-              "path": "/nix/store/dmnkkj9gqw6nfwwys701z3dy3jjbp4z4-golangci-lint-2.2.1",
-              "default": true
-            }
-          ],
-          "store_path": "/nix/store/dmnkkj9gqw6nfwwys701z3dy3jjbp4z4-golangci-lint-2.2.1"
-        },
-        "x86_64-linux": {
-          "outputs": [
-            {
-              "name": "out",
-              "path": "/nix/store/0881g8ng5vbia6cr6ayb10089ccz2x14-golangci-lint-2.2.1",
-              "default": true
-            }
-          ],
-          "store_path": "/nix/store/0881g8ng5vbia6cr6ayb10089ccz2x14-golangci-lint-2.2.1"
         }
       }
     },
@@ -490,6 +446,54 @@
             }
           ],
           "store_path": "/nix/store/mqk4mnxvg63ns89v4zy6qsznqdvbrjf5-podman-5.5.2"
+        }
+      }
+    },
+    "revive@latest": {
+      "last_modified": "2025-07-13T22:45:35Z",
+      "resolved": "github:NixOS/nixpkgs/a421ac6595024edcfbb1ef950a3712b89161c359#revive",
+      "source": "devbox-search",
+      "version": "1.11.0",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/86wvvjd60y79m0wh76gjpxivkjgfv441-revive-1.11.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/86wvvjd60y79m0wh76gjpxivkjgfv441-revive-1.11.0"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/rpmqh7snr1y4d90qfivzld9wf4lw2hrd-revive-1.11.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/rpmqh7snr1y4d90qfivzld9wf4lw2hrd-revive-1.11.0"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/pp4f8ksgmknd8zrw35azifq6yswi8n26-revive-1.11.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/pp4f8ksgmknd8zrw35azifq6yswi8n26-revive-1.11.0"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/wdyz68mzrppnqa7pcj3a7jag5a126p9j-revive-1.11.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/wdyz68mzrppnqa7pcj3a7jag5a126p9j-revive-1.11.0"
         }
       }
     },

@@ -11,7 +11,8 @@
     "rootlesskit@latest",
     "bun@latest",
     "chromium@latest",
-    "golangci-lint@latest"
+    "go-tools",
+    "revive@latest"
   ],
   "shell": {
     "init_hook": [
@@ -30,9 +31,12 @@
       "lint:everything": [
         "if git status --porcelain api/proto | grep -q '.'; then buf generate; else echo 'No changes in api/proto, skipping buf generate.'; fi",
         "go mod tidy",
-        "golangci-lint run -c .golangci.toml",
+        "go vet $(go list ./... | grep -v /gen/)",
+        "staticcheck $(go list ./... | grep -v /gen/)",
+        "revive -config revive.toml ./...",
         "go test ./...",
         "markdownlint --fix '**/*.md' --ignore vendor",
+        "export CHROMIUM_BIN=$(which chromium)",
         "cd static/js && bun install && bun run build && bun run test && bun run lint"
       ]
     }

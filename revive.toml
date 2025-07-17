@@ -1,0 +1,20 @@
+# revive.toml
+# Configuration for revive linter
+
+# Default severity for rules
+severity = "warning"
+
+# Enable all rules
+enableAllRules = true
+
+[rule.line-length-limit]
+Disabled = true
+
+[rule.cognitive-complexity]
+Arguments = [15]
+
+[rule.cyclomatic]
+Arguments = [15]
+
+[rule.package-comments]
+Disabled = true
