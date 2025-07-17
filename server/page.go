@@ -26,14 +26,16 @@ type Page struct {
 	IsLocked           bool
 	PassphraseToUnlock string
 	UnlockedFor        string
-	FrontmatterJson    []byte `json:"-"`
+	FrontmatterJSON    []byte `json:"-"`
 	WasLoadedFromDisk  bool   `json:"-"`
 }
 
+// LastEditTime returns the last edit time of the page.
 func (p Page) LastEditTime() time.Time {
 	return time.Unix(p.LastEditUnixTime(), 0)
 }
 
+// LastEditUnixTime returns the last edit time of the page in Unix nanoseconds.
 func (p Page) LastEditUnixTime() int64 {
 	return p.Text.LastEditTime() / 1000000000
 }
@@ -80,6 +82,7 @@ func (p *Page) parse() (common.FrontMatter, common.Markdown, error) {
 	return fm, common.Markdown(md), nil
 }
 
+// DecodeFileName decodes a filename from base32.
 func DecodeFileName(s string) string {
 	s2, _ := utils.DecodeFromBase32(strings.Split(s, ".")[0])
 	return s2
@@ -96,15 +99,17 @@ func (p *Page) Update(newText string) error {
 	return p.Save()
 }
 
+// Render renders the page content to HTML and extracts frontmatter.
 func (p *Page) Render() {
 	var err error
-	p.RenderedPage, p.FrontmatterJson, err = utils.MarkdownToHtmlAndJsonFrontmatter(p.Text.GetCurrent(), true, p.Site, p.Site.MarkdownRenderer, p.Site.FrontmatterIndexQueryer)
+	p.RenderedPage, p.FrontmatterJSON, err = utils.MarkdownToHtmlAndJsonFrontmatter(p.Text.GetCurrent(), true, p.Site, p.Site.MarkdownRenderer, p.Site.FrontmatterIndexQueryer)
 	if err != nil {
 		p.Site.Logger.Error("Error rendering page: %v", err)
 		p.RenderedPage = []byte(err.Error())
 	}
 }
 
+// Save saves the page to disk.
 func (p *Page) Save() error {
 	p.Site.saveMut.Lock()
 	defer p.Site.saveMut.Unlock()
@@ -124,18 +129,20 @@ func (p *Page) Save() error {
 		return err
 	}
 
-	p.Site.IndexMaintainer.AddPageToIndex(p.Identifier)
+	_ = p.Site.IndexMaintainer.AddPageToIndex(p.Identifier)
 
 	return nil
 }
 
+// IsNew returns true if the page has not been loaded from disk.
 func (p *Page) IsNew() bool {
 	return !p.WasLoadedFromDisk
 }
 
+// Erase deletes the page from disk.
 func (p *Page) Erase() error {
 	p.Site.Logger.Trace("Erasing %s", p.Identifier)
-	p.Site.IndexMaintainer.RemovePageFromIndex(p.Identifier)
+	_ = p.Site.IndexMaintainer.RemovePageFromIndex(p.Identifier)
 	err := os.Remove(path.Join(p.Site.PathToData, utils.EncodeToBase32(strings.ToLower(p.Identifier))+".json"))
 	if err != nil {
 		return err

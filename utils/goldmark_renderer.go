@@ -19,6 +19,7 @@ import (
 
 type GoldmarkRenderer struct{}
 
+// Render renders the input markdown to HTML.
 func (b GoldmarkRenderer) Render(input []byte) ([]byte, error) {
 	md := goldmark.New(
 		goldmark.WithExtensions(

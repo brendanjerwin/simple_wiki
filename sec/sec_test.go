@@ -1,3 +1,4 @@
+//revive:disable:dot-imports
 package sec
 
 import (

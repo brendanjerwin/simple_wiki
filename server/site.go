@@ -29,6 +29,7 @@ import (
 	"github.com/schollz/versionedtext"
 )
 
+// Site represents the wiki site.
 type Site struct {
 	PathToData              string
 	CSS                     []byte
@@ -60,7 +61,7 @@ func (s *Site) sniffContentType(name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// The mimetype library reads up to 3072 bytes by default.
 	buffer := make([]byte, 3072)
@@ -75,9 +76,10 @@ func (s *Site) sniffContentType(name string) (string, error) {
 	return mtype.String(), nil
 }
 
+// InitializeIndexing initializes the site's indexes.
 func (s *Site) InitializeIndexing() error {
-	frontmatterIndex := frontmatter.NewFrontmatterIndex(s)
-	bleveIndex, err := bleve.NewBleveIndex(s, frontmatterIndex)
+	frontmatterIndex := frontmatter.NewIndex(s)
+	bleveIndex, err := bleve.NewIndex(s, frontmatterIndex)
 	if err != nil {
 		return err
 	}
@@ -89,7 +91,7 @@ func (s *Site) InitializeIndexing() error {
 
 	files := s.DirectoryList()
 	for _, file := range files {
-		s.IndexMaintainer.AddPageToIndex(file.Name())
+		_ = s.IndexMaintainer.AddPageToIndex(file.Name())
 	}
 
 	s.Logger.Info("Indexing complete. Added %v pages.", len(files))
@@ -101,10 +103,10 @@ func (s *Site) InitializeIndexing() error {
 
 func (s *Site) readFileByIdentifier(identifier, extension string) (string, []byte, error) {
 	// First try with the munged identifier
-	munged_identifier := common.MungeIdentifier(identifier)
-	b, err := os.ReadFile(path.Join(s.PathToData, utils.EncodeToBase32(strings.ToLower(munged_identifier))+"."+extension))
+	mungedIdentifier := common.MungeIdentifier(identifier)
+	b, err := os.ReadFile(path.Join(s.PathToData, utils.EncodeToBase32(strings.ToLower(mungedIdentifier))+"."+extension))
 	if err == nil {
-		return munged_identifier, b, nil
+		return mungedIdentifier, b, nil
 	}
 
 	// Then try with the original identifier if that didn't work (older files)
@@ -113,18 +115,19 @@ func (s *Site) readFileByIdentifier(identifier, extension string) (string, []byt
 		return identifier, b, nil
 	}
 
-	return munged_identifier, nil, err
+	return mungedIdentifier, nil, err
 }
 
-func (s *Site) Open(requested_identifier string) (p *Page) {
+// Open opens a page by its identifier.
+func (s *Site) Open(requestedIdentifier string) (p *Page) {
 	// Create a new page object to be returned if no file is found.
 	p = new(Page)
-	p.Identifier = requested_identifier
+	p.Identifier = requestedIdentifier
 	p.Site = s
 	p.Text = versionedtext.NewVersionedText("")
 	p.WasLoadedFromDisk = false
 
-	identifier, bJSON, err := s.readFileByIdentifier(requested_identifier, "json")
+	identifier, bJSON, err := s.readFileByIdentifier(requestedIdentifier, "json")
 	if err == nil {
 		// Found JSON file, decode it.
 		// The previous code `json.Unmarshal(bJSON, &p)` was incorrect. It replaces the pointer p,
@@ -138,12 +141,12 @@ func (s *Site) Open(requested_identifier string) (p *Page) {
 	}
 
 	if !os.IsNotExist(err) {
-		s.Logger.Error("Error reading page json for %s: %v", requested_identifier, err)
+		s.Logger.Error("Error reading page json for %s: %v", requestedIdentifier, err)
 		return p // Return empty page object
 	}
 
 	// JSON file not found, try to load from .md file.
-	identifier, mdBytes, err := s.readFileByIdentifier(requested_identifier, "md")
+	identifier, mdBytes, err := s.readFileByIdentifier(requestedIdentifier, "md")
 	if err != nil {
 		return p // Return empty page object
 	}
@@ -154,8 +157,9 @@ func (s *Site) Open(requested_identifier string) (p *Page) {
 	return p
 }
 
-func (s *Site) OpenOrInit(requested_identifier string, req *http.Request) (p *Page) {
-	p = s.Open(requested_identifier)
+// OpenOrInit opens a page or initializes a new one if it doesn't exist.
+func (s *Site) OpenOrInit(requestedIdentifier string, req *http.Request) (p *Page) {
+	p = s.Open(requestedIdentifier)
 	if p.IsNew() {
 		prams := req.URL.Query()
 		initialText := "identifier = \"" + p.Identifier + "\"\n"
@@ -198,12 +202,13 @@ items = [
 
 		p.Text = versionedtext.NewVersionedText(initialText)
 		p.Render()
-		p.Save()
+		_ = p.Save()
 	}
 	p.Render()
 	return p
 }
 
+// DirectoryEntry represents an entry in the wiki directory.
 type DirectoryEntry struct {
 	Path       string
 	Length     int
@@ -211,34 +216,42 @@ type DirectoryEntry struct {
 	LastEdited time.Time
 }
 
+// LastEditTime returns the last edit time of the directory entry.
 func (d DirectoryEntry) LastEditTime() string {
 	return d.LastEdited.Format("Mon Jan 2 15:04:05 MST 2006")
 }
 
+// Name returns the name of the directory entry.
 func (d DirectoryEntry) Name() string {
 	return d.Path
 }
 
+// Size returns the size of the directory entry.
 func (d DirectoryEntry) Size() int64 {
 	return int64(d.Length)
 }
 
+// Mode returns the file mode of the directory entry.
 func (d DirectoryEntry) Mode() os.FileMode {
 	return os.ModePerm
 }
 
+// ModTime returns the modification time of the directory entry.
 func (d DirectoryEntry) ModTime() time.Time {
 	return d.LastEdited
 }
 
+// IsDir returns true if the directory entry is a directory.
 func (d DirectoryEntry) IsDir() bool {
 	return false
 }
 
+// Sys returns the underlying data source of the directory entry.
 func (d DirectoryEntry) Sys() any {
 	return nil
 }
 
+// DirectoryList returns a list of all wiki pages in the data directory.
 func (s *Site) DirectoryList() []os.FileInfo {
 	files, _ := os.ReadDir(s.PathToData)
 	entries := make([]os.FileInfo, len(files))
@@ -261,10 +274,12 @@ func (s *Site) DirectoryList() []os.FileInfo {
 	return entries
 }
 
+// UploadEntry represents an uploaded file entry.
 type UploadEntry struct {
 	os.FileInfo
 }
 
+// UploadList returns a list of all uploaded files in the data directory.
 func (s *Site) UploadList() ([]os.FileInfo, error) {
 	paths, err := filepath.Glob(path.Join(s.PathToData, "sha256*"))
 	if err != nil {
@@ -306,6 +321,7 @@ func combineFrontmatterAndMarkdown(fm common.FrontMatter, md common.Markdown) (s
 	return content.String(), nil
 }
 
+// WriteFrontMatter writes the frontmatter for a page.
 func (s *Site) WriteFrontMatter(identifier common.PageIdentifier, fm common.FrontMatter) error {
 	p := s.Open(string(identifier))
 
@@ -342,6 +358,7 @@ func lenientParse(content []byte, matter any) (body []byte, err error) {
 	return
 }
 
+// WriteMarkdown writes the markdown content for a page.
 func (s *Site) WriteMarkdown(identifier common.PageIdentifier, md common.Markdown) error {
 	p := s.Open(string(identifier))
 
@@ -360,6 +377,7 @@ func (s *Site) WriteMarkdown(identifier common.PageIdentifier, md common.Markdow
 	return p.Update(newText)
 }
 
+// ReadFrontMatter reads the frontmatter for a page.
 func (s *Site) ReadFrontMatter(identifier common.PageIdentifier) (common.PageIdentifier, common.FrontMatter, error) {
 	identifier, content, err := s.readFileByIdentifier(identifier, "md")
 	if err != nil {
@@ -382,6 +400,7 @@ func (s *Site) ReadFrontMatter(identifier common.PageIdentifier) (common.PageIde
 	return identifier, matter, nil
 }
 
+// ReadMarkdown reads the markdown content for a page.
 func (s *Site) ReadMarkdown(identifier common.PageIdentifier) (common.PageIdentifier, common.Markdown, error) {
 	identifier, content, err := s.readFileByIdentifier(identifier, "md")
 	if err != nil {

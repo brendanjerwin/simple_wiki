@@ -59,8 +59,8 @@ func ConstructTemplateContextFromFrontmatter(frontmatter common.FrontMatter, que
 		// If there was an item that existed as a title in the list of items, remove it.
 		// This is to support the workflow of items first being listed directly on the inventory container,
 		// but later getting their own page and being linked to the inventory container through the inventory.container frontmatter key.
-		item_title := query.GetValue(item, "title")
-		delete(uniqueItems, item_title)
+		itemTitle := query.GetValue(item, "title")
+		delete(uniqueItems, itemTitle)
 
 		uniqueItems[item] = true
 	}
@@ -80,7 +80,7 @@ func BuildShowInventoryContentsOf(site common.PageReader, query frontmatter.IQue
 	isContainer := BuildIsContainer(query)
 
 	return func(containerIdentifier string) string {
-		containerIdentifier, containerFrontmatter, err := site.ReadFrontMatter(containerIdentifier)
+		_, containerFrontmatter, err := site.ReadFrontMatter(containerIdentifier)
 		if err != nil {
 			return err.Error()
 		}
@@ -181,6 +181,7 @@ func BuildIsContainer(query frontmatter.IQueryFrontmatterIndex) func(string) boo
 	}
 }
 
+// ExecuteTemplate executes a template string with the given frontmatter and site context.
 func ExecuteTemplate(templateString string, frontmatter common.FrontMatter, site common.PageReader, query frontmatter.IQueryFrontmatterIndex) ([]byte, error) {
 	templateContext, err := ConstructTemplateContextFromFrontmatter(frontmatter, query)
 	if err != nil {

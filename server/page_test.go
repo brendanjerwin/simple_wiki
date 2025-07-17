@@ -1,3 +1,4 @@
+//revive:disable:dot-imports
 package server
 
 import (
@@ -34,7 +35,7 @@ var _ = Describe("Page Functions", func() {
 	})
 
 	AfterEach(func() {
-		os.RemoveAll(pathToData)
+		_ = os.RemoveAll(pathToData)
 	})
 
 	Describe("Site.DirectoryList", func() {
