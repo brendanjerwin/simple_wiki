@@ -20,8 +20,8 @@ import (
 )
 
 var (
-	version string = "dev"
-	commit  string = "n/a"
+	version = "dev"
+	commit  = "n/a"
 )
 
 func main() {
@@ -32,7 +32,9 @@ func main() {
 	app.Compiled = time.Now()
 	app.Action = func(c *cli.Context) error {
 		pathToData := c.GlobalString("data")
-		os.MkdirAll(pathToData, 0755)
+		if err := os.MkdirAll(pathToData, 0755); err != nil {
+			return err
+		}
 
 		grpcServer := grpc.NewServer()
 
@@ -51,14 +53,14 @@ func main() {
 			logger,
 		)
 		ginRouter := site.GinRouter()
-		grpcApiServer := grpcApi.NewServer(version, commit, app.Compiled, site)
-		grpcApiServer.RegisterWithServer(grpcServer)
+		grpcAPIServer := grpcApi.NewServer(version, commit, app.Compiled, site)
+		grpcAPIServer.RegisterWithServer(grpcServer)
 
 		reflection.Register(grpcServer)
 
 		wrappedGrpc := grpcweb.WrapServer(grpcServer,
 			// Enable CORS so browser clients can make requests
-			grpcweb.WithOriginFunc(func(origin string) bool { return true }),
+			grpcweb.WithOriginFunc(func(_ string) bool { return true }),
 		)
 
 		// 5. Create a multiplexer to route traffic to either gRPC or Gin.
@@ -152,7 +154,10 @@ func main() {
 		},
 	}
 
-	app.Run(os.Args)
+	if err := app.Run(os.Args); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 }
 
 func makeLogger(debug bool) *lumber.ConsoleLogger {

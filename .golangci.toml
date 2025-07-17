@@ -1,0 +1,15 @@
+version = "2"
+
+[run]
+timeout = "5m"
+
+[linters]
+default = "standard"
+enable = ["revive", "govet", "staticcheck", "unparam", "unused"]
+
+[[linters.settings.revive.rules]]
+name = "dot-imports"
+disabled = true
+
+[formatters]
+enable = ["gofmt", "goimports"]

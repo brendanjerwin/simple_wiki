@@ -10,6 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
+
 	"github.com/adrg/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/common"
 	frontmatterIdx "github.com/brendanjerwin/simple_wiki/index/frontmatter"
@@ -35,11 +38,11 @@ func init() {
 }
 
 func randomAnimal() string {
-	return strings.Replace(strings.Title(animals[rand.Intn(len(animals)-1)]), " ", "", -1)
+	return strings.ReplaceAll(cases.Title(language.English).String(animals[rand.Intn(len(animals)-1)]), " ", "")
 }
 
 func randomAdjective() string {
-	return strings.Replace(strings.Title(adjectives[rand.Intn(len(adjectives)-1)]), " ", "", -1)
+	return strings.ReplaceAll(cases.Title(language.English).String(adjectives[rand.Intn(len(adjectives)-1)]), " ", "")
 }
 
 func RandomAlliterateCombo() (combo string) {
@@ -67,9 +70,9 @@ func StringInSlice(s string, strings []string) bool {
 }
 
 func ContentTypeFromName(filename string) string {
-	mime.AddExtensionType(".md", "text/markdown")
-	mime.AddExtensionType(".heic", "image/heic")
-	mime.AddExtensionType(".heif", "image/heif")
+	_ = mime.AddExtensionType(".md", "text/markdown")
+	_ = mime.AddExtensionType(".heic", "image/heic")
+	_ = mime.AddExtensionType(".heif", "image/heif")
 
 	nameParts := strings.Split(filename, ".")
 	mimeType := mime.TypeByExtension("." + nameParts[len(nameParts)-1])
@@ -178,6 +181,7 @@ func ReverseSliceString(s []string) []string {
 	return s
 }
 
+// ReverseSliceInt reverses a slice of ints.
 func ReverseSliceInt(s []int) []int {
 	for i, j := 0, len(s)-1; i < j; i, j = i+1, j-1 {
 		s[i], s[j] = s[j], s[i]

@@ -85,7 +85,7 @@ func (s *Server) ReplaceFrontmatter(ctx context.Context, req *apiv1.ReplaceFront
 }
 
 // RemoveKeyAtPath implements the RemoveKeyAtPath RPC.
-func (s *Server) RemoveKeyAtPath(ctx context.Context, req *apiv1.RemoveKeyAtPathRequest) (*apiv1.RemoveKeyAtPathResponse, error) {
+func (s *Server) RemoveKeyAtPath(_ context.Context, req *apiv1.RemoveKeyAtPathRequest) (*apiv1.RemoveKeyAtPathResponse, error) {
 	v := reflect.ValueOf(s.PageReadWriter)
 	if s.PageReadWriter == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
 		return nil, status.Error(codes.Internal, "PageReadWriter not available")

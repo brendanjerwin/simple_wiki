@@ -6,13 +6,19 @@ import (
 	"github.com/karalabe/usb"
 )
 
-var (
-	ErrorDeviceNotFound           = errors.New("Can not detect any USB printer")
-	ErrorEndpointNotAccessable    = errors.New("Can not access endpoint")
-	ErrorVendorNotSpecified       = errors.New("Vendor ID is not specified")
-	ErrorPlatformDoesntSupportUsb = errors.New("Platform doesn't support USB")
-)
+// ErrorDeviceNotFound indicates that no USB printer was detected.
+var ErrorDeviceNotFound = errors.New("can not detect any USB printer")
 
+// ErrorEndpointNotAccessable indicates that the USB endpoint is not accessible.
+var ErrorEndpointNotAccessable = errors.New("can not access endpoint")
+
+// ErrorVendorNotSpecified indicates that the vendor ID was not specified.
+var ErrorVendorNotSpecified = errors.New("vendor ID is not specified")
+
+// ErrorPlatformDoesntSupportUsb indicates that the platform does not support USB.
+var ErrorPlatformDoesntSupportUsb = errors.New("platform doesn't support USB")
+
+// GetUSBPrinter returns a Printer for a USB printer.
 func GetUSBPrinter(config PrinterConfig) (Printer, error) {
 	if config.USBVendor == 0 {
 		return nil, ErrorVendorNotSpecified

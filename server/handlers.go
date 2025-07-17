@@ -78,6 +78,7 @@ func NewSite(
 	return site
 }
 
+// GinRouter returns a new Gin router configured for the site.
 func (s *Site) GinRouter() *gin.Engine {
 	if s.Logger == nil {
 		s.Logger = lumber.NewConsoleLogger(lumber.TRACE)
@@ -112,7 +113,8 @@ func (s *Site) GinRouter() *gin.Engine {
 			RequireAuth: func(c *gin.Context) bool {
 				page := c.Param("page")
 
-				if page == "favicon.ico" || page == "static" || page == "uploads" {
+				switch page {
+				case "favicon.ico", "static", "uploads":
 					return false // no auth for these
 				}
 
@@ -195,7 +197,7 @@ func (s *Site) handlePageRelinquish(c *gin.Context) {
 	text := p.Text.GetCurrent()
 	isLocked := pageIsLocked(p, c)
 	if !isLocked {
-		p.Erase()
+		_ = p.Erase()
 		message = "Relinquished and erased"
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -218,7 +220,7 @@ func getSetSessionID(c *gin.Context) (sid string) {
 	if v == nil || sid == "" {
 		sid, _ = utils.RandomStringOfLength(8)
 		session.Set("sid", sid)
-		session.Save()
+		_ = session.Save()
 	}
 	return sid
 }
@@ -227,11 +229,12 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 	page := c.Param("page")
 	command := c.Param("command")
 
-	if page == "favicon.ico" {
+	switch page {
+	case "favicon.ico":
 		data, _ := static.StaticContent.ReadFile("img/favicon/favicon.ico")
 		c.Data(http.StatusOK, utils.ContentTypeFromName("img/favicon/favicon.ico"), data)
 		return
-	} else if page == "static" {
+	case "static":
 		filename := strings.TrimPrefix(command, "/")
 		var data []byte
 		if filename == "css/custom.css" {
@@ -240,16 +243,17 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 			var errAssset error
 			data, errAssset = static.StaticContent.ReadFile(filename)
 			if errAssset != nil {
+
 				c.String(http.StatusNotFound, "Could not find data")
 				return
 			}
 		}
 		c.Data(http.StatusOK, utils.ContentTypeFromName(filename), data)
 		return
-	} else if page == "uploads" {
+	case "uploads":
 		if len(command) == 0 || command == "/" || command == "/edit" {
 			if !s.Fileuploads {
-				c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("uploads are disabled on this server"))
+				_ = c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("uploads are disabled on this server"))
 				return
 			}
 		} else {
@@ -261,7 +265,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 
 			c.Header(
 				"Content-Disposition",
-				`inline; filename="`+c.DefaultQuery("filename", "upload")+`"`,
+				"inline; filename=\""+c.DefaultQuery("filename", "upload")+"\"",
 			)
 			c.File(pathname)
 			return
@@ -293,7 +297,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 
 	if command == "/erase" {
 		if !isLocked {
-			p.Erase()
+			_ = p.Erase()
 			c.Redirect(302, "/")
 		} else {
 			c.Redirect(302, "/"+page+"/view")
@@ -342,7 +346,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 	}
 
 	if strings.HasPrefix(command, "/frontmatter") {
-		c.Data(http.StatusOK, gin.MIMEJSON, p.FrontmatterJson)
+		c.Data(http.StatusOK, gin.MIMEJSON, p.FrontmatterJSON)
 		return
 	}
 
@@ -356,7 +360,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		var err error
 		DirectoryEntries, err = s.UploadList()
 		if err != nil {
-			c.AbortWithError(http.StatusInternalServerError, err)
+			_ = c.AbortWithError(http.StatusInternalServerError, err)
 			return
 		}
 	}
@@ -409,7 +413,7 @@ func getRecentlyEdited(title string, c *gin.Context) []string {
 		}
 	}
 	session.Set("recentlyEdited", recentlyEdited)
-	session.Save()
+	_ = session.Save()
 	editedThingsWithoutCurrent := make([]string, len(editedThings))
 	i := 0
 	for _, thing := range editedThings {
@@ -485,8 +489,8 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 		message = "Refusing to overwrite others work"
 	} else {
 		p.Meta = json.Meta
-		p.Update(json.NewText)
-		p.Save()
+		_ = p.Update(json.NewText)
+		_ = p.Save()
 		message = "Saved"
 		success = true
 	}
@@ -506,7 +510,7 @@ func (s *Site) handleLock(c *gin.Context) {
 	}
 	p := s.Open(json.Page)
 	if s.defaultLock() != "" && p.IsNew() {
-		p.IsLocked = true // IsLocked was replaced by variable wrt Context
+		p.IsLocked = true
 		p.PassphraseToUnlock = s.defaultLock()
 	}
 
@@ -542,27 +546,27 @@ func (s *Site) handleLock(c *gin.Context) {
 		p.UnlockedFor = sessionID
 		message = "Unlocked only for you"
 	}
-	p.Save()
+	_ = p.Save()
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": message})
 }
 
 func (s *Site) handleUpload(c *gin.Context) {
 	if !s.Fileuploads {
-		c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("uploads are disabled on this server"))
+		_ = c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("uploads are disabled on this server"))
 		return
 	}
 
 	file, info, err := c.Request.FormFile("file")
 	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
+		_ = c.AbortWithError(http.StatusInternalServerError, err)
 		s.Logger.Error("Failed to upload: %s", err.Error())
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	h := sha256.New()
 	if _, err := io.Copy(h, file); err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
+		_ = c.AbortWithError(http.StatusInternalServerError, err)
 		s.Logger.Error("Failed to upload: %s", err.Error())
 		return
 	}
@@ -572,15 +576,15 @@ func (s *Site) handleUpload(c *gin.Context) {
 	// Replaces any existing version, but sha256 collisions are rare as anything.
 	outfile, err := os.Create(path.Join(s.PathToData, newName+".upload"))
 	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
+		_ = c.AbortWithError(http.StatusInternalServerError, err)
 		s.Logger.Error("Failed to upload: %s", err.Error())
 		return
 	}
 
-	file.Seek(0, io.SeekStart)
+	_, _ = file.Seek(0, io.SeekStart)
 	_, err = io.Copy(outfile, file)
 	if err != nil {
-		c.AbortWithError(http.StatusInternalServerError, err)
+		_ = c.AbortWithError(http.StatusInternalServerError, err)
 		s.Logger.Error("Failed to upload: %s", err.Error())
 		return
 	}
