@@ -1,6 +1,6 @@
 import { html, css, LitElement } from 'lit';
 import { createClient } from '@connectrpc/connect';
-import { createConnectTransport } from '@connectrpc/connect-web';
+import { createGrpcWebTransport } from '@connectrpc/connect-web';
 import { Version } from '../gen/api/v1/version_connect.js';
 import { GetVersionRequest, GetVersionResponse } from '../gen/api/v1/version_pb.js';
 import { Timestamp } from '@bufbuild/protobuf';
@@ -83,13 +83,18 @@ export class VersionDisplay extends LitElement {
     error: { state: true },
   };
 
-  private version?: GetVersionResponse;
-  private loading = true;
-  private error?: string;
+  declare version?: GetVersionResponse;
+  declare loading: boolean;
+  declare error?: string;
 
-  private client = createClient(Version, createConnectTransport({
+  private client = createClient(Version, createGrpcWebTransport({
     baseUrl: window.location.origin,
   }));
+
+  constructor() {
+    super();
+    this.loading = true;
+  }
 
   override connectedCallback(): void {
     super.connectedCallback();
