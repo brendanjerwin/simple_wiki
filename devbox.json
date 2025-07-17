@@ -36,6 +36,11 @@
         "markdownlint --fix '**/*.md' --ignore vendor",
         "export CHROMIUM_BIN=$(which chromium)",
         "cd static/js && bun install && bun run build && bun run test && bun run lint"
+      ],
+      "build": [
+        "COMMIT=$(git rev-parse HEAD)",
+        "BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+        "go build -ldflags \"-X main.commit=$COMMIT -X main.buildTime=$BUILD_TIME\" -o simple_wiki ."
       ]
     }
   }

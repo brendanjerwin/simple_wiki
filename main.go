@@ -21,8 +21,9 @@ import (
 )
 
 var (
-	commit  = "n/a"
-	logger  *lumber.ConsoleLogger
+	commit    = "n/a"
+	buildTime = ""
+	logger    *lumber.ConsoleLogger
 )
 
 // getCommitHash retrieves the current git commit hash.
@@ -45,8 +46,16 @@ func getCommitHash() string {
 
 // getBuildTime returns the build time.
 // If running in development (via go run), returns the current time.
-// Otherwise, returns the compiled time.
+// Otherwise, returns the compiled time set via ldflags.
 func getBuildTime() time.Time {
+	if buildTime != "" {
+		// If buildTime was set at build time, parse and use that
+		if t, err := time.Parse(time.RFC3339, buildTime); err == nil {
+			return t
+		}
+	}
+	
+	// Fallback to current time (development mode)
 	return time.Now()
 }
 
