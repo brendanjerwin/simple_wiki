@@ -53,21 +53,74 @@ describe('FrontmatterEditorDialog - Array and Section Handling', () => {
       expect(addButton?.textContent?.trim()).to.equal('Add Item');
     });
 
-    it('should handle array item changes', async () => {
-      const firstItemInput = el.shadowRoot?.querySelector('.array-item input[type="text"]') as HTMLInputElement;
-      expect(firstItemInput).to.exist;
-      
-      firstItemInput.value = 'Updated Earbuds';
-      firstItemInput.dispatchEvent(new Event('input', { bubbles: true }));
-      
-      await el.updateComplete;
-      
-      const items = (el.workingFrontmatter as any)?.inventory?.items;
-      expect(items[0]).to.equal('Updated Earbuds');
+    it('should have remove buttons for each array item', () => {
+      const removeButtons = el.shadowRoot?.querySelectorAll('.array-item .remove-field-button');
+      expect(removeButtons).to.have.length(3);
+      removeButtons?.forEach(button => {
+        expect(button.textContent?.trim()).to.equal('Remove');
+      });
+    });
+
+    describe('when add item is clicked', () => {
+      let addButton: Element;
+
+      beforeEach(async () => {
+        addButton = el.shadowRoot?.querySelector('.array-section .add-field-button') as Element;
+        addButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await el.updateComplete;
+      });
+
+      it('should add a new empty item to the array', () => {
+        const items = (el.workingFrontmatter as any)?.inventory?.items;
+        expect(items).to.have.length(4);
+        expect(items[3]).to.equal('');
+      });
+
+      it('should render the new array item', () => {
+        const arrayItems = el.shadowRoot?.querySelectorAll('.array-item');
+        expect(arrayItems).to.have.length(4);
+      });
+    });
+
+    describe('when remove item is clicked', () => {
+      let removeButton: Element;
+
+      beforeEach(async () => {
+        removeButton = el.shadowRoot?.querySelector('.array-item .remove-field-button') as Element;
+        removeButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await el.updateComplete;
+      });
+
+      it('should remove the item from the array', () => {
+        const items = (el.workingFrontmatter as any)?.inventory?.items;
+        expect(items).to.have.length(2);
+        expect(items[0]).to.equal('Steel Series Arctis 5 Headphone 3.5mm Adapter Cable');
+      });
+
+      it('should update the rendered array items', () => {
+        const arrayItems = el.shadowRoot?.querySelectorAll('.array-item');
+        expect(arrayItems).to.have.length(2);
+      });
+    });
+
+    describe('when an array item is changed', () => {
+      let firstItemInput: HTMLInputElement;
+
+      beforeEach(async () => {
+        firstItemInput = el.shadowRoot?.querySelector('.array-item input[type="text"]') as HTMLInputElement;
+        firstItemInput.value = 'Updated Earbuds';
+        firstItemInput.dispatchEvent(new Event('input', { bubbles: true }));
+        await el.updateComplete;
+      });
+
+      it('should update the array value in working frontmatter', () => {
+        const items = (el.workingFrontmatter as any)?.inventory?.items;
+        expect(items[0]).to.equal('Updated Earbuds');
+      });
     });
   });
 
-  describe('when handling section names', () => {
+  describe('when managing section names', () => {
     beforeEach(async () => {
       el.workingFrontmatter = {
         rename_this_section: {
@@ -84,22 +137,28 @@ describe('FrontmatterEditorDialog - Array and Section Handling', () => {
       expect(sectionInput?.value).to.equal('rename_this_section');
     });
 
-    it('should allow changing section names', async () => {
-      const sectionInput = el.shadowRoot?.querySelector('.section-title-input') as HTMLInputElement;
-      expect(sectionInput).to.exist;
-      
-      sectionInput.value = 'new_section_name';
-      sectionInput.dispatchEvent(new Event('input', { bubbles: true }));
-      
-      await el.updateComplete;
-      
-      expect(el.workingFrontmatter).to.have.property('new_section_name');
-      expect(el.workingFrontmatter).to.not.have.property('rename_this_section');
-      expect((el.workingFrontmatter as any)?.new_section_name?.total).to.equal('32');
+    describe('when section name is changed', () => {
+      let sectionInput: HTMLInputElement;
+
+      beforeEach(async () => {
+        sectionInput = el.shadowRoot?.querySelector('.section-title-input') as HTMLInputElement;
+        sectionInput.value = 'new_section_name';
+        sectionInput.dispatchEvent(new Event('input', { bubbles: true }));
+        await el.updateComplete;
+      });
+
+      it('should update the frontmatter with new section name', () => {
+        expect(el.workingFrontmatter).to.have.property('new_section_name');
+        expect(el.workingFrontmatter).to.not.have.property('rename_this_section');
+      });
+
+      it('should preserve the section content', () => {
+        expect((el.workingFrontmatter as any)?.new_section_name?.total).to.equal('32');
+      });
     });
   });
 
-  describe('when handling complex frontmatter structure', () => {
+  describe('when working with complex frontmatter structure', () => {
     beforeEach(async () => {
       // Use the exact structure from the user's comment
       el.workingFrontmatter = {
@@ -142,17 +201,82 @@ describe('FrontmatterEditorDialog - Array and Section Handling', () => {
       expect(arrayItems).to.have.length(7);
     });
 
-    it('should allow editing nested field values', async () => {
-      const containerInput = el.shadowRoot?.querySelector('input[name="inventory.container"]') as HTMLInputElement;
-      expect(containerInput).to.exist;
-      expect(containerInput?.value).to.equal('lab_small_parts');
-      
-      containerInput.value = 'new_container';
-      containerInput.dispatchEvent(new Event('input', { bubbles: true }));
-      
-      await el.updateComplete;
-      
-      expect((el.workingFrontmatter as any)?.inventory?.container).to.equal('new_container');
+    describe('when editing nested field values', () => {
+      let containerInput: HTMLInputElement;
+
+      beforeEach(async () => {
+        containerInput = el.shadowRoot?.querySelector('input[name="inventory.container"]') as HTMLInputElement;
+        containerInput.value = 'new_container';
+        containerInput.dispatchEvent(new Event('input', { bubbles: true }));
+        await el.updateComplete;
+      });
+
+      it('should update the nested field value', () => {
+        expect((el.workingFrontmatter as any)?.inventory?.container).to.equal('new_container');
+      });
+    });
+
+    describe('when adding items to arrays', () => {
+      let addButton: Element;
+
+      beforeEach(async () => {
+        addButton = el.shadowRoot?.querySelector('.array-section .add-field-button') as Element;
+        addButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await el.updateComplete;
+      });
+
+      it('should increase the array length', () => {
+        const items = (el.workingFrontmatter as any)?.inventory?.items;
+        expect(items).to.have.length(8);
+      });
+
+      it('should add an empty string as the new item', () => {
+        const items = (el.workingFrontmatter as any)?.inventory?.items;
+        expect(items[7]).to.equal('');
+      });
+    });
+
+    describe('when removing items from arrays', () => {
+      let removeButton: Element;
+
+      beforeEach(async () => {
+        removeButton = el.shadowRoot?.querySelector('.array-item:first-child .remove-field-button') as Element;
+        removeButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await el.updateComplete;
+      });
+
+      it('should decrease the array length', () => {
+        const items = (el.workingFrontmatter as any)?.inventory?.items;
+        expect(items).to.have.length(6);
+      });
+
+      it('should remove the correct item', () => {
+        const items = (el.workingFrontmatter as any)?.inventory?.items;
+        expect(items[0]).to.equal('Steel Series Arctis 5 Headphone 3.5mm Adapter Cable');
+      });
+    });
+
+    describe('when modifying array items', () => {
+      let thirdItemInput: HTMLInputElement;
+
+      beforeEach(async () => {
+        const arrayItems = el.shadowRoot?.querySelectorAll('.array-item input[type="text"]');
+        thirdItemInput = arrayItems?.[2] as HTMLInputElement;
+        thirdItemInput.value = 'Modified USB Dongle';
+        thirdItemInput.dispatchEvent(new Event('input', { bubbles: true }));
+        await el.updateComplete;
+      });
+
+      it('should update the specific array item', () => {
+        const items = (el.workingFrontmatter as any)?.inventory?.items;
+        expect(items[2]).to.equal('Modified USB Dongle');
+      });
+
+      it('should not affect other array items', () => {
+        const items = (el.workingFrontmatter as any)?.inventory?.items;
+        expect(items[0]).to.equal('AKG Wired Earbuds');
+        expect(items[1]).to.equal('Steel Series Arctis 5 Headphone 3.5mm Adapter Cable');
+      });
     });
   });
 });

@@ -428,6 +428,99 @@ var _ = Describe("Server", func() {
 				Expect(resp.Frontmatter).To(Equal(expectedPb))
 			})
 		})
+
+		When("merging complex frontmatter with arrays and nested objects", func() {
+			var initialFm, mergeFm, expectedFm wikipage.FrontMatter
+
+			BeforeEach(func() {
+				// Initial complex frontmatter structure
+				initialFm = map[string]any{
+					"identifier": "inventory_item",
+					"title":      "Original Item",
+					"inventory": map[string]any{
+						"container": "lab_small_parts",
+						"items": []any{
+							"Original Item 1",
+							"Original Item 2",
+						},
+					},
+				}
+				mockPageReadWriter.Frontmatter = initialFm
+
+				// Merge data with array and nested changes
+				mergeFm = map[string]any{
+					"title": "Updated Inventory Item",
+					"inventory": map[string]any{
+						"location": "main_lab",
+						"items": []any{
+							"Updated Item 1",
+							"Updated Item 2",
+							"New Item 3",
+						},
+					},
+					"new_section": map[string]any{
+						"total": "42",
+					},
+				}
+
+				// Expected result after merge (maps.Copy replaces nested objects)
+				expectedFm = map[string]any{
+					"identifier": "inventory_item",
+					"title":      "Updated Inventory Item",
+					"inventory": map[string]any{
+						"location": "main_lab",
+						"items": []any{
+							"Updated Item 1",
+							"Updated Item 2",
+							"New Item 3",
+						},
+					},
+					"new_section": map[string]any{
+						"total": "42",
+					},
+				}
+
+				mergeFmPb, err := structpb.NewStruct(mergeFm)
+				Expect(err).NotTo(HaveOccurred())
+				req.Frontmatter = mergeFmPb
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should write the correctly merged complex frontmatter", func() {
+				Expect(mockPageReadWriter.WrittenFrontmatter).To(Equal(expectedFm))
+			})
+
+			It("should return the correctly merged complex frontmatter", func() {
+				expectedPb, err := structpb.NewStruct(expectedFm)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.Frontmatter).To(Equal(expectedPb))
+			})
+
+			It("should preserve arrays and nested structures correctly", func() {
+				resultMap := resp.Frontmatter.AsMap()
+				
+				// Check that arrays are properly handled
+				inventory, ok := resultMap["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue())
+				
+				items, ok := inventory["items"].([]any)
+				Expect(ok).To(BeTrue())
+				Expect(items).To(HaveLen(3))
+				Expect(items[2]).To(Equal("New Item 3"))
+				
+				// Check that new nested sections are added
+				newSection, ok := resultMap["new_section"].(map[string]any)
+				Expect(ok).To(BeTrue())
+				Expect(newSection["total"]).To(Equal("42"))
+				
+				// Note: maps.Copy replaces the entire inventory object, so container is not preserved
+				Expect(inventory["container"]).To(BeNil())
+				Expect(inventory["location"]).To(Equal("main_lab"))
+			})
+		})
 	})
 
 	Describe("ReplaceFrontmatter", func() {
@@ -522,6 +615,81 @@ var _ = Describe("Server", func() {
 
 			It("should return nil frontmatter", func() {
 				Expect(resp.Frontmatter).To(BeNil())
+			})
+		})
+
+		When("replacing with complex frontmatter containing arrays and nested objects", func() {
+			var complexFm wikipage.FrontMatter
+			var complexFmPb *structpb.Struct
+
+			BeforeEach(func() {
+				// Set up complex frontmatter structure to replace with
+				complexFm = map[string]any{
+					"identifier": "inventory_item",
+					"title":      "Complex Inventory Item",
+					"rename_this_section": map[string]any{
+						"total": "32",
+					},
+					"inventory": map[string]any{
+						"container": "lab_small_parts",
+						"items": []any{
+							"AKG Wired Earbuds",
+							"Steel Series Arctis 5 Headphone 3.5mm Adapter Cable",
+							"Steel Series Arctis 5 Headphone USB Dongle",
+							"Male 3.5mm to Male 3.5mm Coiled Cable",
+							"Random Earbud Tips",
+							"3.5mm to RCA Cable",
+							"Male 3.5mm to Male 3.5mm Cable",
+						},
+					},
+				}
+
+				var err error
+				complexFmPb, err = structpb.NewStruct(complexFm)
+				Expect(err).NotTo(HaveOccurred())
+
+				req.Frontmatter = complexFmPb
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should write the complex frontmatter structure correctly", func() {
+				Expect(mockPageReadWriter.WrittenFrontmatter).To(Equal(complexFm))
+			})
+
+			It("should return the complex frontmatter structure correctly", func() {
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.Frontmatter).To(Equal(complexFmPb))
+			})
+
+			It("should correctly handle nested objects and arrays in replacement", func() {
+				Expect(resp).NotTo(BeNil())
+				
+				// Verify the structure can be converted back to a map
+				resultMap := resp.Frontmatter.AsMap()
+				
+				// Check top-level fields
+				Expect(resultMap["identifier"]).To(Equal("inventory_item"))
+				Expect(resultMap["title"]).To(Equal("Complex Inventory Item"))
+				
+				// Check nested section
+				renameSection, ok := resultMap["rename_this_section"].(map[string]any)
+				Expect(ok).To(BeTrue())
+				Expect(renameSection["total"]).To(Equal("32"))
+				
+				// Check inventory section with arrays
+				inventory, ok := resultMap["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue())
+				Expect(inventory["container"]).To(Equal("lab_small_parts"))
+				
+				// Check array handling
+				items, ok := inventory["items"].([]any)
+				Expect(ok).To(BeTrue())
+				Expect(items).To(HaveLen(7))
+				Expect(items[0]).To(Equal("AKG Wired Earbuds"))
+				Expect(items[6]).To(Equal("Male 3.5mm to Male 3.5mm Cable"))
 			})
 		})
 	})
