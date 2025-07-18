@@ -1,6 +1,6 @@
 import { html, css, LitElement } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
-import { sharedStyles, sharedCSS } from './shared-styles.js';
+import { sharedStyles, foundationCSS } from './shared-styles.js';
 
 interface SearchResult {
   Identifier: string;
@@ -10,7 +10,7 @@ interface SearchResult {
 
 class WikiSearchResults extends LitElement {
   static override styles = [
-    sharedCSS,
+    foundationCSS,
     css`
       :host {
         display: block;

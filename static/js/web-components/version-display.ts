@@ -1,16 +1,16 @@
 import { html, css, LitElement } from 'lit';
 import { createClient } from '@connectrpc/connect';
-import { createGrpcWebTransport } from '@connectrpc/connect-web';
+import { getGrpcWebTransport } from './grpc-transport.js';
 import { Version } from '../gen/api/v1/version_connect.js';
 import { GetVersionRequest, GetVersionResponse } from '../gen/api/v1/version_pb.js';
 import { Timestamp } from '@bufbuild/protobuf';
-import { sharedCSS } from './shared-styles.js';
+import { foundationCSS } from './shared-styles.js';
 
 export class VersionDisplay extends LitElement {
   static readonly DEBOUNCE_DELAY = 300;
 
   static override styles = [
-    sharedCSS,
+    foundationCSS,
     css`
       :host {
         position: fixed;
@@ -101,9 +101,7 @@ export class VersionDisplay extends LitElement {
   declare error?: string;
   private debounceTimer?: ReturnType<typeof setTimeout>;
 
-  private client = createClient(Version, createGrpcWebTransport({
-    baseUrl: window.location.origin,
-  }));
+  private client = createClient(Version, getGrpcWebTransport());
 
   constructor() {
     super();

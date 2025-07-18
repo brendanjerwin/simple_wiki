@@ -92,11 +92,36 @@ export const dialogCSS = css`
 `;
 
 /* ==========================================================================
-   Combined Shared Styles
+   Responsive Styles
    ========================================================================== */
 
-export const sharedCSS = css`
-  ${foundationCSS}
-  ${buttonCSS}
-  ${dialogCSS}
+export const responsiveCSS = css`
+  /* Mobile responsive styles for dialogs */
+  @media (max-width: 768px) {
+    .dialog {
+      width: 100%;
+      height: 100%;
+      max-width: none;
+      max-height: none;
+      border-radius: 0;
+      margin: 0;
+    }
+
+    .header {
+      padding: 12px 16px;
+    }
+
+    .title {
+      font-size: 16px;
+    }
+
+    .content {
+      padding: 16px;
+    }
+
+    .footer {
+      padding: 12px 16px;
+    }
+  }
 `;
+

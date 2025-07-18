@@ -1,13 +1,15 @@
 import { html, css, LitElement } from 'lit';
 import { createClient } from '@connectrpc/connect';
-import { createGrpcWebTransport } from '@connectrpc/connect-web';
+import { getGrpcWebTransport } from './grpc-transport.js';
 import { Frontmatter } from '../gen/api/v1/frontmatter_connect.js';
 import { GetFrontmatterRequest, GetFrontmatterResponse } from '../gen/api/v1/frontmatter_pb.js';
-import { sharedStyles, sharedCSS } from './shared-styles.js';
+import { sharedStyles, foundationCSS, dialogCSS, responsiveCSS } from './shared-styles.js';
 
 export class FrontmatterEditorDialog extends LitElement {
   static override styles = [
-    sharedCSS,
+    foundationCSS,
+    dialogCSS,
+    responsiveCSS,
     css`
       :host {
         position: fixed;
@@ -150,34 +152,6 @@ export class FrontmatterEditorDialog extends LitElement {
         background: #0056b3;
         border-color: #0056b3;
       }
-
-      /* Mobile responsive styles */
-      @media (max-width: 768px) {
-        .dialog {
-          width: 100%;
-          height: 100%;
-          max-width: none;
-          max-height: none;
-          border-radius: 0;
-          margin: 0;
-        }
-
-        .header {
-          padding: 12px 16px;
-        }
-
-        .title {
-          font-size: 16px;
-        }
-
-        .content {
-          padding: 16px;
-        }
-
-        .footer {
-          padding: 12px 16px;
-        }
-      }
     `
   ];
 
@@ -195,9 +169,7 @@ export class FrontmatterEditorDialog extends LitElement {
   declare error?: string;
   declare frontmatter?: GetFrontmatterResponse;
 
-  private client = createClient(Frontmatter, createGrpcWebTransport({
-    baseUrl: window.location.origin,
-  }));
+  private client = createClient(Frontmatter, getGrpcWebTransport());
 
   constructor() {
     super();
