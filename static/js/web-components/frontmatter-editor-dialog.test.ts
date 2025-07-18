@@ -203,11 +203,6 @@ describe('FrontmatterEditorDialog', () => {
       expect(title?.textContent).to.equal('Edit Frontmatter');
     });
 
-    it('should render close button', () => {
-      const closeButton = el.shadowRoot?.querySelector('.dialog-close-button');
-      expect(closeButton).to.exist;
-    });
-
     it('should render save and cancel buttons', () => {
       const saveButton = el.shadowRoot?.querySelector('.button-save');
       const cancelButton = el.shadowRoot?.querySelector('.button-cancel');
@@ -309,23 +304,6 @@ describe('FrontmatterEditorDialog', () => {
       const frontmatterDisplay = el.shadowRoot?.querySelector('.frontmatter-display');
       expect(frontmatterDisplay?.textContent).to.include('title');
       expect(frontmatterDisplay?.textContent).to.include('Test Page');
-    });
-  });
-
-  describe('when clicking close button', () => {
-    let closeSpy: sinon.SinonSpy;
-
-    beforeEach(async () => {
-      el.open = true;
-      await el.updateComplete;
-      closeSpy = sinon.spy(el, 'close');
-      
-      const closeButton = el.shadowRoot?.querySelector('.dialog-close-button') as HTMLButtonElement;
-      closeButton.click();
-    });
-
-    it('should call close method', () => {
-      expect(closeSpy).to.have.been.calledOnce;
     });
   });
 

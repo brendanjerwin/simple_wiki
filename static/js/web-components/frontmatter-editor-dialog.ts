@@ -287,9 +287,6 @@ export class FrontmatterEditorDialog extends LitElement {
       <div class="dialog system-font border-radius box-shadow">
         <div class="dialog-header">
           <h2 class="dialog-title">Edit Frontmatter</h2>
-          <button class="dialog-close-button" @click="${this._handleCancel}">
-            <i class="fas fa-times"></i>
-          </button>
         </div>
         <div class="content">
           ${this.loading ? html`
