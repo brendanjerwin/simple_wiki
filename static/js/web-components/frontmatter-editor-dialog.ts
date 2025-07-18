@@ -284,6 +284,113 @@ export class FrontmatterEditorDialog extends LitElement {
         margin-bottom: 0;
       }
 
+      .key-value-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+
+      .key-value-row .key-input {
+        flex: 0 0 150px;
+        padding: 8px 12px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+        font-family: inherit;
+        box-sizing: border-box;
+        font-weight: 500;
+        background: #f8f9fa;
+      }
+
+      .key-value-row .key-input:focus {
+        outline: none;
+        border-color: #007bff;
+        box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.1);
+        background: white;
+      }
+
+      .key-value-row .value-input {
+        flex: 1;
+        padding: 8px 12px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+        font-family: inherit;
+        box-sizing: border-box;
+      }
+
+      .key-value-row .value-input:focus {
+        outline: none;
+        border-color: #007bff;
+        box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.1);
+      }
+
+      .top-level-controls {
+        margin-bottom: 20px;
+        padding: 16px;
+        border: 1px solid #e0e0e0;
+        border-radius: 4px;
+        background: #f9f9f9;
+      }
+
+      .dropdown-container {
+        position: relative;
+        display: inline-block;
+      }
+
+      .dropdown-button {
+        padding: 8px 16px;
+        font-size: 14px;
+        border: 1px solid #28a745;
+        border-radius: 4px;
+        cursor: pointer;
+        background: #28a745;
+        color: white;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .dropdown-button:hover {
+        background: #218838;
+        border-color: #218838;
+      }
+
+      .dropdown-menu {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        z-index: 1000;
+        min-width: 150px;
+      }
+
+      .dropdown-item {
+        padding: 8px 12px;
+        cursor: pointer;
+        border: none;
+        background: none;
+        width: 100%;
+        text-align: left;
+        font-size: 14px;
+      }
+
+      .dropdown-item:hover {
+        background: #f8f9fa;
+      }
+
+      .dropdown-item:first-child {
+        border-radius: 4px 4px 0 0;
+      }
+
+      .dropdown-item:last-child {
+        border-radius: 0 0 4px 4px;
+      }
+
       .new-field-row {
         display: flex;
         gap: 8px;
@@ -331,6 +438,7 @@ export class FrontmatterEditorDialog extends LitElement {
     error: { state: true },
     frontmatter: { state: true },
     workingFrontmatter: { state: true },
+    dropdownOpen: { state: true },
   };
 
   declare page: string;
@@ -339,6 +447,7 @@ export class FrontmatterEditorDialog extends LitElement {
   declare error?: string | undefined;
   declare frontmatter?: GetFrontmatterResponse | undefined;
   declare workingFrontmatter?: Record<string, unknown>;
+  declare dropdownOpen: boolean;
 
   private client = createClient(Frontmatter, getGrpcWebTransport());
 
@@ -348,6 +457,7 @@ export class FrontmatterEditorDialog extends LitElement {
     this.open = false;
     this.loading = false;
     this.workingFrontmatter = {};
+    this.dropdownOpen = false;
   }
 
   private convertStructToPlainObject(struct?: Struct): Record<string, unknown> {
@@ -369,16 +479,95 @@ export class FrontmatterEditorDialog extends LitElement {
     }
   }
 
+  private _handleKeyChange = (oldPath: string, newKey: string): void => {
+    if (!newKey.trim() || newKey === oldPath.split('.').pop()) return;
+    
+    // Get the current value at the old path
+    const currentValue = this._getValueAtPath(oldPath);
+    
+    // Create the new path
+    const pathParts = oldPath.split('.');
+    pathParts[pathParts.length - 1] = newKey.trim();
+    const newPath = pathParts.join('.');
+    
+    // Remove the old path and set the new one
+    this._removeValueAtPath(oldPath);
+    this._setValueAtPath(newPath, currentValue);
+    
+    this.requestUpdate();
+  };
+
+  private _handleToggleDropdown = (): void => {
+    this.dropdownOpen = !this.dropdownOpen;
+  };
+
+  private _handleAddTopLevelField = (): void => {
+    this._addTopLevelField('field');
+    this.dropdownOpen = false;
+  };
+
+  private _handleAddTopLevelArray = (): void => {
+    this._addTopLevelField('array');
+    this.dropdownOpen = false;
+  };
+
+  private _handleAddTopLevelSection = (): void => {
+    this._addTopLevelField('section');
+    this.dropdownOpen = false;
+  };
+
+  private _addTopLevelField(type: 'field' | 'array' | 'section'): void {
+    const newKey = this._generateUniqueKey(type === 'field' ? 'new_field' : type === 'array' ? 'new_array' : 'new_section');
+    
+    switch (type) {
+      case 'field':
+        this.workingFrontmatter[newKey] = '';
+        break;
+      case 'array':
+        this.workingFrontmatter[newKey] = [];
+        break;
+      case 'section':
+        this.workingFrontmatter[newKey] = {};
+        break;
+    }
+    
+    this.requestUpdate();
+  };
+
+  private _generateUniqueKey(baseKey: string): string {
+    let counter = 1;
+    let newKey = baseKey;
+    
+    while (this.workingFrontmatter[newKey] !== undefined) {
+      newKey = `${baseKey}_${counter}`;
+      counter++;
+    }
+    
+    return newKey;
+  };
+
   override connectedCallback(): void {
     super.connectedCallback();
     // Handle escape key to close dialog
     document.addEventListener('keydown', this._handleKeydown);
+    // Close dropdown when clicking outside
+    document.addEventListener('click', this._handleClickOutside);
   }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     document.removeEventListener('keydown', this._handleKeydown);
+    document.removeEventListener('click', this._handleClickOutside);
   }
+
+  private _handleClickOutside = (event: Event): void => {
+    if (!this.dropdownOpen) return;
+    
+    const dropdown = this.shadowRoot?.querySelector('.dropdown-container');
+    if (dropdown && !dropdown.contains(event.target as Node)) {
+      this.dropdownOpen = false;
+    }
+  };
 
   public _handleKeydown = (event: KeyboardEvent): void => {
     if (event.key === 'Escape' && this.open) {
@@ -522,37 +711,55 @@ export class FrontmatterEditorDialog extends LitElement {
     this.requestUpdate();
   };
 
-  private renderValue(key: string, value: unknown, path: string = ''): unknown {
+  private renderValue(key: string, value: unknown, path: string = '', isTopLevel: boolean = false): unknown {
     const fullPath = path ? `${path}.${key}` : key;
     
     if (typeof value === 'string') {
-      return this.renderStringField(key, value, fullPath);
+      return this.renderStringField(key, value, fullPath, isTopLevel);
     } else if (Array.isArray(value)) {
-      return this.renderArrayField(key, value, fullPath);
+      return this.renderArrayField(key, value, fullPath, isTopLevel);
     } else if (typeof value === 'object' && value !== null) {
-      return this.renderMapField(key, value as Record<string, unknown>, fullPath);
+      return this.renderMapField(key, value as Record<string, unknown>, fullPath, isTopLevel);
     } else {
       // For other types (numbers, booleans), render as string for now
-      return this.renderStringField(key, String(value), fullPath);
+      return this.renderStringField(key, String(value), fullPath, isTopLevel);
     }
   }
 
-  private renderStringField(key: string, value: string, path: string): unknown {
+  private renderStringField(key: string, value: string, path: string, isTopLevel: boolean = false): unknown {
+    const keyParts = path.split('.');
+    const currentKey = keyParts[keyParts.length - 1];
+    
     return html`
-      <div class="form-field">
-        <label for="${path}">${key}</label>
+      <div class="key-value-row">
         <input 
           type="text" 
+          class="key-input"
+          .value="${currentKey}" 
+          @input="${(e: Event) => this._handleKeyChange(path, (e.target as HTMLInputElement).value)}"
+          placeholder="Field name"
+        />
+        <input 
+          type="text" 
+          class="value-input"
           name="${path}" 
-          id="${path}"
           .value="${value}" 
           @input="${this._handleFieldChange}"
+          placeholder="Field value"
         />
+        ${isTopLevel ? html`
+          <button 
+            class="remove-field-button" 
+            @click="${() => this._handleRemoveField(path)}"
+          >
+            Remove
+          </button>
+        ` : ''}
       </div>
     `;
   }
 
-  private renderMapField(key: string, value: Record<string, unknown>, path: string): unknown {
+  private renderMapField(key: string, value: Record<string, unknown>, path: string, isTopLevel: boolean = false): unknown {
     const fields = Object.entries(value).map(([subKey, subValue]) => {
       const fieldPath = `${path}.${subKey}`;
       return html`
@@ -616,21 +823,19 @@ export class FrontmatterEditorDialog extends LitElement {
     `;
   }
 
-  private renderArrayField(key: string, value: unknown[], path: string): unknown {
+  private renderArrayField(key: string, value: unknown[], path: string, isTopLevel: boolean = false): unknown {
     const arrayItems = value.map((item, index) => {
       const itemPath = `${path}[${index}]`;
       return html`
         <div class="array-item">
-          <div class="form-field">
-            <label for="${itemPath}">Item ${index + 1}</label>
-            <input 
-              type="text" 
-              name="${itemPath}" 
-              id="${itemPath}"
-              .value="${String(item)}" 
-              @input="${this._handleArrayItemChange}"
-            />
-          </div>
+          <input 
+            type="text" 
+            class="value-input"
+            name="${itemPath}" 
+            .value="${String(item)}" 
+            @input="${this._handleArrayItemChange}"
+            placeholder="Array item"
+          />
           <button 
             class="remove-field-button" 
             @click="${() => this._handleRemoveArrayItem(path, index)}"
@@ -652,12 +857,21 @@ export class FrontmatterEditorDialog extends LitElement {
             >
               Add Item
             </button>
-            <button 
-              class="remove-section-button"
-              @click="${() => this._handleRemoveField(path)}"
-            >
-              Remove Array
-            </button>
+            ${isTopLevel ? html`
+              <button 
+                class="remove-section-button"
+                @click="${() => this._handleRemoveField(path)}"
+              >
+                Remove Array
+              </button>
+            ` : html`
+              <button 
+                class="remove-section-button"
+                @click="${() => this._handleRemoveField(path)}"
+              >
+                Remove Array
+              </button>
+            `}
           </div>
         </div>
         <div class="array-items">
@@ -761,14 +975,54 @@ export class FrontmatterEditorDialog extends LitElement {
 
   private renderFrontmatterEditor(): unknown {
     if (!this.workingFrontmatter || Object.keys(this.workingFrontmatter).length === 0) {
-      return html`<div class="loading">No frontmatter to edit</div>`;
+      return html`
+        <div class="top-level-controls">
+          <div class="dropdown-container">
+            <button 
+              class="dropdown-button" 
+              @click="${(e: Event) => { e.stopPropagation(); this._handleToggleDropdown(); }}"
+            >
+              Add Field ▼
+            </button>
+            ${this.dropdownOpen ? html`
+              <div class="dropdown-menu">
+                <button class="dropdown-item" @click="${this._handleAddTopLevelField}">Add Field</button>
+                <button class="dropdown-item" @click="${this._handleAddTopLevelArray}">Add Array</button>
+                <button class="dropdown-item" @click="${this._handleAddTopLevelSection}">Add Section</button>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+        <div class="loading">No frontmatter to edit - use "Add Field" to get started</div>
+      `;
     }
 
     const fields = Object.entries(this.workingFrontmatter).map(([key, value]) => 
-      this.renderValue(key, value)
+      this.renderValue(key, value, '', true)
     );
 
-    return html`<div class="frontmatter-editor">${fields}</div>`;
+    return html`
+      <div class="frontmatter-editor">
+        <div class="top-level-controls">
+          <div class="dropdown-container">
+            <button 
+              class="dropdown-button" 
+              @click="${(e: Event) => { e.stopPropagation(); this._handleToggleDropdown(); }}"
+            >
+              Add Field ▼
+            </button>
+            ${this.dropdownOpen ? html`
+              <div class="dropdown-menu">
+                <button class="dropdown-item" @click="${this._handleAddTopLevelField}">Add Field</button>
+                <button class="dropdown-item" @click="${this._handleAddTopLevelArray}">Add Array</button>
+                <button class="dropdown-item" @click="${this._handleAddTopLevelSection}">Add Section</button>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+        ${fields}
+      </div>
+    `;
   }
 
   override render() {
