@@ -27,5 +27,10 @@ export default {
     reporters: ['lcov', 'json'],
     exclude: ['node_modules/**'],
   },
+  testFramework: {
+    config: {
+      timeout: '5000', // 5 seconds
+    },
+  },
   testsFinishTimeout: 180000,
 };
