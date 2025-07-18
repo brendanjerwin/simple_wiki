@@ -1,6 +1,7 @@
 import { html, css, LitElement } from 'lit';
 import './frontmatter-key.js';
-import './frontmatter-value-string.js';
+import './frontmatter-value.js';
+import './frontmatter-add-field-button.js';
 
 export class FrontmatterValueSection extends LitElement {
   static override styles = css`
@@ -15,6 +16,12 @@ export class FrontmatterValueSection extends LitElement {
       background: #f9f9f9;
     }
 
+    .section-container.root-section {
+      border: none;
+      background: transparent;
+      padding: 0;
+    }
+
     .section-header {
       display: flex;
       justify-content: space-between;
@@ -24,32 +31,15 @@ export class FrontmatterValueSection extends LitElement {
       border-bottom: 1px solid #e0e0e0;
     }
 
+    .section-header.root-header {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+
     .section-title {
       font-weight: 600;
       color: #333;
       font-size: 14px;
-    }
-
-    .add-field-button {
-      padding: 4px 8px;
-      font-size: 12px;
-      border: 1px solid #28a745;
-      border-radius: 2px;
-      cursor: pointer;
-      transition: all 0.2s;
-      background: #28a745;
-      color: white;
-    }
-
-    .add-field-button:hover:not(:disabled) {
-      background: #218838;
-      border-color: #218838;
-    }
-
-    .add-field-button:disabled {
-      background: #6c757d;
-      border-color: #6c757d;
-      cursor: not-allowed;
     }
 
     .section-fields {
@@ -60,23 +50,27 @@ export class FrontmatterValueSection extends LitElement {
 
     .field-row {
       display: flex;
-      align-items: center;
+      flex-direction: column;
       gap: 8px;
-      padding: 8px;
+      padding: 12px;
       background: #fff;
       border: 1px solid #e0e0e0;
-      border-radius: 2px;
+      border-radius: 4px;
+      position: relative;
     }
 
     .field-row frontmatter-key {
-      flex: 0 0 150px;
+      align-self: flex-start;
     }
 
     .field-row frontmatter-value-string {
-      flex: 1;
+      width: 100%;
     }
 
     .remove-field-button {
+      position: absolute;
+      top: 8px;
+      right: 8px;
       padding: 4px 8px;
       font-size: 12px;
       border: 1px solid #dc3545;
@@ -109,15 +103,21 @@ export class FrontmatterValueSection extends LitElement {
   static override properties = {
     fields: { type: Object },
     disabled: { type: Boolean },
+    isRoot: { type: Boolean },
+    title: { type: String },
   };
 
-  declare fields: Record<string, string>;
+  declare fields: Record<string, unknown>;
   declare disabled: boolean;
+  declare isRoot: boolean;
+  declare title: string;
 
   constructor() {
     super();
     this.fields = {};
     this.disabled = false;
+    this.isRoot = false;
+    this.title = 'Section Fields';
   }
 
   private _generateUniqueKey(baseKey: string): string {
@@ -132,11 +132,31 @@ export class FrontmatterValueSection extends LitElement {
     return newKey;
   }
 
-  private _handleAddField = (): void => {
+  private _handleAddField = (event: CustomEvent): void => {
+    const { type } = event.detail;
     const oldFields = { ...this.fields };
-    const newKey = this._generateUniqueKey('new_field');
-    const newFields = { ...this.fields, [newKey]: '' };
+    const newKey = this._generateUniqueKey(
+      type === 'field' ? 'new_field' : 
+      type === 'array' ? 'new_array' : 
+      'new_section'
+    );
     
+    let newValue: unknown;
+    switch (type) {
+      case 'field':
+        newValue = '';
+        break;
+      case 'array':
+        newValue = [];
+        break;
+      case 'section':
+        newValue = {};
+        break;
+      default:
+        return;
+    }
+    
+    const newFields = { ...this.fields, [newKey]: newValue };
     this.fields = newFields;
     
     this._dispatchSectionChange(oldFields, newFields);
@@ -183,7 +203,7 @@ export class FrontmatterValueSection extends LitElement {
     this._dispatchSectionChange(oldFields, newFields);
   };
 
-  private _dispatchSectionChange(oldFields: Record<string, string>, newFields: Record<string, string>): void {
+  private _dispatchSectionChange(oldFields: Record<string, unknown>, newFields: Record<string, unknown>): void {
     this.dispatchEvent(new CustomEvent('section-change', {
       detail: {
         oldFields,
@@ -212,12 +232,12 @@ export class FrontmatterValueSection extends LitElement {
               placeholder="Field name"
               @key-change="${this._handleKeyChange}"
             ></frontmatter-key>
-            <frontmatter-value-string
+            <frontmatter-value
               .value="${value}"
               .disabled="${this.disabled}"
               placeholder="Field value"
               @value-change="${(e: CustomEvent) => this._handleValueChange(e, key)}"
-            ></frontmatter-value-string>
+            ></frontmatter-value>
             <button
               class="remove-field-button"
               .disabled="${this.disabled}"
@@ -232,17 +252,20 @@ export class FrontmatterValueSection extends LitElement {
   }
 
   override render() {
+    const containerClass = this.isRoot ? 'section-container root-section' : 'section-container';
+    const headerClass = this.isRoot ? 'section-header root-header' : 'section-header';
+    const fieldCount = Object.keys(this.fields).length;
+
     return html`
-      <div class="section-container">
-        <div class="section-header">
-          <span class="section-title">Section Fields (${Object.keys(this.fields).length})</span>
-          <button
-            class="add-field-button"
+      <div class="${containerClass}">
+        <div class="${headerClass}">
+          ${!this.isRoot ? html`
+            <span class="section-title">${this.title} (${fieldCount})</span>
+          ` : ''}
+          <frontmatter-add-field-button
             .disabled="${this.disabled}"
-            @click="${this._handleAddField}"
-          >
-            Add Field
-          </button>
+            @add-field="${this._handleAddField}"
+          ></frontmatter-add-field-button>
         </div>
         ${this.renderSectionFields()}
       </div>

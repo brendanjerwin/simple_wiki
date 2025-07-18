@@ -220,7 +220,7 @@ describe('FrontmatterKey', () => {
       const inputElement = el.shadowRoot?.querySelector('.key-input') as HTMLInputElement;
       const computedStyle = getComputedStyle(inputElement);
       
-      expect(computedStyle.fontWeight).to.equal('500');
+      expect(computedStyle.fontWeight).to.equal('600');
       expect(computedStyle.borderWidth).to.equal('1px');
     });
 
@@ -229,7 +229,7 @@ describe('FrontmatterKey', () => {
       const displayElement = el.shadowRoot?.querySelector('.key-display') as HTMLElement;
       const computedStyle = getComputedStyle(displayElement);
       
-      expect(computedStyle.fontWeight).to.equal('500');
+      expect(computedStyle.fontWeight).to.equal('600');
     });
   });
 });

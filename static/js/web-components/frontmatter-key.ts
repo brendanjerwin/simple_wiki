@@ -7,7 +7,7 @@ export class FrontmatterKey extends LitElement {
     }
 
     .key-input {
-      font-weight: 500;
+      font-weight: 600;
       color: #333;
       background: transparent;
       border: 1px solid transparent;
@@ -18,11 +18,15 @@ export class FrontmatterKey extends LitElement {
       box-sizing: border-box;
       cursor: pointer;
       transition: all 0.2s ease;
+      text-decoration: underline;
+      text-decoration-style: dashed;
+      text-decoration-color: transparent;
     }
 
     .key-input:hover {
       background: #f8f9fa;
       border-color: #ddd;
+      text-decoration-color: #999;
     }
 
     .key-input:focus {
@@ -31,14 +35,18 @@ export class FrontmatterKey extends LitElement {
       box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.1);
       background: white;
       cursor: text;
+      text-decoration: none;
     }
 
     .key-display {
-      font-weight: 500;
+      font-weight: 600;
       color: #333;
       padding: 8px 12px;
       font-size: 14px;
       font-family: inherit;
+      text-decoration: underline;
+      text-decoration-style: solid;
+      text-decoration-color: #333;
     }
   `;
 
