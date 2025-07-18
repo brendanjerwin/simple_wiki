@@ -16,19 +16,24 @@ import (
 	"time"
 
 	adrgfrontmatter "github.com/adrg/frontmatter"
-	"github.com/brendanjerwin/simple_wiki/wikipage"
-	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/brendanjerwin/simple_wiki/index"
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/sec"
-	"github.com/brendanjerwin/simple_wiki/utils"
+	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
+	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/gabriel-vasile/mimetype"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/jcelliott/lumber"
 	"github.com/pelletier/go-toml/v2"
 	"github.com/schollz/versionedtext"
 )
+
+// IRenderMarkdownToHTML is an interface that abstracts the rendering process
+type IRenderMarkdownToHTML interface {
+	Render(input []byte) ([]byte, error)
+}
 
 // Site represents the wiki site.
 type Site struct {
@@ -43,7 +48,7 @@ type Site struct {
 	MaxUploadSize           uint
 	MaxDocumentSize         uint // in runes; about a 10mb limit by default
 	Logger                  *lumber.ConsoleLogger
-	MarkdownRenderer        utils.IRenderMarkdownToHTML
+	MarkdownRenderer        IRenderMarkdownToHTML
 	IndexMaintainer         index.IMaintainIndex
 	FrontmatterIndexQueryer frontmatter.IQueryFrontmatterIndex
 	BleveIndexQueryer       bleve.IQueryBleveIndex
@@ -107,13 +112,13 @@ func (s *Site) InitializeIndexing() error {
 func (s *Site) readFileByIdentifier(identifier, extension string) (string, []byte, error) {
 	// First try with the munged identifier
 	mungedIdentifier := wikiidentifiers.MungeIdentifier(identifier)
-	b, err := os.ReadFile(path.Join(s.PathToData, utils.EncodeToBase32(strings.ToLower(mungedIdentifier))+"."+extension))
+	b, err := os.ReadFile(path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(mungedIdentifier))+"."+extension))
 	if err == nil {
 		return mungedIdentifier, b, nil
 	}
 
 	// Then try with the original identifier if that didn't work (older files)
-	b, err = os.ReadFile(path.Join(s.PathToData, utils.EncodeToBase32(strings.ToLower(identifier))+"."+extension))
+	b, err = os.ReadFile(path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(identifier))+"."+extension))
 	if err == nil {
 		return identifier, b, nil
 	}

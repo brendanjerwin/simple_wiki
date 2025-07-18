@@ -1,23 +1,28 @@
 package server
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"html/template"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"os"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/sec"
 	"github.com/brendanjerwin/simple_wiki/static"
-	"github.com/brendanjerwin/simple_wiki/utils"
+	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
+	"github.com/brendanjerwin/simple_wiki/utils/slicetools"
 	ginteenysecurity "github.com/danielheath/gin-teeny-security"
 	"github.com/gin-contrib/multitemplate"
 	"github.com/gin-contrib/sessions"
@@ -30,18 +35,18 @@ const minutesToUnlock = 10.0
 
 const (
 	// HTTP status codes
-	httpStatusFound        = 302
-	httpStatusOK           = 200
-	
+	httpStatusFound = 302
+	httpStatusOK    = 200
+
 	// Magic numbers
-	maxSecretAttempts      = 8
-	maxCacheControl       = 60
-	maxContentLength      = 3
-	
+	maxSecretAttempts = 8
+	maxCacheControl   = 60
+	maxContentLength  = 3
+
 	// String constants
-	rootPath              = "/"
-	uploadFailureMessage  = "Failed to upload: %s"
-	uploadsPage           = "uploads"
+	rootPath             = "/"
+	uploadFailureMessage = "Failed to upload: %s"
+	uploadsPage          = "uploads"
 )
 
 var (
@@ -143,11 +148,7 @@ func (s *Site) GinRouter() *gin.Engine {
 	}
 
 	router.GET("/", func(c *gin.Context) {
-		if s.DefaultPage != "" {
-			c.Redirect(httpStatusFound, "/"+s.DefaultPage+"/view")
-		} else {
-			c.Redirect(httpStatusFound, "/"+utils.RandomAlliterateCombo())
-		}
+		c.Redirect(httpStatusFound, "/"+s.DefaultPage+"/view")
 	})
 
 	router.POST("/uploads", s.handleUpload)
@@ -238,7 +239,18 @@ func getSetSessionID(c *gin.Context) (sid string) {
 		}
 	}
 	if v == nil || sid == "" {
-		sid, _ = utils.RandomStringOfLength(maxSecretAttempts)
+		// Each byte becomes two hex characters, so we need half the number of bytes as the desired string length.
+		// We add 1 and divide by 2 to handle both even and odd lengths correctly.
+		byteLength := (maxSecretAttempts + 1) / 2
+		b := make([]byte, byteLength)
+		if _, err := rand.Read(b); err != nil {
+			panic(fmt.Sprintf("failed to generate random string: %v", err))
+		}
+		sid = hex.EncodeToString(b)
+		// Trim the string to the exact desired length, as we may have generated one extra character for odd lengths.
+		if len(sid) > maxSecretAttempts {
+			sid = sid[:maxSecretAttempts]
+		}
 		session.Set("sid", sid)
 		_ = session.Save()
 	}
@@ -297,7 +309,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 	}
 
 	rawText, contentHTML := s.getPageContent(p, version)
-	contentHTML = []byte(fmt.Sprintf("<article class='content' id='%s'>%s</article>", page, string(contentHTML)))
+	contentHTML = fmt.Appendf(nil, "<article class='content' id='%s'>%s</article>", page, string(contentHTML))
 
 	// Get history
 	versionsInt64, versionsChangeSums, versionsText := s.getVersionHistory(command, p)
@@ -360,9 +372,9 @@ func (*Site) getVersionHistory(command string, p *Page) (versionsInt64 []int64, 
 		for i, v := range versionsInt64 {
 			versionsText[i] = time.Unix(v/1000000000, 0).Format("Mon Jan 2 15:04:05 MST 2006")
 		}
-		versionsText = utils.ReverseSliceString(versionsText)
-		versionsInt64 = utils.ReverseSliceInt64(versionsInt64)
-		versionsChangeSums = utils.ReverseSliceInt(versionsChangeSums)
+		versionsText = slicetools.ReverseSliceString(versionsText)
+		versionsInt64 = slicetools.ReverseSliceInt64(versionsInt64)
+		versionsChangeSums = slicetools.ReverseSliceInt(versionsChangeSums)
 	}
 	return versionsInt64, versionsChangeSums, versionsText
 }
@@ -410,7 +422,7 @@ func getRecentlyEdited(title string, c *gin.Context) []string {
 	} else {
 		if recentlyEditedStr, ok := v.(string); ok {
 			editedThings = strings.Split(recentlyEditedStr, "|||")
-			if !utils.StringInSlice(title, editedThings) {
+			if !slices.Contains(editedThings, title) {
 				recentlyEdited = recentlyEditedStr + "|||" + title
 			} else {
 				recentlyEdited = recentlyEditedStr
@@ -575,7 +587,7 @@ func (s *Site) handleUpload(c *gin.Context) {
 		return
 	}
 
-	newName := "sha256-" + utils.EncodeBytesToBase32(h.Sum(nil))
+	newName := "sha256-" + base32tools.EncodeBytesToBase32(h.Sum(nil))
 
 	// Replaces any existing version, but sha256 collisions are rare as anything.
 	outfile, err := os.Create(path.Join(s.PathToData, newName+".upload"))
@@ -598,7 +610,7 @@ func (s *Site) handleUpload(c *gin.Context) {
 
 func (*Site) handleFavicon(c *gin.Context) {
 	data, _ := static.StaticContent.ReadFile("img/favicon/favicon.ico")
-	c.Data(http.StatusOK, utils.ContentTypeFromName("img/favicon/favicon.ico"), data)
+	c.Data(http.StatusOK, contentTypeFromName("img/favicon/favicon.ico"), data)
 }
 
 func (s *Site) handleStatic(c *gin.Context, command string) {
@@ -614,11 +626,11 @@ func (s *Site) handleStatic(c *gin.Context, command string) {
 			return
 		}
 	}
-	c.Data(http.StatusOK, utils.ContentTypeFromName(filename), data)
+	c.Data(http.StatusOK, contentTypeFromName(filename), data)
 }
 
 func (s *Site) handleUploads(c *gin.Context, command string) {
-	if !(len(command) == 0 || command == rootPath || command == "/edit") {
+	if len(command) != 0 && command != rootPath && command != "/edit" {
 		command = command[1:]
 		if !strings.HasSuffix(command, ".upload") {
 			command = command + ".upload"
@@ -646,7 +658,7 @@ func (*Site) handleRawContent(c *gin.Context, command string, p *Page, rawText s
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE, UPDATE")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, X-Max")
 		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Data(httpStatusOK, utils.ContentTypeFromName(p.Identifier), []byte(rawText))
+		c.Data(httpStatusOK, contentTypeFromName(p.Identifier), []byte(rawText))
 		return true
 	}
 	return false
@@ -658,4 +670,14 @@ func (*Site) handleFrontmatter(c *gin.Context, command string, p *Page) bool {
 		return true
 	}
 	return false
+}
+
+func contentTypeFromName(filename string) string {
+	_ = mime.AddExtensionType(".md", "text/markdown")
+	_ = mime.AddExtensionType(".heic", "image/heic")
+	_ = mime.AddExtensionType(".heif", "image/heif")
+
+	nameParts := strings.Split(filename, ".")
+	mimeType := mime.TypeByExtension("." + nameParts[len(nameParts)-1])
+	return mimeType
 }
