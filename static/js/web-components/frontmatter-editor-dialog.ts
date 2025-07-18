@@ -5,6 +5,8 @@ import { getGrpcWebTransport } from './grpc-transport.js';
 import { Frontmatter } from '../gen/api/v1/frontmatter_connect.js';
 import { GetFrontmatterRequest, GetFrontmatterResponse } from '../gen/api/v1/frontmatter_pb.js';
 import { sharedStyles, foundationCSS, dialogCSS, responsiveCSS } from './shared-styles.js';
+import './frontmatter-key.js';
+import './frontmatter-value.js';
 
 export class FrontmatterEditorDialog extends LitElement {
   static override styles = [
@@ -154,176 +156,39 @@ export class FrontmatterEditorDialog extends LitElement {
         border-color: #0056b3;
       }
 
-      .form-field {
-        margin-bottom: 16px;
-      }
-
-      .form-field label {
-        display: block;
-        margin-bottom: 4px;
-        font-weight: 500;
-        color: #333;
-      }
-
-      .form-field input {
-        width: 100%;
-        padding: 8px 12px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        font-size: 14px;
-        font-family: inherit;
-        box-sizing: border-box;
-      }
-
-      .form-field input:focus {
-        outline: none;
-        border-color: #007bff;
-        box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.1);
-      }
-
-      .field-section {
-        margin-bottom: 24px;
-        padding: 16px;
+      .top-level-field {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+        padding: 12px;
+        background: #fff;
         border: 1px solid #e0e0e0;
         border-radius: 4px;
-        background: #f9f9f9;
       }
 
-      .section-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 12px;
-        padding-bottom: 8px;
-        border-bottom: 1px solid #e0e0e0;
+      .top-level-field frontmatter-key {
+        flex: 0 0 150px;
       }
 
-      .section-title {
-        font-weight: 600;
-        color: #333;
+      .top-level-field frontmatter-value {
+        flex: 1;
       }
 
-      .section-title-input {
-        font-weight: 600;
-        color: #333;
-        background: transparent;
-        border: none;
-        border-bottom: 1px solid #ddd;
-        padding: 2px 4px;
-        font-size: inherit;
-        font-family: inherit;
-      }
-
-      .section-title-input:focus {
-        outline: none;
-        border-bottom-color: #007bff;
-        background: #f9f9f9;
-      }
-
-      .section-controls {
-        display: flex;
-        gap: 8px;
-      }
-
-      .add-field-button,
-      .remove-section-button,
-      .remove-field-button,
-      .save-new-field-button {
+      .remove-field-button {
         padding: 4px 8px;
         font-size: 12px;
-        border: 1px solid;
+        border: 1px solid #dc3545;
         border-radius: 2px;
         cursor: pointer;
         transition: all 0.2s;
-      }
-
-      .add-field-button {
-        background: #28a745;
-        color: white;
-        border-color: #28a745;
-      }
-
-      .add-field-button:hover {
-        background: #218838;
-        border-color: #218838;
-      }
-
-      .remove-section-button,
-      .remove-field-button {
         background: #dc3545;
         color: white;
-        border-color: #dc3545;
       }
 
-      .remove-section-button:hover,
       .remove-field-button:hover {
         background: #c82333;
         border-color: #c82333;
-      }
-
-      .save-new-field-button {
-        background: #007bff;
-        color: white;
-        border-color: #007bff;
-      }
-
-      .save-new-field-button:hover {
-        background: #0056b3;
-        border-color: #0056b3;
-      }
-
-      .field-row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin-bottom: 8px;
-      }
-
-      .field-row .form-field {
-        flex: 1;
-        margin-bottom: 0;
-      }
-
-      .key-value-row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin-bottom: 8px;
-      }
-
-      .key-value-row .key-input {
-        flex: 0 0 150px;
-        padding: 8px 12px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        font-size: 14px;
-        font-family: inherit;
-        box-sizing: border-box;
-        font-weight: 500;
-        background: #f8f9fa;
-      }
-
-      .key-value-row .key-input:focus {
-        outline: none;
-        border-color: #007bff;
-        box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.1);
-        background: white;
-      }
-
-      .key-value-row .value-input {
-        flex: 1;
-        padding: 8px 12px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        font-size: 14px;
-        font-family: inherit;
-        box-sizing: border-box;
-      }
-
-      .key-value-row .value-input:focus {
-        outline: none;
-        border-color: #007bff;
-        box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.1);
       }
 
       .top-level-controls {
@@ -390,44 +255,6 @@ export class FrontmatterEditorDialog extends LitElement {
       .dropdown-item:last-child {
         border-radius: 0 0 4px 4px;
       }
-
-      .new-field-row {
-        display: flex;
-        gap: 8px;
-        margin-top: 12px;
-        padding-top: 12px;
-        border-top: 1px solid #e0e0e0;
-      }
-
-      .new-field-row input {
-        flex: 1;
-        padding: 6px 10px;
-        font-size: 13px;
-      }
-
-      .array-section {
-        border-left: 3px solid #007bff;
-      }
-
-      .array-item {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin-bottom: 8px;
-        padding: 8px;
-        background: #fff;
-        border: 1px solid #e0e0e0;
-        border-radius: 2px;
-      }
-
-      .array-item .form-field {
-        flex: 1;
-        margin-bottom: 0;
-      }
-
-      .array-items {
-        margin-left: 16px;
-      }
     `
   ];
 
@@ -479,21 +306,24 @@ export class FrontmatterEditorDialog extends LitElement {
     }
   }
 
-  private _handleKeyChange = (oldPath: string, newKey: string): void => {
-    if (!newKey.trim() || newKey === oldPath.split('.').pop()) return;
+  private _handleKeyChange = (event: CustomEvent): void => {
+    const { oldKey, newKey } = event.detail;
     
-    // Get the current value at the old path
-    const currentValue = this._getValueAtPath(oldPath);
+    if (!newKey.trim() || newKey === oldKey) return;
     
-    // Create the new path
-    const pathParts = oldPath.split('.');
-    pathParts[pathParts.length - 1] = newKey.trim();
-    const newPath = pathParts.join('.');
+    // Get the current value at the old key
+    const currentValue = this.workingFrontmatter[oldKey];
     
-    // Remove the old path and set the new one
-    this._removeValueAtPath(oldPath);
-    this._setValueAtPath(newPath, currentValue);
+    // Remove the old key and set the new one
+    delete this.workingFrontmatter[oldKey];
+    this.workingFrontmatter[newKey] = currentValue;
     
+    this.requestUpdate();
+  };
+
+  private _handleValueChange = (event: CustomEvent, key: string): void => {
+    const { newValue } = event.detail;
+    this.workingFrontmatter[key] = newValue;
     this.requestUpdate();
   };
 
@@ -620,359 +450,55 @@ export class FrontmatterEditorDialog extends LitElement {
     this.close();
   };
 
-  private formatFrontmatter(frontmatter?: GetFrontmatterResponse): string {
-    if (!frontmatter?.frontmatter) {
-      return '';
-    }
-
-    try {
-      // Convert the protobuf Struct to a plain JavaScript object
-      const jsonObject = frontmatter.frontmatter.toJson();
-      return JSON.stringify(jsonObject, null, 2);
-    } catch (err) {
-      return `Error formatting frontmatter: ${err instanceof Error ? err.message : 'Unknown error'}`;
-    }
-  }
-
-  private _handleFieldChange = (event: Event): void => {
-    const target = event.target as HTMLInputElement;
-    const fieldPath = target.name;
-    const value = target.value;
-    
-    this._updateFieldValue(fieldPath, value);
-  };
-
-  private _updateFieldValue(fieldPath: string, value: string): void {
-    const pathParts = fieldPath.split('.');
-    let current = this.workingFrontmatter;
-    
-    // Navigate to the parent object
-    for (let i = 0; i < pathParts.length - 1; i++) {
-      if (!current[pathParts[i]]) {
-        current[pathParts[i]] = {};
-      }
-      current = current[pathParts[i]];
-    }
-    
-    // Set the value
-    current[pathParts[pathParts.length - 1]] = value;
-    this.requestUpdate();
-  }
-
-  private _handleAddField = (sectionKey: string): void => {
-    const sectionContainer = this.shadowRoot?.querySelector(`.field-section[data-key="${sectionKey}"]`);
-    if (!sectionContainer) return;
-
-    // Show the new field inputs
-    const newFieldRow = sectionContainer.querySelector('.new-field-row') as HTMLElement;
-    if (newFieldRow) {
-      newFieldRow.style.display = 'flex';
-    }
-  };
-
-  private _handleSaveNewField = (sectionKey: string): void => {
-    const sectionContainer = this.shadowRoot?.querySelector(`.field-section[data-key="${sectionKey}"]`);
-    if (!sectionContainer) return;
-
-    const keyInput = sectionContainer.querySelector('.new-field-key') as HTMLInputElement;
-    const valueInput = sectionContainer.querySelector('.new-field-value') as HTMLInputElement;
-    
-    if (!keyInput || !valueInput || !keyInput.value.trim()) return;
-
-    // Add the new field to the working frontmatter
-    if (!this.workingFrontmatter[sectionKey]) {
-      this.workingFrontmatter[sectionKey] = {};
-    }
-    this.workingFrontmatter[sectionKey][keyInput.value.trim()] = valueInput.value;
-    
-    // Clear the inputs and hide the new field row
-    keyInput.value = '';
-    valueInput.value = '';
-    const newFieldRow = sectionContainer.querySelector('.new-field-row') as HTMLElement;
-    if (newFieldRow) {
-      newFieldRow.style.display = 'none';
-    }
-    
-    this.requestUpdate()
-  };
-
-  private _handleRemoveField = (fieldPath: string): void => {
-    const pathParts = fieldPath.split('.');
-    let current = this.workingFrontmatter;
-    
-    // Navigate to the parent object
-    for (let i = 0; i < pathParts.length - 1; i++) {
-      if (!current[pathParts[i]]) return; // Path doesn't exist
-      current = current[pathParts[i]];
-    }
-    
-    // Remove the field
-    delete current[pathParts[pathParts.length - 1]];
+  private _handleRemoveField = (key: string): void => {
+    delete this.workingFrontmatter[key];
     this.requestUpdate();
   };
 
-  private renderValue(key: string, value: unknown, path: string = '', isTopLevel: boolean = false): unknown {
-    const fullPath = path ? `${path}.${key}` : key;
-    
-    if (typeof value === 'string') {
-      return this.renderStringField(key, value, fullPath, isTopLevel);
-    } else if (Array.isArray(value)) {
-      return this.renderArrayField(key, value, fullPath, isTopLevel);
-    } else if (typeof value === 'object' && value !== null) {
-      return this.renderMapField(key, value as Record<string, unknown>, fullPath, isTopLevel);
-    } else {
-      // For other types (numbers, booleans), render as string for now
-      return this.renderStringField(key, String(value), fullPath, isTopLevel);
-    }
-  }
-
-  private renderStringField(key: string, value: string, path: string, isTopLevel: boolean = false): unknown {
-    const keyParts = path.split('.');
-    const currentKey = keyParts[keyParts.length - 1];
-    
+  private renderTopLevelField(key: string, value: unknown): unknown {
     return html`
-      <div class="key-value-row">
-        <input 
-          type="text" 
-          class="key-input"
-          .value="${currentKey}" 
-          @input="${(e: Event) => this._handleKeyChange(path, (e.target as HTMLInputElement).value)}"
+      <div class="top-level-field">
+        <frontmatter-key
+          .key="${key}"
+          .editable="${true}"
           placeholder="Field name"
-        />
-        <input 
-          type="text" 
-          class="value-input"
-          name="${path}" 
-          .value="${value}" 
-          @input="${this._handleFieldChange}"
+          @key-change="${(e: CustomEvent) => this._handleTopLevelKeyChange(e, key)}"
+        ></frontmatter-key>
+        <frontmatter-value
+          .value="${value}"
           placeholder="Field value"
-        />
-        ${isTopLevel ? html`
-          <button 
-            class="remove-field-button" 
-            @click="${() => this._handleRemoveField(path)}"
-          >
-            Remove
-          </button>
-        ` : ''}
+          @value-change="${(e: CustomEvent) => this._handleTopLevelValueChange(e, key)}"
+        ></frontmatter-value>
+        <button 
+          class="remove-field-button" 
+          @click="${() => this._handleRemoveField(key)}"
+        >
+          Remove
+        </button>
       </div>
     `;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  private renderMapField(key: string, value: Record<string, unknown>, path: string, isTopLevel: boolean = false): unknown {
-    const fields = Object.entries(value).map(([subKey, subValue]) => {
-      const fieldPath = `${path}.${subKey}`;
-      return html`
-        <div class="field-row">
-          ${this.renderValue(subKey, subValue, path)}
-          <button 
-            class="remove-field-button" 
-            data-field="${fieldPath}"
-            @click="${() => this._handleRemoveField(fieldPath)}"
-          >
-            Remove
-          </button>
-        </div>
-      `;
-    });
-
-    return html`
-      <div class="field-section" data-key="${key}">
-        <div class="section-header">
-          <input 
-            type="text" 
-            class="section-title-input" 
-            .value="${key}" 
-            @input="${(e: Event) => this._handleSectionNameChange(path || key, (e.target as HTMLInputElement).value)}"
-          />
-          <div class="section-controls">
-            <button 
-              class="add-field-button" 
-              @click="${() => this._handleAddField(key)}"
-            >
-              Add Field
-            </button>
-            <button 
-              class="remove-section-button"
-              @click="${() => this._handleRemoveField(path || key)}"
-            >
-              Remove Section
-            </button>
-          </div>
-        </div>
-        ${fields}
-        <div class="new-field-row" style="display: none;">
-          <input 
-            type="text" 
-            class="new-field-key" 
-            placeholder="Field name"
-          />
-          <input 
-            type="text" 
-            class="new-field-value" 
-            placeholder="Field value"
-          />
-          <button 
-            class="save-new-field-button"
-            @click="${() => this._handleSaveNewField(key)}"
-          >
-            Save
-          </button>
-        </div>
-      </div>
-    `;
-  }
-
-  private renderArrayField(key: string, value: unknown[], path: string, isTopLevel: boolean = false): unknown {
-    const arrayItems = value.map((item, index) => {
-      const itemPath = `${path}[${index}]`;
-      return html`
-        <div class="array-item">
-          <input 
-            type="text" 
-            class="value-input"
-            name="${itemPath}" 
-            .value="${String(item)}" 
-            @input="${this._handleArrayItemChange}"
-            placeholder="Array item"
-          />
-          <button 
-            class="remove-field-button" 
-            @click="${() => this._handleRemoveArrayItem(path, index)}"
-          >
-            Remove
-          </button>
-        </div>
-      `;
-    });
-
-    return html`
-      <div class="field-section array-section" data-key="${key}">
-        <div class="section-header">
-          <span class="section-title">${key} (Array)</span>
-          <div class="section-controls">
-            <button 
-              class="add-field-button" 
-              @click="${() => this._handleAddArrayItem(path)}"
-            >
-              Add Item
-            </button>
-            ${isTopLevel ? html`
-              <button 
-                class="remove-section-button"
-                @click="${() => this._handleRemoveField(path)}"
-              >
-                Remove Array
-              </button>
-            ` : html`
-              <button 
-                class="remove-section-button"
-                @click="${() => this._handleRemoveField(path)}"
-              >
-                Remove Array
-              </button>
-            `}
-          </div>
-        </div>
-        <div class="array-items">
-          ${arrayItems}
-        </div>
-      </div>
-    `;
-  }
-
-  private _handleSectionNameChange = (oldPath: string, newName: string): void => {
-    if (!newName.trim() || newName === oldPath) return;
+  private _handleTopLevelKeyChange = (event: CustomEvent, oldKey: string): void => {
+    const { newKey } = event.detail;
     
-    // Get the current value of the section
-    const currentValue = this._getValueAtPath(oldPath);
+    if (!newKey.trim() || newKey === oldKey) return;
     
-    // Remove the old section
-    this._removeValueAtPath(oldPath);
+    // Get the current value at the old key
+    const currentValue = this.workingFrontmatter[oldKey];
     
-    // Add the new section with the same value
-    this._setValueAtPath(newName, currentValue);
+    // Remove the old key and set the new one
+    delete this.workingFrontmatter[oldKey];
+    this.workingFrontmatter[newKey] = currentValue;
     
     this.requestUpdate();
   };
 
-  private _handleArrayItemChange = (event: Event): void => {
-    const target = event.target as HTMLInputElement;
-    const fieldPath = target.name;
-    const value = target.value;
-    
-    // Parse array path like "inventory.items[0]"
-    const match = fieldPath.match(/^(.+)\[(\d+)\]$/);
-    if (!match) return;
-    
-    const arrayPath = match[1];
-    const index = parseInt(match[2], 10);
-    
-    const array = this._getValueAtPath(arrayPath) as unknown[];
-    if (Array.isArray(array) && index >= 0 && index < array.length) {
-      array[index] = value;
-      this.requestUpdate();
-    }
+  private _handleTopLevelValueChange = (event: CustomEvent, key: string): void => {
+    const { newValue } = event.detail;
+    this.workingFrontmatter[key] = newValue;
+    this.requestUpdate();
   };
-
-  private _handleAddArrayItem = (arrayPath: string): void => {
-    const array = this._getValueAtPath(arrayPath) as unknown[];
-    if (Array.isArray(array)) {
-      array.push('');
-      this.requestUpdate();
-    }
-  };
-
-  private _handleRemoveArrayItem = (arrayPath: string, index: number): void => {
-    const array = this._getValueAtPath(arrayPath) as unknown[];
-    if (Array.isArray(array) && index >= 0 && index < array.length) {
-      array.splice(index, 1);
-      this.requestUpdate();
-    }
-  };
-
-  private _getValueAtPath(path: string): unknown {
-    const pathParts = path.split('.');
-    let current = this.workingFrontmatter as Record<string, unknown>;
-    
-    for (const part of pathParts) {
-      if (!current || typeof current !== 'object') return undefined;
-      current = current[part] as Record<string, unknown>;
-    }
-    
-    return current;
-  }
-
-  private _setValueAtPath(path: string, value: unknown): void {
-    const pathParts = path.split('.');
-    let current = this.workingFrontmatter as Record<string, unknown>;
-    
-    // Navigate to the parent object
-    for (let i = 0; i < pathParts.length - 1; i++) {
-      if (!current[pathParts[i]]) {
-        current[pathParts[i]] = {};
-      }
-      current = current[pathParts[i]] as Record<string, unknown>;
-    }
-    
-    // Set the value
-    current[pathParts[pathParts.length - 1]] = value;
-  }
-
-  private _removeValueAtPath(path: string): void {
-    const pathParts = path.split('.');
-    let current = this.workingFrontmatter as Record<string, unknown>;
-    
-    // Navigate to the parent object
-    for (let i = 0; i < pathParts.length - 1; i++) {
-      if (!current[pathParts[i]]) return; // Path doesn't exist
-      current = current[pathParts[i]] as Record<string, unknown>;
-    }
-    
-    // Remove the value
-    delete current[pathParts[pathParts.length - 1]];
-  }
 
   private renderFrontmatterEditor(): unknown {
     if (!this.workingFrontmatter || Object.keys(this.workingFrontmatter).length === 0) {
@@ -999,7 +525,7 @@ export class FrontmatterEditorDialog extends LitElement {
     }
 
     const fields = Object.entries(this.workingFrontmatter).map(([key, value]) => 
-      this.renderValue(key, value, '', true)
+      this.renderTopLevelField(key, value)
     );
 
     return html`

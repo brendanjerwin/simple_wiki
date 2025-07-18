@@ -1,8 +1,9 @@
 import { fixture, html, expect } from '@open-wc/testing';
+import { TemplateResult } from 'lit';
 import { restore } from 'sinon';
 import { FrontmatterValueString } from './frontmatter-value-string.js';
 
-function createFixtureWithTimeout(template: any, timeoutMs = 5000): Promise<FrontmatterValueString> {
+function createFixtureWithTimeout(template: TemplateResult, timeoutMs = 5000): Promise<FrontmatterValueString> {
   const timeout = (ms: number, message: string) =>
     new Promise<never>((_, reject) => 
       setTimeout(() => reject(new Error(message)), ms)

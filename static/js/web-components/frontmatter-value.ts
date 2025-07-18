@@ -25,7 +25,7 @@ export class FrontmatterValue extends LitElement {
     placeholder: { type: String },
   };
 
-  declare value: any;
+  declare value: unknown;
   declare disabled: boolean;
   declare placeholder: string;
 
@@ -38,7 +38,7 @@ export class FrontmatterValue extends LitElement {
 
   private _handleValueChange = (event: CustomEvent): void => {
     const oldValue = this.value;
-    let newValue: any;
+    let newValue: unknown;
 
     // Stop the event from bubbling further up since we'll re-dispatch it
     event.stopPropagation();

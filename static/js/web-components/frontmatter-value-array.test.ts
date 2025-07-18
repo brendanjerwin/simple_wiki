@@ -1,8 +1,9 @@
 import { fixture, html, expect } from '@open-wc/testing';
+import { TemplateResult } from 'lit';
 import { restore } from 'sinon';
 import { FrontmatterValueArray } from './frontmatter-value-array.js';
 
-function createFixtureWithTimeout(template: any, timeoutMs = 5000): Promise<FrontmatterValueArray> {
+function createFixtureWithTimeout(template: TemplateResult, timeoutMs = 5000): Promise<FrontmatterValueArray> {
   const timeout = (ms: number, message: string) =>
     new Promise<never>((_, reject) => 
       setTimeout(() => reject(new Error(message)), ms)
@@ -78,7 +79,7 @@ describe('FrontmatterValueArray', () => {
     });
 
     it('should display the values in string components', () => {
-      const stringComponents = el.shadowRoot?.querySelectorAll('frontmatter-value-string') as NodeListOf<any>;
+      const stringComponents = el.shadowRoot?.querySelectorAll('frontmatter-value-string') as NodeListOf<Element>;
       expect(stringComponents[0].value).to.equal('item1');
       expect(stringComponents[1].value).to.equal('item2');
       expect(stringComponents[2].value).to.equal('item3');
@@ -194,7 +195,7 @@ describe('FrontmatterValueArray', () => {
       });
 
       // Simulate value change in first string component
-      const stringComponents = el.shadowRoot?.querySelectorAll('frontmatter-value-string') as NodeListOf<any>;
+      const stringComponents = el.shadowRoot?.querySelectorAll('frontmatter-value-string') as NodeListOf<Element>;
       stringComponents[0].dispatchEvent(new CustomEvent('value-change', {
         detail: {
           oldValue: 'original1',
@@ -227,7 +228,7 @@ describe('FrontmatterValueArray', () => {
     });
 
     it('should disable all string components', () => {
-      const stringComponents = el.shadowRoot?.querySelectorAll('frontmatter-value-string') as NodeListOf<any>;
+      const stringComponents = el.shadowRoot?.querySelectorAll('frontmatter-value-string') as NodeListOf<Element>;
       stringComponents.forEach(component => {
         expect(component.disabled).to.be.true;
       });
@@ -252,7 +253,7 @@ describe('FrontmatterValueArray', () => {
     });
 
     it('should set placeholder on all string components', () => {
-      const stringComponents = el.shadowRoot?.querySelectorAll('frontmatter-value-string') as NodeListOf<any>;
+      const stringComponents = el.shadowRoot?.querySelectorAll('frontmatter-value-string') as NodeListOf<Element>;
       stringComponents.forEach(component => {
         expect(component.placeholder).to.equal('Enter item');
       });
@@ -319,7 +320,7 @@ describe('FrontmatterValueArray', () => {
       });
 
       it('should update string component values', () => {
-        const stringComponents = el.shadowRoot?.querySelectorAll('frontmatter-value-string') as NodeListOf<any>;
+        const stringComponents = el.shadowRoot?.querySelectorAll('frontmatter-value-string') as NodeListOf<Element>;
         expect(stringComponents[0].value).to.equal('updated1');
         expect(stringComponents[1].value).to.equal('updated2');
       });

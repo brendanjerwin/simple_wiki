@@ -1,8 +1,9 @@
 import { fixture, html, expect } from '@open-wc/testing';
+import { TemplateResult } from 'lit';
 import { restore } from 'sinon';
 import { FrontmatterValueSection } from './frontmatter-value-section.js';
 
-function createFixtureWithTimeout(template: any, timeoutMs = 5000): Promise<FrontmatterValueSection> {
+function createFixtureWithTimeout(template: TemplateResult, timeoutMs = 5000): Promise<FrontmatterValueSection> {
   const timeout = (ms: number, message: string) =>
     new Promise<never>((_, reject) => 
       setTimeout(() => reject(new Error(message)), ms)
@@ -83,13 +84,13 @@ describe('FrontmatterValueSection', () => {
     });
 
     it('should display the correct keys', () => {
-      const keyComponents = el.shadowRoot?.querySelectorAll('frontmatter-key') as NodeListOf<any>;
+      const keyComponents = el.shadowRoot?.querySelectorAll('frontmatter-key') as NodeListOf<Element>;
       const keys = Array.from(keyComponents).map(comp => comp.key);
       expect(keys).to.include.members(['title', 'description', 'count']);
     });
 
     it('should display the correct values', () => {
-      const valueComponents = el.shadowRoot?.querySelectorAll('frontmatter-value-string') as NodeListOf<any>;
+      const valueComponents = el.shadowRoot?.querySelectorAll('frontmatter-value-string') as NodeListOf<Element>;
       const values = Array.from(valueComponents).map(comp => comp.value);
       expect(values).to.include.members(['Test Title', 'Test Description', '42']);
     });
@@ -214,7 +215,7 @@ describe('FrontmatterValueSection', () => {
       });
 
       // Simulate key change
-      const keyComponent = el.shadowRoot?.querySelector('frontmatter-key') as any;
+      const keyComponent = el.shadowRoot?.querySelector('frontmatter-key') as HTMLElement & { [key: string]: unknown };
       keyComponent.dispatchEvent(new CustomEvent('key-change', {
         detail: {
           oldKey: 'oldKey',
@@ -253,7 +254,7 @@ describe('FrontmatterValueSection', () => {
       });
 
       // Simulate value change
-      const valueComponent = el.shadowRoot?.querySelector('frontmatter-value-string') as any;
+      const valueComponent = el.shadowRoot?.querySelector('frontmatter-value-string') as HTMLElement & { [key: string]: unknown };
       valueComponent.dispatchEvent(new CustomEvent('value-change', {
         detail: {
           oldValue: 'original value',
@@ -282,14 +283,14 @@ describe('FrontmatterValueSection', () => {
     });
 
     it('should disable all key components', () => {
-      const keyComponents = el.shadowRoot?.querySelectorAll('frontmatter-key') as NodeListOf<any>;
+      const keyComponents = el.shadowRoot?.querySelectorAll('frontmatter-key') as NodeListOf<Element>;
       keyComponents.forEach(component => {
         expect(component.editable).to.be.false;
       });
     });
 
     it('should disable all value components', () => {
-      const valueComponents = el.shadowRoot?.querySelectorAll('frontmatter-value-string') as NodeListOf<any>;
+      const valueComponents = el.shadowRoot?.querySelectorAll('frontmatter-value-string') as NodeListOf<Element>;
       valueComponents.forEach(component => {
         expect(component.disabled).to.be.true;
       });
@@ -328,13 +329,13 @@ describe('FrontmatterValueSection', () => {
       });
 
       it('should update key components', () => {
-        const keyComponents = el.shadowRoot?.querySelectorAll('frontmatter-key') as NodeListOf<any>;
+        const keyComponents = el.shadowRoot?.querySelectorAll('frontmatter-key') as NodeListOf<Element>;
         const keys = Array.from(keyComponents).map(comp => comp.key);
         expect(keys).to.include.members(['updated1', 'updated2']);
       });
 
       it('should update value components', () => {
-        const valueComponents = el.shadowRoot?.querySelectorAll('frontmatter-value-string') as NodeListOf<any>;
+        const valueComponents = el.shadowRoot?.querySelectorAll('frontmatter-value-string') as NodeListOf<Element>;
         const values = Array.from(valueComponents).map(comp => comp.value);
         expect(values).to.include.members(['value1', 'value2']);
       });
