@@ -159,6 +159,16 @@ export class FrontmatterValueSection extends LitElement {
     const newFields = { ...this.fields, [newKey]: newValue };
     this.fields = newFields;
     
+    // Debug logging for data structure changes
+    console.log('[FrontmatterValueSection] Add field:', {
+      type,
+      newKey,
+      newValue,
+      oldFields,
+      newFields,
+      isRoot: this.isRoot
+    });
+    
     this._dispatchSectionChange(oldFields, newFields);
     this.requestUpdate();
   };
@@ -169,6 +179,14 @@ export class FrontmatterValueSection extends LitElement {
     delete newFields[key];
     
     this.fields = newFields;
+    
+    // Debug logging for data structure changes
+    console.log('[FrontmatterValueSection] Remove field:', {
+      removedKey: key,
+      oldFields,
+      newFields,
+      isRoot: this.isRoot
+    });
     
     this._dispatchSectionChange(oldFields, newFields);
     this.requestUpdate();
@@ -188,6 +206,16 @@ export class FrontmatterValueSection extends LitElement {
     
     this.fields = newFields;
     
+    // Debug logging for data structure changes
+    console.log('[FrontmatterValueSection] Key changed:', {
+      oldKey,
+      newKey,
+      value: newFields[newKey],
+      oldFields,
+      newFields,
+      isRoot: this.isRoot
+    });
+    
     this._dispatchSectionChange(oldFields, newFields);
     this.requestUpdate();
   };
@@ -199,6 +227,16 @@ export class FrontmatterValueSection extends LitElement {
     const newFields = { ...this.fields, [key]: newValue };
     
     this.fields = newFields;
+    
+    // Debug logging for data structure changes
+    console.log('[FrontmatterValueSection] Value changed:', {
+      key,
+      oldValue: oldFields[key],
+      newValue,
+      oldFields,
+      newFields,
+      isRoot: this.isRoot
+    });
     
     this._dispatchSectionChange(oldFields, newFields);
   };

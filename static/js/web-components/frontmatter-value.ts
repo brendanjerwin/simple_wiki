@@ -57,6 +57,14 @@ export class FrontmatterValue extends LitElement {
     // Update our value
     this.value = newValue;
 
+    // Debug logging for data structure changes
+    console.log('[FrontmatterValue] Value delegated change:', {
+      eventType: event.type,
+      oldValue,
+      newValue,
+      valueType: Array.isArray(newValue) ? 'array' : typeof newValue
+    });
+
     // Dispatch our own value-change event
     this.dispatchEvent(new CustomEvent('value-change', {
       detail: {
