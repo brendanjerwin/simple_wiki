@@ -255,7 +255,7 @@ func (s *Server) GetFrontmatter(_ context.Context, req *apiv1.GetFrontmatterRequ
 
 // LoggingInterceptor returns a gRPC unary interceptor for logging method calls.
 func (s *Server) LoggingInterceptor() grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		start := time.Now()
 
 		// Call the method

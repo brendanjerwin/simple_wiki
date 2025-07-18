@@ -471,6 +471,19 @@ Tests for both frontend (JavaScript) and Go can be run using `devbox` scripts, e
   const result = user ? processUser(user) : 'No user';
   ```
 
+### Running Linters
+
+The project uses different linters for different parts of the codebase:
+
+- **Go linting**: Use `devbox run go:lint` to run the Go linter (revive)
+- **Frontend linting**: Use `devbox run fe:lint` to run the frontend TypeScript/JavaScript linter (ESLint)
+- **All linting**: Use `devbox run lint:everything` to run all linters, tests, and builds
+
+Each linter enforces specific rules:
+
+- Go linter enforces using `any` instead of `interface{}` and other Go best practices
+- Frontend linter enforces TypeScript strict typing with `@typescript-eslint/no-explicit-any` rule enabled
+
 ### Required Before Each Commit
 
 - Run the tests, builds, and linters. You can use `devbox run lint:everything` for that.

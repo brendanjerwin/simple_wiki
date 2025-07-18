@@ -11,7 +11,7 @@ import (
 	"time"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
-	v1 "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
+	"github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
@@ -709,7 +709,7 @@ var _ = Describe("Server", func() {
 			server  *v1.Server
 			logger  *lumber.ConsoleLogger
 			ctx     context.Context
-			req     interface{}
+			req     any
 			info    *grpc.UnaryServerInfo
 			handler grpc.UnaryHandler
 		)
@@ -729,12 +729,12 @@ var _ = Describe("Server", func() {
 
 		When("a successful gRPC call is made", func() {
 			var (
-				resp interface{}
+				resp any
 				err  error
 			)
 
 			BeforeEach(func() {
-				handler = func(ctx context.Context, req interface{}) (interface{}, error) {
+				handler = func(ctx context.Context, req any) (any, error) {
 					time.Sleep(10 * time.Millisecond) // Simulate some work
 					return &apiv1.GetVersionResponse{Commit: "test"}, nil
 				}
@@ -755,12 +755,12 @@ var _ = Describe("Server", func() {
 
 		When("a gRPC call fails", func() {
 			var (
-				resp interface{}
+				resp any
 				err  error
 			)
 
 			BeforeEach(func() {
-				handler = func(ctx context.Context, req interface{}) (interface{}, error) {
+				handler = func(ctx context.Context, req any) (any, error) {
 					time.Sleep(5 * time.Millisecond) // Simulate some work
 					return nil, status.Error(codes.Internal, "test error")
 				}
@@ -783,7 +783,7 @@ var _ = Describe("Server", func() {
 			var err error
 
 			BeforeEach(func() {
-				handler = func(ctx context.Context, req interface{}) (interface{}, error) {
+				handler = func(ctx context.Context, req any) (any, error) {
 					panic("test panic")
 				}
 
@@ -806,14 +806,14 @@ var _ = Describe("Server", func() {
 
 		When("logger is nil", func() {
 			var (
-				resp interface{}
+				resp any
 				err  error
 			)
 
 			BeforeEach(func() {
 				server = v1.NewServer("test-commit", time.Now(), nil, nil)
 
-				handler = func(ctx context.Context, req interface{}) (interface{}, error) {
+				handler = func(ctx context.Context, req any) (any, error) {
 					return &apiv1.GetVersionResponse{Commit: "test"}, nil
 				}
 

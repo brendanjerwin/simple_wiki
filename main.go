@@ -61,74 +61,80 @@ func getBuildTime() time.Time {
 
 var app *cli.App
 
+func setupServer(c *cli.Context) (*http.Server, error) {
+	pathToData := c.GlobalString("data")
+	if err := os.MkdirAll(pathToData, 0755); err != nil {
+		return nil, err
+	}
+
+	if c.GlobalBool("debug") {
+		logger = makeDebugLogger()
+	} else {
+		logger = makeProductionLogger()
+	}
+
+	site := server.NewSite(
+		pathToData,
+		c.GlobalString("css"),
+		c.GlobalString("default-page"),
+		c.GlobalString("lock"),
+		c.GlobalInt("debounce"),
+		c.GlobalString("cookie-secret"),
+		c.GlobalString("access-code"),
+		!c.GlobalBool("block-file-uploads"),
+		c.GlobalUint("max-upload-mb"),
+		c.GlobalUint("max-document-length"),
+		logger,
+	)
+
+	ginRouter := site.GinRouter()
+	actualCommit := getCommitHash()
+	buildTime := getBuildTime()
+	grpcAPIServer := grpcapi.NewServer(actualCommit, buildTime, site, logger)
+	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(grpcAPIServer.LoggingInterceptor()))
+	grpcAPIServer.RegisterWithServer(grpcServer)
+
+	reflection.Register(grpcServer)
+
+	wrappedGrpc := grpcweb.WrapServer(grpcServer,
+		// Enable CORS so browser clients can make requests
+		grpcweb.WithOriginFunc(func(_ string) bool { return true }),
+	)
+
+	// Create a multiplexer to route traffic to either gRPC or Gin.
+	multiplexedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
+			logger.Debug("gRPC-ish request: %s %s", r.Method, r.URL.Path)
+			wrappedGrpc.ServeHTTP(w, r)
+			return
+		}
+		logger.Debug("Gin request: %s %s", r.Method, r.URL.Path)
+		ginRouter.ServeHTTP(w, r)
+	})
+
+	// Determine host and port, then start the server
+	host := c.GlobalString("host")
+	if host == "" {
+		host = "0.0.0.0"
+	}
+	addr := fmt.Sprintf("%s:%s", host, c.GlobalString("port"))
+	logger.Info("Running simple_wiki server (commit %s) at http://%s", actualCommit, addr)
+
+	return &http.Server{
+		Addr:    addr,
+		Handler: h2c.NewHandler(multiplexedHandler, &http2.Server{}),
+	}, nil
+}
+
 func main() {
 	app = cli.NewApp()
 	app.Name = "simple_wiki"
 	app.Usage = "a simple wiki"
 	app.Compiled = time.Now()
 	app.Action = func(c *cli.Context) error {
-		pathToData := c.GlobalString("data")
-		if err := os.MkdirAll(pathToData, 0755); err != nil {
+		srv, err := setupServer(c)
+		if err != nil {
 			return err
-		}
-
-		grpcServer := grpc.NewServer()
-
-		if c.GlobalBool("debug") {
-			logger = makeDebugLogger()
-		} else {
-			logger = makeProductionLogger()
-		}
-
-		site := server.NewSite(
-			pathToData,
-			c.GlobalString("css"),
-			c.GlobalString("default-page"),
-			c.GlobalString("lock"),
-			c.GlobalInt("debounce"),
-			c.GlobalString("cookie-secret"),
-			c.GlobalString("access-code"),
-			!c.GlobalBool("block-file-uploads"),
-			c.GlobalUint("max-upload-mb"),
-			c.GlobalUint("max-document-length"),
-			logger,
-		)
-		ginRouter := site.GinRouter()
-		actualCommit := getCommitHash()
-		buildTime := getBuildTime()
-		grpcAPIServer := grpcapi.NewServer(actualCommit, buildTime, site, logger)
-		grpcServer = grpc.NewServer(grpc.UnaryInterceptor(grpcAPIServer.LoggingInterceptor()))
-		grpcAPIServer.RegisterWithServer(grpcServer)
-
-		reflection.Register(grpcServer)
-
-		wrappedGrpc := grpcweb.WrapServer(grpcServer,
-			// Enable CORS so browser clients can make requests
-			grpcweb.WithOriginFunc(func(_ string) bool { return true }),
-		)
-
-		// 5. Create a multiplexer to route traffic to either gRPC or Gin.
-		multiplexedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
-				logger.Debug("gRPC-ish request: %s %s", r.Method, r.URL.Path)
-				wrappedGrpc.ServeHTTP(w, r)
-				return
-			}
-			logger.Debug("Gin request: %s %s", r.Method, r.URL.Path)
-			ginRouter.ServeHTTP(w, r)
-		})
-
-		// 6. Determine host and port, then start the server
-		host := c.GlobalString("host")
-		if host == "" {
-			host = "0.0.0.0"
-		}
-		addr := fmt.Sprintf("%s:%s", host, c.GlobalString("port"))
-		logger.Info("Running simple_wiki server (commit %s) at http://%s", actualCommit, addr)
-
-		srv := &http.Server{
-			Addr:    addr,
-			Handler: h2c.NewHandler(multiplexedHandler, &http2.Server{}),
 		}
 		return srv.ListenAndServe()
 	}
