@@ -9,13 +9,20 @@ export class FrontmatterKey extends LitElement {
     .key-input {
       font-weight: 500;
       color: #333;
-      background: #f8f9fa;
-      border: 1px solid #ddd;
+      background: transparent;
+      border: 1px solid transparent;
       border-radius: 4px;
-      padding: 8px 12px;
+      padding: 4px 8px;
       font-size: 14px;
       font-family: inherit;
       box-sizing: border-box;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .key-input:hover {
+      background: #f8f9fa;
+      border-color: #ddd;
     }
 
     .key-input:focus {
@@ -23,6 +30,7 @@ export class FrontmatterKey extends LitElement {
       border-color: #007bff;
       box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.1);
       background: white;
+      cursor: text;
     }
 
     .key-display {

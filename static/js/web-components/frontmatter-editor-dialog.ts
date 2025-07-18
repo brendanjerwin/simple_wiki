@@ -158,24 +158,28 @@ export class FrontmatterEditorDialog extends LitElement {
 
       .top-level-field {
         display: flex;
-        align-items: center;
+        flex-direction: column;
         gap: 8px;
-        margin-bottom: 8px;
+        margin-bottom: 16px;
         padding: 12px;
         background: #fff;
         border: 1px solid #e0e0e0;
         border-radius: 4px;
+        position: relative;
       }
 
       .top-level-field frontmatter-key {
-        flex: 0 0 150px;
+        align-self: flex-start;
       }
 
       .top-level-field frontmatter-value {
-        flex: 1;
+        width: 100%;
       }
 
       .remove-field-button {
+        position: absolute;
+        top: 8px;
+        right: 8px;
         padding: 4px 8px;
         font-size: 12px;
         border: 1px solid #dc3545;
