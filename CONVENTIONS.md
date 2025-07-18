@@ -167,6 +167,105 @@ Do not run them directly with `npx`, `npm`, `bun`, `bunx`, `go test`, etc. Use t
   devbox run go:test
   ```
 
+### Robust Asynchronous Testing in JavaScript
+
+Hanging or flaky async tests are common. The key is to ensure every asynchronous operation either resolves or rejects within a reasonable time. While a global test timeout is a good safety net, the following patterns help create more robust and predictable async tests.
+
+#### 1. Stub Network and API Calls
+
+This is the most frequent cause of hangs. If a component's setup code (e.g., in its `connectedCallback`) fetches data, the test will hang if the server is slow or unreachable.
+
+**Pattern:** Use a library like `sinon` to intercept network requests and provide a fake, immediate response.
+
+**Example:**
+```typescript
+// In your test file
+import { stub } from 'sinon';
+
+describe('My Component', () => {
+  let fetchStub;
+
+  beforeEach(async () => {
+    // Stub the global fetch function before the component is created
+    fetchStub = stub(window, 'fetch');
+    // Make it resolve instantly with a fake response
+    fetchStub.resolves(new Response(JSON.stringify({ id: 1, name: 'Test Data' })));
+
+    // Now, when you create the component, it won't make a real network call
+    const el = await fixture(html`<my-component></my-component>`);
+  });
+
+  afterEach(() => {
+    // Clean up the stub after each test
+    fetchStub.restore();
+  });
+});
+```
+
+#### 2. Control Time with Fake Timers
+
+If your component uses `setTimeout`, `setInterval`, or other time-based functions, waiting for them in real-time makes tests slow and fragile.
+
+**Pattern:** Use `sinon`'s fake timers to control the clock from your test.
+
+**Example:**
+```typescript
+import { useFakeTimers } from 'sinon';
+
+describe('My Timed Component', () => {
+  let clock;
+
+  beforeEach(() => {
+    // Take control of time
+    clock = useFakeTimers();
+  });
+
+  afterEach(() => {
+    // Give control back
+    clock.restore();
+  });
+
+  it('should do something after 2 seconds', async () => {
+    const el = await fixture(html`<my-timed-component></my-timed-component>`);
+    
+    // Fast-forward the clock by 2 seconds instantly
+    await clock.tickAsync(2000);
+
+    // Now you can assert what was supposed to happen after the delay
+    expect(el.state).to.equal('loaded');
+  });
+});
+```
+
+#### 3. Use `Promise.race` for Explicit Timeouts
+
+While the test runner timeout is a good safety net, you can add more specific timeouts to your setup logic to pinpoint exactly which async operation is failing.
+
+**Pattern:** Race your async setup operation against a timeout promise. Whichever finishes first wins.
+
+**Example:**
+```typescript
+function timeout(ms, message) {
+  return new Promise((_, reject) => 
+    setTimeout(() => reject(new Error(message)), ms)
+  );
+}
+
+beforeEach(async () => {
+  try {
+    // This will fail if the fixture takes longer than 3 seconds
+    el = await Promise.race([
+      fixture(html`<frontmatter-editor-dialog></frontmatter-editor-dialog>`),
+      timeout(3000, 'Component fixture timed out')
+    ]);
+  } catch (e) {
+    // The error will clearly state that the fixture timed out
+    console.error(e);
+    throw e;
+  }
+});
+```
+
 - Prefer Context-Specification style for testing. Nest `describe` blocks to build up context. Don't bother with `context` blocks.
 - Don't do actions in the `It` blocks. The `It` blocks should only contain assertions. All setup (**Arrange**) and execution (**Act**) should be done in `BeforeEach` blocks (or equivalent, depending on the testing framework) within the `Describe` or `When` blocks. This allows for reusing context to add additional assertions later.
 
