@@ -148,7 +148,8 @@ The wiki will be running at <http://localhost:8050>, and you can access the Stru
 
 ### Running Tests
 
-Tests for both frontend (JavaScript) and Go can be run using `devbox` scripts, ensuring a consistent environment.
+Tests for both frontend (JavaScript) and Go MUST be run using `devbox` scripts, ensuring a consistent environment.
+Do not run them directly with `npx`, `npm`, `bun`, `bunx`, `go test`, etc. Use the provided scripts to ensure the setup is correct and that there are no environment issues causing false failures.
 
 - **Frontend Tests (JavaScript)**:
 
