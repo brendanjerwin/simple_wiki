@@ -78,8 +78,8 @@ describe('FrontmatterValueSection', () => {
       expect(keyComponents?.length).to.equal(3);
     });
 
-    it('should render frontmatter-value-string components for each field', () => {
-      const valueComponents = el.shadowRoot?.querySelectorAll('frontmatter-value-string');
+    it('should render frontmatter-value components for each field', () => {
+      const valueComponents = el.shadowRoot?.querySelectorAll('frontmatter-value');
       expect(valueComponents?.length).to.equal(3);
     });
 
@@ -129,8 +129,8 @@ describe('FrontmatterValueSection', () => {
         sectionChangeEvent = event as CustomEvent;
       });
 
-      const addButton = el.shadowRoot?.querySelector('.add-field-button') as HTMLButtonElement;
-      addButton.click();
+      const addButton = el.shadowRoot?.querySelector('frontmatter-add-field-button') as any;
+      addButton?.shadowRoot?.querySelector('.dropdown-button')?.click();
     });
 
     it('should dispatch section-change event', () => {
@@ -297,8 +297,8 @@ describe('FrontmatterValueSection', () => {
     });
 
     it('should disable the add field button', () => {
-      const addButton = el.shadowRoot?.querySelector('.add-field-button') as HTMLButtonElement;
-      expect(addButton.disabled).to.be.true;
+      const addButton = el.shadowRoot?.querySelector('frontmatter-add-field-button') as any;
+      expect(addButton?.disabled).to.be.true;
     });
 
     it('should disable all remove buttons', () => {
