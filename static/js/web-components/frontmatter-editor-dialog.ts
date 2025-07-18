@@ -561,10 +561,12 @@ export class FrontmatterEditorDialog extends LitElement {
   }
 
   private _handleClickOutside = (event: Event): void => {
-    if (!this.dropdownOpen) return;
+    if (!this.dropdownOpen || !this.shadowRoot) return;
     
-    const dropdown = this.shadowRoot?.querySelector('.dropdown-container');
-    if (dropdown && !dropdown.contains(event.target as Node)) {
+    const dropdown = this.shadowRoot.querySelector('.dropdown-container');
+    const target = event.target as Node;
+    
+    if (dropdown && target && !dropdown.contains(target)) {
       this.dropdownOpen = false;
     }
   };
@@ -761,10 +763,11 @@ export class FrontmatterEditorDialog extends LitElement {
 
   private renderMapField(key: string, value: Record<string, unknown>, path: string, isTopLevel: boolean = false): unknown {
     const fields = Object.entries(value).map(([subKey, subValue]) => {
-      const fieldPath = `${path}.${subKey}`;
+      const currentPath = path || key;
+      const fieldPath = `${currentPath}.${subKey}`;
       return html`
         <div class="field-row">
-          ${this.renderValue(subKey, subValue, path)}
+          ${this.renderValue(subKey, subValue, currentPath)}
           <button 
             class="remove-field-button" 
             data-field="${fieldPath}"
