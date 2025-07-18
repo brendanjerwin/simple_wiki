@@ -142,6 +142,10 @@ devbox services up
 
 to start the process manager with all services.
 
+#### Accessing the Application
+
+The wiki will be running at <http://localhost:8050>, and you can access the Structurizr Lite documentation at <http://localhost:8080>.
+
 ### Running Tests
 
 Tests for both frontend (JavaScript) and Go can be run using `devbox` scripts, ensuring a consistent environment.
@@ -416,6 +420,7 @@ Tests for both frontend (JavaScript) and Go can be run using `devbox` scripts, e
 - If a problem is due to an invalid parameter, don't just fix the parameter value. _also_ add an input validation to the function/method receiving the parameter such that the error being fixed is perfectly clear to the next developer.
 - Do not use `recover` to hide panics. A panic indicates a serious bug that should crash the program during development and be fixed. Catching panics in handlers can obfuscate the problem and make debugging difficult. Instead, write defensive code to prevent panics in the first place, for example by checking for `nil`.
 - **Never Hide Broken Functionality**: Do not make systems appear to work when they are actually broken. This includes:
+
   - Avoid showing fallback data that looks like real data when services are unavailable
   - Prefer clear error messages over misleading success states
   - Components should remain blank or show clear error states rather than fake data
@@ -427,11 +432,11 @@ Tests for both frontend (JavaScript) and Go can be run using `devbox` scripts, e
 
   ```typescript
   function formatTimestamp(timestamp?: Timestamp): string {
-    if (!timestamp) return 'Unknown';
+    if (!timestamp) return "Unknown";
     try {
       return timestamp.toDate().toLocaleDateString();
     } catch {
-      return 'Invalid date';  // This hides the real problem
+      return "Invalid date"; // This hides the real problem
     }
   }
   ```
@@ -444,9 +449,9 @@ Tests for both frontend (JavaScript) and Go can be run using `devbox` scripts, e
     const date = timestamp.toDate();
     return date.toLocaleDateString();
   }
-  
+
   // Usage - handle the null case at the call site
-  const formatted = buildTime ? formatTimestamp(buildTime) : '';
+  const formatted = buildTime ? formatTimestamp(buildTime) : "";
   ```
 
 - **Avoid Nullable Function Parameters**: Nullable parameters (`param?: Type`) should be rare for function parameters. It's preferable to force an exception at the source of the problem rather than handle null cases inside functions. This makes the code more predictable and helps identify issues earlier.
@@ -455,7 +460,7 @@ Tests for both frontend (JavaScript) and Go can be run using `devbox` scripts, e
 
   ```typescript
   function processUser(user?: User): string {
-    if (!user) return 'No user';
+    if (!user) return "No user";
     return user.name;
   }
   ```
@@ -466,9 +471,9 @@ Tests for both frontend (JavaScript) and Go can be run using `devbox` scripts, e
   function processUser(user: User): string {
     return user.name;
   }
-  
+
   // Handle the null case at the call site
-  const result = user ? processUser(user) : 'No user';
+  const result = user ? processUser(user) : "No user";
   ```
 
 ### Running Linters
@@ -503,7 +508,7 @@ ADRs should document significant architectural decisions that have long-term imp
 **Do NOT create ADRs for:**
 
 - Simple component implementations
-- UI styling decisions  
+- UI styling decisions
 - Routine feature additions
 - Standard library usage
 - Minor refactoring decisions

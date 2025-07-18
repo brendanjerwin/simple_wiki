@@ -137,6 +137,11 @@ $(window).load(function () {
         }
     });
 
+    $("#editFrontmatter").click(function (e) {
+        e.preventDefault();
+        alert("Frontmatter Editor will open here! Page: " + window.simple_wiki.pageName);
+    });
+
     $("textarea").keydown(function (e) {
         if (e.keyCode === 9) { // tab was pressed
             // get caret position/selection

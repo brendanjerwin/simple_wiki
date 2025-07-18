@@ -4,7 +4,7 @@
   "documentation" : { },
   "id" : 1,
   "lastModifiedAgent" : "structurizr-ui",
-  "lastModifiedDate" : "2025-06-26T22:04:14Z",
+  "lastModifiedDate" : "2025-07-18T01:07:02Z",
   "model" : {
     "people" : [ {
       "description" : "A person using the wiki.",
