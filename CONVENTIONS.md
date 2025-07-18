@@ -144,7 +144,7 @@ to start the process manager with all services.
 
 #### Accessing the Application
 
-The wiki will be running at http://localhost:8050, and you can access the Structurizr Lite documentation at http://localhost:8080.
+The wiki will be running at <http://localhost:8050>, and you can access the Structurizr Lite documentation at <http://localhost:8080>.
 
 ### Running Tests
 
