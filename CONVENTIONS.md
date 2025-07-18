@@ -178,6 +178,7 @@ This is the most frequent cause of hangs. If a component's setup code (e.g., in 
 **Pattern:** Use a library like `sinon` to intercept network requests and provide a fake, immediate response.
 
 **Example:**
+
 ```typescript
 // In your test file
 import { stub } from 'sinon';
@@ -209,6 +210,7 @@ If your component uses `setTimeout`, `setInterval`, or other time-based function
 **Pattern:** Use `sinon`'s fake timers to control the clock from your test.
 
 **Example:**
+
 ```typescript
 import { useFakeTimers } from 'sinon';
 
@@ -244,6 +246,7 @@ While the test runner timeout is a good safety net, you can add more specific ti
 **Pattern:** Race your async setup operation against a timeout promise. Whichever finishes first wins.
 
 **Example:**
+
 ```typescript
 function timeout(ms, message) {
   return new Promise((_, reject) => 

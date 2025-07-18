@@ -1,4 +1,4 @@
-import { html, fixture, expect, waitUntil } from '@open-wc/testing';
+import { html, fixture, expect } from '@open-wc/testing';
 import { FrontmatterEditorDialog } from './frontmatter-editor-dialog.js';
 import sinon from 'sinon';
 import './frontmatter-editor-dialog.js';
@@ -28,12 +28,10 @@ describe('FrontmatterEditorDialog - Editable Features', () => {
 
     describe('when a field key is changed', () => {
       let keyInput: HTMLInputElement;
-      let valueInput: HTMLInputElement;
 
       beforeEach(async () => {
         const keyValueRow = el.shadowRoot?.querySelector('.key-value-row');
         keyInput = keyValueRow?.querySelector('.key-input') as HTMLInputElement;
-        valueInput = keyValueRow?.querySelector('.value-input') as HTMLInputElement;
         
         // Change the key from 'identifier' to 'id'
         keyInput.value = 'id';
@@ -118,7 +116,7 @@ describe('FrontmatterEditorDialog - Editable Features', () => {
       beforeEach(async () => {
         // First change: 'identifier' to 'id'
         let keyValueRows = el.shadowRoot?.querySelectorAll('.key-value-row');
-        let firstKeyInput = keyValueRows?.[0]?.querySelector('.key-input') as HTMLInputElement;
+        const firstKeyInput = keyValueRows?.[0]?.querySelector('.key-input') as HTMLInputElement;
         expect(firstKeyInput.value).to.equal('identifier'); // Verify we're changing the right field
         firstKeyInput.value = 'id';
         firstKeyInput.dispatchEvent(new Event('input', { bubbles: true }));

@@ -693,7 +693,7 @@ export class FrontmatterEditorDialog extends LitElement {
       newFieldRow.style.display = 'none';
     }
     
-    this.requestUpdate();
+    this.requestUpdate()
   };
 
   private _handleRemoveField = (fieldPath: string): void => {
@@ -759,6 +759,7 @@ export class FrontmatterEditorDialog extends LitElement {
     `;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   private renderMapField(key: string, value: Record<string, unknown>, path: string, isTopLevel: boolean = false): unknown {
     const fields = Object.entries(value).map(([subKey, subValue]) => {
       const fieldPath = `${path}.${subKey}`;

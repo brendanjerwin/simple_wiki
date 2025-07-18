@@ -3,6 +3,18 @@ import { FrontmatterEditorDialog } from './frontmatter-editor-dialog.js';
 import sinon from 'sinon';
 import './frontmatter-editor-dialog.js';
 
+interface TestFrontmatter {
+  identifier: string;
+  title: string;
+  rename_this_section: {
+    total: string;
+  };
+  inventory: {
+    container: string;
+    items: string[];
+  };
+}
+
 describe('FrontmatterEditorDialog - Array and Section Handling', () => {
   let el: FrontmatterEditorDialog;
 
@@ -54,7 +66,7 @@ describe('FrontmatterEditorDialog - Array and Section Handling', () => {
             'Steel Series Arctis 5 Headphone USB Dongle'
           ]
         }
-      };
+      } as TestFrontmatter;
       el.open = true;
       await el.updateComplete;
     });
@@ -86,7 +98,7 @@ describe('FrontmatterEditorDialog - Array and Section Handling', () => {
       });
 
       it('should add a new empty item to the array', () => {
-        const items = (el.workingFrontmatter as any)?.inventory?.items;
+        const items = (el.workingFrontmatter as TestFrontmatter)?.inventory?.items;
         expect(items).to.have.length(4);
         expect(items[3]).to.equal('');
       });
