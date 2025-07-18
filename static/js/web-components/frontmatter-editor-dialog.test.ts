@@ -217,8 +217,8 @@ describe('FrontmatterEditorDialog', () => {
     beforeEach(async () => {
       el.open = true;
       el.loading = true;
-      el.error = undefined;
-      el.frontmatter = undefined;
+      el.error = undefined as any;
+      el.frontmatter = undefined as any;
       await el.updateComplete;
     });
 
@@ -338,6 +338,255 @@ describe('FrontmatterEditorDialog', () => {
 
     it('should call close method', () => {
       expect(closeSpy).to.have.been.calledOnce;
+    });
+  });
+
+  describe('when rendering graphical frontmatter editor', () => {
+    describe('when frontmatter has simple string fields', () => {
+      beforeEach(async () => {
+        el.open = true;
+        el.loading = false;
+        el.error = undefined;
+        
+        const mockStruct = new Struct({
+          fields: {
+            title: { kind: { case: 'stringValue', value: 'Test Page' } },
+            category: { kind: { case: 'stringValue', value: 'The Category' } },
+            identifier: { kind: { case: 'stringValue', value: 'home' } }
+          }
+        });
+        
+        el.frontmatter = new GetFrontmatterResponse({ frontmatter: mockStruct });
+        await el.updateComplete;
+      });
+
+      it('should render text input fields for string values', () => {
+        const titleInput = el.shadowRoot?.querySelector('input[name="title"]') as HTMLInputElement;
+        const categoryInput = el.shadowRoot?.querySelector('input[name="category"]') as HTMLInputElement;
+        const identifierInput = el.shadowRoot?.querySelector('input[name="identifier"]') as HTMLInputElement;
+        
+        expect(titleInput).to.exist;
+        expect(categoryInput).to.exist;
+        expect(identifierInput).to.exist;
+        
+        expect(titleInput.value).to.equal('Test Page');
+        expect(categoryInput.value).to.equal('The Category');
+        expect(identifierInput.value).to.equal('home');
+      });
+
+      it('should render field labels', () => {
+        const titleLabel = el.shadowRoot?.querySelector('label[for="title"]');
+        const categoryLabel = el.shadowRoot?.querySelector('label[for="category"]');
+        const identifierLabel = el.shadowRoot?.querySelector('label[for="identifier"]');
+        
+        expect(titleLabel).to.exist;
+        expect(categoryLabel).to.exist;
+        expect(identifierLabel).to.exist;
+        
+        expect(titleLabel?.textContent).to.equal('title');
+        expect(categoryLabel?.textContent).to.equal('category');
+        expect(identifierLabel?.textContent).to.equal('identifier');
+      });
+
+      it('should not render the raw JSON display', () => {
+        const frontmatterDisplay = el.shadowRoot?.querySelector('.frontmatter-display');
+        expect(frontmatterDisplay).to.not.exist;
+      });
+    });
+
+    describe('when frontmatter has nested map fields', () => {
+      beforeEach(async () => {
+        el.open = true;
+        el.loading = false;
+        el.error = undefined;
+        
+        const mockStruct = new Struct({
+          fields: {
+            title: { kind: { case: 'stringValue', value: 'Test Page' } },
+            Section: {
+              kind: {
+                case: 'structValue',
+                value: new Struct({
+                  fields: {
+                    item: { kind: { case: 'stringValue', value: 'test value' } },
+                    description: { kind: { case: 'stringValue', value: 'A test description' } }
+                  }
+                })
+              }
+            }
+          }
+        });
+        
+        el.frontmatter = new GetFrontmatterResponse({ frontmatter: mockStruct });
+        await el.updateComplete;
+      });
+
+      it('should render nested sections for map values', () => {
+        const sectionContainer = el.shadowRoot?.querySelector('.field-section[data-key="Section"]');
+        expect(sectionContainer).to.exist;
+        
+        const sectionHeader = sectionContainer?.querySelector('.section-header');
+        expect(sectionHeader).to.exist;
+        expect(sectionHeader?.textContent).to.contain('Section');
+      });
+
+      it('should render input fields for nested map values', () => {
+        const itemInput = el.shadowRoot?.querySelector('input[name="Section.item"]') as HTMLInputElement;
+        const descriptionInput = el.shadowRoot?.querySelector('input[name="Section.description"]') as HTMLInputElement;
+        
+        expect(itemInput).to.exist;
+        expect(descriptionInput).to.exist;
+        
+        expect(itemInput.value).to.equal('test value');
+        expect(descriptionInput.value).to.equal('A test description');
+      });
+
+      it('should render add/remove controls for map sections', () => {
+        const sectionContainer = el.shadowRoot?.querySelector('.field-section[data-key="Section"]');
+        const addButton = sectionContainer?.querySelector('.add-field-button');
+        const removeButton = sectionContainer?.querySelector('.remove-section-button');
+        
+        expect(addButton).to.exist;
+        expect(removeButton).to.exist;
+      });
+    });
+
+    describe('when editing field values', () => {
+      let mockStruct: Struct;
+
+      beforeEach(async () => {
+        el.open = true;
+        el.loading = false;
+        el.error = undefined;
+        
+        mockStruct = new Struct({
+          fields: {
+            title: { kind: { case: 'stringValue', value: 'Test Page' } },
+            category: { kind: { case: 'stringValue', value: 'The Category' } }
+          }
+        });
+        
+        el.frontmatter = new GetFrontmatterResponse({ frontmatter: mockStruct });
+        await el.updateComplete;
+      });
+
+      it('should update internal data model when input values change', () => {
+        const titleInput = el.shadowRoot?.querySelector('input[name="title"]') as HTMLInputElement;
+        
+        titleInput.value = 'Updated Title';
+        titleInput.dispatchEvent(new Event('input', { bubbles: true }));
+        
+        // The internal working copy should be updated
+        expect(el.workingFrontmatter).to.exist;
+        expect(el.workingFrontmatter.title).to.equal('Updated Title');
+      });
+
+      it('should preserve other fields when one field is updated', () => {
+        const titleInput = el.shadowRoot?.querySelector('input[name="title"]') as HTMLInputElement;
+        
+        titleInput.value = 'Updated Title';
+        titleInput.dispatchEvent(new Event('input', { bubbles: true }));
+        
+        expect(el.workingFrontmatter.category).to.equal('The Category');
+      });
+    });
+
+    describe('when adding new fields to a map section', () => {
+      beforeEach(async () => {
+        el.open = true;
+        el.loading = false;
+        el.error = undefined;
+        
+        const mockStruct = new Struct({
+          fields: {
+            Section: {
+              kind: {
+                case: 'structValue',
+                value: new Struct({
+                  fields: {
+                    item: { kind: { case: 'stringValue', value: 'test value' } }
+                  }
+                })
+              }
+            }
+          }
+        });
+        
+        el.frontmatter = new GetFrontmatterResponse({ frontmatter: mockStruct });
+        await el.updateComplete;
+      });
+
+      it('should add a new field when add button is clicked', () => {
+        const sectionContainer = el.shadowRoot?.querySelector('.field-section[data-key="Section"]');
+        const addButton = sectionContainer?.querySelector('.add-field-button') as HTMLButtonElement;
+        
+        addButton.click();
+        
+        // Should show key/value inputs for new field
+        const newKeyInput = sectionContainer?.querySelector('.new-field-key') as HTMLInputElement;
+        const newValueInput = sectionContainer?.querySelector('.new-field-value') as HTMLInputElement;
+        
+        expect(newKeyInput).to.exist;
+        expect(newValueInput).to.exist;
+      });
+
+      it('should add field to data model when save new field button is clicked', () => {
+        const sectionContainer = el.shadowRoot?.querySelector('.field-section[data-key="Section"]');
+        const addButton = sectionContainer?.querySelector('.add-field-button') as HTMLButtonElement;
+        
+        addButton.click();
+        
+        const newKeyInput = sectionContainer?.querySelector('.new-field-key') as HTMLInputElement;
+        const newValueInput = sectionContainer?.querySelector('.new-field-value') as HTMLInputElement;
+        const saveNewButton = sectionContainer?.querySelector('.save-new-field-button') as HTMLButtonElement;
+        
+        newKeyInput.value = 'newKey';
+        newValueInput.value = 'newValue';
+        saveNewButton.click();
+        
+        expect(el.workingFrontmatter.Section.newKey).to.equal('newValue');
+      });
+    });
+
+    describe('when removing fields from a map section', () => {
+      beforeEach(async () => {
+        el.open = true;
+        el.loading = false;
+        el.error = undefined;
+        
+        const mockStruct = new Struct({
+          fields: {
+            Section: {
+              kind: {
+                case: 'structValue',
+                value: new Struct({
+                  fields: {
+                    item: { kind: { case: 'stringValue', value: 'test value' } },
+                    description: { kind: { case: 'stringValue', value: 'A test description' } }
+                  }
+                })
+              }
+            }
+          }
+        });
+        
+        el.frontmatter = new GetFrontmatterResponse({ frontmatter: mockStruct });
+        await el.updateComplete;
+      });
+
+      it('should render remove buttons for individual fields', () => {
+        const removeButtons = el.shadowRoot?.querySelectorAll('.remove-field-button');
+        expect(removeButtons).to.have.length(2); // One for each field in Section
+      });
+
+      it('should remove field from data model when remove button is clicked', () => {
+        const removeButton = el.shadowRoot?.querySelector('.remove-field-button[data-field="Section.item"]') as HTMLButtonElement;
+        
+        removeButton.click();
+        
+        expect(el.workingFrontmatter.Section.item).to.be.undefined;
+        expect(el.workingFrontmatter.Section.description).to.equal('A test description');
+      });
     });
   });
 });
