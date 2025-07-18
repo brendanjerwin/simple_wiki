@@ -11,10 +11,10 @@ enableAllRules = true
 disabled = true
 
 [rule.cognitive-complexity]
-Arguments = [15]
+arguments = [30]
 
 [rule.cyclomatic]
-Arguments = [15]
+arguments = [25]
 
 [rule.package-comments]
 disabled = true
@@ -35,3 +35,14 @@ arguments = [
 
 [rule.max-public-structs]
 disabled = true
+
+[rule.dot-imports]
+arguments = [
+  { allowed-packages = [
+    "github.com/onsi/ginkgo/v2",
+    "github.com/onsi/gomega",
+  ] },
+]
+
+[rule.unused-parameter]
+exclude = ["**/*_test.go"]

@@ -41,7 +41,11 @@ func main() {
 
 		grpcServer := grpc.NewServer()
 
-		logger = makeLogger(c.GlobalBool("debug"))
+		if c.GlobalBool("debug") {
+			logger = makeDebugLogger()
+		} else {
+			logger = makeProductionLogger()
+		}
 		site := server.NewSite(
 			pathToData,
 			c.GlobalString("css"),
@@ -173,9 +177,10 @@ func getFlags() []cli.Flag {
 	}
 }
 
-func makeLogger(debug bool) *lumber.ConsoleLogger {
-	if !debug {
-		return lumber.NewConsoleLogger(lumber.WARN)
-	}
+func makeDebugLogger() *lumber.ConsoleLogger {
 	return lumber.NewConsoleLogger(lumber.TRACE)
+}
+
+func makeProductionLogger() *lumber.ConsoleLogger {
+	return lumber.NewConsoleLogger(lumber.WARN)
 }

@@ -22,7 +22,7 @@ func (m *MockIndexMaintainer) RemovePageFromIndex(identifier wikipage.PageIdenti
 	return nil
 }
 
-func (m *MockIndexMaintainer) Name() string {
+func (*MockIndexMaintainer) Name() string {
 	return "mock"
 }
 

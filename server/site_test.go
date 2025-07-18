@@ -7,7 +7,8 @@ import (
 	"strings"
 
 	"github.com/brendanjerwin/simple_wiki/sec"
-	"github.com/brendanjerwin/simple_wiki/utils"
+	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
+	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
@@ -32,7 +33,7 @@ var _ = Describe("Site", func() {
 			Logger:                  lumber.NewConsoleLogger(lumber.INFO),
 			PathToData:              tempDir,
 			IndexMaintainer:         mockIndex,
-			MarkdownRenderer:        &utils.GoldmarkRenderer{},
+			MarkdownRenderer:        &goldmarkrenderer.GoldmarkRenderer{},
 			FrontmatterIndexQueryer: &mockFrontmatterIndexQueryer{},
 		}
 	})
@@ -147,7 +148,7 @@ var _ = Describe("Site", func() {
 		BeforeEach(func() {
 			pageIdentifier = "test-page"
 			// The PageReadWriter implementation reads from base32 encoded filenames
-			pagePath = filepath.Join(s.PathToData, utils.EncodeToBase32(strings.ToLower(string(pageIdentifier)))+".md")
+			pagePath = filepath.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(string(pageIdentifier)))+".md")
 		})
 
 		Describe("ReadFrontMatter", func() {
@@ -165,7 +166,7 @@ var _ = Describe("Site", func() {
 
 			When("the page exists without frontmatter", func() {
 				var (
-										fm  wikipage.FrontMatter
+					fm  wikipage.FrontMatter
 					err error
 				)
 
@@ -186,7 +187,7 @@ var _ = Describe("Site", func() {
 
 			When("the page exists with frontmatter", func() {
 				var (
-										fm  wikipage.FrontMatter
+					fm  wikipage.FrontMatter
 					err error
 				)
 

@@ -16,19 +16,24 @@ import (
 	"time"
 
 	adrgfrontmatter "github.com/adrg/frontmatter"
-	"github.com/brendanjerwin/simple_wiki/wikipage"
-	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/brendanjerwin/simple_wiki/index"
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/sec"
-	"github.com/brendanjerwin/simple_wiki/utils"
+	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
+	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/gabriel-vasile/mimetype"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/jcelliott/lumber"
 	"github.com/pelletier/go-toml/v2"
 	"github.com/schollz/versionedtext"
 )
+
+// IRenderMarkdownToHTML is an interface that abstracts the rendering process
+type IRenderMarkdownToHTML interface {
+	Render(input []byte) ([]byte, error)
+}
 
 // Site represents the wiki site.
 type Site struct {
@@ -43,12 +48,14 @@ type Site struct {
 	MaxUploadSize           uint
 	MaxDocumentSize         uint // in runes; about a 10mb limit by default
 	Logger                  *lumber.ConsoleLogger
-	MarkdownRenderer        utils.IRenderMarkdownToHtml
+	MarkdownRenderer        IRenderMarkdownToHTML
 	IndexMaintainer         index.IMaintainIndex
 	FrontmatterIndexQueryer frontmatter.IQueryFrontmatterIndex
 	BleveIndexQueryer       bleve.IQueryBleveIndex
 	saveMut                 sync.Mutex
 }
+
+const tomlDelimiter = "+++\n"
 
 func (s *Site) defaultLock() string {
 	if s.DefaultPassword == "" {
@@ -105,13 +112,13 @@ func (s *Site) InitializeIndexing() error {
 func (s *Site) readFileByIdentifier(identifier, extension string) (string, []byte, error) {
 	// First try with the munged identifier
 	mungedIdentifier := wikiidentifiers.MungeIdentifier(identifier)
-	b, err := os.ReadFile(path.Join(s.PathToData, utils.EncodeToBase32(strings.ToLower(mungedIdentifier))+"."+extension))
+	b, err := os.ReadFile(path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(mungedIdentifier))+"."+extension))
 	if err == nil {
 		return mungedIdentifier, b, nil
 	}
 
 	// Then try with the original identifier if that didn't work (older files)
-	b, err = os.ReadFile(path.Join(s.PathToData, utils.EncodeToBase32(strings.ToLower(identifier))+"."+extension))
+	b, err = os.ReadFile(path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(identifier))+"."+extension))
 	if err == nil {
 		return identifier, b, nil
 	}
@@ -233,7 +240,7 @@ func (d DirectoryEntry) Size() int64 {
 }
 
 // Mode returns the file mode of the directory entry.
-func (d DirectoryEntry) Mode() os.FileMode {
+func (DirectoryEntry) Mode() os.FileMode {
 	return os.ModePerm
 }
 
@@ -243,12 +250,12 @@ func (d DirectoryEntry) ModTime() time.Time {
 }
 
 // IsDir returns true if the directory entry is a directory.
-func (d DirectoryEntry) IsDir() bool {
+func (DirectoryEntry) IsDir() bool {
 	return false
 }
 
 // Sys returns the underlying data source of the directory entry.
-func (d DirectoryEntry) Sys() any {
+func (DirectoryEntry) Sys() any {
 	return nil
 }
 
@@ -298,6 +305,24 @@ func (s *Site) UploadList() ([]os.FileInfo, error) {
 
 // --- PageReadWriter implementation ---
 
+func writeFrontmatterToBuffer(content *bytes.Buffer, fmBytes []byte) error {
+	if _, err := content.WriteString(tomlDelimiter); err != nil {
+		return err
+	}
+	if _, err := content.Write(fmBytes); err != nil {
+		return err
+	}
+	if !bytes.HasSuffix(fmBytes, []byte("\n")) {
+		if _, err := content.WriteString("\n"); err != nil {
+			return err
+		}
+	}
+	if _, err := content.WriteString(tomlDelimiter); err != nil {
+		return err
+	}
+	return nil
+}
+
 func combineFrontmatterAndMarkdown(fm wikipage.FrontMatter, md wikipage.Markdown) (string, error) {
 	fmBytes, err := toml.Marshal(fm)
 	if err != nil {
@@ -311,14 +336,13 @@ func combineFrontmatterAndMarkdown(fm wikipage.FrontMatter, md wikipage.Markdown
 
 	var content bytes.Buffer
 	if len(fm) > 0 {
-		content.WriteString("+++\n")
-		content.Write(fmBytes)
-		if !bytes.HasSuffix(fmBytes, []byte("\n")) {
-			content.WriteString("\n")
+		if err := writeFrontmatterToBuffer(&content, fmBytes); err != nil {
+			return "", err
 		}
-		content.WriteString("+++\n")
 	}
-	content.WriteString(string(md))
+	if _, err := content.WriteString(string(md)); err != nil {
+		return "", err
+	}
 	return content.String(), nil
 }
 
@@ -353,10 +377,10 @@ func lenientParse(content []byte, matter any) (body []byte, err error) {
 			// Replace TOML delimiters with YAML and try again
 			newContent := bytes.Replace(content, []byte("+++"), []byte("---"), 2)
 			body, err = adrgfrontmatter.Parse(bytes.NewReader(newContent), matter)
-			return
+			return body, err
 		}
 	}
-	return
+	return body, err
 }
 
 // WriteMarkdown writes the markdown content for a page.

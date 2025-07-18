@@ -1,18 +1,18 @@
 //revive:disable:dot-imports
-package utils_test
+package goldmarkrenderer_test
 
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/brendanjerwin/simple_wiki/utils"
+	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
 )
 
 var _ = Describe("GoldmarkRenderer", func() {
-	var renderer *utils.GoldmarkRenderer
+	var renderer *goldmarkrenderer.GoldmarkRenderer
 
 	BeforeEach(func() {
-		renderer = &utils.GoldmarkRenderer{}
+		renderer = &goldmarkrenderer.GoldmarkRenderer{}
 	})
 
 	It("should exist", func() {
