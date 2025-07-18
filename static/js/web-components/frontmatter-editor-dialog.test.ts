@@ -217,8 +217,8 @@ describe('FrontmatterEditorDialog', () => {
     beforeEach(async () => {
       el.open = true;
       el.loading = true;
-      el.error = undefined as any;
-      el.frontmatter = undefined as any;
+      el.error = undefined;
+      el.frontmatter = undefined;
       await el.updateComplete;
     });
 

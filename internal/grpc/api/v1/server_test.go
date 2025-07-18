@@ -242,6 +242,71 @@ var _ = Describe("Server", func() {
 				Expect(res.Frontmatter).To(Equal(expectedStruct))
 			})
 		})
+
+		When("the page has complex nested frontmatter with arrays", func() {
+			var complexFm map[string]any
+
+			BeforeEach(func() {
+				complexFm = map[string]any{
+					"identifier": "inventory_item",
+					"title":      "Inventory Item",
+					"rename_this_section": map[string]any{
+						"total": "32",
+					},
+					"inventory": map[string]any{
+						"container": "lab_small_parts",
+						"items": []any{
+							"AKG Wired Earbuds",
+							"Steel Series Arctis 5 Headphone 3.5mm Adapter Cable",
+							"Steel Series Arctis 5 Headphone USB Dongle",
+							"Male 3.5mm to Male 3.5mm Coiled Cable",
+							"Random Earbud Tips",
+							"3.5mm to RCA Cable",
+							"Male 3.5mm to Male 3.5mm Cable",
+						},
+					},
+				}
+				mockPageReadWriter.Frontmatter = complexFm
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return the complex frontmatter structure correctly", func() {
+				Expect(res).NotTo(BeNil())
+				expectedStruct, err := structpb.NewStruct(complexFm)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(res.Frontmatter).To(Equal(expectedStruct))
+			})
+
+			It("should correctly handle nested object and array data", func() {
+				Expect(res).NotTo(BeNil())
+				
+				// Verify the structure can be converted back to a map
+				resultMap := res.Frontmatter.AsMap()
+				
+				// Check top-level fields
+				Expect(resultMap["identifier"]).To(Equal("inventory_item"))
+				Expect(resultMap["title"]).To(Equal("Inventory Item"))
+				
+				// Check nested section
+				renameSection, ok := resultMap["rename_this_section"].(map[string]any)
+				Expect(ok).To(BeTrue())
+				Expect(renameSection["total"]).To(Equal("32"))
+				
+				// Check nested inventory section with array
+				inventory, ok := resultMap["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue())
+				Expect(inventory["container"]).To(Equal("lab_small_parts"))
+				
+				items, ok := inventory["items"].([]any)
+				Expect(ok).To(BeTrue())
+				Expect(items).To(HaveLen(7))
+				Expect(items[0]).To(Equal("AKG Wired Earbuds"))
+				Expect(items[6]).To(Equal("Male 3.5mm to Male 3.5mm Cable"))
+			})
+		})
 	})
 
 	Describe("MergeFrontmatter", func() {
