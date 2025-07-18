@@ -9,7 +9,7 @@
   },
   "scripts": {
     "prebuild": "rm -rf dist && mkdir -p dist",
-    "build": "bun build ./web-components/wiki-search.ts --outfile ./dist/web-components.js --target browser",
+    "build": "bun build ./index.ts --outfile ./dist/web-components.js --target browser",
     "test": "web-test-runner",
     "test:wtr": "web-test-runner",
     "lint": "eslint . --ext .ts"
@@ -34,6 +34,9 @@
     "eslint-plugin-lit": "^1.0.0"
   },
   "dependencies": {
-    "lit": "^3.3.1"
+    "lit": "^3.3.1",
+    "@bufbuild/protobuf": "^1.10.0",
+    "@connectrpc/connect": "^1.4.0",
+    "@connectrpc/connect-web": "^1.4.0"
   }
 }

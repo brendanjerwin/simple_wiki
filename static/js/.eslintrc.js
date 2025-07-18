@@ -7,5 +7,9 @@ module.exports = {
     'plugin:lit/recommended',
   ],
   root: true,
-  rules: {},
+  rules: {
+    '@typescript-eslint/no-explicit-any': 'error',
+    '@typescript-eslint/no-unused-vars': 'error',
+  },
+  ignorePatterns: ['gen/**/*'],
 };

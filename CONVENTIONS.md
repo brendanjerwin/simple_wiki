@@ -419,13 +419,98 @@ Tests for both frontend (JavaScript) and Go can be run using `devbox` scripts, e
   - Avoid showing fallback data that looks like real data when services are unavailable
   - Prefer clear error messages over misleading success states
   - Components should remain blank or show clear error states rather than fake data
+  - **Don't return fake placeholder values**: Functions should return empty strings, nil, or appropriate zero values rather than fake data like "unknown" or "placeholder" that could mislead developers
+  - **Be explicit about limitations**: If a function cannot provide the requested data, it should clearly indicate this through its return value and/or documentation
   - This principle helps identify real problems quickly and prevents false confidence in broken systems
+
+  **Bad (TypeScript):**
+
+  ```typescript
+  function formatTimestamp(timestamp?: Timestamp): string {
+    if (!timestamp) return 'Unknown';
+    try {
+      return timestamp.toDate().toLocaleDateString();
+    } catch {
+      return 'Invalid date';  // This hides the real problem
+    }
+  }
+  ```
+
+  **Good (TypeScript):**
+
+  ```typescript
+  function formatTimestamp(timestamp: Timestamp): string {
+    // Let the function throw if timestamp is invalid - don't hide the error
+    const date = timestamp.toDate();
+    return date.toLocaleDateString();
+  }
+  
+  // Usage - handle the null case at the call site
+  const formatted = buildTime ? formatTimestamp(buildTime) : '';
+  ```
+
+- **Avoid Nullable Function Parameters**: Nullable parameters (`param?: Type`) should be rare for function parameters. It's preferable to force an exception at the source of the problem rather than handle null cases inside functions. This makes the code more predictable and helps identify issues earlier.
+
+  **Bad (TypeScript):**
+
+  ```typescript
+  function processUser(user?: User): string {
+    if (!user) return 'No user';
+    return user.name;
+  }
+  ```
+
+  **Good (TypeScript):**
+
+  ```typescript
+  function processUser(user: User): string {
+    return user.name;
+  }
+  
+  // Handle the null case at the call site
+  const result = user ? processUser(user) : 'No user';
+  ```
+
+### Running Linters
+
+The project uses different linters for different parts of the codebase:
+
+- **Go linting**: Use `devbox run go:lint` to run the Go linter (revive)
+- **Frontend linting**: Use `devbox run fe:lint` to run the frontend TypeScript/JavaScript linter (ESLint)
+- **All linting**: Use `devbox run lint:everything` to run all linters, tests, and builds
+
+Each linter enforces specific rules:
+
+- Go linter enforces using `any` instead of `interface{}` and other Go best practices
+- Frontend linter enforces TypeScript strict typing with `@typescript-eslint/no-explicit-any` rule enabled
 
 ### Required Before Each Commit
 
 - Run the tests, builds, and linters. You can use `devbox run lint:everything` for that.
 - Run the application and ensure you can interact with it.
 - Examine any recently written tests to ensure they conform to the testing guidance.
+
+## Architecture Decision Records (ADRs)
+
+ADRs should document significant architectural decisions that have long-term implications for the system design. Use ADRs for:
+
+- **Significant architectural choices**: Technology stack decisions, database choices, communication patterns between services
+- **Design patterns**: Adoption of specific architectural patterns (e.g., event sourcing, CQRS, microservices vs monolith)
+- **Cross-cutting concerns**: Logging, monitoring, security, authentication strategies
+- **Trade-offs with consequences**: Decisions where there are clear alternatives with different pros/cons
+- **Decisions that could be questioned later**: Choices that future developers might wonder "why did we do it this way?"
+
+**Do NOT create ADRs for:**
+
+- Simple component implementations
+- UI styling decisions  
+- Routine feature additions
+- Standard library usage
+- Minor refactoring decisions
+- Implementation details that don't affect overall architecture
+
+**Example of ADR-worthy decision**: "We chose gRPC-Web over REST for frontend-backend communication"  
+**Example of non-ADR decision**: "We implemented a version display component in the bottom-right corner"
 
 ## README
 

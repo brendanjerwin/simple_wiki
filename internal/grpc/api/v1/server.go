@@ -7,8 +7,9 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/brendanjerwin/simple_wiki/wikipage"
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
+	"github.com/jcelliott/lumber"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -22,10 +23,10 @@ const pageReadWriterNotAvailableError = "PageReadWriter not available"
 type Server struct {
 	apiv1.UnimplementedVersionServer
 	apiv1.UnimplementedFrontmatterServer
-	Version        string
 	Commit         string
 	BuildTime      time.Time
 	PageReadWriter wikipage.PageReadWriter
+	Logger         *lumber.ConsoleLogger
 }
 
 // MergeFrontmatter implements the MergeFrontmatter RPC.
@@ -201,13 +202,13 @@ func removeAtPath(data any, path []*apiv1.PathComponent) (any, error) {
 	}
 }
 
-// NewServer creates a new debug server.
-func NewServer(version, commit string, buildTime time.Time, pageReadWriter wikipage.PageReadWriter) *Server {
+// NewServer creates a new debug server
+func NewServer(commit string, buildTime time.Time, pageReadWriter wikipage.PageReadWriter, logger *lumber.ConsoleLogger) *Server {
 	return &Server{
-		Version:        version,
 		Commit:         commit,
 		BuildTime:      buildTime,
 		PageReadWriter: pageReadWriter,
+		Logger:         logger,
 	}
 }
 
@@ -220,7 +221,6 @@ func (s *Server) RegisterWithServer(grpcServer *grpc.Server) {
 // GetVersion implements the GetVersion RPC.
 func (s *Server) GetVersion(_ context.Context, _ *apiv1.GetVersionRequest) (*apiv1.GetVersionResponse, error) {
 	return &apiv1.GetVersionResponse{
-		Version:   s.Version,
 		Commit:    s.Commit,
 		BuildTime: timestamppb.New(s.BuildTime),
 	}, nil
@@ -251,4 +251,33 @@ func (s *Server) GetFrontmatter(_ context.Context, req *apiv1.GetFrontmatterRequ
 	return &apiv1.GetFrontmatterResponse{
 		Frontmatter: structFm,
 	}, nil
+}
+
+// LoggingInterceptor returns a gRPC unary interceptor for logging method calls.
+func (s *Server) LoggingInterceptor() grpc.UnaryServerInterceptor {
+	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+		start := time.Now()
+
+		// Call the method
+		resp, err := handler(ctx, req)
+
+		// Log the request in a format similar to Gin
+		duration := time.Since(start)
+		statusCode := codes.OK
+		if err != nil {
+			if st, ok := status.FromError(err); ok {
+				statusCode = st.Code()
+			}
+		}
+
+		if s.Logger != nil {
+			s.Logger.Warn("[GRPC] %s | %s | %v",
+				statusCode,
+				duration,
+				info.FullMethod,
+			)
+		}
+
+		return resp, err
+	}
 }
