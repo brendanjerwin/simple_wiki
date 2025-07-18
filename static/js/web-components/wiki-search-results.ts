@@ -1,6 +1,6 @@
 import { html, css, LitElement } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
-import { sharedStyles } from './shared-styles.js';
+import { sharedStyles, foundationCSS } from './shared-styles.js';
 
 interface SearchResult {
   Identifier: string;
@@ -9,45 +9,44 @@ interface SearchResult {
 }
 
 class WikiSearchResults extends LitElement {
-  static override styles = css`
-        :host {
-            display: block;
-            position: relative;
-        }
-        .popover {
-            flex-direction: column;
-            display: none;
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            max-height: 95%;
-            width: 400px;
-            max-width: 97%;
-            border-radius: 10px;
-            box-shadow: 0px 5px 15px rgba(0, 0, 0, 0.3);
-            z-index: 9999;
-            background-color: white;
-        }
-        :host([open]) .popover {
-            display: flex;
-        }
-        div#results {
-            max-height: 100%;
-            overflow-y: auto;
-        }
+  static override styles = [
+    foundationCSS,
+    css`
+      :host {
+        display: block;
+        position: relative;
+      }
+      .popover {
+        flex-direction: column;
+        display: none;
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        max-height: 95%;
+        width: 400px;
+        max-width: 97%;
+        z-index: 9999;
+        background-color: white;
+      }
+      :host([open]) .popover {
+        display: flex;
+      }
+      div#results {
+        max-height: 100%;
+        overflow-y: auto;
+      }
 
-        a {
-            display: block;
-            margin: 5px;
-            text-decoration: none;
-            font-weight: bold;
-            border-radius: 5px;
-            transition: background-color 0.3s ease;
-            cursor: pointer;
-            overflow: hidden;
-            white-space: nowrap;
-            text-overflow: ellipsis;
+      a {
+        display: block;
+        margin: 5px;
+        text-decoration: none;
+        font-weight: bold;
+        transition: background-color 0.3s ease;
+        cursor: pointer;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
         }
         .popover:not(:hover) a:focus {
             outline: 2px solid #4d90fe;
@@ -105,7 +104,8 @@ class WikiSearchResults extends LitElement {
                 width: 97%;
             }
         }
-    `;
+    `
+  ];
 
   static override properties = {
     results: { type: Array },
@@ -166,15 +166,15 @@ class WikiSearchResults extends LitElement {
   override render() {
     return html`
             ${sharedStyles}
-            <div class="popover" @click="${this.handlePopoverClick}">
+            <div class="popover border-radius-large box-shadow-light" @click="${this.handlePopoverClick}">
                 <div class="title-bar">
                     <h2><i class="fa-solid fa-search"></i> Search Results</h2>
-                    <button class="close" @click="${this.close}"><i class="fa-solid fa-xmark"></i></button>
+                    <button class="close border-radius-small" @click="${this.close}"><i class="fa-solid fa-xmark"></i></button>
                 </div>
                 <div id="results">
                 ${this.results.map(result => html`
-                    <a href="/${result.Identifier}">${result.Title}</a>
-                    <div class="fragment">${unsafeHTML(result.FragmentHTML) || "N/A"}</div> 
+                    <a href="/${result.Identifier}" class="border-radius-small">${result.Title}</a>
+                    <div class="fragment border-radius-small">${unsafeHTML(result.FragmentHTML) || "N/A"}</div> 
                 `)}
                 </div>
             </div>
