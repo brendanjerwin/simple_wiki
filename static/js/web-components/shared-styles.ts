@@ -5,37 +5,76 @@ export const sharedStyles = html`
   <link href="/static/vendor/css/solid.min.css" rel="stylesheet">
 `;
 
-export const sharedCSS = css`
-  /* Font family */
+/* ==========================================================================
+   Foundation Styles
+   ========================================================================== */
+
+export const foundationCSS = css`
+  /* Typography */
   .system-font {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
       'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
       sans-serif;
   }
 
-  /* Border radius */
-  .border-radius {
-    border-radius: 8px;
-  }
-
+  /* Border radius utilities */
   .border-radius-small {
     border-radius: 4px;
+  }
+
+  .border-radius {
+    border-radius: 8px;
   }
 
   .border-radius-large {
     border-radius: 10px;
   }
 
-  /* Box shadows */
-  .box-shadow {
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
-  }
-
+  /* Shadow utilities */
   .box-shadow-light {
     box-shadow: 0px 5px 15px rgba(0, 0, 0, 0.3);
   }
 
-  /* Modal dialog header */
+  .box-shadow {
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  }
+`;
+
+/* ==========================================================================
+   Button Styles
+   ========================================================================== */
+
+export const buttonCSS = css`
+  .button-base {
+    border: none;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+    font-family: inherit;
+  }
+
+  .button-icon {
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    color: #666;
+    padding: 4px;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+  }
+
+  .button-icon:hover {
+    background-color: #f0f0f0;
+  }
+`;
+
+/* ==========================================================================
+   Dialog Component Styles
+   ========================================================================== */
+
+export const dialogCSS = css`
   .dialog-header {
     display: flex;
     align-items: center;
@@ -50,19 +89,14 @@ export const sharedCSS = css`
     color: #333;
     margin: 0;
   }
+`;
 
-  .dialog-close-button {
-    background: none;
-    border: none;
-    font-size: 20px;
-    cursor: pointer;
-    color: #666;
-    padding: 4px;
-    border-radius: 4px;
-    transition: background-color 0.2s;
-  }
+/* ==========================================================================
+   Combined Shared Styles
+   ========================================================================== */
 
-  .dialog-close-button:hover {
-    background-color: #f0f0f0;
-  }
+export const sharedCSS = css`
+  ${foundationCSS}
+  ${buttonCSS}
+  ${dialogCSS}
 `;

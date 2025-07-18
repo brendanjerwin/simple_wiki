@@ -4,25 +4,25 @@ import { createGrpcWebTransport } from '@connectrpc/connect-web';
 import { Version } from '../gen/api/v1/version_connect.js';
 import { GetVersionRequest, GetVersionResponse } from '../gen/api/v1/version_pb.js';
 import { Timestamp } from '@bufbuild/protobuf';
+import { sharedCSS } from './shared-styles.js';
 
 export class VersionDisplay extends LitElement {
   static readonly DEBOUNCE_DELAY = 300;
 
-  static override styles = css`
-    :host {
-      position: fixed;
-      bottom: 2px;
-      right: 2px;
-      z-index: 1000;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-        'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-        sans-serif;
-      font-size: 11px;
-      line-height: 1.2;
-      transition: opacity 0.3s ease;
-    }
+  static override styles = [
+    sharedCSS,
+    css`
+      :host {
+        position: fixed;
+        bottom: 2px;
+        right: 2px;
+        z-index: 1000;
+        font-size: 11px;
+        line-height: 1.2;
+        transition: opacity 0.3s ease;
+      }
 
-    .version-panel {
+      .version-panel {
       background: #2d2d2d;
       border: 1px solid #404040;
       border-radius: 4px;
@@ -88,7 +88,7 @@ export class VersionDisplay extends LitElement {
     .loading {
       color: #ccc;
     }
-  `;
+  `];
 
   static override properties = {
     version: { state: true },
@@ -177,7 +177,7 @@ export class VersionDisplay extends LitElement {
 
   override render() {
     return html`
-      <div class="version-panel">
+      <div class="version-panel system-font">
         <div class="hover-overlay"></div>
         <div class="version-info">
           ${this.loading ? html`
