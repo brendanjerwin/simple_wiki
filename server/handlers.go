@@ -1,22 +1,29 @@
 package server
 
 import (
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"html/template"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"os"
 	"path"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/sec"
 	"github.com/brendanjerwin/simple_wiki/static"
-	"github.com/brendanjerwin/simple_wiki/utils"
-	secretRequired "github.com/danielheath/gin-teeny-security"
+	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
+	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
+	"github.com/brendanjerwin/simple_wiki/utils/slicetools"
+	ginteenysecurity "github.com/danielheath/gin-teeny-security"
 	"github.com/gin-contrib/multitemplate"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
@@ -25,6 +32,22 @@ import (
 )
 
 const minutesToUnlock = 10.0
+
+const (
+	// HTTP status codes
+	httpStatusFound = 302
+	httpStatusOK    = 200
+
+	// Magic numbers
+	maxSecretAttempts = 8
+	maxCacheControl   = 60
+	maxContentLength  = 3
+
+	// String constants
+	rootPath             = "/"
+	uploadFailureMessage = "Failed to upload: %s"
+	uploadsPage          = "uploads"
+)
 
 var (
 	hotTemplateReloading bool
@@ -50,10 +73,10 @@ func NewSite(
 		var errRead error
 		customCSS, errRead = os.ReadFile(cssFile)
 		if errRead != nil {
-			fmt.Println(errRead)
+			_, _ = fmt.Println(errRead)
 			panic(errRead)
 		}
-		fmt.Printf("Loaded CSS file, %d bytes\n", len(customCSS))
+		_, _ = fmt.Printf("Loaded CSS file, %d bytes\n", len(customCSS))
 	}
 
 	site := &Site{
@@ -85,7 +108,7 @@ func (s *Site) GinRouter() *gin.Engine {
 	}
 
 	if s.MarkdownRenderer == nil {
-		s.MarkdownRenderer = utils.GoldmarkRenderer{}
+		s.MarkdownRenderer = goldmarkrenderer.GoldmarkRenderer{}
 	}
 
 	if hotTemplateReloading {
@@ -107,36 +130,32 @@ func (s *Site) GinRouter() *gin.Engine {
 
 	router.Use(sessions.Sessions("_session", s.SessionStore))
 	if s.SecretCode != "" {
-		cfg := &secretRequired.Config{
+		cfg := &ginteenysecurity.Config{
 			Secret: s.SecretCode,
 			Path:   "/login/",
 			RequireAuth: func(c *gin.Context) bool {
 				page := c.Param("page")
 
 				switch page {
-				case "favicon.ico", "static", "uploads":
+				case "favicon.ico", "static", uploadsPage:
 					return false // no auth for these
+				default:
+					return true
 				}
-
-				return true
 			},
 		}
 		router.Use(cfg.Middleware)
 	}
 
 	router.GET("/", func(c *gin.Context) {
-		if s.DefaultPage != "" {
-			c.Redirect(302, "/"+s.DefaultPage+"/view")
-		} else {
-			c.Redirect(302, "/"+utils.RandomAlliterateCombo())
-		}
+		c.Redirect(httpStatusFound, "/"+s.DefaultPage+"/view")
 	})
 
 	router.POST("/uploads", s.handleUpload)
 
 	router.GET("/:page", func(c *gin.Context) {
 		page := c.Param("page")
-		c.Redirect(302, "/"+page+"/view?"+c.Request.URL.RawQuery)
+		c.Redirect(httpStatusFound, "/"+page+"/view?"+c.Request.URL.RawQuery)
 	})
 	router.GET("/:page/*command", s.handlePageRequest)
 	router.POST("/update", s.handlePageUpdate)
@@ -215,10 +234,23 @@ func getSetSessionID(c *gin.Context) (sid string) {
 		v       = session.Get("sid")
 	)
 	if v != nil {
-		sid = v.(string)
+		if sidStr, ok := v.(string); ok {
+			sid = sidStr
+		}
 	}
 	if v == nil || sid == "" {
-		sid, _ = utils.RandomStringOfLength(8)
+		// Each byte becomes two hex characters, so we need half the number of bytes as the desired string length.
+		// We add 1 and divide by 2 to handle both even and odd lengths correctly.
+		byteLength := (maxSecretAttempts + 1) / 2
+		b := make([]byte, byteLength)
+		if _, err := rand.Read(b); err != nil {
+			panic(fmt.Sprintf("failed to generate random string: %v", err))
+		}
+		sid = hex.EncodeToString(b)
+		// Trim the string to the exact desired length, as we may have generated one extra character for odd lengths.
+		if len(sid) > maxSecretAttempts {
+			sid = sid[:maxSecretAttempts]
+		}
 		session.Set("sid", sid)
 		_ = session.Save()
 	}
@@ -231,49 +263,20 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 
 	switch page {
 	case "favicon.ico":
-		data, _ := static.StaticContent.ReadFile("img/favicon/favicon.ico")
-		c.Data(http.StatusOK, utils.ContentTypeFromName("img/favicon/favicon.ico"), data)
+		s.handleFavicon(c)
 		return
 	case "static":
-		filename := strings.TrimPrefix(command, "/")
-		var data []byte
-		if filename == "css/custom.css" {
-			data = s.CSS
-		} else {
-			var errAssset error
-			data, errAssset = static.StaticContent.ReadFile(filename)
-			if errAssset != nil {
-
-				c.String(http.StatusNotFound, "Could not find data")
-				return
-			}
-		}
-		c.Data(http.StatusOK, utils.ContentTypeFromName(filename), data)
+		s.handleStatic(c, command)
 		return
-	case "uploads":
-		if len(command) == 0 || command == "/" || command == "/edit" {
-			if !s.Fileuploads {
-				_ = c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("uploads are disabled on this server"))
-				return
-			}
-		} else {
-			command = command[1:]
-			if !strings.HasSuffix(command, ".upload") {
-				command = command + ".upload"
-			}
-			pathname := path.Join(s.PathToData, command)
-
-			c.Header(
-				"Content-Disposition",
-				"inline; filename=\""+c.DefaultQuery("filename", "upload")+"\"",
-			)
-			c.File(pathname)
-			return
-		}
+	case uploadsPage:
+		s.handleUploads(c, command)
+		return
+	default:
+		// General page handling continues below
 	}
 
 	if len(command) < 2 {
-		c.Redirect(302, "/"+page+"/view")
+		c.Redirect(httpStatusFound, "/"+page+"/view")
 		return
 	}
 
@@ -291,21 +294,47 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 	// Disallow anything but viewing locked pages
 	if (isLocked) &&
 		(command[0:2] != "/v" && command[0:2] != "/r") {
-		c.Redirect(302, "/"+page+"/view")
+		c.Redirect(httpStatusFound, "/"+page+"/view")
 		return
 	}
 
 	if command == "/erase" {
 		if !isLocked {
 			_ = p.Erase()
-			c.Redirect(302, "/")
+			c.Redirect(httpStatusFound, rootPath)
 		} else {
-			c.Redirect(302, "/"+page+"/view")
+			c.Redirect(httpStatusFound, "/"+page+"/view")
 		}
 		return
 	}
-	rawText := p.Text.GetCurrent()
-	contentHTML := p.RenderedPage
+
+	rawText, contentHTML := s.getPageContent(p, version)
+	contentHTML = fmt.Appendf(nil, "<article class='content' id='%s'>%s</article>", page, string(contentHTML))
+
+	// Get history
+	versionsInt64, versionsChangeSums, versionsText := s.getVersionHistory(command, p)
+
+	if s.handleRawContent(c, command, p, rawText) {
+		return
+	}
+
+	if s.handleFrontmatter(c, command, p) {
+		return
+	}
+
+	directoryEntries, command, err := s.getDirectoryEntries(page, command)
+	if err != nil {
+		_ = c.AbortWithError(http.StatusInternalServerError, err)
+		return
+	}
+
+	templateData := s.buildTemplateData(page, command, directoryEntries, contentHTML, rawText, versionsInt64, versionsText, versionsChangeSums, isLocked, c)
+	c.HTML(http.StatusOK, "index.tmpl", templateData)
+}
+
+func (*Site) getPageContent(p *Page, version string) (rawText string, contentHTML []byte) {
+	rawText = p.Text.GetCurrent()
+	contentHTML = p.RenderedPage
 
 	// Check to see if an old version is requested
 	versionInt, versionErr := strconv.Atoi(version)
@@ -316,56 +345,42 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 			contentHTML, _ = p.Site.MarkdownRenderer.Render([]byte(rawText))
 		}
 	}
+	return rawText, contentHTML
+}
 
-	contentHTML = []byte(fmt.Sprintf("<article class='content' id='%s'>%s</article>", page, string(contentHTML)))
+func (s *Site) getDirectoryEntries(page, command string) ([]os.FileInfo, string, error) {
+	var directoryEntries []os.FileInfo
+	if page == "ls" {
+		command = "/view"
+		directoryEntries = s.DirectoryList()
+	}
+	if page == uploadsPage {
+		command = "/view"
+		var err error
+		directoryEntries, err = s.UploadList()
+		if err != nil {
+			return nil, command, err
+		}
+	}
+	return directoryEntries, command, nil
+}
 
-	// Get history
-	var versionsInt64 []int64
-	var versionsChangeSums []int
-	var versionsText []string
+func (*Site) getVersionHistory(command string, p *Page) (versionsInt64 []int64, versionsChangeSums []int, versionsText []string) {
 	if command[0:2] == "/h" {
-		versionsInt64, versionsChangeSums = p.Text.GetMajorSnapshotsAndChangeSums(60) // get snapshots 60 seconds apart
+		versionsInt64, versionsChangeSums = p.Text.GetMajorSnapshotsAndChangeSums(maxCacheControl) // get snapshots 60 seconds apart
 		versionsText = make([]string, len(versionsInt64))
 		for i, v := range versionsInt64 {
 			versionsText[i] = time.Unix(v/1000000000, 0).Format("Mon Jan 2 15:04:05 MST 2006")
 		}
-		versionsText = utils.ReverseSliceString(versionsText)
-		versionsInt64 = utils.ReverseSliceInt64(versionsInt64)
-		versionsChangeSums = utils.ReverseSliceInt(versionsChangeSums)
+		versionsText = slicetools.ReverseSliceString(versionsText)
+		versionsInt64 = slicetools.ReverseSliceInt64(versionsInt64)
+		versionsChangeSums = slicetools.ReverseSliceInt(versionsChangeSums)
 	}
+	return versionsInt64, versionsChangeSums, versionsText
+}
 
-	if len(command) > 3 && command[0:3] == "/ra" {
-		c.Writer.Header().Set("Content-Type", "text/plain")
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
-		c.Writer.Header().Set("Access-Control-Max-Age", "86400")
-		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE, UPDATE")
-		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, X-Max")
-		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
-		c.Data(200, utils.ContentTypeFromName(p.Identifier), []byte(rawText))
-		return
-	}
-
-	if strings.HasPrefix(command, "/frontmatter") {
-		c.Data(http.StatusOK, gin.MIMEJSON, p.FrontmatterJSON)
-		return
-	}
-
-	var DirectoryEntries []os.FileInfo
-	if page == "ls" {
-		command = "/view"
-		DirectoryEntries = s.DirectoryList()
-	}
-	if page == "uploads" {
-		command = "/view"
-		var err error
-		DirectoryEntries, err = s.UploadList()
-		if err != nil {
-			_ = c.AbortWithError(http.StatusInternalServerError, err)
-			return
-		}
-	}
-
-	c.HTML(http.StatusOK, "index.tmpl", gin.H{
+func (s *Site) buildTemplateData(page, command string, directoryEntries []os.FileInfo, contentHTML []byte, rawText string, versionsInt64 []int64, versionsText []string, versionsChangeSums []int, isLocked bool, c *gin.Context) gin.H {
+	return gin.H{
 		"EditPage":    command[0:2] == "/e", // /edit
 		"ViewPage":    command[0:2] == "/v", // /view
 		"HistoryPage": command[0:2] == "/h", // /history
@@ -375,9 +390,9 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 			command[0:2] != "/l" &&
 			command[0:2] != "/r" &&
 			command[0:2] != "/h",
-		"DirectoryPage":      page == "ls" || page == "uploads",
-		"UploadPage":         page == "uploads",
-		"DirectoryEntries":   DirectoryEntries,
+		"DirectoryPage":      page == "ls" || page == uploadsPage,
+		"UploadPage":         page == uploadsPage,
+		"DirectoryEntries":   directoryEntries,
 		"Page":               page,
 		"RenderedPage":       template.HTML([]byte(contentHTML)),
 		"RawPage":            rawText,
@@ -394,7 +409,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		"UnixTime":           time.Now().Unix(),
 		"AllowFileUploads":   s.Fileuploads,
 		"MaxUploadMB":        s.MaxUploadSize,
-	})
+	}
 }
 
 func getRecentlyEdited(title string, c *gin.Context) []string {
@@ -405,11 +420,13 @@ func getRecentlyEdited(title string, c *gin.Context) []string {
 	if v == nil {
 		recentlyEdited = title
 	} else {
-		editedThings = strings.Split(v.(string), "|||")
-		if !utils.StringInSlice(title, editedThings) {
-			recentlyEdited = v.(string) + "|||" + title
-		} else {
-			recentlyEdited = v.(string)
+		if recentlyEditedStr, ok := v.(string); ok {
+			editedThings = strings.Split(recentlyEditedStr, "|||")
+			if !slices.Contains(editedThings, title) {
+				recentlyEdited = recentlyEditedStr + "|||" + title
+			} else {
+				recentlyEdited = recentlyEditedStr
+			}
 		}
 	}
 	session.Set("recentlyEdited", recentlyEdited)
@@ -525,7 +542,6 @@ func (s *Site) handleLock(c *gin.Context) {
 		p.UnlockedFor != sessionID &&
 		p.UnlockedFor != "" &&
 		sinceLastEdit.Minutes() < minutesToUnlock {
-
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": fmt.Sprintf("This page is being edited by someone else! Will unlock automatically %2.0f minutes after the last change.", minutesToUnlock-sinceLastEdit.Minutes()),
@@ -552,14 +568,14 @@ func (s *Site) handleLock(c *gin.Context) {
 
 func (s *Site) handleUpload(c *gin.Context) {
 	if !s.Fileuploads {
-		_ = c.AbortWithError(http.StatusInternalServerError, fmt.Errorf("uploads are disabled on this server"))
+		_ = c.AbortWithError(http.StatusInternalServerError, errors.New("uploads are disabled on this server"))
 		return
 	}
 
 	file, info, err := c.Request.FormFile("file")
 	if err != nil {
 		_ = c.AbortWithError(http.StatusInternalServerError, err)
-		s.Logger.Error("Failed to upload: %s", err.Error())
+		s.Logger.Error(uploadFailureMessage, err.Error())
 		return
 	}
 	defer func() { _ = file.Close() }()
@@ -567,17 +583,17 @@ func (s *Site) handleUpload(c *gin.Context) {
 	h := sha256.New()
 	if _, err := io.Copy(h, file); err != nil {
 		_ = c.AbortWithError(http.StatusInternalServerError, err)
-		s.Logger.Error("Failed to upload: %s", err.Error())
+		s.Logger.Error(uploadFailureMessage, err.Error())
 		return
 	}
 
-	newName := "sha256-" + utils.EncodeBytesToBase32(h.Sum(nil))
+	newName := "sha256-" + base32tools.EncodeBytesToBase32(h.Sum(nil))
 
 	// Replaces any existing version, but sha256 collisions are rare as anything.
 	outfile, err := os.Create(path.Join(s.PathToData, newName+".upload"))
 	if err != nil {
 		_ = c.AbortWithError(http.StatusInternalServerError, err)
-		s.Logger.Error("Failed to upload: %s", err.Error())
+		s.Logger.Error(uploadFailureMessage, err.Error())
 		return
 	}
 
@@ -585,9 +601,83 @@ func (s *Site) handleUpload(c *gin.Context) {
 	_, err = io.Copy(outfile, file)
 	if err != nil {
 		_ = c.AbortWithError(http.StatusInternalServerError, err)
-		s.Logger.Error("Failed to upload: %s", err.Error())
+		s.Logger.Error(uploadFailureMessage, err.Error())
 		return
 	}
 
 	c.Header("Location", "/uploads/"+newName+"?filename="+url.QueryEscape(info.Filename))
+}
+
+func (*Site) handleFavicon(c *gin.Context) {
+	data, _ := static.StaticContent.ReadFile("img/favicon/favicon.ico")
+	c.Data(http.StatusOK, contentTypeFromName("img/favicon/favicon.ico"), data)
+}
+
+func (s *Site) handleStatic(c *gin.Context, command string) {
+	filename := strings.TrimPrefix(command, "/")
+	var data []byte
+	if filename == "css/custom.css" {
+		data = s.CSS
+	} else {
+		var errAssset error
+		data, errAssset = static.StaticContent.ReadFile(filename)
+		if errAssset != nil {
+			c.String(http.StatusNotFound, "Could not find data")
+			return
+		}
+	}
+	c.Data(http.StatusOK, contentTypeFromName(filename), data)
+}
+
+func (s *Site) handleUploads(c *gin.Context, command string) {
+	if len(command) != 0 && command != rootPath && command != "/edit" {
+		command = command[1:]
+		if !strings.HasSuffix(command, ".upload") {
+			command = command + ".upload"
+		}
+		pathname := path.Join(s.PathToData, command)
+
+		c.Header(
+			"Content-Disposition",
+			"inline; filename=\""+c.DefaultQuery("filename", "upload")+"\"",
+		)
+		c.File(pathname)
+		return
+	}
+	if !s.Fileuploads {
+		_ = c.AbortWithError(http.StatusInternalServerError, errors.New("uploads are disabled on this server"))
+		return
+	}
+}
+
+func (*Site) handleRawContent(c *gin.Context, command string, p *Page, rawText string) bool {
+	if len(command) > maxContentLength && command[0:maxContentLength] == "/ra" {
+		c.Writer.Header().Set("Content-Type", "text/plain")
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		c.Writer.Header().Set("Access-Control-Max-Age", "86400")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE, UPDATE")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, X-Max")
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		c.Data(httpStatusOK, contentTypeFromName(p.Identifier), []byte(rawText))
+		return true
+	}
+	return false
+}
+
+func (*Site) handleFrontmatter(c *gin.Context, command string, p *Page) bool {
+	if strings.HasPrefix(command, "/frontmatter") {
+		c.Data(http.StatusOK, gin.MIMEJSON, p.FrontmatterJSON)
+		return true
+	}
+	return false
+}
+
+func contentTypeFromName(filename string) string {
+	_ = mime.AddExtensionType(".md", "text/markdown")
+	_ = mime.AddExtensionType(".heic", "image/heic")
+	_ = mime.AddExtensionType(".heif", "image/heif")
+
+	nameParts := strings.Split(filename, ".")
+	mimeType := mime.TypeByExtension("." + nameParts[len(nameParts)-1])
+	return mimeType
 }

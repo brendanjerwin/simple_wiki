@@ -17,6 +17,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+const pageReadWriterNotAvailableError = "PageReadWriter not available"
+
 // Server is the implementation of the gRPC services.
 type Server struct {
 	apiv1.UnimplementedVersionServer
@@ -31,7 +33,7 @@ type Server struct {
 func (s *Server) MergeFrontmatter(_ context.Context, req *apiv1.MergeFrontmatterRequest) (resp *apiv1.MergeFrontmatterResponse, err error) {
 	v := reflect.ValueOf(s.PageReadWriter)
 	if s.PageReadWriter == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
-		return nil, status.Error(codes.Internal, "PageReadWriter not available")
+		return nil, status.Error(codes.Internal, pageReadWriterNotAvailableError)
 	}
 
 	_, existingFm, err := s.PageReadWriter.ReadFrontMatter(req.Page)
@@ -67,7 +69,7 @@ func (s *Server) MergeFrontmatter(_ context.Context, req *apiv1.MergeFrontmatter
 func (s *Server) ReplaceFrontmatter(_ context.Context, req *apiv1.ReplaceFrontmatterRequest) (resp *apiv1.ReplaceFrontmatterResponse, err error) {
 	v := reflect.ValueOf(s.PageReadWriter)
 	if s.PageReadWriter == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
-		return nil, status.Error(codes.Internal, "PageReadWriter not available")
+		return nil, status.Error(codes.Internal, pageReadWriterNotAvailableError)
 	}
 
 	var fm map[string]any
@@ -89,7 +91,7 @@ func (s *Server) ReplaceFrontmatter(_ context.Context, req *apiv1.ReplaceFrontma
 func (s *Server) RemoveKeyAtPath(_ context.Context, req *apiv1.RemoveKeyAtPathRequest) (*apiv1.RemoveKeyAtPathResponse, error) {
 	v := reflect.ValueOf(s.PageReadWriter)
 	if s.PageReadWriter == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
-		return nil, status.Error(codes.Internal, "PageReadWriter not available")
+		return nil, status.Error(codes.Internal, pageReadWriterNotAvailableError)
 	}
 
 	if len(req.GetKeyPath()) == 0 {
@@ -228,7 +230,7 @@ func (s *Server) GetVersion(_ context.Context, _ *apiv1.GetVersionRequest) (*api
 func (s *Server) GetFrontmatter(_ context.Context, req *apiv1.GetFrontmatterRequest) (resp *apiv1.GetFrontmatterResponse, err error) {
 	v := reflect.ValueOf(s.PageReadWriter)
 	if s.PageReadWriter == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
-		return nil, status.Error(codes.Internal, "PageReadWriter not available")
+		return nil, status.Error(codes.Internal, pageReadWriterNotAvailableError)
 	}
 
 	var fm map[string]any
