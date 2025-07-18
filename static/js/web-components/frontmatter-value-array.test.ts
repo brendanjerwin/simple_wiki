@@ -278,7 +278,7 @@ describe('FrontmatterValueArray', () => {
     describe('when last item is removed', () => {
       let arrayChangeEvent: CustomEvent | null;
 
-      beforeEach(() => {
+      beforeEach(async () => {
         arrayChangeEvent = null;
         el.addEventListener('array-change', (event) => {
           arrayChangeEvent = event as CustomEvent;
@@ -286,6 +286,7 @@ describe('FrontmatterValueArray', () => {
 
         const removeButton = el.shadowRoot?.querySelector('.remove-item-button') as HTMLButtonElement;
         removeButton.click();
+        await el.updateComplete;
       });
 
       it('should result in empty array', () => {
