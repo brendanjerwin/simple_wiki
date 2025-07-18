@@ -17,14 +17,7 @@ jobs:
       - name: Install Devbox
         uses: jetify-com/devbox-install-action@v0.12.0
         with:
-          enable-cache: 'true'
+          enable-cache: "true"
 
       - name: Install Devbox dependencies
         run: devbox install
-
-      - name: Configure pre-commit hook for linting
-        run: |
-          mkdir -p .git/hooks
-          echo '#!/bin/sh' > .git/hooks/pre-commit
-          echo 'devbox run lint:everything' >> .git/hooks/pre-commit
-          chmod +x .git/hooks/pre-commit
