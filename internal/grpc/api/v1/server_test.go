@@ -664,32 +664,86 @@ var _ = Describe("Server", func() {
 				Expect(resp.Frontmatter).To(Equal(complexFmPb))
 			})
 
-			It("should correctly handle nested objects and arrays in replacement", func() {
-				Expect(resp).NotTo(BeNil())
-				
-				// Verify the structure can be converted back to a map
-				resultMap := resp.Frontmatter.AsMap()
-				
-				// Check top-level fields
-				Expect(resultMap["identifier"]).To(Equal("inventory_item"))
-				Expect(resultMap["title"]).To(Equal("Complex Inventory Item"))
-				
-				// Check nested section
-				renameSection, ok := resultMap["rename_this_section"].(map[string]any)
-				Expect(ok).To(BeTrue())
-				Expect(renameSection["total"]).To(Equal("32"))
-				
-				// Check inventory section with arrays
-				inventory, ok := resultMap["inventory"].(map[string]any)
-				Expect(ok).To(BeTrue())
-				Expect(inventory["container"]).To(Equal("lab_small_parts"))
-				
-				// Check array handling
-				items, ok := inventory["items"].([]any)
-				Expect(ok).To(BeTrue())
-				Expect(items).To(HaveLen(7))
-				Expect(items[0]).To(Equal("AKG Wired Earbuds"))
-				Expect(items[6]).To(Equal("Male 3.5mm to Male 3.5mm Cable"))
+			Describe("when verifying complex frontmatter structure handling", func() {
+				var resultMap map[string]any
+
+				BeforeEach(func() {
+					// Verify the structure can be converted back to a map
+					resultMap = resp.Frontmatter.AsMap()
+				})
+
+				It("should provide a valid response", func() {
+					Expect(resp).NotTo(BeNil())
+				})
+
+				Describe("when checking top-level fields", func() {
+					It("should preserve the identifier field", func() {
+						Expect(resultMap["identifier"]).To(Equal("inventory_item"))
+					})
+
+					It("should preserve the title field", func() {
+						Expect(resultMap["title"]).To(Equal("Complex Inventory Item"))
+					})
+				})
+
+				Describe("when checking nested section handling", func() {
+					var renameSection map[string]any
+					var sectionExists bool
+
+					BeforeEach(func() {
+						renameSection, sectionExists = resultMap["rename_this_section"].(map[string]any)
+					})
+
+					It("should preserve the nested section", func() {
+						Expect(sectionExists).To(BeTrue())
+					})
+
+					It("should preserve nested section fields", func() {
+						Expect(renameSection["total"]).To(Equal("32"))
+					})
+				})
+
+				Describe("when checking inventory section with arrays", func() {
+					var inventory map[string]any
+					var inventoryExists bool
+
+					BeforeEach(func() {
+						inventory, inventoryExists = resultMap["inventory"].(map[string]any)
+					})
+
+					It("should preserve the inventory section", func() {
+						Expect(inventoryExists).To(BeTrue())
+					})
+
+					It("should preserve inventory container field", func() {
+						Expect(inventory["container"]).To(Equal("lab_small_parts"))
+					})
+
+					Describe("when checking array handling", func() {
+						var items []any
+						var itemsExists bool
+
+						BeforeEach(func() {
+							items, itemsExists = inventory["items"].([]any)
+						})
+
+						It("should preserve the items array", func() {
+							Expect(itemsExists).To(BeTrue())
+						})
+
+						It("should preserve array length", func() {
+							Expect(items).To(HaveLen(7))
+						})
+
+						It("should preserve first array item", func() {
+							Expect(items[0]).To(Equal("AKG Wired Earbuds"))
+						})
+
+						It("should preserve last array item", func() {
+							Expect(items[6]).To(Equal("Male 3.5mm to Male 3.5mm Cable"))
+						})
+					})
+				})
 			})
 		})
 	})
