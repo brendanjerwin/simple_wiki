@@ -3,218 +3,183 @@ import { createClient } from '@connectrpc/connect';
 import { createGrpcWebTransport } from '@connectrpc/connect-web';
 import { Frontmatter } from '../gen/api/v1/frontmatter_connect.js';
 import { GetFrontmatterRequest, GetFrontmatterResponse } from '../gen/api/v1/frontmatter_pb.js';
-import { sharedStyles } from './shared-styles.js';
+import { sharedStyles, sharedCSS } from './shared-styles.js';
 
 export class FrontmatterEditorDialog extends LitElement {
-  static override styles = css`
-    :host {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      z-index: 9999;
-      display: none;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-        'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-        sans-serif;
-    }
-
-    :host([open]) {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      animation: fadeIn 0.2s ease-out;
-    }
-
-    @keyframes fadeIn {
-      from {
-        opacity: 0;
+  static override styles = [
+    sharedCSS,
+    css`
+      :host {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 9999;
+        display: none;
       }
-      to {
-        opacity: 1;
+
+      :host([open]) {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        animation: fadeIn 0.2s ease-out;
       }
-    }
 
-    .backdrop {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.5);
-      cursor: pointer;
-    }
-
-    .dialog {
-      background: white;
-      border-radius: 8px;
-      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
-      max-width: 600px;
-      width: 90%;
-      max-height: 80vh;
-      display: flex;
-      flex-direction: column;
-      position: relative;
-      z-index: 1;
-      animation: slideIn 0.2s ease-out;
-    }
-
-    @keyframes slideIn {
-      from {
-        transform: translateY(-20px);
-        opacity: 0;
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
       }
-      to {
-        transform: translateY(0);
-        opacity: 1;
+
+      .backdrop {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
       }
-    }
 
-    .header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 16px 20px;
-      border-bottom: 1px solid #e0e0e0;
-    }
-
-    .title {
-      font-size: 18px;
-      font-weight: 600;
-      color: #333;
-      margin: 0;
-    }
-
-    .close-button {
-      background: none;
-      border: none;
-      font-size: 20px;
-      cursor: pointer;
-      color: #666;
-      padding: 4px;
-      border-radius: 4px;
-      transition: background-color 0.2s;
-    }
-
-    .close-button:hover {
-      background-color: #f0f0f0;
-    }
-
-    .content {
-      flex: 1;
-      padding: 20px;
-      overflow-y: auto;
-    }
-
-    .frontmatter-display {
-      width: 100%;
-      min-height: 200px;
-      padding: 12px;
-      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-      font-size: 14px;
-      line-height: 1.4;
-      background: #f8f9fa;
-      border: 1px solid #e9ecef;
-      border-radius: 4px;
-      resize: vertical;
-      box-sizing: border-box;
-      white-space: pre-wrap;
-      word-wrap: break-word;
-    }
-
-    .loading,
-    .error {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 200px;
-      font-size: 16px;
-    }
-
-    .loading {
-      color: #666;
-    }
-
-    .error {
-      color: #dc3545;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .footer {
-      display: flex;
-      gap: 12px;
-      padding: 16px 20px;
-      border-top: 1px solid #e0e0e0;
-      justify-content: flex-end;
-    }
-
-    .button {
-      padding: 8px 16px;
-      border-radius: 4px;
-      border: 1px solid;
-      cursor: pointer;
-      font-size: 14px;
-      font-weight: 500;
-      transition: all 0.2s;
-    }
-
-    .button:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    }
-
-    .button-cancel {
-      background: white;
-      color: #666;
-      border-color: #ddd;
-    }
-
-    .button-cancel:hover {
-      background: #f8f9fa;
-      border-color: #999;
-    }
-
-    .button-save {
-      background: #007bff;
-      color: white;
-      border-color: #007bff;
-    }
-
-    .button-save:hover {
-      background: #0056b3;
-      border-color: #0056b3;
-    }
-
-    /* Mobile responsive styles */
-    @media (max-width: 768px) {
       .dialog {
-        width: 100%;
-        height: 100%;
-        max-width: none;
-        max-height: none;
-        border-radius: 0;
-        margin: 0;
+        background: white;
+        max-width: 600px;
+        width: 90%;
+        max-height: 80vh;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+        z-index: 1;
+        animation: slideIn 0.2s ease-out;
       }
 
-      .header {
-        padding: 12px 16px;
-      }
-
-      .title {
-        font-size: 16px;
+      @keyframes slideIn {
+        from {
+          transform: translateY(-20px);
+          opacity: 0;
+        }
+        to {
+          transform: translateY(0);
+          opacity: 1;
+        }
       }
 
       .content {
-        padding: 16px;
+        flex: 1;
+        padding: 20px;
+        overflow-y: auto;
+      }
+
+      .frontmatter-display {
+        width: 100%;
+        min-height: 200px;
+        padding: 12px;
+        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+        font-size: 14px;
+        line-height: 1.4;
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        resize: vertical;
+        box-sizing: border-box;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+      }
+
+      .loading,
+      .error {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 200px;
+        font-size: 16px;
+      }
+
+      .loading {
+        color: #666;
+      }
+
+      .error {
+        color: #dc3545;
+        flex-direction: column;
+        gap: 8px;
       }
 
       .footer {
-        padding: 12px 16px;
+        display: flex;
+        gap: 12px;
+        padding: 16px 20px;
+        border-top: 1px solid #e0e0e0;
+        justify-content: flex-end;
       }
-    }
-  `;
+
+      .button {
+        padding: 8px 16px;
+        border: 1px solid;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        transition: all 0.2s;
+      }
+
+      .button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+
+      .button-cancel {
+        background: white;
+        color: #666;
+        border-color: #ddd;
+      }
+
+      .button-cancel:hover {
+        background: #f8f9fa;
+        border-color: #999;
+      }
+
+      .button-save {
+        background: #007bff;
+        color: white;
+        border-color: #007bff;
+      }
+
+      .button-save:hover {
+        background: #0056b3;
+        border-color: #0056b3;
+      }
+
+      /* Mobile responsive styles */
+      @media (max-width: 768px) {
+        .dialog {
+          width: 100%;
+          height: 100%;
+          max-width: none;
+          max-height: none;
+          border-radius: 0;
+          margin: 0;
+        }
+
+        .header {
+          padding: 12px 16px;
+        }
+
+        .title {
+          font-size: 16px;
+        }
+
+        .content {
+          padding: 16px;
+        }
+
+        .footer {
+          padding: 12px 16px;
+        }
+      }
+    `
+  ];
 
   static override properties = {
     page: { type: String },
@@ -254,7 +219,7 @@ export class FrontmatterEditorDialog extends LitElement {
 
   public _handleKeydown = (event: KeyboardEvent): void => {
     if (event.key === 'Escape' && this.open) {
-      this.close();
+      this._handleCancel();
     }
   };
 
@@ -291,23 +256,13 @@ export class FrontmatterEditorDialog extends LitElement {
     }
   }
 
-  private _handleBackdropClick = (event: MouseEvent): void => {
-    if (event.target === event.currentTarget) {
-      this.close();
-    }
-  };
-
-  private _handleCloseClick = (): void => {
+  private _handleCancel = (): void => {
     this.close();
   };
 
   private _handleSaveClick = (): void => {
     // For now, just close the dialog
     // In future iterations, this would save the frontmatter
-    this.close();
-  };
-
-  private _handleCancelClick = (): void => {
     this.close();
   };
 
@@ -328,11 +283,11 @@ export class FrontmatterEditorDialog extends LitElement {
   override render() {
     return html`
       ${sharedStyles}
-      <div class="backdrop" @click="${this._handleBackdropClick}"></div>
-      <div class="dialog">
-        <div class="header">
-          <h2 class="title">Edit Frontmatter</h2>
-          <button class="close-button" @click="${this._handleCloseClick}">
+      <div class="backdrop"></div>
+      <div class="dialog system-font border-radius box-shadow">
+        <div class="dialog-header">
+          <h2 class="dialog-title">Edit Frontmatter</h2>
+          <button class="dialog-close-button" @click="${this._handleCancel}">
             <i class="fas fa-times"></i>
           </button>
         </div>
@@ -348,14 +303,14 @@ export class FrontmatterEditorDialog extends LitElement {
               ${this.error}
             </div>
           ` : html`
-            <div class="frontmatter-display">${this.formatFrontmatter(this.frontmatter)}</div>
+            <div class="frontmatter-display border-radius-small">${this.formatFrontmatter(this.frontmatter)}</div>
           `}
         </div>
         <div class="footer">
-          <button class="button button-cancel" @click="${this._handleCancelClick}">
+          <button class="button button-cancel border-radius-small" @click="${this._handleCancel}">
             Cancel
           </button>
-          <button class="button button-save" @click="${this._handleSaveClick}">
+          <button class="button button-save border-radius-small" @click="${this._handleSaveClick}">
             Save
           </button>
         </div>

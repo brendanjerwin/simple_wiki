@@ -186,7 +186,7 @@ describe('FrontmatterEditorDialog', () => {
     it('should render dialog structure', () => {
       const backdrop = el.shadowRoot?.querySelector('.backdrop');
       const dialog = el.shadowRoot?.querySelector('.dialog');
-      const header = el.shadowRoot?.querySelector('.header');
+      const header = el.shadowRoot?.querySelector('.dialog-header');
       const content = el.shadowRoot?.querySelector('.content');
       const footer = el.shadowRoot?.querySelector('.footer');
 
@@ -198,13 +198,13 @@ describe('FrontmatterEditorDialog', () => {
     });
 
     it('should render title', () => {
-      const title = el.shadowRoot?.querySelector('.title');
+      const title = el.shadowRoot?.querySelector('.dialog-title');
       expect(title).to.exist;
       expect(title?.textContent).to.equal('Edit Frontmatter');
     });
 
     it('should render close button', () => {
-      const closeButton = el.shadowRoot?.querySelector('.close-button');
+      const closeButton = el.shadowRoot?.querySelector('.dialog-close-button');
       expect(closeButton).to.exist;
     });
 
@@ -320,7 +320,7 @@ describe('FrontmatterEditorDialog', () => {
       await el.updateComplete;
       closeSpy = sinon.spy(el, 'close');
       
-      const closeButton = el.shadowRoot?.querySelector('.close-button') as HTMLButtonElement;
+      const closeButton = el.shadowRoot?.querySelector('.dialog-close-button') as HTMLButtonElement;
       closeButton.click();
     });
 
@@ -360,37 +360,6 @@ describe('FrontmatterEditorDialog', () => {
 
     it('should call close method', () => {
       expect(closeSpy).to.have.been.calledOnce;
-    });
-  });
-
-  describe('when clicking backdrop', () => {
-    let closeSpy: sinon.SinonSpy;
-
-    beforeEach(async () => {
-      el.open = true;
-      await el.updateComplete;
-      closeSpy = sinon.spy(el, 'close');
-    });
-
-    it('should close dialog when clicking backdrop', () => {
-      const backdrop = el.shadowRoot?.querySelector('.backdrop') as HTMLElement;
-      const event = new MouseEvent('click', { bubbles: true });
-      Object.defineProperty(event, 'target', { value: backdrop });
-      Object.defineProperty(event, 'currentTarget', { value: backdrop });
-      backdrop.dispatchEvent(event);
-      
-      expect(closeSpy).to.have.been.calledOnce;
-    });
-
-    it('should not close dialog when clicking dialog content', () => {
-      const backdrop = el.shadowRoot?.querySelector('.backdrop') as HTMLElement;
-      const dialog = el.shadowRoot?.querySelector('.dialog') as HTMLElement;
-      const event = new MouseEvent('click', { bubbles: true });
-      Object.defineProperty(event, 'target', { value: dialog });
-      Object.defineProperty(event, 'currentTarget', { value: backdrop });
-      backdrop.dispatchEvent(event);
-      
-      expect(closeSpy).to.not.have.been.called;
     });
   });
 });
