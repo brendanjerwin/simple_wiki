@@ -137,6 +137,11 @@ $(window).load(function () {
         }
     });
 
+    $("#editFrontmatter").click(function (e) {
+        e.preventDefault();
+        alert("Frontmatter Editor will open here!");
+    });
+
     $("textarea").keydown(function (e) {
         if (e.keyCode === 9) { // tab was pressed
             // get caret position/selection
