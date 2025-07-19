@@ -8,23 +8,23 @@ export class FrontmatterAddFieldButton extends LitElement {
       }
 
       .dropdown-button {
-        padding: 8px 16px;
-        font-size: 14px;
-        border: 1px solid #28a745;
-        border-radius: 4px;
+        padding: 4px 8px;
+        font-size: 12px;
+        border: 1px solid #6c757d;
+        border-radius: 2px;
         cursor: pointer;
-        background: #28a745;
+        background: #6c757d;
         color: white;
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 6px;
         font-weight: 500;
         transition: all 0.2s ease;
       }
 
       .dropdown-button:hover {
-        background: #218838;
-        border-color: #218838;
+        background: #5a6268;
+        border-color: #5a6268;
         transform: translateY(-1px);
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
       }

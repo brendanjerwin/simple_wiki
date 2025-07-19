@@ -34,6 +34,7 @@ export class FrontmatterValueSection extends LitElement {
     .section-header.root-header {
       border-bottom: none;
       padding-bottom: 0;
+      justify-content: flex-end;
     }
 
     .section-title {
@@ -73,17 +74,17 @@ export class FrontmatterValueSection extends LitElement {
       right: 8px;
       padding: 4px 8px;
       font-size: 12px;
-      border: 1px solid #dc3545;
+      border: 1px solid #6c757d;
       border-radius: 2px;
       cursor: pointer;
       transition: all 0.2s;
-      background: #dc3545;
+      background: #6c757d;
       color: white;
     }
 
     .remove-field-button:hover:not(:disabled) {
-      background: #c82333;
-      border-color: #c82333;
+      background: #5a6268;
+      border-color: #5a6268;
     }
 
     .remove-field-button:disabled {
@@ -251,6 +252,30 @@ export class FrontmatterValueSection extends LitElement {
     }));
   }
 
+  private _getValueType(value: unknown): string {
+    if (Array.isArray(value)) return 'array';
+    if (typeof value === 'object' && value !== null) return 'object';
+    return 'string';
+  }
+
+  private _sortFieldEntries(entries: [string, unknown][]): [string, unknown][] {
+    return entries.sort(([keyA, valueA], [keyB, valueB]) => {
+      const typeA = this._getValueType(valueA);
+      const typeB = this._getValueType(valueB);
+      
+      // First sort by type priority: string < array < object
+      const typePriority = { string: 0, array: 1, object: 2 };
+      const priorityDiff = typePriority[typeA as keyof typeof typePriority] - typePriority[typeB as keyof typeof typePriority];
+      
+      if (priorityDiff !== 0) {
+        return priorityDiff;
+      }
+      
+      // Then sort alphabetically by key
+      return keyA.localeCompare(keyB);
+    });
+  }
+
   private renderSectionFields() {
     const fieldEntries = Object.entries(this.fields);
     
@@ -260,9 +285,11 @@ export class FrontmatterValueSection extends LitElement {
       `;
     }
 
+    const sortedEntries = this._sortFieldEntries(fieldEntries);
+
     return html`
       <div class="section-fields">
-        ${fieldEntries.map(([key, value]) => html`
+        ${sortedEntries.map(([key, value]) => html`
           <div class="field-row">
             <frontmatter-key
               .key="${key}"

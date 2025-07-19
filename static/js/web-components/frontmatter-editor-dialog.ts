@@ -145,14 +145,14 @@ export class FrontmatterEditorDialog extends LitElement {
       }
 
       .button-save {
-        background: #007bff;
+        background: #6c757d;
         color: white;
-        border-color: #007bff;
+        border-color: #6c757d;
       }
 
       .button-save:hover {
-        background: #0056b3;
-        border-color: #0056b3;
+        background: #5a6268;
+        border-color: #5a6268;
       }
     `
   ];

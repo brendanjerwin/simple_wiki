@@ -284,6 +284,56 @@ describe('FrontmatterValueSection', () => {
     });
   });
 
+  describe('when fields of different types are rendered', () => {
+    beforeEach(async () => {
+      // Create a complex object with mixed types in non-alphabetical order
+      el = await createFixtureWithTimeout(html`<frontmatter-value-section .fields="${{
+        zebra_section: { nested: 'value' },
+        apple_field: 'string value',
+        orange_array: ['item1', 'item2'],
+        banana_field: 'another string',
+        charlie_section: { another: 'nested' },
+        delta_array: ['item3']
+      }}"></frontmatter-value-section>`);
+    });
+
+    it('should render fields sorted by type then alphabetically', () => {
+      const fieldRows = el.shadowRoot?.querySelectorAll('.field-row') as NodeListOf<Element>;
+      const keys: string[] = [];
+      
+      fieldRows.forEach(row => {
+        const keyComponent = row.querySelector('frontmatter-key') as HTMLElement & { key: string };
+        keys.push(keyComponent.key);
+      });
+
+      // Expected order: strings first (alphabetical), then arrays (alphabetical), then objects (alphabetical)
+      expect(keys).to.deep.equal([
+        'apple_field',     // string
+        'banana_field',    // string
+        'delta_array',     // array
+        'orange_array',    // array
+        'charlie_section', // object
+        'zebra_section'    // object
+      ]);
+    });
+
+    it('should render appropriate components for each type', () => {
+      const fieldRows = el.shadowRoot?.querySelectorAll('.field-row') as NodeListOf<Element>;
+      
+      // Check first field (apple_field - string)
+      const firstValueComponent = fieldRows[0].querySelector('frontmatter-value') as HTMLElement;
+      expect(firstValueComponent.shadowRoot?.querySelector('frontmatter-value-string')).to.exist;
+      
+      // Check third field (delta_array - array)  
+      const thirdValueComponent = fieldRows[2].querySelector('frontmatter-value') as HTMLElement;
+      expect(thirdValueComponent.shadowRoot?.querySelector('frontmatter-value-array')).to.exist;
+      
+      // Check last field (zebra_section - object)
+      const lastValueComponent = fieldRows[fieldRows.length - 1].querySelector('frontmatter-value') as HTMLElement;
+      expect(lastValueComponent.shadowRoot?.querySelector('frontmatter-value-section')).to.exist;
+    });
+  });
+
   describe('when disabled is true', () => {
     beforeEach(async () => {
       el = await createFixtureWithTimeout(html`<frontmatter-value-section .fields="${{test: 'value'}}" disabled></frontmatter-value-section>`);

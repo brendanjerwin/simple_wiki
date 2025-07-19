@@ -32,17 +32,17 @@ export class FrontmatterValueArray extends LitElement {
     .add-item-button {
       padding: 4px 8px;
       font-size: 12px;
-      border: 1px solid #28a745;
+      border: 1px solid #6c757d;
       border-radius: 2px;
       cursor: pointer;
       transition: all 0.2s;
-      background: #28a745;
+      background: #6c757d;
       color: white;
     }
 
     .add-item-button:hover:not(:disabled) {
-      background: #218838;
-      border-color: #218838;
+      background: #5a6268;
+      border-color: #5a6268;
     }
 
     .add-item-button:disabled {
@@ -74,17 +74,17 @@ export class FrontmatterValueArray extends LitElement {
     .remove-item-button {
       padding: 4px 8px;
       font-size: 12px;
-      border: 1px solid #dc3545;
+      border: 1px solid #6c757d;
       border-radius: 2px;
       cursor: pointer;
       transition: all 0.2s;
-      background: #dc3545;
+      background: #6c757d;
       color: white;
     }
 
     .remove-item-button:hover:not(:disabled) {
-      background: #c82333;
-      border-color: #c82333;
+      background: #5a6268;
+      border-color: #5a6268;
     }
 
     .remove-item-button:disabled {
