@@ -409,7 +409,7 @@ describe('FrontmatterValueSection', () => {
       const computedStyle = getComputedStyle(section);
       
       expect(computedStyle.borderWidth).to.equal('1px');
-      expect(computedStyle.padding).to.contain('16px');
+      expect(computedStyle.padding).to.contain('8px');
     });
 
     it('should have proper field row styling', () => {
@@ -417,7 +417,7 @@ describe('FrontmatterValueSection', () => {
       const computedStyle = getComputedStyle(fieldRow);
       
       expect(computedStyle.display).to.equal('flex');
-      expect(computedStyle.gap).to.contain('8px');
+      expect(computedStyle.gap).to.contain('4px');
     });
   });
 });

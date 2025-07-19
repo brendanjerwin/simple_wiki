@@ -1,58 +1,15 @@
 import { html, css, LitElement } from 'lit';
-import { buttonCSS, foundationCSS } from './shared-styles.js';
+import { buttonCSS, foundationCSS, menuCSS } from './shared-styles.js';
 
 export class FrontmatterAddFieldButton extends LitElement {
   static override styles = [
     foundationCSS,
     buttonCSS,
+    menuCSS,
     css`
       :host {
         position: relative;
         display: inline-block;
-      }
-
-      .dropdown-menu {
-        position: absolute;
-        top: 100%;
-        right: 0;
-        background: white;
-        border: 1px solid #ddd;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-        z-index: 1000;
-        min-width: 150px;
-        margin-top: 4px;
-      }
-
-      .dropdown-item {
-        padding: 10px 16px;
-        cursor: pointer;
-        border: none;
-        background: none;
-        width: 100%;
-        text-align: left;
-        font-size: 14px;
-        color: #333;
-        transition: background-color 0.2s ease;
-      }
-
-      .dropdown-item:hover {
-        background: #f8f9fa;
-      }
-
-      .dropdown-item:first-child {
-        border-radius: 4px 4px 0 0;
-      }
-
-      .dropdown-item:last-child {
-        border-radius: 0 0 4px 4px;
-      }
-
-      .dropdown-arrow {
-        transition: transform 0.2s ease;
-      }
-
-      .dropdown-arrow.open {
-        transform: rotate(180deg);
       }
     `
   ];

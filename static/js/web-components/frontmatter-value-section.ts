@@ -15,7 +15,7 @@ export class FrontmatterValueSection extends LitElement {
 
       .section-container {
         border: 1px solid #e0e0e0;
-        padding: 16px;
+        padding: 8px;
         background: #f9f9f9;
       }
 
@@ -29,8 +29,8 @@ export class FrontmatterValueSection extends LitElement {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: 12px;
-        padding-bottom: 8px;
+        margin-bottom: 8px;
+        padding-bottom: 4px;
         border-bottom: 1px solid #e0e0e0;
       }
 
@@ -51,17 +51,18 @@ export class FrontmatterValueSection extends LitElement {
       .section-fields {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 4px;
       }
 
       .field-row {
         display: flex;
         flex-direction: column;
-        gap: 8px;
-        padding: 12px;
+        gap: 4px;
+        padding: 8px;
         background: #fff;
         border: 1px solid #e0e0e0;
         position: relative;
+        margin-left: 8px;
       }
 
       .field-row frontmatter-key {
@@ -74,8 +75,8 @@ export class FrontmatterValueSection extends LitElement {
 
       .remove-field-button {
         position: absolute;
-        top: 8px;
-        right: 8px;
+        top: 4px;
+        right: 4px;
       }
 
       .empty-section-message {
@@ -105,7 +106,10 @@ export class FrontmatterValueSection extends LitElement {
     this.disabled = false;
     this.isRoot = false;
     this.title = 'Section Fields';
+    this._pendingFocusKey = null;
   }
+
+  private _pendingFocusKey: string | null = null;
 
   private _generateUniqueKey(baseKey: string): string {
     let counter = 1;
@@ -173,6 +177,9 @@ export class FrontmatterValueSection extends LitElement {
     
     this.fields = newFields;
     
+    // Track that this key should receive focus after reordering
+    this._pendingFocusKey = newKey;
+    
     this._dispatchSectionChange(oldFields, newFields);
     this.requestUpdate();
   };
@@ -195,6 +202,40 @@ export class FrontmatterValueSection extends LitElement {
       },
       bubbles: true,
     }));
+  }
+
+  override updated(changedProperties: Map<string | number | symbol, unknown>): void {
+    super.updated(changedProperties);
+    
+    // Handle focus management after reordering
+    if (this._pendingFocusKey && changedProperties.has('fields')) {
+      this._restoreFocusToField(this._pendingFocusKey);
+      this._pendingFocusKey = null;
+    }
+  }
+
+  private _restoreFocusToField(key: string): void {
+    // Wait for the next frame to ensure the DOM has been updated
+    requestAnimationFrame(() => {
+      const fieldRows = this.shadowRoot?.querySelectorAll('.field-row');
+      const sortedEntries = this._sortFieldEntries(Object.entries(this.fields));
+      
+      // Find the index of the key in the sorted order
+      const keyIndex = sortedEntries.findIndex(([k]) => k === key);
+      
+      if (keyIndex !== -1 && fieldRows && fieldRows[keyIndex]) {
+        const fieldRow = fieldRows[keyIndex];
+        const valueComponent = fieldRow.querySelector('frontmatter-value');
+        
+        if (valueComponent) {
+          // Focus the value component for this field
+          const valueInput = valueComponent.shadowRoot?.querySelector('input, textarea');
+          if (valueInput instanceof HTMLElement) {
+            valueInput.focus();
+          }
+        }
+      }
+    });
   }
 
   private _getValueType(value: unknown): string {

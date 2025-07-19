@@ -125,6 +125,57 @@ export const buttonCSS = css`
 `;
 
 /* ==========================================================================
+   Dropdown/Menu Styles
+   ========================================================================== */
+
+export const menuCSS = css`
+  .dropdown-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    background: white;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    min-width: 150px;
+    margin-top: 4px;
+  }
+
+  .dropdown-item {
+    padding: 10px 16px;
+    cursor: pointer;
+    border: none;
+    background: none;
+    width: 100%;
+    text-align: left;
+    font-size: 14px;
+    color: #333;
+    transition: background-color 0.2s ease;
+  }
+
+  .dropdown-item:hover {
+    background: #f8f9fa;
+  }
+
+  .dropdown-item:first-child {
+    border-radius: 4px 4px 0 0;
+  }
+
+  .dropdown-item:last-child {
+    border-radius: 0 0 4px 4px;
+  }
+
+  .dropdown-arrow {
+    transition: transform 0.2s ease;
+  }
+
+  .dropdown-arrow.open {
+    transform: rotate(180deg);
+  }
+`;
+
+/* ==========================================================================
    Dialog Component Styles
    ========================================================================== */
 
