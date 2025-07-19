@@ -86,12 +86,6 @@ export class FrontmatterKey extends LitElement {
     // Update the key property
     this.key = newKey;
 
-    // Debug logging for data structure changes
-    console.log('[FrontmatterKey] Key input changed:', {
-      oldKey,
-      newKey
-    });
-
     // Dispatch custom event with old and new key values
     this.dispatchEvent(new CustomEvent('key-change', {
       detail: {

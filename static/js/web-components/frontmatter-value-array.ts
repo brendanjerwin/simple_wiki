@@ -85,14 +85,6 @@ export class FrontmatterValueArray extends LitElement {
     const newArray = [...this.values, ''];
     
     this.values = newArray;
-    
-    // Debug logging for data structure changes
-    console.log('[FrontmatterValueArray] Add item:', {
-      oldArray,
-      newArray,
-      newItemIndex: newArray.length - 1
-    });
-    
     this._dispatchArrayChange(oldArray, newArray);
     this.requestUpdate();
   };
@@ -102,15 +94,6 @@ export class FrontmatterValueArray extends LitElement {
     const newArray = this.values.filter((_, i) => i !== index);
     
     this.values = newArray;
-    
-    // Debug logging for data structure changes
-    console.log('[FrontmatterValueArray] Remove item:', {
-      removedIndex: index,
-      removedValue: oldArray[index],
-      oldArray,
-      newArray
-    });
-    
     this._dispatchArrayChange(oldArray, newArray);
     this.requestUpdate();
   };
@@ -121,16 +104,6 @@ export class FrontmatterValueArray extends LitElement {
     newArray[index] = event.detail.newValue;
     
     this.values = newArray;
-    
-    // Debug logging for data structure changes
-    console.log('[FrontmatterValueArray] Item changed:', {
-      index,
-      oldValue: oldArray[index],
-      newValue: event.detail.newValue,
-      oldArray,
-      newArray
-    });
-    
     this._dispatchArrayChange(oldArray, newArray);
   };
 

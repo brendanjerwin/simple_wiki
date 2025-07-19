@@ -188,13 +188,6 @@ export class FrontmatterEditorDialog extends LitElement {
   private _handleSectionChange = (event: CustomEvent): void => {
     const { newFields } = event.detail;
     this.workingFrontmatter = newFields;
-    
-    // Debug logging for data structure changes
-    console.log('[FrontmatterEditorDialog] Root section changed:', {
-      newFields,
-      fullStructure: this.workingFrontmatter
-    });
-    
     this.requestUpdate();
   };
 

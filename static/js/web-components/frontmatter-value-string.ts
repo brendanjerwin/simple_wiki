@@ -59,12 +59,6 @@ export class FrontmatterValueString extends LitElement {
     // Update the value property
     this.value = newValue;
 
-    // Debug logging for data structure changes
-    console.log('[FrontmatterValueString] Value input changed:', {
-      oldValue,
-      newValue
-    });
-
     // Dispatch custom event with old and new values
     this.dispatchEvent(new CustomEvent('value-change', {
       detail: {
