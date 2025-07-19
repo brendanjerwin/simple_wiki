@@ -1,9 +1,11 @@
 import { html, css, LitElement } from 'lit';
 import { createClient } from '@connectrpc/connect';
+import { Struct } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import { Frontmatter } from '../gen/api/v1/frontmatter_connect.js';
 import { GetFrontmatterRequest, GetFrontmatterResponse } from '../gen/api/v1/frontmatter_pb.js';
 import { sharedStyles, foundationCSS, dialogCSS, responsiveCSS } from './shared-styles.js';
+import './frontmatter-value-section.js';
 
 export class FrontmatterEditorDialog extends LitElement {
   static override styles = [
@@ -161,13 +163,15 @@ export class FrontmatterEditorDialog extends LitElement {
     loading: { state: true },
     error: { state: true },
     frontmatter: { state: true },
+    workingFrontmatter: { state: true },
   };
 
   declare page: string;
   declare open: boolean;
   declare loading: boolean;
-  declare error?: string;
-  declare frontmatter?: GetFrontmatterResponse;
+  declare error?: string | undefined;
+  declare frontmatter?: GetFrontmatterResponse | undefined;
+  declare workingFrontmatter?: Record<string, unknown>;
 
   private client = createClient(Frontmatter, getGrpcWebTransport());
 
@@ -176,7 +180,40 @@ export class FrontmatterEditorDialog extends LitElement {
     this.page = '';
     this.open = false;
     this.loading = false;
+    this.workingFrontmatter = {};
   }
+
+  private convertStructToPlainObject(struct?: Struct): Record<string, unknown> {
+    if (!struct) return {};
+    
+    try {
+      return struct.toJson() as Record<string, unknown>;
+    } catch (err) {
+      console.error('Error converting struct to plain object:', err);
+      return {};
+    }
+  }
+
+  private updateWorkingFrontmatter(): void {
+    if (this.frontmatter?.frontmatter) {
+      this.workingFrontmatter = this.convertStructToPlainObject(this.frontmatter.frontmatter);
+    } else {
+      this.workingFrontmatter = {};
+    }
+  }
+
+  private _handleSectionChange = (event: CustomEvent): void => {
+    const { newFields } = event.detail;
+    this.workingFrontmatter = newFields;
+    
+    // Debug logging for data structure changes
+    console.log('[FrontmatterEditorDialog] Root section changed:', {
+      newFields,
+      fullStructure: this.workingFrontmatter
+    });
+    
+    this.requestUpdate();
+  };
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -215,11 +252,13 @@ export class FrontmatterEditorDialog extends LitElement {
       this.loading = true;
       this.error = undefined;
       this.frontmatter = undefined;
+      this.workingFrontmatter = {};
       this.requestUpdate();
 
       const request = new GetFrontmatterRequest({ page: this.page });
       const response = await this.client.getFrontmatter(request);
       this.frontmatter = response;
+      this.updateWorkingFrontmatter();
     } catch (err) {
       this.error = err instanceof Error ? err.message : 'Failed to load frontmatter';
     } finally {
@@ -238,18 +277,14 @@ export class FrontmatterEditorDialog extends LitElement {
     this.close();
   };
 
-  private formatFrontmatter(frontmatter?: GetFrontmatterResponse): string {
-    if (!frontmatter?.frontmatter) {
-      return '';
-    }
-
-    try {
-      // Convert the protobuf Struct to a plain JavaScript object
-      const jsonObject = frontmatter.frontmatter.toJson();
-      return JSON.stringify(jsonObject, null, 2);
-    } catch (err) {
-      return `Error formatting frontmatter: ${err instanceof Error ? err.message : 'Unknown error'}`;
-    }
+  private renderFrontmatterEditor(): unknown {
+    return html`
+      <frontmatter-value-section
+        .fields="${this.workingFrontmatter || {}}"
+        .isRoot="${true}"
+        @section-change="${this._handleSectionChange}"
+      ></frontmatter-value-section>
+    `;
   }
 
   override render() {
@@ -272,7 +307,7 @@ export class FrontmatterEditorDialog extends LitElement {
               ${this.error}
             </div>
           ` : html`
-            <div class="frontmatter-display border-radius-small">${this.formatFrontmatter(this.frontmatter)}</div>
+            ${this.renderFrontmatterEditor()}
           `}
         </div>
         <div class="footer">

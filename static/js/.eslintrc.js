@@ -10,6 +10,7 @@ module.exports = {
   rules: {
     '@typescript-eslint/no-explicit-any': 'error',
     '@typescript-eslint/no-unused-vars': 'error',
+    'no-extra-semi': 'off',
   },
   ignorePatterns: ['gen/**/*'],
 };
