@@ -46,15 +46,17 @@ describe('FrontmatterEditorDialog - Component Integration', () => {
     });
 
     it('should render sub-components for fields', () => {
-      const keyComponents = el.shadowRoot?.querySelectorAll('frontmatter-key');
-      const valueComponents = el.shadowRoot?.querySelectorAll('frontmatter-value');
+      const sectionComponent = el.shadowRoot?.querySelector('frontmatter-value-section') as HTMLElement & {shadowRoot: ShadowRoot};
+      const keyComponents = sectionComponent?.shadowRoot?.querySelectorAll('frontmatter-key');
+      const valueComponents = sectionComponent?.shadowRoot?.querySelectorAll('frontmatter-value');
       
       expect(keyComponents).to.have.length.greaterThan(0);
       expect(valueComponents).to.have.length.greaterThan(0);
     });
 
     it('should render remove buttons for top-level fields', () => {
-      const removeButtons = el.shadowRoot?.querySelectorAll('.remove-field-button');
+      const sectionComponent = el.shadowRoot?.querySelector('frontmatter-value-section') as HTMLElement & {shadowRoot: ShadowRoot};
+      const removeButtons = sectionComponent?.shadowRoot?.querySelectorAll('.remove-field-button');
       expect(removeButtons).to.have.length.greaterThan(0);
     });
   });
@@ -71,12 +73,13 @@ describe('FrontmatterEditorDialog - Component Integration', () => {
 
     describe('when a key is renamed via component event', () => {
       beforeEach(async () => {
+        const sectionComponent = el.shadowRoot?.querySelector('frontmatter-value-section') as HTMLElement & {shadowRoot: ShadowRoot};
         const keyChangeEvent = new CustomEvent('key-change', {
           detail: { oldKey: 'identifier', newKey: 'id' },
           bubbles: true
         });
         
-        const keyComponent = el.shadowRoot?.querySelector('frontmatter-key');
+        const keyComponent = sectionComponent?.shadowRoot?.querySelector('frontmatter-key');
         keyComponent?.dispatchEvent(keyChangeEvent);
         await el.updateComplete;
       });
@@ -107,12 +110,13 @@ describe('FrontmatterEditorDialog - Component Integration', () => {
 
     describe('when a value is changed via component event', () => {
       beforeEach(async () => {
+        const sectionComponent = el.shadowRoot?.querySelector('frontmatter-value-section') as HTMLElement & {shadowRoot: ShadowRoot};
         const valueChangeEvent = new CustomEvent('value-change', {
           detail: { oldValue: 'Original Title', newValue: 'New Title' },
           bubbles: true
         });
         
-        const valueComponent = el.shadowRoot?.querySelector('frontmatter-value');
+        const valueComponent = sectionComponent?.shadowRoot?.querySelector('frontmatter-value');
         valueComponent?.dispatchEvent(valueChangeEvent);
         await el.updateComplete;
       });
@@ -136,7 +140,8 @@ describe('FrontmatterEditorDialog - Component Integration', () => {
 
     describe('when remove button is clicked', () => {
       beforeEach(async () => {
-        const removeButton = el.shadowRoot?.querySelector('.remove-field-button') as HTMLButtonElement;
+        const sectionComponent = el.shadowRoot?.querySelector('frontmatter-value-section') as HTMLElement & {shadowRoot: ShadowRoot};
+        const removeButton = sectionComponent?.shadowRoot?.querySelector('.remove-field-button') as HTMLButtonElement;
         removeButton?.click();
         await el.updateComplete;
       });
@@ -164,11 +169,15 @@ describe('FrontmatterEditorDialog - Component Integration', () => {
 
     describe('when Add Field dropdown option is selected', () => {
       beforeEach(async () => {
-        const dropdownButton = el.shadowRoot?.querySelector('.dropdown-button') as HTMLButtonElement;
+        // Navigate to the add field button through the component hierarchy
+        const sectionComponent = el.shadowRoot?.querySelector('frontmatter-value-section') as HTMLElement & {shadowRoot: ShadowRoot};
+        const addFieldButton = sectionComponent?.shadowRoot?.querySelector('frontmatter-add-field-button') as HTMLElement & {shadowRoot: ShadowRoot, updateComplete: Promise<unknown>};
+        const dropdownButton = addFieldButton?.shadowRoot?.querySelector('.dropdown-button') as HTMLButtonElement;
+        
         dropdownButton?.click();
-        await el.updateComplete;
+        await addFieldButton?.updateComplete;
 
-        const addFieldOption = el.shadowRoot?.querySelector('.dropdown-item') as HTMLButtonElement;
+        const addFieldOption = addFieldButton?.shadowRoot?.querySelector('.dropdown-item') as HTMLButtonElement;
         addFieldOption?.click();
         await el.updateComplete;
       });
@@ -183,8 +192,9 @@ describe('FrontmatterEditorDialog - Component Integration', () => {
       });
 
       it('should render the new field with sub-components', () => {
-        const keyComponents = el.shadowRoot?.querySelectorAll('frontmatter-key');
-        const valueComponents = el.shadowRoot?.querySelectorAll('frontmatter-value');
+        const sectionComponent = el.shadowRoot?.querySelector('frontmatter-value-section') as HTMLElement & {shadowRoot: ShadowRoot};
+        const keyComponents = sectionComponent?.shadowRoot?.querySelectorAll('frontmatter-key');
+        const valueComponents = sectionComponent?.shadowRoot?.querySelectorAll('frontmatter-value');
         
         expect(keyComponents).to.have.length(1);
         expect(valueComponents).to.have.length(1);
@@ -206,7 +216,8 @@ describe('FrontmatterEditorDialog - Component Integration', () => {
     });
 
     it('should render appropriate sub-components for different value types', () => {
-      const valueComponents = el.shadowRoot?.querySelectorAll('frontmatter-value');
+      const sectionComponent = el.shadowRoot?.querySelector('frontmatter-value-section') as HTMLElement & {shadowRoot: ShadowRoot};
+      const valueComponents = sectionComponent?.shadowRoot?.querySelectorAll('frontmatter-value');
       expect(valueComponents).to.have.length(3); // One for each top-level field
     });
 

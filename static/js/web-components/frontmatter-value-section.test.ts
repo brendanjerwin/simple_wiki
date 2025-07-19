@@ -90,8 +90,8 @@ describe('FrontmatterValueSection', () => {
     });
 
     it('should display the correct values', () => {
-      const valueComponents = el.shadowRoot?.querySelectorAll('frontmatter-value-string') as NodeListOf<Element>;
-      const values = Array.from(valueComponents).map(comp => comp.value);
+      const valueDispatcherComponents = el.shadowRoot?.querySelectorAll('frontmatter-value') as NodeListOf<HTMLElement & {value: unknown}>;
+      const values = Array.from(valueDispatcherComponents).map(comp => comp.value);
       expect(values).to.include.members(['Test Title', 'Test Description', '42']);
     });
 
@@ -129,8 +129,15 @@ describe('FrontmatterValueSection', () => {
         sectionChangeEvent = event as CustomEvent;
       });
 
-      const addButton = el.shadowRoot?.querySelector('frontmatter-add-field-button') as any;
+      // First click to open dropdown
+      const addButton = el.shadowRoot?.querySelector('frontmatter-add-field-button') as HTMLElement & {shadowRoot: ShadowRoot, updateComplete: Promise<unknown>};
       addButton?.shadowRoot?.querySelector('.dropdown-button')?.click();
+      await addButton?.updateComplete;
+      
+      // Then click on "Add Field" option to actually add a field
+      const addFieldOption = addButton?.shadowRoot?.querySelector('.dropdown-item') as HTMLButtonElement;
+      addFieldOption?.click();
+      await el.updateComplete;
     });
 
     it('should dispatch section-change event', () => {
@@ -254,8 +261,8 @@ describe('FrontmatterValueSection', () => {
       });
 
       // Simulate value change
-      const valueComponent = el.shadowRoot?.querySelector('frontmatter-value-string') as HTMLElement & { [key: string]: unknown };
-      valueComponent.dispatchEvent(new CustomEvent('value-change', {
+      const valueComponent = el.shadowRoot?.querySelector('frontmatter-value') as HTMLElement & { [key: string]: unknown };
+      valueComponent?.dispatchEvent(new CustomEvent('value-change', {
         detail: {
           oldValue: 'original value',
           newValue: 'modified value'
@@ -297,7 +304,7 @@ describe('FrontmatterValueSection', () => {
     });
 
     it('should disable the add field button', () => {
-      const addButton = el.shadowRoot?.querySelector('frontmatter-add-field-button') as any;
+      const addButton = el.shadowRoot?.querySelector('frontmatter-add-field-button') as HTMLElement & {disabled: boolean};
       expect(addButton?.disabled).to.be.true;
     });
 
@@ -335,8 +342,8 @@ describe('FrontmatterValueSection', () => {
       });
 
       it('should update value components', () => {
-        const valueComponents = el.shadowRoot?.querySelectorAll('frontmatter-value-string') as NodeListOf<Element>;
-        const values = Array.from(valueComponents).map(comp => comp.value);
+        const valueDispatcherComponents = el.shadowRoot?.querySelectorAll('frontmatter-value') as NodeListOf<HTMLElement & {value: unknown}>;
+        const values = Array.from(valueDispatcherComponents).map(comp => comp.value);
         expect(values).to.include.members(['value1', 'value2']);
       });
     });
