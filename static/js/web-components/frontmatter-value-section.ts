@@ -15,7 +15,9 @@ export class FrontmatterValueSection extends LitElement {
 
       .section-container {
         border: 1px solid #e0e0e0;
-        padding: 8px;
+        padding-left: 4px;
+        padding-top: 4px;
+        padding-bottom: 4px;
         background: #f9f9f9;
       }
 
@@ -29,8 +31,8 @@ export class FrontmatterValueSection extends LitElement {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: 8px;
-        padding-bottom: 4px;
+        margin-bottom: 4px;
+        padding-bottom: 2px;
         border-bottom: 1px solid #e0e0e0;
       }
 
@@ -57,12 +59,14 @@ export class FrontmatterValueSection extends LitElement {
       .field-row {
         display: flex;
         flex-direction: column;
-        gap: 4px;
-        padding: 8px;
+        gap: 2px;
+        padding-left: 4px;
+        padding-top: 4px;
+        padding-bottom: 4px;
         background: #fff;
         border: 1px solid #e0e0e0;
         position: relative;
-        margin-left: 8px;
+        margin-left: 4px;
       }
 
       .field-row frontmatter-key {
@@ -215,26 +219,37 @@ export class FrontmatterValueSection extends LitElement {
   }
 
   private _restoreFocusToField(key: string): void {
-    // Wait for the next frame to ensure the DOM has been updated
+    // Use multiple animation frames to ensure DOM is fully updated after reordering
     requestAnimationFrame(() => {
-      const fieldRows = this.shadowRoot?.querySelectorAll('.field-row');
-      const sortedEntries = this._sortFieldEntries(Object.entries(this.fields));
-      
-      // Find the index of the key in the sorted order
-      const keyIndex = sortedEntries.findIndex(([k]) => k === key);
-      
-      if (keyIndex !== -1 && fieldRows && fieldRows[keyIndex]) {
-        const fieldRow = fieldRows[keyIndex];
-        const valueComponent = fieldRow.querySelector('frontmatter-value');
+      requestAnimationFrame(() => {
+        const fieldRows = this.shadowRoot?.querySelectorAll('.field-row');
+        const sortedEntries = this._sortFieldEntries(Object.entries(this.fields));
         
-        if (valueComponent) {
-          // Focus the value component for this field
-          const valueInput = valueComponent.shadowRoot?.querySelector('input, textarea');
-          if (valueInput instanceof HTMLElement) {
-            valueInput.focus();
+        // Find the index of the key in the sorted order
+        const keyIndex = sortedEntries.findIndex(([k]) => k === key);
+        
+        if (keyIndex !== -1 && fieldRows && fieldRows[keyIndex]) {
+          const fieldRow = fieldRows[keyIndex];
+          const valueComponent = fieldRow.querySelector('frontmatter-value');
+          
+          if (valueComponent) {
+            // First try to focus a direct input in the value component
+            let valueInput = valueComponent.shadowRoot?.querySelector('input, textarea');
+            
+            // If not found, check for nested components (like in arrays or sections)
+            if (!valueInput) {
+              const stringComponent = valueComponent.shadowRoot?.querySelector('frontmatter-value-string');
+              if (stringComponent) {
+                valueInput = stringComponent.shadowRoot?.querySelector('input, textarea');
+              }
+            }
+            
+            if (valueInput instanceof HTMLElement) {
+              valueInput.focus();
+            }
           }
         }
-      }
+      });
     });
   }
 

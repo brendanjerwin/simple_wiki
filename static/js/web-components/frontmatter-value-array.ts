@@ -13,17 +13,19 @@ export class FrontmatterValueArray extends LitElement {
 
       .array-container {
         border: 1px solid #e0e0e0;
-        padding: 8px;
+        padding-left: 4px;
+        padding-top: 4px;
+        padding-bottom: 4px;
         background: #f9f9f9;
-        margin-left: 8px;
+        margin-left: 4px;
       }
 
       .array-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: 8px;
-        padding-bottom: 4px;
+        margin-bottom: 4px;
+        padding-bottom: 2px;
         border-bottom: 1px solid #e0e0e0;
       }
 
@@ -38,14 +40,16 @@ export class FrontmatterValueArray extends LitElement {
     .array-items {
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      gap: 2px;
     }
 
     .array-item {
       display: flex;
       align-items: center;
-      gap: 8px;
-      padding: 6px;
+      gap: 4px;
+      padding-left: 4px;
+      padding-top: 3px;
+      padding-bottom: 3px;
       background: #fff;
       border: 1px solid #e0e0e0;
       border-radius: 2px;

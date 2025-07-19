@@ -338,7 +338,7 @@ describe('FrontmatterValueArray', () => {
       const computedStyle = getComputedStyle(arrayItem);
       
       expect(computedStyle.display).to.equal('flex');
-      expect(computedStyle.gap).to.contain('8px');
+      expect(computedStyle.gap).to.contain('4px');
     });
 
     it('should have proper button styling', () => {
