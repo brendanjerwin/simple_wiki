@@ -131,7 +131,7 @@ describe('FrontmatterValueSection', () => {
 
       // First click to open dropdown
       const addButton = el.shadowRoot?.querySelector('frontmatter-add-field-button') as HTMLElement & {shadowRoot: ShadowRoot, updateComplete: Promise<unknown>};
-      addButton?.shadowRoot?.querySelector('.dropdown-button')?.click();
+      addButton?.shadowRoot?.querySelector('button')?.click();
       await addButton?.updateComplete;
       
       // Then click on "Add Field" option to actually add a field
@@ -409,7 +409,7 @@ describe('FrontmatterValueSection', () => {
       const computedStyle = getComputedStyle(section);
       
       expect(computedStyle.borderWidth).to.equal('1px');
-      expect(computedStyle.borderRadius).to.equal('4px');
+      expect(computedStyle.padding).to.contain('16px');
     });
 
     it('should have proper field row styling', () => {

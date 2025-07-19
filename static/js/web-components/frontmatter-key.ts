@@ -110,7 +110,7 @@ export class FrontmatterKey extends LitElement {
           class="key-input"
           .value="${this.key}" 
           .placeholder="${this.placeholder}"
-          @input="${this._handleKeyInput}"
+          @blur="${this._handleKeyInput}"
         />
       `;
     }

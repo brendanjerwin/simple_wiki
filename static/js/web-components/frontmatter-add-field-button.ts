@@ -1,45 +1,22 @@
 import { html, css, LitElement } from 'lit';
+import { buttonCSS, foundationCSS } from './shared-styles.js';
 
 export class FrontmatterAddFieldButton extends LitElement {
-  static override styles = css`
+  static override styles = [
+    foundationCSS,
+    buttonCSS,
+    css`
       :host {
         position: relative;
         display: inline-block;
       }
 
-      .dropdown-button {
-        padding: 4px 8px;
-        font-size: 12px;
-        border: 1px solid #6c757d;
-        border-radius: 2px;
-        cursor: pointer;
-        background: #6c757d;
-        color: white;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        font-weight: 500;
-        transition: all 0.2s ease;
-      }
-
-      .dropdown-button:hover {
-        background: #5a6268;
-        border-color: #5a6268;
-        transform: translateY(-1px);
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-      }
-
-      .dropdown-button:active {
-        transform: translateY(0);
-      }
-
       .dropdown-menu {
         position: absolute;
         top: 100%;
-        left: 0;
+        right: 0;
         background: white;
         border: 1px solid #ddd;
-        border-radius: 4px;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         z-index: 1000;
         min-width: 150px;
@@ -77,7 +54,8 @@ export class FrontmatterAddFieldButton extends LitElement {
       .dropdown-arrow.open {
         transform: rotate(180deg);
       }
-    `;
+    `
+  ];
 
   static override properties = {
     open: { type: Boolean, state: true },
@@ -143,7 +121,7 @@ export class FrontmatterAddFieldButton extends LitElement {
   override render() {
     return html`
       <button 
-        class="dropdown-button" 
+        class="button-base button-primary button-small button-dropdown border-radius-small" 
         ?disabled="${this.disabled}"
         @click="${this._handleToggleDropdown}"
       >
@@ -151,7 +129,7 @@ export class FrontmatterAddFieldButton extends LitElement {
         <span class="dropdown-arrow ${this.open ? 'open' : ''}">▼</span>
       </button>
       ${this.open ? html`
-        <div class="dropdown-menu">
+        <div class="dropdown-menu border-radius">
           <button class="dropdown-item" @click="${this._handleAddField}">Add Field</button>
           <button class="dropdown-item" @click="${this._handleAddArray}">Add Array</button>
           <button class="dropdown-item" @click="${this._handleAddSection}">Add Section</button>

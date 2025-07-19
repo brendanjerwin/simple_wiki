@@ -346,7 +346,7 @@ describe('FrontmatterValueArray', () => {
       const computedStyle = getComputedStyle(addButton);
       
       expect(computedStyle.padding).to.contain('4px');
-      expect(computedStyle.borderRadius).to.equal('2px');
+      expect(computedStyle.borderRadius).to.equal('4px');
     });
   });
 });

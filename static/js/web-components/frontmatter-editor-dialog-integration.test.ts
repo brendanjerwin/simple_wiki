@@ -172,7 +172,7 @@ describe('FrontmatterEditorDialog - Component Integration', () => {
         // Navigate to the add field button through the component hierarchy
         const sectionComponent = el.shadowRoot?.querySelector('frontmatter-value-section') as HTMLElement & {shadowRoot: ShadowRoot};
         const addFieldButton = sectionComponent?.shadowRoot?.querySelector('frontmatter-add-field-button') as HTMLElement & {shadowRoot: ShadowRoot, updateComplete: Promise<unknown>};
-        const dropdownButton = addFieldButton?.shadowRoot?.querySelector('.dropdown-button') as HTMLButtonElement;
+        const dropdownButton = addFieldButton?.shadowRoot?.querySelector('button') as HTMLButtonElement;
         
         dropdownButton?.click();
         await addFieldButton?.updateComplete;

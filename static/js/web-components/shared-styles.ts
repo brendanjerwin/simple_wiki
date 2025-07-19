@@ -48,10 +48,53 @@ export const buttonCSS = css`
   .button-base {
     border: none;
     cursor: pointer;
-    padding: 4px;
+    padding: 4px 8px;
     border-radius: 4px;
-    transition: background-color 0.2s;
+    transition: all 0.2s ease;
     font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
+  }
+
+  .button-primary {
+    background: #6c757d;
+    color: white;
+    border: 1px solid #6c757d;
+  }
+
+  .button-primary:hover:not(:disabled) {
+    background: #5a6268;
+    border-color: #5a6268;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+
+  .button-primary:active {
+    transform: translateY(0);
+  }
+
+  .button-primary:disabled {
+    background: #6c757d;
+    border-color: #6c757d;
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+
+  .button-secondary {
+    background: white;
+    color: #666;
+    border: 1px solid #ddd;
+  }
+
+  .button-secondary:hover:not(:disabled) {
+    background: #f8f9fa;
+    border-color: #999;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+
+  .button-secondary:active {
+    transform: translateY(0);
   }
 
   .button-icon {
@@ -67,6 +110,17 @@ export const buttonCSS = css`
 
   .button-icon:hover {
     background-color: #f0f0f0;
+  }
+
+  .button-small {
+    padding: 4px 8px;
+    font-size: 12px;
+  }
+
+  .button-dropdown {
+    display: flex;
+    align-items: center;
+    gap: 6px;
   }
 `;
 

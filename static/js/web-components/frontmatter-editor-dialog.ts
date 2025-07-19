@@ -4,7 +4,7 @@ import { Struct } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import { Frontmatter } from '../gen/api/v1/frontmatter_connect.js';
 import { GetFrontmatterRequest, GetFrontmatterResponse } from '../gen/api/v1/frontmatter_pb.js';
-import { sharedStyles, foundationCSS, dialogCSS, responsiveCSS } from './shared-styles.js';
+import { sharedStyles, foundationCSS, dialogCSS, responsiveCSS, buttonCSS } from './shared-styles.js';
 import './frontmatter-value-section.js';
 
 export class FrontmatterEditorDialog extends LitElement {
@@ -12,6 +12,7 @@ export class FrontmatterEditorDialog extends LitElement {
     foundationCSS,
     dialogCSS,
     responsiveCSS,
+    buttonCSS,
     css`
       :host {
         position: fixed;
@@ -58,6 +59,7 @@ export class FrontmatterEditorDialog extends LitElement {
         position: relative;
         z-index: 1;
         animation: slideIn 0.2s ease-out;
+        border-radius: 8px;
       }
 
       @keyframes slideIn {
@@ -68,6 +70,23 @@ export class FrontmatterEditorDialog extends LitElement {
         to {
           transform: translateY(0);
           opacity: 1;
+        }
+      }
+
+      /* Mobile-first responsive behavior */
+      @media (max-width: 768px) {
+        :host([open]) {
+          align-items: stretch;
+          justify-content: stretch;
+        }
+
+        .dialog {
+          width: 100%;
+          height: 100%;
+          max-width: none;
+          max-height: none;
+          border-radius: 0;
+          margin: 0;
         }
       }
 
@@ -117,42 +136,6 @@ export class FrontmatterEditorDialog extends LitElement {
         padding: 16px 20px;
         border-top: 1px solid #e0e0e0;
         justify-content: flex-end;
-      }
-
-      .button {
-        padding: 8px 16px;
-        border: 1px solid;
-        cursor: pointer;
-        font-size: 14px;
-        font-weight: 500;
-        transition: all 0.2s;
-      }
-
-      .button:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-      }
-
-      .button-cancel {
-        background: white;
-        color: #666;
-        border-color: #ddd;
-      }
-
-      .button-cancel:hover {
-        background: #f8f9fa;
-        border-color: #999;
-      }
-
-      .button-save {
-        background: #6c757d;
-        color: white;
-        border-color: #6c757d;
-      }
-
-      .button-save:hover {
-        background: #5a6268;
-        border-color: #5a6268;
       }
     `
   ];
@@ -311,10 +294,10 @@ export class FrontmatterEditorDialog extends LitElement {
           `}
         </div>
         <div class="footer">
-          <button class="button button-cancel border-radius-small" @click="${this._handleCancel}">
+          <button class="button-base button-secondary border-radius-small" @click="${this._handleCancel}">
             Cancel
           </button>
-          <button class="button button-save border-radius-small" @click="${this._handleSaveClick}">
+          <button class="button-base button-primary border-radius-small" @click="${this._handleSaveClick}">
             Save
           </button>
         </div>

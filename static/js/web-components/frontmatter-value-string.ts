@@ -83,7 +83,7 @@ export class FrontmatterValueString extends LitElement {
         .value="${this.value}" 
         .placeholder="${this.placeholder}"
         .disabled="${this.disabled}"
-        @input="${this._handleValueInput}"
+        @blur="${this._handleValueInput}"
       />
     `;
   }

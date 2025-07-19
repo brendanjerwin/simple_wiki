@@ -1,55 +1,38 @@
 import { html, css, LitElement } from 'lit';
+import { buttonCSS, foundationCSS } from './shared-styles.js';
 import './frontmatter-value-string.js';
 
 export class FrontmatterValueArray extends LitElement {
-  static override styles = css`
-    :host {
-      display: block;
-    }
+  static override styles = [
+    foundationCSS,
+    buttonCSS,
+    css`
+      :host {
+        display: block;
+      }
 
-    .array-container {
-      border: 1px solid #e0e0e0;
-      border-radius: 4px;
-      padding: 12px;
-      background: #f9f9f9;
-    }
+      .array-container {
+        border: 1px solid #e0e0e0;
+        padding: 12px;
+        background: #f9f9f9;
+      }
 
-    .array-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 12px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid #e0e0e0;
-    }
+      .array-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 12px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid #e0e0e0;
+      }
 
-    .array-title {
-      font-weight: 600;
-      color: #333;
-      font-size: 14px;
-    }
-
-    .add-item-button {
-      padding: 4px 8px;
-      font-size: 12px;
-      border: 1px solid #6c757d;
-      border-radius: 2px;
-      cursor: pointer;
-      transition: all 0.2s;
-      background: #6c757d;
-      color: white;
-    }
-
-    .add-item-button:hover:not(:disabled) {
-      background: #5a6268;
-      border-color: #5a6268;
-    }
-
-    .add-item-button:disabled {
-      background: #6c757d;
-      border-color: #6c757d;
-      cursor: not-allowed;
-    }
+      .array-title {
+        font-weight: normal;
+        color: #888;
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
 
     .array-items {
       display: flex;
@@ -71,35 +54,14 @@ export class FrontmatterValueArray extends LitElement {
       flex: 1;
     }
 
-    .remove-item-button {
-      padding: 4px 8px;
-      font-size: 12px;
-      border: 1px solid #6c757d;
-      border-radius: 2px;
-      cursor: pointer;
-      transition: all 0.2s;
-      background: #6c757d;
-      color: white;
-    }
-
-    .remove-item-button:hover:not(:disabled) {
-      background: #5a6268;
-      border-color: #5a6268;
-    }
-
-    .remove-item-button:disabled {
-      background: #6c757d;
-      border-color: #6c757d;
-      cursor: not-allowed;
-    }
-
     .empty-array-message {
       text-align: center;
       color: #666;
       font-style: italic;
       padding: 16px;
     }
-  `;
+  `
+];
 
   static override properties = {
     values: { type: Array },
@@ -200,7 +162,7 @@ export class FrontmatterValueArray extends LitElement {
               @value-change="${(e: CustomEvent) => this._handleItemChange(e, index)}"
             ></frontmatter-value-string>
             <button
-              class="remove-item-button"
+              class="button-base button-primary button-small border-radius-small remove-item-button"
               .disabled="${this.disabled}"
               @click="${() => this._handleRemoveItem(index)}"
             >
@@ -218,7 +180,7 @@ export class FrontmatterValueArray extends LitElement {
         <div class="array-header">
           <span class="array-title">Array Items (${this.values.length})</span>
           <button
-            class="add-item-button"
+            class="button-base button-primary button-small border-radius-small add-item-button"
             .disabled="${this.disabled}"
             @click="${this._handleAddItem}"
           >

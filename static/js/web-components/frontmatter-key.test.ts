@@ -106,7 +106,7 @@ describe('FrontmatterKey', () => {
 
       const inputElement = el.shadowRoot?.querySelector('.key-input') as HTMLInputElement;
       inputElement.value = 'modified';
-      inputElement.dispatchEvent(new Event('input', { bubbles: true }));
+      inputElement.dispatchEvent(new Event('blur', { bubbles: true }));
     });
 
     it('should dispatch key-change event', () => {
@@ -139,7 +139,7 @@ describe('FrontmatterKey', () => {
 
       const inputElement = el.shadowRoot?.querySelector('.key-input') as HTMLInputElement;
       inputElement.value = '';
-      inputElement.dispatchEvent(new Event('input', { bubbles: true }));
+      inputElement.dispatchEvent(new Event('blur', { bubbles: true }));
     });
 
     it('should not dispatch key-change event', () => {
@@ -169,7 +169,7 @@ describe('FrontmatterKey', () => {
 
       const inputElement = el.shadowRoot?.querySelector('.key-input') as HTMLInputElement;
       inputElement.value = '   ';
-      inputElement.dispatchEvent(new Event('input', { bubbles: true }));
+      inputElement.dispatchEvent(new Event('blur', { bubbles: true }));
     });
 
     it('should not dispatch key-change event', () => {
@@ -199,7 +199,7 @@ describe('FrontmatterKey', () => {
 
       const inputElement = el.shadowRoot?.querySelector('.key-input') as HTMLInputElement;
       inputElement.value = 'unchanged';
-      inputElement.dispatchEvent(new Event('input', { bubbles: true }));
+      inputElement.dispatchEvent(new Event('blur', { bubbles: true }));
     });
 
     it('should not dispatch key-change event', () => {

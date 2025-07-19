@@ -69,7 +69,7 @@ describe('FrontmatterValueString', () => {
 
       const inputElement = el.shadowRoot?.querySelector('.value-input') as HTMLInputElement;
       inputElement.value = 'updated';
-      inputElement.dispatchEvent(new Event('input', { bubbles: true }));
+      inputElement.dispatchEvent(new Event('blur', { bubbles: true }));
     });
 
     it('should dispatch value-change event', () => {
