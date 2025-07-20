@@ -14,10 +14,10 @@ export class FrontmatterValueArray extends LitElement {
       .array-container {
         border: none;
         border-left: 1px solid #e0e0e0;
-        padding-left: 4px;
+        padding-left: 2px;
         padding-top: 4px;
         background: #f9f9f9;
-        margin-left: 4px;
+        margin-left: 2px;
       }
 
       .array-header {
@@ -47,7 +47,7 @@ export class FrontmatterValueArray extends LitElement {
       display: flex;
       align-items: center;
       gap: 4px;
-      padding-left: 4px;
+      padding-left: 2px;
       padding-top: 3px;
       background: #fff;
       border: none;
