@@ -40,7 +40,14 @@ export class FrontmatterValue extends LitElement {
     const oldValue = this.value;
     let newValue: unknown;
 
-    // Stop the event from bubbling further up since we'll re-dispatch it
+    // Stop the event from bubbling further up to prevent parent components
+    // from handling the original event. This ensures that the parent only
+    // processes the normalized event we re-dispatch below. The re-dispatching
+    // allows us to update the event details (e.g., oldValue and newValue) and
+    // maintain a consistent event format across different child components.
+    // Event flow pattern: Child components emit specific events (e.g., value-change,
+    // array-change, section-change), which are intercepted here, normalized, and
+    // re-dispatched for parent components to handle.
     event.stopPropagation();
 
     // Extract the new value based on the event type
