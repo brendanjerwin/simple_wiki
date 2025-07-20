@@ -17,7 +17,6 @@ export class FrontmatterValueSection extends LitElement {
         border: 1px solid #e0e0e0;
         padding-left: 4px;
         padding-top: 4px;
-        padding-bottom: 4px;
         background: #f9f9f9;
       }
 
@@ -62,8 +61,6 @@ export class FrontmatterValueSection extends LitElement {
         gap: 2px;
         padding-left: 4px;
         padding-top: 4px;
-        padding-bottom: 4px;
-        padding-right: 4px;
         background: #fff;
         border: 1px solid #e0e0e0;
         position: relative;
@@ -74,7 +71,7 @@ export class FrontmatterValueSection extends LitElement {
         display: flex;
         flex-direction: column;
         gap: 2px;
-        padding-right: 60px; /* Space for remove button */
+        max-width: calc(100% - 60px); /* Leave space for remove button */
       }
 
       .field-row frontmatter-key {
