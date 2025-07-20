@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"strings"
 	"testing"
@@ -243,68 +244,65 @@ var _ = Describe("Server", func() {
 			})
 		})
 
-		When("the page has complex nested frontmatter with arrays", func() {
-			var complexFm map[string]any
+		When("the requested page has frontmatter with identifier key", func() {
+			var frontmatterWithIdentifier map[string]any
+			var expectedFilteredFm map[string]any
 
 			BeforeEach(func() {
-				complexFm = map[string]any{
-					"identifier": "inventory_item",
-					"title":      "Inventory Item",
-					"rename_this_section": map[string]any{
-						"total": "32",
-					},
-					"inventory": map[string]any{
-						"container": "lab_small_parts",
-						"items": []any{
-							"AKG Wired Earbuds",
-							"Steel Series Arctis 5 Headphone 3.5mm Adapter Cable",
-							"Steel Series Arctis 5 Headphone USB Dongle",
-							"Male 3.5mm to Male 3.5mm Coiled Cable",
-							"Random Earbud Tips",
-							"3.5mm to RCA Cable",
-							"Male 3.5mm to Male 3.5mm Cable",
-						},
-					},
+				frontmatterWithIdentifier = map[string]any{
+					"title":      "Test Page",
+					"identifier": "test-page",
+					"tags":       []any{"test", "ginkgo"},
 				}
-				mockPageReadWriter.Frontmatter = complexFm
+				expectedFilteredFm = map[string]any{
+					"title": "Test Page",
+					"tags":  []any{"test", "ginkgo"},
+				}
+				mockPageReadWriter.Frontmatter = frontmatterWithIdentifier
 			})
 
 			It("should not return an error", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("should return the complex frontmatter structure correctly", func() {
+			It("should return the frontmatter without the identifier key", func() {
 				Expect(res).NotTo(BeNil())
-				expectedStruct, err := structpb.NewStruct(complexFm)
+				expectedStruct, err := structpb.NewStruct(expectedFilteredFm)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(res.Frontmatter).To(Equal(expectedStruct))
 			})
+		})
 
-			It("should correctly handle nested object and array data", func() {
+		When("the requested page has frontmatter with nested identifier keys", func() {
+			var frontmatterWithNestedIdentifier map[string]any
+
+			BeforeEach(func() {
+				frontmatterWithNestedIdentifier = map[string]any{
+					"title": "Test Page",
+					"metadata": map[string]any{
+						"identifier": "nested-identifier-should-be-allowed",
+						"author":     "test-author",
+					},
+					"tags": []any{
+						map[string]any{
+							"identifier": "tag-identifier-should-be-allowed",
+							"name":       "test-tag",
+						},
+					},
+				}
+				mockPageReadWriter.Frontmatter = frontmatterWithNestedIdentifier
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return the frontmatter with nested identifier keys preserved", func() {
 				Expect(res).NotTo(BeNil())
-				
-				// Verify the structure can be converted back to a map
-				resultMap := res.Frontmatter.AsMap()
-				
-				// Check top-level fields
-				Expect(resultMap["identifier"]).To(Equal("inventory_item"))
-				Expect(resultMap["title"]).To(Equal("Inventory Item"))
-				
-				// Check nested section
-				renameSection, ok := resultMap["rename_this_section"].(map[string]any)
-				Expect(ok).To(BeTrue())
-				Expect(renameSection["total"]).To(Equal("32"))
-				
-				// Check nested inventory section with array
-				inventory, ok := resultMap["inventory"].(map[string]any)
-				Expect(ok).To(BeTrue())
-				Expect(inventory["container"]).To(Equal("lab_small_parts"))
-				
-				items, ok := inventory["items"].([]any)
-				Expect(ok).To(BeTrue())
-				Expect(items).To(HaveLen(7))
-				Expect(items[0]).To(Equal("AKG Wired Earbuds"))
-				Expect(items[6]).To(Equal("Male 3.5mm to Male 3.5mm Cable"))
+				// Nested identifier keys should be preserved, only root-level filtered
+				expectedStruct, err := structpb.NewStruct(frontmatterWithNestedIdentifier)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(res.Frontmatter).To(Equal(expectedStruct))
 			})
 		})
 	})
@@ -422,103 +420,88 @@ var _ = Describe("Server", func() {
 				Expect(mockPageReadWriter.WrittenFrontmatter).To(Equal(mergedFrontmatter))
 			})
 
-			It("should return the merged frontmatter", func() {
+			It("should return the merged frontmatter without identifier key", func() {
 				expectedPb, err := structpb.NewStruct(mergedFrontmatter)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(resp.Frontmatter).To(Equal(expectedPb))
 			})
 		})
 
-		When("merging complex frontmatter with arrays and nested objects", func() {
-			var initialFm, mergeFm, expectedFm wikipage.FrontMatter
+		When("the frontmatter contains an identifier key", func() {
+			BeforeEach(func() {
+				frontmatterWithIdentifier := wikipage.FrontMatter{
+					"title":      "New Title",
+					"identifier": "malicious-identifier",
+				}
+				var err error
+				req.Frontmatter, err = structpb.NewStruct(frontmatterWithIdentifier)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "identifier key cannot be modified"))
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("the frontmatter contains nested identifier keys", func() {
+			var existingFrontmatter wikipage.FrontMatter
+			var newFrontmatter wikipage.FrontMatter
+			var expectedMergedFm wikipage.FrontMatter
 
 			BeforeEach(func() {
-				// Initial complex frontmatter structure
-				initialFm = map[string]any{
-					"identifier": "inventory_item",
-					"title":      "Original Item",
-					"inventory": map[string]any{
-						"container": "lab_small_parts",
-						"items": []any{
-							"Original Item 1",
-							"Original Item 2",
-						},
+				existingFrontmatter = wikipage.FrontMatter{
+					"title": "Existing Title",
+					"metadata": map[string]any{
+						"author": "existing-author",
 					},
 				}
-				mockPageReadWriter.Frontmatter = initialFm
-
-				// Merge data with array and nested changes
-				mergeFm = map[string]any{
-					"title": "Updated Inventory Item",
-					"inventory": map[string]any{
-						"location": "main_lab",
-						"items": []any{
-							"Updated Item 1",
-							"Updated Item 2",
-							"New Item 3",
+				newFrontmatter = wikipage.FrontMatter{
+					"tags": []any{
+						map[string]any{
+							"identifier": "tag-identifier-should-be-allowed",
+							"name":       "new-tag",
 						},
 					},
-					"new_section": map[string]any{
-						"total": "42",
+					"metadata": map[string]any{
+						"identifier": "nested-identifier-should-be-allowed", 
+						"version":    "1.0",
 					},
 				}
-
-				// Expected result after merge (maps.Copy replaces nested objects)
-				expectedFm = map[string]any{
-					"identifier": "inventory_item",
-					"title":      "Updated Inventory Item",
-					"inventory": map[string]any{
-						"location": "main_lab",
-						"items": []any{
-							"Updated Item 1",
-							"Updated Item 2",
-							"New Item 3",
+				expectedMergedFm = wikipage.FrontMatter{
+					"title": "Existing Title",
+					"tags": []any{
+						map[string]any{
+							"identifier": "tag-identifier-should-be-allowed",
+							"name":       "new-tag",
 						},
 					},
-					"new_section": map[string]any{
-						"total": "42",
+					"metadata": map[string]any{
+						"identifier": "nested-identifier-should-be-allowed",
+						"version":    "1.0",
+						// Note: "author" from existing metadata is overwritten by maps.Copy
 					},
 				}
-
-				mergeFmPb, err := structpb.NewStruct(mergeFm)
+				
+				mockPageReadWriter.Frontmatter = existingFrontmatter
+				var err error
+				req.Frontmatter, err = structpb.NewStruct(newFrontmatter)
 				Expect(err).NotTo(HaveOccurred())
-				req.Frontmatter = mergeFmPb
 			})
 
 			It("should not return an error", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("should write the correctly merged complex frontmatter", func() {
-				Expect(mockPageReadWriter.WrittenFrontmatter).To(Equal(expectedFm))
+			It("should write the merged frontmatter with nested identifier keys preserved", func() {
+				Expect(mockPageReadWriter.WrittenIdentifier).To(Equal(wikipage.PageIdentifier(pageName)))
+				Expect(mockPageReadWriter.WrittenFrontmatter).To(Equal(expectedMergedFm))
 			})
 
-			It("should return the correctly merged complex frontmatter", func() {
-				expectedPb, err := structpb.NewStruct(expectedFm)
+			It("should return the merged frontmatter with nested identifier keys preserved", func() {
+				expectedPb, err := structpb.NewStruct(expectedMergedFm)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(resp.Frontmatter).To(Equal(expectedPb))
-			})
-
-			It("should preserve arrays and nested structures correctly", func() {
-				resultMap := resp.Frontmatter.AsMap()
-				
-				// Check that arrays are properly handled
-				inventory, ok := resultMap["inventory"].(map[string]any)
-				Expect(ok).To(BeTrue())
-				
-				items, ok := inventory["items"].([]any)
-				Expect(ok).To(BeTrue())
-				Expect(items).To(HaveLen(3))
-				Expect(items[2]).To(Equal("New Item 3"))
-				
-				// Check that new nested sections are added
-				newSection, ok := resultMap["new_section"].(map[string]any)
-				Expect(ok).To(BeTrue())
-				Expect(newSection["total"]).To(Equal("42"))
-				
-				// Note: maps.Copy replaces the entire inventory object, so container is not preserved
-				Expect(inventory["container"]).To(BeNil())
-				Expect(inventory["location"]).To(Equal("main_lab"))
 			})
 		})
 	})
@@ -586,8 +569,10 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should write the new frontmatter to the page", func() {
+				expectedWrittenFm := maps.Clone(newFrontmatter)
+				expectedWrittenFm["identifier"] = pageName
 				Expect(mockPageReadWriter.WrittenIdentifier).To(Equal(wikipage.PageIdentifier(pageName)))
-				Expect(mockPageReadWriter.WrittenFrontmatter).To(Equal(newFrontmatter))
+				Expect(mockPageReadWriter.WrittenFrontmatter).To(Equal(expectedWrittenFm))
 			})
 
 			It("should return the new frontmatter", func() {
@@ -618,132 +603,113 @@ var _ = Describe("Server", func() {
 			})
 		})
 
-		When("replacing with complex frontmatter containing arrays and nested objects", func() {
-			var complexFm wikipage.FrontMatter
-			var complexFmPb *structpb.Struct
+		When("the request contains an identifier key", func() {
+			var frontmatterWithIdentifier wikipage.FrontMatter
+			var expectedWrittenFm wikipage.FrontMatter
+			var expectedResponseFm wikipage.FrontMatter
 
 			BeforeEach(func() {
-				// Set up complex frontmatter structure to replace with
-				complexFm = map[string]any{
-					"identifier": "inventory_item",
-					"title":      "Complex Inventory Item",
-					"rename_this_section": map[string]any{
-						"total": "32",
-					},
-					"inventory": map[string]any{
-						"container": "lab_small_parts",
-						"items": []any{
-							"AKG Wired Earbuds",
-							"Steel Series Arctis 5 Headphone 3.5mm Adapter Cable",
-							"Steel Series Arctis 5 Headphone USB Dongle",
-							"Male 3.5mm to Male 3.5mm Coiled Cable",
-							"Random Earbud Tips",
-							"3.5mm to RCA Cable",
-							"Male 3.5mm to Male 3.5mm Cable",
-						},
-					},
+				frontmatterWithIdentifier = wikipage.FrontMatter{
+					"title":      "New Title",
+					"identifier": "malicious-identifier",
+					"tags":       []any{"a", "b"},
+				}
+				expectedWrittenFm = wikipage.FrontMatter{
+					"title":      "New Title",
+					"identifier": pageName, // Should be set to correct page name
+					"tags":       []any{"a", "b"},
+				}
+				expectedResponseFm = wikipage.FrontMatter{
+					"title": "New Title",
+					"tags":  []any{"a", "b"},
 				}
 
 				var err error
-				complexFmPb, err = structpb.NewStruct(complexFm)
+				req.Frontmatter, err = structpb.NewStruct(frontmatterWithIdentifier)
 				Expect(err).NotTo(HaveOccurred())
-
-				req.Frontmatter = complexFmPb
 			})
 
 			It("should not return an error", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("should write the complex frontmatter structure correctly", func() {
-				Expect(mockPageReadWriter.WrittenFrontmatter).To(Equal(complexFm))
+			It("should write frontmatter with correct identifier", func() {
+				Expect(mockPageReadWriter.WrittenIdentifier).To(Equal(wikipage.PageIdentifier(pageName)))
+				Expect(mockPageReadWriter.WrittenFrontmatter).To(Equal(expectedWrittenFm))
 			})
 
-			It("should return the complex frontmatter structure correctly", func() {
-				Expect(resp).NotTo(BeNil())
-				Expect(resp.Frontmatter).To(Equal(complexFmPb))
+			It("should return frontmatter without identifier key", func() {
+				expectedPb, err := structpb.NewStruct(expectedResponseFm)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.Frontmatter).To(Equal(expectedPb))
+			})
+		})
+
+		When("the request contains nested identifier keys", func() {
+			var frontmatterWithNestedIdentifier wikipage.FrontMatter
+			var expectedWrittenFm wikipage.FrontMatter
+			var expectedResponseFm wikipage.FrontMatter
+
+			BeforeEach(func() {
+				frontmatterWithNestedIdentifier = wikipage.FrontMatter{
+					"title": "New Title",
+					"metadata": map[string]any{
+						"identifier": "nested-identifier-should-be-allowed",
+						"author":     "test-author",
+					},
+					"tags": []any{
+						map[string]any{
+							"identifier": "tag-identifier-should-be-allowed",
+							"name":       "test-tag",
+						},
+					},
+				}
+				expectedWrittenFm = wikipage.FrontMatter{
+					"title":      "New Title",
+					"identifier": pageName, // Should be set to correct page name
+					"metadata": map[string]any{
+						"identifier": "nested-identifier-should-be-allowed",
+						"author":     "test-author",
+					},
+					"tags": []any{
+						map[string]any{
+							"identifier": "tag-identifier-should-be-allowed",
+							"name":       "test-tag",
+						},
+					},
+				}
+				expectedResponseFm = wikipage.FrontMatter{
+					"title": "New Title",
+					"metadata": map[string]any{
+						"identifier": "nested-identifier-should-be-allowed",
+						"author":     "test-author",
+					},
+					"tags": []any{
+						map[string]any{
+							"identifier": "tag-identifier-should-be-allowed",
+							"name":       "test-tag",
+						},
+					},
+				}
+
+				var err error
+				req.Frontmatter, err = structpb.NewStruct(frontmatterWithNestedIdentifier)
+				Expect(err).NotTo(HaveOccurred())
 			})
 
-			Describe("when verifying complex frontmatter structure handling", func() {
-				var resultMap map[string]any
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
 
-				BeforeEach(func() {
-					// Verify the structure can be converted back to a map
-					resultMap = resp.Frontmatter.AsMap()
-				})
+			It("should write frontmatter with nested identifier keys preserved and correct root identifier", func() {
+				Expect(mockPageReadWriter.WrittenIdentifier).To(Equal(wikipage.PageIdentifier(pageName)))
+				Expect(mockPageReadWriter.WrittenFrontmatter).To(Equal(expectedWrittenFm))
+			})
 
-				It("should provide a valid response", func() {
-					Expect(resp).NotTo(BeNil())
-				})
-
-				Describe("when checking top-level fields", func() {
-					It("should preserve the identifier field", func() {
-						Expect(resultMap["identifier"]).To(Equal("inventory_item"))
-					})
-
-					It("should preserve the title field", func() {
-						Expect(resultMap["title"]).To(Equal("Complex Inventory Item"))
-					})
-				})
-
-				Describe("when checking nested section handling", func() {
-					var renameSection map[string]any
-					var sectionExists bool
-
-					BeforeEach(func() {
-						renameSection, sectionExists = resultMap["rename_this_section"].(map[string]any)
-					})
-
-					It("should preserve the nested section", func() {
-						Expect(sectionExists).To(BeTrue())
-					})
-
-					It("should preserve nested section fields", func() {
-						Expect(renameSection["total"]).To(Equal("32"))
-					})
-				})
-
-				Describe("when checking inventory section with arrays", func() {
-					var inventory map[string]any
-					var inventoryExists bool
-
-					BeforeEach(func() {
-						inventory, inventoryExists = resultMap["inventory"].(map[string]any)
-					})
-
-					It("should preserve the inventory section", func() {
-						Expect(inventoryExists).To(BeTrue())
-					})
-
-					It("should preserve inventory container field", func() {
-						Expect(inventory["container"]).To(Equal("lab_small_parts"))
-					})
-
-					Describe("when checking array handling", func() {
-						var items []any
-						var itemsExists bool
-
-						BeforeEach(func() {
-							items, itemsExists = inventory["items"].([]any)
-						})
-
-						It("should preserve the items array", func() {
-							Expect(itemsExists).To(BeTrue())
-						})
-
-						It("should preserve array length", func() {
-							Expect(items).To(HaveLen(7))
-						})
-
-						It("should preserve first array item", func() {
-							Expect(items[0]).To(Equal("AKG Wired Earbuds"))
-						})
-
-						It("should preserve last array item", func() {
-							Expect(items[6]).To(Equal("Male 3.5mm to Male 3.5mm Cable"))
-						})
-					})
-				})
+			It("should return frontmatter with nested identifier keys preserved", func() {
+				expectedPb, err := structpb.NewStruct(expectedResponseFm)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.Frontmatter).To(Equal(expectedPb))
 			})
 		})
 	})
@@ -987,6 +953,113 @@ var _ = Describe("Server", func() {
 					Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "path is deeper than data structure"))
 					Expect(resp).To(BeNil())
 				})
+			})
+		})
+
+		When("attempting to remove the identifier key", func() {
+			BeforeEach(func() {
+				mockPageReadWriter.Frontmatter = wikipage.FrontMatter{
+					"title":      "Test Page",
+					"identifier": "test-page",
+				}
+				req.KeyPath = []*apiv1.PathComponent{
+					{Component: &apiv1.PathComponent_Key{Key: "identifier"}},
+				}
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "identifier key cannot be removed"))
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("removing a regular key with identifier present", func() {
+			var initialFm wikipage.FrontMatter
+			var expectedFm wikipage.FrontMatter
+
+			BeforeEach(func() {
+				initialFm = wikipage.FrontMatter{
+					"title":      "Test Page",
+					"identifier": "test-page",
+					"tags":       []any{"test"},
+				}
+				expectedFm = wikipage.FrontMatter{
+					"title":      "Test Page",
+					"identifier": "test-page",
+				}
+				mockPageReadWriter.Frontmatter = initialFm
+				req.KeyPath = []*apiv1.PathComponent{
+					{Component: &apiv1.PathComponent_Key{Key: "tags"}},
+				}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should write the correctly modified frontmatter with identifier preserved", func() {
+				Expect(mockPageReadWriter.WrittenFrontmatter).To(Equal(expectedFm))
+			})
+
+			It("should return the modified frontmatter without identifier key", func() {
+				expectedResponseFm := wikipage.FrontMatter{
+					"title": "Test Page",
+				}
+				expectedPb, err := structpb.NewStruct(expectedResponseFm)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.Frontmatter).To(Equal(expectedPb))
+			})
+		})
+
+		When("removing a nested identifier key", func() {
+			var initialFm wikipage.FrontMatter
+			var expectedFm wikipage.FrontMatter
+
+			BeforeEach(func() {
+				initialFm = wikipage.FrontMatter{
+					"title":      "Test Page",
+					"identifier": "test-page",
+					"metadata": map[string]any{
+						"identifier": "nested-identifier-should-be-removable",
+						"author":     "test-author",
+						"version":    "1.0",
+					},
+				}
+				expectedFm = wikipage.FrontMatter{
+					"title":      "Test Page",
+					"identifier": "test-page",
+					"metadata": map[string]any{
+						"author":  "test-author",
+						"version": "1.0",
+					},
+				}
+
+				mockPageReadWriter.Frontmatter = initialFm
+				req.KeyPath = []*apiv1.PathComponent{
+					{Component: &apiv1.PathComponent_Key{Key: "metadata"}},
+					{Component: &apiv1.PathComponent_Key{Key: "identifier"}},
+				}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should write the correctly modified frontmatter with nested identifier removed", func() {
+				Expect(mockPageReadWriter.WrittenFrontmatter).To(Equal(expectedFm))
+			})
+
+			It("should return the modified frontmatter without root identifier key", func() {
+				expectedResponseFm := wikipage.FrontMatter{
+					"title": "Test Page",
+					"metadata": map[string]any{
+						"author":  "test-author",
+						"version": "1.0",
+					},
+				}
+				expectedPb, err := structpb.NewStruct(expectedResponseFm)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.Frontmatter).To(Equal(expectedPb))
 			})
 		})
 	})
