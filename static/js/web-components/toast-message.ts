@@ -36,8 +36,6 @@ export class ToastMessage extends LitElement {
 
       .toast {
         background: #ffffff;
-        border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         border-left: 4px solid var(--toast-color);
         padding: 16px;
         display: flex;
@@ -47,11 +45,11 @@ export class ToastMessage extends LitElement {
       }
 
       .toast.success {
-        --toast-color: #28a745;
+        --toast-color: #5cb85c;
       }
 
       .toast.error {
-        --toast-color: #dc3545;
+        --toast-color: #d9534f;
       }
 
       .toast.warning {
@@ -59,7 +57,7 @@ export class ToastMessage extends LitElement {
       }
 
       .toast.info {
-        --toast-color: #17a2b8;
+        --toast-color: #6c757d;
       }
 
       .icon {
@@ -81,32 +79,6 @@ export class ToastMessage extends LitElement {
         color: #333;
         margin: 0;
         word-wrap: break-word;
-      }
-
-      .close-button {
-        flex-shrink: 0;
-        background: none;
-        border: none;
-        color: #666;
-        cursor: pointer;
-        padding: 0;
-        width: 20px;
-        height: 20px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 2px;
-        transition: background-color 0.2s ease;
-      }
-
-      .close-button:hover {
-        background-color: #f5f5f5;
-        color: #333;
-      }
-
-      .close-button:focus {
-        outline: 2px solid var(--toast-color);
-        outline-offset: 1px;
       }
 
       /* Mobile responsive */
@@ -201,7 +173,7 @@ export class ToastMessage extends LitElement {
   override render() {
     return html`
       ${sharedStyles}
-      <div class="toast ${this.type}">
+      <div class="toast ${this.type} border-radius box-shadow system-font">
         <div class="icon" aria-hidden="true">
           ${this.getIcon()}
         </div>
@@ -209,7 +181,7 @@ export class ToastMessage extends LitElement {
           <p class="message">${this.message}</p>
         </div>
         <button 
-          class="close-button" 
+          class="button-icon" 
           @click="${this._handleClose}"
           aria-label="Close notification"
           title="Close"

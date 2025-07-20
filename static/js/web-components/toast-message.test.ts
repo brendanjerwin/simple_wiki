@@ -137,7 +137,7 @@ describe('ToastMessage', () => {
     });
 
     it('should hide the toast', async () => {
-      const closeButton = el.shadowRoot?.querySelector('.close-button') as HTMLButtonElement;
+      const closeButton = el.shadowRoot?.querySelector('.button-icon') as HTMLButtonElement;
       expect(closeButton).to.exist;
       
       closeButton.click();
