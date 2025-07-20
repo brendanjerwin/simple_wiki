@@ -8,6 +8,8 @@ import './frontmatter-editor-dialog.js';
 describe('FrontmatterEditorDialog - Save Functionality', () => {
   let el: FrontmatterEditorDialog;
   let clientStub: sinon.SinonStub;
+  let sessionStorageStub: sinon.SinonStub;
+  let refreshPageStub: sinon.SinonStub;
 
   function timeout(ms: number, message: string): Promise<never> {
     return new Promise((_, reject) => 
@@ -26,6 +28,12 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
     
     // Stub the client replaceFrontmatter method
     clientStub = sinon.stub(el['client'], 'replaceFrontmatter');
+    
+    // Stub sessionStorage.setItem to test toast storage
+    sessionStorageStub = sinon.stub(sessionStorage, 'setItem');
+    
+    // Stub the refreshPage method to prevent actual page refresh
+    refreshPageStub = sinon.stub(el, 'refreshPage' as keyof FrontmatterEditorDialog);
     
     await el.updateComplete;
   });
@@ -146,6 +154,17 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
         expect(el.saving).to.be.false;
       });
 
+      it('should store success toast and refresh page after successful save', async () => {
+        await el['_handleSaveClick']();
+        
+        // Check that success message was stored in sessionStorage
+        expect(sessionStorageStub).to.have.been.calledWith('toast-message', 'Frontmatter saved successfully!');
+        expect(sessionStorageStub).to.have.been.calledWith('toast-type', 'success');
+        
+        // Check that page refresh was triggered
+        expect(refreshPageStub).to.have.been.calledOnce;
+      });
+
       it('should close the dialog after successful save', async () => {
         el.open = true;
         await el['_handleSaveClick']();
@@ -192,6 +211,16 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
       it('should clear saving state on failure', async () => {
         await el['_handleSaveClick']();
         expect(el.saving).to.be.false;
+      });
+
+      it('should not refresh page on failure', async () => {
+        await el['_handleSaveClick']();
+        expect(refreshPageStub).not.to.have.been.called;
+      });
+
+      it('should not store toast message on failure', async () => {
+        await el['_handleSaveClick']();
+        expect(sessionStorageStub).not.to.have.been.called;
       });
 
       it('should not close dialog on failure', async () => {
