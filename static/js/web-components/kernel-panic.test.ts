@@ -87,4 +87,24 @@ describe('KernelPanic', () => {
       expect(errorStack?.textContent).to.include('Test error message');
     });
   });
+
+  describe('when refresh button is clicked', () => {
+    beforeEach(async () => {
+      el = await fixture(html`<kernel-panic></kernel-panic>`);
+    });
+
+    it('should have a refresh handler method', () => {
+      // Verify the component has the _handleRefresh method
+      expect(typeof (el as KernelPanic & { _handleRefresh: () => void })._handleRefresh).to.equal('function');
+    });
+
+    it('should render button with click handler', () => {
+      const button = el.shadowRoot?.querySelector('.refresh-button') as HTMLButtonElement;
+      expect(button).to.exist;
+      expect(button.textContent?.trim()).to.equal('Refresh Page');
+      
+      // Verify button is clickable
+      expect(button.disabled).to.be.false;
+    });
+  });
 });

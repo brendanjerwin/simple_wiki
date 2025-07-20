@@ -7,6 +7,7 @@ import { GetFrontmatterRequest, GetFrontmatterResponse } from '../gen/api/v1/fro
 import { sharedStyles, foundationCSS, dialogCSS, responsiveCSS, buttonCSS } from './shared-styles.js';
 import './frontmatter-value-section.js';
 import './kernel-panic.js';
+import { showKernelPanic } from './kernel-panic.js';
 
 /**
  * FrontmatterEditorDialog - A modal dialog for editing page frontmatter metadata
@@ -206,13 +207,7 @@ export class FrontmatterEditorDialog extends LitElement {
       return struct.toJson() as Record<string, unknown>;
     } catch (err) {
       // This is an unrecoverable error - the protobuf data is corrupted
-      const kernelPanic = document.createElement('kernel-panic') as HTMLElement & {
-        message: string;
-        error: Error;
-      };
-      kernelPanic.message = 'Failed to convert frontmatter data structure';
-      kernelPanic.error = err;
-      document.body.appendChild(kernelPanic);
+      showKernelPanic('Failed to convert frontmatter data structure', err as Error);
       throw err;
     }
   }

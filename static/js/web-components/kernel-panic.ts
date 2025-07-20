@@ -20,6 +20,18 @@ export class KernelPanic extends LitElement {
       overflow-y: auto;
       display: flex;
       flex-direction: column;
+      animation: fade-in 1.5s ease-in-out;
+    }
+
+    @keyframes fade-in {
+      0% {
+        opacity: 0;
+        transform: scale(0.95);
+      }
+      100% {
+        opacity: 1;
+        transform: scale(1);
+      }
     }
 
     .header {
@@ -168,3 +180,20 @@ export class KernelPanic extends LitElement {
 }
 
 customElements.define('kernel-panic', KernelPanic);
+
+/**
+ * Creates and displays a kernel panic overlay for unrecoverable errors.
+ * This function handles all the DOM manipulation needed to display the error.
+ * 
+ * @param message - The error message to display
+ * @param error - The error object with stack trace
+ */
+export function showKernelPanic(message: string, error: Error): void {
+  const kernelPanic = document.createElement('kernel-panic') as HTMLElement & {
+    message: string;
+    error: Error;
+  };
+  kernelPanic.message = message;
+  kernelPanic.error = error;
+  document.body.appendChild(kernelPanic);
+}
