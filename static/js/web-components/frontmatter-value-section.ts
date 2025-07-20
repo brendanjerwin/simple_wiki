@@ -63,10 +63,18 @@ export class FrontmatterValueSection extends LitElement {
         padding-left: 4px;
         padding-top: 4px;
         padding-bottom: 4px;
+        padding-right: 4px;
         background: #fff;
         border: 1px solid #e0e0e0;
         position: relative;
         margin-left: 4px;
+      }
+
+      .field-content {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        padding-right: 60px; /* Space for remove button */
       }
 
       .field-row frontmatter-key {
@@ -81,6 +89,7 @@ export class FrontmatterValueSection extends LitElement {
         position: absolute;
         top: 4px;
         right: 4px;
+        flex-shrink: 0;
       }
 
       .empty-section-message {
@@ -292,18 +301,20 @@ export class FrontmatterValueSection extends LitElement {
       <div class="section-fields">
         ${sortedEntries.map(([key, value]) => html`
           <div class="field-row">
-            <frontmatter-key
-              .key="${key}"
-              .editable="${!this.disabled}"
-              placeholder="Field name"
-              @key-change="${this._handleKeyChange}"
-            ></frontmatter-key>
-            <frontmatter-value
-              .value="${value}"
-              .disabled="${this.disabled}"
-              placeholder="Field value"
-              @value-change="${(e: CustomEvent) => this._handleValueChange(e, key)}"
-            ></frontmatter-value>
+            <div class="field-content">
+              <frontmatter-key
+                .key="${key}"
+                .editable="${!this.disabled}"
+                placeholder="Field name"
+                @key-change="${this._handleKeyChange}"
+              ></frontmatter-key>
+              <frontmatter-value
+                .value="${value}"
+                .disabled="${this.disabled}"
+                placeholder="Field value"
+                @value-change="${(e: CustomEvent) => this._handleValueChange(e, key)}"
+              ></frontmatter-value>
+            </div>
             <button
               class="button-base button-primary button-small border-radius-small remove-field-button"
               .disabled="${this.disabled}"

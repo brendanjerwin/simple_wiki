@@ -16,6 +16,7 @@ export class FrontmatterValueArray extends LitElement {
         padding-left: 4px;
         padding-top: 4px;
         padding-bottom: 4px;
+        padding-right: 4px;
         background: #f9f9f9;
         margin-left: 4px;
       }
@@ -50,6 +51,7 @@ export class FrontmatterValueArray extends LitElement {
       padding-left: 4px;
       padding-top: 3px;
       padding-bottom: 3px;
+      padding-right: 4px;
       background: #fff;
       border: 1px solid #e0e0e0;
       border-radius: 2px;

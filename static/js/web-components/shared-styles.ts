@@ -117,6 +117,12 @@ export const buttonCSS = css`
     font-size: 12px;
   }
 
+  .button-large {
+    padding: 12px 20px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
   .button-dropdown {
     display: flex;
     align-items: center;

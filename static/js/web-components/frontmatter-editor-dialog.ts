@@ -287,10 +287,10 @@ export class FrontmatterEditorDialog extends LitElement {
           `}
         </div>
         <div class="footer">
-          <button class="button-base button-secondary border-radius-small" @click="${this._handleCancel}">
+          <button class="button-base button-secondary button-large border-radius-small" @click="${this._handleCancel}">
             Cancel
           </button>
-          <button class="button-base button-primary border-radius-small" @click="${this._handleSaveClick}">
+          <button class="button-base button-primary button-large border-radius-small" @click="${this._handleSaveClick}">
             Save
           </button>
         </div>
