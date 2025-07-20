@@ -272,6 +272,39 @@ var _ = Describe("Server", func() {
 				Expect(res.Frontmatter).To(Equal(expectedStruct))
 			})
 		})
+
+		When("the requested page has frontmatter with nested identifier keys", func() {
+			var frontmatterWithNestedIdentifier map[string]any
+
+			BeforeEach(func() {
+				frontmatterWithNestedIdentifier = map[string]any{
+					"title": "Test Page",
+					"metadata": map[string]any{
+						"identifier": "nested-identifier-should-be-allowed",
+						"author":     "test-author",
+					},
+					"tags": []any{
+						map[string]any{
+							"identifier": "tag-identifier-should-be-allowed",
+							"name":       "test-tag",
+						},
+					},
+				}
+				mockPageReadWriter.Frontmatter = frontmatterWithNestedIdentifier
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return the frontmatter with nested identifier keys preserved", func() {
+				Expect(res).NotTo(BeNil())
+				// Nested identifier keys should be preserved, only root-level filtered
+				expectedStruct, err := structpb.NewStruct(frontmatterWithNestedIdentifier)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(res.Frontmatter).To(Equal(expectedStruct))
+			})
+		})
 	})
 
 	Describe("MergeFrontmatter", func() {
@@ -410,6 +443,67 @@ var _ = Describe("Server", func() {
 				Expect(resp).To(BeNil())
 			})
 		})
+
+		When("the frontmatter contains nested identifier keys", func() {
+			var existingFrontmatter wikipage.FrontMatter
+			var newFrontmatter wikipage.FrontMatter
+			var expectedMergedFm wikipage.FrontMatter
+
+			BeforeEach(func() {
+				existingFrontmatter = wikipage.FrontMatter{
+					"title": "Existing Title",
+					"metadata": map[string]any{
+						"author": "existing-author",
+					},
+				}
+				newFrontmatter = wikipage.FrontMatter{
+					"tags": []any{
+						map[string]any{
+							"identifier": "tag-identifier-should-be-allowed",
+							"name":       "new-tag",
+						},
+					},
+					"metadata": map[string]any{
+						"identifier": "nested-identifier-should-be-allowed", 
+						"version":    "1.0",
+					},
+				}
+				expectedMergedFm = wikipage.FrontMatter{
+					"title": "Existing Title",
+					"tags": []any{
+						map[string]any{
+							"identifier": "tag-identifier-should-be-allowed",
+							"name":       "new-tag",
+						},
+					},
+					"metadata": map[string]any{
+						"identifier": "nested-identifier-should-be-allowed",
+						"version":    "1.0",
+						// Note: "author" from existing metadata is overwritten by maps.Copy
+					},
+				}
+				
+				mockPageReadWriter.Frontmatter = existingFrontmatter
+				var err error
+				req.Frontmatter, err = structpb.NewStruct(newFrontmatter)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should write the merged frontmatter with nested identifier keys preserved", func() {
+				Expect(mockPageReadWriter.WrittenIdentifier).To(Equal(wikipage.PageIdentifier(pageName)))
+				Expect(mockPageReadWriter.WrittenFrontmatter).To(Equal(expectedMergedFm))
+			})
+
+			It("should return the merged frontmatter with nested identifier keys preserved", func() {
+				expectedPb, err := structpb.NewStruct(expectedMergedFm)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.Frontmatter).To(Equal(expectedPb))
+			})
+		})
 	})
 
 	Describe("ReplaceFrontmatter", func() {
@@ -545,6 +639,74 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should return frontmatter without identifier key", func() {
+				expectedPb, err := structpb.NewStruct(expectedResponseFm)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.Frontmatter).To(Equal(expectedPb))
+			})
+		})
+
+		When("the request contains nested identifier keys", func() {
+			var frontmatterWithNestedIdentifier wikipage.FrontMatter
+			var expectedWrittenFm wikipage.FrontMatter
+			var expectedResponseFm wikipage.FrontMatter
+
+			BeforeEach(func() {
+				frontmatterWithNestedIdentifier = wikipage.FrontMatter{
+					"title": "New Title",
+					"metadata": map[string]any{
+						"identifier": "nested-identifier-should-be-allowed",
+						"author":     "test-author",
+					},
+					"tags": []any{
+						map[string]any{
+							"identifier": "tag-identifier-should-be-allowed",
+							"name":       "test-tag",
+						},
+					},
+				}
+				expectedWrittenFm = wikipage.FrontMatter{
+					"title":      "New Title",
+					"identifier": pageName, // Should be set to correct page name
+					"metadata": map[string]any{
+						"identifier": "nested-identifier-should-be-allowed",
+						"author":     "test-author",
+					},
+					"tags": []any{
+						map[string]any{
+							"identifier": "tag-identifier-should-be-allowed",
+							"name":       "test-tag",
+						},
+					},
+				}
+				expectedResponseFm = wikipage.FrontMatter{
+					"title": "New Title",
+					"metadata": map[string]any{
+						"identifier": "nested-identifier-should-be-allowed",
+						"author":     "test-author",
+					},
+					"tags": []any{
+						map[string]any{
+							"identifier": "tag-identifier-should-be-allowed",
+							"name":       "test-tag",
+						},
+					},
+				}
+
+				var err error
+				req.Frontmatter, err = structpb.NewStruct(frontmatterWithNestedIdentifier)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should write frontmatter with nested identifier keys preserved and correct root identifier", func() {
+				Expect(mockPageReadWriter.WrittenIdentifier).To(Equal(wikipage.PageIdentifier(pageName)))
+				Expect(mockPageReadWriter.WrittenFrontmatter).To(Equal(expectedWrittenFm))
+			})
+
+			It("should return frontmatter with nested identifier keys preserved", func() {
 				expectedPb, err := structpb.NewStruct(expectedResponseFm)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(resp.Frontmatter).To(Equal(expectedPb))
@@ -842,6 +1004,58 @@ var _ = Describe("Server", func() {
 			It("should return the modified frontmatter without identifier key", func() {
 				expectedResponseFm := wikipage.FrontMatter{
 					"title": "Test Page",
+				}
+				expectedPb, err := structpb.NewStruct(expectedResponseFm)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.Frontmatter).To(Equal(expectedPb))
+			})
+		})
+
+		When("removing a nested identifier key", func() {
+			var initialFm wikipage.FrontMatter
+			var expectedFm wikipage.FrontMatter
+
+			BeforeEach(func() {
+				initialFm = wikipage.FrontMatter{
+					"title":      "Test Page",
+					"identifier": "test-page",
+					"metadata": map[string]any{
+						"identifier": "nested-identifier-should-be-removable",
+						"author":     "test-author",
+						"version":    "1.0",
+					},
+				}
+				expectedFm = wikipage.FrontMatter{
+					"title":      "Test Page",
+					"identifier": "test-page",
+					"metadata": map[string]any{
+						"author":  "test-author",
+						"version": "1.0",
+					},
+				}
+
+				mockPageReadWriter.Frontmatter = initialFm
+				req.KeyPath = []*apiv1.PathComponent{
+					{Component: &apiv1.PathComponent_Key{Key: "metadata"}},
+					{Component: &apiv1.PathComponent_Key{Key: "identifier"}},
+				}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should write the correctly modified frontmatter with nested identifier removed", func() {
+				Expect(mockPageReadWriter.WrittenFrontmatter).To(Equal(expectedFm))
+			})
+
+			It("should return the modified frontmatter without root identifier key", func() {
+				expectedResponseFm := wikipage.FrontMatter{
+					"title": "Test Page",
+					"metadata": map[string]any{
+						"author":  "test-author",
+						"version": "1.0",
+					},
 				}
 				expectedPb, err := structpb.NewStruct(expectedResponseFm)
 				Expect(err).NotTo(HaveOccurred())
