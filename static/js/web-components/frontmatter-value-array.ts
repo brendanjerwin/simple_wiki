@@ -12,7 +12,8 @@ export class FrontmatterValueArray extends LitElement {
       }
 
       .array-container {
-        border: 1px solid #e0e0e0;
+        border: none;
+        border-left: 1px solid #e0e0e0;
         padding-left: 4px;
         padding-top: 4px;
         background: #f9f9f9;
@@ -25,7 +26,7 @@ export class FrontmatterValueArray extends LitElement {
         align-items: center;
         margin-bottom: 4px;
         padding-bottom: 2px;
-        border-bottom: 1px solid #e0e0e0;
+        border: none;
       }
 
       .array-title {
@@ -49,7 +50,8 @@ export class FrontmatterValueArray extends LitElement {
       padding-left: 4px;
       padding-top: 3px;
       background: #fff;
-      border: 1px solid #e0e0e0;
+      border: none;
+      border-left: 1px solid #e0e0e0;
       border-radius: 2px;
     }
 

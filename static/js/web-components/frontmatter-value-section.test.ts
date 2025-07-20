@@ -408,7 +408,10 @@ describe('FrontmatterValueSection', () => {
       const section = el.shadowRoot?.querySelector('.section-container') as HTMLElement;
       const computedStyle = getComputedStyle(section);
       
-      expect(computedStyle.borderWidth).to.equal('1px');
+      expect(computedStyle.borderLeftWidth).to.equal('1px');
+      expect(computedStyle.borderRightWidth).to.equal('0px');
+      expect(computedStyle.borderTopWidth).to.equal('0px');
+      expect(computedStyle.borderBottomWidth).to.equal('0px');
       expect(computedStyle.padding).to.contain('4px');
     });
 

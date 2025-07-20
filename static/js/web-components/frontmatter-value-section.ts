@@ -14,7 +14,8 @@ export class FrontmatterValueSection extends LitElement {
       }
 
       .section-container {
-        border: 1px solid #e0e0e0;
+        border: none;
+        border-left: 1px solid #e0e0e0;
         padding-left: 4px;
         padding-top: 4px;
         background: #f9f9f9;
@@ -32,11 +33,11 @@ export class FrontmatterValueSection extends LitElement {
         align-items: center;
         margin-bottom: 4px;
         padding-bottom: 2px;
-        border-bottom: 1px solid #e0e0e0;
+        border: none;
       }
 
       .section-header.root-header {
-        border-bottom: none;
+        border: none;
         padding-bottom: 0;
         justify-content: flex-end;
       }
@@ -62,7 +63,8 @@ export class FrontmatterValueSection extends LitElement {
         padding-left: 4px;
         padding-top: 4px;
         background: #fff;
-        border: 1px solid #e0e0e0;
+        border: none;
+        border-left: 1px solid #e0e0e0;
         position: relative;
         margin-left: 4px;
       }

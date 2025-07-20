@@ -221,7 +221,10 @@ describe('FrontmatterKey', () => {
       const computedStyle = getComputedStyle(inputElement);
       
       expect(computedStyle.fontWeight).to.equal('600');
-      expect(computedStyle.borderWidth).to.equal('1px');
+      expect(computedStyle.borderLeftWidth).to.equal('1px');
+      expect(computedStyle.borderRightWidth).to.equal('0px');
+      expect(computedStyle.borderTopWidth).to.equal('0px');
+      expect(computedStyle.borderBottomWidth).to.equal('0px');
     });
 
     it('should have proper display styling for non-editable', async () => {
