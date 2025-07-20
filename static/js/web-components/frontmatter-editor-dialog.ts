@@ -3,7 +3,7 @@ import { createClient } from '@connectrpc/connect';
 import { Struct } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import { Frontmatter } from '../gen/api/v1/frontmatter_connect.js';
-import { GetFrontmatterRequest, GetFrontmatterResponse, ReplaceFrontmatterRequest, ReplaceFrontmatterResponse } from '../gen/api/v1/frontmatter_pb.js';
+import { GetFrontmatterRequest, GetFrontmatterResponse, ReplaceFrontmatterRequest } from '../gen/api/v1/frontmatter_pb.js';
 import { sharedStyles, foundationCSS, dialogCSS, responsiveCSS, buttonCSS } from './shared-styles.js';
 import './frontmatter-value-section.js';
 import './kernel-panic.js';
