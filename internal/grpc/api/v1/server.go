@@ -18,6 +18,48 @@ import (
 )
 
 const pageReadWriterNotAvailableError = "PageReadWriter not available"
+const identifierKey = "identifier"
+
+// filterIdentifierKey removes the identifier key from a frontmatter map.
+func filterIdentifierKey(fm map[string]any) map[string]any {
+	if fm == nil {
+		return nil
+	}
+	
+	filtered := make(map[string]any)
+	for k, v := range fm {
+		if k != identifierKey {
+			filtered[k] = v
+		}
+	}
+	return filtered
+}
+
+// validateNoIdentifierKey checks if the frontmatter contains an identifier key.
+func validateNoIdentifierKey(fm map[string]any) error {
+	if fm == nil {
+		return nil
+	}
+	
+	if _, exists := fm[identifierKey]; exists {
+		return status.Error(codes.InvalidArgument, "identifier key cannot be modified")
+	}
+	return nil
+}
+
+// isIdentifierKeyPath checks if the given path targets the identifier key at the root level.
+func isIdentifierKeyPath(path []*apiv1.PathComponent) bool {
+	if len(path) != 1 {
+		return false
+	}
+	
+	keyComp, ok := path[0].Component.(*apiv1.PathComponent_Key)
+	if !ok {
+		return false
+	}
+	
+	return keyComp.Key == identifierKey
+}
 
 // Server is the implementation of the gRPC services.
 type Server struct {
@@ -34,6 +76,14 @@ func (s *Server) MergeFrontmatter(_ context.Context, req *apiv1.MergeFrontmatter
 	v := reflect.ValueOf(s.PageReadWriter)
 	if s.PageReadWriter == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
 		return nil, status.Error(codes.Internal, pageReadWriterNotAvailableError)
+	}
+
+	// Validate that the request doesn't contain an identifier key
+	if req.Frontmatter != nil {
+		newFm := req.Frontmatter.AsMap()
+		if err := validateNoIdentifierKey(newFm); err != nil {
+			return nil, err
+		}
 	}
 
 	_, existingFm, err := s.PageReadWriter.ReadFrontMatter(req.Page)
@@ -55,7 +105,9 @@ func (s *Server) MergeFrontmatter(_ context.Context, req *apiv1.MergeFrontmatter
 		return nil, status.Errorf(codes.Internal, "failed to write frontmatter: %v", err)
 	}
 
-	mergedFmStruct, err := structpb.NewStruct(existingFm)
+	// Filter out the identifier key from the response
+	filteredFm := filterIdentifierKey(existingFm)
+	mergedFmStruct, err := structpb.NewStruct(filteredFm)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to convert merged frontmatter to struct: %v", err)
 	}
@@ -75,6 +127,9 @@ func (s *Server) ReplaceFrontmatter(_ context.Context, req *apiv1.ReplaceFrontma
 	var fm map[string]any
 	if req.Frontmatter != nil {
 		fm = req.Frontmatter.AsMap()
+		// Filter out any user-provided identifier key and set the correct one
+		fm = filterIdentifierKey(fm)
+		fm[identifierKey] = req.Page
 	}
 
 	err = s.PageReadWriter.WriteFrontMatter(req.Page, fm)
@@ -82,8 +137,22 @@ func (s *Server) ReplaceFrontmatter(_ context.Context, req *apiv1.ReplaceFrontma
 		return nil, status.Errorf(codes.Internal, "failed to write frontmatter: %v", err)
 	}
 
+	// Return the frontmatter without the identifier key
+	var responseFm map[string]any
+	if fm != nil {
+		responseFm = filterIdentifierKey(fm)
+	}
+	
+	var responseFmStruct *structpb.Struct
+	if len(responseFm) > 0 {
+		responseFmStruct, err = structpb.NewStruct(responseFm)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to convert frontmatter to struct: %v", err)
+		}
+	}
+
 	return &apiv1.ReplaceFrontmatterResponse{
-		Frontmatter: req.Frontmatter,
+		Frontmatter: responseFmStruct,
 	}, nil
 }
 
@@ -96,6 +165,11 @@ func (s *Server) RemoveKeyAtPath(_ context.Context, req *apiv1.RemoveKeyAtPathRe
 
 	if len(req.GetKeyPath()) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "key_path cannot be empty")
+	}
+
+	// Validate that the path is not targeting the identifier key
+	if isIdentifierKeyPath(req.GetKeyPath()) {
+		return nil, status.Error(codes.InvalidArgument, "identifier key cannot be removed")
 	}
 
 	_, fm, err := s.PageReadWriter.ReadFrontMatter(req.Page)
@@ -121,7 +195,9 @@ func (s *Server) RemoveKeyAtPath(_ context.Context, req *apiv1.RemoveKeyAtPathRe
 		return nil, status.Errorf(codes.Internal, "failed to write frontmatter: %v", err)
 	}
 
-	updatedFmStruct, err := structpb.NewStruct(updatedFm.(map[string]any))
+	// Filter out the identifier key from the response
+	filteredFm := filterIdentifierKey(updatedFm.(map[string]any))
+	updatedFmStruct, err := structpb.NewStruct(filteredFm)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to convert updated frontmatter to struct: %v", err)
 	}
@@ -242,8 +318,11 @@ func (s *Server) GetFrontmatter(_ context.Context, req *apiv1.GetFrontmatterRequ
 		return nil, status.Errorf(codes.Internal, "failed to read frontmatter: %v", err)
 	}
 
+	// Filter out the identifier key from the response
+	filteredFm := filterIdentifierKey(fm)
+
 	var structFm *structpb.Struct
-	structFm, err = structpb.NewStruct(fm)
+	structFm, err = structpb.NewStruct(filteredFm)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to convert frontmatter to struct: %v", err)
 	}
