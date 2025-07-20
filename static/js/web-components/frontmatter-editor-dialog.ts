@@ -1,15 +1,51 @@
 import { html, css, LitElement } from 'lit';
 import { createClient } from '@connectrpc/connect';
+import { Struct } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import { Frontmatter } from '../gen/api/v1/frontmatter_connect.js';
 import { GetFrontmatterRequest, GetFrontmatterResponse } from '../gen/api/v1/frontmatter_pb.js';
-import { sharedStyles, foundationCSS, dialogCSS, responsiveCSS } from './shared-styles.js';
+import { sharedStyles, foundationCSS, dialogCSS, responsiveCSS, buttonCSS } from './shared-styles.js';
+import './frontmatter-value-section.js';
+import './kernel-panic.js';
+import { showKernelPanic } from './kernel-panic.js';
 
+/**
+ * FrontmatterEditorDialog - A modal dialog for editing page frontmatter metadata
+ * 
+ * WORKING THEORY:
+ * This component manages the complete lifecycle of frontmatter editing through several key state variables:
+ * 
+ * - `frontmatter`: The original server response containing the current frontmatter data (read-only)
+ * - `workingFrontmatter`: A mutable working copy of the frontmatter data that users can edit
+ * - `loading`: Indicates whether the component is fetching data from the server
+ * - `error`: Contains any error message from server operations
+ * - `open`: Controls the visibility state of the modal dialog
+ * 
+ * DATA FLOW:
+ * 1. When opened, the dialog fetches current frontmatter via gRPC and stores it in `frontmatter`
+ * 2. `convertStructToPlainObject()` converts the protobuf Struct to a plain JavaScript object
+ * 3. This converted data is copied to `workingFrontmatter` for editing
+ * 4. The frontmatter-value-section component renders and manages all field editing operations
+ * 5. All user modifications update `workingFrontmatter` while preserving the original `frontmatter`
+ * 6. On save, `workingFrontmatter` is sent back to the server; on cancel, changes are discarded
+ * 
+ * COMPONENT ARCHITECTURE:
+ * The dialog uses a hierarchical component structure:
+ * - frontmatter-value-section: Root container that handles the main frontmatter object
+ * - frontmatter-key: Manages editable key names with label-like styling
+ * - frontmatter-value: Dispatcher that delegates to appropriate value components
+ * - frontmatter-value-string: Handles individual string fields
+ * - frontmatter-value-array: Manages arrays of string values
+ * - frontmatter-add-field-button: Provides dropdown for adding new fields/arrays/sections
+ * 
+ * This separation allows for clean state management, proper event bubbling, and maintainable code.
+ */
 export class FrontmatterEditorDialog extends LitElement {
   static override styles = [
     foundationCSS,
     dialogCSS,
     responsiveCSS,
+    buttonCSS,
     css`
       :host {
         position: fixed;
@@ -56,6 +92,7 @@ export class FrontmatterEditorDialog extends LitElement {
         position: relative;
         z-index: 1;
         animation: slideIn 0.2s ease-out;
+        border-radius: 8px;
       }
 
       @keyframes slideIn {
@@ -69,10 +106,28 @@ export class FrontmatterEditorDialog extends LitElement {
         }
       }
 
+      /* Mobile-first responsive behavior */
+      @media (max-width: 768px) {
+        :host([open]) {
+          align-items: stretch;
+          justify-content: stretch;
+        }
+
+        .dialog {
+          width: 100%;
+          height: 100%;
+          max-width: none;
+          max-height: none;
+          border-radius: 0;
+          margin: 0;
+        }
+      }
+
       .content {
         flex: 1;
         padding: 20px;
         overflow-y: auto;
+        min-height: 150px;
       }
 
       .frontmatter-display {
@@ -116,42 +171,6 @@ export class FrontmatterEditorDialog extends LitElement {
         border-top: 1px solid #e0e0e0;
         justify-content: flex-end;
       }
-
-      .button {
-        padding: 8px 16px;
-        border: 1px solid;
-        cursor: pointer;
-        font-size: 14px;
-        font-weight: 500;
-        transition: all 0.2s;
-      }
-
-      .button:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-      }
-
-      .button-cancel {
-        background: white;
-        color: #666;
-        border-color: #ddd;
-      }
-
-      .button-cancel:hover {
-        background: #f8f9fa;
-        border-color: #999;
-      }
-
-      .button-save {
-        background: #007bff;
-        color: white;
-        border-color: #007bff;
-      }
-
-      .button-save:hover {
-        background: #0056b3;
-        border-color: #0056b3;
-      }
     `
   ];
 
@@ -161,13 +180,15 @@ export class FrontmatterEditorDialog extends LitElement {
     loading: { state: true },
     error: { state: true },
     frontmatter: { state: true },
+    workingFrontmatter: { state: true },
   };
 
   declare page: string;
   declare open: boolean;
   declare loading: boolean;
-  declare error?: string;
-  declare frontmatter?: GetFrontmatterResponse;
+  declare error?: string | undefined;
+  declare frontmatter?: GetFrontmatterResponse | undefined;
+  declare workingFrontmatter?: Record<string, unknown>;
 
   private client = createClient(Frontmatter, getGrpcWebTransport());
 
@@ -176,7 +197,34 @@ export class FrontmatterEditorDialog extends LitElement {
     this.page = '';
     this.open = false;
     this.loading = false;
+    this.workingFrontmatter = {};
   }
+
+  private convertStructToPlainObject(struct?: Struct): Record<string, unknown> {
+    if (!struct) return {};
+
+    try {
+      return struct.toJson() as Record<string, unknown>;
+    } catch (err) {
+      // This is an unrecoverable error - the protobuf data is corrupted
+      showKernelPanic('Failed to convert frontmatter data structure', err as Error);
+      throw err;
+    }
+  }
+
+  private updateWorkingFrontmatter(): void {
+    if (this.frontmatter?.frontmatter) {
+      this.workingFrontmatter = this.convertStructToPlainObject(this.frontmatter.frontmatter);
+    } else {
+      this.workingFrontmatter = {};
+    }
+  }
+
+  private _handleSectionChange = (event: CustomEvent): void => {
+    const { newFields } = event.detail;
+    this.workingFrontmatter = newFields;
+    this.requestUpdate();
+  };
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -215,11 +263,13 @@ export class FrontmatterEditorDialog extends LitElement {
       this.loading = true;
       this.error = undefined;
       this.frontmatter = undefined;
+      this.workingFrontmatter = {};
       this.requestUpdate();
 
       const request = new GetFrontmatterRequest({ page: this.page });
       const response = await this.client.getFrontmatter(request);
       this.frontmatter = response;
+      this.updateWorkingFrontmatter();
     } catch (err) {
       this.error = err instanceof Error ? err.message : 'Failed to load frontmatter';
     } finally {
@@ -238,18 +288,14 @@ export class FrontmatterEditorDialog extends LitElement {
     this.close();
   };
 
-  private formatFrontmatter(frontmatter?: GetFrontmatterResponse): string {
-    if (!frontmatter?.frontmatter) {
-      return '';
-    }
-
-    try {
-      // Convert the protobuf Struct to a plain JavaScript object
-      const jsonObject = frontmatter.frontmatter.toJson();
-      return JSON.stringify(jsonObject, null, 2);
-    } catch (err) {
-      return `Error formatting frontmatter: ${err instanceof Error ? err.message : 'Unknown error'}`;
-    }
+  private renderFrontmatterEditor(): unknown {
+    return html`
+      <frontmatter-value-section
+        .fields="${this.workingFrontmatter || {}}"
+        .isRoot="${true}"
+        @section-change="${this._handleSectionChange}"
+      ></frontmatter-value-section>
+    `;
   }
 
   override render() {
@@ -272,14 +318,14 @@ export class FrontmatterEditorDialog extends LitElement {
               ${this.error}
             </div>
           ` : html`
-            <div class="frontmatter-display border-radius-small">${this.formatFrontmatter(this.frontmatter)}</div>
+            ${this.renderFrontmatterEditor()}
           `}
         </div>
         <div class="footer">
-          <button class="button button-cancel border-radius-small" @click="${this._handleCancel}">
+          <button class="button-base button-secondary button-large border-radius-small" @click="${this._handleCancel}">
             Cancel
           </button>
-          <button class="button button-save border-radius-small" @click="${this._handleSaveClick}">
+          <button class="button-base button-primary button-large border-radius-small" @click="${this._handleSaveClick}">
             Save
           </button>
         </div>
