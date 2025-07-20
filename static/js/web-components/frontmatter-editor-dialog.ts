@@ -3,7 +3,7 @@ import { createClient } from '@connectrpc/connect';
 import { Struct } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import { Frontmatter } from '../gen/api/v1/frontmatter_connect.js';
-import { GetFrontmatterRequest, GetFrontmatterResponse } from '../gen/api/v1/frontmatter_pb.js';
+import { GetFrontmatterRequest, GetFrontmatterResponse, ReplaceFrontmatterRequest, ReplaceFrontmatterResponse } from '../gen/api/v1/frontmatter_pb.js';
 import { sharedStyles, foundationCSS, dialogCSS, responsiveCSS, buttonCSS } from './shared-styles.js';
 import './frontmatter-value-section.js';
 import './kernel-panic.js';
@@ -178,6 +178,7 @@ export class FrontmatterEditorDialog extends LitElement {
     page: { type: String },
     open: { type: Boolean, reflect: true },
     loading: { state: true },
+    saving: { state: true },
     error: { state: true },
     frontmatter: { state: true },
     workingFrontmatter: { state: true },
@@ -186,6 +187,7 @@ export class FrontmatterEditorDialog extends LitElement {
   declare page: string;
   declare open: boolean;
   declare loading: boolean;
+  declare saving: boolean;
   declare error?: string | undefined;
   declare frontmatter?: GetFrontmatterResponse | undefined;
   declare workingFrontmatter?: Record<string, unknown>;
@@ -197,6 +199,7 @@ export class FrontmatterEditorDialog extends LitElement {
     this.page = '';
     this.open = false;
     this.loading = false;
+    this.saving = false;
     this.workingFrontmatter = {};
   }
 
@@ -208,6 +211,16 @@ export class FrontmatterEditorDialog extends LitElement {
     } catch (err) {
       // This is an unrecoverable error - the protobuf data is corrupted
       showKernelPanic('Failed to convert frontmatter data structure', err as Error);
+      throw err;
+    }
+  }
+
+  private convertPlainObjectToStruct(obj: Record<string, unknown>): Struct {
+    try {
+      return Struct.fromJson(obj);
+    } catch (err) {
+      // This is an unrecoverable error - the data is corrupted
+      showKernelPanic('Failed to convert plain object to protobuf Struct', err as Error);
       throw err;
     }
   }
@@ -254,6 +267,7 @@ export class FrontmatterEditorDialog extends LitElement {
     this.frontmatter = undefined;
     this.error = undefined;
     this.loading = false;
+    this.saving = false;
   }
 
   public async loadFrontmatter(): Promise<void> {
@@ -282,10 +296,42 @@ export class FrontmatterEditorDialog extends LitElement {
     this.close();
   };
 
-  private _handleSaveClick = (): void => {
-    // For now, just close the dialog
-    // In future iterations, this would save the frontmatter
-    this.close();
+  private _handleSaveClick = async (): Promise<void> => {
+    if (!this.page || !this.workingFrontmatter) return;
+
+    try {
+      this.saving = true;
+      this.error = undefined;
+      this.requestUpdate();
+
+      const frontmatterStruct = this.convertPlainObjectToStruct(this.workingFrontmatter);
+      const request = new ReplaceFrontmatterRequest({ 
+        page: this.page, 
+        frontmatter: frontmatterStruct 
+      });
+      
+      const response = await this.client.replaceFrontmatter(request);
+      
+      // Update the stored frontmatter with the response to reflect any server-side changes
+      if (response.frontmatter) {
+        this.frontmatter = new GetFrontmatterResponse({ frontmatter: response.frontmatter });
+        this.updateWorkingFrontmatter();
+      }
+      
+      // Close the dialog on successful save
+      this.close();
+    } catch (err) {
+      if (err instanceof Error) {
+        this.error = err.message;
+      } else if (typeof err === 'string' && err.trim()) {
+        this.error = err;
+      } else {
+        this.error = 'Failed to save frontmatter';
+      }
+    } finally {
+      this.saving = false;
+      this.requestUpdate();
+    }
   };
 
   private renderFrontmatterEditor(): unknown {
@@ -322,11 +368,11 @@ export class FrontmatterEditorDialog extends LitElement {
           `}
         </div>
         <div class="footer">
-          <button class="button-base button-secondary button-large border-radius-small" @click="${this._handleCancel}">
+          <button class="button-base button-secondary button-large border-radius-small" @click="${this._handleCancel}" ?disabled="${this.saving}">
             Cancel
           </button>
-          <button class="button-base button-primary button-large border-radius-small" @click="${this._handleSaveClick}">
-            Save
+          <button class="button-base button-primary button-large border-radius-small" @click="${this._handleSaveClick}" ?disabled="${this.saving || this.loading}">
+            ${this.saving ? 'Saving...' : 'Save'}
           </button>
         </div>
       </div>
