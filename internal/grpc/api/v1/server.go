@@ -144,7 +144,7 @@ func (s *Server) ReplaceFrontmatter(_ context.Context, req *apiv1.ReplaceFrontma
 	}
 	
 	var responseFmStruct *structpb.Struct
-	if responseFm != nil && len(responseFm) > 0 {
+	if len(responseFm) > 0 {
 		responseFmStruct, err = structpb.NewStruct(responseFm)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to convert frontmatter to struct: %v", err)
