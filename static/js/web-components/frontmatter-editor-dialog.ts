@@ -8,7 +8,7 @@ import { sharedStyles, foundationCSS, dialogCSS, responsiveCSS, buttonCSS } from
 import './frontmatter-value-section.js';
 import './kernel-panic.js';
 import { showKernelPanic } from './kernel-panic.js';
-import { storeToastForRefresh } from './toast-message.js';
+import { showToastAfter } from './toast-message.js';
 
 /**
  * FrontmatterEditorDialog - A modal dialog for editing page frontmatter metadata
@@ -323,14 +323,14 @@ export class FrontmatterEditorDialog extends LitElement {
         this.updateWorkingFrontmatter();
       }
       
-      // Store success message for display after page refresh
-      storeToastForRefresh('Frontmatter saved successfully!', 'success');
-      
-      // Close the dialog
-      this.close();
-      
-      // Refresh the page to show updated content with new frontmatter
-      this.refreshPage();
+      // Store success message and close dialog with page refresh
+      showToastAfter('Frontmatter saved successfully!', 'success', () => {
+        // Close the dialog
+        this.close();
+        
+        // Refresh the page to show updated content with new frontmatter
+        this.refreshPage();
+      });
     } catch (err) {
       if (err instanceof Error) {
         this.error = err.message;

@@ -42,6 +42,7 @@ export class ToastMessage extends LitElement {
         align-items: flex-start;
         gap: 12px;
         position: relative;
+        cursor: pointer;
       }
 
       .toast.success {
@@ -61,16 +62,22 @@ export class ToastMessage extends LitElement {
       }
 
       .icon {
-        flex-shrink: 0;
-        width: 20px;
-        height: 20px;
+        position: absolute;
+        top: 8px;
+        left: 8px;
+        font-size: 32px;
+        opacity: 0.15;
+        z-index: 0;
         color: var(--toast-color);
-        margin-top: 2px;
+        pointer-events: none;
       }
 
       .content {
         flex: 1;
         min-width: 0;
+        position: relative;
+        z-index: 1;
+        margin-left: 20px; /* Add margin to account for ambient icon */
       }
 
       .message {
@@ -98,14 +105,14 @@ export class ToastMessage extends LitElement {
     message: { type: String },
     type: { type: String },
     visible: { type: Boolean, reflect: true },
-    timeout: { type: Number },
+    timeoutMs: { type: Number },
     autoClose: { type: Boolean }
   };
 
   declare message: string;
   declare type: 'success' | 'error' | 'warning' | 'info';
   declare visible: boolean;
-  declare timeout: number;
+  declare timeoutMs: number;
   declare autoClose: boolean;
 
   private timeoutId?: number;
@@ -115,32 +122,32 @@ export class ToastMessage extends LitElement {
     this.message = '';
     this.type = 'info';
     this.visible = false;
-    this.timeout = 5000; // 5 seconds default
+    this.timeoutMs = 5000; // 5 seconds default
     this.autoClose = true;
   }
 
   private getIcon(): string {
     switch (this.type) {
       case 'success':
-        return '✓';
+        return '✅';
       case 'error':
-        return '✕';
+        return '❌';
       case 'warning':
-        return '⚠';
+        return '⚠️';
       case 'info':
       default:
-        return 'ℹ';
+        return 'ℹ️';
     }
   }
 
   public show(): void {
     this.visible = true;
     
-    if (this.autoClose && this.timeout > 0) {
+    if (this.autoClose && this.timeoutMs > 0) {
       this.clearTimeout();
       this.timeoutId = window.setTimeout(() => {
         this.hide();
-      }, this.timeout);
+      }, this.timeoutMs);
     }
   }
 
@@ -161,7 +168,7 @@ export class ToastMessage extends LitElement {
     }
   }
 
-  private _handleClose = (): void => {
+  private _handleToastClick = (): void => {
     this.hide();
   };
 
@@ -173,21 +180,13 @@ export class ToastMessage extends LitElement {
   override render() {
     return html`
       ${sharedStyles}
-      <div class="toast ${this.type} border-radius box-shadow system-font">
+      <div class="toast ${this.type} border-radius box-shadow system-font" @click="${this._handleToastClick}">
         <div class="icon" aria-hidden="true">
           ${this.getIcon()}
         </div>
         <div class="content">
           <p class="message">${this.message}</p>
         </div>
-        <button 
-          class="button-icon" 
-          @click="${this._handleClose}"
-          aria-label="Close notification"
-          title="Close"
-        >
-          ✕
-        </button>
       </div>
     `;
   }
@@ -196,26 +195,34 @@ export class ToastMessage extends LitElement {
 customElements.define('toast-message', ToastMessage);
 
 /**
- * Utility function to show a toast message
+ * Show a toast after executing a function, with sessionStorage persistence across page refreshes
+ */
+export function showToastAfter(
+  message: string, 
+  type: 'success' | 'error' | 'warning' | 'info' = 'info',
+  fn: () => void
+): void {
+  // Store the toast message for post-execution display
+  sessionStorage.setItem('toast-message', message);
+  sessionStorage.setItem('toast-type', type);
+  
+  // Execute the provided function
+  fn();
+  
+  // Show the stored toast (useful if fn doesn't cause a page refresh)
+  showStoredToast();
+}
+
+/**
+ * Show a toast immediately (convenience method using showToastAfter)
  */
 export function showToast(
   message: string, 
-  type: 'success' | 'error' | 'warning' | 'info' = 'info',
-  timeout = 5000
-): ToastMessage {
-  const toast = document.createElement('toast-message') as ToastMessage;
-  toast.message = message;
-  toast.type = type;
-  toast.timeout = timeout;
-  
-  document.body.appendChild(toast);
-  
-  // Show after a brief delay to ensure proper mounting
-  requestAnimationFrame(() => {
-    toast.show();
+  type: 'success' | 'error' | 'warning' | 'info' = 'info'
+): void {
+  showToastAfter(message, type, () => {
+    // No-op function - just show the toast immediately
   });
-  
-  return toast;
 }
 
 /**
@@ -223,25 +230,32 @@ export function showToast(
  */
 export function showStoredToast(): void {
   const storedMessage = sessionStorage.getItem('toast-message');
-  const storedType = sessionStorage.getItem('toast-type') as 'success' | 'error' | 'warning' | 'info' || 'info';
+  const storedTypeRaw = sessionStorage.getItem('toast-type');
   
   if (storedMessage) {
+    // Validate the stored type, default to 'info' if invalid
+    const validTypes = ['success', 'error', 'warning', 'info'] as const;
+    type ValidType = typeof validTypes[number];
+    const storedType = validTypes.includes(storedTypeRaw as ValidType) ? storedTypeRaw as ValidType : 'info';
+    
     sessionStorage.removeItem('toast-message');
     sessionStorage.removeItem('toast-type');
-    showToast(storedMessage, storedType);
+    
+    // Create and show the toast immediately
+    const toast = document.createElement('toast-message') as ToastMessage;
+    toast.message = storedMessage;
+    toast.type = storedType;
+    toast.timeoutMs = 5000;
+    
+    document.body.appendChild(toast);
+    
+    requestAnimationFrame(() => {
+      toast.show();
+    });
   }
 }
 
-/**
- * Store a toast message in sessionStorage for display after page refresh
- */
-export function storeToastForRefresh(
-  message: string, 
-  type: 'success' | 'error' | 'warning' | 'info' = 'success'
-): void {
-  sessionStorage.setItem('toast-message', message);
-  sessionStorage.setItem('toast-type', type);
-}
+
 
 declare global {
   interface HTMLElementTagNameMap {

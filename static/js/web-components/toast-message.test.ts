@@ -1,6 +1,6 @@
 import { html, fixture, expect, assert } from '@open-wc/testing';
 import sinon from 'sinon';
-import { ToastMessage, showToast, showStoredToast, storeToastForRefresh } from './toast-message.js';
+import { ToastMessage, showToast, showStoredToast, showToastAfter } from './toast-message.js';
 
 describe('ToastMessage', () => {
   let el: ToastMessage;
@@ -17,7 +17,7 @@ describe('ToastMessage', () => {
     expect(el.message).to.equal('');
     expect(el.type).to.equal('info');
     expect(el.visible).to.be.false;
-    expect(el.timeout).to.equal(5000);
+    expect(el.timeoutMs).to.equal(5000);
     expect(el.autoClose).to.be.true;
   });
 
@@ -40,7 +40,7 @@ describe('ToastMessage', () => {
 
     it('should show correct icon for success type', () => {
       const iconElement = el.shadowRoot?.querySelector('.icon');
-      expect(iconElement?.textContent?.trim()).to.equal('✓');
+      expect(iconElement?.textContent?.trim()).to.equal('✅');
     });
   });
 
@@ -49,21 +49,21 @@ describe('ToastMessage', () => {
       el.type = 'error';
       await el.updateComplete;
       const iconElement = el.shadowRoot?.querySelector('.icon');
-      expect(iconElement?.textContent?.trim()).to.equal('✕');
+      expect(iconElement?.textContent?.trim()).to.equal('❌');
     });
 
     it('should show warning icon for warning type', async () => {
       el.type = 'warning';
       await el.updateComplete;
       const iconElement = el.shadowRoot?.querySelector('.icon');
-      expect(iconElement?.textContent?.trim()).to.equal('⚠');
+      expect(iconElement?.textContent?.trim()).to.equal('⚠️');
     });
 
     it('should show info icon for info type', async () => {
       el.type = 'info';
       await el.updateComplete;
       const iconElement = el.shadowRoot?.querySelector('.icon');
-      expect(iconElement?.textContent?.trim()).to.equal('ℹ');
+      expect(iconElement?.textContent?.trim()).to.equal('ℹ️');
     });
   });
 
@@ -73,7 +73,7 @@ describe('ToastMessage', () => {
     beforeEach(() => {
       clock = sinon.useFakeTimers();
       el.message = 'Test message';
-      el.timeout = 1000;
+      el.timeoutMs = 1000;
     });
 
     afterEach(() => {
@@ -96,26 +96,28 @@ describe('ToastMessage', () => {
       expect(el.visible).to.be.false;
     });
 
-    it('should not auto-hide when autoClose is false', () => {
-      el.autoClose = false;
-      el.show();
-      
-      expect(el.visible).to.be.true;
-      
-      clock.tick(1000);
-      
-      expect(el.visible).to.be.true;
+    describe('when autoClose is false', () => {
+      beforeEach(() => {
+        el.autoClose = false;
+        el.show();
+        clock.tick(1000);
+      });
+
+      it('should not auto-hide', () => {
+        expect(el.visible).to.be.true;
+      });
     });
 
-    it('should not auto-hide when timeout is 0', () => {
-      el.timeout = 0;
-      el.show();
-      
-      expect(el.visible).to.be.true;
-      
-      clock.tick(5000);
-      
-      expect(el.visible).to.be.true;
+    describe('when timeout is 0', () => {
+      beforeEach(() => {
+        el.timeoutMs = 0;
+        el.show();
+        clock.tick(5000);
+      });
+
+      it('should not auto-hide', () => {
+        expect(el.visible).to.be.true;
+      });
     });
   });
 
@@ -130,17 +132,17 @@ describe('ToastMessage', () => {
     });
   });
 
-  describe('when close button is clicked', () => {
+  describe('when toast is clicked', () => {
     beforeEach(async () => {
       el.visible = true;
       await el.updateComplete;
     });
 
     it('should hide the toast', async () => {
-      const closeButton = el.shadowRoot?.querySelector('.button-icon') as HTMLButtonElement;
-      expect(closeButton).to.exist;
+      const toastElement = el.shadowRoot?.querySelector('.toast') as HTMLElement;
+      expect(toastElement).to.exist;
       
-      closeButton.click();
+      toastElement.click();
       await el.updateComplete;
       
       expect(el.visible).to.be.false;
@@ -152,30 +154,73 @@ describe('showToast utility function', () => {
   beforeEach(() => {
     // Clean up any existing toast elements
     document.querySelectorAll('toast-message').forEach(el => el.remove());
+    sessionStorage.clear();
   });
 
   afterEach(() => {
     // Clean up after each test
     document.querySelectorAll('toast-message').forEach(el => el.remove());
+    sessionStorage.clear();
   });
 
   it('should create and show a toast message', async () => {
-    const toast = showToast('Test message', 'success');
+    showToast('Test message', 'success');
     
-    expect(toast).to.be.instanceOf(ToastMessage);
+    const toast = document.querySelector('toast-message') as ToastMessage;
+    expect(toast).to.exist;
     expect(toast.message).to.equal('Test message');
     expect(toast.type).to.equal('success');
-    expect(document.body.contains(toast)).to.be.true;
   });
 
   it('should use default type if not specified', () => {
-    const toast = showToast('Test message');
+    showToast('Test message');
+    
+    const toast = document.querySelector('toast-message') as ToastMessage;
     expect(toast.type).to.equal('info');
   });
+});
 
-  it('should use custom timeout', () => {
-    const toast = showToast('Test message', 'info', 3000);
-    expect(toast.timeout).to.equal(3000);
+describe('showToastAfter utility function', () => {
+  beforeEach(() => {
+    // Clean up any existing toast elements
+    document.querySelectorAll('toast-message').forEach(el => el.remove());
+    sessionStorage.clear();
+  });
+
+  afterEach(() => {
+    // Clean up after each test
+    document.querySelectorAll('toast-message').forEach(el => el.remove());
+    sessionStorage.clear();
+  });
+
+  it('should store toast message and execute function', () => {
+    let functionExecuted = false;
+    
+    showToastAfter('Test message', 'success', () => {
+      functionExecuted = true;
+    });
+    
+    expect(functionExecuted).to.be.true;
+    // sessionStorage should be cleared after showStoredToast is called
+    expect(sessionStorage.getItem('toast-message')).to.be.null;
+    expect(sessionStorage.getItem('toast-type')).to.be.null;
+    
+    // But the toast should be displayed
+    const toast = document.querySelector('toast-message') as ToastMessage;
+    expect(toast).to.exist;
+    expect(toast.message).to.equal('Test message');
+    expect(toast.type).to.equal('success');
+  });
+
+  it('should show toast after execution if no page refresh occurs', () => {
+    showToastAfter('Test message', 'warning', () => {
+      // No-op function that doesn't refresh page
+    });
+    
+    const toast = document.querySelector('toast-message') as ToastMessage;
+    expect(toast).to.exist;
+    expect(toast.message).to.equal('Test message');
+    expect(toast.type).to.equal('warning');
   });
 });
 
@@ -189,22 +234,6 @@ describe('sessionStorage toast functions', () => {
   afterEach(() => {
     sessionStorage.clear();
     document.querySelectorAll('toast-message').forEach(el => el.remove());
-  });
-
-  describe('storeToastForRefresh', () => {
-    it('should store message and type in sessionStorage', () => {
-      storeToastForRefresh('Success message', 'success');
-      
-      expect(sessionStorage.getItem('toast-message')).to.equal('Success message');
-      expect(sessionStorage.getItem('toast-type')).to.equal('success');
-    });
-
-    it('should use default type if not specified', () => {
-      storeToastForRefresh('Success message');
-      
-      expect(sessionStorage.getItem('toast-message')).to.equal('Success message');
-      expect(sessionStorage.getItem('toast-type')).to.equal('success');
-    });
   });
 
   describe('showStoredToast', () => {
