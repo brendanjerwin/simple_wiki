@@ -203,6 +203,114 @@ export const dialogCSS = css`
 `;
 
 /* ==========================================================================
+   Layout Styles
+   ========================================================================== */
+
+export const layoutCSS = css`
+  .section-container {
+    border: none;
+    border-left: 1px solid #e0e0e0;
+    padding-left: 2px;
+    padding-top: 4px;
+    background: #f9f9f9;
+  }
+
+  .section-container-root {
+    border: none;
+    background: transparent;
+    padding: 0;
+  }
+
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+    padding-bottom: 2px;
+    border: none;
+  }
+
+  .section-header-root {
+    border: none;
+    padding-bottom: 0;
+    justify-content: flex-end;
+  }
+
+  .section-title {
+    font-weight: normal;
+    color: #888;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .section-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .field-row {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-left: 2px;
+    padding-top: 4px;
+    background: #fff;
+    border: none;
+    border-left: 1px solid #e0e0e0;
+    position: relative;
+  }
+
+  .field-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .empty-section-message {
+    text-align: center;
+    color: #666;
+    font-style: italic;
+    padding: 16px;
+  }
+`;
+
+/* ==========================================================================
+   Input Styles
+   ========================================================================== */
+
+export const inputCSS = css`
+  .input-base {
+    width: 100%;
+    padding: 8px 12px;
+    border: none;
+    border-left: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    font-family: inherit;
+    box-sizing: border-box;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .input-base:focus {
+    outline: none;
+    border-left-color: #007bff;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.1);
+  }
+
+  .input-base:disabled {
+    background-color: #f8f9fa;
+    color: #6c757d;
+    cursor: not-allowed;
+  }
+
+  .input-base::placeholder {
+    color: #999;
+  }
+`;
+
+/* ==========================================================================
    Responsive Styles
    ========================================================================== */
 

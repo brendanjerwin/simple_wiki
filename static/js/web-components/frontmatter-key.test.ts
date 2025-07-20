@@ -210,29 +210,4 @@ describe('FrontmatterKey', () => {
       expect(el.key).to.equal('unchanged');
     });
   });
-
-  describe('when styling is applied', () => {
-    beforeEach(async () => {
-      el = await fixture(html`<frontmatter-key key="test" editable></frontmatter-key>`);
-    });
-
-    it('should have proper input styling', () => {
-      const inputElement = el.shadowRoot?.querySelector('.key-input') as HTMLInputElement;
-      const computedStyle = getComputedStyle(inputElement);
-      
-      expect(computedStyle.fontWeight).to.equal('600');
-      expect(computedStyle.borderLeftWidth).to.equal('1px');
-      expect(computedStyle.borderRightWidth).to.equal('0px');
-      expect(computedStyle.borderTopWidth).to.equal('0px');
-      expect(computedStyle.borderBottomWidth).to.equal('0px');
-    });
-
-    it('should have proper display styling for non-editable', async () => {
-      el = await fixture(html`<frontmatter-key key="test"></frontmatter-key>`);
-      const displayElement = el.shadowRoot?.querySelector('.key-display') as HTMLElement;
-      const computedStyle = getComputedStyle(displayElement);
-      
-      expect(computedStyle.fontWeight).to.equal('600');
-    });
-  });
 });

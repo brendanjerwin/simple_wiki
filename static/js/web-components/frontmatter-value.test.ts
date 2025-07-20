@@ -24,12 +24,7 @@ describe('FrontmatterValue', () => {
 
   describe('should exist', () => {
     beforeEach(async () => {
-      try {
-        el = await createFixtureWithTimeout(html`<frontmatter-value></frontmatter-value>`);
-      } catch (e) {
-        console.error(e);
-        throw e;
-      }
+      el = await createFixtureWithTimeout(html`<frontmatter-value></frontmatter-value>`);
     });
 
     it('should exist', () => {

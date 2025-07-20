@@ -6,7 +6,39 @@ import { Frontmatter } from '../gen/api/v1/frontmatter_connect.js';
 import { GetFrontmatterRequest, GetFrontmatterResponse } from '../gen/api/v1/frontmatter_pb.js';
 import { sharedStyles, foundationCSS, dialogCSS, responsiveCSS, buttonCSS } from './shared-styles.js';
 import './frontmatter-value-section.js';
+import './kernel-panic.js';
 
+/**
+ * FrontmatterEditorDialog - A modal dialog for editing page frontmatter metadata
+ * 
+ * WORKING THEORY:
+ * This component manages the complete lifecycle of frontmatter editing through several key state variables:
+ * 
+ * - `frontmatter`: The original server response containing the current frontmatter data (read-only)
+ * - `workingFrontmatter`: A mutable working copy of the frontmatter data that users can edit
+ * - `loading`: Indicates whether the component is fetching data from the server
+ * - `error`: Contains any error message from server operations
+ * - `open`: Controls the visibility state of the modal dialog
+ * 
+ * DATA FLOW:
+ * 1. When opened, the dialog fetches current frontmatter via gRPC and stores it in `frontmatter`
+ * 2. `convertStructToPlainObject()` converts the protobuf Struct to a plain JavaScript object
+ * 3. This converted data is copied to `workingFrontmatter` for editing
+ * 4. The frontmatter-value-section component renders and manages all field editing operations
+ * 5. All user modifications update `workingFrontmatter` while preserving the original `frontmatter`
+ * 6. On save, `workingFrontmatter` is sent back to the server; on cancel, changes are discarded
+ * 
+ * COMPONENT ARCHITECTURE:
+ * The dialog uses a hierarchical component structure:
+ * - frontmatter-value-section: Root container that handles the main frontmatter object
+ * - frontmatter-key: Manages editable key names with label-like styling
+ * - frontmatter-value: Dispatcher that delegates to appropriate value components
+ * - frontmatter-value-string: Handles individual string fields
+ * - frontmatter-value-array: Manages arrays of string values
+ * - frontmatter-add-field-button: Provides dropdown for adding new fields/arrays/sections
+ * 
+ * This separation allows for clean state management, proper event bubbling, and maintainable code.
+ */
 export class FrontmatterEditorDialog extends LitElement {
   static override styles = [
     foundationCSS,
@@ -173,8 +205,12 @@ export class FrontmatterEditorDialog extends LitElement {
     try {
       return struct.toJson() as Record<string, unknown>;
     } catch (err) {
-      console.error('Error converting struct to plain object:', err);
-      return {};
+      // This is an unrecoverable error - the protobuf data is corrupted
+      const kernelPanic = document.createElement('kernel-panic') as any;
+      kernelPanic.message = 'Failed to convert frontmatter data structure';
+      kernelPanic.error = err;
+      document.body.appendChild(kernelPanic);
+      throw err;
     }
   }
 

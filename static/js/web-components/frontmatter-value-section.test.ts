@@ -24,12 +24,7 @@ describe('FrontmatterValueSection', () => {
 
   describe('should exist', () => {
     beforeEach(async () => {
-      try {
-        el = await createFixtureWithTimeout(html`<frontmatter-value-section></frontmatter-value-section>`);
-      } catch (e) {
-        console.error(e);
-        throw e;
-      }
+      el = await createFixtureWithTimeout(html`<frontmatter-value-section></frontmatter-value-section>`);
     });
 
     it('should exist', () => {
@@ -396,31 +391,6 @@ describe('FrontmatterValueSection', () => {
         const values = Array.from(valueDispatcherComponents).map(comp => comp.value);
         expect(values).to.include.members(['value1', 'value2']);
       });
-    });
-  });
-
-  describe('when styling is applied', () => {
-    beforeEach(async () => {
-      el = await createFixtureWithTimeout(html`<frontmatter-value-section .fields="${{test: 'value'}}"></frontmatter-value-section>`);
-    });
-
-    it('should have proper section styling', () => {
-      const section = el.shadowRoot?.querySelector('.section-container') as HTMLElement;
-      const computedStyle = getComputedStyle(section);
-      
-      expect(computedStyle.borderLeftWidth).to.equal('1px');
-      expect(computedStyle.borderRightWidth).to.equal('0px');
-      expect(computedStyle.borderTopWidth).to.equal('0px');
-      expect(computedStyle.borderBottomWidth).to.equal('0px');
-      expect(computedStyle.padding).to.contain('4px');
-    });
-
-    it('should have proper field row styling', () => {
-      const fieldRow = el.shadowRoot?.querySelector('.field-row') as HTMLElement;
-      const computedStyle = getComputedStyle(fieldRow);
-      
-      expect(computedStyle.display).to.equal('flex');
-      expect(computedStyle.gap).to.contain('2px');
     });
   });
 });

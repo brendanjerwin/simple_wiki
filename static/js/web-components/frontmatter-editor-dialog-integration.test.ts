@@ -22,7 +22,6 @@ describe('FrontmatterEditorDialog - Component Integration', () => {
       sinon.stub(el, 'loadFrontmatter').resolves();
       await el.updateComplete;
     } catch (e) {
-      console.error('Fixture creation failed:', e);
       throw e;
     }
   });

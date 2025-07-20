@@ -25,7 +25,6 @@ describe('FrontmatterEditorDialog', () => {
       
       await el.updateComplete;
     } catch (e) {
-      console.error('Fixture creation failed:', e);
       throw e;
     }
   });

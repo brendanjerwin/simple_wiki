@@ -1,34 +1,19 @@
 import { html, css, LitElement } from 'lit';
+import { inputCSS } from './shared-styles.js';
 
 export class FrontmatterValueString extends LitElement {
-  static override styles = css`
-    :host {
-      display: block;
-    }
+  static override styles = [
+    inputCSS,
+    css`
+      :host {
+        display: block;
+      }
 
-    .value-input {
-      width: 100%;
-      padding: 8px 12px;
-      border: none;
-      border-left: 1px solid #ddd;
-      border-radius: 4px;
-      font-size: 14px;
-      font-family: inherit;
-      box-sizing: border-box;
-    }
-
-    .value-input:focus {
-      outline: none;
-      border-left-color: #007bff;
-      box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.1);
-    }
-
-    .value-input:disabled {
-      background-color: #f8f9fa;
-      color: #6c757d;
-      cursor: not-allowed;
-    }
-  `;
+      .value-input {
+        /* Uses .input-base from shared styles */
+      }
+    `
+  ];
 
   static override properties = {
     value: { type: String },
@@ -74,7 +59,7 @@ export class FrontmatterValueString extends LitElement {
     return html`
       <input 
         type="text" 
-        class="value-input"
+        class="value-input input-base"
         .value="${this.value}" 
         .placeholder="${this.placeholder}"
         .disabled="${this.disabled}"

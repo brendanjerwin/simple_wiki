@@ -413,6 +413,8 @@ beforeEach(async () => {
 
 - **Comprehensive Testing**: Tests should validate the entire user-facing functionality, not just internal implementation details. When unit tests are green, we should be confident the whole app works. For example, when testing a search component, verify not only that results are processed correctly but also that the results view component becomes visible to the user.
 
+- **No CSS-Only Testing**: Tests should not assert that specific CSS properties are applied unless it's for functional reasons (e.g., verifying visibility changes). Avoid testing computed styles like `getComputedStyle(element).property` unless the test verifies functional behavior that depends on that styling. Focus tests on component behavior, state management, event handling, and user interaction rather than visual styling details.
+
 - **Documentation of Testing Principles**: When you discover important testing principles or patterns that ensure comprehensive coverage, document them in this CONVENTIONS.md file. This builds a comprehensive guide for future developers and helps maintain consistent testing practices across the project.
 
 - Include a blank line between all the various Ginkgo blocks. This makes it easier to read the tests.

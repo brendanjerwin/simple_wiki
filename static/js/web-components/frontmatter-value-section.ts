@@ -1,77 +1,18 @@
 import { html, css, LitElement } from 'lit';
-import { buttonCSS, foundationCSS } from './shared-styles.js';
+import { buttonCSS, foundationCSS, layoutCSS } from './shared-styles.js';
 import './frontmatter-key.js';
 import './frontmatter-value.js';
 import './frontmatter-add-field-button.js';
+import './kernel-panic.js';
 
 export class FrontmatterValueSection extends LitElement {
   static override styles = [
     foundationCSS,
     buttonCSS,
+    layoutCSS,
     css`
       :host {
         display: block;
-      }
-
-      .section-container {
-        border: none;
-        border-left: 1px solid #e0e0e0;
-        padding-left: 2px;
-        padding-top: 4px;
-        background: #f9f9f9;
-      }
-
-      .section-container.root-section {
-        border: none;
-        background: transparent;
-        padding: 0;
-      }
-
-      .section-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 4px;
-        padding-bottom: 2px;
-        border: none;
-      }
-
-      .section-header.root-header {
-        border: none;
-        padding-bottom: 0;
-        justify-content: flex-end;
-      }
-
-      .section-title {
-        font-weight: normal;
-        color: #888;
-        font-size: 11px;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-      }
-
-      .section-fields {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-      }
-
-      .field-row {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
-        padding-left: 2px;
-        padding-top: 4px;
-        background: #fff;
-        border: none;
-        border-left: 1px solid #e0e0e0;
-        position: relative;
-      }
-
-      .field-content {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
       }
 
       .field-row frontmatter-key {
@@ -87,13 +28,6 @@ export class FrontmatterValueSection extends LitElement {
         top: 4px;
         right: 0;
         flex-shrink: 0;
-      }
-
-      .empty-section-message {
-        text-align: center;
-        color: #666;
-        font-style: italic;
-        padding: 16px;
       }
     `
   ];
@@ -124,10 +58,20 @@ export class FrontmatterValueSection extends LitElement {
   private _generateUniqueKey(baseKey: string): string {
     let counter = 1;
     let newKey = baseKey;
+    const maxIterations = 1000;
 
     while (this.fields[newKey] !== undefined) {
       newKey = `${baseKey}_${counter}`;
       counter++;
+      
+      if (counter > maxIterations) {
+        // Unrecoverable error - infinite loop protection
+        const kernelPanic = document.createElement('kernel-panic') as any;
+        kernelPanic.message = 'Maximum iteration limit exceeded while generating unique key';
+        kernelPanic.error = new Error(`Attempted to generate unique key for "${baseKey}" but exceeded ${maxIterations} iterations`);
+        document.body.appendChild(kernelPanic);
+        throw new Error(`Maximum iteration limit exceeded for key generation: ${baseKey}`);
+      }
     }
 
     return newKey;
@@ -159,6 +103,7 @@ export class FrontmatterValueSection extends LitElement {
 
     const newFields = { ...this.fields, [newKey]: newValue };
     this.fields = newFields;
+    this._clearSortingCache();
     this._dispatchSectionChange(oldFields, newFields);
     this.requestUpdate();
   };
@@ -169,6 +114,7 @@ export class FrontmatterValueSection extends LitElement {
     delete newFields[key];
 
     this.fields = newFields;
+    this._clearSortingCache();
     this._dispatchSectionChange(oldFields, newFields);
     this.requestUpdate();
   };
@@ -186,6 +132,7 @@ export class FrontmatterValueSection extends LitElement {
     delete newFields[oldKey];
 
     this.fields = newFields;
+    this._clearSortingCache();
 
     // Track that this key should receive focus after reordering
     this._pendingFocusKey = newKey;
@@ -201,6 +148,7 @@ export class FrontmatterValueSection extends LitElement {
     const newFields = { ...this.fields, [key]: newValue };
 
     this.fields = newFields;
+    this._clearSortingCache();
     this._dispatchSectionChange(oldFields, newFields);
   };
 
@@ -225,38 +173,47 @@ export class FrontmatterValueSection extends LitElement {
   }
 
   private _restoreFocusToField(key: string): void {
-    // Use multiple animation frames to ensure DOM is fully updated after reordering
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        const fieldRows = this.shadowRoot?.querySelectorAll('.field-row');
-        const sortedEntries = this._sortFieldEntries(Object.entries(this.fields));
+    // Use updateComplete promise to ensure DOM is fully updated after reordering
+    this.updateComplete.then(() => {
+      const fieldRows = this.shadowRoot?.querySelectorAll('.field-row');
+      const sortedEntries = this._sortFieldEntries(Object.entries(this.fields));
 
-        // Find the index of the key in the sorted order
-        const keyIndex = sortedEntries.findIndex(([k]) => k === key);
+      // Find the index of the key in the sorted order
+      const keyIndex = sortedEntries.findIndex(([k]) => k === key);
 
-        if (keyIndex !== -1 && fieldRows && fieldRows[keyIndex]) {
-          const fieldRow = fieldRows[keyIndex];
-          const valueComponent = fieldRow.querySelector('frontmatter-value');
+      if (keyIndex !== -1 && fieldRows && fieldRows[keyIndex]) {
+        const fieldRow = fieldRows[keyIndex];
+        const valueComponent = fieldRow.querySelector('frontmatter-value');
 
-          if (valueComponent) {
-            // First try to focus a direct input in the value component
-            let valueInput = valueComponent.shadowRoot?.querySelector('input, textarea');
+        if (valueComponent) {
+          // First try to focus a direct input in the value component
+          let valueInput = valueComponent.shadowRoot?.querySelector('input, textarea');
 
-            // If not found, check for nested components (like in arrays or sections)
-            if (!valueInput) {
-              const stringComponent = valueComponent.shadowRoot?.querySelector('frontmatter-value-string');
-              if (stringComponent) {
-                valueInput = stringComponent.shadowRoot?.querySelector('input, textarea');
-              }
-            }
-
-            if (valueInput instanceof HTMLElement) {
-              valueInput.focus();
+          // If not found, check for nested components (like in arrays or sections)
+          if (!valueInput) {
+            const stringComponent = valueComponent.shadowRoot?.querySelector('frontmatter-value-string');
+            if (stringComponent) {
+              valueInput = stringComponent.shadowRoot?.querySelector('input, textarea');
             }
           }
+
+          if (valueInput instanceof HTMLElement) {
+            valueInput.focus();
+          }
         }
-      });
+      }
+    }).catch(err => {
+      console.warn('Failed to restore focus after key rename:', err);
     });
+  }
+
+  // Cache for memoized sorting results
+  private _sortedEntriesCache = new Map<string, [string, unknown][]>();
+  private _fieldsHashCache = '';
+
+  private _clearSortingCache(): void {
+    this._sortedEntriesCache.clear();
+    this._fieldsHashCache = '';
   }
 
   private _getValueType(value: unknown): string {
@@ -265,14 +222,25 @@ export class FrontmatterValueSection extends LitElement {
     return 'string';
   }
 
+  private _typePriorityCompare(typeA: string, typeB: string): number {
+    // First sort by type priority: string < array < object
+    const typePriority = { string: 0, array: 1, object: 2 };
+    return typePriority[typeA as keyof typeof typePriority] - typePriority[typeB as keyof typeof typePriority];
+  }
+
   private _sortFieldEntries(entries: [string, unknown][]): [string, unknown][] {
-    return entries.sort(([keyA, valueA], [keyB, valueB]) => {
+    // Create a hash of the fields to check if we can use cached results
+    const fieldsHash = JSON.stringify(entries);
+    
+    if (this._fieldsHashCache === fieldsHash && this._sortedEntriesCache.has(fieldsHash)) {
+      return this._sortedEntriesCache.get(fieldsHash)!;
+    }
+
+    const sortedEntries = [...entries].sort(([keyA, valueA], [keyB, valueB]) => {
       const typeA = this._getValueType(valueA);
       const typeB = this._getValueType(valueB);
 
-      // First sort by type priority: string < array < object
-      const typePriority = { string: 0, array: 1, object: 2 };
-      const priorityDiff = typePriority[typeA as keyof typeof typePriority] - typePriority[typeB as keyof typeof typePriority];
+      const priorityDiff = this._typePriorityCompare(typeA, typeB);
 
       if (priorityDiff !== 0) {
         return priorityDiff;
@@ -281,6 +249,12 @@ export class FrontmatterValueSection extends LitElement {
       // Then sort alphabetically by key
       return keyA.localeCompare(keyB);
     });
+
+    // Cache the result
+    this._fieldsHashCache = fieldsHash;
+    this._sortedEntriesCache.set(fieldsHash, sortedEntries);
+
+    return sortedEntries;
   }
 
   private renderSectionFields() {
@@ -326,8 +300,8 @@ export class FrontmatterValueSection extends LitElement {
   }
 
   override render() {
-    const containerClass = this.isRoot ? 'section-container root-section' : 'section-container';
-    const headerClass = this.isRoot ? 'section-header root-header' : 'section-header';
+    const containerClass = this.isRoot ? 'section-container section-container-root' : 'section-container';
+    const headerClass = this.isRoot ? 'section-header section-header-root' : 'section-header';
     const fieldCount = Object.keys(this.fields).length;
 
     return html`
