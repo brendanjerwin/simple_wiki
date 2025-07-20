@@ -94,6 +94,7 @@ export class FrontmatterEditorDialog extends LitElement {
         flex: 1;
         padding: 20px;
         overflow-y: auto;
+        min-height: 150px;
       }
 
       .frontmatter-display {
@@ -168,7 +169,7 @@ export class FrontmatterEditorDialog extends LitElement {
 
   private convertStructToPlainObject(struct?: Struct): Record<string, unknown> {
     if (!struct) return {};
-    
+
     try {
       return struct.toJson() as Record<string, unknown>;
     } catch (err) {

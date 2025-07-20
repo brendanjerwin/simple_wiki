@@ -66,14 +66,12 @@ export class FrontmatterValueSection extends LitElement {
         border: none;
         border-left: 1px solid #e0e0e0;
         position: relative;
-        margin-left: 2px;
       }
 
       .field-content {
         display: flex;
         flex-direction: column;
         gap: 2px;
-        max-width: calc(100% - 60px); /* Leave space for remove button */
       }
 
       .field-row frontmatter-key {
@@ -87,7 +85,7 @@ export class FrontmatterValueSection extends LitElement {
       .remove-field-button {
         position: absolute;
         top: 4px;
-        right: 4px;
+        right: 0;
         flex-shrink: 0;
       }
 
@@ -126,12 +124,12 @@ export class FrontmatterValueSection extends LitElement {
   private _generateUniqueKey(baseKey: string): string {
     let counter = 1;
     let newKey = baseKey;
-    
+
     while (this.fields[newKey] !== undefined) {
       newKey = `${baseKey}_${counter}`;
       counter++;
     }
-    
+
     return newKey;
   }
 
@@ -139,11 +137,11 @@ export class FrontmatterValueSection extends LitElement {
     const { type } = event.detail;
     const oldFields = { ...this.fields };
     const newKey = this._generateUniqueKey(
-      type === 'field' ? 'new_field' : 
-      type === 'array' ? 'new_array' : 
-      'new_section'
+      type === 'field' ? 'new_field' :
+        type === 'array' ? 'new_array' :
+          'new_section'
     );
-    
+
     let newValue: unknown;
     switch (type) {
       case 'field':
@@ -158,7 +156,7 @@ export class FrontmatterValueSection extends LitElement {
       default:
         return;
     }
-    
+
     const newFields = { ...this.fields, [newKey]: newValue };
     this.fields = newFields;
     this._dispatchSectionChange(oldFields, newFields);
@@ -169,7 +167,7 @@ export class FrontmatterValueSection extends LitElement {
     const oldFields = { ...this.fields };
     const newFields = { ...this.fields };
     delete newFields[key];
-    
+
     this.fields = newFields;
     this._dispatchSectionChange(oldFields, newFields);
     this.requestUpdate();
@@ -177,31 +175,31 @@ export class FrontmatterValueSection extends LitElement {
 
   private _handleKeyChange = (event: CustomEvent): void => {
     const { oldKey, newKey } = event.detail;
-    
+
     if (oldKey === newKey || !newKey.trim()) return;
-    
+
     const oldFields = { ...this.fields };
     const newFields = { ...this.fields };
-    
+
     // Move the value from old key to new key
     newFields[newKey] = newFields[oldKey];
     delete newFields[oldKey];
-    
+
     this.fields = newFields;
-    
+
     // Track that this key should receive focus after reordering
     this._pendingFocusKey = newKey;
-    
+
     this._dispatchSectionChange(oldFields, newFields);
     this.requestUpdate();
   };
 
   private _handleValueChange = (event: CustomEvent, key: string): void => {
     const { newValue } = event.detail;
-    
+
     const oldFields = { ...this.fields };
     const newFields = { ...this.fields, [key]: newValue };
-    
+
     this.fields = newFields;
     this._dispatchSectionChange(oldFields, newFields);
   };
@@ -218,7 +216,7 @@ export class FrontmatterValueSection extends LitElement {
 
   override updated(changedProperties: Map<string | number | symbol, unknown>): void {
     super.updated(changedProperties);
-    
+
     // Handle focus management after reordering
     if (this._pendingFocusKey && changedProperties.has('fields')) {
       this._restoreFocusToField(this._pendingFocusKey);
@@ -232,18 +230,18 @@ export class FrontmatterValueSection extends LitElement {
       requestAnimationFrame(() => {
         const fieldRows = this.shadowRoot?.querySelectorAll('.field-row');
         const sortedEntries = this._sortFieldEntries(Object.entries(this.fields));
-        
+
         // Find the index of the key in the sorted order
         const keyIndex = sortedEntries.findIndex(([k]) => k === key);
-        
+
         if (keyIndex !== -1 && fieldRows && fieldRows[keyIndex]) {
           const fieldRow = fieldRows[keyIndex];
           const valueComponent = fieldRow.querySelector('frontmatter-value');
-          
+
           if (valueComponent) {
             // First try to focus a direct input in the value component
             let valueInput = valueComponent.shadowRoot?.querySelector('input, textarea');
-            
+
             // If not found, check for nested components (like in arrays or sections)
             if (!valueInput) {
               const stringComponent = valueComponent.shadowRoot?.querySelector('frontmatter-value-string');
@@ -251,7 +249,7 @@ export class FrontmatterValueSection extends LitElement {
                 valueInput = stringComponent.shadowRoot?.querySelector('input, textarea');
               }
             }
-            
+
             if (valueInput instanceof HTMLElement) {
               valueInput.focus();
             }
@@ -271,15 +269,15 @@ export class FrontmatterValueSection extends LitElement {
     return entries.sort(([keyA, valueA], [keyB, valueB]) => {
       const typeA = this._getValueType(valueA);
       const typeB = this._getValueType(valueB);
-      
+
       // First sort by type priority: string < array < object
       const typePriority = { string: 0, array: 1, object: 2 };
       const priorityDiff = typePriority[typeA as keyof typeof typePriority] - typePriority[typeB as keyof typeof typePriority];
-      
+
       if (priorityDiff !== 0) {
         return priorityDiff;
       }
-      
+
       // Then sort alphabetically by key
       return keyA.localeCompare(keyB);
     });
@@ -287,7 +285,7 @@ export class FrontmatterValueSection extends LitElement {
 
   private renderSectionFields() {
     const fieldEntries = Object.entries(this.fields);
-    
+
     if (fieldEntries.length === 0) {
       return html`
         <div class="empty-section-message">No fields in section</div>
