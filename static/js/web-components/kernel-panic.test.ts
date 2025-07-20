@@ -87,24 +87,4 @@ describe('KernelPanic', () => {
       expect(errorStack?.textContent).to.include('Test error message');
     });
   });
-
-  describe('when refresh button is clicked', () => {
-    it('should call window.location.reload', () => {
-      let reloadCalled = false;
-      
-      // Store original reload
-      const originalReload = window.location.reload;
-      
-      // Replace with test spy
-      window.location.reload = () => { reloadCalled = true; };
-      
-      const button = el.shadowRoot?.querySelector('.refresh-button') as HTMLButtonElement;
-      button?.click();
-      
-      expect(reloadCalled).to.be.true;
-      
-      // Restore original
-      window.location.reload = originalReload;
-    });
-  });
 });

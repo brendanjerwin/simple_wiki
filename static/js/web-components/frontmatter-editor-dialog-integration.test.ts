@@ -13,17 +13,13 @@ describe('FrontmatterEditorDialog - Component Integration', () => {
   }
 
   beforeEach(async () => {
-    try {
-      el = await Promise.race([
-        fixture(html`<frontmatter-editor-dialog></frontmatter-editor-dialog>`),
-        timeout(5000, 'Component fixture timed out')
-      ]);
-      
-      sinon.stub(el, 'loadFrontmatter').resolves();
-      await el.updateComplete;
-    } catch (e) {
-      throw e;
-    }
+    el = await Promise.race([
+      fixture(html`<frontmatter-editor-dialog></frontmatter-editor-dialog>`),
+      timeout(5000, 'Component fixture timed out')
+    ]);
+    
+    sinon.stub(el, 'loadFrontmatter').resolves();
+    await el.updateComplete;
   });
 
   afterEach(() => {

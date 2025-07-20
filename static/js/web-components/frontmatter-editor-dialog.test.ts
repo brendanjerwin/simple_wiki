@@ -13,20 +13,16 @@ describe('FrontmatterEditorDialog', () => {
   }
 
   beforeEach(async () => {
-    try {
-      // Use Promise.race to add explicit timeout for fixture creation
-      el = await Promise.race([
-        fixture(html`<frontmatter-editor-dialog></frontmatter-editor-dialog>`),
-        timeout(5000, 'Component fixture timed out')
-      ]);
-      
-      // Stub the loadFrontmatter method to prevent network calls
-      sinon.stub(el, 'loadFrontmatter').resolves();
-      
-      await el.updateComplete;
-    } catch (e) {
-      throw e;
-    }
+    // Use Promise.race to add explicit timeout for fixture creation
+    el = await Promise.race([
+      fixture(html`<frontmatter-editor-dialog></frontmatter-editor-dialog>`),
+      timeout(5000, 'Component fixture timed out')
+    ]);
+    
+    // Stub the loadFrontmatter method to prevent network calls
+    sinon.stub(el, 'loadFrontmatter').resolves();
+    
+    await el.updateComplete;
   });
 
   afterEach(() => {

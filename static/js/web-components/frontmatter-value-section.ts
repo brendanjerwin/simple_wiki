@@ -66,7 +66,10 @@ export class FrontmatterValueSection extends LitElement {
       
       if (counter > maxIterations) {
         // Unrecoverable error - infinite loop protection
-        const kernelPanic = document.createElement('kernel-panic') as any;
+        const kernelPanic = document.createElement('kernel-panic') as HTMLElement & {
+          message: string;
+          error: Error;
+        };
         kernelPanic.message = 'Maximum iteration limit exceeded while generating unique key';
         kernelPanic.error = new Error(`Attempted to generate unique key for "${baseKey}" but exceeded ${maxIterations} iterations`);
         document.body.appendChild(kernelPanic);

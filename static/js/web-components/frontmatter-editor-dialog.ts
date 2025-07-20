@@ -206,7 +206,10 @@ export class FrontmatterEditorDialog extends LitElement {
       return struct.toJson() as Record<string, unknown>;
     } catch (err) {
       // This is an unrecoverable error - the protobuf data is corrupted
-      const kernelPanic = document.createElement('kernel-panic') as any;
+      const kernelPanic = document.createElement('kernel-panic') as HTMLElement & {
+        message: string;
+        error: Error;
+      };
       kernelPanic.message = 'Failed to convert frontmatter data structure';
       kernelPanic.error = err;
       document.body.appendChild(kernelPanic);
