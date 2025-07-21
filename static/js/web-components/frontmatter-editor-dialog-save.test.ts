@@ -99,7 +99,7 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
     describe('when save is successful', () => {
       let mockResponse: ReplaceFrontmatterResponse;
 
-      beforeEach(() => {
+      beforeEach(async () => {
         // Create a successful response
         const responseStruct = new Struct({
           fields: {
@@ -121,11 +121,12 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
         
         mockResponse = new ReplaceFrontmatterResponse({ frontmatter: responseStruct });
         clientStub.resolves(mockResponse);
+        
+        // Execute the save action
+        await el['_handleSaveClick']();
       });
 
-      it('should call replaceFrontmatter with correct parameters', async () => {
-        await el['_handleSaveClick']();
-
+      it('should call replaceFrontmatter with correct parameters', () => {
         expect(clientStub).to.have.been.calledOnce;
         const callArgs = clientStub.getCall(0).args[0] as ReplaceFrontmatterRequest;
         expect(callArgs.page).to.equal('test-page');
@@ -140,115 +141,183 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
         });
       });
 
-      it('should set saving state during save operation', async () => {
-        // Start the save operation
-        const savePromise = el['_handleSaveClick']();
-        
-        // Check that saving state is set
-        expect(el.saving).to.be.true;
-        
-        // Wait for completion
-        await savePromise;
-        
-        // Check that saving state is cleared
+      it('should clear saving state', () => {
         expect(el.saving).to.be.false;
       });
 
-      it('should store success toast and refresh page after successful save', async () => {
-        await el['_handleSaveClick']();
-        
-        // Check that success message was stored in sessionStorage
+      it('should store success toast message', () => {
         expect(sessionStorageStub).to.have.been.calledWith('toast-message', 'Frontmatter saved successfully!');
         expect(sessionStorageStub).to.have.been.calledWith('toast-type', 'success');
-        
-        // Check that page refresh was triggered
+      });
+
+      it('should trigger page refresh', () => {
         expect(refreshPageStub).to.have.been.calledOnce;
       });
 
-      it('should close the dialog after successful save', async () => {
-        el.open = true;
-        await el['_handleSaveClick']();
+      it('should close the dialog', () => {
         expect(el.open).to.be.false;
       });
 
-      it('should update frontmatter data with server response', async () => {
-        // Since close() clears frontmatter, we need to check before the save completes
-        let frontmatterBeforeClose: GetFrontmatterResponse | undefined;
-        
-        // Stub the close method to capture the frontmatter before it's cleared
-        const originalClose = el.close;
-        sinon.stub(el, 'close').callsFake(() => {
-          frontmatterBeforeClose = el.frontmatter;
-          originalClose.call(el);
-        });
-        
-        await el['_handleSaveClick']();
-        
-        expect(frontmatterBeforeClose).to.be.instanceOf(GetFrontmatterResponse);
-        expect(frontmatterBeforeClose!.frontmatter).to.equal(mockResponse.frontmatter);
+      it('should clear any previous error', () => {
+        expect(el.error).to.be.undefined;
       });
 
-      it('should clear any previous error', async () => {
-        el.error = 'Previous error';
-        await el['_handleSaveClick']();
-        expect(el.error).to.be.undefined;
+      describe('when saving state is observed during operation', () => {
+        let savePromise: Promise<void>;
+        let savingStateDuringOperation: boolean;
+
+        beforeEach(async () => {
+          // Reset the stub to prepare for a new save operation
+          clientStub.reset();
+          clientStub.resolves(mockResponse);
+          
+          // Start the save operation and capture saving state
+          savePromise = el['_handleSaveClick']();
+          savingStateDuringOperation = el.saving;
+          
+          // Wait for completion
+          await savePromise;
+        });
+
+        it('should set saving state during operation', () => {
+          expect(savingStateDuringOperation).to.be.true;
+        });
+      });
+
+      describe('when dialog was open before save', () => {
+        beforeEach(async () => {
+          // Reset and setup for testing dialog close behavior
+          clientStub.reset();
+          clientStub.resolves(mockResponse);
+          el.open = true;
+          
+          await el['_handleSaveClick']();
+        });
+
+        it('should close the dialog', () => {
+          expect(el.open).to.be.false;
+        });
+      });
+
+      describe('when there was a previous error', () => {
+        beforeEach(async () => {
+          // Reset and setup for testing error clearing
+          clientStub.reset();
+          clientStub.resolves(mockResponse);
+          el.error = 'Previous error';
+          
+          await el['_handleSaveClick']();
+        });
+
+        it('should clear the error', () => {
+          expect(el.error).to.be.undefined;
+        });
+      });
+
+      describe('when testing frontmatter update behavior', () => {
+        let frontmatterBeforeClose: GetFrontmatterResponse | undefined;
+
+        beforeEach(async () => {
+          // Reset and setup for testing frontmatter update
+          clientStub.reset();
+          clientStub.resolves(mockResponse);
+          
+          // Stub the close method to capture the frontmatter before it's cleared
+          const originalClose = el.close;
+          sinon.stub(el, 'close').callsFake(() => {
+            frontmatterBeforeClose = el.frontmatter;
+            originalClose.call(el);
+          });
+          
+          await el['_handleSaveClick']();
+        });
+
+        it('should update frontmatter data with server response', () => {
+          expect(frontmatterBeforeClose).to.be.instanceOf(GetFrontmatterResponse);
+          expect(frontmatterBeforeClose!.frontmatter).to.equal(mockResponse.frontmatter);
+        });
       });
     });
 
     describe('when save fails', () => {
       let mockError: Error;
 
-      beforeEach(() => {
+      beforeEach(async () => {
         mockError = new Error('Failed to save frontmatter');
         clientStub.rejects(mockError);
+        
+        // Execute the save action
+        await el['_handleSaveClick']();
       });
 
-      it('should set error message on failure', async () => {
-        await el['_handleSaveClick']();
+      it('should set error message', () => {
         expect(el.error).to.equal('Failed to save frontmatter');
       });
 
-      it('should clear saving state on failure', async () => {
-        await el['_handleSaveClick']();
+      it('should clear saving state', () => {
         expect(el.saving).to.be.false;
       });
 
-      it('should not refresh page on failure', async () => {
-        await el['_handleSaveClick']();
+      it('should not refresh page', () => {
         expect(refreshPageStub).not.to.have.been.called;
       });
 
-      it('should not store toast message on failure', async () => {
-        await el['_handleSaveClick']();
+      it('should not store toast message', () => {
         expect(sessionStorageStub).not.to.have.been.called;
       });
 
-      it('should not close dialog on failure', async () => {
-        el.open = true;
-        await el['_handleSaveClick']();
-        expect(el.open).to.be.true;
-      });
+      describe('when dialog was open before save failure', () => {
+        beforeEach(async () => {
+          // Reset and setup for testing dialog behavior on failure
+          clientStub.reset();
+          clientStub.rejects(mockError);
+          el.open = true;
+          
+          await el['_handleSaveClick']();
+        });
 
-      it('should handle non-Error exceptions', async () => {
+        it('should not close dialog', () => {
+          expect(el.open).to.be.true;
+        });
+      });
+    });
+
+    describe('when a non-Error exception is raised', () => {
+      beforeEach(async () => {
         // Use a rejected promise with a string directly 
         clientStub.returns(Promise.reject('String error'));
+        
+        // Execute the save action
         await el['_handleSaveClick']();
+      });
+
+      it('should handle non-Error exceptions', () => {
         expect(el.error).to.equal('String error');
       });
     });
 
     describe('when page is not set', () => {
-      it('should not make network call if page is empty', async () => {
+      beforeEach(async () => {
         el.page = '';
+        
+        // Execute the save action
         await el['_handleSaveClick']();
+      });
+
+      it('should not make network call', () => {
         expect(clientStub).not.to.have.been.called;
       });
     });
 
     describe('when workingFrontmatter is not set', () => {
-      it('should not make network call if workingFrontmatter is undefined', async () => {
+      beforeEach(async () => {
         el.workingFrontmatter = undefined;
+        
+        // Execute the save action
         await el['_handleSaveClick']();
+      });
+
+      it('should not make network call', () => {
         expect(clientStub).not.to.have.been.called;
       });
     });

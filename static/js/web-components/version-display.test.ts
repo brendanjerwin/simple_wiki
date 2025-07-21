@@ -116,7 +116,7 @@ describe('VersionDisplay', () => {
       expect(error).to.not.exist;
     });
 
-    it('should show version row structure during loading', () => {
+    it('should show version row structure', () => {
       const versionRows = el.shadowRoot?.querySelectorAll('.version-row');
       expect(versionRows).to.have.length(2);
 
