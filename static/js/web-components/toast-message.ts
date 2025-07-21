@@ -54,7 +54,7 @@ export class ToastMessage extends LitElement {
         padding: 16px;
         position: relative;
         cursor: pointer;
-        min-height: 60px; /* Ensure minimum height for layout */
+        min-height: 48px; /* Start with icon size (32px) + padding (16px) */
       }
 
       .toast.success {
@@ -95,7 +95,7 @@ export class ToastMessage extends LitElement {
       }
 
       .message {
-        font-size: 14px;
+        font-size: 16px;
         line-height: 1.4;
         color: #333;
         margin: 0;
