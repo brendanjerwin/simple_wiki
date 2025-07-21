@@ -50,6 +50,9 @@
         "COMMIT=$(git rev-parse HEAD)",
         "BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)",
         "go build -ldflags \"-X main.commit=$COMMIT -X main.buildTime=$BUILD_TIME\" -o simple_wiki ."
+      ],
+      "storybook": [
+        "cd static/js && bun install && bun run storybook"
       ]
     }
   }

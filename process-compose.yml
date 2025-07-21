@@ -8,3 +8,7 @@ processes:
     command: podman run --rm -p 8080:8080 -v $(pwd)/docs:/usr/local/structurizr -i docker.io/structurizr/lite
     availability:
       restart: "always"
+  storybook:
+    command: cd static/js && bun install && bun run storybook
+    availability:
+      restart: "always"
