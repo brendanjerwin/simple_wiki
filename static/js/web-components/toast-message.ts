@@ -52,11 +52,9 @@ export class ToastMessage extends LitElement {
         background: #ffffff;
         border-left: 4px solid var(--toast-color);
         padding: 16px;
-        display: flex;
-        align-items: flex-start;
-        gap: 12px;
         position: relative;
         cursor: pointer;
+        min-height: 60px; /* Ensure minimum height for layout */
       }
 
       .toast.success {
@@ -77,10 +75,9 @@ export class ToastMessage extends LitElement {
 
       .icon {
         position: absolute;
-        bottom: 8px;
-        right: 8px;
-        font-size: 48px;
-        font-weight: 900;
+        top: 8px;
+        left: 8px;
+        font-size: 32px;
         opacity: 0.15;
         z-index: 0;
         color: var(--toast-color);
@@ -89,11 +86,12 @@ export class ToastMessage extends LitElement {
       }
 
       .content {
-        flex: 1;
-        min-width: 0;
-        position: relative;
+        position: absolute;
+        bottom: 8px;
+        right: 8px;
         z-index: 1;
-        margin-right: 40px; /* Add margin to account for ambient icon in bottom-right */
+        text-align: right;
+        max-width: calc(100% - 60px); /* Account for icon space */
       }
 
       .message {
