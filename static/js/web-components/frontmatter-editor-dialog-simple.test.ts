@@ -40,9 +40,11 @@ describe('FrontmatterEditorDialog - Basic Tests', () => {
       });
     });
 
-    it('should return empty object when struct is undefined', () => {
-      const result = el['convertStructToPlainObject'](undefined);
-      expect(result).to.deep.equal({});
+    describe('when struct is undefined', () => {
+      it('should return empty object', () => {
+        const result = el['convertStructToPlainObject'](undefined);
+        expect(result).to.deep.equal({});
+      });
     });
   });
 

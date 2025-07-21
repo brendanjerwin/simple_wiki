@@ -330,39 +330,48 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
       await el.updateComplete;
     });
 
-    it('should disable save button when saving', async () => {
-      el.saving = true;
-      await el.updateComplete;
-      
-      const saveButton = el.shadowRoot!.querySelector('.footer button:last-child') as HTMLButtonElement;
-      expect(saveButton.disabled).to.be.true;
-      expect(saveButton.textContent!.trim()).to.equal('Saving...');
+    describe('when saving', () => {
+      beforeEach(async () => {
+        el.saving = true;
+        await el.updateComplete;
+      });
+
+      it('should disable save button', () => {
+        const saveButton = el.shadowRoot!.querySelector('.footer button:last-child') as HTMLButtonElement;
+        expect(saveButton.disabled).to.be.true;
+        expect(saveButton.textContent!.trim()).to.equal('Saving...');
+      });
+
+      it('should disable cancel button', () => {
+        const cancelButton = el.shadowRoot!.querySelector('.footer button:first-child') as HTMLButtonElement;
+        expect(cancelButton.disabled).to.be.true;
+      });
     });
 
-    it('should disable save button when loading', async () => {
-      el.loading = true;
-      await el.updateComplete;
-      
-      const saveButton = el.shadowRoot!.querySelector('.footer button:last-child') as HTMLButtonElement;
-      expect(saveButton.disabled).to.be.true;
+    describe('when loading', () => {
+      beforeEach(async () => {
+        el.loading = true;
+        await el.updateComplete;
+      });
+
+      it('should disable save button', () => {
+        const saveButton = el.shadowRoot!.querySelector('.footer button:last-child') as HTMLButtonElement;
+        expect(saveButton.disabled).to.be.true;
+      });
     });
 
-    it('should enable save button when not saving or loading', async () => {
-      el.saving = false;
-      el.loading = false;
-      await el.updateComplete;
-      
-      const saveButton = el.shadowRoot!.querySelector('.footer button:last-child') as HTMLButtonElement;
-      expect(saveButton.disabled).to.be.false;
-      expect(saveButton.textContent!.trim()).to.equal('Save');
-    });
+    describe('when not saving or loading', () => {
+      beforeEach(async () => {
+        el.saving = false;
+        el.loading = false;
+        await el.updateComplete;
+      });
 
-    it('should disable cancel button when saving', async () => {
-      el.saving = true;
-      await el.updateComplete;
-      
-      const cancelButton = el.shadowRoot!.querySelector('.footer button:first-child') as HTMLButtonElement;
-      expect(cancelButton.disabled).to.be.true;
+      it('should enable save button', () => {
+        const saveButton = el.shadowRoot!.querySelector('.footer button:last-child') as HTMLButtonElement;
+        expect(saveButton.disabled).to.be.false;
+        expect(saveButton.textContent!.trim()).to.equal('Save');
+      });
     });
   });
 });

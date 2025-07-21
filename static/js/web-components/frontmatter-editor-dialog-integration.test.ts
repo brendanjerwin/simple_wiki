@@ -216,10 +216,12 @@ describe('FrontmatterEditorDialog - Component Integration', () => {
       expect(valueComponents).to.have.length(3); // One for each top-level field
     });
 
-    it('should maintain data integrity when components change', () => {
-      expect(el.workingFrontmatter.simple_field).to.equal('value');
-      expect(el.workingFrontmatter.array_field).to.deep.equal(['item1', 'item2']);
-      expect(el.workingFrontmatter.section_field).to.deep.equal({ nested_key: 'nested_value' });
+    describe('when components change', () => {
+      it('should maintain data integrity', () => {
+        expect(el.workingFrontmatter.simple_field).to.equal('value');
+        expect(el.workingFrontmatter.array_field).to.deep.equal(['item1', 'item2']);
+        expect(el.workingFrontmatter.section_field).to.deep.equal({ nested_key: 'nested_value' });
+      });
     });
   });
 });

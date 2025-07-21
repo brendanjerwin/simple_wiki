@@ -86,14 +86,18 @@ describe('ToastMessage', () => {
       expect(el.visible).to.be.true;
     });
 
-    it('should auto-hide after timeout when autoClose is true', () => {
-      el.show();
-      
-      expect(el.visible).to.be.true;
-      
-      clock.tick(1000);
-      
-      expect(el.visible).to.be.false;
+    describe('when autoClose is true', () => {
+      beforeEach(() => {
+        el.show();
+      });
+
+      it('should auto-hide after timeout', () => {
+        expect(el.visible).to.be.true;
+        
+        clock.tick(1000);
+        
+        expect(el.visible).to.be.false;
+      });
     });
 
     describe('when autoClose is false', () => {

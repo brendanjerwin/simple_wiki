@@ -39,9 +39,11 @@ describe('FrontmatterAddFieldButton', () => {
       expect(button).to.exist;
     });
 
-    it('should not render dropdown menu when closed', () => {
-      const menu = el.shadowRoot?.querySelector('.dropdown-menu');
-      expect(menu).to.not.exist;
+    describe('when closed', () => {
+      it('should not render dropdown menu', () => {
+        const menu = el.shadowRoot?.querySelector('.dropdown-menu');
+        expect(menu).to.not.exist;
+      });
     });
   });
 
