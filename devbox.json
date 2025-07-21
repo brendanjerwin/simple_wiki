@@ -53,6 +53,12 @@
       ],
       "storybook": [
         "cd static/js && bun install && bun run storybook"
+      ],
+      "storybook:build": [
+        "cd static/js && bun install && bun run build-storybook"
+      ],
+      "chromatic": [
+        "cd static/js && bun install && bun run build-storybook && bunx chromatic --project-token=$CHROMATIC_PROJECT_TOKEN --storybook-build-dir=storybook-static"
       ]
     }
   }
