@@ -13,6 +13,7 @@ import (
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
+	"github.com/brendanjerwin/simple_wiki/internal/testutils"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
@@ -115,6 +116,7 @@ func (m *gRPCStatusMatcher) NegatedFailureMessage(actual any) (message string) {
 }
 
 func TestServer(t *testing.T) {
+	testutils.EnforceDevboxInCI()
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "gRPC V1 Server Suite")
 }

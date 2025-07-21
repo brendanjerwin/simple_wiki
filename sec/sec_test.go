@@ -4,11 +4,13 @@ package sec
 import (
 	"testing"
 
+	"github.com/brendanjerwin/simple_wiki/internal/testutils"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 func TestSec(t *testing.T) {
+	testutils.EnforceDevboxInCI()
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Sec Suite")
 }

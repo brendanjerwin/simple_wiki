@@ -3,12 +3,14 @@ package slicetools_test
 import (
 	"testing"
 
+	"github.com/brendanjerwin/simple_wiki/internal/testutils"
 	"github.com/brendanjerwin/simple_wiki/utils/slicetools"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 func TestUtils(t *testing.T) {
+	testutils.EnforceDevboxInCI()
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "slicetools Suite")
 }
