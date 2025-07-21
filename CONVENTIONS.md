@@ -61,6 +61,7 @@
 - Since this is primarily a Go project, JavaScript is only for the frontend portion and should be contained within the `static/js` directory.
 - Organize frontend JavaScript files within appropriate subdirectories under `static/js` (e.g., `web-components`, `utils`).
 - Test files should be placed next to the production code they test, using the `.test.js` suffix. For example, `wiki-search.js` should have its tests in `wiki-search.test.js` in the same directory.
+- **Scalar Variable Units**: Always include units in scalar variable names when the unit is meaningful. For example, use `timeoutMs` instead of `timeout`, `delaySeconds` instead of `delay`, `heightPx` instead of `height`. This makes the code self-documenting and prevents unit confusion.
 
 ## TDD
 
