@@ -324,7 +324,7 @@ export class FrontmatterEditorDialog extends LitElement {
       }
       
       // Store success message and close dialog with page refresh
-      showToastAfter('Frontmatter saved successfully!', 'success', () => {
+      showToastAfter('Frontmatter saved successfully!', 'success', 5, () => {
         // Close the dialog
         this.close();
         

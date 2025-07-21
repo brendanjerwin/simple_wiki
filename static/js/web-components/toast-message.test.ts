@@ -14,11 +14,11 @@ describe('ToastMessage', () => {
   });
 
   it('should have default properties', () => {
-    expect(el.message).to.equal('');
-    expect(el.type).to.equal('info');
-    expect(el.visible).to.be.false;
-    expect(el.timeoutMs).to.equal(5000);
-    expect(el.autoClose).to.be.true;
+    expect(el.message).to.be.undefined;
+    expect(el.type).to.be.undefined;
+    expect(el.visible).to.be.undefined;
+    expect(el.timeoutSeconds).to.be.undefined;
+    expect(el.autoClose).to.be.undefined;
   });
 
   describe('when showing a message', () => {
@@ -73,7 +73,8 @@ describe('ToastMessage', () => {
     beforeEach(() => {
       clock = sinon.useFakeTimers();
       el.message = 'Test message';
-      el.timeoutMs = 1000;
+      el.timeoutSeconds = 1;
+      el.autoClose = true;
     });
 
     afterEach(() => {
@@ -86,7 +87,6 @@ describe('ToastMessage', () => {
     });
 
     it('should auto-hide after timeout when autoClose is true', () => {
-      el.autoClose = true;
       el.show();
       
       expect(el.visible).to.be.true;
@@ -110,7 +110,7 @@ describe('ToastMessage', () => {
 
     describe('when timeout is 0', () => {
       beforeEach(() => {
-        el.timeoutMs = 0;
+        el.timeoutSeconds = 0;
         el.show();
         clock.tick(5000);
       });
@@ -164,7 +164,7 @@ describe('showToast utility function', () => {
   });
 
   it('should create and show a toast message', async () => {
-    showToast('Test message', 'success');
+    showToast('Test message', 'success', 5);
     
     const toast = document.querySelector('toast-message') as ToastMessage;
     expect(toast).to.exist;
@@ -173,7 +173,7 @@ describe('showToast utility function', () => {
   });
 
   it('should use default type if not specified', () => {
-    showToast('Test message');
+    showToast('Test message', 'info', 5);
     
     const toast = document.querySelector('toast-message') as ToastMessage;
     expect(toast.type).to.equal('info');
@@ -193,14 +193,18 @@ describe('showToastAfter utility function', () => {
     sessionStorage.clear();
   });
 
-  it('should store toast message and execute function', () => {
+  it('should store toast message and execute function', async () => {
     let functionExecuted = false;
     
-    showToastAfter('Test message', 'success', () => {
+    showToastAfter('Test message', 'success', 5, () => {
       functionExecuted = true;
     });
     
     expect(functionExecuted).to.be.true;
+    
+    // Wait for the delayed showStoredToast call
+    await new Promise(resolve => setTimeout(resolve, 150));
+    
     // sessionStorage should be cleared after showStoredToast is called
     expect(sessionStorage.getItem('toast-message')).to.be.null;
     expect(sessionStorage.getItem('toast-type')).to.be.null;
@@ -212,10 +216,13 @@ describe('showToastAfter utility function', () => {
     expect(toast.type).to.equal('success');
   });
 
-  it('should show toast after execution if no page refresh occurs', () => {
-    showToastAfter('Test message', 'warning', () => {
+  it('should show toast after execution if no page refresh occurs', async () => {
+    showToastAfter('Test message', 'warning', 5, () => {
       // No-op function that doesn't refresh page
     });
+    
+    // Wait for the delayed showStoredToast call
+    await new Promise(resolve => setTimeout(resolve, 150));
     
     const toast = document.querySelector('toast-message') as ToastMessage;
     expect(toast).to.exist;

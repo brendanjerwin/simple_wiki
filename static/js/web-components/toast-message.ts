@@ -1,13 +1,27 @@
 import { html, css, LitElement } from 'lit';
 import { sharedStyles, foundationCSS, buttonCSS } from './shared-styles.js';
 
+// Valid toast types - defined once for consistency
+const TOAST_TYPES = ['success', 'error', 'warning', 'info'] as const;
+type ToastType = typeof TOAST_TYPES[number];
+
+// Storage keys for sessionStorage persistence
+const STORAGE_KEYS = {
+  MESSAGE: 'toast-message',
+  TYPE: 'toast-type',
+  TIMEOUT: 'toast-timeout'
+} as const;
+
+// Animation duration in milliseconds - matches CSS transition
+const ANIMATION_DURATION_MS = 300;
+
 /**
  * ToastMessage - A temporary notification component for user feedback
  * 
  * Features:
  * - Displays temporary success, error, warning, or info messages
  * - Auto-dismisses after a configurable timeout
- * - Supports manual closing via close button
+ * - Supports manual closing via clicking anywhere on toast
  * - Uses smooth animations for show/hide
  * - Follows existing component patterns and styling
  */
@@ -63,13 +77,15 @@ export class ToastMessage extends LitElement {
 
       .icon {
         position: absolute;
-        top: 8px;
-        left: 8px;
-        font-size: 32px;
+        bottom: 8px;
+        right: 8px;
+        font-size: 48px;
+        font-weight: 900;
         opacity: 0.15;
         z-index: 0;
         color: var(--toast-color);
         pointer-events: none;
+        line-height: 1;
       }
 
       .content {
@@ -77,7 +93,7 @@ export class ToastMessage extends LitElement {
         min-width: 0;
         position: relative;
         z-index: 1;
-        margin-left: 20px; /* Add margin to account for ambient icon */
+        margin-right: 40px; /* Add margin to account for ambient icon in bottom-right */
       }
 
       .message {
@@ -105,25 +121,22 @@ export class ToastMessage extends LitElement {
     message: { type: String },
     type: { type: String },
     visible: { type: Boolean, reflect: true },
-    timeoutMs: { type: Number },
+    timeoutSeconds: { type: Number },
     autoClose: { type: Boolean }
   };
 
   declare message: string;
-  declare type: 'success' | 'error' | 'warning' | 'info';
+  declare type: ToastType;
   declare visible: boolean;
-  declare timeoutMs: number;
+  declare timeoutSeconds: number;
   declare autoClose: boolean;
 
   private timeoutId?: number;
 
   constructor() {
     super();
-    this.message = '';
-    this.type = 'info';
-    this.visible = false;
-    this.timeoutMs = 5000; // 5 seconds default
-    this.autoClose = true;
+    // No defaults - component must be fully configured
+    // Exceptions are preferred over accidental success
   }
 
   private getIcon(): string {
@@ -143,11 +156,11 @@ export class ToastMessage extends LitElement {
   public show(): void {
     this.visible = true;
     
-    if (this.autoClose && this.timeoutMs > 0) {
+    if (this.autoClose && this.timeoutSeconds > 0) {
       this.clearTimeout();
       this.timeoutId = window.setTimeout(() => {
         this.hide();
-      }, this.timeoutMs);
+      }, this.timeoutSeconds * 1000);
     }
   }
 
@@ -158,7 +171,7 @@ export class ToastMessage extends LitElement {
     // Remove from DOM after animation completes
     setTimeout(() => {
       this.remove();
-    }, 300);
+    }, ANIMATION_DURATION_MS);
   }
 
   private clearTimeout(): void {
@@ -199,29 +212,44 @@ customElements.define('toast-message', ToastMessage);
  */
 export function showToastAfter(
   message: string, 
-  type: 'success' | 'error' | 'warning' | 'info' = 'info',
+  type: ToastType,
+  timeoutSeconds: number,
   fn: () => void
 ): void {
   // Store the toast message for post-execution display
-  sessionStorage.setItem('toast-message', message);
-  sessionStorage.setItem('toast-type', type);
+  sessionStorage.setItem(STORAGE_KEYS.MESSAGE, message);
+  sessionStorage.setItem(STORAGE_KEYS.TYPE, type);
+  sessionStorage.setItem(STORAGE_KEYS.TIMEOUT, timeoutSeconds.toString());
   
   // Execute the provided function
   fn();
   
-  // Show the stored toast (useful if fn doesn't cause a page refresh)
-  showStoredToast();
+  // Wait a moment for any async work to complete before showing toast
+  setTimeout(() => {
+    showStoredToast();
+  }, 100);
 }
 
 /**
- * Show a toast immediately (convenience method using showToastAfter)
+ * Show a toast immediately (convenience method)
  */
 export function showToast(
   message: string, 
-  type: 'success' | 'error' | 'warning' | 'info' = 'info'
+  type: ToastType,
+  timeoutSeconds: number
 ): void {
-  showToastAfter(message, type, () => {
-    // No-op function - just show the toast immediately
+  // Create and show the toast immediately
+  const toast = document.createElement('toast-message') as ToastMessage;
+  toast.message = message;
+  toast.type = type;
+  toast.timeoutSeconds = timeoutSeconds;
+  toast.autoClose = true;
+  toast.visible = false;
+  
+  document.body.appendChild(toast);
+  
+  requestAnimationFrame(() => {
+    toast.show();
   });
 }
 
@@ -229,23 +257,26 @@ export function showToast(
  * Show a success toast stored in sessionStorage (for post-refresh notifications)
  */
 export function showStoredToast(): void {
-  const storedMessage = sessionStorage.getItem('toast-message');
-  const storedTypeRaw = sessionStorage.getItem('toast-type');
+  const storedMessage = sessionStorage.getItem(STORAGE_KEYS.MESSAGE);
+  const storedTypeRaw = sessionStorage.getItem(STORAGE_KEYS.TYPE);
+  const storedTimeoutRaw = sessionStorage.getItem(STORAGE_KEYS.TIMEOUT);
   
   if (storedMessage) {
-    // Validate the stored type, default to 'info' if invalid
-    const validTypes = ['success', 'error', 'warning', 'info'] as const;
-    type ValidType = typeof validTypes[number];
-    const storedType = validTypes.includes(storedTypeRaw as ValidType) ? storedTypeRaw as ValidType : 'info';
+    // Validate the stored type against valid types
+    const storedType = TOAST_TYPES.includes(storedTypeRaw as ToastType) ? storedTypeRaw as ToastType : 'info';
+    const storedTimeout = storedTimeoutRaw ? parseInt(storedTimeoutRaw, 10) : 5;
     
-    sessionStorage.removeItem('toast-message');
-    sessionStorage.removeItem('toast-type');
+    sessionStorage.removeItem(STORAGE_KEYS.MESSAGE);
+    sessionStorage.removeItem(STORAGE_KEYS.TYPE);
+    sessionStorage.removeItem(STORAGE_KEYS.TIMEOUT);
     
     // Create and show the toast immediately
     const toast = document.createElement('toast-message') as ToastMessage;
     toast.message = storedMessage;
     toast.type = storedType;
-    toast.timeoutMs = 5000;
+    toast.timeoutSeconds = storedTimeout;
+    toast.autoClose = true;
+    toast.visible = false;
     
     document.body.appendChild(toast);
     
