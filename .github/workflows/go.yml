@@ -50,54 +50,53 @@ jobs:
         id: generate
         run: go run ./tools/generate_matrix.go
 
-  build-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: 1.24
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-      - name: Compile test binaries
-        run: |
-          mkdir -p test-binaries
-          for pkg in $(go list -f '{{if .TestGoFiles}}{{.ImportPath}}{{end}}' ./... | grep -v vendor | grep -v /gen/); do
-            go test -c -cover -o "test-binaries/$(echo $pkg | tr '/' '-').test" $pkg
-          done
-      - name: Upload test binaries
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-binaries
-          path: test-binaries/
+# Commented out since we now use devbox for test execution instead of pre-compiled binaries
+  # build-tests:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - name: Set up Go
+  #       uses: actions/setup-go@v5
+  #       with:
+  #         go-version: 1.24
+  #     - name: Cache Go modules
+  #       uses: actions/cache@v4
+  #       with:
+  #         path: ~/go/pkg/mod
+  #         key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+  #         restore-keys: |
+  #           ${{ runner.os }}-go-
+  #     - name: Compile test binaries
+  #       run: |
+  #         mkdir -p test-binaries
+  #         for pkg in $(go list -f '{{if .TestGoFiles}}{{.ImportPath}}{{end}}' ./... | grep -v vendor | grep -v /gen/); do
+  #           go test -c -cover -o "test-binaries/$(echo $pkg | tr '/' '-').test" $pkg
+  #         done
+  #     - name: Upload test binaries
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: test-binaries
+  #         path: test-binaries/
 
   test:
     runs-on: ubuntu-latest
-    needs: [generate-matrix, build-tests]
+    needs: [generate-matrix]
     strategy:
       matrix: ${{ fromJson(needs.generate-matrix.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
-      - name: Download test binaries
-        uses: actions/download-artifact@v4
+      
+      - name: Install Devbox
+        uses: jetify-com/devbox-install-action@v0.12.0
         with:
-          name: test-binaries
-          path: test-binaries/
+          enable-cache: 'true'
+      
       - name: Test ${{ matrix.name }}
         run: |
           mkdir -p coverage_temp
           for pkg in ${{ join(matrix.packages, ' ') }}; do
             TEST_BINARY_NAME=$(echo $pkg | tr '/' '-')
-            if [ -f "./test-binaries/$TEST_BINARY_NAME.test" ]; then
-              chmod +x ./test-binaries/$TEST_BINARY_NAME.test
-              ./test-binaries/$TEST_BINARY_NAME.test -test.coverprofile="coverage_temp/$TEST_BINARY_NAME.cover" &
-            fi
+            devbox run -- go test -coverprofile="coverage_temp/$TEST_BINARY_NAME.cover" $pkg &
           done
           wait
       - name: Upload coverage artifact
