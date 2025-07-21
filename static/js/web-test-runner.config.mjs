@@ -5,6 +5,15 @@ import { summaryReporter } from '@web/test-runner';
 const chromiumPath = process.env.CHROMIUM_BIN;
 console.log('WTR Config - CHROMIUM_BIN:', chromiumPath);
 
+// Enforce devbox usage in GitHub Actions
+if (process.env.GITHUB_ACTIONS === 'true') {
+  if (process.env.DEVBOX_SHELL_ENABLED !== '1') {
+    console.error('\nERROR: Tests must be run using \'devbox run fe:test\' in GitHub Actions environment.');
+    console.error('Please use: devbox run fe:test\n');
+    process.exit(1);
+  }
+}
+
 export default {
   files: './web-components/**/*.test.ts',
   base: '/static/js/',
