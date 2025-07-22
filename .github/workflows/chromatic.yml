@@ -20,7 +20,17 @@ jobs:
         with:
           enable-cache: 'true'
       
-      - name: Publish to Chromatic
+      - name: Publish to Chromatic (Push to main)
+        if: github.event_name == 'push'
         run: devbox run chromatic
         env:
           CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+      
+      - name: Publish to Chromatic (Pull Request)
+        if: github.event_name == 'pull_request'
+        run: devbox run chromatic:pr
+        env:
+          CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
+          BASE_BRANCH: ${{ github.base_ref }}
+          HEAD_BRANCH: ${{ github.head_ref }}
+          PR_SHA: ${{ github.event.pull_request.head.sha }}
