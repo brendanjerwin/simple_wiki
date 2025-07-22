@@ -2,6 +2,16 @@ import type { Meta, StoryObj } from '@storybook/web-components-vite';
 import { html } from 'lit';
 import './frontmatter-editor-dialog.js';
 
+// Custom action logger for Storybook
+const action = (name: string) => (event: Event) => {
+  console.log(`🎬 Action: ${name}`, {
+    type: event.type,
+    target: event.target,
+    detail: (event as CustomEvent).detail,
+    timestamp: new Date().toISOString()
+  });
+};
+
 const meta: Meta = {
   title: 'Components/FrontmatterEditorDialog',
   tags: ['autodocs'],
@@ -36,7 +46,10 @@ export const Closed: Story = {
   render: (args) => html`
     <frontmatter-editor-dialog 
       .page="${args.page}"
-      .open="${args.open}">
+      .open="${args.open}"
+      @save=${action('save-event')}
+      @cancel=${action('cancel-event')}
+      @close=${action('close-event')}>
     </frontmatter-editor-dialog>
   `,
 };
@@ -52,7 +65,10 @@ export const LoadingState: Story = {
       <frontmatter-editor-dialog 
         .page="${args.page}"
         .open="${args.open}"
-        .loading="${true}">
+        .loading="${true}"
+        @save=${action('save-event')}
+        @cancel=${action('cancel-event')}
+        @close=${action('close-event')}>
     </frontmatter-editor-dialog>
     `;
   },
@@ -68,7 +84,10 @@ export const ErrorState: Story = {
       .page="${args.page}"
       .open="${args.open}"
       .loading="${false}"
-      .error="${'Network error: Could not connect to server'}">
+      .error="${'Network error: Could not connect to server'}"
+      @save=${action('save-event')}
+      @cancel=${action('cancel-event')}
+      @close=${action('close-event')}>
     </frontmatter-editor-dialog>
   `,
 };
@@ -98,7 +117,13 @@ export const WithFrontmatterData: Story = {
         .page="${args.page}"
         .open="${args.open}"
         .loading="${false}"
-        .workingFrontmatter="${mockFrontmatterData}">
+        .workingFrontmatter="${mockFrontmatterData}"
+        @save=${action('save-event')}
+        @cancel=${action('cancel-event')}
+        @close=${action('close-event')}
+        @value-change=${action('value-changed')}
+        @key-change=${action('key-changed')}
+        @add-field=${action('field-added')}>
       </frontmatter-editor-dialog>
     `;
   },
@@ -122,8 +147,52 @@ export const SavingState: Story = {
         .open="${args.open}"
         .loading="${false}"
         .saving="${true}"
-        .workingFrontmatter="${mockFrontmatterData}">
+        .workingFrontmatter="${mockFrontmatterData}"
+        @save=${action('save-event')}
+        @cancel=${action('cancel-event')}
+        @close=${action('close-event')}
+        @value-change=${action('value-changed')}
+        @key-change=${action('key-changed')}
+        @add-field=${action('field-added')}>
       </frontmatter-editor-dialog>
     `;
+  },
+};
+
+// Interactive form testing story
+export const InteractiveFormTesting: Story = {
+  args: {
+    page: 'interactive-test',
+    open: true,
+  },
+  render: (args) => {
+    const mockFrontmatterData = {
+      title: 'Edit Me!',
+      description: 'Try editing these fields',
+      tags: ['test', 'interactive'],
+      published: false,
+    };
+
+    return html`
+      <frontmatter-editor-dialog 
+        .page="${args.page}"
+        .open="${args.open}"
+        .loading="${false}"
+        .workingFrontmatter="${mockFrontmatterData}"
+        @save=${action('save-event')}
+        @cancel=${action('cancel-event')}
+        @close=${action('close-event')}
+        @value-change=${action('value-changed')}
+        @key-change=${action('key-changed')}
+        @add-field=${action('field-added')}>
+      </frontmatter-editor-dialog>
+    `;
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'This story provides an interactive frontmatter editor for testing form interactions. Try editing field values, changing keys, adding new fields, and using the save/cancel buttons. Watch the browser console (F12) to see all triggered events and their data.',
+      },
+    },
   },
 };

@@ -115,6 +115,87 @@ Storybook is used for developing and documenting UI components in isolation. Fol
 - Use `devbox run storybook:build` to build static Storybook files
 - Stories are automatically deployed to Chromatic for visual regression testing
 
+### Actions and Interactions
+
+Every story should include comprehensive event logging and interaction testing for user behaviors:
+
+#### Custom Action Logging Setup
+Since we use Storybook's base configuration, we implement custom action logging:
+
+```typescript
+// Custom action logger for Storybook
+const action = (name: string) => (event: Event) => {
+  console.log(`🎬 Action: ${name}`, {
+    type: event.type,
+    target: event.target,
+    detail: (event as CustomEvent).detail,
+    timestamp: new Date().toISOString()
+  });
+};
+```
+
+#### Event Binding in Stories
+- **Bind action loggers to all relevant events** in your story render functions:
+  ```typescript
+  render: (args) => html`
+    <my-component 
+      @click=${action('component-clicked')}
+      @input=${action('input-changed')}
+      @custom-event=${action('custom-event')}>
+    </my-component>
+  `,
+  ```
+
+#### Interactive Testing Stories
+- **Create dedicated interactive testing stories** for complex components that demonstrate:
+  - User workflows (form filling, multi-step interactions)
+  - Keyboard shortcuts and accessibility features
+  - Error states and recovery scenarios
+  - Real-world usage patterns
+
+- **Use descriptive story names** that indicate the interaction being tested:
+  - `InteractiveFormTesting` - for comprehensive form interaction testing
+  - `KeyboardShortcuts` - for keyboard navigation and shortcuts
+  - `DropdownInteractions` - for dropdown open/close/selection behaviors
+  - `ErrorRecovery` - for testing error states and user recovery paths
+
+#### Documentation and Context
+- **Add comprehensive story descriptions** using `parameters.docs.description.story`
+- **Provide clear instructions** for what users should test and what events to watch for in the browser console
+- **Include visual context** with appropriate styling and layout to simulate real usage
+- **Always mention "Open the browser developer tools console to see the action logs"** in interactive story descriptions
+
+#### Event Payload Testing
+- **Verify event payloads** contain correct data by checking the browser console logs
+- **Test data flow** by creating stories that demonstrate how component state changes affect event payloads
+- **Document expected event structure** in story descriptions
+
+#### Example Pattern
+```typescript
+export const InteractiveExample: Story = {
+  render: (args) => html`
+    <div style="padding: 20px; background: #f0f8ff;">
+      <h3>Component Interaction Test</h3>
+      <p>Instructions for testing...</p>
+      <my-component 
+        @event1=${action('event1-triggered')}
+        @event2=${action('event2-with-data')}>
+      </my-component>
+      <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
+        Watch the browser console (F12) to see triggered events logged.
+      </p>
+    </div>
+  `,
+  parameters: {
+    docs: {
+      description: {
+        story: 'Detailed description of what to test and expected behavior. Open the browser developer tools console to see the action logs.',
+      },
+    },
+  },
+};
+```
+
 ## TDD
 
 - Be Test-Driven. Write the test first, then write the code to make the tests pass.

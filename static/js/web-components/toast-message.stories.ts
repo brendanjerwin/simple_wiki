@@ -2,6 +2,16 @@ import type { Meta, StoryObj } from '@storybook/web-components';
 import { html } from 'lit';
 import './toast-message.js';
 
+// Custom action logger for Storybook
+const action = (name: string) => (event: Event) => {
+  console.log(`🎬 Action: ${name}`, {
+    type: event.type,
+    target: event.target,
+    detail: (event as CustomEvent).detail,
+    timestamp: new Date().toISOString()
+  });
+};
+
 const meta: Meta = {
   title: 'Components/ToastMessage',
   component: 'toast-message',
@@ -36,7 +46,10 @@ export const Success: Story = {
       .type=${args.type}
       .visible=${args.visible}
       .autoClose=${args.autoClose}
-      .timeout=${args.timeout}>
+      .timeout=${args.timeout}
+      @click=${action('toast-clicked')}
+      @show=${action('toast-shown')}
+      @hide=${action('toast-hidden')}>
     </toast-message>
   `,
 };
@@ -54,7 +67,10 @@ export const Error: Story = {
       .type=${args.type}
       .visible=${args.visible}
       .autoClose=${args.autoClose}
-      .timeout=${args.timeout}>
+      .timeout=${args.timeout}
+      @click=${action('toast-clicked')}
+      @show=${action('toast-shown')}
+      @hide=${action('toast-hidden')}>
     </toast-message>
   `,
 };
@@ -72,7 +88,10 @@ export const Warning: Story = {
       .type=${args.type}
       .visible=${args.visible}
       .autoClose=${args.autoClose}
-      .timeout=${args.timeout}>
+      .timeout=${args.timeout}
+      @click=${action('toast-clicked')}
+      @show=${action('toast-shown')}
+      @hide=${action('toast-hidden')}>
     </toast-message>
   `,
 };
@@ -90,7 +109,73 @@ export const Info: Story = {
       .type=${args.type}
       .visible=${args.visible}
       .autoClose=${args.autoClose}
-      .timeout=${args.timeout}>
+      .timeout=${args.timeout}
+      @click=${action('toast-clicked')}
+      @show=${action('toast-shown')}
+      @hide=${action('toast-hidden')}>
     </toast-message>
   `,
+};
+
+// Interactive story demonstrating click-to-dismiss behavior
+export const InteractiveClickToDismiss: Story = {
+  args: {
+    message: 'Click on this toast to dismiss it!',
+    type: 'info',
+    visible: true,
+    autoClose: false,
+  },
+  render: (args) => html`
+    <div style="position: relative; height: 100px; display: flex; align-items: center; justify-content: center;">
+      <toast-message 
+        .message=${args.message}
+        .type=${args.type}
+        .visible=${args.visible}
+        .autoClose=${args.autoClose}
+        .timeout=${args.timeout}
+        @click=${action('toast-clicked')}
+        @show=${action('toast-shown')}
+        @hide=${action('toast-hidden')}>
+      </toast-message>
+    </div>
+  `,
+  parameters: {
+    docs: {
+      description: {
+        story: 'Click on the toast message to see the click action logged to the browser console. In the real application, this would dismiss the toast. Open the browser developer tools console to see the action logs.',
+      },
+    },
+  },
+};
+
+// Auto-close demonstration
+export const AutoCloseBehavior: Story = {
+  args: {
+    message: 'This message will auto-hide after 3 seconds',
+    type: 'success',
+    visible: true,
+    autoClose: true,
+    timeout: 3000,
+  },
+  render: (args) => html`
+    <div style="position: relative; height: 100px; display: flex; align-items: center; justify-content: center;">
+      <toast-message 
+        .message=${args.message}
+        .type=${args.type}
+        .visible=${args.visible}
+        .autoClose=${args.autoClose}
+        .timeout=${args.timeout}
+        @click=${action('toast-clicked')}
+        @show=${action('toast-shown')}
+        @hide=${action('toast-hidden')}>
+      </toast-message>
+    </div>
+  `,
+  parameters: {
+    docs: {
+      description: {
+        story: 'This toast demonstrates auto-close behavior. Watch the browser console to see the hide event after 3 seconds. Open the browser developer tools console to see the action logs.',
+      },
+    },
+  },
 };

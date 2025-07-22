@@ -90,3 +90,40 @@ export const MinimalMessage: Story = {
     </kernel-panic>
   `,
 };
+
+// Interactive test for refresh button
+export const InteractiveRefreshButton: Story = {
+  render: () => {
+    // Custom action logger for this story
+    const action = (name: string) => (event: Event) => {
+      console.log(`🎬 Action: ${name}`, {
+        type: event.type,
+        target: event.target,
+        detail: (event as CustomEvent).detail,
+        timestamp: new Date().toISOString()
+      });
+    };
+
+    return html`
+      <div style="padding: 20px; background: #fff8dc; border: 1px solid #ddd; border-radius: 8px;">
+        <h3 style="margin-top: 0;">Kernel Panic Interaction Test</h3>
+        <p>Click the "Refresh Page" button to test the refresh functionality:</p>
+        <kernel-panic 
+          .message="Test panic for interaction testing"
+          .error="${new Error('Simulated error with stack trace\n  at testFunction (test.js:1:1)\n  at main (app.js:5:5)')}"
+          @click="${action('refresh-button-clicked')}">
+        </kernel-panic>
+        <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
+          Watch the browser console (F12) to see the refresh button click event.
+        </p>
+      </div>
+    `;
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'This story demonstrates the kernel panic refresh button interaction. Click the "Refresh Page" button to see the click event logged. Open the browser developer tools console to see the action logs.',
+      },
+    },
+  },
+};
