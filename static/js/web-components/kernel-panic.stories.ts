@@ -40,7 +40,14 @@ export const Basic: Story = {
 export const WithError: Story = {
   args: {
     message: 'Failed to save frontmatter data',
-    error: new Error('Network connection failed: Unable to reach server'),
+    error: (() => {
+      const error = new Error('Network connection failed: Unable to reach server');
+      error.stack = `Error: Network connection failed: Unable to reach server
+    at WikiService.saveFrontmatter (wiki-service.ts:123:15)
+    at FrontmatterEditorDialog._handleSave (frontmatter-editor-dialog.ts:245:12)
+    at HTMLElement.click (frontmatter-editor-dialog.ts:180:5)`;
+      return error;
+    })(),
   },
   render: (args) => html`
     <kernel-panic 
