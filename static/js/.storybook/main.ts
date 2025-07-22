@@ -5,7 +5,8 @@ const config: StorybookConfig = {
     "../web-components/**/*.stories.@(js|jsx|mjs|ts|tsx)"
   ],
   "addons": [
-    "@storybook/addon-docs"
+    "@storybook/addon-docs",
+    "@storybook/addon-interactions"
   ],
   "framework": {
     "name": "@storybook/web-components-vite",

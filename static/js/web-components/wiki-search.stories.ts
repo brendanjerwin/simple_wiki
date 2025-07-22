@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/web-components';
 import { html } from 'lit';
+import { expect, userEvent, within } from '@storybook/test';
 import './wiki-search.js';
 
 // Custom action logger for Storybook
@@ -35,6 +36,21 @@ export const Default: Story = {
       </wiki-search>
     </div>
   `,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    
+    // Find the search input
+    const searchInput = canvasElement.querySelector('wiki-search')?.shadowRoot?.querySelector('input');
+    expect(searchInput).toBeInTheDocument();
+    
+    // Test typing in the search box
+    await userEvent.type(searchInput!, 'test search');
+    expect(searchInput).toHaveValue('test search');
+    
+    // Clear the input
+    await userEvent.clear(searchInput!);
+    expect(searchInput).toHaveValue('');
+  },
 };
 
 export const WithContext: Story = {
@@ -77,10 +93,32 @@ export const KeyboardShortcuts: Story = {
       </p>
     </div>
   `,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    
+    // Test keyboard shortcut (Ctrl+K) to focus search
+    await userEvent.keyboard('{Control>}k{/Control}');
+    
+    // Find the search input (it should be focused now)
+    const searchInput = canvasElement.querySelector('wiki-search')?.shadowRoot?.querySelector('input');
+    expect(searchInput).toBeInTheDocument();
+    expect(searchInput).toHaveFocus();
+    
+    // Type a search query
+    await userEvent.type(searchInput!, 'homepage');
+    expect(searchInput).toHaveValue('homepage');
+    
+    // Test Enter key to submit
+    await userEvent.keyboard('{Enter}');
+    
+    // Test Escape key to clear
+    await userEvent.keyboard('{Escape}');
+    expect(searchInput).toHaveValue('');
+  },
   parameters: {
     docs: {
       description: {
-        story: 'This story demonstrates keyboard shortcuts and interaction testing. Use Ctrl+K (Cmd+K on Mac) to focus the search field and watch the browser console for event tracking. Open the browser developer tools console to see the action logs.',
+        story: 'This story demonstrates keyboard shortcuts and interaction testing. The play function automatically tests Ctrl+K focusing, typing, Enter submission, and Escape clearing. Watch both the Interactions panel and browser console for event tracking.',
       },
     },
   },

@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/web-components-vite';
 import { html } from 'lit';
+import { expect, userEvent, within } from '@storybook/test';
 import './kernel-panic.js';
 
 const meta: Meta = {
@@ -119,10 +120,34 @@ export const InteractiveRefreshButton: Story = {
       </div>
     `;
   },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    
+    // Find the kernel panic component
+    const kernelPanic = canvasElement.querySelector('kernel-panic');
+    expect(kernelPanic).toBeInTheDocument();
+    
+    // Verify the component has the expected properties
+    expect(kernelPanic).toHaveProperty('message', 'Test panic for interaction testing');
+    expect(kernelPanic?.error).toBeInstanceOf(Error);
+    
+    // Wait for component to render
+    await new Promise(resolve => setTimeout(resolve, 300));
+    
+    // Try to find and click the refresh button
+    // Note: This requires the button to be accessible in the component's shadow DOM
+    const refreshButton = kernelPanic?.shadowRoot?.querySelector('button');
+    if (refreshButton) {
+      await userEvent.click(refreshButton);
+    }
+    
+    // Alternative: If the component listens for click events on itself
+    await userEvent.click(kernelPanic!);
+  },
   parameters: {
     docs: {
       description: {
-        story: 'This story demonstrates the kernel panic refresh button interaction. Click the "Refresh Page" button to see the click event logged. Open the browser developer tools console to see the action logs.',
+        story: 'This story demonstrates the kernel panic refresh button interaction. The play function automatically tests clicking the refresh button. For manual testing, click the "Refresh Page" button to see the click event logged. Watch both the Interactions panel and browser console (F12) for event tracking.',
       },
     },
   },
