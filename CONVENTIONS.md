@@ -5,6 +5,7 @@
 - [General](#general)
 - [Development Environment](#development-environment)
 - [Frontend JavaScript](#frontend-javascript)
+- [Storybook](#storybook)
 - [Testing](#testing)
 - [Fixing Problems](#fixing-problems)
 <!--toc:end-->
@@ -62,6 +63,57 @@
 - Organize frontend JavaScript files within appropriate subdirectories under `static/js` (e.g., `web-components`, `utils`).
 - Test files should be placed next to the production code they test, using the `.test.js` suffix. For example, `wiki-search.js` should have its tests in `wiki-search.test.js` in the same directory.
 - **Scalar Variable Units**: Always include units in scalar variable names when the unit is meaningful. For example, use `timeoutMs` instead of `timeout`, `delaySeconds` instead of `delay`, `heightPx` instead of `height`. This makes the code self-documenting and prevents unit confusion.
+
+## Storybook
+
+Storybook is used for developing and documenting UI components in isolation. Follow these principles when creating and maintaining Storybook stories:
+
+### Story Creation Rules
+
+- **ALWAYS use actual components**: Stories must render the actual component, never create mock HTML structures that simulate the component's appearance.
+
+  **Bad:** Creating mock HTML divs to simulate a dialog component:
+  ```typescript
+  render: (args) => html`
+    <div style="position: fixed; inset: 0; background: rgba(0,0,0,0.5);">
+      <div style="background: white; border-radius: 8px;">
+        <h2>Fake Dialog Title</h2>
+        <p>Mock content that simulates the real component</p>
+      </div>
+    </div>
+  `;
+  ```
+
+  **Good:** Using the actual component and setting its properties:
+  ```typescript
+  render: (args) => html`
+    <my-dialog-component 
+      .open="${args.open}"
+      .loading="${true}">
+    </my-dialog-component>
+  `;
+  ```
+
+- **Mock data, not components**: It's perfectly acceptable (and encouraged) to use mock data to populate components with realistic content. The distinction is:
+  - ✅ Mock data: Providing sample arrays, objects, or strings as component props
+  - ❌ Mock components: Creating fake HTML elements instead of using the real component
+
+- **Leverage component state**: Components often have internal state properties that control loading, error, and other UI states. Set these properties directly in stories to demonstrate different visual states without requiring backend connections.
+
+- **Test all component states**: Create stories that demonstrate all major visual states of a component (loading, error, success, empty, etc.) by manipulating the component's properties.
+
+### Story Organization
+
+- Group related stories under a logical hierarchy using the `title` metadata
+- Use descriptive story names that clearly indicate what state or variation is being demonstrated
+- Include meaningful controls via `argTypes` for properties that users should be able to manipulate interactively
+
+### Development Integration
+
+- Storybook runs as part of the `devbox services` workflow for seamless development
+- Use `devbox run storybook` to run Storybook standalone
+- Use `devbox run storybook:build` to build static Storybook files
+- Stories are automatically deployed to Chromatic for visual regression testing
 
 ## TDD
 
