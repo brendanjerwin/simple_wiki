@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/web-components';
 import { html } from 'lit';
-import { expect, userEvent, within } from '@storybook/test';
+import { expect, userEvent } from '@storybook/test';
 import './wiki-search.js';
 
 // Custom action logger for Storybook
@@ -37,8 +37,6 @@ export const Default: Story = {
     </div>
   `,
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    
     // Find the search input
     const searchInput = canvasElement.querySelector('wiki-search')?.shadowRoot?.querySelector('input');
     expect(searchInput).toBeInTheDocument();
@@ -94,8 +92,6 @@ export const KeyboardShortcuts: Story = {
     </div>
   `,
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    
     // Test keyboard shortcut (Ctrl+K) to focus search
     await userEvent.keyboard('{Control>}k{/Control}');
     

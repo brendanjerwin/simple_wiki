@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/web-components-vite';
 import { html } from 'lit';
-import { expect, userEvent, within } from '@storybook/test';
+import { expect } from '@storybook/test';
 import './frontmatter-editor-dialog.js';
 
 // Custom action logger for Storybook
@@ -190,8 +190,6 @@ export const InteractiveFormTesting: Story = {
     `;
   },
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    
     // Find the dialog element
     const dialog = canvasElement.querySelector('frontmatter-editor-dialog');
     expect(dialog).toBeInTheDocument();

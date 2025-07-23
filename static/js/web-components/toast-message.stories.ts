@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/web-components';
 import { html } from 'lit';
-import { expect, userEvent, within } from '@storybook/test';
+import { expect, userEvent } from '@storybook/test';
 import './toast-message.js';
 
 // Custom action logger for Storybook
@@ -141,8 +141,6 @@ export const InteractiveClickToDismiss: Story = {
     </div>
   `,
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    
     // Find the toast message element
     const toastElement = canvasElement.querySelector('toast-message');
     expect(toastElement).toBeInTheDocument();
@@ -189,8 +187,6 @@ export const AutoCloseBehavior: Story = {
     </div>
   `,
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    
     // Find the toast message element
     const toastElement = canvasElement.querySelector('toast-message');
     expect(toastElement).toBeInTheDocument();

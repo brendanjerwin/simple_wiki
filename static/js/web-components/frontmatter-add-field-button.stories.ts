@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/web-components';
 import { html } from 'lit';
-import { expect, userEvent, within } from '@storybook/test';
+import { expect, userEvent } from '@storybook/test';
 import './frontmatter-add-field-button.js';
 
 // Custom action logger for Storybook
@@ -41,8 +41,6 @@ export const Default: Story = {
     </div>
   `,
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    
     // Find the button element
     const button = canvasElement.querySelector('frontmatter-add-field-button');
     expect(button).toBeInTheDocument();
@@ -122,8 +120,6 @@ export const InteractiveDropdown: Story = {
     </div>
   `,
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    
     // Find the button element
     const button = canvasElement.querySelector('frontmatter-add-field-button');
     expect(button).toBeInTheDocument();

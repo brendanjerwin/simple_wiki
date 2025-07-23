@@ -73,6 +73,7 @@ Storybook is used for developing and documenting UI components in isolation. Fol
 - **ALWAYS use actual components**: Stories must render the actual component, never create mock HTML structures that simulate the component's appearance.
 
   **Bad:** Creating mock HTML divs to simulate a dialog component:
+
   ```typescript
   render: (args) => html`
     <div style="position: fixed; inset: 0; background: rgba(0,0,0,0.5);">
@@ -85,6 +86,7 @@ Storybook is used for developing and documenting UI components in isolation. Fol
   ```
 
   **Good:** Using the actual component and setting its properties:
+
   ```typescript
   render: (args) => html`
     <my-dialog-component 
@@ -120,6 +122,7 @@ Storybook is used for developing and documenting UI components in isolation. Fol
 Every story should include comprehensive event logging and interaction testing for user behaviors:
 
 #### Custom Action Logging Setup
+
 Since we use Storybook's base configuration, we implement custom action logging:
 
 ```typescript
@@ -135,7 +138,9 @@ const action = (name: string) => (event: Event) => {
 ```
 
 #### Event Binding in Stories
+
 - **Bind action loggers to all relevant events** in your story render functions:
+
   ```typescript
   render: (args) => html`
     <my-component 
@@ -147,6 +152,7 @@ const action = (name: string) => (event: Event) => {
   ```
 
 #### Interactive Testing Stories
+
 - **Create dedicated interactive testing stories** for complex components that demonstrate:
   - User workflows (form filling, multi-step interactions)
   - Keyboard shortcuts and accessibility features
@@ -160,20 +166,24 @@ const action = (name: string) => (event: Event) => {
   - `ErrorRecovery` - for testing error states and user recovery paths
 
 #### Documentation and Context
+
 - **Add comprehensive story descriptions** using `parameters.docs.description.story`
 - **Provide clear instructions** for what users should test and what events to watch for in the browser console
 - **Include visual context** with appropriate styling and layout to simulate real usage
 - **Always mention "Open the browser developer tools console to see the action logs"** in interactive story descriptions
 
 #### Event Payload Testing
+
 - **Verify event payloads** contain correct data by checking the browser console logs
 - **Test data flow** by creating stories that demonstrate how component state changes affect event payloads
 - **Document expected event structure** in story descriptions
 
 #### Play Functions for Automated Testing
+
 Storybook play functions provide automated interaction testing that runs when a story loads. **All interactive stories should include play functions** to demonstrate and verify component behavior:
 
 **Setup Requirements:**
+
 ```bash
 # Add required packages
 bun add @storybook/addon-interactions @storybook/test --dev
@@ -195,6 +205,7 @@ import { expect, userEvent, within } from '@storybook/test';
 **Play Function Patterns:**
 
 - **Basic Component Verification:**
+
   ```typescript
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -206,6 +217,7 @@ import { expect, userEvent, within } from '@storybook/test';
   ```
 
 - **User Interaction Testing:**
+
   ```typescript
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -225,6 +237,7 @@ import { expect, userEvent, within } from '@storybook/test';
   ```
 
 - **Shadow DOM Component Testing:**
+
   ```typescript
   play: async ({ canvasElement }) => {
     const component = canvasElement.querySelector('my-web-component');
@@ -241,6 +254,7 @@ import { expect, userEvent, within } from '@storybook/test';
   ```
 
 - **Timing and Async Behavior:**
+
   ```typescript
   play: async ({ canvasElement }) => {
     // Wait for component initialization
@@ -256,6 +270,7 @@ import { expect, userEvent, within } from '@storybook/test';
   ```
 
 **Play Function Guidelines:**
+
 - **Always verify component existence** before interaction
 - **Test both properties and DOM state** when relevant
 - **Use appropriate wait times** for component rendering (typically 100-500ms)
@@ -266,6 +281,7 @@ import { expect, userEvent, within } from '@storybook/test';
 
 **Story Description Updates:**
 Update story descriptions to mention both manual and automated testing:
+
 ```typescript
 parameters: {
   docs: {
@@ -277,6 +293,7 @@ parameters: {
 ```
 
 #### Example Pattern
+
 ```typescript
 export const InteractiveExample: Story = {
   render: (args) => html`

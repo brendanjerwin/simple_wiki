@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/web-components-vite';
 import { html } from 'lit';
-import { expect, userEvent, within } from '@storybook/test';
+import { expect, userEvent } from '@storybook/test';
 import './kernel-panic.js';
 
 const meta: Meta = {
@@ -121,8 +121,6 @@ export const InteractiveRefreshButton: Story = {
     `;
   },
   play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    
     // Find the kernel panic component
     const kernelPanic = canvasElement.querySelector('kernel-panic');
     expect(kernelPanic).toBeInTheDocument();
