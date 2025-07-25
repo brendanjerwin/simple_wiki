@@ -5,6 +5,7 @@
 - [General](#general)
 - [Development Environment](#development-environment)
 - [Frontend JavaScript](#frontend-javascript)
+- [Storybook](#storybook)
 - [Testing](#testing)
 - [Fixing Problems](#fixing-problems)
 <!--toc:end-->
@@ -62,6 +63,158 @@
 - Organize frontend JavaScript files within appropriate subdirectories under `static/js` (e.g., `web-components`, `utils`).
 - Test files should be placed next to the production code they test, using the `.test.js` suffix. For example, `wiki-search.js` should have its tests in `wiki-search.test.js` in the same directory.
 - **Scalar Variable Units**: Always include units in scalar variable names when the unit is meaningful. For example, use `timeoutMs` instead of `timeout`, `delaySeconds` instead of `delay`, `heightPx` instead of `height`. This makes the code self-documenting and prevents unit confusion.
+
+## Storybook
+
+Storybook is used for developing and documenting UI components in isolation. Follow these principles when creating and maintaining Storybook stories:
+
+### Story Creation Rules
+
+- **ALWAYS use actual components**: Stories must render the actual component, never create mock HTML structures that simulate the component's appearance.
+
+  **Bad:** Creating mock HTML divs to simulate a dialog component:
+
+  ```typescript
+  render: (args) => html`
+    <div style="position: fixed; inset: 0; background: rgba(0,0,0,0.5);">
+      <div style="background: white; border-radius: 8px;">
+        <h2>Fake Dialog Title</h2>
+        <p>Mock content that simulates the real component</p>
+      </div>
+    </div>
+  `;
+  ```
+
+  **Good:** Using the actual component and setting its properties:
+
+  ```typescript
+  render: (args) => html`
+    <my-dialog-component 
+      .open="${args.open}"
+      .loading="${true}">
+    </my-dialog-component>
+  `;
+  ```
+
+- **Mock data, not components**: It's perfectly acceptable (and encouraged) to use mock data to populate components with realistic content. The distinction is:
+  - ✅ Mock data: Providing sample arrays, objects, or strings as component props
+  - ❌ Mock components: Creating fake HTML elements instead of using the real component
+
+- **Leverage component state**: Components often have internal state properties that control loading, error, and other UI states. Set these properties directly in stories to demonstrate different visual states without requiring backend connections.
+
+- **Test all component states**: Create stories that demonstrate all major visual states of a component (loading, error, success, empty, etc.) by manipulating the component's properties.
+
+### Story Organization
+
+- Group related stories under a logical hierarchy using the `title` metadata
+- Use descriptive story names that clearly indicate what state or variation is being demonstrated
+- Include meaningful controls via `argTypes` for properties that users should be able to manipulate interactively
+
+### Development Integration
+
+- Storybook runs as part of the `devbox services` workflow for seamless development
+- Use `devbox run storybook` to run Storybook standalone
+- Use `devbox run storybook:build` to build static Storybook files
+- Stories are automatically deployed to Chromatic for visual regression testing
+
+### Actions and Interactions
+
+Every story should include comprehensive event logging and interaction testing for user behaviors:
+
+#### Custom Action Logging Setup
+
+Since we use Storybook's base configuration, we implement custom action logging:
+
+```typescript
+// Custom action logger for Storybook
+const action = (name: string) => (event: Event) => {
+  console.log(`🎬 Action: ${name}`, {
+    type: event.type,
+    target: event.target,
+    detail: (event as CustomEvent).detail,
+    timestamp: new Date().toISOString()
+  });
+};
+```
+
+#### Event Binding in Stories
+
+- **Bind action loggers to all relevant events** in your story render functions:
+
+  ```typescript
+  render: (args) => html`
+    <my-component 
+      @click=${action('component-clicked')}
+      @input=${action('input-changed')}
+      @custom-event=${action('custom-event')}>
+    </my-component>
+  `,
+  ```
+
+#### Interactive Testing Stories
+
+- **Create dedicated interactive testing stories** for complex components that demonstrate:
+  - User workflows (form filling, multi-step interactions)
+  - Keyboard shortcuts and accessibility features
+  - Error states and recovery scenarios
+  - Real-world usage patterns
+
+- **Use descriptive story names** that indicate the interaction being tested:
+  - `InteractiveFormTesting` - for comprehensive form interaction testing
+  - `KeyboardShortcuts` - for keyboard navigation and shortcuts
+  - `DropdownInteractions` - for dropdown open/close/selection behaviors
+  - `ErrorRecovery` - for testing error states and user recovery paths
+
+#### Documentation and Context
+
+- **Add comprehensive story descriptions** using `parameters.docs.description.story`
+- **Provide clear instructions** for what users should test and what events to watch for in the browser console
+- **Include visual context** with appropriate styling and layout to simulate real usage
+- **Always mention "Open the browser developer tools console to see the action logs"** in interactive story descriptions
+
+#### Event Payload Testing
+
+- **Verify event payloads** contain correct data by checking the browser console logs
+- **Test data flow** by creating stories that demonstrate how component state changes affect event payloads
+- **Document expected event structure** in story descriptions
+
+#### Example Pattern
+
+```typescript
+export const InteractiveExample: Story = {
+  render: (args) => html`
+    <div style="padding: 20px; background: #f0f8ff;">
+      <h3>Component Interaction Test</h3>
+      <p>Instructions for testing...</p>
+      <my-component 
+        @event1=${action('event1-triggered')}
+        @event2=${action('event2-with-data')}>
+      </my-component>
+      <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
+        Watch the browser console (F12) to see triggered events logged.
+      </p>
+    </div>
+  `,
+  parameters: {
+    docs: {
+      description: {
+        story: 'Detailed description of what to test and expected behavior. Open the browser developer tools console to see the action logs.',
+      },
+    },
+  },
+};
+```
+
+### Storybook Focus
+
+Storybook is used for **visual component exploration and manual interaction testing**. Functional testing should be handled by the regular unit test suite.
+
+- **Visual documentation**: Use Storybook to showcase component variants and visual states
+- **Manual interaction testing**: Use action logging to track user interactions and events
+- **Component exploration**: Provide interactive controls for real-time property manipulation
+- **Design system**: Maintain a centralized view of all UI components for consistency
+
+Storybook should focus on visual and interactive aspects, while automated functional testing is handled by the project's comprehensive unit test suite.
 
 ## TDD
 

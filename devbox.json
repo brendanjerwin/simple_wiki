@@ -23,6 +23,7 @@
       "fe:test": [
         "export CHROMIUM_BIN=$(which chromium) && cd static/js && bun install && bun run test:wtr ${CI_COVERAGE:+--coverage}"
       ],
+
       "fe:lint": [
         "cd static/js && bun install && bun run -- eslint . --ext .ts --max-warnings 0"
       ],
@@ -50,6 +51,18 @@
         "COMMIT=$(git rev-parse HEAD)",
         "BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)",
         "go build -ldflags \"-X main.commit=$COMMIT -X main.buildTime=$BUILD_TIME\" -o simple_wiki ."
+      ],
+      "storybook": [
+        "cd static/js && bun install && bun run storybook"
+      ],
+      "storybook:build": [
+        "cd static/js && bun install && bun run build-storybook"
+      ],
+      "chromatic": [
+        "cd static/js && bun install && bun run build-storybook && bunx chromatic --project-token=$CHROMATIC_PROJECT_TOKEN --storybook-build-dir=storybook-static --exit-zero-on-changes"
+      ],
+      "chromatic:pr": [
+        "cd static/js && bun install && bun run build-storybook && bunx chromatic --project-token=$CHROMATIC_PROJECT_TOKEN --storybook-build-dir=storybook-static --patch-build=$HEAD_BRANCH...$BASE_BRANCH --exit-zero-on-changes"
       ]
     }
   }
