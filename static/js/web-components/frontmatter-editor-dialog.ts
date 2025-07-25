@@ -9,6 +9,7 @@ import './frontmatter-value-section.js';
 import './kernel-panic.js';
 import { showKernelPanic } from './kernel-panic.js';
 import { showToastAfter } from './toast-message.js';
+import './error-display.js';
 
 /**
  * FrontmatterEditorDialog - A modal dialog for editing page frontmatter metadata
@@ -181,6 +182,7 @@ export class FrontmatterEditorDialog extends LitElement {
     loading: { state: true },
     saving: { state: true },
     error: { state: true },
+    errorDetails: { state: true },
     frontmatter: { state: true },
     workingFrontmatter: { state: true },
   };
@@ -190,6 +192,7 @@ export class FrontmatterEditorDialog extends LitElement {
   declare loading: boolean;
   declare saving: boolean;
   declare error?: string | undefined;
+  declare errorDetails?: string | undefined;
   declare frontmatter?: GetFrontmatterResponse | undefined;
   declare workingFrontmatter?: Record<string, unknown>;
 
@@ -267,6 +270,7 @@ export class FrontmatterEditorDialog extends LitElement {
     this.open = false;
     this.frontmatter = undefined;
     this.error = undefined;
+    this.errorDetails = undefined;
     this.loading = false;
     this.saving = false;
   }
@@ -277,6 +281,7 @@ export class FrontmatterEditorDialog extends LitElement {
     try {
       this.loading = true;
       this.error = undefined;
+      this.errorDetails = undefined;
       this.frontmatter = undefined;
       this.workingFrontmatter = {};
       this.requestUpdate();
@@ -286,7 +291,26 @@ export class FrontmatterEditorDialog extends LitElement {
       this.frontmatter = response;
       this.updateWorkingFrontmatter();
     } catch (err) {
-      this.error = err instanceof Error ? err.message : 'Failed to load frontmatter';
+      this.error = 'Failed to load frontmatter';
+      
+      if (err instanceof Error) {
+        // For ConnectError or other gRPC errors, provide more specific messaging
+        if (err.message.includes('UNAVAILABLE')) {
+          this.error = 'Unable to connect to server';
+          this.errorDetails = `gRPC error: ${err.message}\n\nThe server may be down or unreachable. Please check your network connection and try again.`;
+        } else if (err.message.includes('NOT_FOUND')) {
+          this.error = 'Page not found';
+          this.errorDetails = `gRPC error: ${err.message}\n\nThe requested page may not exist or you may not have permission to access it.`;
+        } else if (err.message.includes('PERMISSION_DENIED')) {
+          this.error = 'Access denied';
+          this.errorDetails = `gRPC error: ${err.message}\n\nYou do not have permission to view the frontmatter for this page.`;
+        } else {
+          this.error = err.message || 'Failed to load frontmatter';
+          this.errorDetails = err.stack || err.toString();
+        }
+      } else {
+        this.errorDetails = typeof err === 'string' ? err : JSON.stringify(err);
+      }
     } finally {
       this.loading = false;
       this.requestUpdate();
@@ -307,6 +331,7 @@ export class FrontmatterEditorDialog extends LitElement {
     try {
       this.saving = true;
       this.error = undefined;
+      this.errorDetails = undefined;
       this.requestUpdate();
 
       const frontmatterStruct = this.convertPlainObjectToStruct(this.workingFrontmatter);
@@ -333,11 +358,26 @@ export class FrontmatterEditorDialog extends LitElement {
       });
     } catch (err) {
       if (err instanceof Error) {
-        this.error = err.message;
+        // For ConnectError or other gRPC errors, provide more specific messaging
+        if (err.message.includes('UNAVAILABLE')) {
+          this.error = 'Unable to connect to server';
+          this.errorDetails = `gRPC error: ${err.message}\n\nThe server may be down or unreachable. Please check your network connection and try again.`;
+        } else if (err.message.includes('PERMISSION_DENIED')) {
+          this.error = 'Access denied';
+          this.errorDetails = `gRPC error: ${err.message}\n\nYou do not have permission to save changes to this page.`;
+        } else if (err.message.includes('INVALID_ARGUMENT')) {
+          this.error = 'Invalid frontmatter data';
+          this.errorDetails = `gRPC error: ${err.message}\n\nThe frontmatter contains invalid data that cannot be saved. Please check your field values.`;
+        } else {
+          this.error = err.message || 'Failed to save frontmatter';
+          this.errorDetails = err.stack || err.toString();
+        }
       } else if (typeof err === 'string' && err.trim()) {
         this.error = err;
+        this.errorDetails = undefined;
       } else {
         this.error = 'Failed to save frontmatter';
+        this.errorDetails = typeof err === 'string' ? err : JSON.stringify(err);
       }
     } finally {
       this.saving = false;
@@ -370,10 +410,11 @@ export class FrontmatterEditorDialog extends LitElement {
               Loading frontmatter...
             </div>
           ` : this.error ? html`
-            <div class="error">
-              <i class="fas fa-exclamation-triangle"></i>
-              ${this.error}
-            </div>
+            <error-display 
+              .message=${this.error}
+              .details=${this.errorDetails}
+              .icon=${'⚠️'}>
+            </error-display>
           ` : html`
             ${this.renderFrontmatterEditor()}
           `}

@@ -1,5 +1,6 @@
 import { html, css, LitElement } from 'lit';
 import { property } from 'lit/decorators.js';
+import './error-display.js';
 
 export class KernelPanic extends LitElement {
   static override styles = css`
@@ -154,15 +155,13 @@ export class KernelPanic extends LitElement {
         <div class="subtitle">A critical error has occurred</div>
       </div>
 
-      ${this.message ? html`
-        <div class="message">${this.message}</div>
-      ` : ''}
-
-      ${this.error ? html`
-        <div class="error-details">
-          <div class="error-title">Exception Details:</div>
-          <div class="error-stack">${this.error.stack || this.error.message}</div>
-        </div>
+      ${this.message || this.error ? html`
+        <error-display 
+          .message=${this.message || 'An unrecoverable error has occurred'}
+          .details=${this.error ? (this.error.stack || this.error.message) : undefined}
+          .icon=${'💥'}
+          style="background: #330000; border-color: #660000; color: #ffcccc;">
+        </error-display>
       ` : ''}
 
       <div class="instructions">

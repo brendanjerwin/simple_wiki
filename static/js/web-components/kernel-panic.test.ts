@@ -62,10 +62,10 @@ describe('KernelPanic', () => {
       el = await fixture(html`<kernel-panic message="Something went wrong"></kernel-panic>`);
     });
 
-    it('should display the message', () => {
-      const messageEl = el.shadowRoot?.querySelector('.message');
-      expect(messageEl).to.exist;
-      expect(messageEl?.textContent).to.equal('Something went wrong');
+    it('should display the message in error display component', () => {
+      const errorDisplay = el.shadowRoot?.querySelector('error-display');
+      expect(errorDisplay).to.exist;
+      expect(errorDisplay?.message).to.equal('Something went wrong');
     });
   });
 
@@ -76,15 +76,16 @@ describe('KernelPanic', () => {
       el = await fixture(html`<kernel-panic .error="${testError}"></kernel-panic>`);
     });
 
-    it('should display error details section', () => {
-      const errorDetails = el.shadowRoot?.querySelector('.error-details');
-      expect(errorDetails).to.exist;
+    it('should display error in error display component', () => {
+      const errorDisplay = el.shadowRoot?.querySelector('error-display');
+      expect(errorDisplay).to.exist;
     });
 
-    it('should display error stack trace', () => {
-      const errorStack = el.shadowRoot?.querySelector('.error-stack');
-      expect(errorStack).to.exist;
-      expect(errorStack?.textContent).to.include('Test error message');
+    it('should include error details in the error display component', () => {
+      const errorDisplay = el.shadowRoot?.querySelector('error-display');
+      expect(errorDisplay).to.exist;
+      // The error details should be set as a property
+      expect(errorDisplay?.details).to.include('Test error message');
     });
   });
 
