@@ -1,6 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/web-components-vite';
 import { html } from 'lit';
-import { expect, userEvent } from '@storybook/test';
 import './toast-message.js';
 
 // Custom action logger for Storybook
@@ -140,24 +139,10 @@ export const InteractiveClickToDismiss: Story = {
       </toast-message>
     </div>
   `,
-  play: async ({ canvasElement }) => {
-    // Find the toast message element
-    const toastElement = canvasElement.querySelector('toast-message');
-    expect(toastElement).toBeInTheDocument();
-    
-    // Verify it's visible initially
-    expect(toastElement).toHaveProperty('visible', true);
-    
-    // Click on the toast message
-    await userEvent.click(toastElement);
-    
-    // Note: In a real implementation, clicking would hide the toast
-    // This play function demonstrates the interaction pattern
-  },
   parameters: {
     docs: {
       description: {
-        story: 'Click on the toast message to see the click action logged to the browser console. In the real application, this would dismiss the toast. The play function automatically demonstrates clicking on the toast. Watch both the Interactions panel and browser console.',
+        story: 'Click on the toast message to see the click action logged to the browser console. In the real application, this would dismiss the toast. Open the browser developer tools console to see the action logs.',
       },
     },
   },
@@ -186,23 +171,10 @@ export const AutoCloseBehavior: Story = {
       </toast-message>
     </div>
   `,
-  play: async ({ canvasElement }) => {
-    // Find the toast message element
-    const toastElement = canvasElement.querySelector('toast-message');
-    expect(toastElement).toBeInTheDocument();
-    
-    // Verify it's visible initially
-    expect(toastElement).toHaveProperty('visible', true);
-    expect(toastElement).toHaveProperty('autoClose', true);
-    expect(toastElement).toHaveProperty('timeout', 3000);
-    
-    // Note: We could wait for the timeout, but that would make the play function take 3 seconds
-    // Instead, we verify the initial state. The actual auto-close behavior can be observed manually
-  },
   parameters: {
     docs: {
       description: {
-        story: 'This toast demonstrates auto-close behavior. The play function verifies the auto-close configuration. Watch the browser console to see the hide event after 3 seconds. The Interactions panel shows the automated verification of the component setup.',
+        story: 'This toast demonstrates auto-close behavior. Watch the browser console to see the hide event after 3 seconds.',
       },
     },
   },

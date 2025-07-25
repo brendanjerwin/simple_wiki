@@ -178,120 +178,6 @@ const action = (name: string) => (event: Event) => {
 - **Test data flow** by creating stories that demonstrate how component state changes affect event payloads
 - **Document expected event structure** in story descriptions
 
-#### Play Functions for Automated Testing
-
-Storybook play functions provide automated interaction testing that runs when a story loads. **All interactive stories should include play functions** to demonstrate and verify component behavior:
-
-**Setup Requirements:**
-
-```bash
-# Add required packages
-bun add @storybook/addon-interactions @storybook/test --dev
-```
-
-```typescript
-// In .storybook/main.ts
-"addons": [
-  "@storybook/addon-docs",
-  "@storybook/addon-interactions"
-],
-```
-
-```typescript
-// Import testing utilities in story files
-import { expect, userEvent, within } from '@storybook/test';
-```
-
-**Play Function Patterns:**
-
-- **Basic Component Verification:**
-
-  ```typescript
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    
-    const component = canvasElement.querySelector('my-component');
-    expect(component).toBeInTheDocument();
-    expect(component).toHaveProperty('propertyName', expectedValue);
-  },
-  ```
-
-- **User Interaction Testing:**
-
-  ```typescript
-  play: async ({ canvasElement }) => {
-    const canvas = within(canvasElement);
-    
-    // Test clicking
-    const button = canvasElement.querySelector('button');
-    await userEvent.click(button);
-    
-    // Test typing
-    const input = canvasElement.querySelector('input');
-    await userEvent.type(input, 'test text');
-    expect(input).toHaveValue('test text');
-    
-    // Test keyboard shortcuts
-    await userEvent.keyboard('{Control>}k{/Control}');
-  },
-  ```
-
-- **Shadow DOM Component Testing:**
-
-  ```typescript
-  play: async ({ canvasElement }) => {
-    const component = canvasElement.querySelector('my-web-component');
-    
-    // Access shadow DOM elements
-    const shadowButton = component?.shadowRoot?.querySelector('button');
-    if (shadowButton) {
-      await userEvent.click(shadowButton);
-    }
-    
-    // Verify component properties instead of DOM when shadow DOM is complex
-    expect(component).toHaveProperty('loading', false);
-  },
-  ```
-
-- **Timing and Async Behavior:**
-
-  ```typescript
-  play: async ({ canvasElement }) => {
-    // Wait for component initialization
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    // Test immediate state
-    const component = canvasElement.querySelector('my-component');
-    expect(component).toHaveProperty('visible', true);
-    
-    // Note: Avoid waiting for long timeouts in play functions
-    // Verify configuration instead of waiting for actual timeout behavior
-  },
-  ```
-
-**Play Function Guidelines:**
-
-- **Always verify component existence** before interaction
-- **Test both properties and DOM state** when relevant
-- **Use appropriate wait times** for component rendering (typically 100-500ms)
-- **Avoid long waits** - verify configuration instead of waiting for timeouts
-- **Combine with action logging** - play functions show in Interactions panel, actions show in console
-- **Document what the play function tests** in story descriptions
-- **Handle shadow DOM complexity** - sometimes property verification is more reliable than DOM interaction
-
-**Story Description Updates:**
-Update story descriptions to mention both manual and automated testing:
-
-```typescript
-parameters: {
-  docs: {
-    description: {
-      story: 'This story demonstrates X behavior. The play function automatically tests Y interactions. For manual testing, try Z. Watch both the Interactions panel and browser console (F12) for event tracking.',
-    },
-  },
-},
-```
-
 #### Example Pattern
 
 ```typescript
@@ -318,6 +204,17 @@ export const InteractiveExample: Story = {
   },
 };
 ```
+
+### Storybook Focus
+
+Storybook is used for **visual component exploration and manual interaction testing**. Functional testing should be handled by the regular unit test suite.
+
+- **Visual documentation**: Use Storybook to showcase component variants and visual states
+- **Manual interaction testing**: Use action logging to track user interactions and events
+- **Component exploration**: Provide interactive controls for real-time property manipulation
+- **Design system**: Maintain a centralized view of all UI components for consistency
+
+Storybook should focus on visual and interactive aspects, while automated functional testing is handled by the project's comprehensive unit test suite.
 
 ## TDD
 

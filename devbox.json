@@ -23,9 +23,7 @@
       "fe:test": [
         "export CHROMIUM_BIN=$(which chromium) && cd static/js && bun install && bun run test:wtr ${CI_COVERAGE:+--coverage}"
       ],
-      "fe:test:storybook": [
-        "export CHROMIUM_BIN=$(which chromium) && cd static/js && bun install && bun run build-storybook"
-      ],
+
       "fe:lint": [
         "cd static/js && bun install && bun run -- eslint . --ext .ts --max-warnings 0"
       ],

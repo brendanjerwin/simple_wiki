@@ -1,6 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/web-components-vite';
 import { html } from 'lit';
-import { expect } from '@storybook/test';
 import './frontmatter-editor-dialog.js';
 
 // Custom action logger for Storybook
@@ -189,28 +188,10 @@ export const InteractiveFormTesting: Story = {
       </frontmatter-editor-dialog>
     `;
   },
-  play: async ({ canvasElement }) => {
-    // Find the dialog element
-    const dialog = canvasElement.querySelector('frontmatter-editor-dialog');
-    expect(dialog).toBeInTheDocument();
-    expect(dialog).toHaveProperty('open', true);
-    
-    // Wait for the dialog to fully render
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
-    // Find inputs within the shadow DOM - this is more complex with web components
-    // We'll verify the dialog is open and has the expected properties
-    expect(dialog).toHaveProperty('loading', false);
-    expect(dialog?.workingFrontmatter).toHaveProperty('title', 'Edit Me!');
-    expect(dialog?.workingFrontmatter).toHaveProperty('published', false);
-    
-    // Note: Interacting with shadow DOM elements requires more complex selectors
-    // This play function demonstrates property verification rather than DOM interaction
-  },
   parameters: {
     docs: {
       description: {
-        story: 'This story provides an interactive frontmatter editor for testing form interactions. The play function verifies the dialog state and properties. For manual testing, try editing field values, changing keys, adding new fields, and using the save/cancel buttons. Watch both the Interactions panel and browser console (F12) for all triggered events and their data.',
+        story: 'This story provides an interactive frontmatter editor for testing form interactions. Try editing field values, changing keys, adding new fields, and using the save/cancel buttons. Watch the browser console (F12) for all triggered events and their data.',
       },
     },
   },

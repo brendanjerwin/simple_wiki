@@ -1,6 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/web-components-vite';
 import { html } from 'lit';
-import { expect, userEvent } from '@storybook/test';
 import './frontmatter-add-field-button.js';
 
 // Custom action logger for Storybook
@@ -40,18 +39,6 @@ export const Default: Story = {
       </frontmatter-add-field-button>
     </div>
   `,
-  play: async ({ canvasElement }) => {
-    // Find the button element
-    const button = canvasElement.querySelector('frontmatter-add-field-button');
-    expect(button).toBeInTheDocument();
-    expect(button).toHaveProperty('disabled', false);
-    
-    // Click the button to test basic interaction
-    await userEvent.click(button!);
-    
-    // Note: The actual dropdown behavior would require more complex shadow DOM interaction
-    // This play function demonstrates basic button clicking
-  },
 };
 
 export const Disabled: Story = {
@@ -119,26 +106,10 @@ export const InteractiveDropdown: Story = {
       </p>
     </div>
   `,
-  play: async ({ canvasElement }) => {
-    // Find the button element
-    const button = canvasElement.querySelector('frontmatter-add-field-button');
-    expect(button).toBeInTheDocument();
-    expect(button).toHaveProperty('disabled', false);
-    
-    // Click the button to open dropdown
-    await userEvent.click(button!);
-    
-    // Wait a moment for potential dropdown to appear
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
-    // Note: Testing actual dropdown menu selection would require
-    // accessing shadow DOM elements, which is more complex in Storybook
-    // This play function demonstrates the button click interaction
-  },
   parameters: {
     docs: {
       description: {
-        story: 'This story demonstrates dropdown interactions. The play function automatically clicks the button to trigger the dropdown. For manual testing, click the button to open the dropdown menu and select different field types. Each selection triggers an add-field event with specific type information. Watch both the Interactions panel and browser console (F12) for event tracking.',
+        story: 'This story demonstrates dropdown interactions. Click the button to open the dropdown menu and select different field types. Each selection triggers an add-field event with specific type information. Watch the browser console (F12) for event tracking.',
       },
     },
   },
