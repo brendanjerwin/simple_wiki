@@ -67,16 +67,3 @@ export const Empty: Story = {
     </frontmatter-key>
   `,
 };
-
-export const LongKey: Story = {
-  args: {
-    key: 'very_long_key_name_that_might_wrap',
-    editable: false,
-  },
-  render: (args) => html`
-    <frontmatter-key 
-      .key="${args.key}"
-      .editable="${args.editable}">
-    </frontmatter-key>
-  `,
-};

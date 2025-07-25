@@ -117,39 +117,7 @@ export const Info: Story = {
   `,
 };
 
-// Interactive story demonstrating click-to-dismiss behavior
-export const InteractiveClickToDismiss: Story = {
-  args: {
-    message: 'Click on this toast to dismiss it!',
-    type: 'info',
-    visible: true,
-    autoClose: false,
-  },
-  render: (args) => html`
-    <div style="position: relative; height: 100px; display: flex; align-items: center; justify-content: center;">
-      <toast-message 
-        .message=${args.message}
-        .type=${args.type}
-        .visible=${args.visible}
-        .autoClose=${args.autoClose}
-        .timeout=${args.timeout}
-        @click=${action('toast-clicked')}
-        @show=${action('toast-shown')}
-        @hide=${action('toast-hidden')}>
-      </toast-message>
-    </div>
-  `,
-  parameters: {
-    docs: {
-      description: {
-        story: 'Click on the toast message to see the click action logged to the browser console. In the real application, this would dismiss the toast. Open the browser developer tools console to see the action logs.',
-      },
-    },
-  },
-};
-
-// Auto-close demonstration
-export const AutoCloseBehavior: Story = {
+export const AutoClose: Story = {
   args: {
     message: 'This message will auto-hide after 3 seconds',
     type: 'success',

@@ -54,7 +54,7 @@ export const Closed: Story = {
   `,
 };
 
-export const LoadingState: Story = {
+export const Loading: Story = {
   args: {
     page: 'loading-page',
     open: true,
@@ -74,7 +74,7 @@ export const LoadingState: Story = {
   },
 };
 
-export const ErrorState: Story = {
+export const Error: Story = {
   args: {
     page: 'error-page',
     open: true,
@@ -92,7 +92,7 @@ export const ErrorState: Story = {
   `,
 };
 
-export const WithFrontmatterData: Story = {
+export const Loaded: Story = {
   args: {
     page: 'content-page',
     open: true,
@@ -129,7 +129,7 @@ export const WithFrontmatterData: Story = {
   },
 };
 
-export const SavingState: Story = {
+export const Saving: Story = {
   args: {
     page: 'saving-page',
     open: true,
@@ -156,43 +156,5 @@ export const SavingState: Story = {
         @add-field=${action('field-added')}>
       </frontmatter-editor-dialog>
     `;
-  },
-};
-
-// Interactive form testing story
-export const InteractiveFormTesting: Story = {
-  args: {
-    page: 'interactive-test',
-    open: true,
-  },
-  render: (args) => {
-    const mockFrontmatterData = {
-      title: 'Edit Me!',
-      description: 'Try editing these fields',
-      tags: ['test', 'interactive'],
-      published: false,
-    };
-
-    return html`
-      <frontmatter-editor-dialog 
-        .page="${args.page}"
-        .open="${args.open}"
-        .loading="${false}"
-        .workingFrontmatter="${mockFrontmatterData}"
-        @save=${action('save-event')}
-        @cancel=${action('cancel-event')}
-        @close=${action('close-event')}
-        @value-change=${action('value-changed')}
-        @key-change=${action('key-changed')}
-        @add-field=${action('field-added')}>
-      </frontmatter-editor-dialog>
-    `;
-  },
-  parameters: {
-    docs: {
-      description: {
-        story: 'This story provides an interactive frontmatter editor for testing form interactions. Try editing field values, changing keys, adding new fields, and using the save/cancel buttons. Watch the browser console (F12) for all triggered events and their data.',
-      },
-    },
   },
 };

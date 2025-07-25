@@ -25,24 +25,9 @@ const meta: Meta = {
 export default meta;
 type Story = StoryObj;
 
-export const Default: Story = {
+export const WithItems: Story = {
   args: {
     values: ['tag1', 'tag2', 'tag3'],
-    disabled: false,
-    placeholder: 'Add new item...',
-  },
-  render: (args) => html`
-    <frontmatter-value-array 
-      .values="${args.values}"
-      .disabled="${args.disabled}"
-      .placeholder="${args.placeholder}">
-    </frontmatter-value-array>
-  `,
-};
-
-export const SingleItem: Story = {
-  args: {
-    values: ['single-tag'],
     disabled: false,
     placeholder: 'Add new item...',
   },
@@ -75,50 +60,6 @@ export const Disabled: Story = {
     values: ['readonly1', 'readonly2', 'readonly3'],
     disabled: true,
     placeholder: 'Cannot add items',
-  },
-  render: (args) => html`
-    <frontmatter-value-array 
-      .values="${args.values}"
-      .disabled="${args.disabled}"
-      .placeholder="${args.placeholder}">
-    </frontmatter-value-array>
-  `,
-};
-
-export const ManyItems: Story = {
-  args: {
-    values: [
-      'javascript',
-      'typescript',
-      'web-components',
-      'lit',
-      'storybook',
-      'frontend',
-      'development',
-      'ui',
-      'components'
-    ],
-    disabled: false,
-    placeholder: 'Add tag...',
-  },
-  render: (args) => html`
-    <frontmatter-value-array 
-      .values="${args.values}"
-      .disabled="${args.disabled}"
-      .placeholder="${args.placeholder}">
-    </frontmatter-value-array>
-  `,
-};
-
-export const LongItems: Story = {
-  args: {
-    values: [
-      'This is a very long item that might wrap or overflow',
-      'Another extremely long item that demonstrates text behavior',
-      'Short item'
-    ],
-    disabled: false,
-    placeholder: 'Add item...',
   },
   render: (args) => html`
     <frontmatter-value-array 

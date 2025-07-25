@@ -29,7 +29,7 @@ const meta: Meta = {
 export default meta;
 type Story = StoryObj;
 
-export const Default: Story = {
+export const NestedSection: Story = {
   args: {
     fields: {
       title: 'Sample Page Title',
@@ -73,32 +73,6 @@ export const RootSection: Story = {
   `,
 };
 
-export const NestedSection: Story = {
-  args: {
-    fields: {
-      name: 'Contact Information',
-      email: 'contact@example.com',
-      address: {
-        street: '123 Main St',
-        city: 'Anytown',
-        country: 'USA'
-      },
-      phone: '+1-555-0123',
-    },
-    disabled: false,
-    isRoot: false,
-    title: 'Contact Details',
-  },
-  render: (args) => html`
-    <frontmatter-value-section 
-      .fields="${args.fields}"
-      .disabled="${args.disabled}"
-      .isRoot="${args.isRoot}"
-      .title="${args.title}">
-    </frontmatter-value-section>
-  `,
-};
-
 export const Empty: Story = {
   args: {
     fields: {},
@@ -126,27 +100,6 @@ export const Disabled: Story = {
     disabled: true,
     isRoot: false,
     title: 'Read-only Section',
-  },
-  render: (args) => html`
-    <frontmatter-value-section 
-      .fields="${args.fields}"
-      .disabled="${args.disabled}"
-      .isRoot="${args.isRoot}"
-      .title="${args.title}">
-    </frontmatter-value-section>
-  `,
-};
-
-export const WithArrays: Story = {
-  args: {
-    fields: {
-      categories: ['web', 'development', 'tutorial'],
-      keywords: ['lit', 'web-components', 'storybook'],
-      contributors: ['Alice', 'Bob', 'Charlie'],
-    },
-    disabled: false,
-    isRoot: false,
-    title: 'Arrays and Lists',
   },
   render: (args) => html`
     <frontmatter-value-section 

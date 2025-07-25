@@ -25,7 +25,7 @@ const meta: Meta = {
 export default meta;
 type Story = StoryObj;
 
-export const Default: Story = {
+export const WithValue: Story = {
   args: {
     value: 'Sample string value',
     disabled: false,
@@ -59,36 +59,6 @@ export const Disabled: Story = {
   args: {
     value: 'This value cannot be changed',
     disabled: true,
-    placeholder: 'Enter value...',
-  },
-  render: (args) => html`
-    <frontmatter-value-string 
-      .value="${args.value}"
-      .disabled="${args.disabled}"
-      .placeholder="${args.placeholder}">
-    </frontmatter-value-string>
-  `,
-};
-
-export const LongValue: Story = {
-  args: {
-    value: 'This is a very long string value that might wrap or overflow depending on the container width and text rendering',
-    disabled: false,
-    placeholder: 'Enter value...',
-  },
-  render: (args) => html`
-    <frontmatter-value-string 
-      .value="${args.value}"
-      .disabled="${args.disabled}"
-      .placeholder="${args.placeholder}">
-    </frontmatter-value-string>
-  `,
-};
-
-export const WithSpecialCharacters: Story = {
-  args: {
-    value: 'Value with symbols: @#$%^&*()_+-=[]{}|;:,.<>?',
-    disabled: false,
     placeholder: 'Enter value...',
   },
   render: (args) => html`
