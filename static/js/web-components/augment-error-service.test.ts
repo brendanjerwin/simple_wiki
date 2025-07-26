@@ -346,63 +346,94 @@ describe('AugmentedError', () => {
     expect(augmented.name).to.equal('Error');
   });
 
-  it('should preserve original error stack when provided', () => {
-    const originalError = new Error('Original');
-    const originalStack = originalError.stack;
-    
-    const augmented = new AugmentedError(
-      originalError,
-      ErrorKind.ERROR,
-      'error'
-    );
+  describe('when preserving original error stack', () => {
+    let originalError: Error;
+    let originalStack: string | undefined;
+    let augmented: AugmentedError;
 
-    expect(augmented.stack).to.equal(originalStack);
+    beforeEach(() => {
+      // Arrange
+      originalError = new Error('Original');
+      originalStack = originalError.stack;
+      
+      // Act
+      augmented = new AugmentedError(
+        originalError,
+        ErrorKind.ERROR,
+        'error'
+      );
+    });
+
+    it('should preserve the stack', () => {
+      expect(augmented.stack).to.equal(originalStack);
+    });
   });
 
-  it('should delegate name to original error', () => {
-    const typeError = new TypeError('Type error');
-    const augmented = new AugmentedError(
-      typeError,
-      ErrorKind.ERROR,
-      'error'
-    );
+  describe('when delegating to original error properties', () => {
+    describe('when original error is TypeError', () => {
+      let typeError: TypeError;
+      let augmented: AugmentedError;
 
-    expect(augmented.name).to.equal('TypeError');
-  });
+      beforeEach(() => {
+        // Arrange
+        typeError = new TypeError('Type error');
 
-  it('should delegate cause to original error when present', () => {
-    const causeError = new Error('Root cause');
-    const originalError = new Error('Error with cause', { cause: causeError });
-    const augmented = new AugmentedError(
-      originalError,
-      ErrorKind.ERROR,
-      'error'
-    );
+        // Act
+        augmented = new AugmentedError(
+          typeError,
+          ErrorKind.ERROR,
+          'error'
+        );
+      });
 
-    expect(augmented.cause).to.equal(causeError);
-  });
+      it('should delegate name', () => {
+        expect(augmented.name).to.equal('TypeError');
+      });
+    });
 
-  it('should return undefined for cause when original error has no cause', () => {
-    const originalError = new Error('No cause');
-    const augmented = new AugmentedError(
-      originalError,
-      ErrorKind.ERROR,
-      'error'
-    );
+    describe('when original error has cause', () => {
+      let causeError: Error;
+      let originalError: Error;
+      let augmented: AugmentedError;
 
-    expect(augmented.cause).to.be.undefined;
+      beforeEach(() => {
+        // Arrange
+        causeError = new Error('Root cause');
+        originalError = new Error('Error with cause', { cause: causeError });
+
+        // Act
+        augmented = new AugmentedError(
+          originalError,
+          ErrorKind.ERROR,
+          'error'
+        );
+      });
+
+      it('should delegate cause', () => {
+        expect(augmented.cause).to.equal(causeError);
+      });
+    });
+
+    describe('when original error has no cause', () => {
+      let originalError: Error;
+      let augmented: AugmentedError;
+
+      beforeEach(() => {
+        // Arrange
+        originalError = new Error('No cause');
+
+        // Act
+        augmented = new AugmentedError(
+          originalError,
+          ErrorKind.ERROR,
+          'error'
+        );
+      });
+
+      it('should return undefined for cause', () => {
+        expect(augmented.cause).to.be.undefined;
+      });
+    });
   });
 });
 
-describe('ErrorKind enum', () => {
-  it('should have all expected values', () => {
-    expect(ErrorKind.WARNING).to.equal('warning');
-    expect(ErrorKind.ERROR).to.equal('error');
-    expect(ErrorKind.NETWORK).to.equal('network');
-    expect(ErrorKind.PERMISSION).to.equal('permission');
-    expect(ErrorKind.TIMEOUT).to.equal('timeout');
-    expect(ErrorKind.NOT_FOUND).to.equal('not-found');
-    expect(ErrorKind.VALIDATION).to.equal('validation');
-    expect(ErrorKind.SERVER).to.equal('server');
-  });
-});

@@ -161,4 +161,3 @@ This architecture aligns with our core design principles:
 - Use of Lit Element web components for UI consistency
 - Global error handler implementation for unhandled exceptions
 - AugmentedError as extension of standard Error class
-

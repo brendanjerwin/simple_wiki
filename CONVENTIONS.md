@@ -333,8 +333,6 @@ Do not run them directly with `npx`, `npm`, `bun`, `bunx`, `go test`, etc. Use t
   devbox run fe:test -- web-components/error-display.test.ts
   ```
 
-  
-
 - **Go Tests**:
 
   To run all Go tests:
