@@ -6,8 +6,6 @@ import { Frontmatter } from '../gen/api/v1/frontmatter_connect.js';
 import { GetFrontmatterRequest, GetFrontmatterResponse, ReplaceFrontmatterRequest } from '../gen/api/v1/frontmatter_pb.js';
 import { sharedStyles, foundationCSS, dialogCSS, responsiveCSS, buttonCSS } from './shared-styles.js';
 import './frontmatter-value-section.js';
-import './kernel-panic.js';
-import { showKernelPanic } from './kernel-panic.js';
 import { showToastAfter } from './toast-message.js';
 import './error-display.js';
 import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
@@ -209,23 +207,11 @@ export class FrontmatterEditorDialog extends LitElement {
   private convertStructToPlainObject(struct?: Struct): Record<string, unknown> {
     if (!struct) return {};
 
-    try {
-      return struct.toJson() as Record<string, unknown>;
-    } catch (err) {
-      // This is an unrecoverable error - the protobuf data is corrupted
-      showKernelPanic(err as Error);
-      throw err;
-    }
+    return struct.toJson() as Record<string, unknown>;
   }
 
   private convertPlainObjectToStruct(obj: Record<string, unknown>): Struct {
-    try {
-      return Struct.fromJson(obj);
-    } catch (err) {
-      // This is an unrecoverable error - the data is corrupted
-      showKernelPanic(err as Error);
-      throw err;
-    }
+    return Struct.fromJson(obj);
   }
 
   private updateWorkingFrontmatter(): void {
@@ -289,7 +275,7 @@ export class FrontmatterEditorDialog extends LitElement {
       this.frontmatter = response;
       this.updateWorkingFrontmatter();
     } catch (err) {
-      this.augmentedError = AugmentErrorService.augmentError(err, 'Failed to load frontmatter');
+      this.augmentedError = AugmentErrorService.augmentError(err, 'loading frontmatter');
     } finally {
       this.loading = false;
       this.requestUpdate();
@@ -335,7 +321,7 @@ export class FrontmatterEditorDialog extends LitElement {
         this.refreshPage();
       });
     } catch (err) {
-      this.augmentedError = AugmentErrorService.augmentError(err, 'Failed to save frontmatter');
+      this.augmentedError = AugmentErrorService.augmentError(err, 'saving frontmatter');
     } finally {
       this.saving = false;
       this.requestUpdate();

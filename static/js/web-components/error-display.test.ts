@@ -36,8 +36,9 @@ describe('ErrorDisplay', () => {
     let augmentedError: AugmentedError;
 
     beforeEach(async () => {
+      const originalError = new Error('Test error message');
       augmentedError = new AugmentedError(
-        'Test error message',
+        originalError,
         ErrorKind.ERROR,
         'error'
       );
@@ -47,7 +48,7 @@ describe('ErrorDisplay', () => {
 
     it('should display the message', () => {
       const messageElement = el.shadowRoot?.querySelector('.error-message');
-      expect(messageElement?.textContent).to.equal('Test error message');
+      expect(messageElement?.textContent?.trim()).to.equal('Test error message');
     });
 
     it('should display the icon', () => {
@@ -65,11 +66,12 @@ describe('ErrorDisplay', () => {
     let augmentedError: AugmentedError;
 
     beforeEach(async () => {
+      const originalError = new Error('Test error message');
+      originalError.stack = 'Error: Test error message\n    at Object.<anonymous> (test.js:1:1)';
       augmentedError = new AugmentedError(
-        'Test error message',
+        originalError,
         ErrorKind.ERROR,
-        'error',
-        'Detailed error information'
+        'error'
       );
       el.augmentedError = augmentedError;
       await el.updateComplete;
@@ -198,11 +200,12 @@ describe('ErrorDisplay', () => {
 
   describe('when augmentedError has empty details', () => {
     beforeEach(async () => {
+      const originalError = new Error('Test error message');
+      originalError.stack = '';
       const augmentedError = new AugmentedError(
-        'Test error message',
+        originalError,
         ErrorKind.ERROR,
-        'error',
-        ''
+        'error'
       );
       el.augmentedError = augmentedError;
       await el.updateComplete;
@@ -221,11 +224,12 @@ describe('ErrorDisplay', () => {
 
   describe('when augmentedError has whitespace-only details', () => {
     beforeEach(async () => {
+      const originalError = new Error('Test error message');
+      originalError.stack = '   \n\t   ';
       const augmentedError = new AugmentedError(
-        'Test error message',
+        originalError,
         ErrorKind.ERROR,
-        'error',
-        '   \n\t   '
+        'error'
       );
       el.augmentedError = augmentedError;
       await el.updateComplete;
@@ -239,11 +243,12 @@ describe('ErrorDisplay', () => {
 
   describe('accessibility features', () => {
     beforeEach(async () => {
+      const originalError = new Error('Test error message');
+      originalError.stack = 'Error: Test error message\n    at Object.<anonymous> (test.js:1:1)';
       const augmentedError = new AugmentedError(
-        'Test error message',
+        originalError,
         ErrorKind.ERROR,
-        'error',
-        'Detailed error information'
+        'error'
       );
       el.augmentedError = augmentedError;
       await el.updateComplete;
@@ -274,8 +279,9 @@ describe('ErrorDisplay', () => {
 
   describe('custom icon support', () => {
     it('should display custom emoji icon', async () => {
+      const originalError = new Error('Custom error');
       const augmentedError = new AugmentedError(
-        'Custom error',
+        originalError,
         ErrorKind.ERROR,
         '🎯'
       );
@@ -287,8 +293,9 @@ describe('ErrorDisplay', () => {
     });
 
     it('should display standard icon', async () => {
+      const originalError = new Error('Network error');
       const augmentedError = new AugmentedError(
-        'Network error',
+        originalError,
         ErrorKind.NETWORK,
         'network'
       );
@@ -297,6 +304,37 @@ describe('ErrorDisplay', () => {
 
       const iconElement = el.shadowRoot?.querySelector('.error-icon');
       expect(iconElement?.textContent).to.equal('🌐');
+    });
+  });
+
+  describe('when failedGoalDescription is provided', () => {
+    it('should display "Error while {goal}: {message}"', async () => {
+      const originalError = new Error('Connection refused');
+      const augmentedError = new AugmentedError(
+        originalError,
+        ErrorKind.NETWORK,
+        'network',
+        'saving document'
+      );
+      el.augmentedError = augmentedError;
+      await el.updateComplete;
+
+      const messageElement = el.shadowRoot?.querySelector('.error-message');
+      expect(messageElement?.textContent?.trim()).to.equal('Error while saving document: Connection refused');
+    });
+
+    it('should display just the message when no failedGoalDescription', async () => {
+      const originalError = new Error('Connection refused');
+      const augmentedError = new AugmentedError(
+        originalError,
+        ErrorKind.NETWORK,
+        'network'
+      );
+      el.augmentedError = augmentedError;
+      await el.updateComplete;
+
+      const messageElement = el.shadowRoot?.querySelector('.error-message');
+      expect(messageElement?.textContent?.trim()).to.equal('Connection refused');
     });
   });
 });

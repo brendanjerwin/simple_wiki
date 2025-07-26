@@ -299,7 +299,7 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
       it('should handle non-Error exceptions', () => {
         expect(el.augmentedError).to.exist;
         expect(el.augmentedError?.message).to.equal('String error');
-        expect(el.augmentedError?.details).to.equal('String error');
+        expect(el.augmentedError?.originalError).to.be.instanceOf(Error);
       });
     });
 

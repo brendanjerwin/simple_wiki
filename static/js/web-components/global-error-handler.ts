@@ -1,4 +1,5 @@
 import { showKernelPanic } from './kernel-panic.js';
+import { AugmentErrorService } from './augment-error-service.js';
 
 // Store references to the handlers so we can remove them later
 let errorHandler: ((event: ErrorEvent) => void) | null = null;
@@ -13,14 +14,16 @@ export function setupGlobalErrorHandler(): void {
   // Handle unhandled JavaScript errors
   errorHandler = (event: ErrorEvent): void => {
     const error = event.error || new Error(event.message || 'Unknown error');
-    showKernelPanic(error);
+    const augmentedError = AugmentErrorService.augmentError(error);
+    showKernelPanic(augmentedError);
   };
 
   // Handle unhandled promise rejections
   rejectionHandler = (event: PromiseRejectionEvent): void => {
     event.preventDefault(); // Prevent the default browser handling
     
-    showKernelPanic(event.reason);
+    const augmentedError = AugmentErrorService.augmentError(event.reason);
+    showKernelPanic(augmentedError);
   };
 
   // Register the handlers

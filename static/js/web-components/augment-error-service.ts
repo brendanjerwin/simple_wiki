@@ -66,21 +66,16 @@ const ERROR_KIND_TO_ICON: Record<ErrorKind, StandardErrorIcon> = {
  */
 export class AugmentedError extends Error {
   constructor(
-    message: string,
+    public readonly originalError: Error,
     public readonly errorKind: ErrorKind,
     public readonly icon: ErrorIcon,
-    public readonly details?: string,
-    originalError?: Error
+    public readonly failedGoalDescription?: string
   ) {
-    super(message);
+    super(originalError.message);
     this.name = 'AugmentedError';
     
-    // Preserve original stack trace if available
-    if (originalError?.stack) {
-      this.stack = originalError.stack;
-    } else if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, AugmentedError);
-    }
+    // Preserve original stack trace
+    this.stack = originalError.stack;
   }
 }
 
@@ -95,21 +90,21 @@ export class AugmentErrorService {
   /**
    * Augment any error with errorKind and icon metadata
    */
-  static augmentError(error: unknown): AugmentedError {
+  static augmentError(error: unknown, failedGoalDescription?: string): AugmentedError {
     if (error instanceof AugmentedError) {
       return error; // Already augmented
     }
     
     if (error instanceof ConnectError) {
-      return this.augmentConnectError(error);
+      return this.augmentConnectError(error, failedGoalDescription);
     }
     
     if (error instanceof Error) {
-      return this.augmentStandardError(error);
+      return this.augmentStandardError(error, failedGoalDescription);
     }
     
     // Handle non-Error objects by creating Error first
-    return this.augmentUnknownError(error);
+    return this.augmentUnknownError(error, failedGoalDescription);
   }
 
   /**
@@ -125,7 +120,7 @@ export class AugmentErrorService {
   /**
    * Augment Connect/gRPC errors using proper error codes
    */
-  private static augmentConnectError(error: ConnectError): AugmentedError {
+  private static augmentConnectError(error: ConnectError, failedGoalDescription?: string): AugmentedError {
     let errorKind: ErrorKind;
     
     switch (error.code) {
@@ -155,43 +150,39 @@ export class AugmentErrorService {
     const icon = ERROR_KIND_TO_ICON[errorKind];
     
     return new AugmentedError(
-      error.message,
+      error,
       errorKind,
       icon,
-      `gRPC error: ${error.message}`,
-      error
+      failedGoalDescription
     );
   }
 
   /**
    * Augment standard Error objects
    */
-  private static augmentStandardError(error: Error): AugmentedError {
+  private static augmentStandardError(error: Error, failedGoalDescription?: string): AugmentedError {
     return new AugmentedError(
-      error.message || 'An error occurred',
+      error,
       ErrorKind.ERROR,
       ERROR_KIND_TO_ICON[ErrorKind.ERROR],
-      error.stack || error.toString(),
-      error
+      failedGoalDescription
     );
   }
 
   /**
    * Augment non-Error objects by creating Error first, then augmenting
    */
-  private static augmentUnknownError(error: unknown): AugmentedError {
+  private static augmentUnknownError(error: unknown, failedGoalDescription?: string): AugmentedError {
     const message = typeof error === 'string' ? error : 'An unknown error occurred';
-    const details = typeof error === 'string' ? error : JSON.stringify(error);
     
     // Create Error first, then augment it
     const createdError = new Error(message);
     
     return new AugmentedError(
-      createdError.message,
+      createdError,
       ErrorKind.ERROR,
       ERROR_KIND_TO_ICON[ErrorKind.ERROR],
-      details,
-      createdError
+      failedGoalDescription
     );
   }
 }

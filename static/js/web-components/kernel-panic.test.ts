@@ -77,11 +77,12 @@ describe('KernelPanic', () => {
 
   describe('when augmentedError is provided', () => {
     beforeEach(async () => {
+      const originalError = new Error('System failure detected');
+      originalError.stack = 'Stack trace: Error at line 42\nCaused by memory leak';
       const augmentedError = new AugmentedError(
-        'System failure detected',
+        originalError,
         ErrorKind.ERROR,
-        'error',
-        'Stack trace: Error at line 42\nCaused by memory leak'
+        'error'
       );
       el = await fixture(html`<kernel-panic .augmentedError="${augmentedError}"></kernel-panic>`);
     });
@@ -111,33 +112,21 @@ describe('KernelPanic', () => {
 });
 
 describe('showKernelPanic function', () => {
-  let augmentErrorSpy: sinon.SinonSpy;
-
   beforeEach(() => {
     // Clean up any existing kernel-panic elements
     document.querySelectorAll('kernel-panic').forEach(el => el.remove());
-    
-    // Spy on AugmentErrorService.augmentError
-    augmentErrorSpy = sinon.spy(AugmentErrorService, 'augmentError');
   });
 
   afterEach(() => {
-    sinon.restore();
     // Clean up created elements
     document.querySelectorAll('kernel-panic').forEach(el => el.remove());
   });
 
-  describe('when called with error', () => {
+  describe('when called with augmented error', () => {
     beforeEach(() => {
-      const testError = new Error('Test system error');
-      showKernelPanic(testError);
-    });
-
-    it('should call AugmentErrorService.augmentError with the error', () => {
-      expect(augmentErrorSpy).to.have.been.calledOnce;
-      expect(augmentErrorSpy).to.have.been.calledWith(
-        sinon.match.instanceOf(Error).and(sinon.match.has('message', 'Test system error'))
-      );
+      const originalError = new Error('Test system error');
+      const augmentedError = AugmentErrorService.augmentError(originalError);
+      showKernelPanic(augmentedError);
     });
 
     it('should create a kernel-panic element in document body', () => {

@@ -161,7 +161,7 @@ export class ErrorDisplay extends LitElement {
     if (!this.augmentedError) {
       throw new Error('ErrorDisplay component not properly initialized: augmentedError is required');
     }
-    return Boolean(this.augmentedError.details && this.augmentedError.details.trim());
+    return Boolean(this.augmentedError.originalError.stack && this.augmentedError.originalError.stack.trim());
   }
 
   private _handleExpandToggle(): void {
@@ -184,7 +184,11 @@ export class ErrorDisplay extends LitElement {
       <div class="error-header">
         <span class="error-icon" aria-hidden="true">${this.displayIcon}</span>
         <div class="error-content">
-          <div class="error-message">${this.augmentedError.message}</div>
+          <div class="error-message">
+            ${this.augmentedError.failedGoalDescription 
+              ? html`Error while ${this.augmentedError.failedGoalDescription}: ${this.augmentedError.message}` 
+              : this.augmentedError.message}
+          </div>
           
           ${this.hasDetails ? html`
             <button
@@ -203,7 +207,7 @@ export class ErrorDisplay extends LitElement {
               class="error-details"
               aria-hidden="${!this.expanded}"
             >
-              <div class="error-details-content monospace-font">${this.augmentedError.details}</div>
+              <div class="error-details-content monospace-font">${this.augmentedError.originalError.stack}</div>
             </div>
           ` : ''}
         </div>

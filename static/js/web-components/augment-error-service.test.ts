@@ -33,10 +33,6 @@ describe('AugmentErrorService', () => {
         it('should set icon to network', () => {
           expect(augmented.icon).to.equal('network');
         });
-
-        it('should include gRPC error in details', () => {
-          expect(augmented.details).to.include('gRPC error:');
-        });
       });
 
       describe('when the error is NOT_FOUND', () => {
@@ -191,10 +187,6 @@ describe('AugmentErrorService', () => {
         it('should set icon to error', () => {
           expect(augmented.icon).to.equal('error');
         });
-
-        it('should include error in details', () => {
-          expect(augmented.details).to.include('Error: Test error');
-        });
       });
 
       describe('when Error has empty message', () => {
@@ -206,8 +198,8 @@ describe('AugmentErrorService', () => {
           augmented = AugmentErrorService.augmentError(error);
         });
 
-        it('should provide fallback message', () => {
-          expect(augmented.message).to.equal('An error occurred');
+        it('should preserve empty message', () => {
+          expect(augmented.message).to.equal('');
         });
 
         it('should set errorKind to ERROR', () => {
@@ -258,10 +250,6 @@ describe('AugmentErrorService', () => {
           expect(augmented.message).to.equal('String error');
         });
 
-        it('should use string as details', () => {
-          expect(augmented.details).to.equal('String error');
-        });
-
         it('should set errorKind to ERROR', () => {
           expect(augmented.errorKind).to.equal(ErrorKind.ERROR);
         });
@@ -278,10 +266,6 @@ describe('AugmentErrorService', () => {
 
         it('should use fallback message', () => {
           expect(augmented.message).to.equal('An unknown error occurred');
-        });
-
-        it('should serialize object as details', () => {
-          expect(augmented.details).to.equal(JSON.stringify(errorObj));
         });
 
         it('should set errorKind to ERROR', () => {
@@ -307,24 +291,27 @@ describe('AugmentErrorService', () => {
 
 describe('AugmentedError', () => {
   it('should extend Error', () => {
-    const augmented = new AugmentedError('Test', ErrorKind.ERROR, 'error');
+    const originalError = new Error('Test');
+    const augmented = new AugmentedError(originalError, ErrorKind.ERROR, 'error');
     
     expect(augmented).to.be.instanceof(Error);
     expect(augmented).to.be.instanceof(AugmentedError);
   });
 
   it('should have correct properties', () => {
+    const originalError = new Error('Test message');
     const augmented = new AugmentedError(
-      'Test message', 
+      originalError, 
       ErrorKind.WARNING, 
       'warning',
-      'Test details'
+      'loading data'
     );
 
     expect(augmented.message).to.equal('Test message');
     expect(augmented.errorKind).to.equal(ErrorKind.WARNING);
     expect(augmented.icon).to.equal('warning');
-    expect(augmented.details).to.equal('Test details');
+    expect(augmented.failedGoalDescription).to.equal('loading data');
+    expect(augmented.originalError).to.equal(originalError);
     expect(augmented.name).to.equal('AugmentedError');
   });
 
@@ -333,11 +320,9 @@ describe('AugmentedError', () => {
     const originalStack = originalError.stack;
     
     const augmented = new AugmentedError(
-      'New message',
+      originalError,
       ErrorKind.ERROR,
-      'error',
-      undefined,
-      originalError
+      'error'
     );
 
     expect(augmented.stack).to.equal(originalStack);

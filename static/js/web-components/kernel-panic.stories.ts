@@ -1,14 +1,14 @@
 import type { Meta, StoryObj } from '@storybook/web-components-vite';
 import { html } from 'lit';
 import './kernel-panic.js';
-import type { AugmentedError } from './augment-error-service.js';
+import { AugmentErrorService, ErrorKind, type AugmentedError } from './augment-error-service.js';
 
 const meta: Meta = {
   title: 'Components/KernelPanic',
   tags: ['autodocs'],
   component: 'kernel-panic',
   argTypes: {
-    processedError: {
+    augmentedError: {
       control: 'object',
       description: 'Augmented error object from AugmentErrorService',
     },
@@ -23,19 +23,21 @@ type Story = StoryObj;
 
 export const Basic: Story = {
   args: {
-    processedError: {
-      message: 'Something went wrong with the application',
-      details: `A critical error has occurred and the application cannot continue.
-
-Technical details:
-- Error type: System failure
-- Component: Application core
-- Timestamp: ${new Date().toISOString()}`,
-      icon: 'error'
-    } as AugmentedError,
+    augmentedError: (() => {
+      const originalError = new Error('Something went wrong with the application');
+      originalError.stack = `Error: Something went wrong with the application
+    at Application.init (app.js:42:15)
+    at window.onload (index.js:10:5)`;
+      return new AugmentedError(
+        originalError,
+        ErrorKind.ERROR,
+        'error',
+        'initializing application'
+      );
+    })(),
   },
   render: (args) => html`
-    <kernel-panic .processedError="${args.processedError}"></kernel-panic>
+    <kernel-panic .augmentedError="${args.augmentedError}"></kernel-panic>
   `,
 };
 
@@ -52,93 +54,86 @@ export const WithoutError: Story = {
   },
 };
 
-export const WithDetailedError: Story = {
-  args: {
-    processedError: {
-      message: 'Failed to save frontmatter data',
-      details: `Network connection failed: Unable to reach server
-
-Error: Network connection failed: Unable to reach server
-    at WikiService.saveFrontmatter (wiki-service.ts:123:15)
-    at FrontmatterEditorDialog._handleSave (frontmatter-editor-dialog.ts:245:12)
-    at HTMLElement.click (frontmatter-editor-dialog.ts:180:5)
-
-Connection details:
-- URL: https://api.example.com/frontmatter
-- Method: POST
-- Status: Connection timeout
-- Duration: 30 seconds`,
-      icon: 'network'
-    } as AugmentedError,
-  },
-  render: (args) => html`
-    <kernel-panic .processedError="${args.processedError}"></kernel-panic>
-  `,
-};
-
-export const WithProcessedError: Story = {
-  args: {
-    processedError: {
-      message: 'Critical system error',
-      details: `Database connection failed: Unable to connect to PostgreSQL server
-
-Connection timeout after 30 seconds
-Server: localhost:5432
-Database: wiki_production
-
-Stack trace:
-Error: connect ECONNREFUSED 127.0.0.1:5432
-    at TCPConnectWrap.afterConnect [as oncomplete] (net.js:1141:16)
-    at DatabaseService.connect (db-service.ts:45:12)
-    at WikiService.initialize (wiki-service.ts:78:9)
-    at Application.start (app.ts:123:15)`,
-      icon: 'server'
-    } as AugmentedError,
-  },
-  render: (args) => html`
-    <kernel-panic .processedError="${args.processedError}"></kernel-panic>
-  `,
-};
-
 export const NetworkError: Story = {
   args: {
-    processedError: {
-      message: 'Unable to connect to server',
-      details: `gRPC error: [unavailable] Failed to connect to backend
-
-The server may be down or unreachable. Please check your network connection and try again.
-
-Technical details:
-- Connection timeout: 10 seconds
-- Retry attempts: 3
-- Last error: CONN_REFUSED`,
-      icon: 'network'
-    } as AugmentedError,
+    augmentedError: (() => {
+      const originalError = new Error('Failed to connect to server');
+      originalError.stack = `Error: Failed to connect to server
+    at fetch (network.js:15:10)
+    at ApiClient.makeRequest (api.js:25:8)
+    at UserService.loadProfile (user.js:40:12)`;
+      return new AugmentedError(
+        originalError,
+        ErrorKind.NETWORK,
+        'network',
+        'loading user profile'
+      );
+    })(),
   },
   render: (args) => html`
-    <kernel-panic .processedError="${args.processedError}"></kernel-panic>
+    <kernel-panic .augmentedError="${args.augmentedError}"></kernel-panic>
   `,
 };
 
 export const PermissionError: Story = {
   args: {
-    processedError: {
-      message: 'Access denied',
-      details: `gRPC error: [permission_denied] Insufficient privileges
-
-You do not have permission to perform this action.
-
-Required permissions:
-- system:admin
-- wiki:critical_operations
-
-Current user permissions:
-- wiki:read
-- wiki:write`,
-      icon: 'permission'
-    } as AugmentedError,
+    augmentedError: (() => {
+      const originalError = new Error('Access denied: insufficient permissions');
+      originalError.stack = `Error: Access denied: insufficient permissions
+    at SecurityService.checkPermissions (security.js:30:12)
+    at DocumentService.save (document.js:55:8)
+    at Editor.saveDocument (editor.js:120:15)`;
+      return new AugmentedError(
+        originalError,
+        ErrorKind.PERMISSION,
+        'permission',
+        'saving document'
+      );
+    })(),
   },
   render: (args) => html`
-    <kernel-panic .processedError="${args.processedError}"></kernel-panic>
+    <kernel-panic .augmentedError="${args.augmentedError}"></kernel-panic>
+  `,
+};
+
+export const ValidationError: Story = {
+  args: {
+    augmentedError: (() => {
+      const originalError = new Error('Invalid data format: missing required field "title"');
+      originalError.stack = `Error: Invalid data format: missing required field "title"
+    at Validator.validate (validator.js:18:9)
+    at Form.submit (form.js:45:12)
+    at HTMLFormElement.onsubmit (page.js:85:5)`;
+      return new AugmentedError(
+        originalError,
+        ErrorKind.VALIDATION,
+        'validation',
+        'submitting form'
+      );
+    })(),
+  },
+  render: (args) => html`
+    <kernel-panic .augmentedError="${args.augmentedError}"></kernel-panic>
+  `,
+};
+
+export const TimeoutError: Story = {
+  args: {
+    augmentedError: (() => {
+      const originalError = new Error('Request timeout after 30 seconds');
+      originalError.stack = `Error: Request timeout after 30 seconds
+    at TimeoutHandler.onTimeout (timeout.js:22:8)
+    at XMLHttpRequest.ontimeout (http.js:78:12)
+    at BackupService.createBackup (backup.js:95:15)`;
+      return new AugmentedError(
+        originalError,
+        ErrorKind.TIMEOUT,
+        'timeout',
+        'creating backup'
+      );
+    })(),
+  },
+  render: (args) => html`
+    <kernel-panic .augmentedError="${args.augmentedError}"></kernel-panic>
   `,
 };
