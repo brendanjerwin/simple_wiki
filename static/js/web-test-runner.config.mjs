@@ -34,6 +34,7 @@ export default {
       timeout: '5000', // 5 seconds
     },
   },
+  concurrency: 4,
   testsFinishTimeout: 300000, // 5 minutes,
   filterBrowserLogs(log) {
     // This is the full message that Lit logs to the console.
