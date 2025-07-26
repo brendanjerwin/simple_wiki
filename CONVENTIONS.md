@@ -832,6 +832,103 @@ beforeEach(async () => {
   const result = user ? processUser(user) : "No user";
   ```
 
+## Exception Handling Strategy
+
+The application follows a **selective exception handling** strategy: **only catch exceptions you can meaningfully handle or recover from**. All unhandled exceptions should bubble up to the global error handler to provide a consistent user experience.
+
+### Global Error Handler
+
+The application has a global error handler that:
+- Catches all unhandled JavaScript errors (`window.addEventListener('error')`)
+- Catches all unhandled promise rejections (`window.addEventListener('unhandledrejection')`)
+- Displays a kernel panic screen with error details processed through `ErrorService`
+- Allows users to refresh and restart the application
+
+This ensures that even unhandled errors provide a user-friendly experience rather than a broken application.
+
+### When to Catch Exceptions
+
+**✅ DO catch exceptions when:**
+- You can provide meaningful user feedback and allow retry (e.g., network requests)
+- You can gracefully degrade functionality while keeping the app usable
+- You can recover automatically or provide alternative behavior
+- The error is expected and part of normal operation (e.g., validation errors)
+
+**❌ DON'T catch exceptions when:**
+- You're just logging and re-throwing without handling
+- The error represents a programming bug that should be fixed
+- You can't provide any meaningful recovery or user action
+- You're hiding genuine problems that should be addressed
+
+### Exception Handling Patterns
+
+**Good: Handle recoverable errors**
+
+```typescript
+// User can retry this operation
+async loadData() {
+  try {
+    this.loading = true;
+    this.error = undefined;
+    const response = await this.client.getData();
+    this.data = response;
+  } catch (err) {
+    // Process error and show user-friendly message
+    const processedError = ErrorService.processError(err, 'load data');
+    this.error = processedError.message;
+    this.errorDetails = processedError.details;
+    // User can click reload button to retry
+  } finally {
+    this.loading = false;
+  }
+}
+```
+
+**Good: Let unrecoverable errors bubble up**
+
+```typescript
+// This represents data corruption - nothing the component can do
+private convertData(corruptedData: unknown): ProcessedData {
+  if (!this.isValidData(corruptedData)) {
+    // Don't catch this - let it bubble to global handler
+    throw new Error('Data corruption detected in user profile');
+  }
+  return this.processData(corruptedData);
+}
+```
+
+**Bad: Catching without meaningful handling**
+
+```typescript
+// Bad: Just logging and hiding the error
+async saveDocument() {
+  try {
+    await this.client.save(this.document);
+  } catch (err) {
+    console.error('Save failed:', err); // Just logging
+    // No user feedback, no retry mechanism, error is hidden
+  }
+}
+```
+
+### Error Recovery Guidelines
+
+- **Provide clear user feedback** for all caught errors
+- **Enable retry mechanisms** when operations can be reattempted
+- **Maintain application state consistency** when errors occur
+- **Use ErrorService.processError()** for consistent error presentation
+- **Document recovery paths** in component interfaces and user documentation
+
+### Testing Exception Scenarios
+
+- **Test error paths** as thoroughly as success paths
+- **Verify error messages** are user-friendly and actionable
+- **Test global error handler** doesn't interfere with intentional error handling
+- **Simulate network failures, timeouts, and server errors** in tests
+- **Ensure error states can be recovered from** without full page refresh
+
+This strategy ensures robust error handling while maintaining a clean separation between recoverable local errors and unrecoverable system errors.
+
 ### Running Linters
 
 The project uses different linters for different parts of the codebase:
