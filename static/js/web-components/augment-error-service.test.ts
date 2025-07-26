@@ -343,7 +343,7 @@ describe('AugmentedError', () => {
     expect(augmented.icon).to.equal('warning');
     expect(augmented.failedGoalDescription).to.equal('loading data');
     expect(augmented.originalError).to.equal(originalError);
-    expect(augmented.name).to.equal('AugmentedError');
+    expect(augmented.name).to.equal('Error');
   });
 
   it('should preserve original error stack when provided', () => {
@@ -357,6 +357,40 @@ describe('AugmentedError', () => {
     );
 
     expect(augmented.stack).to.equal(originalStack);
+  });
+
+  it('should delegate name to original error', () => {
+    const typeError = new TypeError('Type error');
+    const augmented = new AugmentedError(
+      typeError,
+      ErrorKind.ERROR,
+      'error'
+    );
+
+    expect(augmented.name).to.equal('TypeError');
+  });
+
+  it('should delegate cause to original error when present', () => {
+    const causeError = new Error('Root cause');
+    const originalError = new Error('Error with cause', { cause: causeError });
+    const augmented = new AugmentedError(
+      originalError,
+      ErrorKind.ERROR,
+      'error'
+    );
+
+    expect(augmented.cause).to.equal(causeError);
+  });
+
+  it('should return undefined for cause when original error has no cause', () => {
+    const originalError = new Error('No cause');
+    const augmented = new AugmentedError(
+      originalError,
+      ErrorKind.ERROR,
+      'error'
+    );
+
+    expect(augmented.cause).to.be.undefined;
   });
 });
 

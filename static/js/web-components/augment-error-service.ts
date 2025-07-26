@@ -73,7 +73,6 @@ export class AugmentedError extends Error {
   ) {
     // Call super with no arguments to avoid auto-generating new stack trace
     super();
-    this.name = 'AugmentedError';
     
     // Remove the auto-generated stack property so our getter can work
     delete (this as Error).stack;
@@ -87,6 +86,16 @@ export class AugmentedError extends Error {
   // Delegate stack to original error
   override get stack(): string | undefined {
     return this.originalError.stack;
+  }
+
+  // Delegate name to original error to preserve error type information
+  override get name(): string {
+    return this.originalError.name;
+  }
+
+  // Delegate cause to original error for full transparency
+  override get cause(): unknown {
+    return (this.originalError as { cause?: unknown }).cause;
   }
 }
 
