@@ -52,7 +52,7 @@
 - Use [Devbox](https://www.jetpack.io/devbox/) by Jetify to create isolated, reproducible development environments.
 - Add new dependencies via `devbox add <package>`. This ensures the `devbox.json` and `devbox.lock` files are updated correctly.
 - Use either `devbox shell` (for an interactive shell) or `devbox run <command>` (for running specific commands) to work within the Devbox environment.
-- When possible, use scripts defined in `devbox.json` to run commands.
+- When possible, use scripts defined in `devbox.json` to run commands. Run `devbox run` to see a list of available scripts.
 
 ## Frontend JavaScript
 
@@ -89,14 +89,13 @@ Storybook is used for developing and documenting UI components in isolation. Fol
 
   ```typescript
   render: (args) => html`
-    <my-dialog-component 
-      .open="${args.open}"
-      .loading="${true}">
+    <my-dialog-component .open="${args.open}" .loading="${true}">
     </my-dialog-component>
   `;
   ```
 
 - **Mock data, not components**: It's perfectly acceptable (and encouraged) to use mock data to populate components with realistic content. The distinction is:
+
   - ✅ Mock data: Providing sample arrays, objects, or strings as component props
   - ❌ Mock components: Creating fake HTML elements instead of using the real component
 
@@ -132,7 +131,7 @@ const action = (name: string) => (event: Event) => {
     type: event.type,
     target: event.target,
     detail: (event as CustomEvent).detail,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 };
 ```
@@ -143,7 +142,7 @@ const action = (name: string) => (event: Event) => {
 
   ```typescript
   render: (args) => html`
-    <my-component 
+    <my-component
       @click=${action('component-clicked')}
       @input=${action('input-changed')}
       @custom-event=${action('custom-event')}>
@@ -154,6 +153,7 @@ const action = (name: string) => (event: Event) => {
 #### Interactive Testing Stories
 
 - **Create dedicated interactive testing stories** for complex components that demonstrate:
+
   - User workflows (form filling, multi-step interactions)
   - Keyboard shortcuts and accessibility features
   - Error states and recovery scenarios
@@ -186,9 +186,10 @@ export const InteractiveExample: Story = {
     <div style="padding: 20px; background: #f0f8ff;">
       <h3>Component Interaction Test</h3>
       <p>Instructions for testing...</p>
-      <my-component 
-        @event1=${action('event1-triggered')}
-        @event2=${action('event2-with-data')}>
+      <my-component
+        @event1=${action("event1-triggered")}
+        @event2=${action("event2-with-data")}
+      >
       </my-component>
       <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
         Watch the browser console (F12) to see triggered events logged.
@@ -198,7 +199,8 @@ export const InteractiveExample: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Detailed description of what to test and expected behavior. Open the browser developer tools console to see the action logs.',
+        story:
+          "Detailed description of what to test and expected behavior. Open the browser developer tools console to see the action logs.",
       },
     },
   },
@@ -335,16 +337,18 @@ This is the most frequent cause of hangs. If a component's setup code (e.g., in 
 
 ```typescript
 // In your test file
-import { stub } from 'sinon';
+import { stub } from "sinon";
 
-describe('My Component', () => {
+describe("My Component", () => {
   let fetchStub;
 
   beforeEach(async () => {
     // Stub the global fetch function before the component is created
-    fetchStub = stub(window, 'fetch');
+    fetchStub = stub(window, "fetch");
     // Make it resolve instantly with a fake response
-    fetchStub.resolves(new Response(JSON.stringify({ id: 1, name: 'Test Data' })));
+    fetchStub.resolves(
+      new Response(JSON.stringify({ id: 1, name: "Test Data" })),
+    );
 
     // Now, when you create the component, it won't make a real network call
     const el = await fixture(html`<my-component></my-component>`);
@@ -366,9 +370,9 @@ If your component uses `setTimeout`, `setInterval`, or other time-based function
 **Example:**
 
 ```typescript
-import { useFakeTimers } from 'sinon';
+import { useFakeTimers } from "sinon";
 
-describe('My Timed Component', () => {
+describe("My Timed Component", () => {
   let clock;
 
   beforeEach(() => {
@@ -381,14 +385,14 @@ describe('My Timed Component', () => {
     clock.restore();
   });
 
-  it('should do something after 2 seconds', async () => {
+  it("should do something after 2 seconds", async () => {
     const el = await fixture(html`<my-timed-component></my-timed-component>`);
-    
+
     // Fast-forward the clock by 2 seconds instantly
     await clock.tickAsync(2000);
 
     // Now you can assert what was supposed to happen after the delay
-    expect(el.state).to.equal('loaded');
+    expect(el.state).to.equal("loaded");
   });
 });
 ```
@@ -403,8 +407,8 @@ While the test runner timeout is a good safety net, you can add more specific ti
 
 ```typescript
 function timeout(ms, message) {
-  return new Promise((_, reject) => 
-    setTimeout(() => reject(new Error(message)), ms)
+  return new Promise((_, reject) =>
+    setTimeout(() => reject(new Error(message)), ms),
   );
 }
 
@@ -413,7 +417,7 @@ beforeEach(async () => {
     // This will fail if the fixture takes longer than 3 seconds
     el = await Promise.race([
       fixture(html`<frontmatter-editor-dialog></frontmatter-editor-dialog>`),
-      timeout(3000, 'Component fixture timed out')
+      timeout(3000, "Component fixture timed out"),
     ]);
   } catch (e) {
     // The error will clearly state that the fixture timed out
@@ -687,10 +691,10 @@ beforeEach(async () => {
     await client.getFrontmatter(request);
   } catch (err) {
     // Bad: Branching on human-readable error message
-    if (err.message.includes('UNAVAILABLE')) {
-      this.error = 'Unable to connect to server';
-    } else if (err.message.includes('PERMISSION_DENIED')) {
-      this.error = 'Access denied';
+    if (err.message.includes("UNAVAILABLE")) {
+      this.error = "Unable to connect to server";
+    } else if (err.message.includes("PERMISSION_DENIED")) {
+      this.error = "Access denied";
     }
   }
   ```
@@ -698,7 +702,7 @@ beforeEach(async () => {
   **Good (TypeScript):**
 
   ```typescript
-  import { ConnectError, Code } from '@connectrpc/connect';
+  import { ConnectError, Code } from "@connectrpc/connect";
 
   try {
     await client.getFrontmatter(request);
@@ -707,19 +711,20 @@ beforeEach(async () => {
     if (err instanceof ConnectError) {
       switch (err.code) {
         case Code.Unavailable:
-          this.error = 'Unable to connect to server';
+          this.error = "Unable to connect to server";
           break;
         case Code.PermissionDenied:
-          this.error = 'Access denied';
+          this.error = "Access denied";
           break;
         default:
-          this.error = 'An unexpected error occurred';
+          this.error = "An unexpected error occurred";
       }
     }
   }
   ```
 
   This approach ensures that:
+
   - Error logic remains stable when error message wording changes
   - Code is more maintainable and less fragile
   - Error handling is explicit and type-safe
@@ -737,7 +742,7 @@ beforeEach(async () => {
         // ... API call
       } catch (err) {
         if (err instanceof ConnectError && err.code === Code.NotFound) {
-          this.error = 'Data not found. Please check your input.';
+          this.error = "Data not found. Please check your input.";
         }
         // Duplicate error handling logic in every component
       }
@@ -754,11 +759,11 @@ beforeEach(async () => {
       if (error instanceof ConnectError) {
         switch (error.code) {
           case Code.NotFound:
-            return { message: 'Data not found', icon: 'not-found' };
+            return { message: "Data not found", icon: "not-found" };
           // ... other cases
         }
       }
-      return { message: `Failed to ${context}`, icon: 'error' };
+      return { message: `Failed to ${context}`, icon: "error" };
     }
   }
 
@@ -768,13 +773,14 @@ beforeEach(async () => {
       try {
         // ... API call
       } catch (err) {
-        const processedError = ErrorService.processError(err, 'load data');
+        const processedError = ErrorService.processError(err, "load data");
         this.error = processedError.message;
         this.errorIcon = processedError.icon;
       }
     }
   }
   ```
+
 - **Never Hide Broken Functionality**: Do not make systems appear to work when they are actually broken. This includes:
 
   - Avoid showing fallback data that looks like real data when services are unavailable
@@ -839,6 +845,7 @@ The application follows a **selective exception handling** strategy: **only catc
 ### Global Error Handler
 
 The application has a global error handler that:
+
 - Catches all unhandled JavaScript errors (`window.addEventListener('error')`)
 - Catches all unhandled promise rejections (`window.addEventListener('unhandledrejection')`)
 - Displays a kernel panic screen with error details processed through `ErrorService`
@@ -849,12 +856,14 @@ This ensures that even unhandled errors provide a user-friendly experience rathe
 ### When to Catch Exceptions
 
 **✅ DO catch exceptions when:**
+
 - You can provide meaningful user feedback and allow retry (e.g., network requests)
 - You can gracefully degrade functionality while keeping the app usable
 - You can recover automatically or provide alternative behavior
 - The error is expected and part of normal operation (e.g., validation errors)
 
 **❌ DON'T catch exceptions when:**
+
 - You're just logging and re-throwing without handling
 - The error represents a programming bug that should be fixed
 - You can't provide any meaningful recovery or user action
@@ -942,9 +951,9 @@ Each linter enforces specific rules:
 - Go linter enforces using `any` instead of `interface{}` and other Go best practices
 - Frontend linter enforces TypeScript strict typing with `@typescript-eslint/no-explicit-any` rule enabled
 
-### Required Before Each Commit
+### Required Before Each Commit to Make Sure Everything Works
 
-- Run the tests, builds, and linters. You can use `devbox run lint:everything` for that.
+- Run the tests, builds, and linters with `devbox run lint:everything`.
 - Run the application and ensure you can interact with it.
 - Examine any recently written tests to ensure they conform to the testing guidance.
 

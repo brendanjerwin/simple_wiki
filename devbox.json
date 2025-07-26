@@ -23,7 +23,6 @@
       "fe:test": [
         "export CHROMIUM_BIN=$(which chromium) && cd static/js && bun install && bun run test:wtr ${CI_COVERAGE:+--coverage}"
       ],
-
       "fe:lint": [
         "cd static/js && bun install && bun run -- eslint . --ext .ts --max-warnings 0"
       ],
@@ -50,7 +49,11 @@
       "build": [
         "COMMIT=$(git rev-parse HEAD)",
         "BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-        "go build -ldflags \"-X main.commit=$COMMIT -X main.buildTime=$BUILD_TIME\" -o simple_wiki ."
+        "echo \"Generating protos and frontend\"",
+        "go generate ./...",
+        "echo \"Building binary\"",
+        "go build -ldflags \"-X main.commit=$COMMIT -X main.buildTime=$BUILD_TIME\" -o simple_wiki .",
+        "echo \"Build complete!\""
       ],
       "storybook": [
         "cd static/js && bun install && bun run storybook"
