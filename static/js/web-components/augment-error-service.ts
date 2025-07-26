@@ -71,17 +71,22 @@ export class AugmentedError extends Error {
     public readonly icon: ErrorIcon,
     public readonly failedGoalDescription?: string
   ) {
-    // Delegate to original error message instead of copying
+    // Call super with no arguments to avoid auto-generating new stack trace
     super();
     this.name = 'AugmentedError';
     
-    // Preserve original stack trace
-    this.stack = originalError.stack;
+    // Remove the auto-generated stack property so our getter can work
+    delete (this as Error).stack;
   }
 
   // Delegate message to original error
   override get message(): string {
     return this.originalError.message;
+  }
+
+  // Delegate stack to original error
+  override get stack(): string | undefined {
+    return this.originalError.stack;
   }
 }
 
