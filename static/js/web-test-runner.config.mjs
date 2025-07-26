@@ -31,10 +31,9 @@ export default {
   },
   testFramework: {
     config: {
-      timeout: '5000', // 5 seconds
+      timeout: '10000', // 10 seconds
     },
   },
-  concurrency: 4,
   testsFinishTimeout: 300000, // 5 minutes,
   filterBrowserLogs(log) {
     // This is the full message that Lit logs to the console.

@@ -197,6 +197,9 @@ describe('WikiSearch', () => {
       // Trigger form submit
       el.handleFormSubmit(submitEvent);
       
+      // Wait for the async operation to start
+      await new Promise(resolve => setTimeout(resolve, 0));
+      
       // Check that fetch was called with properly encoded URL
       expect(fetchStub).to.have.been.calledWith('https://example.com/search?q=test%20%26%20query%20with%20spaces');
     });

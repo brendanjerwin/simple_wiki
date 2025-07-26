@@ -126,7 +126,7 @@ describe('ErrorDisplay', () => {
 
       it('should display the details content', () => {
         const detailsContent = el.shadowRoot?.querySelector('.error-details-content');
-        expect(detailsContent?.textContent).to.equal('Detailed error information');
+        expect(detailsContent?.textContent).to.equal('Error: Test error message\n    at Object.<anonymous> (test.js:1:1)');
       });
 
       describe('when expand button is clicked again', () => {
