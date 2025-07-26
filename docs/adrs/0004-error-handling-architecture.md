@@ -48,11 +48,19 @@ All unhandled errors bubble up to a global error handler that:
 
 All errors use a unified presentation system:
 
-- **AugmentErrorService**: Augments errors with classification metadata (ErrorKind, icon)
+- **AugmentErrorService**: Augments errors with classification metadata (ErrorKind, icon, failedGoalDescription)
 - **ErrorDisplay Component**: Provides consistent visual presentation with expand/collapse
 - **Structured Error Types**: AugmentedError extends Error with additional metadata
 
-### 4. Error Classification System
+### 4. Contextual Error Information
+
+Errors include contextual information about what operation was being attempted:
+
+- **failedGoalDescription**: Optional parameter describing the goal that was being attempted when the error occurred (e.g., "saving frontmatter", "loading user profile")
+- **User-Friendly Display**: Error messages show as "Error while {failedGoalDescription}: {originalErrorMessage}"
+- **Progressive Disclosure**: Technical details (stack traces) are available via expand/collapse
+
+### 5. Error Classification System
 
 Errors are classified using an ErrorKind enum:
 
@@ -72,7 +80,7 @@ Each kind maps to appropriate visual icons for quick user recognition.
 ### Core Components
 
 1. **AugmentErrorService**: Converts any error into AugmentedError with metadata
-2. **AugmentedError**: Error subclass with errorKind and icon properties
+2. **AugmentedError**: Error subclass with errorKind, icon, and failedGoalDescription properties
 3. **ErrorDisplay**: Reusable web component for consistent error presentation
 4. **Global Error Handler**: Catches unhandled errors and shows kernel panic
 
@@ -92,8 +100,8 @@ Error Occurs → Can it be handled locally?
 try {
   await this.client.saveDocument();
 } catch (err) {
-  this.augmentedError = AugmentErrorService.augmentError(err);
-  // User can see error and retry
+  this.augmentedError = AugmentErrorService.augmentError(err, 'saving document');
+  // User sees "Error while saving document: Connection failed" and can retry
 }
 ```
 

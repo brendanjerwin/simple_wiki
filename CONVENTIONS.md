@@ -678,6 +678,25 @@ beforeEach(async () => {
 
 - **No CSS-Only Testing**: Tests should not assert that specific CSS properties are applied unless it's for functional reasons (e.g., verifying visibility changes). Avoid testing computed styles like `getComputedStyle(element).property` unless the test verifies functional behavior that depends on that styling. Focus tests on component behavior, state management, event handling, and user interaction rather than visual styling details.
 
+- **Avoid Double-Entry Testing**: Don't test simple declarations or property assignments that just mirror the code being tested. Focus tests on behavior and logic, not on verifying that properties exist or have been set to specific values that are obvious from the declaration.
+
+  **Bad:** Testing a declaration
+  
+  ```typescript
+  // Component declaration: errorKind: ErrorKind.WARNING
+  it('should have errorKind property', () => {
+    expect(augmented.errorKind).to.equal(ErrorKind.WARNING); // Just testing the declaration
+  });
+  ```
+  
+  **Good:** Testing behavior that depends on the property
+  
+  ```typescript  
+  it('should display warning icon for WARNING errorKind', () => {
+    expect(AugmentErrorService.getIconString(augmented.icon)).to.equal('⚠️');
+  });
+  ```
+
 - **Documentation of Testing Principles**: When you discover important testing principles or patterns that ensure comprehensive coverage, document them in this CONVENTIONS.md file. This builds a comprehensive guide for future developers and helps maintain consistent testing practices across the project.
 
 - Include a blank line between all the various Ginkgo blocks. This makes it easier to read the tests.
