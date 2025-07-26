@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/web-components-vite';
 import { html } from 'lit';
 import './kernel-panic.js';
-import { ErrorKind, type AugmentedError } from './augment-error-service.js';
+import { ErrorKind, AugmentedError } from './augment-error-service.js';
 
 const meta: Meta = {
   title: 'Components/KernelPanic',
@@ -9,7 +9,7 @@ const meta: Meta = {
   component: 'kernel-panic',
   argTypes: {
     augmentedError: {
-      control: 'object',
+      control: false, // Disable control due to getter delegation causing deep clone issues in Storybook
       description: 'Augmented error object from AugmentErrorService',
     },
   },
