@@ -95,7 +95,7 @@ export class AugmentErrorService {
   /**
    * Augment any error with errorKind and icon metadata
    */
-  static augmentError(error: unknown, fallbackMessage?: string): AugmentedError {
+  static augmentError(error: unknown): AugmentedError {
     if (error instanceof AugmentedError) {
       return error; // Already augmented
     }
@@ -108,8 +108,8 @@ export class AugmentErrorService {
       return this.augmentStandardError(error);
     }
     
-    // Handle non-Error objects
-    return this.augmentUnknownError(error, fallbackMessage);
+    // Handle non-Error objects by creating Error first
+    return this.augmentUnknownError(error);
   }
 
   /**
@@ -177,17 +177,21 @@ export class AugmentErrorService {
   }
 
   /**
-   * Augment non-Error objects by converting them to AugmentedError
+   * Augment non-Error objects by creating Error first, then augmenting
    */
-  private static augmentUnknownError(error: unknown, fallbackMessage?: string): AugmentedError {
-    const message = fallbackMessage || 'An unknown error occurred';
+  private static augmentUnknownError(error: unknown): AugmentedError {
+    const message = typeof error === 'string' ? error : 'An unknown error occurred';
     const details = typeof error === 'string' ? error : JSON.stringify(error);
     
+    // Create Error first, then augment it
+    const createdError = new Error(message);
+    
     return new AugmentedError(
-      message,
+      createdError.message,
       ErrorKind.ERROR,
       ERROR_KIND_TO_ICON[ErrorKind.ERROR],
-      details
+      details,
+      createdError
     );
   }
 }

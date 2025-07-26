@@ -9,134 +9,284 @@ import {
 describe('AugmentErrorService', () => {
   describe('augmentError', () => {
     describe('when processing ConnectError instances', () => {
-      it('should handle UNAVAILABLE errors', () => {
-        const connectError = new ConnectError('Service unavailable', Code.Unavailable);
-        const augmented = AugmentErrorService.augmentError(connectError);
+      describe('when the error is UNAVAILABLE', () => {
+        let connectError: ConnectError;
+        let augmented: AugmentedError;
 
-        expect(augmented).to.be.instanceof(AugmentedError);
-        expect(augmented.message).to.equal('[unavailable] Service unavailable');
-        expect(augmented.errorKind).to.equal(ErrorKind.NETWORK);
-        expect(augmented.icon).to.equal('network');
-        expect(augmented.details).to.include('gRPC error:');
+        beforeEach(() => {
+          connectError = new ConnectError('Service unavailable', Code.Unavailable);
+          augmented = AugmentErrorService.augmentError(connectError);
+        });
+
+        it('should return AugmentedError instance', () => {
+          expect(augmented).to.be.instanceof(AugmentedError);
+        });
+
+        it('should preserve original message', () => {
+          expect(augmented.message).to.equal('[unavailable] Service unavailable');
+        });
+
+        it('should set errorKind to NETWORK', () => {
+          expect(augmented.errorKind).to.equal(ErrorKind.NETWORK);
+        });
+
+        it('should set icon to network', () => {
+          expect(augmented.icon).to.equal('network');
+        });
+
+        it('should include gRPC error in details', () => {
+          expect(augmented.details).to.include('gRPC error:');
+        });
       });
 
-      it('should handle NOT_FOUND errors', () => {
-        const connectError = new ConnectError('Resource not found', Code.NotFound);
-        const augmented = AugmentErrorService.augmentError(connectError);
+      describe('when the error is NOT_FOUND', () => {
+        let connectError: ConnectError;
+        let augmented: AugmentedError;
 
-        expect(augmented.errorKind).to.equal(ErrorKind.NOT_FOUND);
-        expect(augmented.icon).to.equal('not-found');
+        beforeEach(() => {
+          connectError = new ConnectError('Resource not found', Code.NotFound);
+          augmented = AugmentErrorService.augmentError(connectError);
+        });
+
+        it('should set errorKind to NOT_FOUND', () => {
+          expect(augmented.errorKind).to.equal(ErrorKind.NOT_FOUND);
+        });
+
+        it('should set icon to not-found', () => {
+          expect(augmented.icon).to.equal('not-found');
+        });
       });
 
-      it('should handle PERMISSION_DENIED errors', () => {
-        const connectError = new ConnectError('Access denied', Code.PermissionDenied);
-        const augmented = AugmentErrorService.augmentError(connectError);
+      describe('when the error is PERMISSION_DENIED', () => {
+        let connectError: ConnectError;
+        let augmented: AugmentedError;
 
-        expect(augmented.errorKind).to.equal(ErrorKind.PERMISSION);
-        expect(augmented.icon).to.equal('permission');
+        beforeEach(() => {
+          connectError = new ConnectError('Access denied', Code.PermissionDenied);
+          augmented = AugmentErrorService.augmentError(connectError);
+        });
+
+        it('should set errorKind to PERMISSION', () => {
+          expect(augmented.errorKind).to.equal(ErrorKind.PERMISSION);
+        });
+
+        it('should set icon to permission', () => {
+          expect(augmented.icon).to.equal('permission');
+        });
       });
 
-      it('should handle UNAUTHENTICATED errors', () => {
-        const connectError = new ConnectError('Authentication required', Code.Unauthenticated);
-        const augmented = AugmentErrorService.augmentError(connectError);
+      describe('when the error is UNAUTHENTICATED', () => {
+        let connectError: ConnectError;
+        let augmented: AugmentedError;
 
-        expect(augmented.errorKind).to.equal(ErrorKind.PERMISSION);
-        expect(augmented.icon).to.equal('permission');
+        beforeEach(() => {
+          connectError = new ConnectError('Authentication required', Code.Unauthenticated);
+          augmented = AugmentErrorService.augmentError(connectError);
+        });
+
+        it('should set errorKind to PERMISSION', () => {
+          expect(augmented.errorKind).to.equal(ErrorKind.PERMISSION);
+        });
+
+        it('should set icon to permission', () => {
+          expect(augmented.icon).to.equal('permission');
+        });
       });
 
-      it('should handle INVALID_ARGUMENT errors', () => {
-        const connectError = new ConnectError('Invalid input', Code.InvalidArgument);
-        const augmented = AugmentErrorService.augmentError(connectError);
+      describe('when the error is INVALID_ARGUMENT', () => {
+        let connectError: ConnectError;
+        let augmented: AugmentedError;
 
-        expect(augmented.errorKind).to.equal(ErrorKind.VALIDATION);
-        expect(augmented.icon).to.equal('validation');
+        beforeEach(() => {
+          connectError = new ConnectError('Invalid input', Code.InvalidArgument);
+          augmented = AugmentErrorService.augmentError(connectError);
+        });
+
+        it('should set errorKind to VALIDATION', () => {
+          expect(augmented.errorKind).to.equal(ErrorKind.VALIDATION);
+        });
+
+        it('should set icon to validation', () => {
+          expect(augmented.icon).to.equal('validation');
+        });
       });
 
-      it('should handle DEADLINE_EXCEEDED errors', () => {
-        const connectError = new ConnectError('Timeout', Code.DeadlineExceeded);
-        const augmented = AugmentErrorService.augmentError(connectError);
+      describe('when the error is DEADLINE_EXCEEDED', () => {
+        let connectError: ConnectError;
+        let augmented: AugmentedError;
 
-        expect(augmented.errorKind).to.equal(ErrorKind.TIMEOUT);
-        expect(augmented.icon).to.equal('timeout');
+        beforeEach(() => {
+          connectError = new ConnectError('Timeout', Code.DeadlineExceeded);
+          augmented = AugmentErrorService.augmentError(connectError);
+        });
+
+        it('should set errorKind to TIMEOUT', () => {
+          expect(augmented.errorKind).to.equal(ErrorKind.TIMEOUT);
+        });
+
+        it('should set icon to timeout', () => {
+          expect(augmented.icon).to.equal('timeout');
+        });
       });
 
-      it('should handle INTERNAL errors', () => {
-        const connectError = new ConnectError('Internal error', Code.Internal);
-        const augmented = AugmentErrorService.augmentError(connectError);
+      describe('when the error is INTERNAL', () => {
+        let connectError: ConnectError;
+        let augmented: AugmentedError;
 
-        expect(augmented.errorKind).to.equal(ErrorKind.SERVER);
-        expect(augmented.icon).to.equal('server');
+        beforeEach(() => {
+          connectError = new ConnectError('Internal error', Code.Internal);
+          augmented = AugmentErrorService.augmentError(connectError);
+        });
+
+        it('should set errorKind to SERVER', () => {
+          expect(augmented.errorKind).to.equal(ErrorKind.SERVER);
+        });
+
+        it('should set icon to server', () => {
+          expect(augmented.icon).to.equal('server');
+        });
       });
 
-      it('should handle unknown error codes', () => {
-        const connectError = new ConnectError('Unknown error', Code.Unknown);
-        const augmented = AugmentErrorService.augmentError(connectError);
+      describe('when the error code is unknown', () => {
+        let connectError: ConnectError;
+        let augmented: AugmentedError;
 
-        expect(augmented.errorKind).to.equal(ErrorKind.ERROR);
-        expect(augmented.icon).to.equal('error');
+        beforeEach(() => {
+          connectError = new ConnectError('Unknown error', Code.Unknown);
+          augmented = AugmentErrorService.augmentError(connectError);
+        });
+
+        it('should set errorKind to ERROR', () => {
+          expect(augmented.errorKind).to.equal(ErrorKind.ERROR);
+        });
+
+        it('should set icon to error', () => {
+          expect(augmented.icon).to.equal('error');
+        });
       });
     });
 
     describe('when processing regular Error instances', () => {
-      it('should handle Error objects with message and stack', () => {
-        const error = new Error('Test error');
-        const augmented = AugmentErrorService.augmentError(error);
+      describe('when Error has message and stack', () => {
+        let error: Error;
+        let augmented: AugmentedError;
 
-        expect(augmented).to.be.instanceof(AugmentedError);
-        expect(augmented.message).to.equal('Test error');
-        expect(augmented.errorKind).to.equal(ErrorKind.ERROR);
-        expect(augmented.icon).to.equal('error');
-        expect(augmented.details).to.include('Error: Test error');
+        beforeEach(() => {
+          error = new Error('Test error');
+          augmented = AugmentErrorService.augmentError(error);
+        });
+
+        it('should return AugmentedError instance', () => {
+          expect(augmented).to.be.instanceof(AugmentedError);
+        });
+
+        it('should preserve original message', () => {
+          expect(augmented.message).to.equal('Test error');
+        });
+
+        it('should set errorKind to ERROR', () => {
+          expect(augmented.errorKind).to.equal(ErrorKind.ERROR);
+        });
+
+        it('should set icon to error', () => {
+          expect(augmented.icon).to.equal('error');
+        });
+
+        it('should include error in details', () => {
+          expect(augmented.details).to.include('Error: Test error');
+        });
       });
 
-      it('should handle Error objects without message', () => {
-        const error = new Error('');
-        const augmented = AugmentErrorService.augmentError(error);
+      describe('when Error has empty message', () => {
+        let error: Error;
+        let augmented: AugmentedError;
 
-        expect(augmented.message).to.equal('An error occurred');
-        expect(augmented.errorKind).to.equal(ErrorKind.ERROR);
+        beforeEach(() => {
+          error = new Error('');
+          augmented = AugmentErrorService.augmentError(error);
+        });
+
+        it('should provide fallback message', () => {
+          expect(augmented.message).to.equal('An error occurred');
+        });
+
+        it('should set errorKind to ERROR', () => {
+          expect(augmented.errorKind).to.equal(ErrorKind.ERROR);
+        });
       });
 
-      it('should preserve original stack trace', () => {
-        const error = new Error('Test error');
-        const originalStack = error.stack;
-        const augmented = AugmentErrorService.augmentError(error);
+      describe('when preserving stack trace', () => {
+        let error: Error;
+        let augmented: AugmentedError;
 
-        expect(augmented.stack).to.equal(originalStack);
+        beforeEach(() => {
+          error = new Error('Test error');
+          augmented = AugmentErrorService.augmentError(error);
+        });
+
+        it('should preserve original stack', () => {
+          expect(augmented.stack).to.equal(error.stack);
+        });
       });
     });
 
     describe('when processing AugmentedError instances', () => {
-      it('should return the same instance without modification', () => {
-        const augmented = new AugmentedError('Test', ErrorKind.WARNING, 'warning');
-        const result = AugmentErrorService.augmentError(augmented);
+      describe('when augmented error is passed', () => {
+        let augmented: AugmentedError;
+        let result: AugmentedError;
 
-        expect(result).to.equal(augmented);
+        beforeEach(() => {
+          augmented = new AugmentedError('Test', ErrorKind.WARNING, 'warning');
+          result = AugmentErrorService.augmentError(augmented);
+        });
+
+        it('should return same instance without modification', () => {
+          expect(result).to.equal(augmented);
+        });
       });
     });
 
     describe('when processing non-Error objects', () => {
-      it('should handle string errors', () => {
-        const augmented = AugmentErrorService.augmentError('String error');
+      describe('when error is a string', () => {
+        let augmented: AugmentedError;
 
-        expect(augmented.message).to.equal('An unknown error occurred');
-        expect(augmented.details).to.equal('String error');
-        expect(augmented.errorKind).to.equal(ErrorKind.ERROR);
+        beforeEach(() => {
+          augmented = AugmentErrorService.augmentError('String error');
+        });
+
+        it('should use string as message', () => {
+          expect(augmented.message).to.equal('String error');
+        });
+
+        it('should use string as details', () => {
+          expect(augmented.details).to.equal('String error');
+        });
+
+        it('should set errorKind to ERROR', () => {
+          expect(augmented.errorKind).to.equal(ErrorKind.ERROR);
+        });
       });
 
-      it('should handle object errors', () => {
-        const errorObj = { code: 500, message: 'Server error' };
-        const augmented = AugmentErrorService.augmentError(errorObj);
+      describe('when error is an object', () => {
+        let errorObj: { code: number; message: string };
+        let augmented: AugmentedError;
 
-        expect(augmented.message).to.equal('An unknown error occurred');
-        expect(augmented.details).to.equal(JSON.stringify(errorObj));
-      });
+        beforeEach(() => {
+          errorObj = { code: 500, message: 'Server error' };
+          augmented = AugmentErrorService.augmentError(errorObj);
+        });
 
-      it('should use fallback message when provided', () => {
-        const augmented = AugmentErrorService.augmentError('test', 'Custom fallback');
+        it('should use fallback message', () => {
+          expect(augmented.message).to.equal('An unknown error occurred');
+        });
 
-        expect(augmented.message).to.equal('Custom fallback');
-        expect(augmented.details).to.equal('test');
+        it('should serialize object as details', () => {
+          expect(augmented.details).to.equal(JSON.stringify(errorObj));
+        });
+
+        it('should set errorKind to ERROR', () => {
+          expect(augmented.errorKind).to.equal(ErrorKind.ERROR);
+        });
       });
     });
   });

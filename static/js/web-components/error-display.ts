@@ -151,12 +151,17 @@ export class ErrorDisplay extends LitElement {
   }
 
   private get displayIcon(): string {
-    if (!this.augmentedError) return '⚠️';
+    if (!this.augmentedError) {
+      throw new Error('ErrorDisplay component not properly initialized: augmentedError is required');
+    }
     return AugmentErrorService.getIconString(this.augmentedError.icon);
   }
 
   private get hasDetails(): boolean {
-    return Boolean(this.augmentedError?.details && this.augmentedError.details.trim());
+    if (!this.augmentedError) {
+      throw new Error('ErrorDisplay component not properly initialized: augmentedError is required');
+    }
+    return Boolean(this.augmentedError.details && this.augmentedError.details.trim());
   }
 
   private _handleExpandToggle(): void {

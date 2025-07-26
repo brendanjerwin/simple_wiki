@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/web-components-vite';
 import { html } from 'lit';
 import './kernel-panic.js';
-import type { ProcessedError } from './error-service.js';
+import type { AugmentedError } from './augment-error-service.js';
 
 const meta: Meta = {
   title: 'Components/KernelPanic',
@@ -10,7 +10,7 @@ const meta: Meta = {
   argTypes: {
     processedError: {
       control: 'object',
-      description: 'Processed error object from ErrorService',
+      description: 'Augmented error object from AugmentErrorService',
     },
   },
   parameters: {
@@ -32,7 +32,7 @@ Technical details:
 - Component: Application core
 - Timestamp: ${new Date().toISOString()}`,
       icon: 'error'
-    } as ProcessedError,
+    } as AugmentedError,
   },
   render: (args) => html`
     <kernel-panic .processedError="${args.processedError}"></kernel-panic>
@@ -69,7 +69,7 @@ Connection details:
 - Status: Connection timeout
 - Duration: 30 seconds`,
       icon: 'network'
-    } as ProcessedError,
+    } as AugmentedError,
   },
   render: (args) => html`
     <kernel-panic .processedError="${args.processedError}"></kernel-panic>
@@ -93,7 +93,7 @@ Error: connect ECONNREFUSED 127.0.0.1:5432
     at WikiService.initialize (wiki-service.ts:78:9)
     at Application.start (app.ts:123:15)`,
       icon: 'server'
-    } as ProcessedError,
+    } as AugmentedError,
   },
   render: (args) => html`
     <kernel-panic .processedError="${args.processedError}"></kernel-panic>
@@ -113,7 +113,7 @@ Technical details:
 - Retry attempts: 3
 - Last error: CONN_REFUSED`,
       icon: 'network'
-    } as ProcessedError,
+    } as AugmentedError,
   },
   render: (args) => html`
     <kernel-panic .processedError="${args.processedError}"></kernel-panic>
@@ -136,7 +136,7 @@ Current user permissions:
 - wiki:read
 - wiki:write`,
       icon: 'permission'
-    } as ProcessedError,
+    } as AugmentedError,
   },
   render: (args) => html`
     <kernel-panic .processedError="${args.processedError}"></kernel-panic>

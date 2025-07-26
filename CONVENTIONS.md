@@ -464,14 +464,71 @@ beforeEach(async () => {
       handlerResult = rejectionHandler(mockRejectionEvent);
     });
 
-    it('should handle rejection events without throwing', () => {
+    it('should not throw', () => {
       // Assert - if we get here, no exception was thrown
       expect(handlerResult).to.exist;
     });
 
-    it('should prevent default on rejection events', () => {
+    it('should prevent default', () => {
       // Assert
       expect(preventDefaultStub).to.have.been.calledOnce;
+    });
+  });
+  ```
+
+- **Keep assertions terse**: Avoid restating the context in `it` block descriptions. The `describe` blocks provide the context, so `it` blocks should focus on the specific behavior being tested.
+
+  **Bad:**
+
+  ```javascript
+  describe("when handling rejection events", () => {
+    // ...
+    it('should handle rejection events without throwing', () => {
+      // Restates the context from describe block
+      expect(handlerResult).to.exist;
+    });
+  });
+  ```
+
+  **Good:**
+
+  ```javascript
+  describe("when handling rejection events", () => {
+    // ...
+    it('should not throw', () => {
+      // Concise assertion focused on specific behavior
+      expect(handlerResult).to.exist;
+    });
+  });
+  ```
+
+- **No context in it blocks**: All context setup and actions should be in `describe`/`beforeEach` blocks, never in `it` blocks. If you find yourself setting up context within an `it` block, it should be moved to a `beforeEach` within an appropriately named `describe` block.
+
+  **Bad:**
+
+  ```javascript
+  it('should handle timeout errors', () => {
+    const connectError = new ConnectError('Timeout', Code.DeadlineExceeded);
+    const augmented = AugmentErrorService.augmentError(connectError);
+    
+    expect(augmented.errorKind).to.equal(ErrorKind.TIMEOUT);
+  });
+  ```
+
+  **Good:**
+
+  ```javascript
+  describe('when the error is DEADLINE_EXCEEDED', () => {
+    let connectError;
+    let augmented;
+
+    beforeEach(() => {
+      connectError = new ConnectError('Timeout', Code.DeadlineExceeded);
+      augmented = AugmentErrorService.augmentError(connectError);
+    });
+
+    it('should set errorKind to TIMEOUT', () => {
+      expect(augmented.errorKind).to.equal(ErrorKind.TIMEOUT);
     });
   });
   ```
@@ -884,6 +941,51 @@ beforeEach(async () => {
 
   // Handle the null case at the call site
   const result = user ? processUser(user) : "No user";
+  ```
+
+- **Don't Hide Improperly Initialized Components**: Components should throw errors when they are not properly initialized rather than providing fallback behavior that masks the problem. This helps identify configuration issues early rather than allowing broken components to appear functional.
+
+  **Bad:**
+
+  ```typescript
+  private get displayIcon(): string {
+    if (!this.augmentedError) return '⚠️'; // Hides initialization problem
+    return AugmentErrorService.getIconString(this.augmentedError.icon);
+  }
+  ```
+
+  **Good:**
+
+  ```typescript
+  private get displayIcon(): string {
+    if (!this.augmentedError) {
+      throw new Error('ErrorDisplay component not properly initialized: augmentedError is required');
+    }
+    return AugmentErrorService.getIconString(this.augmentedError.icon);
+  }
+  ```
+
+- **Avoid Default Behaviors Sprinkled Throughout System**: Don't scatter default fallback values throughout the codebase as this can hide real problems and make debugging difficult. Instead, ensure proper initialization and let errors surface when components are misconfigured.
+
+  **Bad:**
+
+  ```typescript
+  // Multiple components providing their own defaults
+  private get hasDetails(): boolean {
+    return Boolean(this.augmentedError?.details || 'No details available');
+  }
+  ```
+
+  **Good:**
+
+  ```typescript
+  // Force proper initialization, let errors surface
+  private get hasDetails(): boolean {
+    if (!this.augmentedError) {
+      throw new Error('Component not properly initialized');
+    }
+    return Boolean(this.augmentedError.details && this.augmentedError.details.trim());
+  }
   ```
 
 ## Exception Handling Strategy

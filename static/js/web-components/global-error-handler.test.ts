@@ -59,29 +59,48 @@ describe('Global Error Handler', () => {
       expect(errorHandler).to.be.a('function');
     });
 
-    it('should handle error events without throwing', () => {
-      const mockError = new Error('Test error message');
-      const mockErrorEvent = {
-        error: mockError,
-        message: 'Test error message',
-        filename: 'test.js',
-        lineno: 42,
-        colno: 10
-      } as ErrorEvent;
+    describe('when handling error events with error object', () => {
+      let mockError: Error;
+      let mockErrorEvent: ErrorEvent;
 
-      expect(() => errorHandler(mockErrorEvent)).to.not.throw();
+      beforeEach(() => {
+        mockError = new Error('Test error message');
+        mockErrorEvent = {
+          error: mockError,
+          message: 'Test error message',
+          filename: 'test.js',
+          lineno: 42,
+          colno: 10
+        } as ErrorEvent;
+
+        errorHandler(mockErrorEvent);
+      });
+
+      it('should not throw', () => {
+        // If we get here, errorHandler didn't throw
+        expect(true).to.be.true;
+      });
     });
 
-    it('should handle errors without error object', () => {
-      const mockErrorEvent = {
-        error: null,
-        message: 'Script error',
-        filename: 'unknown',
-        lineno: 0,
-        colno: 0
-      } as ErrorEvent;
+    describe('when handling errors without error object', () => {
+      let mockErrorEvent: ErrorEvent;
 
-      expect(() => errorHandler(mockErrorEvent)).to.not.throw();
+      beforeEach(() => {
+        mockErrorEvent = {
+          error: null,
+          message: 'Script error',
+          filename: 'unknown',
+          lineno: 0,
+          colno: 0
+        } as ErrorEvent;
+
+        errorHandler(mockErrorEvent);
+      });
+
+      it('should not throw', () => {
+        // If we get here, errorHandler didn't throw
+        expect(true).to.be.true;
+      });
     });
   });
 
@@ -99,28 +118,31 @@ describe('Global Error Handler', () => {
       expect(rejectionHandler).to.be.a('function');
     });
 
-    it('should handle rejection events', () => {
-      const mockError = new Error('Promise rejection error');
-      const preventDefaultStub = stub();
-      const mockRejectionEvent = {
-        reason: mockError,
-        preventDefault: preventDefaultStub
-      } as unknown as PromiseRejectionEvent;
+  describe('when handling rejection events', () => {
+    let mockError: Error;
+    let preventDefaultStub: SinonStub;
+    let mockRejectionEvent: PromiseRejectionEvent;
 
-      expect(() => rejectionHandler(mockRejectionEvent)).to.not.throw();
-    });
-
-    it('should prevent default on rejection events', () => {
-      const mockError = new Error('Promise rejection error');
-      const preventDefaultStub = stub();
-      const mockRejectionEvent = {
+    beforeEach(() => {
+      mockError = new Error('Promise rejection error');
+      preventDefaultStub = stub();
+      mockRejectionEvent = {
         reason: mockError,
         preventDefault: preventDefaultStub
       } as unknown as PromiseRejectionEvent;
 
       rejectionHandler(mockRejectionEvent);
+    });
+
+    it('should not throw', () => {
+      // If we get here, rejectionHandler didn't throw
+      expect(true).to.be.true;
+    });
+
+    it('should prevent default', () => {
       expect(preventDefaultStub).to.have.been.calledOnce;
     });
+  });
 
     it('should handle non-Error rejection reasons', () => {
       const preventDefaultStub = stub();
