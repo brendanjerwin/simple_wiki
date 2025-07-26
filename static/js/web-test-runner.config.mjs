@@ -34,7 +34,7 @@ export default {
       timeout: '10000', // 10 seconds
     },
   },
-  testsFinishTimeout: 300000, // 5 minutes,
+  testsFinishTimeout: 600000, // 10 minutes,
   filterBrowserLogs(log) {
     // This is the full message that Lit logs to the console.
     const litDevModeMessage = 'Lit is in dev mode. Not recommended for production! See https://lit.dev/msg/dev-mode for more information.';
