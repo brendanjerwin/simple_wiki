@@ -1,4 +1,4 @@
-# ADR-0001: Error Handling Architecture
+# ADR-0004: Error Handling Architecture
 
 ## Status
 
@@ -9,6 +9,7 @@ Accepted
 The application needs a consistent and robust error handling strategy that provides a good user experience while maintaining system stability. Previously, error handling was scattered throughout the codebase with inconsistent presentation and no clear strategy for when to catch versus when to let errors bubble up.
 
 Key challenges addressed:
+
 - Inconsistent error presentation across components
 - No clear strategy for recoverable vs. unrecoverable errors
 - Error handling logic mixed into UI components
@@ -21,12 +22,14 @@ We will implement a **selective exception handling architecture** with the follo
 ### 1. Only Catch Exceptions You Can Meaningfully Handle
 
 **Catch exceptions when:**
+
 - You can provide meaningful user feedback and allow retry (e.g., network requests)
 - You can gracefully degrade functionality while keeping the app usable
 - You can recover automatically or provide alternative behavior
 - The error is expected and part of normal operation (e.g., validation errors)
 
 **Don't catch exceptions when:**
+
 - You're just logging and re-throwing without handling
 - The error represents a programming bug that should be fixed
 - You can't provide any meaningful recovery or user action
@@ -35,6 +38,7 @@ We will implement a **selective exception handling architecture** with the follo
 ### 2. Global Unhandled Error Handling
 
 All unhandled errors bubble up to a global error handler that:
+
 - Catches all unhandled JavaScript errors and promise rejections
 - Displays a "kernel panic" screen with error details
 - Prevents users from continuing to work in an undefined system state
@@ -43,6 +47,7 @@ All unhandled errors bubble up to a global error handler that:
 ### 3. Consistent Error Presentation
 
 All errors use a unified presentation system:
+
 - **AugmentErrorService**: Augments errors with classification metadata (ErrorKind, icon)
 - **ErrorDisplay Component**: Provides consistent visual presentation with expand/collapse
 - **Structured Error Types**: AugmentedError extends Error with additional metadata
@@ -50,8 +55,9 @@ All errors use a unified presentation system:
 ### 4. Error Classification System
 
 Errors are classified using an ErrorKind enum:
+
 - NETWORK: Connectivity and communication errors
-- PERMISSION: Authorization and authentication errors  
+- PERMISSION: Authorization and authentication errors
 - VALIDATION: Input validation and data format errors
 - NOT_FOUND: Missing resources or files
 - TIMEOUT: Performance and deadline exceeded errors
@@ -73,7 +79,7 @@ Each kind maps to appropriate visual icons for quick user recognition.
 ### Error Flow
 
 ```
-Error Occurs → Can it be handled locally? 
+Error Occurs → Can it be handled locally?
 ├─ Yes → Catch, augment with AugmentErrorService, show in ErrorDisplay
 └─ No → Let bubble → Global handler → Kernel panic screen
 ```
@@ -81,6 +87,7 @@ Error Occurs → Can it be handled locally?
 ### Usage Examples
 
 **Recoverable Error (Handle Locally):**
+
 ```typescript
 try {
   await this.client.saveDocument();
@@ -91,6 +98,7 @@ try {
 ```
 
 **Unrecoverable Error (Let Bubble):**
+
 ```typescript
 private processData(data: unknown): ProcessedData {
   if (!this.isValidData(data)) {
@@ -112,17 +120,20 @@ private processData(data: unknown): ProcessedData {
 ## Consequences
 
 ### Positive
+
 - Consistent error handling patterns across the application
 - Clear separation between recoverable and unrecoverable errors
 - Better user feedback for operational issues
 - Immediate visibility of programming errors through kernel panics
 
 ### Negative
+
 - More upfront complexity in error handling setup
 - Developers must think carefully about whether to catch errors
 - Kernel panic screens may seem "dramatic" for some errors
 
 ### Risks Mitigated
+
 - Users continuing to work after system errors
 - Inconsistent error presentation across components
 - Hidden bugs due to overly broad exception catching
@@ -131,6 +142,7 @@ private processData(data: unknown): ProcessedData {
 ## Compliance with Design Principles
 
 This architecture aligns with our core design principles:
+
 - **Defensive Programming**: Errors are handled gracefully or surfaced clearly
 - **Fail Fast**: Unrecoverable errors immediately surface as kernel panics
 - **Single Responsibility**: Error processing separated from UI components
@@ -141,3 +153,4 @@ This architecture aligns with our core design principles:
 - Use of Lit Element web components for UI consistency
 - Global error handler implementation for unhandled exceptions
 - AugmentedError as extension of standard Error class
+
