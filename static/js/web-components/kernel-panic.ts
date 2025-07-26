@@ -147,7 +147,7 @@ export class KernelPanic extends LitElement {
     error-display .error-details-content {
       background: #1a1a1a !important;
       border: 1px solid #444 !important;
-      color: #ccc !important;
+      color: #000 !important;
     }
 
     error-display .expand-button {
