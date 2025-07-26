@@ -315,6 +315,26 @@ Do not run them directly with `npx`, `npm`, `bun`, `bunx`, `go test`, etc. Use t
   devbox run fe:test
   ```
 
+  To run a single frontend test file, pass the path to the file as an argument. The script will automatically handle the `static/js/` prefix if present:
+
+  ```bash
+  devbox run fe:test -- <path_to_test_file>
+  ```
+
+  For example:
+
+  ```bash
+  devbox run fe:test -- static/js/web-components/error-display.test.ts
+  ```
+
+  Or:
+
+  ```bash
+  devbox run fe:test -- web-components/error-display.test.ts
+  ```
+
+  
+
 - **Go Tests**:
 
   To run all Go tests:
