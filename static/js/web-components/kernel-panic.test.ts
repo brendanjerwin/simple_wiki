@@ -1,5 +1,6 @@
 import { html, fixture, expect } from '@open-wc/testing';
-import { KernelPanic } from './kernel-panic.js';
+import { KernelPanic, showKernelPanic } from './kernel-panic.js';
+import { AugmentErrorService, AugmentedError, ErrorKind } from './augment-error-service.js';
 
 describe('KernelPanic', () => {
   let el: KernelPanic;
@@ -27,12 +28,8 @@ describe('KernelPanic', () => {
       el = await fixture(html`<kernel-panic></kernel-panic>`);
     });
 
-    it('should have empty message by default', () => {
-      expect(el.message).to.equal('');
-    });
-
-    it('should have no error by default', () => {
-      expect(el.error).to.be.null;
+    it('should have no augmentedError by default', () => {
+      expect(el.augmentedError).to.be.null;
     });
 
     it('should render header with skull and title', () => {
@@ -57,37 +54,6 @@ describe('KernelPanic', () => {
     });
   });
 
-  describe('when message is provided', () => {
-    beforeEach(async () => {
-      el = await fixture(html`<kernel-panic message="Something went wrong"></kernel-panic>`);
-    });
-
-    it('should display the message', () => {
-      const messageEl = el.shadowRoot?.querySelector('.message');
-      expect(messageEl).to.exist;
-      expect(messageEl?.textContent).to.equal('Something went wrong');
-    });
-  });
-
-  describe('when error is provided', () => {
-    beforeEach(async () => {
-      const testError = new Error('Test error message');
-      testError.stack = 'Error: Test error message\n    at test:1:1';
-      el = await fixture(html`<kernel-panic .error="${testError}"></kernel-panic>`);
-    });
-
-    it('should display error details section', () => {
-      const errorDetails = el.shadowRoot?.querySelector('.error-details');
-      expect(errorDetails).to.exist;
-    });
-
-    it('should display error stack trace', () => {
-      const errorStack = el.shadowRoot?.querySelector('.error-stack');
-      expect(errorStack).to.exist;
-      expect(errorStack?.textContent).to.include('Test error message');
-    });
-  });
-
   describe('when refresh button is clicked', () => {
     beforeEach(async () => {
       el = await fixture(html`<kernel-panic></kernel-panic>`);
@@ -105,6 +71,72 @@ describe('KernelPanic', () => {
       
       // Verify button is clickable
       expect(button.disabled).to.be.false;
+    });
+  });
+
+  describe('when augmentedError is provided', () => {
+    beforeEach(async () => {
+      const originalError = new Error('System failure detected');
+      originalError.stack = 'Stack trace: Error at line 42\nCaused by memory leak';
+      const augmentedError = new AugmentedError(
+        originalError,
+        ErrorKind.ERROR,
+        'error'
+      );
+      el = await fixture(html`<kernel-panic .augmentedError="${augmentedError}"></kernel-panic>`);
+    });
+
+    it('should have augmentedError property', () => {
+      expect(el.augmentedError).to.exist;
+      expect(el.augmentedError?.message).to.equal('System failure detected');
+    });
+
+    it('should display the error using error-display component', () => {
+      const errorDisplay = el.shadowRoot?.querySelector('error-display');
+      expect(errorDisplay).to.exist;
+      expect(errorDisplay?.augmentedError).to.equal(el.augmentedError);
+    });
+  });
+  
+  describe('when no augmentedError is provided', () => {
+    beforeEach(async () => {
+      el = await fixture(html`<kernel-panic></kernel-panic>`);
+    });
+
+    it('should not render error-display component', () => {
+      const errorDisplay = el.shadowRoot?.querySelector('error-display');
+      expect(errorDisplay).to.not.exist;
+    });
+  });
+});
+
+describe('showKernelPanic function', () => {
+  beforeEach(() => {
+    // Clean up any existing kernel-panic elements
+    document.querySelectorAll('kernel-panic').forEach(el => el.remove());
+  });
+
+  afterEach(() => {
+    // Clean up created elements
+    document.querySelectorAll('kernel-panic').forEach(el => el.remove());
+  });
+
+  describe('when called with augmented error', () => {
+    beforeEach(() => {
+      const originalError = new Error('Test system error');
+      const augmentedError = AugmentErrorService.augmentError(originalError);
+      showKernelPanic(augmentedError);
+    });
+
+    it('should create a kernel-panic element in document body', () => {
+      const kernelPanicElement = document.querySelector('kernel-panic');
+      expect(kernelPanicElement).to.exist;
+    });
+
+    it('should set augmentedError on the created element', () => {
+      const kernelPanicElement = document.querySelector('kernel-panic') as HTMLElement & { augmentedError: AugmentedError };
+      expect(kernelPanicElement.augmentedError).to.exist;
+      expect(kernelPanicElement.augmentedError.message).to.equal('Test system error');
     });
   });
 });

@@ -6,9 +6,9 @@ import { Frontmatter } from '../gen/api/v1/frontmatter_connect.js';
 import { GetFrontmatterRequest, GetFrontmatterResponse, ReplaceFrontmatterRequest } from '../gen/api/v1/frontmatter_pb.js';
 import { sharedStyles, foundationCSS, dialogCSS, responsiveCSS, buttonCSS } from './shared-styles.js';
 import './frontmatter-value-section.js';
-import './kernel-panic.js';
-import { showKernelPanic } from './kernel-panic.js';
 import { showToastAfter } from './toast-message.js';
+import './error-display.js';
+import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
 
 /**
  * FrontmatterEditorDialog - A modal dialog for editing page frontmatter metadata
@@ -19,7 +19,7 @@ import { showToastAfter } from './toast-message.js';
  * - `frontmatter`: The original server response containing the current frontmatter data (read-only)
  * - `workingFrontmatter`: A mutable working copy of the frontmatter data that users can edit
  * - `loading`: Indicates whether the component is fetching data from the server
- * - `error`: Contains any error message from server operations
+ * - `augmentedError`: Contains any error message from server operations
  * - `open`: Controls the visibility state of the modal dialog
  * 
  * DATA FLOW:
@@ -180,7 +180,7 @@ export class FrontmatterEditorDialog extends LitElement {
     open: { type: Boolean, reflect: true },
     loading: { state: true },
     saving: { state: true },
-    error: { state: true },
+    augmentedError: { state: true },
     frontmatter: { state: true },
     workingFrontmatter: { state: true },
   };
@@ -189,7 +189,7 @@ export class FrontmatterEditorDialog extends LitElement {
   declare open: boolean;
   declare loading: boolean;
   declare saving: boolean;
-  declare error?: string | undefined;
+  declare augmentedError?: AugmentedError | undefined;
   declare frontmatter?: GetFrontmatterResponse | undefined;
   declare workingFrontmatter?: Record<string, unknown>;
 
@@ -207,23 +207,11 @@ export class FrontmatterEditorDialog extends LitElement {
   private convertStructToPlainObject(struct?: Struct): Record<string, unknown> {
     if (!struct) return {};
 
-    try {
-      return struct.toJson() as Record<string, unknown>;
-    } catch (err) {
-      // This is an unrecoverable error - the protobuf data is corrupted
-      showKernelPanic('Failed to convert frontmatter data structure', err as Error);
-      throw err;
-    }
+    return struct.toJson() as Record<string, unknown>;
   }
 
   private convertPlainObjectToStruct(obj: Record<string, unknown>): Struct {
-    try {
-      return Struct.fromJson(obj);
-    } catch (err) {
-      // This is an unrecoverable error - the data is corrupted
-      showKernelPanic('Failed to convert plain object to protobuf Struct', err as Error);
-      throw err;
-    }
+    return Struct.fromJson(obj);
   }
 
   private updateWorkingFrontmatter(): void {
@@ -266,7 +254,7 @@ export class FrontmatterEditorDialog extends LitElement {
   public close(): void {
     this.open = false;
     this.frontmatter = undefined;
-    this.error = undefined;
+    this.augmentedError = undefined;
     this.loading = false;
     this.saving = false;
   }
@@ -276,7 +264,7 @@ export class FrontmatterEditorDialog extends LitElement {
 
     try {
       this.loading = true;
-      this.error = undefined;
+      this.augmentedError = undefined;
       this.frontmatter = undefined;
       this.workingFrontmatter = {};
       this.requestUpdate();
@@ -286,7 +274,7 @@ export class FrontmatterEditorDialog extends LitElement {
       this.frontmatter = response;
       this.updateWorkingFrontmatter();
     } catch (err) {
-      this.error = err instanceof Error ? err.message : 'Failed to load frontmatter';
+      this.augmentedError = AugmentErrorService.augmentError(err, 'loading frontmatter');
     } finally {
       this.loading = false;
       this.requestUpdate();
@@ -306,39 +294,33 @@ export class FrontmatterEditorDialog extends LitElement {
 
     try {
       this.saving = true;
-      this.error = undefined;
+      this.augmentedError = undefined;
       this.requestUpdate();
 
       const frontmatterStruct = this.convertPlainObjectToStruct(this.workingFrontmatter);
-      const request = new ReplaceFrontmatterRequest({ 
-        page: this.page, 
-        frontmatter: frontmatterStruct 
+      const request = new ReplaceFrontmatterRequest({
+        page: this.page,
+        frontmatter: frontmatterStruct
       });
-      
+
       const response = await this.client.replaceFrontmatter(request);
-      
+
       // Update the stored frontmatter with the response to reflect any server-side changes
       if (response.frontmatter) {
         this.frontmatter = new GetFrontmatterResponse({ frontmatter: response.frontmatter });
         this.updateWorkingFrontmatter();
       }
-      
+
       // Store success message and close dialog with page refresh
       showToastAfter('Frontmatter saved successfully!', 'success', 5, () => {
         // Close the dialog
         this.close();
-        
+
         // Refresh the page to show updated content with new frontmatter
         this.refreshPage();
       });
     } catch (err) {
-      if (err instanceof Error) {
-        this.error = err.message;
-      } else if (typeof err === 'string' && err.trim()) {
-        this.error = err;
-      } else {
-        this.error = 'Failed to save frontmatter';
-      }
+      this.augmentedError = AugmentErrorService.augmentError(err, 'saving frontmatter');
     } finally {
       this.saving = false;
       this.requestUpdate();
@@ -369,11 +351,10 @@ export class FrontmatterEditorDialog extends LitElement {
               <i class="fas fa-spinner fa-spin"></i>
               Loading frontmatter...
             </div>
-          ` : this.error ? html`
-            <div class="error">
-              <i class="fas fa-exclamation-triangle"></i>
-              ${this.error}
-            </div>
+          ` : this.augmentedError ? html`
+            <error-display 
+              .augmentedError=${this.augmentedError}>
+            </error-display>
           ` : html`
             ${this.renderFrontmatterEditor()}
           `}
