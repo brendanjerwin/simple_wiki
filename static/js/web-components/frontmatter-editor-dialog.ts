@@ -19,7 +19,7 @@ import { AugmentErrorService, type AugmentedError } from './augment-error-servic
  * - `frontmatter`: The original server response containing the current frontmatter data (read-only)
  * - `workingFrontmatter`: A mutable working copy of the frontmatter data that users can edit
  * - `loading`: Indicates whether the component is fetching data from the server
- * - `error`: Contains any error message from server operations
+ * - `augmentedError`: Contains any error message from server operations
  * - `open`: Controls the visibility state of the modal dialog
  * 
  * DATA FLOW:
@@ -254,8 +254,7 @@ export class FrontmatterEditorDialog extends LitElement {
   public close(): void {
     this.open = false;
     this.frontmatter = undefined;
-    this.error = undefined;
-    this.errorDetails = undefined;
+    this.augmentedError = undefined;
     this.loading = false;
     this.saving = false;
   }
@@ -299,24 +298,24 @@ export class FrontmatterEditorDialog extends LitElement {
       this.requestUpdate();
 
       const frontmatterStruct = this.convertPlainObjectToStruct(this.workingFrontmatter);
-      const request = new ReplaceFrontmatterRequest({ 
-        page: this.page, 
-        frontmatter: frontmatterStruct 
+      const request = new ReplaceFrontmatterRequest({
+        page: this.page,
+        frontmatter: frontmatterStruct
       });
-      
+
       const response = await this.client.replaceFrontmatter(request);
-      
+
       // Update the stored frontmatter with the response to reflect any server-side changes
       if (response.frontmatter) {
         this.frontmatter = new GetFrontmatterResponse({ frontmatter: response.frontmatter });
         this.updateWorkingFrontmatter();
       }
-      
+
       // Store success message and close dialog with page refresh
       showToastAfter('Frontmatter saved successfully!', 'success', 5, () => {
         // Close the dialog
         this.close();
-        
+
         // Refresh the page to show updated content with new frontmatter
         this.refreshPage();
       });
