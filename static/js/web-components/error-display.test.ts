@@ -1,5 +1,4 @@
 import { html, fixture, expect, assert } from '@open-wc/testing';
-import sinon from 'sinon';
 import { ErrorDisplay } from './error-display.js';
 import { AugmentedError, ErrorKind } from './augment-error-service.js';
 

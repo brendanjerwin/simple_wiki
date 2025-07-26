@@ -385,14 +385,21 @@ describe("My Timed Component", () => {
     clock.restore();
   });
 
-  it("should do something after 2 seconds", async () => {
-    const el = await fixture(html`<my-timed-component></my-timed-component>`);
+  describe("when waiting 2 seconds", () => {
+    let el;
 
-    // Fast-forward the clock by 2 seconds instantly
-    await clock.tickAsync(2000);
+    beforeEach(async () => {
+      // Arrange
+      el = await fixture(html`<my-timed-component></my-timed-component>`);
 
-    // Now you can assert what was supposed to happen after the delay
-    expect(el.state).to.equal("loaded");
+      // Act - fast-forward the clock by 2 seconds instantly
+      await clock.tickAsync(2000);
+    });
+
+    it("should change state to loaded", () => {
+      // Assert
+      expect(el.state).to.equal("loaded");
+    });
   });
 });
 ```
@@ -440,16 +447,32 @@ beforeEach(async () => {
   });
   ```
 
-  **Good:** Split into separate, focused tests.
+  **Good:** Split into separate, focused tests with actions in `beforeEach`.
 
   ```javascript
-  it('should handle rejection events', () => {
-    expect(() => rejectionHandler(mockRejectionEvent)).to.not.throw();
-  });
+  describe("when handling rejection events", () => {
+    let preventDefaultStub;
+    let mockRejectionEvent;
+    let handlerResult;
 
-  it('should prevent default on rejection events', () => {
-    rejectionHandler(mockRejectionEvent);
-    expect(preventDefaultStub).to.have.been.calledOnce;
+    beforeEach(() => {
+      // Arrange
+      preventDefaultStub = sinon.stub();
+      mockRejectionEvent = { preventDefault: preventDefaultStub };
+      
+      // Act
+      handlerResult = rejectionHandler(mockRejectionEvent);
+    });
+
+    it('should handle rejection events without throwing', () => {
+      // Assert - if we get here, no exception was thrown
+      expect(handlerResult).to.exist;
+    });
+
+    it('should prevent default on rejection events', () => {
+      // Assert
+      expect(preventDefaultStub).to.have.been.calledOnce;
+    });
   });
   ```
 

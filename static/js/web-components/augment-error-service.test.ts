@@ -3,8 +3,7 @@ import { ConnectError, Code } from '@connectrpc/connect';
 import { 
   AugmentErrorService, 
   AugmentedError, 
-  ErrorKind,
-  type ErrorIcon
+  ErrorKind
 } from './augment-error-service.js';
 
 describe('AugmentErrorService', () => {
