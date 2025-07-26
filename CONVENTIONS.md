@@ -678,6 +678,103 @@ beforeEach(async () => {
 
 - If a problem is due to an invalid parameter, don't just fix the parameter value. _also_ add an input validation to the function/method receiving the parameter such that the error being fixed is perfectly clear to the next developer.
 - Do not use `recover` to hide panics. A panic indicates a serious bug that should crash the program during development and be fixed. Catching panics in handlers can obfuscate the problem and make debugging difficult. Instead, write defensive code to prevent panics in the first place, for example by checking for `nil`.
+- **Never Branch Logic on Error Messages**: Error messages are intended for human consumption and should never be used for conditional logic or control flow. Use proper error types, error codes, or structured error objects instead.
+
+  **Bad (TypeScript):**
+
+  ```typescript
+  try {
+    await client.getFrontmatter(request);
+  } catch (err) {
+    // Bad: Branching on human-readable error message
+    if (err.message.includes('UNAVAILABLE')) {
+      this.error = 'Unable to connect to server';
+    } else if (err.message.includes('PERMISSION_DENIED')) {
+      this.error = 'Access denied';
+    }
+  }
+  ```
+
+  **Good (TypeScript):**
+
+  ```typescript
+  import { ConnectError, Code } from '@connectrpc/connect';
+
+  try {
+    await client.getFrontmatter(request);
+  } catch (err) {
+    // Good: Using proper error codes for logic
+    if (err instanceof ConnectError) {
+      switch (err.code) {
+        case Code.Unavailable:
+          this.error = 'Unable to connect to server';
+          break;
+        case Code.PermissionDenied:
+          this.error = 'Access denied';
+          break;
+        default:
+          this.error = 'An unexpected error occurred';
+      }
+    }
+  }
+  ```
+
+  This approach ensures that:
+  - Error logic remains stable when error message wording changes
+  - Code is more maintainable and less fragile
+  - Error handling is explicit and type-safe
+  - Error messages can be localized without breaking logic
+
+- **Centralize Error Processing**: Create dedicated error service classes to handle the conversion of technical errors (like gRPC errors) into user-friendly messages. This separates business logic from UI components and ensures consistent error presentation.
+
+  **Bad:**
+
+  ```typescript
+  // Error message generation scattered across UI components
+  class SomeComponent {
+    async loadData() {
+      try {
+        // ... API call
+      } catch (err) {
+        if (err instanceof ConnectError && err.code === Code.NotFound) {
+          this.error = 'Data not found. Please check your input.';
+        }
+        // Duplicate error handling logic in every component
+      }
+    }
+  }
+  ```
+
+  **Good:**
+
+  ```typescript
+  // Centralized error processing
+  class ErrorService {
+    static processError(error: unknown, context: string): ProcessedError {
+      if (error instanceof ConnectError) {
+        switch (error.code) {
+          case Code.NotFound:
+            return { message: 'Data not found', icon: 'not-found' };
+          // ... other cases
+        }
+      }
+      return { message: `Failed to ${context}`, icon: 'error' };
+    }
+  }
+
+  // Clean, consistent UI components
+  class SomeComponent {
+    async loadData() {
+      try {
+        // ... API call
+      } catch (err) {
+        const processedError = ErrorService.processError(err, 'load data');
+        this.error = processedError.message;
+        this.errorIcon = processedError.icon;
+      }
+    }
+  }
+  ```
 - **Never Hide Broken Functionality**: Do not make systems appear to work when they are actually broken. This includes:
 
   - Avoid showing fallback data that looks like real data when services are unavailable

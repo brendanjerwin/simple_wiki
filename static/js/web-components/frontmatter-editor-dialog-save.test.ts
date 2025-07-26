@@ -292,7 +292,8 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
       });
 
       it('should handle non-Error exceptions', () => {
-        expect(el.error).to.equal('String error');
+        expect(el.error).to.equal('Failed to save frontmatter');
+        expect(el.errorDetails).to.equal('String error');
       });
     });
 

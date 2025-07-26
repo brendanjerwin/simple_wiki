@@ -2,16 +2,6 @@ import type { Meta, StoryObj } from '@storybook/web-components-vite';
 import { html } from 'lit';
 import './error-display.js';
 
-// Custom action logger for Storybook
-const action = (name: string) => (event: Event) => {
-  console.log(`🎬 Action: ${name}`, {
-    type: event.type,
-    target: event.target,
-    detail: (event as CustomEvent).detail,
-    timestamp: new Date().toISOString()
-  });
-};
-
 const meta: Meta = {
   title: 'Components/ErrorDisplay',
   component: 'error-display',
@@ -63,7 +53,7 @@ export const CustomIcon: Story = {
   args: {
     message: 'Network connection failed',
     details: 'Could not connect to server at localhost:8050. Please check your network connection and try again.',
-    icon: '🚨',
+    icon: 'network', // Using standard icon
   },
   render: (args) => html`
     <error-display 
@@ -111,31 +101,37 @@ export const MultipleDifferentErrors: Story = {
       <error-display 
         message="Validation Error"
         details="The form contains invalid data that must be corrected before saving."
-        icon="❌">
+        icon="validation">
       </error-display>
 
       <error-display 
         message="Network Timeout"
         details="Request timed out after 30 seconds. The server may be experiencing high load."
-        icon="⏱️">
+        icon="timeout">
       </error-display>
 
       <error-display 
         message="Permission Denied"
         details="You do not have sufficient permissions to perform this action. Contact your administrator."
-        icon="🔒">
+        icon="permission">
       </error-display>
 
       <error-display 
         message="File Not Found"
-        icon="📄">
+        icon="not-found">
+      </error-display>
+
+      <error-display 
+        message="Custom Icon Example"
+        details="This error uses a custom emoji icon instead of a standard one."
+        icon="🎯">
       </error-display>
     </div>
   `,
   parameters: {
     docs: {
       description: {
-        story: 'Demonstrates various error types with different icons and detail levels.',
+        story: 'Demonstrates various error types using both standard icons (validation, timeout, permission, not-found) and custom icons (🎯). Standard icons provide consistency while custom icons allow for specific use cases.',
       },
     },
   },
@@ -168,19 +164,18 @@ The component supports:
       <error-display 
         .message=${args.message}
         .details=${args.details}
-        .icon=${args.icon}
-        @click=${action('error-display-clicked')}>
+        .icon=${args.icon}>
       </error-display>
       
       <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
-        Open the browser developer tools console (F12) to see any logged events.
+        Try the expand/collapse functionality by clicking the "Show details" button.
       </p>
     </div>
   `,
   parameters: {
     docs: {
       description: {
-        story: 'Interactive example for testing the expand/collapse functionality and accessibility features. Open the browser developer tools console to see the action logs.',
+        story: 'Interactive example for testing the expand/collapse functionality and accessibility features.',
       },
     },
   },
