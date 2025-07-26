@@ -1,12 +1,16 @@
 import { html, css, LitElement } from 'lit';
 import { property, state } from 'lit/decorators.js';
+import { foundationCSS, buttonCSS } from './shared-styles.js';
 import { AugmentedError, AugmentErrorService } from './augment-error-service.js';
 
 /**
  * ErrorDisplay - A reusable component for displaying AugmentedError instances
  */
 export class ErrorDisplay extends LitElement {
-  static override styles = css`
+  static override styles = [
+    foundationCSS,
+    buttonCSS,
+    css`
     :host {
       display: block;
       background: #fef2f2;
@@ -129,7 +133,7 @@ export class ErrorDisplay extends LitElement {
         transition: none;
       }
     }
-  `;
+  `];
 
   @property({ type: Object })
   augmentedError?: AugmentedError;
