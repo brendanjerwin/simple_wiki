@@ -139,12 +139,6 @@ export class KernelPanic extends LitElement {
     }
   `;
 
-  @property({ type: String })
-  message = '';
-
-  @property({ type: Object })
-  error: Error | null = null;
-
   @property({ type: Object })
   processedError: ProcessedError | null = null;
 
@@ -153,23 +147,6 @@ export class KernelPanic extends LitElement {
   };
 
   override render() {
-    // Determine which error data to use
-    const hasError = this.processedError || this.message || this.error;
-    
-    let errorMessage: string;
-    let errorDetails: string | undefined;
-    let errorIcon: string;
-    
-    if (this.processedError) {
-      errorMessage = this.processedError.message;
-      errorDetails = this.processedError.details;
-      errorIcon = this.processedError.icon;
-    } else {
-      errorMessage = this.message || 'An unrecoverable error has occurred';
-      errorDetails = this.error ? (this.error.stack || this.error.message) : undefined;
-      errorIcon = '💥';
-    }
-
     return html`
       <div class="header">
         <span class="skull">💀</span>
@@ -177,11 +154,11 @@ export class KernelPanic extends LitElement {
         <div class="subtitle">A critical error has occurred</div>
       </div>
 
-      ${hasError ? html`
+      ${this.processedError ? html`
         <error-display 
-          .message=${errorMessage}
-          .details=${errorDetails}
-          .icon=${errorIcon}
+          .message=${this.processedError.message}
+          .details=${this.processedError.details}
+          .icon=${this.processedError.icon}
           style="background: #330000; border-color: #660000; color: #ffcccc;">
         </error-display>
       ` : ''}

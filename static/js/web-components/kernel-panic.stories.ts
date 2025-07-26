@@ -8,14 +8,6 @@ const meta: Meta = {
   tags: ['autodocs'],
   component: 'kernel-panic',
   argTypes: {
-    message: {
-      control: 'text',
-      description: 'The error message to display (legacy)',
-    },
-    error: {
-      control: 'object',
-      description: 'The error object with stack trace (legacy)',
-    },
     processedError: {
       control: 'object',
       description: 'Processed error object from ErrorService',
@@ -31,34 +23,56 @@ type Story = StoryObj;
 
 export const Basic: Story = {
   args: {
-    message: 'Something went wrong with the application',
-    error: null,
+    processedError: {
+      message: 'Something went wrong with the application',
+      details: `A critical error has occurred and the application cannot continue.
+
+Technical details:
+- Error type: System failure
+- Component: Application core
+- Timestamp: ${new Date().toISOString()}`,
+      icon: 'error'
+    } as ProcessedError,
   },
   render: (args) => html`
-    <kernel-panic 
-      .message="${args.message}"
-      .error="${args.error}">
-    </kernel-panic>
+    <kernel-panic .processedError="${args.processedError}"></kernel-panic>
   `,
 };
 
-export const WithError: Story = {
+export const WithoutError: Story = {
+  render: () => html`
+    <kernel-panic></kernel-panic>
+  `,
+  parameters: {
+    docs: {
+      description: {
+        story: 'Shows the kernel panic component without any error data. Only the basic instructions are shown.',
+      },
+    },
+  },
+};
+
+export const WithDetailedError: Story = {
   args: {
-    message: 'Failed to save frontmatter data',
-    error: (() => {
-      const error = new Error('Network connection failed: Unable to reach server');
-      error.stack = `Error: Network connection failed: Unable to reach server
+    processedError: {
+      message: 'Failed to save frontmatter data',
+      details: `Network connection failed: Unable to reach server
+
+Error: Network connection failed: Unable to reach server
     at WikiService.saveFrontmatter (wiki-service.ts:123:15)
     at FrontmatterEditorDialog._handleSave (frontmatter-editor-dialog.ts:245:12)
-    at HTMLElement.click (frontmatter-editor-dialog.ts:180:5)`;
-      return error;
-    })(),
+    at HTMLElement.click (frontmatter-editor-dialog.ts:180:5)
+
+Connection details:
+- URL: https://api.example.com/frontmatter
+- Method: POST
+- Status: Connection timeout
+- Duration: 30 seconds`,
+      icon: 'network'
+    } as ProcessedError,
   },
   render: (args) => html`
-    <kernel-panic 
-      .message="${args.message}"
-      .error="${args.error}">
-    </kernel-panic>
+    <kernel-panic .processedError="${args.processedError}"></kernel-panic>
   `,
 };
 

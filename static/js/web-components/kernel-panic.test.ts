@@ -30,12 +30,8 @@ describe('KernelPanic', () => {
       el = await fixture(html`<kernel-panic></kernel-panic>`);
     });
 
-    it('should have empty message by default', () => {
-      expect(el.message).to.equal('');
-    });
-
-    it('should have no error by default', () => {
-      expect(el.error).to.be.null;
+    it('should have no processedError by default', () => {
+      expect(el.processedError).to.be.null;
     });
 
     it('should render header with skull and title', () => {
@@ -60,37 +56,7 @@ describe('KernelPanic', () => {
     });
   });
 
-  describe('when message is provided', () => {
-    beforeEach(async () => {
-      el = await fixture(html`<kernel-panic message="Something went wrong"></kernel-panic>`);
-    });
 
-    it('should display the message in error display component', () => {
-      const errorDisplay = el.shadowRoot?.querySelector('error-display');
-      expect(errorDisplay).to.exist;
-      expect(errorDisplay?.message).to.equal('Something went wrong');
-    });
-  });
-
-  describe('when error is provided', () => {
-    beforeEach(async () => {
-      const testError = new Error('Test error message');
-      testError.stack = 'Error: Test error message\n    at test:1:1';
-      el = await fixture(html`<kernel-panic .error="${testError}"></kernel-panic>`);
-    });
-
-    it('should display error in error display component', () => {
-      const errorDisplay = el.shadowRoot?.querySelector('error-display');
-      expect(errorDisplay).to.exist;
-    });
-
-    it('should include error details in the error display component', () => {
-      const errorDisplay = el.shadowRoot?.querySelector('error-display');
-      expect(errorDisplay).to.exist;
-      // The error details should be set as a property
-      expect(errorDisplay?.details).to.include('Test error message');
-    });
-  });
 
   describe('when refresh button is clicked', () => {
     beforeEach(async () => {
@@ -136,25 +102,14 @@ describe('KernelPanic', () => {
     });
   });
 
-  describe('when both legacy properties and processedError are provided', () => {
+  describe('when no processedError is provided', () => {
     beforeEach(async () => {
-      const processedError: ProcessedError = {
-        message: 'Processed error message',
-        details: 'Processed error details',
-        icon: 'warning'
-      };
-      el = await fixture(html`<kernel-panic 
-        message="Legacy message"
-        .error="${new Error('Legacy error')}"
-        .processedError="${processedError}"></kernel-panic>`);
+      el = await fixture(html`<kernel-panic></kernel-panic>`);
     });
 
-    it('should prefer processedError over legacy properties', () => {
+    it('should not render error-display component', () => {
       const errorDisplay = el.shadowRoot?.querySelector('error-display');
-      expect(errorDisplay).to.exist;
-      expect(errorDisplay?.message).to.equal('Processed error message');
-      expect(errorDisplay?.details).to.equal('Processed error details');
-      expect(errorDisplay?.icon).to.equal('warning');
+      expect(errorDisplay).to.not.exist;
     });
   });
 });
