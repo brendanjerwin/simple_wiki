@@ -1,7 +1,6 @@
 import { html, fixture, expect } from '@open-wc/testing';
 import { KernelPanic, showKernelPanic } from './kernel-panic.js';
 import { AugmentErrorService, AugmentedError, ErrorKind } from './augment-error-service.js';
-import * as sinon from 'sinon';
 
 describe('KernelPanic', () => {
   let el: KernelPanic;

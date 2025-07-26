@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/web-components-vite';
 import { html } from 'lit';
 import './kernel-panic.js';
-import { AugmentErrorService, ErrorKind, type AugmentedError } from './augment-error-service.js';
+import { ErrorKind, type AugmentedError } from './augment-error-service.js';
 
 const meta: Meta = {
   title: 'Components/KernelPanic',

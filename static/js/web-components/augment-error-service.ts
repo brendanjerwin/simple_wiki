@@ -71,11 +71,17 @@ export class AugmentedError extends Error {
     public readonly icon: ErrorIcon,
     public readonly failedGoalDescription?: string
   ) {
-    super(originalError.message);
+    // Delegate to original error message instead of copying
+    super();
     this.name = 'AugmentedError';
     
     // Preserve original stack trace
     this.stack = originalError.stack;
+  }
+
+  // Delegate message to original error
+  override get message(): string {
+    return this.originalError.message;
   }
 }
 
@@ -173,7 +179,21 @@ export class AugmentErrorService {
    * Augment non-Error objects by creating Error first, then augmenting
    */
   private static augmentUnknownError(error: unknown, failedGoalDescription?: string): AugmentedError {
-    const message = typeof error === 'string' ? error : 'An unknown error occurred';
+    let message: string;
+    
+    if (typeof error === 'string') {
+      message = error;
+    } else if (error !== null && error !== undefined) {
+      // Try to stringify the object to preserve information
+      try {
+        message = JSON.stringify(error);
+      } catch {
+        // If JSON.stringify fails, use toString or fallback
+        message = error.toString?.() || 'An unknown error occurred';
+      }
+    } else {
+      message = 'An unknown error occurred';
+    }
     
     // Create Error first, then augment it
     const createdError = new Error(message);

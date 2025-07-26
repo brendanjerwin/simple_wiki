@@ -264,12 +264,43 @@ describe('AugmentErrorService', () => {
           augmented = AugmentErrorService.augmentError(errorObj);
         });
 
-        it('should use fallback message', () => {
-          expect(augmented.message).to.equal('An unknown error occurred');
+        it('should use object stringification', () => {
+          expect(augmented.message).to.equal('{"code":500,"message":"Server error"}');
         });
 
         it('should set errorKind to ERROR', () => {
           expect(augmented.errorKind).to.equal(ErrorKind.ERROR);
+        });
+      });
+
+      describe('when error is an object with circular reference', () => {
+        let circularObj: Record<string, unknown>;
+        let augmented: AugmentedError;
+
+        beforeEach(() => {
+          circularObj = { name: 'CircularError' };
+          circularObj.self = circularObj;  // Create circular reference
+          augmented = AugmentErrorService.augmentError(circularObj);
+        });
+
+        it('should use toString fallback when JSON.stringify fails', () => {
+          expect(augmented.message).to.equal('[object Object]');
+        });
+
+        it('should set errorKind to ERROR', () => {
+          expect(augmented.errorKind).to.equal(ErrorKind.ERROR);
+        });
+      });
+
+      describe('when error is null or undefined', () => {
+        it('should use fallback message for null', () => {
+          const augmented = AugmentErrorService.augmentError(null);
+          expect(augmented.message).to.equal('An unknown error occurred');
+        });
+
+        it('should use fallback message for undefined', () => {
+          const augmented = AugmentErrorService.augmentError(undefined);
+          expect(augmented.message).to.equal('An unknown error occurred');
         });
       });
     });

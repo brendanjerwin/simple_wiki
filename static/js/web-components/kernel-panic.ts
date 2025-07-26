@@ -3,7 +3,6 @@ import { property } from 'lit/decorators.js';
 import { foundationCSS } from './shared-styles.js';
 import './error-display.js';
 import type { AugmentedError } from './augment-error-service.js';
-import { AugmentErrorService } from './augment-error-service.js';
 
 export class KernelPanic extends LitElement {
   static override styles = [
