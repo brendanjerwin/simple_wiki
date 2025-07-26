@@ -11,7 +11,7 @@ function timeout(ms: number, message: string) {
 
 describe('ErrorDisplay', () => {
   let el: ErrorDisplay;
-  let fetchStub: any;
+  let fetchStub: ReturnType<typeof stub>;
 
   beforeEach(async () => {
     // Prevent any potential network calls that could cause hanging
