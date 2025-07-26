@@ -1,6 +1,8 @@
 import { html, css, LitElement } from 'lit';
 import { property } from 'lit/decorators.js';
 import './error-display.js';
+import type { ProcessedError } from './error-service.js';
+import { ErrorService } from './error-service.js';
 
 export class KernelPanic extends LitElement {
   static override styles = css`
@@ -143,11 +145,31 @@ export class KernelPanic extends LitElement {
   @property({ type: Object })
   error: Error | null = null;
 
+  @property({ type: Object })
+  processedError: ProcessedError | null = null;
+
   private _handleRefresh = (): void => {
     window.location.reload();
   };
 
   override render() {
+    // Determine which error data to use
+    const hasError = this.processedError || this.message || this.error;
+    
+    let errorMessage: string;
+    let errorDetails: string | undefined;
+    let errorIcon: string;
+    
+    if (this.processedError) {
+      errorMessage = this.processedError.message;
+      errorDetails = this.processedError.details;
+      errorIcon = this.processedError.icon;
+    } else {
+      errorMessage = this.message || 'An unrecoverable error has occurred';
+      errorDetails = this.error ? (this.error.stack || this.error.message) : undefined;
+      errorIcon = '💥';
+    }
+
     return html`
       <div class="header">
         <span class="skull">💀</span>
@@ -155,11 +177,11 @@ export class KernelPanic extends LitElement {
         <div class="subtitle">A critical error has occurred</div>
       </div>
 
-      ${this.message || this.error ? html`
+      ${hasError ? html`
         <error-display 
-          .message=${this.message || 'An unrecoverable error has occurred'}
-          .details=${this.error ? (this.error.stack || this.error.message) : undefined}
-          .icon=${'💥'}
+          .message=${errorMessage}
+          .details=${errorDetails}
+          .icon=${errorIcon}
           style="background: #330000; border-color: #660000; color: #ffcccc;">
         </error-display>
       ` : ''}
@@ -188,11 +210,13 @@ customElements.define('kernel-panic', KernelPanic);
  * @param error - The error object with stack trace
  */
 export function showKernelPanic(message: string, error: Error): void {
+  const processedError = ErrorService.processError(error, 'system operation');
+  // Override the processed message with the provided context-specific message
+  processedError.message = message;
+  
   const kernelPanic = document.createElement('kernel-panic') as HTMLElement & {
-    message: string;
-    error: Error;
+    processedError: ProcessedError;
   };
-  kernelPanic.message = message;
-  kernelPanic.error = error;
+  kernelPanic.processedError = processedError;
   document.body.appendChild(kernelPanic);
 }
