@@ -346,7 +346,7 @@ describe('AugmentedError', () => {
     expect(augmented.name).to.equal('Error');
   });
 
-  describe('when preserving original error stack', () => {
+  describe('when the source Error has a stack', () => {
     let originalError: Error;
     let originalStack: string | undefined;
     let augmented: AugmentedError;
@@ -369,7 +369,7 @@ describe('AugmentedError', () => {
     });
   });
 
-  describe('when delegating to original error properties', () => {
+  describe('delegating to original error properties', () => {
     describe('when original error is TypeError', () => {
       let typeError: TypeError;
       let augmented: AugmentedError;

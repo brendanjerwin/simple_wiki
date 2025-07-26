@@ -666,6 +666,32 @@ beforeEach(async () => {
   });
   ```
 
+- **When to Use "when" in Describe Blocks**: Use "when" in `describe` blocks only to establish scenarios or conditions, not to describe features or behaviors. This creates clear test organization by separating scenarios from the behaviors being tested.
+
+  **Bad:** Using "when" for a feature/behavior
+
+  ```javascript
+  describe("when preserving original error stack", () => {
+    // This describes what the code does, not a scenario
+  });
+  ```
+
+  **Good:** Using "when" for a scenario/condition
+
+  ```javascript
+  describe("when the source Error has a stack", () => {
+    // This describes a condition/scenario
+  });
+  ```
+
+  **Good:** Describing a feature without "when"
+
+  ```javascript
+  describe("delegating to original error properties", () => {
+    // This describes a feature/behavior
+  });
+  ```
+
 - **Event Handler Wiring Tests**: For web components that add/remove event listeners, always test that the event handlers are properly wired up. Use spies to verify that `addEventListener` and `removeEventListener` are called with the correct parameters and function references.
 
   **Example:**
