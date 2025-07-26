@@ -13,19 +13,14 @@ export function setupGlobalErrorHandler(): void {
   // Handle unhandled JavaScript errors
   errorHandler = (event: ErrorEvent): void => {
     const error = event.error || new Error(event.message || 'Unknown error');
-    showKernelPanic('An unhandled error has occurred', error);
+    showKernelPanic(error);
   };
 
   // Handle unhandled promise rejections
   rejectionHandler = (event: PromiseRejectionEvent): void => {
     event.preventDefault(); // Prevent the default browser handling
     
-    // Convert the rejection reason to an Error if it's not already one
-    const error = event.reason instanceof Error 
-      ? event.reason 
-      : new Error(String(event.reason));
-    
-    showKernelPanic('An unhandled promise rejection has occurred', error);
+    showKernelPanic(event.reason);
   };
 
   // Register the handlers

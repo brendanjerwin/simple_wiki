@@ -1,7 +1,6 @@
 import { html, fixture, expect } from '@open-wc/testing';
 import { KernelPanic, showKernelPanic } from './kernel-panic.js';
-import type { ProcessedError } from './error-service.js';
-import { ErrorService } from './error-service.js';
+import { AugmentErrorService, AugmentedError, ErrorKind } from './augment-error-service.js';
 import * as sinon from 'sinon';
 
 describe('KernelPanic', () => {
@@ -30,8 +29,8 @@ describe('KernelPanic', () => {
       el = await fixture(html`<kernel-panic></kernel-panic>`);
     });
 
-    it('should have no processedError by default', () => {
-      expect(el.processedError).to.be.null;
+    it('should have no augmentedError by default', () => {
+      expect(el.augmentedError).to.be.null;
     });
 
     it('should render header with skull and title', () => {
@@ -56,8 +55,6 @@ describe('KernelPanic', () => {
     });
   });
 
-
-
   describe('when refresh button is clicked', () => {
     beforeEach(async () => {
       el = await fixture(html`<kernel-panic></kernel-panic>`);
@@ -78,31 +75,30 @@ describe('KernelPanic', () => {
     });
   });
 
-  describe('when processedError is provided', () => {
+  describe('when augmentedError is provided', () => {
     beforeEach(async () => {
-      const processedError: ProcessedError = {
-        message: 'System failure detected',
-        details: 'Stack trace: Error at line 42\nCaused by memory leak',
-        icon: 'error'
-      };
-      el = await fixture(html`<kernel-panic .processedError="${processedError}"></kernel-panic>`);
+      const augmentedError = new AugmentedError(
+        'System failure detected',
+        ErrorKind.ERROR,
+        'error',
+        'Stack trace: Error at line 42\nCaused by memory leak'
+      );
+      el = await fixture(html`<kernel-panic .augmentedError="${augmentedError}"></kernel-panic>`);
     });
 
-    it('should have processedError property', () => {
-      expect(el.processedError).to.exist;
-      expect(el.processedError.message).to.equal('System failure detected');
+    it('should have augmentedError property', () => {
+      expect(el.augmentedError).to.exist;
+      expect(el.augmentedError?.message).to.equal('System failure detected');
     });
 
     it('should display the error using error-display component', () => {
       const errorDisplay = el.shadowRoot?.querySelector('error-display');
       expect(errorDisplay).to.exist;
-      expect(errorDisplay?.message).to.equal('System failure detected');
-      expect(errorDisplay?.details).to.equal('Stack trace: Error at line 42\nCaused by memory leak');
-      expect(errorDisplay?.icon).to.equal('error');
+      expect(errorDisplay?.augmentedError).to.equal(el.augmentedError);
     });
   });
-
-  describe('when no processedError is provided', () => {
+  
+  describe('when no augmentedError is provided', () => {
     beforeEach(async () => {
       el = await fixture(html`<kernel-panic></kernel-panic>`);
     });
@@ -115,14 +111,14 @@ describe('KernelPanic', () => {
 });
 
 describe('showKernelPanic function', () => {
-  let processErrorSpy: sinon.SinonSpy;
+  let augmentErrorSpy: sinon.SinonSpy;
 
   beforeEach(() => {
     // Clean up any existing kernel-panic elements
     document.querySelectorAll('kernel-panic').forEach(el => el.remove());
     
-    // Spy on ErrorService.processError
-    processErrorSpy = sinon.spy(ErrorService, 'processError');
+    // Spy on AugmentErrorService.augmentError
+    augmentErrorSpy = sinon.spy(AugmentErrorService, 'augmentError');
   });
 
   afterEach(() => {
@@ -134,14 +130,13 @@ describe('showKernelPanic function', () => {
   describe('when called with error', () => {
     beforeEach(() => {
       const testError = new Error('Test system error');
-      showKernelPanic('Critical system failure', testError);
+      showKernelPanic(testError);
     });
 
-    it('should call ErrorService.processError with the error', () => {
-      expect(processErrorSpy).to.have.been.calledOnce;
-      expect(processErrorSpy).to.have.been.calledWith(
-        sinon.match.instanceOf(Error).and(sinon.match.has('message', 'Test system error')),
-        'system operation'
+    it('should call AugmentErrorService.augmentError with the error', () => {
+      expect(augmentErrorSpy).to.have.been.calledOnce;
+      expect(augmentErrorSpy).to.have.been.calledWith(
+        sinon.match.instanceOf(Error).and(sinon.match.has('message', 'Test system error'))
       );
     });
 
@@ -150,10 +145,10 @@ describe('showKernelPanic function', () => {
       expect(kernelPanicElement).to.exist;
     });
 
-    it('should set processedError on the created element', () => {
-      const kernelPanicElement = document.querySelector('kernel-panic') as HTMLElement & { processedError: ProcessedError };
-      expect(kernelPanicElement.processedError).to.exist;
-      expect(kernelPanicElement.processedError.message).to.equal('Critical system failure');
+    it('should set augmentedError on the created element', () => {
+      const kernelPanicElement = document.querySelector('kernel-panic') as HTMLElement & { augmentedError: AugmentedError };
+      expect(kernelPanicElement.augmentedError).to.exist;
+      expect(kernelPanicElement.augmentedError.message).to.equal('Test system error');
     });
   });
 });

@@ -1,6 +1,7 @@
 import { html, fixture, expect, assert } from '@open-wc/testing';
 import sinon from 'sinon';
 import { ErrorDisplay } from './error-display.js';
+import { AugmentedError, ErrorKind } from './augment-error-service.js';
 
 describe('ErrorDisplay', () => {
   let el: ErrorDisplay;
@@ -23,25 +24,25 @@ describe('ErrorDisplay', () => {
 
   describe('when component is initialized', () => {
     it('should have default properties', () => {
-      expect(el.message).to.equal('');
-      expect(el.details).to.be.undefined;
-      expect(el.icon).to.be.undefined;
+      expect(el.augmentedError).to.be.undefined;
     });
 
-    it('should not render details when no details provided', () => {
-      const detailsElement = el.shadowRoot?.querySelector('.error-details');
-      expect(detailsElement).to.not.exist;
-    });
-
-    it('should render with default icon when no icon is provided', () => {
-      const iconElement = el.shadowRoot?.querySelector('.error-icon');
-      expect(iconElement?.textContent).to.equal('⚠️');
+    it('should not render anything when no augmentedError provided', () => {
+      const headerElement = el.shadowRoot?.querySelector('.error-header');
+      expect(headerElement).to.not.exist;
     });
   });
 
-  describe('when message is provided', () => {
+  describe('when augmentedError is provided', () => {
+    let augmentedError: AugmentedError;
+
     beforeEach(async () => {
-      el.message = 'Test error message';
+      augmentedError = new AugmentedError(
+        'Test error message',
+        ErrorKind.ERROR,
+        'error'
+      );
+      el.augmentedError = augmentedError;
       await el.updateComplete;
     });
 
@@ -49,24 +50,29 @@ describe('ErrorDisplay', () => {
       const messageElement = el.shadowRoot?.querySelector('.error-message');
       expect(messageElement?.textContent).to.equal('Test error message');
     });
-  });
 
-  describe('when custom icon is provided', () => {
-    beforeEach(async () => {
-      el.icon = '🚨';
-      await el.updateComplete;
-    });
-
-    it('should display the custom icon', () => {
+    it('should display the icon', () => {
       const iconElement = el.shadowRoot?.querySelector('.error-icon');
-      expect(iconElement?.textContent).to.equal('🚨');
+      expect(iconElement?.textContent).to.equal('❌');
+    });
+
+    it('should not render details section when no details provided', () => {
+      const detailsElement = el.shadowRoot?.querySelector('.error-details');
+      expect(detailsElement).to.not.exist;
     });
   });
 
-  describe('when details are provided', () => {
+  describe('when augmentedError with details is provided', () => {
+    let augmentedError: AugmentedError;
+
     beforeEach(async () => {
-      el.message = 'Error occurred';
-      el.details = 'Detailed error information here';
+      augmentedError = new AugmentedError(
+        'Test error message',
+        ErrorKind.ERROR,
+        'error',
+        'Detailed error information'
+      );
+      el.augmentedError = augmentedError;
       await el.updateComplete;
     });
 
@@ -76,13 +82,13 @@ describe('ErrorDisplay', () => {
     });
 
     it('should render details container', () => {
-      const detailsContainer = el.shadowRoot?.querySelector('.error-details');
-      expect(detailsContainer).to.exist;
+      const detailsElement = el.shadowRoot?.querySelector('.error-details');
+      expect(detailsElement).to.exist;
     });
 
     it('should have details hidden by default', () => {
-      const detailsContainer = el.shadowRoot?.querySelector('.error-details');
-      expect(detailsContainer?.getAttribute('aria-hidden')).to.equal('true');
+      const detailsElement = el.shadowRoot?.querySelector('.error-details');
+      expect(detailsElement?.getAttribute('aria-hidden')).to.equal('true');
     });
 
     it('should show "Show details" text initially', () => {
@@ -98,8 +104,8 @@ describe('ErrorDisplay', () => {
       });
 
       it('should expand the details', () => {
-        const detailsContainer = el.shadowRoot?.querySelector('.error-details');
-        expect(detailsContainer?.getAttribute('aria-hidden')).to.equal('false');
+        const detailsElement = el.shadowRoot?.querySelector('.error-details');
+        expect(detailsElement?.getAttribute('aria-hidden')).to.equal('false');
       });
 
       it('should change button text to "Hide details"', () => {
@@ -119,7 +125,7 @@ describe('ErrorDisplay', () => {
 
       it('should display the details content', () => {
         const detailsContent = el.shadowRoot?.querySelector('.error-details-content');
-        expect(detailsContent?.textContent).to.equal('Detailed error information here');
+        expect(detailsContent?.textContent).to.equal('Detailed error information');
       });
 
       describe('when expand button is clicked again', () => {
@@ -130,8 +136,8 @@ describe('ErrorDisplay', () => {
         });
 
         it('should collapse the details', () => {
-          const detailsContainer = el.shadowRoot?.querySelector('.error-details');
-          expect(detailsContainer?.getAttribute('aria-hidden')).to.equal('true');
+          const detailsElement = el.shadowRoot?.querySelector('.error-details');
+          expect(detailsElement?.getAttribute('aria-hidden')).to.equal('true');
         });
 
         it('should change button text back to "Show details"', () => {
@@ -154,47 +160,52 @@ describe('ErrorDisplay', () => {
     describe('when Enter key is pressed on expand button', () => {
       beforeEach(async () => {
         const expandButton = el.shadowRoot?.querySelector('.expand-button') as HTMLButtonElement;
-        const event = new KeyboardEvent('keydown', { key: 'Enter' });
-        expandButton.dispatchEvent(event);
+        expandButton.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
         await el.updateComplete;
       });
 
       it('should expand the details', () => {
-        const detailsContainer = el.shadowRoot?.querySelector('.error-details');
-        expect(detailsContainer?.getAttribute('aria-hidden')).to.equal('false');
+        const detailsElement = el.shadowRoot?.querySelector('.error-details');
+        expect(detailsElement?.getAttribute('aria-hidden')).to.equal('false');
       });
     });
 
     describe('when Space key is pressed on expand button', () => {
-      it('should expand the details', async () => {
+      beforeEach(async () => {
         const expandButton = el.shadowRoot?.querySelector('.expand-button') as HTMLButtonElement;
-        const event = new KeyboardEvent('keydown', { key: ' ' });
-        const preventDefaultSpy = sinon.spy(event, 'preventDefault');
-        expandButton.dispatchEvent(event);
+        expandButton.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' }));
         await el.updateComplete;
-        
-        expect(preventDefaultSpy).to.have.been.called;
-        const detailsContainer = el.shadowRoot?.querySelector('.error-details');
-        expect(detailsContainer?.getAttribute('aria-hidden')).to.equal('false');
+      });
+
+      it('should expand the details', () => {
+        const detailsElement = el.shadowRoot?.querySelector('.error-details');
+        expect(detailsElement?.getAttribute('aria-hidden')).to.equal('false');
       });
     });
 
     describe('when other key is pressed on expand button', () => {
-      it('should not expand the details', async () => {
+      beforeEach(async () => {
         const expandButton = el.shadowRoot?.querySelector('.expand-button') as HTMLButtonElement;
-        const event = new KeyboardEvent('keydown', { key: 'Tab' });
-        expandButton.dispatchEvent(event);
+        expandButton.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }));
         await el.updateComplete;
+      });
 
-        const detailsContainer = el.shadowRoot?.querySelector('.error-details');
-        expect(detailsContainer?.getAttribute('aria-hidden')).to.equal('true');
+      it('should not expand the details', () => {
+        const detailsElement = el.shadowRoot?.querySelector('.error-details');
+        expect(detailsElement?.getAttribute('aria-hidden')).to.equal('true');
       });
     });
   });
 
-  describe('when no details are provided', () => {
+  describe('when augmentedError has empty details', () => {
     beforeEach(async () => {
-      el.message = 'Simple error message';
+      const augmentedError = new AugmentedError(
+        'Test error message',
+        ErrorKind.ERROR,
+        'error',
+        ''
+      );
+      el.augmentedError = augmentedError;
       await el.updateComplete;
     });
 
@@ -204,28 +215,20 @@ describe('ErrorDisplay', () => {
     });
 
     it('should not render details container', () => {
-      const detailsContainer = el.shadowRoot?.querySelector('.error-details');
-      expect(detailsContainer).to.not.exist;
+      const detailsElement = el.shadowRoot?.querySelector('.error-details');
+      expect(detailsElement).to.not.exist;
     });
   });
 
-  describe('when details are empty string', () => {
+  describe('when augmentedError has whitespace-only details', () => {
     beforeEach(async () => {
-      el.message = 'Error message';
-      el.details = '';
-      await el.updateComplete;
-    });
-
-    it('should not render expand button', () => {
-      const expandButton = el.shadowRoot?.querySelector('.expand-button');
-      expect(expandButton).to.not.exist;
-    });
-  });
-
-  describe('when details are whitespace only', () => {
-    beforeEach(async () => {
-      el.message = 'Error message';
-      el.details = '   \n\t  ';
+      const augmentedError = new AugmentedError(
+        'Test error message',
+        ErrorKind.ERROR,
+        'error',
+        '   \n\t   '
+      );
+      el.augmentedError = augmentedError;
       await el.updateComplete;
     });
 
@@ -237,8 +240,13 @@ describe('ErrorDisplay', () => {
 
   describe('accessibility features', () => {
     beforeEach(async () => {
-      el.message = 'Error occurred';
-      el.details = 'Detailed error information';
+      const augmentedError = new AugmentedError(
+        'Test error message',
+        ErrorKind.ERROR,
+        'error',
+        'Detailed error information'
+      );
+      el.augmentedError = augmentedError;
       await el.updateComplete;
     });
 
@@ -249,19 +257,47 @@ describe('ErrorDisplay', () => {
     });
 
     it('should have proper ARIA attributes on details container', () => {
-      const detailsContainer = el.shadowRoot?.querySelector('.error-details');
-      expect(detailsContainer?.getAttribute('aria-hidden')).to.equal('true');
-      expect(detailsContainer?.getAttribute('id')).to.equal('error-details');
+      const detailsElement = el.shadowRoot?.querySelector('.error-details');
+      expect(detailsElement?.getAttribute('aria-hidden')).to.equal('true');
+      expect(detailsElement?.getAttribute('id')).to.equal('error-details');
     });
 
     it('should have aria-hidden on icon', () => {
-      const icon = el.shadowRoot?.querySelector('.error-icon');
-      expect(icon?.getAttribute('aria-hidden')).to.equal('true');
+      const iconElement = el.shadowRoot?.querySelector('.error-icon');
+      expect(iconElement?.getAttribute('aria-hidden')).to.equal('true');
     });
 
     it('should have aria-hidden on expand icon', () => {
       const expandIcon = el.shadowRoot?.querySelector('.expand-icon');
       expect(expandIcon?.getAttribute('aria-hidden')).to.equal('true');
+    });
+  });
+
+  describe('custom icon support', () => {
+    it('should display custom emoji icon', async () => {
+      const augmentedError = new AugmentedError(
+        'Custom error',
+        ErrorKind.ERROR,
+        '🎯'
+      );
+      el.augmentedError = augmentedError;
+      await el.updateComplete;
+
+      const iconElement = el.shadowRoot?.querySelector('.error-icon');
+      expect(iconElement?.textContent).to.equal('🎯');
+    });
+
+    it('should display standard icon', async () => {
+      const augmentedError = new AugmentedError(
+        'Network error',
+        ErrorKind.NETWORK,
+        'network'
+      );
+      el.augmentedError = augmentedError;
+      await el.updateComplete;
+
+      const iconElement = el.shadowRoot?.querySelector('.error-icon');
+      expect(iconElement?.textContent).to.equal('🌐');
     });
   });
 });

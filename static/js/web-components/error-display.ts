@@ -1,47 +1,14 @@
 import { html, css, LitElement } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import { foundationCSS, buttonCSS } from './shared-styles.js';
+import { AugmentedError, AugmentErrorService } from './augment-error-service.js';
 
 /**
- * Standard error icons for common error types
- */
-export type StandardErrorIcon = 
-  | 'warning'      // ⚠️ - General warnings and errors
-  | 'error'        // ❌ - Critical errors and failures  
-  | 'network'      // 🌐 - Network and connectivity errors
-  | 'permission'   // 🔒 - Permission and authorization errors
-  | 'timeout'      // ⏱️ - Timeout and performance errors
-  | 'not-found'    // 📄 - Missing files or resources
-  | 'validation'   // ✏️ - Input validation errors
-  | 'server'       // 🚨 - Server and system errors
-  ;
-
-/**
- * Icon type can be a standard icon or any custom string (emoji, unicode, etc.)
- */
-export type ErrorIcon = StandardErrorIcon | string;
-
-/**
- * Map of standard icons to their emoji representations
- */
-const STANDARD_ICONS: Record<StandardErrorIcon, string> = {
-  'warning': '⚠️',
-  'error': '❌', 
-  'network': '🌐',
-  'permission': '🔒',
-  'timeout': '⏱️',
-  'not-found': '📄',
-  'validation': '✏️',
-  'server': '🚨',
-};
-
-/**
- * ErrorDisplay - A reusable component for displaying errors with optional details
+ * ErrorDisplay - A reusable component for displaying AugmentedError instances
  * 
  * Features:
- * - Displays a user-friendly error message with an icon
+ * - Displays errors with icons and messages
  * - Optional detailed error information that can be expanded/collapsed
- * - Customizable icon (defaults based on error type)
  * - Consistent styling that indicates error state
  * - Smooth animations for expand/collapse
  * - Keyboard accessible
@@ -108,12 +75,15 @@ export class ErrorDisplay extends LitElement {
         background: #fee2e2;
         border: 1px solid #fca5a5;
         border-radius: 4px;
-        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
         font-size: 13px;
         line-height: 1.4;
         white-space: pre-wrap;
         word-wrap: break-word;
         overflow-wrap: break-word;
+      }
+
+      .error-details-content.monospace-font {
+        /* Inherits monospace font from foundationCSS */
       }
 
       .expand-button {
@@ -167,49 +137,26 @@ export class ErrorDisplay extends LitElement {
   ];
 
   static override properties = {
-    message: { type: String },
-    details: { type: String },
-    icon: { type: String },
+    augmentedError: { type: Object },
   };
 
-  @property({ type: String })
-  declare message: string;
-
-  @property({ type: String })
-  declare details?: string;
-
-  @property({ type: String })
-  declare icon?: ErrorIcon;
+  @property({ type: Object })
+  declare augmentedError?: AugmentedError;
 
   @state()
   private expanded = false;
 
-  private displayIcon: string;
-
   constructor() {
     super();
-    this.message = '';
-    this.displayIcon = STANDARD_ICONS.warning; // Default to warning icon
   }
 
-  protected override willUpdate(changedProperties: Map<string | number | symbol, unknown>): void {
-    super.willUpdate(changedProperties);
-    
-    if (changedProperties.has('icon')) {
-      // If icon is a standard icon key, use the corresponding emoji
-      // Otherwise, use the icon value directly as custom icon
-      if (this.icon && this.icon in STANDARD_ICONS) {
-        this.displayIcon = STANDARD_ICONS[this.icon as StandardErrorIcon];
-      } else if (this.icon) {
-        this.displayIcon = this.icon;
-      } else {
-        this.displayIcon = STANDARD_ICONS.warning;
-      }
-    }
+  private get displayIcon(): string {
+    if (!this.augmentedError) return '⚠️';
+    return AugmentErrorService.getIconString(this.augmentedError.icon);
   }
 
   private get hasDetails(): boolean {
-    return Boolean(this.details && this.details.trim());
+    return Boolean(this.augmentedError?.details && this.augmentedError.details.trim());
   }
 
   private _handleExpandToggle(): void {
@@ -224,11 +171,15 @@ export class ErrorDisplay extends LitElement {
   }
 
   override render() {
+    if (!this.augmentedError) {
+      return html``;
+    }
+
     return html`
       <div class="error-header">
         <span class="error-icon" aria-hidden="true">${this.displayIcon}</span>
         <div class="error-content">
-          <div class="error-message">${this.message}</div>
+          <div class="error-message">${this.augmentedError.message}</div>
           
           ${this.hasDetails ? html`
             <button
@@ -247,7 +198,7 @@ export class ErrorDisplay extends LitElement {
               class="error-details"
               aria-hidden="${!this.expanded}"
             >
-              <div class="error-details-content">${this.details}</div>
+              <div class="error-details-content monospace-font">${this.augmentedError.details}</div>
             </div>
           ` : ''}
         </div>

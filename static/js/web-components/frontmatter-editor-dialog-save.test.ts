@@ -159,7 +159,7 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
       });
 
       it('should clear any previous error', () => {
-        expect(el.error).to.be.undefined;
+        expect(el.augmentedError).to.be.undefined;
       });
 
       describe('when saving state is observed during operation', () => {
@@ -204,13 +204,17 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
           // Reset and setup for testing error clearing
           clientStub.reset();
           clientStub.resolves(mockResponse);
-          el.error = 'Previous error';
+          el.augmentedError = new (await import('./augment-error-service.js')).AugmentedError(
+            'Previous error',
+            (await import('./augment-error-service.js')).ErrorKind.ERROR,
+            'error'
+          );
           
           await el['_handleSaveClick']();
         });
 
         it('should clear the error', () => {
-          expect(el.error).to.be.undefined;
+          expect(el.augmentedError).to.be.undefined;
         });
       });
 
@@ -250,8 +254,9 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
         await el['_handleSaveClick']();
       });
 
-      it('should set error message', () => {
-        expect(el.error).to.equal('Failed to save frontmatter');
+      it('should set augmented error', () => {
+        expect(el.augmentedError).to.exist;
+        expect(el.augmentedError?.message).to.include('Failed to save frontmatter');
       });
 
       it('should clear saving state', () => {
@@ -292,8 +297,9 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
       });
 
       it('should handle non-Error exceptions', () => {
-        expect(el.error).to.equal('Failed to save frontmatter');
-        expect(el.errorDetails).to.equal('String error');
+        expect(el.augmentedError).to.exist;
+        expect(el.augmentedError?.message).to.include('Failed to save frontmatter');
+        expect(el.augmentedError?.details).to.equal('String error');
       });
     });
 

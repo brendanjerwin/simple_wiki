@@ -428,6 +428,31 @@ beforeEach(async () => {
 ```
 
 - Prefer Context-Specification style for testing. Nest `describe` blocks to build up context. Don't bother with `context` blocks.
+- **Separate test assertions**: Each `it` block should test one specific behavior. If a test description contains "and", it indicates the test is checking multiple behaviors and should be split into separate `it` blocks.
+
+  **Bad:** Testing multiple behaviors in one block.
+
+  ```javascript
+  it('should handle rejection events and prevent default', () => {
+    // This tests TWO behaviors: handling events AND preventing default
+    expect(() => rejectionHandler(mockRejectionEvent)).to.not.throw();
+    expect(preventDefaultStub).to.have.been.calledOnce;
+  });
+  ```
+
+  **Good:** Split into separate, focused tests.
+
+  ```javascript
+  it('should handle rejection events', () => {
+    expect(() => rejectionHandler(mockRejectionEvent)).to.not.throw();
+  });
+
+  it('should prevent default on rejection events', () => {
+    rejectionHandler(mockRejectionEvent);
+    expect(preventDefaultStub).to.have.been.calledOnce;
+  });
+  ```
+
 - Don't do actions in the `It` blocks. The `It` blocks should only contain assertions. All setup (**Arrange**) and execution (**Act**) should be done in `BeforeEach` blocks (or equivalent, depending on the testing framework) within the `Describe` or `When` blocks. This allows for reusing context to add additional assertions later.
 
   **Bad:** Action inside the `It` block (Go example).

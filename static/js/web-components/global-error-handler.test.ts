@@ -99,7 +99,7 @@ describe('Global Error Handler', () => {
       expect(rejectionHandler).to.be.a('function');
     });
 
-    it('should handle rejection events and prevent default', () => {
+    it('should handle rejection events', () => {
       const mockError = new Error('Promise rejection error');
       const preventDefaultStub = stub();
       const mockRejectionEvent = {
@@ -108,6 +108,17 @@ describe('Global Error Handler', () => {
       } as unknown as PromiseRejectionEvent;
 
       expect(() => rejectionHandler(mockRejectionEvent)).to.not.throw();
+    });
+
+    it('should prevent default on rejection events', () => {
+      const mockError = new Error('Promise rejection error');
+      const preventDefaultStub = stub();
+      const mockRejectionEvent = {
+        reason: mockError,
+        preventDefault: preventDefaultStub
+      } as unknown as PromiseRejectionEvent;
+
+      rejectionHandler(mockRejectionEvent);
       expect(preventDefaultStub).to.have.been.calledOnce;
     });
 

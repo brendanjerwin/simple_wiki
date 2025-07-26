@@ -58,7 +58,7 @@ describe('FrontmatterEditorDialog', () => {
     });
 
     it('should have no error by default', () => {
-      expect(el.error).to.be.undefined;
+      expect(el.augmentedError).to.be.undefined;
     });
   });
 });

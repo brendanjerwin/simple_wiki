@@ -10,8 +10,7 @@ import './kernel-panic.js';
 import { showKernelPanic } from './kernel-panic.js';
 import { showToastAfter } from './toast-message.js';
 import './error-display.js';
-import { ErrorService } from './error-service.js';
-import type { ErrorIcon } from './error-display.js';
+import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
 
 /**
  * FrontmatterEditorDialog - A modal dialog for editing page frontmatter metadata
@@ -183,9 +182,7 @@ export class FrontmatterEditorDialog extends LitElement {
     open: { type: Boolean, reflect: true },
     loading: { state: true },
     saving: { state: true },
-    error: { state: true },
-    errorDetails: { state: true },
-    errorIcon: { state: true },
+    augmentedError: { state: true },
     frontmatter: { state: true },
     workingFrontmatter: { state: true },
   };
@@ -194,9 +191,7 @@ export class FrontmatterEditorDialog extends LitElement {
   declare open: boolean;
   declare loading: boolean;
   declare saving: boolean;
-  declare error?: string | undefined;
-  declare errorDetails?: string | undefined;
-  declare errorIcon?: ErrorIcon | undefined;
+  declare augmentedError?: AugmentedError | undefined;
   declare frontmatter?: GetFrontmatterResponse | undefined;
   declare workingFrontmatter?: Record<string, unknown>;
 
@@ -218,7 +213,7 @@ export class FrontmatterEditorDialog extends LitElement {
       return struct.toJson() as Record<string, unknown>;
     } catch (err) {
       // This is an unrecoverable error - the protobuf data is corrupted
-      showKernelPanic('Failed to convert frontmatter data structure', err as Error);
+      showKernelPanic(err as Error);
       throw err;
     }
   }
@@ -228,7 +223,7 @@ export class FrontmatterEditorDialog extends LitElement {
       return Struct.fromJson(obj);
     } catch (err) {
       // This is an unrecoverable error - the data is corrupted
-      showKernelPanic('Failed to convert plain object to protobuf Struct', err as Error);
+      showKernelPanic(err as Error);
       throw err;
     }
   }
@@ -284,9 +279,7 @@ export class FrontmatterEditorDialog extends LitElement {
 
     try {
       this.loading = true;
-      this.error = undefined;
-      this.errorDetails = undefined;
-      this.errorIcon = undefined;
+      this.augmentedError = undefined;
       this.frontmatter = undefined;
       this.workingFrontmatter = {};
       this.requestUpdate();
@@ -296,10 +289,7 @@ export class FrontmatterEditorDialog extends LitElement {
       this.frontmatter = response;
       this.updateWorkingFrontmatter();
     } catch (err) {
-      const processedError = ErrorService.processError(err, 'load frontmatter');
-      this.error = processedError.message;
-      this.errorDetails = processedError.details;
-      this.errorIcon = processedError.icon;
+      this.augmentedError = AugmentErrorService.augmentError(err, 'Failed to load frontmatter');
     } finally {
       this.loading = false;
       this.requestUpdate();
@@ -319,9 +309,7 @@ export class FrontmatterEditorDialog extends LitElement {
 
     try {
       this.saving = true;
-      this.error = undefined;
-      this.errorDetails = undefined;
-      this.errorIcon = undefined;
+      this.augmentedError = undefined;
       this.requestUpdate();
 
       const frontmatterStruct = this.convertPlainObjectToStruct(this.workingFrontmatter);
@@ -347,10 +335,7 @@ export class FrontmatterEditorDialog extends LitElement {
         this.refreshPage();
       });
     } catch (err) {
-      const processedError = ErrorService.processError(err, 'save frontmatter');
-      this.error = processedError.message;
-      this.errorDetails = processedError.details;
-      this.errorIcon = processedError.icon;
+      this.augmentedError = AugmentErrorService.augmentError(err, 'Failed to save frontmatter');
     } finally {
       this.saving = false;
       this.requestUpdate();
@@ -381,11 +366,9 @@ export class FrontmatterEditorDialog extends LitElement {
               <i class="fas fa-spinner fa-spin"></i>
               Loading frontmatter...
             </div>
-          ` : this.error ? html`
+          ` : this.augmentedError ? html`
             <error-display 
-              .message=${this.error}
-              .details=${this.errorDetails}
-              .icon=${this.errorIcon}>
+              .augmentedError=${this.augmentedError}>
             </error-display>
           ` : html`
             ${this.renderFrontmatterEditor()}
