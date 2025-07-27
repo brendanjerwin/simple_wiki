@@ -216,7 +216,10 @@ func (s *Site) handlePageRelinquish(c *gin.Context) {
 	text := p.Text.GetCurrent()
 	isLocked := pageIsLocked(p, c)
 	if !isLocked {
-		_ = p.Erase()
+		if err := p.Erase(); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to erase page"})
+			return
+		}
 		message = "Relinquished and erased"
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -300,7 +303,10 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 
 	if command == "/erase" {
 		if !isLocked {
-			_ = p.Erase()
+			if err := p.Erase(); err != nil {
+				_ = c.AbortWithError(http.StatusInternalServerError, err)
+				return
+			}
 			c.Redirect(httpStatusFound, rootPath)
 		} else {
 			c.Redirect(httpStatusFound, "/"+page+"/view")
@@ -506,13 +512,14 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 		message = "Refusing to overwrite others work"
 	} else {
 		p.Meta = json.Meta
-		_ = p.Update(json.NewText)
-		if err := p.Save(); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to save page"})
-			return
+		if err := p.Update(json.NewText); err != nil {
+			s.Logger.Error("Failed to save page '%s': %v", json.Page, err)
+			message = "Failed to save page"
+			success = false
+		} else {
+			message = "Saved"
+			success = true
 		}
-		message = "Saved"
-		success = true
 	}
 	c.JSON(http.StatusOK, gin.H{"success": success, "message": message, "unix_time": time.Now().Unix()})
 }
