@@ -512,10 +512,14 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 		message = "Refusing to overwrite others work"
 	} else {
 		p.Meta = json.Meta
-		_ = p.Update(json.NewText)
-		_ = p.Save()
-		message = "Saved"
-		success = true
+		if err := p.Update(json.NewText); err != nil {
+			s.Logger.Error("Failed to save page '%s': %v", json.Page, err)
+			message = "Failed to save page"
+			success = false
+		} else {
+			message = "Saved"
+			success = true
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"success": success, "message": message, "unix_time": time.Now().Unix()})
 }
