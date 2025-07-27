@@ -185,10 +185,10 @@ func (s *Site) loadTemplate() multitemplate.Render {
 	return r
 }
 
-func pageIsLocked(p *Page, c *gin.Context) bool {
+func pageIsLocked(p *Page, c *gin.Context, logger *lumber.ConsoleLogger) bool {
 	// it is easier to reason about when the page is actually unlocked
 	unlocked := !p.IsLocked ||
-		(p.IsLocked && p.UnlockedFor == getSetSessionID(c))
+		(p.IsLocked && p.UnlockedFor == getSetSessionID(c, logger))
 	return !unlocked
 }
 
@@ -214,7 +214,7 @@ func (s *Site) handlePageRelinquish(c *gin.Context) {
 		name = json.Page
 	}
 	text := p.Text.GetCurrent()
-	isLocked := pageIsLocked(p, c)
+	isLocked := pageIsLocked(p, c, s.Logger)
 	if !isLocked {
 		if err := p.Erase(); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to erase page"})
@@ -231,7 +231,7 @@ func (s *Site) handlePageRelinquish(c *gin.Context) {
 	})
 }
 
-func getSetSessionID(c *gin.Context) (sid string) {
+func getSetSessionID(c *gin.Context, logger *lumber.ConsoleLogger) (sid string) {
 	var (
 		session = sessions.Default(c)
 		v       = session.Get("sid")
@@ -255,7 +255,9 @@ func getSetSessionID(c *gin.Context) (sid string) {
 			sid = sid[:maxSecretAttempts]
 		}
 		session.Set("sid", sid)
-		_ = session.Save()
+		if err := session.Save(); err != nil {
+			logger.Error("Failed to save session: %v", err)
+		}
 	}
 	return sid
 }
@@ -297,7 +299,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 	}
 
 	version := c.DefaultQuery("version", "ajksldfjl")
-	isLocked := pageIsLocked(p, c)
+	isLocked := pageIsLocked(p, c, s.Logger)
 
 	// Disallow anything but viewing locked pages
 	if (isLocked) &&
@@ -413,7 +415,7 @@ func (s *Site) buildTemplateData(page, command string, directoryEntries []os.Fil
 		"IsLocked":           isLocked,
 		"Route":              "/" + page + command,
 		"HasDotInName":       strings.Contains(page, "."),
-		"RecentlyEdited":     getRecentlyEdited(page, c),
+		"RecentlyEdited":     getRecentlyEdited(page, c, s.Logger),
 		"CustomCSS":          len(s.CSS) > 0,
 		"Debounce":           s.Debounce,
 		"Date":               time.Now().Format("2006-01-02"),
@@ -423,7 +425,7 @@ func (s *Site) buildTemplateData(page, command string, directoryEntries []os.Fil
 	}
 }
 
-func getRecentlyEdited(title string, c *gin.Context) []string {
+func getRecentlyEdited(title string, c *gin.Context, logger *lumber.ConsoleLogger) []string {
 	session := sessions.Default(c)
 	var recentlyEdited string
 	v := session.Get("recentlyEdited")
@@ -441,7 +443,9 @@ func getRecentlyEdited(title string, c *gin.Context) []string {
 		}
 	}
 	session.Set("recentlyEdited", recentlyEdited)
-	_ = session.Save()
+	if err := session.Save(); err != nil {
+		logger.Error("Failed to save session: %v", err)
+	}
 	editedThingsWithoutCurrent := make([]string, len(editedThings))
 	i := 0
 	for _, thing := range editedThings {
@@ -505,7 +509,7 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 		sinceLastEdit = time.Since(p.LastEditTime())
 	)
 	success := false
-	if pageIsLocked(p, c) {
+	if pageIsLocked(p, c, s.Logger) {
 		if sinceLastEdit < minutesToUnlock {
 			message = "This page is being edited by someone else"
 		} else {
@@ -548,7 +552,7 @@ func (s *Site) handleLock(c *gin.Context) {
 
 	var (
 		message       string
-		sessionID     = getSetSessionID(c)
+		sessionID     = getSetSessionID(c, s.Logger)
 		sinceLastEdit = time.Since(p.LastEditTime())
 	)
 
@@ -563,7 +567,7 @@ func (s *Site) handleLock(c *gin.Context) {
 		})
 		return
 	}
-	if !pageIsLocked(p, c) {
+	if !pageIsLocked(p, c, s.Logger) {
 		p.IsLocked = true
 		p.PassphraseToUnlock = sec.HashPassword(json.Passphrase)
 		p.UnlockedFor = ""
@@ -579,7 +583,7 @@ func (s *Site) handleLock(c *gin.Context) {
 	}
 	if err := p.Save(); err != nil {
 		s.Logger.Error("Failed to save page lock state for '%s': %v", json.Page, err)
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "Failed to save lock state"})
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to save lock information"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": message})
@@ -699,4 +703,21 @@ func contentTypeFromName(filename string) string {
 	nameParts := strings.Split(filename, ".")
 	mimeType := mime.TypeByExtension("." + nameParts[len(nameParts)-1])
 	return mimeType
+}
+
+// Test helper functions to expose private functions for testing
+
+// GetSetSessionIDForTesting exposes getSetSessionID for testing
+func GetSetSessionIDForTesting(c *gin.Context, logger *lumber.ConsoleLogger) string {
+	return getSetSessionID(c, logger)
+}
+
+// GetRecentlyEditedForTesting exposes getRecentlyEdited for testing
+func GetRecentlyEditedForTesting(title string, c *gin.Context, logger *lumber.ConsoleLogger) []string {
+	return getRecentlyEdited(title, c, logger)
+}
+
+// PageIsLockedForTesting exposes pageIsLocked for testing
+func PageIsLockedForTesting(p *Page, c *gin.Context, logger *lumber.ConsoleLogger) bool {
+	return pageIsLocked(p, c, logger)
 }
