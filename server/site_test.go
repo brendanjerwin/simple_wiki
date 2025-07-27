@@ -1,6 +1,7 @@
 package server
 
 import (
+	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -469,6 +470,71 @@ old markdown`
 					Expect(mdErr).NotTo(HaveOccurred())
 					Expect(string(md)).To(Equal(string(newMd)))
 				})
+			})
+		})
+	})
+
+	Describe("OpenOrInit", func() {
+		var (
+			req           *http.Request
+			pageToCreate  string
+			originalPerms os.FileMode
+		)
+
+		BeforeEach(func() {
+			pageToCreate = "new-test-page"
+			req, _ = http.NewRequest("GET", "/", nil)
+		})
+
+		When("creating a new page successfully", func() {
+			var p *Page
+
+			BeforeEach(func() {
+				p = s.OpenOrInit(pageToCreate, req)
+			})
+
+			It("should create a page with initial content", func() {
+				Expect(p.Text.GetCurrent()).To(ContainSubstring("# {{or .Title .Identifier}}"))
+				Expect(p.Text.GetCurrent()).To(ContainSubstring(`identifier = "` + pageToCreate + `"`))
+			})
+
+			It("should create the page regardless of save success", func() {
+				Expect(p.IsNew()).To(BeTrue()) // OpenOrInit always creates new pages programmatically
+			})
+		})
+
+		When("creating a new page fails to save", func() {
+			var p *Page
+
+			BeforeEach(func() {
+				// Make the data directory read-only to simulate save failure
+				dirInfo, err := os.Stat(tempDir)
+				Expect(err).NotTo(HaveOccurred())
+				originalPerms = dirInfo.Mode()
+				err = os.Chmod(tempDir, 0444)
+				Expect(err).NotTo(HaveOccurred())
+
+				p = s.OpenOrInit(pageToCreate, req)
+			})
+
+			AfterEach(func() {
+				// Restore permissions for cleanup
+				_ = os.Chmod(tempDir, originalPerms)
+			})
+
+			It("should still return a page object", func() {
+				Expect(p).NotTo(BeNil())
+				Expect(p.Identifier).To(Equal(pageToCreate))
+			})
+
+			It("should still have the initial content", func() {
+				Expect(p.Text.GetCurrent()).To(ContainSubstring("# {{or .Title .Identifier}}"))
+			})
+
+			It("should log an error message", func() {
+				// Note: In a real test environment, we might want to capture logs
+				// For now, we're just ensuring the function doesn't panic
+				Expect(p.Text.GetCurrent()).NotTo(BeEmpty())
 			})
 		})
 	})

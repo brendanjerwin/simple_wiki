@@ -507,9 +507,14 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 	} else {
 		p.Meta = json.Meta
 		_ = p.Update(json.NewText)
-		_ = p.Save()
-		message = "Saved"
-		success = true
+		if err := p.Save(); err != nil {
+			s.Logger.Error("Failed to save page '%s': %v", json.Page, err)
+			message = "Failed to save page"
+			success = false
+		} else {
+			message = "Saved"
+			success = true
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"success": success, "message": message, "unix_time": time.Now().Unix()})
 }
@@ -562,7 +567,11 @@ func (s *Site) handleLock(c *gin.Context) {
 		p.UnlockedFor = sessionID
 		message = "Unlocked only for you"
 	}
-	_ = p.Save()
+	if err := p.Save(); err != nil {
+		s.Logger.Error("Failed to save page lock state for '%s': %v", json.Page, err)
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "Failed to save lock state"})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": message})
 }
 

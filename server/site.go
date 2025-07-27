@@ -210,7 +210,10 @@ items = [
 
 		p.Text = versionedtext.NewVersionedText(initialText)
 		p.Render()
-		_ = p.Save()
+		if err := p.Save(); err != nil {
+			s.Logger.Error("Failed to save new page '%s': %v", p.Identifier, err)
+			// Consider how to handle this critical failure. For now, logging is the minimum.
+		}
 	}
 	p.Render()
 	return p
