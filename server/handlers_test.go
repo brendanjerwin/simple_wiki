@@ -349,6 +349,150 @@ var _ = Describe("Handlers", func() {
 				Expect(p.Text.GetCurrent()).To(Equal(newText))
 			})
 		})
+
+		When("the page save fails due to filesystem error", func() {
+			var response map[string]any
+			var pageName string
+			var newText string
+			var originalDataPath string
+
+			BeforeEach(func() {
+				pageName = "test-update-fail"
+				newText = "new content"
+				p := site.Open(pageName)
+				_ = p.Update("some content")
+				_ = p.Save()
+
+				// Create a read-only directory to cause save failure
+				readOnlyDir, err := os.MkdirTemp("", "readonly")
+				Expect(err).NotTo(HaveOccurred())
+				err = os.Chmod(readOnlyDir, 0444) // Read-only directory
+				Expect(err).NotTo(HaveOccurred())
+
+				// Change data path to read-only directory
+				originalDataPath = site.PathToData
+				site.PathToData = readOnlyDir
+
+				body, _ := json.Marshal(map[string]any{
+					"page":       pageName,
+					"new_text":   newText,
+					"fetched_at": time.Now().Unix(),
+				})
+				req, _ := http.NewRequest(http.MethodPost, "/update", bytes.NewBuffer(body))
+				req.Header.Set("Content-Type", "application/json")
+				router.ServeHTTP(w, req)
+				_ = json.Unmarshal(w.Body.Bytes(), &response)
+			})
+
+			AfterEach(func() {
+				// Restore original data path
+				site.PathToData = originalDataPath
+			})
+
+			It("should return a 200 status code", func() {
+				Expect(w.Code).To(Equal(http.StatusOK))
+			})
+
+			It("should return a failure response", func() {
+				Expect(response["success"]).To(BeFalse())
+				Expect(response["message"]).To(Equal("Failed to save page"))
+			})
+		})
+	})
+
+	Describe("handleLock", func() {
+		When("the request has bad json", func() {
+			BeforeEach(func() {
+				req, _ := http.NewRequest(http.MethodPost, "/lock", bytes.NewBuffer([]byte("bad json")))
+				req.Header.Set("Content-Type", "application/json")
+				router.ServeHTTP(w, req)
+			})
+
+			It("should return a 400 error", func() {
+				Expect(w.Code).To(Equal(http.StatusBadRequest))
+			})
+		})
+
+		When("the page is locked successfully", func() {
+			var response map[string]any
+			var pageName string
+
+			BeforeEach(func() {
+				pageName = "test-lock"
+				p := site.Open(pageName)
+				_ = p.Update("some content")
+				_ = p.Save()
+
+				body, _ := json.Marshal(map[string]any{
+					"page":       pageName,
+					"passphrase": "testpass",
+				})
+				req, _ := http.NewRequest(http.MethodPost, "/lock", bytes.NewBuffer(body))
+				req.Header.Set("Content-Type", "application/json")
+				router.ServeHTTP(w, req)
+				_ = json.Unmarshal(w.Body.Bytes(), &response)
+			})
+
+			It("should return a 200 status code", func() {
+				Expect(w.Code).To(Equal(http.StatusOK))
+			})
+
+			It("should return a success message", func() {
+				Expect(response["success"]).To(BeTrue())
+				Expect(response["message"]).To(Equal("Locked"))
+			})
+
+			It("should lock the page", func() {
+				p := site.Open(pageName)
+				Expect(p.IsLocked).To(BeTrue())
+			})
+		})
+
+		When("the lock save fails due to filesystem error", func() {
+			var response map[string]any
+			var pageName string
+			var originalDataPath string
+
+			BeforeEach(func() {
+				pageName = "test-lock-fail"
+				p := site.Open(pageName)
+				_ = p.Update("some content")
+				_ = p.Save()
+
+				// Create a read-only directory to cause save failure
+				readOnlyDir, err := os.MkdirTemp("", "readonly")
+				Expect(err).NotTo(HaveOccurred())
+				err = os.Chmod(readOnlyDir, 0444) // Read-only directory
+				Expect(err).NotTo(HaveOccurred())
+
+				// Change data path to read-only directory
+				originalDataPath = site.PathToData
+				site.PathToData = readOnlyDir
+
+				body, _ := json.Marshal(map[string]any{
+					"page":       pageName,
+					"passphrase": "password", // Use the default password
+				})
+				req, _ := http.NewRequest(http.MethodPost, "/lock", bytes.NewBuffer(body))
+				req.Header.Set("Content-Type", "application/json")
+				router.ServeHTTP(w, req)
+				_ = json.Unmarshal(w.Body.Bytes(), &response)
+			})
+
+			AfterEach(func() {
+				// Restore original data path
+				site.PathToData = originalDataPath
+			})
+
+			It("should return a 500 status code", func() {
+				Expect(w.Code).To(Equal(http.StatusInternalServerError))
+			})
+
+			It("should return a failure response", func() {
+				Expect(response["success"]).To(BeFalse())
+				Expect(response["message"]).To(Equal("Failed to save lock information"))
+			})
+		})
 	})
 
 	Describe("handlePageRequest erase command", func() {
