@@ -202,6 +202,49 @@ var _ = Describe("Handlers", func() {
 			})
 		})
 
+		When("the page update fails due to save error", func() {
+			var response map[string]any
+			var pageName string
+			var originalMode os.FileMode
+
+			BeforeEach(func() {
+				pageName = "test-update-fail"
+				newText := "new content"
+
+				// Create and save a page first
+				p := site.Open(pageName)
+				_ = p.Update("some content")
+
+				// Make the data directory read-only to force save failure
+				dataDir := site.PathToData
+				info, _ := os.Stat(dataDir)
+				originalMode = info.Mode()
+				_ = os.Chmod(dataDir, 0444) // read-only
+
+				body, _ := json.Marshal(map[string]any{
+					"page":       pageName,
+					"new_text":   newText,
+					"fetched_at": time.Now().Unix(),
+				})
+				req, _ := http.NewRequest(http.MethodPost, "/update", bytes.NewBuffer(body))
+				req.Header.Set("Content-Type", "application/json")
+				router.ServeHTTP(w, req)
+				_ = json.Unmarshal(w.Body.Bytes(), &response)
+
+				// Restore permissions for cleanup
+				_ = os.Chmod(dataDir, originalMode)
+			})
+
+			It("should return a 200 status code", func() {
+				Expect(w.Code).To(Equal(http.StatusOK))
+			})
+
+			It("should return a failure message", func() {
+				Expect(response["success"]).To(BeFalse())
+				Expect(response["message"]).To(Equal("Failed to save page"))
+			})
+		})
+
 		When("the page is updated successfully", func() {
 			var response map[string]any
 			var pageName string
