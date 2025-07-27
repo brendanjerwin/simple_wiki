@@ -266,18 +266,9 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 	page := c.Param("page")
 	command := c.Param("command")
 
-	switch page {
-	case "favicon.ico":
-		s.handleFavicon(c)
+	// Handle special pages (favicon, static, uploads)
+	if s.handleSpecialPages(c, page, command) {
 		return
-	case "static":
-		s.handleStatic(c, command)
-		return
-	case uploadsPage:
-		s.handleUploads(c, command)
-		return
-	default:
-		// General page handling continues below
 	}
 
 	if len(command) < 2 {
@@ -308,6 +299,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		return
 	}
 
+	// Handle page erase command
 	if command == "/erase" {
 		if !isLocked {
 			if err := p.Erase(); err != nil {
@@ -321,6 +313,30 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		return
 	}
 
+	// Render the page content
+	s.renderPageContent(c, page, command, p, version, isLocked)
+}
+
+// handleSpecialPages handles special page routes (favicon, static, uploads)
+// Returns true if the request was handled
+func (s *Site) handleSpecialPages(c *gin.Context, page, command string) bool {
+	switch page {
+	case "favicon.ico":
+		s.handleFavicon(c)
+		return true
+	case "static":
+		s.handleStatic(c, command)
+		return true
+	case uploadsPage:
+		s.handleUploads(c, command)
+		return true
+	default:
+		return false
+	}
+}
+
+// renderPageContent handles the final page content rendering
+func (s *Site) renderPageContent(c *gin.Context, page, command string, p *Page, version string, isLocked bool) {
 	rawText, contentHTML := s.getPageContent(p, version)
 	contentHTML = fmt.Appendf(nil, "<article class='content' id='%s'>%s</article>", page, string(contentHTML))
 
