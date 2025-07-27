@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/web-components-vite';
 import { action } from 'storybook/actions';
 import { html } from 'lit';
+import { AugmentedError, ErrorKind } from './augment-error-service.js';
 import './toast-message.js';
 
 const meta: Meta = {
@@ -134,6 +135,48 @@ export const AutoClose: Story = {
     docs: {
       description: {
         story: 'This toast demonstrates auto-close behavior. Watch the browser console to see the hide event after 3 seconds.',
+      },
+    },
+  },
+};
+
+export const AugmentedErrorDisplay: Story = {
+  args: {
+    type: 'error',
+    visible: true,
+    autoClose: false,
+  },
+  render: (args) => {
+    // Create a sample AugmentedError for demonstration
+    const originalError = new Error('Failed to connect to the server. The request timed out after 30 seconds.');
+    originalError.stack = `Error: Failed to connect to the server. The request timed out after 30 seconds.
+    at fetchData (http://localhost:8050/static/js/api.js:45:12)
+    at async loadUserProfile (http://localhost:8050/static/js/components/user-profile.js:23:18)
+    at async UserProfileComponent.connectedCallback (http://localhost:8050/static/js/components/user-profile.js:15:5)`;
+    
+    const augmentedError = new AugmentedError(
+      originalError,
+      ErrorKind.NETWORK,
+      'network',
+      'loading user profile'
+    );
+
+    return html`
+      <toast-message 
+        .type=${args['type']}
+        .visible=${args['visible']}
+        .autoClose=${args['autoClose']}
+        .augmentedError=${augmentedError}
+        @click=${action('toast-clicked')}
+        @show=${action('toast-shown')}
+        @hide=${action('toast-hidden')}>
+      </toast-message>
+    `;
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'This toast demonstrates the AugmentedError functionality, embedding an error-display component with detailed error information including an expandable stack trace. Note how the error type disables auto-close by default.',
       },
     },
   },

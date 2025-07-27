@@ -1,6 +1,7 @@
 import { html, fixture, expect, assert } from '@open-wc/testing';
 import sinon from 'sinon';
 import { ToastMessage, showToast, showStoredToast, showToastAfter } from './toast-message.js';
+import { AugmentedError, ErrorKind } from './augment-error-service.js';
 
 describe('ToastMessage', () => {
   let el: ToastMessage;
@@ -67,6 +68,51 @@ describe('ToastMessage', () => {
     });
   });
 
+  describe('when augmentedError is provided', () => {
+    let augmentedError: AugmentedError;
+
+    beforeEach(async () => {
+      const originalError = new Error('Test error message');
+      augmentedError = new AugmentedError(originalError, ErrorKind.ERROR, 'error', 'testing error display');
+      el.augmentedError = augmentedError;
+      await el.updateComplete;
+    });
+
+    it('should embed error-display component', () => {
+      const errorDisplayElement = el.shadowRoot?.querySelector('error-display');
+      expect(errorDisplayElement).to.exist;
+    });
+
+    it('should pass augmentedError to error-display component', () => {
+      const errorDisplayElement = el.shadowRoot?.querySelector('error-display');
+      expect(errorDisplayElement?.augmentedError).to.equal(augmentedError);
+    });
+
+    it('should not display simple message text', () => {
+      const messageElement = el.shadowRoot?.querySelector('.message');
+      expect(messageElement).to.not.exist;
+    });
+  });
+
+  describe('when no augmentedError is provided', () => {
+    beforeEach(async () => {
+      el.message = 'Simple text message';
+      el.type = 'info';
+      await el.updateComplete;
+    });
+
+    it('should not embed error-display component', () => {
+      const errorDisplayElement = el.shadowRoot?.querySelector('error-display');
+      expect(errorDisplayElement).to.not.exist;
+    });
+
+    it('should display simple message text', () => {
+      const messageElement = el.shadowRoot?.querySelector('.message');
+      expect(messageElement).to.exist;
+      expect(messageElement?.textContent).to.equal('Simple text message');
+    });
+  });
+
   describe('when show() is called', () => {
     let clock: sinon.SinonFakeTimers;
 
@@ -121,6 +167,64 @@ describe('ToastMessage', () => {
 
       it('should not auto-hide', () => {
         expect(el.visible).to.be.true;
+      });
+    });
+
+    describe('when type is error', () => {
+      beforeEach(() => {
+        el.type = 'error';
+        el.timeoutSeconds = 1;
+        // Don't set autoClose explicitly
+        el.autoClose = undefined;
+      });
+
+      describe('when autoClose is not set', () => {
+        beforeEach(() => {
+          el.show();
+          clock.tick(1000);
+        });
+
+        it('should not auto-hide by default', () => {
+          expect(el.visible).to.be.true;
+        });
+      });
+
+      describe('when autoClose is explicitly set to true', () => {
+        beforeEach(() => {
+          el.autoClose = true;
+          el.show();
+          clock.tick(1000);
+        });
+
+        it('should auto-hide when explicitly enabled', () => {
+          expect(el.visible).to.be.false;
+        });
+      });
+
+      describe('when autoClose is explicitly set to false', () => {
+        beforeEach(() => {
+          el.autoClose = false;
+          el.show();
+          clock.tick(1000);
+        });
+
+        it('should not auto-hide when explicitly disabled', () => {
+          expect(el.visible).to.be.true;
+        });
+      });
+    });
+
+    describe('when type is not error', () => {
+      beforeEach(() => {
+        el.type = 'success';
+        el.timeoutSeconds = 1;
+        el.autoClose = true;
+        el.show();
+        clock.tick(1000);
+      });
+
+      it('should maintain existing auto-close behavior', () => {
+        expect(el.visible).to.be.false;
       });
     });
   });

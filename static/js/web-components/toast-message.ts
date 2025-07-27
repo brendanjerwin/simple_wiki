@@ -1,5 +1,7 @@
 import { html, css, LitElement } from 'lit';
 import { sharedStyles, foundationCSS, buttonCSS } from './shared-styles.js';
+import { AugmentedError } from './augment-error-service.js';
+import './error-display.js';
 
 // Valid toast types - defined once for consistency
 const TOAST_TYPES = ['success', 'error', 'warning', 'info'] as const;
@@ -120,7 +122,8 @@ export class ToastMessage extends LitElement {
     type: { type: String },
     visible: { type: Boolean, reflect: true },
     timeoutSeconds: { type: Number },
-    autoClose: { type: Boolean }
+    autoClose: { type: Boolean },
+    augmentedError: { type: Object }
   };
 
   declare message: string;
@@ -128,6 +131,7 @@ export class ToastMessage extends LitElement {
   declare visible: boolean;
   declare timeoutSeconds: number;
   declare autoClose: boolean;
+  declare augmentedError?: AugmentedError;
 
   private timeoutId?: number;
 
@@ -154,7 +158,12 @@ export class ToastMessage extends LitElement {
   public show(): void {
     this.visible = true;
     
-    if (this.autoClose && this.timeoutSeconds > 0) {
+    // Disable auto-close by default for error types, unless explicitly enabled
+    const shouldAutoClose = this.type === 'error' 
+      ? this.autoClose === true 
+      : this.autoClose;
+    
+    if (shouldAutoClose && this.timeoutSeconds > 0) {
       this.clearTimeout();
       this.timeoutId = window.setTimeout(() => {
         this.hide();
@@ -196,7 +205,10 @@ export class ToastMessage extends LitElement {
           ${this.getIcon()}
         </div>
         <div class="content">
-          <p class="message">${this.message}</p>
+          ${this.augmentedError 
+            ? html`<error-display .augmentedError="${this.augmentedError}"></error-display>`
+            : html`<p class="message">${this.message}</p>`
+          }
         </div>
       </div>
     `;
@@ -241,7 +253,9 @@ export function showToast(
   toast.message = message;
   toast.type = type;
   toast.timeoutSeconds = timeoutSeconds;
-  toast.autoClose = true;
+  // For error types, don't enable auto-close by default
+  // For other types, maintain existing behavior
+  toast.autoClose = type !== 'error';
   toast.visible = false;
   
   document.body.appendChild(toast);
@@ -273,7 +287,9 @@ export function showStoredToast(): void {
     toast.message = storedMessage;
     toast.type = storedType;
     toast.timeoutSeconds = storedTimeout;
-    toast.autoClose = true;
+    // For error types, don't enable auto-close by default
+    // For other types, maintain existing behavior
+    toast.autoClose = storedType !== 'error';
     toast.visible = false;
     
     document.body.appendChild(toast);
