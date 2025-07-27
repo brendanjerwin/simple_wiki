@@ -304,10 +304,10 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 	if command == "/erase" {
 		if !isLocked {
 			if err := p.Erase(); err != nil {
-				c.Redirect(httpStatusFound, "/"+page+"/view")
-			} else {
-				c.Redirect(httpStatusFound, rootPath)
+				_ = c.AbortWithError(http.StatusInternalServerError, err)
+				return
 			}
+			c.Redirect(httpStatusFound, rootPath)
 		} else {
 			c.Redirect(httpStatusFound, "/"+page+"/view")
 		}
