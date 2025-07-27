@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	pageReadWriterNotAvailableError = "PageReadWriter not available"
+	pageReadWriterNotAvailableError = "PageManager not available"
 	identifierKey                   = "identifier"
 )
 
@@ -71,14 +71,14 @@ type Server struct {
 	apiv1.UnimplementedPageManagementServiceServer
 	Commit         string
 	BuildTime      time.Time
-	PageReadWriter wikipage.PageReadWriter
+	PageManager wikipage.PageManager
 	Logger         *lumber.ConsoleLogger
 }
 
 // MergeFrontmatter implements the MergeFrontmatter RPC.
 func (s *Server) MergeFrontmatter(_ context.Context, req *apiv1.MergeFrontmatterRequest) (resp *apiv1.MergeFrontmatterResponse, err error) {
-	v := reflect.ValueOf(s.PageReadWriter)
-	if s.PageReadWriter == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
+	v := reflect.ValueOf(s.PageManager)
+	if s.PageManager == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
 		return nil, status.Error(codes.Internal, pageReadWriterNotAvailableError)
 	}
 
@@ -90,7 +90,7 @@ func (s *Server) MergeFrontmatter(_ context.Context, req *apiv1.MergeFrontmatter
 		}
 	}
 
-	_, existingFm, err := s.PageReadWriter.ReadFrontMatter(req.Page)
+	_, existingFm, err := s.PageManager.ReadFrontMatter(req.Page)
 	if err != nil && !os.IsNotExist(err) {
 		return nil, status.Errorf(codes.Internal, "failed to read frontmatter: %v", err)
 	}
@@ -104,7 +104,7 @@ func (s *Server) MergeFrontmatter(_ context.Context, req *apiv1.MergeFrontmatter
 		maps.Copy(existingFm, newFm)
 	}
 
-	err = s.PageReadWriter.WriteFrontMatter(req.Page, existingFm)
+	err = s.PageManager.WriteFrontMatter(req.Page, existingFm)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to write frontmatter: %v", err)
 	}
@@ -123,8 +123,8 @@ func (s *Server) MergeFrontmatter(_ context.Context, req *apiv1.MergeFrontmatter
 
 // ReplaceFrontmatter implements the ReplaceFrontmatter RPC.
 func (s *Server) ReplaceFrontmatter(_ context.Context, req *apiv1.ReplaceFrontmatterRequest) (resp *apiv1.ReplaceFrontmatterResponse, err error) {
-	v := reflect.ValueOf(s.PageReadWriter)
-	if s.PageReadWriter == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
+	v := reflect.ValueOf(s.PageManager)
+	if s.PageManager == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
 		return nil, status.Error(codes.Internal, pageReadWriterNotAvailableError)
 	}
 
@@ -136,7 +136,7 @@ func (s *Server) ReplaceFrontmatter(_ context.Context, req *apiv1.ReplaceFrontma
 		fm[identifierKey] = req.Page
 	}
 
-	err = s.PageReadWriter.WriteFrontMatter(req.Page, fm)
+	err = s.PageManager.WriteFrontMatter(req.Page, fm)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to write frontmatter: %v", err)
 	}
@@ -162,8 +162,8 @@ func (s *Server) ReplaceFrontmatter(_ context.Context, req *apiv1.ReplaceFrontma
 
 // RemoveKeyAtPath implements the RemoveKeyAtPath RPC.
 func (s *Server) RemoveKeyAtPath(_ context.Context, req *apiv1.RemoveKeyAtPathRequest) (*apiv1.RemoveKeyAtPathResponse, error) {
-	v := reflect.ValueOf(s.PageReadWriter)
-	if s.PageReadWriter == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
+	v := reflect.ValueOf(s.PageManager)
+	if s.PageManager == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
 		return nil, status.Error(codes.Internal, pageReadWriterNotAvailableError)
 	}
 
@@ -176,7 +176,7 @@ func (s *Server) RemoveKeyAtPath(_ context.Context, req *apiv1.RemoveKeyAtPathRe
 		return nil, status.Error(codes.InvalidArgument, "identifier key cannot be removed")
 	}
 
-	_, fm, err := s.PageReadWriter.ReadFrontMatter(req.Page)
+	_, fm, err := s.PageManager.ReadFrontMatter(req.Page)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, status.Errorf(codes.NotFound, "page not found: %s", req.Page)
@@ -194,7 +194,7 @@ func (s *Server) RemoveKeyAtPath(_ context.Context, req *apiv1.RemoveKeyAtPathRe
 		return nil, err
 	}
 
-	err = s.PageReadWriter.WriteFrontMatter(req.Page, updatedFm.(map[string]any))
+	err = s.PageManager.WriteFrontMatter(req.Page, updatedFm.(map[string]any))
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to write frontmatter: %v", err)
 	}
@@ -283,11 +283,11 @@ func removeAtPath(data any, path []*apiv1.PathComponent) (any, error) {
 }
 
 // NewServer creates a new debug server
-func NewServer(commit string, buildTime time.Time, pageReadWriter wikipage.PageReadWriter, logger *lumber.ConsoleLogger) *Server {
+func NewServer(commit string, buildTime time.Time, pageReadWriter wikipage.PageManager, logger *lumber.ConsoleLogger) *Server {
 	return &Server{
 		Commit:         commit,
 		BuildTime:      buildTime,
-		PageReadWriter: pageReadWriter,
+		PageManager: pageReadWriter,
 		Logger:         logger,
 	}
 }
@@ -309,13 +309,13 @@ func (s *Server) GetVersion(_ context.Context, _ *apiv1.GetVersionRequest) (*api
 
 // GetFrontmatter implements the GetFrontmatter RPC.
 func (s *Server) GetFrontmatter(_ context.Context, req *apiv1.GetFrontmatterRequest) (resp *apiv1.GetFrontmatterResponse, err error) {
-	v := reflect.ValueOf(s.PageReadWriter)
-	if s.PageReadWriter == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
+	v := reflect.ValueOf(s.PageManager)
+	if s.PageManager == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
 		return nil, status.Error(codes.Internal, pageReadWriterNotAvailableError)
 	}
 
 	var fm map[string]any
-	_, fm, err = s.PageReadWriter.ReadFrontMatter(req.Page)
+	_, fm, err = s.PageManager.ReadFrontMatter(req.Page)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, status.Errorf(codes.NotFound, "page not found: %s", req.Page)
@@ -368,12 +368,12 @@ func (s *Server) LoggingInterceptor() grpc.UnaryServerInterceptor {
 
 // DeletePage implements the DeletePage RPC.
 func (s *Server) DeletePage(_ context.Context, req *apiv1.DeletePageRequest) (*apiv1.DeletePageResponse, error) {
-	v := reflect.ValueOf(s.PageReadWriter)
-	if s.PageReadWriter == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
+	v := reflect.ValueOf(s.PageManager)
+	if s.PageManager == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
 		return nil, status.Error(codes.Internal, pageReadWriterNotAvailableError)
 	}
 
-	err := s.PageReadWriter.DeletePage(req.PageName)
+	err := s.PageManager.DeletePage(req.PageName)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, status.Errorf(codes.NotFound, "page not found: %s", req.PageName)

@@ -141,7 +141,7 @@ var _ = Describe("Site", func() {
 		})
 	})
 
-	Describe("PageReadWriter implementation", func() {
+	Describe("PageManager implementation", func() {
 		var (
 			pageIdentifier wikipage.PageIdentifier
 			pagePath       string
@@ -149,7 +149,7 @@ var _ = Describe("Site", func() {
 
 		BeforeEach(func() {
 			pageIdentifier = "test-page"
-			// The PageReadWriter implementation reads from base32 encoded filenames
+			// The PageManager implementation reads from base32 encoded filenames
 			pagePath = filepath.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(string(pageIdentifier)))+".md")
 		})
 
@@ -470,6 +470,93 @@ old markdown`
 					_, md, mdErr := s.ReadMarkdown(pageIdentifier)
 					Expect(mdErr).NotTo(HaveOccurred())
 					Expect(string(md)).To(Equal(string(newMd)))
+				})
+			})
+		})
+
+		Describe("DeletePage", func() {
+			When("the page exists as .md file only", func() {
+				var err error
+
+				BeforeEach(func() {
+					// Create a test page as .md file only
+					content := `---
+title: Test Page
+---
+test content`
+					fileErr := os.WriteFile(pagePath, []byte(content), 0644)
+					Expect(fileErr).NotTo(HaveOccurred())
+
+					err = s.DeletePage(pageIdentifier)
+				})
+
+				It("should return a not found error (because .json file doesn't exist)", func() {
+					Expect(os.IsNotExist(err)).To(BeTrue())
+				})
+
+				It("should remove the page from the index", func() {
+					Expect(mockIndex.RemovePageFromIndexCalledWith).To(Equal(pageIdentifier))
+				})
+
+				It("should leave the .md file intact (due to current Erase implementation)", func() {
+					_, statErr := os.Stat(pagePath)
+					Expect(statErr).NotTo(HaveOccurred())
+				})
+			})
+
+			When("the page exists with both .md and .json files", func() {
+				var (
+					err      error
+					jsonPath string
+				)
+
+				BeforeEach(func() {
+					// Create both .md and .json files for the same page
+					content := `---
+title: Test Page
+---
+test content`
+					fileErr := os.WriteFile(pagePath, []byte(content), 0644)
+					Expect(fileErr).NotTo(HaveOccurred())
+
+					jsonPath = filepath.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(string(pageIdentifier)))+".json")
+					jsonContent := `{"identifier":"test-page","text":{"current":"test content","history":[]}}`
+					jsonErr := os.WriteFile(jsonPath, []byte(jsonContent), 0644)
+					Expect(jsonErr).NotTo(HaveOccurred())
+
+					err = s.DeletePage(pageIdentifier)
+				})
+
+				It("should not return an error", func() {
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("should remove both the .md and .json files", func() {
+					_, mdStatErr := os.Stat(pagePath)
+					Expect(os.IsNotExist(mdStatErr)).To(BeTrue())
+
+					_, jsonStatErr := os.Stat(jsonPath)
+					Expect(os.IsNotExist(jsonStatErr)).To(BeTrue())
+				})
+
+				It("should remove the page from the index", func() {
+					Expect(mockIndex.RemovePageFromIndexCalledWith).To(Equal(pageIdentifier))
+				})
+			})
+
+			When("the page does not exist", func() {
+				var err error
+
+				BeforeEach(func() {
+					err = s.DeletePage(pageIdentifier)
+				})
+
+				It("should return a not found error", func() {
+					Expect(os.IsNotExist(err)).To(BeTrue())
+				})
+
+				It("should still attempt to remove from index", func() {
+					Expect(mockIndex.RemovePageFromIndexCalledWith).To(Equal(pageIdentifier))
 				})
 			})
 		})
