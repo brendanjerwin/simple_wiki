@@ -472,4 +472,41 @@ old markdown`
 			})
 		})
 	})
+
+	Describe("InitializeIndexing", func() {
+		When("a JSON file exists in the data directory", func() {
+			var (
+				err error
+			)
+
+			BeforeEach(func() {
+				// Create a test page as a JSON file with proper base32-encoded filename
+				encodedFilename := base32tools.EncodeToBase32(strings.ToLower("test"))
+				pagePath := filepath.Join(s.PathToData, encodedFilename+".json")
+				testPageContent := `{"identifier":"test","text":{"current":"test content","history":[]}}`
+				fileErr := os.WriteFile(pagePath, []byte(testPageContent), 0644)
+				Expect(fileErr).NotTo(HaveOccurred())
+
+				err = s.InitializeIndexing()
+			})
+
+			It("should not return an error from InitializeIndexing", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should complete successfully and create indexes", func() {
+				// The method should complete and create indexes
+				Expect(s.IndexMaintainer).NotTo(BeNil())
+				Expect(s.FrontmatterIndexQueryer).NotTo(BeNil())
+				Expect(s.BleveIndexQueryer).NotTo(BeNil())
+			})
+
+			It("should index the test page", func() {
+				// The page should be indexed (we can verify by checking DirectoryList)
+				files := s.DirectoryList()
+				Expect(len(files)).To(BeNumerically(">", 0))
+				Expect(files[0].Name()).To(Equal("test"))
+			})
+		})
+	})
 })
