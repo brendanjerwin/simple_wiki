@@ -27,7 +27,7 @@
   - `UserService` (vague - what service?)
 
   **Good Examples:**
-  - `PageReadMutator` (specific - reads and mutates pages)
+  - `PageReaderMutator` (specific - reads and mutates pages)
   - `DataValidator` (specific - validates data)
   - `RequestRouter` (specific - routes requests)
   - `UserAuthenticator` (specific - authenticates users)

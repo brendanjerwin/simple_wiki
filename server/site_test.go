@@ -142,7 +142,7 @@ var _ = Describe("Site", func() {
 		})
 	})
 
-	Describe("PageReadMutator implementation", func() {
+	Describe("PageReaderMutator implementation", func() {
 		var (
 			pageIdentifier wikipage.PageIdentifier
 			pagePath       string
@@ -150,7 +150,7 @@ var _ = Describe("Site", func() {
 
 		BeforeEach(func() {
 			pageIdentifier = "test-page"
-			// The PageReadMutator implementation reads from base32 encoded filenames
+			// The PageReaderMutator implementation reads from base32 encoded filenames
 			pagePath = filepath.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(string(pageIdentifier)))+".md")
 		})
 
