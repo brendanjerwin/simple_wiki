@@ -350,6 +350,54 @@ var _ = Describe("Handlers", func() {
 			})
 		})
 
+		When("the page save fails during update", func() {
+			var response map[string]any
+			var pageName string
+			var newText string
+			var originalPermissions os.FileMode
+
+			BeforeEach(func() {
+				pageName = "test-save-fail"
+				newText = "new content that should fail to save"
+				
+				// Create the page first
+				p := site.Open(pageName)
+				_ = p.Update("initial content")
+				_ = p.Save()
+
+				// Make the data directory read-only to simulate save failure
+				dirInfo, err := os.Stat(tmpDir)
+				Expect(err).NotTo(HaveOccurred())
+				originalPermissions = dirInfo.Mode()
+				err = os.Chmod(tmpDir, 0444)
+				Expect(err).NotTo(HaveOccurred())
+
+				body, _ := json.Marshal(map[string]any{
+					"page":       pageName,
+					"new_text":   newText,
+					"fetched_at": time.Now().Unix(),
+				})
+				req, _ := http.NewRequest(http.MethodPost, "/update", bytes.NewBuffer(body))
+				req.Header.Set("Content-Type", "application/json")
+				router.ServeHTTP(w, req)
+				_ = json.Unmarshal(w.Body.Bytes(), &response)
+			})
+
+			AfterEach(func() {
+				// Restore permissions for cleanup
+				_ = os.Chmod(tmpDir, originalPermissions)
+			})
+
+			It("should return a 200 status code", func() {
+				Expect(w.Code).To(Equal(http.StatusOK))
+			})
+
+			It("should return a failure response", func() {
+				Expect(response["success"]).To(BeFalse())
+				Expect(response["message"]).To(ContainSubstring("Failed to save"))
+			})
+		})
+
 		When("the page save fails due to filesystem error", func() {
 			var response map[string]any
 			var pageName string
@@ -413,7 +461,7 @@ var _ = Describe("Handlers", func() {
 			})
 		})
 
-		When("the page is locked successfully", func() {
+		When("the request has valid data and saves successfully", func() {
 			var response map[string]any
 			var pageName string
 
@@ -437,7 +485,7 @@ var _ = Describe("Handlers", func() {
 				Expect(w.Code).To(Equal(http.StatusOK))
 			})
 
-			It("should return a success message", func() {
+			It("should return a success response", func() {
 				Expect(response["success"]).To(BeTrue())
 				Expect(response["message"]).To(Equal("Locked"))
 			})
@@ -448,13 +496,60 @@ var _ = Describe("Handlers", func() {
 			})
 		})
 
+		When("the lock save fails", func() {
+			var response map[string]any
+			var pageName string
+			var originalPermissions os.FileMode
+
+			BeforeEach(func() {
+				pageName = "test-lock-fail"
+				p := site.Open(pageName)
+				_ = p.Update("some content")
+				_ = p.Save()
+
+				// Ensure page is NOT locked initially
+				p.IsLocked = false
+				_ = p.Save()
+
+				// Make the data directory read-only to simulate save failure
+				dirInfo, err := os.Stat(tmpDir)
+				Expect(err).NotTo(HaveOccurred())
+				originalPermissions = dirInfo.Mode()
+				err = os.Chmod(tmpDir, 0444)
+				Expect(err).NotTo(HaveOccurred())
+
+				body, _ := json.Marshal(map[string]any{
+					"page":       pageName,
+					"passphrase": "password", // Use default password since page will be auto-locked
+				})
+				req, _ := http.NewRequest(http.MethodPost, "/lock", bytes.NewBuffer(body))
+				req.Header.Set("Content-Type", "application/json")
+				router.ServeHTTP(w, req)
+				_ = json.Unmarshal(w.Body.Bytes(), &response)
+			})
+
+			AfterEach(func() {
+				// Restore permissions for cleanup
+				_ = os.Chmod(tmpDir, originalPermissions)
+			})
+
+			It("should return an error status code", func() {
+				Expect(w.Code).To(Equal(http.StatusInternalServerError))
+			})
+
+			It("should return a failure response", func() {
+				Expect(response["success"]).To(BeFalse())
+				Expect(response["message"]).To(ContainSubstring("Failed to save lock"))
+			})
+		})
+
 		When("the lock save fails due to filesystem error", func() {
 			var response map[string]any
 			var pageName string
 			var originalDataPath string
 
 			BeforeEach(func() {
-				pageName = "test-lock-fail"
+				pageName = "test-lock-fail-filesystem"
 				p := site.Open(pageName)
 				_ = p.Update("some content")
 				_ = p.Save()
