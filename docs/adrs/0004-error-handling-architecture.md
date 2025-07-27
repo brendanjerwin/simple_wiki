@@ -86,7 +86,7 @@ Each kind maps to appropriate visual icons for quick user recognition.
 
 ### Error Flow
 
-```
+```text
 Error Occurs → Can it be handled locally?
 ├─ Yes → Catch, augment with AugmentErrorService, show in ErrorDisplay
 └─ No → Let bubble → Global handler → Kernel panic screen
