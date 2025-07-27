@@ -1,6 +1,7 @@
-import type { Meta, StoryObj } from '@storybook/web-components-vite';
+import type { Meta, StoryObj } from '@storybook/web-components';
 import { html } from 'lit';
 import './frontmatter-editor-dialog.js';
+import { AugmentedError, AugmentErrorService } from './augment-error-service.js';
 
 // Custom action logger for Storybook
 const action = (name: string) => (event: Event) => {
@@ -45,8 +46,8 @@ export const Closed: Story = {
   },
   render: (args) => html`
     <frontmatter-editor-dialog 
-      .page="${args.page}"
-      .open="${args.open}"
+      .page="${args['page']}"
+      .open="${args['open']}"
       @save=${action('save-event')}
       @cancel=${action('cancel-event')}
       @close=${action('close-event')}>
@@ -63,8 +64,8 @@ export const Loading: Story = {
     // Create element and manually set its internal loading state
     return html`
       <frontmatter-editor-dialog 
-        .page="${args.page}"
-        .open="${args.open}"
+        .page="${args['page']}"
+        .open="${args['open']}"
         .loading="${true}"
         @save=${action('save-event')}
         @cancel=${action('cancel-event')}
@@ -79,17 +80,19 @@ export const Error: Story = {
     page: 'error-page',
     open: true,
   },
-  render: (args) => html`
+  render: (args) => {
+    const mockError = AugmentErrorService.augmentError(new window.Error('Network error: Could not connect to server'), 'loading frontmatter data');
+    return html`
     <frontmatter-editor-dialog 
-      .page="${args.page}"
-      .open="${args.open}"
+      .page="${args['page']}"
+      .open="${args['open']}"
       .loading="${false}"
-      .error="${'Network error: Could not connect to server'}"
+      .augmentedError=${mockError}
       @save=${action('save-event')}
       @cancel=${action('cancel-event')}
       @close=${action('close-event')}>
     </frontmatter-editor-dialog>
-  `,
+  `},
 };
 
 export const Loaded: Story = {
@@ -114,8 +117,8 @@ export const Loaded: Story = {
 
     return html`
       <frontmatter-editor-dialog 
-        .page="${args.page}"
-        .open="${args.open}"
+        .page="${args['page']}"
+        .open="${args['open']}"
         .loading="${false}"
         .workingFrontmatter="${mockFrontmatterData}"
         @save=${action('save-event')}
@@ -143,8 +146,8 @@ export const Saving: Story = {
 
     return html`
       <frontmatter-editor-dialog 
-        .page="${args.page}"
-        .open="${args.open}"
+        .page="${args['page']}"
+        .open="${args['open']}"
         .loading="${false}"
         .saving="${true}"
         .workingFrontmatter="${mockFrontmatterData}"

@@ -17,7 +17,7 @@ export enum ErrorKind {
 /**
  * Standard error icons for common error types
  */
-export type StandardErrorIcon = 
+export type StandardErrorIcon =
   | 'warning'      // ⚠️ - General warnings and errors
   | 'error'        // ❌ - Critical errors and failures  
   | 'network'      // 🌐 - Network and connectivity errors
@@ -38,7 +38,7 @@ export type ErrorIcon = StandardErrorIcon | string;
  */
 const STANDARD_ICONS: Record<StandardErrorIcon, string> = {
   'warning': '⚠️',
-  'error': '❌', 
+  'error': '❌',
   'network': '🌐',
   'permission': '🔒',
   'timeout': '⏱️',
@@ -73,19 +73,19 @@ export class AugmentedError extends Error {
   ) {
     // Call super with no arguments to avoid auto-generating new stack trace
     super();
-    
+
     // Remove the auto-generated stack property so our getter can work
     delete (this as Error).stack;
   }
 
   // Delegate message to original error
   override get message(): string {
-    return this.originalError.message;
+    return this.originalError.message ?? '';
   }
 
   // Delegate stack to original error
-  override get stack(): string | undefined {
-    return this.originalError.stack;
+  override get stack(): string {
+    return this.originalError.stack ?? '';
   }
 
   // Delegate name to original error to preserve error type information
@@ -94,7 +94,7 @@ export class AugmentedError extends Error {
   }
 
   // Delegate cause to original error for full transparency
-  override get cause(): unknown {
+  get cause(): unknown {
     return (this.originalError as { cause?: unknown }).cause;
   }
 }
@@ -114,15 +114,15 @@ export class AugmentErrorService {
     if (error instanceof AugmentedError) {
       return error; // Already augmented
     }
-    
+
     if (error instanceof ConnectError) {
       return this.augmentConnectError(error, failedGoalDescription);
     }
-    
+
     if (error instanceof Error) {
       return this.augmentStandardError(error, failedGoalDescription);
     }
-    
+
     // Handle non-Error objects by creating Error first
     return this.augmentUnknownError(error, failedGoalDescription);
   }
@@ -142,7 +142,7 @@ export class AugmentErrorService {
    */
   private static augmentConnectError(error: ConnectError, failedGoalDescription?: string): AugmentedError {
     let errorKind: ErrorKind;
-    
+
     switch (error.code) {
       case Code.Unavailable:
         errorKind = ErrorKind.NETWORK;
@@ -166,9 +166,9 @@ export class AugmentErrorService {
       default:
         errorKind = ErrorKind.ERROR;
     }
-    
+
     const icon = ERROR_KIND_TO_ICON[errorKind];
-    
+
     return new AugmentedError(
       error,
       errorKind,
@@ -194,7 +194,7 @@ export class AugmentErrorService {
    */
   private static augmentUnknownError(error: unknown, failedGoalDescription?: string): AugmentedError {
     let message: string;
-    
+
     if (typeof error === 'string') {
       message = error;
     } else if (error !== null && error !== undefined) {
@@ -208,10 +208,10 @@ export class AugmentErrorService {
     } else {
       message = 'An unknown error occurred';
     }
-    
+
     // Create Error first, then augment it
     const createdError = new Error(message);
-    
+
     return new AugmentedError(
       createdError,
       ErrorKind.ERROR,
