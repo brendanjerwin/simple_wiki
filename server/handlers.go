@@ -685,3 +685,20 @@ func contentTypeFromName(filename string) string {
 	mimeType := mime.TypeByExtension("." + nameParts[len(nameParts)-1])
 	return mimeType
 }
+
+// Test helper functions to expose private functions for testing
+
+// GetSetSessionIDForTesting exposes getSetSessionID for testing
+func GetSetSessionIDForTesting(c *gin.Context, logger *lumber.ConsoleLogger) string {
+	return getSetSessionID(c, logger)
+}
+
+// GetRecentlyEditedForTesting exposes getRecentlyEdited for testing
+func GetRecentlyEditedForTesting(title string, c *gin.Context, logger *lumber.ConsoleLogger) []string {
+	return getRecentlyEdited(title, c, logger)
+}
+
+// PageIsLockedForTesting exposes pageIsLocked for testing
+func PageIsLockedForTesting(p *Page, c *gin.Context, logger *lumber.ConsoleLogger) bool {
+	return pageIsLocked(p, c, logger)
+}
