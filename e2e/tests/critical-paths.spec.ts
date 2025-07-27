@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+import { test, expect } from '@playwright/test';
 
 // Test data
 const TEST_PAGE_NAME = 'E2ETestPage';
@@ -66,7 +66,7 @@ Created at: ${new Date().toISOString().slice(0, 19)}`;
     
     // Should have some pages listed (at least home)
     const pageLinks = page.locator('a[href*="/view"]');
-    await expect(pageLinks).toHaveCount({ gte: 1 });
+    await expect(pageLinks.first()).toBeVisible();
     
     // Find and click the home page link
     const homeLink = page.locator('a[href="/home/view"]');
@@ -144,7 +144,7 @@ identifier = "${TEST_PAGE_NAME.toLowerCase()}"
       await page.waitForTimeout(1000);
       
       console.log(`Cleaned up test page: ${TEST_PAGE_NAME}`);
-    } catch (error) {
+    } catch (error: any) {
       console.log(`Test page cleanup skipped: ${error.message}`);
     }
     

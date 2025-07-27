@@ -1,10 +1,10 @@
-// @ts-check
-const { defineConfig, devices } = require('@playwright/test');
+import { defineConfig, devices } from '@playwright/test';
+import path from 'path';
 
 /**
- * @see https://playwright.dev/docs/test-configuration
+ * See https://playwright.dev/docs/test-configuration.
  */
-module.exports = defineConfig({
+export default defineConfig({
   testDir: './tests',
   /* Run tests in files in parallel */
   fullyParallel: false,
@@ -33,6 +33,20 @@ module.exports = defineConfig({
     /* Use headless mode for CI/container environments */
     headless: true,
   },
+
+  /* Configure web server - this replaces the complex shell script */
+  webServer: {
+    command: 'cd .. && ./simple_wiki --port 8051 --data e2e/test-data --debug',
+    url: 'http://localhost:8051',
+    reuseExistingServer: !process.env.CI,
+    stdout: 'pipe',
+    stderr: 'pipe',
+    timeout: 30 * 1000,
+  },
+
+  /* Global setup and teardown for test data */
+  globalSetup: './global-setup.ts',
+  globalTeardown: './global-teardown.ts',
 
   /* Configure projects for major browsers */
   projects: [
