@@ -148,12 +148,12 @@ export const AugmentedErrorDisplay: Story = {
   },
   render: (args) => {
     // Create a sample AugmentedError for demonstration
-    const originalError = new Error('Failed to connect to the server. The request timed out after 30 seconds.');
+    const originalError = new window.Error('Failed to connect to the server. The request timed out after 30 seconds.');
     originalError.stack = `Error: Failed to connect to the server. The request timed out after 30 seconds.
     at fetchData (http://localhost:8050/static/js/api.js:45:12)
     at async loadUserProfile (http://localhost:8050/static/js/components/user-profile.js:23:18)
     at async UserProfileComponent.connectedCallback (http://localhost:8050/static/js/components/user-profile.js:15:5)`;
-    
+
     const augmentedError = new AugmentedError(
       originalError,
       ErrorKind.NETWORK,
