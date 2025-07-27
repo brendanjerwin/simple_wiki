@@ -1,5 +1,7 @@
 import { html, css, LitElement } from 'lit';
 import { sharedStyles, foundationCSS, buttonCSS } from './shared-styles.js';
+import { AugmentedError } from './augment-error-service.js';
+import './error-display.js';
 
 // Valid toast types - defined once for consistency
 const TOAST_TYPES = ['success', 'error', 'warning', 'info'] as const;
@@ -36,7 +38,7 @@ export class ToastMessage extends LitElement {
         right: 20px;
         z-index: 10000;
         display: block;
-        max-width: 400px;
+        max-width: 500px;
         min-width: 300px;
         opacity: 0;
         transform: translateX(100%);
@@ -51,10 +53,12 @@ export class ToastMessage extends LitElement {
       .toast {
         background: #ffffff;
         border-left: 4px solid var(--toast-color);
-        padding: 16px;
+        padding: 16px 40px 16px 16px; /* Extra padding on right for close button */
         position: relative;
-        cursor: pointer;
-        min-height: 48px; /* Start with icon size (32px) + padding (16px) */
+        min-height: 48px;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
       }
 
       .toast.success {
@@ -73,25 +77,24 @@ export class ToastMessage extends LitElement {
         --toast-color: #6c757d;
       }
 
+      .toast-header {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        min-height: 32px; /* Ensure minimum height for icon */
+      }
+
       .icon {
-        position: absolute;
-        top: 8px;
-        left: 8px;
         font-size: 32px;
-        opacity: 0.15;
-        z-index: 0;
         color: var(--toast-color);
-        pointer-events: none;
         line-height: 1;
+        flex-shrink: 0;
+        opacity: 0.8;
       }
 
       .content {
-        position: absolute;
-        bottom: 8px;
-        right: 8px;
-        z-index: 1;
-        text-align: right;
-        max-width: calc(100% - 60px); /* Account for icon space */
+        flex: 1;
+        min-width: 0; /* Allow content to shrink */
       }
 
       .message {
@@ -100,6 +103,35 @@ export class ToastMessage extends LitElement {
         color: #333;
         margin: 0;
         word-wrap: break-word;
+      }
+
+      .close-button {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        background: none;
+        border: none;
+        font-size: 20px;
+        line-height: 1;
+        cursor: pointer;
+        padding: 4px;
+        color: #666;
+        border-radius: 2px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+      }
+
+      .close-button:hover {
+        background: rgba(0, 0, 0, 0.1);
+        color: #333;
+      }
+
+      .close-button:focus {
+        outline: 2px solid var(--toast-color);
+        outline-offset: 1px;
       }
 
       /* Mobile responsive */
@@ -120,7 +152,8 @@ export class ToastMessage extends LitElement {
     type: { type: String },
     visible: { type: Boolean, reflect: true },
     timeoutSeconds: { type: Number },
-    autoClose: { type: Boolean }
+    autoClose: { type: Boolean },
+    augmentedError: { type: Object }
   };
 
   declare message: string;
@@ -128,6 +161,7 @@ export class ToastMessage extends LitElement {
   declare visible: boolean;
   declare timeoutSeconds: number;
   declare autoClose: boolean;
+  declare augmentedError?: AugmentedError;
 
   private timeoutId?: number;
 
@@ -154,7 +188,12 @@ export class ToastMessage extends LitElement {
   public show(): void {
     this.visible = true;
     
-    if (this.autoClose && this.timeoutSeconds > 0) {
+    // Disable auto-close by default for error types, unless explicitly enabled
+    const shouldAutoClose = this.type === 'error' 
+      ? this.autoClose === true 
+      : this.autoClose;
+    
+    if (shouldAutoClose && this.timeoutSeconds > 0) {
       this.clearTimeout();
       this.timeoutId = window.setTimeout(() => {
         this.hide();
@@ -179,7 +218,25 @@ export class ToastMessage extends LitElement {
     }
   }
 
-  private _handleToastClick = (): void => {
+  private _handleCloseClick = (event: Event): void => {
+    event.stopPropagation();
+    this.hide();
+  };
+
+  private _handleToastClick = (event: Event): void => {
+    // Don't dismiss if clicking on error-display component or its children
+    const target = event.target as Element;
+    if (target && target.closest('error-display')) {
+      return;
+    }
+    
+    // Don't dismiss if clicking on the close button (handled separately)
+    if (target && target.closest('.close-button')) {
+      return;
+    }
+    
+    // For backward compatibility, still allow clicking elsewhere to dismiss
+    // This maintains existing behavior for simple message toasts
     this.hide();
   };
 
@@ -192,11 +249,23 @@ export class ToastMessage extends LitElement {
     return html`
       ${sharedStyles}
       <div class="toast ${this.type} border-radius box-shadow system-font" @click="${this._handleToastClick}">
-        <div class="icon" aria-hidden="true">
-          ${this.getIcon()}
-        </div>
-        <div class="content">
-          <p class="message">${this.message}</p>
+        <button 
+          class="close-button" 
+          @click="${this._handleCloseClick}"
+          aria-label="Close notification"
+          title="Close notification">
+          ✕
+        </button>
+        <div class="toast-header">
+          <div class="icon" aria-hidden="true">
+            ${this.getIcon()}
+          </div>
+          <div class="content">
+            ${this.augmentedError 
+              ? html`<error-display .augmentedError="${this.augmentedError}"></error-display>`
+              : html`<p class="message">${this.message}</p>`
+            }
+          </div>
         </div>
       </div>
     `;
@@ -241,7 +310,9 @@ export function showToast(
   toast.message = message;
   toast.type = type;
   toast.timeoutSeconds = timeoutSeconds;
-  toast.autoClose = true;
+  // For error types, don't enable auto-close by default
+  // For other types, maintain existing behavior
+  toast.autoClose = type !== 'error';
   toast.visible = false;
   
   document.body.appendChild(toast);
@@ -273,7 +344,9 @@ export function showStoredToast(): void {
     toast.message = storedMessage;
     toast.type = storedType;
     toast.timeoutSeconds = storedTimeout;
-    toast.autoClose = true;
+    // For error types, don't enable auto-close by default
+    // For other types, maintain existing behavior
+    toast.autoClose = storedType !== 'error';
     toast.visible = false;
     
     document.body.appendChild(toast);
