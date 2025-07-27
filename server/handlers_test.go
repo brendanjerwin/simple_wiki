@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/server"
@@ -260,7 +261,7 @@ var _ = Describe("Session Logging Functions", func() {
 
 		// Create a buffer-backed logger to capture log output
 		logBuffer = &bytes.Buffer{}
-		logger = lumber.NewBasicLogger(&testWriteCloser{logBuffer}, lumber.ERROR)
+		logger = lumber.NewBasicLogger(&handlerTestWriteCloser{logBuffer}, lumber.ERROR)
 
 		site = server.NewSite(tmpDir, "", "testpage", "password", 0, "secret", "", true, 1024, 1024, logger)
 		router = site.GinRouter()
@@ -329,6 +330,37 @@ var _ = Describe("Session Logging Functions", func() {
 				Expect(logOutput).To(ContainSubstring("session save failed"))
 			})
 		})
+
+		When("session contains invalid sid type", func() {
+			var sessionID string
+			var c *gin.Context
+
+			BeforeEach(func() {
+				w := httptest.NewRecorder()
+				c, _ = gin.CreateTestContext(w)
+				c.Request, _ = http.NewRequest("GET", "/", nil)
+
+				// Set up session middleware with cookie store
+				store := cookie.NewStore([]byte("test-secret"))
+				sessions.Sessions("_session", store)(c)
+
+				// Set invalid type in session (not a string)
+				session := sessions.Default(c)
+				session.Set("sid", 12345) // integer instead of string
+				_ = session.Save()
+
+				// Call the function under test
+				sessionID = server.GetSetSessionIDForTesting(c, logger)
+			})
+
+			It("should generate a new session ID when type assertion fails", func() {
+				Expect(sessionID).NotTo(BeEmpty())
+			})
+
+			It("should not log any errors", func() {
+				Expect(logBuffer.String()).To(BeEmpty())
+			})
+		})
 	})
 
 	Describe("getRecentlyEdited", func() {
@@ -392,6 +424,88 @@ var _ = Describe("Session Logging Functions", func() {
 				logOutput := logBuffer.String()
 				Expect(logOutput).To(ContainSubstring("Failed to save session"))
 				Expect(logOutput).To(ContainSubstring("session save failed"))
+			})
+		})
+
+		When("session contains invalid recentlyEdited type", func() {
+			var recentPages []string
+			var c *gin.Context
+
+			BeforeEach(func() {
+				w := httptest.NewRecorder()
+				c, _ = gin.CreateTestContext(w)
+				c.Request, _ = http.NewRequest("GET", "/", nil)
+
+				// Set up session middleware with cookie store
+				store := cookie.NewStore([]byte("test-secret"))
+				sessions.Sessions("_session", store)(c)
+
+				// Set invalid type in session (not a string)
+				session := sessions.Default(c)
+				session.Set("recentlyEdited", []string{"invalid", "type"}) // slice instead of string
+				_ = session.Save()
+
+				// Call the function under test
+				recentPages = server.GetRecentlyEditedForTesting("test-page", c, logger)
+			})
+
+			It("should return an empty list when type assertion fails", func() {
+				Expect(recentPages).To(BeEmpty())
+			})
+
+			It("should not log any errors", func() {
+				Expect(logBuffer.String()).To(BeEmpty())
+			})
+		})
+
+		When("handling special cases", func() {
+			var c *gin.Context
+
+			BeforeEach(func() {
+				w := httptest.NewRecorder()
+				c, _ = gin.CreateTestContext(w)
+				c.Request, _ = http.NewRequest("GET", "/", nil)
+
+				// Set up session middleware with cookie store
+				store := cookie.NewStore([]byte("test-secret"))
+				sessions.Sessions("_session", store)(c)
+
+				// Set up some initial recent pages including icons and duplicates
+				session := sessions.Default(c)
+				session.Set("recentlyEdited", "page1|||icon-test|||duplicate-page|||page2")
+				_ = session.Save()
+			})
+
+			It("should filter out icon pages", func() {
+				recentPages := server.GetRecentlyEditedForTesting("new-page", c, logger)
+				Expect(recentPages).To(ContainElement("page1"))
+				Expect(recentPages).To(ContainElement("duplicate-page"))
+				Expect(recentPages).To(ContainElement("page2"))
+				Expect(recentPages).NotTo(ContainElement("icon-test"))
+			})
+
+			It("should exclude current page from results", func() {
+				recentPages := server.GetRecentlyEditedForTesting("duplicate-page", c, logger)
+				Expect(recentPages).To(ContainElement("page1"))
+				Expect(recentPages).To(ContainElement("page2"))
+				Expect(recentPages).NotTo(ContainElement("duplicate-page"))
+				Expect(recentPages).NotTo(ContainElement("icon-test"))
+			})
+
+			It("should not add duplicate when page already exists", func() {
+				// First call adds the page
+				server.GetRecentlyEditedForTesting("page1", c, logger)
+				
+				// Second call should not duplicate it
+				_ = server.GetRecentlyEditedForTesting("different-page", c, logger)
+				
+				// Count occurrences of "page1" in the session
+				session := sessions.Default(c)
+				recentStrVal := session.Get("recentlyEdited")
+				recentStr, ok := recentStrVal.(string)
+				Expect(ok).To(BeTrue())
+				count := strings.Count(recentStr, "page1")
+				Expect(count).To(Equal(1)) // Should only appear once
 			})
 		})
 	})
@@ -465,12 +579,12 @@ var _ = Describe("Session Logging Functions", func() {
 	})
 })
 
-// testWriteCloser wraps a buffer to implement io.WriteCloser for logger testing
-type testWriteCloser struct {
+// handlerTestWriteCloser wraps a buffer to implement io.WriteCloser for logger testing
+type handlerTestWriteCloser struct {
 	*bytes.Buffer
 }
 
-func (*testWriteCloser) Close() error {
+func (*handlerTestWriteCloser) Close() error {
 	return nil
 }
 
