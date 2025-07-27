@@ -7,13 +7,13 @@ import { CreatePageRequest, CreatePageResponse, DeletePageRequest, DeletePageRes
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
- * @generated from service api.v1.PageManagement
+ * @generated from service api.v1.PageManagementService
  */
-export const PageManagement = {
-  typeName: "api.v1.PageManagement",
+export const PageManagementService = {
+  typeName: "api.v1.PageManagementService",
   methods: {
     /**
-     * @generated from rpc api.v1.PageManagement.CreatePage
+     * @generated from rpc api.v1.PageManagementService.CreatePage
      */
     createPage: {
       name: "CreatePage",
@@ -22,7 +22,7 @@ export const PageManagement = {
       kind: MethodKind.Unary,
     },
     /**
-     * @generated from rpc api.v1.PageManagement.ReadPage
+     * @generated from rpc api.v1.PageManagementService.ReadPage
      */
     readPage: {
       name: "ReadPage",
@@ -31,7 +31,7 @@ export const PageManagement = {
       kind: MethodKind.Unary,
     },
     /**
-     * @generated from rpc api.v1.PageManagement.RenderPage
+     * @generated from rpc api.v1.PageManagementService.RenderPage
      */
     renderPage: {
       name: "RenderPage",
@@ -40,7 +40,7 @@ export const PageManagement = {
       kind: MethodKind.Unary,
     },
     /**
-     * @generated from rpc api.v1.PageManagement.UpdatePage
+     * @generated from rpc api.v1.PageManagementService.UpdatePage
      */
     updatePage: {
       name: "UpdatePage",
@@ -49,7 +49,7 @@ export const PageManagement = {
       kind: MethodKind.Unary,
     },
     /**
-     * @generated from rpc api.v1.PageManagement.UpdatePageContent
+     * @generated from rpc api.v1.PageManagementService.UpdatePageContent
      */
     updatePageContent: {
       name: "UpdatePageContent",
@@ -58,7 +58,7 @@ export const PageManagement = {
       kind: MethodKind.Unary,
     },
     /**
-     * @generated from rpc api.v1.PageManagement.UpdateWholePage
+     * @generated from rpc api.v1.PageManagementService.UpdateWholePage
      */
     updateWholePage: {
       name: "UpdateWholePage",
@@ -67,7 +67,7 @@ export const PageManagement = {
       kind: MethodKind.Unary,
     },
     /**
-     * @generated from rpc api.v1.PageManagement.DeletePage
+     * @generated from rpc api.v1.PageManagementService.DeletePage
      */
     deletePage: {
       name: "DeletePage",
@@ -76,7 +76,7 @@ export const PageManagement = {
       kind: MethodKind.Unary,
     },
     /**
-     * @generated from rpc api.v1.PageManagement.TogglePageLock
+     * @generated from rpc api.v1.PageManagementService.TogglePageLock
      */
     togglePageLock: {
       name: "TogglePageLock",

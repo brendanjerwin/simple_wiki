@@ -19,20 +19,20 @@ import (
 const _ = grpc.SupportPackageIsVersion8
 
 const (
-	PageManagement_CreatePage_FullMethodName        = "/api.v1.PageManagement/CreatePage"
-	PageManagement_ReadPage_FullMethodName          = "/api.v1.PageManagement/ReadPage"
-	PageManagement_RenderPage_FullMethodName        = "/api.v1.PageManagement/RenderPage"
-	PageManagement_UpdatePage_FullMethodName        = "/api.v1.PageManagement/UpdatePage"
-	PageManagement_UpdatePageContent_FullMethodName = "/api.v1.PageManagement/UpdatePageContent"
-	PageManagement_UpdateWholePage_FullMethodName   = "/api.v1.PageManagement/UpdateWholePage"
-	PageManagement_DeletePage_FullMethodName        = "/api.v1.PageManagement/DeletePage"
-	PageManagement_TogglePageLock_FullMethodName    = "/api.v1.PageManagement/TogglePageLock"
+	PageManagementService_CreatePage_FullMethodName        = "/api.v1.PageManagementService/CreatePage"
+	PageManagementService_ReadPage_FullMethodName          = "/api.v1.PageManagementService/ReadPage"
+	PageManagementService_RenderPage_FullMethodName        = "/api.v1.PageManagementService/RenderPage"
+	PageManagementService_UpdatePage_FullMethodName        = "/api.v1.PageManagementService/UpdatePage"
+	PageManagementService_UpdatePageContent_FullMethodName = "/api.v1.PageManagementService/UpdatePageContent"
+	PageManagementService_UpdateWholePage_FullMethodName   = "/api.v1.PageManagementService/UpdateWholePage"
+	PageManagementService_DeletePage_FullMethodName        = "/api.v1.PageManagementService/DeletePage"
+	PageManagementService_TogglePageLock_FullMethodName    = "/api.v1.PageManagementService/TogglePageLock"
 )
 
-// PageManagementClient is the client API for PageManagement service.
+// PageManagementServiceClient is the client API for PageManagementService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-type PageManagementClient interface {
+type PageManagementServiceClient interface {
 	CreatePage(ctx context.Context, in *CreatePageRequest, opts ...grpc.CallOption) (*CreatePageResponse, error)
 	ReadPage(ctx context.Context, in *ReadPageRequest, opts ...grpc.CallOption) (*ReadPageResponse, error)
 	RenderPage(ctx context.Context, in *RenderPageRequest, opts ...grpc.CallOption) (*RenderPageResponse, error)
@@ -43,98 +43,98 @@ type PageManagementClient interface {
 	TogglePageLock(ctx context.Context, in *TogglePageLockRequest, opts ...grpc.CallOption) (*TogglePageLockResponse, error)
 }
 
-type pageManagementClient struct {
+type pageManagementServiceClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewPageManagementClient(cc grpc.ClientConnInterface) PageManagementClient {
-	return &pageManagementClient{cc}
+func NewPageManagementServiceClient(cc grpc.ClientConnInterface) PageManagementServiceClient {
+	return &pageManagementServiceClient{cc}
 }
 
-func (c *pageManagementClient) CreatePage(ctx context.Context, in *CreatePageRequest, opts ...grpc.CallOption) (*CreatePageResponse, error) {
+func (c *pageManagementServiceClient) CreatePage(ctx context.Context, in *CreatePageRequest, opts ...grpc.CallOption) (*CreatePageResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(CreatePageResponse)
-	err := c.cc.Invoke(ctx, PageManagement_CreatePage_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, PageManagementService_CreatePage_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *pageManagementClient) ReadPage(ctx context.Context, in *ReadPageRequest, opts ...grpc.CallOption) (*ReadPageResponse, error) {
+func (c *pageManagementServiceClient) ReadPage(ctx context.Context, in *ReadPageRequest, opts ...grpc.CallOption) (*ReadPageResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ReadPageResponse)
-	err := c.cc.Invoke(ctx, PageManagement_ReadPage_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, PageManagementService_ReadPage_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *pageManagementClient) RenderPage(ctx context.Context, in *RenderPageRequest, opts ...grpc.CallOption) (*RenderPageResponse, error) {
+func (c *pageManagementServiceClient) RenderPage(ctx context.Context, in *RenderPageRequest, opts ...grpc.CallOption) (*RenderPageResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(RenderPageResponse)
-	err := c.cc.Invoke(ctx, PageManagement_RenderPage_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, PageManagementService_RenderPage_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *pageManagementClient) UpdatePage(ctx context.Context, in *UpdatePageRequest, opts ...grpc.CallOption) (*UpdatePageResponse, error) {
+func (c *pageManagementServiceClient) UpdatePage(ctx context.Context, in *UpdatePageRequest, opts ...grpc.CallOption) (*UpdatePageResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(UpdatePageResponse)
-	err := c.cc.Invoke(ctx, PageManagement_UpdatePage_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, PageManagementService_UpdatePage_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *pageManagementClient) UpdatePageContent(ctx context.Context, in *UpdatePageContentRequest, opts ...grpc.CallOption) (*UpdatePageContentResponse, error) {
+func (c *pageManagementServiceClient) UpdatePageContent(ctx context.Context, in *UpdatePageContentRequest, opts ...grpc.CallOption) (*UpdatePageContentResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(UpdatePageContentResponse)
-	err := c.cc.Invoke(ctx, PageManagement_UpdatePageContent_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, PageManagementService_UpdatePageContent_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *pageManagementClient) UpdateWholePage(ctx context.Context, in *UpdateWholePageRequest, opts ...grpc.CallOption) (*UpdateWholePageResponse, error) {
+func (c *pageManagementServiceClient) UpdateWholePage(ctx context.Context, in *UpdateWholePageRequest, opts ...grpc.CallOption) (*UpdateWholePageResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(UpdateWholePageResponse)
-	err := c.cc.Invoke(ctx, PageManagement_UpdateWholePage_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, PageManagementService_UpdateWholePage_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *pageManagementClient) DeletePage(ctx context.Context, in *DeletePageRequest, opts ...grpc.CallOption) (*DeletePageResponse, error) {
+func (c *pageManagementServiceClient) DeletePage(ctx context.Context, in *DeletePageRequest, opts ...grpc.CallOption) (*DeletePageResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(DeletePageResponse)
-	err := c.cc.Invoke(ctx, PageManagement_DeletePage_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, PageManagementService_DeletePage_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *pageManagementClient) TogglePageLock(ctx context.Context, in *TogglePageLockRequest, opts ...grpc.CallOption) (*TogglePageLockResponse, error) {
+func (c *pageManagementServiceClient) TogglePageLock(ctx context.Context, in *TogglePageLockRequest, opts ...grpc.CallOption) (*TogglePageLockResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(TogglePageLockResponse)
-	err := c.cc.Invoke(ctx, PageManagement_TogglePageLock_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, PageManagementService_TogglePageLock_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// PageManagementServer is the server API for PageManagement service.
-// All implementations must embed UnimplementedPageManagementServer
+// PageManagementServiceServer is the server API for PageManagementService service.
+// All implementations must embed UnimplementedPageManagementServiceServer
 // for forward compatibility
-type PageManagementServer interface {
+type PageManagementServiceServer interface {
 	CreatePage(context.Context, *CreatePageRequest) (*CreatePageResponse, error)
 	ReadPage(context.Context, *ReadPageRequest) (*ReadPageResponse, error)
 	RenderPage(context.Context, *RenderPageRequest) (*RenderPageResponse, error)
@@ -143,232 +143,232 @@ type PageManagementServer interface {
 	UpdateWholePage(context.Context, *UpdateWholePageRequest) (*UpdateWholePageResponse, error)
 	DeletePage(context.Context, *DeletePageRequest) (*DeletePageResponse, error)
 	TogglePageLock(context.Context, *TogglePageLockRequest) (*TogglePageLockResponse, error)
-	mustEmbedUnimplementedPageManagementServer()
+	mustEmbedUnimplementedPageManagementServiceServer()
 }
 
-// UnimplementedPageManagementServer must be embedded to have forward compatible implementations.
-type UnimplementedPageManagementServer struct {
+// UnimplementedPageManagementServiceServer must be embedded to have forward compatible implementations.
+type UnimplementedPageManagementServiceServer struct {
 }
 
-func (UnimplementedPageManagementServer) CreatePage(context.Context, *CreatePageRequest) (*CreatePageResponse, error) {
+func (UnimplementedPageManagementServiceServer) CreatePage(context.Context, *CreatePageRequest) (*CreatePageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CreatePage not implemented")
 }
-func (UnimplementedPageManagementServer) ReadPage(context.Context, *ReadPageRequest) (*ReadPageResponse, error) {
+func (UnimplementedPageManagementServiceServer) ReadPage(context.Context, *ReadPageRequest) (*ReadPageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReadPage not implemented")
 }
-func (UnimplementedPageManagementServer) RenderPage(context.Context, *RenderPageRequest) (*RenderPageResponse, error) {
+func (UnimplementedPageManagementServiceServer) RenderPage(context.Context, *RenderPageRequest) (*RenderPageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RenderPage not implemented")
 }
-func (UnimplementedPageManagementServer) UpdatePage(context.Context, *UpdatePageRequest) (*UpdatePageResponse, error) {
+func (UnimplementedPageManagementServiceServer) UpdatePage(context.Context, *UpdatePageRequest) (*UpdatePageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdatePage not implemented")
 }
-func (UnimplementedPageManagementServer) UpdatePageContent(context.Context, *UpdatePageContentRequest) (*UpdatePageContentResponse, error) {
+func (UnimplementedPageManagementServiceServer) UpdatePageContent(context.Context, *UpdatePageContentRequest) (*UpdatePageContentResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdatePageContent not implemented")
 }
-func (UnimplementedPageManagementServer) UpdateWholePage(context.Context, *UpdateWholePageRequest) (*UpdateWholePageResponse, error) {
+func (UnimplementedPageManagementServiceServer) UpdateWholePage(context.Context, *UpdateWholePageRequest) (*UpdateWholePageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpdateWholePage not implemented")
 }
-func (UnimplementedPageManagementServer) DeletePage(context.Context, *DeletePageRequest) (*DeletePageResponse, error) {
+func (UnimplementedPageManagementServiceServer) DeletePage(context.Context, *DeletePageRequest) (*DeletePageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeletePage not implemented")
 }
-func (UnimplementedPageManagementServer) TogglePageLock(context.Context, *TogglePageLockRequest) (*TogglePageLockResponse, error) {
+func (UnimplementedPageManagementServiceServer) TogglePageLock(context.Context, *TogglePageLockRequest) (*TogglePageLockResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method TogglePageLock not implemented")
 }
-func (UnimplementedPageManagementServer) mustEmbedUnimplementedPageManagementServer() {}
+func (UnimplementedPageManagementServiceServer) mustEmbedUnimplementedPageManagementServiceServer() {}
 
-// UnsafePageManagementServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to PageManagementServer will
+// UnsafePageManagementServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to PageManagementServiceServer will
 // result in compilation errors.
-type UnsafePageManagementServer interface {
-	mustEmbedUnimplementedPageManagementServer()
+type UnsafePageManagementServiceServer interface {
+	mustEmbedUnimplementedPageManagementServiceServer()
 }
 
-func RegisterPageManagementServer(s grpc.ServiceRegistrar, srv PageManagementServer) {
-	s.RegisterService(&PageManagement_ServiceDesc, srv)
+func RegisterPageManagementServiceServer(s grpc.ServiceRegistrar, srv PageManagementServiceServer) {
+	s.RegisterService(&PageManagementService_ServiceDesc, srv)
 }
 
-func _PageManagement_CreatePage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _PageManagementService_CreatePage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CreatePageRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(PageManagementServer).CreatePage(ctx, in)
+		return srv.(PageManagementServiceServer).CreatePage(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: PageManagement_CreatePage_FullMethodName,
+		FullMethod: PageManagementService_CreatePage_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PageManagementServer).CreatePage(ctx, req.(*CreatePageRequest))
+		return srv.(PageManagementServiceServer).CreatePage(ctx, req.(*CreatePageRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _PageManagement_ReadPage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _PageManagementService_ReadPage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ReadPageRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(PageManagementServer).ReadPage(ctx, in)
+		return srv.(PageManagementServiceServer).ReadPage(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: PageManagement_ReadPage_FullMethodName,
+		FullMethod: PageManagementService_ReadPage_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PageManagementServer).ReadPage(ctx, req.(*ReadPageRequest))
+		return srv.(PageManagementServiceServer).ReadPage(ctx, req.(*ReadPageRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _PageManagement_RenderPage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _PageManagementService_RenderPage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(RenderPageRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(PageManagementServer).RenderPage(ctx, in)
+		return srv.(PageManagementServiceServer).RenderPage(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: PageManagement_RenderPage_FullMethodName,
+		FullMethod: PageManagementService_RenderPage_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PageManagementServer).RenderPage(ctx, req.(*RenderPageRequest))
+		return srv.(PageManagementServiceServer).RenderPage(ctx, req.(*RenderPageRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _PageManagement_UpdatePage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _PageManagementService_UpdatePage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(UpdatePageRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(PageManagementServer).UpdatePage(ctx, in)
+		return srv.(PageManagementServiceServer).UpdatePage(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: PageManagement_UpdatePage_FullMethodName,
+		FullMethod: PageManagementService_UpdatePage_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PageManagementServer).UpdatePage(ctx, req.(*UpdatePageRequest))
+		return srv.(PageManagementServiceServer).UpdatePage(ctx, req.(*UpdatePageRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _PageManagement_UpdatePageContent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _PageManagementService_UpdatePageContent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(UpdatePageContentRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(PageManagementServer).UpdatePageContent(ctx, in)
+		return srv.(PageManagementServiceServer).UpdatePageContent(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: PageManagement_UpdatePageContent_FullMethodName,
+		FullMethod: PageManagementService_UpdatePageContent_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PageManagementServer).UpdatePageContent(ctx, req.(*UpdatePageContentRequest))
+		return srv.(PageManagementServiceServer).UpdatePageContent(ctx, req.(*UpdatePageContentRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _PageManagement_UpdateWholePage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _PageManagementService_UpdateWholePage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(UpdateWholePageRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(PageManagementServer).UpdateWholePage(ctx, in)
+		return srv.(PageManagementServiceServer).UpdateWholePage(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: PageManagement_UpdateWholePage_FullMethodName,
+		FullMethod: PageManagementService_UpdateWholePage_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PageManagementServer).UpdateWholePage(ctx, req.(*UpdateWholePageRequest))
+		return srv.(PageManagementServiceServer).UpdateWholePage(ctx, req.(*UpdateWholePageRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _PageManagement_DeletePage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _PageManagementService_DeletePage_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(DeletePageRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(PageManagementServer).DeletePage(ctx, in)
+		return srv.(PageManagementServiceServer).DeletePage(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: PageManagement_DeletePage_FullMethodName,
+		FullMethod: PageManagementService_DeletePage_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PageManagementServer).DeletePage(ctx, req.(*DeletePageRequest))
+		return srv.(PageManagementServiceServer).DeletePage(ctx, req.(*DeletePageRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _PageManagement_TogglePageLock_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _PageManagementService_TogglePageLock_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(TogglePageLockRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(PageManagementServer).TogglePageLock(ctx, in)
+		return srv.(PageManagementServiceServer).TogglePageLock(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: PageManagement_TogglePageLock_FullMethodName,
+		FullMethod: PageManagementService_TogglePageLock_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PageManagementServer).TogglePageLock(ctx, req.(*TogglePageLockRequest))
+		return srv.(PageManagementServiceServer).TogglePageLock(ctx, req.(*TogglePageLockRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// PageManagement_ServiceDesc is the grpc.ServiceDesc for PageManagement service.
+// PageManagementService_ServiceDesc is the grpc.ServiceDesc for PageManagementService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var PageManagement_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "api.v1.PageManagement",
-	HandlerType: (*PageManagementServer)(nil),
+var PageManagementService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "api.v1.PageManagementService",
+	HandlerType: (*PageManagementServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "CreatePage",
-			Handler:    _PageManagement_CreatePage_Handler,
+			Handler:    _PageManagementService_CreatePage_Handler,
 		},
 		{
 			MethodName: "ReadPage",
-			Handler:    _PageManagement_ReadPage_Handler,
+			Handler:    _PageManagementService_ReadPage_Handler,
 		},
 		{
 			MethodName: "RenderPage",
-			Handler:    _PageManagement_RenderPage_Handler,
+			Handler:    _PageManagementService_RenderPage_Handler,
 		},
 		{
 			MethodName: "UpdatePage",
-			Handler:    _PageManagement_UpdatePage_Handler,
+			Handler:    _PageManagementService_UpdatePage_Handler,
 		},
 		{
 			MethodName: "UpdatePageContent",
-			Handler:    _PageManagement_UpdatePageContent_Handler,
+			Handler:    _PageManagementService_UpdatePageContent_Handler,
 		},
 		{
 			MethodName: "UpdateWholePage",
-			Handler:    _PageManagement_UpdateWholePage_Handler,
+			Handler:    _PageManagementService_UpdateWholePage_Handler,
 		},
 		{
 			MethodName: "DeletePage",
-			Handler:    _PageManagement_DeletePage_Handler,
+			Handler:    _PageManagementService_DeletePage_Handler,
 		},
 		{
 			MethodName: "TogglePageLock",
-			Handler:    _PageManagement_TogglePageLock_Handler,
+			Handler:    _PageManagementService_TogglePageLock_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
