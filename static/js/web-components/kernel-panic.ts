@@ -142,21 +142,6 @@ export class KernelPanic extends LitElement {
     .refresh-button:active {
       background: #222;
     }
-
-    /* Override error-display styles for dark theme visibility */
-    error-display .error-details-content {
-      background: #1a1a1a !important;
-      border: 1px solid #444 !important;
-      color: #000 !important;
-    }
-
-    error-display .expand-button {
-      color: #ffcccc !important;
-    }
-
-    error-display .expand-button:hover {
-      color: #ff9999 !important;
-    }
     `
   ];
 

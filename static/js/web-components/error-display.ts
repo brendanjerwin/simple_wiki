@@ -86,6 +86,7 @@ export class ErrorDisplay extends LitElement {
       word-wrap: break-word;
       overflow-wrap: break-word;
       font-family: ui-monospace, 'SFMono-Regular', 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+      color: black;
     }
 
     .expand-button {
@@ -169,12 +170,12 @@ export class ErrorDisplay extends LitElement {
         <span class="error-icon" aria-hidden="true">${displayIcon}</span>
         <div class="error-content">
           <div class="error-message">
-            ${this.augmentedError.failedGoalDescription 
-              ? html`
+            ${this.augmentedError.failedGoalDescription
+        ? html`
                 <span class="error-goal">Error while ${this.augmentedError.failedGoalDescription}:</span>
                 <span class="error-detail">${this.augmentedError.message}</span>
-              ` 
-              : html`${this.augmentedError.message}`}
+              `
+        : html`${this.augmentedError.message}`}
           </div>
           
           ${hasDetails ? html`
