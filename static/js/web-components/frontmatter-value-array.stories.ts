@@ -33,9 +33,9 @@ export const WithItems: Story = {
   },
   render: (args) => html`
     <frontmatter-value-array 
-      .values="${args.values}"
-      .disabled="${args.disabled}"
-      .placeholder="${args.placeholder}">
+      .values="${args['values']}"
+      .disabled="${args['disabled']}"
+      .placeholder="${args['placeholder']}">
     </frontmatter-value-array>
   `,
 };
@@ -48,9 +48,9 @@ export const Empty: Story = {
   },
   render: (args) => html`
     <frontmatter-value-array 
-      .values="${args.values}"
-      .disabled="${args.disabled}"
-      .placeholder="${args.placeholder}">
+      .values="${args['values']}"
+      .disabled="${args['disabled']}"
+      .placeholder="${args['placeholder']}">
     </frontmatter-value-array>
   `,
 };
@@ -63,9 +63,9 @@ export const Disabled: Story = {
   },
   render: (args) => html`
     <frontmatter-value-array 
-      .values="${args.values}"
-      .disabled="${args.disabled}"
-      .placeholder="${args.placeholder}">
+      .values="${args['values']}"
+      .disabled="${args['disabled']}"
+      .placeholder="${args['placeholder']}">
     </frontmatter-value-array>
   `,
 };

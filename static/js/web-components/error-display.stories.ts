@@ -108,7 +108,7 @@ export const MultipleDifferentErrors: Story = {
       'network',
       'connecting to server'
     );
-    
+
     const permissionErrorOriginal = new Error('Access denied');
     permissionErrorOriginal.stack = 'User does not have write permissions for this resource';
     const permissionError = new AugmentedError(
@@ -117,7 +117,7 @@ export const MultipleDifferentErrors: Story = {
       'permission',
       'accessing resource'
     );
-    
+
     const validationErrorOriginal = new Error('Invalid input data');
     validationErrorOriginal.stack = 'Required field "title" is missing';
     const validationError = new AugmentedError(
@@ -126,7 +126,7 @@ export const MultipleDifferentErrors: Story = {
       'validation',
       'validating form data'
     );
-    
+
     const customIconErrorOriginal = new Error('Custom error with emoji');
     const customIconError = new AugmentedError(
       customIconErrorOriginal,
@@ -134,7 +134,7 @@ export const MultipleDifferentErrors: Story = {
       '🎯',
       'performing custom operation'
     );
-    
+
     return html`
       <div style="display: flex; flex-direction: column; gap: 20px; max-width: 500px;">
         <h3>Different Error Types</h3>
@@ -178,7 +178,7 @@ The component supports:
       '🎮',
       'testing component functionality'
     );
-    
+
     return html`
       <div style="padding: 20px; background: #f0f8ff; border-radius: 8px;">
         <h3>Error Display Component Test</h3>
@@ -200,83 +200,3 @@ The component supports:
     },
   },
 };
-
-export const FrontmatterEditorContext: Story = {
-  render: () => {
-    const originalError = new Error('Failed to load frontmatter');
-    originalError.stack = `ConnectError: NOT_FOUND
-    at FrontmatterService.getFrontmatter (/api/v1/frontmatter:23)
-    at FrontmatterEditorDialog.loadFrontmatter (frontmatter-editor:156)
-    at FrontmatterEditorDialog.connectedCallback (frontmatter-editor:89)
-    
-Caused by: Page does not exist or has been moved`;
-    const augmentedError = new AugmentedError(
-      originalError,
-      ErrorKind.NOT_FOUND,
-      'not-found',
-      'loading frontmatter'
-    );
-    
-    return html`
-      <div style="max-width: 600px; padding: 20px; border: 1px solid #ddd; border-radius: 8px; background: white;">
-        <h3 style="margin-top: 0;">Frontmatter Editor - Error State</h3>
-        <p>This shows how the error display component would appear in the frontmatter editor context:</p>
-        
-        <error-display .augmentedError=${augmentedError}></error-display>
-        
-        <div style="margin-top: 20px; display: flex; gap: 10px; justify-content: flex-end;">
-          <button style="padding: 8px 16px; background: #f3f4f6; border: 1px solid #d1d5db; border-radius: 4px;">Cancel</button>
-          <button style="padding: 8px 16px; background: #374151; color: white; border: 1px solid #374151; border-radius: 4px;">Save</button>
-        </div>
-      </div>
-    `;
-  },
-  parameters: {
-    docs: {
-      description: {
-        story: 'Shows how the error display component appears in the context of the frontmatter editor dialog.',
-      },
-    },
-  },
-};
-
-export const KernelPanicContext: Story = {
-  render: () => {
-    const originalError = new Error('Unhandled application error');
-    originalError.stack = `TypeError: Cannot read property 'data' of undefined
-    at WikiPage.render (wiki-page.js:45:12)
-    at LitElement.update (lit-element.js:332:19)
-    at LitElement.performUpdate (lit-element.js:298:16)
-    at LitElement._$commitUpdate (lit-element.js:242:23)
-    
-Caused by: Malformed data structure received from server`;
-    const augmentedError = new AugmentedError(
-      originalError,
-      ErrorKind.ERROR,
-      'error'
-    );
-    
-    return html`
-      <div style="position: relative; height: 300px; background: #1f2937; color: white; padding: 20px; border-radius: 8px; font-family: monospace;">
-        <h3 style="margin-top: 0; color: #ef4444;">Application Error</h3>
-        <p style="margin-bottom: 20px;">This shows how the error display appears in a kernel panic context:</p>
-        
-        <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 4px;">
-          <error-display .augmentedError=${augmentedError}></error-display>
-        </div>
-        
-        <p style="margin-top: 20px; font-size: 0.9em; opacity: 0.8;">
-          The application has encountered an unrecoverable error. Please refresh the page to restart.
-        </p>
-      </div>
-    `;
-  },
-  parameters: {
-    docs: {
-      description: {
-        story: 'Shows how the error display component appears in a kernel panic (application crash) context.',
-      },
-    },
-  },
-};
-

@@ -37,7 +37,7 @@ export const Basic: Story = {
     })(),
   },
   render: (args) => html`
-    <kernel-panic .augmentedError="${args.augmentedError}"></kernel-panic>
+    <kernel-panic .augmentedError="${args['augmentedError']}"></kernel-panic>
   `,
 };
 
@@ -71,7 +71,7 @@ export const NetworkError: Story = {
     })(),
   },
   render: (args) => html`
-    <kernel-panic .augmentedError="${args.augmentedError}"></kernel-panic>
+    <kernel-panic .augmentedError="${args['augmentedError']}"></kernel-panic>
   `,
 };
 
@@ -92,7 +92,7 @@ export const PermissionError: Story = {
     })(),
   },
   render: (args) => html`
-    <kernel-panic .augmentedError="${args.augmentedError}"></kernel-panic>
+    <kernel-panic .augmentedError="${args['augmentedError']}"></kernel-panic>
   `,
 };
 
@@ -113,7 +113,7 @@ export const ValidationError: Story = {
     })(),
   },
   render: (args) => html`
-    <kernel-panic .augmentedError="${args.augmentedError}"></kernel-panic>
+    <kernel-panic .augmentedError="${args['augmentedError']}"></kernel-panic>
   `,
 };
 
@@ -134,6 +134,6 @@ export const TimeoutError: Story = {
     })(),
   },
   render: (args) => html`
-    <kernel-panic .augmentedError="${args.augmentedError}"></kernel-panic>
+    <kernel-panic .augmentedError="${args['augmentedError']}"></kernel-panic>
   `,
 };
