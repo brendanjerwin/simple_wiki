@@ -496,10 +496,15 @@ old markdown`
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("should complete successfully and create indexes", func() {
-				// The method should complete and create indexes
+			It("should initialize IndexMaintainer", func() {
 				Expect(s.IndexMaintainer).NotTo(BeNil())
+			})
+
+			It("should initialize FrontmatterIndexQueryer", func() {
 				Expect(s.FrontmatterIndexQueryer).NotTo(BeNil())
+			})
+
+			It("should initialize BleveIndexQueryer", func() {
 				Expect(s.BleveIndexQueryer).NotTo(BeNil())
 			})
 
@@ -555,11 +560,6 @@ old markdown`
 				// Should find the test file in DirectoryList
 				Expect(len(files)).To(BeNumerically(">", 0))
 				Expect(files[0].Name()).To(Equal("test"))
-			})
-
-			It("should not panic when AddPageToIndex returns an error", func() {
-				// The test completing successfully demonstrates this
-				Expect(true).To(BeTrue())
 			})
 
 			It("should log the error", func() {
