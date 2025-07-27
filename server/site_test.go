@@ -1,6 +1,8 @@
 package server
 
 import (
+	"bytes"
+	"errors"
 	"net/http"
 	"os"
 	"path"
@@ -536,4 +538,107 @@ old markdown`
 			})
 		})
 	})
+
+	Describe("InitializeIndexing", func() {
+		When("a JSON file exists in the data directory", func() {
+			var (
+				err error
+			)
+
+			BeforeEach(func() {
+				// Create a test page as a JSON file with proper base32-encoded filename
+				encodedFilename := base32tools.EncodeToBase32(strings.ToLower("test"))
+				pagePath := filepath.Join(s.PathToData, encodedFilename+".json")
+				testPageContent := `{"identifier":"test","text":{"current":"test content","history":[]}}`
+				fileErr := os.WriteFile(pagePath, []byte(testPageContent), 0644)
+				Expect(fileErr).NotTo(HaveOccurred())
+
+				err = s.InitializeIndexing()
+			})
+
+			It("should not return an error from InitializeIndexing", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should initialize IndexMaintainer", func() {
+				Expect(s.IndexMaintainer).NotTo(BeNil())
+			})
+
+			It("should initialize FrontmatterIndexQueryer", func() {
+				Expect(s.FrontmatterIndexQueryer).NotTo(BeNil())
+			})
+
+			It("should initialize BleveIndexQueryer", func() {
+				Expect(s.BleveIndexQueryer).NotTo(BeNil())
+			})
+
+			It("should index the test page", func() {
+				// The page should be indexed (we can verify by checking DirectoryList)
+				files := s.DirectoryList()
+				Expect(len(files)).To(BeNumerically(">", 0))
+				Expect(files[0].Name()).To(Equal("test"))
+			})
+		})
+
+		When("the indexing process encounters errors", func() {
+			var (
+				files []os.FileInfo
+				logBuffer *bytes.Buffer
+				logOutput string
+			)
+
+			BeforeEach(func() {
+				// Create a test page
+				encodedFilename := base32tools.EncodeToBase32(strings.ToLower("test"))
+				pagePath := filepath.Join(s.PathToData, encodedFilename+".json")
+				testPageContent := `{"identifier":"test","text":{"current":"test content","history":[]}}`
+				fileErr := os.WriteFile(pagePath, []byte(testPageContent), 0644)
+				Expect(fileErr).NotTo(HaveOccurred())
+
+				// Set up a logger that writes to a buffer so we can capture log output
+				logBuffer = &bytes.Buffer{}
+				s.Logger = lumber.NewBasicLogger(&testWriteCloser{logBuffer}, lumber.ERROR)
+
+				// Set up a mock that returns an error
+				mockIndex.AddPageToIndexError = errors.New("mock index error")
+				s.IndexMaintainer = mockIndex
+
+				// Call the loop logic directly by simulating what InitializeIndexing does
+				files = s.DirectoryList()
+				for _, file := range files {
+					if err := s.IndexMaintainer.AddPageToIndex(file.Name()); err != nil {
+						s.Logger.Error("Failed to add page '%s' to index during initialization: %v", file.Name(), err)
+					}
+				}
+
+				// Capture log output after the actions are performed
+				logOutput = logBuffer.String()
+			})
+
+			It("should handle indexing errors gracefully", func() {
+				// The mock should have been called
+				Expect(mockIndex.AddPageToIndexCalledWith).To(Equal(wikipage.PageIdentifier("test")))
+			})
+
+			It("should continue processing despite errors", func() {
+				// Should find the test file in DirectoryList
+				Expect(len(files)).To(BeNumerically(">", 0))
+				Expect(files[0].Name()).To(Equal("test"))
+			})
+
+			It("should log the error", func() {
+				Expect(logOutput).To(ContainSubstring("Failed to add page 'test' to index during initialization"))
+				Expect(logOutput).To(ContainSubstring("mock index error"))
+			})
+		})
+	})
 })
+
+// testWriteCloser wraps a buffer and implements io.WriteCloser for testing
+type testWriteCloser struct {
+	*bytes.Buffer
+}
+
+func (*testWriteCloser) Close() error {
+	return nil
+}

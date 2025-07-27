@@ -99,7 +99,9 @@ func (s *Site) InitializeIndexing() error {
 
 	files := s.DirectoryList()
 	for _, file := range files {
-		_ = s.IndexMaintainer.AddPageToIndex(file.Name())
+		if err := s.IndexMaintainer.AddPageToIndex(file.Name()); err != nil {
+			s.Logger.Error("Failed to add page '%s' to index during initialization: %v", file.Name(), err)
+		}
 	}
 
 	s.Logger.Info("Indexing complete. Added %v pages.", len(files))
