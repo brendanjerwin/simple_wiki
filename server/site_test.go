@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"errors"
 	"os"
 	"path"
@@ -513,6 +514,7 @@ old markdown`
 		When("the indexing process encounters errors", func() {
 			var (
 				files []os.FileInfo
+				logBuffer *bytes.Buffer
 			)
 
 			BeforeEach(func() {
@@ -522,6 +524,10 @@ old markdown`
 				testPageContent := `{"identifier":"test","text":{"current":"test content","history":[]}}`
 				fileErr := os.WriteFile(pagePath, []byte(testPageContent), 0644)
 				Expect(fileErr).NotTo(HaveOccurred())
+
+				// Set up a logger that writes to a buffer so we can capture log output
+				logBuffer = &bytes.Buffer{}
+				s.Logger = lumber.NewBasicLogger(&testWriteCloser{logBuffer}, lumber.ERROR)
 
 				// Set up a mock that returns an error
 				mockIndex.AddPageToIndexError = errors.New("mock index error")
@@ -551,6 +557,21 @@ old markdown`
 				// The test completing successfully demonstrates this
 				Expect(true).To(BeTrue())
 			})
+
+			It("should log the error", func() {
+				logOutput := logBuffer.String()
+				Expect(logOutput).To(ContainSubstring("Failed to add page 'test' to index during initialization"))
+				Expect(logOutput).To(ContainSubstring("mock index error"))
+			})
 		})
 	})
 })
+
+// testWriteCloser wraps a buffer and implements io.WriteCloser for testing
+type testWriteCloser struct {
+	*bytes.Buffer
+}
+
+func (*testWriteCloser) Close() error {
+	return nil
+}
