@@ -3,7 +3,7 @@
  "Text": {
   "CurrentText": "+++\nidentifier = \"favicon-16x16.png\"\n+++\n\n# {{or .Title .Identifier}}\n",
   "Diffs": {
-   "1753658494357593203": "++++%0Aidentifier = %22favicon-16x16.png%22%0A+++%0A%0A# %7B%7Bor .Title .Identifier%7D%7D%0A"
+   "1753659089341370388": "++++%0Aidentifier = %22favicon-16x16.png%22%0A+++%0A%0A# %7B%7Bor .Title .Identifier%7D%7D%0A"
   }
  },
  "Meta": "",
