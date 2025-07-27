@@ -1,17 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/web-components';
+import { action } from 'storybook/actions';
 import { html } from 'lit';
 import './frontmatter-editor-dialog.js';
 import { AugmentErrorService } from './augment-error-service.js';
-
-// Custom action logger for Storybook
-const action = (name: string) => (event: Event) => {
-  console.log(`🎬 Action: ${name}`, {
-    type: event.type,
-    target: event.target,
-    detail: (event as CustomEvent).detail,
-    timestamp: new Date().toISOString()
-  });
-};
 
 const meta: Meta = {
   title: 'Components/FrontmatterEditorDialog',

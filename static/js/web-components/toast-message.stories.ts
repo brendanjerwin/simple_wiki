@@ -1,16 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/web-components-vite';
+import { action } from 'storybook/actions';
 import { html } from 'lit';
 import './toast-message.js';
-
-// Custom action logger for Storybook
-const action = (name: string) => (event: Event) => {
-  console.log(`🎬 Action: ${name}`, {
-    type: event.type,
-    target: event.target,
-    detail: (event as CustomEvent).detail,
-    timestamp: new Date().toISOString()
-  });
-};
 
 const meta: Meta = {
   title: 'Components/ToastMessage',
@@ -20,7 +11,7 @@ const meta: Meta = {
   },
   argTypes: {
     message: { control: 'text' },
-    type: { 
+    type: {
       control: { type: 'select' },
       options: ['success', 'error', 'warning', 'info']
     },
@@ -42,11 +33,11 @@ export const Success: Story = {
   },
   render: (args) => html`
     <toast-message 
-      .message=${args.message}
-      .type=${args.type}
-      .visible=${args.visible}
-      .autoClose=${args.autoClose}
-      .timeout=${args.timeout}
+      .message=${args['message']}
+      .type=${args['type']}
+      .visible=${args['visible']}
+      .autoClose=${args['autoClose']}
+      .timeout=${args['timeout']}
       @click=${action('toast-clicked')}
       @show=${action('toast-shown')}
       @hide=${action('toast-hidden')}>
@@ -63,11 +54,11 @@ export const Error: Story = {
   },
   render: (args) => html`
     <toast-message 
-      .message=${args.message}
-      .type=${args.type}
-      .visible=${args.visible}
-      .autoClose=${args.autoClose}
-      .timeout=${args.timeout}
+      .message=${args['message']}
+      .type=${args['type']}
+      .visible=${args['visible']}
+      .autoClose=${args['autoClose']}
+      .timeout=${args['timeout']}
       @click=${action('toast-clicked')}
       @show=${action('toast-shown')}
       @hide=${action('toast-hidden')}>
@@ -84,11 +75,11 @@ export const Warning: Story = {
   },
   render: (args) => html`
     <toast-message 
-      .message=${args.message}
-      .type=${args.type}
-      .visible=${args.visible}
-      .autoClose=${args.autoClose}
-      .timeout=${args.timeout}
+      .message=${args['message']}
+      .type=${args['type']}
+      .visible=${args['visible']}
+      .autoClose=${args['autoClose']}
+      .timeout=${args['timeout']}
       @click=${action('toast-clicked')}
       @show=${action('toast-shown')}
       @hide=${action('toast-hidden')}>
@@ -105,11 +96,11 @@ export const Info: Story = {
   },
   render: (args) => html`
     <toast-message 
-      .message=${args.message}
-      .type=${args.type}
-      .visible=${args.visible}
-      .autoClose=${args.autoClose}
-      .timeout=${args.timeout}
+      .message=${args['message']}
+      .type=${args['type']}
+      .visible=${args['visible']}
+      .autoClose=${args['autoClose']}
+      .timeout=${args['timeout']}
       @click=${action('toast-clicked')}
       @show=${action('toast-shown')}
       @hide=${action('toast-hidden')}>
@@ -128,11 +119,11 @@ export const AutoClose: Story = {
   render: (args) => html`
     <div style="position: relative; height: 100px; display: flex; align-items: center; justify-content: center;">
       <toast-message 
-        .message=${args.message}
-        .type=${args.type}
-        .visible=${args.visible}
-        .autoClose=${args.autoClose}
-        .timeout=${args.timeout}
+        .message=${args['message']}
+        .type=${args['type']}
+        .visible=${args['visible']}
+        .autoClose=${args['autoClose']}
+        .timeout=${args['timeout']}
         @click=${action('toast-clicked')}
         @show=${action('toast-shown')}
         @hide=${action('toast-hidden')}>

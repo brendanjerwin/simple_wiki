@@ -116,26 +116,6 @@ Storybook is used for developing and documenting UI components in isolation. Fol
 - Use `devbox run storybook:build` to build static Storybook files
 - Stories are automatically deployed to Chromatic for visual regression testing
 
-### Actions and Interactions
-
-Every story should include comprehensive event logging and interaction testing for user behaviors:
-
-#### Custom Action Logging Setup
-
-Since we use Storybook's base configuration, we implement custom action logging:
-
-```typescript
-// Custom action logger for Storybook
-const action = (name: string) => (event: Event) => {
-  console.log(`🎬 Action: ${name}`, {
-    type: event.type,
-    target: event.target,
-    detail: (event as CustomEvent).detail,
-    timestamp: new Date().toISOString(),
-  });
-};
-```
-
 #### Event Binding in Stories
 
 - **Bind action loggers to all relevant events** in your story render functions:
@@ -458,7 +438,7 @@ beforeEach(async () => {
   **Bad:** Testing multiple behaviors in one block.
 
   ```javascript
-  it('should handle rejection events and prevent default', () => {
+  it("should handle rejection events and prevent default", () => {
     // This tests TWO behaviors: handling events AND preventing default
     expect(() => rejectionHandler(mockRejectionEvent)).to.not.throw();
     expect(preventDefaultStub).to.have.been.calledOnce;
@@ -477,17 +457,17 @@ beforeEach(async () => {
       // Arrange
       preventDefaultStub = sinon.stub();
       mockRejectionEvent = { preventDefault: preventDefaultStub };
-      
+
       // Act
       handlerResult = rejectionHandler(mockRejectionEvent);
     });
 
-    it('should not throw', () => {
+    it("should not throw", () => {
       // Assert - if we get here, no exception was thrown
       expect(handlerResult).to.exist;
     });
 
-    it('should prevent default', () => {
+    it("should prevent default", () => {
       // Assert
       expect(preventDefaultStub).to.have.been.calledOnce;
     });
@@ -501,7 +481,7 @@ beforeEach(async () => {
   ```javascript
   describe("when handling rejection events", () => {
     // ...
-    it('should handle rejection events without throwing', () => {
+    it("should handle rejection events without throwing", () => {
       // Restates the context from describe block
       expect(handlerResult).to.exist;
     });
@@ -513,7 +493,7 @@ beforeEach(async () => {
   ```javascript
   describe("when handling rejection events", () => {
     // ...
-    it('should not throw', () => {
+    it("should not throw", () => {
       // Concise assertion focused on specific behavior
       expect(handlerResult).to.exist;
     });
@@ -525,10 +505,10 @@ beforeEach(async () => {
   **Bad:**
 
   ```javascript
-  it('should handle timeout errors', () => {
-    const connectError = new ConnectError('Timeout', Code.DeadlineExceeded);
+  it("should handle timeout errors", () => {
+    const connectError = new ConnectError("Timeout", Code.DeadlineExceeded);
     const augmented = AugmentErrorService.augmentError(connectError);
-    
+
     expect(augmented.errorKind).to.equal(ErrorKind.TIMEOUT);
   });
   ```
@@ -536,16 +516,16 @@ beforeEach(async () => {
   **Good:**
 
   ```javascript
-  describe('when the error is DEADLINE_EXCEEDED', () => {
+  describe("when the error is DEADLINE_EXCEEDED", () => {
     let connectError;
     let augmented;
 
     beforeEach(() => {
-      connectError = new ConnectError('Timeout', Code.DeadlineExceeded);
+      connectError = new ConnectError("Timeout", Code.DeadlineExceeded);
       augmented = AugmentErrorService.augmentError(connectError);
     });
 
-    it('should set errorKind to TIMEOUT', () => {
+    it("should set errorKind to TIMEOUT", () => {
       expect(augmented.errorKind).to.equal(ErrorKind.TIMEOUT);
     });
   });
@@ -725,19 +705,19 @@ beforeEach(async () => {
 - **Avoid Double-Entry Testing**: Don't test simple declarations or property assignments that just mirror the code being tested. Focus tests on behavior and logic, not on verifying that properties exist or have been set to specific values that are obvious from the declaration.
 
   **Bad:** Testing a declaration
-  
+
   ```typescript
   // Component declaration: errorKind: ErrorKind.WARNING
-  it('should have errorKind property', () => {
+  it("should have errorKind property", () => {
     expect(augmented.errorKind).to.equal(ErrorKind.WARNING); // Just testing the declaration
   });
   ```
-  
+
   **Good:** Testing behavior that depends on the property
-  
-  ```typescript  
-  it('should display warning icon for WARNING errorKind', () => {
-    expect(AugmentErrorService.getIconString(augmented.icon)).to.equal('⚠️');
+
+  ```typescript
+  it("should display warning icon for WARNING errorKind", () => {
+    expect(AugmentErrorService.getIconString(augmented.icon)).to.equal("⚠️");
   });
   ```
 
