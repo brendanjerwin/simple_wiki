@@ -507,7 +507,10 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 	} else {
 		p.Meta = json.Meta
 		_ = p.Update(json.NewText)
-		_ = p.Save()
+		if err := p.Save(); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to save page"})
+			return
+		}
 		message = "Saved"
 		success = true
 	}
@@ -562,7 +565,10 @@ func (s *Site) handleLock(c *gin.Context) {
 		p.UnlockedFor = sessionID
 		message = "Unlocked only for you"
 	}
-	_ = p.Save()
+	if err := p.Save(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to save lock information"})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": message})
 }
 
