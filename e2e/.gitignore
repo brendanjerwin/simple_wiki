@@ -1,0 +1,18 @@
+# Playwright test artifacts
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# Node modules
+node_modules/
+
+# Test server PID file
+server.pid
+
+# Screenshots and videos from failed tests
+screenshots/
+videos/
+
+# Logs
+*.log

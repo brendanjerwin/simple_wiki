@@ -1,0 +1,13 @@
+{
+ "Identifier": "anothertestpage",
+ "Text": {
+  "CurrentText": "+++\nidentifier = \"anothertestpage\"\n+++\n\n# {{or .Title .Identifier}}\n",
+  "Diffs": {
+   "1753658739954192387": "++++%0Aidentifier = %22anothertestpage%22%0A+++%0A%0A# %7B%7Bor .Title .Identifier%7D%7D%0A"
+  }
+ },
+ "Meta": "",
+ "IsLocked": false,
+ "PassphraseToUnlock": "",
+ "UnlockedFor": ""
+}

@@ -1,0 +1,14 @@
+{
+  "name": "simple-wiki-e2e-tests",
+  "version": "1.0.0",
+  "description": "End-to-end tests for Simple Wiki",
+  "scripts": {
+    "test": "playwright test",
+    "test:debug": "playwright test --debug",
+    "test:headed": "playwright test --headed",
+    "show-report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0"
+  }
+}
