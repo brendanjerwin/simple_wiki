@@ -1,3 +1,4 @@
+// Package v1 provides the implementation of gRPC services for version 1 of the API
 package v1
 
 import (
@@ -17,15 +18,17 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-const pageReadWriterNotAvailableError = "PageReadWriter not available"
-const identifierKey = "identifier"
+const (
+	pageReadWriterNotAvailableError = "PageReadWriter not available"
+	identifierKey                   = "identifier"
+)
 
 // filterIdentifierKey removes the identifier key from a frontmatter map.
 func filterIdentifierKey(fm map[string]any) map[string]any {
 	if fm == nil {
 		return nil
 	}
-	
+
 	filtered := make(map[string]any)
 	for k, v := range fm {
 		if k != identifierKey {
@@ -40,7 +43,7 @@ func validateNoIdentifierKey(fm map[string]any) error {
 	if fm == nil {
 		return nil
 	}
-	
+
 	if _, exists := fm[identifierKey]; exists {
 		return status.Error(codes.InvalidArgument, "identifier key cannot be modified")
 	}
@@ -52,12 +55,12 @@ func isIdentifierKeyPath(path []*apiv1.PathComponent) bool {
 	if len(path) != 1 {
 		return false
 	}
-	
+
 	keyComp, ok := path[0].Component.(*apiv1.PathComponent_Key)
 	if !ok {
 		return false
 	}
-	
+
 	return keyComp.Key == identifierKey
 }
 
@@ -65,6 +68,7 @@ func isIdentifierKeyPath(path []*apiv1.PathComponent) bool {
 type Server struct {
 	apiv1.UnimplementedVersionServer
 	apiv1.UnimplementedFrontmatterServer
+	apiv1.UnimplementedPageManagementServiceServer
 	Commit         string
 	BuildTime      time.Time
 	PageReadWriter wikipage.PageReadWriter
@@ -142,7 +146,7 @@ func (s *Server) ReplaceFrontmatter(_ context.Context, req *apiv1.ReplaceFrontma
 	if fm != nil {
 		responseFm = filterIdentifierKey(fm)
 	}
-	
+
 	var responseFmStruct *structpb.Struct
 	if len(responseFm) > 0 {
 		responseFmStruct, err = structpb.NewStruct(responseFm)
@@ -292,6 +296,7 @@ func NewServer(commit string, buildTime time.Time, pageReadWriter wikipage.PageR
 func (s *Server) RegisterWithServer(grpcServer *grpc.Server) {
 	apiv1.RegisterVersionServer(grpcServer, s)
 	apiv1.RegisterFrontmatterServer(grpcServer, s)
+	apiv1.RegisterPageManagementServiceServer(grpcServer, s)
 }
 
 // GetVersion implements the GetVersion RPC.
