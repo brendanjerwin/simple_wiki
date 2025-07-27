@@ -255,6 +255,54 @@ describe('ToastMessage', () => {
       
       expect(el.visible).to.be.false;
     });
+
+    describe('when clicking on error-display component', () => {
+      beforeEach(async () => {
+        const augmentedError = new AugmentedError(
+          new Error('Test error'),
+          ErrorKind.NETWORK,
+          'network',
+          'testing'
+        );
+        el.augmentedError = augmentedError;
+        el.type = 'error';
+        await el.updateComplete;
+      });
+
+      it('should not hide the toast', async () => {
+        const errorDisplay = el.shadowRoot?.querySelector('error-display') as HTMLElement;
+        expect(errorDisplay).to.exist;
+        
+        errorDisplay.click();
+        await el.updateComplete;
+        
+        expect(el.visible).to.be.true;
+      });
+    });
+  });
+
+  describe('when close button is clicked', () => {
+    beforeEach(async () => {
+      el.visible = true;
+      await el.updateComplete;
+    });
+
+    it('should hide the toast', async () => {
+      const closeButton = el.shadowRoot?.querySelector('.close-button') as HTMLElement;
+      expect(closeButton).to.exist;
+      
+      closeButton.click();
+      await el.updateComplete;
+      
+      expect(el.visible).to.be.false;
+    });
+
+    it('should have proper accessibility attributes', () => {
+      const closeButton = el.shadowRoot?.querySelector('.close-button') as HTMLElement;
+      expect(closeButton).to.exist;
+      expect(closeButton.getAttribute('aria-label')).to.equal('Close notification');
+      expect(closeButton.getAttribute('title')).to.equal('Close notification');
+    });
   });
 });
 

@@ -181,3 +181,42 @@ export const AugmentedErrorDisplay: Story = {
     },
   },
 };
+
+export const InteractiveCloseButton: Story = {
+  args: {
+    message: 'Interactive toast with close button functionality',
+    type: 'info',
+    visible: true,
+    autoClose: false,
+  },
+  render: (args) => html`
+    <div style="padding: 20px; background: #f5f5f5; position: relative; height: 200px;">
+      <h3>Close Button Interaction Test</h3>
+      <p>Test the close button functionality:</p>
+      <ul style="margin-bottom: 20px;">
+        <li>Click the X button in the top-right corner to dismiss</li>
+        <li>Click elsewhere on the toast to also dismiss (backward compatibility)</li>
+        <li>For error toasts with AugmentedError, clicking on error details won't dismiss</li>
+      </ul>
+      <toast-message 
+        .message=${args['message']}
+        .type=${args['type']}
+        .visible=${args['visible']}
+        .autoClose=${args['autoClose']}
+        @click=${action('toast-area-clicked')}
+        @show=${action('toast-shown')}
+        @hide=${action('toast-hidden')}>
+      </toast-message>
+      <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
+        Open the browser console (F12) to see event logs when interacting with the toast.
+      </p>
+    </div>
+  `,
+  parameters: {
+    docs: {
+      description: {
+        story: 'Demonstrates the new close button functionality and interaction behavior. The close button provides an explicit way to dismiss toasts, while maintaining backward compatibility with click-to-dismiss behavior. Open the browser developer tools console to see the action logs.',
+      },
+    },
+  },
+};
