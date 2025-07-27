@@ -1,29 +1,37 @@
 import { html, css, LitElement } from 'lit';
 import { property } from 'lit/decorators.js';
+import { foundationCSS } from './shared-styles.js';
+import './error-display.js';
+import type { AugmentedError } from './augment-error-service.js';
 
 export class KernelPanic extends LitElement {
-  static override styles = css`
-    :host {
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      z-index: 10000;
-      background: #000;
-      color: #fff;
-      font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-      font-size: 14px;
-      line-height: 1.4;
-      padding: 20px;
-      box-sizing: border-box;
-      overflow-y: auto;
-      display: flex;
-      flex-direction: column;
-      animation: fade-in 1.5s ease-in-out;
-    }
+  static override styles = [
+    foundationCSS,
+    css`
+      :host {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 10000;
+        background: #000;
+        color: #fff;
+        font-size: 14px;
+        line-height: 1.4;
+        padding: 20px;
+        box-sizing: border-box;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        animation: fade-in 1.5s ease-in-out;
+      }
 
-    @keyframes fade-in {
+      :host .monospace-font {
+        /* Inherits monospace font from foundationCSS */
+      }
+
+      @keyframes fade-in {
       0% {
         opacity: 0;
         transform: scale(0.95);
@@ -134,13 +142,11 @@ export class KernelPanic extends LitElement {
     .refresh-button:active {
       background: #222;
     }
-  `;
-
-  @property({ type: String })
-  message = '';
+    `
+  ];
 
   @property({ type: Object })
-  error: Error | null = null;
+  augmentedError: AugmentedError | null = null;
 
   private _handleRefresh = (): void => {
     window.location.reload();
@@ -148,24 +154,20 @@ export class KernelPanic extends LitElement {
 
   override render() {
     return html`
-      <div class="header">
+      <div class="header monospace-font">
         <span class="skull">💀</span>
         <div class="title">Kernel Panic</div>
         <div class="subtitle">A critical error has occurred</div>
       </div>
 
-      ${this.message ? html`
-        <div class="message">${this.message}</div>
+      ${this.augmentedError ? html`
+        <error-display 
+          .augmentedError=${this.augmentedError}
+          style="background: #330000; border-color: #660000; color: #ffcccc;">
+        </error-display>
       ` : ''}
 
-      ${this.error ? html`
-        <div class="error-details">
-          <div class="error-title">Exception Details:</div>
-          <div class="error-stack">${this.error.stack || this.error.message}</div>
-        </div>
-      ` : ''}
-
-      <div class="instructions">
+      <div class="instructions monospace-font">
         <div class="instruction-item">The application has encountered an unrecoverable error</div>
         <div class="instruction-item">Your work may have been lost</div>
         <div class="instruction-item">Please refresh the page to restart the application</div>
@@ -185,15 +187,12 @@ customElements.define('kernel-panic', KernelPanic);
  * Creates and displays a kernel panic overlay for unrecoverable errors.
  * This function handles all the DOM manipulation needed to display the error.
  * 
- * @param message - The error message to display
- * @param error - The error object with stack trace
+ * @param augmentedError - The augmented error to display
  */
-export function showKernelPanic(message: string, error: Error): void {
+export function showKernelPanic(augmentedError: AugmentedError): void {
   const kernelPanic = document.createElement('kernel-panic') as HTMLElement & {
-    message: string;
-    error: Error;
+    augmentedError: AugmentedError;
   };
-  kernelPanic.message = message;
-  kernelPanic.error = error;
+  kernelPanic.augmentedError = augmentedError;
   document.body.appendChild(kernelPanic);
 }

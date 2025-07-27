@@ -17,6 +17,10 @@ export const foundationCSS = css`
       sans-serif;
   }
 
+  .monospace-font {
+    font-family: ui-monospace, 'SFMono-Regular', 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  }
+
   /* Border radius utilities */
   .border-radius-small {
     border-radius: 4px;

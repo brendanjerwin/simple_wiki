@@ -52,7 +52,7 @@
 - Use [Devbox](https://www.jetpack.io/devbox/) by Jetify to create isolated, reproducible development environments.
 - Add new dependencies via `devbox add <package>`. This ensures the `devbox.json` and `devbox.lock` files are updated correctly.
 - Use either `devbox shell` (for an interactive shell) or `devbox run <command>` (for running specific commands) to work within the Devbox environment.
-- When possible, use scripts defined in `devbox.json` to run commands.
+- When possible, use scripts defined in `devbox.json` to run commands. Run `devbox run` to see a list of available scripts.
 
 ## Frontend JavaScript
 
@@ -89,14 +89,13 @@ Storybook is used for developing and documenting UI components in isolation. Fol
 
   ```typescript
   render: (args) => html`
-    <my-dialog-component 
-      .open="${args.open}"
-      .loading="${true}">
+    <my-dialog-component .open="${args.open}" .loading="${true}">
     </my-dialog-component>
   `;
   ```
 
 - **Mock data, not components**: It's perfectly acceptable (and encouraged) to use mock data to populate components with realistic content. The distinction is:
+
   - ✅ Mock data: Providing sample arrays, objects, or strings as component props
   - ❌ Mock components: Creating fake HTML elements instead of using the real component
 
@@ -117,33 +116,13 @@ Storybook is used for developing and documenting UI components in isolation. Fol
 - Use `devbox run storybook:build` to build static Storybook files
 - Stories are automatically deployed to Chromatic for visual regression testing
 
-### Actions and Interactions
-
-Every story should include comprehensive event logging and interaction testing for user behaviors:
-
-#### Custom Action Logging Setup
-
-Since we use Storybook's base configuration, we implement custom action logging:
-
-```typescript
-// Custom action logger for Storybook
-const action = (name: string) => (event: Event) => {
-  console.log(`🎬 Action: ${name}`, {
-    type: event.type,
-    target: event.target,
-    detail: (event as CustomEvent).detail,
-    timestamp: new Date().toISOString()
-  });
-};
-```
-
 #### Event Binding in Stories
 
 - **Bind action loggers to all relevant events** in your story render functions:
 
   ```typescript
   render: (args) => html`
-    <my-component 
+    <my-component
       @click=${action('component-clicked')}
       @input=${action('input-changed')}
       @custom-event=${action('custom-event')}>
@@ -154,6 +133,7 @@ const action = (name: string) => (event: Event) => {
 #### Interactive Testing Stories
 
 - **Create dedicated interactive testing stories** for complex components that demonstrate:
+
   - User workflows (form filling, multi-step interactions)
   - Keyboard shortcuts and accessibility features
   - Error states and recovery scenarios
@@ -186,9 +166,10 @@ export const InteractiveExample: Story = {
     <div style="padding: 20px; background: #f0f8ff;">
       <h3>Component Interaction Test</h3>
       <p>Instructions for testing...</p>
-      <my-component 
-        @event1=${action('event1-triggered')}
-        @event2=${action('event2-with-data')}>
+      <my-component
+        @event1=${action("event1-triggered")}
+        @event2=${action("event2-with-data")}
+      >
       </my-component>
       <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
         Watch the browser console (F12) to see triggered events logged.
@@ -198,7 +179,8 @@ export const InteractiveExample: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Detailed description of what to test and expected behavior. Open the browser developer tools console to see the action logs.',
+        story:
+          "Detailed description of what to test and expected behavior. Open the browser developer tools console to see the action logs.",
       },
     },
   },
@@ -313,6 +295,24 @@ Do not run them directly with `npx`, `npm`, `bun`, `bunx`, `go test`, etc. Use t
   devbox run fe:test
   ```
 
+  To run a single frontend test file, pass the path to the file as an argument. The script will automatically handle the `static/js/` prefix if present:
+
+  ```bash
+  devbox run fe:test -- <path_to_test_file>
+  ```
+
+  For example:
+
+  ```bash
+  devbox run fe:test -- static/js/web-components/error-display.test.ts
+  ```
+
+  Or:
+
+  ```bash
+  devbox run fe:test -- web-components/error-display.test.ts
+  ```
+
 - **Go Tests**:
 
   To run all Go tests:
@@ -335,16 +335,18 @@ This is the most frequent cause of hangs. If a component's setup code (e.g., in 
 
 ```typescript
 // In your test file
-import { stub } from 'sinon';
+import { stub } from "sinon";
 
-describe('My Component', () => {
+describe("My Component", () => {
   let fetchStub;
 
   beforeEach(async () => {
     // Stub the global fetch function before the component is created
-    fetchStub = stub(window, 'fetch');
+    fetchStub = stub(window, "fetch");
     // Make it resolve instantly with a fake response
-    fetchStub.resolves(new Response(JSON.stringify({ id: 1, name: 'Test Data' })));
+    fetchStub.resolves(
+      new Response(JSON.stringify({ id: 1, name: "Test Data" })),
+    );
 
     // Now, when you create the component, it won't make a real network call
     const el = await fixture(html`<my-component></my-component>`);
@@ -366,9 +368,9 @@ If your component uses `setTimeout`, `setInterval`, or other time-based function
 **Example:**
 
 ```typescript
-import { useFakeTimers } from 'sinon';
+import { useFakeTimers } from "sinon";
 
-describe('My Timed Component', () => {
+describe("My Timed Component", () => {
   let clock;
 
   beforeEach(() => {
@@ -381,14 +383,21 @@ describe('My Timed Component', () => {
     clock.restore();
   });
 
-  it('should do something after 2 seconds', async () => {
-    const el = await fixture(html`<my-timed-component></my-timed-component>`);
-    
-    // Fast-forward the clock by 2 seconds instantly
-    await clock.tickAsync(2000);
+  describe("when waiting 2 seconds", () => {
+    let el;
 
-    // Now you can assert what was supposed to happen after the delay
-    expect(el.state).to.equal('loaded');
+    beforeEach(async () => {
+      // Arrange
+      el = await fixture(html`<my-timed-component></my-timed-component>`);
+
+      // Act - fast-forward the clock by 2 seconds instantly
+      await clock.tickAsync(2000);
+    });
+
+    it("should change state to loaded", () => {
+      // Assert
+      expect(el.state).to.equal("loaded");
+    });
   });
 });
 ```
@@ -403,8 +412,8 @@ While the test runner timeout is a good safety net, you can add more specific ti
 
 ```typescript
 function timeout(ms, message) {
-  return new Promise((_, reject) => 
-    setTimeout(() => reject(new Error(message)), ms)
+  return new Promise((_, reject) =>
+    setTimeout(() => reject(new Error(message)), ms),
   );
 }
 
@@ -413,7 +422,7 @@ beforeEach(async () => {
     // This will fail if the fixture takes longer than 3 seconds
     el = await Promise.race([
       fixture(html`<frontmatter-editor-dialog></frontmatter-editor-dialog>`),
-      timeout(3000, 'Component fixture timed out')
+      timeout(3000, "Component fixture timed out"),
     ]);
   } catch (e) {
     // The error will clearly state that the fixture timed out
@@ -424,6 +433,104 @@ beforeEach(async () => {
 ```
 
 - Prefer Context-Specification style for testing. Nest `describe` blocks to build up context. Don't bother with `context` blocks.
+- **Separate test assertions**: Each `it` block should test one specific behavior. If a test description contains "and", it indicates the test is checking multiple behaviors and should be split into separate `it` blocks.
+
+  **Bad:** Testing multiple behaviors in one block.
+
+  ```javascript
+  it("should handle rejection events and prevent default", () => {
+    // This tests TWO behaviors: handling events AND preventing default
+    expect(() => rejectionHandler(mockRejectionEvent)).to.not.throw();
+    expect(preventDefaultStub).to.have.been.calledOnce;
+  });
+  ```
+
+  **Good:** Split into separate, focused tests with actions in `beforeEach`.
+
+  ```javascript
+  describe("when handling rejection events", () => {
+    let preventDefaultStub;
+    let mockRejectionEvent;
+    let handlerResult;
+
+    beforeEach(() => {
+      // Arrange
+      preventDefaultStub = sinon.stub();
+      mockRejectionEvent = { preventDefault: preventDefaultStub };
+
+      // Act
+      handlerResult = rejectionHandler(mockRejectionEvent);
+    });
+
+    it("should not throw", () => {
+      // Assert - if we get here, no exception was thrown
+      expect(handlerResult).to.exist;
+    });
+
+    it("should prevent default", () => {
+      // Assert
+      expect(preventDefaultStub).to.have.been.calledOnce;
+    });
+  });
+  ```
+
+- **Keep assertions terse**: Avoid restating the context in `it` block descriptions. The `describe` blocks provide the context, so `it` blocks should focus on the specific behavior being tested.
+
+  **Bad:**
+
+  ```javascript
+  describe("when handling rejection events", () => {
+    // ...
+    it("should handle rejection events without throwing", () => {
+      // Restates the context from describe block
+      expect(handlerResult).to.exist;
+    });
+  });
+  ```
+
+  **Good:**
+
+  ```javascript
+  describe("when handling rejection events", () => {
+    // ...
+    it("should not throw", () => {
+      // Concise assertion focused on specific behavior
+      expect(handlerResult).to.exist;
+    });
+  });
+  ```
+
+- **No context in it blocks**: All context setup and actions should be in `describe`/`beforeEach` blocks, never in `it` blocks. If you find yourself setting up context within an `it` block, it should be moved to a `beforeEach` within an appropriately named `describe` block.
+
+  **Bad:**
+
+  ```javascript
+  it("should handle timeout errors", () => {
+    const connectError = new ConnectError("Timeout", Code.DeadlineExceeded);
+    const augmented = AugmentErrorService.augmentError(connectError);
+
+    expect(augmented.errorKind).to.equal(ErrorKind.TIMEOUT);
+  });
+  ```
+
+  **Good:**
+
+  ```javascript
+  describe("when the error is DEADLINE_EXCEEDED", () => {
+    let connectError;
+    let augmented;
+
+    beforeEach(() => {
+      connectError = new ConnectError("Timeout", Code.DeadlineExceeded);
+      augmented = AugmentErrorService.augmentError(connectError);
+    });
+
+    it("should set errorKind to TIMEOUT", () => {
+      expect(augmented.errorKind).to.equal(ErrorKind.TIMEOUT);
+    });
+  });
+  ```
+
 - Don't do actions in the `It` blocks. The `It` blocks should only contain assertions. All setup (**Arrange**) and execution (**Act**) should be done in `BeforeEach` blocks (or equivalent, depending on the testing framework) within the `Describe` or `When` blocks. This allows for reusing context to add additional assertions later.
 
   **Bad:** Action inside the `It` block (Go example).
@@ -539,6 +646,32 @@ beforeEach(async () => {
   });
   ```
 
+- **When to Use "when" in Describe Blocks**: Use "when" in `describe` blocks only to establish scenarios or conditions, not to describe features or behaviors. This creates clear test organization by separating scenarios from the behaviors being tested.
+
+  **Bad:** Using "when" for a feature/behavior
+
+  ```javascript
+  describe("when preserving original error stack", () => {
+    // This describes what the code does, not a scenario
+  });
+  ```
+
+  **Good:** Using "when" for a scenario/condition
+
+  ```javascript
+  describe("when the source Error has a stack", () => {
+    // This describes a condition/scenario
+  });
+  ```
+
+  **Good:** Describing a feature without "when"
+
+  ```javascript
+  describe("delegating to original error properties", () => {
+    // This describes a feature/behavior
+  });
+  ```
+
 - **Event Handler Wiring Tests**: For web components that add/remove event listeners, always test that the event handlers are properly wired up. Use spies to verify that `addEventListener` and `removeEventListener` are called with the correct parameters and function references.
 
   **Example:**
@@ -568,6 +701,25 @@ beforeEach(async () => {
 - **Comprehensive Testing**: Tests should validate the entire user-facing functionality, not just internal implementation details. When unit tests are green, we should be confident the whole app works. For example, when testing a search component, verify not only that results are processed correctly but also that the results view component becomes visible to the user.
 
 - **No CSS-Only Testing**: Tests should not assert that specific CSS properties are applied unless it's for functional reasons (e.g., verifying visibility changes). Avoid testing computed styles like `getComputedStyle(element).property` unless the test verifies functional behavior that depends on that styling. Focus tests on component behavior, state management, event handling, and user interaction rather than visual styling details.
+
+- **Avoid Double-Entry Testing**: Don't test simple declarations or property assignments that just mirror the code being tested. Focus tests on behavior and logic, not on verifying that properties exist or have been set to specific values that are obvious from the declaration.
+
+  **Bad:** Testing a declaration
+
+  ```typescript
+  // Component declaration: errorKind: ErrorKind.WARNING
+  it("should have errorKind property", () => {
+    expect(augmented.errorKind).to.equal(ErrorKind.WARNING); // Just testing the declaration
+  });
+  ```
+
+  **Good:** Testing behavior that depends on the property
+
+  ```typescript
+  it("should display warning icon for WARNING errorKind", () => {
+    expect(AugmentErrorService.getIconString(augmented.icon)).to.equal("⚠️");
+  });
+  ```
 
 - **Documentation of Testing Principles**: When you discover important testing principles or patterns that ensure comprehensive coverage, document them in this CONVENTIONS.md file. This builds a comprehensive guide for future developers and helps maintain consistent testing practices across the project.
 
@@ -678,6 +830,105 @@ beforeEach(async () => {
 
 - If a problem is due to an invalid parameter, don't just fix the parameter value. _also_ add an input validation to the function/method receiving the parameter such that the error being fixed is perfectly clear to the next developer.
 - Do not use `recover` to hide panics. A panic indicates a serious bug that should crash the program during development and be fixed. Catching panics in handlers can obfuscate the problem and make debugging difficult. Instead, write defensive code to prevent panics in the first place, for example by checking for `nil`.
+- **Never Branch Logic on Error Messages**: Error messages are intended for human consumption and should never be used for conditional logic or control flow. Use proper error types, error codes, or structured error objects instead.
+
+  **Bad (TypeScript):**
+
+  ```typescript
+  try {
+    await client.getFrontmatter(request);
+  } catch (err) {
+    // Bad: Branching on human-readable error message
+    if (err.message.includes("UNAVAILABLE")) {
+      this.error = "Unable to connect to server";
+    } else if (err.message.includes("PERMISSION_DENIED")) {
+      this.error = "Access denied";
+    }
+  }
+  ```
+
+  **Good (TypeScript):**
+
+  ```typescript
+  import { ConnectError, Code } from "@connectrpc/connect";
+
+  try {
+    await client.getFrontmatter(request);
+  } catch (err) {
+    // Good: Using proper error codes for logic
+    if (err instanceof ConnectError) {
+      switch (err.code) {
+        case Code.Unavailable:
+          this.error = "Unable to connect to server";
+          break;
+        case Code.PermissionDenied:
+          this.error = "Access denied";
+          break;
+        default:
+          this.error = "An unexpected error occurred";
+      }
+    }
+  }
+  ```
+
+  This approach ensures that:
+
+  - Error logic remains stable when error message wording changes
+  - Code is more maintainable and less fragile
+  - Error handling is explicit and type-safe
+  - Error messages can be localized without breaking logic
+
+- **Centralize Error Processing**: Create dedicated error service classes to handle the conversion of technical errors (like gRPC errors) into user-friendly messages. This separates business logic from UI components and ensures consistent error presentation.
+
+  **Bad:**
+
+  ```typescript
+  // Error message generation scattered across UI components
+  class SomeComponent {
+    async loadData() {
+      try {
+        // ... API call
+      } catch (err) {
+        if (err instanceof ConnectError && err.code === Code.NotFound) {
+          this.error = "Data not found. Please check your input.";
+        }
+        // Duplicate error handling logic in every component
+      }
+    }
+  }
+  ```
+
+  **Good:**
+
+  ```typescript
+  // Centralized error processing
+  class ErrorService {
+    static processError(error: unknown, context: string): ProcessedError {
+      if (error instanceof ConnectError) {
+        switch (error.code) {
+          case Code.NotFound:
+            return { message: "Data not found", icon: "not-found" };
+          // ... other cases
+        }
+      }
+      return { message: `Failed to ${context}`, icon: "error" };
+    }
+  }
+
+  // Clean, consistent UI components
+  class SomeComponent {
+    async loadData() {
+      try {
+        // ... API call
+      } catch (err) {
+        const processedError = ErrorService.processError(err, "load data");
+        this.error = processedError.message;
+        this.errorIcon = processedError.icon;
+      }
+    }
+  }
+  ```
+
 - **Never Hide Broken Functionality**: Do not make systems appear to work when they are actually broken. This includes:
 
   - Avoid showing fallback data that looks like real data when services are unavailable
@@ -735,6 +986,151 @@ beforeEach(async () => {
   const result = user ? processUser(user) : "No user";
   ```
 
+- **Don't Hide Improperly Initialized Components**: Components should throw errors when they are not properly initialized rather than providing fallback behavior that masks the problem. This helps identify configuration issues early rather than allowing broken components to appear functional.
+
+  **Bad:**
+
+  ```typescript
+  private get displayIcon(): string {
+    if (!this.augmentedError) return '⚠️'; // Hides initialization problem
+    return AugmentErrorService.getIconString(this.augmentedError.icon);
+  }
+  ```
+
+  **Good:**
+
+  ```typescript
+  private get displayIcon(): string {
+    if (!this.augmentedError) {
+      throw new Error('ErrorDisplay component not properly initialized: augmentedError is required');
+    }
+    return AugmentErrorService.getIconString(this.augmentedError.icon);
+  }
+  ```
+
+- **Avoid Default Behaviors Sprinkled Throughout System**: Don't scatter default fallback values throughout the codebase as this can hide real problems and make debugging difficult. Instead, ensure proper initialization and let errors surface when components are misconfigured.
+
+  **Bad:**
+
+  ```typescript
+  // Multiple components providing their own defaults
+  private get hasDetails(): boolean {
+    return Boolean(this.augmentedError?.details || 'No details available');
+  }
+  ```
+
+  **Good:**
+
+  ```typescript
+  // Force proper initialization, let errors surface
+  private get hasDetails(): boolean {
+    if (!this.augmentedError) {
+      throw new Error('Component not properly initialized');
+    }
+    return Boolean(this.augmentedError.details && this.augmentedError.details.trim());
+  }
+  ```
+
+## Exception Handling Strategy
+
+The application follows a **selective exception handling** strategy: **only catch exceptions you can meaningfully handle or recover from**. All unhandled exceptions should bubble up to the global error handler to provide a consistent user experience.
+
+### Global Error Handler
+
+The application has a global error handler that:
+
+- Catches all unhandled JavaScript errors (`window.addEventListener('error')`)
+- Catches all unhandled promise rejections (`window.addEventListener('unhandledrejection')`)
+- Displays a kernel panic screen with error details processed through `ErrorService`
+- Allows users to refresh and restart the application
+
+This ensures that even unhandled errors provide a user-friendly experience rather than a broken application.
+
+### When to Catch Exceptions
+
+**✅ DO catch exceptions when:**
+
+- You can provide meaningful user feedback and allow retry (e.g., network requests)
+- You can gracefully degrade functionality while keeping the app usable
+- You can recover automatically or provide alternative behavior
+- The error is expected and part of normal operation (e.g., validation errors)
+
+**❌ DON'T catch exceptions when:**
+
+- You're just logging and re-throwing without handling
+- The error represents a programming bug that should be fixed
+- You can't provide any meaningful recovery or user action
+- You're hiding genuine problems that should be addressed
+
+### Exception Handling Patterns
+
+#### Good: Handle recoverable errors
+
+```typescript
+// User can retry this operation
+async loadData() {
+  try {
+    this.loading = true;
+    this.error = undefined;
+    const response = await this.client.getData();
+    this.data = response;
+  } catch (err) {
+    // Process error and show user-friendly message
+    const processedError = ErrorService.processError(err, 'load data');
+    this.error = processedError.message;
+    this.errorDetails = processedError.details;
+    // User can click reload button to retry
+  } finally {
+    this.loading = false;
+  }
+}
+```
+
+#### Good: Let unrecoverable errors bubble up
+
+```typescript
+// This represents data corruption - nothing the component can do
+private convertData(corruptedData: unknown): ProcessedData {
+  if (!this.isValidData(corruptedData)) {
+    // Don't catch this - let it bubble to global handler
+    throw new Error('Data corruption detected in user profile');
+  }
+  return this.processData(corruptedData);
+}
+```
+
+#### Bad: Catching without meaningful handling
+
+```typescript
+// Bad: Just logging and hiding the error
+async saveDocument() {
+  try {
+    await this.client.save(this.document);
+  } catch (err) {
+    console.error('Save failed:', err); // Just logging
+    // No user feedback, no retry mechanism, error is hidden
+  }
+}
+```
+
+### Error Recovery Guidelines
+
+- **Provide clear user feedback** for all caught errors
+- **Enable retry mechanisms** when operations can be reattempted
+- **Maintain application state consistency** when errors occur
+- **Use ErrorService.processError()** for consistent error presentation
+- **Document recovery paths** in component interfaces and user documentation
+
+### Testing Exception Scenarios
+
+- **Test error paths** as thoroughly as success paths
+- **Verify error messages** are user-friendly and actionable
+- **Test global error handler** doesn't interfere with intentional error handling
+- **Simulate network failures, timeouts, and server errors** in tests
+- **Ensure error states can be recovered from** without full page refresh
+
+This strategy ensures robust error handling while maintaining a clean separation between recoverable local errors and unrecoverable system errors.
+
 ### Running Linters
 
 The project uses different linters for different parts of the codebase:
@@ -748,9 +1144,9 @@ Each linter enforces specific rules:
 - Go linter enforces using `any` instead of `interface{}` and other Go best practices
 - Frontend linter enforces TypeScript strict typing with `@typescript-eslint/no-explicit-any` rule enabled
 
-### Required Before Each Commit
+### Required Before Each Commit to Make Sure Everything Works
 
-- Run the tests, builds, and linters. You can use `devbox run lint:everything` for that.
+- Run the tests, builds, and linters with `devbox run lint:everything`.
 - Run the application and ensure you can interact with it.
 - Examine any recently written tests to ensure they conform to the testing guidance.
 

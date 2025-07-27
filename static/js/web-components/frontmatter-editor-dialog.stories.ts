@@ -1,16 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/web-components-vite';
+import { action } from 'storybook/actions';
 import { html } from 'lit';
 import './frontmatter-editor-dialog.js';
-
-// Custom action logger for Storybook
-const action = (name: string) => (event: Event) => {
-  console.log(`🎬 Action: ${name}`, {
-    type: event.type,
-    target: event.target,
-    detail: (event as CustomEvent).detail,
-    timestamp: new Date().toISOString()
-  });
-};
+import { AugmentErrorService } from './augment-error-service.js';
 
 const meta: Meta = {
   title: 'Components/FrontmatterEditorDialog',
@@ -45,8 +37,8 @@ export const Closed: Story = {
   },
   render: (args) => html`
     <frontmatter-editor-dialog 
-      .page="${args.page}"
-      .open="${args.open}"
+      .page="${args['page']}"
+      .open="${args['open']}"
       @save=${action('save-event')}
       @cancel=${action('cancel-event')}
       @close=${action('close-event')}>
@@ -63,8 +55,8 @@ export const Loading: Story = {
     // Create element and manually set its internal loading state
     return html`
       <frontmatter-editor-dialog 
-        .page="${args.page}"
-        .open="${args.open}"
+        .page="${args['page']}"
+        .open="${args['open']}"
         .loading="${true}"
         @save=${action('save-event')}
         @cancel=${action('cancel-event')}
@@ -79,17 +71,19 @@ export const Error: Story = {
     page: 'error-page',
     open: true,
   },
-  render: (args) => html`
+  render: (args) => {
+    const mockError = AugmentErrorService.augmentError(new window.Error('Network error: Could not connect to server'), 'loading frontmatter data');
+    return html`
     <frontmatter-editor-dialog 
-      .page="${args.page}"
-      .open="${args.open}"
+      .page="${args['page']}"
+      .open="${args['open']}"
       .loading="${false}"
-      .error="${'Network error: Could not connect to server'}"
+      .augmentedError=${mockError}
       @save=${action('save-event')}
       @cancel=${action('cancel-event')}
       @close=${action('close-event')}>
     </frontmatter-editor-dialog>
-  `,
+  `},
 };
 
 export const Loaded: Story = {
@@ -114,8 +108,8 @@ export const Loaded: Story = {
 
     return html`
       <frontmatter-editor-dialog 
-        .page="${args.page}"
-        .open="${args.open}"
+        .page="${args['page']}"
+        .open="${args['open']}"
         .loading="${false}"
         .workingFrontmatter="${mockFrontmatterData}"
         @save=${action('save-event')}
@@ -143,8 +137,8 @@ export const Saving: Story = {
 
     return html`
       <frontmatter-editor-dialog 
-        .page="${args.page}"
-        .open="${args.open}"
+        .page="${args['page']}"
+        .open="${args['open']}"
         .loading="${false}"
         .saving="${true}"
         .workingFrontmatter="${mockFrontmatterData}"
