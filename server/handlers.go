@@ -509,6 +509,7 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 		if err := p.Update(json.NewText); err != nil {
 			s.Logger.Error("Failed to save page '%s': %v", json.Page, err)
 			message = "Failed to save page"
+			success = false
 		} else {
 			message = "Saved"
 			success = true

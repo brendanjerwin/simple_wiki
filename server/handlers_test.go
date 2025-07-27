@@ -16,6 +16,15 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+// writeCloserBuffer wraps a bytes.Buffer to implement io.WriteCloser
+type writeCloserBuffer struct {
+	*bytes.Buffer
+}
+
+func (*writeCloserBuffer) Close() error {
+	return nil
+}
+
 var _ = Describe("Handlers", func() {
 	var site *server.Site
 	var router *gin.Engine
@@ -206,17 +215,26 @@ var _ = Describe("Handlers", func() {
 			var response map[string]any
 			var pageName string
 			var originalMode os.FileMode
+			var logBuffer *bytes.Buffer
+			var customSite *server.Site
+			var customRouter *gin.Engine
 
 			BeforeEach(func() {
 				pageName = "test-update-fail"
 				newText := "new content"
 
+				// Create a custom logger that writes to a buffer for this test
+				logBuffer = &bytes.Buffer{}
+				customLogger := lumber.NewBasicLogger(&writeCloserBuffer{logBuffer}, lumber.TRACE)
+				customSite = server.NewSite(tmpDir, "", "testpage", "password", 0, "secret", "", true, 1024, 1024, customLogger)
+				customRouter = customSite.GinRouter()
+
 				// Create and save a page first
-				p := site.Open(pageName)
+				p := customSite.Open(pageName)
 				_ = p.Update("some content")
 
 				// Make the data directory read-only to force save failure
-				dataDir := site.PathToData
+				dataDir := customSite.PathToData
 				info, _ := os.Stat(dataDir)
 				originalMode = info.Mode()
 				_ = os.Chmod(dataDir, 0444) // read-only
@@ -228,7 +246,7 @@ var _ = Describe("Handlers", func() {
 				})
 				req, _ := http.NewRequest(http.MethodPost, "/update", bytes.NewBuffer(body))
 				req.Header.Set("Content-Type", "application/json")
-				router.ServeHTTP(w, req)
+				customRouter.ServeHTTP(w, req)
 				_ = json.Unmarshal(w.Body.Bytes(), &response)
 
 				// Restore permissions for cleanup
@@ -242,6 +260,12 @@ var _ = Describe("Handlers", func() {
 			It("should return a failure message", func() {
 				Expect(response["success"]).To(BeFalse())
 				Expect(response["message"]).To(Equal("Failed to save page"))
+			})
+
+			It("should log the error", func() {
+				logOutput := logBuffer.String()
+				Expect(logOutput).To(ContainSubstring("Failed to save page 'test-update-fail'"))
+				Expect(logOutput).To(ContainSubstring("ERROR"))
 			})
 		})
 

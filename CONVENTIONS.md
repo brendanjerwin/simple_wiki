@@ -828,6 +828,36 @@ beforeEach(async () => {
   }
   ```
 
+- **Be Explicit with Error State**: When handling errors, explicitly set all relevant state variables to make the error handling path clear and obvious. Even if variables have default values, explicitly setting them improves code readability and prevents confusion about the intended state.
+
+  **Bad:**
+
+  ```go
+  // Implicit error state - success defaults to false but it's not clear
+  if err := operation(); err != nil {
+      logger.Error("Operation failed: %v", err)
+      message = "Operation failed"
+      // success remains false by default, but this is not obvious
+  } else {
+      message = "Success"
+      success = true
+  }
+  ```
+
+  **Good:**
+
+  ```go
+  // Explicit error state - clearly shows intention for both paths
+  if err := operation(); err != nil {
+      logger.Error("Operation failed: %v", err)
+      message = "Operation failed"
+      success = false  // Explicitly set to make error handling clear
+  } else {
+      message = "Success"
+      success = true
+  }
+  ```
+
 - If a problem is due to an invalid parameter, don't just fix the parameter value. _also_ add an input validation to the function/method receiving the parameter such that the error being fixed is perfectly clear to the next developer.
 - Do not use `recover` to hide panics. A panic indicates a serious bug that should crash the program during development and be fixed. Catching panics in handlers can obfuscate the problem and make debugging difficult. Instead, write defensive code to prevent panics in the first place, for example by checking for `nil`.
 - **Never Branch Logic on Error Messages**: Error messages are intended for human consumption and should never be used for conditional logic or control flow. Use proper error types, error codes, or structured error objects instead.
