@@ -515,6 +515,7 @@ old markdown`
 			var (
 				files []os.FileInfo
 				logBuffer *bytes.Buffer
+				logOutput string
 			)
 
 			BeforeEach(func() {
@@ -540,6 +541,9 @@ old markdown`
 						s.Logger.Error("Failed to add page '%s' to index during initialization: %v", file.Name(), err)
 					}
 				}
+
+				// Capture log output after the actions are performed
+				logOutput = logBuffer.String()
 			})
 
 			It("should handle indexing errors gracefully", func() {
@@ -559,7 +563,6 @@ old markdown`
 			})
 
 			It("should log the error", func() {
-				logOutput := logBuffer.String()
 				Expect(logOutput).To(ContainSubstring("Failed to add page 'test' to index during initialization"))
 				Expect(logOutput).To(ContainSubstring("mock index error"))
 			})
