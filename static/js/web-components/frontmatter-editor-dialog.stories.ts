@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/web-components';
 import { html } from 'lit';
 import './frontmatter-editor-dialog.js';
-import { AugmentedError, AugmentErrorService } from './augment-error-service.js';
+import { AugmentErrorService } from './augment-error-service.js';
 
 // Custom action logger for Storybook
 const action = (name: string) => (event: Event) => {

@@ -1084,7 +1084,7 @@ This ensures that even unhandled errors provide a user-friendly experience rathe
 
 ### Exception Handling Patterns
 
-**Good: Handle recoverable errors**
+#### Good: Handle recoverable errors
 
 ```typescript
 // User can retry this operation
@@ -1106,7 +1106,7 @@ async loadData() {
 }
 ```
 
-**Good: Let unrecoverable errors bubble up**
+#### Good: Let unrecoverable errors bubble up
 
 ```typescript
 // This represents data corruption - nothing the component can do
@@ -1119,7 +1119,7 @@ private convertData(corruptedData: unknown): ProcessedData {
 }
 ```
 
-**Bad: Catching without meaningful handling**
+#### Bad: Catching without meaningful handling
 
 ```typescript
 // Bad: Just logging and hiding the error
