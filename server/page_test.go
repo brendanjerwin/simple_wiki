@@ -44,17 +44,20 @@ var _ = Describe("Page Functions", func() {
 
 			BeforeEach(func() {
 				req, _ := http.NewRequest("GET", "/", nil)
-				p := s.OpenOrInit("testpage", req)
-				err := p.Update("Some data")
+				p, err := s.OpenOrInit("testpage", req)
+				Expect(err).ToNot(HaveOccurred())
+				err = p.Update("Some data")
 				Expect(err).ToNot(HaveOccurred())
 				time.Sleep(10 * time.Millisecond)
 
-				p = s.OpenOrInit("testpage2", req)
+				p, err = s.OpenOrInit("testpage2", req)
+				Expect(err).ToNot(HaveOccurred())
 				err = p.Update("A different bunch of data")
 				Expect(err).ToNot(HaveOccurred())
 				time.Sleep(10 * time.Millisecond)
 
-				p = s.OpenOrInit("testpage3", req)
+				p, err = s.OpenOrInit("testpage3", req)
+				Expect(err).ToNot(HaveOccurred())
 				err = p.Update("Not much else")
 				Expect(err).ToNot(HaveOccurred())
 
@@ -79,7 +82,9 @@ var _ = Describe("Page Functions", func() {
 
 		BeforeEach(func() {
 			req, _ := http.NewRequest("GET", "/", nil)
-			p = s.OpenOrInit("testpage", req)
+			var err error
+			p, err = s.OpenOrInit("testpage", req)
+			Expect(err).ToNot(HaveOccurred())
 		})
 
 		When("A page is updated", func() {

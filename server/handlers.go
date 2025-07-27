@@ -280,7 +280,12 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		return
 	}
 
-	p := s.OpenOrInit(page, c.Request)
+	p, err := s.OpenOrInit(page, c.Request)
+	if err != nil {
+		s.Logger.Error("Failed to initialize page '%s': %v", page, err)
+		c.String(http.StatusInternalServerError, "Failed to initialize page")
+		return
+	}
 
 	// use the default lock
 	if s.defaultLock() != "" && p.IsNew() {

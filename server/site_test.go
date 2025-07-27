@@ -488,33 +488,37 @@ old markdown`
 
 		When("creating a new page successfully", func() {
 			var p *Page
+			var err error
 
 			BeforeEach(func() {
-				p = s.OpenOrInit(pageToCreate, req)
+				p, err = s.OpenOrInit(pageToCreate, req)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("should create a page with initial content", func() {
 				Expect(p.Text.GetCurrent()).To(ContainSubstring("# {{or .Title .Identifier}}"))
 				Expect(p.Text.GetCurrent()).To(ContainSubstring(`identifier = "` + pageToCreate + `"`))
 			})
-
-			It("should create the page regardless of save success", func() {
-				Expect(p.IsNew()).To(BeTrue()) // OpenOrInit always creates new pages programmatically
-			})
 		})
 
 		When("creating a new page fails to save", func() {
 			var p *Page
+			var err error
 
 			BeforeEach(func() {
 				// Make the data directory read-only to simulate save failure
-				dirInfo, err := os.Stat(tempDir)
-				Expect(err).NotTo(HaveOccurred())
+				var dirInfo os.FileInfo
+				var statErr error
+				dirInfo, statErr = os.Stat(tempDir)
+				Expect(statErr).NotTo(HaveOccurred())
 				originalPerms = dirInfo.Mode()
-				err = os.Chmod(tempDir, 0444)
-				Expect(err).NotTo(HaveOccurred())
+				chmodErr := os.Chmod(tempDir, 0444)
+				Expect(chmodErr).NotTo(HaveOccurred())
 
-				p = s.OpenOrInit(pageToCreate, req)
+				p, err = s.OpenOrInit(pageToCreate, req)
 			})
 
 			AfterEach(func() {
@@ -522,19 +526,13 @@ old markdown`
 				_ = os.Chmod(tempDir, originalPerms)
 			})
 
-			It("should still return a page object", func() {
-				Expect(p).NotTo(BeNil())
-				Expect(p.Identifier).To(Equal(pageToCreate))
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("failed to save new page"))
 			})
 
-			It("should still have the initial content", func() {
-				Expect(p.Text.GetCurrent()).To(ContainSubstring("# {{or .Title .Identifier}}"))
-			})
-
-			It("should log an error message", func() {
-				// Note: In a real test environment, we might want to capture logs
-				// For now, we're just ensuring the function doesn't panic
-				Expect(p.Text.GetCurrent()).NotTo(BeEmpty())
+			It("should return nil page when save fails", func() {
+				Expect(p).To(BeNil())
 			})
 		})
 	})

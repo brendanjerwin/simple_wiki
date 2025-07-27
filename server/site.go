@@ -166,8 +166,9 @@ func (s *Site) Open(requestedIdentifier string) (p *Page) {
 }
 
 // OpenOrInit opens a page or initializes a new one if it doesn't exist.
-func (s *Site) OpenOrInit(requestedIdentifier string, req *http.Request) (p *Page) {
-	p = s.Open(requestedIdentifier)
+// Returns an error if page initialization fails to save.
+func (s *Site) OpenOrInit(requestedIdentifier string, req *http.Request) (*Page, error) {
+	p := s.Open(requestedIdentifier)
 	if p.IsNew() {
 		prams := req.URL.Query()
 		initialText := "identifier = \"" + p.Identifier + "\"\n"
@@ -212,11 +213,11 @@ items = [
 		p.Render()
 		if err := p.Save(); err != nil {
 			s.Logger.Error("Failed to save new page '%s': %v", p.Identifier, err)
-			// Consider how to handle this critical failure. For now, logging is the minimum.
+			return nil, fmt.Errorf("failed to save new page '%s': %w", p.Identifier, err)
 		}
 	}
 	p.Render()
-	return p
+	return p, nil
 }
 
 // DirectoryEntry represents an entry in the wiki directory.
