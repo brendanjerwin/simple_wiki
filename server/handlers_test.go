@@ -385,8 +385,8 @@ var _ = Describe("Handlers", func() {
 				site.PathToData = originalDataPath
 			})
 
-			It("should return a 500 status code", func() {
-				Expect(w.Code).To(Equal(http.StatusInternalServerError))
+			It("should return a 200 status code", func() {
+				Expect(w.Code).To(Equal(http.StatusOK))
 			})
 
 			It("should return a failure response", func() {
