@@ -1,0 +1,103 @@
+syntax = "proto3";
+
+package api.v1;
+
+option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
+
+service PageManagement {
+    rpc CreatePage(CreatePageRequest) returns (CreatePageResponse);
+    rpc ReadPage(ReadPageRequest) returns (ReadPageResponse);
+    rpc RenderPage(RenderPageRequest) returns (RenderPageResponse);
+    rpc UpdatePage(UpdatePageRequest) returns (UpdatePageResponse);
+    rpc UpdatePageContent(UpdatePageContentRequest) returns (UpdatePageContentResponse);
+    rpc UpdateWholePage(UpdateWholePageRequest) returns (UpdateWholePageResponse);
+    rpc DeletePage(DeletePageRequest) returns (DeletePageResponse);
+    rpc TogglePageLock(TogglePageLockRequest) returns (TogglePageLockResponse);
+}
+
+// Create Page
+message CreatePageRequest {
+    string page_name = 1;
+    string content_markdown = 2;
+    string front_matter_toml = 3;
+}
+
+message CreatePageResponse {
+    bool success = 1;
+    string error = 2;
+}
+
+// Read Page
+message ReadPageRequest {
+    string page_name = 1;
+}
+
+message ReadPageResponse {
+    string content_markdown = 1;
+    string front_matter_toml = 2;
+    string rendered_content_html = 3;
+}
+
+// Render Page
+message RenderPageRequest {
+    string page_name = 1;
+}
+
+message RenderPageResponse {
+    string rendered_content_html = 1;
+}
+
+// Update Page
+message UpdatePageRequest {
+    string page_name = 1;
+    string new_content_markdown = 2;
+    string new_front_matter_toml = 3;
+}
+
+message UpdatePageResponse {
+    bool success = 1;
+    string error = 2;
+}
+
+// Update Page Content
+message UpdatePageContentRequest {
+    string page_name = 1;
+    string new_content_markdown = 2;
+}
+
+message UpdatePageContentResponse {
+    bool success = 1;
+    string error = 2;
+}
+
+// Update Whole Page
+message UpdateWholePageRequest {
+    string page_name = 1;
+    string new_whole_markdown = 2; // Markdown including front matter
+}
+
+message UpdateWholePageResponse {
+    bool success = 1;
+    string error = 2;
+}
+
+// Delete Page
+message DeletePageRequest {
+    string page_name = 1;
+}
+
+message DeletePageResponse {
+    bool success = 1;
+    string error = 2;
+}
+
+// Toggle Page Lock
+message TogglePageLockRequest {
+    string page_name = 1;
+    string passphrase = 2;
+}
+
+message TogglePageLockResponse {
+    bool success = 1;
+    string error = 2;
+}

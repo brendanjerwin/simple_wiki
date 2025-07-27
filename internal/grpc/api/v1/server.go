@@ -65,6 +65,7 @@ func isIdentifierKeyPath(path []*apiv1.PathComponent) bool {
 type Server struct {
 	apiv1.UnimplementedVersionServer
 	apiv1.UnimplementedFrontmatterServer
+	apiv1.UnimplementedPageManagementServer
 	Commit         string
 	BuildTime      time.Time
 	PageReadWriter wikipage.PageReadWriter
@@ -292,6 +293,7 @@ func NewServer(commit string, buildTime time.Time, pageReadWriter wikipage.PageR
 func (s *Server) RegisterWithServer(grpcServer *grpc.Server) {
 	apiv1.RegisterVersionServer(grpcServer, s)
 	apiv1.RegisterFrontmatterServer(grpcServer, s)
+	apiv1.RegisterPageManagementServer(grpcServer, s)
 }
 
 // GetVersion implements the GetVersion RPC.
