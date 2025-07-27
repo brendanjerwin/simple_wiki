@@ -607,6 +607,42 @@ beforeEach(async () => {
   });
   ```
 
+- **Capture Test Data in BeforeEach**: When you need to capture data that results from actions (like log output, response data, or computed values), always capture it in the `BeforeEach` block after the action is performed, not in the `It` blocks. Declare the variable in the scope above so multiple `It` blocks can access it for different assertions.
+
+  **Bad:** Capturing data inside the `It` block
+
+  ```go
+  It("should log the error", func() {
+    logOutput := logBuffer.String() // Action inside It block
+    Expect(logOutput).To(ContainSubstring("error message"))
+  })
+  ```
+
+  **Good:** Capturing data in `BeforeEach` after action
+
+  ```go
+  When("action is performed", func() {
+    var logOutput string
+    var logBuffer *bytes.Buffer
+    
+    BeforeEach(func() {
+      // ... setup and action ...
+      performAction()
+      
+      // Capture result data after action
+      logOutput = logBuffer.String()
+    })
+    
+    It("should log the error", func() {
+      Expect(logOutput).To(ContainSubstring("error message"))
+    })
+    
+    It("should include error level", func() {
+      Expect(logOutput).To(ContainSubstring("ERROR"))
+    })
+  })
+  ```
+
 - When asserting an error, check for the specific error type or message. Do not just check that an error is not `nil`. This ensures that the test is validating the specific error that is expected to be returned.
 
   **Bad:** (Go example)

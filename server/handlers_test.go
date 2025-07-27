@@ -218,6 +218,7 @@ var _ = Describe("Handlers", func() {
 			var logBuffer *bytes.Buffer
 			var customSite *server.Site
 			var customRouter *gin.Engine
+			var logOutput string
 
 			BeforeEach(func() {
 				pageName = "test-update-fail"
@@ -249,6 +250,9 @@ var _ = Describe("Handlers", func() {
 				customRouter.ServeHTTP(w, req)
 				_ = json.Unmarshal(w.Body.Bytes(), &response)
 
+				// Capture log output after action is performed
+				logOutput = logBuffer.String()
+
 				// Restore permissions for cleanup
 				_ = os.Chmod(dataDir, originalMode)
 			})
@@ -263,7 +267,6 @@ var _ = Describe("Handlers", func() {
 			})
 
 			It("should log the error", func() {
-				logOutput := logBuffer.String()
 				Expect(logOutput).To(ContainSubstring("Failed to save page 'test-update-fail'"))
 				Expect(logOutput).To(ContainSubstring("ERROR"))
 			})
