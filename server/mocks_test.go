@@ -10,10 +10,14 @@ import (
 type MockIndexMaintainer struct {
 	AddPageToIndexCalledWith      wikipage.PageIdentifier
 	RemovePageFromIndexCalledWith wikipage.PageIdentifier
+	AddPageToIndexError           error // Error to return from AddPageToIndex
 }
 
 func (m *MockIndexMaintainer) AddPageToIndex(identifier wikipage.PageIdentifier) error {
 	m.AddPageToIndexCalledWith = identifier
+	if m.AddPageToIndexError != nil {
+		return m.AddPageToIndexError
+	}
 	return nil
 }
 
