@@ -93,6 +93,39 @@ var _ = Describe("Handlers", func() {
 				Expect(p.Text.GetCurrent()).To(BeEmpty())
 			})
 		})
+
+		When("the page erase fails during relinquish", func() {
+			var response map[string]any
+			var pageName string
+
+			BeforeEach(func() {
+				pageName = "test-relinquish-fail"
+				p := site.Open(pageName)
+				_ = p.Update("some content")
+				_ = p.Save()
+
+				// Make the data directory read-only to cause erase to fail
+				_ = os.Chmod(tmpDir, 0444)
+
+				body, _ := json.Marshal(map[string]string{"page": pageName})
+				req, _ := http.NewRequest(http.MethodPost, "/relinquish", bytes.NewBuffer(body))
+				req.Header.Set("Content-Type", "application/json")
+				router.ServeHTTP(w, req)
+				_ = json.Unmarshal(w.Body.Bytes(), &response)
+
+				// Restore permissions for cleanup
+				_ = os.Chmod(tmpDir, 0755)
+			})
+
+			It("should return a 500 status code", func() {
+				Expect(w.Code).To(Equal(http.StatusInternalServerError))
+			})
+
+			It("should return an error message", func() {
+				Expect(response["success"]).To(BeFalse())
+				Expect(response["message"]).To(Equal("Failed to erase page"))
+			})
+		})
 	})
 
 	Describe("handlePageExists", func() {
@@ -237,6 +270,62 @@ var _ = Describe("Handlers", func() {
 			It("should update the page content", func() {
 				p := site.Open(pageName)
 				Expect(p.Text.GetCurrent()).To(Equal(newText))
+			})
+		})
+	})
+
+	Describe("handlePageRequest erase command", func() {
+		When("the erase command is successful", func() {
+			var pageName string
+
+			BeforeEach(func() {
+				pageName = "test-erase"
+				p := site.Open(pageName)
+				_ = p.Update("some content")
+				_ = p.Save()
+
+				req, _ := http.NewRequest(http.MethodGet, "/"+pageName+"/erase", nil)
+				router.ServeHTTP(w, req)
+			})
+
+			It("should redirect to root path", func() {
+				Expect(w.Code).To(Equal(http.StatusFound))
+				Expect(w.Header().Get("Location")).To(Equal("/"))
+			})
+
+			It("should erase the page", func() {
+				p := site.Open(pageName)
+				Expect(p.Text.GetCurrent()).To(BeEmpty())
+			})
+		})
+
+		When("the erase command fails", func() {
+			var pageName string
+
+			BeforeEach(func() {
+				pageName = "test-erase-fail"
+				p := site.Open(pageName)
+				_ = p.Update("some content")
+				_ = p.Save()
+
+				// Make the data directory read-only to cause erase to fail
+				_ = os.Chmod(tmpDir, 0444)
+
+				req, _ := http.NewRequest(http.MethodGet, "/"+pageName+"/erase", nil)
+				router.ServeHTTP(w, req)
+
+				// Restore permissions for cleanup
+				_ = os.Chmod(tmpDir, 0755)
+			})
+
+			It("should redirect back to the page view", func() {
+				Expect(w.Code).To(Equal(http.StatusFound))
+				Expect(w.Header().Get("Location")).To(Equal("/" + pageName + "/view"))
+			})
+
+			It("should not erase the page", func() {
+				p := site.Open(pageName)
+				Expect(p.Text.GetCurrent()).To(Equal("some content"))
 			})
 		})
 	})

@@ -216,7 +216,10 @@ func (s *Site) handlePageRelinquish(c *gin.Context) {
 	text := p.Text.GetCurrent()
 	isLocked := pageIsLocked(p, c)
 	if !isLocked {
-		_ = p.Erase()
+		if err := p.Erase(); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to erase page"})
+			return
+		}
 		message = "Relinquished and erased"
 	}
 	c.JSON(http.StatusOK, gin.H{
@@ -300,8 +303,11 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 
 	if command == "/erase" {
 		if !isLocked {
-			_ = p.Erase()
-			c.Redirect(httpStatusFound, rootPath)
+			if err := p.Erase(); err != nil {
+				c.Redirect(httpStatusFound, "/"+page+"/view")
+			} else {
+				c.Redirect(httpStatusFound, rootPath)
+			}
 		} else {
 			c.Redirect(httpStatusFound, "/"+page+"/view")
 		}
