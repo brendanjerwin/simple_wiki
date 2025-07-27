@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"errors"
+	"net/http"
 	"os"
 	"path"
 	"path/filepath"
@@ -471,6 +472,69 @@ old markdown`
 					Expect(mdErr).NotTo(HaveOccurred())
 					Expect(string(md)).To(Equal(string(newMd)))
 				})
+			})
+		})
+	})
+
+	Describe("OpenOrInit", func() {
+		var (
+			req           *http.Request
+			pageToCreate  string
+			originalPerms os.FileMode
+		)
+
+		BeforeEach(func() {
+			pageToCreate = "new-test-page"
+			req, _ = http.NewRequest("GET", "/", nil)
+		})
+
+		When("creating a new page successfully", func() {
+			var p *Page
+			var err error
+
+			BeforeEach(func() {
+				p, err = s.OpenOrInit(pageToCreate, req)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should create a page with initial content", func() {
+				Expect(p.Text.GetCurrent()).To(ContainSubstring("# {{or .Title .Identifier}}"))
+				Expect(p.Text.GetCurrent()).To(ContainSubstring(`identifier = "` + pageToCreate + `"`))
+			})
+		})
+
+		When("creating a new page fails to save", func() {
+			var p *Page
+			var err error
+
+			BeforeEach(func() {
+				// Make the data directory read-only to simulate save failure
+				var dirInfo os.FileInfo
+				var statErr error
+				dirInfo, statErr = os.Stat(tempDir)
+				Expect(statErr).NotTo(HaveOccurred())
+				originalPerms = dirInfo.Mode()
+				chmodErr := os.Chmod(tempDir, 0444)
+				Expect(chmodErr).NotTo(HaveOccurred())
+
+				p, err = s.OpenOrInit(pageToCreate, req)
+			})
+
+			AfterEach(func() {
+				// Restore permissions for cleanup
+				_ = os.Chmod(tempDir, originalPerms)
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("failed to save new page"))
+			})
+
+			It("should return nil page when save fails", func() {
+				Expect(p).To(BeNil())
 			})
 		})
 	})
