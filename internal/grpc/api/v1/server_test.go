@@ -128,6 +128,8 @@ type MockPageReadWriter struct {
 	WrittenMarkdown    wikipage.Markdown
 	WrittenIdentifier  wikipage.PageIdentifier
 	WriteErr           error
+	DeletedIdentifier  wikipage.PageIdentifier
+	DeleteErr          error
 }
 
 func (m *MockPageReadWriter) ReadFrontMatter(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
@@ -154,6 +156,11 @@ func (m *MockPageReadWriter) ReadMarkdown(identifier wikipage.PageIdentifier) (w
 		return "", "", m.Err
 	}
 	return identifier, m.Markdown, nil
+}
+
+func (m *MockPageReadWriter) DeletePage(identifier wikipage.PageIdentifier) error {
+	m.DeletedIdentifier = identifier
+	return m.DeleteErr
 }
 
 var _ = Describe("Server", func() {
@@ -1187,6 +1194,76 @@ var _ = Describe("Server", func() {
 
 			It("should return the response", func() {
 				Expect(resp).NotTo(BeNil())
+			})
+		})
+	})
+
+	Describe("DeletePage", func() {
+		var (
+			req                *apiv1.DeletePageRequest
+			resp               *apiv1.DeletePageResponse
+			err                error
+			mockPageReadWriter *MockPageReadWriter
+		)
+
+		BeforeEach(func() {
+			req = &apiv1.DeletePageRequest{
+				PageName: "test-page",
+			}
+			mockPageReadWriter = &MockPageReadWriter{}
+		})
+
+		JustBeforeEach(func() {
+			server = v1.NewServer("commit", time.Now(), mockPageReadWriter, lumber.NewConsoleLogger(lumber.WARN))
+			resp, err = server.DeletePage(ctx, req)
+		})
+
+		When("the PageReadWriter is not configured", func() {
+			BeforeEach(func() {
+				mockPageReadWriter = nil
+			})
+
+			It("should return an internal error and no response", func() {
+				Expect(err).To(HaveGrpcStatus(codes.Internal, "PageReadWriter not available"))
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("the page does not exist", func() {
+			BeforeEach(func() {
+				mockPageReadWriter.DeleteErr = os.ErrNotExist
+			})
+
+			It("should return a not found error and no response", func() {
+				Expect(err).To(HaveGrpcStatus(codes.NotFound, "page not found: test-page"))
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("deletion fails with a generic error", func() {
+			BeforeEach(func() {
+				mockPageReadWriter.DeleteErr = errors.New("disk error")
+			})
+
+			It("should return an internal error and no response", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to delete page"))
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("deletion is successful", func() {
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a success response", func() {
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.Success).To(BeTrue())
+				Expect(resp.Error).To(BeEmpty())
+			})
+
+			It("should call delete on the PageReadWriter", func() {
+				Expect(mockPageReadWriter.DeletedIdentifier).To(Equal(wikipage.PageIdentifier("test-page")))
 			})
 		})
 	})

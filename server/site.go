@@ -446,3 +446,9 @@ func (s *Site) ReadMarkdown(identifier wikipage.PageIdentifier) (wikipage.PageId
 
 	return identifier, wikipage.Markdown(body), nil
 }
+
+// DeletePage deletes a page from disk.
+func (s *Site) DeletePage(identifier wikipage.PageIdentifier) error {
+	p := s.Open(string(identifier))
+	return p.Erase()
+}

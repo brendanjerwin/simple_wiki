@@ -21,8 +21,14 @@ type PageWriter interface {
 	WriteMarkdown(identifier PageIdentifier, md Markdown) error
 }
 
+// PageDeleter is an interface for deleting pages.
+type PageDeleter interface {
+	DeletePage(identifier PageIdentifier) error
+}
+
 // PageReadWriter is an interface that combines PageReader and PageWriter.
 type PageReadWriter interface {
 	PageReader
 	PageWriter
+	PageDeleter
 }

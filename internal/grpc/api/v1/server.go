@@ -365,3 +365,24 @@ func (s *Server) LoggingInterceptor() grpc.UnaryServerInterceptor {
 		return resp, err
 	}
 }
+
+// DeletePage implements the DeletePage RPC.
+func (s *Server) DeletePage(_ context.Context, req *apiv1.DeletePageRequest) (*apiv1.DeletePageResponse, error) {
+	v := reflect.ValueOf(s.PageReadWriter)
+	if s.PageReadWriter == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
+		return nil, status.Error(codes.Internal, pageReadWriterNotAvailableError)
+	}
+
+	err := s.PageReadWriter.DeletePage(req.PageName)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, status.Errorf(codes.NotFound, "page not found: %s", req.PageName)
+		}
+		return nil, status.Errorf(codes.Internal, "failed to delete page: %v", err)
+	}
+
+	return &apiv1.DeletePageResponse{
+		Success: true,
+		Error:   "",
+	}, nil
+}
