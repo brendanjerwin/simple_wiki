@@ -7,9 +7,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path"
+	"strings"
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/server"
+	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/gin-gonic/gin"
 	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
@@ -100,6 +103,39 @@ var _ = Describe("Handlers", func() {
 			It("should erase the page", func() {
 				p := site.Open(pageName)
 				Expect(p.Text.GetCurrent()).To(BeEmpty())
+			})
+		})
+
+		When("the page erase fails during relinquish", func() {
+			var response map[string]any
+			var pageName string
+
+			BeforeEach(func() {
+				pageName = "test-relinquish-fail"
+				p := site.Open(pageName)
+				_ = p.Update("some content")
+				_ = p.Save()
+
+				// Make the data directory read-only to cause erase to fail
+				_ = os.Chmod(tmpDir, 0444)
+
+				body, _ := json.Marshal(map[string]string{"page": pageName})
+				req, _ := http.NewRequest(http.MethodPost, "/relinquish", bytes.NewBuffer(body))
+				req.Header.Set("Content-Type", "application/json")
+				router.ServeHTTP(w, req)
+				_ = json.Unmarshal(w.Body.Bytes(), &response)
+
+				// Restore permissions for cleanup
+				_ = os.Chmod(tmpDir, 0755)
+			})
+
+			It("should return a 500 status code", func() {
+				Expect(w.Code).To(Equal(http.StatusInternalServerError))
+			})
+
+			It("should return an error message", func() {
+				Expect(response["success"]).To(BeFalse())
+				Expect(response["message"]).To(Equal("Failed to erase page"))
 			})
 		})
 	})
@@ -307,6 +343,68 @@ var _ = Describe("Handlers", func() {
 			It("should update the page content", func() {
 				p := site.Open(pageName)
 				Expect(p.Text.GetCurrent()).To(Equal(newText))
+			})
+		})
+	})
+
+	Describe("handlePageRequest erase command", func() {
+		When("the erase command is successful", func() {
+			var pageName string
+
+			BeforeEach(func() {
+				pageName = "test-erase"
+				p := site.Open(pageName)
+				_ = p.Update("some content")
+				_ = p.Save()
+
+				req, _ := http.NewRequest(http.MethodGet, "/"+pageName+"/erase", nil)
+				router.ServeHTTP(w, req)
+			})
+
+			It("should redirect to root path", func() {
+				Expect(w.Code).To(Equal(http.StatusFound))
+				Expect(w.Header().Get("Location")).To(Equal("/"))
+			})
+
+			It("should erase the page", func() {
+				p := site.Open(pageName)
+				Expect(p.Text.GetCurrent()).To(BeEmpty())
+			})
+		})
+
+		When("the erase command fails", func() {
+			var pageName string
+
+			BeforeEach(func() {
+				pageName = "test-erase-fail"
+				p := site.Open(pageName)
+				_ = p.Update("some content")
+				_ = p.Save()
+
+				// Make the specific files read-only to cause erase to fail
+				// (directory can still be read, but files can't be deleted)
+				jsonFile := path.Join(tmpDir, base32tools.EncodeToBase32(strings.ToLower(pageName))+".json")
+				mdFile := path.Join(tmpDir, base32tools.EncodeToBase32(strings.ToLower(pageName))+".md")
+				_ = os.Chmod(jsonFile, 0444)
+				_ = os.Chmod(mdFile, 0444)
+				_ = os.Chmod(tmpDir, 0555) // Read-only directory (can read, but can't modify/delete files)
+
+				req, _ := http.NewRequest(http.MethodGet, "/"+pageName+"/erase", nil)
+				router.ServeHTTP(w, req)
+
+				// Restore permissions for cleanup
+				_ = os.Chmod(tmpDir, 0755)
+				_ = os.Chmod(jsonFile, 0644)
+				_ = os.Chmod(mdFile, 0644)
+			})
+
+			It("should return internal server error", func() {
+				Expect(w.Code).To(Equal(http.StatusInternalServerError))
+			})
+
+			It("should not erase the page", func() {
+				p := site.Open(pageName)
+				Expect(p.Text.GetCurrent()).To(Equal("some content"))
 			})
 		})
 	})
