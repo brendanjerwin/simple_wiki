@@ -18,6 +18,19 @@
 - **Standard Idioms and Tooling**: Prefer standard idioms and approaches for the language in use. Leverage appropriate code generation tools when beneficial (e.g., `go:generate` for Go). For JavaScript, utilize tools like `bun build` for bundling and `web-test-runner` for testing.
 - Generated files **should be committed** to the repository. This ensures that developers can build and test the project without needing to have all code generation tools installed locally. Any files created or modified by `go generate ./...` should be included in commits.
 - prefer IoC approaches. Make \*-er interfaces for all the things!
+- **Avoid Meaningless Names**: Avoid generic, meaningless names like "Manager", "Handler", "Processor", "Service", "Util", or "Helper" unless they genuinely describe the specific purpose. These names are often cop-outs that don't convey meaningful information about what the type or function actually does. Instead, use descriptive names that clearly indicate the specific responsibility or behavior.
+
+  **Bad Examples:**
+  - `PageManager` (vague - manages what about pages?)
+  - `DataProcessor` (vague - processes how?)
+  - `RequestHandler` (vague - handles how?)
+  - `UserService` (vague - what service?)
+
+  **Good Examples:**
+  - `PageReadMutator` (specific - reads and mutates pages)
+  - `DataValidator` (specific - validates data)
+  - `RequestRouter` (specific - routes requests)
+  - `UserAuthenticator` (specific - authenticates users)
 
   - **Defensive Error Handling**: Take a defensive coding approach. Check inputs, assert preconditions, and enforce invariants. For recoverable issues, prefer returning an error or throwing an
     exception rather than causing a program crash (panic). Crashes/panics should be reserved for truly exceptional and unrecoverable situations. This allows the caller to handle the problem more

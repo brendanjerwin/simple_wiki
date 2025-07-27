@@ -26,8 +26,8 @@ type PageDeleter interface {
 	DeletePage(identifier PageIdentifier) error
 }
 
-// PageManager is an interface that combines PageReader, PageWriter, and PageDeleter.
-type PageManager interface {
+// PageReadMutator is an interface that combines PageReader, PageWriter, and PageDeleter.
+type PageReadMutator interface {
 	PageReader
 	PageWriter
 	PageDeleter
