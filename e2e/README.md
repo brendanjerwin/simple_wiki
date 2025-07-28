@@ -18,6 +18,9 @@ The E2E test suite focuses on critical path functionality following the testing 
 ```bash
 # Run all E2E tests
 devbox run e2e:test
+
+# Run with visible browser for debugging
+devbox run e2e:test:headed
 ```
 
 This single command will:
@@ -28,6 +31,36 @@ This single command will:
 4. Install/configure Playwright browsers
 5. Run the test suite
 6. Clean up automatically
+
+### Creating New E2E Tests
+
+#### Option 1: Interactive Test Development (Recommended)
+
+```bash
+# Start the E2E development environment
+devbox run e2e:codegen
+```
+
+This command provides a comprehensive development environment:
+
+- ✅ **Fresh Build**: Builds the application from scratch
+- ✅ **Clean Environment**: Sets up isolated test data directory
+- ✅ **Auto Server**: Starts wiki server on http://localhost:8051
+- ✅ **Helpful Instructions**: Detailed guidance for test creation
+- ✅ **Two Methods**: Support for both Playwright codegen and manual creation
+- ✅ **Auto Cleanup**: Graceful shutdown and cleanup with Ctrl+C
+
+Follow the on-screen instructions to:
+1. Use Playwright codegen for automated test recording, or
+2. Manually create tests with provided examples and patterns
+
+#### Option 2: Manual Test Creation
+
+If you prefer to write tests manually, you can:
+1. Run `devbox run e2e:codegen` to start the development server
+2. Open http://localhost:8051 in your browser
+3. Perform the actions you want to test
+4. Write test code using the patterns displayed in the instructions
 
 ### Test Structure
 
@@ -103,8 +136,25 @@ The goal is to catch regressions in core functionality while maintaining a light
 
 When adding new E2E tests:
 
+### Using the Development Environment
+
+1. **Start the development environment**: `devbox run e2e:codegen`
+2. **Use Playwright codegen**: Follow the on-screen instructions to record interactions
+3. **Focus on critical workflows**: Only test the most important user paths
+4. **Test edge cases**: Include both happy path and error scenarios
+5. **Keep tests isolated**: Each test should be independent
+
+### Best Practices
+
 1. Focus on critical user workflows only
-2. Use the existing page object patterns
+2. Use descriptive test names that explain the behavior being tested
 3. Ensure proper cleanup in test teardown
 4. Test both happy path and edge cases
 5. Keep tests isolated and independent
+6. Use the existing patterns shown in the codegen environment
+
+### Test File Organization
+
+- **Main test file**: `e2e/tests/critical-paths.spec.ts`
+- **New test files**: Create additional `.spec.ts` files in `e2e/tests/` as needed
+- **Helper functions**: Extract common patterns into reusable functions

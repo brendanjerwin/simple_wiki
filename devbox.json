@@ -71,6 +71,10 @@
         "devbox run build",
         "export CHROMIUM_BIN=$(which chromium)",
         "cd e2e && bun install && bun run test:headed"
+      ],
+      "e2e:codegen": [
+        "export CHROMIUM_BIN=$(which chromium)",
+        "cd e2e && bun install && bun run codegen:setup"
       ]
     }
   }

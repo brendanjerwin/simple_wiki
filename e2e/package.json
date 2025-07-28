@@ -7,11 +7,14 @@
     "test": "playwright test",
     "test:debug": "playwright test --debug",
     "test:headed": "PLAYWRIGHT_HEADED=true playwright test --headed",
-    "show-report": "playwright show-report"
+    "show-report": "playwright show-report",
+    "codegen": "PLAYWRIGHT_BROWSERS_PATH=0 playwright codegen --browser=chromium --target typescript",
+    "codegen:setup": "tsx codegen-setup.ts"
   },
   "devDependencies": {
     "@playwright/test": "^1.40.0",
     "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
     "typescript": "^5.0.0"
   }
 }
