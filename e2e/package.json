@@ -6,7 +6,7 @@
   "scripts": {
     "test": "playwright test",
     "test:debug": "playwright test --debug",
-    "test:headed": "playwright test --headed",
+    "test:headed": "PLAYWRIGHT_HEADED=true playwright test --headed",
     "show-report": "playwright show-report"
   },
   "devDependencies": {

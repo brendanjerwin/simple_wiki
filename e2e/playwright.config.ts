@@ -46,8 +46,8 @@ export default defineConfig({
     /* Disable video recording to avoid FFmpeg dependency */
     video: 'off',
     
-    /* Use headless mode for CI/container environments */
-    headless: true,
+    /* Use headless mode for CI/container environments, but allow override via environment variable */
+    headless: process.env.PLAYWRIGHT_HEADED !== 'true',
   },
 
   /* Configure web server - this replaces the complex shell script */

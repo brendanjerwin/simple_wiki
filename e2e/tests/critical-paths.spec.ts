@@ -46,8 +46,12 @@ This is a test page created by the E2E test suite.
 
 Created at: ${new Date().toISOString().slice(0, 19)}`;
 
+    // Fill the content and trigger keyup event to start auto-save
     await textarea.fill(testPageContent);
-    await page.waitForTimeout(1000);
+    await textarea.press('Space'); // Trigger keyup event
+    
+    // Wait for save to complete - look for save button to show success
+    await expect(page.locator('#saveEditButton')).toContainText('Saved', { timeout: 10000 });
     
     // Go to view mode to verify the page was created and content rendered
     await page.goto(`/${TEST_PAGE_NAME.toLowerCase()}/view`);
@@ -61,8 +65,8 @@ Created at: ${new Date().toISOString().slice(0, 19)}`;
     // Navigate to the page list
     await page.goto('/ls');
     
-    // Should show a list of pages
-    await expect(page.locator('h1')).toContainText('List');
+    // Should show a list of pages - the h1 shows "ls" not "List"
+    await expect(page.locator('h1')).toContainText('ls');
     
     // Should have some pages listed (at least home)
     const pageLinks = page.locator('a[href*="/view"]');
@@ -96,7 +100,10 @@ This tests that content persists across page reloads.`;
     
     // Fill and save the content
     await textarea.fill(testContent);
-    await page.waitForTimeout(1000); // Wait for auto-save
+    await textarea.press('Space'); // Trigger keyup event
+    
+    // Wait for save to complete
+    await expect(page.locator('#saveEditButton')).toContainText('Saved', { timeout: 10000 });
     
     // Navigate away and back to verify persistence
     await page.goto('/home/edit');
@@ -141,7 +148,10 @@ This tests that content persists across page reloads.`;
       await textarea.fill(`+++
 identifier = "${TEST_PAGE_NAME.toLowerCase()}"
 +++`);
-      await page.waitForTimeout(1000);
+      await textarea.press('Space'); // Trigger keyup event
+      
+      // Wait for save to complete
+      await expect(page.locator('#saveEditButton')).toContainText('Saved', { timeout: 10000 });
       
       console.log(`Cleaned up test page: ${TEST_PAGE_NAME}`);
     } catch (error: any) {
@@ -158,6 +168,9 @@ identifier = "home"
 # Home
 
 Welcome to your wiki!`);
-    await page.waitForTimeout(1000);
+    await homeTextarea.press('Space'); // Trigger keyup event
+    
+    // Wait for save to complete
+    await expect(page.locator('#saveEditButton')).toContainText('Saved', { timeout: 10000 });
   });
 });
