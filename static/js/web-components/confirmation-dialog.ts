@@ -34,7 +34,6 @@ export interface ConfirmationConfig {
  * - Configurable message, buttons, and styling
  * - Loading states during async operations
  * - Error display integration
- * - Keyboard shortcuts (Enter to confirm, Escape to cancel)
  * - Click-outside-to-close functionality
  * - Standardized icon system (supports both standard error icons and custom strings)
  * 
@@ -211,9 +210,6 @@ export class ConfirmationDialog extends LitElement {
     this.open = true;
     this.setAttribute('open', '');
     this.style.setProperty('display', 'block', 'important');
-    
-    // Set up keyboard event listeners
-    this.addEventListener('keydown', this.handleKeydown);
   }
 
   /**
@@ -226,9 +222,6 @@ export class ConfirmationDialog extends LitElement {
     this.loading = false;
     this.augmentedError = undefined;
     this.config = null;
-    
-    // Clean up keyboard event listeners
-    this.removeEventListener('keydown', this.handleKeydown);
   }
 
   /**
@@ -245,26 +238,6 @@ export class ConfirmationDialog extends LitElement {
   setLoading(loading: boolean) {
     this.loading = loading;
   }
-
-  /**
-   * Handles keyboard shortcuts
-   */
-  private handleKeydown = (event: KeyboardEvent) => {
-    if (!this.open) return;
-    
-    switch (event.key) {
-      case 'Escape':
-        event.preventDefault();
-        this.handleCancel();
-        break;
-      case 'Enter':
-        if (event.ctrlKey || event.metaKey) {
-          event.preventDefault();
-          this.handleConfirm();
-        }
-        break;
-    }
-  };
 
   /**
    * Handles the confirm action

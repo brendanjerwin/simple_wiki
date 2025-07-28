@@ -210,65 +210,6 @@ describe('ConfirmationDialog', () => {
     });
   });
 
-  describe('keyboard shortcuts', () => {
-    let confirmSpy: sinon.SinonSpy;
-    let cancelSpy: sinon.SinonSpy;
-
-    beforeEach(() => {
-      confirmSpy = sinon.spy();
-      cancelSpy = sinon.spy();
-      el.addEventListener('confirm', confirmSpy);
-      el.addEventListener('cancel', cancelSpy);
-      
-      el.openDialog({
-        message: 'Test message'
-      });
-    });
-
-    describe('when pressing Escape key', () => {
-      beforeEach(() => {
-        const escapeEvent = new KeyboardEvent('keydown', { key: 'Escape' });
-        el.dispatchEvent(escapeEvent);
-      });
-
-      it('should dispatch cancel event', () => {
-        expect(cancelSpy).to.have.been.calledOnce;
-      });
-
-      it('should close the dialog', () => {
-        expect(el.hasAttribute('open')).to.be.false;
-      });
-    });
-
-    describe('when pressing Ctrl+Enter', () => {
-      beforeEach(() => {
-        const enterEvent = new KeyboardEvent('keydown', { 
-          key: 'Enter', 
-          ctrlKey: true 
-        });
-        el.dispatchEvent(enterEvent);
-      });
-
-      it('should dispatch confirm event', () => {
-        expect(confirmSpy).to.have.been.calledOnce;
-      });
-    });
-
-    describe('when pressing Cmd+Enter on Mac', () => {
-      beforeEach(() => {
-        const enterEvent = new KeyboardEvent('keydown', { 
-          key: 'Enter', 
-          metaKey: true 
-        });
-        el.dispatchEvent(enterEvent);
-      });
-
-      it('should dispatch confirm event', () => {
-        expect(confirmSpy).to.have.been.calledOnce;
-      });
-    });
-  });
-
   describe('loading state', () => {
     beforeEach(async () => {
       el.openDialog({
