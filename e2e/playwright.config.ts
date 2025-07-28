@@ -2,6 +2,22 @@ import { defineConfig, devices } from '@playwright/test';
 import path from 'path';
 
 /**
+ * Get Chromium executable path, preferring environment variable like web-test-runner
+ */
+const getChromiumPath = (): string | undefined => {
+  const chromiumBin = process.env.CHROMIUM_BIN;
+  if (chromiumBin) {
+    console.log('Playwright Config - Using CHROMIUM_BIN:', chromiumBin);
+    return chromiumBin;
+  }
+  
+  // Fallback to system chromium path
+  const fallbackPath = '/usr/bin/chromium';
+  console.log('Playwright Config - Using fallback path:', fallbackPath);
+  return fallbackPath;
+};
+
+/**
  * See https://playwright.dev/docs/test-configuration.
  */
 export default defineConfig({
@@ -36,7 +52,7 @@ export default defineConfig({
 
   /* Configure web server - this replaces the complex shell script */
   webServer: {
-    command: 'cd .. && ./simple_wiki --port 8051 --data e2e/test-data --debug',
+    command: 'cd .. && ./simple_wiki-linux-amd64 --port 8051 --data e2e/test-data --debug',
     url: 'http://localhost:8051',
     reuseExistingServer: !process.env.CI,
     stdout: 'pipe',
@@ -54,9 +70,9 @@ export default defineConfig({
       name: 'chromium',
       use: { 
         ...devices['Desktop Chrome'],
-        /* Use system browser with proper path */
+        /* Use system browser with proper path from environment */
         launchOptions: {
-          executablePath: '/usr/bin/chromium',
+          executablePath: getChromiumPath(),
           args: [
             '--no-sandbox',
             '--disable-setuid-sandbox',

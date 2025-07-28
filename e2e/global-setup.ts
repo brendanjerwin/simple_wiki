@@ -19,7 +19,7 @@ async function globalSetup(config: FullConfig) {
   }
   
   // Ensure the binary exists
-  const binaryPath = path.join(__dirname, '..', 'simple_wiki');
+  const binaryPath = path.join(__dirname, '..', 'simple_wiki-linux-amd64');
   if (!fs.existsSync(binaryPath)) {
     throw new Error(`Build failed: ${binaryPath} not found`);
   }

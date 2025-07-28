@@ -64,6 +64,7 @@
       ],
       "e2e:test": [
         "devbox run build",
+        "export CHROMIUM_BIN=$(which chromium)",
         "cd e2e && bun install && bunx playwright test"
       ]
     }
