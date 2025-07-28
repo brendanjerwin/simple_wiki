@@ -26,13 +26,23 @@ async function globalSetup(config: FullConfig) {
   
   console.log(`[E2E Setup] Binary confirmed at: ${binaryPath}`);
   
-  // Create clean test data directory
+  // Clean up any existing test data directories to prevent cross-contamination
   const testDataDir = path.join(__dirname, 'test-data');
-  console.log(`[E2E Setup] Setting up clean test data directory: ${testDataDir}`);
+  const rootTestDataDir = path.join(__dirname, '..', 'e2e-test-data');
+  
+  console.log(`[E2E Setup] Cleaning up test data directories to prevent cross-contamination...`);
   
   if (fs.existsSync(testDataDir)) {
+    console.log(`[E2E Setup] Removing existing test data: ${testDataDir}`);
     fs.rmSync(testDataDir, { recursive: true, force: true });
   }
+  
+  if (fs.existsSync(rootTestDataDir)) {
+    console.log(`[E2E Setup] Removing existing root test data: ${rootTestDataDir}`);
+    fs.rmSync(rootTestDataDir, { recursive: true, force: true });
+  }
+  
+  console.log(`[E2E Setup] Setting up clean test data directory: ${testDataDir}`);
   fs.mkdirSync(testDataDir, { recursive: true });
   
   console.log('[E2E Setup] Test environment ready!');
