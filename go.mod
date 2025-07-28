@@ -17,7 +17,7 @@ require (
 	github.com/karalabe/usb v0.0.2
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/onsi/ginkgo/v2 v2.23.4
-	github.com/onsi/gomega v1.37.0
+	github.com/onsi/gomega v1.38.0
 	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/schollz/versionedtext v1.0.0
 	github.com/stoewer/go-strcase v1.3.1
