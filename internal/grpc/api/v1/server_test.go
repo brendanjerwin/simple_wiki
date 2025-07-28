@@ -119,8 +119,8 @@ func TestServer(t *testing.T) {
 	RunSpecs(t, "gRPC V1 Server Suite")
 }
 
-// MockPageReadWriter is a mock implementation of wikipage.PageReadWriter for testing.
-type MockPageReadWriter struct {
+// MockPageReaderMutator is a mock implementation of wikipage.PageReaderMutator for testing.
+type MockPageReaderMutator struct {
 	Frontmatter        wikipage.FrontMatter
 	Markdown           wikipage.Markdown
 	Err                error
@@ -128,32 +128,39 @@ type MockPageReadWriter struct {
 	WrittenMarkdown    wikipage.Markdown
 	WrittenIdentifier  wikipage.PageIdentifier
 	WriteErr           error
+	DeletedIdentifier  wikipage.PageIdentifier
+	DeleteErr          error
 }
 
-func (m *MockPageReadWriter) ReadFrontMatter(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
+func (m *MockPageReaderMutator) ReadFrontMatter(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
 	if m.Err != nil {
 		return "", nil, m.Err
 	}
 	return identifier, m.Frontmatter, nil
 }
 
-func (m *MockPageReadWriter) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
+func (m *MockPageReaderMutator) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
 	m.WrittenIdentifier = identifier
 	m.WrittenFrontmatter = fm
 	return m.WriteErr
 }
 
-func (m *MockPageReadWriter) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Markdown) error {
+func (m *MockPageReaderMutator) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Markdown) error {
 	m.WrittenIdentifier = identifier
 	m.WrittenMarkdown = md
 	return m.WriteErr
 }
 
-func (m *MockPageReadWriter) ReadMarkdown(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
+func (m *MockPageReaderMutator) ReadMarkdown(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
 	if m.Err != nil {
 		return "", "", m.Err
 	}
 	return identifier, m.Markdown, nil
+}
+
+func (m *MockPageReaderMutator) DeletePage(identifier wikipage.PageIdentifier) error {
+	m.DeletedIdentifier = identifier
+	return m.DeleteErr
 }
 
 var _ = Describe("Server", func() {
@@ -171,35 +178,35 @@ var _ = Describe("Server", func() {
 			req                *apiv1.GetFrontmatterRequest
 			res                *apiv1.GetFrontmatterResponse
 			err                error
-			mockPageReadWriter *MockPageReadWriter
+			mockPageReaderMutator *MockPageReaderMutator
 		)
 
 		BeforeEach(func() {
 			req = &apiv1.GetFrontmatterRequest{
 				Page: "test-page",
 			}
-			mockPageReadWriter = &MockPageReadWriter{}
+			mockPageReaderMutator = &MockPageReaderMutator{}
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("commit", time.Now(), mockPageReadWriter, lumber.NewConsoleLogger(lumber.WARN))
+			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, lumber.NewConsoleLogger(lumber.WARN))
 			res, err = server.GetFrontmatter(ctx, req)
 		})
 
-		When("the PageReadWriter is not configured", func() {
+		When("the PageReaderMutator is not configured", func() {
 			BeforeEach(func() {
-				mockPageReadWriter = nil
+				mockPageReaderMutator = nil
 			})
 
 			It("should return an internal error and no response", func() {
-				Expect(err).To(HaveGrpcStatus(codes.Internal, "PageReadWriter not available"))
+				Expect(err).To(HaveGrpcStatus(codes.Internal, "PageReaderMutator not available"))
 				Expect(res).To(BeNil())
 			})
 		})
 
 		When("the requested page does not exist", func() {
 			BeforeEach(func() {
-				mockPageReadWriter.Err = os.ErrNotExist
+				mockPageReaderMutator.Err = os.ErrNotExist
 			})
 
 			It("should return a not found error and no response", func() {
@@ -208,11 +215,11 @@ var _ = Describe("Server", func() {
 			})
 		})
 
-		When("PageReadWriter returns a generic error", func() {
+		When("PageReaderMutator returns a generic error", func() {
 			var genericError error
 			BeforeEach(func() {
 				genericError = errors.New("kaboom")
-				mockPageReadWriter.Err = genericError
+				mockPageReaderMutator.Err = genericError
 			})
 
 			It("should return an internal error and no response", func() {
@@ -229,7 +236,7 @@ var _ = Describe("Server", func() {
 					"title": "Test Page",
 					"tags":  []any{"test", "ginkgo"},
 				}
-				mockPageReadWriter.Frontmatter = expectedFm
+				mockPageReaderMutator.Frontmatter = expectedFm
 			})
 
 			It("should not return an error", func() {
@@ -258,7 +265,7 @@ var _ = Describe("Server", func() {
 					"title": "Test Page",
 					"tags":  []any{"test", "ginkgo"},
 				}
-				mockPageReadWriter.Frontmatter = frontmatterWithIdentifier
+				mockPageReaderMutator.Frontmatter = frontmatterWithIdentifier
 			})
 
 			It("should not return an error", func() {
@@ -290,7 +297,7 @@ var _ = Describe("Server", func() {
 						},
 					},
 				}
-				mockPageReadWriter.Frontmatter = frontmatterWithNestedIdentifier
+				mockPageReaderMutator.Frontmatter = frontmatterWithNestedIdentifier
 			})
 
 			It("should not return an error", func() {
@@ -312,37 +319,37 @@ var _ = Describe("Server", func() {
 			req                *apiv1.MergeFrontmatterRequest
 			resp               *apiv1.MergeFrontmatterResponse
 			err                error
-			mockPageReadWriter *MockPageReadWriter
+			mockPageReaderMutator *MockPageReaderMutator
 			pageName           string
 		)
 
 		BeforeEach(func() {
 			pageName = "test-page"
-			mockPageReadWriter = &MockPageReadWriter{}
+			mockPageReaderMutator = &MockPageReaderMutator{}
 			req = &apiv1.MergeFrontmatterRequest{
 				Page: pageName,
 			}
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("commit", time.Now(), mockPageReadWriter, lumber.NewConsoleLogger(lumber.WARN))
+			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, lumber.NewConsoleLogger(lumber.WARN))
 			resp, err = server.MergeFrontmatter(ctx, req)
 		})
 
-		When("the PageReadWriter is not configured", func() {
+		When("the PageReaderMutator is not configured", func() {
 			BeforeEach(func() {
-				mockPageReadWriter = nil
+				mockPageReaderMutator = nil
 			})
 
 			It("should return an internal error and no response", func() {
-				Expect(err).To(HaveGrpcStatus(codes.Internal, "PageReadWriter not available"))
+				Expect(err).To(HaveGrpcStatus(codes.Internal, "PageReaderMutator not available"))
 				Expect(resp).To(BeNil())
 			})
 		})
 
 		When("reading the frontmatter fails with a generic error", func() {
 			BeforeEach(func() {
-				mockPageReadWriter.Err = errors.New("read error")
+				mockPageReaderMutator.Err = errors.New("read error")
 			})
 
 			It("should return an internal error and no response", func() {
@@ -353,7 +360,7 @@ var _ = Describe("Server", func() {
 
 		When("writing the frontmatter fails", func() {
 			BeforeEach(func() {
-				mockPageReadWriter.WriteErr = errors.New("write error")
+				mockPageReaderMutator.WriteErr = errors.New("write error")
 			})
 
 			It("should return an internal error and no response", func() {
@@ -367,7 +374,7 @@ var _ = Describe("Server", func() {
 			var newFrontmatter wikipage.FrontMatter
 
 			BeforeEach(func() {
-				mockPageReadWriter.Err = os.ErrNotExist
+				mockPageReaderMutator.Err = os.ErrNotExist
 
 				newFrontmatter = wikipage.FrontMatter{"title": "New Title"}
 				var err error
@@ -381,8 +388,8 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should write the new frontmatter", func() {
-				Expect(mockPageReadWriter.WrittenIdentifier).To(Equal(wikipage.PageIdentifier(pageName)))
-				Expect(mockPageReadWriter.WrittenFrontmatter).To(Equal(newFrontmatter))
+				Expect(mockPageReaderMutator.WrittenIdentifier).To(Equal(wikipage.PageIdentifier(pageName)))
+				Expect(mockPageReaderMutator.WrittenFrontmatter).To(Equal(newFrontmatter))
 			})
 
 			It("should return the new frontmatter", func() {
@@ -405,7 +412,7 @@ var _ = Describe("Server", func() {
 					"author": "test",
 				}
 
-				mockPageReadWriter.Frontmatter = existingFrontmatter
+				mockPageReaderMutator.Frontmatter = existingFrontmatter
 				var err error
 				req.Frontmatter, err = structpb.NewStruct(newFrontmatter)
 				Expect(err).NotTo(HaveOccurred())
@@ -416,8 +423,8 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should write the merged frontmatter", func() {
-				Expect(mockPageReadWriter.WrittenIdentifier).To(Equal(wikipage.PageIdentifier(pageName)))
-				Expect(mockPageReadWriter.WrittenFrontmatter).To(Equal(mergedFrontmatter))
+				Expect(mockPageReaderMutator.WrittenIdentifier).To(Equal(wikipage.PageIdentifier(pageName)))
+				Expect(mockPageReaderMutator.WrittenFrontmatter).To(Equal(mergedFrontmatter))
 			})
 
 			It("should return the merged frontmatter without identifier key", func() {
@@ -483,7 +490,7 @@ var _ = Describe("Server", func() {
 					},
 				}
 				
-				mockPageReadWriter.Frontmatter = existingFrontmatter
+				mockPageReaderMutator.Frontmatter = existingFrontmatter
 				var err error
 				req.Frontmatter, err = structpb.NewStruct(newFrontmatter)
 				Expect(err).NotTo(HaveOccurred())
@@ -494,8 +501,8 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should write the merged frontmatter with nested identifier keys preserved", func() {
-				Expect(mockPageReadWriter.WrittenIdentifier).To(Equal(wikipage.PageIdentifier(pageName)))
-				Expect(mockPageReadWriter.WrittenFrontmatter).To(Equal(expectedMergedFm))
+				Expect(mockPageReaderMutator.WrittenIdentifier).To(Equal(wikipage.PageIdentifier(pageName)))
+				Expect(mockPageReaderMutator.WrittenFrontmatter).To(Equal(expectedMergedFm))
 			})
 
 			It("should return the merged frontmatter with nested identifier keys preserved", func() {
@@ -511,7 +518,7 @@ var _ = Describe("Server", func() {
 			req                *apiv1.ReplaceFrontmatterRequest
 			resp               *apiv1.ReplaceFrontmatterResponse
 			err                error
-			mockPageReadWriter *MockPageReadWriter
+			mockPageReaderMutator *MockPageReaderMutator
 			pageName           string
 			newFrontmatter     wikipage.FrontMatter
 			newFrontmatterPb   *structpb.Struct
@@ -524,7 +531,7 @@ var _ = Describe("Server", func() {
 			newFrontmatterPb, err = structpb.NewStruct(newFrontmatter)
 			Expect(err).NotTo(HaveOccurred())
 
-			mockPageReadWriter = &MockPageReadWriter{}
+			mockPageReaderMutator = &MockPageReaderMutator{}
 
 			req = &apiv1.ReplaceFrontmatterRequest{
 				Page:        pageName,
@@ -533,24 +540,24 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("commit", time.Now(), mockPageReadWriter, lumber.NewConsoleLogger(lumber.WARN))
+			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, lumber.NewConsoleLogger(lumber.WARN))
 			resp, err = server.ReplaceFrontmatter(ctx, req)
 		})
 
-		When("the PageReadWriter is not configured", func() {
+		When("the PageReaderMutator is not configured", func() {
 			BeforeEach(func() {
-				mockPageReadWriter = nil
+				mockPageReaderMutator = nil
 			})
 
 			It("should return an internal error and no response", func() {
-				Expect(err).To(HaveGrpcStatus(codes.Internal, "PageReadWriter not available"))
+				Expect(err).To(HaveGrpcStatus(codes.Internal, "PageReaderMutator not available"))
 				Expect(resp).To(BeNil())
 			})
 		})
 
 		When("writing the frontmatter fails", func() {
 			BeforeEach(func() {
-				mockPageReadWriter.WriteErr = errors.New("disk full")
+				mockPageReaderMutator.WriteErr = errors.New("disk full")
 			})
 
 			It("should return an internal error and no response", func() {
@@ -571,8 +578,8 @@ var _ = Describe("Server", func() {
 			It("should write the new frontmatter to the page", func() {
 				expectedWrittenFm := maps.Clone(newFrontmatter)
 				expectedWrittenFm["identifier"] = pageName
-				Expect(mockPageReadWriter.WrittenIdentifier).To(Equal(wikipage.PageIdentifier(pageName)))
-				Expect(mockPageReadWriter.WrittenFrontmatter).To(Equal(expectedWrittenFm))
+				Expect(mockPageReaderMutator.WrittenIdentifier).To(Equal(wikipage.PageIdentifier(pageName)))
+				Expect(mockPageReaderMutator.WrittenFrontmatter).To(Equal(expectedWrittenFm))
 			})
 
 			It("should return the new frontmatter", func() {
@@ -594,8 +601,8 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should write nil frontmatter", func() {
-				Expect(mockPageReadWriter.WrittenIdentifier).To(Equal(wikipage.PageIdentifier(pageName)))
-				Expect(mockPageReadWriter.WrittenFrontmatter).To(BeNil())
+				Expect(mockPageReaderMutator.WrittenIdentifier).To(Equal(wikipage.PageIdentifier(pageName)))
+				Expect(mockPageReaderMutator.WrittenFrontmatter).To(BeNil())
 			})
 
 			It("should return nil frontmatter", func() {
@@ -634,8 +641,8 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should write frontmatter with correct identifier", func() {
-				Expect(mockPageReadWriter.WrittenIdentifier).To(Equal(wikipage.PageIdentifier(pageName)))
-				Expect(mockPageReadWriter.WrittenFrontmatter).To(Equal(expectedWrittenFm))
+				Expect(mockPageReaderMutator.WrittenIdentifier).To(Equal(wikipage.PageIdentifier(pageName)))
+				Expect(mockPageReaderMutator.WrittenFrontmatter).To(Equal(expectedWrittenFm))
 			})
 
 			It("should return frontmatter without identifier key", func() {
@@ -702,8 +709,8 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should write frontmatter with nested identifier keys preserved and correct root identifier", func() {
-				Expect(mockPageReadWriter.WrittenIdentifier).To(Equal(wikipage.PageIdentifier(pageName)))
-				Expect(mockPageReadWriter.WrittenFrontmatter).To(Equal(expectedWrittenFm))
+				Expect(mockPageReaderMutator.WrittenIdentifier).To(Equal(wikipage.PageIdentifier(pageName)))
+				Expect(mockPageReaderMutator.WrittenFrontmatter).To(Equal(expectedWrittenFm))
 			})
 
 			It("should return frontmatter with nested identifier keys preserved", func() {
@@ -719,30 +726,30 @@ var _ = Describe("Server", func() {
 			req                *apiv1.RemoveKeyAtPathRequest
 			resp               *apiv1.RemoveKeyAtPathResponse
 			err                error
-			mockPageReadWriter *MockPageReadWriter
+			mockPageReaderMutator *MockPageReaderMutator
 			pageName           string
 		)
 
 		BeforeEach(func() {
 			pageName = "test-page"
-			mockPageReadWriter = &MockPageReadWriter{}
+			mockPageReaderMutator = &MockPageReaderMutator{}
 			req = &apiv1.RemoveKeyAtPathRequest{
 				Page: pageName,
 			}
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("commit", time.Now(), mockPageReadWriter, lumber.NewConsoleLogger(lumber.WARN))
+			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, lumber.NewConsoleLogger(lumber.WARN))
 			resp, err = server.RemoveKeyAtPath(ctx, req)
 		})
 
-		When("the PageReadWriter is not configured", func() {
+		When("the PageReaderMutator is not configured", func() {
 			BeforeEach(func() {
-				mockPageReadWriter = nil
+				mockPageReaderMutator = nil
 			})
 
 			It("should return an internal error and no response", func() {
-				Expect(err).To(HaveGrpcStatus(codes.Internal, "PageReadWriter not available"))
+				Expect(err).To(HaveGrpcStatus(codes.Internal, "PageReaderMutator not available"))
 				Expect(resp).To(BeNil())
 			})
 		})
@@ -760,7 +767,7 @@ var _ = Describe("Server", func() {
 
 		When("the page does not exist", func() {
 			BeforeEach(func() {
-				mockPageReadWriter.Err = os.ErrNotExist
+				mockPageReaderMutator.Err = os.ErrNotExist
 				req.KeyPath = []*apiv1.PathComponent{{Component: &apiv1.PathComponent_Key{Key: "a"}}}
 			})
 
@@ -772,7 +779,7 @@ var _ = Describe("Server", func() {
 
 		When("the frontmatter is nil", func() {
 			BeforeEach(func() {
-				mockPageReadWriter.Frontmatter = nil
+				mockPageReaderMutator.Frontmatter = nil
 				req.KeyPath = []*apiv1.PathComponent{{Component: &apiv1.PathComponent_Key{Key: "a"}}}
 			})
 			It("should return a not found error for the key and no response", func() {
@@ -791,7 +798,7 @@ var _ = Describe("Server", func() {
 					},
 					"f": []any{"g", "h", map[string]any{"i": "j"}},
 				}
-				mockPageReadWriter.Frontmatter = initialFm
+				mockPageReaderMutator.Frontmatter = initialFm
 			})
 
 			When("from the top-level map", func() {
@@ -813,7 +820,7 @@ var _ = Describe("Server", func() {
 				})
 
 				It("should write the correctly modified frontmatter", func() {
-					Expect(mockPageReadWriter.WrittenFrontmatter).To(Equal(expectedFm))
+					Expect(mockPageReaderMutator.WrittenFrontmatter).To(Equal(expectedFm))
 				})
 
 				It("should return the correctly modified frontmatter", func() {
@@ -842,7 +849,7 @@ var _ = Describe("Server", func() {
 				})
 
 				It("should write the correctly modified frontmatter", func() {
-					Expect(mockPageReadWriter.WrittenFrontmatter).To(Equal(expectedFm))
+					Expect(mockPageReaderMutator.WrittenFrontmatter).To(Equal(expectedFm))
 				})
 
 				It("should return the correctly modified frontmatter", func() {
@@ -873,7 +880,7 @@ var _ = Describe("Server", func() {
 				})
 
 				It("should write the correctly modified frontmatter", func() {
-					Expect(mockPageReadWriter.WrittenFrontmatter).To(Equal(expectedFm))
+					Expect(mockPageReaderMutator.WrittenFrontmatter).To(Equal(expectedFm))
 				})
 
 				It("should return the correctly modified frontmatter", func() {
@@ -886,7 +893,7 @@ var _ = Describe("Server", func() {
 
 		When("the path is invalid", func() {
 			BeforeEach(func() {
-				mockPageReadWriter.Frontmatter = wikipage.FrontMatter{
+				mockPageReaderMutator.Frontmatter = wikipage.FrontMatter{
 					"a": "b",
 					"f": []any{"g"},
 				}
@@ -958,7 +965,7 @@ var _ = Describe("Server", func() {
 
 		When("attempting to remove the identifier key", func() {
 			BeforeEach(func() {
-				mockPageReadWriter.Frontmatter = wikipage.FrontMatter{
+				mockPageReaderMutator.Frontmatter = wikipage.FrontMatter{
 					"title":      "Test Page",
 					"identifier": "test-page",
 				}
@@ -987,7 +994,7 @@ var _ = Describe("Server", func() {
 					"title":      "Test Page",
 					"identifier": "test-page",
 				}
-				mockPageReadWriter.Frontmatter = initialFm
+				mockPageReaderMutator.Frontmatter = initialFm
 				req.KeyPath = []*apiv1.PathComponent{
 					{Component: &apiv1.PathComponent_Key{Key: "tags"}},
 				}
@@ -998,7 +1005,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should write the correctly modified frontmatter with identifier preserved", func() {
-				Expect(mockPageReadWriter.WrittenFrontmatter).To(Equal(expectedFm))
+				Expect(mockPageReaderMutator.WrittenFrontmatter).To(Equal(expectedFm))
 			})
 
 			It("should return the modified frontmatter without identifier key", func() {
@@ -1034,7 +1041,7 @@ var _ = Describe("Server", func() {
 					},
 				}
 
-				mockPageReadWriter.Frontmatter = initialFm
+				mockPageReaderMutator.Frontmatter = initialFm
 				req.KeyPath = []*apiv1.PathComponent{
 					{Component: &apiv1.PathComponent_Key{Key: "metadata"}},
 					{Component: &apiv1.PathComponent_Key{Key: "identifier"}},
@@ -1046,7 +1053,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should write the correctly modified frontmatter with nested identifier removed", func() {
-				Expect(mockPageReadWriter.WrittenFrontmatter).To(Equal(expectedFm))
+				Expect(mockPageReaderMutator.WrittenFrontmatter).To(Equal(expectedFm))
 			})
 
 			It("should return the modified frontmatter without root identifier key", func() {
@@ -1187,6 +1194,76 @@ var _ = Describe("Server", func() {
 
 			It("should return the response", func() {
 				Expect(resp).NotTo(BeNil())
+			})
+		})
+	})
+
+	Describe("DeletePage", func() {
+		var (
+			req                *apiv1.DeletePageRequest
+			resp               *apiv1.DeletePageResponse
+			err                error
+			mockPageReaderMutator *MockPageReaderMutator
+		)
+
+		BeforeEach(func() {
+			req = &apiv1.DeletePageRequest{
+				PageName: "test-page",
+			}
+			mockPageReaderMutator = &MockPageReaderMutator{}
+		})
+
+		JustBeforeEach(func() {
+			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, lumber.NewConsoleLogger(lumber.WARN))
+			resp, err = server.DeletePage(ctx, req)
+		})
+
+		When("the PageReaderMutator is not configured", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator = nil
+			})
+
+			It("should return an internal error and no response", func() {
+				Expect(err).To(HaveGrpcStatus(codes.Internal, "PageReaderMutator not available"))
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("the page does not exist", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.DeleteErr = os.ErrNotExist
+			})
+
+			It("should return a not found error and no response", func() {
+				Expect(err).To(HaveGrpcStatus(codes.NotFound, "page not found: test-page"))
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("deletion fails with a generic error", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.DeleteErr = errors.New("disk error")
+			})
+
+			It("should return an internal error and no response", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to delete page"))
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("deletion is successful", func() {
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a success response", func() {
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.Success).To(BeTrue())
+				Expect(resp.Error).To(BeEmpty())
+			})
+
+			It("should call delete on the PageReaderMutator", func() {
+				Expect(mockPageReaderMutator.DeletedIdentifier).To(Equal(wikipage.PageIdentifier("test-page")))
 			})
 		})
 	})
