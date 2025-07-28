@@ -5,6 +5,7 @@ This directory contains Playwright-powered end-to-end tests for the Simple Wiki 
 ## Overview
 
 The E2E test suite focuses on critical path functionality following the testing triangle principle:
+
 - Lightweight tests that verify the most valuable user workflows
 - Builds the application fresh for each test run
 - Uses clean test data directory for isolation
@@ -20,6 +21,7 @@ devbox run e2e:test
 ```
 
 This single command will:
+
 1. Build the application (`devbox run build`)
 2. Set up a clean test data directory
 3. Start the wiki server on port 8051
@@ -39,6 +41,7 @@ The test suite includes:
 ### Current Status
 
 As of implementation:
+
 - ✅ **Infrastructure**: Playwright setup, browser automation, server management
 - ✅ **Page Loading**: Home page and edit interface verification
 - ✅ **URL Navigation**: Direct navigation to edit/view/list pages
@@ -66,6 +69,7 @@ npx playwright test --debug   # Run with debugger
 ## Test Philosophy
 
 These E2E tests follow the testing triangle principle:
+
 - **Minimal and focused**: Only tests critical user paths
 - **Fast and reliable**: Designed to run quickly in CI/CD environments  
 - **Isolated**: Each test run uses fresh data and clean state
@@ -98,6 +102,7 @@ The goal is to catch regressions in core functionality while maintaining a light
 ## Extending Tests
 
 When adding new E2E tests:
+
 1. Focus on critical user workflows only
 2. Use the existing page object patterns
 3. Ensure proper cleanup in test teardown

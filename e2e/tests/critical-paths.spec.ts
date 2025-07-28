@@ -3,6 +3,14 @@ import { test, expect } from '@playwright/test';
 // Test data
 const TEST_PAGE_NAME = 'E2ETestPage';
 
+// Constants
+const SAVE_TIMEOUT_MS = 10000;
+
+// Helper functions
+function formatTimestamp(): string {
+  return new Date().toISOString().slice(0, 19);
+}
+
 test.describe('Simple Wiki E2E Critical Paths', () => {
   
   test('should load the home page editing interface successfully', async ({ page }) => {
@@ -44,14 +52,14 @@ This is a test page created by the E2E test suite.
 - Feature 2: Auto-saving  
 - Feature 3: Navigation
 
-Created at: ${new Date().toISOString().slice(0, 19)}`;
+Created at: ${formatTimestamp()}`;
 
     // Fill the content and trigger keyup event to start auto-save
     await textarea.fill(testPageContent);
     await textarea.press('Space'); // Trigger keyup event
     
     // Wait for save to complete - look for save button to show success
-    await expect(page.locator('#saveEditButton')).toContainText('Saved', { timeout: 10000 });
+    await expect(page.locator('#saveEditButton')).toContainText('Saved', { timeout: SAVE_TIMEOUT_MS });
     
     // Go to view mode to verify the page was created and content rendered
     await page.goto(`/${TEST_PAGE_NAME.toLowerCase()}/view`);
@@ -87,7 +95,7 @@ Created at: ${new Date().toISOString().slice(0, 19)}`;
     const textarea = page.locator('#userInput');
     
     // Create content with a unique timestamp
-    const timestamp = new Date().toISOString().slice(0, 19);
+    const timestamp = formatTimestamp();
     const testContent = `+++
 identifier = "${TEST_PAGE_NAME.toLowerCase()}"
 +++
@@ -103,7 +111,7 @@ This tests that content persists across page reloads.`;
     await textarea.press('Space'); // Trigger keyup event
     
     // Wait for save to complete
-    await expect(page.locator('#saveEditButton')).toContainText('Saved', { timeout: 10000 });
+    await expect(page.locator('#saveEditButton')).toContainText('Saved', { timeout: SAVE_TIMEOUT_MS });
     
     // Navigate away and back to verify persistence
     await page.goto('/home/edit');
@@ -151,11 +159,12 @@ identifier = "${TEST_PAGE_NAME.toLowerCase()}"
       await textarea.press('Space'); // Trigger keyup event
       
       // Wait for save to complete
-      await expect(page.locator('#saveEditButton')).toContainText('Saved', { timeout: 10000 });
+      await expect(page.locator('#saveEditButton')).toContainText('Saved', { timeout: SAVE_TIMEOUT_MS });
       
       console.log(`Cleaned up test page: ${TEST_PAGE_NAME}`);
-    } catch (error: any) {
-      console.log(`Test page cleanup skipped: ${error.message}`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.log(`Test page cleanup skipped: ${errorMessage}`);
     }
     
     // Reset home page to clean state  
@@ -171,6 +180,6 @@ Welcome to your wiki!`);
     await homeTextarea.press('Space'); // Trigger keyup event
     
     // Wait for save to complete
-    await expect(page.locator('#saveEditButton')).toContainText('Saved', { timeout: 10000 });
+    await expect(page.locator('#saveEditButton')).toContainText('Saved', { timeout: SAVE_TIMEOUT_MS });
   });
 });
