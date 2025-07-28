@@ -37,7 +37,15 @@ export class PageDeletionService {
     parentNode?: { removeChild: (node: HTMLElement) => void };
   };
 
+  // Store bound event handlers for proper cleanup
+  private boundHandleConfirm: (event: Event) => void;
+  private boundHandleCancel: (event: Event) => void;
+
   constructor() {
+    // Bind event handlers once to ensure proper cleanup
+    this.boundHandleConfirm = this.handleConfirm.bind(this);
+    this.boundHandleCancel = this.handleCancel.bind(this);
+    
     this.ensureDialogExists();
     this.setupEventListeners();
   }
@@ -84,8 +92,8 @@ export class PageDeletionService {
    * Sets up event listeners for the confirmation dialog
    */
   private setupEventListeners() {
-    this.dialog.addEventListener('confirm', this.handleConfirm.bind(this));
-    this.dialog.addEventListener('cancel', this.handleCancel.bind(this));
+    this.dialog.addEventListener('confirm', this.boundHandleConfirm);
+    this.dialog.addEventListener('cancel', this.boundHandleCancel);
   }
 
   /**
@@ -150,8 +158,8 @@ export class PageDeletionService {
    */
   destroy() {
     if (this.dialog) {
-      this.dialog.removeEventListener('confirm', this.handleConfirm);
-      this.dialog.removeEventListener('cancel', this.handleCancel);
+      this.dialog.removeEventListener('confirm', this.boundHandleConfirm);
+      this.dialog.removeEventListener('cancel', this.boundHandleCancel);
       
       if (this.dialog.parentNode) {
         this.dialog.parentNode.removeChild(this.dialog);

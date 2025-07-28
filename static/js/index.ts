@@ -19,7 +19,7 @@ declare global {
   }
 }
 
-(window as any).pageDeleteService = pageDeleteService;
+(window as unknown as { pageDeleteService: typeof pageDeleteService }).pageDeleteService = pageDeleteService;
 
 // Show any stored toast messages after page load
 document.addEventListener('DOMContentLoaded', () => {
