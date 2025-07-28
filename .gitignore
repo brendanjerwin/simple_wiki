@@ -27,6 +27,7 @@ _testmain.go
 data/*
 simple_wiki
 simple_wiki.exe
+simple_wiki-*
 dist
 .aider*
 docs/.structurizr/*

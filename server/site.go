@@ -309,7 +309,7 @@ func (s *Site) UploadList() ([]os.FileInfo, error) {
 	return result, nil
 }
 
-// --- PageReadWriter implementation ---
+// --- PageReaderMutator implementation ---
 
 func writeFrontmatterToBuffer(content *bytes.Buffer, fmBytes []byte) error {
 	if _, err := content.WriteString(tomlDelimiter); err != nil {
@@ -356,7 +356,7 @@ func combineFrontmatterAndMarkdown(fm wikipage.FrontMatter, md wikipage.Markdown
 func (s *Site) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
 	p := s.Open(string(identifier))
 
-	// Use the PageReadWriter interface to get the current markdown content.
+	// Use the PageReaderMutator interface to get the current markdown content.
 	_, md, err := s.ReadMarkdown(identifier)
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("could not read markdown to write frontmatter: %w", err)
@@ -393,7 +393,7 @@ func lenientParse(content []byte, matter any) (body []byte, err error) {
 func (s *Site) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Markdown) error {
 	p := s.Open(string(identifier))
 
-	// Use the PageReadWriter interface to get the current frontmatter.
+	// Use the PageReaderMutator interface to get the current frontmatter.
 	_, fm, err := s.ReadFrontMatter(identifier)
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("could not read frontmatter to write markdown: %w", err)
@@ -449,4 +449,10 @@ func (s *Site) ReadMarkdown(identifier wikipage.PageIdentifier) (wikipage.PageId
 	}
 
 	return identifier, wikipage.Markdown(body), nil
+}
+
+// DeletePage deletes a page from disk.
+func (s *Site) DeletePage(identifier wikipage.PageIdentifier) error {
+	p := s.Open(string(identifier))
+	return p.Erase()
 }
