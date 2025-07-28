@@ -121,9 +121,9 @@ $(window).load(function () {
 
     $("#erasePage").click(function (e) {
         e.preventDefault();
-        const dialog = document.querySelector('#page-delete-dialog');
-        if (dialog) {
-            dialog.openDialog(window.simple_wiki.pageName);
+        // Use the page deletion service for a consistent confirmation flow
+        if (window.pageDeleteService) {
+            window.pageDeleteService.confirmAndDeletePage(window.simple_wiki.pageName);
         }
     });
 
