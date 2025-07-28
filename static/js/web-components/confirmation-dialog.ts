@@ -209,6 +209,7 @@ export class ConfirmationDialog extends LitElement {
     this.loading = false;
     this.open = true;
     this.setAttribute('open', '');
+    this.style.setProperty('display', 'block', 'important');
     
     // Set up keyboard event listeners
     this.addEventListener('keydown', this.handleKeydown);
@@ -220,6 +221,7 @@ export class ConfirmationDialog extends LitElement {
   closeDialog() {
     this.open = false;
     this.removeAttribute('open');
+    this.style.setProperty('display', 'none', 'important');
     this.loading = false;
     this.augmentedError = undefined;
     this.config = null;
