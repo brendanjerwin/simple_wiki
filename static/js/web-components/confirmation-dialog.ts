@@ -2,7 +2,7 @@ import { html, css, LitElement } from 'lit';
 import { state } from 'lit/decorators.js';
 import { foundationCSS, dialogCSS, responsiveCSS, buttonCSS } from './shared-styles.js';
 import './error-display.js';
-import { type AugmentedError } from './augment-error-service.js';
+import { type AugmentedError, type ErrorIcon, AugmentErrorService } from './augment-error-service.js';
 
 /**
  * Configuration for the confirmation dialog
@@ -18,8 +18,8 @@ export interface ConfirmationConfig {
   cancelText?: string;
   /** Style variant for the confirm button (default: "danger") */
   confirmVariant?: 'primary' | 'danger' | 'warning';
-  /** Icon to display (default: "⚠️") */
-  icon?: string;
+  /** Icon to display (default: "warning") */
+  icon?: ErrorIcon;
   /** Whether the action can be undone (affects messaging) */
   irreversible?: boolean;
 }
@@ -36,7 +36,7 @@ export interface ConfirmationConfig {
  * - Error display integration
  * - Keyboard shortcuts (Enter to confirm, Escape to cancel)
  * - Click-outside-to-close functionality
- * - Customizable icons and button variants
+ * - Standardized icon system (supports both standard error icons and custom strings)
  * 
  * Usage:
  * ```typescript
@@ -45,7 +45,8 @@ export interface ConfirmationConfig {
  *   message: 'Are you sure you want to delete this item?',
  *   description: 'This action cannot be undone.',
  *   confirmText: 'Delete',
- *   confirmVariant: 'danger'
+ *   confirmVariant: 'danger',
+ *   icon: 'warning' // Uses standardized error icon system
  * });
  * 
  * dialog.addEventListener('confirm', async (event) => {
@@ -323,7 +324,7 @@ export class ConfirmationDialog extends LitElement {
         <div class="dialog-box">
           <div class="dialog-content">
             <div class="dialog-icon ${iconClass}">
-              ${config.icon || '⚠️'}
+              ${AugmentErrorService.getIconString(config.icon || 'warning')}
             </div>
             
             <div class="dialog-message">

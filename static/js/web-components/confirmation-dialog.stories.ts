@@ -69,7 +69,7 @@ export const DangerConfirmation: Story = {
           confirmText: 'Delete Page',
           cancelText: 'Cancel',
           confirmVariant: 'danger',
-          icon: '⚠️',
+          icon: 'warning',
           irreversible: true
         });
       }
@@ -155,7 +155,7 @@ export const WarningConfirmation: Story = {
           confirmText: 'Proceed Anyway',
           cancelText: 'Cancel',
           confirmVariant: 'warning',
-          icon: '⚠️',
+          icon: 'warning',
           irreversible: false
         });
       }

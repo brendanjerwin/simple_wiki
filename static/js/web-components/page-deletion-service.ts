@@ -5,6 +5,7 @@ import { DeletePageRequest } from '../gen/api/v1/page_management_pb.js';
 import { AugmentErrorService } from './augment-error-service.js';
 import { showToastAfter } from './toast-message.js';
 import './confirmation-dialog.js';
+import { type ConfirmationConfig } from './confirmation-dialog.js';
 
 /**
  * PageDeletionService - Handles page deletion workflow using the generic confirmation dialog
@@ -24,7 +25,7 @@ import './confirmation-dialog.js';
 export class PageDeletionService {
   private client = createClient(PageManagementService, getGrpcWebTransport());
   private dialog: HTMLElement & {
-    openDialog: (config: any) => void;
+    openDialog: (config: ConfirmationConfig) => void;
     setLoading: (loading: boolean) => void;
     showError: (error: AugmentedError) => void;
     closeDialog: () => void;
@@ -57,7 +58,7 @@ export class PageDeletionService {
       confirmText: 'Delete Page',
       cancelText: 'Cancel',
       confirmVariant: 'danger',
-      icon: '⚠️',
+      icon: 'warning',
       irreversible: true
     });
 
