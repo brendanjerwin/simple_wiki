@@ -174,9 +174,9 @@ export class PageDeleteDialog extends LitElement {
         this.closeDialog();
         
         // Use showToastAfter to handle the toast display after redirect
-        showToastAfter(() => {
+        showToastAfter('Page deleted successfully', 'success', 5, () => {
           window.location.href = '/';
-        }, 'Page deleted successfully', 'success');
+        });
       } else {
         // Handle server-side error response
         const error = new Error(response.error || 'Failed to delete page');
