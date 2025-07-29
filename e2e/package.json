@@ -1,0 +1,18 @@
+{
+  "name": "simple-wiki-e2e-tests",
+  "version": "1.0.0",
+  "description": "End-to-end tests for Simple Wiki",
+  "packageManager": "bun@1.0.0",
+  "scripts": {
+    "test": "playwright test",
+    "test:debug": "playwright test --debug",
+    "test:headed": "PLAYWRIGHT_HEADED=true playwright test --headed",
+    "show-report": "playwright show-report",
+    "codegen": "PLAYWRIGHT_BROWSERS_PATH=0 playwright codegen --browser=chromium --target typescript"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  }
+}
