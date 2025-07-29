@@ -14,7 +14,9 @@
     "go-tools",
     "revive@latest",
     "ast-grep@latest",
-    "playwright@latest"
+    "playwright@latest",
+    "playwright-driver@latest",
+    "playwright-test@latest"
   ],
   "shell": {
     "init_hook": [
@@ -73,11 +75,7 @@
         "cd e2e && bun install && bun run test:headed"
       ],
       "e2e:codegen": [
-        "cd e2e && bun install && bunx playwright codegen http://localhost:8051/home/edit"
-      ],
-      "e2e:setup": [
-        "echo 'Installing Playwright browsers (one-time setup)'",
-        "cd e2e && bun install && bunx playwright install --with-deps chromium"
+        "cd e2e & playwright codegen --browser=chromium http://localhost:8050/home"
       ]
     }
   }
