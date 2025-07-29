@@ -73,8 +73,11 @@
         "cd e2e && bun install && bun run test:headed"
       ],
       "e2e:codegen": [
-        "export CHROMIUM_BIN=$(which chromium)",
-        "cd e2e && bun install && bun run codegen:setup"
+        "cd e2e && bun install && bunx playwright codegen http://localhost:8051/home/edit"
+      ],
+      "e2e:setup": [
+        "echo 'Installing Playwright browsers (one-time setup)'",
+        "cd e2e && bun install && bunx playwright install --with-deps chromium"
       ]
     }
   }

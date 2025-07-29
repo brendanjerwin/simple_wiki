@@ -34,33 +34,19 @@ This single command will:
 
 ### Creating New E2E Tests
 
-#### Option 1: Interactive Test Development (Recommended)
+#### Interactive Test Development with Playwright Codegen
 
 ```bash
-# Start the E2E development environment
+# Start the wiki server 
+devbox services up
+
+# Run Playwright codegen to record interactions
 devbox run e2e:codegen
 ```
 
-This command provides a comprehensive development environment:
+This will open a browser with Playwright's recording interface. Navigate through the wiki and Playwright will generate test code automatically.
 
-- ✅ **Fresh Build**: Builds the application from scratch
-- ✅ **Clean Environment**: Sets up isolated test data directory
-- ✅ **Auto Server**: Starts wiki server on http://localhost:8051
-- ✅ **Helpful Instructions**: Detailed guidance for test creation
-- ✅ **Two Methods**: Support for both Playwright codegen and manual creation
-- ✅ **Auto Cleanup**: Graceful shutdown and cleanup with Ctrl+C
-
-Follow the on-screen instructions to:
-1. Use Playwright codegen for automated test recording, or
-2. Manually create tests with provided examples and patterns
-
-#### Option 2: Manual Test Creation
-
-If you prefer to write tests manually, you can:
-1. Run `devbox run e2e:codegen` to start the development server
-2. Open http://localhost:8051 in your browser
-3. Perform the actions you want to test
-4. Write test code using the patterns displayed in the instructions
+**First-time setup:** If you get browser errors, run `devbox run e2e:setup` once to install Playwright browsers.
 
 ### Test Structure
 
@@ -88,15 +74,15 @@ For debugging, you can start the test server manually:
 
 ```bash
 # Start server on test port with clean data
-./simple_wiki --port 8051 --data ./e2e-test-data --debug
+./simple_wiki-linux-amd64 --port 8051 --data ./e2e/test-data --debug
 ```
 
 Then run individual Playwright tests:
 
 ```bash
 cd e2e
-npx playwright test --headed  # Run with visible browser
-npx playwright test --debug   # Run with debugger
+bunx playwright test --headed  # Run with visible browser
+bunx playwright test --debug   # Run with debugger
 ```
 
 ## Test Philosophy
@@ -112,7 +98,7 @@ The goal is to catch regressions in core functionality while maintaining a light
 
 ## Configuration
 
-- **Test Data**: Uses `./e2e-test-data/` directory (automatically cleaned up)
+- **Test Data**: Uses `./e2e/test-data/` directory (automatically cleaned up)
 - **Test Port**: Server runs on port 8051 during tests
 - **Browser**: Uses system Chromium with headless mode
 - **Timeouts**: Configured for typical local development speeds
