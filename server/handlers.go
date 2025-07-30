@@ -299,20 +299,6 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		return
 	}
 
-	// Handle page erase command
-	if command == "/erase" {
-		if !isLocked {
-			if err := p.Erase(); err != nil {
-				_ = c.AbortWithError(http.StatusInternalServerError, err)
-				return
-			}
-			c.Redirect(httpStatusFound, rootPath)
-		} else {
-			c.Redirect(httpStatusFound, "/"+page+"/view")
-		}
-		return
-	}
-
 	// Render the page content
 	s.renderPageContent(c, page, command, p, version, isLocked)
 }
