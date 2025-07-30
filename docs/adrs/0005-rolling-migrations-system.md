@@ -79,13 +79,14 @@ type FrontmatterMigrationApplicator interface {
 Migrations rely on frontmatter type detection combined with pattern matching to determine applicability. The system first determines the frontmatter format, then checks applicable migrations:
 
 ```go
+// Example showing the architectural approach
 func (m *TOMLDotNotationMigration) SupportedTypes() []FrontmatterType {
     return []FrontmatterType{FrontmatterTOML}
 }
 
 func (m *TOMLDotNotationMigration) AppliesTo(content []byte) bool {
-    // Assumes content is already confirmed to be TOML by the applicator
-    return hasConflictingDotNotationAndTables(content)
+    // Implementation would detect specific TOML conflict patterns
+    // Content type is already confirmed by the applicator
 }
 ```
 
@@ -96,19 +97,11 @@ No metadata storage or tracking is needed - migrations are self-determining base
 Migrations will be integrated at a single, well-defined point in the frontmatter processing pipeline:
 
 ```go
-// In server/site.go - lenientParse function
+// Integration point in server/site.go - lenientParse function
 func lenientParse(content []byte, matter interface{}) (body []byte, err error) {
     // Apply frontmatter migrations BEFORE parsing
-    migratedContent, err := frontmatterMigrationApplicator.ApplyMigrations(content)
-    if err != nil {
-        // Log migration failure - migratedContent already contains original content
-        log.Printf("Migration failed, using original content: %v", err)
-    }
-    
-    // Continue with existing parsing logic using migratedContent
-    // Note: Replace with actual frontmatter parsing library used in project
-    body, err = frontmatterParser.Parse(bytes.NewReader(migratedContent), matter)
-    // ... rest of existing logic
+    migratedContent, err := migrationApplicator.ApplyMigrations(content)
+    // ... continue with existing frontmatter parsing using migratedContent
 }
 ```
 
@@ -129,30 +122,11 @@ When multiple migrations match the same content:
 ### Error Handling Strategy
 
 ```go
+// Conceptual flow - actual implementation details would be determined during development
 func (a *FrontmatterMigrationApplicator) ApplyMigrations(content []byte) ([]byte, error) {
-    // Detect frontmatter type once
-    fmType := detectFrontmatterType(content)
-    if fmType == FrontmatterUnknown {
-        return content, nil // No frontmatter or unrecognized format
-    }
-    
-    current := content
-    for _, migration := range a.migrations {
-        // Check if migration supports this frontmatter type
-        if !supportsFrontmatterType(migration.SupportedTypes(), fmType) {
-            continue
-        }
-        
-        if migration.AppliesTo(current) {
-            migrated, err := migration.Apply(current)
-            if err != nil {
-                // On error, return original content; the caller is responsible for logging
-                return content, fmt.Errorf("migration failed: %w", err)
-            }
-            current = migrated
-        }
-    }
-    return current, nil
+    // 1. Detect frontmatter type to filter applicable migrations
+    // 2. Apply each applicable migration in registration order
+    // 3. Return transformed content or original content on error
 }
 ```
 
@@ -242,6 +216,7 @@ func (a *FrontmatterMigrationApplicator) ApplyMigrations(content []byte) ([]byte
 ## Example: TOML Dot Notation Migration
 
 ```go
+// Example migration implementing the interface
 type TOMLDotNotationMigration struct{}
 
 func (m *TOMLDotNotationMigration) SupportedTypes() []FrontmatterType {
@@ -249,28 +224,13 @@ func (m *TOMLDotNotationMigration) SupportedTypes() []FrontmatterType {
 }
 
 func (m *TOMLDotNotationMigration) AppliesTo(content []byte) bool {
-    // Assumes content is already confirmed to be TOML by the applicator
-    return containsDotNotationConflict(content)
+    // Implementation would detect TOML with conflicting dot notation and table syntax
+    // e.g., "inventory.container = value" combined with "[inventory]" sections
 }
 
 func (m *TOMLDotNotationMigration) Apply(content []byte) ([]byte, error) {
-    // Transform conflicting TOML to use consistent table syntax
-    // Result will not match AppliesTo() pattern, preventing re-application
-    return resolveTomlDotNotationConflicts(content)
-}
-
-// containsDotNotationConflict detects TOML with conflicting dot and table syntax
-// Implementation would check for patterns like "key.subkey = value" followed by "[key]"
-func containsDotNotationConflict(content []byte) bool {
-    // Placeholder implementation - replace with actual conflict detection logic
-    return false
-}
-
-// resolveTomlDotNotationConflicts transforms conflicting TOML syntax
-// Implementation would convert dot notation to explicit table syntax
-func resolveTomlDotNotationConflicts(content []byte) ([]byte, error) {
-    // Placeholder implementation - replace with actual transformation logic
-    return content, nil
+    // Implementation would transform conflicting syntax to consistent format
+    // Result must not match AppliesTo() pattern to prevent re-application
 }
 ```
 
