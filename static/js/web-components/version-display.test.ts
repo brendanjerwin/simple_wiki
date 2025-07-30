@@ -140,6 +140,18 @@ describe('VersionDisplay', () => {
       const result = el['formatCommit'](shortCommit);
       expect(result).to.equal('abc123');
     });
+
+    it('should not truncate tagged versions', () => {
+      const taggedVersion = 'v1.2.3 (abc1234)';
+      const result = el['formatCommit'](taggedVersion);
+      expect(result).to.equal('v1.2.3 (abc1234)');
+    });
+
+    it('should not truncate longer tagged versions', () => {
+      const taggedVersion = 'v10.20.30-beta.1 (abcdef123456)';
+      const result = el['formatCommit'](taggedVersion);
+      expect(result).to.equal('v10.20.30-beta.1 (abcdef123456)');
+    });
   });
 
   describe('when formatting timestamp', () => {

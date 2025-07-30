@@ -76,7 +76,7 @@ export class VersionDisplay extends LitElement {
     }
 
     .commit {
-      max-width: 70px;
+      max-width: 120px;
       overflow: hidden;
       text-overflow: ellipsis;
     }
@@ -170,6 +170,13 @@ export class VersionDisplay extends LitElement {
   }
 
   private formatCommit(commit: string): string {
+    // If commit contains parentheses, it's likely a tagged version like "v1.2.3 (abc1234)"
+    // In this case, display the full string
+    if (commit.includes('(') && commit.includes(')')) {
+      return commit;
+    }
+    
+    // For plain commit hashes, truncate to 7 characters
     return commit.length > 7 ? commit.substring(0, 7) : commit;
   }
 

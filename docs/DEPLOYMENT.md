@@ -48,9 +48,11 @@ The workflow performs the following steps:
 ### Rollback Strategy
 
 If deployment fails:
+
 - The workflow automatically attempts to restore the previous binary
 - Data backups are preserved at `/srv/wiki/data_bak_YYYYMMDD_HHMMSS`
 - Manual rollback can be performed by:
+
   ```bash
   sudo systemctl stop simple_wiki
   sudo cp /srv/wiki/bin/simple_wiki.backup /srv/wiki/bin/simple_wiki
@@ -60,6 +62,7 @@ If deployment fails:
 ### Server Configuration
 
 The target server configuration:
+
 - **Service**: `simple_wiki.service` managed by systemd
 - **Location**: `/srv/wiki/bin/simple_wiki`
 - **Data**: `/srv/wiki/data/`
@@ -68,12 +71,14 @@ The target server configuration:
 ### Troubleshooting
 
 **Common Issues:**
+
 - **Permission denied**: Ensure the GitHub Actions runner has proper Tailscale access
 - **Service won't start**: Check systemd logs with `sudo journalctl -u simple_wiki`
 - **Binary not found**: Verify the release has the `simple_wiki-linux-amd64` asset
 - **Health check fails**: Ensure port 80 is accessible and the service is binding correctly
 
 **Manual Verification:**
+
 ```bash
 # Check service status
 sudo systemctl status simple_wiki
