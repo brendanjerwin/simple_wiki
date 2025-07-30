@@ -6,11 +6,24 @@ set -e
 
 VERSION="$1"
 
+# Validate version argument
+if [ -z "$VERSION" ]; then
+    echo "❌ ERROR: Version argument is required"
+    echo "Usage: $0 <version>"
+    exit 1
+fi
+
 echo "=== Starting deployment of $VERSION ==="
 
-# Clean up old data backups, keeping only the most recent
+# Verify deployment directory exists
+if [ ! -d "/srv/wiki" ]; then
+    echo "❌ ERROR: Deployment directory /srv/wiki does not exist"
+    exit 1
+fi
+
+# Clean up old data backups, keeping only the 2 most recent
 cd /srv/wiki
-sudo bash -c 'ls -1td data_bak_* 2>/dev/null | tail -n +2 | xargs -r rm -rf || true'
+sudo bash -c 'ls -1td data_bak_* 2>/dev/null | tail -n +3 | xargs -r rm -rf || true'
 
 # Create new data backup with timestamp
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
