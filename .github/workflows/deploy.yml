@@ -1,0 +1,75 @@
+name: Deploy to Home Server
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version to deploy (e.g., v3.2-pre, v3.1.11)'
+        required: true
+        type: string
+      server_host:
+        description: 'Target server hostname'
+        required: false
+        default: 'wiki'
+        type: string
+      username:
+        description: 'SSH username for deployment'
+        required: false
+        default: 'brendanjerwin'
+        type: string
+
+jobs:
+  deploy:
+    name: Deploy Wiki to Home Server
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Setup Devbox
+        uses: jetify-com/devbox-install-action@v0.11.0
+        
+      - name: Download release asset
+        uses: robinraju/release-downloader@v1.10
+        with:
+          repository: ${{ github.repository }}
+          tag: ${{ inputs.version }}
+          fileName: 'simple_wiki-linux-amd64'
+          out-file-path: '.'
+          
+      - name: Verify downloaded binary
+        run: |
+          ls -la simple_wiki-linux-amd64
+          file simple_wiki-linux-amd64
+          chmod +x simple_wiki-linux-amd64
+          
+      - name: Setup Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:github-actions
+          
+      - name: Deploy to server
+        uses: FarisZR/tailscale-ssh-deploy@v1.1.0
+        with:
+          server: ${{ inputs.server_host }}
+          username: ${{ inputs.username }}
+          source: './simple_wiki-linux-amd64,./deployment/simple_wiki.service,./deployment/pre-deploy.sh,./deployment/post-deploy.sh'
+          target: '/tmp/simple_wiki-new,/tmp/simple_wiki.service,/tmp/pre-deploy.sh,/tmp/post-deploy.sh'
+          pre_deploy: |
+            chmod +x /tmp/pre-deploy.sh
+            /tmp/pre-deploy.sh "${{ inputs.version }}"
+          post_deploy: |
+            chmod +x /tmp/post-deploy.sh
+            /tmp/post-deploy.sh "${{ inputs.version }}"
+            
+      - name: Report deployment status
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "🎉 Successfully deployed ${{ inputs.version }} to ${{ inputs.server_host }}"
+          else
+            echo "❌ Deployment of ${{ inputs.version }} to ${{ inputs.server_host }} failed"
+          fi
