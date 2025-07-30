@@ -52,7 +52,7 @@ jobs:
           tags: tag:github-actions
           
       - name: Deploy to server
-        uses: FarisZR/tailscale-ssh-deploy@v1.1.0
+        uses: FarisZR/tailscale-ssh-deploy@v1
         with:
           server: ${{ inputs.server_host }}
           username: ${{ inputs.username }}
