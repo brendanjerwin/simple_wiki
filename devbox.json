@@ -13,7 +13,10 @@
     "chromium@latest",
     "go-tools",
     "revive@latest",
-    "ast-grep@latest"
+    "ast-grep@latest",
+    "playwright@latest",
+    "playwright-driver@latest",
+    "playwright-test@latest"
   ],
   "shell": {
     "init_hook": [
@@ -60,6 +63,19 @@
       ],
       "chromatic:pr": [
         "cd static/js && bun install && bun run build-storybook && bunx chromatic --project-token=$CHROMATIC_PROJECT_TOKEN --storybook-build-dir=storybook-static --patch-build=$HEAD_BRANCH...$BASE_BRANCH --exit-zero-on-changes"
+      ],
+      "e2e:test": [
+        "devbox run build",
+        "export CHROMIUM_BIN=$(which chromium)",
+        "cd e2e && bun install && bunx playwright test"
+      ],
+      "e2e:test:headed": [
+        "devbox run build",
+        "export CHROMIUM_BIN=$(which chromium)",
+        "cd e2e && bun install && bun run test:headed"
+      ],
+      "e2e:codegen": [
+        "cd e2e & playwright codegen --browser=chromium http://localhost:8050/home"
       ]
     }
   }

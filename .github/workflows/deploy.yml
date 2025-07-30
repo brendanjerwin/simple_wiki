@@ -1,0 +1,79 @@
+name: Deploy to Home Server
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version to deploy (e.g., v3.2-pre, v3.1.11)'
+        required: true
+        type: string
+      server_host:
+        description: 'Target server hostname'
+        required: false
+        default: 'wiki'
+        type: string
+      username:
+        description: 'SSH username for deployment'
+        required: false
+        default: 'brendanjerwin'
+        type: string
+
+jobs:
+  deploy:
+    name: Deploy Wiki to Home Server
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Setup Devbox
+        uses: jetify-com/devbox-install-action@v0.11.0
+        with:
+          enable-cache: true
+        
+      - name: Download release asset
+        uses: robinraju/release-downloader@v1.10
+        with:
+          repository: ${{ github.repository }}
+          tag: ${{ inputs.version }}
+          fileName: 'simple_wiki-linux-amd64'
+          out-file-path: '.'
+          
+      - name: Verify downloaded binary
+        run: |
+          ls -la simple_wiki-linux-amd64
+          file simple_wiki-linux-amd64
+          chmod +x simple_wiki-linux-amd64
+          
+      - name: Setup Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:github-actions
+          
+      - name: Prepare deployment files
+        run: |
+          mkdir -p deployment-package
+          cp simple_wiki-linux-amd64 deployment-package/
+          cp deployment/simple_wiki.service deployment-package/
+          cp deployment/deploy.sh deployment-package/
+          chmod +x deployment-package/deploy.sh
+          
+      - name: Deploy to server
+        uses: FarisZR/tailscale-ssh-deploy@v1
+        with:
+          remote_host: ${{ inputs.username }}@${{ inputs.server_host }}
+          directory: deployment-package
+          remote_destination: /tmp
+          post_upload_command: /tmp/deployment-package/deploy.sh "${{ inputs.version }}"
+            
+      - name: Report deployment status
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "🎉 Successfully deployed ${{ inputs.version }} to ${{ inputs.server_host }}"
+          else
+            echo "❌ Deployment of ${{ inputs.version }} to ${{ inputs.server_host }} failed"
+          fi
