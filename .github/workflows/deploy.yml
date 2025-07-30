@@ -1,0 +1,115 @@
+name: Deploy to Home Server
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version to deploy (e.g., v3.2-pre, v3.1.11)'
+        required: true
+        type: string
+      server_host:
+        description: 'Target server hostname'
+        required: false
+        default: 'wiki'
+        type: string
+
+jobs:
+  deploy:
+    name: Deploy Wiki to Home Server
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Download release asset
+        uses: robinraju/release-downloader@v1.10
+        with:
+          repository: ${{ github.repository }}
+          tag: ${{ inputs.version }}
+          fileName: 'simple_wiki-linux-amd64'
+          out-file-path: '.'
+          
+      - name: Verify downloaded binary
+        run: |
+          ls -la simple_wiki-linux-amd64
+          file simple_wiki-linux-amd64
+          chmod +x simple_wiki-linux-amd64
+          
+      - name: Setup Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:github-actions
+          
+      - name: Deploy to server
+        uses: FarisZR/tailscale-ssh-deploy@v1.1.0
+        with:
+          server: ${{ inputs.server_host }}
+          username: brendanjerwin
+          ssh_private_key: dummy # Not needed with Tailscale SSH
+          source: './simple_wiki-linux-amd64'
+          target: '/tmp/simple_wiki-new'
+          pre_deploy: |
+            echo "Starting deployment of ${{ inputs.version }}"
+            
+            # Clean up old data backups, keeping only the most recent
+            cd /srv/wiki
+            sudo bash -c 'ls -1td data_bak_* 2>/dev/null | tail -n +2 | xargs rm -rf || true'
+            
+            # Create new data backup with timestamp
+            TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+            echo "Creating data backup: data_bak_$TIMESTAMP"
+            sudo cp -r data data_bak_$TIMESTAMP
+            
+            # Backup current binary
+            echo "Backing up current binary"
+            sudo cp /srv/wiki/bin/simple_wiki /srv/wiki/bin/simple_wiki.backup || true
+            
+            # Stop the service
+            echo "Stopping simple_wiki service"
+            sudo systemctl stop simple_wiki
+            
+          post_deploy: |
+            # Move new binary to final location
+            echo "Installing new binary"
+            sudo mv /tmp/simple_wiki-new /srv/wiki/bin/simple_wiki
+            sudo chown root:root /srv/wiki/bin/simple_wiki
+            sudo chmod 755 /srv/wiki/bin/simple_wiki
+            
+            # Start the service
+            echo "Starting simple_wiki service"
+            sudo systemctl start simple_wiki
+            
+            # Wait a moment for service to start
+            sleep 5
+            
+            # Health check
+            echo "Performing health check"
+            if sudo systemctl is-active --quiet simple_wiki; then
+              echo "✅ Service is running"
+              # Test HTTP response (wiki runs on port 80)
+              if curl -s -f http://localhost:80/ > /dev/null; then
+                echo "✅ HTTP health check passed"
+                echo "🎉 Deployment of ${{ inputs.version }} completed successfully!"
+              else
+                echo "❌ HTTP health check failed"
+                exit 1
+              fi
+            else
+              echo "❌ Service failed to start"
+              echo "Service status:"
+              sudo systemctl status simple_wiki --no-pager
+              
+              echo "Attempting rollback..."
+              sudo cp /srv/wiki/bin/simple_wiki.backup /srv/wiki/bin/simple_wiki || echo "No backup found"
+              sudo systemctl start simple_wiki
+              exit 1
+            fi
+            
+      - name: Report deployment status
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "🎉 Successfully deployed ${{ inputs.version }} to ${{ inputs.server_host }}"
+          else
+            echo "❌ Deployment of ${{ inputs.version }} to ${{ inputs.server_host }} failed"
+          fi
