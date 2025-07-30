@@ -121,12 +121,8 @@ $(window).load(function () {
 
     $("#erasePage").click(function (e) {
         e.preventDefault();
-        var r = confirm("Are you sure you want to erase?");
-        if (r == true) {
-            window.location = "/" + window.simple_wiki.pageName + "/erase";
-        } else {
-            x = "You pressed Cancel!";
-        }
+        // Use the page deletion service for a consistent confirmation flow
+        window.pageDeleteService.confirmAndDeletePage(window.simple_wiki.pageName);
     });
 
     $("#lockPage").click(function (e) {
