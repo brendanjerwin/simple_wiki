@@ -47,7 +47,14 @@ else
   sudo systemctl status simple_wiki --no-pager
   
   echo "Attempting rollback..."
-  sudo cp /srv/wiki/bin/simple_wiki.backup /srv/wiki/bin/simple_wiki || echo "No backup found"
-  sudo systemctl start simple_wiki
+  if [ -f /srv/wiki/bin/simple_wiki.backup ]; then
+    echo "Restoring from backup: simple_wiki.backup"
+    sudo cp /srv/wiki/bin/simple_wiki.backup /srv/wiki/bin/simple_wiki
+    sudo systemctl start simple_wiki
+    echo "Rollback completed - previous version restored"
+  else
+    echo "❌ ERROR: No backup binary found at /srv/wiki/bin/simple_wiki.backup"
+    echo "Manual intervention required to restore service"
+  fi
   exit 1
 fi

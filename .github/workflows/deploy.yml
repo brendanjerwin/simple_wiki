@@ -12,6 +12,11 @@ on:
         required: false
         default: 'wiki'
         type: string
+      username:
+        description: 'SSH username for deployment'
+        required: false
+        default: 'brendanjerwin'
+        type: string
 
 jobs:
   deploy:
@@ -50,7 +55,7 @@ jobs:
         uses: FarisZR/tailscale-ssh-deploy@v1.1.0
         with:
           server: ${{ inputs.server_host }}
-          username: brendanjerwin
+          username: ${{ inputs.username }}
           ssh_private_key: dummy # Not needed with Tailscale SSH
           source: './simple_wiki-linux-amd64,./deployment/simple_wiki.service,./deployment/pre-deploy.sh,./deployment/post-deploy.sh'
           target: '/tmp/simple_wiki-new,/tmp/simple_wiki.service,/tmp/pre-deploy.sh,/tmp/post-deploy.sh'

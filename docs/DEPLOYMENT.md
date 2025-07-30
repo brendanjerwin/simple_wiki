@@ -33,8 +33,8 @@ The workflow performs the following steps:
 1. **Download Release**: Downloads the specified release's `simple_wiki-linux-amd64` binary
 2. **Setup Tailscale**: Establishes secure connection to the home network
 3. **Backup Management**:
-   - Cleans up old data backups (keeps only the most recent)
-   - Creates a new timestamped backup of `/srv/wiki/data/`
+   - Cleans up old data backups (keeps only the 2 most recent: current + previous)
+   - Creates a new timestamped backup of `/srv/wiki/data/` as `data_bak_YYYYMMDD_HHMMSS`
    - Backs up the current binary to `simple_wiki.backup`
 4. **Service Management**:
    - Stops the `simple_wiki` systemd service

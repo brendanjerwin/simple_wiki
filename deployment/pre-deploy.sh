@@ -7,7 +7,7 @@ echo "Starting deployment of $VERSION"
 
 # Clean up old data backups, keeping only the most recent
 cd /srv/wiki
-sudo bash -c 'ls -1td data_bak_* 2>/dev/null | tail -n +2 | xargs rm -rf || true'
+sudo bash -c 'ls -1td data_bak_* 2>/dev/null | tail -n +2 | xargs -r rm -rf || true'
 
 # Create new data backup with timestamp
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
