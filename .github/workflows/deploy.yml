@@ -29,6 +29,8 @@ jobs:
         
       - name: Setup Devbox
         uses: jetify-com/devbox-install-action@v0.11.0
+        with:
+          enable-cache: true
         
       - name: Download release asset
         uses: robinraju/release-downloader@v1.10
@@ -51,19 +53,21 @@ jobs:
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:github-actions
           
+      - name: Prepare deployment files
+        run: |
+          mkdir -p deployment-package
+          cp simple_wiki-linux-amd64 deployment-package/
+          cp deployment/simple_wiki.service deployment-package/
+          cp deployment/deploy.sh deployment-package/
+          chmod +x deployment-package/deploy.sh
+          
       - name: Deploy to server
         uses: FarisZR/tailscale-ssh-deploy@v1
         with:
-          server: ${{ inputs.server_host }}
-          username: ${{ inputs.username }}
-          source: './simple_wiki-linux-amd64,./deployment/simple_wiki.service,./deployment/pre-deploy.sh,./deployment/post-deploy.sh'
-          target: '/tmp/simple_wiki-new,/tmp/simple_wiki.service,/tmp/pre-deploy.sh,/tmp/post-deploy.sh'
-          pre_deploy: |
-            chmod +x /tmp/pre-deploy.sh
-            /tmp/pre-deploy.sh "${{ inputs.version }}"
-          post_deploy: |
-            chmod +x /tmp/post-deploy.sh
-            /tmp/post-deploy.sh "${{ inputs.version }}"
+          remote_host: ${{ inputs.username }}@${{ inputs.server_host }}
+          directory: deployment-package
+          remote_destination: /tmp
+          post_upload_command: /tmp/deployment-package/deploy.sh "${{ inputs.version }}"
             
       - name: Report deployment status
         if: always()
