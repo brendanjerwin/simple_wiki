@@ -60,12 +60,13 @@ compare_semver() {
         elif [ -z "$v2_pre" ]; then
             echo "$tag2"  # v2 is release, v1 is prerelease - v2 is higher
         else
-            # Both are prereleases, compare prerelease identifiers
-            local pre_cmp=$(printf '%s\n%s\n' "$v1_pre" "$v2_pre" | sort -V | tail -1)
+            # Both are prereleases, compare prerelease identifiers using proper semver rules
+            # For prereleases, we need to compare according to semver precedence rules
+            local pre_cmp=$(printf '%s\n%s\n' "$v1_pre" "$v2_pre" | sort -V | head -1)
             if [ "$pre_cmp" = "$v1_pre" ]; then
-                echo "$tag1"
+                echo "$tag2"  # v1_pre comes first in sort, so v2_pre is higher
             else
-                echo "$tag2"
+                echo "$tag1"  # v2_pre comes first in sort, so v1_pre is higher
             fi
         fi
     fi
@@ -118,7 +119,7 @@ fi
 # Build the binary
 echo "Building binary"
 GOOS=$TARGET_OS GOARCH=$TARGET_ARCH CGO_ENABLED=0 go build \
-    -ldflags "-X 'main.commit=$COMMIT' -X main.buildTime=$BUILD_TIME" \
+    -ldflags "-X 'main.commit=$COMMIT' -X 'main.buildTime=$BUILD_TIME'" \
     -o "$BINARY_NAME" .
 
 echo "Build complete: $BINARY_NAME"
