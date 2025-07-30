@@ -42,7 +42,7 @@ The workflow performs the following steps:
    - Starts the service again
 5. **Health Check**:
    - Verifies the systemd service is running
-   - Tests HTTP connectivity to ensure the wiki is responding
+   - Tests HTTP connectivity locally on the server to ensure the wiki is responding
    - Rolls back automatically if health checks fail
 
 ### Rollback Strategy

@@ -33,7 +33,7 @@ sleep 5
 echo "Performing health check"
 if sudo systemctl is-active --quiet simple_wiki; then
   echo "✅ Service is running"
-  # Test HTTP response (wiki runs on port 80)
+  # Test HTTP response (wiki runs on port 80) - checked locally on server
   if curl -s -f http://localhost:80/ > /dev/null; then
     echo "✅ HTTP health check passed"
     echo "🎉 Deployment of $VERSION completed successfully!"
