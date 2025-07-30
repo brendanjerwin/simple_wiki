@@ -6,16 +6,9 @@ Proposed
 
 ## Context
 
-We have encountered situations where frontmatter stored in the wiki needs to be transformed to handle:
+### Specific Problem
 
-1. **Conflicting TOML frontmatter syntax**: Legacy content with `inventory.container = "value"` combined with `[inventory]` tables causes parsing conflicts
-2. **Frontmatter format evolution**: As the wiki evolves, we may need to transform frontmatter structure, field names, or syntax
-3. **Backward compatibility**: We need to support existing deployments without requiring manual frontmatter migration
-4. **Data integrity**: Transformations must be safe and reliable
-
-### Current Problem
-
-The immediate issue is TOML frontmatter with mixed dot notation and explicit table syntax:
+The immediate issue is TOML frontmatter with mixed dot notation and explicit table syntax causing parsing failures in deployed wikis:
 
 ```toml
 +++
@@ -25,7 +18,16 @@ items = []
 +++
 ```
 
-This creates a conflict because both syntaxes attempt to define the `inventory` table, causing parsing failures.
+This creates a conflict because both syntaxes attempt to define the `inventory` table, breaking frontmatter parsing for existing content.
+
+### Broader Requirements
+
+Beyond the immediate TOML conflict, we need a system to handle:
+
+1. **Frontmatter format evolution**: As the wiki evolves, we may need to transform frontmatter structure, field names, or syntax
+2. **Backward compatibility**: Support existing deployments without requiring manual frontmatter migration
+3. **Data integrity**: Transformations must be safe and reliable for production use
+
 
 ## Decision
 
@@ -42,33 +44,52 @@ We will implement a **Rolling Migrations System** that automatically transforms 
 
 #### Migration Interface
 ```go
+type FrontmatterType int
+
+const (
+    FrontmatterUnknown FrontmatterType = iota
+    FrontmatterYAML    // ---
+    FrontmatterTOML    // +++
+    FrontmatterJSON    // { }
+)
+
 type FrontmatterMigration interface {
-    AppliesTo(content []byte) bool        // Check if frontmatter migration is needed
+    SupportedTypes() []FrontmatterType    // Which frontmatter types this migration applies to
+    AppliesTo(content []byte) bool        // Check if migration is needed (within supported types)
     Apply(content []byte) ([]byte, error) // Transform frontmatter content
 }
 ```
 
-#### Migration Applicator
+#### Migration Registry
+```go
+type FrontmatterMigrationRegistry interface {
+    RegisterMigration(migration FrontmatterMigration)
+}
+```
+
+#### Migration Applicator  
 ```go
 type FrontmatterMigrationApplicator interface {
-    RegisterMigration(migration FrontmatterMigration)
     ApplyMigrations(content []byte) ([]byte, error)
 }
 ```
 
 ### Pattern-Based Detection
 
-Migrations rely entirely on pattern matching to determine applicability. Each migration implements robust detection logic:
+Migrations rely on frontmatter type detection combined with pattern matching to determine applicability. The system first determines the frontmatter format, then checks applicable migrations:
 
 ```go
+func (m *TOMLDotNotationMigration) SupportedTypes() []FrontmatterType {
+    return []FrontmatterType{FrontmatterTOML}
+}
+
 func (m *TOMLDotNotationMigration) AppliesTo(content []byte) bool {
-    // Only apply to TOML frontmatter with specific conflict pattern
-    return bytes.HasPrefix(content, []byte("+++")) && 
-           hasConflictingDotNotationAndTables(content)
+    // Assumes content is already confirmed to be TOML by the applicator
+    return hasConflictingDotNotationAndTables(content)
 }
 ```
 
-No metadata storage or tracking is needed - migrations are self-determining based on content patterns.
+No metadata storage or tracking is needed - migrations are self-determining based on content patterns. The applicator handles frontmatter type detection once, avoiding repeated format checking in each migration.
 
 ### Integration Points
 
@@ -76,7 +97,7 @@ Migrations will be integrated at a single, well-defined point in the frontmatter
 
 ```go
 // In server/site.go - lenientParse function
-func lenientParse(content []byte, matter any) (body []byte, err error) {
+func lenientParse(content []byte, matter interface{}) (body []byte, err error) {
     // Apply frontmatter migrations BEFORE parsing
     migratedContent, err := frontmatterMigrationApplicator.ApplyMigrations(content)
     if err != nil {
@@ -85,13 +106,15 @@ func lenientParse(content []byte, matter any) (body []byte, err error) {
     }
     
     // Continue with existing parsing logic using migratedContent
-    body, err = adrgfrontmatter.Parse(bytes.NewReader(migratedContent), matter)
+    // Note: Replace with actual frontmatter parsing library used in project
+    body, err = frontmatterParser.Parse(bytes.NewReader(migratedContent), matter)
     // ... rest of existing logic
 }
 ```
 
 This ensures migrations run:
-- During `ReadFrontMatter()` calls (including index initialization)
+- During `ReadFrontMatter()` calls (used by both bleve and frontmatter indexes during startup)
+- During page serving when frontmatter is accessed via gRPC API
 - Before any frontmatter parsing attempts
 - Only once per content access (no caching needed due to pattern-based design)
 
@@ -107,12 +130,23 @@ When multiple migrations match the same content:
 
 ```go
 func (a *FrontmatterMigrationApplicator) ApplyMigrations(content []byte) ([]byte, error) {
+    // Detect frontmatter type once
+    fmType := detectFrontmatterType(content)
+    if fmType == FrontmatterUnknown {
+        return content, nil // No frontmatter or unrecognized format
+    }
+    
     current := content
     for _, migration := range a.migrations {
+        // Check if migration supports this frontmatter type
+        if !supportsFrontmatterType(migration.SupportedTypes(), fmType) {
+            continue
+        }
+        
         if migration.AppliesTo(current) {
             migrated, err := migration.Apply(current)
             if err != nil {
-                // Log error and return original content - site continues to function
+                // On error, return original content; the caller is responsible for logging
                 return content, fmt.Errorf("migration failed: %w", err)
             }
             current = migrated
@@ -123,7 +157,7 @@ func (a *FrontmatterMigrationApplicator) ApplyMigrations(content []byte) ([]byte
 ```
 
 **Error Recovery**:
-- Migration failures return original content with error logging
+- Migration failures return original content; the caller is responsible for logging
 - Site continues to function with unmigrated content
 - No retry logic to prevent infinite loops
 - Operators can fix content manually if needed
@@ -210,16 +244,33 @@ func (a *FrontmatterMigrationApplicator) ApplyMigrations(content []byte) ([]byte
 ```go
 type TOMLDotNotationMigration struct{}
 
+func (m *TOMLDotNotationMigration) SupportedTypes() []FrontmatterType {
+    return []FrontmatterType{FrontmatterTOML}
+}
+
 func (m *TOMLDotNotationMigration) AppliesTo(content []byte) bool {
-    // Check for TOML with both dot notation and explicit tables
-    return bytes.HasPrefix(content, []byte("+++")) && 
-           containsDotNotationConflict(content)
+    // Assumes content is already confirmed to be TOML by the applicator
+    return containsDotNotationConflict(content)
 }
 
 func (m *TOMLDotNotationMigration) Apply(content []byte) ([]byte, error) {
     // Transform conflicting TOML to use consistent table syntax
     // Result will not match AppliesTo() pattern, preventing re-application
     return resolveTomlDotNotationConflicts(content)
+}
+
+// containsDotNotationConflict detects TOML with conflicting dot and table syntax
+// Implementation would check for patterns like "key.subkey = value" followed by "[key]"
+func containsDotNotationConflict(content []byte) bool {
+    // Placeholder implementation - replace with actual conflict detection logic
+    return false
+}
+
+// resolveTomlDotNotationConflicts transforms conflicting TOML syntax
+// Implementation would convert dot notation to explicit table syntax
+func resolveTomlDotNotationConflicts(content []byte) ([]byte, error) {
+    // Placeholder implementation - replace with actual transformation logic
+    return content, nil
 }
 ```
 
