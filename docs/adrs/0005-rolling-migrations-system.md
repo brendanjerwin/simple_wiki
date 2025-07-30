@@ -80,9 +80,8 @@ func lenientParse(content []byte, matter any) (body []byte, err error) {
     // Apply frontmatter migrations BEFORE parsing
     migratedContent, err := frontmatterMigrationApplicator.ApplyMigrations(content)
     if err != nil {
-        // Log migration failure but continue with original content
+        // Log migration failure - migratedContent already contains original content
         log.Printf("Migration failed, using original content: %v", err)
-        migratedContent = content
     }
     
     // Continue with existing parsing logic using migratedContent
