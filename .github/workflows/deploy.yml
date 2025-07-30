@@ -66,8 +66,8 @@ jobs:
         with:
           remote_host: ${{ inputs.username }}@${{ inputs.server_host }}
           directory: deployment-package
-          remote_destination: /tmp/deployment
-          post_upload_command: /tmp/deployment/deploy.sh "${{ inputs.version }}"
+          remote_destination: /tmp
+          post_upload_command: /tmp/deployment-package/deploy.sh "${{ inputs.version }}"
             
       - name: Report deployment status
         if: always()

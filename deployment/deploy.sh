@@ -27,7 +27,7 @@ sudo systemctl stop simple_wiki
 
 # Install/update systemd service
 echo "Installing systemd service"
-sudo cp /tmp/deployment/simple_wiki.service /etc/systemd/system/simple_wiki.service
+sudo cp /tmp/deployment-package/simple_wiki.service /etc/systemd/system/simple_wiki.service
 sudo chown root:root /etc/systemd/system/simple_wiki.service
 sudo chmod 644 /etc/systemd/system/simple_wiki.service
 sudo systemctl daemon-reload
@@ -35,7 +35,7 @@ sudo systemctl enable simple_wiki
 
 # Move new binary to final location
 echo "Installing new binary"
-sudo cp /tmp/deployment/simple_wiki-linux-amd64 /srv/wiki/bin/simple_wiki
+sudo cp /tmp/deployment-package/simple_wiki-linux-amd64 /srv/wiki/bin/simple_wiki
 sudo chown root:root /srv/wiki/bin/simple_wiki
 sudo chmod 755 /srv/wiki/bin/simple_wiki
 
