@@ -22,8 +22,17 @@ TARGET_ARCH=${2:-$(go env GOARCH)}
 SKIP_GENERATE=${3:-false}
 
 # Build variables
-COMMIT=$(git rev-parse HEAD)
+COMMIT_HASH=$(git rev-parse HEAD)
+SHORT_COMMIT=$(git rev-parse --short HEAD)
 BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+# Check if current commit is tagged and format commit accordingly
+TAG=$(git describe --tags --exact-match HEAD 2>/dev/null || echo "")
+if [ -n "$TAG" ]; then
+    COMMIT="$TAG ($SHORT_COMMIT)"
+else
+    COMMIT="$COMMIT_HASH"
+fi
 
 # Binary name with platform suffix
 BINARY_NAME="simple_wiki-${TARGET_OS}-${TARGET_ARCH}"
@@ -43,7 +52,7 @@ fi
 # Build the binary
 echo "Building binary"
 GOOS=$TARGET_OS GOARCH=$TARGET_ARCH CGO_ENABLED=0 go build \
-    -ldflags "-X main.commit=$COMMIT -X main.buildTime=$BUILD_TIME" \
+    -ldflags "-X 'main.commit=$COMMIT' -X main.buildTime=$BUILD_TIME" \
     -o "$BINARY_NAME" .
 
 echo "Build complete: $BINARY_NAME"
