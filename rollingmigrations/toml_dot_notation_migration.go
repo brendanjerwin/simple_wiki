@@ -35,20 +35,9 @@ func (*TOMLDotNotationMigration) AppliesTo(content []byte) bool {
 		return false
 	}
 
-	// Check for conflicts: dot notation + table for same prefix
+	// Apply migration if any dot notation is found - we want consistent table syntax
 	dotNotationPrefixes := findDotNotationPrefixes(frontmatter)
-	tablePrefixes := findTablePrefixes(frontmatter)
-
-	// Check if any dot notation prefix conflicts with table prefix
-	for _, dotPrefix := range dotNotationPrefixes {
-		for _, tablePrefix := range tablePrefixes {
-			if dotPrefix == tablePrefix {
-				return true
-			}
-		}
-	}
-
-	return false
+	return len(dotNotationPrefixes) > 0
 }
 
 func (*TOMLDotNotationMigration) Apply(content []byte) ([]byte, error) {

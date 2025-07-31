@@ -87,7 +87,7 @@ func (m *TOMLDotNotationMigration) SupportedTypes() []FrontmatterType {
 }
 
 func (m *TOMLDotNotationMigration) AppliesTo(content []byte) bool {
-    // Implementation would detect specific TOML conflict patterns
+    // Implementation detects any dot notation for consistent table syntax conversion
     // Content type is already confirmed by the applicator
 }
 ```
@@ -351,7 +351,7 @@ func (a *DefaultApplicator) ApplyMigrations(content []byte) ([]byte, error) {
 ## Example: TOML Dot Notation Migration (Implemented)
 
 ```go
-// Actual implementation resolving TOML conflicts
+// Actual implementation ensuring consistent TOML table syntax
 type TOMLDotNotationMigration struct{}
 
 func (m *TOMLDotNotationMigration) SupportedTypes() []FrontmatterType {
@@ -359,26 +359,23 @@ func (m *TOMLDotNotationMigration) SupportedTypes() []FrontmatterType {
 }
 
 func (m *TOMLDotNotationMigration) AppliesTo(content []byte) bool {
-    // Detects TOML with conflicting dot notation and table syntax
-    // e.g., "inventory.container = value" combined with "[inventory]" sections
+    // Detects any TOML dot notation for consistent table syntax conversion
+    // e.g., "inventory.container = value" should become "[inventory] container = value"
     frontmatter := extractTOMLFrontmatter(content)
     if frontmatter == "" {
         return false
     }
     
-    // Find dot notation keys and existing table sections
-    dotNotationKeys := findDotNotationKeys(frontmatter)
-    tableSections := findTableSections(frontmatter)
-    
-    // Check for conflicts between dot notation and table definitions
-    return hasConflicts(dotNotationKeys, tableSections)
+    // Apply migration if any dot notation is found - we want consistent table syntax
+    dotNotationPrefixes := findDotNotationPrefixes(frontmatter)
+    return len(dotNotationPrefixes) > 0
 }
 
 func (m *TOMLDotNotationMigration) Apply(content []byte) ([]byte, error) {
-    // Transforms conflicting syntax to consistent table format
+    // Transforms any dot notation to consistent table format
     // Converts "inventory.container = value" to proper table entries
     // Result will not match AppliesTo() pattern, preventing re-application
-    return transformTOMLConflicts(content)
+    return transformTOMLDotNotation(content)
 }
 ```
 

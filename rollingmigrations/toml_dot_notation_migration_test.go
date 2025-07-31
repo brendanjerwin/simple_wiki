@@ -32,7 +32,7 @@ var _ = Describe("TOMLDotNotationMigration", func() {
 	})
 
 	Describe("AppliesTo", func() {
-		Describe("when content has conflicting dot notation and table syntax", func() {
+		Describe("when content has dot notation with conflicting table syntax", func() {
 			var applies bool
 
 			BeforeEach(func() {
@@ -50,7 +50,7 @@ content here`)
 			})
 		})
 
-		Describe("when content has dot notation but no conflicting table", func() {
+		Describe("when content has dot notation without conflicting table", func() {
 			var applies bool
 
 			BeforeEach(func() {
@@ -62,8 +62,8 @@ content here`)
 				applies = migration.AppliesTo(content)
 			})
 
-			It("should return false", func() {
-				Expect(applies).To(BeFalse())
+			It("should return true", func() {
+				Expect(applies).To(BeTrue())
 			})
 		})
 
@@ -186,6 +186,35 @@ content here`)
 [game.inventory]
 container = "fireplace_cabinet_right"
 items = []
++++
+content here`)
+				Expect(result).To(Equal(expected))
+			})
+		})
+
+		Describe("when content has dot notation but no existing table", func() {
+			var content []byte
+			var result []byte
+			var err error
+
+			BeforeEach(func() {
+				content = []byte(`+++
+inventory.container = "fireplace_cabinet_right"
+title = "test"
++++
+content here`)
+				result, err = migration.Apply(content)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should convert dot notation to table syntax", func() {
+				expected := []byte(`+++
+title = "test"
+[inventory]
+container = "fireplace_cabinet_right"
 +++
 content here`)
 				Expect(result).To(Equal(expected))
