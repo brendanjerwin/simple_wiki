@@ -7,9 +7,9 @@ import (
 )
 
 const (
-	// TOML frontmatter delimiter length
+	// TOML frontmatter delimiter length (length of "+++")
 	tomlDelimiterLength = 3
-	// TOML frontmatter start position after delimiter and newline
+	// TOML frontmatter start position after delimiter and newline (length of "\n+++\n")
 	tomlStartOffset = 5
 	// Newline character for TOML formatting
 	newlineChar = "\n"
@@ -79,6 +79,11 @@ func extractTOMLFrontmatter(content []byte) string {
 func splitTOMLContent(content []byte) []string {
 	str := string(content)
 	if !strings.HasPrefix(str, tomlDelimiter) {
+		return nil
+	}
+
+	// Validate string length before slicing to prevent panic
+	if len(str) < tomlDelimiterLength {
 		return nil
 	}
 

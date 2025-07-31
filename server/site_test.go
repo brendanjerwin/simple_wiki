@@ -19,31 +19,6 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-// mockMigration for testing integration behavior
-type mockMigration struct {
-	supportedTypes []rollingmigrations.FrontmatterType
-	appliesTo      bool
-	applyResult    []byte
-	applyError     error
-}
-
-func (m *mockMigration) SupportedTypes() []rollingmigrations.FrontmatterType {
-	return m.supportedTypes
-}
-
-func (m *mockMigration) AppliesTo(content []byte) bool {
-	return m.appliesTo
-}
-
-func (m *mockMigration) Apply(content []byte) ([]byte, error) {
-	if m.applyError != nil {
-		return content, m.applyError
-	}
-	if m.applyResult != nil {
-		return m.applyResult, nil
-	}
-	return content, nil
-}
 
 var _ = Describe("Site", func() {
 	var (
@@ -61,7 +36,7 @@ var _ = Describe("Site", func() {
 
 		// Set up empty migration applicator for unit testing
 		// (integration tests will configure their own mocks)
-		applicator := rollingmigrations.NewDefaultApplicator()
+		applicator := rollingmigrations.NewEmptyApplicator()
 
 		s = &Site{
 			Logger:                  lumber.NewConsoleLogger(lumber.INFO),
@@ -755,15 +730,15 @@ test content`
 	Describe("Rolling migrations integration", func() {
 		var (
 			mockApplicator *rollingmigrations.DefaultApplicator
-			mockMig        *mockMigration
+			mockMig        *rollingmigrations.MockMigration
 		)
 
 		BeforeEach(func() {
 			// Set up mock migration applicator for integration testing
-			mockApplicator = rollingmigrations.NewDefaultApplicator()
-			mockMig = &mockMigration{
-				supportedTypes: []rollingmigrations.FrontmatterType{rollingmigrations.FrontmatterTOML},
-				appliesTo:      true,
+			mockApplicator = rollingmigrations.NewEmptyApplicator()
+			mockMig = &rollingmigrations.MockMigration{
+				SupportedTypesResult: []rollingmigrations.FrontmatterType{rollingmigrations.FrontmatterTOML},
+				AppliesToResult:      true,
 			}
 			mockApplicator.RegisterMigration(mockMig)
 			s.MigrationApplicator = mockApplicator
@@ -775,6 +750,8 @@ test content`
 				pagePath       string
 				fm             wikipage.FrontMatter
 				err            error
+				savedContent   string
+				readErr        error
 			)
 
 			BeforeEach(func() {
@@ -795,12 +772,18 @@ status = "published"
 +++
 # Test Content`
 
-				mockMig.applyResult = []byte(migratedContent)
+				mockMig.ApplyResult = []byte(migratedContent)
 
 				fileErr := os.WriteFile(pagePath, []byte(originalContent), 0644)
 				Expect(fileErr).NotTo(HaveOccurred())
 
 				_, fm, err = s.ReadFrontMatter(pageIdentifier)
+				
+				// Read the saved content for verification
+				rawContent, readErr := os.ReadFile(pagePath)
+				if readErr == nil {
+					savedContent = string(rawContent)
+				}
 			})
 
 			It("should not return an error", func() {
@@ -816,11 +799,9 @@ status = "published"
 
 			It("should auto-save the migrated content to disk", func() {
 				// Verify file was updated with migrated content
-				rawContent, readErr := os.ReadFile(pagePath)
 				Expect(readErr).NotTo(HaveOccurred())
-				content := string(rawContent)
-				Expect(content).To(ContainSubstring(`status = "published"`))
-				Expect(content).NotTo(ContainSubstring(`status = "draft"`))
+				Expect(savedContent).To(ContainSubstring(`status = "published"`))
+				Expect(savedContent).NotTo(ContainSubstring(`status = "draft"`))
 			})
 		})
 
@@ -830,6 +811,8 @@ status = "published"
 				pagePath       string
 				fm             wikipage.FrontMatter
 				err            error
+				savedContent   string
+				readErr        error
 			)
 
 			BeforeEach(func() {
@@ -837,7 +820,7 @@ status = "published"
 				pagePath = filepath.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(string(pageIdentifier)))+".md")
 
 				// Set mock to not apply
-				mockMig.appliesTo = false
+				mockMig.AppliesToResult = false
 
 				originalContent := `+++
 title = "Clean Page"
@@ -848,6 +831,12 @@ title = "Clean Page"
 				Expect(fileErr).NotTo(HaveOccurred())
 
 				_, fm, err = s.ReadFrontMatter(pageIdentifier)
+				
+				// Read the saved content for verification
+				rawContent, readErr := os.ReadFile(pagePath)
+				if readErr == nil {
+					savedContent = string(rawContent)
+				}
 			})
 
 			It("should not return an error", func() {
@@ -861,10 +850,8 @@ title = "Clean Page"
 
 			It("should not modify the file on disk", func() {
 				// File should remain unchanged
-				rawContent, readErr := os.ReadFile(pagePath)
 				Expect(readErr).NotTo(HaveOccurred())
-				content := string(rawContent)
-				Expect(content).To(ContainSubstring(`title = "Clean Page"`))
+				Expect(savedContent).To(ContainSubstring(`title = "Clean Page"`))
 			})
 		})
 
@@ -874,6 +861,8 @@ title = "Clean Page"
 				pagePath       string
 				fm             wikipage.FrontMatter
 				err            error
+				savedContent   string
+				readErr        error
 			)
 
 			BeforeEach(func() {
@@ -881,8 +870,8 @@ title = "Clean Page"
 				pagePath = filepath.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(string(pageIdentifier)))+".md")
 
 				// Set mock to fail
-				mockMig.appliesTo = true
-				mockMig.applyError = errors.New("mock migration failure")
+				mockMig.AppliesToResult = true
+				mockMig.ApplyError = errors.New("mock migration failure")
 
 				originalContent := `+++
 title = "Test Page"
@@ -893,6 +882,12 @@ title = "Test Page"
 				Expect(fileErr).NotTo(HaveOccurred())
 
 				_, fm, err = s.ReadFrontMatter(pageIdentifier)
+				
+				// Read the saved content for verification
+				rawContent, readErr := os.ReadFile(pagePath)
+				if readErr == nil {
+					savedContent = string(rawContent)
+				}
 			})
 
 			It("should not return an error", func() {
@@ -907,10 +902,8 @@ title = "Test Page"
 
 			It("should not modify the file on disk when migration fails", func() {
 				// File should remain unchanged since migration failed
-				rawContent, readErr := os.ReadFile(pagePath)
 				Expect(readErr).NotTo(HaveOccurred())
-				content := string(rawContent)
-				Expect(content).To(ContainSubstring(`title = "Test Page"`))
+				Expect(savedContent).To(ContainSubstring(`title = "Test Page"`))
 			})
 		})
 

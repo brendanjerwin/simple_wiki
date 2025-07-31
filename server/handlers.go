@@ -80,9 +80,8 @@ func NewSite(
 		_, _ = fmt.Printf("Loaded CSS file, %d bytes\n", len(customCSS))
 	}
 
-	// Set up migration applicator with TOML dot notation migration
-	applicator := rollingmigrations.NewDefaultApplicator()
-	applicator.RegisterMigration(rollingmigrations.NewTOMLDotNotationMigration())
+	// Set up migration applicator with default migrations
+	applicator := rollingmigrations.NewApplicator()
 
 	site := &Site{
 		PathToData:          filepathToData,

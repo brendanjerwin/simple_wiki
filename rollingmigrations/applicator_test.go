@@ -9,33 +9,13 @@ import (
 	"github.com/brendanjerwin/simple_wiki/rollingmigrations"
 )
 
-type mockMigration struct {
-	supportedTypes []rollingmigrations.FrontmatterType
-	appliesTo      bool
-	applyResult    []byte
-	applyError     error
-}
-
-func (m *mockMigration) SupportedTypes() []rollingmigrations.FrontmatterType {
-	return m.supportedTypes
-}
-
-func (m *mockMigration) AppliesTo(content []byte) bool {
-	return m.appliesTo
-}
-
-func (m *mockMigration) Apply(content []byte) ([]byte, error) {
-	if m.applyError != nil {
-		return nil, m.applyError
-	}
-	return m.applyResult, nil
-}
 
 var _ = Describe("DefaultApplicator", func() {
 	var applicator rollingmigrations.FrontmatterMigrationApplicator
 
 	BeforeEach(func() {
-		applicator = rollingmigrations.NewDefaultApplicator()
+		// Create empty applicator without default migrations for unit testing
+		applicator = rollingmigrations.NewEmptyApplicator()
 	})
 
 	It("should exist", func() {
@@ -63,16 +43,16 @@ var _ = Describe("DefaultApplicator", func() {
 
 	Describe("when applying migrations to YAML frontmatter", func() {
 		var content []byte
-		var migration *mockMigration
+		var migration *rollingmigrations.MockMigration
 		var result []byte
 		var err error
 
 		BeforeEach(func() {
 			content = []byte("---\ntitle: test\n---\ncontent")
-			migration = &mockMigration{
-				supportedTypes: []rollingmigrations.FrontmatterType{rollingmigrations.FrontmatterYAML},
-				appliesTo:      true,
-				applyResult:    []byte("---\ntitle: migrated\n---\ncontent"),
+			migration = &rollingmigrations.MockMigration{
+				SupportedTypesResult: []rollingmigrations.FrontmatterType{rollingmigrations.FrontmatterYAML},
+				AppliesToResult:      true,
+				ApplyResult:          []byte("---\ntitle: migrated\n---\ncontent"),
 			}
 			
 			registry, ok := applicator.(rollingmigrations.FrontmatterMigrationRegistry)
@@ -87,22 +67,22 @@ var _ = Describe("DefaultApplicator", func() {
 		})
 
 		It("should return the migrated content", func() {
-			Expect(result).To(Equal(migration.applyResult))
+			Expect(result).To(Equal(migration.ApplyResult))
 		})
 	})
 
 	Describe("when applying migrations to TOML frontmatter", func() {
 		var content []byte
-		var migration *mockMigration
+		var migration *rollingmigrations.MockMigration
 		var result []byte
 		var err error
 
 		BeforeEach(func() {
 			content = []byte("+++\ntitle = \"test\"\n+++\ncontent")
-			migration = &mockMigration{
-				supportedTypes: []rollingmigrations.FrontmatterType{rollingmigrations.FrontmatterTOML},
-				appliesTo:      true,
-				applyResult:    []byte("+++\ntitle = \"migrated\"\n+++\ncontent"),
+			migration = &rollingmigrations.MockMigration{
+				SupportedTypesResult: []rollingmigrations.FrontmatterType{rollingmigrations.FrontmatterTOML},
+				AppliesToResult:      true,
+				ApplyResult:          []byte("+++\ntitle = \"migrated\"\n+++\ncontent"),
 			}
 			
 			registry, ok := applicator.(rollingmigrations.FrontmatterMigrationRegistry)
@@ -117,21 +97,21 @@ var _ = Describe("DefaultApplicator", func() {
 		})
 
 		It("should return the migrated content", func() {
-			Expect(result).To(Equal(migration.applyResult))
+			Expect(result).To(Equal(migration.ApplyResult))
 		})
 	})
 
 	Describe("when migration doesn't apply to content", func() {
 		var content []byte
-		var migration *mockMigration
+		var migration *rollingmigrations.MockMigration
 		var result []byte
 		var err error
 
 		BeforeEach(func() {
 			content = []byte("+++\ntitle = \"test\"\n+++\ncontent")
-			migration = &mockMigration{
-				supportedTypes: []rollingmigrations.FrontmatterType{rollingmigrations.FrontmatterTOML},
-				appliesTo:      false, // Migration doesn't apply
+			migration = &rollingmigrations.MockMigration{
+				SupportedTypesResult: []rollingmigrations.FrontmatterType{rollingmigrations.FrontmatterTOML},
+				AppliesToResult:      false, // Migration doesn't apply
 			}
 			
 			registry, ok := applicator.(rollingmigrations.FrontmatterMigrationRegistry)
@@ -152,16 +132,16 @@ var _ = Describe("DefaultApplicator", func() {
 
 	Describe("when migration fails", func() {
 		var content []byte
-		var migration *mockMigration
+		var migration *rollingmigrations.MockMigration
 		var result []byte
 		var err error
 
 		BeforeEach(func() {
 			content = []byte("+++\ntitle = \"test\"\n+++\ncontent")
-			migration = &mockMigration{
-				supportedTypes: []rollingmigrations.FrontmatterType{rollingmigrations.FrontmatterTOML},
-				appliesTo:      true,
-				applyError:     errors.New("migration failed"),
+			migration = &rollingmigrations.MockMigration{
+				SupportedTypesResult: []rollingmigrations.FrontmatterType{rollingmigrations.FrontmatterTOML},
+				AppliesToResult:      true,
+				ApplyError:           errors.New("migration failed"),
 			}
 			
 			registry, ok := applicator.(rollingmigrations.FrontmatterMigrationRegistry)
@@ -183,16 +163,16 @@ var _ = Describe("DefaultApplicator", func() {
 
 	Describe("when migration doesn't support the frontmatter type", func() {
 		var content []byte
-		var migration *mockMigration
+		var migration *rollingmigrations.MockMigration
 		var result []byte
 		var err error
 
 		BeforeEach(func() {
 			content = []byte("+++\ntitle = \"test\"\n+++\ncontent")
-			migration = &mockMigration{
-				supportedTypes: []rollingmigrations.FrontmatterType{rollingmigrations.FrontmatterYAML}, // Only supports YAML
-				appliesTo:      true,
-				applyResult:    []byte("should not be applied"),
+			migration = &rollingmigrations.MockMigration{
+				SupportedTypesResult: []rollingmigrations.FrontmatterType{rollingmigrations.FrontmatterYAML}, // Only supports YAML
+				AppliesToResult:      true,
+				ApplyResult:          []byte("should not be applied"),
 			}
 			
 			registry, ok := applicator.(rollingmigrations.FrontmatterMigrationRegistry)

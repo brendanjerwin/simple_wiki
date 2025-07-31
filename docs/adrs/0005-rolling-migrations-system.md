@@ -108,7 +108,7 @@ func (s *Site) lenientParse(content []byte, matter any, identifier wikipage.Page
         migratedContent, err = s.MigrationApplicator.ApplyMigrations(content)
         if err != nil {
             s.Logger.Warn("Migration failed, using original content: %v", err)
-            migratedContent = content
+            // migratedContent already contains original content from initialization
         } else if !bytes.Equal(content, migratedContent) {
             migrationApplied = true
         }

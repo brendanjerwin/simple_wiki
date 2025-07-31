@@ -38,6 +38,10 @@
       "go:lint": [
         "revive -config revive.toml -set_exit_status ./..."
       ],
+      "go:coverage": [
+        "go list ./... | grep -v \"/gen/\" | xargs go test -coverprofile=coverage.out",
+        "go tool cover -func=coverage.out | tail -1"
+      ],
       "lint:everything": [
         "if git status --porcelain api/proto | grep -q '.'; then buf generate; else echo 'No changes in api/proto, skipping buf generate.'; fi",
         "go mod tidy",

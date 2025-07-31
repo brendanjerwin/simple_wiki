@@ -15,7 +15,19 @@ type DefaultApplicator struct {
 	migrations []FrontmatterMigration
 }
 
-func NewDefaultApplicator() *DefaultApplicator {
+func NewApplicator() *DefaultApplicator {
+	applicator := &DefaultApplicator{
+		migrations: make([]FrontmatterMigration, 0),
+	}
+	
+	// Register default migrations
+	applicator.RegisterMigration(NewTOMLDotNotationMigration())
+	
+	return applicator
+}
+
+// NewEmptyApplicator creates an applicator without any default migrations (for testing)
+func NewEmptyApplicator() *DefaultApplicator {
 	return &DefaultApplicator{
 		migrations: make([]FrontmatterMigration, 0),
 	}

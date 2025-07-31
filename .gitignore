@@ -41,6 +41,8 @@ yarn-error.log*
 
 # Test coverage
 coverage/
+coverage.out
+coverage_clean.out
 
 *storybook.log
 storybook-static
