@@ -3,7 +3,6 @@ package server
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,7 +14,6 @@ import (
 	"sync"
 	"time"
 
-	adrgfrontmatter "github.com/adrg/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/index"
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
@@ -386,23 +384,6 @@ func (s *Site) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.
 	return p.Update(newText)
 }
 
-func (*Site) lenientParse(content []byte, matter any) (body []byte, err error) {
-	body, err = adrgfrontmatter.Parse(bytes.NewReader(content), matter)
-	if err != nil {
-		var tomlErr *toml.DecodeError
-		// If it's a TOML parsing error and it has TOML delimiters, try to parse as YAML.
-		// `adrg/frontmatter` does not export its YAML/TOML parsing errors, so we have
-		// to rely on `go-toml`'s error type or string matching for the error.
-		if (errors.As(err, &tomlErr) || strings.Contains(err.Error(), "bare keys cannot contain")) &&
-			bytes.HasPrefix(content, []byte("+++")) {
-			// Replace TOML delimiters with YAML and try again
-			newContent := bytes.Replace(content, []byte("+++"), []byte("---"), 2)
-			body, err = adrgfrontmatter.Parse(bytes.NewReader(newContent), matter)
-		}
-	}
-
-	return body, err
-}
 
 // WriteMarkdown writes the markdown content for a page.
 func (s *Site) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Markdown) error {

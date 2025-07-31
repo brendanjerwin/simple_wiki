@@ -16,6 +16,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/templating"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
+	"github.com/pelletier/go-toml/v2"
 	"github.com/schollz/versionedtext"
 )
 
@@ -96,31 +97,23 @@ func DecodeFileName(s string) string {
 
 // Update overwrites the page's content with newText, saves the change, and re-renders the page.
 func (p *Page) Update(newText string) error {
-	return p.updateWithMigrations(newText)
+	return p.updateInternal(newText, true)
 }
 
-// updateWithoutMigrations provides internal update mechanism that skips migrations
-func (p *Page) updateWithoutMigrations(newText string) error {
-	// Update the versioned text
-	p.Text.Update(newText)
+// updateInternal provides internal update mechanism with migration control
+//revive:disable-next-line:flag-parameter withMigrations is intentionally used for recursion control
+func (p *Page) updateInternal(newText string, withMigrations bool) error {
+	// Apply migrations to fix user mistakes in real-time (but avoid recursion)
+	if withMigrations {
+		migratedContent, err := p.applyMigrations([]byte(newText))
+		if err != nil {
+			return fmt.Errorf("failed to apply migrations during save: %w", err)
+		}
 
-	// Render the new page
-	p.Render()
-
-	return p.Save()
-}
-
-// updateWithMigrations applies migrations and updates the page
-func (p *Page) updateWithMigrations(newText string) error {
-	// Apply migrations to fix user mistakes in real-time
-	migratedContent, err := p.applyMigrations([]byte(newText))
-	if err != nil {
-		return fmt.Errorf("failed to apply migrations during save: %w", err)
-	}
-
-	// If migration changed the content, use the migrated version
-	if string(migratedContent) != newText {
-		newText = string(migratedContent)
+		// If migration changed the content, use the migrated version
+		if string(migratedContent) != newText {
+			newText = string(migratedContent)
+		}
 	}
 
 	// Update the versioned text
@@ -153,8 +146,8 @@ func (p *Page) applyMigrations(content []byte) ([]byte, error) {
 	// If migration was applied, save the migrated content using normal page saving mechanism
 	// This ensures the migration appears in the page history like any other change
 	if !bytes.Equal(content, migratedContent) {
-		// Use updateWithoutMigrations to prevent recursive migration calls
-		if saveErr := p.updateWithoutMigrations(string(migratedContent)); saveErr != nil {
+		// Use updateInternal with withMigrations=false to prevent recursive migration calls
+		if saveErr := p.updateInternal(string(migratedContent), false); saveErr != nil {
 			p.Site.Logger.Warn("Failed to save migrated content for %s: %v", p.Identifier, saveErr)
 		} else {
 			p.Site.Logger.Info("Successfully migrated and saved frontmatter for page: %s", p.Identifier)
@@ -182,7 +175,7 @@ func (p *Page) ReadFrontMatter() (wikipage.FrontMatter, error) {
 	}
 
 	var matter wikipage.FrontMatter
-	_, err = p.Site.lenientParse(migratedContent, &matter)
+	_, err = p.lenientParse(migratedContent, &matter)
 	if err != nil {
 		if strings.Contains(err.Error(), "format not found") {
 			return make(wikipage.FrontMatter), nil
@@ -215,7 +208,7 @@ func (p *Page) ReadMarkdown() (wikipage.Markdown, error) {
 	}
 
 	var dummy any
-	body, err := p.Site.lenientParse(migratedContent, &dummy)
+	body, err := p.lenientParse(migratedContent, &dummy)
 	if err != nil {
 		if strings.Contains(err.Error(), "format not found") {
 			// No frontmatter found, the entire content is markdown.
@@ -225,6 +218,25 @@ func (p *Page) ReadMarkdown() (wikipage.Markdown, error) {
 	}
 
 	return wikipage.Markdown(body), nil
+}
+
+// lenientParse attempts to parse frontmatter with fallback for TOML/YAML conflicts
+func (*Page) lenientParse(content []byte, matter any) (body []byte, err error) {
+	body, err = adrgfrontmatter.Parse(bytes.NewReader(content), matter)
+	if err != nil {
+		var tomlErr *toml.DecodeError
+		// If it's a TOML parsing error and it has TOML delimiters, try to parse as YAML.
+		// `adrg/frontmatter` does not export its YAML/TOML parsing errors, so we have
+		// to rely on `go-toml`'s error type or string matching for the error.
+		if (errors.As(err, &tomlErr) || strings.Contains(err.Error(), "bare keys cannot contain")) &&
+			bytes.HasPrefix(content, []byte("+++")) {
+			// Replace TOML delimiters with YAML and try again
+			newContent := bytes.Replace(content, []byte("+++"), []byte("---"), 2)
+			body, err = adrgfrontmatter.Parse(bytes.NewReader(newContent), matter)
+		}
+	}
+
+	return body, err
 }
 
 func markdownToHTMLAndJSONFrontmatter(s string, site wikipage.PageReader, renderer IRenderMarkdownToHTML, query indexfrontmatter.IQueryFrontmatterIndex) (html []byte, matter []byte, err error) {
