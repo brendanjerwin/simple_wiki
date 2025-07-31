@@ -117,7 +117,7 @@ func (p *Page) updateWithMigrations(newText string) error {
 	if err != nil {
 		return fmt.Errorf("failed to apply migrations during save: %w", err)
 	}
-	
+
 	// If migration changed the content, use the migrated version
 	if string(migratedContent) != newText {
 		newText = string(migratedContent)
@@ -137,19 +137,19 @@ func (p *Page) applyMigrations(content []byte) ([]byte, error) {
 	if p == nil || p.Site == nil {
 		return nil, errors.New("page or site is nil")
 	}
-	
+
 	// Error if no migration applicator is configured - this is an application setup mistake
 	if p.Site.MigrationApplicator == nil {
 		return nil, errors.New("migration applicator not configured: this is an application setup mistake")
 	}
-	
+
 	migratedContent, err := p.Site.MigrationApplicator.ApplyMigrations(content)
 	if err != nil {
 		// Log migration failure but continue with original content
 		p.Site.Logger.Warn("Migration failed, using original content: %v", err)
 		return content, nil
 	}
-	
+
 	// If migration was applied, save the migrated content using normal page saving mechanism
 	// This ensures the migration appears in the page history like any other change
 	if !bytes.Equal(content, migratedContent) {
@@ -160,7 +160,7 @@ func (p *Page) applyMigrations(content []byte) ([]byte, error) {
 			p.Site.Logger.Info("Successfully migrated and saved frontmatter for page: %s", p.Identifier)
 		}
 	}
-	
+
 	return migratedContent, nil
 }
 
@@ -169,7 +169,7 @@ func (p *Page) ReadFrontMatter() (wikipage.FrontMatter, error) {
 	if p == nil || p.Site == nil {
 		return nil, errors.New("page or site is nil")
 	}
-	
+
 	_, content, err := p.Site.readFileByIdentifier(wikipage.PageIdentifier(p.Identifier), mdExtension)
 	if err != nil {
 		return nil, err
@@ -182,7 +182,7 @@ func (p *Page) ReadFrontMatter() (wikipage.FrontMatter, error) {
 	}
 
 	var matter wikipage.FrontMatter
-	_, err = p.Site.lenientParse(migratedContent, &matter, wikipage.PageIdentifier(p.Identifier))
+	_, err = p.Site.lenientParse(migratedContent, &matter)
 	if err != nil {
 		if strings.Contains(err.Error(), "format not found") {
 			return make(wikipage.FrontMatter), nil
@@ -202,7 +202,7 @@ func (p *Page) ReadMarkdown() (wikipage.Markdown, error) {
 	if p == nil || p.Site == nil {
 		return "", errors.New("page or site is nil")
 	}
-	
+
 	_, content, err := p.Site.readFileByIdentifier(wikipage.PageIdentifier(p.Identifier), mdExtension)
 	if err != nil {
 		return "", err
@@ -215,7 +215,7 @@ func (p *Page) ReadMarkdown() (wikipage.Markdown, error) {
 	}
 
 	var dummy any
-	body, err := p.Site.lenientParse(migratedContent, &dummy, wikipage.PageIdentifier(p.Identifier))
+	body, err := p.Site.lenientParse(migratedContent, &dummy)
 	if err != nil {
 		if strings.Contains(err.Error(), "format not found") {
 			// No frontmatter found, the entire content is markdown.

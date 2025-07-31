@@ -18,8 +18,8 @@ import (
 	adrgfrontmatter "github.com/adrg/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/index"
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
-	"github.com/brendanjerwin/simple_wiki/rollingmigrations"
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
+	"github.com/brendanjerwin/simple_wiki/rollingmigrations"
 	"github.com/brendanjerwin/simple_wiki/sec"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
@@ -127,7 +127,7 @@ func (s *Site) getFilePathsForIdentifier(identifier, extension string) (mungedPa
 
 func (s *Site) readFileByIdentifier(identifier, extension string) (string, []byte, error) {
 	mungedPath, originalPath, mungedIdentifier := s.getFilePathsForIdentifier(identifier, extension)
-	
+
 	// First try with the munged identifier
 	b, err := os.ReadFile(mungedPath)
 	if err == nil {
@@ -386,8 +386,7 @@ func (s *Site) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.
 	return p.Update(newText)
 }
 
-
-func (*Site) lenientParse(content []byte, matter any, _ wikipage.PageIdentifier) (body []byte, err error) {
+func (*Site) lenientParse(content []byte, matter any) (body []byte, err error) {
 	body, err = adrgfrontmatter.Parse(bytes.NewReader(content), matter)
 	if err != nil {
 		var tomlErr *toml.DecodeError
@@ -401,10 +400,9 @@ func (*Site) lenientParse(content []byte, matter any, _ wikipage.PageIdentifier)
 			body, err = adrgfrontmatter.Parse(bytes.NewReader(newContent), matter)
 		}
 	}
-	
+
 	return body, err
 }
-
 
 // WriteMarkdown writes the markdown content for a page.
 func (s *Site) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Markdown) error {
