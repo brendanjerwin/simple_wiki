@@ -386,33 +386,6 @@ func (s *Site) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.
 	return p.Update(newText)
 }
 
-// applyMigrations applies frontmatter migrations to content and auto-saves if successful
-func (s *Site) applyMigrations(content []byte, identifier wikipage.PageIdentifier) ([]byte, error) {
-	// If no migration applicator is configured, return content unchanged
-	if s.MigrationApplicator == nil {
-		return content, nil
-	}
-	
-	migratedContent, err := s.MigrationApplicator.ApplyMigrations(content)
-	if err != nil {
-		// Log migration failure but continue with original content
-		s.Logger.Warn("Migration failed, using original content: %v", err)
-		return content, nil
-	}
-	
-	// If migration was applied, save the migrated content using normal page saving mechanism
-	// This ensures the migration appears in the page history like any other change
-	if !bytes.Equal(content, migratedContent) {
-		page := s.Open(string(identifier))
-		if saveErr := page.Update(string(migratedContent)); saveErr != nil {
-			s.Logger.Warn("Failed to save migrated content for %s: %v", identifier, saveErr)
-		} else {
-			s.Logger.Info("Successfully migrated and saved frontmatter for page: %s", identifier)
-		}
-	}
-	
-	return migratedContent, nil
-}
 
 func (*Site) lenientParse(content []byte, matter any, _ wikipage.PageIdentifier) (body []byte, err error) {
 	body, err = adrgfrontmatter.Parse(bytes.NewReader(content), matter)
@@ -454,57 +427,22 @@ func (s *Site) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Mar
 
 // ReadFrontMatter reads the frontmatter for a page.
 func (s *Site) ReadFrontMatter(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
-	identifier, content, err := s.readFileByIdentifier(identifier, mdExtension)
+	page := s.Open(string(identifier))
+	matter, err := page.ReadFrontMatter()
 	if err != nil {
 		return identifier, nil, err
 	}
-
-	// Apply migrations right after reading file content
-	migratedContent, err := s.applyMigrations(content, identifier)
-	if err != nil {
-		return identifier, nil, err
-	}
-
-	var matter wikipage.FrontMatter
-	_, err = s.lenientParse(migratedContent, &matter, identifier)
-	if err != nil {
-		if strings.Contains(err.Error(), "format not found") {
-			return identifier, make(wikipage.FrontMatter), nil
-		}
-		return identifier, nil, err
-	}
-
-	if matter == nil {
-		return identifier, make(wikipage.FrontMatter), nil
-	}
-
 	return identifier, matter, nil
 }
 
 // ReadMarkdown reads the markdown content for a page.
 func (s *Site) ReadMarkdown(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
-	identifier, content, err := s.readFileByIdentifier(identifier, mdExtension)
+	page := s.Open(string(identifier))
+	markdown, err := page.ReadMarkdown()
 	if err != nil {
 		return identifier, "", err
 	}
-
-	// Apply migrations right after reading file content
-	migratedContent, err := s.applyMigrations(content, identifier)
-	if err != nil {
-		return identifier, "", err
-	}
-
-	var dummy any
-	body, err := s.lenientParse(migratedContent, &dummy, identifier)
-	if err != nil {
-		if strings.Contains(err.Error(), "format not found") {
-			// No frontmatter found, the entire content is markdown.
-			return identifier, wikipage.Markdown(body), nil
-		}
-		return identifier, "", err // A real parsing error.
-	}
-
-	return identifier, wikipage.Markdown(body), nil
+	return identifier, markdown, nil
 }
 
 // DeletePage deletes a page from disk.

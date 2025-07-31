@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/brendanjerwin/simple_wiki/rollingmigrations"
 	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 
@@ -26,9 +27,10 @@ var _ = Describe("Page Functions", func() {
 		err := os.MkdirAll(pathToData, 0755)
 		Expect(err).NotTo(HaveOccurred())
 		s = &Site{
-			PathToData:       pathToData,
-			MarkdownRenderer: &goldmarkrenderer.GoldmarkRenderer{},
-			Logger:           lumber.NewConsoleLogger(lumber.INFO),
+			PathToData:          pathToData,
+			MarkdownRenderer:    &goldmarkrenderer.GoldmarkRenderer{},
+			Logger:              lumber.NewConsoleLogger(lumber.INFO),
+			MigrationApplicator: rollingmigrations.NewEmptyApplicator(),
 		}
 		err = s.InitializeIndexing()
 		Expect(err).NotTo(HaveOccurred())

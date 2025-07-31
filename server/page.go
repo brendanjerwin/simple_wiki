@@ -1,7 +1,9 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -94,6 +96,11 @@ func DecodeFileName(s string) string {
 
 // Update overwrites the page's content with newText, saves the change, and re-renders the page.
 func (p *Page) Update(newText string) error {
+	return p.updateWithMigrations(newText)
+}
+
+// updateWithoutMigrations provides internal update mechanism that skips migrations
+func (p *Page) updateWithoutMigrations(newText string) error {
 	// Update the versioned text
 	p.Text.Update(newText)
 
@@ -101,6 +108,123 @@ func (p *Page) Update(newText string) error {
 	p.Render()
 
 	return p.Save()
+}
+
+// updateWithMigrations applies migrations and updates the page
+func (p *Page) updateWithMigrations(newText string) error {
+	// Apply migrations to fix user mistakes in real-time
+	migratedContent, err := p.applyMigrations([]byte(newText))
+	if err != nil {
+		return fmt.Errorf("failed to apply migrations during save: %w", err)
+	}
+	
+	// If migration changed the content, use the migrated version
+	if string(migratedContent) != newText {
+		newText = string(migratedContent)
+	}
+
+	// Update the versioned text
+	p.Text.Update(newText)
+
+	// Render the new page
+	p.Render()
+
+	return p.Save()
+}
+
+// applyMigrations applies frontmatter migrations to content and auto-saves if successful
+func (p *Page) applyMigrations(content []byte) ([]byte, error) {
+	if p == nil || p.Site == nil {
+		return nil, errors.New("page or site is nil")
+	}
+	
+	// Error if no migration applicator is configured - this is an application setup mistake
+	if p.Site.MigrationApplicator == nil {
+		return nil, errors.New("migration applicator not configured: this is an application setup mistake")
+	}
+	
+	migratedContent, err := p.Site.MigrationApplicator.ApplyMigrations(content)
+	if err != nil {
+		// Log migration failure but continue with original content
+		p.Site.Logger.Warn("Migration failed, using original content: %v", err)
+		return content, nil
+	}
+	
+	// If migration was applied, save the migrated content using normal page saving mechanism
+	// This ensures the migration appears in the page history like any other change
+	if !bytes.Equal(content, migratedContent) {
+		// Use updateWithoutMigrations to prevent recursive migration calls
+		if saveErr := p.updateWithoutMigrations(string(migratedContent)); saveErr != nil {
+			p.Site.Logger.Warn("Failed to save migrated content for %s: %v", p.Identifier, saveErr)
+		} else {
+			p.Site.Logger.Info("Successfully migrated and saved frontmatter for page: %s", p.Identifier)
+		}
+	}
+	
+	return migratedContent, nil
+}
+
+// ReadFrontMatter reads the frontmatter for this page, applying migrations as needed.
+func (p *Page) ReadFrontMatter() (wikipage.FrontMatter, error) {
+	if p == nil || p.Site == nil {
+		return nil, errors.New("page or site is nil")
+	}
+	
+	_, content, err := p.Site.readFileByIdentifier(wikipage.PageIdentifier(p.Identifier), mdExtension)
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply migrations to the content
+	migratedContent, err := p.applyMigrations(content)
+	if err != nil {
+		return nil, err
+	}
+
+	var matter wikipage.FrontMatter
+	_, err = p.Site.lenientParse(migratedContent, &matter, wikipage.PageIdentifier(p.Identifier))
+	if err != nil {
+		if strings.Contains(err.Error(), "format not found") {
+			return make(wikipage.FrontMatter), nil
+		}
+		return nil, err
+	}
+
+	if matter == nil {
+		return make(wikipage.FrontMatter), nil
+	}
+
+	return matter, nil
+}
+
+// ReadMarkdown reads the markdown content for this page, applying migrations as needed.
+func (p *Page) ReadMarkdown() (wikipage.Markdown, error) {
+	if p == nil || p.Site == nil {
+		return "", errors.New("page or site is nil")
+	}
+	
+	_, content, err := p.Site.readFileByIdentifier(wikipage.PageIdentifier(p.Identifier), mdExtension)
+	if err != nil {
+		return "", err
+	}
+
+	// Apply migrations to the content
+	migratedContent, err := p.applyMigrations(content)
+	if err != nil {
+		return "", err
+	}
+
+	var dummy any
+	body, err := p.Site.lenientParse(migratedContent, &dummy, wikipage.PageIdentifier(p.Identifier))
+	if err != nil {
+		if strings.Contains(err.Error(), "format not found") {
+			// No frontmatter found, the entire content is markdown.
+			return wikipage.Markdown(body), nil
+		}
+		return "", err // A real parsing error.
+	}
+
+	return wikipage.Markdown(body), nil
 }
 
 func markdownToHTMLAndJSONFrontmatter(s string, site wikipage.PageReader, renderer IRenderMarkdownToHTML, query indexfrontmatter.IQueryFrontmatterIndex) (html []byte, matter []byte, err error) {

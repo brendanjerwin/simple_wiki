@@ -96,45 +96,111 @@ No metadata storage or tracking is needed - migrations are self-determining base
 
 ### Integration Points
 
-Migrations are integrated at a single, well-defined point in the frontmatter processing pipeline:
+Migrations are integrated at two key points in the content processing pipeline:
+
+#### 1. Read-Time Migrations (Content Access)
+
+Migrations run during content reading operations in the `applyMigrations()` function:
 
 ```go
-// Integration point in server/site.go - lenientParse function
-func (s *Site) lenientParse(content []byte, matter any, identifier wikipage.PageIdentifier) (body []byte, err error) {
-    migratedContent := content
-    migrationApplied := false
-    
-    if s.MigrationApplicator != nil {
-        migratedContent, err = s.MigrationApplicator.ApplyMigrations(content)
-        if err != nil {
-            s.Logger.Warn("Migration failed, using original content: %v", err)
-            // migratedContent already contains original content from initialization
-        } else if !bytes.Equal(content, migratedContent) {
-            migrationApplied = true
-        }
+// Integration point in server/site.go - applyMigrations function
+func (s *Site) applyMigrations(content []byte, identifier wikipage.PageIdentifier) ([]byte, error) {
+    // Error if no migration applicator is configured - this is an application setup mistake
+    if s.MigrationApplicator == nil {
+        return nil, fmt.Errorf("migration applicator not configured: this is an application setup mistake")
     }
     
-    body, err = adrgfrontmatter.Parse(bytes.NewReader(migratedContent), matter)
+    migratedContent, err := s.MigrationApplicator.ApplyMigrations(content)
+    if err != nil {
+        // Log migration failure but continue with original content
+        s.Logger.Warn("Migration failed, using original content: %v", err)
+        return content, nil
+    }
     
-    // Auto-save migrated content to disk
-    if migrationApplied && err == nil {
-        if saveErr := s.saveMigratedContent(identifier, migratedContent); saveErr != nil {
+    // If migration was applied, save the migrated content using normal page saving mechanism
+    // This ensures the migration appears in the page history like any other change
+    if !bytes.Equal(content, migratedContent) {
+        page := s.Open(string(identifier))
+        page.skipMigrations = true // Prevent recursive migration calls
+        if saveErr := page.Update(string(migratedContent)); saveErr != nil {
             s.Logger.Warn("Failed to save migrated content for %s: %v", identifier, saveErr)
         } else {
             s.Logger.Info("Successfully migrated and saved frontmatter for page: %s", identifier)
         }
     }
     
-    return body, err
+    return migratedContent, nil
+}
+```
+
+#### 2. Write-Time Migrations (User Saves)
+
+Migrations also run during user save operations to fix mistakes in real-time. **All migration logic is now contained within the page layer** using **stack-based recursion protection**:
+
+```go
+// Integration point in server/page.go - Clean page-layer architecture
+func (p *Page) Update(newText string) error {
+    return p.updateWithMigrationControl(newText, false)
+}
+
+// updateWithMigrationControl provides stack-based recursion control for migrations
+func (p *Page) updateWithMigrationControl(newText string, skipMigrations bool) error {
+    // Apply migrations to fix user mistakes in real-time (but avoid recursion)
+    if !skipMigrations {
+        migratedContent, err := p.applyMigrations([]byte(newText))
+        if err != nil {
+            return fmt.Errorf("failed to apply migrations during save: %w", err)
+        }
+        
+        // If migration changed the content, use the migrated version
+        if string(migratedContent) != newText {
+            newText = string(migratedContent)
+        }
+    }
+
+    // Update the versioned text
+    p.Text.Update(newText)
+
+    // Render the new page
+    p.Render()
+
+    return p.Save()
+}
+
+// Page-layer migration handling with stack-based recursion prevention
+func (p *Page) applyMigrations(content []byte) ([]byte, error) {
+    // Configuration validation
+    if p.Site.MigrationApplicator == nil {
+        return nil, fmt.Errorf("migration applicator not configured: this is an application setup mistake")
+    }
+    
+    migratedContent, err := p.Site.MigrationApplicator.ApplyMigrations(content)
+    if err != nil {
+        p.Site.Logger.Warn("Migration failed, using original content: %v", err)
+        return content, nil
+    }
+    
+    // If migration was applied, save using stack-based recursion protection
+    if !bytes.Equal(content, migratedContent) {
+        // Pass skipMigrations=true to prevent recursive calls - cleaner than struct state
+        if saveErr := p.updateWithMigrationControl(string(migratedContent), true); saveErr != nil {
+            p.Site.Logger.Warn("Failed to save migrated content for %s: %v", p.Identifier, saveErr)
+        } else {
+            p.Site.Logger.Info("Successfully migrated and saved frontmatter for page: %s", p.Identifier)
+        }
+    }
+    
+    return migratedContent, nil
 }
 ```
 
 This ensures migrations run:
 
-- During `ReadFrontMatter()` calls (used by both bleve and frontmatter indexes during startup)
-- During page serving when frontmatter is accessed via gRPC API
-- Before any frontmatter parsing attempts
-- **Auto-save**: Migrated content is automatically persisted to disk, optimizing performance for subsequent reads
+- **During reads**: Page-based `ReadFrontMatter()` and `ReadMarkdown()` methods (used by both bleve and frontmatter indexes during startup)
+- **During reads**: Page serving when frontmatter is accessed via gRPC API (delegated through site to page layer)
+- **During writes**: User save operations to fix problematic content in real-time
+- **Auto-save**: Migrated content is automatically persisted to disk using the normal page saving mechanism, ensuring it appears in page history
+- **Stack-based recursion prevention**: Function parameters prevent infinite loops instead of struct state mutations
 
 ### Migration Execution Order
 
@@ -146,6 +212,18 @@ When multiple migrations match the same content:
 4. Migrations must be designed to not conflict with each other
 
 ### Error Handling Strategy
+
+#### Configuration Errors
+
+**Missing Migration Applicator**: The system requires a configured migration applicator as part of application setup. A nil applicator indicates an application setup mistake and will cause an error:
+
+```go
+if s.MigrationApplicator == nil {
+    return nil, fmt.Errorf("migration applicator not configured: this is an application setup mistake")
+}
+```
+
+#### Migration Execution Errors
 
 ```go
 // Actual implementation in DefaultApplicator
@@ -176,10 +254,12 @@ func (a *DefaultApplicator) ApplyMigrations(content []byte) ([]byte, error) {
 
 **Error Recovery**:
 
-- Migration failures are logged by the Site integration layer; original content is used
-- Site continues to function with unmigrated content
+- **Configuration errors**: Application fails to start properly without a migration applicator
+- **Migration failures**: Are logged by the Site integration layer; original content is used
+- Site continues to function with unmigrated content after migration failures
 - No retry logic to prevent infinite loops
 - Auto-save only occurs when migration succeeds and parsing is successful
+- **Recursion prevention**: `skipMigrations` flag prevents infinite loops during write-time migrations
 
 ### Migration Categories (Frontmatter Only)
 
@@ -306,12 +386,15 @@ func (m *TOMLDotNotationMigration) Apply(content []byte) ([]byte, error) {
 
 1. **Backward Compatibility**: Existing content continues to work without manual intervention
 2. **Simplicity**: No metadata storage or tracking - migrations are self-contained
-3. **Automatic Application**: Migrations apply transparently when content is accessed
-4. **Extensibility**: Easy to add new migrations as requirements evolve
-5. **Safety**: Robust pattern matching prevents incorrect application
-6. **Performance Optimization**: Auto-save ensures migrations run only once per file
-7. **Operational Excellence**: Comprehensive logging and error handling for production use
-8. **Testing Architecture**: Proper separation between unit tests (migration logic) and integration tests (orchestration)
+3. **Automatic Application**: Migrations apply transparently when content is accessed or saved
+4. **Real-time Error Correction**: User mistakes are automatically fixed during save operations
+5. **Extensibility**: Easy to add new migrations as requirements evolve
+6. **Safety**: Robust pattern matching prevents incorrect application
+7. **Performance Optimization**: Auto-save ensures migrations run only once per file
+8. **Operational Excellence**: Comprehensive logging and error handling for production use
+9. **Testing Architecture**: Proper separation between unit tests (migration logic) and integration tests (orchestration)
+10. **Clean Architecture**: All migration logic consolidated in the page layer where content lifecycle is managed
+11. **Stack-based Recursion Prevention**: Function parameters provide cleaner recursion control than struct state mutations
 
 ## Risks and Mitigations
 
@@ -344,18 +427,24 @@ func (m *TOMLDotNotationMigration) Apply(content []byte) ([]byte, error) {
   - Seamless backward compatibility achieved
   - Extensible architecture implemented and tested
   - Automated content evolution with persistent optimization
+  - **Real-time error correction**: User mistakes are automatically fixed during save operations
   - Performance benefits through auto-save functionality
   - Production-ready error handling and logging
   - Comprehensive test coverage with proper architectural separation
+  - **Configuration validation**: Missing migration applicator is properly detected as setup error
+  - **Clean architecture**: Migration logic properly consolidated in page layer
+  - **Stack-based design**: Function parameters provide cleaner control flow than struct state
 
 - **Negative**:
-  - Additional complexity in content reading pipeline (manageable with good abstractions)
+  - Additional complexity in content processing pipelines (well-managed through page layer abstraction)
   - New failure modes handled through graceful degradation
   - Increased disk I/O during auto-save operations
+  - **Application setup requirement**: Migration applicator must be configured for proper operation
 
 - **Neutral**:
   - New `rollingmigrations` package successfully integrated
   - Migration registry provides clean extension points
   - Clear patterns established for future migration development
+  - **Page-layer consolidation**: Both read-time and write-time migrations follow consistent architectural patterns
 
-**Outcome**: This system has successfully resolved the immediate TOML parsing issue while providing a robust, battle-tested foundation for future content transformations. The auto-save optimization ensures excellent performance characteristics for production deployment.
+**Outcome**: This system has successfully resolved the immediate TOML parsing issue while providing a robust, battle-tested foundation for future content transformations. The dual integration approach (read-time and write-time migrations) provides both backward compatibility and real-time user assistance. The auto-save optimization ensures excellent performance characteristics for production deployment.
