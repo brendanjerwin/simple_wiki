@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/brendanjerwin/simple_wiki/rollingmigrations"
 	"github.com/brendanjerwin/simple_wiki/sec"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
@@ -17,6 +18,32 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
+
+// mockMigration for testing integration behavior
+type mockMigration struct {
+	supportedTypes []rollingmigrations.FrontmatterType
+	appliesTo      bool
+	applyResult    []byte
+	applyError     error
+}
+
+func (m *mockMigration) SupportedTypes() []rollingmigrations.FrontmatterType {
+	return m.supportedTypes
+}
+
+func (m *mockMigration) AppliesTo(content []byte) bool {
+	return m.appliesTo
+}
+
+func (m *mockMigration) Apply(content []byte) ([]byte, error) {
+	if m.applyError != nil {
+		return content, m.applyError
+	}
+	if m.applyResult != nil {
+		return m.applyResult, nil
+	}
+	return content, nil
+}
 
 var _ = Describe("Site", func() {
 	var (
@@ -32,12 +59,17 @@ var _ = Describe("Site", func() {
 
 		mockIndex = &MockIndexMaintainer{}
 
+		// Set up empty migration applicator for unit testing
+		// (integration tests will configure their own mocks)
+		applicator := rollingmigrations.NewDefaultApplicator()
+
 		s = &Site{
 			Logger:                  lumber.NewConsoleLogger(lumber.INFO),
 			PathToData:              tempDir,
 			IndexMaintainer:         mockIndex,
 			MarkdownRenderer:        &goldmarkrenderer.GoldmarkRenderer{},
 			FrontmatterIndexQueryer: &mockFrontmatterIndexQueryer{},
+			MigrationApplicator:     applicator,
 		}
 	})
 
@@ -716,6 +748,205 @@ test content`
 			It("should log the error", func() {
 				Expect(logOutput).To(ContainSubstring("Failed to add page 'test' to index during initialization"))
 				Expect(logOutput).To(ContainSubstring("mock index error"))
+			})
+		})
+	})
+
+	Describe("Rolling migrations integration", func() {
+		var (
+			mockApplicator *rollingmigrations.DefaultApplicator
+			mockMig        *mockMigration
+		)
+
+		BeforeEach(func() {
+			// Set up mock migration applicator for integration testing
+			mockApplicator = rollingmigrations.NewDefaultApplicator()
+			mockMig = &mockMigration{
+				supportedTypes: []rollingmigrations.FrontmatterType{rollingmigrations.FrontmatterTOML},
+				appliesTo:      true,
+			}
+			mockApplicator.RegisterMigration(mockMig)
+			s.MigrationApplicator = mockApplicator
+		})
+
+		Describe("when migration applies and succeeds", func() {
+			var (
+				pageIdentifier wikipage.PageIdentifier
+				pagePath       string
+				fm             wikipage.FrontMatter
+				err            error
+			)
+
+			BeforeEach(func() {
+				pageIdentifier = "mock-migration-test"
+				pagePath = filepath.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(string(pageIdentifier)))+".md")
+
+				// Original content that needs migration
+				originalContent := `+++
+title = "Test Page"
+status = "draft"
++++
+# Test Content`
+
+				// Mock migration result with modified content
+				migratedContent := `+++
+title = "Test Page"
+status = "published"
++++
+# Test Content`
+
+				mockMig.applyResult = []byte(migratedContent)
+
+				fileErr := os.WriteFile(pagePath, []byte(originalContent), 0644)
+				Expect(fileErr).NotTo(HaveOccurred())
+
+				_, fm, err = s.ReadFrontMatter(pageIdentifier)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should parse migrated frontmatter correctly", func() {
+				Expect(fm).To(HaveKey("title"))
+				Expect(fm["title"]).To(Equal("Test Page"))
+				Expect(fm).To(HaveKey("status"))
+				Expect(fm["status"]).To(Equal("published"))
+			})
+
+			It("should auto-save the migrated content to disk", func() {
+				// Verify file was updated with migrated content
+				rawContent, readErr := os.ReadFile(pagePath)
+				Expect(readErr).NotTo(HaveOccurred())
+				content := string(rawContent)
+				Expect(content).To(ContainSubstring(`status = "published"`))
+				Expect(content).NotTo(ContainSubstring(`status = "draft"`))
+			})
+		})
+
+		Describe("when migration doesn't apply", func() {
+			var (
+				pageIdentifier wikipage.PageIdentifier
+				pagePath       string
+				fm             wikipage.FrontMatter
+				err            error
+			)
+
+			BeforeEach(func() {
+				pageIdentifier = "no-migration-test"
+				pagePath = filepath.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(string(pageIdentifier)))+".md")
+
+				// Set mock to not apply
+				mockMig.appliesTo = false
+
+				originalContent := `+++
+title = "Clean Page"
++++
+# Content`
+
+				fileErr := os.WriteFile(pagePath, []byte(originalContent), 0644)
+				Expect(fileErr).NotTo(HaveOccurred())
+
+				_, fm, err = s.ReadFrontMatter(pageIdentifier)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should parse original frontmatter", func() {
+				Expect(fm).To(HaveKey("title"))
+				Expect(fm["title"]).To(Equal("Clean Page"))
+			})
+
+			It("should not modify the file on disk", func() {
+				// File should remain unchanged
+				rawContent, readErr := os.ReadFile(pagePath)
+				Expect(readErr).NotTo(HaveOccurred())
+				content := string(rawContent)
+				Expect(content).To(ContainSubstring(`title = "Clean Page"`))
+			})
+		})
+
+		Describe("when migration fails", func() {
+			var (
+				pageIdentifier wikipage.PageIdentifier
+				pagePath       string
+				fm             wikipage.FrontMatter
+				err            error
+			)
+
+			BeforeEach(func() {
+				pageIdentifier = "failed-migration-test"
+				pagePath = filepath.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(string(pageIdentifier)))+".md")
+
+				// Set mock to fail
+				mockMig.appliesTo = true
+				mockMig.applyError = errors.New("mock migration failure")
+
+				originalContent := `+++
+title = "Test Page"
++++
+# Content`
+
+				fileErr := os.WriteFile(pagePath, []byte(originalContent), 0644)
+				Expect(fileErr).NotTo(HaveOccurred())
+
+				_, fm, err = s.ReadFrontMatter(pageIdentifier)
+			})
+
+			It("should not return an error", func() {
+				// lenientParse should handle migration failures gracefully
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should fall back to original content", func() {
+				Expect(fm).To(HaveKey("title"))
+				Expect(fm["title"]).To(Equal("Test Page"))
+			})
+
+			It("should not modify the file on disk when migration fails", func() {
+				// File should remain unchanged since migration failed
+				rawContent, readErr := os.ReadFile(pagePath)
+				Expect(readErr).NotTo(HaveOccurred())
+				content := string(rawContent)
+				Expect(content).To(ContainSubstring(`title = "Test Page"`))
+			})
+		})
+
+		Describe("when no migration applicator is configured", func() {
+			var (
+				pageIdentifier wikipage.PageIdentifier
+				pagePath       string
+				fm             wikipage.FrontMatter
+				err            error
+			)
+
+			BeforeEach(func() {
+				pageIdentifier = "no-applicator-test"
+				pagePath = filepath.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(string(pageIdentifier)))+".md")
+
+				// Remove migration applicator
+				s.MigrationApplicator = nil
+
+				originalContent := `+++
+title = "Test Page"
++++
+# Content`
+
+				fileErr := os.WriteFile(pagePath, []byte(originalContent), 0644)
+				Expect(fileErr).NotTo(HaveOccurred())
+
+				_, fm, err = s.ReadFrontMatter(pageIdentifier)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should parse original content without migration", func() {
+				Expect(fm).To(HaveKey("title"))
+				Expect(fm["title"]).To(Equal("Test Page"))
 			})
 		})
 	})

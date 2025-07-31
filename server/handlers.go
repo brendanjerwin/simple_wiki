@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/brendanjerwin/simple_wiki/rollingmigrations"
 	"github.com/brendanjerwin/simple_wiki/sec"
 	"github.com/brendanjerwin/simple_wiki/static"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
@@ -79,18 +80,23 @@ func NewSite(
 		_, _ = fmt.Printf("Loaded CSS file, %d bytes\n", len(customCSS))
 	}
 
+	// Set up migration applicator with TOML dot notation migration
+	applicator := rollingmigrations.NewDefaultApplicator()
+	applicator.RegisterMigration(rollingmigrations.NewTOMLDotNotationMigration())
+
 	site := &Site{
-		PathToData:      filepathToData,
-		CSS:             customCSS,
-		DefaultPage:     defaultPage,
-		DefaultPassword: defaultPassword,
-		Debounce:        debounce,
-		SessionStore:    cookie.NewStore([]byte(secret)),
-		SecretCode:      secretCode,
-		Fileuploads:     fileuploads,
-		MaxUploadSize:   maxUploadSize,
-		MaxDocumentSize: maxDocumentSize,
-		Logger:          logger,
+		PathToData:          filepathToData,
+		CSS:                 customCSS,
+		DefaultPage:         defaultPage,
+		DefaultPassword:     defaultPassword,
+		Debounce:            debounce,
+		SessionStore:        cookie.NewStore([]byte(secret)),
+		SecretCode:          secretCode,
+		Fileuploads:         fileuploads,
+		MaxUploadSize:       maxUploadSize,
+		MaxDocumentSize:     maxDocumentSize,
+		Logger:              logger,
+		MigrationApplicator: applicator,
 	}
 
 	err := site.InitializeIndexing()

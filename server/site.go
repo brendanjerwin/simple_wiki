@@ -18,6 +18,7 @@ import (
 	adrgfrontmatter "github.com/adrg/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/index"
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
+	"github.com/brendanjerwin/simple_wiki/rollingmigrations"
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/sec"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
@@ -52,6 +53,7 @@ type Site struct {
 	IndexMaintainer         index.IMaintainIndex
 	FrontmatterIndexQueryer frontmatter.IQueryFrontmatterIndex
 	BleveIndexQueryer       bleve.IQueryBleveIndex
+	MigrationApplicator     rollingmigrations.FrontmatterMigrationApplicator
 	saveMut                 sync.Mutex
 }
 
@@ -371,22 +373,91 @@ func (s *Site) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.
 	return p.Update(newText)
 }
 
-func lenientParse(content []byte, matter any) (body []byte, err error) {
-	body, err = adrgfrontmatter.Parse(bytes.NewReader(content), matter)
+func (s *Site) lenientParse(content []byte, matter any, identifier wikipage.PageIdentifier) (body []byte, err error) {
+	// Apply frontmatter migrations BEFORE parsing
+	migratedContent := content
+	migrationApplied := false
+	
+	if s.MigrationApplicator != nil {
+		migratedContent, err = s.MigrationApplicator.ApplyMigrations(content)
+		if err != nil {
+			// Log migration failure but continue with original content
+			s.Logger.Warn("Migration failed, using original content: %v", err)
+			migratedContent = content
+		} else if !bytes.Equal(content, migratedContent) {
+			migrationApplied = true
+		}
+	}
+
+	body, err = adrgfrontmatter.Parse(bytes.NewReader(migratedContent), matter)
 	if err != nil {
 		var tomlErr *toml.DecodeError
 		// If it's a TOML parsing error and it has TOML delimiters, try to parse as YAML.
 		// `adrg/frontmatter` does not export its YAML/TOML parsing errors, so we have
 		// to rely on `go-toml`'s error type or string matching for the error.
 		if (errors.As(err, &tomlErr) || strings.Contains(err.Error(), "bare keys cannot contain")) &&
-			bytes.HasPrefix(content, []byte("+++")) {
+			bytes.HasPrefix(migratedContent, []byte("+++")) {
 			// Replace TOML delimiters with YAML and try again
-			newContent := bytes.Replace(content, []byte("+++"), []byte("---"), 2)
+			newContent := bytes.Replace(migratedContent, []byte("+++"), []byte("---"), 2)
 			body, err = adrgfrontmatter.Parse(bytes.NewReader(newContent), matter)
+			if err == nil && migrationApplied {
+				// Parsing succeeded after YAML fallback, save the migrated content
+				if saveErr := s.saveMigratedContent(identifier, migratedContent); saveErr != nil {
+					s.Logger.Warn("Failed to save migrated content for %s: %v", identifier, saveErr)
+				} else {
+					s.Logger.Info("Successfully migrated and saved frontmatter for page: %s", identifier)
+				}
+			}
 			return body, err
 		}
 	}
+	
+	// If migration was applied and parsing succeeded, save the migrated content
+	if migrationApplied && err == nil {
+		if saveErr := s.saveMigratedContent(identifier, migratedContent); saveErr != nil {
+			s.Logger.Warn("Failed to save migrated content for %s: %v", identifier, saveErr)
+		} else {
+			s.Logger.Info("Successfully migrated and saved frontmatter for page: %s", identifier)
+		}
+	}
+	
 	return body, err
+}
+
+// saveMigratedContent saves the migrated content back to the .md file on disk
+func (s *Site) saveMigratedContent(identifier wikipage.PageIdentifier, migratedContent []byte) error {
+	// Use the same logic as readFileByIdentifier to determine the correct file path
+	// First try with the munged identifier
+	mungedIdentifier := wikiidentifiers.MungeIdentifier(string(identifier))
+	mungedPath := path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(mungedIdentifier))+".md")
+	
+	// Check if the munged file exists
+	if _, err := os.Stat(mungedPath); err == nil {
+		// Munged file exists, write to it
+		return s.writeFileContent(mungedPath, migratedContent)
+	}
+	
+	// Munged file doesn't exist, try original identifier (for older files)
+	originalPath := path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(string(identifier)))+".md")
+	if _, err := os.Stat(originalPath); err == nil {
+		// Original file exists, write to it
+		return s.writeFileContent(originalPath, migratedContent)
+	}
+	
+	// Neither exists, this is the case where lenientParse is called with the identifier
+	// that was returned by readFileByIdentifier, so we should write to that path
+	// The identifier passed here should be the actual one found by readFileByIdentifier
+	actualPath := path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(string(identifier)))+".md")
+	return s.writeFileContent(actualPath, migratedContent)
+}
+
+// writeFileContent writes content to a file with proper error handling
+func (*Site) writeFileContent(filePath string, content []byte) error {
+	err := os.WriteFile(filePath, content, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to write migrated content to %s: %w", filePath, err)
+	}
+	return nil
 }
 
 // WriteMarkdown writes the markdown content for a page.
@@ -416,7 +487,7 @@ func (s *Site) ReadFrontMatter(identifier wikipage.PageIdentifier) (wikipage.Pag
 	}
 
 	var matter wikipage.FrontMatter
-	_, err = lenientParse(content, &matter)
+	_, err = s.lenientParse(content, &matter, identifier)
 	if err != nil {
 		if strings.Contains(err.Error(), "format not found") {
 			return identifier, make(wikipage.FrontMatter), nil
@@ -439,7 +510,7 @@ func (s *Site) ReadMarkdown(identifier wikipage.PageIdentifier) (wikipage.PageId
 	}
 
 	var dummy any
-	body, err := lenientParse(content, &dummy)
+	body, err := s.lenientParse(content, &dummy, identifier)
 	if err != nil {
 		if strings.Contains(err.Error(), "format not found") {
 			// No frontmatter found, the entire content is markdown.
