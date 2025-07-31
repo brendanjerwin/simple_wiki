@@ -400,9 +400,11 @@ func (s *Site) applyMigrations(content []byte, identifier wikipage.PageIdentifie
 		return content, nil
 	}
 	
-	// If migration was applied, save the migrated content
+	// If migration was applied, save the migrated content using normal page saving mechanism
+	// This ensures the migration appears in the page history like any other change
 	if !bytes.Equal(content, migratedContent) {
-		if saveErr := s.saveMigratedContent(identifier, migratedContent); saveErr != nil {
+		page := s.Open(string(identifier))
+		if saveErr := page.Update(string(migratedContent)); saveErr != nil {
 			s.Logger.Warn("Failed to save migrated content for %s: %v", identifier, saveErr)
 		} else {
 			s.Logger.Info("Successfully migrated and saved frontmatter for page: %s", identifier)
@@ -430,37 +432,6 @@ func (*Site) lenientParse(content []byte, matter any, _ wikipage.PageIdentifier)
 	return body, err
 }
 
-// saveMigratedContent saves the migrated content back to the .md file on disk
-func (s *Site) saveMigratedContent(identifier wikipage.PageIdentifier, migratedContent []byte) error {
-	mungedPath, originalPath, _ := s.getFilePathsForIdentifier(string(identifier), mdExtension)
-	
-	// Check if the munged file exists
-	if _, err := os.Stat(mungedPath); err == nil {
-		// Munged file exists, write to it
-		return s.writeFileContent(mungedPath, migratedContent)
-	}
-	
-	// Munged file doesn't exist, try original identifier (for older files)
-	if _, err := os.Stat(originalPath); err == nil {
-		// Original file exists, write to it
-		return s.writeFileContent(originalPath, migratedContent)
-	}
-	
-	// Neither exists, this is the case where lenientParse is called with the identifier
-	// that was returned by readFileByIdentifier, so we should write to that path
-	// The identifier passed here should be the actual one found by readFileByIdentifier
-	actualPath := path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(string(identifier)))+".md")
-	return s.writeFileContent(actualPath, migratedContent)
-}
-
-// writeFileContent writes content to a file with proper error handling
-func (*Site) writeFileContent(filePath string, content []byte) error {
-	err := os.WriteFile(filePath, content, 0644)
-	if err != nil {
-		return fmt.Errorf("failed to write migrated content to %s: %w", filePath, err)
-	}
-	return nil
-}
 
 // WriteMarkdown writes the markdown content for a page.
 func (s *Site) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Markdown) error {

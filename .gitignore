@@ -50,3 +50,9 @@ storybook-static
 # E2E test data directories
 e2e-test-data/
 test-manual-data/
+
+# Crush agent directory
+.crush
+
+# Crush configuration file
+CRUSH.md
