@@ -1,7 +1,9 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -14,8 +16,23 @@ import (
 	"github.com/brendanjerwin/simple_wiki/templating"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
+	"github.com/pelletier/go-toml/v2"
 	"github.com/schollz/versionedtext"
 )
+
+// ConfigurationError represents an application setup/configuration error
+type ConfigurationError struct {
+	Component string
+	Err       error
+}
+
+func (e *ConfigurationError) Error() string {
+	return fmt.Sprintf("configuration error in %s: %v", e.Component, e.Err)
+}
+
+func (e *ConfigurationError) Unwrap() error {
+	return e.Err
+}
 
 const nanosecondsPerSecond = 1000000000
 
@@ -94,6 +111,25 @@ func DecodeFileName(s string) string {
 
 // Update overwrites the page's content with newText, saves the change, and re-renders the page.
 func (p *Page) Update(newText string) error {
+	return p.updateInternal(newText, true)
+}
+
+// updateInternal provides internal update mechanism with migration control
+//revive:disable-next-line:flag-parameter withMigrations is intentionally used for recursion control
+func (p *Page) updateInternal(newText string, withMigrations bool) error {
+	// Apply migrations to fix user mistakes in real-time (but avoid recursion)
+	if withMigrations {
+		migratedContent, err := p.applyMigrations([]byte(newText))
+		if err != nil {
+			return fmt.Errorf("failed to apply migrations during save: %w", err)
+		}
+
+		// If migration changed the content, use the migrated version
+		if string(migratedContent) != newText {
+			newText = string(migratedContent)
+		}
+	}
+
 	// Update the versioned text
 	p.Text.Update(newText)
 
@@ -103,8 +139,129 @@ func (p *Page) Update(newText string) error {
 	return p.Save()
 }
 
+// applyMigrations applies frontmatter migrations to content and auto-saves if successful
+func (p *Page) applyMigrations(content []byte) ([]byte, error) {
+	if p == nil || p.Site == nil {
+		return nil, errors.New("page or site is nil")
+	}
+
+	// Error if no migration applicator is configured - this is an application setup mistake
+	if p.Site.MigrationApplicator == nil {
+		return nil, errors.New("migration applicator not configured: this is an application setup mistake")
+	}
+
+	migratedContent, err := p.Site.MigrationApplicator.ApplyMigrations(content)
+	if err != nil {
+		// Log migration failure but continue with original content
+		p.Site.Logger.Warn("Migration failed, using original content: %v", err)
+		return content, nil
+	}
+
+	// If migration was applied, save the migrated content using normal page saving mechanism
+	// This ensures the migration appears in the page history like any other change
+	if !bytes.Equal(content, migratedContent) {
+		// Use updateInternal with withMigrations=false to prevent recursive migration calls
+		if saveErr := p.updateInternal(string(migratedContent), false); saveErr != nil {
+			p.Site.Logger.Warn("Failed to save migrated content for %s: %v", p.Identifier, saveErr)
+		} else {
+			p.Site.Logger.Info("Successfully migrated and saved frontmatter for page: %s", p.Identifier)
+		}
+	}
+
+	return migratedContent, nil
+}
+
+// ReadFrontMatter reads the frontmatter for this page, applying migrations as needed.
+func (p *Page) ReadFrontMatter() (wikipage.FrontMatter, error) {
+	if p == nil || p.Site == nil {
+		return nil, errors.New("page or site is nil")
+	}
+
+	_, content, err := p.Site.readFileByIdentifier(wikipage.PageIdentifier(p.Identifier), mdExtension)
+	if err != nil {
+		return nil, err
+	}
+
+	// Apply migrations to the content
+	migratedContent, err := p.applyMigrations(content)
+	if err != nil {
+		return nil, err
+	}
+
+	var matter wikipage.FrontMatter
+	_, err = p.lenientParse(migratedContent, &matter)
+	if err != nil {
+		if strings.Contains(err.Error(), "format not found") {
+			return make(wikipage.FrontMatter), nil
+		}
+		return nil, err
+	}
+
+	if matter == nil {
+		return make(wikipage.FrontMatter), nil
+	}
+
+	return matter, nil
+}
+
+// ReadMarkdown reads the markdown content for this page, applying migrations as needed.
+func (p *Page) ReadMarkdown() (wikipage.Markdown, error) {
+	if p == nil || p.Site == nil {
+		return "", errors.New("page or site is nil")
+	}
+
+	_, content, err := p.Site.readFileByIdentifier(wikipage.PageIdentifier(p.Identifier), mdExtension)
+	if err != nil {
+		return "", err
+	}
+
+	// Apply migrations to the content
+	migratedContent, err := p.applyMigrations(content)
+	if err != nil {
+		return "", err
+	}
+
+	var dummy any
+	body, err := p.lenientParse(migratedContent, &dummy)
+	if err != nil {
+		if strings.Contains(err.Error(), "format not found") {
+			// No frontmatter found, the entire content is markdown.
+			return wikipage.Markdown(body), nil
+		}
+		return "", err // A real parsing error.
+	}
+
+	return wikipage.Markdown(body), nil
+}
+
+// lenientParse attempts to parse frontmatter with fallback for TOML/YAML conflicts
+func (*Page) lenientParse(content []byte, matter any) (body []byte, err error) {
+	body, err = adrgfrontmatter.Parse(bytes.NewReader(content), matter)
+	if err != nil {
+		var tomlErr *toml.DecodeError
+		// If it's a TOML parsing error and it has TOML delimiters, try to parse as YAML.
+		// `adrg/frontmatter` does not export its YAML/TOML parsing errors, so we have
+		// to rely on `go-toml`'s error type or string matching for the error.
+		if (errors.As(err, &tomlErr) || strings.Contains(err.Error(), "bare keys cannot contain")) &&
+			bytes.HasPrefix(content, []byte("+++")) {
+			// Replace TOML delimiters with YAML and try again
+			newContent := bytes.Replace(content, []byte("+++"), []byte("---"), 2)
+			body, err = adrgfrontmatter.Parse(bytes.NewReader(newContent), matter)
+		}
+	}
+
+	return body, err
+}
+
 func markdownToHTMLAndJSONFrontmatter(s string, site wikipage.PageReader, renderer IRenderMarkdownToHTML, query indexfrontmatter.IQueryFrontmatterIndex) (html []byte, matter []byte, err error) {
 	var markdownBytes []byte
+
+	if renderer == nil {
+		return nil, nil, &ConfigurationError{
+			Component: "MarkdownRenderer",
+			Err:       errors.New("renderer is not initialized"),
+		}
+	}
 
 	matterMap := &map[string]any{}
 	markdownBytes, err = adrgfrontmatter.Parse(strings.NewReader(s), &matterMap)

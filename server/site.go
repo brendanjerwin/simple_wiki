@@ -15,10 +15,10 @@ import (
 	"sync"
 	"time"
 
-	adrgfrontmatter "github.com/adrg/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/index"
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
+	"github.com/brendanjerwin/simple_wiki/rollingmigrations"
 	"github.com/brendanjerwin/simple_wiki/sec"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
@@ -52,10 +52,14 @@ type Site struct {
 	IndexMaintainer         index.IMaintainIndex
 	FrontmatterIndexQueryer frontmatter.IQueryFrontmatterIndex
 	BleveIndexQueryer       bleve.IQueryBleveIndex
+	MigrationApplicator     rollingmigrations.FrontmatterMigrationApplicator
 	saveMut                 sync.Mutex
 }
 
-const tomlDelimiter = "+++\n"
+const (
+	tomlDelimiter = "+++\n"
+	mdExtension   = "md"
+)
 
 func (s *Site) defaultLock() string {
 	if s.DefaultPassword == "" {
@@ -100,6 +104,13 @@ func (s *Site) InitializeIndexing() error {
 	files := s.DirectoryList()
 	for _, file := range files {
 		if err := s.IndexMaintainer.AddPageToIndex(file.Name()); err != nil {
+			// Check for application setup errors that should prevent startup
+			var configErr *ConfigurationError
+			if errors.As(err, &configErr) {
+				s.Logger.Error("Application configuration error during initialization: %v", err)
+				return fmt.Errorf("failed to initialize due to configuration error: %w", err)
+			}
+			// Log individual page errors but continue with other pages
 			s.Logger.Error("Failed to add page '%s' to index during initialization: %v", file.Name(), err)
 		}
 	}
@@ -111,16 +122,26 @@ func (s *Site) InitializeIndexing() error {
 
 // --- Site methods moved from page.go ---
 
-func (s *Site) readFileByIdentifier(identifier, extension string) (string, []byte, error) {
-	// First try with the munged identifier
+// getFilePathsForIdentifier returns the munged and original file paths for an identifier
+func (s *Site) getFilePathsForIdentifier(identifier, extension string) (mungedPath, originalPath, actualIdentifier string) {
 	mungedIdentifier := wikiidentifiers.MungeIdentifier(identifier)
-	b, err := os.ReadFile(path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(mungedIdentifier))+"."+extension))
+	mungedPath = path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(mungedIdentifier))+"."+extension)
+	originalPath = path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(identifier))+"."+extension)
+	actualIdentifier = mungedIdentifier
+	return mungedPath, originalPath, actualIdentifier
+}
+
+func (s *Site) readFileByIdentifier(identifier, extension string) (string, []byte, error) {
+	mungedPath, originalPath, mungedIdentifier := s.getFilePathsForIdentifier(identifier, extension)
+
+	// First try with the munged identifier
+	b, err := os.ReadFile(mungedPath)
 	if err == nil {
 		return mungedIdentifier, b, nil
 	}
 
 	// Then try with the original identifier if that didn't work (older files)
-	b, err = os.ReadFile(path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(identifier))+"."+extension))
+	b, err = os.ReadFile(originalPath)
 	if err == nil {
 		return identifier, b, nil
 	}
@@ -156,7 +177,7 @@ func (s *Site) Open(requestedIdentifier string) (p *Page) {
 	}
 
 	// JSON file not found, try to load from .md file.
-	identifier, mdBytes, err := s.readFileByIdentifier(requestedIdentifier, "md")
+	identifier, mdBytes, err := s.readFileByIdentifier(requestedIdentifier, mdExtension)
 	if err != nil {
 		return p // Return empty page object
 	}
@@ -371,23 +392,6 @@ func (s *Site) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.
 	return p.Update(newText)
 }
 
-func lenientParse(content []byte, matter any) (body []byte, err error) {
-	body, err = adrgfrontmatter.Parse(bytes.NewReader(content), matter)
-	if err != nil {
-		var tomlErr *toml.DecodeError
-		// If it's a TOML parsing error and it has TOML delimiters, try to parse as YAML.
-		// `adrg/frontmatter` does not export its YAML/TOML parsing errors, so we have
-		// to rely on `go-toml`'s error type or string matching for the error.
-		if (errors.As(err, &tomlErr) || strings.Contains(err.Error(), "bare keys cannot contain")) &&
-			bytes.HasPrefix(content, []byte("+++")) {
-			// Replace TOML delimiters with YAML and try again
-			newContent := bytes.Replace(content, []byte("+++"), []byte("---"), 2)
-			body, err = adrgfrontmatter.Parse(bytes.NewReader(newContent), matter)
-			return body, err
-		}
-	}
-	return body, err
-}
 
 // WriteMarkdown writes the markdown content for a page.
 func (s *Site) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Markdown) error {
@@ -410,45 +414,22 @@ func (s *Site) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Mar
 
 // ReadFrontMatter reads the frontmatter for a page.
 func (s *Site) ReadFrontMatter(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
-	identifier, content, err := s.readFileByIdentifier(identifier, "md")
+	page := s.Open(string(identifier))
+	matter, err := page.ReadFrontMatter()
 	if err != nil {
 		return identifier, nil, err
 	}
-
-	var matter wikipage.FrontMatter
-	_, err = lenientParse(content, &matter)
-	if err != nil {
-		if strings.Contains(err.Error(), "format not found") {
-			return identifier, make(wikipage.FrontMatter), nil
-		}
-		return identifier, nil, err
-	}
-
-	if matter == nil {
-		return identifier, make(wikipage.FrontMatter), nil
-	}
-
 	return identifier, matter, nil
 }
 
 // ReadMarkdown reads the markdown content for a page.
 func (s *Site) ReadMarkdown(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
-	identifier, content, err := s.readFileByIdentifier(identifier, "md")
+	page := s.Open(string(identifier))
+	markdown, err := page.ReadMarkdown()
 	if err != nil {
 		return identifier, "", err
 	}
-
-	var dummy any
-	body, err := lenientParse(content, &dummy)
-	if err != nil {
-		if strings.Contains(err.Error(), "format not found") {
-			// No frontmatter found, the entire content is markdown.
-			return identifier, wikipage.Markdown(body), nil
-		}
-		return identifier, "", err // A real parsing error.
-	}
-
-	return identifier, wikipage.Markdown(body), nil
+	return identifier, markdown, nil
 }
 
 // DeletePage deletes a page from disk.
