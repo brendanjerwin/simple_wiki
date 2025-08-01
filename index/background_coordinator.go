@@ -248,8 +248,28 @@ func (b *BackgroundIndexingCoordinator) GetProgress() IndexingProgress {
 	totalQueueDepth := b.calculateTotalQueueDepth()
 	overallCompleted := b.calculateOverallCompleted()
 	
+	// Check if indexing should automatically transition to completed
+	// This needs to be done with minimal impact on the existing logic
+	isRunning := b.isRunning
+	if b.isRunning && b.totalPages > 0 && totalQueueDepth == 0 && overallCompleted >= b.totalPages {
+		// We need to update the state, but do it in a way that doesn't interfere with timing calculations
+		// Use a deferred goroutine to update the state after this function returns
+		go func() {
+			b.mu.Lock()
+			defer b.mu.Unlock()
+			// Double-check conditions under write lock
+			if b.isRunning && b.totalPages > 0 && 
+			   b.calculateTotalQueueDepth() == 0 && 
+			   b.calculateOverallCompleted() >= b.totalPages {
+				b.isRunning = false
+			}
+		}()
+		// For this call, we still return false to reflect the completed state
+		isRunning = false
+	}
+	
 	progress := IndexingProgress{
-		IsRunning:      b.isRunning,
+		IsRunning:      isRunning,
 		TotalPages:     b.totalPages,
 		CompletedPages: overallCompleted,
 		QueueDepth:     totalQueueDepth,

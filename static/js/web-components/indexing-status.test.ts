@@ -147,6 +147,72 @@ describe('SystemInfoIndexing', () => {
       const indexItems = perIndexProgress!.querySelectorAll('.index-item');
       expect(indexItems).to.have.lengthOf(2);
     });
+
+    it('should sort index progress rows alphabetically by name', () => {
+      const perIndexProgress = el.shadowRoot!.querySelector('.per-index-progress');
+      expect(perIndexProgress).to.exist;
+      
+      const indexItems = perIndexProgress!.querySelectorAll('.index-item');
+      const indexNames = Array.from(indexItems).map(item => 
+        item.querySelector('.index-name')!.textContent
+      );
+      
+      // Should be sorted: 'bleve' comes before 'frontmatter' alphabetically
+      expect(indexNames).to.deep.equal(['bleve', 'frontmatter']);
+    });
+  });
+
+  describe('when indexing has mixed order index names', () => {
+    beforeEach(async () => {
+      // Create indexes in a non-alphabetical order to test sorting
+      const zebra = new SingleIndexProgress({
+        name: 'zebra',
+        completed: 10,
+        total: 100,
+        processingRatePerSecond: 5.0,
+        lastError: undefined
+      });
+
+      const alpha = new SingleIndexProgress({
+        name: 'alpha',
+        completed: 20,
+        total: 100,
+        processingRatePerSecond: 3.0,
+        lastError: undefined
+      });
+
+      const beta = new SingleIndexProgress({
+        name: 'beta',
+        completed: 30,
+        total: 100,
+        processingRatePerSecond: 7.0,
+        lastError: undefined
+      });
+
+      el.loading = false;
+      el.status = new GetIndexingStatusResponse({
+        isRunning: true,
+        totalPages: 100,
+        completedPages: 10,
+        queueDepth: 90,
+        processingRatePerSecond: 5.0,
+        indexProgress: [zebra, alpha, beta] // Deliberately unsorted
+      });
+      await el.updateComplete;
+    });
+
+    it('should sort all index names alphabetically regardless of input order', () => {
+      const perIndexProgress = el.shadowRoot!.querySelector('.per-index-progress');
+      expect(perIndexProgress).to.exist;
+      
+      const indexItems = perIndexProgress!.querySelectorAll('.index-item');
+      const indexNames = Array.from(indexItems).map(item => 
+        item.querySelector('.index-name')!.textContent
+      );
+      
+      // Should be sorted: alpha, beta, zebra
+      expect(indexNames).to.deep.equal(['alpha', 'beta', 'zebra']);
+    });
   });
 
   describe('when indexing is idle', () => {

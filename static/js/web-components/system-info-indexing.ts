@@ -233,7 +233,10 @@ export class SystemInfoIndexing extends LitElement {
         <!-- Per-index progress inline (no dropdown) -->
         ${this.status.indexProgress && this.status.indexProgress.length > 1 ? html`
           <div class="per-index-progress">
-            ${this.status.indexProgress.map(index => {
+            ${this.status.indexProgress
+              .slice() // Create a copy to avoid mutating the original
+              .sort((a, b) => a.name.localeCompare(b.name)) // Sort alphabetically
+              .map(index => {
               const indexProgress = this.calculateProgress(index.completed, index.total);
               const isIndexComplete = indexProgress === 100;
               const hasError = index.lastError && index.lastError.trim() !== '';

@@ -284,6 +284,41 @@ var _ = Describe("BackgroundIndexingCoordinator", func() {
 				Expect(progress.IsRunning).To(BeFalse())
 			})
 		})
+
+		When("all indexing work completes naturally", func() {
+			var progress index.IndexingProgress
+
+			BeforeEach(func() {
+				// Use a controllable mock that can signal completion
+				controllableMock1 := &MockIndexMaintainer{IndexName: "index1"}
+				controllableMock2 := &MockIndexMaintainer{IndexName: "index2"}
+				controlMaintainer := index.NewMultiMaintainer(controllableMock1, controllableMock2)
+				
+				workerConfigs := []index.IndexWorkerConfig{
+					{IndexName: "index1", WorkerCount: 1},
+					{IndexName: "index2", WorkerCount: 1},
+				}
+				coordinator = index.NewBackgroundIndexingCoordinator(controlMaintainer, logger, workerConfigs)
+
+				err := coordinator.StartBackground(testPages)
+				Expect(err).NotTo(HaveOccurred())
+
+				// Wait for all work to complete naturally (all queues empty, all pages processed)
+				Eventually(func() bool {
+					progress = coordinator.GetProgress()
+					return progress.CompletedPages == len(testPages) && 
+						   progress.QueueDepth == 0
+				}, 10*time.Second, 100*time.Millisecond).Should(BeTrue())
+
+				// Give the coordinator a moment to detect completion
+				time.Sleep(200 * time.Millisecond)
+				progress = coordinator.GetProgress()
+			})
+
+			It("should automatically transition to not running", func() {
+				Expect(progress.IsRunning).To(BeFalse())
+			})
+		})
 	})
 
 	Describe("GetProgress", func() {
@@ -314,10 +349,31 @@ var _ = Describe("BackgroundIndexingCoordinator", func() {
 
 		When("indexing is in progress", func() {
 			BeforeEach(func() {
+				// Use slow mock to ensure indexing stays "in progress"
+				slowMock1 := &MockIndexMaintainer{IndexName: "index1"}
+				slowMock2 := &MockIndexMaintainer{IndexName: "index2"}
+				
+				// Make the mocks process very slowly to keep indexing "in progress"
+				slowMock1.AddPageToIndexFunc = func(identifier wikipage.PageIdentifier) error {
+					time.Sleep(200 * time.Millisecond) // Slow processing
+					return nil
+				}
+				slowMock2.AddPageToIndexFunc = func(identifier wikipage.PageIdentifier) error {
+					time.Sleep(150 * time.Millisecond) // Slow processing
+					return nil
+				}
+				
+				slowMaintainer := index.NewMultiMaintainer(slowMock1, slowMock2)
+				workerConfigs := []index.IndexWorkerConfig{
+					{IndexName: "index1", WorkerCount: 1},
+					{IndexName: "index2", WorkerCount: 1},
+				}
+				coordinator = index.NewBackgroundIndexingCoordinator(slowMaintainer, logger, workerConfigs)
+
 				err := coordinator.StartBackground(testPages)
 				Expect(err).NotTo(HaveOccurred())
 				
-				// Wait for some progress
+				// Wait for some progress but not completion
 				Eventually(func() int {
 					progress := coordinator.GetProgress()
 					return progress.CompletedPages
@@ -340,11 +396,44 @@ var _ = Describe("BackgroundIndexingCoordinator", func() {
 
 	Describe("Per-Index Progress Tracking", func() {
 		When("pages are processed", func() {
+			var progressDuringProcessing index.IndexingProgress
+
 			BeforeEach(func() {
+				// Use slow mock to ensure we can capture progress while running
+				slowMock1 := &MockIndexMaintainer{IndexName: "index1"}
+				slowMock2 := &MockIndexMaintainer{IndexName: "index2"}
+				
+				// Make the mocks process slowly to keep indexing "in progress"
+				slowMock1.AddPageToIndexFunc = func(identifier wikipage.PageIdentifier) error {
+					time.Sleep(300 * time.Millisecond) // Slow processing
+					return nil
+				}
+				slowMock2.AddPageToIndexFunc = func(identifier wikipage.PageIdentifier) error {
+					time.Sleep(250 * time.Millisecond) // Slow processing
+					return nil
+				}
+				
+				slowMaintainer := index.NewMultiMaintainer(slowMock1, slowMock2)
+				workerConfigs := []index.IndexWorkerConfig{
+					{IndexName: "index1", WorkerCount: 1},
+					{IndexName: "index2", WorkerCount: 1},
+				}
+				coordinator = index.NewBackgroundIndexingCoordinator(slowMaintainer, logger, workerConfigs)
+
 				err := coordinator.StartBackground(testPages)
 				Expect(err).NotTo(HaveOccurred())
 				
-				// Wait for processing to complete
+				// Wait for some processing to happen but capture progress while still running
+				Eventually(func() bool {
+					progress := coordinator.GetProgress()
+					if progress.CompletedPages > 0 && progress.IsRunning {
+						progressDuringProcessing = progress
+						return true
+					}
+					return false
+				}, 5*time.Second, 100*time.Millisecond).Should(BeTrue())
+				
+				// Now wait for processing to complete
 				Eventually(func() int {
 					progress := coordinator.GetProgress()
 					return progress.CompletedPages
@@ -352,23 +441,23 @@ var _ = Describe("BackgroundIndexingCoordinator", func() {
 			})
 
 			It("should track progress for each individual index", func() {
-				progress := coordinator.GetProgress()
-				Expect(progress.IndexProgress).To(HaveLen(2))
+				// Use progress captured while still running to verify processing rates
+				Expect(progressDuringProcessing.IndexProgress).To(HaveLen(2))
 
 				// Check index1 progress
-				index1Progress, exists := progress.IndexProgress["index1"]
+				index1Progress, exists := progressDuringProcessing.IndexProgress["index1"]
 				Expect(exists).To(BeTrue())
 				Expect(index1Progress.Name).To(Equal("index1"))
-				Expect(index1Progress.Completed).To(Equal(len(testPages)))
+				Expect(index1Progress.Completed).To(BeNumerically(">", 0))
 				Expect(index1Progress.Total).To(Equal(len(testPages)))
 				Expect(index1Progress.ProcessingRatePerSecond).To(BeNumerically(">", 0))
 				Expect(index1Progress.LastError).To(BeNil())
 
 				// Check index2 progress
-				index2Progress, exists := progress.IndexProgress["index2"]
+				index2Progress, exists := progressDuringProcessing.IndexProgress["index2"]
 				Expect(exists).To(BeTrue())
 				Expect(index2Progress.Name).To(Equal("index2"))
-				Expect(index2Progress.Completed).To(Equal(len(testPages)))
+				Expect(index2Progress.Completed).To(BeNumerically(">", 0))
 				Expect(index2Progress.Total).To(Equal(len(testPages)))
 				Expect(index2Progress.ProcessingRatePerSecond).To(BeNumerically(">", 0))
 				Expect(index2Progress.LastError).To(BeNil())
