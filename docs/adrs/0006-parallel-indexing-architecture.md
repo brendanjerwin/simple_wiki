@@ -70,26 +70,61 @@ type BackgroundIndexingCoordinator struct {
 
 The coordinator wraps the existing `MultiMaintainer` and implements the same `IMaintainIndex` interface for backward compatibility.
 
-#### Worker Pool Implementation
+#### Per-Index Worker Pool Implementation
 
-- **Configurable Concurrency**: Default to `runtime.NumCPU()` workers, configurable via CLI
-- **Work Queue**: Channel-based distribution of page identifiers to workers
+**IMPLEMENTATION NOTE**: The final architecture uses **separate worker pools per index type** rather than a single shared pool. This critical enhancement addresses throughput isolation between fast indexes (frontmatter) and slow indexes (AI embeddings).
+
+- **Per-Index Queues**: Each index type gets its own worker pool and queue
+- **Configurable Workers Per Index**: Independent worker counts per index type (e.g., frontmatter: 4 workers, embeddings: 1 worker)
+- **Throughput Isolation**: Fast indexes are never blocked by slow ones
 - **Error Isolation**: Individual page failures don't stop other processing
-- **Graceful Shutdown**: Workers can be stopped cleanly during application shutdown
+- **Graceful Shutdown**: All worker pools can be stopped cleanly during application shutdown
+
+```go
+type indexWorkerPool struct {
+    indexName     string
+    maintainer    IMaintainIndex
+    workQueue     chan wikipage.PageIdentifier
+    workerCount   int
+    wg            sync.WaitGroup
+    logger        lumber.Logger
+}
+
+type IndexWorkerConfig struct {
+    IndexName   string
+    WorkerCount int
+}
+```
 
 #### Progress Tracking
 
-Multi-index progress monitoring across all index types:
+Multi-index progress monitoring across all index types with per-index detail:
 
 ```go
 type IndexingProgress struct {
-    OverallProgress    float64
-    IndexProgress      map[string]IndexProgress  // "frontmatter", "bleve", "vector"
-    QueueDepth         int
-    ProcessingRate     float64
+    IsRunning           bool
+    TotalPages          int
+    CompletedPages      int  // Minimum across all indexes
+    QueueDepth          int  // Sum across all index queues
+    ProcessingRatePerSecond float64
     EstimatedCompletion *time.Duration
+    IndexProgress       map[string]SingleIndexProgress
+}
+
+type SingleIndexProgress struct {
+    Name                string
+    Completed           int
+    Total               int
+    ProcessingRatePerSecond float64
+    LastError           *string
 }
 ```
+
+**Key Implementation Details**:
+- Overall progress calculated as minimum completion across all indexes
+- Individual error tracking per index type
+- Thread-safe concurrent access with RWMutex
+- Completion estimation based on slowest index
 
 ### Integration Points
 
@@ -104,10 +139,15 @@ func (s *Site) InitializeIndexing() error {
         return err
     }
     
-    // Create background coordinator instead of direct MultiMaintainer
-    backgroundCoordinator := NewBackgroundIndexingCoordinator(
+    // Create background coordinator with per-index worker configuration
+    workerConfigs := []index.IndexWorkerConfig{
+        {IndexName: "frontmatter", WorkerCount: runtime.NumCPU()},
+        {IndexName: "bleve", WorkerCount: runtime.NumCPU()},
+    }
+    backgroundCoordinator := index.NewBackgroundIndexingCoordinator(
         index.NewMultiMaintainer(frontmatterIndex, bleveIndex),
         s.Logger,
+        workerConfigs,
     )
     
     s.IndexMaintainer = backgroundCoordinator
@@ -120,9 +160,14 @@ func (s *Site) InitializeIndexing() error {
 
 #### System Monitoring
 
-- **gRPC Service Extension**: Add indexing status to existing system info service
-- **UI Progress Display**: Visual progress indicators for all index types
-- **Health Checks**: Application health independent of indexing status
+**IMPLEMENTATION**: Complete gRPC API and UI implementation delivered:
+
+- **gRPC SystemInfoService**: Extended with `GetIndexingStatus()` endpoint
+- **Real-time Progress API**: Returns detailed per-index progress, rates, and errors
+- **SystemInfo UI Component**: Bottom-right overlay with version and indexing status
+- **Auto-refresh Behavior**: 2-second intervals during active indexing, 10-second when idle
+- **Responsive UI States**: Loading, idle, active, complete, and error states
+- **Per-index Detail View**: Expandable progress breakdown with error messages
 
 ### Future RAG Integration
 
