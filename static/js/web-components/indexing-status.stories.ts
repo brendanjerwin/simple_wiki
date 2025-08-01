@@ -1,14 +1,15 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Meta, StoryObj } from '@storybook/web-components-vite';
 import { html } from 'lit';
-import { action } from '@storybook/addon-actions';
-import './indexing-status.js';
-import { IndexingStatus } from './indexing-status.js';
+import './system-info-indexing.js';
+import { SystemInfoIndexing } from './system-info-indexing.js';
 import { GetIndexingStatusResponse, SingleIndexProgress } from '../gen/api/v1/system_info_pb.js';
 import { Timestamp } from '@bufbuild/protobuf';
+import { stub } from 'sinon';
 
 const meta: Meta = {
-  title: 'Components/IndexingStatus',
-  component: 'indexing-status',
+  title: 'Components/SystemInfoIndexing',
+  component: 'system-info-indexing',
   parameters: {
     layout: 'padded',
     docs: {
@@ -24,13 +25,43 @@ export default meta;
 type Story = StoryObj;
 
 export const Default: Story = {
-  render: () => html`
-    <indexing-status></indexing-status>
-  `,
+  render: () => {
+    const el = document.createElement('system-info-indexing') as SystemInfoIndexing;
+    
+    
+    // Set up realistic default data
+    const frontmatterIndex = new SingleIndexProgress({
+      name: 'frontmatter',
+      completed: 450,
+      total: 500,
+      processingRatePerSecond: 25.3,
+      lastError: undefined
+    });
+
+    const bleveIndex = new SingleIndexProgress({
+      name: 'bleve',
+      completed: 380,
+      total: 500,
+      processingRatePerSecond: 18.7,
+      lastError: undefined
+    });
+
+    el.loading = false;
+    el.status = new GetIndexingStatusResponse({
+      isRunning: true,
+      totalPages: 500,
+      completedPages: 380, // Limited by slowest index
+      queueDepth: 120,
+      processingRatePerSecond: 22.0,
+      indexProgress: [frontmatterIndex, bleveIndex]
+    });
+    
+    return el;
+  },
   parameters: {
     docs: {
       description: {
-        story: 'Default indexing status component that will fetch real data from the server.',
+        story: 'Default indexing status component with stubbed data showing per-index progress bars.',
       },
     },
   },
@@ -38,7 +69,13 @@ export const Default: Story = {
 
 export const Loading: Story = {
   render: () => {
-    const el = document.createElement('indexing-status') as IndexingStatus;
+    const el = document.createElement('system-info-indexing') as SystemInfoIndexing;
+    
+    // Stub API calls to prevent network requests
+    stub(el, 'loadStatus' as any).resolves();
+    stub(el, 'startAutoRefresh' as any);
+    stub(el, 'stopAutoRefresh' as any);
+    
     el.loading = true;
     el.status = undefined;
     return el;
@@ -54,7 +91,13 @@ export const Loading: Story = {
 
 export const Idle: Story = {
   render: () => {
-    const el = document.createElement('indexing-status') as IndexingStatus;
+    const el = document.createElement('system-info-indexing') as SystemInfoIndexing;
+    
+    // Stub API calls to prevent network requests
+    stub(el, 'loadStatus' as any).resolves();
+    stub(el, 'startAutoRefresh' as any);
+    stub(el, 'stopAutoRefresh' as any);
+    
     el.loading = false;
     el.status = new GetIndexingStatusResponse({
       isRunning: false,
@@ -77,7 +120,12 @@ export const Idle: Story = {
 
 export const ActiveIndexing: Story = {
   render: () => {
-    const el = document.createElement('indexing-status') as IndexingStatus;
+    const el = document.createElement('system-info-indexing') as SystemInfoIndexing;
+    
+    // Stub API calls to prevent network requests
+    stub(el, 'loadStatus' as any).resolves();
+    stub(el, 'startAutoRefresh' as any);
+    stub(el, 'stopAutoRefresh' as any);
     
     // Create mock timestamp 5 minutes from now
     const mockTimestamp = new Timestamp({
@@ -125,7 +173,12 @@ export const ActiveIndexing: Story = {
 
 export const WithErrors: Story = {
   render: () => {
-    const el = document.createElement('indexing-status') as IndexingStatus;
+    const el = document.createElement('system-info-indexing') as SystemInfoIndexing;
+    
+    // Stub API calls to prevent network requests
+    stub(el, 'loadStatus' as any).resolves();
+    stub(el, 'startAutoRefresh' as any);
+    stub(el, 'stopAutoRefresh' as any);
     
     const workingIndex = new SingleIndexProgress({
       name: 'frontmatter',
@@ -166,7 +219,12 @@ export const WithErrors: Story = {
 
 export const SlowIndexing: Story = {
   render: () => {
-    const el = document.createElement('indexing-status') as IndexingStatus;
+    const el = document.createElement('system-info-indexing') as SystemInfoIndexing;
+    
+    // Stub API calls to prevent network requests
+    stub(el, 'loadStatus' as any).resolves();
+    stub(el, 'startAutoRefresh' as any);
+    stub(el, 'stopAutoRefresh' as any);
     
     // Create mock timestamp 2 hours from now
     const mockTimestamp = new Timestamp({
@@ -214,7 +272,12 @@ export const SlowIndexing: Story = {
 
 export const Complete: Story = {
   render: () => {
-    const el = document.createElement('indexing-status') as IndexingStatus;
+    const el = document.createElement('system-info-indexing') as SystemInfoIndexing;
+    
+    // Stub API calls to prevent network requests
+    stub(el, 'loadStatus' as any).resolves();
+    stub(el, 'startAutoRefresh' as any);
+    stub(el, 'stopAutoRefresh' as any);
     
     const index1 = new SingleIndexProgress({
       name: 'frontmatter',
@@ -232,6 +295,14 @@ export const Complete: Story = {
       lastError: undefined
     });
 
+    const index3 = new SingleIndexProgress({
+      name: 'embeddings',
+      completed: 1000,
+      total: 1000,
+      processingRatePerSecond: 0,
+      lastError: undefined
+    });
+
     el.loading = false;
     el.status = new GetIndexingStatusResponse({
       isRunning: false,
@@ -239,7 +310,7 @@ export const Complete: Story = {
       completedPages: 1000,
       queueDepth: 0,
       processingRatePerSecond: 0,
-      indexProgress: [index1, index2]
+      indexProgress: [index1, index2, index3]
     });
     
     return el;
@@ -255,7 +326,13 @@ export const Complete: Story = {
 
 export const ErrorState: Story = {
   render: () => {
-    const el = document.createElement('indexing-status') as IndexingStatus;
+    const el = document.createElement('system-info-indexing') as SystemInfoIndexing;
+    
+    // Stub API calls to prevent network requests
+    stub(el, 'loadStatus' as any).resolves();
+    stub(el, 'startAutoRefresh' as any);
+    stub(el, 'stopAutoRefresh' as any);
+    
     el.loading = false;
     el.error = 'Failed to connect to indexing service';
     return el;
@@ -269,21 +346,146 @@ export const ErrorState: Story = {
   },
 };
 
-export const InteractiveDemo: Story = {
-  render: () => html`
-    <div style="padding: 20px; background: #f0f8ff;">
-      <h3>Indexing Status Component Demo</h3>
-      <p>This component automatically refreshes every 2 seconds when indexing is active, and every 10 seconds when idle.</p>
-      <indexing-status></indexing-status>
-      <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
-        The component will fetch real data from the server. Open the browser developer tools console to see any network requests.
-      </p>
-    </div>
-  `,
+export const MultipleIndexTypes: Story = {
+  render: () => {
+    const el = document.createElement('system-info-indexing') as SystemInfoIndexing;
+    
+    // Stub API calls to prevent network requests
+    stub(el, 'loadStatus' as any).resolves();
+    stub(el, 'startAutoRefresh' as any);
+    stub(el, 'stopAutoRefresh' as any);
+    
+    // Create mock timestamp 15 minutes from now
+    const mockTimestamp = new Timestamp({
+      seconds: BigInt(Math.floor((Date.now() + 900000) / 1000)),
+      nanos: 0
+    });
+
+    // Demonstrate different progress levels for each index type
+    const frontmatterIndex = new SingleIndexProgress({
+      name: 'frontmatter',
+      completed: 2800,
+      total: 3000,
+      processingRatePerSecond: 85.3,
+      lastError: undefined
+    });
+
+    const bleveIndex = new SingleIndexProgress({
+      name: 'bleve',
+      completed: 1950,
+      total: 3000,
+      processingRatePerSecond: 22.1,
+      lastError: undefined
+    });
+
+    const embeddingsIndex = new SingleIndexProgress({
+      name: 'ai-embeddings',
+      completed: 450,
+      total: 3000,
+      processingRatePerSecond: 1.2, // Very slow AI processing
+      lastError: undefined
+    });
+
+    const vectorIndex = new SingleIndexProgress({
+      name: 'vector-search',
+      completed: 750,
+      total: 3000,
+      processingRatePerSecond: 3.8,
+      lastError: undefined
+    });
+
+    el.loading = false;
+    el.status = new GetIndexingStatusResponse({
+      isRunning: true,
+      totalPages: 3000,
+      completedPages: 450, // Limited by slowest index (embeddings)
+      queueDepth: 2550,
+      processingRatePerSecond: 28.1,
+      estimatedCompletion: mockTimestamp,
+      indexProgress: [frontmatterIndex, bleveIndex, embeddingsIndex, vectorIndex]
+    });
+    
+    return el;
+  },
   parameters: {
     docs: {
       description: {
-        story: 'Interactive demo that connects to the real indexing status API. Use this to test the component with live data.',
+        story: 'Shows multiple index types with different progress levels, demonstrating how separate queues allow each index to progress independently. Notice how the fast frontmatter index is nearly complete while AI-powered indexes are still processing.',
+      },
+    },
+  },
+};
+
+export const InteractiveDemo: Story = {
+  render: () => {
+    const el = document.createElement('system-info-indexing') as SystemInfoIndexing;
+    
+    // For interactive demo, we'll use a more realistic stubbed scenario
+    // instead of real API calls to prevent 404 errors
+    stub(el, 'loadStatus' as any).callsFake(async () => {
+      // Simulate loading time
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Set up dynamic demo data
+      const frontmatterIndex = new SingleIndexProgress({
+        name: 'frontmatter',
+        completed: Math.floor(Math.random() * 100) + 400,
+        total: 500,
+        processingRatePerSecond: Math.random() * 50 + 20,
+        lastError: undefined
+      });
+
+      const bleveIndex = new SingleIndexProgress({
+        name: 'bleve',
+        completed: Math.floor(Math.random() * 150) + 250,
+        total: 500,
+        processingRatePerSecond: Math.random() * 20 + 10,
+        lastError: undefined
+      });
+
+      el.status = new GetIndexingStatusResponse({
+        isRunning: Math.random() > 0.3,
+        totalPages: 500,
+        completedPages: Math.min(frontmatterIndex.completed, bleveIndex.completed),
+        queueDepth: Math.floor(Math.random() * 100) + 50,
+        processingRatePerSecond: Math.random() * 30 + 15,
+        indexProgress: [frontmatterIndex, bleveIndex]
+      });
+      
+      el.loading = false;
+      el.requestUpdate();
+    });
+    
+    // Allow auto-refresh to work with stubbed data
+    stub(el, 'startAutoRefresh' as any).callsFake(() => {
+      // Call loadStatus periodically with stubbed data
+      const interval = setInterval(() => {
+        if (el.isConnected) {
+          (el as any).loadStatus();
+        } else {
+          clearInterval(interval);
+        }
+      }, 3000); // Refresh every 3 seconds for demo
+    });
+    
+    stub(el, 'stopAutoRefresh' as any);
+    
+    return html`
+      <div style="padding: 20px; background: #f0f8ff;">
+        <h3>Interactive Indexing Status Demo</h3>
+        <p>This component demonstrates stubbed auto-refresh behavior with randomized progress data.</p>
+        <p><strong>Per-Index Progress:</strong> Click on "Per-Index Progress" to see individual progress bars for each index type.</p>
+        ${el}
+        <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
+          Demo refreshes every 3 seconds with simulated progress updates. No real API calls are made.
+        </p>
+      </div>
+    `;
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Interactive demo with stubbed auto-refresh behavior. Shows per-index progress bars and simulates realistic indexing scenarios without making API calls.',
       },
     },
   },

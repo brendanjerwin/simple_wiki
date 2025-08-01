@@ -3,8 +3,9 @@ import { createClient } from '@connectrpc/connect';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import { SystemInfoService } from '../gen/api/v1/system_info_connect.js';
 import { GetVersionRequest, GetVersionResponse, GetIndexingStatusRequest, GetIndexingStatusResponse } from '../gen/api/v1/system_info_pb.js';
-import { Timestamp } from '@bufbuild/protobuf';
 import { foundationCSS } from './shared-styles.js';
+import './system-info-indexing.js';
+import './system-info-version.js';
 
 export class SystemInfo extends LitElement {
   static readonly DEBOUNCE_DELAY = 300;
@@ -62,113 +63,11 @@ export class SystemInfo extends LitElement {
         pointer-events: none;
       }
 
-      .version-info {
-        display: flex;
-        flex-direction: row;
-        align-items: center;
-        gap: 12px;
-      }
 
-      .version-row {
-        display: flex;
-        align-items: center;
-        white-space: nowrap;
-      }
-
-      .indexing-info {
-        display: flex;
-        flex-direction: column;
-        gap: 2px;
+      system-info-indexing {
         border-top: 1px solid #404040;
         padding-top: 4px;
         margin-top: 2px;
-      }
-
-      .indexing-header {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-      }
-
-      .status-indicator {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: #28a745;
-        animation: pulse 2s infinite;
-      }
-
-      .status-indicator.idle {
-        background: #6c757d;
-        animation: none;
-      }
-
-      @keyframes pulse {
-        0% { opacity: 1; }
-        50% { opacity: 0.5; }
-        100% { opacity: 1; }
-      }
-
-      .indexing-stats {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 10px;
-      }
-
-      .progress-compact {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-      }
-
-      .progress-bar-mini {
-        width: 40px;
-        height: 3px;
-        background: #404040;
-        border-radius: 2px;
-        overflow: hidden;
-      }
-
-      .progress-fill-mini {
-        height: 100%;
-        background: #28a745;
-        transition: width 0.3s ease;
-        border-radius: 2px;
-      }
-
-      .label {
-        font-weight: bold;
-        color: white;
-        margin-right: 4px;
-      }
-
-      .value {
-        font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
-        color: #ccc;
-        font-size: 10px;
-      }
-
-      .commit {
-        max-width: 120px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
-
-      .error {
-        color: #ff6b6b;
-      }
-
-      .loading {
-        color: #ccc;
-      }
-
-      .rate {
-        color: #adb5bd;
-      }
-
-      .queue {
-        color: #ffc107;
       }
     `];
 
@@ -280,36 +179,7 @@ export class SystemInfo extends LitElement {
     }
   }
 
-  private formatTimestamp(timestamp: Timestamp): string {
-    const date = timestamp.toDate();
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  }
 
-  private formatCommit(commit: string): string {
-    // If commit contains parentheses, it's likely a tagged version like "v1.2.3 (abc1234)"
-    if (commit.includes('(') && commit.includes(')')) {
-      return commit;
-    }
-    
-    // For plain commit hashes, truncate to 7 characters
-    return commit.length > 7 ? commit.substring(0, 7) : commit;
-  }
-
-  private formatRate(rate: number): string {
-    if (rate < 0.1) return '< 0.1/s';
-    if (rate < 1) return `${rate.toFixed(1)}/s`;
-    return `${Math.round(rate)}/s`;
-  }
-
-  private calculateProgress(completed: number, total: number): number {
-    return total > 0 ? (completed / total) * 100 : 0;
-  }
 
   override render() {
     return html`
@@ -317,52 +187,16 @@ export class SystemInfo extends LitElement {
         <div class="hover-overlay"></div>
         <div class="system-content">
           <!-- Version Info (Always Present) -->
-          <div class="version-info">
-            ${this.loading && !this.version ? html`
-              <div class="version-row">
-                <span class="label">Commit:</span>
-                <span class="value loading">Loading...</span>
-              </div>
-              <div class="version-row">
-                <span class="label">Built:</span>
-                <span class="value loading">Loading...</span>
-              </div>
-            ` : this.error && !this.version ? html`
-              <div class="error">${this.error}</div>
-            ` : html`
-              <div class="version-row">
-                <span class="label">Commit:</span>
-                <span class="value commit">${this.formatCommit(this.version?.commit || '')}</span>
-              </div>
-              <div class="version-row">
-                <span class="label">Built:</span>
-                <span class="value">${this.version?.buildTime ? this.formatTimestamp(this.version.buildTime) : ''}</span>
-              </div>
-            `}
-          </div>
+          <system-info-version 
+            .version="${this.version}"
+            .loading="${this.loading}"
+            .error="${this.error}"></system-info-version>
 
-          <!-- Indexing Info (Only When Active) -->
-          ${this.indexingStatus?.isRunning ? html`
-            <div class="indexing-info">
-              <div class="indexing-header">
-                <div class="status-indicator"></div>
-                <span class="label">Indexing</span>
-                <span class="value">${this.indexingStatus.completedPages}/${this.indexingStatus.totalPages}</span>
-              </div>
-              <div class="indexing-stats">
-                <div class="progress-compact">
-                  <div class="progress-bar-mini">
-                    <div class="progress-fill-mini" 
-                         style="width: ${this.calculateProgress(this.indexingStatus.completedPages, this.indexingStatus.totalPages)}%"></div>
-                  </div>
-                </div>
-                <span class="rate">${this.formatRate(this.indexingStatus.processingRatePerSecond)}</span>
-                ${this.indexingStatus.queueDepth > 0 ? html`
-                  <span class="queue">Q:${this.indexingStatus.queueDepth}</span>
-                ` : ''}
-              </div>
-            </div>
-          ` : ''}
+          <!-- Indexing Status Component -->
+          <system-info-indexing 
+            .status="${this.indexingStatus}"
+            .loading="${this.loading}"
+            .error="${this.error}"></system-info-indexing>
         </div>
       </div>
     `;

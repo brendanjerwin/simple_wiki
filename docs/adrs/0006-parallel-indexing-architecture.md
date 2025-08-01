@@ -121,6 +121,7 @@ type SingleIndexProgress struct {
 ```
 
 **Key Implementation Details**:
+
 - Overall progress calculated as minimum completion across all indexes
 - Individual error tracking per index type
 - Thread-safe concurrent access with RWMutex

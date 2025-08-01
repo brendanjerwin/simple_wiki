@@ -200,7 +200,7 @@ func (b *BackgroundIndexingCoordinator) StartBackground(pageIdentifiers []wikipa
 		}
 		
 		// Start a goroutine to feed work to this index's queue
-		go func(indexPool *indexWorkerPool, name string) {
+		go func(indexPool *indexWorkerPool, _ string) {
 			defer close(indexPool.workQueue)
 			for _, identifier := range pageIdentifiers {
 				select {
@@ -245,13 +245,33 @@ func (b *BackgroundIndexingCoordinator) GetProgress() IndexingProgress {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	
-	// Calculate overall queue depth across all index pools
+	totalQueueDepth := b.calculateTotalQueueDepth()
+	overallCompleted := b.calculateOverallCompleted()
+	
+	progress := IndexingProgress{
+		IsRunning:      b.isRunning,
+		TotalPages:     b.totalPages,
+		CompletedPages: overallCompleted,
+		QueueDepth:     totalQueueDepth,
+	}
+	
+	b.calculateProcessingRateAndEstimation(&progress, overallCompleted)
+	b.populateIndexProgress(&progress)
+	
+	return progress
+}
+
+// calculateTotalQueueDepth calculates the total queue depth across all index pools.
+func (b *BackgroundIndexingCoordinator) calculateTotalQueueDepth() int {
 	totalQueueDepth := 0
 	for _, pool := range b.indexPools {
 		totalQueueDepth += len(pool.workQueue)
 	}
-	
-	// Calculate overall completed pages (minimum across all indexes)
+	return totalQueueDepth
+}
+
+// calculateOverallCompleted calculates the minimum completed pages across all indexes.
+func (b *BackgroundIndexingCoordinator) calculateOverallCompleted() int {
 	overallCompleted := 0
 	if len(b.indexProgress) > 0 {
 		// Initialize to the first index's progress
@@ -265,40 +285,40 @@ func (b *BackgroundIndexingCoordinator) GetProgress() IndexingProgress {
 			}
 		}
 	}
-	
-	progress := IndexingProgress{
-		IsRunning:      b.isRunning,
-		TotalPages:     b.totalPages,
-		CompletedPages: overallCompleted,
-		QueueDepth:     totalQueueDepth,
+	return overallCompleted
+}
+
+// calculateProcessingRateAndEstimation calculates processing rates and estimated completion time.
+func (b *BackgroundIndexingCoordinator) calculateProcessingRateAndEstimation(progress *IndexingProgress, overallCompleted int) {
+	if !b.isRunning || overallCompleted <= 0 {
+		return
 	}
 	
-	// Calculate overall processing rate (minimum across all indexes)
-	if b.isRunning && overallCompleted > 0 {
-		elapsed := time.Since(b.startTime)
-		progress.ProcessingRatePerSecond = float64(overallCompleted) / elapsed.Seconds()
-		
-		// Estimate completion time based on slowest index
-		slowestRate := progress.ProcessingRatePerSecond
-		for _, tracker := range b.indexProgress {
-			if tracker.completed > 0 {
-				trackerElapsed := time.Since(tracker.startTime)
-				trackerRate := float64(tracker.completed) / trackerElapsed.Seconds()
-				if trackerRate < slowestRate {
-					slowestRate = trackerRate
-				}
+	elapsed := time.Since(b.startTime)
+	progress.ProcessingRatePerSecond = float64(overallCompleted) / elapsed.Seconds()
+	
+	// Estimate completion time based on slowest index
+	slowestRate := progress.ProcessingRatePerSecond
+	for _, tracker := range b.indexProgress {
+		if tracker.completed > 0 {
+			trackerElapsed := time.Since(tracker.startTime)
+			trackerRate := float64(tracker.completed) / trackerElapsed.Seconds()
+			if trackerRate < slowestRate {
+				slowestRate = trackerRate
 			}
 		}
-		
-		if slowestRate > 0 {
-			remaining := b.totalPages - overallCompleted
-			estimatedSeconds := float64(remaining) / slowestRate
-			estimated := time.Duration(estimatedSeconds) * time.Second
-			progress.EstimatedCompletion = &estimated
-		}
 	}
 	
-	// Populate per-index progress tracking
+	if slowestRate > 0 {
+		remaining := b.totalPages - overallCompleted
+		estimatedSeconds := float64(remaining) / slowestRate
+		estimated := time.Duration(estimatedSeconds) * time.Second
+		progress.EstimatedCompletion = &estimated
+	}
+}
+
+// populateIndexProgress populates per-index progress tracking.
+func (b *BackgroundIndexingCoordinator) populateIndexProgress(progress *IndexingProgress) {
 	progress.IndexProgress = make(map[string]SingleIndexProgress)
 	for name, tracker := range b.indexProgress {
 		singleProgress := SingleIndexProgress{
@@ -316,8 +336,6 @@ func (b *BackgroundIndexingCoordinator) GetProgress() IndexingProgress {
 		
 		progress.IndexProgress[name] = singleProgress
 	}
-	
-	return progress
 }
 
 // WaitForCompletion blocks until all background indexing is complete.

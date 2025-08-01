@@ -1,6 +1,7 @@
-import { html, fixture, expect } from '@open-wc/testing';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { expect } from '@open-wc/testing';
 import { SystemInfo } from './system-info.js';
-import { GetVersionResponse, GetIndexingStatusResponse, SingleIndexProgress } from '../gen/api/v1/system_info_pb.js';
+import { GetVersionResponse, GetIndexingStatusResponse } from '../gen/api/v1/system_info_pb.js';
 import { Timestamp } from '@bufbuild/protobuf';
 import { stub, useFakeTimers } from 'sinon';
 import './system-info.js';
@@ -53,9 +54,9 @@ describe('SystemInfo', () => {
     });
 
     it('should display loading message for version', () => {
-      const loadingText = el.shadowRoot!.querySelector('.loading');
-      expect(loadingText).to.exist;
-      expect(loadingText!.textContent).to.include('Loading');
+      const versionComponent = el.shadowRoot!.querySelector('system-info-version');
+      expect(versionComponent).to.exist;
+      expect(versionComponent!.loading).to.be.true;
     });
   });
 
@@ -68,9 +69,9 @@ describe('SystemInfo', () => {
     });
 
     it('should display error message', () => {
-      const errorText = el.shadowRoot!.querySelector('.error');
-      expect(errorText).to.exist;
-      expect(errorText!.textContent).to.include('Connection failed');
+      const versionComponent = el.shadowRoot!.querySelector('system-info-version');
+      expect(versionComponent).to.exist;
+      expect(versionComponent!.error).to.equal('Connection failed');
     });
   });
 
@@ -98,22 +99,21 @@ describe('SystemInfo', () => {
     });
 
     it('should display version information', () => {
-      const versionInfo = el.shadowRoot!.querySelector('.version-info');
-      expect(versionInfo).to.exist;
+      const versionComponent = el.shadowRoot!.querySelector('system-info-version');
+      expect(versionComponent).to.exist;
+      expect(versionComponent!.version).to.exist;
     });
 
     it('should show commit hash', () => {
-      const commitValue = el.shadowRoot!.querySelector('.commit');
-      expect(commitValue).to.exist;
-      expect(commitValue!.textContent).to.equal('abc123d'); // Truncated
+      const versionComponent = el.shadowRoot!.querySelector('system-info-version') as any;
+      expect(versionComponent).to.exist;
+      expect(versionComponent.version.commit).to.equal('abc123def456'); // From beforeEach setup
     });
 
     it('should show build time', () => {
-      const values = el.shadowRoot!.querySelectorAll('.value');
-      const buildTimeValue = Array.from(values).find(v => 
-        v.textContent && v.textContent.includes('Jan')
-      );
-      expect(buildTimeValue).to.exist;
+      const versionComponent = el.shadowRoot!.querySelector('system-info-version') as any;
+      expect(versionComponent).to.exist;
+      expect(versionComponent.version.buildTime).to.exist;
     });
 
     it('should not show indexing info when not running', () => {
@@ -145,41 +145,33 @@ describe('SystemInfo', () => {
       await el.updateComplete;
     });
 
-    it('should show indexing info section', () => {
-      const indexingInfo = el.shadowRoot!.querySelector('.indexing-info');
-      expect(indexingInfo).to.exist;
+    it('should show indexing status component', () => {
+      const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing');
+      expect(indexingStatus).to.exist;
     });
 
-    it('should show active status indicator', () => {
-      const indicator = el.shadowRoot!.querySelector('.status-indicator');
-      expect(indicator).to.exist;
-      expect(indicator).to.not.have.class('idle');
+    it('should pass correct data to indexing status component', () => {
+      const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as any;
+      expect(indexingStatus).to.exist;
+      expect(indexingStatus.status).to.exist;
+      expect(indexingStatus.status.isRunning).to.be.true;
     });
 
-    it('should display progress information', () => {
-      const indexingInfo = el.shadowRoot!.querySelector('.indexing-info');
-      expect(indexingInfo!.textContent).to.include('50/100');
+    it('should pass correct progress data', () => {
+      const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as any;
+      expect(indexingStatus.status.completedPages).to.equal(50);
+      expect(indexingStatus.status.totalPages).to.equal(100);
     });
 
-    it('should show progress bar', () => {
-      const progressBar = el.shadowRoot!.querySelector('.progress-bar-mini');
-      expect(progressBar).to.exist;
-      
-      const progressFill = el.shadowRoot!.querySelector('.progress-fill-mini');
-      expect(progressFill).to.exist;
-      expect(progressFill!.getAttribute('style')).to.include('width: 50%');
+
+    it('should pass processing rate data', () => {
+      const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as any;
+      expect(indexingStatus.status.processingRatePerSecond).to.equal(12.5);
     });
 
-    it('should display processing rate', () => {
-      const rate = el.shadowRoot!.querySelector('.rate');
-      expect(rate).to.exist;
-      expect(rate!.textContent).to.include('13/s'); // Rounded
-    });
-
-    it('should show queue depth when present', () => {
-      const queue = el.shadowRoot!.querySelector('.queue');
-      expect(queue).to.exist;
-      expect(queue!.textContent).to.include('Q:25');
+    it('should pass queue depth data', () => {
+      const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as any;
+      expect(indexingStatus.status.queueDepth).to.equal(25);
     });
   });
 
@@ -206,9 +198,9 @@ describe('SystemInfo', () => {
       await el.updateComplete;
     });
 
-    it('should not show indexing info when idle', () => {
-      const indexingInfo = el.shadowRoot!.querySelector('.indexing-info');
-      expect(indexingInfo).to.not.exist;
+    it('should show indexing status component even when idle', () => {
+      const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing');
+      expect(indexingStatus).to.exist;
     });
   });
 
@@ -231,8 +223,9 @@ describe('SystemInfo', () => {
       
       await el.updateComplete;
       
-      const commitValue = el.shadowRoot!.querySelector('.commit');
-      expect(commitValue!.textContent).to.equal('abc123d');
+      const versionComponent = el.shadowRoot!.querySelector('system-info-version') as any;
+      expect(versionComponent).to.exist;
+      expect(versionComponent.version.commit).to.equal('abc123def456789');
     });
 
     it('should format tagged version correctly', async () => {
@@ -253,11 +246,12 @@ describe('SystemInfo', () => {
       
       await el.updateComplete;
       
-      const commitValue = el.shadowRoot!.querySelector('.commit');
-      expect(commitValue!.textContent).to.equal('v1.2.3 (abc123d)');
+      const versionComponent = el.shadowRoot!.querySelector('system-info-version') as any;
+      expect(versionComponent).to.exist;
+      expect(versionComponent.version.commit).to.equal('v1.2.3 (abc123d)');
     });
 
-    it('should format processing rates correctly', async () => {
+    it('should pass slow processing rates to component correctly', async () => {
       el.indexingStatus = new GetIndexingStatusResponse({
         isRunning: true,
         totalPages: 100,
@@ -269,8 +263,8 @@ describe('SystemInfo', () => {
 
       await el.updateComplete;
       
-      const rate = el.shadowRoot!.querySelector('.rate');
-      expect(rate!.textContent).to.include('< 0.1/s');
+      const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as any;
+      expect(indexingStatus.status.processingRatePerSecond).to.equal(0.05);
     });
   });
 
@@ -309,7 +303,7 @@ describe('SystemInfo', () => {
       expect(() => el.render()).to.not.throw();
     });
 
-    it('should calculate progress percentage correctly', async () => {
+    it('should pass correct progress data for calculation', async () => {
       el.indexingStatus = new GetIndexingStatusResponse({
         isRunning: true,
         totalPages: 200,
@@ -321,8 +315,9 @@ describe('SystemInfo', () => {
 
       await el.updateComplete;
       
-      const progressFill = el.shadowRoot!.querySelector('.progress-fill-mini');
-      expect(progressFill!.getAttribute('style')).to.include('width: 37.5%');
+      const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as any;
+      expect(indexingStatus.status.completedPages).to.equal(75);
+      expect(indexingStatus.status.totalPages).to.equal(200);
     });
   });
 
