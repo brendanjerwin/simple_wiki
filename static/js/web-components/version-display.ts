@@ -1,8 +1,8 @@
 import { html, css, LitElement } from 'lit';
 import { createClient } from '@connectrpc/connect';
 import { getGrpcWebTransport } from './grpc-transport.js';
-import { Version } from '../gen/api/v1/version_connect.js';
-import { GetVersionRequest, GetVersionResponse } from '../gen/api/v1/version_pb.js';
+import { SystemInfoService } from '../gen/api/v1/system_info_connect.js';
+import { GetVersionRequest, GetVersionResponse } from '../gen/api/v1/system_info_pb.js';
 import { Timestamp } from '@bufbuild/protobuf';
 import { foundationCSS } from './shared-styles.js';
 
@@ -101,7 +101,7 @@ export class VersionDisplay extends LitElement {
   declare error?: string;
   private debounceTimer?: ReturnType<typeof setTimeout>;
 
-  private client = createClient(Version, getGrpcWebTransport());
+  private client = createClient(SystemInfoService, getGrpcWebTransport());
 
   constructor() {
     super();

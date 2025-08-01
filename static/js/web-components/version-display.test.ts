@@ -1,6 +1,6 @@
 import { html, fixture, expect } from '@open-wc/testing';
 import { VersionDisplay } from './version-display.js';
-import { GetVersionResponse } from '../gen/api/v1/version_pb.js';
+import { GetVersionResponse } from '../gen/api/v1/system_info_pb.js';
 import { Timestamp } from '@bufbuild/protobuf';
 import './version-display.js';
 
