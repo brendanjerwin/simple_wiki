@@ -67,20 +67,22 @@ func NewSite(
 	maxUploadSize uint,
 	maxDocumentSize uint,
 	logger *lumber.ConsoleLogger,
-) *Site {
+) (*Site, error) {
 	var customCSS []byte
 	// collect custom CSS
 	if len(cssFile) > 0 {
 		var errRead error
 		customCSS, errRead = os.ReadFile(cssFile)
 		if errRead != nil {
-			_, _ = fmt.Println(errRead)
-			panic(errRead)
+			return nil, fmt.Errorf("failed to read CSS file %s: %w", cssFile, errRead)
 		}
 		_, _ = fmt.Printf("Loaded CSS file, %d bytes\n", len(customCSS))
 	}
 
+	logger.Info("Initializing simple_wiki site...")
+	
 	// Set up migration applicator with default migrations
+	logger.Info("Setting up rolling migrations system")
 	applicator := rollingmigrations.NewApplicator()
 
 	site := &Site{
@@ -96,24 +98,23 @@ func NewSite(
 		MaxDocumentSize:     maxDocumentSize,
 		Logger:              logger,
 		MigrationApplicator: applicator,
+		MarkdownRenderer:    &goldmarkrenderer.GoldmarkRenderer{},
 	}
 
+	logger.Info("Initializing site indexing...")
 	err := site.InitializeIndexing()
 	if err != nil {
-		logger.Error("Failed to initialize indexing: %v", err)
-		panic(err.Error())
+		return nil, fmt.Errorf("failed to initialize site: %w", err)
 	}
-	return site
+	
+	logger.Info("Site initialization complete")
+	return site, nil
 }
 
 // GinRouter returns a new Gin router configured for the site.
 func (s *Site) GinRouter() *gin.Engine {
 	if s.Logger == nil {
 		s.Logger = lumber.NewConsoleLogger(lumber.TRACE)
-	}
-
-	if s.MarkdownRenderer == nil {
-		s.MarkdownRenderer = goldmarkrenderer.GoldmarkRenderer{}
 	}
 
 	if hotTemplateReloading {

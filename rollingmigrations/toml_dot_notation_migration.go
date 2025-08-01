@@ -119,29 +119,6 @@ func findDotNotationPrefixes(frontmatter string) []string {
 	return prefixes
 }
 
-func findTablePrefixes(frontmatter string) []string {
-	tableRegex := regexp.MustCompile(`^\[([^\]]+)\]`)
-	lines := strings.Split(frontmatter, newlineChar)
-	prefixSet := make(map[string]bool)
-
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-
-		matches := tableRegex.FindStringSubmatch(line)
-		if len(matches) > 1 {
-			prefixSet[matches[1]] = true
-		}
-	}
-
-	var prefixes []string
-	for prefix := range prefixSet {
-		prefixes = append(prefixes, prefix)
-	}
-	return prefixes
-}
 
 // tomlParseResult holds the parsed TOML structure
 type tomlParseResult struct {

@@ -20,6 +20,20 @@ import (
 	"github.com/schollz/versionedtext"
 )
 
+// ConfigurationError represents an application setup/configuration error
+type ConfigurationError struct {
+	Component string
+	Err       error
+}
+
+func (e *ConfigurationError) Error() string {
+	return fmt.Sprintf("configuration error in %s: %v", e.Component, e.Err)
+}
+
+func (e *ConfigurationError) Unwrap() error {
+	return e.Err
+}
+
 const nanosecondsPerSecond = 1000000000
 
 // Page is the basic struct
@@ -241,6 +255,13 @@ func (*Page) lenientParse(content []byte, matter any) (body []byte, err error) {
 
 func markdownToHTMLAndJSONFrontmatter(s string, site wikipage.PageReader, renderer IRenderMarkdownToHTML, query indexfrontmatter.IQueryFrontmatterIndex) (html []byte, matter []byte, err error) {
 	var markdownBytes []byte
+
+	if renderer == nil {
+		return nil, nil, &ConfigurationError{
+			Component: "MarkdownRenderer",
+			Err:       errors.New("renderer is not initialized"),
+		}
+	}
 
 	matterMap := &map[string]any{}
 	markdownBytes, err = adrgfrontmatter.Parse(strings.NewReader(s), &matterMap)

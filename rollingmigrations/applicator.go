@@ -20,8 +20,9 @@ func NewApplicator() *DefaultApplicator {
 		migrations: make([]FrontmatterMigration, 0),
 	}
 	
-	// Register default migrations
+	// Register default migrations - order matters for execution
 	applicator.RegisterMigration(NewTOMLDotNotationMigration())
+	applicator.RegisterMigration(NewTOMLTableSpacingMigration()) // Must be last for proper formatting
 	
 	return applicator
 }

@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -103,6 +104,13 @@ func (s *Site) InitializeIndexing() error {
 	files := s.DirectoryList()
 	for _, file := range files {
 		if err := s.IndexMaintainer.AddPageToIndex(file.Name()); err != nil {
+			// Check for application setup errors that should prevent startup
+			var configErr *ConfigurationError
+			if errors.As(err, &configErr) {
+				s.Logger.Error("Application configuration error during initialization: %v", err)
+				return fmt.Errorf("failed to initialize due to configuration error: %w", err)
+			}
+			// Log individual page errors but continue with other pages
 			s.Logger.Error("Failed to add page '%s' to index during initialization: %v", file.Name(), err)
 		}
 	}

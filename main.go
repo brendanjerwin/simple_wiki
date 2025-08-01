@@ -72,8 +72,10 @@ func setupServer(c *cli.Context) (*http.Server, error) {
 	} else {
 		logger = makeProductionLogger()
 	}
+	
+	logger.Info("Starting simple_wiki server...")
 
-	site := server.NewSite(
+	site, err := server.NewSite(
 		pathToData,
 		c.GlobalString("css"),
 		c.GlobalString("default-page"),
@@ -86,7 +88,12 @@ func setupServer(c *cli.Context) (*http.Server, error) {
 		c.GlobalUint("max-document-length"),
 		logger,
 	)
+	if err != nil {
+		logger.Error("Failed to initialize site: %v", err)
+		return nil, err
+	}
 
+	logger.Info("Setting up HTTP and gRPC servers...")
 	ginRouter := site.GinRouter()
 	actualCommit := getCommitHash()
 	buildTime := getBuildTime()
@@ -225,5 +232,5 @@ func makeDebugLogger() *lumber.ConsoleLogger {
 }
 
 func makeProductionLogger() *lumber.ConsoleLogger {
-	return lumber.NewConsoleLogger(lumber.WARN)
+	return lumber.NewConsoleLogger(lumber.INFO)
 }
