@@ -15,3 +15,8 @@ type IMaintainIndex interface {
 type IProvideIndexName interface {
 	GetIndexName() string
 }
+
+// IProvideIndexingProgress defines the interface for components that can provide indexing progress.
+type IProvideIndexingProgress interface {
+	GetProgress() IndexingProgress
+}

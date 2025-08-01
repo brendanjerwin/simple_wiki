@@ -19,7 +19,8 @@ import (
 const _ = grpc.SupportPackageIsVersion8
 
 const (
-	SystemInfoService_GetVersion_FullMethodName = "/api.v1.SystemInfoService/GetVersion"
+	SystemInfoService_GetVersion_FullMethodName        = "/api.v1.SystemInfoService/GetVersion"
+	SystemInfoService_GetIndexingStatus_FullMethodName = "/api.v1.SystemInfoService/GetIndexingStatus"
 )
 
 // SystemInfoServiceClient is the client API for SystemInfoService service.
@@ -28,6 +29,8 @@ const (
 type SystemInfoServiceClient interface {
 	// GetVersion returns the server version and build time.
 	GetVersion(ctx context.Context, in *GetVersionRequest, opts ...grpc.CallOption) (*GetVersionResponse, error)
+	// GetIndexingStatus returns the current status of background indexing operations.
+	GetIndexingStatus(ctx context.Context, in *GetIndexingStatusRequest, opts ...grpc.CallOption) (*GetIndexingStatusResponse, error)
 }
 
 type systemInfoServiceClient struct {
@@ -48,12 +51,24 @@ func (c *systemInfoServiceClient) GetVersion(ctx context.Context, in *GetVersion
 	return out, nil
 }
 
+func (c *systemInfoServiceClient) GetIndexingStatus(ctx context.Context, in *GetIndexingStatusRequest, opts ...grpc.CallOption) (*GetIndexingStatusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetIndexingStatusResponse)
+	err := c.cc.Invoke(ctx, SystemInfoService_GetIndexingStatus_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SystemInfoServiceServer is the server API for SystemInfoService service.
 // All implementations must embed UnimplementedSystemInfoServiceServer
 // for forward compatibility
 type SystemInfoServiceServer interface {
 	// GetVersion returns the server version and build time.
 	GetVersion(context.Context, *GetVersionRequest) (*GetVersionResponse, error)
+	// GetIndexingStatus returns the current status of background indexing operations.
+	GetIndexingStatus(context.Context, *GetIndexingStatusRequest) (*GetIndexingStatusResponse, error)
 	mustEmbedUnimplementedSystemInfoServiceServer()
 }
 
@@ -63,6 +78,9 @@ type UnimplementedSystemInfoServiceServer struct {
 
 func (UnimplementedSystemInfoServiceServer) GetVersion(context.Context, *GetVersionRequest) (*GetVersionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetVersion not implemented")
+}
+func (UnimplementedSystemInfoServiceServer) GetIndexingStatus(context.Context, *GetIndexingStatusRequest) (*GetIndexingStatusResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetIndexingStatus not implemented")
 }
 func (UnimplementedSystemInfoServiceServer) mustEmbedUnimplementedSystemInfoServiceServer() {}
 
@@ -95,6 +113,24 @@ func _SystemInfoService_GetVersion_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SystemInfoService_GetIndexingStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetIndexingStatusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SystemInfoServiceServer).GetIndexingStatus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SystemInfoService_GetIndexingStatus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SystemInfoServiceServer).GetIndexingStatus(ctx, req.(*GetIndexingStatusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SystemInfoService_ServiceDesc is the grpc.ServiceDesc for SystemInfoService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -105,6 +141,10 @@ var SystemInfoService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetVersion",
 			Handler:    _SystemInfoService_GetVersion_Handler,
+		},
+		{
+			MethodName: "GetIndexingStatus",
+			Handler:    _SystemInfoService_GetIndexingStatus_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

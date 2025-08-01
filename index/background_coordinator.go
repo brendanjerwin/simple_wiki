@@ -3,6 +3,7 @@ package index
 
 import (
 	"context"
+	"fmt"
 	"runtime"
 	"sync"
 	"time"
@@ -40,23 +41,32 @@ type indexProgressTracker struct {
 	lastError      *string
 }
 
+// indexWorkerPool manages workers for a single index type.
+type indexWorkerPool struct {
+	indexName     string
+	maintainer    IMaintainIndex
+	workQueue     chan wikipage.PageIdentifier
+	workerCount   int
+	wg            sync.WaitGroup
+	logger        lumber.Logger
+}
+
 // BackgroundIndexingCoordinator coordinates background indexing operations
-// across multiple index types using a worker pool pattern.
+// across multiple index types using separate worker pools per index type.
 type BackgroundIndexingCoordinator struct {
 	multiMaintainer *MultiMaintainer
 	logger          lumber.Logger
-	workerCount     int
 	
 	// Worker coordination
 	ctx        context.Context
 	cancel     context.CancelFunc
-	workQueue  chan wikipage.PageIdentifier
-	wg         sync.WaitGroup
+	
+	// Per-index worker pools
+	indexPools     map[string]*indexWorkerPool
 	
 	// Progress tracking
 	mu              sync.RWMutex
 	totalPages      int
-	completedPages  int
 	startTime       time.Time
 	isRunning       bool
 	
@@ -64,40 +74,87 @@ type BackgroundIndexingCoordinator struct {
 	indexProgress   map[string]*indexProgressTracker
 }
 
-// NewBackgroundIndexingCoordinator creates a new background indexing coordinator.
-func NewBackgroundIndexingCoordinator(multiMaintainer *MultiMaintainer, logger lumber.Logger, workerCount int) *BackgroundIndexingCoordinator {
-	if workerCount <= 0 {
-		panic("workerCount must be greater than 0")
-	}
-	
+// IndexWorkerConfig specifies the number of workers for a specific index type.
+type IndexWorkerConfig struct {
+	IndexName   string
+	WorkerCount int
+}
+
+// NewBackgroundIndexingCoordinator creates a new background indexing coordinator with per-index worker configuration.
+func NewBackgroundIndexingCoordinator(multiMaintainer *MultiMaintainer, logger lumber.Logger, workerConfigs []IndexWorkerConfig) *BackgroundIndexingCoordinator {
 	ctx, cancel := context.WithCancel(context.Background())
 	
-	// Initialize progress tracking for each index
+	// Create worker config map for easy lookup
+	workerConfigMap := make(map[string]int)
+	for _, config := range workerConfigs {
+		if config.WorkerCount <= 0 {
+			panic(fmt.Sprintf("worker count for index '%s' must be greater than 0", config.IndexName))
+		}
+		workerConfigMap[config.IndexName] = config.WorkerCount
+	}
+	
+	// Initialize per-index worker pools and progress tracking
+	indexPools := make(map[string]*indexWorkerPool)
 	indexProgress := make(map[string]*indexProgressTracker)
+	
 	for _, maintainer := range multiMaintainer.Maintainers {
+		var indexName string
 		if indexNameProvider, ok := maintainer.(IProvideIndexName); ok {
-			name := indexNameProvider.GetIndexName()
-			indexProgress[name] = &indexProgressTracker{
-				name: name,
-			}
+			indexName = indexNameProvider.GetIndexName()
+		} else {
+			indexName = "unknown"
+		}
+		
+		// Get worker count for this index, default to 1 if not specified
+		workerCount := workerConfigMap[indexName]
+		if workerCount == 0 {
+			workerCount = 1
+			logger.Warn("No worker count specified for index '%s', defaulting to 1", indexName)
+		}
+		
+		// Create worker pool for this index
+		indexPools[indexName] = &indexWorkerPool{
+			indexName:   indexName,
+			maintainer:  maintainer,
+			workQueue:   make(chan wikipage.PageIdentifier, workerCount*2), // Buffered queue
+			workerCount: workerCount,
+			logger:      logger,
+		}
+		
+		// Initialize progress tracking for this index
+		indexProgress[indexName] = &indexProgressTracker{
+			name: indexName,
 		}
 	}
 	
 	return &BackgroundIndexingCoordinator{
 		multiMaintainer: multiMaintainer,
 		logger:          logger,
-		workerCount:     workerCount,
 		ctx:             ctx,
 		cancel:          cancel,
-		workQueue:       make(chan wikipage.PageIdentifier, workerCount*2), // Buffered queue
+		indexPools:      indexPools,
 		indexProgress:   indexProgress,
 	}
 }
 
 // NewBackgroundIndexingCoordinatorWithCPUWorkers creates a new background indexing coordinator
-// using runtime.NumCPU() workers.
+// using runtime.NumCPU() workers per index type.
 func NewBackgroundIndexingCoordinatorWithCPUWorkers(multiMaintainer *MultiMaintainer, logger lumber.Logger) *BackgroundIndexingCoordinator {
-	return NewBackgroundIndexingCoordinator(multiMaintainer, logger, runtime.NumCPU())
+	cpuCount := runtime.NumCPU()
+	
+	// Create default worker configs for all index types
+	var workerConfigs []IndexWorkerConfig
+	for _, maintainer := range multiMaintainer.Maintainers {
+		if indexNameProvider, ok := maintainer.(IProvideIndexName); ok {
+			indexName := indexNameProvider.GetIndexName()
+			workerConfigs = append(workerConfigs, IndexWorkerConfig{
+				IndexName:   indexName,
+				WorkerCount: cpuCount,
+			})
+		}
+	}
+	
+	return NewBackgroundIndexingCoordinator(multiMaintainer, logger, workerConfigs)
 }
 
 // AddPageToIndex implements IMaintainIndex interface for compatibility.
@@ -121,7 +178,6 @@ func (b *BackgroundIndexingCoordinator) StartBackground(pageIdentifiers []wikipa
 	}
 	
 	b.totalPages = len(pageIdentifiers)
-	b.completedPages = 0
 	b.startTime = time.Now()
 	b.isRunning = true
 	
@@ -133,32 +189,48 @@ func (b *BackgroundIndexingCoordinator) StartBackground(pageIdentifiers []wikipa
 		tracker.lastError = nil
 	}
 	
-	// Start worker goroutines
-	for i := 0; i < b.workerCount; i++ {
-		b.wg.Add(1)
-		go b.worker()
+	// Start workers for each index pool
+	for indexName, pool := range b.indexPools {
+		b.logger.Info("Starting %d workers for %s index", pool.workerCount, indexName)
+		
+		// Start workers for this index
+		for i := 0; i < pool.workerCount; i++ {
+			pool.wg.Add(1)
+			go b.indexWorker(pool, indexName)
+		}
+		
+		// Start a goroutine to feed work to this index's queue
+		go func(indexPool *indexWorkerPool, name string) {
+			defer close(indexPool.workQueue)
+			for _, identifier := range pageIdentifiers {
+				select {
+				case indexPool.workQueue <- identifier:
+				case <-b.ctx.Done():
+					return
+				}
+			}
+		}(pool, indexName)
 	}
 	
-	// Start a goroutine to feed work to the queue
-	go func() {
-		defer close(b.workQueue)
-		for _, identifier := range pageIdentifiers {
-			select {
-			case b.workQueue <- identifier:
-			case <-b.ctx.Done():
-				return
-			}
-		}
-	}()
+	totalWorkers := 0
+	for _, pool := range b.indexPools {
+		totalWorkers += pool.workerCount
+	}
 	
-	b.logger.Info("Started background indexing with %d workers for %d pages", b.workerCount, b.totalPages)
+	b.logger.Info("Started background indexing with %d total workers across %d index types for %d pages", 
+		totalWorkers, len(b.indexPools), b.totalPages)
 	return nil
 }
 
 // Stop gracefully stops the background indexing process.
 func (b *BackgroundIndexingCoordinator) Stop() error {
 	b.cancel()
-	b.wg.Wait()
+	
+	// Wait for all index pools to complete
+	for indexName, pool := range b.indexPools {
+		b.logger.Info("Waiting for %s index workers to stop", indexName)
+		pool.wg.Wait()
+	}
 	
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -173,22 +245,54 @@ func (b *BackgroundIndexingCoordinator) GetProgress() IndexingProgress {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	
+	// Calculate overall queue depth across all index pools
+	totalQueueDepth := 0
+	for _, pool := range b.indexPools {
+		totalQueueDepth += len(pool.workQueue)
+	}
+	
+	// Calculate overall completed pages (minimum across all indexes)
+	overallCompleted := 0
+	if len(b.indexProgress) > 0 {
+		// Initialize to the first index's progress
+		first := true
+		for _, tracker := range b.indexProgress {
+			if first {
+				overallCompleted = tracker.completed
+				first = false
+			} else if tracker.completed < overallCompleted {
+				overallCompleted = tracker.completed
+			}
+		}
+	}
+	
 	progress := IndexingProgress{
 		IsRunning:      b.isRunning,
 		TotalPages:     b.totalPages,
-		CompletedPages: b.completedPages,
-		QueueDepth:     len(b.workQueue),
+		CompletedPages: overallCompleted,
+		QueueDepth:     totalQueueDepth,
 	}
 	
-	// Calculate processing rate
-	if b.isRunning && b.completedPages > 0 {
+	// Calculate overall processing rate (minimum across all indexes)
+	if b.isRunning && overallCompleted > 0 {
 		elapsed := time.Since(b.startTime)
-		progress.ProcessingRatePerSecond = float64(b.completedPages) / elapsed.Seconds()
+		progress.ProcessingRatePerSecond = float64(overallCompleted) / elapsed.Seconds()
 		
-		// Estimate completion time
-		if progress.ProcessingRatePerSecond > 0 {
-			remaining := b.totalPages - b.completedPages
-			estimatedSeconds := float64(remaining) / progress.ProcessingRatePerSecond
+		// Estimate completion time based on slowest index
+		slowestRate := progress.ProcessingRatePerSecond
+		for _, tracker := range b.indexProgress {
+			if tracker.completed > 0 {
+				trackerElapsed := time.Since(tracker.startTime)
+				trackerRate := float64(tracker.completed) / trackerElapsed.Seconds()
+				if trackerRate < slowestRate {
+					slowestRate = trackerRate
+				}
+			}
+		}
+		
+		if slowestRate > 0 {
+			remaining := b.totalPages - overallCompleted
+			estimatedSeconds := float64(remaining) / slowestRate
 			estimated := time.Duration(estimatedSeconds) * time.Second
 			progress.EstimatedCompletion = &estimated
 		}
@@ -218,24 +322,26 @@ func (b *BackgroundIndexingCoordinator) GetProgress() IndexingProgress {
 
 // WaitForCompletion blocks until all background indexing is complete.
 func (b *BackgroundIndexingCoordinator) WaitForCompletion() error {
-	// Wait for all workers to finish
-	b.wg.Wait()
+	// Wait for all index pools to finish
+	for _, pool := range b.indexPools {
+		pool.wg.Wait()
+	}
 	return nil
 }
 
-// worker processes pages from the work queue.
-func (b *BackgroundIndexingCoordinator) worker() {
-	defer b.wg.Done()
+// indexWorker processes pages from a specific index's work queue.
+func (b *BackgroundIndexingCoordinator) indexWorker(pool *indexWorkerPool, indexName string) {
+	defer pool.wg.Done()
 	
 	for {
 		select {
-		case identifier, ok := <-b.workQueue:
+		case identifier, ok := <-pool.workQueue:
 			if !ok {
 				return // Queue closed
 			}
 			
-			// Process the page with per-index tracking
-			b.processPageWithTracking(identifier)
+			// Process the page for this specific index
+			b.processPageForIndex(pool.maintainer, indexName, identifier)
 			
 		case <-b.ctx.Done():
 			return // Context cancelled
@@ -243,60 +349,28 @@ func (b *BackgroundIndexingCoordinator) worker() {
 	}
 }
 
-// processPageWithTracking processes a page and tracks progress for each individual index.
-func (b *BackgroundIndexingCoordinator) processPageWithTracking(identifier wikipage.PageIdentifier) {
-	// Process each index individually to track per-index progress
-	// We don't hold the mutex during index operations to avoid blocking progress reporting
-	type indexResult struct {
-		name string
-		err  error
+// processPageForIndex processes a page for a specific index and tracks progress.
+func (b *BackgroundIndexingCoordinator) processPageForIndex(maintainer IMaintainIndex, indexName string, identifier wikipage.PageIdentifier) {
+	// Process the page without holding the mutex
+	err := maintainer.AddPageToIndex(identifier)
+	if err != nil {
+		b.logger.Error("Failed to index page '%s' in %s index: %v", identifier, indexName, err)
 	}
 	
-	results := make([]indexResult, 0, len(b.multiMaintainer.Maintainers))
-	
-	// Process all indexes without holding the mutex
-	for _, maintainer := range b.multiMaintainer.Maintainers {
-		var indexName string
-		if indexNameProvider, ok := maintainer.(IProvideIndexName); ok {
-			indexName = indexNameProvider.GetIndexName()
-		} else {
-			indexName = "unknown"
-		}
-		
-		// Try to index the page in this specific index
-		err := maintainer.AddPageToIndex(identifier)
-		if err != nil {
-			b.logger.Error("Failed to index page '%s' in %s index: %v", identifier, indexName, err)
-		}
-		
-		results = append(results, indexResult{name: indexName, err: err})
-	}
-	
-	// Now update all progress atomically with minimal lock time
+	// Update progress atomically with minimal lock time
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	
-	allSuccessful := true
-	for _, result := range results {
-		if result.err != nil {
-			allSuccessful = false
+	if tracker, exists := b.indexProgress[indexName]; exists {
+		if err != nil {
 			// Record the error for this index
-			if tracker, exists := b.indexProgress[result.name]; exists {
-				errorMsg := result.err.Error()
-				tracker.lastError = &errorMsg
-			}
+			errorMsg := err.Error()
+			tracker.lastError = &errorMsg
 		} else {
 			// Success - increment progress for this index
-			if tracker, exists := b.indexProgress[result.name]; exists {
-				tracker.completed++
-				// Clear any previous error
-				tracker.lastError = nil
-			}
+			tracker.completed++
+			// Don't clear previous errors, just record success
+			// The lastError field will persist to show the most recent error
 		}
-	}
-	
-	// Only increment overall progress if at least one index succeeded
-	if allSuccessful {
-		b.completedPages++
 	}
 }

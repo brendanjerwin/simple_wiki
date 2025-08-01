@@ -9,6 +9,9 @@ option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
 service SystemInfoService {
   // GetVersion returns the server version and build time.
   rpc GetVersion(GetVersionRequest) returns (GetVersionResponse) {}
+  
+  // GetIndexingStatus returns the current status of background indexing operations.
+  rpc GetIndexingStatus(GetIndexingStatusRequest) returns (GetIndexingStatusResponse) {}
 }
 
 // The request message for the GetVersion RPC.
@@ -18,4 +21,27 @@ message GetVersionRequest {}
 message GetVersionResponse {
   string commit = 1;
   google.protobuf.Timestamp build_time = 2;
+}
+
+// The request message for the GetIndexingStatus RPC.
+message GetIndexingStatusRequest {}
+
+// The response message for the GetIndexingStatus RPC.
+message GetIndexingStatusResponse {
+  bool is_running = 1;
+  int32 total_pages = 2;
+  int32 completed_pages = 3;
+  int32 queue_depth = 4;
+  double processing_rate_per_second = 5;
+  optional google.protobuf.Timestamp estimated_completion = 6;
+  repeated SingleIndexProgress index_progress = 7;
+}
+
+// Progress information for a single index type.
+message SingleIndexProgress {
+  string name = 1;
+  int32 completed = 2;
+  int32 total = 3;
+  double processing_rate_per_second = 4;
+  optional string last_error = 5;
 }

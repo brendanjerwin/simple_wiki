@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { GetVersionRequest, GetVersionResponse } from "./system_info_pb.js";
+import { GetIndexingStatusRequest, GetIndexingStatusResponse, GetVersionRequest, GetVersionResponse } from "./system_info_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -21,6 +21,17 @@ export const SystemInfoService = {
       name: "GetVersion",
       I: GetVersionRequest,
       O: GetVersionResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * GetIndexingStatus returns the current status of background indexing operations.
+     *
+     * @generated from rpc api.v1.SystemInfoService.GetIndexingStatus
+     */
+    getIndexingStatus: {
+      name: "GetIndexingStatus",
+      I: GetIndexingStatusRequest,
+      O: GetIndexingStatusResponse,
       kind: MethodKind.Unary,
     },
   }

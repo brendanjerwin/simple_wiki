@@ -84,3 +84,174 @@ export class GetVersionResponse extends Message<GetVersionResponse> {
   }
 }
 
+/**
+ * The request message for the GetIndexingStatus RPC.
+ *
+ * @generated from message api.v1.GetIndexingStatusRequest
+ */
+export class GetIndexingStatusRequest extends Message<GetIndexingStatusRequest> {
+  constructor(data?: PartialMessage<GetIndexingStatusRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "api.v1.GetIndexingStatusRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GetIndexingStatusRequest {
+    return new GetIndexingStatusRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): GetIndexingStatusRequest {
+    return new GetIndexingStatusRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): GetIndexingStatusRequest {
+    return new GetIndexingStatusRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: GetIndexingStatusRequest | PlainMessage<GetIndexingStatusRequest> | undefined, b: GetIndexingStatusRequest | PlainMessage<GetIndexingStatusRequest> | undefined): boolean {
+    return proto3.util.equals(GetIndexingStatusRequest, a, b);
+  }
+}
+
+/**
+ * The response message for the GetIndexingStatus RPC.
+ *
+ * @generated from message api.v1.GetIndexingStatusResponse
+ */
+export class GetIndexingStatusResponse extends Message<GetIndexingStatusResponse> {
+  /**
+   * @generated from field: bool is_running = 1;
+   */
+  isRunning = false;
+
+  /**
+   * @generated from field: int32 total_pages = 2;
+   */
+  totalPages = 0;
+
+  /**
+   * @generated from field: int32 completed_pages = 3;
+   */
+  completedPages = 0;
+
+  /**
+   * @generated from field: int32 queue_depth = 4;
+   */
+  queueDepth = 0;
+
+  /**
+   * @generated from field: double processing_rate_per_second = 5;
+   */
+  processingRatePerSecond = 0;
+
+  /**
+   * @generated from field: optional google.protobuf.Timestamp estimated_completion = 6;
+   */
+  estimatedCompletion?: Timestamp;
+
+  /**
+   * @generated from field: repeated api.v1.SingleIndexProgress index_progress = 7;
+   */
+  indexProgress: SingleIndexProgress[] = [];
+
+  constructor(data?: PartialMessage<GetIndexingStatusResponse>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "api.v1.GetIndexingStatusResponse";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "is_running", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 2, name: "total_pages", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 3, name: "completed_pages", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 4, name: "queue_depth", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 5, name: "processing_rate_per_second", kind: "scalar", T: 1 /* ScalarType.DOUBLE */ },
+    { no: 6, name: "estimated_completion", kind: "message", T: Timestamp, opt: true },
+    { no: 7, name: "index_progress", kind: "message", T: SingleIndexProgress, repeated: true },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GetIndexingStatusResponse {
+    return new GetIndexingStatusResponse().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): GetIndexingStatusResponse {
+    return new GetIndexingStatusResponse().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): GetIndexingStatusResponse {
+    return new GetIndexingStatusResponse().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: GetIndexingStatusResponse | PlainMessage<GetIndexingStatusResponse> | undefined, b: GetIndexingStatusResponse | PlainMessage<GetIndexingStatusResponse> | undefined): boolean {
+    return proto3.util.equals(GetIndexingStatusResponse, a, b);
+  }
+}
+
+/**
+ * Progress information for a single index type.
+ *
+ * @generated from message api.v1.SingleIndexProgress
+ */
+export class SingleIndexProgress extends Message<SingleIndexProgress> {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name = "";
+
+  /**
+   * @generated from field: int32 completed = 2;
+   */
+  completed = 0;
+
+  /**
+   * @generated from field: int32 total = 3;
+   */
+  total = 0;
+
+  /**
+   * @generated from field: double processing_rate_per_second = 4;
+   */
+  processingRatePerSecond = 0;
+
+  /**
+   * @generated from field: optional string last_error = 5;
+   */
+  lastError?: string;
+
+  constructor(data?: PartialMessage<SingleIndexProgress>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "api.v1.SingleIndexProgress";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "completed", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 3, name: "total", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 4, name: "processing_rate_per_second", kind: "scalar", T: 1 /* ScalarType.DOUBLE */ },
+    { no: 5, name: "last_error", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SingleIndexProgress {
+    return new SingleIndexProgress().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SingleIndexProgress {
+    return new SingleIndexProgress().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SingleIndexProgress {
+    return new SingleIndexProgress().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: SingleIndexProgress | PlainMessage<SingleIndexProgress> | undefined, b: SingleIndexProgress | PlainMessage<SingleIndexProgress> | undefined): boolean {
+    return proto3.util.equals(SingleIndexProgress, a, b);
+  }
+}
+

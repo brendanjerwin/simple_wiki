@@ -9,6 +9,7 @@ import (
 	"time"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
+	"github.com/brendanjerwin/simple_wiki/index"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
 	"google.golang.org/grpc"
@@ -69,10 +70,11 @@ type Server struct {
 	apiv1.UnimplementedSystemInfoServiceServer
 	apiv1.UnimplementedFrontmatterServer
 	apiv1.UnimplementedPageManagementServiceServer
-	Commit         string
-	BuildTime      time.Time
-	PageReaderMutator wikipage.PageReaderMutator
-	Logger         *lumber.ConsoleLogger
+	Commit              string
+	BuildTime           time.Time
+	PageReaderMutator   wikipage.PageReaderMutator
+	IndexingProgressProvider index.IProvideIndexingProgress
+	Logger              *lumber.ConsoleLogger
 }
 
 // MergeFrontmatter implements the MergeFrontmatter RPC.
@@ -283,12 +285,13 @@ func removeAtPath(data any, path []*apiv1.PathComponent) (any, error) {
 }
 
 // NewServer creates a new debug server
-func NewServer(commit string, buildTime time.Time, pageReadWriter wikipage.PageReaderMutator, logger *lumber.ConsoleLogger) *Server {
+func NewServer(commit string, buildTime time.Time, pageReadWriter wikipage.PageReaderMutator, indexingProgressProvider index.IProvideIndexingProgress, logger *lumber.ConsoleLogger) *Server {
 	return &Server{
-		Commit:         commit,
-		BuildTime:      buildTime,
-		PageReaderMutator: pageReadWriter,
-		Logger:         logger,
+		Commit:              commit,
+		BuildTime:           buildTime,
+		PageReaderMutator:   pageReadWriter,
+		IndexingProgressProvider: indexingProgressProvider,
+		Logger:              logger,
 	}
 }
 
@@ -304,6 +307,49 @@ func (s *Server) GetVersion(_ context.Context, _ *apiv1.GetVersionRequest) (*api
 	return &apiv1.GetVersionResponse{
 		Commit:    s.Commit,
 		BuildTime: timestamppb.New(s.BuildTime),
+	}, nil
+}
+
+// GetIndexingStatus implements the GetIndexingStatus RPC.
+func (s *Server) GetIndexingStatus(_ context.Context, _ *apiv1.GetIndexingStatusRequest) (*apiv1.GetIndexingStatusResponse, error) {
+	if s.IndexingProgressProvider == nil {
+		return nil, status.Error(codes.Internal, "indexing progress provider not available")
+	}
+
+	progress := s.IndexingProgressProvider.GetProgress()
+
+	// Convert estimated completion time to protobuf timestamp
+	var estimatedCompletion *timestamppb.Timestamp
+	if progress.EstimatedCompletion != nil {
+		estimatedTime := time.Now().Add(*progress.EstimatedCompletion)
+		estimatedCompletion = timestamppb.New(estimatedTime)
+	}
+
+	// Convert per-index progress
+	var indexProgress []*apiv1.SingleIndexProgress
+	for _, singleProgress := range progress.IndexProgress {
+		protoProgress := &apiv1.SingleIndexProgress{
+			Name:                   singleProgress.Name,
+			Completed:              int32(singleProgress.Completed),
+			Total:                  int32(singleProgress.Total),
+			ProcessingRatePerSecond: singleProgress.ProcessingRatePerSecond,
+		}
+		
+		if singleProgress.LastError != nil {
+			protoProgress.LastError = singleProgress.LastError
+		}
+		
+		indexProgress = append(indexProgress, protoProgress)
+	}
+
+	return &apiv1.GetIndexingStatusResponse{
+		IsRunning:              progress.IsRunning,
+		TotalPages:             int32(progress.TotalPages),
+		CompletedPages:         int32(progress.CompletedPages),
+		QueueDepth:             int32(progress.QueueDepth),
+		ProcessingRatePerSecond: progress.ProcessingRatePerSecond,
+		EstimatedCompletion:    estimatedCompletion,
+		IndexProgress:          indexProgress,
 	}, nil
 }
 

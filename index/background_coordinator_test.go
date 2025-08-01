@@ -93,7 +93,11 @@ var _ = Describe("BackgroundIndexingCoordinator", func() {
 			"page5",
 		}
 		
-		coordinator = index.NewBackgroundIndexingCoordinator(multiMaintainer, logger, 2)
+		workerConfigs := []index.IndexWorkerConfig{
+			{IndexName: "index1", WorkerCount: 1},
+			{IndexName: "index2", WorkerCount: 1},
+		}
+		coordinator = index.NewBackgroundIndexingCoordinator(multiMaintainer, logger, workerConfigs)
 	})
 
 	AfterEach(func() {
@@ -110,7 +114,10 @@ var _ = Describe("BackgroundIndexingCoordinator", func() {
 		When("worker count is zero", func() {
 			It("should panic", func() {
 				Expect(func() {
-					index.NewBackgroundIndexingCoordinator(multiMaintainer, logger, 0)
+					zeroWorkerConfigs := []index.IndexWorkerConfig{
+						{IndexName: "index1", WorkerCount: 0},
+					}
+					index.NewBackgroundIndexingCoordinator(multiMaintainer, logger, zeroWorkerConfigs)
 				}).To(Panic())
 			})
 		})
