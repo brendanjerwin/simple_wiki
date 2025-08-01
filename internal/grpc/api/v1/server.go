@@ -66,7 +66,7 @@ func isIdentifierKeyPath(path []*apiv1.PathComponent) bool {
 
 // Server is the implementation of the gRPC services.
 type Server struct {
-	apiv1.UnimplementedVersionServer
+	apiv1.UnimplementedSystemInfoServiceServer
 	apiv1.UnimplementedFrontmatterServer
 	apiv1.UnimplementedPageManagementServiceServer
 	Commit         string
@@ -294,7 +294,7 @@ func NewServer(commit string, buildTime time.Time, pageReadWriter wikipage.PageR
 
 // RegisterWithServer registers the gRPC services with the given gRPC server.
 func (s *Server) RegisterWithServer(grpcServer *grpc.Server) {
-	apiv1.RegisterVersionServer(grpcServer, s)
+	apiv1.RegisterSystemInfoServiceServer(grpcServer, s)
 	apiv1.RegisterFrontmatterServer(grpcServer, s)
 	apiv1.RegisterPageManagementServiceServer(grpcServer, s)
 }
