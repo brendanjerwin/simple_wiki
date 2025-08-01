@@ -10,3 +10,8 @@ type IMaintainIndex interface {
 	AddPageToIndex(identifier wikipage.PageIdentifier) error
 	RemovePageFromIndex(identifier wikipage.PageIdentifier) error
 }
+
+// IProvideIndexName defines the interface for indexes that can provide their name.
+type IProvideIndexName interface {
+	GetIndexName() string
+}

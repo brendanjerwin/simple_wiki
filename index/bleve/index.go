@@ -4,6 +4,7 @@ package bleve
 import (
 	"regexp"
 	"strings"
+	"sync"
 
 		"github.com/blevesearch/bleve"
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
@@ -19,6 +20,7 @@ type Index struct {
 	index              bleve.Index
 	pageReader         wikipage.PageReader
 	frontmatterQueryer frontmatter.IQueryFrontmatterIndex
+	mu                 sync.RWMutex // Protects concurrent access to bleve operations
 }
 
 // IQueryBleveIndex defines the interface for querying the Bleve index.
@@ -40,6 +42,11 @@ func NewIndex(pageReader wikipage.PageReader, frontmatterQueryer frontmatter.IQu
 		pageReader:         pageReader,
 		frontmatterQueryer: frontmatterQueryer,
 	}, nil
+}
+
+// GetIndexName returns the name of this index for progress tracking.
+func (*Index) GetIndexName() string {
+	return "bleve"
 }
 
 var (
@@ -77,6 +84,9 @@ func (b *Index) AddPageToIndex(requestedIdentifier wikipage.PageIdentifier) erro
 
 	pageFrontmatter["content"] = content
 
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
 	_ = b.index.Delete(identifier)
 	_ = b.index.Delete(requestedIdentifier)
 	_ = b.index.Delete(mungedIdentifier)
@@ -87,6 +97,8 @@ func (b *Index) AddPageToIndex(requestedIdentifier wikipage.PageIdentifier) erro
 // RemovePageFromIndex removes a page from the Bleve index.
 func (b *Index) RemovePageFromIndex(identifier wikipage.PageIdentifier) error {
 	identifier = wikiidentifiers.MungeIdentifier(identifier)
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	return b.index.Delete(identifier)
 }
 
@@ -94,6 +106,9 @@ var newlineRegex = regexp.MustCompile("\n")
 
 // Query searches the Bleve index.
 func (b *Index) Query(query string) ([]SearchResult, error) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
 	titleQuery := bleve.NewMatchQuery(query)
 	titleQuery.SetField("title")
 	titleQuery.SetBoost(2.0)

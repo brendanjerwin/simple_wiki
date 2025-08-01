@@ -50,6 +50,7 @@ type Site struct {
 	Logger                  *lumber.ConsoleLogger
 	MarkdownRenderer        IRenderMarkdownToHTML
 	IndexMaintainer         index.IMaintainIndex
+	BackgroundIndexer       *index.BackgroundIndexingCoordinator
 	FrontmatterIndexQueryer frontmatter.IQueryFrontmatterIndex
 	BleveIndexQueryer       bleve.IQueryBleveIndex
 	MigrationApplicator     rollingmigrations.FrontmatterMigrationApplicator
@@ -101,7 +102,38 @@ func (s *Site) InitializeIndexing() error {
 	s.BleveIndexQueryer = bleveIndex
 	s.IndexMaintainer = multiMaintainer
 
+	// Create background indexing coordinator
+	s.BackgroundIndexer = index.NewBackgroundIndexingCoordinatorWithCPUWorkers(multiMaintainer, s.Logger)
+
+	// Get all files that need to be indexed
 	files := s.DirectoryList()
+	if len(files) == 0 {
+		s.Logger.Info("No pages found to index.")
+		return nil
+	}
+
+	// Convert files to page identifiers
+	pageIdentifiers := make([]string, len(files))
+	for i, file := range files {
+		pageIdentifiers[i] = file.Name()
+	}
+
+	// Start background indexing
+	err = s.BackgroundIndexer.StartBackground(pageIdentifiers)
+	if err != nil {
+		s.Logger.Error("Failed to start background indexing: %v", err)
+		// Fall back to synchronous processing
+		return s.initializeIndexingSynchronously(files)
+	}
+
+	s.Logger.Info("Background indexing started for %d pages. Application is ready.", len(files))
+	return nil
+}
+
+// initializeIndexingSynchronously provides fallback synchronous indexing
+func (s *Site) initializeIndexingSynchronously(files []os.FileInfo) error {
+	s.Logger.Info("Starting synchronous indexing fallback...")
+	
 	for _, file := range files {
 		if err := s.IndexMaintainer.AddPageToIndex(file.Name()); err != nil {
 			// Check for application setup errors that should prevent startup
@@ -115,8 +147,7 @@ func (s *Site) InitializeIndexing() error {
 		}
 	}
 
-	s.Logger.Info("Indexing complete. Added %v pages.", len(files))
-
+	s.Logger.Info("Synchronous indexing complete. Added %v pages.", len(files))
 	return nil
 }
 
