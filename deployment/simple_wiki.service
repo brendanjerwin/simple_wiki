@@ -7,6 +7,7 @@ ExecStart=/srv/wiki/bin/simple_wiki -port 80 -data /srv/wiki/data
 Restart=always
 RestartSec=30
 CPUWeight=20
+MemoryMax=3G
 
 [Install]
 WantedBy=multi-user.target
