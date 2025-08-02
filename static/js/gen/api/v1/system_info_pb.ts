@@ -118,6 +118,47 @@ export class GetIndexingStatusRequest extends Message<GetIndexingStatusRequest> 
 }
 
 /**
+ * The request message for the StreamIndexingStatus RPC.
+ *
+ * @generated from message api.v1.StreamIndexingStatusRequest
+ */
+export class StreamIndexingStatusRequest extends Message<StreamIndexingStatusRequest> {
+  /**
+   * Optional: interval in milliseconds for updates (default: 1000ms)
+   *
+   * @generated from field: optional int32 update_interval_ms = 1;
+   */
+  updateIntervalMs?: number;
+
+  constructor(data?: PartialMessage<StreamIndexingStatusRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "api.v1.StreamIndexingStatusRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "update_interval_ms", kind: "scalar", T: 5 /* ScalarType.INT32 */, opt: true },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): StreamIndexingStatusRequest {
+    return new StreamIndexingStatusRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): StreamIndexingStatusRequest {
+    return new StreamIndexingStatusRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): StreamIndexingStatusRequest {
+    return new StreamIndexingStatusRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: StreamIndexingStatusRequest | PlainMessage<StreamIndexingStatusRequest> | undefined, b: StreamIndexingStatusRequest | PlainMessage<StreamIndexingStatusRequest> | undefined): boolean {
+    return proto3.util.equals(StreamIndexingStatusRequest, a, b);
+  }
+}
+
+/**
  * The response message for the GetIndexingStatus RPC.
  *
  * @generated from message api.v1.GetIndexingStatusResponse

@@ -2,7 +2,7 @@ import { html, css, LitElement } from 'lit';
 import { createClient } from '@connectrpc/connect';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import { SystemInfoService } from '../gen/api/v1/system_info_connect.js';
-import { GetVersionRequest, GetVersionResponse, GetIndexingStatusRequest, GetIndexingStatusResponse } from '../gen/api/v1/system_info_pb.js';
+import { GetVersionRequest, GetVersionResponse, GetIndexingStatusRequest, GetIndexingStatusResponse, StreamIndexingStatusRequest } from '../gen/api/v1/system_info_pb.js';
 import { foundationCSS } from './shared-styles.js';
 import './system-info-indexing.js';
 import './system-info-version.js';
@@ -84,6 +84,7 @@ export class SystemInfo extends LitElement {
   declare error?: string;
   private debounceTimer?: ReturnType<typeof setTimeout>;
   private refreshTimer?: ReturnType<typeof setInterval>;
+  private streamSubscription?: AbortController;
 
   private client = createClient(SystemInfoService, getGrpcWebTransport());
 
@@ -95,7 +96,6 @@ export class SystemInfo extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.loadSystemInfo();
-    this.startAutoRefresh();
   }
 
   override firstUpdated(): void {
@@ -108,6 +108,7 @@ export class SystemInfo extends LitElement {
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
+    this.stopIndexingStream();
     this.stopAutoRefresh();
     // Clean up debounce timer
     if (this.debounceTimer) {
@@ -124,8 +125,22 @@ export class SystemInfo extends LitElement {
 
     // Set a new debounce timer
     this.debounceTimer = setTimeout(() => {
-      this.loadSystemInfo();
+      // If we're streaming, just reload version info, otherwise reload everything
+      if (this.streamSubscription) {
+        this.reloadVersionOnly();
+      } else {
+        this.loadSystemInfo();
+      }
     }, SystemInfo.DEBOUNCE_DELAY);
+  }
+
+  private async reloadVersionOnly(): Promise<void> {
+    try {
+      this.version = await this.client.getVersion(new GetVersionRequest());
+      this.requestUpdate();
+    } catch (err) {
+      console.error('Failed to reload version:', err);
+    }
   }
 
   private startAutoRefresh(): void {
@@ -152,30 +167,65 @@ export class SystemInfo extends LitElement {
     try {
       this.error = undefined;
       
-      // Load both version and indexing status in parallel
-      const [versionResponse, indexingResponse] = await Promise.all([
-        this.client.getVersion(new GetVersionRequest()),
-        this.client.getIndexingStatus(new GetIndexingStatusRequest())
-      ]);
+      // Load version (always use unary call for this)
+      this.version = await this.client.getVersion(new GetVersionRequest());
       
-      this.version = versionResponse;
-      this.indexingStatus = indexingResponse;
+      // Load initial indexing status
+      this.indexingStatus = await this.client.getIndexingStatus(new GetIndexingStatusRequest());
       
-      // Adjust refresh interval based on indexing status
-      if (this.refreshTimer) {
-        const currentInterval = this.indexingStatus.isRunning ? 
-          SystemInfo.REFRESH_INTERVAL : 
-          SystemInfo.IDLE_REFRESH_INTERVAL;
-        this.stopAutoRefresh();
-        this.refreshTimer = setInterval(() => {
-          this.loadSystemInfo();
-        }, currentInterval);
+      // Use streaming if indexing is active, otherwise use polling
+      if (this.indexingStatus.isRunning) {
+        this.startIndexingStream();
+      } else {
+        this.startAutoRefresh();
       }
     } catch (err) {
       this.error = err instanceof Error ? err.message : 'Failed to load system info';
+      // Fallback to polling on error
+      this.startAutoRefresh();
     } finally {
       this.loading = false;
       this.requestUpdate();
+    }
+  }
+
+  private async startIndexingStream(): Promise<void> {
+    this.stopIndexingStream();
+    this.stopAutoRefresh();
+    
+    this.streamSubscription = new AbortController();
+    
+    try {
+      const request = new StreamIndexingStatusRequest({
+        updateIntervalMs: 1000 // 1 second updates
+      });
+      
+      for await (const response of this.client.streamIndexingStatus(request, {
+        signal: this.streamSubscription.signal
+      })) {
+        this.indexingStatus = response;
+        this.requestUpdate();
+        
+        // Stop streaming when indexing completes
+        if (!response.isRunning) {
+          this.stopIndexingStream();
+          this.startAutoRefresh(); // Switch to polling for idle state
+          break;
+        }
+      }
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        console.error('Streaming error:', err);
+        // Fallback to polling
+        this.startAutoRefresh();
+      }
+    }
+  }
+
+  private stopIndexingStream(): void {
+    if (this.streamSubscription) {
+      this.streamSubscription.abort();
+      this.streamSubscription = undefined;
     }
   }
 

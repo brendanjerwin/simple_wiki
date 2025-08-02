@@ -19,8 +19,9 @@ import (
 const _ = grpc.SupportPackageIsVersion8
 
 const (
-	SystemInfoService_GetVersion_FullMethodName        = "/api.v1.SystemInfoService/GetVersion"
-	SystemInfoService_GetIndexingStatus_FullMethodName = "/api.v1.SystemInfoService/GetIndexingStatus"
+	SystemInfoService_GetVersion_FullMethodName           = "/api.v1.SystemInfoService/GetVersion"
+	SystemInfoService_GetIndexingStatus_FullMethodName    = "/api.v1.SystemInfoService/GetIndexingStatus"
+	SystemInfoService_StreamIndexingStatus_FullMethodName = "/api.v1.SystemInfoService/StreamIndexingStatus"
 )
 
 // SystemInfoServiceClient is the client API for SystemInfoService service.
@@ -31,6 +32,9 @@ type SystemInfoServiceClient interface {
 	GetVersion(ctx context.Context, in *GetVersionRequest, opts ...grpc.CallOption) (*GetVersionResponse, error)
 	// GetIndexingStatus returns the current status of background indexing operations.
 	GetIndexingStatus(ctx context.Context, in *GetIndexingStatusRequest, opts ...grpc.CallOption) (*GetIndexingStatusResponse, error)
+	// StreamIndexingStatus provides real-time streaming updates of indexing progress.
+	// The stream will automatically terminate when indexing is complete.
+	StreamIndexingStatus(ctx context.Context, in *StreamIndexingStatusRequest, opts ...grpc.CallOption) (SystemInfoService_StreamIndexingStatusClient, error)
 }
 
 type systemInfoServiceClient struct {
@@ -61,6 +65,39 @@ func (c *systemInfoServiceClient) GetIndexingStatus(ctx context.Context, in *Get
 	return out, nil
 }
 
+func (c *systemInfoServiceClient) StreamIndexingStatus(ctx context.Context, in *StreamIndexingStatusRequest, opts ...grpc.CallOption) (SystemInfoService_StreamIndexingStatusClient, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &SystemInfoService_ServiceDesc.Streams[0], SystemInfoService_StreamIndexingStatus_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &systemInfoServiceStreamIndexingStatusClient{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type SystemInfoService_StreamIndexingStatusClient interface {
+	Recv() (*GetIndexingStatusResponse, error)
+	grpc.ClientStream
+}
+
+type systemInfoServiceStreamIndexingStatusClient struct {
+	grpc.ClientStream
+}
+
+func (x *systemInfoServiceStreamIndexingStatusClient) Recv() (*GetIndexingStatusResponse, error) {
+	m := new(GetIndexingStatusResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // SystemInfoServiceServer is the server API for SystemInfoService service.
 // All implementations must embed UnimplementedSystemInfoServiceServer
 // for forward compatibility
@@ -69,6 +106,9 @@ type SystemInfoServiceServer interface {
 	GetVersion(context.Context, *GetVersionRequest) (*GetVersionResponse, error)
 	// GetIndexingStatus returns the current status of background indexing operations.
 	GetIndexingStatus(context.Context, *GetIndexingStatusRequest) (*GetIndexingStatusResponse, error)
+	// StreamIndexingStatus provides real-time streaming updates of indexing progress.
+	// The stream will automatically terminate when indexing is complete.
+	StreamIndexingStatus(*StreamIndexingStatusRequest, SystemInfoService_StreamIndexingStatusServer) error
 	mustEmbedUnimplementedSystemInfoServiceServer()
 }
 
@@ -81,6 +121,9 @@ func (UnimplementedSystemInfoServiceServer) GetVersion(context.Context, *GetVers
 }
 func (UnimplementedSystemInfoServiceServer) GetIndexingStatus(context.Context, *GetIndexingStatusRequest) (*GetIndexingStatusResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetIndexingStatus not implemented")
+}
+func (UnimplementedSystemInfoServiceServer) StreamIndexingStatus(*StreamIndexingStatusRequest, SystemInfoService_StreamIndexingStatusServer) error {
+	return status.Errorf(codes.Unimplemented, "method StreamIndexingStatus not implemented")
 }
 func (UnimplementedSystemInfoServiceServer) mustEmbedUnimplementedSystemInfoServiceServer() {}
 
@@ -131,6 +174,27 @@ func _SystemInfoService_GetIndexingStatus_Handler(srv interface{}, ctx context.C
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SystemInfoService_StreamIndexingStatus_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(StreamIndexingStatusRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(SystemInfoServiceServer).StreamIndexingStatus(m, &systemInfoServiceStreamIndexingStatusServer{ServerStream: stream})
+}
+
+type SystemInfoService_StreamIndexingStatusServer interface {
+	Send(*GetIndexingStatusResponse) error
+	grpc.ServerStream
+}
+
+type systemInfoServiceStreamIndexingStatusServer struct {
+	grpc.ServerStream
+}
+
+func (x *systemInfoServiceStreamIndexingStatusServer) Send(m *GetIndexingStatusResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 // SystemInfoService_ServiceDesc is the grpc.ServiceDesc for SystemInfoService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -147,6 +211,12 @@ var SystemInfoService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _SystemInfoService_GetIndexingStatus_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "StreamIndexingStatus",
+			Handler:       _SystemInfoService_StreamIndexingStatus_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "api/v1/system_info.proto",
 }

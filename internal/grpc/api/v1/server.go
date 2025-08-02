@@ -317,7 +317,64 @@ func (s *Server) GetIndexingStatus(_ context.Context, _ *apiv1.GetIndexingStatus
 	}
 
 	progress := s.IndexingProgressProvider.GetProgress()
+	return s.buildIndexingStatusResponse(progress), nil
+}
 
+// StreamIndexingStatus implements the StreamIndexingStatus RPC for real-time indexing updates.
+func (s *Server) StreamIndexingStatus(req *apiv1.StreamIndexingStatusRequest, stream apiv1.SystemInfoService_StreamIndexingStatusServer) error {
+	if s.IndexingProgressProvider == nil {
+		return status.Error(codes.Internal, "indexing progress provider not available")
+	}
+
+	// Default to 1-second intervals, allow client to customize
+	interval := time.Duration(req.GetUpdateIntervalMs()) * time.Millisecond
+	if interval == 0 {
+		interval = 1 * time.Second
+	}
+
+	// Minimum interval to prevent excessive server load
+	const minIntervalMs = 100
+	if interval < minIntervalMs*time.Millisecond {
+		interval = minIntervalMs * time.Millisecond
+	}
+
+	// Send initial status immediately
+	progress := s.IndexingProgressProvider.GetProgress()
+	response := s.buildIndexingStatusResponse(progress)
+	if err := stream.Send(response); err != nil {
+		return err
+	}
+
+	// If indexing is not running, terminate stream immediately
+	if !progress.IsRunning {
+		return nil
+	}
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-stream.Context().Done():
+			return stream.Context().Err()
+		case <-ticker.C:
+			progress := s.IndexingProgressProvider.GetProgress()
+			response := s.buildIndexingStatusResponse(progress)
+			
+			if err := stream.Send(response); err != nil {
+				return err
+			}
+			
+			// Terminate stream when indexing completes
+			if !progress.IsRunning {
+				return nil
+			}
+		}
+	}
+}
+
+// buildIndexingStatusResponse builds a GetIndexingStatusResponse from IndexingProgress.
+func (*Server) buildIndexingStatusResponse(progress index.IndexingProgress) *apiv1.GetIndexingStatusResponse {
 	// Convert estimated completion time to protobuf timestamp
 	var estimatedCompletion *timestamppb.Timestamp
 	if progress.EstimatedCompletion != nil {
@@ -350,7 +407,7 @@ func (s *Server) GetIndexingStatus(_ context.Context, _ *apiv1.GetIndexingStatus
 		ProcessingRatePerSecond: progress.ProcessingRatePerSecond,
 		EstimatedCompletion:    estimatedCompletion,
 		IndexProgress:          indexProgress,
-	}, nil
+	}
 }
 
 // GetFrontmatter implements the GetFrontmatter RPC.

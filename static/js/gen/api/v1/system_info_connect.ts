@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { GetIndexingStatusRequest, GetIndexingStatusResponse, GetVersionRequest, GetVersionResponse } from "./system_info_pb.js";
+import { GetIndexingStatusRequest, GetIndexingStatusResponse, GetVersionRequest, GetVersionResponse, StreamIndexingStatusRequest } from "./system_info_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -33,6 +33,18 @@ export const SystemInfoService = {
       I: GetIndexingStatusRequest,
       O: GetIndexingStatusResponse,
       kind: MethodKind.Unary,
+    },
+    /**
+     * StreamIndexingStatus provides real-time streaming updates of indexing progress.
+     * The stream will automatically terminate when indexing is complete.
+     *
+     * @generated from rpc api.v1.SystemInfoService.StreamIndexingStatus
+     */
+    streamIndexingStatus: {
+      name: "StreamIndexingStatus",
+      I: StreamIndexingStatusRequest,
+      O: GetIndexingStatusResponse,
+      kind: MethodKind.ServerStreaming,
     },
   }
 } as const;

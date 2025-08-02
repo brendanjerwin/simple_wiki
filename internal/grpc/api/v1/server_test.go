@@ -21,6 +21,7 @@ import (
 	"github.com/onsi/gomega/types"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -171,6 +172,49 @@ type MockIndexingProgressProvider struct {
 
 func (m *MockIndexingProgressProvider) GetProgress() index.IndexingProgress {
 	return m.Progress
+}
+
+// MockStreamServer is a mock implementation of apiv1.SystemInfoService_StreamIndexingStatusServer for testing.
+type MockStreamServer struct {
+	SentMessages []*apiv1.GetIndexingStatusResponse
+	SendErr      error
+	ContextDone  bool
+}
+
+func (m *MockStreamServer) Send(response *apiv1.GetIndexingStatusResponse) error {
+	if m.SendErr != nil {
+		return m.SendErr
+	}
+	m.SentMessages = append(m.SentMessages, response)
+	return nil
+}
+
+func (m *MockStreamServer) Context() context.Context {
+	if m.ContextDone {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		return ctx
+	}
+	return context.Background()
+}
+
+func (*MockStreamServer) SetHeader(metadata.MD) error {
+	return nil
+}
+
+func (*MockStreamServer) SendHeader(metadata.MD) error {
+	return nil
+}
+
+func (*MockStreamServer) SetTrailer(metadata.MD) {
+}
+
+func (*MockStreamServer) SendMsg(any) error {
+	return nil
+}
+
+func (*MockStreamServer) RecvMsg(any) error {
+	return nil
 }
 
 var _ = Describe("Server", func() {
@@ -1372,6 +1416,93 @@ var _ = Describe("Server", func() {
 
 			It("should not return a response", func() {
 				Expect(res).To(BeNil())
+			})
+		})
+	})
+
+	Describe("StreamIndexingStatus", func() {
+		var (
+			req                 *apiv1.StreamIndexingStatusRequest
+			mockProgressProvider *MockIndexingProgressProvider
+			streamServer        *MockStreamServer
+		)
+
+		BeforeEach(func() {
+			req = &apiv1.StreamIndexingStatusRequest{}
+			mockProgressProvider = &MockIndexingProgressProvider{
+				Progress: index.IndexingProgress{
+					IsRunning:              true,
+					TotalPages:             100,
+					CompletedPages:         75,
+					QueueDepth:             5,
+					ProcessingRatePerSecond: 10.5,
+					IndexProgress: map[string]index.SingleIndexProgress{
+						"frontmatter": {
+							Name:                   "frontmatter",
+							Completed:              75,
+							Total:                  100,
+							ProcessingRatePerSecond: 12.0,
+							LastError:              nil,
+						},
+					},
+				},
+			}
+			streamServer = &MockStreamServer{}
+		})
+
+		When("indexing progress provider is not available", func() {
+			var err error
+
+			BeforeEach(func() {
+				server = v1.NewServer("commit", time.Now(), nil, nil, lumber.NewConsoleLogger(lumber.WARN))
+				err = server.StreamIndexingStatus(req, streamServer)
+			})
+
+			It("should return an internal error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.Internal, "indexing progress provider not available"))
+			})
+		})
+
+		When("streaming indexing status with context cancellation", func() {
+			var err error
+
+			BeforeEach(func() {
+				// Set up stream server with context that gets cancelled after initial send
+				streamServer.ContextDone = true
+				server = v1.NewServer("commit", time.Now(), nil, mockProgressProvider, lumber.NewConsoleLogger(lumber.WARN))
+				err = server.StreamIndexingStatus(req, streamServer)
+			})
+
+			It("should send initial status immediately", func() {
+				Expect(streamServer.SentMessages).To(HaveLen(1))
+				firstMessage := streamServer.SentMessages[0]
+				Expect(firstMessage.IsRunning).To(BeTrue())
+				Expect(firstMessage.TotalPages).To(Equal(int32(100)))
+				Expect(firstMessage.CompletedPages).To(Equal(int32(75)))
+			})
+
+			It("should return context cancelled error", func() {
+				Expect(err).To(Equal(context.Canceled))
+			})
+		})
+
+		When("indexing is not running", func() {
+			var err error
+
+			BeforeEach(func() {
+				mockProgressProvider.Progress.IsRunning = false
+				server = v1.NewServer("commit", time.Now(), nil, mockProgressProvider, lumber.NewConsoleLogger(lumber.WARN))
+				err = server.StreamIndexingStatus(req, streamServer)
+			})
+
+			It("should send initial status and terminate", func() {
+				Expect(streamServer.SentMessages).To(HaveLen(1))
+				firstMessage := streamServer.SentMessages[0]
+				Expect(firstMessage.IsRunning).To(BeFalse())
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
 			})
 		})
 	})

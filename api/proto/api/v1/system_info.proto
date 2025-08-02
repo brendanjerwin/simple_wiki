@@ -12,6 +12,10 @@ service SystemInfoService {
   
   // GetIndexingStatus returns the current status of background indexing operations.
   rpc GetIndexingStatus(GetIndexingStatusRequest) returns (GetIndexingStatusResponse) {}
+  
+  // StreamIndexingStatus provides real-time streaming updates of indexing progress.
+  // The stream will automatically terminate when indexing is complete.
+  rpc StreamIndexingStatus(StreamIndexingStatusRequest) returns (stream GetIndexingStatusResponse) {}
 }
 
 // The request message for the GetVersion RPC.
@@ -25,6 +29,12 @@ message GetVersionResponse {
 
 // The request message for the GetIndexingStatus RPC.
 message GetIndexingStatusRequest {}
+
+// The request message for the StreamIndexingStatus RPC.
+message StreamIndexingStatusRequest {
+  // Optional: interval in milliseconds for updates (default: 1000ms)
+  optional int32 update_interval_ms = 1;
+}
 
 // The response message for the GetIndexingStatus RPC.
 message GetIndexingStatusResponse {
