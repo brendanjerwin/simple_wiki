@@ -13,12 +13,13 @@ export class ErrorDisplay extends LitElement {
     css`
     :host {
       display: block;
-      background: #fef2f2;
-      border: 1px solid #fca5a5;
-      border-radius: 6px;
-      padding: 16px;
+      background: #2d2d2d;
+      border: 1px solid #dc3545;
+      border-radius: 4px;
+      padding: 12px;
       margin: 8px 0;
-      color: #991b1b;
+      color: #e9ecef;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
     }
 
     .error-header {
@@ -32,6 +33,7 @@ export class ErrorDisplay extends LitElement {
       line-height: 1;
       flex-shrink: 0;
       margin-top: 2px;
+      color: #dc3545;
     }
 
     .error-content {
@@ -41,21 +43,26 @@ export class ErrorDisplay extends LitElement {
 
     .error-message {
       font-weight: 500;
-      line-height: 1.4;
+      line-height: 1.2;
       margin: 0;
       word-wrap: break-word;
+      color: #e9ecef;
+      font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+      font-size: 11px;
     }
 
     .error-goal {
       display: block;
       font-weight: 600;
       margin-bottom: 4px;
+      color: #ffc107;
     }
 
     .error-detail {
       display: block;
       font-weight: 400;
       margin-left: 8px;
+      color: #adb5bd;
     }
 
     .error-details {
@@ -76,45 +83,47 @@ export class ErrorDisplay extends LitElement {
     }
 
     .error-details-content {
-      padding: 12px;
-      background: #fee2e2;
-      border: 1px solid #fca5a5;
+      padding: 8px;
+      background: rgba(220, 53, 69, 0.1);
+      border: 1px solid rgba(220, 53, 69, 0.3);
       border-radius: 4px;
-      font-size: 13px;
-      line-height: 1.4;
+      font-size: 10px;
+      line-height: 1.2;
       white-space: pre-wrap;
       word-wrap: break-word;
       overflow-wrap: break-word;
-      font-family: ui-monospace, 'SFMono-Regular', 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-      color: black;
+      font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+      color: #adb5bd;
     }
 
     .expand-button {
-      margin-top: 8px;
+      margin-top: 6px;
       background: none;
       border: none;
-      color: #991b1b;
-      font-size: 13px;
+      color: #dc3545;
+      font-size: 10px;
       cursor: pointer;
-      padding: 4px 0;
+      padding: 2px 0;
       text-decoration: underline;
       display: flex;
       align-items: center;
       gap: 4px;
+      font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+      transition: color 0.2s ease;
     }
 
     .expand-button:hover {
-      color: #7f1d1d;
+      color: #ff6b7a;
     }
 
     .expand-button:focus {
-      outline: 2px solid #991b1b;
-      outline-offset: 2px;
+      outline: 2px solid #dc3545;
+      outline-offset: 1px;
       border-radius: 2px;
     }
 
     .expand-icon {
-      font-size: 12px;
+      font-size: 10px;
       transition: transform 0.2s ease;
     }
 

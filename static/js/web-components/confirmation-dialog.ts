@@ -67,6 +67,8 @@ export class ConfirmationDialog extends LitElement {
     css`
       :host {
         display: none;
+        font-size: 11px;
+        line-height: 1.2;
       }
       
       :host([open]) {
@@ -74,61 +76,67 @@ export class ConfirmationDialog extends LitElement {
       }
 
       .dialog-content {
-        padding: 24px;
-        min-width: 400px;
-        max-width: 500px;
+        padding: 16px;
+        min-width: 320px;
+        max-width: 420px;
       }
 
       .dialog-icon {
-        font-size: 48px;
+        font-size: 24px;
         text-align: center;
-        margin-bottom: 16px;
+        margin-bottom: 12px;
+        opacity: 0.9;
       }
 
       .dialog-icon.warning {
-        color: #d9534f;
+        color: #dc3545;
       }
 
       .dialog-icon.info {
-        color: #5bc0de;
+        color: #6c757d;
       }
 
       .dialog-message {
         text-align: center;
-        margin-bottom: 16px;
-        line-height: 1.5;
-        font-size: 16px;
-        font-weight: 500;
+        margin-bottom: 12px;
+        line-height: 1.2;
+        font-size: 12px;
+        font-weight: 600;
+        color: #333;
+        font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
       }
 
       .dialog-description {
         text-align: center;
-        margin-bottom: 24px;
-        line-height: 1.5;
-        color: #666;
+        margin-bottom: 16px;
+        line-height: 1.2;
+        color: #6c757d;
+        font-size: 11px;
+        font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
       }
 
       .dialog-description.irreversible {
-        font-weight: bold;
-        color: #d9534f;
+        font-weight: 600;
+        color: #dc3545;
       }
 
       .dialog-actions {
         display: flex;
-        gap: 12px;
+        gap: 8px;
         justify-content: flex-end;
-        margin-top: 24px;
+        margin-top: 16px;
       }
 
       .button {
-        padding: 8px 16px;
+        padding: 6px 12px;
         border: none;
         border-radius: 4px;
         cursor: pointer;
-        font-size: 14px;
+        font-size: 11px;
         font-weight: 500;
-        transition: background-color 0.2s;
-        min-width: 80px;
+        transition: all 0.2s ease;
+        min-width: 64px;
+        font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
       }
 
       .button:disabled {
@@ -136,40 +144,57 @@ export class ConfirmationDialog extends LitElement {
         cursor: not-allowed;
       }
 
+      .button:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+
+      .button:active {
+        transform: translateY(0);
+      }
+
       .button-cancel {
         background: #6c757d;
         color: white;
+        border: 1px solid #6c757d;
       }
 
       .button-cancel:hover:not(:disabled) {
         background: #5a6268;
+        border-color: #5a6268;
       }
 
       .button-primary {
         background: #007bff;
         color: white;
+        border: 1px solid #007bff;
       }
 
       .button-primary:hover:not(:disabled) {
         background: #0056b3;
+        border-color: #0056b3;
       }
 
       .button-danger {
-        background: #d9534f;
+        background: #dc3545;
         color: white;
+        border: 1px solid #dc3545;
       }
 
       .button-danger:hover:not(:disabled) {
-        background: #c9302c;
+        background: #c82333;
+        border-color: #c82333;
       }
 
       .button-warning {
-        background: #f0ad4e;
-        color: white;
+        background: #ffc107;
+        color: #212529;
+        border: 1px solid #ffc107;
       }
 
       .button-warning:hover:not(:disabled) {
-        background: #ec971f;
+        background: #e0a800;
+        border-color: #e0a800;
       }
 
       .dialog-overlay {
@@ -183,14 +208,52 @@ export class ConfirmationDialog extends LitElement {
         align-items: center;
         justify-content: center;
         z-index: 1000;
+        backdrop-filter: blur(4px);
       }
 
       .dialog-box {
-        background: white;
-        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.95);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 4px;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         max-height: 90vh;
         overflow-y: auto;
+        backdrop-filter: blur(8px);
+      }
+
+      /* Mobile responsive */
+      @media (max-width: 768px) {
+        .dialog-content {
+          padding: 12px;
+          min-width: 280px;
+          max-width: 320px;
+        }
+
+        .dialog-icon {
+          font-size: 20px;
+          margin-bottom: 8px;
+        }
+
+        .dialog-message {
+          font-size: 11px;
+          margin-bottom: 8px;
+        }
+
+        .dialog-description {
+          font-size: 10px;
+          margin-bottom: 12px;
+        }
+
+        .dialog-actions {
+          gap: 6px;
+          margin-top: 12px;
+        }
+
+        .button {
+          padding: 4px 8px;
+          font-size: 10px;
+          min-width: 48px;
+        }
       }
     `
   ];

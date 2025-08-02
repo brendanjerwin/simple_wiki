@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Meta, StoryObj } from '@storybook/web-components-vite';
 import { action } from 'storybook/actions';
 import { html } from 'lit';
@@ -13,13 +14,19 @@ const meta: Meta = {
     docs: {
       description: {
         component: `
-A generic confirmation dialog component that can be reused for various confirmation scenarios.
+A compact confirmation dialog styled to match the system-info design language.
 
-**Features:**
-- Configurable message, buttons, and styling
+**Key Visual Features:**
+- Compact typography with monospace fonts for technical content
+- System-info color palette and spacing patterns
+- Smooth micro-animations and hover effects
+- Backdrop blur for modern glass effect
+- Mobile-responsive design with scaled typography
+
+**Technical Features:**
+- Configurable message, buttons, and styling variants
 - Loading states during async operations  
-- Error display integration
-- Keyboard shortcuts (Enter to confirm, Escape to cancel)
+- Error display integration with AugmentedError
 - Click-outside-to-close functionality
 - Multiple button variants (primary, danger, warning)
 
@@ -27,10 +34,11 @@ A generic confirmation dialog component that can be reused for various confirmat
 \`\`\`typescript
 const dialog = document.querySelector('confirmation-dialog');
 dialog.openDialog({
-  message: 'Are you sure you want to delete this item?',
-  description: 'This action cannot be undone.',
+  message: 'Delete index: frontmatter?',
+  description: 'Pages: 1,247 items',
   confirmText: 'Delete',
-  confirmVariant: 'danger'
+  confirmVariant: 'danger',
+  irreversible: true
 });
 \`\`\`
         `,
@@ -42,31 +50,58 @@ dialog.openDialog({
 export default meta;
 type Story = StoryObj;
 
-export const Closed: Story = {
-  render: () => html`
-    <div style="padding: 20px;">
-      <p>The dialog is closed. Use other stories to see it in different states.</p>
-      <confirmation-dialog></confirmation-dialog>
-    </div>
-  `,
+export const CompactSystemInfoStyle: Story = {
+  render: () => {
+    const openCompactDialog = () => {
+      const dialog = document.querySelector('confirmation-dialog') as any;
+      if (dialog) {
+        dialog.openDialog({
+          message: 'Rebuild search index?',
+          description: 'Current: 1,247 pages indexed',
+          confirmText: 'Rebuild',
+          cancelText: 'Cancel',
+          confirmVariant: 'danger',
+          icon: 'warning',
+          irreversible: false
+        });
+      }
+    };
+
+    setTimeout(openCompactDialog, 100);
+
+    return html`
+      <div style="padding: 20px; background: #f0f8ff;">
+        <h3>Compact System-Info Styling</h3>
+        <p>Dialog with technical monospace typography and tight spacing</p>
+        <button @click=${openCompactDialog}>Open System Dialog</button>
+        <confirmation-dialog
+          @confirm=${action('confirm-rebuild')}
+          @cancel=${action('cancel-rebuild')}>
+        </confirmation-dialog>
+        <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
+          Notice the compact design, monospace fonts, and system-info color palette.
+        </p>
+      </div>
+    `;
+  },
   parameters: {
     docs: {
       description: {
-        story: 'The default state when the dialog is closed and hidden.',
+        story: 'Shows the new compact system-info styling with technical typography, tight spacing, and system colors.',
       },
     },
   },
 };
 
-export const DangerConfirmation: Story = {
+export const CompactDangerConfirmation: Story = {
   render: () => {
     const openDialog = () => {
-      const dialog = document.querySelector('confirmation-dialog');
+      const dialog = document.querySelector('confirmation-dialog') as any;
       if (dialog) {
         dialog.openDialog({
-          message: 'Are you sure you want to delete this page?',
-          description: 'Page: home',
-          confirmText: 'Delete Page',
+          message: 'Delete page: home.md?',
+          description: 'Size: 12.4KB, Modified: 2min ago',
+          confirmText: 'Delete',
           cancelText: 'Cancel',
           confirmVariant: 'danger',
           icon: 'warning',
@@ -79,15 +114,15 @@ export const DangerConfirmation: Story = {
 
     return html`
       <div style="padding: 20px; background: #f0f8ff;">
-        <h3>Danger Confirmation Example</h3>
-        <p>This story shows a typical destructive action confirmation.</p>
-        <button @click=${openDialog}>Open Delete Confirmation</button>
+        <h3>Compact Danger Confirmation</h3>
+        <p>Destructive action with technical file information</p>
+        <button @click=${openDialog}>Delete File Dialog</button>
         <confirmation-dialog
-          @confirm=${action('confirm-delete')}
-          @cancel=${action('cancel-delete')}>
+          @confirm=${action('confirm-delete-file')}
+          @cancel=${action('cancel-delete-file')}>
         </confirmation-dialog>
         <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
-          Open the browser developer tools console to see the action logs.
+          <strong>Open the browser developer tools console (F12) to see the action logs.</strong>
         </p>
       </div>
     `;
@@ -95,24 +130,24 @@ export const DangerConfirmation: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'A typical destructive action confirmation with danger styling. Shows warning icon, irreversible action messaging, and red delete button. Open the browser developer tools console to see the action logs.',
+        story: 'Destructive action dialog with system-info styling. Features technical file information with monospace typography and compact layout. Open the browser developer tools console to see the action logs.',
       },
     },
   },
 };
 
-export const PrimaryConfirmation: Story = {
+export const CompactPrimaryAction: Story = {
   render: () => {
     const openDialog = () => {
-      const dialog = document.querySelector('confirmation-dialog');
+      const dialog = document.querySelector('confirmation-dialog') as any;
       if (dialog) {
         dialog.openDialog({
-          message: 'Do you want to save your changes?',
-          description: 'Your changes will be permanently saved.',
-          confirmText: 'Save Changes',
-          cancelText: 'Discard',
+          message: 'Deploy build: v1.4.2?',
+          description: 'Target: production, Size: 2.1MB',
+          confirmText: 'Deploy',
+          cancelText: 'Cancel',
           confirmVariant: 'primary',
-          icon: '💾',
+          icon: 'system',
           irreversible: false
         });
       }
@@ -122,15 +157,15 @@ export const PrimaryConfirmation: Story = {
 
     return html`
       <div style="padding: 20px; background: #f0f8ff;">
-        <h3>Primary Action Confirmation</h3>
-        <p>This story shows a positive action confirmation.</p>
-        <button @click=${openDialog}>Open Save Confirmation</button>
+        <h3>Compact Primary Action</h3>
+        <p>System deployment confirmation with technical details</p>
+        <button @click=${openDialog}>Deploy Build Dialog</button>
         <confirmation-dialog
-          @confirm=${action('confirm-save')}
-          @cancel=${action('cancel-save')}>
+          @confirm=${action('confirm-deploy')}
+          @cancel=${action('cancel-deploy')}>
         </confirmation-dialog>
         <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
-          Open the browser developer tools console to see the action logs.
+          Primary actions use blue buttons with monospace technical information.
         </p>
       </div>
     `;
@@ -138,21 +173,21 @@ export const PrimaryConfirmation: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'A positive action confirmation with primary styling. Shows save icon and blue confirm button. Open the browser developer tools console to see the action logs.',
+        story: 'Primary action dialog featuring deployment confirmation. Shows technical details with monospace typography and compact system-info styling.',
       },
     },
   },
 };
 
-export const WarningConfirmation: Story = {
+export const CompactWarningAction: Story = {
   render: () => {
     const openDialog = () => {
-      const dialog = document.querySelector('confirmation-dialog');
+      const dialog = document.querySelector('confirmation-dialog') as any;
       if (dialog) {
         dialog.openDialog({
-          message: 'This action may have side effects',
-          description: 'Proceeding will regenerate all cache files and may take several minutes.',
-          confirmText: 'Proceed Anyway',
+          message: 'Clear cache: all indexes?',
+          description: 'Duration: ~3min, Impact: Search unavailable',
+          confirmText: 'Clear Cache',
           cancelText: 'Cancel',
           confirmVariant: 'warning',
           icon: 'warning',
@@ -165,15 +200,15 @@ export const WarningConfirmation: Story = {
 
     return html`
       <div style="padding: 20px; background: #f0f8ff;">
-        <h3>Warning Confirmation Example</h3>
-        <p>This story shows a cautionary action confirmation.</p>
-        <button @click=${openDialog}>Open Warning Confirmation</button>
+        <h3>Compact Warning Action</h3>
+        <p>Cache clearing with impact assessment</p>
+        <button @click=${openDialog}>Clear Cache Dialog</button>
         <confirmation-dialog
-          @confirm=${action('confirm-proceed')}
-          @cancel=${action('cancel-proceed')}>
+          @confirm=${action('confirm-clear-cache')}
+          @cancel=${action('cancel-clear-cache')}>
         </confirmation-dialog>
         <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
-          Open the browser developer tools console to see the action logs.
+          Warning actions use yellow buttons (#ffc107) for potentially disruptive operations.
         </p>
       </div>
     `;
@@ -181,22 +216,23 @@ export const WarningConfirmation: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'A cautionary action confirmation with warning styling. Shows orange/yellow confirm button for actions that need attention but are not destructive. Open the browser developer tools console to see the action logs.',
+        story: 'Warning action dialog for system maintenance operations. Features impact assessment with monospace typography and system-info color coding.',
       },
     },
   },
 };
 
-export const LoadingState: Story = {
+export const CompactLoadingState: Story = {
   render: () => {
     const openDialogWithLoading = () => {
-      const dialog = document.querySelector('confirmation-dialog');
+      const dialog = document.querySelector('confirmation-dialog') as any;
       if (dialog) {
         dialog.openDialog({
-          message: 'Are you sure you want to delete this item?',
-          confirmText: 'Delete',
-          confirmVariant: 'danger',
-          irreversible: true
+          message: 'Reindex all pages?',
+          description: 'Est. time: 2-3 minutes',
+          confirmText: 'Start',
+          confirmVariant: 'primary',
+          irreversible: false
         });
         
         // Simulate loading state
@@ -210,15 +246,15 @@ export const LoadingState: Story = {
 
     return html`
       <div style="padding: 20px; background: #f0f8ff;">
-        <h3>Loading State Example</h3>
-        <p>This story shows the dialog in a loading state with disabled buttons.</p>
-        <button @click=${openDialogWithLoading}>Open Dialog with Loading</button>
+        <h3>Compact Loading State</h3>
+        <p>Dialog in processing state with disabled compact buttons</p>
+        <button @click=${openDialogWithLoading}>Start Reindex Process</button>
         <confirmation-dialog
-          @confirm=${action('confirm-while-loading')}
-          @cancel=${action('cancel-while-loading')}>
+          @confirm=${action('confirm-reindex')}
+          @cancel=${action('cancel-reindex')}>
         </confirmation-dialog>
         <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
-          The dialog will enter loading state after opening. Buttons become disabled and show loading text.
+          Loading state shows "Processing..." in compact monospace buttons.
         </p>
       </div>
     `;
@@ -226,28 +262,29 @@ export const LoadingState: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Shows the dialog in loading state with disabled buttons and loading text. This is useful during async operations to prevent multiple submissions.',
+        story: 'Shows loading state with system-info compact styling. Buttons are disabled and show processing text in monospace font.',
       },
     },
   },
 };
 
-export const ErrorState: Story = {
+export const SystemErrorWithDetails: Story = {
   render: () => {
     const openDialogWithError = () => {
-      const dialog = document.querySelector('confirmation-dialog');
+      const dialog = document.querySelector('confirmation-dialog') as any;
       if (dialog) {
         dialog.openDialog({
-          message: 'Are you sure you want to delete this item?',
-          confirmText: 'Delete',
-          confirmVariant: 'danger',
-          irreversible: true
+          message: 'Rebuild index: frontmatter?',
+          description: 'Previous rebuild failed',
+          confirmText: 'Retry',
+          confirmVariant: 'warning',
+          irreversible: false
         });
         
-        // Simulate error state
+        // Simulate error state with system-specific error
         setTimeout(() => {
-          const mockError = new Error('Network connection failed');
-          const augmentedError = AugmentErrorService.augmentError(mockError, 'delete item');
+          const mockError = new Error('Insufficient disk space: 2.1GB required, 0.8GB available');
+          const augmentedError = AugmentErrorService.augmentError(mockError, 'rebuild search index');
           dialog.showError(augmentedError);
         }, 500);
       }
@@ -257,15 +294,15 @@ export const ErrorState: Story = {
 
     return html`
       <div style="padding: 20px; background: #f0f8ff;">
-        <h3>Error State Example</h3>
-        <p>This story shows the dialog displaying an error message.</p>
-        <button @click=${openDialogWithError}>Open Dialog with Error</button>
+        <h3>System Error with Details</h3>
+        <p>Dialog showing technical error with AugmentedError integration</p>
+        <button @click=${openDialogWithError}>Trigger System Error</button>
         <confirmation-dialog
-          @confirm=${action('confirm-with-error')}
-          @cancel=${action('cancel-with-error')}>
+          @confirm=${action('confirm-retry')}
+          @cancel=${action('cancel-retry')}>
         </confirmation-dialog>
         <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
-          The dialog will show an error after opening. This allows users to see what went wrong and potentially retry.
+          Error display integrates with compact dialog styling. Click error to expand stack trace.
         </p>
       </div>
     `;
@@ -273,36 +310,91 @@ export const ErrorState: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Shows the dialog with an error message displayed. The dialog remains open so users can see the error and potentially retry the action.',
+        story: 'Shows error display integration with system-info styling. AugmentedError provides technical details while maintaining compact layout.',
       },
     },
   },
 };
 
-export const MinimalConfiguration: Story = {
+export const InteractiveTesting: Story = {
   render: () => {
-    const openMinimalDialog = () => {
-      const dialog = document.querySelector('confirmation-dialog');
-      if (dialog) {
-        dialog.openDialog({
-          message: 'Are you sure?'
-        });
+    const scenarios = [
+      {
+        name: 'Quick Action',
+        config: {
+          message: 'Restart service?',
+          description: 'Duration: <5s',
+          confirmText: 'Restart',
+          confirmVariant: 'primary' as const,
+          icon: 'system' as const
+        }
+      },
+      {
+        name: 'Destructive Action',
+        config: {
+          message: 'Purge cache: all data?',
+          description: 'WARNING: Cannot be undone',
+          confirmText: 'Purge',
+          confirmVariant: 'danger' as const,
+          icon: 'warning' as const,
+          irreversible: true
+        }
+      },
+      {
+        name: 'Maintenance',
+        config: {
+          message: 'Update dependencies?',
+          description: 'Service downtime: ~2min',
+          confirmText: 'Update',
+          confirmVariant: 'warning' as const,
+          icon: 'warning' as const
+        }
       }
-    };
-
-    setTimeout(openMinimalDialog, 100);
+    ];
 
     return html`
       <div style="padding: 20px; background: #f0f8ff;">
-        <h3>Minimal Configuration Example</h3>
-        <p>This story shows the dialog with minimal configuration - just a message.</p>
-        <button @click=${openMinimalDialog}>Open Minimal Dialog</button>
+        <h3>Interactive Testing Demo</h3>
+        <p><strong>Test Instructions:</strong></p>
+        <ul style="margin: 10px 0; padding-left: 20px;">
+          <li>Test different dialog variants and button styles</li>
+          <li>Try clicking outside dialogs to dismiss</li>
+          <li>Test keyboard navigation with Tab and Enter/Escape</li>
+          <li>Notice hover animations on compact buttons</li>
+          <li>Observe monospace typography for technical details</li>
+        </ul>
+        
+        <div style="display: flex; gap: 10px; margin: 15px 0;">
+          ${scenarios.map(({ name, config }) => html`
+            <button @click=${() => {
+              const dialog = document.querySelector('confirmation-dialog') as any;
+              if (dialog) {
+                dialog.openDialog(config);
+              }
+            }}>
+              ${name}
+            </button>
+          `)}
+        </div>
+        
         <confirmation-dialog
-          @confirm=${action('confirm-minimal')}
-          @cancel=${action('cancel-minimal')}>
+          @confirm=${action('confirm-interactive')}
+          @cancel=${action('cancel-interactive')}>
         </confirmation-dialog>
+        
+        <div style="margin-top: 20px; padding: 15px; background: #fff3cd; border-radius: 4px;">
+          <h4 style="margin-top: 0;">Expected Behavior:</h4>
+          <ul style="margin: 10px 0; padding-left: 20px;">
+            <li>✅ Compact system-info styling with monospace fonts</li>
+            <li>✅ Smooth hover animations on buttons</li>
+            <li>✅ Backdrop blur effect</li>
+            <li>✅ Appropriate color coding by action type</li>
+            <li>✅ Click outside to dismiss functionality</li>
+          </ul>
+        </div>
+        
         <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
-          Uses default settings: warning icon, "Confirm"/"Cancel" buttons, danger variant.
+          <strong>Open the browser developer tools console (F12) to see the action logs.</strong>
         </p>
       </div>
     `;
@@ -310,7 +402,56 @@ export const MinimalConfiguration: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Shows the dialog with only a message configured. All other options use sensible defaults.',
+        story: 'Comprehensive interactive testing of different dialog configurations. Test various scenarios, interaction patterns, and visual states. Open the browser developer tools console to see the action logs.',
+      },
+    },
+  },
+};
+
+export const ResponsiveDesignDemo: Story = {
+  render: () => {
+    const openResponsiveDialog = () => {
+      const dialog = document.querySelector('confirmation-dialog') as any;
+      if (dialog) {
+        dialog.openDialog({
+          message: 'Mobile responsive test',
+          description: 'Resize browser to see mobile adaptation: Smaller padding, reduced font sizes (12px→11px→10px), compact buttons (6px→4px padding)',
+          confirmText: 'Test',
+          confirmVariant: 'primary',
+          irreversible: false
+        });
+      }
+    };
+
+    setTimeout(openResponsiveDialog, 100);
+
+    return html`
+      <div style="padding: 20px; background: #f0f8ff;">
+        <h3>Responsive Design Test</h3>
+        <p>Dialog adaptation for mobile devices:</p>
+        <ul style="margin: 10px 0; padding-left: 20px;">
+          <li><strong>Desktop:</strong> 16px padding, 12px message font</li>
+          <li><strong>Mobile (≤768px):</strong> 12px padding, 11px message font</li>
+          <li><strong>Buttons:</strong> 6px→4px padding, 11px→10px font</li>
+          <li><strong>Icons:</strong> 24px→20px size reduction</li>
+        </ul>
+        
+        <button @click=${openResponsiveDialog}>Open Responsive Dialog</button>
+        <confirmation-dialog
+          @confirm=${action('confirm-responsive')}
+          @cancel=${action('cancel-responsive')}>
+        </confirmation-dialog>
+        
+        <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
+          Resize browser window to test responsive breakpoints. System-info styling scales appropriately.
+        </p>
+      </div>
+    `;
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Demonstrates responsive behavior with system-info styling. All elements scale appropriately for mobile while maintaining compact design principles.',
       },
     },
   },

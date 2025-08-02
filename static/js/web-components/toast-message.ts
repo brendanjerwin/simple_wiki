@@ -34,15 +34,17 @@ export class ToastMessage extends LitElement {
     css`
       :host {
         position: fixed;
-        top: 20px;
-        right: 20px;
+        top: 12px;
+        right: 12px;
         z-index: 10000;
         display: block;
-        max-width: 500px;
-        min-width: 300px;
+        max-width: 400px;
+        min-width: 280px;
         opacity: 0;
         transform: translateX(100%);
-        transition: all 0.3s ease-in-out;
+        transition: all 0.3s ease;
+        font-size: 11px;
+        line-height: 1.2;
       }
 
       :host([visible]) {
@@ -51,82 +53,100 @@ export class ToastMessage extends LitElement {
       }
 
       .toast {
-        background: #ffffff;
-        border-left: 4px solid var(--toast-color);
-        padding: 16px 40px 16px 16px; /* Extra padding on right for close button */
+        background: #2d2d2d;
+        border: 1px solid #404040;
+        border-left: 3px solid var(--toast-color);
+        padding: 8px 24px 8px 12px; /* Compact padding, extra right space for close button */
         position: relative;
-        min-height: 48px;
+        min-height: 32px;
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 4px;
+        border-radius: 4px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+        opacity: 0.2;
+        transition: opacity 0.3s ease;
+      }
+
+      .toast:hover {
+        opacity: 0.9;
       }
 
       .toast.success {
-        --toast-color: #5cb85c;
+        --toast-color: #28a745;
+        border-left-color: #28a745;
       }
 
       .toast.error {
-        --toast-color: #d9534f;
+        --toast-color: #dc3545;
+        border-left-color: #dc3545;
       }
 
       .toast.warning {
         --toast-color: #ffc107;
+        border-left-color: #ffc107;
       }
 
       .toast.info {
         --toast-color: #6c757d;
+        border-left-color: #6c757d;
       }
 
       .toast-header {
         display: flex;
         align-items: flex-start;
-        gap: 12px;
-        min-height: 32px; /* Ensure minimum height for icon */
+        gap: 8px;
+        min-height: 20px;
       }
 
       .icon {
-        font-size: 32px;
+        font-size: 16px;
         color: var(--toast-color);
         line-height: 1;
         flex-shrink: 0;
-        opacity: 0.8;
+        opacity: 0.9;
+        margin-top: 1px;
       }
 
       .content {
         flex: 1;
-        min-width: 0; /* Allow content to shrink */
+        min-width: 0;
       }
 
       .message {
-        font-size: 16px;
-        line-height: 1.4;
-        color: #333;
+        font-size: 11px;
+        line-height: 1.2;
+        color: #e9ecef;
         margin: 0;
         word-wrap: break-word;
+        font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+        font-weight: 500;
       }
 
       .close-button {
         position: absolute;
-        top: 8px;
-        right: 8px;
+        top: 6px;
+        right: 6px;
         background: none;
         border: none;
-        font-size: 20px;
+        font-size: 14px;
         line-height: 1;
         cursor: pointer;
-        padding: 4px;
-        color: #666;
+        padding: 2px;
+        color: #adb5bd;
         border-radius: 2px;
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 28px;
-        height: 28px;
+        width: 18px;
+        height: 18px;
+        transition: all 0.2s ease;
       }
 
       .close-button:hover {
-        background: rgba(0, 0, 0, 0.1);
-        color: #333;
+        background: rgba(255, 255, 255, 0.1);
+        color: #e9ecef;
+        transform: scale(1.1);
       }
 
       .close-button:focus {
@@ -134,14 +154,38 @@ export class ToastMessage extends LitElement {
         outline-offset: 1px;
       }
 
+      .close-button:active {
+        transform: scale(0.95);
+      }
+
       /* Mobile responsive */
       @media (max-width: 768px) {
         :host {
-          top: 10px;
-          right: 10px;
-          left: 10px;
+          top: 8px;
+          right: 8px;
+          left: 8px;
           max-width: none;
           min-width: auto;
+          font-size: 10px;
+        }
+
+        .toast {
+          padding: 6px 20px 6px 10px;
+          min-height: 28px;
+        }
+
+        .icon {
+          font-size: 14px;
+        }
+
+        .message {
+          font-size: 10px;
+        }
+
+        .close-button {
+          width: 16px;
+          height: 16px;
+          font-size: 12px;
         }
       }
     `

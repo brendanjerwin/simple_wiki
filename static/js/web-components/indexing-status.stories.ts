@@ -211,7 +211,7 @@ export const WithErrors: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Shows indexing status when one index is experiencing errors. The error index progress bar is styled differently and error messages are displayed.',
+        story: 'Shows indexing status when one index is experiencing errors. The error index progress bar is styled differently and error messages are displayed. Click on any error message to copy it to clipboard and see toast notifications. Open the browser developer tools console to see the action logs.',
       },
     },
   },
@@ -486,6 +486,163 @@ export const InteractiveDemo: Story = {
     docs: {
       description: {
         story: 'Interactive demo with stubbed auto-refresh behavior. Shows per-index progress bars and simulates realistic indexing scenarios without making API calls.',
+      },
+    },
+  },
+};
+
+export const InteractiveErrorTesting: Story = {
+  render: () => {
+    const el = document.createElement('system-info-indexing') as SystemInfoIndexing;
+    
+    // Stub API calls
+    stub(el, 'loadStatus' as any).resolves();
+    stub(el, 'startAutoRefresh' as any);
+    stub(el, 'stopAutoRefresh' as any);
+    
+    // Multiple error scenarios for comprehensive testing
+    const networkError = new SingleIndexProgress({
+      name: 'bleve-search',
+      completed: 50,
+      total: 1000,
+      processingRatePerSecond: 0,
+      lastError: 'Network timeout: Unable to reach search index service at localhost:9200. Connection refused after 30 seconds.'
+    });
+
+    const permissionError = new SingleIndexProgress({
+      name: 'file-indexer',
+      completed: 200,
+      total: 1000,
+      processingRatePerSecond: 5.2,
+      lastError: 'Permission denied: Cannot access /protected/documents/sensitive.pdf. Insufficient privileges for indexing operation.'
+    });
+
+    const validationError = new SingleIndexProgress({
+      name: 'ai-embeddings',
+      completed: 75,
+      total: 1000,
+      processingRatePerSecond: 1.1,
+      lastError: 'Validation failed: Document contains invalid UTF-8 sequences at byte offset 1024. Unable to process for embedding generation.'
+    });
+
+    el.loading = false;
+    el.status = new GetIndexingStatusResponse({
+      isRunning: true,
+      totalPages: 1000,
+      completedPages: 50,
+      queueDepth: 950,
+      processingRatePerSecond: 6.3,
+      indexProgress: [networkError, permissionError, validationError]
+    });
+    
+    return html`
+      <div style="padding: 20px; background: #f0f8ff;">
+        <h3>Interactive Error Copy Testing</h3>
+        <p><strong>Test Instructions:</strong></p>
+        <ul style="margin: 10px 0; padding-left: 20px;">
+          <li>Click on any red error message to copy to clipboard</li>
+          <li>Use Tab key to navigate to error messages, then press Enter/Space</li>
+          <li>Watch for toast notifications confirming copy success</li>
+          <li>Test with different error message lengths and content</li>
+          <li>Try rapid clicking to test multiple copy operations</li>
+        </ul>
+        
+        ${el}
+        
+        <div style="margin-top: 20px; padding: 15px; background: #fff3cd; border-radius: 4px;">
+          <h4 style="margin-top: 0;">Expected Behavior:</h4>
+          <ul style="margin: 10px 0; padding-left: 20px;">
+            <li>✅ Error text copied to system clipboard</li>
+            <li>✅ Green success toast appears: "Error copied to clipboard"</li>
+            <li>✅ Keyboard navigation works (Tab → Enter/Space)</li>
+            <li>✅ Visual feedback on hover/focus</li>
+            <li>⚠️ If clipboard fails: Red error toast appears</li>
+          </ul>
+        </div>
+        
+        <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
+          <strong>Open the browser developer tools console (F12) to see the action logs.</strong>
+        </p>
+      </div>
+    `;
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Comprehensive interactive testing story for error click-to-copy functionality. Demonstrates multiple error types, keyboard navigation, accessibility features, and provides clear testing instructions. Open the browser developer tools console to see the action logs.',
+      },
+    },
+  },
+};
+
+export const KeyboardNavigationTesting: Story = {
+  render: () => {
+    const el = document.createElement('system-info-indexing') as SystemInfoIndexing;
+    
+    // Stub API calls
+    stub(el, 'loadStatus' as any).resolves();
+    stub(el, 'startAutoRefresh' as any);
+    stub(el, 'stopAutoRefresh' as any);
+    
+    // Setup with single error for focused testing
+    const errorIndex = new SingleIndexProgress({
+      name: 'test-index',
+      completed: 100,
+      total: 500,
+      processingRatePerSecond: 10.0,
+      lastError: 'Test error message for keyboard navigation testing. This is a longer error message to test text selection and copying behavior.'
+    });
+
+    const workingIndex = new SingleIndexProgress({
+      name: 'working-index',
+      completed: 200,
+      total: 500,
+      processingRatePerSecond: 15.0,
+      lastError: undefined
+    });
+
+    el.loading = false; 
+    el.status = new GetIndexingStatusResponse({
+      isRunning: true,
+      totalPages: 500,
+      completedPages: 100,
+      queueDepth: 400,
+      processingRatePerSecond: 12.5,
+      indexProgress: [errorIndex, workingIndex]
+    });
+    
+    return html`
+      <div style="padding: 20px; background: #f0f8ff;">
+        <h3>Keyboard Navigation Test</h3>
+        <p><strong>Keyboard Testing Steps:</strong></p>
+        <ol style="margin: 10px 0; padding-left: 20px;">
+          <li>Click in this text area, then press Tab to navigate to the error</li>
+          <li>Verify the error message receives focus (should show outline)</li>
+          <li>Press Enter or Space to trigger copy</li>
+          <li>Verify toast notification appears</li>
+          <li>Press Tab again to ensure focus moves properly</li>
+        </ol>
+        
+        <div style="margin: 15px 0; padding: 10px; border: 1px solid #ddd;">
+          <input type="text" placeholder="Start tabbing from here..." style="width: 100%; padding: 8px;" />
+        </div>
+        
+        ${el}
+        
+        <div style="margin: 15px 0; padding: 10px; border: 1px solid #ddd;">
+          <button>Tab should reach here after error</button>
+        </div>
+        
+        <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
+          <strong>Open the browser developer tools console (F12) to see the action logs.</strong>
+        </p>
+      </div>
+    `;
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Tests keyboard navigation and accessibility for error click-to-copy. Focuses on Tab navigation, Enter/Space activation, and proper focus management. Open the browser developer tools console to see the action logs.',
       },
     },
   },

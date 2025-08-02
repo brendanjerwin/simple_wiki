@@ -1,6 +1,7 @@
 import { html, fixture, expect } from '@open-wc/testing';
 import { SystemInfoIndexing } from './system-info-indexing.js';
 import { GetIndexingStatusResponse, SingleIndexProgress } from '../gen/api/v1/system_info_pb.js';
+import { stub, restore, type SinonStub } from 'sinon';
 import './system-info-indexing.js';
 
 describe('SystemInfoIndexing', () => {
@@ -232,6 +233,77 @@ describe('SystemInfoIndexing', () => {
     it('should not render anything when idle', () => {
       const indexingInfo = el.shadowRoot!.querySelector('.indexing-info');
       expect(indexingInfo).to.not.exist;
+    });
+  });
+
+  describe('error click handling', () => {
+    let writeTextStub: SinonStub;
+
+    beforeEach(() => {
+      // Setup clipboard API mock
+      writeTextStub = stub();
+      Object.defineProperty(navigator, 'clipboard', {
+        value: {
+          writeText: writeTextStub
+        },
+        configurable: true
+      });
+    });
+
+    afterEach(() => {
+      restore();
+    });
+
+    describe('when indexing has errors', () => {
+      let errorElement: Element;
+
+      beforeEach(async () => {
+        const errorIndex = new SingleIndexProgress({
+          name: 'test-index',
+          completed: 50,
+          total: 100,
+          processingRatePerSecond: 5.0,
+          lastError: 'Test error message for copying'
+        });
+
+        const workingIndex = new SingleIndexProgress({
+          name: 'working-index',
+          completed: 75,
+          total: 100,
+          processingRatePerSecond: 8.0,
+          lastError: undefined
+        });
+
+        el.loading = false;
+        el.status = new GetIndexingStatusResponse({
+          isRunning: true,
+          totalPages: 100,
+          completedPages: 50,
+          queueDepth: 50,
+          processingRatePerSecond: 5.0,
+          indexProgress: [errorIndex, workingIndex]
+        });
+        await el.updateComplete;
+
+        // Find the error message element (with clickable class)
+        errorElement = el.shadowRoot!.querySelector('.error.clickable')!;
+        expect(errorElement).to.exist;
+      });
+
+      it('should have clickable class', () => {
+        expect(errorElement.classList.contains('clickable')).to.be.true;
+      });
+
+      it('should have proper accessibility attributes', () => {
+        expect(errorElement.getAttribute('role')).to.equal('button');
+        expect(errorElement.getAttribute('tabindex')).to.equal('0');
+        expect(errorElement.getAttribute('aria-label')).to.equal('Click to copy error to clipboard');
+        expect(errorElement.getAttribute('title')).to.equal('Click to copy error to clipboard');
+      });
+
+      it('should contain error text', () => {
+        expect(errorElement.textContent).to.include('Test error message for copying');
+      });
     });
   });
 });
