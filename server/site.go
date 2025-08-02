@@ -50,6 +50,7 @@ type Site struct {
 	Logger                  *lumber.ConsoleLogger
 	MarkdownRenderer        IRenderMarkdownToHTML
 	IndexMaintainer         index.IMaintainIndex
+	BackgroundIndexer       *index.BackgroundIndexingCoordinator
 	FrontmatterIndexQueryer frontmatter.IQueryFrontmatterIndex
 	BleveIndexQueryer       bleve.IQueryBleveIndex
 	MigrationApplicator     rollingmigrations.FrontmatterMigrationApplicator
@@ -59,6 +60,7 @@ type Site struct {
 const (
 	tomlDelimiter = "+++\n"
 	mdExtension   = "md"
+	newline       = "\n"
 )
 
 func (s *Site) defaultLock() string {
@@ -101,7 +103,38 @@ func (s *Site) InitializeIndexing() error {
 	s.BleveIndexQueryer = bleveIndex
 	s.IndexMaintainer = multiMaintainer
 
+	// Create background indexing coordinator
+	s.BackgroundIndexer = index.NewBackgroundIndexingCoordinatorWithCPUWorkers(multiMaintainer, s.Logger)
+
+	// Get all files that need to be indexed
 	files := s.DirectoryList()
+	if len(files) == 0 {
+		s.Logger.Info("No pages found to index.")
+		return nil
+	}
+
+	// Convert files to page identifiers
+	pageIdentifiers := make([]string, len(files))
+	for i, file := range files {
+		pageIdentifiers[i] = file.Name()
+	}
+
+	// Start background indexing
+	err = s.BackgroundIndexer.StartBackground(pageIdentifiers)
+	if err != nil {
+		s.Logger.Error("Failed to start background indexing: %v", err)
+		// Fall back to synchronous processing
+		return s.initializeIndexingSynchronously(files)
+	}
+
+	s.Logger.Info("Background indexing started for %d pages. Application is ready.", len(files))
+	return nil
+}
+
+// initializeIndexingSynchronously provides fallback synchronous indexing
+func (s *Site) initializeIndexingSynchronously(files []os.FileInfo) error {
+	s.Logger.Info("Starting synchronous indexing fallback...")
+	
 	for _, file := range files {
 		if err := s.IndexMaintainer.AddPageToIndex(file.Name()); err != nil {
 			// Check for application setup errors that should prevent startup
@@ -115,8 +148,7 @@ func (s *Site) InitializeIndexing() error {
 		}
 	}
 
-	s.Logger.Info("Indexing complete. Added %v pages.", len(files))
-
+	s.Logger.Info("Synchronous indexing complete. Added %v pages.", len(files))
 	return nil
 }
 
@@ -194,32 +226,43 @@ func (s *Site) OpenOrInit(requestedIdentifier string, req *http.Request) (*Page,
 	p := s.Open(requestedIdentifier)
 	if p.IsNew() {
 		prams := req.URL.Query()
-		initialText := "identifier = \"" + p.Identifier + "\"\n"
 		tmpl := prams.Get("tmpl")
-		for pram, vals := range prams {
-			if len(vals) > 1 {
-				initialText += pram + " = [ \"" + strings.Join(vals, "\", \"") + "\"]\n"
-			} else if len(vals) == 1 {
-				initialText += pram + " = \"" + vals[0] + "\"\n"
+		
+		// Build frontmatter from URL parameters
+		fm, err := BuildFrontmatterFromURLParams(p.Identifier, prams)
+		if err != nil {
+			return nil, fmt.Errorf("failed to build frontmatter from URL params: %w", err)
+		}
+		
+		// Add inventory structure for inv_item template
+		if tmpl == "inv_item" {
+			// Ensure inventory exists and has items array
+			if _, exists := fm["inventory"]; !exists {
+				fm["inventory"] = make(map[string]any)
+			}
+			if inventory, ok := fm["inventory"].(map[string]any); ok {
+				if _, exists := inventory["items"]; !exists {
+					inventory["items"] = []string{}
+				}
 			}
 		}
-
-		if tmpl == "inv_item" {
-			initialText += `
-
-[inventory]
-items = [
-
-]
-
-`
+		
+		// Convert frontmatter to TOML
+		fmBytes, err := toml.Marshal(fm)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal frontmatter to TOML: %w", err)
+		}
+		
+		initialText := ""
+		if len(fmBytes) > 0 {
+			initialText = tomlDelimiter + string(fmBytes)
+			if !bytes.HasSuffix(fmBytes, []byte(newline)) {
+				initialText += newline
+			}
+			initialText += tomlDelimiter
 		}
 
-		if initialText != "" {
-			initialText = "+++\n" + initialText + "+++\n"
-		}
-
-		initialText += "\n# {{or .Title .Identifier}}" + "\n"
+		initialText += newline + "# {{or .Title .Identifier}}" + newline
 
 		if tmpl == "inv_item" {
 			initialText += `
@@ -339,8 +382,8 @@ func writeFrontmatterToBuffer(content *bytes.Buffer, fmBytes []byte) error {
 	if _, err := content.Write(fmBytes); err != nil {
 		return err
 	}
-	if !bytes.HasSuffix(fmBytes, []byte("\n")) {
-		if _, err := content.WriteString("\n"); err != nil {
+	if !bytes.HasSuffix(fmBytes, []byte(newline)) {
+		if _, err := content.WriteString(newline); err != nil {
 			return err
 		}
 	}

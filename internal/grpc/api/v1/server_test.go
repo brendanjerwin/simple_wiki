@@ -12,6 +12,7 @@ import (
 	"time"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
+	"github.com/brendanjerwin/simple_wiki/index"
 	"github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
@@ -20,6 +21,7 @@ import (
 	"github.com/onsi/gomega/types"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -163,6 +165,58 @@ func (m *MockPageReaderMutator) DeletePage(identifier wikipage.PageIdentifier) e
 	return m.DeleteErr
 }
 
+// MockIndexingProgressProvider is a mock implementation of index.IProvideIndexingProgress for testing.
+type MockIndexingProgressProvider struct {
+	Progress index.IndexingProgress
+}
+
+func (m *MockIndexingProgressProvider) GetProgress() index.IndexingProgress {
+	return m.Progress
+}
+
+// MockStreamServer is a mock implementation of apiv1.SystemInfoService_StreamIndexingStatusServer for testing.
+type MockStreamServer struct {
+	SentMessages []*apiv1.GetIndexingStatusResponse
+	SendErr      error
+	ContextDone  bool
+}
+
+func (m *MockStreamServer) Send(response *apiv1.GetIndexingStatusResponse) error {
+	if m.SendErr != nil {
+		return m.SendErr
+	}
+	m.SentMessages = append(m.SentMessages, response)
+	return nil
+}
+
+func (m *MockStreamServer) Context() context.Context {
+	if m.ContextDone {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		return ctx
+	}
+	return context.Background()
+}
+
+func (*MockStreamServer) SetHeader(metadata.MD) error {
+	return nil
+}
+
+func (*MockStreamServer) SendHeader(metadata.MD) error {
+	return nil
+}
+
+func (*MockStreamServer) SetTrailer(metadata.MD) {
+}
+
+func (*MockStreamServer) SendMsg(any) error {
+	return nil
+}
+
+func (*MockStreamServer) RecvMsg(any) error {
+	return nil
+}
+
 var _ = Describe("Server", func() {
 	var (
 		server *v1.Server
@@ -189,7 +243,7 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, lumber.NewConsoleLogger(lumber.WARN))
+			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, nil, lumber.NewConsoleLogger(lumber.WARN))
 			res, err = server.GetFrontmatter(ctx, req)
 		})
 
@@ -332,7 +386,7 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, lumber.NewConsoleLogger(lumber.WARN))
+			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, nil, lumber.NewConsoleLogger(lumber.WARN))
 			resp, err = server.MergeFrontmatter(ctx, req)
 		})
 
@@ -540,7 +594,7 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, lumber.NewConsoleLogger(lumber.WARN))
+			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, nil, lumber.NewConsoleLogger(lumber.WARN))
 			resp, err = server.ReplaceFrontmatter(ctx, req)
 		})
 
@@ -739,7 +793,7 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, lumber.NewConsoleLogger(lumber.WARN))
+			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, nil, lumber.NewConsoleLogger(lumber.WARN))
 			resp, err = server.RemoveKeyAtPath(ctx, req)
 		})
 
@@ -1091,7 +1145,7 @@ var _ = Describe("Server", func() {
 			// Create a mock logger
 			logger = lumber.NewConsoleLogger(lumber.INFO)
 
-			server = v1.NewServer("test-commit", time.Now(), nil, logger)
+			server = v1.NewServer("test-commit", time.Now(), nil, nil, logger)
 		})
 
 		When("a successful gRPC call is made", func() {
@@ -1178,7 +1232,7 @@ var _ = Describe("Server", func() {
 			)
 
 			BeforeEach(func() {
-				server = v1.NewServer("test-commit", time.Now(), nil, nil)
+				server = v1.NewServer("test-commit", time.Now(), nil, nil, nil)
 
 				handler = func(ctx context.Context, req any) (any, error) {
 					return &apiv1.GetVersionResponse{Commit: "test"}, nil
@@ -1214,7 +1268,7 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, lumber.NewConsoleLogger(lumber.WARN))
+			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, nil, lumber.NewConsoleLogger(lumber.WARN))
 			resp, err = server.DeletePage(ctx, req)
 		})
 
@@ -1264,6 +1318,191 @@ var _ = Describe("Server", func() {
 
 			It("should call delete on the PageReaderMutator", func() {
 				Expect(mockPageReaderMutator.DeletedIdentifier).To(Equal(wikipage.PageIdentifier("test-page")))
+			})
+		})
+	})
+
+	Describe("GetIndexingStatus", func() {
+		var (
+			req                 *apiv1.GetIndexingStatusRequest
+			res                 *apiv1.GetIndexingStatusResponse
+			err                 error
+			mockProgressProvider *MockIndexingProgressProvider
+		)
+
+		BeforeEach(func() {
+			req = &apiv1.GetIndexingStatusRequest{}
+			mockProgressProvider = &MockIndexingProgressProvider{
+				Progress: index.IndexingProgress{
+					IsRunning:              true,
+					TotalPages:             100,
+					CompletedPages:         75,
+					QueueDepth:             5,
+					ProcessingRatePerSecond: 10.5,
+					IndexProgress: map[string]index.SingleIndexProgress{
+						"frontmatter": {
+							Name:                   "frontmatter",
+							Completed:              75,
+							Total:                  100,
+							ProcessingRatePerSecond: 12.0,
+							LastError:              nil,
+						},
+						"bleve": {
+							Name:                   "bleve",
+							Completed:              70,
+							Total:                  100,
+							ProcessingRatePerSecond: 9.0,
+							LastError:              nil,
+						},
+					},
+				},
+			}
+		})
+
+		When("indexing progress provider is available", func() {
+			JustBeforeEach(func() {
+				server = v1.NewServer("commit", time.Now(), nil, mockProgressProvider, lumber.NewConsoleLogger(lumber.WARN))
+				res, err = server.GetIndexingStatus(ctx, req)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return indexing status", func() {
+				Expect(res).NotTo(BeNil())
+				Expect(res.IsRunning).To(BeTrue())
+				Expect(res.TotalPages).To(Equal(int32(100)))
+				Expect(res.CompletedPages).To(Equal(int32(75)))
+				Expect(res.QueueDepth).To(Equal(int32(5)))
+				Expect(res.ProcessingRatePerSecond).To(Equal(10.5))
+			})
+
+			It("should return per-index progress", func() {
+				Expect(res.IndexProgress).To(HaveLen(2))
+				
+				var frontmatterProgress *apiv1.SingleIndexProgress
+				var bleveProgress *apiv1.SingleIndexProgress
+				
+				for _, progress := range res.IndexProgress {
+					if progress.Name == "frontmatter" {
+						frontmatterProgress = progress
+					} else if progress.Name == "bleve" {
+						bleveProgress = progress
+					}
+				}
+				
+				Expect(frontmatterProgress).NotTo(BeNil())
+				Expect(frontmatterProgress.Completed).To(Equal(int32(75)))
+				Expect(frontmatterProgress.Total).To(Equal(int32(100)))
+				Expect(frontmatterProgress.ProcessingRatePerSecond).To(Equal(12.0))
+				
+				Expect(bleveProgress).NotTo(BeNil())
+				Expect(bleveProgress.Completed).To(Equal(int32(70)))
+				Expect(bleveProgress.Total).To(Equal(int32(100)))
+				Expect(bleveProgress.ProcessingRatePerSecond).To(Equal(9.0))
+			})
+		})
+
+		When("indexing progress provider is not available", func() {
+			JustBeforeEach(func() {
+				server = v1.NewServer("commit", time.Now(), nil, nil, lumber.NewConsoleLogger(lumber.WARN))
+				res, err = server.GetIndexingStatus(ctx, req)
+			})
+
+			It("should return an internal error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.Internal, "indexing progress provider not available"))
+			})
+
+			It("should not return a response", func() {
+				Expect(res).To(BeNil())
+			})
+		})
+	})
+
+	Describe("StreamIndexingStatus", func() {
+		var (
+			req                 *apiv1.StreamIndexingStatusRequest
+			mockProgressProvider *MockIndexingProgressProvider
+			streamServer        *MockStreamServer
+		)
+
+		BeforeEach(func() {
+			req = &apiv1.StreamIndexingStatusRequest{}
+			mockProgressProvider = &MockIndexingProgressProvider{
+				Progress: index.IndexingProgress{
+					IsRunning:              true,
+					TotalPages:             100,
+					CompletedPages:         75,
+					QueueDepth:             5,
+					ProcessingRatePerSecond: 10.5,
+					IndexProgress: map[string]index.SingleIndexProgress{
+						"frontmatter": {
+							Name:                   "frontmatter",
+							Completed:              75,
+							Total:                  100,
+							ProcessingRatePerSecond: 12.0,
+							LastError:              nil,
+						},
+					},
+				},
+			}
+			streamServer = &MockStreamServer{}
+		})
+
+		When("indexing progress provider is not available", func() {
+			var err error
+
+			BeforeEach(func() {
+				server = v1.NewServer("commit", time.Now(), nil, nil, lumber.NewConsoleLogger(lumber.WARN))
+				err = server.StreamIndexingStatus(req, streamServer)
+			})
+
+			It("should return an internal error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.Internal, "indexing progress provider not available"))
+			})
+		})
+
+		When("streaming indexing status with context cancellation", func() {
+			var err error
+
+			BeforeEach(func() {
+				// Set up stream server with context that gets cancelled after initial send
+				streamServer.ContextDone = true
+				server = v1.NewServer("commit", time.Now(), nil, mockProgressProvider, lumber.NewConsoleLogger(lumber.WARN))
+				err = server.StreamIndexingStatus(req, streamServer)
+			})
+
+			It("should send initial status immediately", func() {
+				Expect(streamServer.SentMessages).To(HaveLen(1))
+				firstMessage := streamServer.SentMessages[0]
+				Expect(firstMessage.IsRunning).To(BeTrue())
+				Expect(firstMessage.TotalPages).To(Equal(int32(100)))
+				Expect(firstMessage.CompletedPages).To(Equal(int32(75)))
+			})
+
+			It("should return context cancelled error", func() {
+				Expect(err).To(Equal(context.Canceled))
+			})
+		})
+
+		When("indexing is not running", func() {
+			var err error
+
+			BeforeEach(func() {
+				mockProgressProvider.Progress.IsRunning = false
+				server = v1.NewServer("commit", time.Now(), nil, mockProgressProvider, lumber.NewConsoleLogger(lumber.WARN))
+				err = server.StreamIndexingStatus(req, streamServer)
+			})
+
+			It("should send initial status and terminate", func() {
+				Expect(streamServer.SentMessages).To(HaveLen(1))
+				firstMessage := streamServer.SentMessages[0]
+				Expect(firstMessage.IsRunning).To(BeFalse())
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
 			})
 		})
 	})

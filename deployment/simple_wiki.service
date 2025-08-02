@@ -4,9 +4,11 @@ After=network-online.target
 
 [Service]
 ExecStart=/srv/wiki/bin/simple_wiki -port 80 -data /srv/wiki/data
+Environment=WIKI_TEMPLATE_DEBUG=true
 Restart=always
 RestartSec=30
 CPUWeight=20
+MemoryMax=3G
 
 [Install]
 WantedBy=multi-user.target

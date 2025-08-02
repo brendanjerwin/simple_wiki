@@ -97,7 +97,7 @@ func setupServer(c *cli.Context) (*http.Server, error) {
 	ginRouter := site.GinRouter()
 	actualCommit := getCommitHash()
 	buildTime := getBuildTime()
-	grpcAPIServer := grpcapi.NewServer(actualCommit, buildTime, site, logger)
+	grpcAPIServer := grpcapi.NewServer(actualCommit, buildTime, site, site.BackgroundIndexer, logger)
 	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(grpcAPIServer.LoggingInterceptor()))
 	grpcAPIServer.RegisterWithServer(grpcServer)
 

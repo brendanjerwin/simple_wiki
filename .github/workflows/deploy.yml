@@ -3,10 +3,6 @@ name: Deploy to Home Server
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: 'Release version to deploy (e.g., v3.2-pre, v3.1.11)'
-        required: true
-        type: string
       server_host:
         description: 'Target server hostname'
         required: false
@@ -32,19 +28,45 @@ jobs:
         with:
           enable-cache: true
         
+      - name: Check if release exists
+        id: check_release
+        run: |
+          if gh release view "${{ github.ref_name }}" >/dev/null 2>&1; then
+            echo "release_exists=true" >> $GITHUB_OUTPUT
+            echo "✅ Release found for ${{ github.ref_name }}"
+          else
+            echo "release_exists=false" >> $GITHUB_OUTPUT  
+            echo "ℹ️ No release found for ${{ github.ref_name }}, will build locally"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
       - name: Download release asset
+        if: steps.check_release.outputs.release_exists == 'true'
         uses: robinraju/release-downloader@v1.10
         with:
           repository: ${{ github.repository }}
-          tag: ${{ inputs.version }}
+          tag: ${{ github.ref_name }}
           fileName: 'simple_wiki-linux-amd64'
           out-file-path: '.'
+
+      - name: Build binary locally
+        if: steps.check_release.outputs.release_exists == 'false'
+        run: |
+          echo "Building simple_wiki for linux/amd64..."
+          devbox run build linux amd64
+          echo "✅ Binary built successfully"
           
-      - name: Verify downloaded binary
+      - name: Verify binary
         run: |
           ls -la simple_wiki-linux-amd64
           file simple_wiki-linux-amd64
           chmod +x simple_wiki-linux-amd64
+          if [ "${{ steps.check_release.outputs.release_exists }}" == "true" ]; then
+            echo "✅ Using binary from release ${{ github.ref_name }}"
+          else
+            echo "✅ Using locally built binary for ${{ github.ref_name }}"
+          fi
           
       - name: Setup Tailscale
         uses: tailscale/github-action@v2
@@ -67,13 +89,13 @@ jobs:
           remote_host: ${{ inputs.username }}@${{ inputs.server_host }}
           directory: deployment-package
           remote_destination: /tmp
-          post_upload_command: /tmp/deployment-package/deploy.sh "${{ inputs.version }}"
+          post_upload_command: /tmp/deployment-package/deploy.sh "${{ github.ref_name }}"
             
       - name: Report deployment status
         if: always()
         run: |
           if [ "${{ job.status }}" == "success" ]; then
-            echo "🎉 Successfully deployed ${{ inputs.version }} to ${{ inputs.server_host }}"
+            echo "🎉 Successfully deployed ${{ github.ref_name }} to ${{ inputs.server_host }}"
           else
-            echo "❌ Deployment of ${{ inputs.version }} to ${{ inputs.server_host }} failed"
+            echo "❌ Deployment of ${{ github.ref_name }} to ${{ inputs.server_host }} failed"
           fi

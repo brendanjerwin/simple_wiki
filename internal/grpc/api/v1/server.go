@@ -9,6 +9,7 @@ import (
 	"time"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
+	"github.com/brendanjerwin/simple_wiki/index"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
 	"google.golang.org/grpc"
@@ -69,10 +70,11 @@ type Server struct {
 	apiv1.UnimplementedSystemInfoServiceServer
 	apiv1.UnimplementedFrontmatterServer
 	apiv1.UnimplementedPageManagementServiceServer
-	Commit         string
-	BuildTime      time.Time
-	PageReaderMutator wikipage.PageReaderMutator
-	Logger         *lumber.ConsoleLogger
+	Commit              string
+	BuildTime           time.Time
+	PageReaderMutator   wikipage.PageReaderMutator
+	IndexingProgressProvider index.IProvideIndexingProgress
+	Logger              *lumber.ConsoleLogger
 }
 
 // MergeFrontmatter implements the MergeFrontmatter RPC.
@@ -283,12 +285,13 @@ func removeAtPath(data any, path []*apiv1.PathComponent) (any, error) {
 }
 
 // NewServer creates a new debug server
-func NewServer(commit string, buildTime time.Time, pageReadWriter wikipage.PageReaderMutator, logger *lumber.ConsoleLogger) *Server {
+func NewServer(commit string, buildTime time.Time, pageReadWriter wikipage.PageReaderMutator, indexingProgressProvider index.IProvideIndexingProgress, logger *lumber.ConsoleLogger) *Server {
 	return &Server{
-		Commit:         commit,
-		BuildTime:      buildTime,
-		PageReaderMutator: pageReadWriter,
-		Logger:         logger,
+		Commit:              commit,
+		BuildTime:           buildTime,
+		PageReaderMutator:   pageReadWriter,
+		IndexingProgressProvider: indexingProgressProvider,
+		Logger:              logger,
 	}
 }
 
@@ -305,6 +308,108 @@ func (s *Server) GetVersion(_ context.Context, _ *apiv1.GetVersionRequest) (*api
 		Commit:    s.Commit,
 		BuildTime: timestamppb.New(s.BuildTime),
 	}, nil
+}
+
+// GetIndexingStatus implements the GetIndexingStatus RPC.
+func (s *Server) GetIndexingStatus(_ context.Context, _ *apiv1.GetIndexingStatusRequest) (*apiv1.GetIndexingStatusResponse, error) {
+	if s.IndexingProgressProvider == nil {
+		return nil, status.Error(codes.Internal, "indexing progress provider not available")
+	}
+
+	progress := s.IndexingProgressProvider.GetProgress()
+	return s.buildIndexingStatusResponse(progress), nil
+}
+
+// StreamIndexingStatus implements the StreamIndexingStatus RPC for real-time indexing updates.
+func (s *Server) StreamIndexingStatus(req *apiv1.StreamIndexingStatusRequest, stream apiv1.SystemInfoService_StreamIndexingStatusServer) error {
+	if s.IndexingProgressProvider == nil {
+		return status.Error(codes.Internal, "indexing progress provider not available")
+	}
+
+	// Default to 1-second intervals, allow client to customize
+	interval := time.Duration(req.GetUpdateIntervalMs()) * time.Millisecond
+	if interval == 0 {
+		interval = 1 * time.Second
+	}
+
+	// Minimum interval to prevent excessive server load
+	const minIntervalMs = 100
+	if interval < minIntervalMs*time.Millisecond {
+		interval = minIntervalMs * time.Millisecond
+	}
+
+	// Send initial status immediately
+	progress := s.IndexingProgressProvider.GetProgress()
+	response := s.buildIndexingStatusResponse(progress)
+	if err := stream.Send(response); err != nil {
+		return err
+	}
+
+	// If indexing is not running, terminate stream immediately
+	if !progress.IsRunning {
+		return nil
+	}
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-stream.Context().Done():
+			return stream.Context().Err()
+		case <-ticker.C:
+			progress := s.IndexingProgressProvider.GetProgress()
+			response := s.buildIndexingStatusResponse(progress)
+			
+			if err := stream.Send(response); err != nil {
+				return err
+			}
+			
+			// Terminate stream when indexing completes
+			if !progress.IsRunning {
+				return nil
+			}
+		}
+	}
+}
+
+// buildIndexingStatusResponse builds a GetIndexingStatusResponse from IndexingProgress.
+func (*Server) buildIndexingStatusResponse(progress index.IndexingProgress) *apiv1.GetIndexingStatusResponse {
+	// Convert estimated completion time to protobuf timestamp
+	var estimatedCompletion *timestamppb.Timestamp
+	if progress.EstimatedCompletion != nil {
+		estimatedTime := time.Now().Add(*progress.EstimatedCompletion)
+		estimatedCompletion = timestamppb.New(estimatedTime)
+	}
+
+	// Convert per-index progress
+	var indexProgress []*apiv1.SingleIndexProgress
+	for _, singleProgress := range progress.IndexProgress {
+		protoProgress := &apiv1.SingleIndexProgress{
+			Name:                     singleProgress.Name,
+			Completed:                int32(singleProgress.Completed),
+			Total:                    int32(singleProgress.Total),
+			ProcessingRatePerSecond:  singleProgress.ProcessingRatePerSecond,
+			QueueDepth:               int32(singleProgress.QueueDepth),
+			WorkDistributionComplete: singleProgress.WorkDistributionComplete,
+		}
+		
+		if singleProgress.LastError != nil {
+			protoProgress.LastError = singleProgress.LastError
+		}
+		
+		indexProgress = append(indexProgress, protoProgress)
+	}
+
+	return &apiv1.GetIndexingStatusResponse{
+		IsRunning:              progress.IsRunning,
+		TotalPages:             int32(progress.TotalPages),
+		CompletedPages:         int32(progress.CompletedPages),
+		QueueDepth:             int32(progress.QueueDepth),
+		ProcessingRatePerSecond: progress.ProcessingRatePerSecond,
+		EstimatedCompletion:    estimatedCompletion,
+		IndexProgress:          indexProgress,
+	}
 }
 
 // GetFrontmatter implements the GetFrontmatter RPC.

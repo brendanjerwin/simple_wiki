@@ -57,7 +57,7 @@ func PrintLabel(templateIdentifier string, identifier string, site wikipage.Page
 		return err
 	}
 
-	zpl, err := templating.ExecuteTemplate(string(templateData), pageFrontmatter, site, query)
+	zpl, err := templating.ExecuteTemplateForLabels(string(templateData), pageFrontmatter, site, query)
 	if err != nil {
 		return err
 	}

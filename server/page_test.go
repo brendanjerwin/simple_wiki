@@ -16,6 +16,20 @@ import (
 	"github.com/schollz/versionedtext"
 )
 
+// mockMigrationApplicatorForCircularTest simulates a migration that modifies content
+type mockMigrationApplicatorForCircularTest struct {
+	shouldModifyContent bool
+}
+
+func (m *mockMigrationApplicatorForCircularTest) ApplyMigrations(content []byte) ([]byte, error) {
+	if m.shouldModifyContent {
+		// Simulate a migration that would modify content, requiring a save
+		modifiedContent := append(content, []byte("\n# Migration applied")...)
+		return modifiedContent, nil
+	}
+	return content, nil
+}
+
 var _ = Describe("Page Functions", func() {
 	var (
 		pathToData string
@@ -271,6 +285,67 @@ And some more text. But this is not frontmatter.`
 
 			It("should not return an error", func() {
 				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+	})
+
+	Describe("Page.ReadFrontMatter circular reference prevention", func() {
+		var (
+			p *Page
+		)
+
+		BeforeEach(func() {
+			// Create a page to test with
+			p = &Page{
+				Site:       s,
+				Identifier: "test_circular_page",
+				Text:       versionedtext.NewVersionedText("+++\nidentifier = \"test_circular_page\"\n+++\n# Test Page"),
+			}
+			
+			// Save the page to disk so ReadFrontMatter can find it
+			saveErr := p.Save()
+			Expect(saveErr).NotTo(HaveOccurred())
+		})
+
+		When("ReadFrontMatter is called with migrations that modify content", func() {
+			var (
+				frontmatter  wikipage.FrontMatter
+				err          error
+				originalContent string
+				finalContent string
+			)
+
+			BeforeEach(func() {
+				// Record original content
+				originalContent = p.Text.GetCurrent()
+				
+				// Set up a mock migration that modifies content, which would trigger save
+				mockApplicator := &mockMigrationApplicatorForCircularTest{
+					shouldModifyContent: true,
+				}
+				s.MigrationApplicator = mockApplicator
+				
+				// This call should complete without hanging (proving no infinite recursion)
+				frontmatter, err = p.ReadFrontMatter()
+				
+				// Check final content after the read operation
+				finalContent = p.Text.GetCurrent()
+			})
+
+			It("should complete without hanging", func() {
+				// If we get here, the operation completed successfully without infinite recursion
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return frontmatter successfully", func() {
+				Expect(frontmatter).NotTo(BeNil())
+				Expect(frontmatter).To(HaveKey("identifier"))
+			})
+
+			It("should persist migrated content", func() {
+				// The migration should have been applied and saved
+				Expect(finalContent).To(ContainSubstring("# Migration applied"))
+				Expect(finalContent).NotTo(Equal(originalContent))
 			})
 		})
 	})
