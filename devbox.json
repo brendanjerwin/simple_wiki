@@ -16,7 +16,8 @@
     "ast-grep@latest",
     "playwright@latest",
     "playwright-driver@latest",
-    "playwright-test@latest"
+    "playwright-test@latest",
+    "gh@latest"
   ],
   "shell": {
     "init_hook": [
@@ -80,6 +81,9 @@
       ],
       "e2e:codegen": [
         "cd e2e & playwright codegen --browser=chromium http://localhost:8050/home"
+      ],
+      "deploy": [
+        "./.devbox_run_scripts/deploy.sh $@"
       ]
     }
   }

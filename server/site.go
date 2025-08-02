@@ -60,6 +60,7 @@ type Site struct {
 const (
 	tomlDelimiter = "+++\n"
 	mdExtension   = "md"
+	newline       = "\n"
 )
 
 func (s *Site) defaultLock() string {
@@ -225,32 +226,43 @@ func (s *Site) OpenOrInit(requestedIdentifier string, req *http.Request) (*Page,
 	p := s.Open(requestedIdentifier)
 	if p.IsNew() {
 		prams := req.URL.Query()
-		initialText := "identifier = \"" + p.Identifier + "\"\n"
 		tmpl := prams.Get("tmpl")
-		for pram, vals := range prams {
-			if len(vals) > 1 {
-				initialText += pram + " = [ \"" + strings.Join(vals, "\", \"") + "\"]\n"
-			} else if len(vals) == 1 {
-				initialText += pram + " = \"" + vals[0] + "\"\n"
+		
+		// Build frontmatter from URL parameters
+		fm, err := BuildFrontmatterFromURLParams(p.Identifier, prams)
+		if err != nil {
+			return nil, fmt.Errorf("failed to build frontmatter from URL params: %w", err)
+		}
+		
+		// Add inventory structure for inv_item template
+		if tmpl == "inv_item" {
+			// Ensure inventory exists and has items array
+			if _, exists := fm["inventory"]; !exists {
+				fm["inventory"] = make(map[string]any)
+			}
+			if inventory, ok := fm["inventory"].(map[string]any); ok {
+				if _, exists := inventory["items"]; !exists {
+					inventory["items"] = []string{}
+				}
 			}
 		}
-
-		if tmpl == "inv_item" {
-			initialText += `
-
-[inventory]
-items = [
-
-]
-
-`
+		
+		// Convert frontmatter to TOML
+		fmBytes, err := toml.Marshal(fm)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal frontmatter to TOML: %w", err)
+		}
+		
+		initialText := ""
+		if len(fmBytes) > 0 {
+			initialText = tomlDelimiter + string(fmBytes)
+			if !bytes.HasSuffix(fmBytes, []byte(newline)) {
+				initialText += newline
+			}
+			initialText += tomlDelimiter
 		}
 
-		if initialText != "" {
-			initialText = "+++\n" + initialText + "+++\n"
-		}
-
-		initialText += "\n# {{or .Title .Identifier}}" + "\n"
+		initialText += newline + "# {{or .Title .Identifier}}" + newline
 
 		if tmpl == "inv_item" {
 			initialText += `
@@ -370,8 +382,8 @@ func writeFrontmatterToBuffer(content *bytes.Buffer, fmBytes []byte) error {
 	if _, err := content.Write(fmBytes); err != nil {
 		return err
 	}
-	if !bytes.HasSuffix(fmBytes, []byte("\n")) {
-		if _, err := content.WriteString("\n"); err != nil {
+	if !bytes.HasSuffix(fmBytes, []byte(newline)) {
+		if _, err := content.WriteString(newline); err != nil {
 			return err
 		}
 	}

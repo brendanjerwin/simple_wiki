@@ -212,10 +212,11 @@ func BuildLinkToWithVisited(site wikipage.PageReader, currentPageTemplateContext
 
 		// Check for circular reference to prevent infinite recursion
 		if visited[identifierToLink] {
-			// Return a safe fallback link without triggering template execution
+			// Return a safe fallback link without triggering template execution - use munged identifier for URL
 			titleCaser := cases.Title(language.AmericanEnglish)
 			titleCasedTitle := titleCaser.String(strings.ReplaceAll(strcase.SnakeCase(identifierToLink), "_", " "))
-			return "[" + titleCasedTitle + " (circular reference)](/" + identifierToLink + ")"
+			mungedIdentifier := wikiidentifiers.MungeIdentifier(identifierToLink)
+			return "[" + titleCasedTitle + " (circular reference)](/" + mungedIdentifier + ")"
 		}
 
 		// Mark this page as visited to prevent recursion
@@ -232,15 +233,19 @@ func BuildLinkToWithVisited(site wikipage.PageReader, currentPageTemplateContext
 			// Doesnt look like it exists yet, return a link.
 			// It'll render and let the page get created.
 			if isContainer(currentPageTemplateContext.Identifier) {
-				// special inventory item link with attributes
-				return "[" + titleCasedTitle + "](/" + identifierToLink + "?tmpl=inv_item&inventory.container=" + currentPageTemplateContext.Identifier + "&title=" + urlEncodedTitle + ")"
+				// special inventory item link with attributes - use munged identifier for URL
+				mungedIdentifier := wikiidentifiers.MungeIdentifier(identifierToLink)
+				return "[" + titleCasedTitle + "](/" + mungedIdentifier + "?tmpl=inv_item&inventory.container=" + currentPageTemplateContext.Identifier + "&title=" + urlEncodedTitle + ")"
 			}
 
-			return "[" + titleCasedTitle + "](/" + identifierToLink + "?title=" + urlEncodedTitle + ")"
+			// Use munged identifier for URL
+			mungedIdentifier := wikiidentifiers.MungeIdentifier(identifierToLink)
+			return "[" + titleCasedTitle + "](/" + mungedIdentifier + "?title=" + urlEncodedTitle + ")"
 		}
 
-		// Linked Page Exists
-		tmplString := "{{if index . \"title\"}}[{{ index . \"title\" }}](/{{ index . \"identifier\" }}){{else}}[{{ index . \"identifier\" }}](/{{ index . \"identifier\" }}){{end}}"
+		// Linked Page Exists - use munged identifier for URL
+		mungedIdentifier := wikiidentifiers.MungeIdentifier(identifierToLink)
+		tmplString := "{{if index . \"title\"}}[{{ index . \"title\" }}](/" + mungedIdentifier + "){{else}}[{{ index . \"identifier\" }}](/" + mungedIdentifier + "){{end}}"
 		tmpl, err := template.New("content").Parse(tmplString)
 		if err != nil {
 			return err.Error()
