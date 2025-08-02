@@ -196,7 +196,7 @@ describe('ConfirmationDialog', () => {
     describe('when clicking overlay', () => {
       beforeEach(async () => {
         await el.updateComplete;
-        const overlay = el.shadowRoot?.querySelector('.dialog-overlay') as HTMLElement;
+        const overlay = el.shadowRoot?.querySelector('.overlay') as HTMLElement;
         overlay.click();
       });
 

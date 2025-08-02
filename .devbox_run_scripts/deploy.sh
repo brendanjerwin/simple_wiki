@@ -1,32 +1,59 @@
 #!/bin/bash
 set -e
 
-# Deploy current branch script
-# Usage: devbox run deploy [server_host] [username]
+# Deploy script
+# Usage: devbox run deploy [tag_or_branch] [server_host] [username]
+# If tag_or_branch starts with 'v', treats it as a tag, otherwise as a branch
 
-CURRENT_BRANCH=$(git branch --show-current)
-SERVER_HOST=${1:-wiki}
-USERNAME=${2:-brendanjerwin}
+TAG_OR_BRANCH=${1}
+SERVER_HOST=${2:-wiki}
+USERNAME=${3:-brendanjerwin}
 
-echo "🚀 Deploying current branch: $CURRENT_BRANCH"
-echo "📍 Target: $USERNAME@$SERVER_HOST"
-
-# Check if there are uncommitted changes
-if ! git diff-index --quiet HEAD --; then
-    echo "⚠️  You have uncommitted changes. Please commit or stash them first."
-    echo "Uncommitted files:"
-    git status --porcelain
-    exit 1
+# Determine if we're deploying a tag or branch
+if [[ -z "$TAG_OR_BRANCH" ]]; then
+    # No parameter provided, use current branch
+    CURRENT_BRANCH=$(git branch --show-current)
+    if [[ -z "$CURRENT_BRANCH" ]]; then
+        echo "❌ Not on a branch and no tag/branch specified"
+        echo "Usage: devbox run deploy [tag_or_branch] [server_host] [username]"
+        exit 1
+    fi
+    REF_TO_DEPLOY="$CURRENT_BRANCH"
+    DEPLOY_TYPE="branch"
+elif [[ "$TAG_OR_BRANCH" =~ ^v[0-9] ]]; then
+    # Starts with v followed by digit, treat as tag
+    REF_TO_DEPLOY="$TAG_OR_BRANCH"
+    DEPLOY_TYPE="tag"
+else
+    # Otherwise treat as branch
+    REF_TO_DEPLOY="$TAG_OR_BRANCH" 
+    DEPLOY_TYPE="branch"
 fi
 
-# Push current branch to origin
-echo "📤 Pushing $CURRENT_BRANCH to origin..."
-git push origin "$CURRENT_BRANCH"
+echo "🚀 Deploying $DEPLOY_TYPE: $REF_TO_DEPLOY"
+echo "📍 Target: $USERNAME@$SERVER_HOST"
+
+# For branches, check uncommitted changes and push
+if [[ "$DEPLOY_TYPE" == "branch" ]]; then
+    # Check if there are uncommitted changes
+    if ! git diff-index --quiet HEAD --; then
+        echo "⚠️  You have uncommitted changes. Please commit or stash them first."
+        echo "Uncommitted files:"
+        git status --porcelain
+        exit 1
+    fi
+
+    # Push branch to origin
+    echo "📤 Pushing $REF_TO_DEPLOY to origin..."
+    git push origin "$REF_TO_DEPLOY"
+else
+    echo "📦 Deploying existing tag: $REF_TO_DEPLOY"
+fi
 
 # Trigger deployment workflow
 echo "🎯 Triggering deployment workflow..."
 gh workflow run deploy.yml \
-    --ref "$CURRENT_BRANCH" \
+    --ref "$REF_TO_DEPLOY" \
     --field server_host="$SERVER_HOST" \
     --field username="$USERNAME"
 

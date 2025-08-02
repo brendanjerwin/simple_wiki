@@ -1,6 +1,7 @@
 import { html, css, LitElement } from 'lit';
 import { GetIndexingStatusResponse } from '../gen/api/v1/system_info_pb.js';
 import { foundationCSS } from './shared-styles.js';
+import { showToast } from './toast-message.js';
 
 export class SystemInfoIndexing extends LitElement {
 
@@ -157,6 +158,26 @@ export class SystemInfoIndexing extends LitElement {
         font-size: 10px;
       }
 
+      .error.clickable {
+        cursor: pointer;
+        transition: background-color 0.2s ease;
+        border-radius: 4px;
+        padding: 4px;
+      }
+
+      .error.clickable:hover {
+        background-color: rgba(255, 107, 107, 0.1);
+      }
+
+      .error.clickable:focus {
+        outline: 2px solid #ff6b6b;
+        outline-offset: 2px;
+      }
+
+      .error.clickable:active {
+        background-color: rgba(255, 107, 107, 0.2);
+      }
+
       .loading {
         color: #adb5bd;
         font-style: italic;
@@ -188,6 +209,23 @@ export class SystemInfoIndexing extends LitElement {
   private calculateProgress(completed: number, total: number): number {
     return total > 0 ? (completed / total) * 100 : 0;
   }
+
+  private _handleErrorClick = async (event: Event, errorText: string): Promise<void> => {
+    event.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(errorText);
+      showToast('Error copied to clipboard', 'success', 3);
+    } catch (err) {
+      showToast('Failed to copy error to clipboard', 'error', 5);
+    }
+  };
+
+  private _handleErrorKeydown = async (event: KeyboardEvent, errorText: string): Promise<void> => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      await this._handleErrorClick(event, errorText);
+    }
+  };
 
   override render() {
     // Handle loading and error states
@@ -257,7 +295,15 @@ export class SystemInfoIndexing extends LitElement {
                   </div>
                 </div>
                 ${hasError ? html`
-                  <div class="error">Error: ${index.lastError}</div>
+                  <div class="error clickable" 
+                       @click="${(e: Event) => this._handleErrorClick(e, index.lastError!)}"
+                       @keydown="${(e: KeyboardEvent) => this._handleErrorKeydown(e, index.lastError!)}"
+                       tabindex="0"
+                       role="button"
+                       aria-label="Click to copy error to clipboard"
+                       title="Click to copy error to clipboard">
+                    Error: ${index.lastError}
+                  </div>
                 ` : ''}
               `;
             })}

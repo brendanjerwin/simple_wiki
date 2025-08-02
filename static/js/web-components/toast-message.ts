@@ -1,5 +1,5 @@
 import { html, css, LitElement } from 'lit';
-import { sharedStyles, foundationCSS, buttonCSS } from './shared-styles.js';
+import { sharedStyles, colorCSS, typographyCSS, themeCSS, foundationCSS, buttonCSS } from './shared-styles.js';
 import { AugmentedError } from './augment-error-service.js';
 import './error-display.js';
 
@@ -29,6 +29,9 @@ const ANIMATION_DURATION_MS = 300;
  */
 export class ToastMessage extends LitElement {
   static override styles = [
+    colorCSS,
+    typographyCSS,
+    themeCSS,
     foundationCSS,
     buttonCSS,
     css`
@@ -53,43 +56,32 @@ export class ToastMessage extends LitElement {
       }
 
       .toast {
-        background: #2d2d2d;
-        border: 1px solid #404040;
         border-left: 3px solid var(--toast-color);
         padding: 8px 24px 8px 12px; /* Compact padding, extra right space for close button */
         position: relative;
         min-height: 32px;
         display: flex;
         flex-direction: column;
-        gap: 4px;
-        border-radius: 4px;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-        opacity: 0.2;
-        transition: opacity 0.3s ease;
-      }
-
-      .toast:hover {
-        opacity: 0.9;
       }
 
       .toast.success {
-        --toast-color: #28a745;
-        border-left-color: #28a745;
+        --toast-color: var(--color-success);
+        border-left-color: var(--color-success);
       }
 
       .toast.error {
-        --toast-color: #dc3545;
-        border-left-color: #dc3545;
+        --toast-color: var(--color-error);
+        border-left-color: var(--color-error);
       }
 
       .toast.warning {
-        --toast-color: #ffc107;
-        border-left-color: #ffc107;
+        --toast-color: var(--color-warning);
+        border-left-color: var(--color-warning);
       }
 
       .toast.info {
-        --toast-color: #6c757d;
-        border-left-color: #6c757d;
+        --toast-color: var(--color-info);
+        border-left-color: var(--color-info);
       }
 
       .toast-header {
@@ -114,12 +106,8 @@ export class ToastMessage extends LitElement {
       }
 
       .message {
-        font-size: 11px;
-        line-height: 1.2;
-        color: #e9ecef;
         margin: 0;
         word-wrap: break-word;
-        font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
         font-weight: 500;
       }
 
@@ -133,7 +121,6 @@ export class ToastMessage extends LitElement {
         line-height: 1;
         cursor: pointer;
         padding: 2px;
-        color: #adb5bd;
         border-radius: 2px;
         display: flex;
         align-items: center;
@@ -144,8 +131,7 @@ export class ToastMessage extends LitElement {
       }
 
       .close-button:hover {
-        background: rgba(255, 255, 255, 0.1);
-        color: #e9ecef;
+        background: var(--color-hover-light);
         transform: scale(1.1);
       }
 
@@ -292,9 +278,9 @@ export class ToastMessage extends LitElement {
   override render() {
     return html`
       ${sharedStyles}
-      <div class="toast ${this.type} border-radius box-shadow system-font" @click="${this._handleToastClick}">
+      <div class="container container-ambient toast ${this.type} gap-sm" @click="${this._handleToastClick}">
         <button 
-          class="close-button" 
+          class="close-button text-muted" 
           @click="${this._handleCloseClick}"
           aria-label="Close notification"
           title="Close notification">
@@ -307,7 +293,7 @@ export class ToastMessage extends LitElement {
           <div class="content">
             ${this.augmentedError 
               ? html`<error-display .augmentedError="${this.augmentedError}"></error-display>`
-              : html`<p class="message">${this.message}</p>`
+              : html`<p class="message text-primary font-mono text-sm">${this.message}</p>`
             }
           </div>
         </div>

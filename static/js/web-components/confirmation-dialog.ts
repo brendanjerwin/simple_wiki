@@ -1,6 +1,6 @@
 import { html, css, LitElement } from 'lit';
 import { state } from 'lit/decorators.js';
-import { foundationCSS, dialogCSS, responsiveCSS, buttonCSS } from './shared-styles.js';
+import { colorCSS, typographyCSS, themeCSS, foundationCSS, dialogCSS, responsiveCSS, buttonCSS } from './shared-styles.js';
 import './error-display.js';
 import { type AugmentedError, type ErrorIcon, AugmentErrorService } from './augment-error-service.js';
 
@@ -60,6 +60,9 @@ export interface ConfirmationConfig {
  */
 export class ConfirmationDialog extends LitElement {
   static override styles = [
+    colorCSS,
+    typographyCSS,
+    themeCSS,
     foundationCSS,
     dialogCSS,
     responsiveCSS,
@@ -99,20 +102,12 @@ export class ConfirmationDialog extends LitElement {
       .dialog-message {
         text-align: center;
         margin-bottom: 12px;
-        line-height: 1.2;
-        font-size: 12px;
         font-weight: 600;
-        color: #333;
-        font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
       }
 
       .dialog-description {
         text-align: center;
         margin-bottom: 16px;
-        line-height: 1.2;
-        color: #6c757d;
-        font-size: 11px;
-        font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
       }
 
       .dialog-description.irreversible {
@@ -132,11 +127,9 @@ export class ConfirmationDialog extends LitElement {
         border: none;
         border-radius: 4px;
         cursor: pointer;
-        font-size: 11px;
         font-weight: 500;
         transition: all 0.2s ease;
         min-width: 64px;
-        font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
       }
 
       .button:disabled {
@@ -197,28 +190,9 @@ export class ConfirmationDialog extends LitElement {
         border-color: #e0a800;
       }
 
-      .dialog-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.5);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 1000;
-        backdrop-filter: blur(4px);
-      }
-
       .dialog-box {
-        background: rgba(255, 255, 255, 0.95);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 4px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         max-height: 90vh;
         overflow-y: auto;
-        backdrop-filter: blur(8px);
       }
 
       /* Mobile responsive */
@@ -356,25 +330,25 @@ export class ConfirmationDialog extends LitElement {
     const confirmButtonClass = `button button-${config.confirmVariant || 'danger'}`;
     
     return html`
-      <div class="dialog-overlay" @click=${this.handleOverlayClick}>
-        <div class="dialog-box">
-          <div class="dialog-content">
+      <div class="overlay" @click=${this.handleOverlayClick}>
+        <div class="container container-modal dialog-box">
+          <div class="dialog-content panel gap-sm">
             <div class="dialog-icon ${iconClass}">
               ${AugmentErrorService.getIconString(config.icon || 'warning')}
             </div>
             
-            <div class="dialog-message">
+            <div class="dialog-message text-primary font-mono text-base">
               ${config.message}
             </div>
 
             ${config.description ? html`
-              <div class="dialog-description ${config.irreversible ? 'irreversible' : ''}">
+              <div class="dialog-description text-muted font-mono text-sm ${config.irreversible ? 'irreversible' : ''}">
                 ${config.description}
               </div>
             ` : ''}
 
             ${config.irreversible ? html`
-              <div class="dialog-description irreversible">
+              <div class="dialog-description text-error font-mono text-sm irreversible">
                 This action cannot be undone.
               </div>
             ` : ''}
@@ -385,14 +359,14 @@ export class ConfirmationDialog extends LitElement {
 
             <div class="dialog-actions">
               <button 
-                class="button button-cancel" 
+                class="button button-cancel font-mono text-sm" 
                 @click=${this.handleCancel}
                 ?disabled=${this.loading}
               >
                 ${config.cancelText || 'Cancel'}
               </button>
               <button 
-                class="${confirmButtonClass}" 
+                class="${confirmButtonClass} font-mono text-sm" 
                 @click=${this.handleConfirm}
                 ?disabled=${this.loading}
               >
