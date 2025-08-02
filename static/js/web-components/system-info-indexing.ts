@@ -250,7 +250,10 @@ export class SystemInfoIndexing extends LitElement {
                            style="width: ${indexProgress}%"></div>
                     </div>
                   </div>
-                  <div class="index-stats">${this.formatRate(index.processingRatePerSecond)}</div>
+                  <div class="index-stats">
+                    ${this.formatRate(index.processingRatePerSecond)}
+                    ${index.queueDepth > 0 ? html` Q:${index.queueDepth}` : ''}
+                  </div>
                 </div>
                 ${hasError ? html`
                   <div class="error">Error: ${index.lastError}</div>

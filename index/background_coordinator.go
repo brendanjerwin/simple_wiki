@@ -30,6 +30,7 @@ type SingleIndexProgress struct {
 	Total               int
 	ProcessingRatePerSecond float64
 	LastError           *string
+	QueueDepth          int
 }
 
 // indexProgressTracker tracks progress for a single index internally.
@@ -352,6 +353,11 @@ func (b *BackgroundIndexingCoordinator) populateIndexProgress(progress *Indexing
 		if b.isRunning && tracker.completed > 0 {
 			elapsed := time.Since(tracker.startTime)
 			singleProgress.ProcessingRatePerSecond = float64(tracker.completed) / elapsed.Seconds()
+		}
+		
+		// Set per-index queue depth
+		if pool, exists := b.indexPools[name]; exists {
+			singleProgress.QueueDepth = len(pool.workQueue)
 		}
 		
 		progress.IndexProgress[name] = singleProgress

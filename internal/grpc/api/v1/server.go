@@ -390,6 +390,7 @@ func (*Server) buildIndexingStatusResponse(progress index.IndexingProgress) *api
 			Completed:              int32(singleProgress.Completed),
 			Total:                  int32(singleProgress.Total),
 			ProcessingRatePerSecond: singleProgress.ProcessingRatePerSecond,
+			QueueDepth:             int32(singleProgress.QueueDepth),
 		}
 		
 		if singleProgress.LastError != nil {
