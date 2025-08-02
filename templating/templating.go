@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"os"
 	"sort"
 	"strings"
 	"text/template"
@@ -22,6 +23,14 @@ import (
 type InventoryFrontmatter struct {
 	Container string   `json:"container"`
 	Items     []string `json:"items"`
+}
+
+// ExecutionContext tracks the source and context of template execution for debugging.
+type ExecutionContext struct {
+	PageIdentifier string    // The page being processed
+	Source         string    // "server", "indexing", "label", etc.
+	StartTime      time.Time // When execution started
+	Depth          int       // Current recursion depth
 }
 
 type TemplateContext struct {
@@ -101,8 +110,20 @@ func ConstructTemplateContextFromFrontmatterWithVisited(fm wikipage.FrontMatter,
 
 const (
 	maxRecursionDepth = 10
+	maxExecutionDepth = 50 // Maximum template execution depth before failing fast
 	templateExecutionTimeout = 30 * time.Second // Timeout for template execution
+	progressLogInterval = 5 * time.Second // Log progress every N seconds during long executions
+	templatePreviewLength = 200 // Maximum length for template preview in error messages
+	unknownSource = "unknown"
+	unknownPageID = "unknown"
+	identifierKey = "identifier"
+	spaceSeparator = " "
 )
+
+// isDebugMode returns true if detailed template execution logging is enabled.
+func isDebugMode() bool {
+	return os.Getenv("WIKI_TEMPLATE_DEBUG") == "true"
+}
 
 func BuildShowInventoryContentsOf(site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, indent int) func(string) string {
 	return BuildShowInventoryContentsOfWithLimit(site, query, indent, maxRecursionDepth, make(map[string]bool))
@@ -256,13 +277,106 @@ func BuildIsContainer(query frontmatter.IQueryFrontmatterIndex) func(string) boo
 // ExecuteTemplate executes a template string with the given frontmatter and site context.
 // Includes timeout protection to prevent infinite hangs.
 func ExecuteTemplate(templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex) ([]byte, error) {
+	// Create execution context with default values
+	pageID := unknownPageID
+	if identifier, exists := fm[identifierKey]; exists {
+		if id, ok := identifier.(string); ok {
+			pageID = id
+		}
+	}
+	
+	execCtx := ExecutionContext{
+		PageIdentifier: pageID,
+		Source:         unknownSource,
+		StartTime:      time.Now(),
+		Depth:          0,
+	}
+	
 	// Create a new visited map for this template execution context to prevent circular references
-	return ExecuteTemplateWithVisited(templateString, fm, site, query, make(map[string]bool))
+	return ExecuteTemplateWithContext(templateString, fm, site, query, make(map[string]bool), execCtx)
+}
+
+// ExecuteTemplateForServer executes a template for server page rendering with enhanced debugging context.
+func ExecuteTemplateForServer(templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex) ([]byte, error) {
+	pageID := unknownPageID
+	if identifier, exists := fm[identifierKey]; exists {
+		if id, ok := identifier.(string); ok {
+			pageID = id
+		}
+	}
+	
+	execCtx := ExecutionContext{
+		PageIdentifier: pageID,
+		Source:         "server",
+		StartTime:      time.Now(),
+		Depth:          0,
+	}
+	
+	return ExecuteTemplateWithContext(templateString, fm, site, query, make(map[string]bool), execCtx)
+}
+
+// ExecuteTemplateForIndexing executes a template for search indexing with enhanced debugging context.
+func ExecuteTemplateForIndexing(templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex) ([]byte, error) {
+	pageID := unknownPageID
+	if identifier, exists := fm[identifierKey]; exists {
+		if id, ok := identifier.(string); ok {
+			pageID = id
+		}
+	}
+	
+	execCtx := ExecutionContext{
+		PageIdentifier: pageID,
+		Source:         "indexing",
+		StartTime:      time.Now(),
+		Depth:          0,
+	}
+	
+	return ExecuteTemplateWithContext(templateString, fm, site, query, make(map[string]bool), execCtx)
+}
+
+// ExecuteTemplateForLabels executes a template for label generation with enhanced debugging context.
+func ExecuteTemplateForLabels(templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex) ([]byte, error) {
+	pageID := unknownPageID
+	if identifier, exists := fm[identifierKey]; exists {
+		if id, ok := identifier.(string); ok {
+			pageID = id
+		}
+	}
+	
+	execCtx := ExecutionContext{
+		PageIdentifier: pageID,
+		Source:         "labels",
+		StartTime:      time.Now(),
+		Depth:          0,
+	}
+	
+	return ExecuteTemplateWithContext(templateString, fm, site, query, make(map[string]bool), execCtx)
 }
 
 // ExecuteTemplateWithVisited executes a template string with the given frontmatter and site context,
 // using a shared visited map to prevent circular references across all template functions.
+// Deprecated: Use ExecuteTemplateWithContext for better debugging information.
 func ExecuteTemplateWithVisited(templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, visited map[string]bool) ([]byte, error) {
+	pageID := unknownPageID
+	if identifier, exists := fm[identifierKey]; exists {
+		if id, ok := identifier.(string); ok {
+			pageID = id
+		}
+	}
+	
+	execCtx := ExecutionContext{
+		PageIdentifier: pageID,
+		Source:         "legacy",
+		StartTime:      time.Now(),
+		Depth:          0,
+	}
+	
+	return ExecuteTemplateWithContext(templateString, fm, site, query, visited, execCtx)
+}
+
+// ExecuteTemplateWithContext executes a template string with the given frontmatter and site context,
+// using a shared visited map and execution context for enhanced debugging and error reporting.
+func ExecuteTemplateWithContext(templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, visited map[string]bool, execCtx ExecutionContext) ([]byte, error) {
 	// Set a reasonable timeout for template execution to prevent hangs
 	timeout := templateExecutionTimeout
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -271,44 +385,7 @@ func ExecuteTemplateWithVisited(templateString string, fm wikipage.FrontMatter, 
 	resultChan := make(chan []byte, 1)
 	errorChan := make(chan error, 1)
 
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				errorChan <- fmt.Errorf("template execution panic: %v", r)
-			}
-		}()
-
-		templateContext, err := ConstructTemplateContextFromFrontmatterWithVisited(fm, query, visited)
-		if err != nil {
-			errorChan <- err
-			return
-		}
-
-		// Pass the shared visited map to all template functions to prevent circular references
-		funcs := template.FuncMap{
-			"ShowInventoryContentsOf": BuildShowInventoryContentsOfWithVisited(site, query, 0, visited),
-			"LinkTo":                  BuildLinkToWithVisited(site, templateContext, query, visited),
-			"IsContainer":             BuildIsContainer(query),
-			"FindBy":                  query.QueryExactMatch,
-			"FindByPrefix":            query.QueryPrefixMatch,
-			"FindByKeyExistence":      query.QueryKeyExistence,
-		}
-
-		tmpl, err := template.New("page").Funcs(funcs).Parse(templateString)
-		if err != nil {
-			errorChan <- err
-			return
-		}
-
-		buf := &bytes.Buffer{}
-		err = tmpl.Execute(buf, templateContext)
-		if err != nil {
-			errorChan <- err
-			return
-		}
-
-		resultChan <- buf.Bytes()
-	}()
+	go executeTemplateWorker(templateString, fm, site, query, visited, execCtx, resultChan, errorChan)
 
 	select {
 	case result := <-resultChan:
@@ -316,6 +393,149 @@ func ExecuteTemplateWithVisited(templateString string, fm wikipage.FrontMatter, 
 	case err := <-errorChan:
 		return nil, err
 	case <-ctx.Done():
-		return nil, fmt.Errorf("template execution timed out after %v - possible circular reference or infinite loop", timeout)
+		// Create detailed timeout error with debugging information
+		errorMsg := formatTimeoutError(execCtx, visited, templateString, timeout)
+		return nil, fmt.Errorf("%s", errorMsg)
 	}
+}
+
+// executeTemplateWorker performs the actual template execution in a goroutine.
+func executeTemplateWorker(templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, visited map[string]bool, execCtx ExecutionContext, resultChan chan []byte, errorChan chan error) {
+	defer func() {
+		if r := recover(); r != nil {
+			errorChan <- fmt.Errorf("template execution panic: %v", r)
+		}
+	}()
+
+	// Check execution depth to fail fast before timeout
+	if err := checkExecutionDepth(execCtx); err != nil {
+		errorChan <- err
+		return
+	}
+
+	logDebugStart(execCtx, visited)
+
+	templateContext, err := ConstructTemplateContextFromFrontmatterWithVisited(fm, query, visited)
+	if err != nil {
+		errorChan <- err
+		return
+	}
+
+	tmpl, err := buildTemplateWithFunctions(templateString, site, query, templateContext, visited)
+	if err != nil {
+		errorChan <- err
+		return
+	}
+
+	result, err := executeTemplateInternal(tmpl, templateContext, execCtx)
+	if err != nil {
+		logDebugError(execCtx, err)
+		errorChan <- err
+		return
+	}
+
+	logDebugComplete(execCtx)
+	resultChan <- result
+}
+
+// checkExecutionDepth validates that execution depth hasn't exceeded the maximum.
+func checkExecutionDepth(execCtx ExecutionContext) error {
+	if execCtx.Depth > maxExecutionDepth {
+		return fmt.Errorf("template execution depth limit exceeded (%d > %d) for page %s (source: %s) - likely infinite recursion", 
+			execCtx.Depth, maxExecutionDepth, execCtx.PageIdentifier, execCtx.Source)
+	}
+	return nil
+}
+
+// buildTemplateWithFunctions creates a template with all necessary functions.
+func buildTemplateWithFunctions(templateString string, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, templateContext TemplateContext, visited map[string]bool) (*template.Template, error) {
+	// Pass the shared visited map to all template functions to prevent circular references
+	funcs := template.FuncMap{
+		"ShowInventoryContentsOf": BuildShowInventoryContentsOfWithVisited(site, query, 0, visited),
+		"LinkTo":                  BuildLinkToWithVisited(site, templateContext, query, visited),
+		"IsContainer":             BuildIsContainer(query),
+		"FindBy":                  query.QueryExactMatch,
+		"FindByPrefix":            query.QueryPrefixMatch,
+		"FindByKeyExistence":      query.QueryKeyExistence,
+	}
+
+	return template.New("page").Funcs(funcs).Parse(templateString)
+}
+
+// executeTemplateInternal executes the template and returns the result.
+func executeTemplateInternal(tmpl *template.Template, templateContext TemplateContext, execCtx ExecutionContext) ([]byte, error) {
+	if isDebugMode() {
+		_, _ = fmt.Printf("[TEMPLATE DEBUG] Template parsed successfully for page %s, starting execution\n", execCtx.PageIdentifier)
+	}
+
+	buf := &bytes.Buffer{}
+	err := tmpl.Execute(buf, templateContext)
+	if err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
+}
+
+// logDebugStart logs the start of template execution if debug mode is enabled.
+func logDebugStart(execCtx ExecutionContext, visited map[string]bool) {
+	if isDebugMode() {
+		_, _ = fmt.Printf("[TEMPLATE DEBUG] Starting execution: page=%s, source=%s, depth=%d, visited=%v\n", 
+			execCtx.PageIdentifier, execCtx.Source, execCtx.Depth, getVisitedList(visited))
+	}
+}
+
+// logDebugError logs template execution errors if debug mode is enabled.
+func logDebugError(execCtx ExecutionContext, err error) {
+	if isDebugMode() {
+		_, _ = fmt.Printf("[TEMPLATE DEBUG] Template execution failed for page %s: %v\n", execCtx.PageIdentifier, err)
+	}
+}
+
+// logDebugComplete logs successful completion of template execution if debug mode is enabled.
+func logDebugComplete(execCtx ExecutionContext) {
+	if isDebugMode() {
+		_, _ = fmt.Printf("[TEMPLATE DEBUG] Template execution completed for page %s (duration: %v)\n", 
+			execCtx.PageIdentifier, time.Since(execCtx.StartTime))
+	}
+}
+
+// formatTimeoutError creates a detailed error message for template execution timeouts.
+func formatTimeoutError(execCtx ExecutionContext, visited map[string]bool, templateString string, timeout time.Duration) string {
+	duration := time.Since(execCtx.StartTime)
+	
+	// Get list of visited pages for debugging circular references
+	visitedPages := make([]string, 0, len(visited))
+	for page := range visited {
+		visitedPages = append(visitedPages, page)
+	}
+	
+	// Get template preview (first N characters)
+	templatePreview := templateString
+	if len(templatePreview) > templatePreviewLength {
+		templatePreview = templatePreview[:templatePreviewLength] + "..."
+	}
+	templatePreview = strings.ReplaceAll(templatePreview, "\n", spaceSeparator)
+	
+	errorMsg := fmt.Sprintf(
+		"template execution timed out after %v (actual duration: %v)\n"+
+			"Page: %s\n"+
+			"Source: %s\n"+
+			"Depth: %d\n"+
+			"Visited pages: %v\n"+
+			"Template preview: %q\n"+
+			"This suggests a circular reference or infinite loop in template execution.",
+		timeout, duration, execCtx.PageIdentifier, execCtx.Source, execCtx.Depth, visitedPages, templatePreview)
+	
+	return errorMsg
+}
+
+// getVisitedList returns a sorted list of visited pages for debugging.
+func getVisitedList(visited map[string]bool) []string {
+	pages := make([]string, 0, len(visited))
+	for page := range visited {
+		pages = append(pages, page)
+	}
+	sort.Strings(pages)
+	return pages
 }
