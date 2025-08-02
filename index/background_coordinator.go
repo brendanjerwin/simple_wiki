@@ -31,6 +31,7 @@ type SingleIndexProgress struct {
 	ProcessingRatePerSecond float64
 	LastError           *string
 	QueueDepth          int
+	WorkDistributionComplete bool
 }
 
 // indexProgressTracker tracks progress for a single index internally.
@@ -40,6 +41,7 @@ type indexProgressTracker struct {
 	total          int
 	startTime      time.Time
 	lastError      *string
+	workDistributionComplete bool
 }
 
 // indexWorkerPool manages workers for a single index type.
@@ -182,12 +184,23 @@ func (b *BackgroundIndexingCoordinator) StartBackground(pageIdentifiers []wikipa
 	b.startTime = time.Now()
 	b.isRunning = true
 	
+	// Resize queues to accommodate all pages (avoid distributor blocking)
+	queueSize := len(pageIdentifiers) + 10 // Add small buffer for safety
+	for indexName, pool := range b.indexPools {
+		// Create new queue with appropriate size
+		oldQueue := pool.workQueue
+		pool.workQueue = make(chan wikipage.PageIdentifier, queueSize)
+		b.logger.Debug("Resized %s queue from buffer=%d to buffer=%d for %d pages", 
+			indexName, cap(oldQueue), cap(pool.workQueue), len(pageIdentifiers))
+	}
+	
 	// Initialize per-index progress
 	for _, tracker := range b.indexProgress {
 		tracker.completed = 0
 		tracker.total = len(pageIdentifiers)
 		tracker.startTime = time.Now()
 		tracker.lastError = nil
+		tracker.workDistributionComplete = false
 	}
 	
 	// Start workers for each index pool
@@ -204,14 +217,26 @@ func (b *BackgroundIndexingCoordinator) StartBackground(pageIdentifiers []wikipa
 		go func(indexPool *indexWorkerPool, idxName string) {
 			defer func() {
 				close(indexPool.workQueue)
-				b.logger.Info("Work distributor for %s completed - fed %d pages", idxName, len(pageIdentifiers))
+				
+				// Mark work distribution as complete
+				b.mu.Lock()
+				if tracker, exists := b.indexProgress[idxName]; exists {
+					tracker.workDistributionComplete = true
+				}
+				b.mu.Unlock()
+				
+				b.logger.Info("Work distributor for %s completed - fed %d pages, queue depth now %d", 
+					idxName, len(pageIdentifiers), len(indexPool.workQueue))
 			}()
+			
+			b.logger.Info("Work distributor for %s starting - will feed %d pages to queue (capacity: %d)", 
+				idxName, len(pageIdentifiers), cap(indexPool.workQueue))
 			
 			for i, identifier := range pageIdentifiers {
 				b.logger.Debug("Feeding page %d/%d (%s) to %s queue", i+1, len(pageIdentifiers), identifier, idxName)
 				select {
 				case indexPool.workQueue <- identifier:
-					b.logger.Debug("Successfully queued page %s to %s", identifier, idxName)
+					b.logger.Debug("Successfully queued page %s to %s (queue depth now: %d)", identifier, idxName, len(indexPool.workQueue))
 				case <-b.ctx.Done():
 					b.logger.Info("Work distributor for %s cancelled at page %d/%d", idxName, i+1, len(pageIdentifiers))
 					return
@@ -261,13 +286,18 @@ func (b *BackgroundIndexingCoordinator) GetProgress() IndexingProgress {
 		queueStates := make([]string, 0, len(b.indexPools))
 		for indexName, pool := range b.indexPools {
 			queueDepth := len(pool.workQueue)
+			queueCapacity := cap(pool.workQueue)
 			completed := 0
+			workDistComplete := false
 			if tracker, exists := b.indexProgress[indexName]; exists {
 				completed = tracker.completed
+				workDistComplete = tracker.workDistributionComplete
 			}
-			queueStates = append(queueStates, fmt.Sprintf("%s: completed=%d, queue=%d", indexName, completed, queueDepth))
+			queueStates = append(queueStates, fmt.Sprintf("%s: completed=%d, queue=%d/%d, dist_complete=%t", 
+				indexName, completed, queueDepth, queueCapacity, workDistComplete))
 		}
-		b.logger.Debug("Queue states: %v", queueStates)
+		b.logger.Debug("Queue states - Total: completed=%d/%d, total_queue=%d | Per-index: %v", 
+			overallCompleted, b.totalPages, totalQueueDepth, queueStates)
 	}
 	
 	// Check if indexing should automatically transition to completed
@@ -368,6 +398,7 @@ func (b *BackgroundIndexingCoordinator) populateIndexProgress(progress *Indexing
 			Completed: tracker.completed,
 			Total:     tracker.total,
 			LastError: tracker.lastError,
+			WorkDistributionComplete: tracker.workDistributionComplete,
 		}
 		
 		// Calculate per-index processing rate

@@ -386,11 +386,12 @@ func (*Server) buildIndexingStatusResponse(progress index.IndexingProgress) *api
 	var indexProgress []*apiv1.SingleIndexProgress
 	for _, singleProgress := range progress.IndexProgress {
 		protoProgress := &apiv1.SingleIndexProgress{
-			Name:                   singleProgress.Name,
-			Completed:              int32(singleProgress.Completed),
-			Total:                  int32(singleProgress.Total),
-			ProcessingRatePerSecond: singleProgress.ProcessingRatePerSecond,
-			QueueDepth:             int32(singleProgress.QueueDepth),
+			Name:                     singleProgress.Name,
+			Completed:                int32(singleProgress.Completed),
+			Total:                    int32(singleProgress.Total),
+			ProcessingRatePerSecond:  singleProgress.ProcessingRatePerSecond,
+			QueueDepth:               int32(singleProgress.QueueDepth),
+			WorkDistributionComplete: singleProgress.WorkDistributionComplete,
 		}
 		
 		if singleProgress.LastError != nil {

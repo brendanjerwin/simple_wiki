@@ -269,6 +269,11 @@ export class SingleIndexProgress extends Message<SingleIndexProgress> {
    */
   queueDepth = 0;
 
+  /**
+   * @generated from field: bool work_distribution_complete = 7;
+   */
+  workDistributionComplete = false;
+
   constructor(data?: PartialMessage<SingleIndexProgress>) {
     super();
     proto3.util.initPartial(data, this);
@@ -283,6 +288,7 @@ export class SingleIndexProgress extends Message<SingleIndexProgress> {
     { no: 4, name: "processing_rate_per_second", kind: "scalar", T: 1 /* ScalarType.DOUBLE */ },
     { no: 5, name: "last_error", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
     { no: 6, name: "queue_depth", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 7, name: "work_distribution_complete", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SingleIndexProgress {

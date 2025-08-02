@@ -55,4 +55,5 @@ message SingleIndexProgress {
   double processing_rate_per_second = 4;
   optional string last_error = 5;
   int32 queue_depth = 6;
+  bool work_distribution_complete = 7;
 }

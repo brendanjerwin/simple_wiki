@@ -253,6 +253,7 @@ export class SystemInfoIndexing extends LitElement {
                   <div class="index-stats">
                     ${this.formatRate(index.processingRatePerSecond)}
                     ${index.queueDepth > 0 ? html` Q:${index.queueDepth}` : ''}
+                    ${!index.workDistributionComplete ? html` <span style="color: #ffc107;">DIST</span>` : ''}
                   </div>
                 </div>
                 ${hasError ? html`
