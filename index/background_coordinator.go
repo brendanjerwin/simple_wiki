@@ -201,12 +201,19 @@ func (b *BackgroundIndexingCoordinator) StartBackground(pageIdentifiers []wikipa
 		}
 		
 		// Start a goroutine to feed work to this index's queue
-		go func(indexPool *indexWorkerPool, _ string) {
-			defer close(indexPool.workQueue)
-			for _, identifier := range pageIdentifiers {
+		go func(indexPool *indexWorkerPool, idxName string) {
+			defer func() {
+				close(indexPool.workQueue)
+				b.logger.Info("Work distributor for %s completed - fed %d pages", idxName, len(pageIdentifiers))
+			}()
+			
+			for i, identifier := range pageIdentifiers {
+				b.logger.Debug("Feeding page %d/%d (%s) to %s queue", i+1, len(pageIdentifiers), identifier, idxName)
 				select {
 				case indexPool.workQueue <- identifier:
+					b.logger.Debug("Successfully queued page %s to %s", identifier, idxName)
 				case <-b.ctx.Done():
+					b.logger.Info("Work distributor for %s cancelled at page %d/%d", idxName, i+1, len(pageIdentifiers))
 					return
 				}
 			}
@@ -248,6 +255,20 @@ func (b *BackgroundIndexingCoordinator) GetProgress() IndexingProgress {
 	
 	totalQueueDepth := b.calculateTotalQueueDepth()
 	overallCompleted := b.calculateOverallCompleted()
+	
+	// Log queue state for debugging
+	if b.isRunning {
+		queueStates := make([]string, 0, len(b.indexPools))
+		for indexName, pool := range b.indexPools {
+			queueDepth := len(pool.workQueue)
+			completed := 0
+			if tracker, exists := b.indexProgress[indexName]; exists {
+				completed = tracker.completed
+			}
+			queueStates = append(queueStates, fmt.Sprintf("%s: completed=%d, queue=%d", indexName, completed, queueDepth))
+		}
+		b.logger.Debug("Queue states: %v", queueStates)
+	}
 	
 	// Check if indexing should automatically transition to completed
 	// This needs to be done with minimal impact on the existing logic
@@ -395,10 +416,14 @@ func (b *BackgroundIndexingCoordinator) indexWorker(pool *indexWorkerPool, index
 
 // processPageForIndex processes a page for a specific index and tracks progress.
 func (b *BackgroundIndexingCoordinator) processPageForIndex(maintainer IMaintainIndex, indexName string, identifier wikipage.PageIdentifier) {
+	b.logger.Debug("Starting to process page '%s' in %s index", identifier, indexName)
+	
 	// Process the page without holding the mutex
 	err := maintainer.AddPageToIndex(identifier)
 	if err != nil {
-		b.logger.Error("Failed to index page '%s' in %s index: %v", identifier, indexName, err)
+		b.logger.Error("Failed to process page '%s' in %s index: %v", identifier, indexName, err)
+	} else {
+		b.logger.Debug("Successfully processed page '%s' in %s index", identifier, indexName)
 	}
 	
 	// Update progress atomically with minimal lock time

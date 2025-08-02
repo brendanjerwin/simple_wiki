@@ -51,12 +51,18 @@ func (*Index) GetIndexName() string {
 
 // AddPageToIndex adds a page's frontmatter to the index.
 func (f *Index) AddPageToIndex(requestedIdentifier wikipage.PageIdentifier) error {
+	log.Printf("Frontmatter indexer: Starting AddPageToIndex for %s", requestedIdentifier)
+	
 	mungedIdentifier := wikiidentifiers.MungeIdentifier(requestedIdentifier)
+	log.Printf("Frontmatter indexer: Reading frontmatter for %s", requestedIdentifier)
 	identifier, frontmatter, err := f.pageReader.ReadFrontMatter(requestedIdentifier)
 	if err != nil {
+		log.Printf("Frontmatter indexer: ReadFrontMatter failed for %s: %v", requestedIdentifier, err)
 		return err
 	}
+	log.Printf("Frontmatter indexer: ReadFrontMatter completed for %s", requestedIdentifier)
 
+	log.Printf("Frontmatter indexer: Starting indexing operations for %s", requestedIdentifier)
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -65,6 +71,7 @@ func (f *Index) AddPageToIndex(requestedIdentifier wikipage.PageIdentifier) erro
 	f.removePageFromIndexUnsafe(mungedIdentifier)
 
 	f.recursiveAddUnsafe(mungedIdentifier, "", frontmatter)
+	log.Printf("Frontmatter indexer: Completed AddPageToIndex for %s", requestedIdentifier)
 	return nil
 }
 
