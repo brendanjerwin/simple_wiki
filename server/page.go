@@ -114,6 +114,16 @@ func (p *Page) Update(newText string) error {
 	return p.updateInternal(newText, true)
 }
 
+// updateContentOnly updates the page's content and saves to disk without rendering or indexing.
+// This is used by migrations to persist content changes without triggering template execution or indexing.
+func (p *Page) updateContentOnly(newText string) error {
+	// Update the versioned text
+	p.Text.Update(newText)
+	
+	// Save to disk without rendering or indexing to prevent circular references
+	return p.saveWithoutIndexing()
+}
+
 // updateInternal provides internal update mechanism with migration control
 //revive:disable-next-line:flag-parameter withMigrations is intentionally used for recursion control
 func (p *Page) updateInternal(newText string, withMigrations bool) error {
@@ -157,11 +167,11 @@ func (p *Page) applyMigrations(content []byte) ([]byte, error) {
 		return content, nil
 	}
 
-	// If migration was applied, save the migrated content using normal page saving mechanism
+	// If migration was applied, save the migrated content without triggering rendering
 	// This ensures the migration appears in the page history like any other change
 	if !bytes.Equal(content, migratedContent) {
-		// Use updateInternal with withMigrations=false to prevent recursive migration calls
-		if saveErr := p.updateInternal(string(migratedContent), false); saveErr != nil {
+		// Use updateContentOnly to save without rendering (prevents infinite recursion)
+		if saveErr := p.updateContentOnly(string(migratedContent)); saveErr != nil {
 			p.Site.Logger.Warn("Failed to save migrated content for %s: %v", p.Identifier, saveErr)
 		} else {
 			p.Site.Logger.Info("Successfully migrated and saved frontmatter for page: %s", p.Identifier)
@@ -315,6 +325,31 @@ func (p *Page) Save() error {
 
 	_ = p.Site.IndexMaintainer.AddPageToIndex(p.Identifier)
 
+	return nil
+}
+
+// saveWithoutIndexing saves the page to disk without triggering indexing.
+// This is used by migrations to avoid circular references during read operations.
+func (p *Page) saveWithoutIndexing() error {
+	p.Site.saveMut.Lock()
+	defer p.Site.saveMut.Unlock()
+	bJSON, err := json.MarshalIndent(p, "", " ")
+	if err != nil {
+		return err
+	}
+
+	err = os.WriteFile(path.Join(p.Site.PathToData, base32tools.EncodeToBase32(strings.ToLower(p.Identifier))+".json"), bJSON, 0644)
+	if err != nil {
+		return err
+	}
+
+	// Write the current Markdown
+	err = os.WriteFile(path.Join(p.Site.PathToData, base32tools.EncodeToBase32(strings.ToLower(p.Identifier))+".md"), []byte(p.Text.CurrentText), 0644)
+	if err != nil {
+		return err
+	}
+
+	// Note: Intentionally NOT calling AddPageToIndex to prevent circular references
 	return nil
 }
 
