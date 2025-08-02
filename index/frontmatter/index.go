@@ -2,7 +2,6 @@
 package frontmatter
 
 import (
-	"fmt"
 	"log"
 	"slices"
 	"strings"
@@ -18,18 +17,6 @@ type (
 	// Value represents the value of a frontmatter key.
 	Value = string
 )
-
-const (
-	// MaxRecursionDepth is the maximum allowed recursion depth to prevent stack overflow
-	MaxRecursionDepth = 50
-)
-
-// recursionContext tracks visited paths and recursion depth to prevent infinite loops
-type recursionContext struct {
-	visitedObjects map[string]bool // Track object pointers to detect cycles
-	depth          int             // Current recursion depth
-	maxDepth       int             // Maximum allowed depth
-}
 
 // IQueryFrontmatterIndex defines the interface for querying the frontmatter index.
 type IQueryFrontmatterIndex interface {
@@ -77,14 +64,7 @@ func (f *Index) AddPageToIndex(requestedIdentifier wikipage.PageIdentifier) erro
 	f.removePageFromIndexUnsafe(requestedIdentifier)
 	f.removePageFromIndexUnsafe(mungedIdentifier)
 
-	// Initialize recursion context for loop detection
-	ctx := &recursionContext{
-		visitedObjects: make(map[string]bool),
-		depth:          0,
-		maxDepth:       MaxRecursionDepth,
-	}
-	
-	f.recursiveAddWithContext(mungedIdentifier, "", frontmatter, ctx)
+	f.recursiveAddUnsafe(mungedIdentifier, "", frontmatter)
 	return nil
 }
 
@@ -103,40 +83,15 @@ func (f *Index) saveToIndexUnsafe(identifier wikipage.PageIdentifier, keyPath Do
 	f.PageKeyMap[identifier][keyPath][value] = true
 }
 
-func (f *Index) recursiveAddWithContext(identifier wikipage.PageIdentifier, keyPath string, value any, ctx *recursionContext) {
+func (f *Index) recursiveAddUnsafe(identifier wikipage.PageIdentifier, keyPath string, value any) {
 	if keyPath == "identifier" {
 		return
 	}
-
-	// Check recursion depth limit
-	if ctx.depth > ctx.maxDepth {
-		log.Printf("Maximum recursion depth (%d) exceeded for page %v at path %v - stopping to prevent stack overflow", 
-			ctx.maxDepth, identifier, keyPath)
-		return
-	}
-
-	// Increment depth for this recursion level
-	ctx.depth++
-	defer func() { ctx.depth-- }()
 
 	// recursively build the dotted key path. a value in frontmatter can be either a string or a map[string]any
 	// if it is a map[string]any, then we need to recurse
 	switch v := value.(type) {
 	case map[string]any:
-		// Generate unique key for this object to detect cycles
-		objPtr := fmt.Sprintf("%p", v)
-		
-		// Check if we've already visited this object anywhere in the current path
-		if ctx.visitedObjects[objPtr] {
-			log.Printf("Circular reference detected for page %v: object %s already visited (now at path %v) - skipping to prevent infinite loop", 
-				identifier, objPtr, keyPath)
-			return
-		}
-		
-		// Mark this object as visited for the duration of this subtree traversal
-		ctx.visitedObjects[objPtr] = true
-		defer func() { delete(ctx.visitedObjects, objPtr) }()
-
 		for key, val := range v {
 			newKeyPath := keyPath
 			if newKeyPath != "" {
@@ -147,7 +102,7 @@ func (f *Index) recursiveAddWithContext(identifier wikipage.PageIdentifier, keyP
 			if _, isMap := val.(map[string]any); isMap {
 				f.saveToIndexUnsafe(identifier, newKeyPath, "") // This ensures that the QueryKeyExistence function works for all keys in the hierarchy
 			}
-			f.recursiveAddWithContext(identifier, newKeyPath, val, ctx)
+			f.recursiveAddUnsafe(identifier, newKeyPath, val)
 		}
 	case string:
 		f.saveToIndexUnsafe(identifier, keyPath, v)
@@ -196,19 +151,9 @@ func (f *Index) QueryExactMatch(dottedKeyPath DottedKeyPath, value Value) []wiki
 func (f *Index) QueryKeyExistence(dottedKeyPath DottedKeyPath) []wikipage.PageIdentifier {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	
-	// Use a map to deduplicate identifiers
-	identifierSet := make(map[wikipage.PageIdentifier]bool)
-	for indexedValue := range f.InvertedIndex[dottedKeyPath] {
-		for _, identifier := range f.InvertedIndex[dottedKeyPath][indexedValue] {
-			identifierSet[identifier] = true
-		}
-	}
-	
-	// Convert map to slice
 	var identifiersWithKey []wikipage.PageIdentifier
-	for identifier := range identifierSet {
-		identifiersWithKey = append(identifiersWithKey, identifier)
+	for indexedValue := range f.InvertedIndex[dottedKeyPath] {
+		identifiersWithKey = append(identifiersWithKey, f.InvertedIndex[dottedKeyPath][indexedValue]...)
 	}
 	return identifiersWithKey
 }
@@ -217,21 +162,11 @@ func (f *Index) QueryKeyExistence(dottedKeyPath DottedKeyPath) []wikipage.PageId
 func (f *Index) QueryPrefixMatch(dottedKeyPath DottedKeyPath, valuePrefix string) []wikipage.PageIdentifier {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	
-	// Use a map to deduplicate identifiers
-	identifierSet := make(map[wikipage.PageIdentifier]bool)
+	var identifiersWithKey []wikipage.PageIdentifier
 	for indexedValue := range f.InvertedIndex[dottedKeyPath] {
 		if strings.HasPrefix(indexedValue, valuePrefix) {
-			for _, identifier := range f.InvertedIndex[dottedKeyPath][indexedValue] {
-				identifierSet[identifier] = true
-			}
+			identifiersWithKey = append(identifiersWithKey, f.InvertedIndex[dottedKeyPath][indexedValue]...)
 		}
-	}
-	
-	// Convert map to slice
-	var identifiersWithKey []wikipage.PageIdentifier
-	for identifier := range identifierSet {
-		identifiersWithKey = append(identifiersWithKey, identifier)
 	}
 	return identifiersWithKey
 }
