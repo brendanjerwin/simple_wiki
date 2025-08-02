@@ -2,11 +2,14 @@ package templating
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"fmt"
 	"net/url"
 	"sort"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
@@ -29,33 +32,52 @@ type TemplateContext struct {
 }
 
 func ConstructTemplateContextFromFrontmatter(fm wikipage.FrontMatter, query frontmatter.IQueryFrontmatterIndex) (TemplateContext, error) {
+	return ConstructTemplateContextFromFrontmatterWithVisited(fm, query, make(map[string]bool))
+}
+
+func ConstructTemplateContextFromFrontmatterWithVisited(fm wikipage.FrontMatter, query frontmatter.IQueryFrontmatterIndex, visited map[string]bool) (TemplateContext, error) {
 	fmBytes, err := json.Marshal(fm)
 	if err != nil {
 		return TemplateContext{}, err
 	}
 
-	context := TemplateContext{}
-	err = json.Unmarshal(fmBytes, &context)
+	templateContext := TemplateContext{}
+	err = json.Unmarshal(fmBytes, &templateContext)
 	if err != nil {
 		return TemplateContext{}, err
 	}
 
-				context.FrontmatterMap = fm
+	templateContext.FrontmatterMap = fm
 
-	if context.Inventory.Items == nil {
-		context.Inventory.Items = []string{}
+	// Check for circular reference in inventory processing
+	if visited[templateContext.Identifier] {
+		// Return context without processing inventory items to prevent infinite recursion
+		if templateContext.Inventory.Items == nil {
+			templateContext.Inventory.Items = []string{}
+		}
+		return templateContext, nil
+	}
+
+	// Mark this identifier as visited
+	visited[templateContext.Identifier] = true
+	defer func() {
+		delete(visited, templateContext.Identifier)
+	}()
+
+	if templateContext.Inventory.Items == nil {
+		templateContext.Inventory.Items = []string{}
 	}
 
 	// Create a map to store unique items
 	uniqueItems := make(map[string]bool)
 
 	// Add existing items to the map
-	for _, item := range context.Inventory.Items {
+	for _, item := range templateContext.Inventory.Items {
 		uniqueItems[wikiidentifiers.MungeIdentifier(item)] = true
 	}
 
-	// Add new items to the map
-	itemsFromIndex := query.QueryExactMatch("inventory.container", context.Identifier)
+	// Add new items to the map (protected from circular references)
+	itemsFromIndex := query.QueryExactMatch("inventory.container", templateContext.Identifier)
 	for _, item := range itemsFromIndex {
 		// If there was an item that existed as a title in the list of items, remove it.
 		// This is to support the workflow of items first being listed directly on the inventory container,
@@ -67,17 +89,20 @@ func ConstructTemplateContextFromFrontmatter(fm wikipage.FrontMatter, query fron
 	}
 
 	// Convert the map back to a slice
-	context.Inventory.Items = make([]string, 0, len(uniqueItems))
+	templateContext.Inventory.Items = make([]string, 0, len(uniqueItems))
 	for item := range uniqueItems {
-		context.Inventory.Items = append(context.Inventory.Items, item)
+		templateContext.Inventory.Items = append(templateContext.Inventory.Items, item)
 	}
 
-	sort.Strings(context.Inventory.Items)
+	sort.Strings(templateContext.Inventory.Items)
 
-	return context, nil
+	return templateContext, nil
 }
 
-const maxRecursionDepth = 10
+const (
+	maxRecursionDepth = 10
+	templateExecutionTimeout = 30 * time.Second // Timeout for template execution
+)
 
 func BuildShowInventoryContentsOf(site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, indent int) func(string) string {
 	return BuildShowInventoryContentsOfWithLimit(site, query, indent, maxRecursionDepth, make(map[string]bool))
@@ -205,31 +230,60 @@ func BuildIsContainer(query frontmatter.IQueryFrontmatterIndex) func(string) boo
 }
 
 // ExecuteTemplate executes a template string with the given frontmatter and site context.
+// Includes timeout protection to prevent infinite hangs.
 func ExecuteTemplate(templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex) ([]byte, error) {
-	templateContext, err := ConstructTemplateContextFromFrontmatter(fm, query)
-	if err != nil {
+	// Set a reasonable timeout for template execution to prevent hangs
+	timeout := templateExecutionTimeout
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	resultChan := make(chan []byte, 1)
+	errorChan := make(chan error, 1)
+
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				errorChan <- fmt.Errorf("template execution panic: %v", r)
+			}
+		}()
+
+		templateContext, err := ConstructTemplateContextFromFrontmatter(fm, query)
+		if err != nil {
+			errorChan <- err
+			return
+		}
+
+		funcs := template.FuncMap{
+			"ShowInventoryContentsOf": BuildShowInventoryContentsOf(site, query, 0),
+			"LinkTo":                  BuildLinkTo(site, templateContext, query),
+			"IsContainer":             BuildIsContainer(query),
+			"FindBy":                  query.QueryExactMatch,
+			"FindByPrefix":            query.QueryPrefixMatch,
+			"FindByKeyExistence":      query.QueryKeyExistence,
+		}
+
+		tmpl, err := template.New("page").Funcs(funcs).Parse(templateString)
+		if err != nil {
+			errorChan <- err
+			return
+		}
+
+		buf := &bytes.Buffer{}
+		err = tmpl.Execute(buf, templateContext)
+		if err != nil {
+			errorChan <- err
+			return
+		}
+
+		resultChan <- buf.Bytes()
+	}()
+
+	select {
+	case result := <-resultChan:
+		return result, nil
+	case err := <-errorChan:
 		return nil, err
+	case <-ctx.Done():
+		return nil, fmt.Errorf("template execution timed out after %v - possible circular reference or infinite loop", timeout)
 	}
-
-	funcs := template.FuncMap{
-		"ShowInventoryContentsOf": BuildShowInventoryContentsOf(site, query, 0),
-		"LinkTo":                  BuildLinkTo(site, templateContext, query),
-		"IsContainer":             BuildIsContainer(query),
-		"FindBy":                  query.QueryExactMatch,
-		"FindByPrefix":            query.QueryPrefixMatch,
-		"FindByKeyExistence":      query.QueryKeyExistence,
-	}
-
-	tmpl, err := template.New("page").Funcs(funcs).Parse(templateString)
-	if err != nil {
-		return nil, err
-	}
-
-	buf := &bytes.Buffer{}
-	err = tmpl.Execute(buf, templateContext)
-	if err != nil {
-		return nil, err
-	}
-
-	return buf.Bytes(), nil
 }

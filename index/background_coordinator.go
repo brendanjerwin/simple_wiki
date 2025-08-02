@@ -12,6 +12,13 @@ import (
 	"github.com/jcelliott/lumber"
 )
 
+const (
+	// Buffer sizing constants
+	defaultBufferPercentage = 0.2 // 20% buffer for dynamic workloads
+	minBufferSize = 10 // Minimum buffer size
+	progressLogInterval = 100 // Log progress every N pages
+)
+
 // IndexingProgress represents the progress of indexing operations.
 type IndexingProgress struct {
 	IsRunning           bool
@@ -185,7 +192,13 @@ func (b *BackgroundIndexingCoordinator) StartBackground(pageIdentifiers []wikipa
 	b.isRunning = true
 	
 	// Resize queues to accommodate all pages (avoid distributor blocking)
-	queueSize := len(pageIdentifiers) + 10 // Add small buffer for safety
+	// Use percentage-based buffer sizing for better dynamic workload handling
+	baseSize := len(pageIdentifiers)
+	bufferSize := int(float64(baseSize) * defaultBufferPercentage)
+	if bufferSize < minBufferSize {
+		bufferSize = minBufferSize
+	}
+	queueSize := baseSize + bufferSize
 	for indexName, pool := range b.indexPools {
 		// Create new queue with appropriate size
 		oldQueue := pool.workQueue
@@ -233,10 +246,16 @@ func (b *BackgroundIndexingCoordinator) StartBackground(pageIdentifiers []wikipa
 				idxName, len(pageIdentifiers), cap(indexPool.workQueue))
 			
 			for i, identifier := range pageIdentifiers {
-				b.logger.Debug("Feeding page %d/%d (%s) to %s queue", i+1, len(pageIdentifiers), identifier, idxName)
+				// Log progress at intervals instead of every page to reduce overhead
+				if (i+1)%progressLogInterval == 0 || i == 0 || i == len(pageIdentifiers)-1 {
+					b.logger.Debug("Feeding page %d/%d (%s) to %s queue", i+1, len(pageIdentifiers), identifier, idxName)
+				}
 				select {
 				case indexPool.workQueue <- identifier:
-					b.logger.Debug("Successfully queued page %s to %s (queue depth now: %d)", identifier, idxName, len(indexPool.workQueue))
+					// Only log queue depth at intervals for first, last, and every Nth page
+					if (i+1)%progressLogInterval == 0 || i == 0 || i == len(pageIdentifiers)-1 {
+						b.logger.Debug("Successfully queued page %s to %s (queue depth now: %d)", identifier, idxName, len(indexPool.workQueue))
+					}
 				case <-b.ctx.Done():
 					b.logger.Info("Work distributor for %s cancelled at page %d/%d", idxName, i+1, len(pageIdentifiers))
 					return
@@ -301,23 +320,14 @@ func (b *BackgroundIndexingCoordinator) GetProgress() IndexingProgress {
 	}
 	
 	// Check if indexing should automatically transition to completed
-	// This needs to be done with minimal impact on the existing logic
-	isRunning := b.isRunning
-	if b.isRunning && b.totalPages > 0 && totalQueueDepth == 0 && overallCompleted >= b.totalPages {
-		// We need to update the state, but do it in a way that doesn't interfere with timing calculations
-		// Use a deferred goroutine to update the state after this function returns
-		go func() {
-			b.mu.Lock()
-			defer b.mu.Unlock()
-			// Double-check conditions under write lock
-			if b.isRunning && b.totalPages > 0 && 
-			   b.calculateTotalQueueDepth() == 0 && 
-			   b.calculateOverallCompleted() >= b.totalPages {
-				b.isRunning = false
-			}
-		}()
-		// For this call, we still return false to reflect the completed state
-		isRunning = false
+	// Check completion conditions and determine if we should transition to completed state
+	shouldComplete := b.isRunning && b.totalPages > 0 && totalQueueDepth == 0 && overallCompleted >= b.totalPages
+	isRunning := b.isRunning && !shouldComplete
+	
+	// If we should complete, update the state immediately to avoid race conditions
+	if shouldComplete {
+		b.isRunning = false
+		b.logger.Info("Background indexing completed automatically - all queues empty and %d/%d pages processed", overallCompleted, b.totalPages)
 	}
 	
 	progress := IndexingProgress{
@@ -362,7 +372,7 @@ func (b *BackgroundIndexingCoordinator) calculateOverallCompleted() int {
 
 // calculateProcessingRateAndEstimation calculates processing rates and estimated completion time.
 func (b *BackgroundIndexingCoordinator) calculateProcessingRateAndEstimation(progress *IndexingProgress, overallCompleted int) {
-	if !b.isRunning || overallCompleted <= 0 {
+	if overallCompleted <= 0 {
 		return
 	}
 	
@@ -402,7 +412,7 @@ func (b *BackgroundIndexingCoordinator) populateIndexProgress(progress *Indexing
 		}
 		
 		// Calculate per-index processing rate
-		if b.isRunning && tracker.completed > 0 {
+		if tracker.completed > 0 {
 			elapsed := time.Since(tracker.startTime)
 			singleProgress.ProcessingRatePerSecond = float64(tracker.completed) / elapsed.Seconds()
 		}
