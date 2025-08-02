@@ -77,10 +77,32 @@ func ConstructTemplateContextFromFrontmatter(fm wikipage.FrontMatter, query fron
 	return context, nil
 }
 
+const maxRecursionDepth = 10
+
 func BuildShowInventoryContentsOf(site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, indent int) func(string) string {
+	return BuildShowInventoryContentsOfWithLimit(site, query, indent, maxRecursionDepth, make(map[string]bool))
+}
+
+func BuildShowInventoryContentsOfWithLimit(site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, indent int, maxDepth int, visited map[string]bool) func(string) string {
 	isContainer := BuildIsContainer(query)
 
 	return func(containerIdentifier string) string {
+		// Check for circular reference
+		if visited[containerIdentifier] {
+			return "  [Circular reference detected]"
+		}
+
+		// Check for maximum recursion depth
+		if indent > maxDepth {
+			return "  [Maximum depth reached]"
+		}
+
+		// Mark this container as visited
+		visited[containerIdentifier] = true
+		defer func() {
+			delete(visited, containerIdentifier)
+		}()
+
 		_, containerFrontmatter, err := site.ReadFrontMatter(containerIdentifier)
 		if err != nil {
 			return err.Error()
@@ -102,7 +124,7 @@ func BuildShowInventoryContentsOf(site wikipage.PageReader, query frontmatter.IQ
 `
 		funcs := template.FuncMap{
 			"LinkTo":                  BuildLinkTo(site, containerTemplateContext, query),
-			"ShowInventoryContentsOf": BuildShowInventoryContentsOf(site, query, indent+1),
+			"ShowInventoryContentsOf": BuildShowInventoryContentsOfWithLimit(site, query, indent+1, maxDepth, visited),
 			"IsContainer":             isContainer,
 			"FindBy":                  query.QueryExactMatch,
 			"FindByPrefix":            query.QueryPrefixMatch,
