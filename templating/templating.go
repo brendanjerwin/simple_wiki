@@ -34,9 +34,11 @@ type ExecutionContext struct {
 }
 
 type TemplateContext struct {
+	// CAUTION: avoid changing the structure of TemplateContext without considering backward compatibility.
+	// If you change the structure, consider adding a migration to handle existing pages that may rely on the old structure.
 	Identifier string `json:"identifier"`
 	Title      string `json:"title"`
-	FrontmatterMap        map[string]any
+	Map        map[string]any
 	Inventory  InventoryFrontmatter `json:"inventory"`
 }
 
@@ -56,7 +58,7 @@ func ConstructTemplateContextFromFrontmatterWithVisited(fm wikipage.FrontMatter,
 		return TemplateContext{}, err
 	}
 
-	templateContext.FrontmatterMap = fm
+	templateContext.Map = fm
 
 	// Check for circular reference in inventory processing
 	if visited[templateContext.Identifier] {
@@ -109,15 +111,15 @@ func ConstructTemplateContextFromFrontmatterWithVisited(fm wikipage.FrontMatter,
 }
 
 const (
-	maxRecursionDepth = 10
-	maxExecutionDepth = 50 // Maximum template execution depth before failing fast
+	maxRecursionDepth        = 10
+	maxExecutionDepth        = 50               // Maximum template execution depth before failing fast
 	templateExecutionTimeout = 30 * time.Second // Timeout for template execution
-	progressLogInterval = 5 * time.Second // Log progress every N seconds during long executions
-	templatePreviewLength = 200 // Maximum length for template preview in error messages
-	unknownSource = "unknown"
-	unknownPageID = "unknown"
-	identifierKey = "identifier"
-	spaceSeparator = " "
+	progressLogInterval      = 5 * time.Second  // Log progress every N seconds during long executions
+	templatePreviewLength    = 200              // Maximum length for template preview in error messages
+	unknownSource            = "unknown"
+	unknownPageID            = "unknown"
+	identifierKey            = "identifier"
+	spaceSeparator           = " "
 )
 
 // isDebugMode returns true if detailed template execution logging is enabled.
@@ -289,14 +291,14 @@ func ExecuteTemplate(templateString string, fm wikipage.FrontMatter, site wikipa
 			pageID = id
 		}
 	}
-	
+
 	execCtx := ExecutionContext{
 		PageIdentifier: pageID,
 		Source:         unknownSource,
 		StartTime:      time.Now(),
 		Depth:          0,
 	}
-	
+
 	// Create a new visited map for this template execution context to prevent circular references
 	return ExecuteTemplateWithContext(templateString, fm, site, query, make(map[string]bool), execCtx)
 }
@@ -309,14 +311,14 @@ func ExecuteTemplateForServer(templateString string, fm wikipage.FrontMatter, si
 			pageID = id
 		}
 	}
-	
+
 	execCtx := ExecutionContext{
 		PageIdentifier: pageID,
 		Source:         "server",
 		StartTime:      time.Now(),
 		Depth:          0,
 	}
-	
+
 	return ExecuteTemplateWithContext(templateString, fm, site, query, make(map[string]bool), execCtx)
 }
 
@@ -328,14 +330,14 @@ func ExecuteTemplateForIndexing(templateString string, fm wikipage.FrontMatter, 
 			pageID = id
 		}
 	}
-	
+
 	execCtx := ExecutionContext{
 		PageIdentifier: pageID,
 		Source:         "indexing",
 		StartTime:      time.Now(),
 		Depth:          0,
 	}
-	
+
 	return ExecuteTemplateWithContext(templateString, fm, site, query, make(map[string]bool), execCtx)
 }
 
@@ -347,14 +349,14 @@ func ExecuteTemplateForLabels(templateString string, fm wikipage.FrontMatter, si
 			pageID = id
 		}
 	}
-	
+
 	execCtx := ExecutionContext{
 		PageIdentifier: pageID,
 		Source:         "labels",
 		StartTime:      time.Now(),
 		Depth:          0,
 	}
-	
+
 	return ExecuteTemplateWithContext(templateString, fm, site, query, make(map[string]bool), execCtx)
 }
 
@@ -368,14 +370,14 @@ func ExecuteTemplateWithVisited(templateString string, fm wikipage.FrontMatter, 
 			pageID = id
 		}
 	}
-	
+
 	execCtx := ExecutionContext{
 		PageIdentifier: pageID,
 		Source:         "legacy",
 		StartTime:      time.Now(),
 		Depth:          0,
 	}
-	
+
 	return ExecuteTemplateWithContext(templateString, fm, site, query, visited, execCtx)
 }
 
@@ -446,7 +448,7 @@ func executeTemplateWorker(templateString string, fm wikipage.FrontMatter, site 
 // checkExecutionDepth validates that execution depth hasn't exceeded the maximum.
 func checkExecutionDepth(execCtx ExecutionContext) error {
 	if execCtx.Depth > maxExecutionDepth {
-		return fmt.Errorf("template execution depth limit exceeded (%d > %d) for page %s (source: %s) - likely infinite recursion", 
+		return fmt.Errorf("template execution depth limit exceeded (%d > %d) for page %s (source: %s) - likely infinite recursion",
 			execCtx.Depth, maxExecutionDepth, execCtx.PageIdentifier, execCtx.Source)
 	}
 	return nil
@@ -485,7 +487,7 @@ func executeTemplateInternal(tmpl *template.Template, templateContext TemplateCo
 // logDebugStart logs the start of template execution if debug mode is enabled.
 func logDebugStart(execCtx ExecutionContext, visited map[string]bool) {
 	if isDebugMode() {
-		_, _ = fmt.Printf("[TEMPLATE DEBUG] Starting execution: page=%s, source=%s, depth=%d, visited=%v\n", 
+		_, _ = fmt.Printf("[TEMPLATE DEBUG] Starting execution: page=%s, source=%s, depth=%d, visited=%v\n",
 			execCtx.PageIdentifier, execCtx.Source, execCtx.Depth, getVisitedList(visited))
 	}
 }
@@ -500,7 +502,7 @@ func logDebugError(execCtx ExecutionContext, err error) {
 // logDebugComplete logs successful completion of template execution if debug mode is enabled.
 func logDebugComplete(execCtx ExecutionContext) {
 	if isDebugMode() {
-		_, _ = fmt.Printf("[TEMPLATE DEBUG] Template execution completed for page %s (duration: %v)\n", 
+		_, _ = fmt.Printf("[TEMPLATE DEBUG] Template execution completed for page %s (duration: %v)\n",
 			execCtx.PageIdentifier, time.Since(execCtx.StartTime))
 	}
 }
@@ -508,20 +510,20 @@ func logDebugComplete(execCtx ExecutionContext) {
 // formatTimeoutError creates a detailed error message for template execution timeouts.
 func formatTimeoutError(execCtx ExecutionContext, visited map[string]bool, templateString string, timeout time.Duration) string {
 	duration := time.Since(execCtx.StartTime)
-	
+
 	// Get list of visited pages for debugging circular references
 	visitedPages := make([]string, 0, len(visited))
 	for page := range visited {
 		visitedPages = append(visitedPages, page)
 	}
-	
+
 	// Get template preview (first N characters)
 	templatePreview := templateString
 	if len(templatePreview) > templatePreviewLength {
 		templatePreview = templatePreview[:templatePreviewLength] + "..."
 	}
 	templatePreview = strings.ReplaceAll(templatePreview, "\n", spaceSeparator)
-	
+
 	errorMsg := fmt.Sprintf(
 		"template execution timed out after %v (actual duration: %v)\n"+
 			"Page: %s\n"+
@@ -531,7 +533,7 @@ func formatTimeoutError(execCtx ExecutionContext, visited map[string]bool, templ
 			"Template preview: %q\n"+
 			"This suggests a circular reference or infinite loop in template execution.",
 		timeout, duration, execCtx.PageIdentifier, execCtx.Source, execCtx.Depth, visitedPages, templatePreview)
-	
+
 	return errorMsg
 }
 
