@@ -187,27 +187,43 @@ func (b *BackgroundIndexingCoordinator) StartBackground(pageIdentifiers []wikipa
 		return nil // Already running
 	}
 	
+	b.initializeIndexing(pageIdentifiers)
+	b.resizeQueues(pageIdentifiers)
+	b.initializeProgress(pageIdentifiers)
+	b.startWorkersAndDistributors(pageIdentifiers)
+	
+	totalWorkers := b.calculateTotalWorkers()
+	b.logger.Info("Started background indexing with %d total workers across %d index types for %d pages", 
+		totalWorkers, len(b.indexPools), b.totalPages)
+	return nil
+}
+
+// initializeIndexing sets up the basic indexing state.
+func (b *BackgroundIndexingCoordinator) initializeIndexing(pageIdentifiers []wikipage.PageIdentifier) {
 	b.totalPages = len(pageIdentifiers)
 	b.startTime = time.Now()
 	b.isRunning = true
-	
-	// Resize queues to accommodate all pages (avoid distributor blocking)
-	// Use percentage-based buffer sizing for better dynamic workload handling
+}
+
+// resizeQueues resizes all index queues to accommodate the workload.
+func (b *BackgroundIndexingCoordinator) resizeQueues(pageIdentifiers []wikipage.PageIdentifier) {
 	baseSize := len(pageIdentifiers)
 	bufferSize := int(float64(baseSize) * defaultBufferPercentage)
 	if bufferSize < minBufferSize {
 		bufferSize = minBufferSize
 	}
 	queueSize := baseSize + bufferSize
+	
 	for indexName, pool := range b.indexPools {
-		// Create new queue with appropriate size
 		oldQueue := pool.workQueue
 		pool.workQueue = make(chan wikipage.PageIdentifier, queueSize)
 		b.logger.Debug("Resized %s queue from buffer=%d to buffer=%d for %d pages", 
 			indexName, cap(oldQueue), cap(pool.workQueue), len(pageIdentifiers))
 	}
-	
-	// Initialize per-index progress
+}
+
+// initializeProgress resets progress tracking for all indexes.
+func (b *BackgroundIndexingCoordinator) initializeProgress(pageIdentifiers []wikipage.PageIdentifier) {
 	for _, tracker := range b.indexProgress {
 		tracker.completed = 0
 		tracker.total = len(pageIdentifiers)
@@ -215,63 +231,83 @@ func (b *BackgroundIndexingCoordinator) StartBackground(pageIdentifiers []wikipa
 		tracker.lastError = nil
 		tracker.workDistributionComplete = false
 	}
-	
-	// Start workers for each index pool
+}
+
+// startWorkersAndDistributors starts worker goroutines and work distributors for all indexes.
+func (b *BackgroundIndexingCoordinator) startWorkersAndDistributors(pageIdentifiers []wikipage.PageIdentifier) {
 	for indexName, pool := range b.indexPools {
 		b.logger.Info("Starting %d workers for %s index", pool.workerCount, indexName)
 		
-		// Start workers for this index
-		for i := 0; i < pool.workerCount; i++ {
-			pool.wg.Add(1)
-			go b.indexWorker(pool, indexName)
+		b.startIndexWorkers(pool, indexName)
+		b.startWorkDistributor(pool, indexName, pageIdentifiers)
+	}
+}
+
+// startIndexWorkers starts worker goroutines for a specific index.
+func (b *BackgroundIndexingCoordinator) startIndexWorkers(pool *indexWorkerPool, indexName string) {
+	for i := 0; i < pool.workerCount; i++ {
+		pool.wg.Add(1)
+		go b.indexWorker(pool, indexName)
+	}
+}
+
+// startWorkDistributor starts a work distributor goroutine for a specific index.
+func (b *BackgroundIndexingCoordinator) startWorkDistributor(pool *indexWorkerPool, indexName string, pageIdentifiers []wikipage.PageIdentifier) {
+	go func(indexPool *indexWorkerPool, idxName string) {
+		defer b.completeWorkDistribution(indexPool, idxName, len(pageIdentifiers))
+		
+		b.logger.Info("Work distributor for %s starting - will feed %d pages to queue (capacity: %d)", 
+			idxName, len(pageIdentifiers), cap(indexPool.workQueue))
+		
+		b.distributeWork(indexPool, idxName, pageIdentifiers)
+	}(pool, indexName)
+}
+
+// completeWorkDistribution handles cleanup when work distribution is complete.
+func (b *BackgroundIndexingCoordinator) completeWorkDistribution(indexPool *indexWorkerPool, idxName string, pageCount int) {
+	close(indexPool.workQueue)
+	
+	b.mu.Lock()
+	if tracker, exists := b.indexProgress[idxName]; exists {
+		tracker.workDistributionComplete = true
+	}
+	b.mu.Unlock()
+	
+	b.logger.Info("Work distributor for %s completed - fed %d pages, queue depth now %d", 
+		idxName, pageCount, len(indexPool.workQueue))
+}
+
+// distributeWork feeds work items to the index queue.
+func (b *BackgroundIndexingCoordinator) distributeWork(indexPool *indexWorkerPool, idxName string, pageIdentifiers []wikipage.PageIdentifier) {
+	for i, identifier := range pageIdentifiers {
+		if b.shouldLogProgress(i, len(pageIdentifiers)) {
+			b.logger.Debug("Feeding page %d/%d (%s) to %s queue", i+1, len(pageIdentifiers), identifier, idxName)
 		}
 		
-		// Start a goroutine to feed work to this index's queue
-		go func(indexPool *indexWorkerPool, idxName string) {
-			defer func() {
-				close(indexPool.workQueue)
-				
-				// Mark work distribution as complete
-				b.mu.Lock()
-				if tracker, exists := b.indexProgress[idxName]; exists {
-					tracker.workDistributionComplete = true
-				}
-				b.mu.Unlock()
-				
-				b.logger.Info("Work distributor for %s completed - fed %d pages, queue depth now %d", 
-					idxName, len(pageIdentifiers), len(indexPool.workQueue))
-			}()
-			
-			b.logger.Info("Work distributor for %s starting - will feed %d pages to queue (capacity: %d)", 
-				idxName, len(pageIdentifiers), cap(indexPool.workQueue))
-			
-			for i, identifier := range pageIdentifiers {
-				// Log progress at intervals instead of every page to reduce overhead
-				if (i+1)%progressLogInterval == 0 || i == 0 || i == len(pageIdentifiers)-1 {
-					b.logger.Debug("Feeding page %d/%d (%s) to %s queue", i+1, len(pageIdentifiers), identifier, idxName)
-				}
-				select {
-				case indexPool.workQueue <- identifier:
-					// Only log queue depth at intervals for first, last, and every Nth page
-					if (i+1)%progressLogInterval == 0 || i == 0 || i == len(pageIdentifiers)-1 {
-						b.logger.Debug("Successfully queued page %s to %s (queue depth now: %d)", identifier, idxName, len(indexPool.workQueue))
-					}
-				case <-b.ctx.Done():
-					b.logger.Info("Work distributor for %s cancelled at page %d/%d", idxName, i+1, len(pageIdentifiers))
-					return
-				}
+		select {
+		case indexPool.workQueue <- identifier:
+			if b.shouldLogProgress(i, len(pageIdentifiers)) {
+				b.logger.Debug("Successfully queued page %s to %s (queue depth now: %d)", identifier, idxName, len(indexPool.workQueue))
 			}
-		}(pool, indexName)
+		case <-b.ctx.Done():
+			b.logger.Info("Work distributor for %s cancelled at page %d/%d", idxName, i+1, len(pageIdentifiers))
+			return
+		}
 	}
-	
+}
+
+// shouldLogProgress determines if progress should be logged for the current item.
+func (*BackgroundIndexingCoordinator) shouldLogProgress(currentIndex, totalCount int) bool {
+	return (currentIndex+1)%progressLogInterval == 0 || currentIndex == 0 || currentIndex == totalCount-1
+}
+
+// calculateTotalWorkers calculates the total number of workers across all indexes.
+func (b *BackgroundIndexingCoordinator) calculateTotalWorkers() int {
 	totalWorkers := 0
 	for _, pool := range b.indexPools {
 		totalWorkers += pool.workerCount
 	}
-	
-	b.logger.Info("Started background indexing with %d total workers across %d index types for %d pages", 
-		totalWorkers, len(b.indexPools), b.totalPages)
-	return nil
+	return totalWorkers
 }
 
 // Stop gracefully stops the background indexing process.

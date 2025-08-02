@@ -108,6 +108,10 @@ func BuildShowInventoryContentsOf(site wikipage.PageReader, query frontmatter.IQ
 	return BuildShowInventoryContentsOfWithLimit(site, query, indent, maxRecursionDepth, make(map[string]bool))
 }
 
+func BuildShowInventoryContentsOfWithVisited(site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, indent int, visited map[string]bool) func(string) string {
+	return BuildShowInventoryContentsOfWithLimit(site, query, indent, maxRecursionDepth, visited)
+}
+
 func BuildShowInventoryContentsOfWithLimit(site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, indent int, maxDepth int, visited map[string]bool) func(string) string {
 	isContainer := BuildIsContainer(query)
 
@@ -132,7 +136,7 @@ func BuildShowInventoryContentsOfWithLimit(site wikipage.PageReader, query front
 		if err != nil {
 			return err.Error()
 		}
-		containerTemplateContext, err := ConstructTemplateContextFromFrontmatter(containerFrontmatter, query)
+		containerTemplateContext, err := ConstructTemplateContextFromFrontmatterWithVisited(containerFrontmatter, query, visited)
 		if err != nil {
 			return err.Error()
 		}
@@ -147,8 +151,9 @@ func BuildShowInventoryContentsOfWithLimit(site wikipage.PageReader, query front
 {{ end }}
 {{ end }}
 `
+		// Pass the shared visited map to template functions to prevent circular references
 		funcs := template.FuncMap{
-			"LinkTo":                  BuildLinkTo(site, containerTemplateContext, query),
+			"LinkTo":                  BuildLinkToWithVisited(site, containerTemplateContext, query, visited),
 			"ShowInventoryContentsOf": BuildShowInventoryContentsOfWithLimit(site, query, indent+1, maxDepth, visited),
 			"IsContainer":             isContainer,
 			"FindBy":                  query.QueryExactMatch,
@@ -173,11 +178,30 @@ func BuildShowInventoryContentsOfWithLimit(site wikipage.PageReader, query front
 }
 
 func BuildLinkTo(site wikipage.PageReader, currentPageTemplateContext TemplateContext, query frontmatter.IQueryFrontmatterIndex) func(string) string {
+	// Legacy function without visited map for backward compatibility
+	return BuildLinkToWithVisited(site, currentPageTemplateContext, query, make(map[string]bool))
+}
+
+func BuildLinkToWithVisited(site wikipage.PageReader, currentPageTemplateContext TemplateContext, query frontmatter.IQueryFrontmatterIndex, visited map[string]bool) func(string) string {
 	isContainer := BuildIsContainer(query)
 	return func(identifierToLink string) string {
 		if identifierToLink == "" {
 			return "N/A"
 		}
+
+		// Check for circular reference to prevent infinite recursion
+		if visited[identifierToLink] {
+			// Return a safe fallback link without triggering template execution
+			titleCaser := cases.Title(language.AmericanEnglish)
+			titleCasedTitle := titleCaser.String(strings.ReplaceAll(strcase.SnakeCase(identifierToLink), "_", " "))
+			return "[" + titleCasedTitle + " (circular reference)](/" + identifierToLink + ")"
+		}
+
+		// Mark this page as visited to prevent recursion
+		visited[identifierToLink] = true
+		defer func() {
+			delete(visited, identifierToLink)
+		}()
 
 		identifierToLink, frontmatterForLinkedPage, err := site.ReadFrontMatter(identifierToLink)
 		if err != nil {
@@ -232,6 +256,13 @@ func BuildIsContainer(query frontmatter.IQueryFrontmatterIndex) func(string) boo
 // ExecuteTemplate executes a template string with the given frontmatter and site context.
 // Includes timeout protection to prevent infinite hangs.
 func ExecuteTemplate(templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex) ([]byte, error) {
+	// Create a new visited map for this template execution context to prevent circular references
+	return ExecuteTemplateWithVisited(templateString, fm, site, query, make(map[string]bool))
+}
+
+// ExecuteTemplateWithVisited executes a template string with the given frontmatter and site context,
+// using a shared visited map to prevent circular references across all template functions.
+func ExecuteTemplateWithVisited(templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, visited map[string]bool) ([]byte, error) {
 	// Set a reasonable timeout for template execution to prevent hangs
 	timeout := templateExecutionTimeout
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -247,15 +278,16 @@ func ExecuteTemplate(templateString string, fm wikipage.FrontMatter, site wikipa
 			}
 		}()
 
-		templateContext, err := ConstructTemplateContextFromFrontmatter(fm, query)
+		templateContext, err := ConstructTemplateContextFromFrontmatterWithVisited(fm, query, visited)
 		if err != nil {
 			errorChan <- err
 			return
 		}
 
+		// Pass the shared visited map to all template functions to prevent circular references
 		funcs := template.FuncMap{
-			"ShowInventoryContentsOf": BuildShowInventoryContentsOf(site, query, 0),
-			"LinkTo":                  BuildLinkTo(site, templateContext, query),
+			"ShowInventoryContentsOf": BuildShowInventoryContentsOfWithVisited(site, query, 0, visited),
+			"LinkTo":                  BuildLinkToWithVisited(site, templateContext, query, visited),
 			"IsContainer":             BuildIsContainer(query),
 			"FindBy":                  query.QueryExactMatch,
 			"FindByPrefix":            query.QueryPrefixMatch,
