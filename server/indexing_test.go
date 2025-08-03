@@ -1,7 +1,6 @@
 package server
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -50,9 +49,9 @@ var _ = Describe("InitializeIndexing Concurrently", func() {
 				Expect(fileErr).NotTo(HaveOccurred())
 				
 				// Create .md file with frontmatter containing a title
-				mdContent := fmt.Sprintf(`---
-title: "%s"
----
+				mdContent := fmt.Sprintf(`+++
+title = "%s"
++++
 # %s`, pageName, pageName)
 				fileErr = os.WriteFile(mdPagePath, []byte(mdContent), 0644)
 				Expect(fileErr).NotTo(HaveOccurred())
@@ -60,17 +59,12 @@ title: "%s"
 		})
 
 		It("should index all pages", func() {
-			err := s.InitializeIndexing()
+			err := s.InitializeIndexingAndWait(5 * time.Second)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(s.FrontmatterIndexQueryer).NotTo(BeNil())
 			Expect(s.BleveIndexQueryer).NotTo(BeNil())
 			Expect(s.IndexingService).NotTo(BeNil())
-
-			// Wait for background indexing to complete
-			completed, timedOut := s.IndexingService.WaitForCompletionWithTimeout(context.Background(), 5*time.Second)
-			Expect(completed).To(BeTrue())
-			Expect(timedOut).To(BeFalse())
 
 			// Query frontmatter for a known key
 			results := s.FrontmatterIndexQueryer.QueryKeyExistence("title")

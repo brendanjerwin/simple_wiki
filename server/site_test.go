@@ -680,7 +680,7 @@ test content`
 				fileErr := os.WriteFile(pagePath, []byte(testPageContent), 0644)
 				Expect(fileErr).NotTo(HaveOccurred())
 
-				err = s.InitializeIndexing()
+				err = s.InitializeIndexingAndWait(5 * time.Second)
 			})
 
 			It("should not return an error from InitializeIndexing", func() {

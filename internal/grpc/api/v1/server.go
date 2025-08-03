@@ -9,7 +9,7 @@ import (
 	"time"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
-	"github.com/brendanjerwin/simple_wiki/index"
+	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
 	"google.golang.org/grpc"
@@ -73,7 +73,7 @@ type Server struct {
 	Commit              string
 	BuildTime           time.Time
 	PageReaderMutator   wikipage.PageReaderMutator
-	IndexingProgressProvider index.IProvideIndexingProgress
+	JobProgressProvider jobs.IProvideJobProgress
 	Logger              *lumber.ConsoleLogger
 }
 
@@ -285,12 +285,12 @@ func removeAtPath(data any, path []*apiv1.PathComponent) (any, error) {
 }
 
 // NewServer creates a new debug server
-func NewServer(commit string, buildTime time.Time, pageReadWriter wikipage.PageReaderMutator, indexingProgressProvider index.IProvideIndexingProgress, logger *lumber.ConsoleLogger) *Server {
+func NewServer(commit string, buildTime time.Time, pageReadWriter wikipage.PageReaderMutator, jobProgressProvider jobs.IProvideJobProgress, logger *lumber.ConsoleLogger) *Server {
 	return &Server{
 		Commit:              commit,
 		BuildTime:           buildTime,
 		PageReaderMutator:   pageReadWriter,
-		IndexingProgressProvider: indexingProgressProvider,
+		JobProgressProvider: jobProgressProvider,
 		Logger:              logger,
 	}
 }
@@ -311,16 +311,12 @@ func (s *Server) GetVersion(_ context.Context, _ *apiv1.GetVersionRequest) (*api
 }
 
 // GetJobStatus implements the GetJobStatus RPC.
-func (*Server) GetJobStatus(_ context.Context, _ *apiv1.GetJobStatusRequest) (*apiv1.GetJobStatusResponse, error) {
-	// TODO: Integrate with job queue coordinator
-	// For now, return empty response
-	return &apiv1.GetJobStatusResponse{
-		JobQueues: []*apiv1.JobQueueStatus{},
-	}, nil
+func (s *Server) GetJobStatus(_ context.Context, _ *apiv1.GetJobStatusRequest) (*apiv1.GetJobStatusResponse, error) {
+	return s.buildJobStatusResponse(), nil
 }
 
 // StreamJobStatus implements the StreamJobStatus RPC for real-time job queue updates.
-func (*Server) StreamJobStatus(req *apiv1.StreamJobStatusRequest, stream apiv1.SystemInfoService_StreamJobStatusServer) error {
+func (s *Server) StreamJobStatus(req *apiv1.StreamJobStatusRequest, stream apiv1.SystemInfoService_StreamJobStatusServer) error {
 	// Default to 1-second intervals, allow client to customize
 	interval := time.Duration(req.GetUpdateIntervalMs()) * time.Millisecond
 	if interval == 0 {
@@ -333,27 +329,54 @@ func (*Server) StreamJobStatus(req *apiv1.StreamJobStatusRequest, stream apiv1.S
 		interval = minIntervalMs * time.Millisecond
 	}
 
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
 	// Send initial status immediately
-	response := &apiv1.GetJobStatusResponse{
-		JobQueues: []*apiv1.JobQueueStatus{},
-	}
+	response := s.buildJobStatusResponse()
 	if err := stream.Send(response); err != nil {
 		return err
 	}
 
-	// TODO: Implement actual streaming with job queue coordinator
-	// For now, just send one response and terminate
-	return nil
+	// Stream updates at the specified interval
+	for {
+		select {
+		case <-ticker.C:
+			response := s.buildJobStatusResponse()
+			if err := stream.Send(response); err != nil {
+				return err
+			}
+		case <-stream.Context().Done():
+			return stream.Context().Err()
+		}
+	}
 }
 
-// TODO: Remove this function when old indexing system is replaced
-// buildJobStatusResponse builds a GetJobStatusResponse from job coordinator
-// func (*Server) buildJobStatusResponse(coordinator *jobs.JobQueueCoordinator) *apiv1.GetJobStatusResponse {
-//     // Implementation will be added when integrating job coordinator
-//     return &apiv1.GetJobStatusResponse{
-//         JobQueues: []*apiv1.JobQueueStatus{},
-//     }
-// }
+// buildJobStatusResponse builds a GetJobStatusResponse from the job progress provider.
+func (s *Server) buildJobStatusResponse() *apiv1.GetJobStatusResponse {
+	if s.JobProgressProvider == nil {
+		return &apiv1.GetJobStatusResponse{
+			JobQueues: []*apiv1.JobQueueStatus{},
+		}
+	}
+
+	progress := s.JobProgressProvider.GetJobProgress()
+	var protoQueues []*apiv1.JobQueueStatus
+
+	for _, queueStats := range progress.QueueStats {
+		protoQueue := &apiv1.JobQueueStatus{
+			Name:          queueStats.QueueName,
+			JobsRemaining: queueStats.JobsRemaining,
+			HighWaterMark: queueStats.HighWaterMark,
+			IsActive:      queueStats.IsActive,
+		}
+		protoQueues = append(protoQueues, protoQueue)
+	}
+
+	return &apiv1.GetJobStatusResponse{
+		JobQueues: protoQueues,
+	}
+}
 
 // GetFrontmatter implements the GetFrontmatter RPC.
 func (s *Server) GetFrontmatter(_ context.Context, req *apiv1.GetFrontmatterRequest) (resp *apiv1.GetFrontmatterResponse, err error) {

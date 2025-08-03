@@ -14,6 +14,19 @@ type QueueStats struct {
 	IsActive      bool  // jobs_remaining > 0
 }
 
+// JobProgress represents the overall progress of all job queues.
+type JobProgress struct {
+	IsRunning    bool
+	QueueStats   []*QueueStats
+	TotalActive  int32
+	TotalQueues  int32
+}
+
+// IProvideJobProgress defines the interface for components that can provide job queue progress.
+type IProvideJobProgress interface {
+	GetJobProgress() JobProgress
+}
+
 // MockJob is a test implementation of the Job interface.
 type MockJob struct {
 	Name string

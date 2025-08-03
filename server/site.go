@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -51,6 +52,8 @@ type Site struct {
 	MarkdownRenderer        IRenderMarkdownToHTML
 	IndexMaintainer         index.IMaintainIndex
 	IndexingService         *IndexingService
+	FileShadowingService    *FileShadowingService
+	JobQueueCoordinator     *jobs.JobQueueCoordinator
 	FrontmatterIndexQueryer frontmatter.IQueryFrontmatterIndex
 	BleveIndexQueryer       bleve.IQueryBleveIndex
 	MigrationApplicator     rollingmigrations.FrontmatterMigrationApplicator
@@ -104,9 +107,17 @@ func (s *Site) InitializeIndexing() error {
 	s.IndexMaintainer = multiMaintainer
 
 	// Create new job queue coordinator and indexing service
-	coordinator := jobs.NewJobQueueCoordinator()
-	s.IndexingService = NewIndexingService(coordinator, frontmatterIndex, bleveIndex)
+	s.JobQueueCoordinator = jobs.NewJobQueueCoordinator()
+	s.IndexingService = NewIndexingService(s.JobQueueCoordinator, frontmatterIndex, bleveIndex)
 	s.IndexingService.InitializeQueues()
+
+	// Initialize file shadowing service using the same coordinator
+	s.FileShadowingService = NewFileShadowingService(s.JobQueueCoordinator, s)
+	s.FileShadowingService.InitializeQueues()
+
+	// Start file shadowing scan
+	s.FileShadowingService.EnqueueScanJob()
+	s.Logger.Info("File shadowing scan started.")
 
 	// Get all files that need to be indexed
 	files := s.DirectoryList()
@@ -124,6 +135,26 @@ func (s *Site) InitializeIndexing() error {
 	// Start background indexing
 	s.IndexingService.BulkEnqueuePages(pageIdentifiers, index.Add)
 	s.Logger.Info("Background indexing started for %d pages. Application is ready.", len(files))
+	return nil
+}
+
+// InitializeIndexingAndWait initializes indexing and waits for initial indexing to complete.
+// This is primarily for testing to ensure all background jobs complete before tests proceed.
+func (s *Site) InitializeIndexingAndWait(timeout time.Duration) error {
+	if err := s.InitializeIndexing(); err != nil {
+		return err
+	}
+	
+	// Wait for all initial indexing jobs to complete
+	ctx := context.Background()
+	completed, timedOut := s.IndexingService.WaitForCompletionWithTimeout(ctx, timeout)
+	if timedOut {
+		return fmt.Errorf("timed out waiting for initial indexing to complete after %v", timeout)
+	}
+	if !completed {
+		return fmt.Errorf("initial indexing was cancelled or failed")
+	}
+	
 	return nil
 }
 
@@ -454,4 +485,9 @@ func (s *Site) ReadMarkdown(identifier wikipage.PageIdentifier) (wikipage.PageId
 func (s *Site) DeletePage(identifier wikipage.PageIdentifier) error {
 	p := s.Open(string(identifier))
 	return p.Erase()
+}
+
+// GetJobQueueCoordinator returns the job queue coordinator for progress monitoring.
+func (s *Site) GetJobQueueCoordinator() *jobs.JobQueueCoordinator {
+	return s.JobQueueCoordinator
 }

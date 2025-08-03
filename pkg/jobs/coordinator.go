@@ -115,3 +115,35 @@ func (c *JobQueueCoordinator) GetActiveQueues() []*QueueStats {
 
 	return activeQueues
 }
+
+// GetJobProgress implements the IProvideJobProgress interface.
+func (c *JobQueueCoordinator) GetJobProgress() JobProgress {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	var allQueues []*QueueStats
+	var activeQueues int32
+	totalQueues := int32(len(c.stats))
+
+	for _, stats := range c.stats {
+		// Return a copy to avoid race conditions
+		queueCopy := &QueueStats{
+			QueueName:     stats.QueueName,
+			JobsRemaining: stats.JobsRemaining,
+			HighWaterMark: stats.HighWaterMark,
+			IsActive:      stats.IsActive,
+		}
+		allQueues = append(allQueues, queueCopy)
+		
+		if stats.IsActive {
+			activeQueues++
+		}
+	}
+
+	return JobProgress{
+		IsRunning:   activeQueues > 0,
+		QueueStats:  allQueues,
+		TotalActive: activeQueues,
+		TotalQueues: totalQueues,
+	}
+}
