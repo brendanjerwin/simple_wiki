@@ -1544,9 +1544,11 @@ var _ = Describe("Server", func() {
 			server = v1.NewServer("commit", time.Now(), nil, nil, lumber.NewConsoleLogger(lumber.WARN))
 		})
 
-		It("should send initial empty response and terminate", func() {
+		It("should send initial empty response and handle context cancellation", func() {
+			// Set up context that gets cancelled after initial send
+			streamServer.ContextDone = true
 			err := server.StreamJobStatus(req, streamServer)
-			Expect(err).NotTo(HaveOccurred())
+			Expect(err).To(Equal(context.Canceled))
 			Expect(streamServer.SentMessages).To(HaveLen(1))
 			firstMessage := streamServer.SentMessages[0]
 			Expect(firstMessage.JobQueues).To(BeEmpty())

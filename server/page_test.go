@@ -47,7 +47,7 @@ var _ = Describe("Page Functions", func() {
 			Logger:              lumber.NewConsoleLogger(lumber.INFO),
 			MigrationApplicator: rollingmigrations.NewEmptyApplicator(),
 		}
-		err = s.InitializeIndexingAndWait(5 * time.Second)
+		err = s.InitializeIndexing()
 		Expect(err).NotTo(HaveOccurred())
 	})
 

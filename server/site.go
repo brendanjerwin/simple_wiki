@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -152,7 +153,7 @@ func (s *Site) InitializeIndexingAndWait(timeout time.Duration) error {
 		return fmt.Errorf("timed out waiting for initial indexing to complete after %v", timeout)
 	}
 	if !completed {
-		return fmt.Errorf("initial indexing was cancelled or failed")
+		return errors.New("initial indexing was cancelled or failed")
 	}
 	
 	return nil

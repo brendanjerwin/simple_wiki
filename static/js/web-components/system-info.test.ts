@@ -202,58 +202,68 @@ describe('SystemInfo', () => {
   });
 
   describe('formatting methods', () => {
-    it('should format commit hash correctly', async () => {
-      // Test long commit hash
-      el.loading = false;
-      el.version = new GetVersionResponse({
-        commit: 'abc123def456789',
-        buildTime: new Timestamp()
+    describe('when displaying long commit hash', () => {
+      beforeEach(async () => {
+        el.loading = false;
+        el.version = new GetVersionResponse({
+          commit: 'abc123def456789',
+          buildTime: new Timestamp()
+        });
+        el.jobStatus = new GetJobStatusResponse({
+          jobQueues: []
+        });
+        
+        await el.updateComplete;
       });
-      el.jobStatus = new GetJobStatusResponse({
-        jobQueues: []
+
+      it('should pass full commit hash to version component', () => {
+        const versionComponent = el.shadowRoot!.querySelector('system-info-version') as any;
+        expect(versionComponent).to.exist;
+        expect(versionComponent.version.commit).to.equal('abc123def456789');
       });
-      
-      await el.updateComplete;
-      
-      const versionComponent = el.shadowRoot!.querySelector('system-info-version') as any;
-      expect(versionComponent).to.exist;
-      expect(versionComponent.version.commit).to.equal('abc123def456789');
     });
 
-    it('should format tagged version correctly', async () => {
-      // Test tagged version (should not be truncated)
-      el.loading = false;
-      el.version = new GetVersionResponse({
-        commit: 'v1.2.3 (abc123d)',
-        buildTime: new Timestamp()
+    describe('when displaying tagged version', () => {
+      beforeEach(async () => {
+        el.loading = false;
+        el.version = new GetVersionResponse({
+          commit: 'v1.2.3 (abc123d)',
+          buildTime: new Timestamp()
+        });
+        el.jobStatus = new GetJobStatusResponse({
+          jobQueues: []
+        });
+        
+        await el.updateComplete;
       });
-      el.jobStatus = new GetJobStatusResponse({
-        jobQueues: []
+
+      it('should pass tagged version to component unchanged', () => {
+        const versionComponent = el.shadowRoot!.querySelector('system-info-version') as any;
+        expect(versionComponent).to.exist;
+        expect(versionComponent.version.commit).to.equal('v1.2.3 (abc123d)');
       });
-      
-      await el.updateComplete;
-      
-      const versionComponent = el.shadowRoot!.querySelector('system-info-version') as any;
-      expect(versionComponent).to.exist;
-      expect(versionComponent.version.commit).to.equal('v1.2.3 (abc123d)');
     });
 
-    it('should pass small job counts to component correctly', async () => {
-      const smallQueue = new JobQueueStatus({
-        name: 'Frontmatter',
-        jobsRemaining: 1,
-        highWaterMark: 100,
-        isActive: true
+    describe('when displaying small job counts', () => {
+      beforeEach(async () => {
+        const smallQueue = new JobQueueStatus({
+          name: 'Frontmatter',
+          jobsRemaining: 1,
+          highWaterMark: 100,
+          isActive: true
+        });
+
+        el.jobStatus = new GetJobStatusResponse({
+          jobQueues: [smallQueue]
+        });
+
+        await el.updateComplete;
       });
 
-      el.jobStatus = new GetJobStatusResponse({
-        jobQueues: [smallQueue]
+      it('should pass correct job count to indexing component', () => {
+        const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as any;
+        expect(indexingStatus.jobStatus.jobQueues[0].jobsRemaining).to.equal(1);
       });
-
-      await el.updateComplete;
-      
-      const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as any;
-      expect(indexingStatus.jobStatus.jobQueues[0].jobsRemaining).to.equal(1);
     });
   });
 
@@ -278,34 +288,51 @@ describe('SystemInfo', () => {
   });
 
   describe('progress calculation', () => {
-    it('should handle empty job queues', () => {
-      el.jobStatus = new GetJobStatusResponse({
-        jobQueues: []
+    describe('when job queues are empty', () => {
+      beforeEach(() => {
+        el.jobStatus = new GetJobStatusResponse({
+          jobQueues: []
+        });
       });
 
-      // Should not crash and should not show job section
-      expect(() => el.render()).to.not.throw();
+      it('should not crash when rendering', () => {
+        expect(() => el.render()).to.not.throw();
+      });
     });
 
-    it('should pass correct job queue data for display', async () => {
-      const testQueue = new JobQueueStatus({
-        name: 'TestQueue',
-        jobsRemaining: 75,
-        highWaterMark: 200,
-        isActive: true
+    describe('when displaying test queue data', () => {
+      beforeEach(async () => {
+        const testQueue = new JobQueueStatus({
+          name: 'TestQueue',
+          jobsRemaining: 75,
+          highWaterMark: 200,
+          isActive: true
+        });
+
+        el.jobStatus = new GetJobStatusResponse({
+          jobQueues: [testQueue]
+        });
+
+        await el.updateComplete;
       });
 
-      el.jobStatus = new GetJobStatusResponse({
-        jobQueues: [testQueue]
+      it('should pass correct job remaining count', () => {
+        const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as any;
+        const queue = indexingStatus.jobStatus.jobQueues[0];
+        expect(queue.jobsRemaining).to.equal(75);
       });
 
-      await el.updateComplete;
-      
-      const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as any;
-      const queue = indexingStatus.jobStatus.jobQueues[0];
-      expect(queue.jobsRemaining).to.equal(75);
-      expect(queue.highWaterMark).to.equal(200);
-      expect(queue.name).to.equal('TestQueue');
+      it('should pass correct high water mark', () => {
+        const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as any;
+        const queue = indexingStatus.jobStatus.jobQueues[0];
+        expect(queue.highWaterMark).to.equal(200);
+      });
+
+      it('should pass correct queue name', () => {
+        const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as any;
+        const queue = indexingStatus.jobStatus.jobQueues[0];
+        expect(queue.name).to.equal('TestQueue');
+      });
     });
   });
 

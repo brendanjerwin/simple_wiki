@@ -54,12 +54,9 @@ describe('SystemInfoVersion', () => {
 
   describe('when in loading state without version data', () => {
     beforeEach(async () => {
-      // Arrange
       el.loading = true;
       el.version = undefined;
       el.error = undefined;
-
-      // Act
       await Promise.race([
         el.updateComplete,
         timeout(5000, "Component update timed out"),
@@ -94,12 +91,10 @@ describe('SystemInfoVersion', () => {
 
   describe('when in error state without version data', () => {
     beforeEach(async () => {
-      // Arrange
       el.loading = false;
       el.error = 'Failed to load version info';
       el.version = undefined;
 
-      // Act
       await Promise.race([
         el.updateComplete,
         timeout(5000, "Component update timed out"),
@@ -120,7 +115,7 @@ describe('SystemInfoVersion', () => {
   describe('when displaying version information', () => {
     describe('when version has complete data', () => {
       beforeEach(async () => {
-        // Arrange
+  
         const mockTimestamp = new Timestamp({
           seconds: BigInt(Math.floor(new Date('2023-06-15T14:30:00Z').getTime() / 1000)),
           nanos: 0
@@ -133,7 +128,7 @@ describe('SystemInfoVersion', () => {
           buildTime: mockTimestamp
         });
 
-        // Act
+  
         await Promise.race([
           el.updateComplete,
           timeout(5000, "Component update timed out"),
@@ -163,7 +158,7 @@ describe('SystemInfoVersion', () => {
 
     describe('when version has tagged commit', () => {
       beforeEach(async () => {
-        // Arrange
+  
         const mockTimestamp = new Timestamp({
           seconds: BigInt(Math.floor(new Date('2023-06-15T14:30:00Z').getTime() / 1000)),
           nanos: 0
@@ -176,7 +171,7 @@ describe('SystemInfoVersion', () => {
           buildTime: mockTimestamp
         });
 
-        // Act
+  
         await Promise.race([
           el.updateComplete,
           timeout(5000, "Component update timed out"),
@@ -191,7 +186,7 @@ describe('SystemInfoVersion', () => {
 
     describe('when version has empty commit', () => {
       beforeEach(async () => {
-        // Arrange
+  
         const mockTimestamp = new Timestamp({
           seconds: BigInt(Math.floor(new Date('2023-06-15T14:30:00Z').getTime() / 1000)),
           nanos: 0
@@ -204,7 +199,7 @@ describe('SystemInfoVersion', () => {
           buildTime: mockTimestamp
         });
 
-        // Act
+  
         await Promise.race([
           el.updateComplete,
           timeout(5000, "Component update timed out"),
@@ -219,7 +214,7 @@ describe('SystemInfoVersion', () => {
 
     describe('when version has no buildTime', () => {
       beforeEach(async () => {
-        // Arrange
+  
         el.loading = false;
         el.error = undefined;
         el.version = new GetVersionResponse({
@@ -227,7 +222,7 @@ describe('SystemInfoVersion', () => {
           buildTime: undefined
         });
 
-        // Act
+  
         await Promise.race([
           el.updateComplete,
           timeout(5000, "Component update timed out"),
@@ -246,10 +241,10 @@ describe('SystemInfoVersion', () => {
       let result: string;
 
       beforeEach(() => {
-        // Arrange
+  
         const longCommit = 'abcdefghijklmnopqrstuvwxyz123456789';
 
-        // Act
+  
         result = el['formatCommit'](longCommit);
       });
 
@@ -262,10 +257,10 @@ describe('SystemInfoVersion', () => {
       let result: string;
 
       beforeEach(() => {
-        // Arrange
+  
         const sevenCharCommit = 'abc1234';
 
-        // Act
+  
         result = el['formatCommit'](sevenCharCommit);
       });
 
@@ -278,10 +273,10 @@ describe('SystemInfoVersion', () => {
       let result: string;
 
       beforeEach(() => {
-        // Arrange
+  
         const shortCommit = 'abc12';
 
-        // Act
+  
         result = el['formatCommit'](shortCommit);
       });
 
@@ -295,10 +290,10 @@ describe('SystemInfoVersion', () => {
         let result: string;
 
         beforeEach(() => {
-          // Arrange
+    
           const taggedCommit = 'v1.2.3 (abc1234)';
 
-          // Act
+    
           result = el['formatCommit'](taggedCommit);
         });
 
@@ -311,10 +306,10 @@ describe('SystemInfoVersion', () => {
         let result: string;
 
         beforeEach(() => {
-          // Arrange
+    
           const complexTaggedCommit = 'v10.20.30-beta.1 (abcdefghijklmnop)';
 
-          // Act
+    
           result = el['formatCommit'](complexTaggedCommit);
         });
 
@@ -327,10 +322,10 @@ describe('SystemInfoVersion', () => {
         let result: string;
 
         beforeEach(() => {
-          // Arrange
+    
           const incompleteParens = 'v1.2.3 (abc1234567890';
 
-          // Act
+    
           result = el['formatCommit'](incompleteParens);
         });
 
@@ -343,10 +338,10 @@ describe('SystemInfoVersion', () => {
         let result: string;
 
         beforeEach(() => {
-          // Arrange
+    
           const incompleteParens = 'v1.2.3 abc1234567890)';
 
-          // Act
+    
           result = el['formatCommit'](incompleteParens);
         });
 
@@ -360,10 +355,10 @@ describe('SystemInfoVersion', () => {
       let result: string;
 
       beforeEach(() => {
-        // Arrange
+  
         const emptyCommit = '';
 
-        // Act
+  
         result = el['formatCommit'](emptyCommit);
       });
 
@@ -378,13 +373,13 @@ describe('SystemInfoVersion', () => {
       let result: string;
 
       beforeEach(() => {
-        // Arrange
+  
         const timestamp = new Timestamp({
           seconds: BigInt(Math.floor(new Date('2023-12-25T15:45:30Z').getTime() / 1000)),
           nanos: 0
         });
 
-        // Act
+  
         result = el['formatTimestamp'](timestamp);
       });
 
@@ -402,13 +397,13 @@ describe('SystemInfoVersion', () => {
       let result: string;
 
       beforeEach(() => {
-        // Arrange
+  
         const timestamp = new Timestamp({
           seconds: BigInt(0),
           nanos: 0
         });
 
-        // Act
+  
         result = el['formatTimestamp'](timestamp);
       });
 
@@ -422,13 +417,13 @@ describe('SystemInfoVersion', () => {
       let result: string;
 
       beforeEach(() => {
-        // Arrange
+  
         const timestamp = new Timestamp({
           seconds: BigInt(Math.floor(new Date('2023-06-15T14:30:00Z').getTime() / 1000)),
           nanos: 500000000 // 0.5 seconds
         });
 
-        // Act
+  
         result = el['formatTimestamp'](timestamp);
       });
 
@@ -442,7 +437,7 @@ describe('SystemInfoVersion', () => {
 
   describe('component structure', () => {
     beforeEach(async () => {
-      // Arrange
+
       const mockTimestamp = new Timestamp({
         seconds: BigInt(Math.floor(new Date('2023-06-15T14:30:00Z').getTime() / 1000)),
         nanos: 0
@@ -454,8 +449,6 @@ describe('SystemInfoVersion', () => {
         commit: 'abcdef1234567890',
         buildTime: mockTimestamp
       });
-
-      // Act
       await Promise.race([
         el.updateComplete,
         timeout(5000, "Component update timed out"),
@@ -497,7 +490,7 @@ describe('SystemInfoVersion', () => {
   describe('error handling edge cases', () => {
     describe('when loading is true but version exists', () => {
       beforeEach(async () => {
-        // Arrange
+  
         const mockTimestamp = new Timestamp({
           seconds: BigInt(Math.floor(new Date('2023-06-15T14:30:00Z').getTime() / 1000)),
           nanos: 0
@@ -510,7 +503,7 @@ describe('SystemInfoVersion', () => {
           buildTime: mockTimestamp
         });
 
-        // Act
+  
         await Promise.race([
           el.updateComplete,
           timeout(5000, "Component update timed out"),
@@ -528,7 +521,7 @@ describe('SystemInfoVersion', () => {
 
     describe('when error exists but version also exists', () => {
       beforeEach(async () => {
-        // Arrange
+  
         const mockTimestamp = new Timestamp({
           seconds: BigInt(Math.floor(new Date('2023-06-15T14:30:00Z').getTime() / 1000)),
           nanos: 0
@@ -541,7 +534,7 @@ describe('SystemInfoVersion', () => {
           buildTime: mockTimestamp
         });
 
-        // Act
+  
         await Promise.race([
           el.updateComplete,
           timeout(5000, "Component update timed out"),

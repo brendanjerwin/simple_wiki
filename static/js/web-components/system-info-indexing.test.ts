@@ -395,60 +395,123 @@ describe('SystemInfoIndexing', () => {
   });
 
   describe('formatRate method', () => {
-    it('should format very low rates', () => {
-      const component = el as SystemInfoIndexing & { formatRate(rate: number): string };
-      const result = component.formatRate(0.05);
-      expect(result).to.equal('< 0.1/s');
+    describe('when rate is very low', () => {
+      let result: string;
+
+      beforeEach(() => {
+        const component = el as SystemInfoIndexing & { formatRate(rate: number): string };
+        result = component.formatRate(0.05);
+      });
+
+      it('should return < 0.1/s format', () => {
+        expect(result).to.equal('< 0.1/s');
+      });
     });
 
-    it('should format rates less than 1', () => {
-      const component = el as SystemInfoIndexing & { formatRate(rate: number): string };
-      const result = component.formatRate(0.7);
-      expect(result).to.equal('0.7/s');
+    describe('when rate is less than 1 but above 0.1', () => {
+      let result: string;
+
+      beforeEach(() => {
+        const component = el as SystemInfoIndexing & { formatRate(rate: number): string };
+        result = component.formatRate(0.7);
+      });
+
+      it('should return decimal format', () => {
+        expect(result).to.equal('0.7/s');
+      });
     });
 
-    it('should format rates greater than or equal to 1', () => {
-      const component = el as SystemInfoIndexing & { formatRate(rate: number): string };
-      const result = component.formatRate(2.8);
-      expect(result).to.equal('3/s');
+    describe('when rate is greater than or equal to 1', () => {
+      let result: string;
+
+      beforeEach(() => {
+        const component = el as SystemInfoIndexing & { formatRate(rate: number): string };
+        result = component.formatRate(2.8);
+      });
+
+      it('should return rounded integer format', () => {
+        expect(result).to.equal('3/s');
+      });
     });
 
-    it('should format edge case of exactly 0.1', () => {
-      const component = el as SystemInfoIndexing & { formatRate(rate: number): string };
-      const result = component.formatRate(0.1);
-      expect(result).to.equal('0.1/s');
+    describe('when rate is exactly 0.1', () => {
+      let result: string;
+
+      beforeEach(() => {
+        const component = el as SystemInfoIndexing & { formatRate(rate: number): string };
+        result = component.formatRate(0.1);
+      });
+
+      it('should return decimal format', () => {
+        expect(result).to.equal('0.1/s');
+      });
     });
 
-    it('should format edge case of exactly 1', () => {
-      const component = el as SystemInfoIndexing & { formatRate(rate: number): string };
-      const result = component.formatRate(1.0);
-      expect(result).to.equal('1/s');
+    describe('when rate is exactly 1', () => {
+      let result: string;
+
+      beforeEach(() => {
+        const component = el as SystemInfoIndexing & { formatRate(rate: number): string };
+        result = component.formatRate(1.0);
+      });
+
+      it('should return integer format', () => {
+        expect(result).to.equal('1/s');
+      });
     });
   });
 
   describe('calculateProgress method', () => {
-    it('should calculate progress correctly', () => {
-      const component = el as SystemInfoIndexing & { calculateProgress(completed: number, total: number): number };
-      const result = component.calculateProgress(50, 100);
-      expect(result).to.equal(50);
+    describe('when calculating normal progress', () => {
+      let result: number;
+
+      beforeEach(() => {
+        const component = el as SystemInfoIndexing & { calculateProgress(completed: number, total: number): number };
+        result = component.calculateProgress(50, 100);
+      });
+
+      it('should return correct percentage', () => {
+        expect(result).to.equal(50);
+      });
     });
 
-    it('should handle zero total', () => {
-      const component = el as SystemInfoIndexing & { calculateProgress(completed: number, total: number): number };
-      const result = component.calculateProgress(10, 0);
-      expect(result).to.equal(0);
+    describe('when total is zero', () => {
+      let result: number;
+
+      beforeEach(() => {
+        const component = el as SystemInfoIndexing & { calculateProgress(completed: number, total: number): number };
+        result = component.calculateProgress(10, 0);
+      });
+
+      it('should return zero to avoid division by zero', () => {
+        expect(result).to.equal(0);
+      });
     });
 
-    it('should handle complete progress', () => {
-      const component = el as SystemInfoIndexing & { calculateProgress(completed: number, total: number): number };
-      const result = component.calculateProgress(100, 100);
-      expect(result).to.equal(100);
+    describe('when progress is complete', () => {
+      let result: number;
+
+      beforeEach(() => {
+        const component = el as SystemInfoIndexing & { calculateProgress(completed: number, total: number): number };
+        result = component.calculateProgress(100, 100);
+      });
+
+      it('should return 100 percent', () => {
+        expect(result).to.equal(100);
+      });
     });
 
-    it('should handle no progress', () => {
-      const component = el as SystemInfoIndexing & { calculateProgress(completed: number, total: number): number };
-      const result = component.calculateProgress(0, 100);
-      expect(result).to.equal(0);
+    describe('when no progress has been made', () => {
+      let result: number;
+
+      beforeEach(() => {
+        const component = el as SystemInfoIndexing & { calculateProgress(completed: number, total: number): number };
+        result = component.calculateProgress(0, 100);
+      });
+
+      it('should return zero percent', () => {
+        expect(result).to.equal(0);
+      });
     });
   });
 
