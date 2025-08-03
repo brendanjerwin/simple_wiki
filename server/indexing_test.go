@@ -1,10 +1,12 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/brendanjerwin/simple_wiki/rollingmigrations"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
@@ -63,11 +65,12 @@ title: "%s"
 
 			Expect(s.FrontmatterIndexQueryer).NotTo(BeNil())
 			Expect(s.BleveIndexQueryer).NotTo(BeNil())
-			Expect(s.BackgroundIndexer).NotTo(BeNil())
+			Expect(s.IndexingService).NotTo(BeNil())
 
 			// Wait for background indexing to complete
-			err = s.BackgroundIndexer.WaitForCompletion()
-			Expect(err).NotTo(HaveOccurred())
+			completed, timedOut := s.IndexingService.WaitForCompletionWithTimeout(context.Background(), 5*time.Second)
+			Expect(completed).To(BeTrue())
+			Expect(timedOut).To(BeFalse())
 
 			// Query frontmatter for a known key
 			results := s.FrontmatterIndexQueryer.QueryKeyExistence("title")

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	adrgfrontmatter "github.com/adrg/frontmatter"
+	"github.com/brendanjerwin/simple_wiki/index"
 	indexfrontmatter "github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/templating"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
@@ -323,7 +324,10 @@ func (p *Page) Save() error {
 		return err
 	}
 
-	_ = p.Site.IndexMaintainer.AddPageToIndex(p.Identifier)
+	// Enqueue indexing jobs for both frontmatter and bleve indexes
+	if p.Site.IndexingService != nil {
+		p.Site.IndexingService.EnqueueIndexJob(p.Identifier, index.Add)
+	}
 
 	return nil
 }
@@ -361,7 +365,10 @@ func (p *Page) IsNew() bool {
 // Erase deletes the page from disk.
 func (p *Page) Erase() error {
 	p.Site.Logger.Trace("Erasing %s", p.Identifier)
-	_ = p.Site.IndexMaintainer.RemovePageFromIndex(p.Identifier)
+	// Enqueue removal jobs for both frontmatter and bleve indexes
+	if p.Site.IndexingService != nil {
+		p.Site.IndexingService.EnqueueIndexJob(p.Identifier, index.Remove)
+	}
 	err := os.Remove(path.Join(p.Site.PathToData, base32tools.EncodeToBase32(strings.ToLower(p.Identifier))+".json"))
 	if err != nil {
 		return err

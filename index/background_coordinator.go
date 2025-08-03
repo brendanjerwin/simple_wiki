@@ -19,28 +19,6 @@ const (
 	progressLogInterval = 100 // Log progress every N pages
 )
 
-// IndexingProgress represents the progress of indexing operations.
-type IndexingProgress struct {
-	IsRunning           bool
-	TotalPages          int
-	CompletedPages      int
-	QueueDepth          int
-	ProcessingRatePerSecond float64
-	EstimatedCompletion *time.Duration
-	IndexProgress       map[string]SingleIndexProgress
-}
-
-// SingleIndexProgress represents progress for a single index type.
-type SingleIndexProgress struct {
-	Name                string
-	Completed           int
-	Total               int
-	ProcessingRatePerSecond float64
-	LastError           *string
-	QueueDepth          int
-	WorkDistributionComplete bool
-}
-
 // indexProgressTracker tracks progress for a single index internally.
 type indexProgressTracker struct {
 	name           string

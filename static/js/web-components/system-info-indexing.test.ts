@@ -396,49 +396,58 @@ describe('SystemInfoIndexing', () => {
 
   describe('formatRate method', () => {
     it('should format very low rates', () => {
-      const result = (el as any).formatRate(0.05);
+      const component = el as SystemInfoIndexing & { formatRate(rate: number): string };
+      const result = component.formatRate(0.05);
       expect(result).to.equal('< 0.1/s');
     });
 
     it('should format rates less than 1', () => {
-      const result = (el as any).formatRate(0.7);
+      const component = el as SystemInfoIndexing & { formatRate(rate: number): string };
+      const result = component.formatRate(0.7);
       expect(result).to.equal('0.7/s');
     });
 
     it('should format rates greater than or equal to 1', () => {
-      const result = (el as any).formatRate(2.8);
+      const component = el as SystemInfoIndexing & { formatRate(rate: number): string };
+      const result = component.formatRate(2.8);
       expect(result).to.equal('3/s');
     });
 
     it('should format edge case of exactly 0.1', () => {
-      const result = (el as any).formatRate(0.1);
+      const component = el as SystemInfoIndexing & { formatRate(rate: number): string };
+      const result = component.formatRate(0.1);
       expect(result).to.equal('0.1/s');
     });
 
     it('should format edge case of exactly 1', () => {
-      const result = (el as any).formatRate(1.0);
+      const component = el as SystemInfoIndexing & { formatRate(rate: number): string };
+      const result = component.formatRate(1.0);
       expect(result).to.equal('1/s');
     });
   });
 
   describe('calculateProgress method', () => {
     it('should calculate progress correctly', () => {
-      const result = (el as any).calculateProgress(50, 100);
+      const component = el as SystemInfoIndexing & { calculateProgress(completed: number, total: number): number };
+      const result = component.calculateProgress(50, 100);
       expect(result).to.equal(50);
     });
 
     it('should handle zero total', () => {
-      const result = (el as any).calculateProgress(10, 0);
+      const component = el as SystemInfoIndexing & { calculateProgress(completed: number, total: number): number };
+      const result = component.calculateProgress(10, 0);
       expect(result).to.equal(0);
     });
 
     it('should handle complete progress', () => {
-      const result = (el as any).calculateProgress(100, 100);
+      const component = el as SystemInfoIndexing & { calculateProgress(completed: number, total: number): number };
+      const result = component.calculateProgress(100, 100);
       expect(result).to.equal(100);
     });
 
     it('should handle no progress', () => {
-      const result = (el as any).calculateProgress(0, 100);
+      const component = el as SystemInfoIndexing & { calculateProgress(completed: number, total: number): number };
+      const result = component.calculateProgress(0, 100);
       expect(result).to.equal(0);
     });
   });

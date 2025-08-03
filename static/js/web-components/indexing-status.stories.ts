@@ -4,7 +4,6 @@ import { html } from 'lit';
 import './system-info-indexing.js';
 import { SystemInfoIndexing } from './system-info-indexing.js';
 import { GetJobStatusResponse, JobQueueStatus } from '../gen/api/v1/system_info_pb.js';
-import { Timestamp } from '@bufbuild/protobuf';
 import { stub } from 'sinon';
 
 const meta: Meta = {

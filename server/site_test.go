@@ -2,13 +2,16 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"net/http"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/rollingmigrations"
 	"github.com/brendanjerwin/simple_wiki/sec"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
@@ -22,10 +25,22 @@ import (
 
 var _ = Describe("Site", func() {
 	var (
-		s         *Site
-		tempDir   string
-		mockIndex *MockIndexMaintainer
+		s                *Site
+		tempDir          string
+		mockIndex        *MockIndexMaintainer
+		mockFrontmatter  *MockIndexOperator
+		mockBleve        *MockIndexOperator
+		coordinator      *jobs.JobQueueCoordinator
+		indexingService  *IndexingService
 	)
+
+	// Helper function to wait for indexing jobs to complete
+	waitForIndexing := func() {
+		if indexingService != nil {
+			completed, _ := indexingService.WaitForCompletionWithTimeout(context.Background(), 1*time.Second)
+			Expect(completed).To(BeTrue())
+		}
+	}
 
 	BeforeEach(func() {
 		var err error
@@ -33,6 +48,13 @@ var _ = Describe("Site", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		mockIndex = &MockIndexMaintainer{}
+		mockFrontmatter = &MockIndexOperator{}
+		mockBleve = &MockIndexOperator{}
+
+		// Set up job queue coordinator and indexing service
+		coordinator = jobs.NewJobQueueCoordinator()
+		indexingService = NewIndexingService(coordinator, mockFrontmatter, mockBleve)
+		indexingService.InitializeQueues()
 
 		// Set up empty migration applicator for unit testing
 		// (integration tests will configure their own mocks)
@@ -42,6 +64,7 @@ var _ = Describe("Site", func() {
 			Logger:                  lumber.NewConsoleLogger(lumber.INFO),
 			PathToData:              tempDir,
 			IndexMaintainer:         mockIndex,
+			IndexingService:         indexingService,
 			MarkdownRenderer:        &goldmarkrenderer.GoldmarkRenderer{},
 			FrontmatterIndexQueryer: &mockFrontmatterIndexQueryer{},
 			MigrationApplicator:     applicator,
@@ -293,6 +316,7 @@ markdown content`
 			When("the page does not exist", func() {
 				BeforeEach(func() {
 					err = s.WriteFrontMatter(pageIdentifier, newFm)
+					waitForIndexing()
 				})
 
 				It("should not return an error", func() {
@@ -310,7 +334,8 @@ markdown content`
 				})
 
 				It("should add the page to the index", func() {
-					Expect(mockIndex.AddPageToIndexCalledWith).To(Equal(pageIdentifier))
+					Expect(mockFrontmatter.LastAddPageCall()).To(Equal(pageIdentifier))
+					Expect(mockBleve.LastAddPageCall()).To(Equal(pageIdentifier))
 				})
 			})
 
@@ -408,6 +433,7 @@ old markdown`
 			When("the page does not exist", func() {
 				BeforeEach(func() {
 					err = s.WriteMarkdown(pageIdentifier, newMd)
+					waitForIndexing()
 				})
 
 				It("should not return an error", func() {
@@ -425,7 +451,8 @@ old markdown`
 				})
 
 				It("should add the page to the index", func() {
-					Expect(mockIndex.AddPageToIndexCalledWith).To(Equal(pageIdentifier))
+					Expect(mockFrontmatter.LastAddPageCall()).To(Equal(pageIdentifier))
+					Expect(mockBleve.LastAddPageCall()).To(Equal(pageIdentifier))
 				})
 			})
 
@@ -496,6 +523,7 @@ test content`
 					Expect(fileErr).NotTo(HaveOccurred())
 
 					err = s.DeletePage(pageIdentifier)
+					waitForIndexing()
 				})
 
 				It("should return a not found error (because .json file doesn't exist)", func() {
@@ -503,7 +531,8 @@ test content`
 				})
 
 				It("should remove the page from the index", func() {
-					Expect(mockIndex.RemovePageFromIndexCalledWith).To(Equal(pageIdentifier))
+					Expect(mockFrontmatter.LastRemovePageCall()).To(Equal(pageIdentifier))
+					Expect(mockBleve.LastRemovePageCall()).To(Equal(pageIdentifier))
 				})
 
 				It("should leave the .md file intact (due to current Erase implementation)", func() {
@@ -533,6 +562,7 @@ test content`
 					Expect(jsonErr).NotTo(HaveOccurred())
 
 					err = s.DeletePage(pageIdentifier)
+					waitForIndexing()
 				})
 
 				It("should not return an error", func() {
@@ -548,7 +578,8 @@ test content`
 				})
 
 				It("should remove the page from the index", func() {
-					Expect(mockIndex.RemovePageFromIndexCalledWith).To(Equal(pageIdentifier))
+					Expect(mockFrontmatter.LastRemovePageCall()).To(Equal(pageIdentifier))
+					Expect(mockBleve.LastRemovePageCall()).To(Equal(pageIdentifier))
 				})
 			})
 
@@ -557,6 +588,7 @@ test content`
 
 				BeforeEach(func() {
 					err = s.DeletePage(pageIdentifier)
+					waitForIndexing()
 				})
 
 				It("should return a not found error", func() {
@@ -564,7 +596,8 @@ test content`
 				})
 
 				It("should still attempt to remove from index", func() {
-					Expect(mockIndex.RemovePageFromIndexCalledWith).To(Equal(pageIdentifier))
+					Expect(mockFrontmatter.LastRemovePageCall()).To(Equal(pageIdentifier))
+					Expect(mockBleve.LastRemovePageCall()).To(Equal(pageIdentifier))
 				})
 			})
 		})

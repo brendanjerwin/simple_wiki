@@ -3,7 +3,6 @@ package server
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,6 +17,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/index"
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
+	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/rollingmigrations"
 	"github.com/brendanjerwin/simple_wiki/sec"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
@@ -50,7 +50,7 @@ type Site struct {
 	Logger                  *lumber.ConsoleLogger
 	MarkdownRenderer        IRenderMarkdownToHTML
 	IndexMaintainer         index.IMaintainIndex
-	BackgroundIndexer       *index.BackgroundIndexingCoordinator
+	IndexingService         *IndexingService
 	FrontmatterIndexQueryer frontmatter.IQueryFrontmatterIndex
 	BleveIndexQueryer       bleve.IQueryBleveIndex
 	MigrationApplicator     rollingmigrations.FrontmatterMigrationApplicator
@@ -103,8 +103,10 @@ func (s *Site) InitializeIndexing() error {
 	s.BleveIndexQueryer = bleveIndex
 	s.IndexMaintainer = multiMaintainer
 
-	// Create background indexing coordinator
-	s.BackgroundIndexer = index.NewBackgroundIndexingCoordinatorWithCPUWorkers(multiMaintainer, s.Logger)
+	// Create new job queue coordinator and indexing service
+	coordinator := jobs.NewJobQueueCoordinator()
+	s.IndexingService = NewIndexingService(coordinator, frontmatterIndex, bleveIndex)
+	s.IndexingService.InitializeQueues()
 
 	// Get all files that need to be indexed
 	files := s.DirectoryList()
@@ -120,35 +122,8 @@ func (s *Site) InitializeIndexing() error {
 	}
 
 	// Start background indexing
-	err = s.BackgroundIndexer.StartBackground(pageIdentifiers)
-	if err != nil {
-		s.Logger.Error("Failed to start background indexing: %v", err)
-		// Fall back to synchronous processing
-		return s.initializeIndexingSynchronously(files)
-	}
-
+	s.IndexingService.BulkEnqueuePages(pageIdentifiers, index.Add)
 	s.Logger.Info("Background indexing started for %d pages. Application is ready.", len(files))
-	return nil
-}
-
-// initializeIndexingSynchronously provides fallback synchronous indexing
-func (s *Site) initializeIndexingSynchronously(files []os.FileInfo) error {
-	s.Logger.Info("Starting synchronous indexing fallback...")
-	
-	for _, file := range files {
-		if err := s.IndexMaintainer.AddPageToIndex(file.Name()); err != nil {
-			// Check for application setup errors that should prevent startup
-			var configErr *ConfigurationError
-			if errors.As(err, &configErr) {
-				s.Logger.Error("Application configuration error during initialization: %v", err)
-				return fmt.Errorf("failed to initialize due to configuration error: %w", err)
-			}
-			// Log individual page errors but continue with other pages
-			s.Logger.Error("Failed to add page '%s' to index during initialization: %v", file.Name(), err)
-		}
-	}
-
-	s.Logger.Info("Synchronous indexing complete. Added %v pages.", len(files))
 	return nil
 }
 

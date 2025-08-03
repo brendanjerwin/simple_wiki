@@ -2,6 +2,7 @@
 package server
 
 import (
+	"context"
 	"net/http"
 	"os"
 	"time"
@@ -76,6 +77,12 @@ var _ = Describe("Page Functions", func() {
 				Expect(err).ToNot(HaveOccurred())
 				err = p.Update("Not much else")
 				Expect(err).ToNot(HaveOccurred())
+
+				// Wait for any background indexing operations to complete
+				if s.IndexingService != nil {
+					completed, _ := s.IndexingService.WaitForCompletionWithTimeout(context.Background(), 1*time.Second)
+					Expect(completed).To(BeTrue())
+				}
 
 				pages = s.DirectoryList()
 			})
@@ -327,6 +334,12 @@ And some more text. But this is not frontmatter.`
 				
 				// This call should complete without hanging (proving no infinite recursion)
 				frontmatter, err = p.ReadFrontMatter()
+				
+				// Wait for any background indexing operations triggered by the save
+				if s.IndexingService != nil {
+					completed, _ := s.IndexingService.WaitForCompletionWithTimeout(context.Background(), 1*time.Second)
+					Expect(completed).To(BeTrue())
+				}
 				
 				// Check final content after the read operation
 				finalContent = p.Text.GetCurrent()

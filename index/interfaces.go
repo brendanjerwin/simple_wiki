@@ -2,6 +2,8 @@
 package index
 
 import (
+	"time"
+
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
@@ -19,4 +21,26 @@ type IProvideIndexName interface {
 // IProvideIndexingProgress defines the interface for components that can provide indexing progress.
 type IProvideIndexingProgress interface {
 	GetProgress() IndexingProgress
+}
+
+// IndexingProgress represents the progress of indexing operations.
+type IndexingProgress struct {
+	IsRunning           bool
+	TotalPages          int
+	CompletedPages      int
+	QueueDepth          int
+	ProcessingRatePerSecond float64
+	EstimatedCompletion *time.Duration
+	IndexProgress       map[string]SingleIndexProgress
+}
+
+// SingleIndexProgress represents progress for a single index type.
+type SingleIndexProgress struct {
+	Name                string
+	Completed           int
+	Total               int
+	ProcessingRatePerSecond float64
+	LastError           *string
+	QueueDepth          int
+	WorkDistributionComplete bool
 }
