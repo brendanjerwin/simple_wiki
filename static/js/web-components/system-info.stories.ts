@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/web-components-vite';
 import { html } from 'lit';
 import './system-info.js';
 import { SystemInfo } from './system-info.js';
-import { GetVersionResponse, GetIndexingStatusResponse, SingleIndexProgress } from '../gen/api/v1/system_info_pb.js';
+import { GetVersionResponse, GetJobStatusResponse, JobQueueStatus } from '../gen/api/v1/system_info_pb.js';
 import { Timestamp } from '@bufbuild/protobuf';
 import { stub } from 'sinon';
 
@@ -14,7 +14,7 @@ const meta: Meta = {
     layout: 'fullscreen',
     docs: {
       description: {
-        component: 'A compact system information overlay showing version info and indexing progress. Positioned in the bottom-right corner, it remains mostly transparent until hovered.',
+        component: 'A compact system information overlay showing version info and job queue status. Positioned in the bottom-right corner, it remains mostly transparent until hovered.'
       },
     },
   },
@@ -39,20 +39,18 @@ export const Default: Story = {
       nanos: 0
     });
 
-    const frontmatterIndex = new SingleIndexProgress({
-      name: 'frontmatter',
-      completed: 850,
-      total: 1000,
-      processingRatePerSecond: 45.2,
-      lastError: undefined
+    const frontmatterQueue = new JobQueueStatus({
+      name: 'Frontmatter',
+      jobsRemaining: 150,
+      highWaterMark: 1000,
+      isActive: true
     });
 
-    const bleveIndex = new SingleIndexProgress({
-      name: 'bleve',
-      completed: 720,
-      total: 1000,
-      processingRatePerSecond: 12.8,
-      lastError: undefined
+    const bleveQueue = new JobQueueStatus({
+      name: 'Bleve',
+      jobsRemaining: 280,
+      highWaterMark: 1000,
+      isActive: true
     });
 
     el.loading = false;
@@ -60,13 +58,8 @@ export const Default: Story = {
       commit: 'abc123def456',
       buildTime: mockTimestamp
     });
-    el.indexingStatus = new GetIndexingStatusResponse({
-      isRunning: true,
-      totalPages: 1000,
-      completedPages: 720,
-      queueDepth: 280,
-      processingRatePerSecond: 29.0,
-      indexProgress: [frontmatterIndex, bleveIndex]
+    el.jobStatus = new GetJobStatusResponse({
+      jobQueues: [frontmatterQueue, bleveQueue]
     });
     
     return html`
@@ -83,7 +76,7 @@ export const Default: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Default system info component with stubbed data showing per-index progress. Hover over the bottom-right component to see full details.',
+        story: 'Default system info component with stubbed data showing job queue status. Hover over the bottom-right component to see full details.'
       },
     },
   },
@@ -100,7 +93,7 @@ export const Loading: Story = {
     
     el.loading = true;
     el.version = undefined;
-    el.indexingStatus = undefined;
+    el.jobStatus = undefined;
     
     return html`
       <div style="height: 100vh; background: #f0f8ff; position: relative;">
@@ -115,7 +108,7 @@ export const Loading: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Loading state displayed while fetching version and indexing status from the server.',
+        story: 'Loading state displayed while fetching version and job queue status from the server.'
       },
     },
   },
@@ -140,20 +133,15 @@ export const VersionOnly: Story = {
       commit: 'abc123def456789',
       buildTime: mockTimestamp
     });
-    el.indexingStatus = new GetIndexingStatusResponse({
-      isRunning: false,
-      totalPages: 0,
-      completedPages: 0,
-      queueDepth: 0,
-      processingRatePerSecond: 0,
-      indexProgress: []
+    el.jobStatus = new GetJobStatusResponse({
+      jobQueues: []
     });
     
     return html`
       <div style="height: 100vh; background: #2d3748; position: relative;">
         <div style="padding: 20px; color: white;">
           <h1>Version Info Only</h1>
-          <p>When indexing is idle, only version information is shown.</p>
+          <p>When no job queues are active, only version information is shown.</p>
           <p>The component remains compact and unobtrusive.</p>
         </div>
         ${el}
@@ -163,7 +151,7 @@ export const VersionOnly: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Compact display showing only version information when no indexing is active. The commit hash is truncated for space efficiency.',
+        story: 'Compact display showing only version information when no job queues are active. The commit hash is truncated for space efficiency.'
       },
     },
   },
@@ -188,13 +176,8 @@ export const TaggedVersion: Story = {
       commit: 'v1.2.3 (abc123d)',
       buildTime: mockTimestamp
     });
-    el.indexingStatus = new GetIndexingStatusResponse({
-      isRunning: false,
-      totalPages: 0,
-      completedPages: 0,
-      queueDepth: 0,
-      processingRatePerSecond: 0,
-      indexProgress: []
+    el.jobStatus = new GetJobStatusResponse({
+      jobQueues: []
     });
     
     return html`
@@ -230,21 +213,19 @@ export const ActiveIndexing: Story = {
       nanos: 0
     });
 
-    // Add per-index progress to show capability
-    const frontmatterIndex = new SingleIndexProgress({
-      name: 'frontmatter',
-      completed: 1200,
-      total: 1500,
-      processingRatePerSecond: 42.1,
-      lastError: undefined
+    // Add job queues to show capability
+    const frontmatterQueue = new JobQueueStatus({
+      name: 'Frontmatter',
+      jobsRemaining: 300,
+      highWaterMark: 1500,
+      isActive: true
     });
 
-    const bleveIndex = new SingleIndexProgress({
-      name: 'bleve',
-      completed: 845,
-      total: 1500,
-      processingRatePerSecond: 15.4,
-      lastError: undefined
+    const bleveQueue = new JobQueueStatus({
+      name: 'Bleve',
+      jobsRemaining: 655,
+      highWaterMark: 1500,
+      isActive: true
     });
 
     el.loading = false;
@@ -252,21 +233,16 @@ export const ActiveIndexing: Story = {
       commit: 'abc123def456',
       buildTime: mockTimestamp
     });
-    el.indexingStatus = new GetIndexingStatusResponse({
-      isRunning: true,
-      totalPages: 1500,
-      completedPages: 845,
-      queueDepth: 235,
-      processingRatePerSecond: 28.5,
-      indexProgress: [frontmatterIndex, bleveIndex]
+    el.jobStatus = new GetJobStatusResponse({
+      jobQueues: [frontmatterQueue, bleveQueue]
     });
     
     return html`
       <div style="height: 100vh; background: #e2e8f0; position: relative;">
         <div style="padding: 20px;">
           <h1>Active Indexing</h1>
-          <p>When indexing is running, additional progress information is displayed below the version.</p>
-          <p>Notice the animated status indicator and compact progress bar.</p>
+          <p>When job queues are active, additional status information is displayed below the version.</p>
+          <p>Notice the animated status indicator and compact queue display.</p>
         </div>
         ${el}
       </div>
@@ -275,7 +251,7 @@ export const ActiveIndexing: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Active indexing state with progress bar, processing rate, and queue depth. The status indicator pulses to show activity.',
+        story: 'Active job queue state with queue status display. The status indicator pulses to show activity.'
       },
     },
   },
@@ -295,21 +271,19 @@ export const SlowIndexing: Story = {
       nanos: 0
     });
 
-    // Show how different index types process at different speeds
-    const frontmatterIndex = new SingleIndexProgress({
-      name: 'frontmatter',
-      completed: 4800,
-      total: 5000,
-      processingRatePerSecond: 25.3,
-      lastError: undefined
+    // Show how different queue types process at different speeds
+    const frontmatterQueue = new JobQueueStatus({
+      name: 'Frontmatter',
+      jobsRemaining: 200,
+      highWaterMark: 5000,
+      isActive: true
     });
 
-    const aiEmbeddingsIndex = new SingleIndexProgress({
-      name: 'ai-embeddings',
-      completed: 125,
-      total: 5000,
-      processingRatePerSecond: 0.7, // Very slow AI processing
-      lastError: undefined
+    const aiEmbeddingsQueue = new JobQueueStatus({
+      name: 'AI-Embeddings',
+      jobsRemaining: 4875,
+      highWaterMark: 5000,
+      isActive: true
     });
 
     el.loading = false;
@@ -317,21 +291,16 @@ export const SlowIndexing: Story = {
       commit: 'v2.1.0-beta (def789a)',
       buildTime: mockTimestamp
     });
-    el.indexingStatus = new GetIndexingStatusResponse({
-      isRunning: true,
-      totalPages: 5000,
-      completedPages: 125, // Limited by slowest index
-      queueDepth: 4875,
-      processingRatePerSecond: 13.0,
-      indexProgress: [frontmatterIndex, aiEmbeddingsIndex]
+    el.jobStatus = new GetJobStatusResponse({
+      jobQueues: [frontmatterQueue, aiEmbeddingsQueue]
     });
     
     return html`
       <div style="height: 100vh; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); position: relative;">
         <div style="padding: 20px; color: white;">
           <h1>Slow AI Indexing</h1>
-          <p>Demonstrates the component with very slow processing rates (AI embeddings).</p>
-          <p>Processing rate is formatted appropriately for sub-1/second rates.</p>
+          <p>Demonstrates the component with queues having many remaining jobs (AI embeddings).</p>
+          <p>Queue status shows large job backlogs appropriately.</p>
         </div>
         ${el}
       </div>
@@ -340,7 +309,7 @@ export const SlowIndexing: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Shows the component handling very slow indexing operations like AI embeddings, with appropriate rate formatting.',
+        story: 'Shows the component handling queues with large job backlogs like AI embeddings, with appropriate display formatting.'
       },
     },
   },
@@ -365,20 +334,22 @@ export const NearCompletion: Story = {
       commit: 'main-branch-abc123d',
       buildTime: mockTimestamp
     });
-    el.indexingStatus = new GetIndexingStatusResponse({
-      isRunning: true,
-      totalPages: 1000,
-      completedPages: 987,
-      queueDepth: 13,
-      processingRatePerSecond: 15.2,
-      indexProgress: []
+    el.jobStatus = new GetJobStatusResponse({
+      jobQueues: [
+        new JobQueueStatus({
+          name: 'Final-Cleanup',
+          jobsRemaining: 13,
+          highWaterMark: 1000,
+          isActive: true
+        })
+      ]
     });
     
     return html`
       <div style="height: 100vh; background: #f7fafc; position: relative;">
         <div style="padding: 20px;">
           <h1>Near Completion</h1>
-          <p>Indexing process nearing completion with small queue depth remaining.</p>
+          <p>Job processing nearing completion with few jobs remaining in queues.</p>
         </div>
         ${el}
       </div>
@@ -387,7 +358,7 @@ export const NearCompletion: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Shows the component when indexing is nearly complete, with a small remaining queue.',
+        story: 'Shows the component when job processing is nearly complete, with few jobs remaining.'
       },
     },
   },
@@ -405,7 +376,7 @@ export const ErrorState: Story = {
     el.loading = false;
     el.error = 'Failed to connect to system info service';
     el.version = undefined;
-    el.indexingStatus = undefined;
+    el.jobStatus = undefined;
     
     return html`
       <div style="height: 100vh; background: #fed7d7; position: relative;">
@@ -445,13 +416,8 @@ export const ResponsiveDemo: Story = {
       commit: 'responsive-demo-123',
       buildTime: mockTimestamp
     });
-    el.indexingStatus = new GetIndexingStatusResponse({
-      isRunning: false,
-      totalPages: 0,
-      completedPages: 0,
-      queueDepth: 0,
-      processingRatePerSecond: 0,
-      indexProgress: []
+    el.jobStatus = new GetJobStatusResponse({
+      jobQueues: []
     });
     
     return html`
@@ -466,8 +432,8 @@ export const ResponsiveDemo: Story = {
               <li><strong>Fixed Positioning:</strong> Always visible in bottom-right corner</li>
               <li><strong>Low Opacity:</strong> Unobtrusive until hovered</li>
               <li><strong>Compact Display:</strong> Minimal space usage</li>
-              <li><strong>Per-Index Progress:</strong> Shows individual progress for each index type</li>
-              <li><strong>Progressive Enhancement:</strong> Shows indexing only when active</li>
+              <li><strong>Job Queue Status:</strong> Shows individual status for each job queue</li>
+              <li><strong>Progressive Enhancement:</strong> Shows job queues only when active</li>
             </ul>
           </div>
         </div>
@@ -498,33 +464,26 @@ export const InteractiveTesting: Story = {
         nanos: 0
       });
 
-      // Create dynamic progress data
-      const frontmatterProgress = Math.floor(Math.random() * 200) + 800;
-      const bleveProgress = Math.floor(Math.random() * 300) + 500;
-      const embeddingProgress = Math.floor(Math.random() * 100) + 50;
-      
-      const frontmatterIndex = new SingleIndexProgress({
-        name: 'frontmatter',
-        completed: frontmatterProgress,
-        total: 1000,
-        processingRatePerSecond: Math.random() * 20 + 30,
-        lastError: undefined
+      // Create dynamic job queue data
+      const frontmatterQueue = new JobQueueStatus({
+        name: 'Frontmatter',
+        jobsRemaining: Math.floor(Math.random() * 200) + 50,
+        highWaterMark: 1000,
+        isActive: Math.random() > 0.1
       });
 
-      const bleveIndex = new SingleIndexProgress({
-        name: 'bleve',
-        completed: bleveProgress,
-        total: 1000,
-        processingRatePerSecond: Math.random() * 10 + 15,
-        lastError: undefined
+      const bleveQueue = new JobQueueStatus({
+        name: 'Bleve',
+        jobsRemaining: Math.floor(Math.random() * 300) + 100,
+        highWaterMark: 1000,
+        isActive: Math.random() > 0.2
       });
 
-      const embeddingIndex = new SingleIndexProgress({
-        name: 'ai-embeddings',
-        completed: embeddingProgress,
-        total: 1000,
-        processingRatePerSecond: Math.random() * 2 + 0.5,
-        lastError: Math.random() > 0.8 ? 'Temporary AI service timeout' : undefined
+      const embeddingQueue = new JobQueueStatus({
+        name: 'AI-Embeddings',
+        jobsRemaining: Math.floor(Math.random() * 500) + 200,
+        highWaterMark: 1000,
+        isActive: Math.random() > 0.3
       });
 
       el.version = new GetVersionResponse({
@@ -532,16 +491,8 @@ export const InteractiveTesting: Story = {
         buildTime: mockTimestamp
       });
       
-      const isRunning = Math.random() > 0.2;
-      const minProgress = Math.min(frontmatterProgress, bleveProgress, embeddingProgress);
-      
-      el.indexingStatus = new GetIndexingStatusResponse({
-        isRunning,
-        totalPages: 1000,
-        completedPages: minProgress,
-        queueDepth: isRunning ? Math.floor(Math.random() * 200) + 50 : 0,
-        processingRatePerSecond: isRunning ? Math.random() * 15 + 20 : 0,
-        indexProgress: [frontmatterIndex, bleveIndex, embeddingIndex]
+      el.jobStatus = new GetJobStatusResponse({
+        jobQueues: [frontmatterQueue, bleveQueue, embeddingQueue]
       });
       
       el.loading = false;
@@ -571,28 +522,28 @@ export const InteractiveTesting: Story = {
             <h3>Testing Instructions:</h3>
             <ol style="margin: 10px 0; padding-left: 20px;">
               <li><strong>Hover Interaction:</strong> Hover over the bottom-right component to see it become more visible</li>
-              <li><strong>Per-Index Progress:</strong> The component shows progress for each index type (frontmatter, bleve, ai-embeddings)</li>
+              <li><strong>Job Queue Status:</strong> The component shows status for each job queue (Frontmatter, Bleve, AI-Embeddings)</li>
               <li><strong>Auto-refresh:</strong> Demo refreshes every 4 seconds with dynamic progress updates</li>
               <li><strong>Error Simulation:</strong> Occasionally shows AI service errors</li>
-              <li><strong>Rate Differences:</strong> Notice how different indexes process at different speeds</li>
+              <li><strong>Queue Activity:</strong> Notice how different queues have different activity states</li>
             </ol>
           </div>
 
           <div style="margin: 20px 0; padding: 15px; background: #e8f4fd; border-radius: 8px;">
-            <h3>Per-Index Progress Features:</h3>
+            <h3>Job Queue Features:</h3>
             <ul style="margin: 10px 0;">
-              <li><strong>Individual Progress Bars:</strong> Each index type has its own progress bar</li>
-              <li><strong>Separate Processing Rates:</strong> Fast frontmatter, medium bleve, slow AI embeddings</li>
-              <li><strong>Independent Queues:</strong> Fast indexes don't wait for slow ones</li>
-              <li><strong>Error Handling:</strong> Individual indexes can fail without affecting others</li>
-              <li><strong>Overall Progress:</strong> Limited by the slowest index (realistic behavior)</li>
+              <li><strong>Individual Queue Status:</strong> Each job queue shows remaining jobs and activity status</li>
+              <li><strong>Independent Processing:</strong> Fast queues don't wait for slow ones</li>
+              <li><strong>Queue Isolation:</strong> Jobs in different queues are processed independently</li>
+              <li><strong>Activity Indicators:</strong> Shows which queues are currently active</li>
+              <li><strong>Compact Display:</strong> Shows "QueueName: N jobs" format</li>
             </ul>
           </div>
 
           <div style="margin: 20px 0; padding: 15px; background: #fff2e8; border-radius: 8px;">
             <h3>Development Notes:</h3>
             <p>This demo uses stubbed data to prevent API calls while showcasing realistic indexing behavior.</p>
-            <p>The component demonstrates the architectural benefit of separate per-index worker queues.</p>
+            <p>The component demonstrates the architectural benefit of separate job queues for different types of work.</p>
           </div>
         </div>
         ${el}

@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/web-components-vite';
 import { html } from 'lit';
 import './system-info-indexing.js';
 import { SystemInfoIndexing } from './system-info-indexing.js';
-import { GetIndexingStatusResponse, SingleIndexProgress } from '../gen/api/v1/system_info_pb.js';
+import { GetJobStatusResponse, JobQueueStatus } from '../gen/api/v1/system_info_pb.js';
 import { Timestamp } from '@bufbuild/protobuf';
 import { stub } from 'sinon';
 
@@ -14,7 +14,7 @@ const meta: Meta = {
     layout: 'padded',
     docs: {
       description: {
-        component: 'A detailed indexing status component. Note: This is now a sub-component of SystemInfo. For the main UI component, see SystemInfo which combines version and indexing status in a compact overlay.',
+        component: 'A detailed job queue status component. Note: This is now a sub-component of SystemInfo. For the main UI component, see SystemInfo which combines version and job status in a compact overlay.'
       },
     },
   },
@@ -30,30 +30,23 @@ export const Default: Story = {
     
     
     // Set up realistic default data
-    const frontmatterIndex = new SingleIndexProgress({
-      name: 'frontmatter',
-      completed: 450,
-      total: 500,
-      processingRatePerSecond: 25.3,
-      lastError: undefined
+    const frontmatterQueue = new JobQueueStatus({
+      name: 'Frontmatter',
+      jobsRemaining: 50,
+      highWaterMark: 500,
+      isActive: true
     });
 
-    const bleveIndex = new SingleIndexProgress({
-      name: 'bleve',
-      completed: 380,
-      total: 500,
-      processingRatePerSecond: 18.7,
-      lastError: undefined
+    const bleveQueue = new JobQueueStatus({
+      name: 'Bleve',
+      jobsRemaining: 120,
+      highWaterMark: 500,
+      isActive: true
     });
 
     el.loading = false;
-    el.status = new GetIndexingStatusResponse({
-      isRunning: true,
-      totalPages: 500,
-      completedPages: 380, // Limited by slowest index
-      queueDepth: 120,
-      processingRatePerSecond: 22.0,
-      indexProgress: [frontmatterIndex, bleveIndex]
+    el.jobStatus = new GetJobStatusResponse({
+      jobQueues: [frontmatterQueue, bleveQueue]
     });
     
     return el;
@@ -61,7 +54,7 @@ export const Default: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Default indexing status component with stubbed data showing per-index progress bars.',
+        story: 'Default job queue status component with stubbed data showing job queue information.'
       },
     },
   },
@@ -77,13 +70,13 @@ export const Loading: Story = {
     stub(el, 'stopAutoRefresh' as any);
     
     el.loading = true;
-    el.status = undefined;
+    el.jobStatus = undefined;
     return el;
   },
   parameters: {
     docs: {
       description: {
-        story: 'Shows the loading state while fetching indexing status.',
+        story: 'Shows the loading state while fetching job queue status.'
       },
     },
   },
@@ -99,20 +92,15 @@ export const Idle: Story = {
     stub(el, 'stopAutoRefresh' as any);
     
     el.loading = false;
-    el.status = new GetIndexingStatusResponse({
-      isRunning: false,
-      totalPages: 0,
-      completedPages: 0,
-      queueDepth: 0,
-      processingRatePerSecond: 0,
-      indexProgress: []
+    el.jobStatus = new GetJobStatusResponse({
+      jobQueues: []
     });
     return el;
   },
   parameters: {
     docs: {
       description: {
-        story: 'Shows the idle state when no indexing is currently running.',
+        story: 'Shows the idle state when no job queues are currently active.'
       },
     },
   },
@@ -127,37 +115,23 @@ export const ActiveIndexing: Story = {
     stub(el, 'startAutoRefresh' as any);
     stub(el, 'stopAutoRefresh' as any);
     
-    // Create mock timestamp 5 minutes from now
-    const mockTimestamp = new Timestamp({
-      seconds: BigInt(Math.floor((Date.now() + 300000) / 1000)),
-      nanos: 0
+    const frontmatterQueue = new JobQueueStatus({
+      name: 'Frontmatter',
+      jobsRemaining: 150,
+      highWaterMark: 1000,
+      isActive: true
     });
 
-    const frontmatterIndex = new SingleIndexProgress({
-      name: 'frontmatter',
-      completed: 850,
-      total: 1000,
-      processingRatePerSecond: 45.2,
-      lastError: undefined
-    });
-
-    const bleveIndex = new SingleIndexProgress({
-      name: 'bleve',
-      completed: 720,
-      total: 1000,
-      processingRatePerSecond: 12.8,
-      lastError: undefined
+    const bleveQueue = new JobQueueStatus({
+      name: 'Bleve',
+      jobsRemaining: 280,
+      highWaterMark: 1000,
+      isActive: true
     });
 
     el.loading = false;
-    el.status = new GetIndexingStatusResponse({
-      isRunning: true,
-      totalPages: 1000,
-      completedPages: 720, // Minimum of the indexes
-      queueDepth: 45,
-      processingRatePerSecond: 28.9,
-      estimatedCompletion: mockTimestamp,
-      indexProgress: [frontmatterIndex, bleveIndex]
+    el.jobStatus = new GetJobStatusResponse({
+      jobQueues: [frontmatterQueue, bleveQueue]
     });
     
     return el;
@@ -165,7 +139,7 @@ export const ActiveIndexing: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Shows active indexing with progress for multiple indexes. The overall progress is determined by the slowest index.',
+        story: 'Shows active job queues with status for multiple queues. Demonstrates independent queue processing.'
       },
     },
   },
@@ -180,38 +154,34 @@ export const WithErrors: Story = {
     stub(el, 'startAutoRefresh' as any);
     stub(el, 'stopAutoRefresh' as any);
     
-    const workingIndex = new SingleIndexProgress({
-      name: 'frontmatter',
-      completed: 450,
-      total: 500,
-      processingRatePerSecond: 25.0,
-      lastError: undefined
+    const workingQueue = new JobQueueStatus({
+      name: 'Frontmatter',
+      jobsRemaining: 50,
+      highWaterMark: 500,
+      isActive: true
     });
 
-    const errorIndex = new SingleIndexProgress({
-      name: 'embeddings',
-      completed: 125,
-      total: 500,
-      processingRatePerSecond: 2.1,
-      lastError: 'Failed to connect to embedding service: timeout after 30s'
+    const errorQueue = new JobQueueStatus({
+      name: 'Embeddings',
+      jobsRemaining: 375,
+      highWaterMark: 500,
+      isActive: false
     });
 
     el.loading = false;
-    el.status = new GetIndexingStatusResponse({
-      isRunning: true,
-      totalPages: 500,
-      completedPages: 125, // Limited by the failing index
-      queueDepth: 375,
-      processingRatePerSecond: 13.6,
-      indexProgress: [workingIndex, errorIndex]
+    el.jobStatus = new GetJobStatusResponse({
+      jobQueues: [workingQueue, errorQueue]
     });
+    
+    // For now, show errors through component error state until job queue error reporting is implemented
+    el.error = 'Failed to connect to embedding service: timeout after 30s';
     
     return el;
   },
   parameters: {
     docs: {
       description: {
-        story: 'Shows indexing status when one index is experiencing errors. The error index progress bar is styled differently and error messages are displayed. Click on any error message to copy it to clipboard and see toast notifications. Open the browser developer tools console to see the action logs.',
+        story: 'Shows job queue status when queues are experiencing errors. Error states are displayed and error messages can be copied. Click on any error message to copy it to clipboard and see toast notifications. Open the browser developer tools console to see the action logs.'
       },
     },
   },
@@ -226,37 +196,23 @@ export const SlowIndexing: Story = {
     stub(el, 'startAutoRefresh' as any);
     stub(el, 'stopAutoRefresh' as any);
     
-    // Create mock timestamp 2 hours from now
-    const mockTimestamp = new Timestamp({
-      seconds: BigInt(Math.floor((Date.now() + 7200000) / 1000)),
-      nanos: 0
+    const fastQueue = new JobQueueStatus({
+      name: 'Frontmatter',
+      jobsRemaining: 500,
+      highWaterMark: 10000,
+      isActive: true
     });
 
-    const fastIndex = new SingleIndexProgress({
-      name: 'frontmatter',
-      completed: 9500,
-      total: 10000,
-      processingRatePerSecond: 150.5,
-      lastError: undefined
-    });
-
-    const slowIndex = new SingleIndexProgress({
-      name: 'ai-embeddings',
-      completed: 2300,
-      total: 10000,
-      processingRatePerSecond: 0.8, // Very slow AI processing
-      lastError: undefined
+    const slowQueue = new JobQueueStatus({
+      name: 'AI-Embeddings',
+      jobsRemaining: 7700,
+      highWaterMark: 10000,
+      isActive: true
     });
 
     el.loading = false;
-    el.status = new GetIndexingStatusResponse({
-      isRunning: true,
-      totalPages: 10000,
-      completedPages: 2300, // Limited by slow AI index
-      queueDepth: 7700,
-      processingRatePerSecond: 75.6,
-      estimatedCompletion: mockTimestamp,
-      indexProgress: [fastIndex, slowIndex]
+    el.jobStatus = new GetJobStatusResponse({
+      jobQueues: [fastQueue, slowQueue]
     });
     
     return el;
@@ -264,7 +220,7 @@ export const SlowIndexing: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Demonstrates the benefit of separate queues: fast indexing (frontmatter) proceeds independently while slow AI-powered indexing (embeddings) runs at its own pace.',
+        story: 'Demonstrates the benefit of separate queues: fast job queues (Frontmatter) proceed independently while slow AI-powered queues (AI-Embeddings) run at their own pace.'
       },
     },
   },
@@ -279,38 +235,30 @@ export const Complete: Story = {
     stub(el, 'startAutoRefresh' as any);
     stub(el, 'stopAutoRefresh' as any);
     
-    const index1 = new SingleIndexProgress({
-      name: 'frontmatter',
-      completed: 1000,
-      total: 1000,
-      processingRatePerSecond: 0,
-      lastError: undefined
+    const queue1 = new JobQueueStatus({
+      name: 'Frontmatter',
+      jobsRemaining: 0,
+      highWaterMark: 1000,
+      isActive: false
     });
 
-    const index2 = new SingleIndexProgress({
-      name: 'bleve',
-      completed: 1000,
-      total: 1000,
-      processingRatePerSecond: 0,
-      lastError: undefined
+    const queue2 = new JobQueueStatus({
+      name: 'Bleve',
+      jobsRemaining: 0,
+      highWaterMark: 1000,
+      isActive: false
     });
 
-    const index3 = new SingleIndexProgress({
-      name: 'embeddings',
-      completed: 1000,
-      total: 1000,
-      processingRatePerSecond: 0,
-      lastError: undefined
+    const queue3 = new JobQueueStatus({
+      name: 'Embeddings',
+      jobsRemaining: 0,
+      highWaterMark: 1000,
+      isActive: false
     });
 
     el.loading = false;
-    el.status = new GetIndexingStatusResponse({
-      isRunning: false,
-      totalPages: 1000,
-      completedPages: 1000,
-      queueDepth: 0,
-      processingRatePerSecond: 0,
-      indexProgress: [index1, index2, index3]
+    el.jobStatus = new GetJobStatusResponse({
+      jobQueues: [queue1, queue2, queue3]
     });
     
     return el;
@@ -318,7 +266,7 @@ export const Complete: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Shows completed indexing with all indexes at 100%. Progress bars are styled with completion colors.',
+        story: 'Shows completed job processing with all queues empty. Queue displays show completion status.'
       },
     },
   },
@@ -340,7 +288,7 @@ export const ErrorState: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Shows the error state when the component cannot fetch indexing status.',
+        story: 'Shows the error state when the component cannot fetch job queue status.'
       },
     },
   },
@@ -355,54 +303,38 @@ export const MultipleIndexTypes: Story = {
     stub(el, 'startAutoRefresh' as any);
     stub(el, 'stopAutoRefresh' as any);
     
-    // Create mock timestamp 15 minutes from now
-    const mockTimestamp = new Timestamp({
-      seconds: BigInt(Math.floor((Date.now() + 900000) / 1000)),
-      nanos: 0
+    // Demonstrate different progress levels for each queue type
+    const frontmatterQueue = new JobQueueStatus({
+      name: 'Frontmatter',
+      jobsRemaining: 200,
+      highWaterMark: 3000,
+      isActive: true
     });
 
-    // Demonstrate different progress levels for each index type
-    const frontmatterIndex = new SingleIndexProgress({
-      name: 'frontmatter',
-      completed: 2800,
-      total: 3000,
-      processingRatePerSecond: 85.3,
-      lastError: undefined
+    const bleveQueue = new JobQueueStatus({
+      name: 'Bleve',
+      jobsRemaining: 1050,
+      highWaterMark: 3000,
+      isActive: true
     });
 
-    const bleveIndex = new SingleIndexProgress({
-      name: 'bleve',
-      completed: 1950,
-      total: 3000,
-      processingRatePerSecond: 22.1,
-      lastError: undefined
+    const embeddingsQueue = new JobQueueStatus({
+      name: 'AI-Embeddings',
+      jobsRemaining: 2550,
+      highWaterMark: 3000,
+      isActive: true
     });
 
-    const embeddingsIndex = new SingleIndexProgress({
-      name: 'ai-embeddings',
-      completed: 450,
-      total: 3000,
-      processingRatePerSecond: 1.2, // Very slow AI processing
-      lastError: undefined
-    });
-
-    const vectorIndex = new SingleIndexProgress({
-      name: 'vector-search',
-      completed: 750,
-      total: 3000,
-      processingRatePerSecond: 3.8,
-      lastError: undefined
+    const vectorQueue = new JobQueueStatus({
+      name: 'Vector-Search',
+      jobsRemaining: 2250,
+      highWaterMark: 3000,
+      isActive: true
     });
 
     el.loading = false;
-    el.status = new GetIndexingStatusResponse({
-      isRunning: true,
-      totalPages: 3000,
-      completedPages: 450, // Limited by slowest index (embeddings)
-      queueDepth: 2550,
-      processingRatePerSecond: 28.1,
-      estimatedCompletion: mockTimestamp,
-      indexProgress: [frontmatterIndex, bleveIndex, embeddingsIndex, vectorIndex]
+    el.jobStatus = new GetJobStatusResponse({
+      jobQueues: [frontmatterQueue, bleveQueue, embeddingsQueue, vectorQueue]
     });
     
     return el;
@@ -410,7 +342,7 @@ export const MultipleIndexTypes: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Shows multiple index types with different progress levels, demonstrating how separate queues allow each index to progress independently. Notice how the fast frontmatter index is nearly complete while AI-powered indexes are still processing.',
+        story: 'Shows multiple queue types with different job levels, demonstrating how separate queues allow each queue to process independently. Notice how the fast Frontmatter queue has fewer jobs remaining while AI-powered queues are still processing many jobs.'
       },
     },
   },
@@ -427,29 +359,22 @@ export const InteractiveDemo: Story = {
       await new Promise(resolve => setTimeout(resolve, 500));
       
       // Set up dynamic demo data
-      const frontmatterIndex = new SingleIndexProgress({
-        name: 'frontmatter',
-        completed: Math.floor(Math.random() * 100) + 400,
-        total: 500,
-        processingRatePerSecond: Math.random() * 50 + 20,
-        lastError: undefined
+      const frontmatterQueue = new JobQueueStatus({
+        name: 'Frontmatter',
+        jobsRemaining: Math.floor(Math.random() * 100) + 50,
+        highWaterMark: 500,
+        isActive: Math.random() > 0.2
       });
 
-      const bleveIndex = new SingleIndexProgress({
-        name: 'bleve',
-        completed: Math.floor(Math.random() * 150) + 250,
-        total: 500,
-        processingRatePerSecond: Math.random() * 20 + 10,
-        lastError: undefined
+      const bleveQueue = new JobQueueStatus({
+        name: 'Bleve',
+        jobsRemaining: Math.floor(Math.random() * 150) + 100,
+        highWaterMark: 500,
+        isActive: Math.random() > 0.2
       });
 
-      el.status = new GetIndexingStatusResponse({
-        isRunning: Math.random() > 0.3,
-        totalPages: 500,
-        completedPages: Math.min(frontmatterIndex.completed, bleveIndex.completed),
-        queueDepth: Math.floor(Math.random() * 100) + 50,
-        processingRatePerSecond: Math.random() * 30 + 15,
-        indexProgress: [frontmatterIndex, bleveIndex]
+      el.jobStatus = new GetJobStatusResponse({
+        jobQueues: [frontmatterQueue, bleveQueue]
       });
       
       el.loading = false;
@@ -473,11 +398,11 @@ export const InteractiveDemo: Story = {
     return html`
       <div style="padding: 20px; background: #f0f8ff;">
         <h3>Interactive Indexing Status Demo</h3>
-        <p>This component demonstrates stubbed auto-refresh behavior with randomized progress data.</p>
-        <p><strong>Per-Index Progress:</strong> Click on "Per-Index Progress" to see individual progress bars for each index type.</p>
+        <p>This component demonstrates stubbed auto-refresh behavior with randomized job queue data.</p>
+        <p><strong>Job Queue Status:</strong> Shows individual status for each job queue type.</p>
         ${el}
         <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
-          Demo refreshes every 3 seconds with simulated progress updates. No real API calls are made.
+          Demo refreshes every 3 seconds with simulated job queue updates. No real API calls are made.
         </p>
       </div>
     `;
@@ -485,7 +410,7 @@ export const InteractiveDemo: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Interactive demo with stubbed auto-refresh behavior. Shows per-index progress bars and simulates realistic indexing scenarios without making API calls.',
+        story: 'Interactive demo with stubbed auto-refresh behavior. Shows job queue status and simulates realistic queue processing scenarios without making API calls.'
       },
     },
   },
@@ -501,39 +426,34 @@ export const InteractiveErrorTesting: Story = {
     stub(el, 'stopAutoRefresh' as any);
     
     // Multiple error scenarios for comprehensive testing
-    const networkError = new SingleIndexProgress({
-      name: 'bleve-search',
-      completed: 50,
-      total: 1000,
-      processingRatePerSecond: 0,
-      lastError: 'Network timeout: Unable to reach search index service at localhost:9200. Connection refused after 30 seconds.'
+    const networkQueue = new JobQueueStatus({
+      name: 'Bleve-Search',
+      jobsRemaining: 950,
+      highWaterMark: 1000,
+      isActive: false
     });
 
-    const permissionError = new SingleIndexProgress({
-      name: 'file-indexer',
-      completed: 200,
-      total: 1000,
-      processingRatePerSecond: 5.2,
-      lastError: 'Permission denied: Cannot access /protected/documents/sensitive.pdf. Insufficient privileges for indexing operation.'
+    const permissionQueue = new JobQueueStatus({
+      name: 'File-Indexer',
+      jobsRemaining: 800,
+      highWaterMark: 1000,
+      isActive: true
     });
 
-    const validationError = new SingleIndexProgress({
-      name: 'ai-embeddings',
-      completed: 75,
-      total: 1000,
-      processingRatePerSecond: 1.1,
-      lastError: 'Validation failed: Document contains invalid UTF-8 sequences at byte offset 1024. Unable to process for embedding generation.'
+    const validationQueue = new JobQueueStatus({
+      name: 'AI-Embeddings',
+      jobsRemaining: 925,
+      highWaterMark: 1000,
+      isActive: false
     });
 
     el.loading = false;
-    el.status = new GetIndexingStatusResponse({
-      isRunning: true,
-      totalPages: 1000,
-      completedPages: 50,
-      queueDepth: 950,
-      processingRatePerSecond: 6.3,
-      indexProgress: [networkError, permissionError, validationError]
+    el.jobStatus = new GetJobStatusResponse({
+      jobQueues: [networkQueue, permissionQueue, validationQueue]
     });
+    
+    // For now, show errors through component error state until job queue error reporting is implemented
+    el.error = 'Multiple queue errors: Network timeout, Permission denied, Validation failed';
     
     return html`
       <div style="padding: 20px; background: #f0f8ff;">
@@ -569,7 +489,7 @@ export const InteractiveErrorTesting: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Comprehensive interactive testing story for error click-to-copy functionality. Demonstrates multiple error types, keyboard navigation, accessibility features, and provides clear testing instructions. Open the browser developer tools console to see the action logs.',
+        story: 'Comprehensive interactive testing story for error click-to-copy functionality. Demonstrates multiple error types for job queues, keyboard navigation, accessibility features, and provides clear testing instructions. Open the browser developer tools console to see the action logs.'
       },
     },
   },
@@ -584,32 +504,28 @@ export const KeyboardNavigationTesting: Story = {
     stub(el, 'startAutoRefresh' as any);
     stub(el, 'stopAutoRefresh' as any);
     
-    // Setup with single error for focused testing
-    const errorIndex = new SingleIndexProgress({
-      name: 'test-index',
-      completed: 100,
-      total: 500,
-      processingRatePerSecond: 10.0,
-      lastError: 'Test error message for keyboard navigation testing. This is a longer error message to test text selection and copying behavior.'
+    // Setup with job queues for focused testing
+    const errorQueue = new JobQueueStatus({
+      name: 'Test-Index',
+      jobsRemaining: 400,
+      highWaterMark: 500,
+      isActive: false
     });
 
-    const workingIndex = new SingleIndexProgress({
-      name: 'working-index',
-      completed: 200,
-      total: 500,
-      processingRatePerSecond: 15.0,
-      lastError: undefined
+    const workingQueue = new JobQueueStatus({
+      name: 'Working-Index',
+      jobsRemaining: 300,
+      highWaterMark: 500,
+      isActive: true
     });
 
-    el.loading = false; 
-    el.status = new GetIndexingStatusResponse({
-      isRunning: true,
-      totalPages: 500,
-      completedPages: 100,
-      queueDepth: 400,
-      processingRatePerSecond: 12.5,
-      indexProgress: [errorIndex, workingIndex]
+    el.loading = false;
+    el.jobStatus = new GetJobStatusResponse({
+      jobQueues: [errorQueue, workingQueue]
     });
+    
+    // For now, show errors through component error state until job queue error reporting is implemented
+    el.error = 'Test error message for keyboard navigation testing. This is a longer error message to test text selection and copying behavior.';
     
     return html`
       <div style="padding: 20px; background: #f0f8ff;">
@@ -642,7 +558,7 @@ export const KeyboardNavigationTesting: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Tests keyboard navigation and accessibility for error click-to-copy. Focuses on Tab navigation, Enter/Space activation, and proper focus management. Open the browser developer tools console to see the action logs.',
+        story: 'Tests keyboard navigation and accessibility for error click-to-copy functionality for job queue errors. Focuses on Tab navigation, Enter/Space activation, and proper focus management. Open the browser developer tools console to see the action logs.'
       },
     },
   },
