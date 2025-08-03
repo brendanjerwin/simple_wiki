@@ -314,7 +314,7 @@ func (s *Site) DirectoryList() []os.FileInfo {
 			name := DecodeFileName(f.Name())
 			p := s.Open(name)
 			entries[found] = DirectoryEntry{
-				Path:       name,
+				Path:       p.Identifier, // Use the actual Page.Identifier, not the decoded filename
 				Length:     len(p.Text.GetCurrent()),
 				Numchanges: p.Text.NumEdits(),
 				LastEdited: time.Unix(p.Text.LastEditTime()/1000000000, 0),

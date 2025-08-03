@@ -32,22 +32,19 @@ func NewFileShadowingMigrationScanJob(dataDir string, coordinator *jobs.JobQueue
 	}
 }
 
-// Execute scans for PascalCase files and enqueues migration jobs
+// Execute scans for PascalCase identifiers and enqueues migration jobs
 func (j *FileShadowingMigrationScanJob) Execute() error {
 	// Check if directory exists
 	if _, err := os.Stat(j.dataDir); os.IsNotExist(err) {
 		return fmt.Errorf("data directory does not exist: %s: no such file or directory", j.dataDir)
 	}
 	
-	// Find all PascalCase files
-	pascalFiles := j.FindPascalCaseFiles()
+	// Find all PascalCase identifiers that need migration
+	pascalIdentifiers := j.FindPascalCaseIdentifiers()
 	
-	// Group by logical page
-	groups := j.GroupFilesByLogicalPage(pascalFiles)
-	
-	// Enqueue a migration job for each logical page
-	for logicalPage := range groups {
-		migrationJob := NewFileShadowingMigrationJob(j.site, logicalPage)
+	// Enqueue a migration job for each PascalCase identifier
+	for _, identifier := range pascalIdentifiers {
+		migrationJob := NewFileShadowingMigrationJob(j.site, identifier)
 		j.coordinator.EnqueueJob(j.queueName, migrationJob)
 	}
 	
@@ -59,57 +56,28 @@ func (*FileShadowingMigrationScanJob) GetName() string {
 	return "FileShadowingMigrationScanJob"
 }
 
-// FindPascalCaseFiles returns all PascalCase page files in the data directory
-func (j *FileShadowingMigrationScanJob) FindPascalCaseFiles() []string {
-	files, err := os.ReadDir(j.dataDir)
-	if err != nil {
-		return []string{}
-	}
+// FindPascalCaseIdentifiers returns all PascalCase identifiers that need migration
+// by using Site.DirectoryList() to get Page.Identifier values and checking if they are PascalCase
+func (j *FileShadowingMigrationScanJob) FindPascalCaseIdentifiers() []string {
+	// Get all pages from the site - this returns Page.Identifier values (original identifiers)
+	entries := j.site.DirectoryList()
 	
-	var pascalFiles []string
-	for _, file := range files {
-		if file.IsDir() {
-			continue
-		}
+	var pascalIdentifiers []string
+	for _, entry := range entries {
+		identifier := entry.Name() // This is the original Page.Identifier
 		
-		name := file.Name()
-		
-		// Skip non-page files (uploads, etc.)
-		if strings.HasPrefix(name, "sha256") || 
-		   (!strings.HasSuffix(name, ".json") && !strings.HasSuffix(name, ".md")) {
-			continue
-		}
-		
-		// Skip base32-encoded files (these are already munged)
-		base := strings.TrimSuffix(strings.TrimSuffix(name, ".json"), ".md")
-		if _, err := base32tools.DecodeFromBase32(base); err == nil {
-			continue // This is a base32-encoded file, skip it
-		}
-		
-		// Check if this literal filename represents a PascalCase identifier
-		mungedVersion := wikiidentifiers.MungeIdentifier(base)
-		if base != mungedVersion {
-			// This is a PascalCase identifier (munging would change it)
-			pascalFiles = append(pascalFiles, name)
+		// Check if this identifier is PascalCase by comparing with its munged version
+		mungedVersion := wikiidentifiers.MungeIdentifier(identifier)
+		if identifier != mungedVersion {
+			// This is a PascalCase identifier that needs migration
+			pascalIdentifiers = append(pascalIdentifiers, identifier)
 		}
 	}
 	
-	return pascalFiles
+	return pascalIdentifiers
 }
 
 
-// GroupFilesByLogicalPage groups files by their logical page identifier
-func (*FileShadowingMigrationScanJob) GroupFilesByLogicalPage(files []string) map[string][]string {
-	groups := make(map[string][]string)
-	
-	for _, file := range files {
-		// Extract the identifier from the literal filename (these are PascalCase files)
-		identifier := strings.TrimSuffix(strings.TrimSuffix(file, ".json"), ".md")
-		groups[identifier] = append(groups[identifier], file)
-	}
-	
-	return groups
-}
 
 // FileShadowingMigrationJob handles migrating a specific PascalCase page to munged_name
 type FileShadowingMigrationJob struct {
@@ -127,37 +95,26 @@ func NewFileShadowingMigrationJob(site *Site, logicalPageID string) *FileShadowi
 
 // Execute migrates a PascalCase page to munged_name format
 func (j *FileShadowingMigrationJob) Execute() error {
-	// Find literal PascalCase files for this identifier
-	pascalJSONPath := filepath.Join(j.site.PathToData, j.logicalPageID+".json")
-	pascalMdPath := filepath.Join(j.site.PathToData, j.logicalPageID+".md")
-	
-	// Check if any PascalCase files exist
-	var pascalFiles []string
-	if _, err := os.Stat(pascalJSONPath); err == nil {
-		pascalFiles = append(pascalFiles, pascalJSONPath)
-	}
-	if _, err := os.Stat(pascalMdPath); err == nil {
-		pascalFiles = append(pascalFiles, pascalMdPath)
-	}
-	
-	if len(pascalFiles) == 0 {
-		return fmt.Errorf("no PascalCase files found for identifier: %s", j.logicalPageID)
+	// We can't use Site.Open() to read the PascalCase page because it will prefer
+	// munged versions when both exist (this is the shadowing problem we're solving).
+	// Instead, we need to read the PascalCase files directly.
+	pascalPage := j.readPascalPageDirectly(j.logicalPageID)
+	if len(pascalPage.Text.GetCurrent()) == 0 {
+		return fmt.Errorf("no page found for PascalCase identifier: %s", j.logicalPageID)
 	}
 	
 	// Get munged identifier
 	mungedID := wikiidentifiers.MungeIdentifier(j.logicalPageID)
 	
 	// Check for shadowing conflicts using Site methods
-	hasShadowing := j.checkForShadowingUsingSite(mungedID)
+	// We can use Site.Open() for the munged version since we want to read it normally
+	mungedPage := j.site.Open(mungedID)
+	hasShadowing := !mungedPage.IsNew()
 	
 	var finalPage *Page
 	
 	if hasShadowing {
 		// Compare content richness and choose the richer version
-		// Read both versions directly to compare content
-		pascalPage := j.readPascalPageUsingSite(j.logicalPageID)
-		mungedPage := j.readMungedPageDirectly(mungedID)
-		
 		// Choose richer content (simple heuristic: longer content)
 		pascalLength := len(pascalPage.Text.GetCurrent())
 		mungedLength := len(mungedPage.Text.GetCurrent())
@@ -170,23 +127,86 @@ func (j *FileShadowingMigrationJob) Execute() error {
 		}
 	} else {
 		// No shadowing - use PascalCase content with munged identifier
-		finalPage = j.readPascalPageUsingSite(j.logicalPageID)
+		finalPage = pascalPage
 		finalPage.Identifier = mungedID // Change identifier to munged version
 	}
 	
-	// Save the page with munged identifier (this will use proper base32 encoding)
+	// Save the page with munged identifier (this will save using base32-encoded filenames)
 	if err := finalPage.Save(); err != nil {
 		return fmt.Errorf("failed to save munged page: %v", err)
 	}
 	
-	// Remove literal PascalCase files
-	for _, pascalFile := range pascalFiles {
-		if err := os.Remove(pascalFile); err != nil {
-			return fmt.Errorf("failed to remove PascalCase file %s: %v", pascalFile, err)
+	// Remove the original base32-encoded files for the PascalCase identifier
+	// Calculate the base32-encoded filenames for the PascalCase identifier
+	pascalJSONPath := filepath.Join(j.site.PathToData, base32tools.EncodeToBase32(strings.ToLower(j.logicalPageID))+".json")
+	pascalMdPath := filepath.Join(j.site.PathToData, base32tools.EncodeToBase32(strings.ToLower(j.logicalPageID))+".md")
+	
+	// Remove files if they exist
+	if _, err := os.Stat(pascalJSONPath); err == nil {
+		if err := os.Remove(pascalJSONPath); err != nil {
+			return fmt.Errorf("failed to remove PascalCase JSON file %s: %v", pascalJSONPath, err)
+		}
+	}
+	if _, err := os.Stat(pascalMdPath); err == nil {
+		if err := os.Remove(pascalMdPath); err != nil {
+			return fmt.Errorf("failed to remove PascalCase MD file %s: %v", pascalMdPath, err)
 		}
 	}
 	
 	return nil
+}
+
+// readPascalPageDirectly reads a PascalCase page by directly accessing the base32-encoded files
+// for the PascalCase identifier (not the munged version)
+func (j *FileShadowingMigrationJob) readPascalPageDirectly(pascalID string) *Page {
+	page := &Page{
+		Identifier: pascalID,
+		Site:       j.site,
+	}
+	
+	// Calculate the base32-encoded filenames for the PascalCase identifier
+	// Note: we use the lowercase PascalCase identifier, not the munged version
+	jsonPath := filepath.Join(j.site.PathToData, base32tools.EncodeToBase32(strings.ToLower(pascalID))+".json")
+	mdPath := filepath.Join(j.site.PathToData, base32tools.EncodeToBase32(strings.ToLower(pascalID))+".md")
+	
+	// Read JSON file if it exists
+	if jsonData, err := os.ReadFile(jsonPath); err == nil {
+		// Parse the JSON to get the versioned text
+		var pageData struct {
+			Text json.RawMessage `json:"text"`
+		}
+		if json.Unmarshal(jsonData, &pageData) == nil {
+			// First try to parse as full versioned text
+			var vText versionedtext.VersionedText
+			if err := json.Unmarshal(pageData.Text, &vText); err == nil {
+				// Use the current text from the parsed versionedtext
+				currentText := vText.GetCurrent()
+				if currentText != "" {
+					page.Text = versionedtext.NewVersionedText(currentText)
+					return page
+				}
+			}
+			
+			// If that fails, try to parse as simple {current: "text"} format
+			var simpleText struct {
+				Current string `json:"current"`
+			}
+			if json.Unmarshal(pageData.Text, &simpleText) == nil && simpleText.Current != "" {
+				page.Text = versionedtext.NewVersionedText(simpleText.Current)
+				return page
+			}
+		}
+	}
+	
+	// Read MD file if JSON didn't work or doesn't exist
+	if mdData, err := os.ReadFile(mdPath); err == nil {
+		page.Text = versionedtext.NewVersionedText(string(mdData))
+		return page
+	}
+	
+	// Return empty page if neither file could be read
+	page.Text = versionedtext.NewVersionedText("")
+	return page
 }
 
 // GetName returns the job name
@@ -199,7 +219,7 @@ func (j *FileShadowingMigrationJob) CheckForShadowing(logicalPageID string) (boo
 	// Get the munged version of the identifier
 	mungedID := wikiidentifiers.MungeIdentifier(logicalPageID)
 	
-	// Check if munged versions exist on disk
+	// Check if base32-encoded versions exist on disk (for the munged identifier)
 	var mungedFiles []string
 	
 	// Check for .json file
@@ -217,111 +237,4 @@ func (j *FileShadowingMigrationJob) CheckForShadowing(logicalPageID string) (boo
 	return len(mungedFiles) > 0, mungedFiles
 }
 
-// checkForShadowingUsingSite checks if munged page already exists using Site methods
-func (j *FileShadowingMigrationJob) checkForShadowingUsingSite(mungedID string) bool {
-	mungedPage := j.site.Open(mungedID)
-	return !mungedPage.IsNew()
-}
-
-// readPascalPageUsingSite reads a PascalCase page by directly opening the literal files
-func (j *FileShadowingMigrationJob) readPascalPageUsingSite(pascalID string) *Page {
-	// Create a temporary site that reads from literal filenames (not base32)
-	// We need to read the literal files and construct a Page object
-	page := &Page{
-		Identifier: pascalID,
-		Site:       j.site,
-	}
-	
-	// Read JSON file if it exists
-	jsonPath := filepath.Join(j.site.PathToData, pascalID+".json")
-	if jsonData, err := os.ReadFile(jsonPath); err == nil {
-		// Parse the JSON to get the versioned text
-		var pageData struct {
-			Text json.RawMessage `json:"text"`
-		}
-		if json.Unmarshal(jsonData, &pageData) == nil {
-			// First try to parse as full versioned text
-			var vText versionedtext.VersionedText
-			if err := json.Unmarshal(pageData.Text, &vText); err == nil {
-				// Use the current text from the parsed versionedtext
-				currentText := vText.GetCurrent()
-				if currentText != "" {
-					page.Text = versionedtext.NewVersionedText(currentText)
-					return page
-				}
-			}
-			
-			// If that fails, try to parse as simple {current: "text"} format
-			var simpleText struct {
-				Current string `json:"current"`
-			}
-			if json.Unmarshal(pageData.Text, &simpleText) == nil && simpleText.Current != "" {
-				page.Text = versionedtext.NewVersionedText(simpleText.Current)
-				return page
-			}
-		}
-	}
-	
-	// Read MD file if JSON didn't work or doesn't exist
-	mdPath := filepath.Join(j.site.PathToData, pascalID+".md")
-	if mdData, err := os.ReadFile(mdPath); err == nil {
-		page.Text = versionedtext.NewVersionedText(string(mdData))
-		return page
-	}
-	
-	// Return empty page if neither file could be read
-	page.Text = versionedtext.NewVersionedText("")
-	return page
-}
-
-// readMungedPageDirectly reads a munged page by directly accessing the base32-encoded files
-func (j *FileShadowingMigrationJob) readMungedPageDirectly(mungedID string) *Page {
-	page := &Page{
-		Identifier: mungedID,
-		Site:       j.site,
-	}
-	
-	// Calculate the base32-encoded filenames for the munged version
-	jsonPath := filepath.Join(j.site.PathToData, base32tools.EncodeToBase32(strings.ToLower(mungedID))+".json")
-	mdPath := filepath.Join(j.site.PathToData, base32tools.EncodeToBase32(strings.ToLower(mungedID))+".md")
-	
-	// Read JSON file if it exists
-	if jsonData, err := os.ReadFile(jsonPath); err == nil {
-		// Parse the JSON to get the versioned text
-		var pageData struct {
-			Text json.RawMessage `json:"text"`
-		}
-		if json.Unmarshal(jsonData, &pageData) == nil {
-			// First try to parse as full versioned text
-			var vText versionedtext.VersionedText
-			if err := json.Unmarshal(pageData.Text, &vText); err == nil {
-				// Use the current text from the parsed versionedtext
-				currentText := vText.GetCurrent()
-				if currentText != "" {
-					page.Text = versionedtext.NewVersionedText(currentText)
-					return page
-				}
-			}
-			
-			// If that fails, try to parse as simple {current: "text"} format
-			var simpleText struct {
-				Current string `json:"current"`
-			}
-			if json.Unmarshal(pageData.Text, &simpleText) == nil && simpleText.Current != "" {
-				page.Text = versionedtext.NewVersionedText(simpleText.Current)
-				return page
-			}
-		}
-	}
-	
-	// Read MD file if JSON didn't work or doesn't exist
-	if mdData, err := os.ReadFile(mdPath); err == nil {
-		page.Text = versionedtext.NewVersionedText(string(mdData))
-		return page
-	}
-	
-	// Return empty page if neither file could be read
-	page.Text = versionedtext.NewVersionedText("")
-	return page
-}
 
