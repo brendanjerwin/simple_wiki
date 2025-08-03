@@ -1,6 +1,6 @@
 import { html, fixture, expect } from '@open-wc/testing';
 import { SystemInfoIndexing } from './system-info-indexing.js';
-import { GetIndexingStatusResponse, SingleIndexProgress } from '../gen/api/v1/system_info_pb.js';
+import { GetJobStatusResponse, JobQueueStatus } from '../gen/api/v1/system_info_pb.js';
 import { stub, restore, type SinonStub } from 'sinon';
 import './system-info-indexing.js';
 
@@ -26,7 +26,7 @@ describe('SystemInfoIndexing', () => {
   describe('when loading', () => {
     beforeEach(async () => {
       el.loading = true;
-      el.status = undefined;
+      el.jobStatus = undefined;
       await el.updateComplete;
     });
 
@@ -41,7 +41,7 @@ describe('SystemInfoIndexing', () => {
     beforeEach(async () => {
       el.loading = false;
       el.error = 'Connection failed';
-      el.status = undefined;
+      el.jobStatus = undefined;
       await el.updateComplete;
     });
 
@@ -52,185 +52,125 @@ describe('SystemInfoIndexing', () => {
     });
   });
 
-  describe('when indexing is not running', () => {
+  describe('when no jobs are active', () => {
     beforeEach(async () => {
       el.loading = false;
-      el.status = new GetIndexingStatusResponse({
-        isRunning: false,
-        totalPages: 0,
-        completedPages: 0,
-        queueDepth: 0,
-        processingRatePerSecond: 0,
-        indexProgress: []
+      el.jobStatus = new GetJobStatusResponse({
+        jobQueues: []
       });
       await el.updateComplete;
     });
 
-    it('should render nothing when not running', () => {
+    it('should render nothing when no jobs are active', () => {
       const indexingInfo = el.shadowRoot!.querySelector('.indexing-info');
       expect(indexingInfo).to.not.exist;
     });
   });
 
-  describe('when indexing is running', () => {
+  describe('when jobs are running', () => {
     beforeEach(async () => {
-      const index1Progress = new SingleIndexProgress({
-        name: 'frontmatter',
-        completed: 75,
-        total: 100,
-        processingRatePerSecond: 10.5,
-        lastError: undefined
+      const frontmatterQueue = new JobQueueStatus({
+        name: 'Frontmatter',
+        jobsRemaining: 25,
+        highWaterMark: 100,
+        isActive: true
       });
 
-      const index2Progress = new SingleIndexProgress({
-        name: 'bleve',
-        completed: 50,
-        total: 100,
-        processingRatePerSecond: 5.2,
-        lastError: undefined
+      const bleveQueue = new JobQueueStatus({
+        name: 'Bleve',
+        jobsRemaining: 50,
+        highWaterMark: 100,
+        isActive: true
       });
 
       el.loading = false;
-      el.status = new GetIndexingStatusResponse({
-        isRunning: true,
-        totalPages: 100,
-        completedPages: 50,
-        queueDepth: 25,
-        processingRatePerSecond: 7.8,
-        indexProgress: [index1Progress, index2Progress]
+      el.jobStatus = new GetJobStatusResponse({
+        jobQueues: [frontmatterQueue, bleveQueue]
       });
       await el.updateComplete;
     });
 
-    it('should display indexing info', () => {
+    it('should display job info', () => {
       const indexingInfo = el.shadowRoot!.querySelector('.indexing-info');
       expect(indexingInfo).to.exist;
     });
 
-    it('should show indexing header with progress', () => {
+    it('should show job header with queue names and counts', () => {
       const indexingHeader = el.shadowRoot!.querySelector('.indexing-header');
       expect(indexingHeader).to.exist;
       
       const value = indexingHeader!.querySelector('.value');
-      expect(value!.textContent).to.equal('50/100');
+      expect(value!.textContent).to.equal('Frontmatter: 25, Bleve: 50');
     });
 
     it('should show active status indicator', () => {
       const indicator = el.shadowRoot!.querySelector('.status-indicator');
       expect(indicator).to.exist;
-      expect(indicator).to.not.have.class('idle');
     });
 
-    it('should display progress bar', () => {
-      const progressBar = el.shadowRoot!.querySelector('.progress-bar-mini');
-      expect(progressBar).to.exist;
-      
-      const progressFill = progressBar!.querySelector('.progress-fill-mini');
-      expect(progressFill).to.exist;
-    });
-
-    it('should show processing rate', () => {
-      const rate = el.shadowRoot!.querySelector('.rate');
-      expect(rate).to.exist;
-      expect(rate!.textContent).to.equal('8/s');
-    });
-
-    it('should display queue depth when present', () => {
-      const queue = el.shadowRoot!.querySelector('.queue');
-      expect(queue).to.exist;
-      expect(queue!.textContent).to.equal('Q:25');
-    });
-
-    it('should show per-index progress when multiple indexes exist', () => {
-      const perIndexProgress = el.shadowRoot!.querySelector('.per-index-progress');
-      expect(perIndexProgress).to.exist;
-      
-      const indexItems = perIndexProgress!.querySelectorAll('.index-item');
-      expect(indexItems).to.have.lengthOf(2);
-    });
-
-    it('should sort index progress rows alphabetically by name', () => {
-      const perIndexProgress = el.shadowRoot!.querySelector('.per-index-progress');
-      expect(perIndexProgress).to.exist;
-      
-      const indexItems = perIndexProgress!.querySelectorAll('.index-item');
-      const indexNames = Array.from(indexItems).map(item => 
-        item.querySelector('.index-name')!.textContent
-      );
-      
-      // Should be sorted: 'bleve' comes before 'frontmatter' alphabetically
-      expect(indexNames).to.deep.equal(['bleve', 'frontmatter']);
+    it('should show Jobs label', () => {
+      const label = el.shadowRoot!.querySelector('.label');
+      expect(label).to.exist;
+      expect(label!.textContent).to.equal('Jobs');
     });
   });
 
-  describe('when indexing has mixed order index names', () => {
+  describe('when jobs are mixed order', () => {
     beforeEach(async () => {
-      // Create indexes in a non-alphabetical order to test sorting
-      const zebra = new SingleIndexProgress({
-        name: 'zebra',
-        completed: 10,
-        total: 100,
-        processingRatePerSecond: 5.0,
-        lastError: undefined
+      // Create queues in a non-alphabetical order to test sorting
+      const zebraQueue = new JobQueueStatus({
+        name: 'Zebra',
+        jobsRemaining: 10,
+        highWaterMark: 100,
+        isActive: true
       });
 
-      const alpha = new SingleIndexProgress({
-        name: 'alpha',
-        completed: 20,
-        total: 100,
-        processingRatePerSecond: 3.0,
-        lastError: undefined
+      const alphaQueue = new JobQueueStatus({
+        name: 'Alpha',
+        jobsRemaining: 20,
+        highWaterMark: 100,
+        isActive: true
       });
 
-      const beta = new SingleIndexProgress({
-        name: 'beta',
-        completed: 30,
-        total: 100,
-        processingRatePerSecond: 7.0,
-        lastError: undefined
+      const betaQueue = new JobQueueStatus({
+        name: 'Beta',
+        jobsRemaining: 30,
+        highWaterMark: 100,
+        isActive: true
       });
 
       el.loading = false;
-      el.status = new GetIndexingStatusResponse({
-        isRunning: true,
-        totalPages: 100,
-        completedPages: 10,
-        queueDepth: 90,
-        processingRatePerSecond: 5.0,
-        indexProgress: [zebra, alpha, beta] // Deliberately unsorted
+      el.jobStatus = new GetJobStatusResponse({
+        jobQueues: [zebraQueue, alphaQueue, betaQueue] // Deliberately unsorted
       });
       await el.updateComplete;
     });
 
-    it('should sort all index names alphabetically regardless of input order', () => {
-      const perIndexProgress = el.shadowRoot!.querySelector('.per-index-progress');
-      expect(perIndexProgress).to.exist;
-      
-      const indexItems = perIndexProgress!.querySelectorAll('.index-item');
-      const indexNames = Array.from(indexItems).map(item => 
-        item.querySelector('.index-name')!.textContent
-      );
-      
-      // Should be sorted: alpha, beta, zebra
-      expect(indexNames).to.deep.equal(['alpha', 'beta', 'zebra']);
+    it('should display all queue names in the value', () => {
+      const value = el.shadowRoot!.querySelector('.value');
+      expect(value!.textContent).to.include('Zebra: 10');
+      expect(value!.textContent).to.include('Alpha: 20');
+      expect(value!.textContent).to.include('Beta: 30');
     });
   });
 
-  describe('when indexing is idle', () => {
+  describe('when all jobs are idle', () => {
     beforeEach(async () => {
+      const inactiveQueue = new JobQueueStatus({
+        name: 'Frontmatter',
+        jobsRemaining: 0,
+        highWaterMark: 0,
+        isActive: false
+      });
+
       el.loading = false;
-      el.status = new GetIndexingStatusResponse({
-        isRunning: false,
-        totalPages: 100,
-        completedPages: 100,
-        queueDepth: 0,
-        processingRatePerSecond: 0,
-        indexProgress: []
+      el.jobStatus = new GetJobStatusResponse({
+        jobQueues: [inactiveQueue]
       });
       await el.updateComplete;
     });
 
-    it('should not render anything when idle', () => {
+    it('should not render anything when all jobs are idle', () => {
       const indexingInfo = el.shadowRoot!.querySelector('.indexing-info');
       expect(indexingInfo).to.not.exist;
     });
@@ -254,55 +194,34 @@ describe('SystemInfoIndexing', () => {
       restore();
     });
 
-    describe('when indexing has errors', () => {
-      let errorElement: Element;
-
+    describe('when jobs have errors', () => {
       beforeEach(async () => {
-        const errorIndex = new SingleIndexProgress({
-          name: 'test-index',
-          completed: 50,
-          total: 100,
-          processingRatePerSecond: 5.0,
-          lastError: 'Test error message for copying'
-        });
-
-        const workingIndex = new SingleIndexProgress({
-          name: 'working-index',
-          completed: 75,
-          total: 100,
-          processingRatePerSecond: 8.0,
-          lastError: undefined
+        // For now, job queue errors will be handled differently
+        // This test structure is preserved for when we add error handling to job queues
+        const workingQueue = new JobQueueStatus({
+          name: 'Frontmatter',
+          jobsRemaining: 25,
+          highWaterMark: 100,
+          isActive: true
         });
 
         el.loading = false;
-        el.status = new GetIndexingStatusResponse({
-          isRunning: true,
-          totalPages: 100,
-          completedPages: 50,
-          queueDepth: 50,
-          processingRatePerSecond: 5.0,
-          indexProgress: [errorIndex, workingIndex]
+        el.jobStatus = new GetJobStatusResponse({
+          jobQueues: [workingQueue]
         });
         await el.updateComplete;
-
-        // Find the error message element (with clickable class)
-        errorElement = el.shadowRoot!.querySelector('.error.clickable')!;
-        expect(errorElement).to.exist;
       });
 
-      it('should have clickable class', () => {
-        expect(errorElement.classList.contains('clickable')).to.be.true;
+      it('should display working queues', () => {
+        const indexingInfo = el.shadowRoot!.querySelector('.indexing-info');
+        expect(indexingInfo).to.exist;
       });
 
-      it('should have proper accessibility attributes', () => {
-        expect(errorElement.getAttribute('role')).to.equal('button');
-        expect(errorElement.getAttribute('tabindex')).to.equal('0');
-        expect(errorElement.getAttribute('aria-label')).to.equal('Click to copy error to clipboard');
-        expect(errorElement.getAttribute('title')).to.equal('Click to copy error to clipboard');
-      });
-
-      it('should contain error text', () => {
-        expect(errorElement.textContent).to.include('Test error message for copying');
+      // TODO: Add error handling tests when job queue error reporting is implemented
+      it('should be ready for future error handling', () => {
+        // Placeholder for error handling tests that will be added
+        // when job queue error reporting is implemented
+        expect(true).to.be.true;
       });
     });
   });

@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { GetIndexingStatusRequest, GetIndexingStatusResponse, GetVersionRequest, GetVersionResponse, StreamIndexingStatusRequest } from "./system_info_pb.js";
+import { GetJobStatusRequest, GetJobStatusResponse, GetVersionRequest, GetVersionResponse, StreamJobStatusRequest } from "./system_info_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -24,26 +24,26 @@ export const SystemInfoService = {
       kind: MethodKind.Unary,
     },
     /**
-     * GetIndexingStatus returns the current status of background indexing operations.
+     * GetJobStatus returns the current status of background job queues.
      *
-     * @generated from rpc api.v1.SystemInfoService.GetIndexingStatus
+     * @generated from rpc api.v1.SystemInfoService.GetJobStatus
      */
-    getIndexingStatus: {
-      name: "GetIndexingStatus",
-      I: GetIndexingStatusRequest,
-      O: GetIndexingStatusResponse,
+    getJobStatus: {
+      name: "GetJobStatus",
+      I: GetJobStatusRequest,
+      O: GetJobStatusResponse,
       kind: MethodKind.Unary,
     },
     /**
-     * StreamIndexingStatus provides real-time streaming updates of indexing progress.
-     * The stream will automatically terminate when indexing is complete.
+     * StreamJobStatus provides real-time streaming updates of job queue status.
+     * The stream will automatically terminate when all queues are idle.
      *
-     * @generated from rpc api.v1.SystemInfoService.StreamIndexingStatus
+     * @generated from rpc api.v1.SystemInfoService.StreamJobStatus
      */
-    streamIndexingStatus: {
-      name: "StreamIndexingStatus",
-      I: StreamIndexingStatusRequest,
-      O: GetIndexingStatusResponse,
+    streamJobStatus: {
+      name: "StreamJobStatus",
+      I: StreamJobStatusRequest,
+      O: GetJobStatusResponse,
       kind: MethodKind.ServerStreaming,
     },
   }

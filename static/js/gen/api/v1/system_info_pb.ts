@@ -85,44 +85,44 @@ export class GetVersionResponse extends Message<GetVersionResponse> {
 }
 
 /**
- * The request message for the GetIndexingStatus RPC.
+ * The request message for the GetJobStatus RPC.
  *
- * @generated from message api.v1.GetIndexingStatusRequest
+ * @generated from message api.v1.GetJobStatusRequest
  */
-export class GetIndexingStatusRequest extends Message<GetIndexingStatusRequest> {
-  constructor(data?: PartialMessage<GetIndexingStatusRequest>) {
+export class GetJobStatusRequest extends Message<GetJobStatusRequest> {
+  constructor(data?: PartialMessage<GetJobStatusRequest>) {
     super();
     proto3.util.initPartial(data, this);
   }
 
   static readonly runtime: typeof proto3 = proto3;
-  static readonly typeName = "api.v1.GetIndexingStatusRequest";
+  static readonly typeName = "api.v1.GetJobStatusRequest";
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
   ]);
 
-  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GetIndexingStatusRequest {
-    return new GetIndexingStatusRequest().fromBinary(bytes, options);
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GetJobStatusRequest {
+    return new GetJobStatusRequest().fromBinary(bytes, options);
   }
 
-  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): GetIndexingStatusRequest {
-    return new GetIndexingStatusRequest().fromJson(jsonValue, options);
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): GetJobStatusRequest {
+    return new GetJobStatusRequest().fromJson(jsonValue, options);
   }
 
-  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): GetIndexingStatusRequest {
-    return new GetIndexingStatusRequest().fromJsonString(jsonString, options);
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): GetJobStatusRequest {
+    return new GetJobStatusRequest().fromJsonString(jsonString, options);
   }
 
-  static equals(a: GetIndexingStatusRequest | PlainMessage<GetIndexingStatusRequest> | undefined, b: GetIndexingStatusRequest | PlainMessage<GetIndexingStatusRequest> | undefined): boolean {
-    return proto3.util.equals(GetIndexingStatusRequest, a, b);
+  static equals(a: GetJobStatusRequest | PlainMessage<GetJobStatusRequest> | undefined, b: GetJobStatusRequest | PlainMessage<GetJobStatusRequest> | undefined): boolean {
+    return proto3.util.equals(GetJobStatusRequest, a, b);
   }
 }
 
 /**
- * The request message for the StreamIndexingStatus RPC.
+ * The request message for the StreamJobStatus RPC.
  *
- * @generated from message api.v1.StreamIndexingStatusRequest
+ * @generated from message api.v1.StreamJobStatusRequest
  */
-export class StreamIndexingStatusRequest extends Message<StreamIndexingStatusRequest> {
+export class StreamJobStatusRequest extends Message<StreamJobStatusRequest> {
   /**
    * Optional: interval in milliseconds for updates (default: 1000ms)
    *
@@ -130,181 +130,135 @@ export class StreamIndexingStatusRequest extends Message<StreamIndexingStatusReq
    */
   updateIntervalMs?: number;
 
-  constructor(data?: PartialMessage<StreamIndexingStatusRequest>) {
+  constructor(data?: PartialMessage<StreamJobStatusRequest>) {
     super();
     proto3.util.initPartial(data, this);
   }
 
   static readonly runtime: typeof proto3 = proto3;
-  static readonly typeName = "api.v1.StreamIndexingStatusRequest";
+  static readonly typeName = "api.v1.StreamJobStatusRequest";
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "update_interval_ms", kind: "scalar", T: 5 /* ScalarType.INT32 */, opt: true },
   ]);
 
-  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): StreamIndexingStatusRequest {
-    return new StreamIndexingStatusRequest().fromBinary(bytes, options);
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): StreamJobStatusRequest {
+    return new StreamJobStatusRequest().fromBinary(bytes, options);
   }
 
-  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): StreamIndexingStatusRequest {
-    return new StreamIndexingStatusRequest().fromJson(jsonValue, options);
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): StreamJobStatusRequest {
+    return new StreamJobStatusRequest().fromJson(jsonValue, options);
   }
 
-  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): StreamIndexingStatusRequest {
-    return new StreamIndexingStatusRequest().fromJsonString(jsonString, options);
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): StreamJobStatusRequest {
+    return new StreamJobStatusRequest().fromJsonString(jsonString, options);
   }
 
-  static equals(a: StreamIndexingStatusRequest | PlainMessage<StreamIndexingStatusRequest> | undefined, b: StreamIndexingStatusRequest | PlainMessage<StreamIndexingStatusRequest> | undefined): boolean {
-    return proto3.util.equals(StreamIndexingStatusRequest, a, b);
+  static equals(a: StreamJobStatusRequest | PlainMessage<StreamJobStatusRequest> | undefined, b: StreamJobStatusRequest | PlainMessage<StreamJobStatusRequest> | undefined): boolean {
+    return proto3.util.equals(StreamJobStatusRequest, a, b);
   }
 }
 
 /**
- * The response message for the GetIndexingStatus RPC.
+ * The response message for the GetJobStatus RPC.
  *
- * @generated from message api.v1.GetIndexingStatusResponse
+ * @generated from message api.v1.GetJobStatusResponse
  */
-export class GetIndexingStatusResponse extends Message<GetIndexingStatusResponse> {
+export class GetJobStatusResponse extends Message<GetJobStatusResponse> {
   /**
-   * @generated from field: bool is_running = 1;
+   * @generated from field: repeated api.v1.JobQueueStatus job_queues = 1;
    */
-  isRunning = false;
+  jobQueues: JobQueueStatus[] = [];
 
-  /**
-   * @generated from field: int32 total_pages = 2;
-   */
-  totalPages = 0;
-
-  /**
-   * @generated from field: int32 completed_pages = 3;
-   */
-  completedPages = 0;
-
-  /**
-   * @generated from field: int32 queue_depth = 4;
-   */
-  queueDepth = 0;
-
-  /**
-   * @generated from field: double processing_rate_per_second = 5;
-   */
-  processingRatePerSecond = 0;
-
-  /**
-   * @generated from field: optional google.protobuf.Timestamp estimated_completion = 6;
-   */
-  estimatedCompletion?: Timestamp;
-
-  /**
-   * @generated from field: repeated api.v1.SingleIndexProgress index_progress = 7;
-   */
-  indexProgress: SingleIndexProgress[] = [];
-
-  constructor(data?: PartialMessage<GetIndexingStatusResponse>) {
+  constructor(data?: PartialMessage<GetJobStatusResponse>) {
     super();
     proto3.util.initPartial(data, this);
   }
 
   static readonly runtime: typeof proto3 = proto3;
-  static readonly typeName = "api.v1.GetIndexingStatusResponse";
+  static readonly typeName = "api.v1.GetJobStatusResponse";
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
-    { no: 1, name: "is_running", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
-    { no: 2, name: "total_pages", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
-    { no: 3, name: "completed_pages", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
-    { no: 4, name: "queue_depth", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
-    { no: 5, name: "processing_rate_per_second", kind: "scalar", T: 1 /* ScalarType.DOUBLE */ },
-    { no: 6, name: "estimated_completion", kind: "message", T: Timestamp, opt: true },
-    { no: 7, name: "index_progress", kind: "message", T: SingleIndexProgress, repeated: true },
+    { no: 1, name: "job_queues", kind: "message", T: JobQueueStatus, repeated: true },
   ]);
 
-  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GetIndexingStatusResponse {
-    return new GetIndexingStatusResponse().fromBinary(bytes, options);
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GetJobStatusResponse {
+    return new GetJobStatusResponse().fromBinary(bytes, options);
   }
 
-  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): GetIndexingStatusResponse {
-    return new GetIndexingStatusResponse().fromJson(jsonValue, options);
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): GetJobStatusResponse {
+    return new GetJobStatusResponse().fromJson(jsonValue, options);
   }
 
-  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): GetIndexingStatusResponse {
-    return new GetIndexingStatusResponse().fromJsonString(jsonString, options);
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): GetJobStatusResponse {
+    return new GetJobStatusResponse().fromJsonString(jsonString, options);
   }
 
-  static equals(a: GetIndexingStatusResponse | PlainMessage<GetIndexingStatusResponse> | undefined, b: GetIndexingStatusResponse | PlainMessage<GetIndexingStatusResponse> | undefined): boolean {
-    return proto3.util.equals(GetIndexingStatusResponse, a, b);
+  static equals(a: GetJobStatusResponse | PlainMessage<GetJobStatusResponse> | undefined, b: GetJobStatusResponse | PlainMessage<GetJobStatusResponse> | undefined): boolean {
+    return proto3.util.equals(GetJobStatusResponse, a, b);
   }
 }
 
 /**
- * Progress information for a single index type.
+ * Status information for a single job queue.
  *
- * @generated from message api.v1.SingleIndexProgress
+ * @generated from message api.v1.JobQueueStatus
  */
-export class SingleIndexProgress extends Message<SingleIndexProgress> {
+export class JobQueueStatus extends Message<JobQueueStatus> {
   /**
+   * "Frontmatter", "Bleve", "File Scan"
+   *
    * @generated from field: string name = 1;
    */
   name = "";
 
   /**
-   * @generated from field: int32 completed = 2;
+   * Current queue depth
+   *
+   * @generated from field: int32 jobs_remaining = 2;
    */
-  completed = 0;
+  jobsRemaining = 0;
 
   /**
-   * @generated from field: int32 total = 3;
+   * Peak, resets to 0 when empty
+   *
+   * @generated from field: int32 high_water_mark = 3;
    */
-  total = 0;
+  highWaterMark = 0;
 
   /**
-   * @generated from field: double processing_rate_per_second = 4;
+   * jobs_remaining > 0
+   *
+   * @generated from field: bool is_active = 4;
    */
-  processingRatePerSecond = 0;
+  isActive = false;
 
-  /**
-   * @generated from field: optional string last_error = 5;
-   */
-  lastError?: string;
-
-  /**
-   * @generated from field: int32 queue_depth = 6;
-   */
-  queueDepth = 0;
-
-  /**
-   * @generated from field: bool work_distribution_complete = 7;
-   */
-  workDistributionComplete = false;
-
-  constructor(data?: PartialMessage<SingleIndexProgress>) {
+  constructor(data?: PartialMessage<JobQueueStatus>) {
     super();
     proto3.util.initPartial(data, this);
   }
 
   static readonly runtime: typeof proto3 = proto3;
-  static readonly typeName = "api.v1.SingleIndexProgress";
+  static readonly typeName = "api.v1.JobQueueStatus";
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 2, name: "completed", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
-    { no: 3, name: "total", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
-    { no: 4, name: "processing_rate_per_second", kind: "scalar", T: 1 /* ScalarType.DOUBLE */ },
-    { no: 5, name: "last_error", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
-    { no: 6, name: "queue_depth", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
-    { no: 7, name: "work_distribution_complete", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 2, name: "jobs_remaining", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 3, name: "high_water_mark", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 4, name: "is_active", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
   ]);
 
-  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SingleIndexProgress {
-    return new SingleIndexProgress().fromBinary(bytes, options);
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): JobQueueStatus {
+    return new JobQueueStatus().fromBinary(bytes, options);
   }
 
-  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): SingleIndexProgress {
-    return new SingleIndexProgress().fromJson(jsonValue, options);
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): JobQueueStatus {
+    return new JobQueueStatus().fromJson(jsonValue, options);
   }
 
-  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): SingleIndexProgress {
-    return new SingleIndexProgress().fromJsonString(jsonString, options);
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): JobQueueStatus {
+    return new JobQueueStatus().fromJsonString(jsonString, options);
   }
 
-  static equals(a: SingleIndexProgress | PlainMessage<SingleIndexProgress> | undefined, b: SingleIndexProgress | PlainMessage<SingleIndexProgress> | undefined): boolean {
-    return proto3.util.equals(SingleIndexProgress, a, b);
+  static equals(a: JobQueueStatus | PlainMessage<JobQueueStatus> | undefined, b: JobQueueStatus | PlainMessage<JobQueueStatus> | undefined): boolean {
+    return proto3.util.equals(JobQueueStatus, a, b);
   }
 }
 

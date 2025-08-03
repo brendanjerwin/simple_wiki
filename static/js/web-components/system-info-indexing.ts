@@ -1,5 +1,5 @@
 import { html, css, LitElement } from 'lit';
-import { GetIndexingStatusResponse } from '../gen/api/v1/system_info_pb.js';
+import { GetJobStatusResponse } from '../gen/api/v1/system_info_pb.js';
 import { foundationCSS } from './shared-styles.js';
 import { showToast } from './toast-message.js';
 
@@ -34,11 +34,6 @@ export class SystemInfoIndexing extends LitElement {
         background: #28a745;
         animation: pulse 2s infinite;
         flex-shrink: 0;
-      }
-
-      .status-indicator.idle {
-        background: #6c757d;
-        animation: none;
       }
 
       @keyframes pulse {
@@ -186,12 +181,12 @@ export class SystemInfoIndexing extends LitElement {
     `];
 
   static override properties = {
-    status: { type: Object },
+    jobStatus: { type: Object },
     loading: { type: Boolean },
     error: { type: String },
   };
 
-  declare status?: GetIndexingStatusResponse;
+  declare jobStatus?: GetJobStatusResponse;
   declare loading: boolean;
   declare error?: string;
 
@@ -229,7 +224,7 @@ export class SystemInfoIndexing extends LitElement {
 
   override render() {
     // Handle loading and error states
-    if (this.loading && !this.status) {
+    if (this.loading && !this.jobStatus) {
       return html`<div class="loading">Loading...</div>`;
     }
 
@@ -237,78 +232,25 @@ export class SystemInfoIndexing extends LitElement {
       return html`<div class="error">${this.error}</div>`;
     }
 
-    if (!this.status) {
+    if (!this.jobStatus) {
       return html`<div class="loading">No data</div>`;
     }
 
-    // Don't render anything when not running
-    if (!this.status.isRunning) {
+    // Filter active queues
+    const activeQueues = this.jobStatus.jobQueues.filter(queue => queue.isActive);
+    
+    // Don't render anything when no active queues
+    if (activeQueues.length === 0) {
       return html``;
     }
-
-    const overallProgress = this.calculateProgress(this.status.completedPages, this.status.totalPages);
 
     return html`
       <div class="indexing-info">
         <div class="indexing-header">
-          <div class="status-indicator ${this.status.isRunning ? '' : 'idle'}"></div>
-          <span class="label">Indexing</span>
-          <span class="value">${this.status.completedPages}/${this.status.totalPages}</span>
+          <div class="status-indicator"></div>
+          <span class="label">Jobs</span>
+          <span class="value">${activeQueues.map(queue => `${queue.name}: ${queue.jobsRemaining}`).join(', ')}</span>
         </div>
-        <div class="indexing-stats">
-          <div class="progress-compact">
-            <div class="progress-bar-mini">
-              <div class="progress-fill-mini" 
-                   style="width: ${overallProgress}%"></div>
-            </div>
-          </div>
-          <span class="rate">${this.formatRate(this.status.processingRatePerSecond)}</span>
-          ${this.status.queueDepth > 0 ? html`
-            <span class="queue">Q:${this.status.queueDepth}</span>
-          ` : ''}
-        </div>
-        
-        <!-- Per-index progress inline (no dropdown) -->
-        ${this.status.indexProgress && this.status.indexProgress.length > 1 ? html`
-          <div class="per-index-progress">
-            ${this.status.indexProgress
-              .slice() // Create a copy to avoid mutating the original
-              .sort((a, b) => a.name.localeCompare(b.name)) // Sort alphabetically
-              .map(index => {
-              const indexProgress = this.calculateProgress(index.completed, index.total);
-              const isIndexComplete = indexProgress === 100;
-              const hasError = index.lastError && index.lastError.trim() !== '';
-              
-              return html`
-                <div class="index-item">
-                  <div class="index-name">${index.name}</div>
-                  <div class="index-progress">
-                    <div class="index-progress-bar">
-                      <div class="index-progress-fill ${isIndexComplete ? 'complete' : hasError ? 'error' : ''}" 
-                           style="width: ${indexProgress}%"></div>
-                    </div>
-                  </div>
-                  <div class="index-stats">
-                    ${this.formatRate(index.processingRatePerSecond)}
-                    ${index.queueDepth > 0 ? html` Q:${index.queueDepth}` : ''}
-                    ${!index.workDistributionComplete ? html` <span style="color: #ffc107;">DIST</span>` : ''}
-                  </div>
-                </div>
-                ${hasError ? html`
-                  <div class="error clickable" 
-                       @click="${(e: Event) => this._handleErrorClick(e, index.lastError!)}"
-                       @keydown="${(e: KeyboardEvent) => this._handleErrorKeydown(e, index.lastError!)}"
-                       tabindex="0"
-                       role="button"
-                       aria-label="Click to copy error to clipboard"
-                       title="Click to copy error to clipboard">
-                    Error: ${index.lastError}
-                  </div>
-                ` : ''}
-              `;
-            })}
-          </div>
-        ` : ''}
       </div>
     `;
   }

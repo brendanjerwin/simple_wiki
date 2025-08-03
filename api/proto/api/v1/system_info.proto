@@ -10,12 +10,12 @@ service SystemInfoService {
   // GetVersion returns the server version and build time.
   rpc GetVersion(GetVersionRequest) returns (GetVersionResponse) {}
   
-  // GetIndexingStatus returns the current status of background indexing operations.
-  rpc GetIndexingStatus(GetIndexingStatusRequest) returns (GetIndexingStatusResponse) {}
+  // GetJobStatus returns the current status of background job queues.
+  rpc GetJobStatus(GetJobStatusRequest) returns (GetJobStatusResponse) {}
   
-  // StreamIndexingStatus provides real-time streaming updates of indexing progress.
-  // The stream will automatically terminate when indexing is complete.
-  rpc StreamIndexingStatus(StreamIndexingStatusRequest) returns (stream GetIndexingStatusResponse) {}
+  // StreamJobStatus provides real-time streaming updates of job queue status.
+  // The stream will automatically terminate when all queues are idle.
+  rpc StreamJobStatus(StreamJobStatusRequest) returns (stream GetJobStatusResponse) {}
 }
 
 // The request message for the GetVersion RPC.
@@ -27,33 +27,24 @@ message GetVersionResponse {
   google.protobuf.Timestamp build_time = 2;
 }
 
-// The request message for the GetIndexingStatus RPC.
-message GetIndexingStatusRequest {}
+// The request message for the GetJobStatus RPC.
+message GetJobStatusRequest {}
 
-// The request message for the StreamIndexingStatus RPC.
-message StreamIndexingStatusRequest {
+// The request message for the StreamJobStatus RPC.
+message StreamJobStatusRequest {
   // Optional: interval in milliseconds for updates (default: 1000ms)
   optional int32 update_interval_ms = 1;
 }
 
-// The response message for the GetIndexingStatus RPC.
-message GetIndexingStatusResponse {
-  bool is_running = 1;
-  int32 total_pages = 2;
-  int32 completed_pages = 3;
-  int32 queue_depth = 4;
-  double processing_rate_per_second = 5;
-  optional google.protobuf.Timestamp estimated_completion = 6;
-  repeated SingleIndexProgress index_progress = 7;
+// The response message for the GetJobStatus RPC.
+message GetJobStatusResponse {
+  repeated JobQueueStatus job_queues = 1;
 }
 
-// Progress information for a single index type.
-message SingleIndexProgress {
-  string name = 1;
-  int32 completed = 2;
-  int32 total = 3;
-  double processing_rate_per_second = 4;
-  optional string last_error = 5;
-  int32 queue_depth = 6;
-  bool work_distribution_complete = 7;
+// Status information for a single job queue.
+message JobQueueStatus {
+  string name = 1;             // "Frontmatter", "Bleve", "File Scan"
+  int32 jobs_remaining = 2;    // Current queue depth
+  int32 high_water_mark = 3;   // Peak, resets to 0 when empty
+  bool is_active = 4;          // jobs_remaining > 0
 }

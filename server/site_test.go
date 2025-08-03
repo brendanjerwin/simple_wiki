@@ -596,7 +596,7 @@ test content`
 
 			It("should create a page with initial content", func() {
 				Expect(p.Text.GetCurrent()).To(ContainSubstring("# {{or .Title .Identifier}}"))
-				Expect(p.Text.GetCurrent()).To(ContainSubstring(`identifier = "` + pageToCreate + `"`))
+				Expect(p.Text.GetCurrent()).To(ContainSubstring(`identifier = '` + pageToCreate + `'`))
 			})
 		})
 

@@ -174,14 +174,14 @@ func (m *MockIndexingProgressProvider) GetProgress() index.IndexingProgress {
 	return m.Progress
 }
 
-// MockStreamServer is a mock implementation of apiv1.SystemInfoService_StreamIndexingStatusServer for testing.
-type MockStreamServer struct {
-	SentMessages []*apiv1.GetIndexingStatusResponse
+// MockJobStreamServer is a mock implementation of apiv1.SystemInfoService_StreamJobStatusServer for testing.
+type MockJobStreamServer struct {
+	SentMessages []*apiv1.GetJobStatusResponse
 	SendErr      error
 	ContextDone  bool
 }
 
-func (m *MockStreamServer) Send(response *apiv1.GetIndexingStatusResponse) error {
+func (m *MockJobStreamServer) Send(response *apiv1.GetJobStatusResponse) error {
 	if m.SendErr != nil {
 		return m.SendErr
 	}
@@ -189,7 +189,7 @@ func (m *MockStreamServer) Send(response *apiv1.GetIndexingStatusResponse) error
 	return nil
 }
 
-func (m *MockStreamServer) Context() context.Context {
+func (m *MockJobStreamServer) Context() context.Context {
 	if m.ContextDone {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
@@ -198,22 +198,22 @@ func (m *MockStreamServer) Context() context.Context {
 	return context.Background()
 }
 
-func (*MockStreamServer) SetHeader(metadata.MD) error {
+func (*MockJobStreamServer) SetHeader(metadata.MD) error {
 	return nil
 }
 
-func (*MockStreamServer) SendHeader(metadata.MD) error {
+func (*MockJobStreamServer) SendHeader(metadata.MD) error {
 	return nil
 }
 
-func (*MockStreamServer) SetTrailer(metadata.MD) {
+func (*MockJobStreamServer) SetTrailer(metadata.MD) {
 }
 
-func (*MockStreamServer) SendMsg(any) error {
+func (*MockJobStreamServer) SendMsg(any) error {
 	return nil
 }
 
-func (*MockStreamServer) RecvMsg(any) error {
+func (*MockJobStreamServer) RecvMsg(any) error {
 	return nil
 }
 
@@ -1322,7 +1322,8 @@ var _ = Describe("Server", func() {
 		})
 	})
 
-	Describe("GetIndexingStatus", func() {
+	/*
+	XDescribe("GetIndexingStatus", func() {
 		var (
 			req                 *apiv1.GetIndexingStatusRequest
 			res                 *apiv1.GetIndexingStatusResponse
@@ -1420,11 +1421,11 @@ var _ = Describe("Server", func() {
 		})
 	})
 
-	Describe("StreamIndexingStatus", func() {
+	XDescribe("StreamIndexingStatus", func() {
 		var (
 			req                 *apiv1.StreamIndexingStatusRequest
 			mockProgressProvider *MockIndexingProgressProvider
-			streamServer        *MockStreamServer
+			streamServer        *MockJobStreamServer
 		)
 
 		BeforeEach(func() {
@@ -1447,7 +1448,7 @@ var _ = Describe("Server", func() {
 					},
 				},
 			}
-			streamServer = &MockStreamServer{}
+			streamServer = &MockJobStreamServer{}
 		})
 
 		When("indexing progress provider is not available", func() {
@@ -1504,6 +1505,51 @@ var _ = Describe("Server", func() {
 			It("should not return an error", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
+		})
+	})
+	*/
+
+	Describe("GetJobStatus", func() {
+		var (
+			req *apiv1.GetJobStatusRequest
+			res *apiv1.GetJobStatusResponse
+			err error
+		)
+
+		BeforeEach(func() {
+			req = &apiv1.GetJobStatusRequest{}
+			server = v1.NewServer("commit", time.Now(), nil, nil, lumber.NewConsoleLogger(lumber.WARN))
+			res, err = server.GetJobStatus(ctx, req)
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return empty job queues for now", func() {
+			Expect(res).NotTo(BeNil())
+			Expect(res.JobQueues).To(BeEmpty())
+		})
+	})
+
+	Describe("StreamJobStatus", func() {
+		var (
+			req          *apiv1.StreamJobStatusRequest
+			streamServer *MockJobStreamServer
+		)
+
+		BeforeEach(func() {
+			req = &apiv1.StreamJobStatusRequest{}
+			streamServer = &MockJobStreamServer{}
+			server = v1.NewServer("commit", time.Now(), nil, nil, lumber.NewConsoleLogger(lumber.WARN))
+		})
+
+		It("should send initial empty response and terminate", func() {
+			err := server.StreamJobStatus(req, streamServer)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(streamServer.SentMessages).To(HaveLen(1))
+			firstMessage := streamServer.SentMessages[0]
+			Expect(firstMessage.JobQueues).To(BeEmpty())
 		})
 	})
 })

@@ -310,22 +310,17 @@ func (s *Server) GetVersion(_ context.Context, _ *apiv1.GetVersionRequest) (*api
 	}, nil
 }
 
-// GetIndexingStatus implements the GetIndexingStatus RPC.
-func (s *Server) GetIndexingStatus(_ context.Context, _ *apiv1.GetIndexingStatusRequest) (*apiv1.GetIndexingStatusResponse, error) {
-	if s.IndexingProgressProvider == nil {
-		return nil, status.Error(codes.Internal, "indexing progress provider not available")
-	}
-
-	progress := s.IndexingProgressProvider.GetProgress()
-	return s.buildIndexingStatusResponse(progress), nil
+// GetJobStatus implements the GetJobStatus RPC.
+func (*Server) GetJobStatus(_ context.Context, _ *apiv1.GetJobStatusRequest) (*apiv1.GetJobStatusResponse, error) {
+	// TODO: Integrate with job queue coordinator
+	// For now, return empty response
+	return &apiv1.GetJobStatusResponse{
+		JobQueues: []*apiv1.JobQueueStatus{},
+	}, nil
 }
 
-// StreamIndexingStatus implements the StreamIndexingStatus RPC for real-time indexing updates.
-func (s *Server) StreamIndexingStatus(req *apiv1.StreamIndexingStatusRequest, stream apiv1.SystemInfoService_StreamIndexingStatusServer) error {
-	if s.IndexingProgressProvider == nil {
-		return status.Error(codes.Internal, "indexing progress provider not available")
-	}
-
+// StreamJobStatus implements the StreamJobStatus RPC for real-time job queue updates.
+func (*Server) StreamJobStatus(req *apiv1.StreamJobStatusRequest, stream apiv1.SystemInfoService_StreamJobStatusServer) error {
 	// Default to 1-second intervals, allow client to customize
 	interval := time.Duration(req.GetUpdateIntervalMs()) * time.Millisecond
 	if interval == 0 {
@@ -339,78 +334,26 @@ func (s *Server) StreamIndexingStatus(req *apiv1.StreamIndexingStatusRequest, st
 	}
 
 	// Send initial status immediately
-	progress := s.IndexingProgressProvider.GetProgress()
-	response := s.buildIndexingStatusResponse(progress)
+	response := &apiv1.GetJobStatusResponse{
+		JobQueues: []*apiv1.JobQueueStatus{},
+	}
 	if err := stream.Send(response); err != nil {
 		return err
 	}
 
-	// If indexing is not running, terminate stream immediately
-	if !progress.IsRunning {
-		return nil
-	}
-
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-stream.Context().Done():
-			return stream.Context().Err()
-		case <-ticker.C:
-			progress := s.IndexingProgressProvider.GetProgress()
-			response := s.buildIndexingStatusResponse(progress)
-			
-			if err := stream.Send(response); err != nil {
-				return err
-			}
-			
-			// Terminate stream when indexing completes
-			if !progress.IsRunning {
-				return nil
-			}
-		}
-	}
+	// TODO: Implement actual streaming with job queue coordinator
+	// For now, just send one response and terminate
+	return nil
 }
 
-// buildIndexingStatusResponse builds a GetIndexingStatusResponse from IndexingProgress.
-func (*Server) buildIndexingStatusResponse(progress index.IndexingProgress) *apiv1.GetIndexingStatusResponse {
-	// Convert estimated completion time to protobuf timestamp
-	var estimatedCompletion *timestamppb.Timestamp
-	if progress.EstimatedCompletion != nil {
-		estimatedTime := time.Now().Add(*progress.EstimatedCompletion)
-		estimatedCompletion = timestamppb.New(estimatedTime)
-	}
-
-	// Convert per-index progress
-	var indexProgress []*apiv1.SingleIndexProgress
-	for _, singleProgress := range progress.IndexProgress {
-		protoProgress := &apiv1.SingleIndexProgress{
-			Name:                     singleProgress.Name,
-			Completed:                int32(singleProgress.Completed),
-			Total:                    int32(singleProgress.Total),
-			ProcessingRatePerSecond:  singleProgress.ProcessingRatePerSecond,
-			QueueDepth:               int32(singleProgress.QueueDepth),
-			WorkDistributionComplete: singleProgress.WorkDistributionComplete,
-		}
-		
-		if singleProgress.LastError != nil {
-			protoProgress.LastError = singleProgress.LastError
-		}
-		
-		indexProgress = append(indexProgress, protoProgress)
-	}
-
-	return &apiv1.GetIndexingStatusResponse{
-		IsRunning:              progress.IsRunning,
-		TotalPages:             int32(progress.TotalPages),
-		CompletedPages:         int32(progress.CompletedPages),
-		QueueDepth:             int32(progress.QueueDepth),
-		ProcessingRatePerSecond: progress.ProcessingRatePerSecond,
-		EstimatedCompletion:    estimatedCompletion,
-		IndexProgress:          indexProgress,
-	}
-}
+// TODO: Remove this function when old indexing system is replaced
+// buildJobStatusResponse builds a GetJobStatusResponse from job coordinator
+// func (*Server) buildJobStatusResponse(coordinator *jobs.JobQueueCoordinator) *apiv1.GetJobStatusResponse {
+//     // Implementation will be added when integrating job coordinator
+//     return &apiv1.GetJobStatusResponse{
+//         JobQueues: []*apiv1.JobQueueStatus{},
+//     }
+// }
 
 // GetFrontmatter implements the GetFrontmatter RPC.
 func (s *Server) GetFrontmatter(_ context.Context, req *apiv1.GetFrontmatterRequest) (resp *apiv1.GetFrontmatterResponse, err error) {

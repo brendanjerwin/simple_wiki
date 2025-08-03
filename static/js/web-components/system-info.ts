@@ -2,7 +2,7 @@ import { html, css, LitElement } from 'lit';
 import { createClient } from '@connectrpc/connect';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import { SystemInfoService } from '../gen/api/v1/system_info_connect.js';
-import { GetVersionRequest, GetVersionResponse, GetIndexingStatusRequest, GetIndexingStatusResponse, StreamIndexingStatusRequest } from '../gen/api/v1/system_info_pb.js';
+import { GetVersionRequest, GetVersionResponse, GetJobStatusRequest, GetJobStatusResponse, StreamJobStatusRequest } from '../gen/api/v1/system_info_pb.js';
 import { foundationCSS } from './shared-styles.js';
 import './system-info-indexing.js';
 import './system-info-version.js';
@@ -73,13 +73,13 @@ export class SystemInfo extends LitElement {
 
   static override properties = {
     version: { state: true },
-    indexingStatus: { state: true },
+    jobStatus: { state: true },
     loading: { state: true },
     error: { state: true },
   };
 
   declare version?: GetVersionResponse;
-  declare indexingStatus?: GetIndexingStatusResponse;
+  declare jobStatus?: GetJobStatusResponse;
   declare loading: boolean;
   declare error?: string;
   private debounceTimer?: ReturnType<typeof setTimeout>;
@@ -108,7 +108,7 @@ export class SystemInfo extends LitElement {
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
-    this.stopIndexingStream();
+    this.stopJobStream();
     this.stopAutoRefresh();
     // Clean up debounce timer
     if (this.debounceTimer) {
@@ -146,8 +146,9 @@ export class SystemInfo extends LitElement {
   private startAutoRefresh(): void {
     this.stopAutoRefresh();
     
-    // Use different refresh intervals based on whether indexing is running
-    const interval = this.indexingStatus?.isRunning ? 
+    // Use different refresh intervals based on whether jobs are running
+    const hasActiveJobs = this.jobStatus?.jobQueues.some(queue => queue.isActive);
+    const interval = hasActiveJobs ? 
       SystemInfo.REFRESH_INTERVAL : 
       SystemInfo.IDLE_REFRESH_INTERVAL;
     
@@ -170,12 +171,13 @@ export class SystemInfo extends LitElement {
       // Load version (always use unary call for this)
       this.version = await this.client.getVersion(new GetVersionRequest());
       
-      // Load initial indexing status
-      this.indexingStatus = await this.client.getIndexingStatus(new GetIndexingStatusRequest());
+      // Load initial job status
+      this.jobStatus = await this.client.getJobStatus(new GetJobStatusRequest());
       
-      // Use streaming if indexing is active, otherwise use polling
-      if (this.indexingStatus.isRunning) {
-        this.startIndexingStream();
+      // Use streaming if any jobs are active, otherwise use polling
+      const hasActiveJobs = this.jobStatus.jobQueues.some(queue => queue.isActive);
+      if (hasActiveJobs) {
+        this.startJobStream();
       } else {
         this.startAutoRefresh();
       }
@@ -189,26 +191,27 @@ export class SystemInfo extends LitElement {
     }
   }
 
-  private async startIndexingStream(): Promise<void> {
-    this.stopIndexingStream();
+  private async startJobStream(): Promise<void> {
+    this.stopJobStream();
     this.stopAutoRefresh();
     
     this.streamSubscription = new AbortController();
     
     try {
-      const request = new StreamIndexingStatusRequest({
+      const request = new StreamJobStatusRequest({
         updateIntervalMs: 1000 // 1 second updates
       });
       
-      for await (const response of this.client.streamIndexingStatus(request, {
+      for await (const response of this.client.streamJobStatus(request, {
         signal: this.streamSubscription.signal
       })) {
-        this.indexingStatus = response;
+        this.jobStatus = response;
         this.requestUpdate();
         
-        // Stop streaming when indexing completes
-        if (!response.isRunning) {
-          this.stopIndexingStream();
+        // Stop streaming when all jobs complete
+        const hasActiveJobs = response.jobQueues.some(queue => queue.isActive);
+        if (!hasActiveJobs) {
+          this.stopJobStream();
           this.startAutoRefresh(); // Switch to polling for idle state
           break;
         }
@@ -222,7 +225,7 @@ export class SystemInfo extends LitElement {
     }
   }
 
-  private stopIndexingStream(): void {
+  private stopJobStream(): void {
     if (this.streamSubscription) {
       this.streamSubscription.abort();
       this.streamSubscription = undefined;
@@ -242,9 +245,9 @@ export class SystemInfo extends LitElement {
             .loading="${this.loading}"
             .error="${this.error}"></system-info-version>
 
-          <!-- Indexing Status Component -->
+          <!-- Job Status Component -->
           <system-info-indexing 
-            .status="${this.indexingStatus}"
+            .jobStatus="${this.jobStatus}"
             .loading="${this.loading}"
             .error="${this.error}"></system-info-indexing>
         </div>

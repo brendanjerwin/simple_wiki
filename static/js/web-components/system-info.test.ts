@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { expect } from '@open-wc/testing';
 import { SystemInfo } from './system-info.js';
-import { GetVersionResponse, GetIndexingStatusResponse } from '../gen/api/v1/system_info_pb.js';
+import { GetVersionResponse, GetJobStatusResponse, JobQueueStatus } from '../gen/api/v1/system_info_pb.js';
 import { Timestamp } from '@bufbuild/protobuf';
 import { stub, useFakeTimers } from 'sinon';
 import './system-info.js';
@@ -49,7 +49,7 @@ describe('SystemInfo', () => {
     beforeEach(async () => {
       el.loading = true;
       el.version = undefined;
-      el.indexingStatus = undefined;
+      el.jobStatus = undefined;
       await el.updateComplete;
     });
 
@@ -87,13 +87,8 @@ describe('SystemInfo', () => {
         commit: 'abc123def456',
         buildTime: mockTimestamp
       });
-      el.indexingStatus = new GetIndexingStatusResponse({
-        isRunning: false,
-        totalPages: 0,
-        completedPages: 0,
-        queueDepth: 0,
-        processingRatePerSecond: 0,
-        indexProgress: []
+      el.jobStatus = new GetJobStatusResponse({
+        jobQueues: []
       });
       await el.updateComplete;
     });
@@ -116,17 +111,24 @@ describe('SystemInfo', () => {
       expect(versionComponent.version.buildTime).to.exist;
     });
 
-    it('should not show indexing info when not running', () => {
+    it('should not show job info when no jobs are active', () => {
       const indexingInfo = el.shadowRoot!.querySelector('.indexing-info');
       expect(indexingInfo).to.not.exist;
     });
   });
 
-  describe('when indexing is active', () => {
+  describe('when jobs are active', () => {
     beforeEach(async () => {
       const mockTimestamp = new Timestamp({
         seconds: BigInt(Math.floor(new Date('2023-01-01T12:00:00Z').getTime() / 1000)),
         nanos: 0
+      });
+
+      const activeQueue = new JobQueueStatus({
+        name: 'Frontmatter',
+        jobsRemaining: 25,
+        highWaterMark: 100,
+        isActive: true
       });
 
       el.loading = false;
@@ -134,52 +136,52 @@ describe('SystemInfo', () => {
         commit: 'abc123def456',
         buildTime: mockTimestamp
       });
-      el.indexingStatus = new GetIndexingStatusResponse({
-        isRunning: true,
-        totalPages: 100,
-        completedPages: 50,
-        queueDepth: 25,
-        processingRatePerSecond: 12.5,
-        indexProgress: []
+      el.jobStatus = new GetJobStatusResponse({
+        jobQueues: [activeQueue]
       });
       await el.updateComplete;
     });
 
-    it('should show indexing status component', () => {
+    it('should show job status component', () => {
       const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing');
       expect(indexingStatus).to.exist;
     });
 
-    it('should pass correct data to indexing status component', () => {
+    it('should pass correct data to job status component', () => {
       const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as any;
       expect(indexingStatus).to.exist;
-      expect(indexingStatus.status).to.exist;
-      expect(indexingStatus.status.isRunning).to.be.true;
+      expect(indexingStatus.jobStatus).to.exist;
+      expect(indexingStatus.jobStatus.jobQueues).to.have.lengthOf(1);
     });
 
-    it('should pass correct progress data', () => {
+    it('should pass correct job queue data', () => {
       const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as any;
-      expect(indexingStatus.status.completedPages).to.equal(50);
-      expect(indexingStatus.status.totalPages).to.equal(100);
+      const queue = indexingStatus.jobStatus.jobQueues[0];
+      expect(queue.name).to.equal('Frontmatter');
+      expect(queue.jobsRemaining).to.equal(25);
+      expect(queue.isActive).to.be.true;
     });
 
 
-    it('should pass processing rate data', () => {
+    it('should pass high water mark data', () => {
       const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as any;
-      expect(indexingStatus.status.processingRatePerSecond).to.equal(12.5);
-    });
-
-    it('should pass queue depth data', () => {
-      const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as any;
-      expect(indexingStatus.status.queueDepth).to.equal(25);
+      const queue = indexingStatus.jobStatus.jobQueues[0];
+      expect(queue.highWaterMark).to.equal(100);
     });
   });
 
-  describe('when indexing is idle', () => {
+  describe('when jobs are idle', () => {
     beforeEach(async () => {
       const mockTimestamp = new Timestamp({
         seconds: BigInt(Math.floor(new Date('2023-01-01T12:00:00Z').getTime() / 1000)),
         nanos: 0
+      });
+
+      const idleQueue = new JobQueueStatus({
+        name: 'Frontmatter',
+        jobsRemaining: 0,
+        highWaterMark: 0,
+        isActive: false
       });
 
       el.loading = false;
@@ -187,18 +189,13 @@ describe('SystemInfo', () => {
         commit: 'abc123def456',
         buildTime: mockTimestamp
       });
-      el.indexingStatus = new GetIndexingStatusResponse({
-        isRunning: false,
-        totalPages: 100,
-        completedPages: 100,
-        queueDepth: 0,
-        processingRatePerSecond: 0,
-        indexProgress: []
+      el.jobStatus = new GetJobStatusResponse({
+        jobQueues: [idleQueue]
       });
       await el.updateComplete;
     });
 
-    it('should show indexing status component even when idle', () => {
+    it('should show job status component even when idle', () => {
       const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing');
       expect(indexingStatus).to.exist;
     });
@@ -212,13 +209,8 @@ describe('SystemInfo', () => {
         commit: 'abc123def456789',
         buildTime: new Timestamp()
       });
-      el.indexingStatus = new GetIndexingStatusResponse({
-        isRunning: false,
-        totalPages: 0,
-        completedPages: 0,
-        queueDepth: 0,
-        processingRatePerSecond: 0,
-        indexProgress: []
+      el.jobStatus = new GetJobStatusResponse({
+        jobQueues: []
       });
       
       await el.updateComplete;
@@ -235,13 +227,8 @@ describe('SystemInfo', () => {
         commit: 'v1.2.3 (abc123d)',
         buildTime: new Timestamp()
       });
-      el.indexingStatus = new GetIndexingStatusResponse({
-        isRunning: false,
-        totalPages: 0,
-        completedPages: 0,
-        queueDepth: 0,
-        processingRatePerSecond: 0,
-        indexProgress: []
+      el.jobStatus = new GetJobStatusResponse({
+        jobQueues: []
       });
       
       await el.updateComplete;
@@ -251,20 +238,22 @@ describe('SystemInfo', () => {
       expect(versionComponent.version.commit).to.equal('v1.2.3 (abc123d)');
     });
 
-    it('should pass slow processing rates to component correctly', async () => {
-      el.indexingStatus = new GetIndexingStatusResponse({
-        isRunning: true,
-        totalPages: 100,
-        completedPages: 50,
-        queueDepth: 0,
-        processingRatePerSecond: 0.05, // Very slow rate
-        indexProgress: []
+    it('should pass small job counts to component correctly', async () => {
+      const smallQueue = new JobQueueStatus({
+        name: 'Frontmatter',
+        jobsRemaining: 1,
+        highWaterMark: 100,
+        isActive: true
+      });
+
+      el.jobStatus = new GetJobStatusResponse({
+        jobQueues: [smallQueue]
       });
 
       await el.updateComplete;
       
       const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as any;
-      expect(indexingStatus.status.processingRatePerSecond).to.equal(0.05);
+      expect(indexingStatus.jobStatus.jobQueues[0].jobsRemaining).to.equal(1);
     });
   });
 
@@ -289,35 +278,34 @@ describe('SystemInfo', () => {
   });
 
   describe('progress calculation', () => {
-    it('should handle zero total pages', () => {
-      el.indexingStatus = new GetIndexingStatusResponse({
-        isRunning: false,
-        totalPages: 0,
-        completedPages: 0,
-        queueDepth: 0,
-        processingRatePerSecond: 0,
-        indexProgress: []
+    it('should handle empty job queues', () => {
+      el.jobStatus = new GetJobStatusResponse({
+        jobQueues: []
       });
 
-      // Should not crash and should not show indexing section
+      // Should not crash and should not show job section
       expect(() => el.render()).to.not.throw();
     });
 
-    it('should pass correct progress data for calculation', async () => {
-      el.indexingStatus = new GetIndexingStatusResponse({
-        isRunning: true,
-        totalPages: 200,
-        completedPages: 75,
-        queueDepth: 0,
-        processingRatePerSecond: 5.0,
-        indexProgress: []
+    it('should pass correct job queue data for display', async () => {
+      const testQueue = new JobQueueStatus({
+        name: 'TestQueue',
+        jobsRemaining: 75,
+        highWaterMark: 200,
+        isActive: true
+      });
+
+      el.jobStatus = new GetJobStatusResponse({
+        jobQueues: [testQueue]
       });
 
       await el.updateComplete;
       
       const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as any;
-      expect(indexingStatus.status.completedPages).to.equal(75);
-      expect(indexingStatus.status.totalPages).to.equal(200);
+      const queue = indexingStatus.jobStatus.jobQueues[0];
+      expect(queue.jobsRemaining).to.equal(75);
+      expect(queue.highWaterMark).to.equal(200);
+      expect(queue.name).to.equal('TestQueue');
     });
   });
 
