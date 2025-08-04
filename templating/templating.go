@@ -119,6 +119,7 @@ const (
 	templateExecutionTimeout = 30 * time.Second // Timeout for template execution
 	progressLogInterval      = 5 * time.Second  // Log progress every N seconds during long executions
 	templatePreviewLength    = 200              // Maximum length for template preview in error messages
+	timeoutMessage           = "  [Template execution timeout]"
 	unknownSource            = "unknown"
 	unknownPageID            = "unknown"
 	identifierKey            = "identifier"
@@ -131,6 +132,12 @@ func isDebugMode() bool {
 }
 
 func BuildShowInventoryContentsOf(site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, indent int) func(string) string {
+	// Create a background context for backward compatibility
+	ctx := context.Background()
+	return BuildShowInventoryContentsOfWithContext(ctx, site, query, indent)
+}
+
+func BuildShowInventoryContentsOfWithContext(ctx context.Context, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, indent int) func(string) string {
 	isContainer := BuildIsContainer(query)
 
 	return func(containerIdentifier string) string {
@@ -139,29 +146,35 @@ func BuildShowInventoryContentsOf(site wikipage.PageReader, query frontmatter.IQ
 			return "  [Maximum depth reached]"
 		}
 
-		// Simple timeout protection - if this takes more than 5 seconds, something is wrong
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		done := make(chan string, 1)
-		go func() {
-			result := buildShowInventoryContentsOfSync(site, query, containerIdentifier, indent, isContainer)
-			done <- result
-		}()
-
+		// Check context cancellation before processing
 		select {
-		case result := <-done:
-			return result
 		case <-ctx.Done():
-			return "  [Template execution timeout]"
+			return timeoutMessage
+		default:
 		}
+
+		return buildShowInventoryContentsOfSync(ctx, site, query, containerIdentifier, indent, isContainer)
 	}
 }
 
-func buildShowInventoryContentsOfSync(site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, containerIdentifier string, indent int, isContainer func(string) bool) string {
+func buildShowInventoryContentsOfSync(ctx context.Context, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, containerIdentifier string, indent int, isContainer func(string) bool) string {
+	// Check context cancellation at the start
+	select {
+	case <-ctx.Done():
+		return timeoutMessage
+	default:
+	}
+
 	_, containerFrontmatter, err := site.ReadFrontMatter(containerIdentifier)
 	if err != nil {
 		return err.Error()
+	}
+	
+	// Check context cancellation after reading frontmatter
+	select {
+	case <-ctx.Done():
+		return timeoutMessage
+	default:
 	}
 	
 	// Use the simple version without visited map complexity
@@ -169,7 +182,6 @@ func buildShowInventoryContentsOfSync(site wikipage.PageReader, query frontmatte
 	if err != nil {
 		return err.Error()
 	}
-
 
 	tmplString := `
 {{ range .Inventory.Items }}
@@ -184,7 +196,7 @@ func buildShowInventoryContentsOfSync(site wikipage.PageReader, query frontmatte
 	// Functions with recursive ShowInventoryContentsOf for nested containers
 	funcs := template.FuncMap{
 		"LinkTo":                  BuildLinkTo(site, containerTemplateContext, query),
-		"ShowInventoryContentsOf": BuildShowInventoryContentsOf(site, query, indent+1),
+		"ShowInventoryContentsOf": BuildShowInventoryContentsOfWithContext(ctx, site, query, indent+1),
 		"IsContainer":             isContainer,
 		"FindBy":                  query.QueryExactMatch,
 		"FindByPrefix":            query.QueryPrefixMatch,
@@ -195,6 +207,13 @@ func buildShowInventoryContentsOfSync(site wikipage.PageReader, query frontmatte
 	tmpl, err := template.New("content").Funcs(funcs).Parse(tmplString)
 	if err != nil {
 		return err.Error()
+	}
+
+	// Check context cancellation before template execution
+	select {
+	case <-ctx.Done():
+		return timeoutMessage
+	default:
 	}
 
 	buf := &bytes.Buffer{}
@@ -391,64 +410,61 @@ func ExecuteTemplateWithVisited(templateString string, fm wikipage.FrontMatter, 
 // using a shared visited map and execution context for enhanced debugging and error reporting.
 func ExecuteTemplateWithContext(templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, visited map[string]bool, execCtx ExecutionContext) ([]byte, error) {
 	// Set a reasonable timeout for template execution to prevent hangs
-	timeout := templateExecutionTimeout
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := context.WithTimeout(context.Background(), templateExecutionTimeout)
 	defer cancel()
 
-	resultChan := make(chan []byte, 1)
-	errorChan := make(chan error, 1)
-
-	go executeTemplateWorker(templateString, fm, site, query, visited, execCtx, resultChan, errorChan)
-
-	select {
-	case result := <-resultChan:
-		return result, nil
-	case err := <-errorChan:
-		return nil, err
-	case <-ctx.Done():
-		// Create detailed timeout error with debugging information
-		errorMsg := formatTimeoutError(execCtx, visited, templateString, timeout)
-		return nil, fmt.Errorf("%s", errorMsg)
-	}
+	return executeTemplateWorker(ctx, templateString, fm, site, query, visited, execCtx)
 }
 
-// executeTemplateWorker performs the actual template execution in a goroutine.
-func executeTemplateWorker(templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, visited map[string]bool, execCtx ExecutionContext, resultChan chan []byte, errorChan chan error) {
+// executeTemplateWorker performs the actual template execution with context cancellation support.
+func executeTemplateWorker(ctx context.Context, templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, visited map[string]bool, execCtx ExecutionContext) ([]byte, error) {
 	defer func() {
 		if r := recover(); r != nil {
-			errorChan <- fmt.Errorf("template execution panic: %v", r)
+			panic(fmt.Errorf("template execution panic: %v", r))
 		}
 	}()
 
+	// Check context cancellation before starting
+	select {
+	case <-ctx.Done():
+		errorMsg := formatTimeoutError(execCtx, visited, templateString, templateExecutionTimeout)
+		return nil, fmt.Errorf("%s", errorMsg)
+	default:
+	}
+
 	// Check execution depth to fail fast before timeout
 	if err := checkExecutionDepth(execCtx); err != nil {
-		errorChan <- err
-		return
+		return nil, err
 	}
 
 	logDebugStart(execCtx, visited)
 
 	templateContext, err := ConstructTemplateContextFromFrontmatterWithVisited(fm, query, visited)
 	if err != nil {
-		errorChan <- err
-		return
+		return nil, err
 	}
 
-	tmpl, err := buildTemplateWithFunctions(templateString, site, query, templateContext, visited)
+	// Check context cancellation after frontmatter construction
+	select {
+	case <-ctx.Done():
+		errorMsg := formatTimeoutError(execCtx, visited, templateString, templateExecutionTimeout)
+		return nil, fmt.Errorf("%s", errorMsg)
+	default:
+	}
+
+	tmpl, err := buildTemplateWithFunctions(ctx, templateString, site, query, templateContext, visited)
 	if err != nil {
-		errorChan <- err
-		return
+		return nil, err
 	}
 
-	result, err := executeTemplateInternal(tmpl, templateContext, execCtx)
+	result, err := executeTemplateInternal(ctx, tmpl, templateContext, execCtx)
 	if err != nil {
 		logDebugError(execCtx, err)
-		errorChan <- err
-		return
+		return nil, err
 	}
 
 	logDebugComplete(execCtx)
-	resultChan <- result
+	return result, nil
 }
 
 // checkExecutionDepth validates that execution depth hasn't exceeded the maximum.
@@ -461,9 +477,16 @@ func checkExecutionDepth(execCtx ExecutionContext) error {
 }
 
 // buildTemplateWithFunctions creates a template with all necessary functions.
-func buildTemplateWithFunctions(templateString string, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, templateContext TemplateContext, _ map[string]bool) (*template.Template, error) {
+func buildTemplateWithFunctions(ctx context.Context, templateString string, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, templateContext TemplateContext, _ map[string]bool) (*template.Template, error) {
+	// Check context cancellation before building functions
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
 	funcs := template.FuncMap{
-		"ShowInventoryContentsOf": BuildShowInventoryContentsOf(site, query, 0),
+		"ShowInventoryContentsOf": BuildShowInventoryContentsOfWithContext(ctx, site, query, 0),
 		"LinkTo":                  BuildLinkTo(site, templateContext, query),
 		"IsContainer":             BuildIsContainer(query),
 		"FindBy":                  query.QueryExactMatch,
@@ -475,7 +498,14 @@ func buildTemplateWithFunctions(templateString string, site wikipage.PageReader,
 }
 
 // executeTemplateInternal executes the template and returns the result.
-func executeTemplateInternal(tmpl *template.Template, templateContext TemplateContext, execCtx ExecutionContext) ([]byte, error) {
+func executeTemplateInternal(ctx context.Context, tmpl *template.Template, templateContext TemplateContext, execCtx ExecutionContext) ([]byte, error) {
+	// Check context cancellation before template execution
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
 	if isDebugMode() {
 		_, _ = fmt.Printf("[TEMPLATE DEBUG] Template parsed successfully for page %s, starting execution\n", execCtx.PageIdentifier)
 	}
