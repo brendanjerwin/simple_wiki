@@ -232,7 +232,7 @@ func createPascalCasePage(dir, pascalIdentifier, content string) {
 	vText := versionedtext.NewVersionedText(content)
 	
 	// Create a basic page structure with PascalCase identifier
-	pageData := map[string]interface{}{
+	pageData := map[string]any{
 		"identifier": pascalIdentifier,
 		"text":       vText,
 	}
