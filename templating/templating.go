@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"os"
 	"sort"
 	"strings"
 	"text/template"
@@ -25,7 +24,7 @@ type InventoryFrontmatter struct {
 	Items     []string `json:"items"`
 }
 
-// ExecutionContext tracks the source and context of template execution for debugging.
+// ExecutionContext tracks the source and context of template execution.
 type ExecutionContext struct {
 	PageIdentifier string    // The page being processed
 	Source         string    // "server", "indexing", "label", etc.
@@ -117,7 +116,6 @@ const (
 	maxInventoryDepth        = 10               // Maximum depth for recursive inventory traversal  
 	maxExecutionDepth        = 50               // Maximum template execution depth before failing fast
 	templateExecutionTimeout = 30 * time.Second // Timeout for template execution
-	progressLogInterval      = 5 * time.Second  // Log progress every N seconds during long executions
 	templatePreviewLength    = 200              // Maximum length for template preview in error messages
 	timeoutMessage           = "  [Template execution timeout]"
 	unknownSource            = "unknown"
@@ -126,10 +124,6 @@ const (
 	spaceSeparator           = " "
 )
 
-// isDebugMode returns true if detailed template execution logging is enabled.
-func isDebugMode() bool {
-	return os.Getenv("WIKI_TEMPLATE_DEBUG") == "true"
-}
 
 func BuildShowInventoryContentsOf(site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, indent int) func(string) string {
 	// Create a background context for backward compatibility
@@ -328,7 +322,7 @@ func ExecuteTemplate(templateString string, fm wikipage.FrontMatter, site wikipa
 	return ExecuteTemplateWithContext(templateString, fm, site, query, make(map[string]bool), execCtx)
 }
 
-// ExecuteTemplateForServer executes a template for server page rendering with enhanced debugging context.
+// ExecuteTemplateForServer executes a template for server page rendering.
 func ExecuteTemplateForServer(templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex) ([]byte, error) {
 	pageID := unknownPageID
 	if identifier, exists := fm[identifierKey]; exists {
@@ -347,7 +341,7 @@ func ExecuteTemplateForServer(templateString string, fm wikipage.FrontMatter, si
 	return ExecuteTemplateWithContext(templateString, fm, site, query, make(map[string]bool), execCtx)
 }
 
-// ExecuteTemplateForIndexing executes a template for search indexing with enhanced debugging context.
+// ExecuteTemplateForIndexing executes a template for search indexing.
 func ExecuteTemplateForIndexing(templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex) ([]byte, error) {
 	pageID := unknownPageID
 	if identifier, exists := fm[identifierKey]; exists {
@@ -366,7 +360,7 @@ func ExecuteTemplateForIndexing(templateString string, fm wikipage.FrontMatter, 
 	return ExecuteTemplateWithContext(templateString, fm, site, query, make(map[string]bool), execCtx)
 }
 
-// ExecuteTemplateForLabels executes a template for label generation with enhanced debugging context.
+// ExecuteTemplateForLabels executes a template for label generation.
 func ExecuteTemplateForLabels(templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex) ([]byte, error) {
 	pageID := unknownPageID
 	if identifier, exists := fm[identifierKey]; exists {
@@ -387,7 +381,7 @@ func ExecuteTemplateForLabels(templateString string, fm wikipage.FrontMatter, si
 
 // ExecuteTemplateWithVisited executes a template string with the given frontmatter and site context,
 // using a shared visited map to prevent circular references across all template functions.
-// Deprecated: Use ExecuteTemplateWithContext for better debugging information.
+// Deprecated: Use ExecuteTemplateWithContext instead.
 func ExecuteTemplateWithVisited(templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, visited map[string]bool) ([]byte, error) {
 	pageID := unknownPageID
 	if identifier, exists := fm[identifierKey]; exists {
@@ -407,7 +401,7 @@ func ExecuteTemplateWithVisited(templateString string, fm wikipage.FrontMatter, 
 }
 
 // ExecuteTemplateWithContext executes a template string with the given frontmatter and site context,
-// using a shared visited map and execution context for enhanced debugging and error reporting.
+// using a shared visited map and execution context for error reporting.
 func ExecuteTemplateWithContext(templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, visited map[string]bool, execCtx ExecutionContext) ([]byte, error) {
 	// Set a reasonable timeout for template execution to prevent hangs
 	ctx, cancel := context.WithTimeout(context.Background(), templateExecutionTimeout)
@@ -437,7 +431,6 @@ func executeTemplateWorker(ctx context.Context, templateString string, fm wikipa
 		return nil, err
 	}
 
-	logDebugStart(execCtx, visited)
 
 	templateContext, err := ConstructTemplateContextFromFrontmatterWithVisited(fm, query, visited)
 	if err != nil {
@@ -457,14 +450,7 @@ func executeTemplateWorker(ctx context.Context, templateString string, fm wikipa
 		return nil, err
 	}
 
-	result, err := executeTemplateInternal(ctx, tmpl, templateContext, execCtx)
-	if err != nil {
-		logDebugError(execCtx, err)
-		return nil, err
-	}
-
-	logDebugComplete(execCtx)
-	return result, nil
+	return executeTemplateInternal(ctx, tmpl, templateContext, execCtx)
 }
 
 // checkExecutionDepth validates that execution depth hasn't exceeded the maximum.
@@ -498,7 +484,7 @@ func buildTemplateWithFunctions(ctx context.Context, templateString string, site
 }
 
 // executeTemplateInternal executes the template and returns the result.
-func executeTemplateInternal(ctx context.Context, tmpl *template.Template, templateContext TemplateContext, execCtx ExecutionContext) ([]byte, error) {
+func executeTemplateInternal(ctx context.Context, tmpl *template.Template, templateContext TemplateContext, _ ExecutionContext) ([]byte, error) {
 	// Check context cancellation before template execution
 	select {
 	case <-ctx.Done():
@@ -506,9 +492,6 @@ func executeTemplateInternal(ctx context.Context, tmpl *template.Template, templ
 	default:
 	}
 
-	if isDebugMode() {
-		_, _ = fmt.Printf("[TEMPLATE DEBUG] Template parsed successfully for page %s, starting execution\n", execCtx.PageIdentifier)
-	}
 
 	buf := &bytes.Buffer{}
 	err := tmpl.Execute(buf, templateContext)
@@ -519,28 +502,6 @@ func executeTemplateInternal(ctx context.Context, tmpl *template.Template, templ
 	return buf.Bytes(), nil
 }
 
-// logDebugStart logs the start of template execution if debug mode is enabled.
-func logDebugStart(execCtx ExecutionContext, visited map[string]bool) {
-	if isDebugMode() {
-		_, _ = fmt.Printf("[TEMPLATE DEBUG] Starting execution: page=%s, source=%s, depth=%d, visited=%v\n",
-			execCtx.PageIdentifier, execCtx.Source, execCtx.Depth, getVisitedList(visited))
-	}
-}
-
-// logDebugError logs template execution errors if debug mode is enabled.
-func logDebugError(execCtx ExecutionContext, err error) {
-	if isDebugMode() {
-		_, _ = fmt.Printf("[TEMPLATE DEBUG] Template execution failed for page %s: %v\n", execCtx.PageIdentifier, err)
-	}
-}
-
-// logDebugComplete logs successful completion of template execution if debug mode is enabled.
-func logDebugComplete(execCtx ExecutionContext) {
-	if isDebugMode() {
-		_, _ = fmt.Printf("[TEMPLATE DEBUG] Template execution completed for page %s (duration: %v)\n",
-			execCtx.PageIdentifier, time.Since(execCtx.StartTime))
-	}
-}
 
 // formatTimeoutError creates a detailed error message for template execution timeouts.
 func formatTimeoutError(execCtx ExecutionContext, visited map[string]bool, templateString string, timeout time.Duration) string {
