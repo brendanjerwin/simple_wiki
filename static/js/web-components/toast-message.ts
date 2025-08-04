@@ -1,5 +1,5 @@
 import { html, css, LitElement } from 'lit';
-import { sharedStyles, colorCSS, typographyCSS, themeCSS, foundationCSS, buttonCSS } from './shared-styles.js';
+import { colorCSS, typographyCSS, themeCSS, foundationCSS, buttonCSS } from './shared-styles.js';
 import { AugmentedError } from './augment-error-service.js';
 import './error-display.js';
 
