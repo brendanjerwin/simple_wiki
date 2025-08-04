@@ -108,7 +108,7 @@ inventory.container = "GarageInventory"
 					"Content should contain [inventory] section after migration")
 				
 				// The container value should still be there
-				Expect(openedContent).To(ContainSubstring(`container = "GarageInventory"`),
+				Expect(openedContent).To(ContainSubstring(`container = "garage_inventory"`),
 					"Content should still contain the container value")
 			})
 
@@ -167,7 +167,7 @@ identifier = "already_migrated_page"
 title = "Already Migrated Page"
 
 [inventory]
-container = "AlreadyMigrated"
+container = "already_migrated"
 +++
 # Already migrated content`
 

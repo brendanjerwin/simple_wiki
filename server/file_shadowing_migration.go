@@ -57,18 +57,51 @@ func (*FileShadowingMigrationScanJob) GetName() string {
 }
 
 // FindPascalCaseIdentifiers returns all PascalCase identifiers that need migration
-// by using Site.DirectoryList() to get Page.Identifier values and checking if they are PascalCase
+// by reading JSON files directly and checking their stored identifier field
 func (j *FileShadowingMigrationScanJob) FindPascalCaseIdentifiers() []string {
-	// Get all pages from the site - this returns Page.Identifier values (original identifiers)
-	entries := j.site.DirectoryList()
+	files, err := os.ReadDir(j.dataDir)
+	if err != nil {
+		return []string{}
+	}
 
 	var pascalIdentifiers []string
-	for _, entry := range entries {
-		identifier := entry.Name() // This is the original Page.Identifier
+	identifiersFound := make(map[string]bool)
+
+	for _, file := range files {
+		// Only look at JSON files (pages)
+		if !strings.HasSuffix(file.Name(), ".json") {
+			continue
+		}
+
+		// Read the JSON file to get the stored identifier
+		filePath := filepath.Join(j.dataDir, file.Name())
+		jsonData, err := os.ReadFile(filePath)
+		if err != nil {
+			continue
+		}
+
+		// Parse the JSON to extract the identifier field
+		var pageData struct {
+			Identifier string `json:"identifier"`
+		}
+		if err := json.Unmarshal(jsonData, &pageData); err != nil {
+			continue
+		}
+
+		identifier := pageData.Identifier
+		if identifier == "" {
+			continue
+		}
+
+		// Skip if we've already processed this identifier
+		if identifiersFound[identifier] {
+			continue
+		}
+		identifiersFound[identifier] = true
 
 		// Check if this identifier is PascalCase by comparing with its munged version
 		mungedVersion := wikiidentifiers.MungeIdentifier(identifier)
-		if strings.ToLower(identifier) != mungedVersion {
+		if identifier != mungedVersion {
 			// This is a PascalCase identifier that needs migration
 			pascalIdentifiers = append(pascalIdentifiers, identifier)
 		}

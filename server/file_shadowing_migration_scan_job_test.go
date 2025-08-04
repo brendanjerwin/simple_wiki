@@ -48,24 +48,13 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 	Describe("Execute", func() {
 		When("directory contains PascalCase identifiers", func() {
 			BeforeEach(func() {
-				// Create PascalCase pages using Site.Open() - they will be stored as base32-encoded files
-				// but the Page.Identifier will remain PascalCase
-				labPage, err := site.Open("LabInventory")
-				Expect(err).NotTo(HaveOccurred())
-				labPage.Text = versionedtext.NewVersionedText("# Lab Inventory")
-				labPage.Save()
+				// Create PascalCase pages directly on filesystem to simulate legacy state
+				// These would have been created before the munging system was implemented
+				createPascalCasePage(testDataDir, "LabInventory", "# Lab Inventory")
+				createPascalCasePage(testDataDir, "UserGuide", "# User Guide") 
+				createPascalCasePage(testDataDir, "DeviceManual", "# Device Manual")
 				
-				userPage, err := site.Open("UserGuide")
-				Expect(err).NotTo(HaveOccurred()) 
-				userPage.Text = versionedtext.NewVersionedText("# User Guide")
-				userPage.Save()
-				
-				devicePage, err := site.Open("DeviceManual")
-				Expect(err).NotTo(HaveOccurred())
-				devicePage.Text = versionedtext.NewVersionedText("# Device Manual")
-				devicePage.Save()
-				
-				// Create already-munged page (should be ignored by scan)
+				// Create already-munged page using Site.Open() (should be ignored by scan)
 				existingPage, err := site.Open("lab_inventory")
 				Expect(err).NotTo(HaveOccurred())
 				existingPage.Text = versionedtext.NewVersionedText("# Existing Lab")
@@ -132,21 +121,10 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 	Describe("FindPascalCaseIdentifiers", func() {
 		When("directory contains mixed page types", func() {
 			BeforeEach(func() {
-				// Create PascalCase pages using Site.Open() - stored as base32 but identifiers remain PascalCase
-				labPage, err := site.Open("LabInventory")
-				Expect(err).NotTo(HaveOccurred())
-				labPage.Text = versionedtext.NewVersionedText("# Lab Inventory")
-				labPage.Save()
-				
-				userPage, err := site.Open("UserGuide")
-				Expect(err).NotTo(HaveOccurred()) 
-				userPage.Text = versionedtext.NewVersionedText("# User Guide")
-				userPage.Save()
-				
-				devicePage, err := site.Open("DeviceList")
-				Expect(err).NotTo(HaveOccurred())
-				devicePage.Text = versionedtext.NewVersionedText("# Device List")
-				devicePage.Save()
+				// Create PascalCase pages directly on filesystem to simulate legacy state
+				createPascalCasePage(testDataDir, "LabInventory", "# Lab Inventory")
+				createPascalCasePage(testDataDir, "UserGuide", "# User Guide") 
+				createPascalCasePage(testDataDir, "DeviceList", "# Device List")
 				
 				// Create already-munged page using Site.Open (creates base32-encoded files)
 				existingPage, err := site.Open("existing_page")

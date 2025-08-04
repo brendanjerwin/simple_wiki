@@ -44,7 +44,7 @@ This is the content.`
 
 			It("should convert inventory.container to [inventory] section", func() {
 				Expect(migratedContent).To(ContainSubstring("[inventory]"))
-				Expect(migratedContent).To(ContainSubstring(`container = "GarageInventory"`))
+				Expect(migratedContent).To(ContainSubstring(`container = "garage_inventory"`))
 			})
 
 			It("should remove dotted notation", func() {

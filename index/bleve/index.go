@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-		"github.com/blevesearch/bleve"
+	"github.com/blevesearch/bleve"
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/templating"
 	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
@@ -57,32 +57,24 @@ var (
 
 // AddPageToIndex adds a page to the Bleve index.
 func (b *Index) AddPageToIndex(requestedIdentifier wikipage.PageIdentifier) error {
-	log.Printf("Bleve indexer: Starting AddPageToIndex for %s", requestedIdentifier)
-	
 	mungedIdentifier := wikiidentifiers.MungeIdentifier(requestedIdentifier)
-	log.Printf("Bleve indexer: Reading markdown for %s", requestedIdentifier)
 	identifier, markdown, err := b.pageReader.ReadMarkdown(requestedIdentifier)
 	if err != nil {
 		log.Printf("Bleve indexer: ReadMarkdown failed for %s: %v", requestedIdentifier, err)
 		return err
 	}
-	log.Printf("Bleve indexer: ReadMarkdown completed for %s", requestedIdentifier)
 
-	log.Printf("Bleve indexer: Reading frontmatter for %s", requestedIdentifier)
 	_, pageFrontmatter, err := b.pageReader.ReadFrontMatter(identifier)
 	if err != nil {
 		log.Printf("Bleve indexer: ReadFrontMatter failed for %s: %v", requestedIdentifier, err)
 		return err
 	}
-	log.Printf("Bleve indexer: ReadFrontMatter completed for %s", requestedIdentifier)
-	
-	log.Printf("Bleve indexer: Executing templates for %s", requestedIdentifier)
+
 	renderedBytes, err := templating.ExecuteTemplateForIndexing(markdown, pageFrontmatter, b.pageReader, b.frontmatterQueryer)
 	if err != nil {
 		log.Printf("Bleve indexer: ExecuteTemplate failed for %s: %v", requestedIdentifier, err)
 		return err
 	}
-	log.Printf("Bleve indexer: ExecuteTemplate completed for %s", requestedIdentifier)
 	markdownRenderer := goldmarkrenderer.GoldmarkRenderer{}
 	htmlBytes, err := markdownRenderer.Render(renderedBytes)
 	var content string
@@ -97,7 +89,6 @@ func (b *Index) AddPageToIndex(requestedIdentifier wikipage.PageIdentifier) erro
 
 	pageFrontmatter["content"] = content
 
-	log.Printf("Bleve indexer: Starting bleve indexing operations for %s", requestedIdentifier)
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -110,8 +101,7 @@ func (b *Index) AddPageToIndex(requestedIdentifier wikipage.PageIdentifier) erro
 		log.Printf("Bleve indexer: Index operation failed for %s: %v", requestedIdentifier, err)
 		return err
 	}
-	
-	log.Printf("Bleve indexer: Completed AddPageToIndex for %s", requestedIdentifier)
+
 	return nil
 }
 

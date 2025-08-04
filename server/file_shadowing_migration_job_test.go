@@ -2,8 +2,11 @@
 package server
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -42,12 +45,8 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 	Describe("Execute", func() {
 		When("PascalCase page exists with shadowing conflict", func() {
 			BeforeEach(func() {
-				// Create PascalCase page using Site.Open() - this will store as base32-encoded files
-				labPage, err := site.Open("LabInventory")
-				Expect(err).NotTo(HaveOccurred())
-				labPage.Text = versionedtext.NewVersionedText("# Rich Pascal Lab Inventory\n\nThis has detailed content with multiple sections.\n\n## Equipment\n- Microscope\n- Centrifuge")
-				err = labPage.Save()
-				Expect(err).NotTo(HaveOccurred())
+				// Create PascalCase page directly on filesystem to simulate legacy state
+				createPascalCasePage(testDataDir, "LabInventory", "# Rich Pascal Lab Inventory\n\nThis has detailed content with multiple sections.\n\n## Equipment\n- Microscope\n- Centrifuge")
 				
 				// Create existing munged page with poor content using Site.Open()
 				mungedPage, err := site.Open("lab_inventory")
@@ -83,12 +82,8 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 
 		When("PascalCase page exists without shadowing conflict", func() {
 			BeforeEach(func() {
-				// Create PascalCase page using Site.Open() - this will store as base32-encoded files
-				userPage, err := site.Open("UserGuide")
-				Expect(err).NotTo(HaveOccurred())
-				userPage.Text = versionedtext.NewVersionedText("# User Guide Content\n\nDetailed guide here.")
-				err = userPage.Save()
-				Expect(err).NotTo(HaveOccurred())
+				// Create PascalCase page directly on filesystem to simulate legacy state
+				createPascalCasePage(testDataDir, "UserGuide", "# User Guide Content\n\nDetailed guide here.")
 			})
 
 			It("should create munged page from PascalCase content", func() {
@@ -116,12 +111,8 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 
 		When("munged page has richer content than PascalCase page", func() {
 			BeforeEach(func() {
-				// Create PascalCase page with basic content using Site.Open()
-				labPage, err := site.Open("LabInventory")
-				Expect(err).NotTo(HaveOccurred())
-				labPage.Text = versionedtext.NewVersionedText("# Basic Lab")
-				err = labPage.Save()
-				Expect(err).NotTo(HaveOccurred())
+				// Create PascalCase page with basic content directly on filesystem
+				createPascalCasePage(testDataDir, "LabInventory", "# Basic Lab")
 				
 				// Create munged page with much richer content using Site.Open()
 				mungedPage, err := site.Open("lab_inventory")
@@ -158,12 +149,8 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 
 		When("PascalCase page exists without markdown file", func() {
 			BeforeEach(func() {
-				// Create PascalCase page using Site.Open() and save it
-				devicePage, err := site.Open("DeviceManual")
-				Expect(err).NotTo(HaveOccurred())
-				devicePage.Text = versionedtext.NewVersionedText("# Device Manual\n\nOperating instructions.")
-				err = devicePage.Save()
-				Expect(err).NotTo(HaveOccurred())
+				// Create PascalCase page directly on filesystem to simulate legacy state
+				createPascalCasePage(testDataDir, "DeviceManual", "# Device Manual\n\nOperating instructions.")
 			})
 
 			It("should create munged page from PascalCase content", func() {
@@ -235,3 +222,40 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 		})
 	})
 })
+
+const testFileTimestampMigration = 1609459200 // 2021-01-01 Unix timestamp
+
+// Helper function to create PascalCase pages directly on filesystem
+// This simulates the legacy state before munging was implemented
+func createPascalCasePage(dir, pascalIdentifier, content string) {
+	// Create the versioned text
+	vText := versionedtext.NewVersionedText(content)
+	
+	// Create a basic page structure with PascalCase identifier
+	pageData := map[string]interface{}{
+		"identifier": pascalIdentifier,
+		"text":       vText,
+	}
+	
+	// Encode the PascalCase identifier (lowercase) to base32 for filename
+	encodedFilename := base32tools.EncodeToBase32(strings.ToLower(pascalIdentifier))
+	jsonPath := filepath.Join(dir, encodedFilename+".json")
+	
+	// Marshal and write the JSON file
+	jsonData, err := json.Marshal(pageData)
+	if err != nil {
+		panic(err)
+	}
+	
+	err = os.WriteFile(jsonPath, jsonData, 0644)
+	if err != nil {
+		panic(err)
+	}
+	
+	// Set consistent timestamp
+	timestamp := time.Unix(testFileTimestampMigration, 0)
+	if err := os.Chtimes(jsonPath, timestamp, timestamp); err != nil {
+		panic(err)
+	}
+}
+

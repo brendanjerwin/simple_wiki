@@ -2,8 +2,11 @@
 package templating_test
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"strings"
+	"text/template"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -160,6 +163,410 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 
 		It("should contain max depth message", func() {
 			Expect(result).To(ContainSubstring("[Maximum depth reached]"))
+		})
+	})
+
+	Describe("when container has items from frontmatter index", func() {
+		var (
+			mockSite  *mockPageReader
+			mockIndex *mockFrontmatterIndex
+			result    string
+		)
+
+		BeforeEach(func() {
+			// Arrange - Container with no direct inventory.items but items in index pointing to it
+			mockSite = &mockPageReader{
+				pages: map[string]wikipage.FrontMatter{
+					"test_container": {
+						identifierKey: "test_container",
+						titleKey:      "Test Container",
+						// No inventory.items in direct frontmatter
+					},
+					"item_from_index": {
+						identifierKey: "item_from_index", 
+						titleKey:      "Item From Index",
+						inventoryKey: map[string]any{
+							"container": "test_container", // This item points to test_container
+						},
+					},
+				},
+			}
+
+			// Set up index to return item_from_index when querying for inventory.container = test_container
+			mockIndex = &mockFrontmatterIndex{
+				index: map[string]map[string][]string{
+					"inventory.container": {
+						"test_container": []string{"item_from_index"}, // This is the key integration
+					},
+				},
+				values: map[string]map[string]string{
+					"test_container": {
+						titleKey: "Test Container",
+					},
+					"item_from_index": {
+						titleKey: "Item From Index",
+					},
+				},
+			}
+
+			// Act
+			showInventoryFunc := templating.BuildShowInventoryContentsOf(mockSite, mockIndex, 0)
+			result = showInventoryFunc("test_container")
+		})
+
+		It("should include items from index in output", func() {
+			Expect(result).To(ContainSubstring("Item From Index"))
+		})
+
+		It("should generate proper markdown list format", func() {
+			Expect(result).To(ContainSubstring("- [Item From Index]"))
+		})
+
+		It("should use proper link format", func() {
+			Expect(result).To(ContainSubstring("](/item_from_index)"))
+		})
+
+		It("should not be empty", func() {
+			Expect(result).NotTo(BeEmpty())
+		})
+	})
+
+	Describe("when container has mixed inventory sources", func() {
+		It("should include both direct and index items", func() {
+			// Arrange - Container with BOTH direct items AND index items - completely isolated
+			isolatedMockSite := &mockPageReader{
+				pages: map[string]wikipage.FrontMatter{
+					"isolated_mixed_container": {
+						identifierKey: "isolated_mixed_container",
+						titleKey:      "Isolated Mixed Container",
+						inventoryKey: map[string]any{
+							itemsKey: []string{"isolated_direct_item"}, // Direct inventory item
+						},
+					},
+					"isolated_direct_item": {
+						identifierKey: "isolated_direct_item",
+						titleKey:      "Isolated Direct Item",
+					},
+					"isolated_index_item": {
+						identifierKey: "isolated_index_item",
+						titleKey:      "Isolated Index Item",
+						inventoryKey: map[string]any{
+							"container": "isolated_mixed_container", // This item points to mixed_container
+						},
+					},
+				},
+			}
+
+			// Set up index to return index_item for mixed_container
+			isolatedMockIndex := &mockFrontmatterIndex{
+				index: map[string]map[string][]string{
+					"inventory.container": {
+						"isolated_mixed_container": []string{"isolated_index_item"}, 
+					},
+				},
+				values: map[string]map[string]string{
+					"isolated_mixed_container": {
+						titleKey: "Isolated Mixed Container",
+					},
+					"isolated_direct_item": {
+						titleKey: "Isolated Direct Item",
+					},
+					"isolated_index_item": {
+						titleKey: "Isolated Index Item",
+					},
+				},
+			}
+
+			// Act
+			showInventoryFunc := templating.BuildShowInventoryContentsOf(isolatedMockSite, isolatedMockIndex, 0)
+			result := showInventoryFunc("isolated_mixed_container")
+			
+			
+			Expect(result).To(ContainSubstring("Isolated Direct Item"))
+			Expect(result).To(ContainSubstring("Isolated Index Item"))
+		})
+	})
+
+	Describe("when testing template execution directly", func() {
+		var (
+			mockSite  *mockPageReader
+			mockIndex *mockFrontmatterIndex
+			result    string
+		)
+
+		BeforeEach(func() {
+			// Arrange - Simplified setup to test template execution  
+			mockSite = &mockPageReader{
+				pages: map[string]wikipage.FrontMatter{
+					"test_container": {
+						identifierKey: "test_container",
+						titleKey:      "Test Container", 
+						inventoryKey: map[string]any{
+							itemsKey: []string{"simple_item"}, // Direct inventory item
+						},
+					},
+					"simple_item": { 
+						identifierKey: "simple_item",
+						titleKey:      "Simple Item",
+					},
+				},
+			}
+
+			mockIndex = &mockFrontmatterIndex{
+				index:  map[string]map[string][]string{},
+				values: map[string]map[string]string{
+					"simple_item": {
+						titleKey: "Simple Item",
+					},
+				},
+			}
+
+			// Act
+			showInventoryFunc := templating.BuildShowInventoryContentsOf(mockSite, mockIndex, 0)
+			result = showInventoryFunc("test_container")
+		})
+
+		It("should produce markdown output for direct inventory item", func() {
+			Expect(result).To(ContainSubstring("Simple Item"))
+		})
+
+		It("should test manual template execution", func() {
+			// Let's manually execute the same template that BuildShowInventoryContentsOf uses
+			_, containerFrontmatter, err := mockSite.ReadFrontMatter("test_container")
+			Expect(err).NotTo(HaveOccurred())
+			
+			templateContext, err := templating.ConstructTemplateContextFromFrontmatterWithVisited(
+				containerFrontmatter, mockIndex, make(map[string]bool))
+			Expect(err).NotTo(HaveOccurred())
+			
+			// Use a simplified template string (without ShowInventoryContentsOf for now)
+			tmplString := `
+{{ range .Inventory.Items }}
+{{ if IsContainer . }}
+ - **{{ LinkTo . }}**
+{{ else }}
+ - {{ LinkTo . }}
+{{ end }}
+{{ end }}
+`
+			
+			// Build the same functions
+			funcs := map[string]any{
+				"LinkTo":      templating.BuildLinkTo(mockSite, templateContext, mockIndex), 
+				"IsContainer": templating.BuildIsContainer(mockIndex),
+			}
+			
+			tmpl, err := template.New("test").Funcs(funcs).Parse(tmplString)
+			Expect(err).NotTo(HaveOccurred())
+			
+			buf := &bytes.Buffer{}
+			err = tmpl.Execute(buf, templateContext)
+			Expect(err).NotTo(HaveOccurred())
+			
+			result := buf.String()
+			Expect(result).To(ContainSubstring("Simple Item"))
+		})
+
+		It("should test manual template with mixed inventory", func() {
+			// Test the exact template execution with mixed inventory that's failing
+			mockSite := &mockPageReader{
+				pages: map[string]wikipage.FrontMatter{
+					"mixed_container": {
+						identifierKey: "mixed_container",
+						titleKey:      "Mixed Container",
+						inventoryKey: map[string]any{
+							itemsKey: []string{"direct_item"}, // Direct inventory item
+						},
+					},
+					"direct_item": {
+						identifierKey: "direct_item",
+						titleKey:      "Direct Item",
+					},
+					"index_item": {
+						identifierKey: "index_item",
+						titleKey:      "Index Item",
+					},
+				},
+			}
+
+			mockIndex := &mockFrontmatterIndex{
+				index: map[string]map[string][]string{
+					"inventory.container": {
+						"mixed_container": []string{"index_item"}, 
+					},
+				},
+				values: map[string]map[string]string{
+					"direct_item": {titleKey: "Direct Item"},
+					"index_item": {titleKey: "Index Item"},
+				},
+			}
+
+			_, containerFrontmatter, err := mockSite.ReadFrontMatter("mixed_container")
+			Expect(err).NotTo(HaveOccurred())
+			
+			templateContext, err := templating.ConstructTemplateContextFromFrontmatterWithVisited(
+				containerFrontmatter, mockIndex, make(map[string]bool))
+			Expect(err).NotTo(HaveOccurred())
+			
+
+			// Use the exact same template string from BuildShowInventoryContentsOfWithLimit
+			tmplString := `
+{{ range .Inventory.Items }}
+{{ if IsContainer . }}
+ - **{{ LinkTo . }}**
+{{ else }}
+ - {{ LinkTo . }}
+{{ end }}
+{{ end }}
+`
+			
+			// Build the same functions exactly as in BuildShowInventoryContentsOfWithLimit
+			funcs := map[string]any{
+				"LinkTo":      templating.BuildLinkTo(mockSite, templateContext, mockIndex), 
+				"IsContainer": templating.BuildIsContainer(mockIndex),
+			}
+			
+			tmpl, err := template.New("test").Funcs(funcs).Parse(tmplString)
+			Expect(err).NotTo(HaveOccurred())
+			
+			buf := &bytes.Buffer{}
+			err = tmpl.Execute(buf, templateContext)
+			Expect(err).NotTo(HaveOccurred())
+			
+			result := buf.String()
+			
+			// This should work if the template execution is correct
+			Expect(result).To(ContainSubstring("Direct Item"))
+			Expect(result).To(ContainSubstring("Index Item"))
+		})
+
+		It("should test exact BuildShowInventoryContentsOfWithLimit setup", func() {
+			// Use the EXACT same setup as BuildShowInventoryContentsOfWithLimit
+			mockSite := &mockPageReader{
+				pages: map[string]wikipage.FrontMatter{
+					"mixed_container": {
+						identifierKey: "mixed_container",
+						titleKey:      "Mixed Container",
+						inventoryKey: map[string]any{
+							itemsKey: []string{"direct_item"}, 
+						},
+					},
+					"direct_item": {
+						identifierKey: "direct_item",
+						titleKey:      "Direct Item",
+					},
+					"index_item": {
+						identifierKey: "index_item",
+						titleKey:      "Index Item",
+					},
+				},
+			}
+
+			mockIndex := &mockFrontmatterIndex{
+				index: map[string]map[string][]string{
+					"inventory.container": {
+						"mixed_container": []string{"index_item"}, 
+					},
+				},
+				values: map[string]map[string]string{
+					"direct_item": {titleKey: "Direct Item"},
+					"index_item": {titleKey: "Index Item"},
+				},
+			}
+
+			_, containerFrontmatter, err := mockSite.ReadFrontMatter("mixed_container")
+			Expect(err).NotTo(HaveOccurred())
+			
+			templateContext, err := templating.ConstructTemplateContextFromFrontmatterWithVisited(
+				containerFrontmatter, mockIndex, make(map[string]bool))
+			Expect(err).NotTo(HaveOccurred())
+			
+
+			// Use the EXACT template and functions from BuildShowInventoryContentsOfWithLimit
+			tmplString := `
+{{ range .Inventory.Items }}
+{{ if IsContainer . }}
+{{ __Indent }} - **{{ LinkTo . }}**
+{{ ShowInventoryContentsOf . }}
+{{ else }}
+{{ __Indent }} - {{ LinkTo . }}
+{{ end }}
+{{ end }}
+`
+			// EXACT same functions as BuildShowInventoryContentsOf 
+			isContainer := templating.BuildIsContainer(mockIndex)
+			
+			funcs := template.FuncMap{
+				"LinkTo":                  templating.BuildLinkTo(mockSite, templateContext, mockIndex),
+				"ShowInventoryContentsOf": templating.BuildShowInventoryContentsOf(mockSite, mockIndex, 1),
+				"IsContainer":             isContainer,
+				"FindBy":                  mockIndex.QueryExactMatch,
+				"FindByPrefix":            mockIndex.QueryPrefixMatch,
+				"FindByKeyExistence":      mockIndex.QueryKeyExistence,
+				"__Indent":                func() string { return strings.Repeat(" ", 0*2) },
+			}
+			
+			tmpl, err := template.New("test").Funcs(funcs).Parse(tmplString)
+			Expect(err).NotTo(HaveOccurred())
+			
+			buf := &bytes.Buffer{}
+			err = tmpl.Execute(buf, templateContext)
+			Expect(err).NotTo(HaveOccurred())
+			
+			result := buf.String()
+			
+			// This should work if the bug is not in the template setup
+			Expect(result).To(ContainSubstring("Direct Item"))
+			Expect(result).To(ContainSubstring("Index Item"))
+		})
+	})
+})
+
+var _ = Describe("ConstructTemplateContextFromFrontmatterWithVisited", func() {
+	Describe("when frontmatter index contains items for container", func() {
+		var (
+			templateContext templating.TemplateContext
+			err            error
+			mockIndex      *mockFrontmatterIndex
+			frontmatter    wikipage.FrontMatter
+		)
+
+		BeforeEach(func() {
+			// Arrange - Set up realistic frontmatter and index
+			frontmatter = wikipage.FrontMatter{
+				identifierKey: "test_container",
+				titleKey:      "Test Container",
+				// No direct inventory.items
+			}
+
+			mockIndex = &mockFrontmatterIndex{
+				index: map[string]map[string][]string{
+					"inventory.container": {
+						"test_container": []string{"item_from_index"},
+					},
+				},
+				values: map[string]map[string]string{
+					"item_from_index": {
+						titleKey: "Item From Index",
+					},
+				},
+			}
+
+			// Act
+			templateContext, err = templating.ConstructTemplateContextFromFrontmatterWithVisited(
+				frontmatter, mockIndex, make(map[string]bool))
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should include items from index in inventory", func() {
+			Expect(templateContext.Inventory.Items).To(ContainElement("item_from_index"))
+		})
+
+		It("should have non-empty inventory items", func() {
+			Expect(len(templateContext.Inventory.Items)).To(BeNumerically(">", 0))
 		})
 	})
 })

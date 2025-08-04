@@ -89,6 +89,8 @@ func ConstructTemplateContextFromFrontmatterWithVisited(fm wikipage.FrontMatter,
 
 	// Add new items to the map (protected from circular references)
 	itemsFromIndex := query.QueryExactMatch("inventory.container", templateContext.Identifier)
+	
+	
 	for _, item := range itemsFromIndex {
 		// If there was an item that existed as a title in the list of items, remove it.
 		// This is to support the workflow of items first being listed directly on the inventory container,
@@ -112,6 +114,7 @@ func ConstructTemplateContextFromFrontmatterWithVisited(fm wikipage.FrontMatter,
 
 const (
 	maxRecursionDepth        = 10
+	maxInventoryDepth        = 10               // Maximum depth for recursive inventory traversal  
 	maxExecutionDepth        = 50               // Maximum template execution depth before failing fast
 	templateExecutionTimeout = 30 * time.Second // Timeout for template execution
 	progressLogInterval      = 5 * time.Second  // Log progress every N seconds during long executions
@@ -128,43 +131,47 @@ func isDebugMode() bool {
 }
 
 func BuildShowInventoryContentsOf(site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, indent int) func(string) string {
-	return BuildShowInventoryContentsOfWithLimit(site, query, indent, maxRecursionDepth, make(map[string]bool))
-}
-
-func BuildShowInventoryContentsOfWithVisited(site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, indent int, visited map[string]bool) func(string) string {
-	return BuildShowInventoryContentsOfWithLimit(site, query, indent, maxRecursionDepth, visited)
-}
-
-func BuildShowInventoryContentsOfWithLimit(site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, indent int, maxDepth int, visited map[string]bool) func(string) string {
 	isContainer := BuildIsContainer(query)
 
 	return func(containerIdentifier string) string {
-		// Check for circular reference
-		if visited[containerIdentifier] {
-			return "  [Circular reference detected]"
-		}
-
-		// Check for maximum recursion depth
-		if indent > maxDepth {
+		// Simple depth protection - prevent infinite recursion in circular references
+		if indent > maxInventoryDepth {
 			return "  [Maximum depth reached]"
 		}
 
-		// Mark this container as visited
-		visited[containerIdentifier] = true
-		defer func() {
-			delete(visited, containerIdentifier)
+		// Simple timeout protection - if this takes more than 5 seconds, something is wrong
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		done := make(chan string, 1)
+		go func() {
+			result := buildShowInventoryContentsOfSync(site, query, containerIdentifier, indent, isContainer)
+			done <- result
 		}()
 
-		_, containerFrontmatter, err := site.ReadFrontMatter(containerIdentifier)
-		if err != nil {
-			return err.Error()
+		select {
+		case result := <-done:
+			return result
+		case <-ctx.Done():
+			return "  [Template execution timeout]"
 		}
-		containerTemplateContext, err := ConstructTemplateContextFromFrontmatterWithVisited(containerFrontmatter, query, visited)
-		if err != nil {
-			return err.Error()
-		}
+	}
+}
 
-		tmplString := `
+func buildShowInventoryContentsOfSync(site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, containerIdentifier string, indent int, isContainer func(string) bool) string {
+	_, containerFrontmatter, err := site.ReadFrontMatter(containerIdentifier)
+	if err != nil {
+		return err.Error()
+	}
+	
+	// Use the simple version without visited map complexity
+	containerTemplateContext, err := ConstructTemplateContextFromFrontmatter(containerFrontmatter, query)
+	if err != nil {
+		return err.Error()
+	}
+
+
+	tmplString := `
 {{ range .Inventory.Items }}
 {{ if IsContainer . }}
 {{ __Indent }} - **{{ LinkTo . }}**
@@ -174,30 +181,29 @@ func BuildShowInventoryContentsOfWithLimit(site wikipage.PageReader, query front
 {{ end }}
 {{ end }}
 `
-		// Pass the shared visited map to template functions to prevent circular references
-		funcs := template.FuncMap{
-			"LinkTo":                  BuildLinkToWithVisited(site, containerTemplateContext, query, visited),
-			"ShowInventoryContentsOf": BuildShowInventoryContentsOfWithLimit(site, query, indent+1, maxDepth, visited),
-			"IsContainer":             isContainer,
-			"FindBy":                  query.QueryExactMatch,
-			"FindByPrefix":            query.QueryPrefixMatch,
-			"FindByKeyExistence":      query.QueryKeyExistence,
-			"__Indent":                func() string { return strings.Repeat(" ", indent*2) },
-		}
-
-		tmpl, err := template.New("content").Funcs(funcs).Parse(tmplString)
-		if err != nil {
-			return err.Error()
-		}
-
-		buf := &bytes.Buffer{}
-		err = tmpl.Execute(buf, containerTemplateContext)
-		if err != nil {
-			return err.Error()
-		}
-
-		return buf.String()
+	// Functions with recursive ShowInventoryContentsOf for nested containers
+	funcs := template.FuncMap{
+		"LinkTo":                  BuildLinkTo(site, containerTemplateContext, query),
+		"ShowInventoryContentsOf": BuildShowInventoryContentsOf(site, query, indent+1),
+		"IsContainer":             isContainer,
+		"FindBy":                  query.QueryExactMatch,
+		"FindByPrefix":            query.QueryPrefixMatch,
+		"FindByKeyExistence":      query.QueryKeyExistence,
+		"__Indent":                func() string { return strings.Repeat(" ", indent*2) },
 	}
+
+	tmpl, err := template.New("content").Funcs(funcs).Parse(tmplString)
+	if err != nil {
+		return err.Error()
+	}
+
+	buf := &bytes.Buffer{}
+	err = tmpl.Execute(buf, containerTemplateContext)
+	if err != nil {
+		return err.Error()
+	}
+
+	return buf.String()
 }
 
 func BuildLinkTo(site wikipage.PageReader, currentPageTemplateContext TemplateContext, query frontmatter.IQueryFrontmatterIndex) func(string) string {
@@ -455,11 +461,10 @@ func checkExecutionDepth(execCtx ExecutionContext) error {
 }
 
 // buildTemplateWithFunctions creates a template with all necessary functions.
-func buildTemplateWithFunctions(templateString string, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, templateContext TemplateContext, visited map[string]bool) (*template.Template, error) {
-	// Pass the shared visited map to all template functions to prevent circular references
+func buildTemplateWithFunctions(templateString string, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, templateContext TemplateContext, _ map[string]bool) (*template.Template, error) {
 	funcs := template.FuncMap{
-		"ShowInventoryContentsOf": BuildShowInventoryContentsOfWithVisited(site, query, 0, visited),
-		"LinkTo":                  BuildLinkToWithVisited(site, templateContext, query, visited),
+		"ShowInventoryContentsOf": BuildShowInventoryContentsOf(site, query, 0),
+		"LinkTo":                  BuildLinkTo(site, templateContext, query),
 		"IsContainer":             BuildIsContainer(query),
 		"FindBy":                  query.QueryExactMatch,
 		"FindByPrefix":            query.QueryPrefixMatch,

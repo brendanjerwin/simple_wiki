@@ -21,7 +21,9 @@ func NewApplicator() *DefaultApplicator {
 	}
 	
 	// Register default migrations - order matters for execution
+	applicator.RegisterMigration(NewYAMLToTOMLMigration())       // Convert YAML to TOML first
 	applicator.RegisterMigration(NewTOMLDotNotationMigration())
+	applicator.RegisterMigration(NewInventoryContainerMungingMigration()) // Munge inventory.container values
 	applicator.RegisterMigration(NewTOMLTableSpacingMigration()) // Must be last for proper formatting
 	
 	return applicator
@@ -81,4 +83,3 @@ func detectFrontmatterType(content []byte) FrontmatterType {
 
 	return FrontmatterUnknown
 }
-
