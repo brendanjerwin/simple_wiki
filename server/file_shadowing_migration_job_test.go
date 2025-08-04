@@ -43,13 +43,15 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 		When("PascalCase page exists with shadowing conflict", func() {
 			BeforeEach(func() {
 				// Create PascalCase page using Site.Open() - this will store as base32-encoded files
-				labPage := site.Open("LabInventory")
+				labPage, err := site.Open("LabInventory")
+				Expect(err).NotTo(HaveOccurred())
 				labPage.Text = versionedtext.NewVersionedText("# Rich Pascal Lab Inventory\n\nThis has detailed content with multiple sections.\n\n## Equipment\n- Microscope\n- Centrifuge")
-				err := labPage.Save()
+				err = labPage.Save()
 				Expect(err).NotTo(HaveOccurred())
 				
 				// Create existing munged page with poor content using Site.Open()
-				mungedPage := site.Open("lab_inventory")
+				mungedPage, err := site.Open("lab_inventory")
+				Expect(err).NotTo(HaveOccurred())
 				mungedPage.Text = versionedtext.NewVersionedText("# Poor Munged Lab")
 				err = mungedPage.Save()
 				Expect(err).NotTo(HaveOccurred())
@@ -61,7 +63,8 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 				Expect(err).NotTo(HaveOccurred())
 				
 				// Verify munged page now has the richer content from PascalCase page
-				mungedPage := site.Open("lab_inventory")
+				mungedPage, err := site.Open("lab_inventory")
+				Expect(err).NotTo(HaveOccurred())
 				Expect(mungedPage.IsNew()).To(BeFalse())
 				content := mungedPage.Text.GetCurrent()
 				Expect(content).To(ContainSubstring("Rich Pascal Lab Inventory"))
@@ -81,9 +84,10 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 		When("PascalCase page exists without shadowing conflict", func() {
 			BeforeEach(func() {
 				// Create PascalCase page using Site.Open() - this will store as base32-encoded files
-				userPage := site.Open("UserGuide")
+				userPage, err := site.Open("UserGuide")
+				Expect(err).NotTo(HaveOccurred())
 				userPage.Text = versionedtext.NewVersionedText("# User Guide Content\n\nDetailed guide here.")
-				err := userPage.Save()
+				err = userPage.Save()
 				Expect(err).NotTo(HaveOccurred())
 			})
 
@@ -93,7 +97,8 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 				Expect(err).NotTo(HaveOccurred())
 				
 				// Verify munged page is created with PascalCase content
-				mungedPage := site.Open("user_guide")
+				mungedPage, err := site.Open("user_guide")
+				Expect(err).NotTo(HaveOccurred())
 				Expect(mungedPage.IsNew()).To(BeFalse())
 				content := mungedPage.Text.GetCurrent()
 				Expect(content).To(ContainSubstring("User Guide Content"))
@@ -112,13 +117,15 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 		When("munged page has richer content than PascalCase page", func() {
 			BeforeEach(func() {
 				// Create PascalCase page with basic content using Site.Open()
-				labPage := site.Open("LabInventory")
+				labPage, err := site.Open("LabInventory")
+				Expect(err).NotTo(HaveOccurred())
 				labPage.Text = versionedtext.NewVersionedText("# Basic Lab")
-				err := labPage.Save()
+				err = labPage.Save()
 				Expect(err).NotTo(HaveOccurred())
 				
 				// Create munged page with much richer content using Site.Open()
-				mungedPage := site.Open("lab_inventory")
+				mungedPage, err := site.Open("lab_inventory")
+				Expect(err).NotTo(HaveOccurred())
 				mungedPage.Text = versionedtext.NewVersionedText("# Rich Munged Lab Inventory\n\nThis munged version has extensive content:\n\n## Equipment List\n- Advanced Microscope\n- High-speed Centrifuge\n- Spectrophotometer\n\n## Procedures\nDetailed procedures here...")
 				err = mungedPage.Save()
 				Expect(err).NotTo(HaveOccurred())
@@ -130,7 +137,8 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 				Expect(err).NotTo(HaveOccurred())
 				
 				// Verify munged page retains its richer content
-				mungedPage := site.Open("lab_inventory")
+				mungedPage, err := site.Open("lab_inventory")
+				Expect(err).NotTo(HaveOccurred())
 				Expect(mungedPage.IsNew()).To(BeFalse())
 				content := mungedPage.Text.GetCurrent()
 				Expect(content).To(ContainSubstring("Rich Munged Lab Inventory"))
@@ -151,9 +159,10 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 		When("PascalCase page exists without markdown file", func() {
 			BeforeEach(func() {
 				// Create PascalCase page using Site.Open() and save it
-				devicePage := site.Open("DeviceManual")
+				devicePage, err := site.Open("DeviceManual")
+				Expect(err).NotTo(HaveOccurred())
 				devicePage.Text = versionedtext.NewVersionedText("# Device Manual\n\nOperating instructions.")
-				err := devicePage.Save()
+				err = devicePage.Save()
 				Expect(err).NotTo(HaveOccurred())
 			})
 
@@ -163,7 +172,8 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 				Expect(err).NotTo(HaveOccurred())
 				
 				// Verify munged page is created with PascalCase content
-				mungedPage := site.Open("device_manual")
+				mungedPage, err := site.Open("device_manual")
+				Expect(err).NotTo(HaveOccurred())
 				Expect(mungedPage.IsNew()).To(BeFalse())
 				content := mungedPage.Text.GetCurrent()
 				Expect(content).To(ContainSubstring("Device Manual"))
@@ -193,9 +203,10 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 		When("munged version exists", func() {
 			BeforeEach(func() {
 				// Create munged page using Site.Open() - this will store as base32-encoded files
-				mungedPage := site.Open("lab_inventory")
+				mungedPage, err := site.Open("lab_inventory")
+				Expect(err).NotTo(HaveOccurred())
 				mungedPage.Text = versionedtext.NewVersionedText("# Munged Version")
-				err := mungedPage.Save()
+				err = mungedPage.Save()
 				Expect(err).NotTo(HaveOccurred())
 			})
 

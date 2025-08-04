@@ -58,13 +58,14 @@ type Site struct {
 	FrontmatterIndexQueryer frontmatter.IQueryFrontmatterIndex
 	BleveIndexQueryer       bleve.IQueryBleveIndex
 	MigrationApplicator     rollingmigrations.FrontmatterMigrationApplicator
-	saveMut                 sync.Mutex
+	saveMut                 sync.RWMutex
 }
 
 const (
-	tomlDelimiter = "+++\n"
-	mdExtension   = "md"
-	newline       = "\n"
+	tomlDelimiter         = "+++\n"
+	mdExtension           = "md"
+	newline               = "\n"
+	failedToOpenPageErrFmt = "failed to open page %s: %w"
 )
 
 func (s *Site) defaultLock() string {
@@ -145,7 +146,7 @@ func (s *Site) InitializeIndexingAndWait(timeout time.Duration) error {
 	if err := s.InitializeIndexing(); err != nil {
 		return err
 	}
-	
+
 	// Wait for all initial indexing jobs to complete
 	ctx := context.Background()
 	completed, timedOut := s.IndexingService.WaitForCompletionWithTimeout(ctx, timeout)
@@ -155,7 +156,7 @@ func (s *Site) InitializeIndexingAndWait(timeout time.Duration) error {
 	if !completed {
 		return errors.New("initial indexing was cancelled or failed")
 	}
-	
+
 	return nil
 }
 
@@ -171,6 +172,9 @@ func (s *Site) getFilePathsForIdentifier(identifier, extension string) (mungedPa
 }
 
 func (s *Site) readFileByIdentifier(identifier, extension string) (string, []byte, error) {
+	s.saveMut.RLock()
+	defer s.saveMut.RUnlock()
+
 	mungedPath, originalPath, mungedIdentifier := s.getFilePathsForIdentifier(identifier, extension)
 
 	// First try with the munged identifier
@@ -189,9 +193,9 @@ func (s *Site) readFileByIdentifier(identifier, extension string) (string, []byt
 }
 
 // Open opens a page by its identifier.
-func (s *Site) Open(requestedIdentifier string) (p *Page) {
+func (s *Site) Open(requestedIdentifier string) (*Page, error) {
 	// Create a new page object to be returned if no file is found.
-	p = new(Page)
+	p := new(Page)
 	p.Identifier = requestedIdentifier
 	p.Site = s
 	p.Text = versionedtext.NewVersionedText("")
@@ -203,44 +207,91 @@ func (s *Site) Open(requestedIdentifier string) (p *Page) {
 		// The previous code `json.Unmarshal(bJSON, &p)` was incorrect. It replaces the pointer p,
 		// wiping out the p.Site assignment. The correct way is to unmarshal into the struct pointed to by p.
 		if errJSON := json.Unmarshal(bJSON, p); errJSON != nil {
-			s.Logger.Error("Failed to unmarshal page %s: %v", identifier, errJSON)
-		} else {
-			p.WasLoadedFromDisk = true
+			return nil, fmt.Errorf("failed to unmarshal page %s: %w", identifier, errJSON)
 		}
-		return p
+		p.WasLoadedFromDisk = true
+		
+		// IMPORTANT: Apply migrations to JSON-loaded content too!
+		// Get the current text content from the versioned text
+		currentContent := p.Text.GetCurrent()
+		if currentContent != "" {
+			migratedContent, migrationErr := s.applyMigrationsForPage(p, []byte(currentContent))
+			if migrationErr != nil {
+				return nil, fmt.Errorf("migration failed for page %s: %w", identifier, migrationErr)
+			}
+			
+			// Update the page's text if migration changed it
+			if string(migratedContent) != currentContent {
+				p.Text = versionedtext.NewVersionedText(string(migratedContent))
+			}
+		}
+		
+		return p, nil
 	}
 
 	if !os.IsNotExist(err) {
-		s.Logger.Error("Error reading page json for %s: %v", requestedIdentifier, err)
-		return p // Return empty page object
+		return nil, fmt.Errorf("error reading page json for %s: %w", requestedIdentifier, err)
 	}
-
 	// JSON file not found, try to load from .md file.
 	identifier, mdBytes, err := s.readFileByIdentifier(requestedIdentifier, mdExtension)
 	if err != nil {
-		return p // Return empty page object
+		// File not found - return empty page (this is normal for new pages)
+		return p, nil
 	}
 
 	p.Identifier = identifier
-	p.Text = versionedtext.NewVersionedText(string(mdBytes))
+
+	// Apply migrations to the loaded content
+	migratedContent, migrationErr := s.applyMigrationsForPage(p, mdBytes)
+	if migrationErr != nil {
+		return nil, fmt.Errorf("migration failed for page %s: %w", identifier, migrationErr)
+	}
+
+	p.Text = versionedtext.NewVersionedText(string(migratedContent))
 	p.WasLoadedFromDisk = true
-	return p
+	return p, nil
+}
+
+// applyMigrationsForPage applies migrations to page content during Open()
+func (s *Site) applyMigrationsForPage(page *Page, content []byte) ([]byte, error) {
+	if s.MigrationApplicator == nil {
+		return nil, errors.New("migration applicator not configured: this is an application setup mistake")
+	}
+
+	migratedContent, err := s.MigrationApplicator.ApplyMigrations(content)
+	if err != nil {
+		return content, err
+	}
+
+	// If migration was applied, save the migrated content
+	if !bytes.Equal(content, migratedContent) {
+		// Update the page's text with migrated content and save
+		page.Text = versionedtext.NewVersionedText(string(migratedContent))
+		if saveErr := page.saveWithoutIndexing(); saveErr != nil {
+			s.Logger.Warn("Failed to save migrated content for %s: %v", page.Identifier, saveErr)
+		}
+	}
+
+	return migratedContent, nil
 }
 
 // OpenOrInit opens a page or initializes a new one if it doesn't exist.
 // Returns an error if page initialization fails to save.
 func (s *Site) OpenOrInit(requestedIdentifier string, req *http.Request) (*Page, error) {
-	p := s.Open(requestedIdentifier)
+	p, err := s.Open(requestedIdentifier)
+	if err != nil {
+		return nil, fmt.Errorf(failedToOpenPageErrFmt, requestedIdentifier, err)
+	}
 	if p.IsNew() {
 		prams := req.URL.Query()
 		tmpl := prams.Get("tmpl")
-		
+
 		// Build frontmatter from URL parameters
 		fm, err := BuildFrontmatterFromURLParams(p.Identifier, prams)
 		if err != nil {
 			return nil, fmt.Errorf("failed to build frontmatter from URL params: %w", err)
 		}
-		
+
 		// Add inventory structure for inv_item template
 		if tmpl == "inv_item" {
 			// Ensure inventory exists and has items array
@@ -253,13 +304,13 @@ func (s *Site) OpenOrInit(requestedIdentifier string, req *http.Request) (*Page,
 				}
 			}
 		}
-		
+
 		// Convert frontmatter to TOML
 		fmBytes, err := toml.Marshal(fm)
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal frontmatter to TOML: %w", err)
 		}
-		
+
 		initialText := ""
 		if len(fmBytes) > 0 {
 			initialText = tomlDelimiter + string(fmBytes)
@@ -344,7 +395,12 @@ func (s *Site) DirectoryList() []os.FileInfo {
 	for _, f := range files {
 		if strings.HasSuffix(f.Name(), ".json") {
 			name := DecodeFileName(f.Name())
-			p := s.Open(name)
+			// Each Open() call will acquire its own read lock
+			p, err := s.Open(name)
+			if err != nil {
+				s.Logger.Warn("Failed to open page %s for directory listing: %v", name, err)
+				continue
+			}
 			entries[found] = DirectoryEntry{
 				Path:       p.Identifier, // Use the actual Page.Identifier, not the decoded filename
 				Length:     len(p.Text.GetCurrent()),
@@ -425,7 +481,10 @@ func combineFrontmatterAndMarkdown(fm wikipage.FrontMatter, md wikipage.Markdown
 
 // WriteFrontMatter writes the frontmatter for a page.
 func (s *Site) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
-	p := s.Open(string(identifier))
+	p, err := s.Open(string(identifier))
+	if err != nil {
+		return fmt.Errorf(failedToOpenPageErrFmt, identifier, err)
+	}
 
 	// Use the PageReaderMutator interface to get the current markdown content.
 	_, md, err := s.ReadMarkdown(identifier)
@@ -442,10 +501,12 @@ func (s *Site) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.
 	return p.Update(newText)
 }
 
-
 // WriteMarkdown writes the markdown content for a page.
 func (s *Site) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Markdown) error {
-	p := s.Open(string(identifier))
+	p, err := s.Open(string(identifier))
+	if err != nil {
+		return fmt.Errorf(failedToOpenPageErrFmt, identifier, err)
+	}
 
 	// Use the PageReaderMutator interface to get the current frontmatter.
 	_, fm, err := s.ReadFrontMatter(identifier)
@@ -464,8 +525,14 @@ func (s *Site) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Mar
 
 // ReadFrontMatter reads the frontmatter for a page.
 func (s *Site) ReadFrontMatter(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
-	page := s.Open(string(identifier))
-	matter, err := page.ReadFrontMatter()
+	page, err := s.Open(string(identifier))
+	if err != nil {
+		return identifier, nil, fmt.Errorf(failedToOpenPageErrFmt, identifier, err)
+	}
+	if page.IsNew() {
+		return identifier, nil, os.ErrNotExist
+	}
+	matter, err := page.GetFrontMatter()
 	if err != nil {
 		return identifier, nil, err
 	}
@@ -474,8 +541,14 @@ func (s *Site) ReadFrontMatter(identifier wikipage.PageIdentifier) (wikipage.Pag
 
 // ReadMarkdown reads the markdown content for a page.
 func (s *Site) ReadMarkdown(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
-	page := s.Open(string(identifier))
-	markdown, err := page.ReadMarkdown()
+	page, err := s.Open(string(identifier))
+	if err != nil {
+		return identifier, "", fmt.Errorf(failedToOpenPageErrFmt, identifier, err)
+	}
+	if page.IsNew() {
+		return identifier, "", os.ErrNotExist
+	}
+	markdown, err := page.GetMarkdown()
 	if err != nil {
 		return identifier, "", err
 	}
@@ -484,7 +557,10 @@ func (s *Site) ReadMarkdown(identifier wikipage.PageIdentifier) (wikipage.PageId
 
 // DeletePage deletes a page from disk.
 func (s *Site) DeletePage(identifier wikipage.PageIdentifier) error {
-	p := s.Open(string(identifier))
+	p, err := s.Open(string(identifier))
+	if err != nil {
+		return fmt.Errorf("failed to open page %s for deletion: %w", identifier, err)
+	}
 	return p.Erase()
 }
 

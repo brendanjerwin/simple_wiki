@@ -79,12 +79,22 @@ func splitTOMLContent(content []byte) []string {
 	// Find the closing +++
 	rest := str[tomlDelimiterLength:]
 	closingIndex := strings.Index(rest, "\n+++\n")
+	var frontmatter, bodyContent string
+	
 	if closingIndex == -1 {
-		return nil
+		// Check if it ends with \n+++ (no content after frontmatter)
+		closingIndex = strings.Index(rest, "\n+++")
+		if closingIndex == -1 {
+			return nil
+		}
+		// Handle case where frontmatter ends without trailing content
+		frontmatter = rest[:closingIndex+1] // Include the newline before +++
+		bodyContent = "" // No body content
+	} else {
+		// Normal case with content after frontmatter
+		frontmatter = rest[:closingIndex+1] // Include the newline before +++
+		bodyContent = rest[closingIndex+tomlStartOffset:] // Skip "\n+++\n"
 	}
-
-	frontmatter := rest[:closingIndex+1] // Include the newline before +++
-	bodyContent := rest[closingIndex+tomlStartOffset:] // Skip "\n+++\n"
 
 	return []string{tomlDelimiter, frontmatter, bodyContent}
 }

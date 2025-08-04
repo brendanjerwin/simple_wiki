@@ -944,7 +944,7 @@ title = "Test Page"
 			var (
 				pageIdentifier wikipage.PageIdentifier
 				pagePath       string
-				err            error
+				openErr        error
 			)
 
 			BeforeEach(func() {
@@ -962,13 +962,14 @@ title = "Test Page"
 				fileErr := os.WriteFile(pagePath, []byte(originalContent), 0644)
 				Expect(fileErr).NotTo(HaveOccurred())
 
-				_, _, err = s.ReadFrontMatter(pageIdentifier)
+				// With no migration applicator, Open() should return an error
+				_, openErr = s.Open(string(pageIdentifier))
 			})
 
 			It("should return an error", func() {
-				// No migration applicator configured is an application setup mistake
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("migration applicator not configured"))
+				// Open should fail when migration applicator is not configured
+				Expect(openErr).To(HaveOccurred())
+				Expect(openErr.Error()).To(ContainSubstring("migration applicator not configured"))
 			})
 		})
 
@@ -1001,7 +1002,8 @@ title = "Fixed Title"
 title = "Bad Title"
 +++
 # Content`
-				page = s.Open(pageIdentifier)
+				page, err = s.Open(pageIdentifier)
+				Expect(err).NotTo(HaveOccurred())
 				err = page.Update(originalContent)
 			})
 
@@ -1026,7 +1028,8 @@ title = "Bad Title"
 					// Set mock to not apply
 					mockMig.AppliesToResult = false
 					
-					page = s.Open(pageIdentifier + "-no-migration")
+					page, err = s.Open(pageIdentifier + "-no-migration")
+					Expect(err).NotTo(HaveOccurred())
 					err = page.Update(originalContent)
 				})
 
@@ -1047,7 +1050,8 @@ title = "Migrated"
 +++
 # Content`)
 					
-					page = s.Open(pageIdentifier + "-recursive")
+					page, err = s.Open(pageIdentifier + "-recursive")
+					Expect(err).NotTo(HaveOccurred())
 					err = page.Update(originalContent)
 				})
 

@@ -5,9 +5,12 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/rollingmigrations"
+	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 
@@ -133,10 +136,14 @@ var _ = Describe("Page Functions", func() {
 				})
 
 				When("the page is retrieved from disk", func() {
-					var p2 *Page
+					var (
+						p2  *Page
+						err error
+					)
 
 					BeforeEach(func() {
-						p2 = s.Open("testpage")
+						p2, err = s.Open("testpage")
+						Expect(err).NotTo(HaveOccurred())
 					})
 
 					It("should have its content preserved", func() {
@@ -296,44 +303,44 @@ And some more text. But this is not frontmatter.`
 		})
 	})
 
-	Describe("Page.ReadFrontMatter circular reference prevention", func() {
+	Describe("Site.Open migration integration", func() {
 		var (
-			p *Page
+			pageIdentifier string
+			pagePath       string
 		)
 
 		BeforeEach(func() {
-			// Create a page to test with
-			p = &Page{
-				Site:       s,
-				Identifier: "test_circular_page",
-				Text:       versionedtext.NewVersionedText("+++\nidentifier = \"test_circular_page\"\n+++\n# Test Page"),
-			}
+			pageIdentifier = "test_migration_page"
+			pagePath = filepath.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(pageIdentifier))+".md")
 			
-			// Save the page to disk so ReadFrontMatter can find it
-			saveErr := p.Save()
-			Expect(saveErr).NotTo(HaveOccurred())
+			// Create initial page content on disk
+			initialContent := "+++\nidentifier = \"test_migration_page\"\n+++\n# Test Page"
+			writeErr := os.WriteFile(pagePath, []byte(initialContent), 0644)
+			Expect(writeErr).NotTo(HaveOccurred())
 		})
 
-		When("ReadFrontMatter is called with migrations that modify content", func() {
+		When("Open is called with migrations that modify content", func() {
 			var (
-				frontmatter  wikipage.FrontMatter
-				err          error
-				originalContent string
-				finalContent string
+				p              *Page
+				err            error
+				originalDiskContent string
+				finalContent   string
 			)
 
 			BeforeEach(func() {
-				// Record original content
-				originalContent = p.Text.GetCurrent()
+				// Record original disk content
+				diskBytes, _ := os.ReadFile(pagePath)
+				originalDiskContent = string(diskBytes)
 				
-				// Set up a mock migration that modifies content, which would trigger save
+				// Set up a mock migration that modifies content
 				mockApplicator := &mockMigrationApplicatorForCircularTest{
 					shouldModifyContent: true,
 				}
 				s.MigrationApplicator = mockApplicator
 				
-				// This call should complete without hanging (proving no infinite recursion)
-				frontmatter, err = p.ReadFrontMatter()
+				// This call should complete without hanging and apply migrations
+				p, err = s.Open(pageIdentifier)
+				Expect(err).NotTo(HaveOccurred())
 				
 				// Wait for any background indexing operations triggered by the save
 				if s.IndexingService != nil {
@@ -341,24 +348,24 @@ And some more text. But this is not frontmatter.`
 					Expect(completed).To(BeTrue())
 				}
 				
-				// Check final content after the read operation
+				// Check final content after open
 				finalContent = p.Text.GetCurrent()
 			})
 
 			It("should complete without hanging", func() {
 				// If we get here, the operation completed successfully without infinite recursion
-				Expect(err).NotTo(HaveOccurred())
+				Expect(p).NotTo(BeNil())
+				Expect(p.WasLoadedFromDisk).To(BeTrue())
 			})
 
-			It("should return frontmatter successfully", func() {
-				Expect(frontmatter).NotTo(BeNil())
-				Expect(frontmatter).To(HaveKey("identifier"))
+			It("should load page successfully", func() {
+				Expect(p.Identifier).To(Equal(pageIdentifier))
 			})
 
 			It("should persist migrated content", func() {
-				// The migration should have been applied and saved
+				// The migration should have been applied and saved during Open()
 				Expect(finalContent).To(ContainSubstring("# Migration applied"))
-				Expect(finalContent).NotTo(Equal(originalContent))
+				Expect(finalContent).NotTo(Equal(originalDiskContent))
 			})
 		})
 	})

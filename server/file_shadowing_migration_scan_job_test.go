@@ -50,20 +50,24 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 			BeforeEach(func() {
 				// Create PascalCase pages using Site.Open() - they will be stored as base32-encoded files
 				// but the Page.Identifier will remain PascalCase
-				labPage := site.Open("LabInventory")
+				labPage, err := site.Open("LabInventory")
+				Expect(err).NotTo(HaveOccurred())
 				labPage.Text = versionedtext.NewVersionedText("# Lab Inventory")
 				labPage.Save()
 				
-				userPage := site.Open("UserGuide") 
+				userPage, err := site.Open("UserGuide")
+				Expect(err).NotTo(HaveOccurred()) 
 				userPage.Text = versionedtext.NewVersionedText("# User Guide")
 				userPage.Save()
 				
-				devicePage := site.Open("DeviceManual")
+				devicePage, err := site.Open("DeviceManual")
+				Expect(err).NotTo(HaveOccurred())
 				devicePage.Text = versionedtext.NewVersionedText("# Device Manual")
 				devicePage.Save()
 				
 				// Create already-munged page (should be ignored by scan)
-				existingPage := site.Open("lab_inventory")
+				existingPage, err := site.Open("lab_inventory")
+				Expect(err).NotTo(HaveOccurred())
 				existingPage.Text = versionedtext.NewVersionedText("# Existing Lab")
 				existingPage.Save()
 				
@@ -87,11 +91,13 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 		When("directory has no PascalCase identifiers", func() {
 			BeforeEach(func() {
 				// Only munged identifiers using Site.Open (creates base32-encoded files)
-				labPage := site.Open("lab_inventory")
+				labPage, err := site.Open("lab_inventory")
+				Expect(err).NotTo(HaveOccurred())
 				labPage.Text = versionedtext.NewVersionedText("# Lab Inventory")
 				labPage.Save()
 				
-				userPage := site.Open("user_guide")
+				userPage, err := site.Open("user_guide")
+				Expect(err).NotTo(HaveOccurred())
 				userPage.Text = versionedtext.NewVersionedText("# User Guide")  
 				userPage.Save()
 				
@@ -127,20 +133,24 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 		When("directory contains mixed page types", func() {
 			BeforeEach(func() {
 				// Create PascalCase pages using Site.Open() - stored as base32 but identifiers remain PascalCase
-				labPage := site.Open("LabInventory")
+				labPage, err := site.Open("LabInventory")
+				Expect(err).NotTo(HaveOccurred())
 				labPage.Text = versionedtext.NewVersionedText("# Lab Inventory")
 				labPage.Save()
 				
-				userPage := site.Open("UserGuide") 
+				userPage, err := site.Open("UserGuide")
+				Expect(err).NotTo(HaveOccurred()) 
 				userPage.Text = versionedtext.NewVersionedText("# User Guide")
 				userPage.Save()
 				
-				devicePage := site.Open("DeviceList")
+				devicePage, err := site.Open("DeviceList")
+				Expect(err).NotTo(HaveOccurred())
 				devicePage.Text = versionedtext.NewVersionedText("# Device List")
 				devicePage.Save()
 				
 				// Create already-munged page using Site.Open (creates base32-encoded files)
-				existingPage := site.Open("existing_page")
+				existingPage, err := site.Open("existing_page")
+				Expect(err).NotTo(HaveOccurred())
 				existingPage.Text = versionedtext.NewVersionedText("# Existing Page")
 				existingPage.Save()
 				

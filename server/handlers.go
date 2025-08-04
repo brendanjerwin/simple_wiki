@@ -214,7 +214,12 @@ func (s *Site) handlePageRelinquish(c *gin.Context) {
 		return
 	}
 	message := "Relinquished"
-	p := s.Open(json.Page)
+	p, err := s.Open(json.Page)
+	if err != nil {
+		s.Logger.Error("Failed to open page %s for relinquish: %v", json.Page, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to open page"})
+		return
+	}
 	name := p.Meta
 	if name == "" {
 		name = json.Page
@@ -480,7 +485,12 @@ func (s *Site) handlePageExists(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Wrong JSON", "exists": false})
 		return
 	}
-	p := s.Open(json.Page)
+	p, err := s.Open(json.Page)
+	if err != nil {
+		s.Logger.Error("Failed to open page %s for exists check: %v", json.Page, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to open page", "exists": false})
+		return
+	}
 	if len(p.Text.GetCurrent()) > 0 {
 		c.JSON(http.StatusOK, gin.H{"success": true, "message": json.Page + " found", "exists": true})
 	} else {
@@ -511,7 +521,12 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 		return
 	}
 	s.Logger.Trace("Update: %v", json)
-	p := s.Open(json.Page)
+	p, err := s.Open(json.Page)
+	if err != nil {
+		s.Logger.Error("Failed to open page %s for update: %v", json.Page, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to open page"})
+		return
+	}
 	var (
 		message       string
 		sinceLastEdit = time.Since(p.LastEditTime())
@@ -552,7 +567,12 @@ func (s *Site) handleLock(c *gin.Context) {
 		c.String(http.StatusBadRequest, "Problem binding keys")
 		return
 	}
-	p := s.Open(json.Page)
+	p, err := s.Open(json.Page)
+	if err != nil {
+		s.Logger.Error("Failed to open page %s for lock: %v", json.Page, err)
+		c.String(http.StatusInternalServerError, "Failed to open page")
+		return
+	}
 	if s.defaultLock() != "" && p.IsNew() {
 		p.IsLocked = true
 		p.PassphraseToUnlock = s.defaultLock()

@@ -17,7 +17,6 @@ import (
 	"github.com/brendanjerwin/simple_wiki/templating"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
-	"github.com/pelletier/go-toml/v2"
 	"github.com/schollz/versionedtext"
 )
 
@@ -182,86 +181,24 @@ func (p *Page) applyMigrations(content []byte) ([]byte, error) {
 	return migratedContent, nil
 }
 
-// ReadFrontMatter reads the frontmatter for this page, applying migrations as needed.
-func (p *Page) ReadFrontMatter() (wikipage.FrontMatter, error) {
-	if p == nil || p.Site == nil {
-		return nil, errors.New("page or site is nil")
+// GetFrontMatter returns the frontmatter for this page from already-loaded content.
+func (p *Page) GetFrontMatter() (wikipage.FrontMatter, error) {
+	if p == nil {
+		return nil, errors.New("page is nil")
 	}
 
-	_, content, err := p.Site.readFileByIdentifier(wikipage.PageIdentifier(p.Identifier), mdExtension)
-	if err != nil {
-		return nil, err
-	}
-
-	// Apply migrations to the content
-	migratedContent, err := p.applyMigrations(content)
-	if err != nil {
-		return nil, err
-	}
-
-	var matter wikipage.FrontMatter
-	_, err = p.lenientParse(migratedContent, &matter)
-	if err != nil {
-		if strings.Contains(err.Error(), "format not found") {
-			return make(wikipage.FrontMatter), nil
-		}
-		return nil, err
-	}
-
-	if matter == nil {
-		return make(wikipage.FrontMatter), nil
-	}
-
-	return matter, nil
+	fm, _, err := p.parse()
+	return fm, err
 }
 
-// ReadMarkdown reads the markdown content for this page, applying migrations as needed.
-func (p *Page) ReadMarkdown() (wikipage.Markdown, error) {
-	if p == nil || p.Site == nil {
-		return "", errors.New("page or site is nil")
+// GetMarkdown returns the markdown content for this page from already-loaded content.
+func (p *Page) GetMarkdown() (wikipage.Markdown, error) {
+	if p == nil {
+		return "", errors.New("page is nil")
 	}
 
-	_, content, err := p.Site.readFileByIdentifier(wikipage.PageIdentifier(p.Identifier), mdExtension)
-	if err != nil {
-		return "", err
-	}
-
-	// Apply migrations to the content
-	migratedContent, err := p.applyMigrations(content)
-	if err != nil {
-		return "", err
-	}
-
-	var dummy any
-	body, err := p.lenientParse(migratedContent, &dummy)
-	if err != nil {
-		if strings.Contains(err.Error(), "format not found") {
-			// No frontmatter found, the entire content is markdown.
-			return wikipage.Markdown(body), nil
-		}
-		return "", err // A real parsing error.
-	}
-
-	return wikipage.Markdown(body), nil
-}
-
-// lenientParse attempts to parse frontmatter with fallback for TOML/YAML conflicts
-func (*Page) lenientParse(content []byte, matter any) (body []byte, err error) {
-	body, err = adrgfrontmatter.Parse(bytes.NewReader(content), matter)
-	if err != nil {
-		var tomlErr *toml.DecodeError
-		// If it's a TOML parsing error and it has TOML delimiters, try to parse as YAML.
-		// `adrg/frontmatter` does not export its YAML/TOML parsing errors, so we have
-		// to rely on `go-toml`'s error type or string matching for the error.
-		if (errors.As(err, &tomlErr) || strings.Contains(err.Error(), "bare keys cannot contain")) &&
-			bytes.HasPrefix(content, []byte("+++")) {
-			// Replace TOML delimiters with YAML and try again
-			newContent := bytes.Replace(content, []byte("+++"), []byte("---"), 2)
-			body, err = adrgfrontmatter.Parse(bytes.NewReader(newContent), matter)
-		}
-	}
-
-	return body, err
+	_, md, err := p.parse()
+	return md, err
 }
 
 func markdownToHTMLAndJSONFrontmatter(s string, site wikipage.PageReader, renderer IRenderMarkdownToHTML, query indexfrontmatter.IQueryFrontmatterIndex) (html []byte, matter []byte, err error) {
@@ -364,6 +301,9 @@ func (p *Page) IsNew() bool {
 
 // Erase deletes the page from disk.
 func (p *Page) Erase() error {
+	p.Site.saveMut.Lock()
+	defer p.Site.saveMut.Unlock()
+	
 	p.Site.Logger.Trace("Erasing %s", p.Identifier)
 	// Enqueue removal jobs for both frontmatter and bleve indexes
 	if p.Site.IndexingService != nil {

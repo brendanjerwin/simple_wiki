@@ -184,18 +184,21 @@ var _ = Describe("FileShadowingService", func() {
 			service.InitializeQueues()
 			
 			// Create PascalCase pages that should be found by scan
-			labPage := site.Open("LabInventory")
+			labPage, err := site.Open("LabInventory")
+			Expect(err).NotTo(HaveOccurred())
 			labPage.Text = versionedtext.NewVersionedText("# Lab Inventory")
-			err := labPage.Save()
+			err = labPage.Save()
 			Expect(err).NotTo(HaveOccurred())
 			
-			userPage := site.Open("UserGuide")
+			userPage, err := site.Open("UserGuide")
+			Expect(err).NotTo(HaveOccurred())
 			userPage.Text = versionedtext.NewVersionedText("# User Guide")
 			err = userPage.Save()
 			Expect(err).NotTo(HaveOccurred())
 			
 			// Also create a munged page that already exists to verify no migration
-			existingPage := site.Open("existing_page")
+			existingPage, err := site.Open("existing_page")
+			Expect(err).NotTo(HaveOccurred())
 			existingPage.Text = versionedtext.NewVersionedText("# Already Munged")
 			err = existingPage.Save()
 			Expect(err).NotTo(HaveOccurred())
