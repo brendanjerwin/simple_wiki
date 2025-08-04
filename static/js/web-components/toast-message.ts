@@ -277,7 +277,6 @@ export class ToastMessage extends LitElement {
 
   override render() {
     return html`
-      ${sharedStyles}
       <div class="container container-ambient toast ${this.type} gap-sm" @click="${this._handleToastClick}">
         <button 
           class="close-button text-muted" 
