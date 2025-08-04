@@ -99,7 +99,6 @@ inventory.container = "GarageInventory"
 			})
 
 			It("should have applied the inventory.container migration", func() {
-
 				// The content should no longer have dotted notation
 				Expect(openedContent).NotTo(ContainSubstring("inventory.container"), 
 					"Content should not contain dotted notation after migration")
@@ -124,7 +123,6 @@ inventory.container = "GarageInventory"
 				})
 
 				It("should have updated the file on disk", func() {
-					
 					// The file on disk should also be migrated
 					Expect(diskContent).NotTo(ContainSubstring("inventory.container"),
 						"File on disk should not contain dotted notation after migration")

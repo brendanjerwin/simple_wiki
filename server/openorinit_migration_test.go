@@ -124,7 +124,6 @@ inventory.container = "GarageInventory"
 				})
 
 				It("should have updated the file on disk", func() {
-					
 					// The file on disk should also be migrated
 					Expect(diskContent).NotTo(ContainSubstring("inventory.container"),
 						"File on disk should not contain dotted notation after migration")
