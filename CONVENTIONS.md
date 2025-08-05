@@ -732,6 +732,38 @@ beforeEach(async () => {
 
 ## Fixing Problems
 
+### Go Error Handling Patterns
+
+Follow these modern, correct patterns for consistent error handling:
+
+**1. In Functions (Service/Repo): The Error Wrapping Pattern**
+
+Action: WRAP & RETURN. Add context. Never log.
+
+```go
+return fmt.Errorf("context: %w", err)
+```
+
+**2. At Boundary (main, HTTP Handlers): The Boundary Handling Pattern**
+
+Action: CHECK, ACT, & LOG ONCE.
+
+How to Check:
+- **Sentinel Error Pattern**: Check for a known error value.
+  ```go
+  if errors.Is(err, ErrNotFound) { /* Act */ }
+  ```
+- **Custom Error Type Pattern**: Check for and extract a specific error type.
+  ```go
+  if errors.As(err, &myErr) { /* Act on myErr data */ }
+  ```
+
+How to Log:
+- Log the full error chain once at the end.
+- `log.Printf("error: %v", err)` (Use %v for the full chain)
+
+### General Error Guidelines
+
 - Do not obfuscate errors. When a function returns an error, inspect it to return an appropriate error to the caller. Do not wrap it in a generic error that hides the original cause or assumes a specific failure mode that may not be true. For example, if a read operation fails, don't automatically assume the file was "not found" if the underlying error could be something else, like a permissions issue.
 
   **Bad:**
