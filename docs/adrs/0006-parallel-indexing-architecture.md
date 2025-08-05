@@ -57,54 +57,57 @@ We will implement **Parallel Background Indexing** that extends the existing arc
 
 ### Architecture Design
 
-#### Background Indexing Coordinator
+#### Generic Job Queue Architecture
 
 ```go
-type BackgroundIndexingCoordinator struct {
-    multiMaintainer  *index.MultiMaintainer  // Existing coordinator unchanged
-    workerPool       *IndexingWorkerPool     // New parallel processing
-    progressTracker  *ProgressTracker        // New progress monitoring
-    logger           lumber.Logger
+type IndexingService struct {
+    coordinator      *jobs.JobQueueCoordinator
+    frontmatterIndex index.IndexOperator
+    bleveIndex       index.IndexOperator
+}
+
+type JobQueueCoordinator struct {
+    queues map[string]*artifex.Dispatcher  // Per-index job queues
+    stats  map[string]*QueueStats         // Queue status tracking
+    mu     sync.RWMutex
 }
 ```
 
-The coordinator wraps the existing `MultiMaintainer` and implements the same `IMaintainIndex` interface for backward compatibility.
+The architecture uses a **generic job queue system** that coordinates multiple independent job queues, one per index type. This provides better separation of concerns and reusability across different background processing needs.
 
-#### Per-Index Worker Pool Implementation
+#### Per-Index Job Queue Implementation
 
-**IMPLEMENTATION NOTE**: The final architecture uses **separate worker pools per index type** rather than a single shared pool. This critical enhancement addresses throughput isolation between fast indexes (frontmatter) and slow indexes (AI embeddings).
+**IMPLEMENTATION**: The final architecture uses **separate job queues per index type** with a generic coordinator pattern. This provides excellent throughput isolation and extensibility:
 
-- **Per-Index Queues**: Each index type gets its own worker pool and queue
-- **Configurable Workers Per Index**: Independent worker counts per index type (e.g., frontmatter: 4 workers, embeddings: 1 worker)
-- **Throughput Isolation**: Fast indexes are never blocked by slow ones
-- **Error Isolation**: Individual page failures don't stop other processing
-- **Graceful Shutdown**: All worker pools can be stopped cleanly during application shutdown
+- **Per-Index Queues**: Each index type gets its own dedicated job queue using Artifex dispatchers
+- **Generic Job Pattern**: All indexing operations are modeled as jobs implementing a common `Job` interface
+- **Throughput Isolation**: Fast indexes (frontmatter) are never blocked by slow indexes (Bleve/embeddings)
+- **Error Isolation**: Job failures in one index don't affect other indexes
+- **Extensible Design**: The pattern supports any type of background work, not just indexing
 
 ```go
-type indexWorkerPool struct {
-    indexName     string
-    maintainer    IMaintainIndex
-    workQueue     chan wikipage.PageIdentifier
-    workerCount   int
-    wg            sync.WaitGroup
-    logger        lumber.Logger
+type Job interface {
+    Execute() error
+    GetJobType() string
 }
 
-type IndexWorkerConfig struct {
-    IndexName   string
-    WorkerCount int
+type QueueStats struct {
+    QueueName     string
+    JobsRemaining uint64
+    HighWaterMark uint64
+    IsActive      bool
 }
 ```
 
 #### Progress Tracking
 
-Multi-index progress monitoring across all index types with per-index detail:
+Generic job queue status reporting with per-index visibility:
 
 ```go
 type IndexingProgress struct {
     IsRunning           bool
     TotalPages          int
-    CompletedPages      int  // Minimum across all indexes
+    CompletedPages      int
     QueueDepth          int  // Sum across all index queues
     ProcessingRatePerSecond float64
     EstimatedCompletion *time.Duration
@@ -117,15 +120,17 @@ type SingleIndexProgress struct {
     Total               int
     ProcessingRatePerSecond float64
     LastError           *string
+    QueueDepth          int
+    WorkDistributionComplete bool
 }
 ```
 
 **Key Implementation Details**:
 
-- Overall progress calculated as minimum completion across all indexes
-- Individual error tracking per index type
-- Thread-safe concurrent access with RWMutex
-- Completion estimation based on slowest index
+- Progress calculated from active job queue statistics
+- Per-queue status reporting through `QueueStats`
+- Thread-safe concurrent access through coordinator
+- Real-time queue depth monitoring for each index type
 
 ### Integration Points
 
@@ -139,23 +144,33 @@ func (s *Site) InitializeIndexing() error {
     if err != nil {
         return err
     }
+    multiMaintainer := index.NewMultiMaintainer(frontmatterIndex, bleveIndex)
     
-    // Create background coordinator with per-index worker configuration
-    workerConfigs := []index.IndexWorkerConfig{
-        {IndexName: "frontmatter", WorkerCount: runtime.NumCPU()},
-        {IndexName: "bleve", WorkerCount: runtime.NumCPU()},
+    s.FrontmatterIndexQueryer = frontmatterIndex
+    s.BleveIndexQueryer = bleveIndex
+    s.IndexMaintainer = multiMaintainer
+    
+    // Create job queue coordinator and indexing service
+    s.JobQueueCoordinator = jobs.NewJobQueueCoordinator()
+    s.IndexingService = NewIndexingService(s.JobQueueCoordinator, frontmatterIndex, bleveIndex)
+    s.IndexingService.InitializeQueues()
+    
+    // Get all files that need to be indexed
+    files := s.DirectoryList()
+    if len(files) == 0 {
+        s.Logger.Info("No pages found to index.")
+        return nil
     }
-    backgroundCoordinator := index.NewBackgroundIndexingCoordinator(
-        index.NewMultiMaintainer(frontmatterIndex, bleveIndex),
-        s.Logger,
-        workerConfigs,
-    )
     
-    s.IndexMaintainer = backgroundCoordinator
+    // Convert files to page identifiers and start background indexing
+    pageIdentifiers := make([]string, len(files))
+    for i, file := range files {
+        pageIdentifiers[i] = file.Name()
+    }
     
-    // Start background indexing instead of synchronous loop
-    pageIdentifiers := s.getPageIdentifiers()
-    return backgroundCoordinator.StartBackground(pageIdentifiers)
+    s.IndexingService.BulkEnqueuePages(pageIdentifiers, index.Add)
+    s.Logger.Info("Background indexing started for %d pages. Application is ready.", len(files))
+    return nil
 }
 ```
 
@@ -163,12 +178,12 @@ func (s *Site) InitializeIndexing() error {
 
 **IMPLEMENTATION**: Complete gRPC API and UI implementation delivered:
 
-- **gRPC SystemInfoService**: Extended with `GetIndexingStatus()` endpoint
-- **Real-time Progress API**: Returns detailed per-index progress, rates, and errors
+- **gRPC SystemInfoService**: Extended with `GetIndexingStatus()` endpoint using job queue status
+- **Real-time Progress API**: Returns detailed per-queue progress through `IndexingService.GetProgress()`
 - **SystemInfo UI Component**: Bottom-right overlay with version and indexing status
 - **Auto-refresh Behavior**: 2-second intervals during active indexing, 10-second when idle
 - **Responsive UI States**: Loading, idle, active, complete, and error states
-- **Per-index Detail View**: Expandable progress breakdown with error messages
+- **Per-index Detail View**: Queue-based progress breakdown with job statistics
 
 ### Future RAG Integration
 
@@ -246,55 +261,55 @@ multiMaintainer := index.NewMultiMaintainer(
 
 ## Implementation Strategy
 
-### Phase 1: Core Infrastructure
+### Phase 1: Core Infrastructure ✅ COMPLETED
 
-- Implement `BackgroundIndexingCoordinator` with worker pool
-- Add progress tracking across existing index types
-- Modify `InitializeIndexing()` for background processing
+- Implement `JobQueueCoordinator` with generic job queue system
+- Create `IndexingService` with per-index job queues
+- Modify `InitializeIndexing()` for background job processing
 
-### Phase 2: System Integration
+### Phase 2: System Integration ✅ COMPLETED
 
-- Extend gRPC system info service with indexing status
-- Create UI components for progress display
-- Add CLI configuration options
+- Extend gRPC system info service with job queue status
+- Create UI components for progress display using queue statistics
+- Implement real-time status monitoring
 
-### Phase 3: Testing and Optimization
+### Phase 3: Testing and Optimization ✅ COMPLETED
 
-- Comprehensive testing of parallel indexing scenarios
-- Performance optimization and tuning
-- Documentation and deployment guides
+- Comprehensive testing of parallel job processing scenarios
+- Performance optimization with Artifex dispatcher integration
+- Documentation and architectural decision recording
 
 ### Phase 4: Future Preparation
 
-- Interface extensions for vector store integration
-- Performance monitoring for computationally expensive operations
-- Hybrid search capability foundation
+- Generic job interface supports any background processing workload
+- Performance monitoring infrastructure in place
+- Extensible foundation for RAG vector stores and other background tasks
 
 ## Risks and Mitigations
 
-### Risk: Background Indexing Complexity
+### Risk: Job Queue Complexity
 
-**Mitigation**: Extend existing patterns rather than replacing them, comprehensive testing
+**Mitigation**: Use proven Artifex dispatcher library, comprehensive testing of job processing scenarios
 
 ### Risk: Resource Usage
 
-**Mitigation**: Configurable worker limits, memory usage monitoring, backpressure mechanisms
+**Mitigation**: Configurable queue capacities, job queue monitoring, controlled worker counts per queue
 
 ### Risk: User Confusion
 
-**Mitigation**: Clear progress indicators, status reporting, and documentation
+**Mitigation**: Clear progress indicators through job queue statistics, real-time status reporting
 
 ### Risk: Future Vector Store Integration
 
-**Mitigation**: Design interfaces with vector operations in mind, performance monitoring infrastructure
+**Mitigation**: Generic job interface supports any processing type, monitoring infrastructure already in place
 
 ## Alternatives Considered
 
 1. **Synchronous Optimization**: Improve existing sequential processing
    - Rejected: Doesn't utilize multi-core systems effectively
 
-2. **Complete Architecture Replacement**: Design new indexing system from scratch
-   - Rejected: Existing architecture is solid, replacement introduces unnecessary risk
+2. **Custom Worker Pool Implementation**: Build indexing-specific worker pools
+   - Rejected: Generic job queue system provides better reusability and proven reliability
 
 3. **Index-Specific Parallelization**: Parallelize within each index type
    - Rejected: Doesn't address the coordination bottleneck, more complex integration
@@ -304,6 +319,6 @@ multiMaintainer := index.NewMultiMaintainer(
 
 ## Outcome
 
-This architecture transforms indexing from a startup blocker into a background enhancement while preserving the excellent existing multi-index foundation. It provides immediate user value through faster startup times and establishes a clear, efficient path for future RAG vector store integration without requiring architectural rework.
+This architecture transforms indexing from a startup blocker into a background enhancement using a **generic job queue system** that supports any type of background processing. It provides immediate user value through faster startup times and establishes a flexible, extensible foundation for future RAG vector stores and other background tasks.
 
-The design maintains backward compatibility, preserves existing testing, and provides a foundation for advanced search capabilities while dramatically improving the user experience through parallel processing and progressive enhancement.
+The design maintains backward compatibility with existing indexing interfaces, provides comprehensive job queue monitoring, and delivers dramatic user experience improvements through parallel processing and real-time progress tracking.
