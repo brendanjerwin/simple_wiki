@@ -24,6 +24,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
 	"github.com/brendanjerwin/simple_wiki/utils/slicetools"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 	ginteenysecurity "github.com/danielheath/gin-teeny-security"
 	"github.com/gin-contrib/multitemplate"
 	"github.com/gin-contrib/sessions"
@@ -227,7 +228,7 @@ func (s *Site) handlePageRelinquish(c *gin.Context) {
 	text := p.Text.GetCurrent()
 	isLocked := pageIsLocked(p, c, s.Logger)
 	if !isLocked {
-		if err := p.Erase(); err != nil {
+		if err := s.DeletePage(p.Identifier); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to erase page"})
 			return
 		}
@@ -544,7 +545,7 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 		message = "Refusing to overwrite others work"
 	} else {
 		p.Meta = json.Meta
-		if err := p.Update(json.NewText); err != nil {
+		if err := s.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), json.NewText); err != nil {
 			s.Logger.Error("Failed to save page '%s': %v", json.Page, err)
 			message = "Failed to save page"
 			success = false
@@ -609,7 +610,7 @@ func (s *Site) handleLock(c *gin.Context) {
 		p.UnlockedFor = sessionID
 		message = "Unlocked only for you"
 	}
-	if err := p.Save(); err != nil {
+	if err := s.savePage(p); err != nil {
 		s.Logger.Error("Failed to save page lock state for '%s': %v", json.Page, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to save lock information"})
 		return

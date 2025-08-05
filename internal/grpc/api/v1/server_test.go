@@ -1544,13 +1544,27 @@ var _ = Describe("Server", func() {
 			server = v1.NewServer("commit", time.Now(), nil, nil, lumber.NewConsoleLogger(lumber.WARN))
 		})
 
-		It("should send initial empty response and handle context cancellation", func() {
+		var (
+			err          error
+			firstMessage *apiv1.GetJobStatusResponse
+		)
+
+		BeforeEach(func() {
 			// Set up context that gets cancelled after initial send
 			streamServer.ContextDone = true
-			err := server.StreamJobStatus(req, streamServer)
+			err = server.StreamJobStatus(req, streamServer)
+			if len(streamServer.SentMessages) > 0 {
+				firstMessage = streamServer.SentMessages[0]
+			}
+		})
+
+		It("should handle context cancellation", func() {
 			Expect(err).To(Equal(context.Canceled))
+		})
+
+		It("should send initial empty response", func() {
 			Expect(streamServer.SentMessages).To(HaveLen(1))
-			firstMessage := streamServer.SentMessages[0]
+			Expect(firstMessage).NotTo(BeNil())
 			Expect(firstMessage.JobQueues).To(BeEmpty())
 		})
 	})

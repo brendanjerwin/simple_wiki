@@ -8,11 +8,11 @@ import (
 	"github.com/brendanjerwin/simple_wiki/rollingmigrations"
 )
 
-var _ = Describe("InventoryContainerMungingMigration", func() {
-	var migration *rollingmigrations.InventoryContainerMungingMigration
+var _ = Describe("IdentifierMungingMigration", func() {
+	var migration *rollingmigrations.IdentifierMungingMigration
 
 	BeforeEach(func() {
-		migration = rollingmigrations.NewInventoryContainerMungingMigration()
+		migration = rollingmigrations.NewIdentifierMungingMigration()
 	})
 
 	It("should exist", func() {
@@ -36,21 +36,17 @@ var _ = Describe("InventoryContainerMungingMigration", func() {
 	})
 
 	Describe("AppliesTo", func() {
-		When("TOML has inventory.container with unmunged value", func() {
+		Describe("when TOML has identifier with unmunged value", func() {
 			var content []byte
 			var applies bool
 
 			BeforeEach(func() {
 				content = []byte(`+++
-identifier = "test_page"
-title = "Test Page"
-
-[inventory]
-container = "GarageInventory"
-items = ["hammer", "screwdriver"]
+identifier = "lab_smallparts_1A6"
+title = "Lab Small Parts Bin 1A6"
 +++
 
-# Test Page Content`)
+# Lab Small Parts Content`)
 				applies = migration.AppliesTo(content)
 			})
 
@@ -59,18 +55,33 @@ items = ["hammer", "screwdriver"]
 			})
 		})
 
-		When("TOML has inventory.container with already munged value", func() {
+		Describe("when TOML has identifier with already munged value", func() {
 			var content []byte
 			var applies bool
 
 			BeforeEach(func() {
 				content = []byte(`+++
-identifier = "test_page"
-title = "Test Page"
+identifier = "lab_smallparts_1a6"
+title = "Lab Small Parts Bin 1A6"
++++
 
-[inventory]
-container = "garage_inventory"
-items = ["hammer", "screwdriver"]
+# Lab Small Parts Content`)
+				applies = migration.AppliesTo(content)
+			})
+
+			It("should not apply", func() {
+				Expect(applies).To(BeFalse())
+			})
+		})
+
+		Describe("when TOML has no identifier field", func() {
+			var content []byte
+			var applies bool
+
+			BeforeEach(func() {
+				content = []byte(`+++
+title = "Test Page"
+author = "John Doe"
 +++
 
 # Test Page Content`)
@@ -82,59 +93,34 @@ items = ["hammer", "screwdriver"]
 			})
 		})
 
-		When("TOML has no inventory section", func() {
-			var content []byte
-			var applies bool
-
-			BeforeEach(func() {
-				content = []byte(`+++
-identifier = "test_page"
-title = "Test Page"
-+++
-
-# Test Page Content`)
-				applies = migration.AppliesTo(content)
-			})
-
-			It("should not apply", func() {
-				Expect(applies).To(BeFalse())
-			})
-		})
-
-		When("TOML has inventory but no container", func() {
-			var content []byte
-			var applies bool
-
-			BeforeEach(func() {
-				content = []byte(`+++
-identifier = "test_page"
-title = "Test Page"
-
-[inventory]
-items = ["hammer", "screwdriver"]
-+++
-
-# Test Page Content`)
-				applies = migration.AppliesTo(content)
-			})
-
-			It("should not apply", func() {
-				Expect(applies).To(BeFalse())
-			})
-		})
-
-		When("content is not TOML", func() {
+		Describe("when content is not TOML", func() {
 			var content []byte
 			var applies bool
 
 			BeforeEach(func() {
 				content = []byte(`---
-identifier: test_page
-inventory:
-  container: GarageInventory
+identifier: lab_smallparts_1A6
+title: Lab Small Parts Bin 1A6
 ---
 
-# Test Page Content`)
+# Lab Small Parts Content`)
+				applies = migration.AppliesTo(content)
+			})
+
+			It("should not apply", func() {
+				Expect(applies).To(BeFalse())
+			})
+		})
+
+		Describe("when content has malformed TOML", func() {
+			var content []byte
+			var applies bool
+
+			BeforeEach(func() {
+				content = []byte(`+++
+identifier = "unclosed_string
+title = "Test"
++++`)
 				applies = migration.AppliesTo(content)
 			})
 
@@ -145,22 +131,18 @@ inventory:
 	})
 
 	Describe("Apply", func() {
-		When("inventory.container needs munging", func() {
+		Describe("when identifier needs munging (primary test case)", func() {
 			var content []byte
 			var result []byte
 			var err error
 
 			BeforeEach(func() {
 				content = []byte(`+++
-identifier = "test_page"
-title = "Test Page"
-
-[inventory]
-container = "GarageInventory"
-items = ["hammer", "screwdriver"]
+identifier = "lab_smallparts_1A6"
+title = "Lab Small Parts Bin 1A6"
 +++
 
-# Test Page Content`)
+# Lab Small Parts Content`)
 				result, err = migration.Apply(content)
 			})
 
@@ -168,35 +150,54 @@ items = ["hammer", "screwdriver"]
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("should munge the container value", func() {
-				Expect(string(result)).To(ContainSubstring(`container = "garage_inventory"`))
+			It("should munge the identifier value", func() {
+				Expect(string(result)).To(ContainSubstring(`identifier = "lab_smallparts_1a6"`))
 			})
 
-			It("should not change GarageInventory in the content", func() {
-				Expect(string(result)).NotTo(ContainSubstring(`container = "GarageInventory"`))
+			It("should not change the original casing in identifier", func() {
+				Expect(string(result)).NotTo(ContainSubstring(`identifier = "lab_smallparts_1A6"`))
 			})
 
 			It("should preserve other fields", func() {
-				Expect(string(result)).To(ContainSubstring(`identifier = "test_page"`))
-				Expect(string(result)).To(ContainSubstring(`title = "Test Page"`))
-				Expect(string(result)).To(ContainSubstring(`items = ["hammer", "screwdriver"]`))
+				Expect(string(result)).To(ContainSubstring(`title = "Lab Small Parts Bin 1A6"`))
 			})
 
 			It("should preserve body content", func() {
-				Expect(string(result)).To(ContainSubstring("# Test Page Content"))
+				Expect(string(result)).To(ContainSubstring("# Lab Small Parts Content"))
 			})
 		})
 
 		Describe("when testing various casing patterns", func() {
-			Describe("when container is KitchenCabinet", func() {
+			Describe("when identifier is lab_smallparts_1A6", func() {
 				var content []byte
 				var result []byte
 				var err error
 
 				BeforeEach(func() {
 					content = []byte(`+++
-[inventory]
-container = "KitchenCabinet"
+identifier = "lab_smallparts_1A6"
++++
+`)
+					result, err = migration.Apply(content)
+				})
+
+				It("should not return an error", func() {
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("should munge to lab_smallparts_1a6", func() {
+					Expect(string(result)).To(ContainSubstring(`identifier = "lab_smallparts_1a6"`))
+				})
+			})
+
+			Describe("when identifier is KitchenCabinet", func() {
+				var content []byte
+				var result []byte
+				var err error
+
+				BeforeEach(func() {
+					content = []byte(`+++
+identifier = "KitchenCabinet"
 +++
 `)
 					result, err = migration.Apply(content)
@@ -207,19 +208,18 @@ container = "KitchenCabinet"
 				})
 
 				It("should munge to kitchen_cabinet", func() {
-					Expect(string(result)).To(ContainSubstring(`container = "kitchen_cabinet"`))
+					Expect(string(result)).To(ContainSubstring(`identifier = "kitchen_cabinet"`))
 				})
 			})
 
-			Describe("when container is MixedCASEExample", func() {
+			Describe("when identifier is MixedCASEExample", func() {
 				var content []byte
 				var result []byte
 				var err error
 
 				BeforeEach(func() {
 					content = []byte(`+++
-[inventory]
-container = "MixedCASEExample"
+identifier = "MixedCASEExample"
 +++
 `)
 					result, err = migration.Apply(content)
@@ -230,19 +230,18 @@ container = "MixedCASEExample"
 				})
 
 				It("should munge to mixed_case_example", func() {
-					Expect(string(result)).To(ContainSubstring(`container = "mixed_case_example"`))
+					Expect(string(result)).To(ContainSubstring(`identifier = "mixed_case_example"`))
 				})
 			})
 
-			Describe("when container is SimpleTest", func() {
+			Describe("when identifier is SimpleTest", func() {
 				var content []byte
 				var result []byte
 				var err error
 
 				BeforeEach(func() {
 					content = []byte(`+++
-[inventory]
-container = "SimpleTest"
+identifier = "SimpleTest"
 +++
 `)
 					result, err = migration.Apply(content)
@@ -253,19 +252,18 @@ container = "SimpleTest"
 				})
 
 				It("should munge to simple_test", func() {
-					Expect(string(result)).To(ContainSubstring(`container = "simple_test"`))
+					Expect(string(result)).To(ContainSubstring(`identifier = "simple_test"`))
 				})
 			})
 
-			Describe("when container is ALLCAPS", func() {
+			Describe("when identifier is ALLCAPS", func() {
 				var content []byte
 				var result []byte
 				var err error
 
 				BeforeEach(func() {
 					content = []byte(`+++
-[inventory]
-container = "ALLCAPS"
+identifier = "ALLCAPS"
 +++
 `)
 					result, err = migration.Apply(content)
@@ -276,27 +274,23 @@ container = "ALLCAPS"
 				})
 
 				It("should munge to allcaps", func() {
-					Expect(string(result)).To(ContainSubstring(`container = "allcaps"`))
+					Expect(string(result)).To(ContainSubstring(`identifier = "allcaps"`))
 				})
 			})
 		})
 
-		When("inventory.container is already munged", func() {
+		Describe("when identifier is already munged", func() {
 			var content []byte
 			var result []byte
 			var err error
 
 			BeforeEach(func() {
 				content = []byte(`+++
-identifier = "test_page"
-title = "Test Page"
-
-[inventory]
-container = "garage_inventory"
-items = ["hammer", "screwdriver"]
+identifier = "lab_smallparts_1a6"
+title = "Lab Small Parts Bin 1A6"
 +++
 
-# Test Page Content`)
+# Lab Small Parts Content`)
 				result, err = migration.Apply(content)
 			})
 
@@ -309,16 +303,15 @@ items = ["hammer", "screwdriver"]
 			})
 		})
 
-		When("handling edge cases", func() {
-			When("container value contains UUID", func() {
+		Describe("when handling edge cases", func() {
+			Describe("when identifier value contains UUID", func() {
 				var content []byte
 				var result []byte
 				var err error
 
 				BeforeEach(func() {
 					content = []byte(`+++
-[inventory]
-container = "LabTub_61c0030e-00e3-47b5-a797-1ac01f8d05b1"
+identifier = "LabTub_61c0030e-00e3-47b5-a797-1ac01f8d05b1"
 +++
 `)
 					result, err = migration.Apply(content)
@@ -329,19 +322,18 @@ container = "LabTub_61c0030e-00e3-47b5-a797-1ac01f8d05b1"
 				})
 
 				It("should lowercase the identifier with UUID", func() {
-					Expect(string(result)).To(ContainSubstring(`container = "labtub_61c0030e-00e3-47b5-a797-1ac01f8d05b1"`))
+					Expect(string(result)).To(ContainSubstring(`identifier = "labtub_61c0030e-00e3-47b5-a797-1ac01f8d05b1"`))
 				})
 			})
 
-			When("container value is empty", func() {
+			Describe("when identifier value is empty", func() {
 				var content []byte
 				var result []byte
 				var err error
 
 				BeforeEach(func() {
 					content = []byte(`+++
-[inventory]
-container = ""
+identifier = ""
 +++
 `)
 					result, err = migration.Apply(content)
@@ -356,14 +348,14 @@ container = ""
 				})
 			})
 
-			When("frontmatter has multiple sections", func() {
+			Describe("when frontmatter has multiple sections", func() {
 				var content []byte
 				var result []byte
 				var err error
 
 				BeforeEach(func() {
 					content = []byte(`+++
-identifier = "test_page"
+identifier = "TestPageID"
 title = "Test Page"
 
 [metadata]
@@ -371,7 +363,7 @@ author = "John Doe"
 date = "2024-01-01"
 
 [inventory]
-container = "StorageRoom"
+container = "storage_room"
 location = "Building A"
 
 [tags]
@@ -386,8 +378,8 @@ primary = ["tools", "hardware"]
 					Expect(err).NotTo(HaveOccurred())
 				})
 
-				It("should munge only the container value", func() {
-					Expect(string(result)).To(ContainSubstring(`container = "storage_room"`))
+				It("should munge only the identifier value", func() {
+					Expect(string(result)).To(ContainSubstring(`identifier = "test_page_id"`))
 				})
 
 				It("should preserve metadata section", func() {
@@ -395,13 +387,79 @@ primary = ["tools", "hardware"]
 					Expect(string(result)).To(ContainSubstring(`author = "John Doe"`))
 				})
 
+				It("should preserve inventory section", func() {
+					Expect(string(result)).To(ContainSubstring("[inventory]"))
+					Expect(string(result)).To(ContainSubstring(`container = "storage_room"`))
+				})
+
 				It("should preserve tags section", func() {
 					Expect(string(result)).To(ContainSubstring("[tags]"))
 					Expect(string(result)).To(ContainSubstring(`primary = ["tools", "hardware"]`))
 				})
+			})
 
-				It("should preserve other inventory fields", func() {
-					Expect(string(result)).To(ContainSubstring(`location = "Building A"`))
+			Describe("when no identifier field exists", func() {
+				var content []byte
+				var result []byte
+				var err error
+
+				BeforeEach(func() {
+					content = []byte(`+++
+title = "Test Page"
+author = "John Doe"
++++
+
+# Content`)
+					result, err = migration.Apply(content)
+				})
+
+				It("should not return an error", func() {
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("should return unchanged content", func() {
+					Expect(result).To(Equal(content))
+				})
+			})
+
+			Describe("when content has malformed TOML", func() {
+				var content []byte
+				var result []byte
+				var err error
+
+				BeforeEach(func() {
+					content = []byte(`+++
+identifier = "unclosed_string
+title = "Test"
++++`)
+					result, err = migration.Apply(content)
+				})
+
+				It("should return an error", func() {
+					Expect(err).To(HaveOccurred())
+				})
+
+				It("should return original content", func() {
+					Expect(result).To(Equal(content))
+				})
+			})
+
+			Describe("when content has invalid format", func() {
+				var content []byte
+				var result []byte
+				var err error
+
+				BeforeEach(func() {
+					content = []byte(`no frontmatter delimiters here`)
+					result, err = migration.Apply(content)
+				})
+
+				It("should not return an error", func() {
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("should return unchanged content", func() {
+					Expect(result).To(Equal(content))
 				})
 			})
 		})

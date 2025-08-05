@@ -198,11 +198,20 @@ tags:
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("should convert nested structures to TOML format", func() {
+			It("should use TOML frontmatter delimiters", func() {
 				Expect(string(convertedContent)).To(ContainSubstring("+++"))
+			})
+
+			It("should convert title to TOML format", func() {
 				Expect(string(convertedContent)).To(ContainSubstring(`title = 'Complex Page'`))
+			})
+
+			It("should convert nested metadata to TOML table", func() {
 				Expect(string(convertedContent)).To(ContainSubstring("[metadata]"))
 				Expect(string(convertedContent)).To(ContainSubstring(`author = 'John Doe'`))
+			})
+
+			It("should convert arrays to TOML format", func() {
 				Expect(string(convertedContent)).To(ContainSubstring(`tags = ['go', 'testing', 'yaml']`))
 			})
 
@@ -238,9 +247,15 @@ items:
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("should convert arrays to TOML format", func() {
+			It("should use TOML frontmatter delimiters", func() {
 				Expect(string(convertedContent)).To(ContainSubstring("+++"))
+			})
+
+			It("should convert simple arrays to TOML format", func() {
 				Expect(string(convertedContent)).To(ContainSubstring("numbers = [1, 2, 3]"))
+			})
+
+			It("should convert array of tables to TOML format", func() {
 				Expect(string(convertedContent)).To(ContainSubstring("[[items]]"))
 			})
 		})

@@ -110,8 +110,8 @@ inventory.container = "GarageInventory"
 					"Content should not contain dotted notation after migration")
 				Expect(content).To(ContainSubstring("[inventory]"),
 					"Content should contain [inventory] section after migration")
-				Expect(content).To(ContainSubstring(`container = "GarageInventory"`),
-					"Content should still contain the container value")
+				Expect(content).To(ContainSubstring(`container = "garage_inventory"`),
+					"Content should contain the munged container value")
 			})
 
 			Context("when checking file on disk", func() {

@@ -25,8 +25,11 @@ var _ = Describe("TOMLTableSpacingMigration", func() {
 			supportedTypes = migration.SupportedTypes()
 		})
 
-		It("should only support TOML frontmatter", func() {
+		It("should contain exactly one type", func() {
 			Expect(supportedTypes).To(HaveLen(1))
+		})
+
+		It("should support TOML frontmatter", func() {
 			Expect(supportedTypes[0]).To(Equal(rollingmigrations.FrontmatterTOML))
 		})
 	})

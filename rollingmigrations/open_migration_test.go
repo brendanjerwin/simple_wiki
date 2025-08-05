@@ -42,7 +42,7 @@ var _ = Describe("Rolling Migrations during Open()", func() {
 		}
 	})
 
-	Context("when opening a file with inventory.container frontmatter", func() {
+	Describe("when opening a file with inventory.container frontmatter", func() {
 		var (
 			identifier    string
 			fileContent   string
@@ -78,9 +78,12 @@ inventory.container = "GarageInventory"
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		Context("when calling Open()", func() {
+		Describe("when calling Open()", func() {
+			var openedPage *server.Page
+
 			BeforeEach(func() {
-				openedPage, openErr := site.Open(identifier)
+				var openErr error
+				openedPage, openErr = site.Open(identifier)
 				Expect(openErr).NotTo(HaveOccurred())
 				openedContent = openedPage.Text.GetCurrent()
 				if openedPage.WasLoadedFromDisk {
@@ -98,21 +101,19 @@ inventory.container = "GarageInventory"
 				Expect(openedContent).NotTo(BeEmpty())
 			})
 
-			It("should have applied the inventory.container migration", func() {
-				// The content should no longer have dotted notation
-				Expect(openedContent).NotTo(ContainSubstring("inventory.container"), 
-					"Content should not contain dotted notation after migration")
-
-				// The content should have the [inventory] section
-				Expect(openedContent).To(ContainSubstring("[inventory]"),
-					"Content should contain [inventory] section after migration")
-				
-				// The container value should still be there
-				Expect(openedContent).To(ContainSubstring(`container = "garage_inventory"`),
-					"Content should still contain the container value")
+			It("should remove dotted notation", func() {
+				Expect(openedContent).NotTo(ContainSubstring("inventory.container"))
 			})
 
-			Context("when checking if file on disk was updated", func() {
+			It("should create [inventory] section", func() {
+				Expect(openedContent).To(ContainSubstring("[inventory]"))
+			})
+
+			It("should preserve container value in munged format", func() {
+				Expect(openedContent).To(ContainSubstring(`container = "garage_inventory"`))
+			})
+
+			Describe("when checking if file on disk was updated", func() {
 				var diskContent string
 
 				BeforeEach(func() {
@@ -122,22 +123,21 @@ inventory.container = "GarageInventory"
 					diskContent = string(diskBytes)
 				})
 
-				It("should have updated the file on disk", func() {
-					// The file on disk should also be migrated
-					Expect(diskContent).NotTo(ContainSubstring("inventory.container"),
-						"File on disk should not contain dotted notation after migration")
-					Expect(diskContent).To(ContainSubstring("[inventory]"),
-						"File on disk should contain [inventory] section after migration")
+				It("should remove dotted notation from disk file", func() {
+					Expect(diskContent).NotTo(ContainSubstring("inventory.container"))
 				})
 
-				It("should have the same content as what Open() returned", func() {
-					Expect(diskContent).To(Equal(openedContent),
-						"Content on disk should match what Open() returned")
+				It("should create [inventory] section in disk file", func() {
+					Expect(diskContent).To(ContainSubstring("[inventory]"))
+				})
+
+				It("should match content returned by Open()", func() {
+					Expect(diskContent).To(Equal(openedContent))
 				})
 			})
 		})
 
-		Context("when migration applicator is nil", func() {
+		Describe("when migration applicator is nil", func() {
 			BeforeEach(func() {
 				// Test with no migration applicator
 				site.MigrationApplicator = nil
@@ -147,12 +147,15 @@ inventory.container = "GarageInventory"
 
 			It("should return an error", func() {
 				Expect(err).To(HaveOccurred())
+			})
+
+			It("should include migration applicator message", func() {
 				Expect(err.Error()).To(ContainSubstring("migration applicator not configured"))
 			})
 		})
 	})
 
-	Context("when opening a file that doesn't need migration", func() {
+	Describe("when opening a file that doesn't need migration", func() {
 		var (
 			identifier    string
 			fileContent   string
@@ -190,10 +193,12 @@ container = "already_migrated"
 			}
 		})
 
-		It("should not modify already migrated content", func() {
+		It("should not return an error", func() {
 			Expect(err).NotTo(HaveOccurred())
-			Expect(openedContent).To(Equal(fileContent),
-				"Already migrated content should remain unchanged")
+		})
+
+		It("should return unchanged content", func() {
+			Expect(openedContent).To(Equal(fileContent))
 		})
 	})
 })

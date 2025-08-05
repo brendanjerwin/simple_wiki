@@ -10,6 +10,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
+	"github.com/brendanjerwin/simple_wiki/rollingmigrations"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/jcelliott/lumber"
 	"github.com/schollz/versionedtext"
@@ -119,6 +120,7 @@ var _ = Describe("FileShadowingService", func() {
 		site = &Site{
 			PathToData: testDataDir,
 			Logger:     lumber.NewConsoleLogger(lumber.WARN),
+			MigrationApplicator: rollingmigrations.NewEmptyApplicator(),
 		}
 		
 		coordinator = jobs.NewJobQueueCoordinator()
@@ -132,7 +134,13 @@ var _ = Describe("FileShadowingService", func() {
 	Describe("NewFileShadowingService", func() {
 		It("should create a new service", func() {
 			Expect(service).NotTo(BeNil())
+		})
+
+		It("should set coordinator correctly", func() {
 			Expect(service.coordinator).To(Equal(coordinator))
+		})
+
+		It("should set site correctly", func() {
 			Expect(service.site).To(Equal(site))
 		})
 	})
@@ -187,20 +195,20 @@ var _ = Describe("FileShadowingService", func() {
 			labPage, err := site.Open("LabInventory")
 			Expect(err).NotTo(HaveOccurred())
 			labPage.Text = versionedtext.NewVersionedText("# Lab Inventory")
-			err = labPage.Save()
+			err = site.UpdatePageContent(labPage.Identifier, labPage.Text.GetCurrent())
 			Expect(err).NotTo(HaveOccurred())
 			
 			userPage, err := site.Open("UserGuide")
 			Expect(err).NotTo(HaveOccurred())
 			userPage.Text = versionedtext.NewVersionedText("# User Guide")
-			err = userPage.Save()
+			err = site.UpdatePageContent(userPage.Identifier, userPage.Text.GetCurrent())
 			Expect(err).NotTo(HaveOccurred())
 			
 			// Also create a munged page that already exists to verify no migration
 			existingPage, err := site.Open("existing_page")
 			Expect(err).NotTo(HaveOccurred())
 			existingPage.Text = versionedtext.NewVersionedText("# Already Munged")
-			err = existingPage.Save()
+			err = site.UpdatePageContent(existingPage.Identifier, existingPage.Text.GetCurrent())
 			Expect(err).NotTo(HaveOccurred())
 			
 			// Create mock scan job instead of using the real one

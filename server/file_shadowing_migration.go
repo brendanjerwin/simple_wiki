@@ -10,6 +10,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/schollz/versionedtext"
 )
 
@@ -102,8 +103,16 @@ func (j *FileShadowingMigrationScanJob) FindPascalCaseIdentifiers() []string {
 		// Check if this identifier is PascalCase by comparing with its munged version
 		mungedVersion := wikiidentifiers.MungeIdentifier(identifier)
 		if identifier != mungedVersion {
-			// This is a PascalCase identifier that needs migration
-			pascalIdentifiers = append(pascalIdentifiers, identifier)
+			// Additional check: ensure that migration wouldn't cause file conflicts
+			// by checking if the base32 encodings would be different
+			originalBase32 := base32tools.EncodeToBase32(strings.ToLower(identifier))
+			mungedBase32 := base32tools.EncodeToBase32(strings.ToLower(mungedVersion))
+			
+			if originalBase32 != mungedBase32 {
+				// This is a safe PascalCase identifier that needs migration
+				pascalIdentifiers = append(pascalIdentifiers, identifier)
+			}
+			// If base32 encodings are the same, skip this identifier to avoid file conflicts
 		}
 	}
 
@@ -165,26 +174,18 @@ func (j *FileShadowingMigrationJob) Execute() error {
 		finalPage.Identifier = mungedID // Change identifier to munged version
 	}
 
-	// Save the page with munged identifier (this will save using base32-encoded filenames)
-	if err := finalPage.Save(); err != nil {
+	// IMPORTANT: Delete the original files FIRST, then save the new content
+	// This prevents data loss in cases where the original and munged identifiers
+	// would result in the same base32-encoded filename
+	
+	// Use Site.DeletePage for soft delete (moves to __deleted__ directory)
+	if err := j.site.DeletePage(wikipage.PageIdentifier(j.logicalPageID)); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to soft delete original PascalCase page %s: %v", j.logicalPageID, err)
+	}
+
+	// Now save the page with munged identifier (this will save using base32-encoded filenames)
+	if err := finalPage.Site.savePage(finalPage); err != nil {
 		return fmt.Errorf("failed to save munged page: %v", err)
-	}
-
-	// Remove the original base32-encoded files for the PascalCase identifier
-	// Calculate the base32-encoded filenames for the PascalCase identifier
-	pascalJSONPath := filepath.Join(j.site.PathToData, base32tools.EncodeToBase32(strings.ToLower(j.logicalPageID))+".json")
-	pascalMdPath := filepath.Join(j.site.PathToData, base32tools.EncodeToBase32(strings.ToLower(j.logicalPageID))+".md")
-
-	// Remove files if they exist
-	if _, err := os.Stat(pascalJSONPath); err == nil {
-		if err := os.Remove(pascalJSONPath); err != nil {
-			return fmt.Errorf("failed to remove PascalCase JSON file %s: %v", pascalJSONPath, err)
-		}
-	}
-	if _, err := os.Stat(pascalMdPath); err == nil {
-		if err := os.Remove(pascalMdPath); err != nil {
-			return fmt.Errorf("failed to remove PascalCase MD file %s: %v", pascalMdPath, err)
-		}
 	}
 
 	return nil

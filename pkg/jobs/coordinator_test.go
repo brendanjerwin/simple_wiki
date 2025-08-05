@@ -116,14 +116,24 @@ var _ = Describe("JobQueueCoordinator", func() {
 			coordinator.EnqueueJob("Queue3", &jobs.MockJob{Name: "job3"})
 		})
 
-		It("should return only active queues", func() {
-			activeQueues := coordinator.GetActiveQueues()
-			Expect(len(activeQueues)).To(Equal(2))
-			
-			queueNames := make([]string, len(activeQueues))
+		var (
+			activeQueues []*jobs.QueueStats
+			queueNames   []string
+		)
+
+		BeforeEach(func() {
+			activeQueues = coordinator.GetActiveQueues()
+			queueNames = make([]string, len(activeQueues))
 			for i, stats := range activeQueues {
 				queueNames[i] = stats.QueueName
 			}
+		})
+
+		It("should return correct number of active queues", func() {
+			Expect(len(activeQueues)).To(Equal(2))
+		})
+
+		It("should return only active queues", func() {
 			Expect(queueNames).To(ContainElements("Queue1", "Queue3"))
 		})
 	})

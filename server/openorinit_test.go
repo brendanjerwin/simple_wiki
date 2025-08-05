@@ -60,6 +60,15 @@ var _ = Describe("Site.OpenOrInit with URL parameters", func() {
 	})
 
 	Describe("when creating a new page with dotted URL parameters", func() {
+		var (
+			content           string
+			frontmatterTOML   string
+			parsed            map[string]any
+			parseErr          error
+			expectedPath      string
+			pathStatErr       error
+		)
+
 		BeforeEach(func() {
 			// Set up URL with dotted parameters
 			params := url.Values{}
@@ -69,62 +78,100 @@ var _ = Describe("Site.OpenOrInit with URL parameters", func() {
 			params.Set("tmpl", "inv_item")
 			reqURL.RawQuery = params.Encode()
 
+			// Act
 			p, err = s.OpenOrInit("kinect_to_windows_adapter", req)
+			
+			// Capture test data after action
+			if p != nil {
+				content = p.Text.GetCurrent()
+				
+				// Extract frontmatter between +++ delimiters
+				if strings.Contains(content, "+++") {
+					startIdx := 4 // After first "+++\n"
+					endIdx := len(content)
+					for i := startIdx; i < len(content)-3; i++ {
+						if content[i:i+3] == "+++" {
+							endIdx = i
+							break
+						}
+					}
+					frontmatterTOML = content[startIdx:endIdx]
+					
+					// Parse the TOML
+					parseErr = toml.Unmarshal([]byte(frontmatterTOML), &parsed)
+				}
+				
+				// Check if page was saved to disk
+				identifier := p.Identifier
+				expectedPath = path.Join(tmpDir, base32tools.EncodeToBase32(strings.ToLower(identifier))+".md")
+				_, pathStatErr = os.Stat(expectedPath)
+			}
 		})
 
 		It("should not return an error", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
 
-		It("should create valid TOML frontmatter", func() {
-			content := p.Text.GetCurrent()
+		It("should contain TOML frontmatter delimiters", func() {
 			Expect(content).To(ContainSubstring("+++\n"))
-			
-			// Extract frontmatter between +++ delimiters
-			startIdx := 4 // After first "+++\n"
-			endIdx := len(content)
-			for i := startIdx; i < len(content)-3; i++ {
-				if content[i:i+3] == "+++" {
-					endIdx = i
-					break
-				}
-			}
-			
-			frontmatterTOML := content[startIdx:endIdx]
-			
-			// Parse the TOML to verify it's valid
-			var parsed map[string]any
-			err := toml.Unmarshal([]byte(frontmatterTOML), &parsed)
-			Expect(err).NotTo(HaveOccurred())
-			
-			// Verify the structure
+		})
+
+		It("should parse TOML without error", func() {
+			Expect(parseErr).NotTo(HaveOccurred())
+		})
+
+		It("should include identifier in frontmatter", func() {
 			Expect(parsed).To(HaveKeyWithValue("identifier", "kinect_to_windows_adapter"))
+		})
+
+		It("should include title in frontmatter", func() {
 			Expect(parsed).To(HaveKeyWithValue("title", "Kinect To Windows Adapter"))
-			
-			// Verify nested inventory structure
+		})
+
+		It("should include inventory structure in frontmatter", func() {
 			Expect(parsed).To(HaveKey("inventory"))
+		})
+
+		It("should create inventory as map type", func() {
+			_, ok := parsed["inventory"].(map[string]any)
+			Expect(ok).To(BeTrue())
+		})
+
+		It("should include container in inventory", func() {
 			inventory, ok := parsed["inventory"].(map[string]any)
 			Expect(ok).To(BeTrue())
 			Expect(inventory).To(HaveKeyWithValue("container", "LabTub_61c0030e-00e3-47b5-a797-1ac01f8d05b1"))
+		})
+
+		It("should include location in inventory", func() {
+			inventory, ok := parsed["inventory"].(map[string]any)
+			Expect(ok).To(BeTrue())
 			Expect(inventory).To(HaveKeyWithValue("location", "Lab A"))
+		})
+
+		It("should include items key in inventory", func() {
+			inventory, ok := parsed["inventory"].(map[string]any)
+			Expect(ok).To(BeTrue())
 			Expect(inventory).To(HaveKey("items"))
 		})
 
 		It("should not include tmpl parameter in frontmatter", func() {
-			content := p.Text.GetCurrent()
 			Expect(content).NotTo(ContainSubstring("tmpl"))
 		})
 
-		It("should save the page successfully", func() {
-			// The page should be saved to disk
-			identifier := p.Identifier
-			expectedPath := path.Join(tmpDir, base32tools.EncodeToBase32(strings.ToLower(identifier))+".md")
-			_, err := os.Stat(expectedPath)
-			Expect(err).NotTo(HaveOccurred())
+		It("should save the page to disk", func() {
+			Expect(pathStatErr).NotTo(HaveOccurred())
 		})
 	})
 
 	Describe("when creating a page with array parameters", func() {
+		var (
+			content         string
+			frontmatterTOML string
+			parsed          map[string]any
+			parseErr        error
+		)
+
 		BeforeEach(func() {
 			params := url.Values{}
 			params.Set("title", "Test Page")
@@ -133,29 +180,43 @@ var _ = Describe("Site.OpenOrInit with URL parameters", func() {
 			params.Add("tags", "adapter")
 			reqURL.RawQuery = params.Encode()
 
+			// Act
 			p, err = s.OpenOrInit("test_page_arrays", req)
-		})
-
-		It("should handle array values correctly", func() {
-			content := p.Text.GetCurrent()
 			
-			// Extract and parse frontmatter
-			startIdx := 4
-			endIdx := len(content)
-			for i := startIdx; i < len(content)-3; i++ {
-				if content[i:i+3] == "+++" {
-					endIdx = i
-					break
+			// Capture test data after action
+			if p != nil {
+				content = p.Text.GetCurrent()
+				
+				// Extract and parse frontmatter
+				if strings.Contains(content, "+++") {
+					startIdx := 4
+					endIdx := len(content)
+					for i := startIdx; i < len(content)-3; i++ {
+						if content[i:i+3] == "+++" {
+							endIdx = i
+							break
+						}
+					}
+					frontmatterTOML = content[startIdx:endIdx]
+					parseErr = toml.Unmarshal([]byte(frontmatterTOML), &parsed)
 				}
 			}
-			
-			frontmatterTOML := content[startIdx:endIdx]
-			var parsed map[string]any
-			err := toml.Unmarshal([]byte(frontmatterTOML), &parsed)
-			Expect(err).NotTo(HaveOccurred())
-			
-			// Verify tags is an array
+		})
+
+		It("should parse frontmatter without error", func() {
+			Expect(parseErr).NotTo(HaveOccurred())
+		})
+
+		It("should include tags key in frontmatter", func() {
 			Expect(parsed).To(HaveKey("tags"))
+		})
+
+		It("should create tags as array type", func() {
+			_, ok := parsed["tags"].([]any)
+			Expect(ok).To(BeTrue())
+		})
+
+		It("should contain three tag values", func() {
 			tags, ok := parsed["tags"].([]any)
 			Expect(ok).To(BeTrue())
 			Expect(tags).To(HaveLen(3))

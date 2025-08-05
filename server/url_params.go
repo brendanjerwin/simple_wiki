@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"net/url"
 	"strings"
 
@@ -51,7 +52,9 @@ func BuildFrontmatterFromURLParams(identifier string, params url.Values) (wikipa
 		
 		// Handle dotted keys
 		if strings.Contains(key, ".") {
-			setNestedValue(frontmatter, key, value)
+			if err := setNestedValue(frontmatter, key, value); err != nil {
+				return nil, err
+			}
 		} else {
 			frontmatter[key] = value
 		}
@@ -62,7 +65,8 @@ func BuildFrontmatterFromURLParams(identifier string, params url.Values) (wikipa
 
 // setNestedValue sets a value in a nested map structure based on a dotted key path.
 // For example, "inventory.container" creates {"inventory": {"container": value}}
-func setNestedValue(m map[string]any, dottedKey string, value any) {
+// Returns an error if there's a conflict between a simple value and a nested structure.
+func setNestedValue(m map[string]any, dottedKey string, value any) error {
 	parts := strings.Split(dottedKey, ".")
 	current := m
 	
@@ -72,15 +76,13 @@ func setNestedValue(m map[string]any, dottedKey string, value any) {
 		
 		if existing, exists := current[part]; exists {
 			// If it exists and is a map, use it
-			if nestedMap, ok := existing.(map[string]any); ok {
-				current = nestedMap
-			} else {
-				// If it exists but is not a map, we need to convert it
-				// This handles the case where a simple value conflicts with a nested structure
-				newMap := make(map[string]any)
-				current[part] = newMap
-				current = newMap
+			nestedMap, ok := existing.(map[string]any)
+			if !ok {
+				// If it exists but is not a map, this is an error - TOML cannot have both
+				// a simple value and a table with the same key
+				return fmt.Errorf("parameter '%s' cannot be both a value and a table", part)
 			}
+			current = nestedMap
 		} else {
 			// Create a new nested map
 			newMap := make(map[string]any)
@@ -92,4 +94,5 @@ func setNestedValue(m map[string]any, dottedKey string, value any) {
 	// Set the final value
 	finalKey := parts[len(parts)-1]
 	current[finalKey] = value
+	return nil
 }

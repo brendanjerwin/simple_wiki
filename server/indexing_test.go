@@ -36,8 +36,10 @@ var _ = Describe("InitializeIndexing Concurrently", func() {
 		_ = os.RemoveAll(tempDir)
 	})
 
-	When("multiple files exist", func() {
+	Describe("when multiple files exist", func() {
 		const numFiles = 5
+		var err error
+
 		BeforeEach(func() {
 			for i := 0; i < numFiles; i++ {
 				pageName := fmt.Sprintf("test-page-%d", i)
@@ -56,21 +58,28 @@ title = "%s"
 				fileErr = os.WriteFile(mdPagePath, []byte(mdContent), 0644)
 				Expect(fileErr).NotTo(HaveOccurred())
 			}
-		})
 
-		It("should index all pages", func() {
-			err := s.InitializeIndexing()
-			Expect(err).NotTo(HaveOccurred())
+			// Act
+			err = s.InitializeIndexing()
 			
 			// Give a brief moment for indexing to start but don't wait for completion
 			time.Sleep(50 * time.Millisecond)
+		})
 
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should initialize FrontmatterIndexQueryer", func() {
 			Expect(s.FrontmatterIndexQueryer).NotTo(BeNil())
-			Expect(s.BleveIndexQueryer).NotTo(BeNil())
-			Expect(s.IndexingService).NotTo(BeNil())
+		})
 
-			// Test indexers are initialized and available for querying
-			// Note: We don't test query results since indexing happens in background
+		It("should initialize BleveIndexQueryer", func() {
+			Expect(s.BleveIndexQueryer).NotTo(BeNil())
+		})
+
+		It("should initialize IndexingService", func() {
+			Expect(s.IndexingService).NotTo(BeNil())
 		})
 	})
 })

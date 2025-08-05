@@ -49,9 +49,15 @@ var _ = Describe("BuildFrontmatterFromURLParams", func() {
 			params.Set("description", "A test page")
 		})
 
-		It("should include all simple parameters", func() {
+		It("should include identifier", func() {
 			Expect(result).To(HaveKeyWithValue("identifier", "test_page"))
+		})
+
+		It("should include title parameter", func() {
 			Expect(result).To(HaveKeyWithValue("title", "My Test Page"))
+		})
+
+		It("should include description parameter", func() {
 			Expect(result).To(HaveKeyWithValue("description", "A test page"))
 		})
 
@@ -66,11 +72,24 @@ var _ = Describe("BuildFrontmatterFromURLParams", func() {
 			params.Set("inventory.location", "Lab A")
 		})
 
-		It("should create nested map structure", func() {
+		It("should create nested inventory structure", func() {
 			Expect(result).To(HaveKey("inventory"))
-			inventory, ok := result["inventory"].(map[string]any)
+		})
+
+		It("should create inventory as map type", func() {
+			_, ok := result["inventory"].(map[string]any)
 			Expect(ok).To(BeTrue(), "inventory should be a map[string]any")
+		})
+
+		It("should include container in inventory", func() {
+			inventory, ok := result["inventory"].(map[string]any)
+			Expect(ok).To(BeTrue())
 			Expect(inventory).To(HaveKeyWithValue("container", "LabTub_61c0030e-00e3-47b5-a797-1ac01f8d05b1"))
+		})
+
+		It("should include location in inventory", func() {
+			inventory, ok := result["inventory"].(map[string]any)
+			Expect(ok).To(BeTrue())
 			Expect(inventory).To(HaveKeyWithValue("location", "Lab A"))
 		})
 
@@ -86,17 +105,47 @@ var _ = Describe("BuildFrontmatterFromURLParams", func() {
 			params.Set("metadata.version", "1.0.0")
 		})
 
-		It("should create deeply nested map structure", func() {
+		It("should create metadata structure", func() {
 			Expect(result).To(HaveKey("metadata"))
-			metadata, ok := result["metadata"].(map[string]any)
+		})
+
+		It("should create metadata as map type", func() {
+			_, ok := result["metadata"].(map[string]any)
 			Expect(ok).To(BeTrue(), "metadata should be a map[string]any")
-			
+		})
+
+		It("should create author structure in metadata", func() {
+			metadata, ok := result["metadata"].(map[string]any)
+			Expect(ok).To(BeTrue())
 			Expect(metadata).To(HaveKey("author"))
-			author, ok := metadata["author"].(map[string]any)
+		})
+
+		It("should create author as map type", func() {
+			metadata, ok := result["metadata"].(map[string]any)
+			Expect(ok).To(BeTrue())
+			_, ok = metadata["author"].(map[string]any)
 			Expect(ok).To(BeTrue(), "author should be a map[string]any")
-			
+		})
+
+		It("should include author name", func() {
+			metadata, ok := result["metadata"].(map[string]any)
+			Expect(ok).To(BeTrue())
+			author, ok := metadata["author"].(map[string]any)
+			Expect(ok).To(BeTrue())
 			Expect(author).To(HaveKeyWithValue("name", "John Doe"))
+		})
+
+		It("should include author email", func() {
+			metadata, ok := result["metadata"].(map[string]any)
+			Expect(ok).To(BeTrue())
+			author, ok := metadata["author"].(map[string]any)
+			Expect(ok).To(BeTrue())
 			Expect(author).To(HaveKeyWithValue("email", "john@example.com"))
+		})
+
+		It("should include version in metadata", func() {
+			metadata, ok := result["metadata"].(map[string]any)
+			Expect(ok).To(BeTrue())
 			Expect(metadata).To(HaveKeyWithValue("version", "1.0.0"))
 		})
 	})
@@ -106,10 +155,18 @@ var _ = Describe("BuildFrontmatterFromURLParams", func() {
 			params["tags"] = []string{"one", "two", "three"}
 		})
 
-		It("should preserve array values", func() {
+		It("should have tags key", func() {
 			Expect(result).To(HaveKey("tags"))
-			tags, ok := result["tags"].([]string)
+		})
+
+		It("should preserve array type", func() {
+			_, ok := result["tags"].([]string)
 			Expect(ok).To(BeTrue(), "tags should be a []string")
+		})
+
+		It("should contain correct array values", func() {
+			tags, ok := result["tags"].([]string)
+			Expect(ok).To(BeTrue())
 			Expect(tags).To(Equal([]string{"one", "two", "three"}))
 		})
 	})
@@ -142,34 +199,59 @@ var _ = Describe("BuildFrontmatterFromURLParams", func() {
 			params.Add("tags", "tag2")
 		})
 
-		It("should handle both correctly", func() {
+		It("should include title parameter", func() {
 			Expect(result).To(HaveKeyWithValue("title", "Test Page"))
+		})
+
+		It("should include inventory structure", func() {
 			Expect(result).To(HaveKey("inventory"))
-			
+		})
+
+		It("should create inventory as map type", func() {
+			_, ok := result["inventory"].(map[string]any)
+			Expect(ok).To(BeTrue())
+		})
+
+		It("should include container in inventory", func() {
 			inventory, ok := result["inventory"].(map[string]any)
 			Expect(ok).To(BeTrue())
 			Expect(inventory).To(HaveKeyWithValue("container", "Container1"))
-			
-			// Multiple values become an array
+		})
+
+		It("should include tags array", func() {
 			Expect(result).To(HaveKey("tags"))
+		})
+
+		It("should create tags as array type", func() {
+			_, ok := result["tags"].([]string)
+			Expect(ok).To(BeTrue())
+		})
+
+		It("should contain both tag values", func() {
 			tags, ok := result["tags"].([]string)
 			Expect(ok).To(BeTrue())
 			Expect(tags).To(ConsistOf("tag1", "tag2"))
 		})
 	})
 
-	Describe("when params would override existing nested structure", func() {
+	Describe("when params would create invalid TOML structure", func() {
 		BeforeEach(func() {
-			// This creates a potential conflict
+			// This creates an invalid TOML structure - cannot have both a string value and a table with the same key
 			params.Set("inventory", "simple_value")
 			params.Set("inventory.container", "Container1")
 		})
 
-		It("should prefer the nested structure", func() {
-			Expect(result).To(HaveKey("inventory"))
-			inventory, ok := result["inventory"].(map[string]any)
-			Expect(ok).To(BeTrue(), "inventory should be a map, not a simple value")
-			Expect(inventory).To(HaveKeyWithValue("container", "Container1"))
+		It("should return an error", func() {
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should return a descriptive error message", func() {
+			Expect(err.Error()).To(ContainSubstring("inventory"))
+			Expect(err.Error()).To(ContainSubstring("cannot be both"))
+		})
+
+		It("should return nil result", func() {
+			Expect(result).To(BeNil())
 		})
 	})
 

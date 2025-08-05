@@ -260,14 +260,16 @@ func (s *Site) applyMigrationsForPage(page *Page, content []byte) ([]byte, error
 
 	migratedContent, err := s.MigrationApplicator.ApplyMigrations(content)
 	if err != nil {
-		return content, err
+		// Log migration failure but continue with original content
+		s.Logger.Warn("Migration failed, using original content: %v", err)
+		return content, nil
 	}
 
 	// If migration was applied, save the migrated content
 	if !bytes.Equal(content, migratedContent) {
 		// Update the page's text with migrated content and save
 		page.Text = versionedtext.NewVersionedText(string(migratedContent))
-		if saveErr := page.saveWithoutIndexing(); saveErr != nil {
+		if saveErr := s.savePageWithoutIndexing(page); saveErr != nil {
 			s.Logger.Warn("Failed to save migrated content for %s: %v", page.Identifier, saveErr)
 		}
 	}
@@ -335,7 +337,7 @@ func (s *Site) OpenOrInit(requestedIdentifier string, req *http.Request) (*Page,
 
 		p.Text = versionedtext.NewVersionedText(initialText)
 		p.Render()
-		if err := p.Save(); err != nil {
+		if err := s.savePage(p); err != nil {
 			s.Logger.Error("Failed to save new page '%s': %v", p.Identifier, err)
 			return nil, fmt.Errorf("failed to save new page '%s': %w", p.Identifier, err)
 		}
@@ -481,11 +483,6 @@ func combineFrontmatterAndMarkdown(fm wikipage.FrontMatter, md wikipage.Markdown
 
 // WriteFrontMatter writes the frontmatter for a page.
 func (s *Site) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
-	p, err := s.Open(string(identifier))
-	if err != nil {
-		return fmt.Errorf(failedToOpenPageErrFmt, identifier, err)
-	}
-
 	// Use the PageReaderMutator interface to get the current markdown content.
 	_, md, err := s.ReadMarkdown(identifier)
 	if err != nil && !os.IsNotExist(err) {
@@ -497,17 +494,12 @@ func (s *Site) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.
 		return err
 	}
 
-	// Use Update to correctly save history to .json and current version to .md
-	return p.Update(newText)
+	// Use UpdatePageContent to correctly save history to .json and current version to .md
+	return s.UpdatePageContent(identifier, newText)
 }
 
 // WriteMarkdown writes the markdown content for a page.
 func (s *Site) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Markdown) error {
-	p, err := s.Open(string(identifier))
-	if err != nil {
-		return fmt.Errorf(failedToOpenPageErrFmt, identifier, err)
-	}
-
 	// Use the PageReaderMutator interface to get the current frontmatter.
 	_, fm, err := s.ReadFrontMatter(identifier)
 	if err != nil && !os.IsNotExist(err) {
@@ -519,8 +511,8 @@ func (s *Site) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Mar
 		return err
 	}
 
-	// Use Update to correctly save history to .json and current version to .md
-	return p.Update(newText)
+	// Use UpdatePageContent to correctly save history to .json and current version to .md
+	return s.UpdatePageContent(identifier, newText)
 }
 
 // ReadFrontMatter reads the frontmatter for a page.
@@ -557,11 +549,133 @@ func (s *Site) ReadMarkdown(identifier wikipage.PageIdentifier) (wikipage.PageId
 
 // DeletePage deletes a page from disk.
 func (s *Site) DeletePage(identifier wikipage.PageIdentifier) error {
+	s.saveMut.Lock()
+	defer s.saveMut.Unlock()
+	
+	s.Logger.Trace("Deleting page %s", identifier)
+	
+	// Enqueue removal jobs for both frontmatter and bleve indexes
+	if s.IndexingService != nil {
+		s.IndexingService.EnqueueIndexJob(string(identifier), index.Remove)
+	}
+	
+	// Soft delete: move files to __deleted__/<timestamp>/ directory
+	timestamp := time.Now().Unix()
+	deletedDir := path.Join(s.PathToData, "__deleted__", fmt.Sprintf("%d", timestamp))
+	
+	// Create the timestamped deleted directory
+	if err := os.MkdirAll(deletedDir, 0755); err != nil {
+		return fmt.Errorf("failed to create deleted directory: %w", err)
+	}
+	
+	// Move JSON file if it exists
+	jsonPath := path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(string(identifier)))+".json")
+	deletedJSONPath := path.Join(deletedDir, base32tools.EncodeToBase32(strings.ToLower(string(identifier)))+".json")
+	jsonErr := os.Rename(jsonPath, deletedJSONPath)
+	jsonExists := jsonErr == nil
+	if jsonErr != nil && !os.IsNotExist(jsonErr) {
+		return fmt.Errorf("failed to move JSON file for page %s: %w", identifier, jsonErr)
+	}
+	
+	// Move Markdown file if it exists
+	mdPath := path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(string(identifier)))+".md")
+	deletedMdPath := path.Join(deletedDir, base32tools.EncodeToBase32(strings.ToLower(string(identifier)))+".md")
+	mdErr := os.Rename(mdPath, deletedMdPath)
+	mdExists := mdErr == nil
+	if mdErr != nil && !os.IsNotExist(mdErr) {
+		return fmt.Errorf("failed to move Markdown file for page %s: %w", identifier, mdErr)
+	}
+	
+	// If neither file existed, return not found error
+	if !jsonExists && !mdExists {
+		return os.ErrNotExist
+	}
+	
+	return nil
+}
+
+// UpdatePageContent updates a page's full content, applying migrations, rendering, and saving.
+// This replaces the functionality of Page.Update() but at the Site interface level.
+func (s *Site) UpdatePageContent(identifier wikipage.PageIdentifier, newText string) error {
 	p, err := s.Open(string(identifier))
 	if err != nil {
-		return fmt.Errorf("failed to open page %s for deletion: %w", identifier, err)
+		return fmt.Errorf("failed to open page %s for update: %w", identifier, err)
 	}
-	return p.Erase()
+
+	// Apply migrations to fix user mistakes in real-time
+	migratedContent, err := p.applyMigrations([]byte(newText))
+	if err != nil {
+		return fmt.Errorf("failed to apply migrations during update: %w", err)
+	}
+
+	// If migration changed the content, use the migrated version
+	if string(migratedContent) != newText {
+		newText = string(migratedContent)
+	}
+
+	// Update the versioned text
+	p.Text.Update(newText)
+
+	// Render the new page
+	p.Render()
+
+	// Save to disk with proper locking
+	return s.savePage(p)
+}
+
+// savePage handles the low-level persistence of a page to disk
+func (s *Site) savePage(p *Page) error {
+	s.saveMut.Lock()
+	defer s.saveMut.Unlock()
+	
+	bJSON, err := json.MarshalIndent(p, "", " ")
+	if err != nil {
+		return err
+	}
+
+	err = os.WriteFile(path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(p.Identifier))+".json"), bJSON, 0644)
+	if err != nil {
+		return err
+	}
+
+	// Write the current Markdown
+	err = os.WriteFile(path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(p.Identifier))+".md"), []byte(p.Text.CurrentText), 0644)
+	if err != nil {
+		return err
+	}
+
+	// Enqueue indexing jobs for both frontmatter and bleve indexes
+	if s.IndexingService != nil {
+		s.IndexingService.EnqueueIndexJob(p.Identifier, index.Add)
+	}
+
+	return nil
+}
+
+// savePageWithoutIndexing saves a page to disk without triggering indexing.
+// This is used by migrations to avoid circular references during read operations.
+func (s *Site) savePageWithoutIndexing(p *Page) error {
+	s.saveMut.Lock()
+	defer s.saveMut.Unlock()
+	
+	bJSON, err := json.MarshalIndent(p, "", " ")
+	if err != nil {
+		return err
+	}
+
+	err = os.WriteFile(path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(p.Identifier))+".json"), bJSON, 0644)
+	if err != nil {
+		return err
+	}
+
+	// Write the current Markdown
+	err = os.WriteFile(path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(p.Identifier))+".md"), []byte(p.Text.CurrentText), 0644)
+	if err != nil {
+		return err
+	}
+
+	// Note: Intentionally NOT calling IndexingService to prevent circular references
+	return nil
 }
 
 // GetJobQueueCoordinator returns the job queue coordinator for progress monitoring.

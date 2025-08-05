@@ -42,8 +42,11 @@ This is the content.`
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("should convert inventory.container to [inventory] section", func() {
+			It("should create [inventory] section", func() {
 				Expect(migratedContent).To(ContainSubstring("[inventory]"))
+			})
+
+			It("should convert container value to munged format", func() {
 				Expect(migratedContent).To(ContainSubstring(`container = "garage_inventory"`))
 			})
 
@@ -51,13 +54,19 @@ This is the content.`
 				Expect(migratedContent).NotTo(ContainSubstring("inventory.container"))
 			})
 
-			It("should preserve other frontmatter fields", func() {
+			It("should preserve identifier field", func() {
 				Expect(migratedContent).To(ContainSubstring(`identifier = "garage_unit_3_shelf_a"`))
+			})
+
+			It("should preserve title field", func() {
 				Expect(migratedContent).To(ContainSubstring(`title = "Garage Unit 3, Shelf A"`))
 			})
 
-			It("should preserve body content", func() {
+			It("should preserve body header", func() {
 				Expect(migratedContent).To(ContainSubstring("# Garage Unit 3, Shelf A"))
+			})
+
+			It("should preserve body text", func() {
 				Expect(migratedContent).To(ContainSubstring("This is the content."))
 			})
 		})
@@ -204,8 +213,11 @@ field = "value"
 				Expect(result).NotTo(ContainSubstring("inventory.container"))
 			})
 
-			It("should preserve existing sections", func() {
+			It("should preserve other section header", func() {
 				Expect(result).To(ContainSubstring("[other]"))
+			})
+
+			It("should preserve other section field", func() {
 				Expect(result).To(ContainSubstring(`field = "value"`))
 			})
 		})

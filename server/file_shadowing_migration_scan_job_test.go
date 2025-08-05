@@ -10,6 +10,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
+	"github.com/brendanjerwin/simple_wiki/rollingmigrations"
 	"github.com/jcelliott/lumber"
 	"github.com/schollz/versionedtext"
 )
@@ -37,6 +38,7 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 		site = &Site{
 			PathToData: testDataDir,
 			Logger:     lumber.NewConsoleLogger(lumber.WARN),
+			MigrationApplicator: rollingmigrations.NewEmptyApplicator(),
 		}
 		job = NewFileShadowingMigrationScanJob(testDataDir, coordinator, queueName, site)
 	})
@@ -47,6 +49,11 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 
 	Describe("Execute", func() {
 		When("directory contains PascalCase identifiers", func() {
+			var (
+				err   error
+				stats *jobs.QueueStats
+			)
+
 			BeforeEach(func() {
 				// Create PascalCase pages directly on filesystem to simulate legacy state
 				// These would have been created before the munging system was implemented
@@ -55,22 +62,26 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 				createPascalCasePage(testDataDir, "DeviceManual", "# Device Manual")
 				
 				// Create already-munged page using Site.Open() (should be ignored by scan)
-				existingPage, err := site.Open("lab_inventory")
-				Expect(err).NotTo(HaveOccurred())
+				existingPage, existingErr := site.Open("lab_inventory")
+				Expect(existingErr).NotTo(HaveOccurred())
 				existingPage.Text = versionedtext.NewVersionedText("# Existing Lab")
-				existingPage.Save()
+				site.UpdatePageContent(existingPage.Identifier, existingPage.Text.GetCurrent())
 				
 				// Non-page files (should be ignored)
 				createTestFile(testDataDir, "sha256_somehash", "binary content")
 				createTestFile(testDataDir, "random.txt", "text file")
+
+				// Act
+				err = job.Execute()
+				stats = coordinator.GetQueueStats(queueName)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("should enqueue migration jobs for each PascalCase identifier", func() {
-				err := job.Execute()
-				Expect(err).NotTo(HaveOccurred())
-				
 				// Should have enqueued jobs for LabInventory, UserGuide, DeviceManual (3 identifiers)
-				stats := coordinator.GetQueueStats(queueName)
 				Expect(stats).NotTo(BeNil())
 				Expect(stats.JobsRemaining).To(Equal(int32(3)))
 				Expect(stats.IsActive).To(BeTrue())
@@ -78,27 +89,36 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 		})
 
 		When("directory has no PascalCase identifiers", func() {
+			var (
+				err   error
+				stats *jobs.QueueStats
+			)
+
 			BeforeEach(func() {
 				// Only munged identifiers using Site.Open (creates base32-encoded files)
-				labPage, err := site.Open("lab_inventory")
-				Expect(err).NotTo(HaveOccurred())
+				labPage, labErr := site.Open("lab_inventory")
+				Expect(labErr).NotTo(HaveOccurred())
 				labPage.Text = versionedtext.NewVersionedText("# Lab Inventory")
-				labPage.Save()
+				site.UpdatePageContent(labPage.Identifier, labPage.Text.GetCurrent())
 				
-				userPage, err := site.Open("user_guide")
-				Expect(err).NotTo(HaveOccurred())
+				userPage, userErr := site.Open("user_guide")
+				Expect(userErr).NotTo(HaveOccurred())
 				userPage.Text = versionedtext.NewVersionedText("# User Guide")  
-				userPage.Save()
+				site.UpdatePageContent(userPage.Identifier, userPage.Text.GetCurrent())
 				
 				// Non-page files
 				createTestFile(testDataDir, "sha256_somehash", "binary content")
+
+				// Act
+				err = job.Execute()
+				stats = coordinator.GetQueueStats(queueName)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("should not enqueue any migration jobs", func() {
-				err := job.Execute()
-				Expect(err).NotTo(HaveOccurred())
-				
-				stats := coordinator.GetQueueStats(queueName)
 				Expect(stats).NotTo(BeNil())
 				Expect(stats.JobsRemaining).To(Equal(int32(0)))
 				Expect(stats.IsActive).To(BeFalse())
@@ -106,13 +126,20 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 		})
 
 		When("directory does not exist", func() {
+			var err error
+
 			BeforeEach(func() {
 				os.RemoveAll(testDataDir)
+
+				// Act
+				err = job.Execute()
 			})
 
 			It("should return an error", func() {
-				err := job.Execute()
 				Expect(err).To(HaveOccurred())
+			})
+
+			It("should indicate directory not found", func() {
 				Expect(err.Error()).To(ContainSubstring("no such file or directory"))
 			})
 		})
@@ -120,6 +147,8 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 
 	Describe("FindPascalCaseIdentifiers", func() {
 		When("directory contains mixed page types", func() {
+			var pascalIdentifiers []string
+
 			BeforeEach(func() {
 				// Create PascalCase pages directly on filesystem to simulate legacy state
 				createPascalCasePage(testDataDir, "LabInventory", "# Lab Inventory")
@@ -127,21 +156,54 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 				createPascalCasePage(testDataDir, "DeviceList", "# Device List")
 				
 				// Create already-munged page using Site.Open (creates base32-encoded files)
-				existingPage, err := site.Open("existing_page")
-				Expect(err).NotTo(HaveOccurred())
+				existingPage, existingErr := site.Open("existing_page")
+				Expect(existingErr).NotTo(HaveOccurred())
 				existingPage.Text = versionedtext.NewVersionedText("# Existing Page")
-				existingPage.Save()
+				site.UpdatePageContent(existingPage.Identifier, existingPage.Text.GetCurrent())
 				
 				// Non-page files (should be ignored)
 				createTestFile(testDataDir, "sha256_abcdef", "binary")
 				createTestFile(testDataDir, "config.txt", "config")
+
+				// Act
+				pascalIdentifiers = job.FindPascalCaseIdentifiers()
+			})
+
+			It("should identify the correct number of PascalCase identifiers", func() {
+				Expect(pascalIdentifiers).To(HaveLen(3))
 			})
 
 			It("should identify only PascalCase identifiers", func() {
-				pascalIdentifiers := job.FindPascalCaseIdentifiers()
-				
-				Expect(pascalIdentifiers).To(HaveLen(3))
 				Expect(pascalIdentifiers).To(ContainElements("LabInventory", "UserGuide", "DeviceList"))
+			})
+		})
+
+		When("directory contains identifiers that would have same base32 encoding when munged", func() {
+			var pascalIdentifiers []string
+
+			BeforeEach(func() {
+				// Create a page that has mixed case but would result in same base32 when munged
+				// This should NOT be detected as PascalCase for migration since it'd cause file conflicts
+				createPascalCasePage(testDataDir, "lab_smallparts_2B4", "# Lab Smallparts 2B4")
+				
+				// Create a true PascalCase identifier that would have different base32 encoding
+				createPascalCasePage(testDataDir, "TruePascalCase", "# True Pascal Case")
+
+				// Act
+				pascalIdentifiers = job.FindPascalCaseIdentifiers()
+			})
+
+			It("should detect only safe PascalCase identifiers", func() {
+				// Should only find TruePascalCase, not lab_smallparts_2B4 (which would conflict)
+				Expect(pascalIdentifiers).To(HaveLen(1))
+			})
+
+			It("should identify the safe PascalCase identifier", func() {
+				Expect(pascalIdentifiers).To(ContainElement("TruePascalCase"))
+			})
+
+			It("should not detect identifiers that would conflict when munged", func() {
+				Expect(pascalIdentifiers).NotTo(ContainElement("lab_smallparts_2B4"))
 			})
 		})
 	})

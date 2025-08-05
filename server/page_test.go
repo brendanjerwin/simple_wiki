@@ -66,19 +66,19 @@ var _ = Describe("Page Functions", func() {
 				req, _ := http.NewRequest("GET", "/", nil)
 				p, err := s.OpenOrInit("testpage", req)
 				Expect(err).ToNot(HaveOccurred())
-				err = p.Update("Some data")
+				err = s.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "Some data")
 				Expect(err).ToNot(HaveOccurred())
 				time.Sleep(10 * time.Millisecond)
 
 				p, err = s.OpenOrInit("testpage2", req)
 				Expect(err).ToNot(HaveOccurred())
-				err = p.Update("A different bunch of data")
+				err = s.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "A different bunch of data")
 				Expect(err).ToNot(HaveOccurred())
 				time.Sleep(10 * time.Millisecond)
 
 				p, err = s.OpenOrInit("testpage3", req)
 				Expect(err).ToNot(HaveOccurred())
-				err = p.Update("Not much else")
+				err = s.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "Not much else")
 				Expect(err).ToNot(HaveOccurred())
 
 				// Wait for any background indexing operations to complete
@@ -115,8 +115,13 @@ var _ = Describe("Page Functions", func() {
 
 		When("A page is updated", func() {
 			BeforeEach(func() {
-				err := p.Update("**bold**")
+				err := s.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "**bold**")
 				Expect(err).ToNot(HaveOccurred())
+				
+				// Re-fetch the page to get the updated content
+				p, err = s.Open(p.Identifier)
+				Expect(err).ToNot(HaveOccurred())
+				p.Render()
 			})
 
 			It("should render correctly", func() {
@@ -125,10 +130,13 @@ var _ = Describe("Page Functions", func() {
 
 			When("the page is updated again", func() {
 				BeforeEach(func() {
-					err := p.Update("**bold** and *italic*")
+					err := s.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "**bold** and *italic*")
 					Expect(err).ToNot(HaveOccurred())
-					err = p.Save()
+					
+					// Re-fetch the page to get the updated content
+					p, err = s.Open(p.Identifier)
 					Expect(err).ToNot(HaveOccurred())
+					p.Render()
 				})
 
 				It("should render the new content", func() {

@@ -232,9 +232,15 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 	})
 
 	Describe("when container has mixed inventory sources", func() {
-		It("should include both direct and index items", func() {
+		var (
+			isolatedMockSite  *mockPageReader
+			isolatedMockIndex *mockFrontmatterIndex
+			result            string
+		)
+
+		BeforeEach(func() {
 			// Arrange - Container with BOTH direct items AND index items - completely isolated
-			isolatedMockSite := &mockPageReader{
+			isolatedMockSite = &mockPageReader{
 				pages: map[string]wikipage.FrontMatter{
 					"isolated_mixed_container": {
 						identifierKey: "isolated_mixed_container",
@@ -258,7 +264,7 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 			}
 
 			// Set up index to return index_item for mixed_container
-			isolatedMockIndex := &mockFrontmatterIndex{
+			isolatedMockIndex = &mockFrontmatterIndex{
 				index: map[string]map[string][]string{
 					"inventory.container": {
 						"isolated_mixed_container": []string{"isolated_index_item"}, 
@@ -279,9 +285,10 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 
 			// Act
 			showInventoryFunc := templating.BuildShowInventoryContentsOf(isolatedMockSite, isolatedMockIndex, 0)
-			result := showInventoryFunc("isolated_mixed_container")
-			
-			
+			result = showInventoryFunc("isolated_mixed_container")
+		})
+
+		It("should include both direct and index items", func() {
 			Expect(result).To(ContainSubstring("Isolated Direct Item"))
 			Expect(result).To(ContainSubstring("Isolated Index Item"))
 		})
@@ -329,18 +336,57 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 		It("should produce markdown output for direct inventory item", func() {
 			Expect(result).To(ContainSubstring("Simple Item"))
 		})
+	})
 
-		It("should test manual template execution", func() {
-			// Let's manually execute the same template that BuildShowInventoryContentsOf uses
-			_, containerFrontmatter, err := mockSite.ReadFrontMatter("test_container")
+	Describe("when testing manual template execution", func() {
+		var (
+			containerFrontmatter wikipage.FrontMatter
+			templateContext      templating.TemplateContext
+			tmplString          string
+			funcs               map[string]any
+			tmpl                *template.Template
+			buf                 *bytes.Buffer
+			result              string
+			err                 error
+		)
+
+		BeforeEach(func() {
+			// Arrange
+			mockSite := &mockPageReader{
+				pages: map[string]wikipage.FrontMatter{
+					"test_container": {
+						identifierKey: "test_container",
+						titleKey:      "Test Container", 
+						inventoryKey: map[string]any{
+							itemsKey: []string{"simple_item"}, // Direct inventory item
+						},
+					},
+					"simple_item": { 
+						identifierKey: "simple_item",
+						titleKey:      "Simple Item",
+					},
+				},
+			}
+
+			mockIndex := &mockFrontmatterIndex{
+				index:  map[string]map[string][]string{},
+				values: map[string]map[string]string{
+					"simple_item": {
+						titleKey: "Simple Item",
+					},
+				},
+			}
+
+			// Act - manually execute the same template that BuildShowInventoryContentsOf uses
+			_, containerFrontmatter, err = mockSite.ReadFrontMatter("test_container")
 			Expect(err).NotTo(HaveOccurred())
 			
-			templateContext, err := templating.ConstructTemplateContextFromFrontmatterWithVisited(
+			templateContext, err = templating.ConstructTemplateContextFromFrontmatterWithVisited(
 				containerFrontmatter, mockIndex, make(map[string]bool))
 			Expect(err).NotTo(HaveOccurred())
 			
 			// Use a simplified template string (without ShowInventoryContentsOf for now)
-			tmplString := `
+			tmplString = `
 {{ range .Inventory.Items }}
 {{ if IsContainer . }}
  - **{{ LinkTo . }}**
@@ -351,19 +397,22 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 `
 			
 			// Build the same functions
-			funcs := map[string]any{
+			funcs = map[string]any{
 				"LinkTo":      templating.BuildLinkTo(mockSite, templateContext, mockIndex), 
 				"IsContainer": templating.BuildIsContainer(mockIndex),
 			}
 			
-			tmpl, err := template.New("test").Funcs(funcs).Parse(tmplString)
+			tmpl, err = template.New("test").Funcs(funcs).Parse(tmplString)
 			Expect(err).NotTo(HaveOccurred())
 			
-			buf := &bytes.Buffer{}
+			buf = &bytes.Buffer{}
 			err = tmpl.Execute(buf, templateContext)
 			Expect(err).NotTo(HaveOccurred())
 			
-			result := buf.String()
+			result = buf.String()
+		})
+
+		It("should produce markdown output for direct inventory item", func() {
 			Expect(result).To(ContainSubstring("Simple Item"))
 		})
 

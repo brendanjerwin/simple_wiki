@@ -532,13 +532,3 @@ func formatTimeoutError(execCtx ExecutionContext, visited map[string]bool, templ
 
 	return errorMsg
 }
-
-// getVisitedList returns a sorted list of visited pages for debugging.
-func getVisitedList(visited map[string]bool) []string {
-	pages := make([]string, 0, len(visited))
-	for page := range visited {
-		pages = append(pages, page)
-	}
-	sort.Strings(pages)
-	return pages
-}
