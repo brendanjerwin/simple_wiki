@@ -379,31 +379,20 @@ describe("My Timed Component", () => {
 
 #### 3. Use `Promise.race` for Explicit Timeouts
 
-While the test runner timeout is a good safety net, you can add more specific timeouts to your setup logic to pinpoint exactly which async operation is failing.
-
-**Pattern:** Race your async setup operation against a timeout promise. Whichever finishes first wins.
-
-**Example:**
+Race your async setup operation against a timeout promise to pinpoint exactly which async operation is failing.
 
 ```typescript
-function timeout(ms, message) {
+function timeout(ms: number, message: string): Promise<never> {
   return new Promise((_, reject) =>
     setTimeout(() => reject(new Error(message)), ms),
   );
 }
 
 beforeEach(async () => {
-  try {
-    // This will fail if the fixture takes longer than 3 seconds
-    el = await Promise.race([
-      fixture(html`<frontmatter-editor-dialog></frontmatter-editor-dialog>`),
-      timeout(3000, "Component fixture timed out"),
-    ]);
-  } catch (e) {
-    // The error will clearly state that the fixture timed out
-    console.error(e);
-    throw e;
-  }
+  el = await Promise.race([
+    fixture(html`<frontmatter-editor-dialog></frontmatter-editor-dialog>`),
+    timeout(3000, "Component fixture timed out"),
+  ]);
 });
 ```
 
@@ -666,12 +655,10 @@ beforeEach(async () => {
   ```
 
 - **Documentation of Testing Principles**: When you discover important testing principles or patterns that ensure comprehensive coverage, document them in this CONVENTIONS.md file. This builds a comprehensive guide for future developers and helps maintain consistent testing practices across the project.
-
 - Include a blank line between all the various Ginkgo blocks. This makes it easier to read the tests.
-
 - Prefer Ginkgo/Gomega for testing in Go.
 - Use a Context-Specification style. Nest `describe` blocks to build up context. Don't bother with `context` blocks in frameworks that provide them.
-- Don't do actions in the `It` blocks. The `It` blocks should only contain assertions. All setup (**Arrange**) and execution (**Act**) should be done in `BeforeEach` blocks within the `Describe` or `When` blocks (`When` blocks if provided by the framework of course. Put "When" in the description of the `Describe` block if `When` blocks aren't available). This allows for reusing context to add additional assertions later.
+- Don't do actions in the `It` blocks. The `It` blocks should only contain assertions. All setup (**Arrange**) and execution (**Act**) should be done in `BeforeEach` blocks within the `Describe` or `When` blocks. This allows for reusing context to add additional assertions later.
 
   **Bad:** Action inside the `It` block.
 
@@ -739,7 +726,7 @@ beforeEach(async () => {
   Expect(err).To(MatchError("specific error message"))
   ```
 
-- Use the `Describe` blocks first to describe the function/component being tested, then use nested `When` blocks to establish the scenarios. Besides the basic `It(text: "Should exist"` tests, everything should be in those nested "When" blocks.
+- Use the `Describe` blocks first to describe the function/component being tested, then use nested `When` blocks to establish the scenarios. Besides the basic `It("Should exist")` tests, everything should be in those nested "When" blocks.
 - **Important**: Use "when" in `describe` block descriptions to establish scenarios, not in `it` block descriptions. The `it` blocks should describe the expected behavior or outcome.
 - Include a blank line between all the various Ginkgo blocks. This makes it easier to read the tests.
 
@@ -1000,103 +987,12 @@ beforeEach(async () => {
 
 ## Exception Handling Strategy
 
-The application follows a **selective exception handling** strategy: **only catch exceptions you can meaningfully handle or recover from**. All unhandled exceptions should bubble up to the global error handler to provide a consistent user experience.
+The application follows a **selective exception handling** strategy: **only catch exceptions you can meaningfully handle or recover from**. All unhandled exceptions bubble up to the global error handler.
 
-### Global Error Handler
+**✅ DO catch when:** You can provide user feedback/retry, gracefully degrade functionality, or recover automatically  
+**❌ DON'T catch when:** Just logging without handling, hiding programming bugs, or can't provide meaningful recovery
 
-The application has a global error handler that:
-
-- Catches all unhandled JavaScript errors (`window.addEventListener('error')`)
-- Catches all unhandled promise rejections (`window.addEventListener('unhandledrejection')`)
-- Displays a kernel panic screen with error details processed through `ErrorService`
-- Allows users to refresh and restart the application
-
-This ensures that even unhandled errors provide a user-friendly experience rather than a broken application.
-
-### When to Catch Exceptions
-
-**✅ DO catch exceptions when:**
-
-- You can provide meaningful user feedback and allow retry (e.g., network requests)
-- You can gracefully degrade functionality while keeping the app usable
-- You can recover automatically or provide alternative behavior
-- The error is expected and part of normal operation (e.g., validation errors)
-
-**❌ DON'T catch exceptions when:**
-
-- You're just logging and re-throwing without handling
-- The error represents a programming bug that should be fixed
-- You can't provide any meaningful recovery or user action
-- You're hiding genuine problems that should be addressed
-
-### Exception Handling Patterns
-
-#### Good: Handle recoverable errors
-
-```typescript
-// User can retry this operation
-async loadData() {
-  try {
-    this.loading = true;
-    this.error = undefined;
-    const response = await this.client.getData();
-    this.data = response;
-  } catch (err) {
-    // Process error and show user-friendly message
-    const processedError = ErrorService.processError(err, 'load data');
-    this.error = processedError.message;
-    this.errorDetails = processedError.details;
-    // User can click reload button to retry
-  } finally {
-    this.loading = false;
-  }
-}
-```
-
-#### Good: Let unrecoverable errors bubble up
-
-```typescript
-// This represents data corruption - nothing the component can do
-private convertData(corruptedData: unknown): ProcessedData {
-  if (!this.isValidData(corruptedData)) {
-    // Don't catch this - let it bubble to global handler
-    throw new Error('Data corruption detected in user profile');
-  }
-  return this.processData(corruptedData);
-}
-```
-
-#### Bad: Catching without meaningful handling
-
-```typescript
-// Bad: Just logging and hiding the error
-async saveDocument() {
-  try {
-    await this.client.save(this.document);
-  } catch (err) {
-    console.error('Save failed:', err); // Just logging
-    // No user feedback, no retry mechanism, error is hidden
-  }
-}
-```
-
-### Error Recovery Guidelines
-
-- **Provide clear user feedback** for all caught errors
-- **Enable retry mechanisms** when operations can be reattempted
-- **Maintain application state consistency** when errors occur
-- **Use ErrorService.processError()** for consistent error presentation
-- **Document recovery paths** in component interfaces and user documentation
-
-### Testing Exception Scenarios
-
-- **Test error paths** as thoroughly as success paths
-- **Verify error messages** are user-friendly and actionable
-- **Test global error handler** doesn't interfere with intentional error handling
-- **Simulate network failures, timeouts, and server errors** in tests
-- **Ensure error states can be recovered from** without full page refresh
-
-This strategy ensures robust error handling while maintaining a clean separation between recoverable local errors and unrecoverable system errors.
+**Global Error Handler**: Catches unhandled errors/rejections, displays kernel panic screen, allows user restart.
 
 ### Running Linters
 
