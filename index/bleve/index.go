@@ -2,7 +2,7 @@
 package bleve
 
 import (
-	"log"
+	"fmt"
 	"regexp"
 	"strings"
 	"sync"
@@ -60,20 +60,17 @@ func (b *Index) AddPageToIndex(requestedIdentifier wikipage.PageIdentifier) erro
 	mungedIdentifier := wikiidentifiers.MungeIdentifier(requestedIdentifier)
 	identifier, markdown, err := b.pageReader.ReadMarkdown(requestedIdentifier)
 	if err != nil {
-		log.Printf("Bleve indexer: ReadMarkdown failed for %s: %v", requestedIdentifier, err)
-		return err
+		return fmt.Errorf("bleve indexer failed to read markdown for page %q: %w", requestedIdentifier, err)
 	}
 
 	_, pageFrontmatter, err := b.pageReader.ReadFrontMatter(identifier)
 	if err != nil {
-		log.Printf("Bleve indexer: ReadFrontMatter failed for %s: %v", requestedIdentifier, err)
-		return err
+		return fmt.Errorf("bleve indexer failed to read frontmatter for page %q: %w", requestedIdentifier, err)
 	}
 
 	renderedBytes, err := templating.ExecuteTemplateForIndexing(markdown, pageFrontmatter, b.pageReader, b.frontmatterQueryer)
 	if err != nil {
-		log.Printf("Bleve indexer: ExecuteTemplate failed for %s: %v", requestedIdentifier, err)
-		return err
+		return fmt.Errorf("bleve indexer failed to execute template for page %q: %w", requestedIdentifier, err)
 	}
 	markdownRenderer := goldmarkrenderer.GoldmarkRenderer{}
 	htmlBytes, err := markdownRenderer.Render(renderedBytes)
@@ -98,8 +95,7 @@ func (b *Index) AddPageToIndex(requestedIdentifier wikipage.PageIdentifier) erro
 
 	err = b.index.Index(identifier, pageFrontmatter)
 	if err != nil {
-		log.Printf("Bleve indexer: Index operation failed for %s: %v", requestedIdentifier, err)
-		return err
+		return fmt.Errorf("bleve indexer failed to index page %q: %w", requestedIdentifier, err)
 	}
 
 	return nil

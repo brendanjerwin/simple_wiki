@@ -30,7 +30,8 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 		testDataDir, err = os.MkdirTemp("", "file-shadowing-scan-test")
 		Expect(err).NotTo(HaveOccurred())
 		
-		coordinator = jobs.NewJobQueueCoordinator()
+		logger := lumber.NewConsoleLogger(lumber.WARN) // Quiet logger for tests
+		coordinator = jobs.NewJobQueueCoordinator(logger)
 		queueName = "FileShadowingMigration"
 		coordinator.RegisterQueue(queueName)
 		

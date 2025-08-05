@@ -3,6 +3,7 @@ package jobs
 import (
 	"sync"
 
+	"github.com/jcelliott/lumber"
 	"github.com/mborders/artifex"
 )
 
@@ -10,14 +11,16 @@ import (
 type JobQueueCoordinator struct {
 	queues map[string]*artifex.Dispatcher
 	stats  map[string]*QueueStats
+	logger lumber.Logger
 	mu     sync.RWMutex
 }
 
 // NewJobQueueCoordinator creates a new JobQueueCoordinator.
-func NewJobQueueCoordinator() *JobQueueCoordinator {
+func NewJobQueueCoordinator(logger lumber.Logger) *JobQueueCoordinator {
 	return &JobQueueCoordinator{
 		queues: make(map[string]*artifex.Dispatcher),
 		stats:  make(map[string]*QueueStats),
+		logger: logger,
 	}
 }
 
@@ -72,7 +75,10 @@ func (c *JobQueueCoordinator) EnqueueJob(queueName string, job Job) {
 			}
 		}()
 		
-		_ = job.Execute() // Execute the job (ignore errors for now)
+		err := job.Execute()
+		if err != nil {
+			c.logger.Error("Job execution failed: queue=%s job=%s error=%v", queueName, job.GetName(), err)
+		}
 	})
 }
 

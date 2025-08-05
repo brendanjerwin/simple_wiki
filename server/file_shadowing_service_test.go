@@ -123,7 +123,8 @@ var _ = Describe("FileShadowingService", func() {
 			MigrationApplicator: rollingmigrations.NewEmptyApplicator(),
 		}
 		
-		coordinator = jobs.NewJobQueueCoordinator()
+		logger := lumber.NewConsoleLogger(lumber.WARN) // Quiet logger for tests
+		coordinator = jobs.NewJobQueueCoordinator(logger)
 		service = NewFileShadowingService(coordinator, site)
 	})
 

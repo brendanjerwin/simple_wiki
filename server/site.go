@@ -109,7 +109,7 @@ func (s *Site) InitializeIndexing() error {
 	s.IndexMaintainer = multiMaintainer
 
 	// Create new job queue coordinator and indexing service
-	s.JobQueueCoordinator = jobs.NewJobQueueCoordinator()
+	s.JobQueueCoordinator = jobs.NewJobQueueCoordinator(s.Logger)
 	s.IndexingService = NewIndexingService(s.JobQueueCoordinator, frontmatterIndex, bleveIndex)
 	s.IndexingService.InitializeQueues()
 

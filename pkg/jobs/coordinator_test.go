@@ -3,6 +3,7 @@ package jobs_test
 import (
 	"testing"
 
+	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -18,7 +19,8 @@ var _ = Describe("JobQueueCoordinator", func() {
 	var coordinator *jobs.JobQueueCoordinator
 
 	BeforeEach(func() {
-		coordinator = jobs.NewJobQueueCoordinator()
+		logger := lumber.NewConsoleLogger(lumber.WARN) // Quiet logger for tests
+		coordinator = jobs.NewJobQueueCoordinator(logger)
 	})
 
 	It("should exist", func() {
@@ -110,30 +112,29 @@ var _ = Describe("JobQueueCoordinator", func() {
 			coordinator.RegisterQueue("Queue1")
 			coordinator.RegisterQueue("Queue2")
 			coordinator.RegisterQueue("Queue3")
-			
-			// Enqueue jobs to make Queue1 and Queue3 active
-			coordinator.EnqueueJob("Queue1", &jobs.MockJob{Name: "job1"})
-			coordinator.EnqueueJob("Queue3", &jobs.MockJob{Name: "job3"})
-		})
-
-		var (
-			activeQueues []*jobs.QueueStats
-			queueNames   []string
-		)
-
-		BeforeEach(func() {
-			activeQueues = coordinator.GetActiveQueues()
-			queueNames = make([]string, len(activeQueues))
-			for i, stats := range activeQueues {
-				queueNames[i] = stats.QueueName
-			}
 		})
 
 		It("should return correct number of active queues", func() {
+			// Enqueue jobs to make Queue1 and Queue3 active
+			coordinator.EnqueueJob("Queue1", &jobs.MockJob{Name: "job1"})
+			coordinator.EnqueueJob("Queue3", &jobs.MockJob{Name: "job3"})
+			
+			// Check immediately after enqueueing, before jobs complete
+			activeQueues := coordinator.GetActiveQueues()
 			Expect(len(activeQueues)).To(Equal(2))
 		})
 
 		It("should return only active queues", func() {
+			// Enqueue jobs to make Queue1 and Queue3 active
+			coordinator.EnqueueJob("Queue1", &jobs.MockJob{Name: "job1"})
+			coordinator.EnqueueJob("Queue3", &jobs.MockJob{Name: "job3"})
+			
+			// Check immediately after enqueueing, before jobs complete
+			activeQueues := coordinator.GetActiveQueues()
+			queueNames := make([]string, len(activeQueues))
+			for i, stats := range activeQueues {
+				queueNames[i] = stats.QueueName
+			}
 			Expect(queueNames).To(ContainElements("Queue1", "Queue3"))
 		})
 	})

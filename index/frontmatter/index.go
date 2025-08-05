@@ -2,7 +2,7 @@
 package frontmatter
 
 import (
-	"log"
+	"fmt"
 	"slices"
 	"strings"
 	"sync"
@@ -60,15 +60,14 @@ func (f *Index) AddPageToIndex(requestedIdentifier wikipage.PageIdentifier) erro
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	f.removePageFromIndexUnsafe(identifier)
-	f.removePageFromIndexUnsafe(requestedIdentifier)
-	f.removePageFromIndexUnsafe(mungedIdentifier)
+	f.removePageFromIndexInternal(identifier)
+	f.removePageFromIndexInternal(requestedIdentifier)
+	f.removePageFromIndexInternal(mungedIdentifier)
 
-	f.recursiveAddUnsafe(mungedIdentifier, "", frontmatter)
-	return nil
+	return f.recursiveAddFrontmatter(mungedIdentifier, "", frontmatter)
 }
 
-func (f *Index) saveToIndexUnsafe(identifier wikipage.PageIdentifier, keyPath DottedKeyPath, value Value) {
+func (f *Index) saveToIndex(identifier wikipage.PageIdentifier, keyPath DottedKeyPath, value Value) {
 	if f.InvertedIndex[keyPath] == nil {
 		f.InvertedIndex[keyPath] = make(map[Value][]wikipage.PageIdentifier)
 	}
@@ -83,9 +82,9 @@ func (f *Index) saveToIndexUnsafe(identifier wikipage.PageIdentifier, keyPath Do
 	f.PageKeyMap[identifier][keyPath][value] = true
 }
 
-func (f *Index) recursiveAddUnsafe(identifier wikipage.PageIdentifier, keyPath string, value any) {
+func (f *Index) recursiveAddFrontmatter(identifier wikipage.PageIdentifier, keyPath string, value any) error {
 	if keyPath == "identifier" {
-		return
+		return nil
 	}
 
 	// recursively build the dotted key path. a value in frontmatter can be either a string or a map[string]any
@@ -100,35 +99,38 @@ func (f *Index) recursiveAddUnsafe(identifier wikipage.PageIdentifier, keyPath s
 			newKeyPath += key
 
 			if _, isMap := val.(map[string]any); isMap {
-				f.saveToIndexUnsafe(identifier, newKeyPath, "") // This ensures that the QueryKeyExistence function works for all keys in the hierarchy
+				f.saveToIndex(identifier, newKeyPath, "") // This ensures that the QueryKeyExistence function works for all keys in the hierarchy
 			}
-			f.recursiveAddUnsafe(identifier, newKeyPath, val)
+			if err := f.recursiveAddFrontmatter(identifier, newKeyPath, val); err != nil {
+				return err
+			}
 		}
 	case string:
-		f.saveToIndexUnsafe(identifier, keyPath, v)
+		f.saveToIndex(identifier, keyPath, v)
 	case []any:
 		for _, array := range v {
 			switch str := array.(type) {
 			case string:
-				f.saveToIndexUnsafe(identifier, keyPath, str)
+				f.saveToIndex(identifier, keyPath, str)
 			default:
-				log.Printf("frontmatter can only be a string, []string, or a map[string]any. Page: %v Key: %v (type: %T)", identifier, keyPath, array)
+				return fmt.Errorf("frontmatter indexer: invalid array element type for page %q key %q (type: %T)", identifier, keyPath, array)
 			}
 		}
 	default:
-		log.Printf("frontmatter can only be a string, []string, or a map[string]any. Page: %v Key: %v (type: %T)", identifier, keyPath, v)
+		return fmt.Errorf("frontmatter indexer: invalid value type for page %q key %q (type: %T)", identifier, keyPath, v)
 	}
+	return nil
 }
 
 // RemovePageFromIndex removes a page's frontmatter from the index.
 func (f *Index) RemovePageFromIndex(identifier wikipage.PageIdentifier) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.removePageFromIndexUnsafe(identifier)
+	f.removePageFromIndexInternal(identifier)
 	return nil
 }
 
-func (f *Index) removePageFromIndexUnsafe(identifier wikipage.PageIdentifier) {
+func (f *Index) removePageFromIndexInternal(identifier wikipage.PageIdentifier) {
 	identifier = wikiidentifiers.MungeIdentifier(identifier)
 	for dottedKeyPath := range f.PageKeyMap[identifier] {
 		for value := range f.PageKeyMap[identifier][dottedKeyPath] {

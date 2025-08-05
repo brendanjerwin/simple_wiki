@@ -53,7 +53,8 @@ var _ = Describe("Site", func() {
 		mockBleve = &MockIndexOperator{}
 
 		// Set up job queue coordinator and indexing service
-		coordinator = jobs.NewJobQueueCoordinator()
+		logger := lumber.NewConsoleLogger(lumber.WARN) // Quiet logger for tests
+		coordinator = jobs.NewJobQueueCoordinator(logger)
 		indexingService = NewIndexingService(coordinator, mockFrontmatter, mockBleve)
 		indexingService.InitializeQueues()
 

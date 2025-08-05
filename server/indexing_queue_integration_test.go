@@ -5,6 +5,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -47,7 +48,8 @@ var _ = Describe("IndexingQueueIntegration", func() {
 	)
 
 	BeforeEach(func() {
-		coordinator = jobs.NewJobQueueCoordinator()
+		logger := lumber.NewConsoleLogger(lumber.WARN) // Quiet logger for tests
+		coordinator = jobs.NewJobQueueCoordinator(logger)
 		frontmatterMock = &MockIntegrationIndexOperator{}
 		bleveMock = &MockIntegrationIndexOperator{}
 		indexingService = server.NewIndexingService(coordinator, frontmatterMock, bleveMock)
