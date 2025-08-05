@@ -21,12 +21,14 @@
 - **Avoid Meaningless Names**: Avoid generic, meaningless names like "Manager", "Handler", "Processor", "Service", "Util", or "Helper" unless they genuinely describe the specific purpose. These names are often cop-outs that don't convey meaningful information about what the type or function actually does. Instead, use descriptive names that clearly indicate the specific responsibility or behavior.
 
   **Bad Examples:**
+
   - `PageManager` (vague - manages what about pages?)
   - `DataProcessor` (vague - processes how?)
   - `RequestHandler` (vague - handles how?)
   - `UserService` (vague - what service?)
 
   **Good Examples:**
+
   - `PageReaderMutator` (specific - reads and mutates pages)
   - `DataValidator` (specific - validates data)
   - `RequestRouter` (specific - routes requests)
@@ -48,14 +50,13 @@
   }
   ```
 
-  **JavaScript Example (Throwing Exception)**:
+  **TypeScript Example (Throwing Exception)**:
 
-  ```javascript
-  function myFunction(input) {
+  ```typescript
+  function myFunction(input: number): boolean {
     if (input < 0) {
       throw new Error("Input cannot be negative");
     }
-    // ...
     return true;
   }
   ```
@@ -129,74 +130,35 @@ Storybook is used for developing and documenting UI components in isolation. Fol
 - Use `devbox run storybook:build` to build static Storybook files
 - Stories are automatically deployed to Chromatic for visual regression testing
 
-#### Event Binding in Stories
+#### Interactive Testing and Event Logging
 
-- **Bind action loggers to all relevant events** in your story render functions:
+- **Create dedicated interactive testing stories** that demonstrate:
+  - User workflows, keyboard shortcuts, error states, and real-world usage patterns
+  - Use descriptive names: `InteractiveFormTesting`, `KeyboardShortcuts`, `ErrorRecovery`
 
-  ```typescript
-  render: (args) => html`
-    <my-component
-      @click=${action('component-clicked')}
-      @input=${action('input-changed')}
-      @custom-event=${action('custom-event')}>
-    </my-component>
-  `,
-  ```
+- **Bind action loggers to all relevant events** and verify event payloads:
+  - Use `@click=${action('event-name')}` patterns
+  - Check browser console logs to verify event data and flow
+  - Document expected event structure in story descriptions
 
-#### Interactive Testing Stories
+- **Provide comprehensive documentation**:
+  - Add story descriptions using `parameters.docs.description.story`
+  - Include clear testing instructions and visual context
+  - Always mention "Open the browser developer tools console to see the action logs"
 
-- **Create dedicated interactive testing stories** for complex components that demonstrate:
-
-  - User workflows (form filling, multi-step interactions)
-  - Keyboard shortcuts and accessibility features
-  - Error states and recovery scenarios
-  - Real-world usage patterns
-
-- **Use descriptive story names** that indicate the interaction being tested:
-  - `InteractiveFormTesting` - for comprehensive form interaction testing
-  - `KeyboardShortcuts` - for keyboard navigation and shortcuts
-  - `DropdownInteractions` - for dropdown open/close/selection behaviors
-  - `ErrorRecovery` - for testing error states and user recovery paths
-
-#### Documentation and Context
-
-- **Add comprehensive story descriptions** using `parameters.docs.description.story`
-- **Provide clear instructions** for what users should test and what events to watch for in the browser console
-- **Include visual context** with appropriate styling and layout to simulate real usage
-- **Always mention "Open the browser developer tools console to see the action logs"** in interactive story descriptions
-
-#### Event Payload Testing
-
-- **Verify event payloads** contain correct data by checking the browser console logs
-- **Test data flow** by creating stories that demonstrate how component state changes affect event payloads
-- **Document expected event structure** in story descriptions
-
-#### Example Pattern
-
+**Example Pattern:**
 ```typescript
 export const InteractiveExample: Story = {
   render: (args) => html`
-    <div style="padding: 20px; background: #f0f8ff;">
-      <h3>Component Interaction Test</h3>
-      <p>Instructions for testing...</p>
-      <my-component
-        @event1=${action("event1-triggered")}
-        @event2=${action("event2-with-data")}
-      >
-      </my-component>
-      <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
-        Watch the browser console (F12) to see triggered events logged.
-      </p>
-    </div>
+    <my-component @event=${action("event-triggered")}></my-component>
   `,
   parameters: {
     docs: {
       description: {
-        story:
-          "Detailed description of what to test and expected behavior. Open the browser developer tools console to see the action logs.",
-      },
-    },
-  },
+        story: "Test component interactions. Open browser dev tools to see action logs."
+      }
+    }
+  }
 };
 ```
 
@@ -445,12 +407,11 @@ beforeEach(async () => {
 });
 ```
 
-- Prefer Context-Specification style for testing. Nest `describe` blocks to build up context. Don't bother with `context` blocks.
 - **Separate test assertions**: Each `it` block should test one specific behavior. If a test description contains "and", it indicates the test is checking multiple behaviors and should be split into separate `it` blocks.
 
   **Bad:** Testing multiple behaviors in one block.
 
-  ```javascript
+  ```typescript
   it("should handle rejection events and prevent default", () => {
     // This tests TWO behaviors: handling events AND preventing default
     expect(() => rejectionHandler(mockRejectionEvent)).to.not.throw();
@@ -460,28 +421,27 @@ beforeEach(async () => {
 
   **Good:** Split into separate, focused tests with actions in `beforeEach`.
 
-  ```javascript
+  ```typescript
+  interface MockEvent {
+    preventDefault: SinonStub;
+  }
+
   describe("when handling rejection events", () => {
-    let preventDefaultStub;
-    let mockRejectionEvent;
-    let handlerResult;
+    let preventDefaultStub: SinonStub;
+    let mockRejectionEvent: MockEvent;
+    let handlerResult: unknown;
 
     beforeEach(() => {
-      // Arrange
       preventDefaultStub = sinon.stub();
       mockRejectionEvent = { preventDefault: preventDefaultStub };
-
-      // Act
       handlerResult = rejectionHandler(mockRejectionEvent);
     });
 
     it("should not throw", () => {
-      // Assert - if we get here, no exception was thrown
       expect(handlerResult).to.exist;
     });
 
     it("should prevent default", () => {
-      // Assert
       expect(preventDefaultStub).to.have.been.calledOnce;
     });
   });
@@ -491,11 +451,9 @@ beforeEach(async () => {
 
   **Bad:**
 
-  ```javascript
+  ```typescript
   describe("when handling rejection events", () => {
-    // ...
     it("should handle rejection events without throwing", () => {
-      // Restates the context from describe block
       expect(handlerResult).to.exist;
     });
   });
@@ -503,11 +461,9 @@ beforeEach(async () => {
 
   **Good:**
 
-  ```javascript
+  ```typescript
   describe("when handling rejection events", () => {
-    // ...
     it("should not throw", () => {
-      // Concise assertion focused on specific behavior
       expect(handlerResult).to.exist;
     });
   });
@@ -517,21 +473,20 @@ beforeEach(async () => {
 
   **Bad:**
 
-  ```javascript
+  ```typescript
   it("should handle timeout errors", () => {
     const connectError = new ConnectError("Timeout", Code.DeadlineExceeded);
     const augmented = AugmentErrorService.augmentError(connectError);
-
     expect(augmented.errorKind).to.equal(ErrorKind.TIMEOUT);
   });
   ```
 
   **Good:**
 
-  ```javascript
+  ```typescript
   describe("when the error is DEADLINE_EXCEEDED", () => {
-    let connectError;
-    let augmented;
+    let connectError: ConnectError;
+    let augmented: AugmentedError;
 
     beforeEach(() => {
       connectError = new ConnectError("Timeout", Code.DeadlineExceeded);
@@ -544,78 +499,22 @@ beforeEach(async () => {
   });
   ```
 
-- Don't do actions in the `It` blocks. The `It` blocks should only contain assertions. All setup (**Arrange**) and execution (**Act**) should be done in `BeforeEach` blocks (or equivalent, depending on the testing framework) within the `Describe` or `When` blocks. This allows for reusing context to add additional assertions later.
+- **No Actions in It Blocks**: All setup (**Arrange**) and execution (**Act**) should be in `beforeEach` blocks within `describe` or `when` blocks. `It` blocks should only contain assertions (**Assert**). This allows reusing context for multiple assertions.
 
-  **Bad:** Action inside the `It` block (Go example).
+  **Good Pattern:**
 
-  ```go
-  Describe("a component", func() {
-    When("in a certain state", func() {
-      It("should do a thing", func() {
-        // Arrange
-        component := setupComponent()
-
-        // Act
-        result, err := component.DoSomething()
-
-        // Assert
-        Expect(err).NotTo(HaveOccurred())
-        Expect(result).To(Equal("expected result"))
-      })
-    })
-  })
-  ```
-
-  **Good:** Action moved to `BeforeEach` (Go example).
-
-  ```go
-  Describe("a component", func() {
-    When("in a certain state", func() {
-      var (
-        component *Component
-        result    string
-        err       error
-      )
-
-      BeforeEach(func() {
-        // Arrange
-        component = setupComponent()
-
-        // Act
-        result, err = component.DoSomething()
-      })
-
-      It("should not return an error", func() {
-        // Assert
-        Expect(err).NotTo(HaveOccurred())
-      })
-
-      It("should return the correct result", func() {
-        // Assert
-        Expect(result).To(Equal("expected result"))
-      })
-    })
-  })
-  ```
-
-  **Good:** Action moved to `beforeEach` (JavaScript Example `static/js/web-components/wiki-search.test.js`).
-
-  ```javascript
+  ```typescript
   describe("when component is connected to DOM", () => {
-    let addEventListenerSpy;
+    let addEventListenerSpy: SinonSpy;
+    let el: WikiSearchElement;
 
     beforeEach(async () => {
       addEventListenerSpy = sinon.spy(window, "addEventListener");
-      // Re-create the element to trigger connectedCallback
       el = await fixture(html`<wiki-search></wiki-search>`);
-      await el.updateComplete;
     });
 
     it("should add keydown event listener", () => {
-      expect(addEventListenerSpy).to.have.been.calledWith(
-        "keydown",
-        el._handleKeydown,
-      );
+      expect(addEventListenerSpy).to.have.been.calledWith("keydown", el._handleKeydown);
     });
   });
   ```
@@ -637,19 +536,19 @@ beforeEach(async () => {
   When("action is performed", func() {
     var logOutput string
     var logBuffer *bytes.Buffer
-    
+
     BeforeEach(func() {
       // ... setup and action ...
       performAction()
-      
+
       // Capture result data after action
       logOutput = logBuffer.String()
     })
-    
+
     It("should log the error", func() {
       Expect(logOutput).To(ContainSubstring("error message"))
     })
-    
+
     It("should include error level", func() {
       Expect(logOutput).To(ContainSubstring("ERROR"))
     })
@@ -675,22 +574,22 @@ beforeEach(async () => {
 
   **Bad:**
 
-  ```javascript
+  ```typescript
   it("should close when clicking outside", () => {
-    // ... test code
+    // test code
   });
   ```
 
   **Good:**
 
-  ```javascript
+  ```typescript
   describe("when clicking outside", () => {
     beforeEach(() => {
-      // ... setup and action
+      // setup and action
     });
 
     it("should close the popover", () => {
-      // ... assertion only
+      // assertion only
     });
   });
   ```
@@ -699,7 +598,7 @@ beforeEach(async () => {
 
   **Bad:** Using "when" for a feature/behavior
 
-  ```javascript
+  ```typescript
   describe("when preserving original error stack", () => {
     // This describes what the code does, not a scenario
   });
@@ -707,7 +606,7 @@ beforeEach(async () => {
 
   **Good:** Using "when" for a scenario/condition
 
-  ```javascript
+  ```typescript
   describe("when the source Error has a stack", () => {
     // This describes a condition/scenario
   });
@@ -715,7 +614,7 @@ beforeEach(async () => {
 
   **Good:** Describing a feature without "when"
 
-  ```javascript
+  ```typescript
   describe("delegating to original error properties", () => {
     // This describes a feature/behavior
   });
@@ -725,22 +624,19 @@ beforeEach(async () => {
 
   **Example:**
 
-  ```javascript
+  ```typescript
   describe("when component is connected to DOM", () => {
-    let addEventListenerSpy;
+    let addEventListenerSpy: SinonSpy;
+    let el: MyComponent;
 
     beforeEach(async () => {
       addEventListenerSpy = sinon.spy(document, "addEventListener");
-      // Re-create the element to trigger connectedCallback
       el = await fixture(html`<my-component></my-component>`);
       await el.updateComplete;
     });
 
     it("should add event listener with correct parameters", () => {
-      expect(addEventListenerSpy).to.have.been.calledWith(
-        "click",
-        el._handleClick,
-      );
+      expect(addEventListenerSpy).to.have.been.calledWith("click", el._handleClick);
     });
   });
   ```
@@ -756,9 +652,8 @@ beforeEach(async () => {
   **Bad:** Testing a declaration
 
   ```typescript
-  // Component declaration: errorKind: ErrorKind.WARNING
   it("should have errorKind property", () => {
-    expect(augmented.errorKind).to.equal(ErrorKind.WARNING); // Just testing the declaration
+    expect(augmented.errorKind).to.equal(ErrorKind.WARNING);
   });
   ```
 
@@ -774,7 +669,7 @@ beforeEach(async () => {
 
 - Include a blank line between all the various Ginkgo blocks. This makes it easier to read the tests.
 
-- Prefer Gomego/Ginkgo for testing in Go.
+- Prefer Ginkgo/Gomega for testing in Go.
 - Use a Context-Specification style. Nest `describe` blocks to build up context. Don't bother with `context` blocks in frameworks that provide them.
 - Don't do actions in the `It` blocks. The `It` blocks should only contain assertions. All setup (**Arrange**) and execution (**Act**) should be done in `BeforeEach` blocks within the `Describe` or `When` blocks (`When` blocks if provided by the framework of course. Put "When" in the description of the `Describe` block if `When` blocks aren't available). This allows for reusing context to add additional assertions later.
 
@@ -847,7 +742,6 @@ beforeEach(async () => {
 - Use the `Describe` blocks first to describe the function/component being tested, then use nested `When` blocks to establish the scenarios. Besides the basic `It(text: "Should exist"` tests, everything should be in those nested "When" blocks.
 - **Important**: Use "when" in `describe` block descriptions to establish scenarios, not in `it` block descriptions. The `it` blocks should describe the expected behavior or outcome.
 - Include a blank line between all the various Ginkgo blocks. This makes it easier to read the tests.
-- For a detailed checklist of test file conformance, refer to [Test File Conformance Checklist](docs/TEST_FILE_CHECKLIST.md).
 
 ## Fixing Problems
 
@@ -916,11 +810,10 @@ beforeEach(async () => {
   ```typescript
   try {
     await client.getFrontmatter(request);
-  } catch (err) {
-    // Bad: Branching on human-readable error message
-    if (err.message.includes("UNAVAILABLE")) {
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message.includes("UNAVAILABLE")) {
       this.error = "Unable to connect to server";
-    } else if (err.message.includes("PERMISSION_DENIED")) {
+    } else if (err instanceof Error && err.message.includes("PERMISSION_DENIED")) {
       this.error = "Access denied";
     }
   }
@@ -933,8 +826,7 @@ beforeEach(async () => {
 
   try {
     await client.getFrontmatter(request);
-  } catch (err) {
-    // Good: Using proper error codes for logic
+  } catch (err: unknown) {
     if (err instanceof ConnectError) {
       switch (err.code) {
         case Code.Unavailable:
@@ -957,53 +849,49 @@ beforeEach(async () => {
   - Error handling is explicit and type-safe
   - Error messages can be localized without breaking logic
 
-- **Centralize Error Processing**: Create dedicated error service classes to handle the conversion of technical errors (like gRPC errors) into user-friendly messages. This separates business logic from UI components and ensures consistent error presentation.
+- **Let Unrecoverable Errors Bubble Up**: Don't catch exceptions you can't meaningfully handle. Let them bubble to the global error handler for consistent user experience.
 
-  **Bad:**
+  **Bad:** Catching without meaningful recovery
 
   ```typescript
-  // Error message generation scattered across UI components
   class SomeComponent {
     async loadData() {
       try {
-        // ... API call
-      } catch (err) {
-        if (err instanceof ConnectError && err.code === Code.NotFound) {
-          this.error = "Data not found. Please check your input.";
-        }
-        // Duplicate error handling logic in every component
+        await this.client.getData();
+      } catch (err: unknown) {
+        console.error('Load failed:', err);
+        // No user feedback, no retry - just hiding the error
       }
     }
   }
   ```
 
-  **Good:**
+  **Good:** Only catch when you can provide recovery
 
   ```typescript
-  // Centralized error processing
-  class ErrorService {
-    static processError(error: unknown, context: string): ProcessedError {
-      if (error instanceof ConnectError) {
-        switch (error.code) {
-          case Code.NotFound:
-            return { message: "Data not found", icon: "not-found" };
-          // ... other cases
-        }
-      }
-      return { message: `Failed to ${context}`, icon: "error" };
-    }
+  interface ProcessedError {
+    message: string;
+    details?: string;
   }
 
-  // Clean, consistent UI components
   class SomeComponent {
-    async loadData() {
+    async loadData(): Promise<void> {
       try {
-        // ... API call
-      } catch (err) {
-        const processedError = ErrorService.processError(err, "load data");
-        this.error = processedError.message;
-        this.errorIcon = processedError.icon;
+        this.loading = true;
+        this.error = undefined;
+        await this.client.getData();
+      } catch (err: unknown) {
+        // Can provide user feedback and retry mechanism
+        this.error = ErrorService.processError(err, 'load data');
+        this.showRetryButton = true;
+      } finally {
+        this.loading = false;
       }
+    }
+
+    // User can retry - this is meaningful recovery
+    async retry(): Promise<void> {
+      await this.loadData();
     }
   }
   ```
