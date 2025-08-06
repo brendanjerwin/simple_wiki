@@ -25,21 +25,16 @@ func NewIndexingService(coordinator *jobs.JobQueueCoordinator, frontmatterIndex,
 	}
 }
 
-// InitializeQueues registers the separate indexing queues.
-func (s *IndexingService) InitializeQueues() {
-	s.coordinator.RegisterQueue("Frontmatter")
-	s.coordinator.RegisterQueue("Bleve")
-}
 
 // EnqueueIndexJob enqueues indexing jobs to both queues for the given page and operation.
 func (s *IndexingService) EnqueueIndexJob(pageIdentifier wikipage.PageIdentifier, operation index.Operation) {
 	// Create and enqueue frontmatter index job
 	frontmatterJob := index.NewFrontmatterIndexJob(s.frontmatterIndex, pageIdentifier, operation)
-	s.coordinator.EnqueueJob("Frontmatter", frontmatterJob)
+	s.coordinator.EnqueueJob(frontmatterJob)
 
 	// Create and enqueue bleve index job
 	bleveJob := index.NewBleveIndexJob(s.bleveIndex, pageIdentifier, operation)
-	s.coordinator.EnqueueJob("Bleve", bleveJob)
+	s.coordinator.EnqueueJob(bleveJob)
 }
 
 // BulkEnqueuePages enqueues multiple pages for indexing.
@@ -86,67 +81,3 @@ func (s *IndexingService) WaitForCompletionWithTimeout(ctx context.Context, time
 	}
 }
 
-// GetProgress implements the IProvideIndexingProgress interface.
-func (s *IndexingService) GetProgress() index.IndexingProgress {
-	activeQueues := s.coordinator.GetActiveQueues()
-
-	// Calculate overall statistics
-	isRunning := len(activeQueues) > 0
-	totalQueueDepth := 0
-	indexProgress := make(map[string]index.SingleIndexProgress)
-
-	for _, queueStats := range activeQueues {
-		totalQueueDepth += int(queueStats.JobsRemaining)
-		indexProgress[queueStats.QueueName] = index.SingleIndexProgress{
-			Name:                queueStats.QueueName,
-			Completed:           int(queueStats.HighWaterMark - queueStats.JobsRemaining),
-			Total:               int(queueStats.HighWaterMark),
-			QueueDepth:          int(queueStats.JobsRemaining),
-			WorkDistributionComplete: !queueStats.IsActive,
-		}
-	}
-
-	// Add inactive queues that may have completed work
-	for _, queueName := range []string{"Frontmatter", "Bleve"} {
-		if _, exists := indexProgress[queueName]; !exists {
-			if stats := s.coordinator.GetQueueStats(queueName); stats != nil {
-				indexProgress[queueName] = index.SingleIndexProgress{
-					Name:                queueName,
-					Completed:           int(stats.HighWaterMark),
-					Total:               int(stats.HighWaterMark),
-					QueueDepth:          0,
-					WorkDistributionComplete: true,
-				}
-			}
-		}
-	}
-
-	// Calculate minimum completed pages across all queues
-	completedPages := 0
-	totalPages := 0
-	if len(indexProgress) > 0 {
-		first := true
-		for _, progress := range indexProgress {
-			if first {
-				completedPages = progress.Completed
-				totalPages = progress.Total
-				first = false
-			} else {
-				if progress.Completed < completedPages {
-					completedPages = progress.Completed
-				}
-				if progress.Total > totalPages {
-					totalPages = progress.Total
-				}
-			}
-		}
-	}
-
-	return index.IndexingProgress{
-		IsRunning:      isRunning,
-		TotalPages:     totalPages,
-		CompletedPages: completedPages,
-		QueueDepth:     totalQueueDepth,
-		IndexProgress:  indexProgress,
-	}
-}

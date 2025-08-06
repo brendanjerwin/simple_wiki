@@ -21,7 +21,6 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 		testDataDir string
 		coordinator *jobs.JobQueueCoordinator
 		site        *Site
-		queueName   string
 	)
 
 	BeforeEach(func() {
@@ -32,8 +31,6 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 		
 		logger := lumber.NewConsoleLogger(lumber.WARN) // Quiet logger for tests
 		coordinator = jobs.NewJobQueueCoordinator(logger)
-		queueName = "FileShadowingMigration"
-		coordinator.RegisterQueue(queueName)
 		
 		// Initialize Site with Logger for DirectoryList() to work
 		site = &Site{
@@ -41,7 +38,7 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 			Logger:     lumber.NewConsoleLogger(lumber.WARN),
 			MigrationApplicator: rollingmigrations.NewEmptyApplicator(),
 		}
-		job = NewFileShadowingMigrationScanJob(testDataDir, coordinator, queueName, site)
+		job = NewFileShadowingMigrationScanJob(testDataDir, coordinator, site)
 	})
 
 	AfterEach(func() {
@@ -51,8 +48,8 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 	Describe("Execute", func() {
 		When("directory contains PascalCase identifiers", func() {
 			var (
-				err   error
-				stats *jobs.QueueStats
+				err          error
+				activeQueues []*jobs.QueueStats
 			)
 
 			BeforeEach(func() {
@@ -74,7 +71,7 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 
 				// Act
 				err = job.Execute()
-				stats = coordinator.GetQueueStats(queueName)
+				activeQueues = coordinator.GetActiveQueues()
 			})
 
 			It("should not return an error", func() {
@@ -83,16 +80,19 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 
 			It("should enqueue migration jobs for each PascalCase identifier", func() {
 				// Should have enqueued jobs for LabInventory, UserGuide, DeviceManual (3 identifiers)
-				Expect(stats).NotTo(BeNil())
-				Expect(stats.JobsRemaining).To(Equal(int32(3)))
-				Expect(stats.IsActive).To(BeTrue())
+				// Each gets its own queue based on job name, so check for 3 active queues
+				Expect(len(activeQueues)).To(Equal(3))
+				for _, queue := range activeQueues {
+					Expect(queue.IsActive).To(BeTrue())
+					Expect(queue.JobsRemaining).To(Equal(int32(1)))
+				}
 			})
 		})
 
 		When("directory has no PascalCase identifiers", func() {
 			var (
-				err   error
-				stats *jobs.QueueStats
+				err          error
+				activeQueues []*jobs.QueueStats
 			)
 
 			BeforeEach(func() {
@@ -112,7 +112,7 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 
 				// Act
 				err = job.Execute()
-				stats = coordinator.GetQueueStats(queueName)
+				activeQueues = coordinator.GetActiveQueues()
 			})
 
 			It("should not return an error", func() {
@@ -120,9 +120,8 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 			})
 
 			It("should not enqueue any migration jobs", func() {
-				Expect(stats).NotTo(BeNil())
-				Expect(stats.JobsRemaining).To(Equal(int32(0)))
-				Expect(stats.IsActive).To(BeFalse())
+				// No PascalCase identifiers means no migration jobs enqueued
+				Expect(len(activeQueues)).To(Equal(0))
 			})
 		})
 

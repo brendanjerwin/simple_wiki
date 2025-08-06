@@ -18,16 +18,11 @@ func NewFileShadowingService(coordinator *jobs.JobQueueCoordinator, site *Site) 
 	}
 }
 
-// InitializeQueues registers the separate file shadowing queues.
-func (s *FileShadowingService) InitializeQueues() {
-	s.coordinator.RegisterQueue("FileScan")
-	s.coordinator.RegisterQueue("FileMigration")
-}
 
 // EnqueueScanJob enqueues a scan job to find PascalCase files.
 func (s *FileShadowingService) EnqueueScanJob() {
-	scanJob := NewFileShadowingMigrationScanJob(s.site.PathToData, s.coordinator, "FileMigration", s.site)
-	s.coordinator.EnqueueJob("FileScan", scanJob)
+	scanJob := NewFileShadowingMigrationScanJob(s.site.PathToData, s.coordinator, s.site)
+	s.coordinator.EnqueueJob(scanJob)
 }
 
 // GetJobQueueCoordinator returns the underlying job queue coordinator for status monitoring.

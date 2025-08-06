@@ -24,33 +24,29 @@ func NewJobQueueCoordinator(logger lumber.Logger) *JobQueueCoordinator {
 	}
 }
 
-// RegisterQueue registers a new job queue with the given name.
-func (c *JobQueueCoordinator) RegisterQueue(queueName string) {
+
+// EnqueueJob adds a job to its appropriate queue based on the job's name.
+func (c *JobQueueCoordinator) EnqueueJob(job Job) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	// Create Artifex dispatcher with 1 worker
-	const defaultQueueCapacity = 10
-	dispatcher := artifex.NewDispatcher(1, defaultQueueCapacity)
-	dispatcher.Start()
-
-	c.queues[queueName] = dispatcher
-	c.stats[queueName] = &QueueStats{
-		QueueName:     queueName,
-		JobsRemaining: 0,
-		HighWaterMark: 0,
-		IsActive:      false,
-	}
-}
-
-// EnqueueJob adds a job to the specified queue.
-func (c *JobQueueCoordinator) EnqueueJob(queueName string, job Job) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
+	queueName := job.GetName()
+	
+	// Auto-register queue if it doesn't exist
 	dispatcher, exists := c.queues[queueName]
 	if !exists {
-		return // Queue not registered
+		// Create new queue for this job type
+		const defaultQueueCapacity = 10
+		dispatcher = artifex.NewDispatcher(1, defaultQueueCapacity)
+		dispatcher.Start()
+		
+		c.queues[queueName] = dispatcher
+		c.stats[queueName] = &QueueStats{
+			QueueName:     queueName,
+			JobsRemaining: 0,
+			HighWaterMark: 0,
+			IsActive:      false,
+		}
 	}
 
 	stats := c.stats[queueName]

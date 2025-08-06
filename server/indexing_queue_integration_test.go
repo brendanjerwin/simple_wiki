@@ -59,28 +59,8 @@ var _ = Describe("IndexingQueueIntegration", func() {
 		Expect(indexingService).NotTo(BeNil())
 	})
 
-	Describe("InitializeQueues", func() {
-		BeforeEach(func() {
-			indexingService.InitializeQueues()
-		})
-
-		It("should register frontmatter queue", func() {
-			stats := coordinator.GetQueueStats("Frontmatter")
-			Expect(stats).NotTo(BeNil())
-			Expect(stats.QueueName).To(Equal("Frontmatter"))
-		})
-
-		It("should register bleve queue", func() {
-			stats := coordinator.GetQueueStats("Bleve")
-			Expect(stats).NotTo(BeNil())
-			Expect(stats.QueueName).To(Equal("Bleve"))
-		})
-	})
 
 	Describe("EnqueueIndexJob", func() {
-		BeforeEach(func() {
-			indexingService.InitializeQueues()
-		})
 
 		Describe("when enqueuing add job", func() {
 			BeforeEach(func() {
@@ -141,7 +121,6 @@ var _ = Describe("IndexingQueueIntegration", func() {
 		var pageIdentifiers []wikipage.PageIdentifier
 
 		BeforeEach(func() {
-			indexingService.InitializeQueues()
 			pageIdentifiers = []wikipage.PageIdentifier{"page1", "page2", "page3"}
 		})
 
@@ -172,9 +151,6 @@ var _ = Describe("IndexingQueueIntegration", func() {
 	})
 
 	Describe("WaitForCompletionWithTimeout", func() {
-		BeforeEach(func() {
-			indexingService.InitializeQueues()
-		})
 
 		Describe("when jobs complete quickly", func() {
 			var completed bool

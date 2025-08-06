@@ -64,15 +64,13 @@ func (j *BlockingJob) IsExecuted() bool {
 type MockScanJob struct {
 	site           *Site
 	coordinator    *jobs.JobQueueCoordinator
-	queueName      string
 	migrationJobs  []*BlockingJob
 }
 
-func NewMockScanJob(site *Site, coordinator *jobs.JobQueueCoordinator, queueName string) *MockScanJob {
+func NewMockScanJob(site *Site, coordinator *jobs.JobQueueCoordinator) *MockScanJob {
 	return &MockScanJob{
 		site:        site,
 		coordinator: coordinator,
-		queueName:   queueName,
 	}
 }
 
@@ -87,7 +85,7 @@ func (j *MockScanJob) Execute() error {
 			// Create a blocking job for each PascalCase identifier
 			blockingJob := NewBlockingJob(fmt.Sprintf("MockMigration-%s", identifier))
 			j.migrationJobs = append(j.migrationJobs, blockingJob)
-			j.coordinator.EnqueueJob(j.queueName, blockingJob)
+			j.coordinator.EnqueueJob(blockingJob)
 		}
 	}
 	
@@ -146,36 +144,15 @@ var _ = Describe("FileShadowingService", func() {
 		})
 	})
 
-	Describe("InitializeQueues", func() {
-		BeforeEach(func() {
-			service.InitializeQueues()
-		})
-
-		It("should register FileScan queue", func() {
-			stats := coordinator.GetQueueStats("FileScan")
-			Expect(stats).NotTo(BeNil())
-			Expect(stats.QueueName).To(Equal("FileScan"))
-		})
-
-		It("should register FileMigration queue", func() {
-			stats := coordinator.GetQueueStats("FileMigration")
-			Expect(stats).NotTo(BeNil())
-			Expect(stats.QueueName).To(Equal("FileMigration"))
-		})
-	})
 
 	Describe("EnqueueScanJob", func() {
-		BeforeEach(func() {
-			service.InitializeQueues()
-		})
-
-		It("should enqueue scan job to FileScan queue", func() {
+		It("should enqueue scan job", func() {
 			service.EnqueueScanJob()
 			
-			// Check that FileScan queue has a job
-			stats := coordinator.GetQueueStats("FileScan")
-			Expect(stats).NotTo(BeNil())
-			Expect(stats.JobsRemaining).To(BeNumerically(">", 0))
+			// Check that a queue was auto-registered for the scan job
+			activeQueues := coordinator.GetActiveQueues()
+			Expect(len(activeQueues)).To(Equal(1))
+			Expect(activeQueues[0].QueueName).To(Equal("FileShadowingMigrationScanJob"))
 		})
 	})
 
@@ -190,8 +167,6 @@ var _ = Describe("FileShadowingService", func() {
 		var mockScanJob *MockScanJob
 		
 		BeforeEach(func() {
-			service.InitializeQueues()
-			
 			// Create PascalCase pages that should be found by scan
 			labPage, err := site.Open("LabInventory")
 			Expect(err).NotTo(HaveOccurred())
@@ -213,7 +188,7 @@ var _ = Describe("FileShadowingService", func() {
 			Expect(err).NotTo(HaveOccurred())
 			
 			// Create mock scan job instead of using the real one
-			mockScanJob = NewMockScanJob(site, coordinator, "FileMigration")
+			mockScanJob = NewMockScanJob(site, coordinator)
 		})
 
 		When("mock scan job is executed", func() {
@@ -221,12 +196,12 @@ var _ = Describe("FileShadowingService", func() {
 			
 			BeforeEach(func() {
 				// Enqueue the mock scan job
-				coordinator.EnqueueJob("FileScan", mockScanJob)
+				coordinator.EnqueueJob(mockScanJob)
 				
 				// Wait for scan job to execute
 				Eventually(func() bool {
-					stats := coordinator.GetQueueStats("FileScan")
-					return stats.JobsRemaining == 0
+					stats := coordinator.GetQueueStats("MockScanJob")
+					return stats != nil && stats.JobsRemaining == 0
 				}, "2s", "10ms").Should(BeTrue())
 				
 				// Get the migration jobs created by the scan job
@@ -241,13 +216,9 @@ var _ = Describe("FileShadowingService", func() {
 			})
 
 			It("should enqueue migration jobs for PascalCase pages", func() {
-				// Check that FileMigration queue has migration jobs
-				stats := coordinator.GetQueueStats("FileMigration")
-				Expect(stats).NotTo(BeNil())
-				// Should have 2 jobs remaining (they're blocked)
-				Expect(stats.JobsRemaining).To(Equal(int32(2)))
-				// Should have enqueued 2 migration jobs for LabInventory and UserGuide
-				Expect(stats.HighWaterMark).To(Equal(int32(2)))
+				// Each migration job gets its own queue, so check active queues
+				activeQueues := coordinator.GetActiveQueues()
+				Expect(len(activeQueues)).To(Equal(2)) // Should have 2 migration job queues
 				
 				// Verify the jobs were created for the right identifiers
 				Expect(migrationJobs).To(HaveLen(2))
@@ -256,22 +227,34 @@ var _ = Describe("FileShadowingService", func() {
 					jobNames = append(jobNames, job.GetName())
 				}
 				Expect(jobNames).To(ContainElements("MockMigration-LabInventory", "MockMigration-UserGuide"))
+				
+				// Each queue should have 1 job remaining (they're blocked)
+				for _, queue := range activeQueues {
+					Expect(queue.JobsRemaining).To(Equal(int32(1)))
+					Expect(queue.HighWaterMark).To(Equal(int32(1)))
+					Expect(queue.IsActive).To(BeTrue())
+				}
 			})
 			
 			It("should maintain queue stats while jobs are blocked", func() {
-				// Initial state - jobs are blocked
-				stats := coordinator.GetQueueStats("FileMigration")
-				Expect(stats.JobsRemaining).To(Equal(int32(2)))
-				Expect(stats.IsActive).To(BeTrue())
+				// Initial state - 2 active queues with jobs blocked
+				activeQueues := coordinator.GetActiveQueues()
+				Expect(len(activeQueues)).To(Equal(2))
+				for _, queue := range activeQueues {
+					Expect(queue.JobsRemaining).To(Equal(int32(1)))
+					Expect(queue.IsActive).To(BeTrue())
+				}
 				
 				// Wait for at least one job to start executing
 				Eventually(func() bool {
 					return migrationJobs[0].IsExecuted() || migrationJobs[1].IsExecuted()
 				}, "2s", "10ms").Should(BeTrue())
 				
-				// High water mark should remain at 2 while jobs are running
-				stats = coordinator.GetQueueStats("FileMigration")
-				Expect(stats.HighWaterMark).To(Equal(int32(2)))
+				// High water mark should remain at 1 while jobs are running
+				activeQueues = coordinator.GetActiveQueues()
+				for _, queue := range activeQueues {
+					Expect(queue.HighWaterMark).To(Equal(int32(1)))
+				}
 				
 				// Release all jobs
 				for _, job := range migrationJobs {
@@ -279,15 +262,13 @@ var _ = Describe("FileShadowingService", func() {
 				}
 				
 				// Wait for all jobs to complete
-				Eventually(func() int32 {
-					return coordinator.GetQueueStats("FileMigration").JobsRemaining
-				}, "2s", "10ms").Should(Equal(int32(0)))
+				Eventually(func() int {
+					return len(coordinator.GetActiveQueues())
+				}, "2s", "10ms").Should(Equal(0))
 				
-				// After all jobs complete, high water mark should reset to 0
-				stats = coordinator.GetQueueStats("FileMigration")
-				Expect(stats.JobsRemaining).To(Equal(int32(0)))
-				Expect(stats.HighWaterMark).To(Equal(int32(0))) // Reset when queue is empty
-				Expect(stats.IsActive).To(BeFalse())
+				// After all jobs complete, no active queues should remain
+				activeQueues = coordinator.GetActiveQueues()
+				Expect(len(activeQueues)).To(Equal(0))
 			})
 		})
 	})

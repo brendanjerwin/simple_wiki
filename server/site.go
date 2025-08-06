@@ -108,11 +108,9 @@ func (s *Site) InitializeIndexing() error {
 	// Create new job queue coordinator and indexing service
 	s.JobQueueCoordinator = jobs.NewJobQueueCoordinator(s.Logger)
 	s.IndexingService = NewIndexingService(s.JobQueueCoordinator, frontmatterIndex, bleveIndex)
-	s.IndexingService.InitializeQueues()
 
 	// Initialize file shadowing service using the same coordinator
 	s.FileShadowingService = NewFileShadowingService(s.JobQueueCoordinator, s)
-	s.FileShadowingService.InitializeQueues()
 
 	// Start file shadowing scan
 	s.FileShadowingService.EnqueueScanJob()

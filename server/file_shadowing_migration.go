@@ -19,16 +19,14 @@ import (
 type FileShadowingMigrationScanJob struct {
 	dataDir     string
 	coordinator *jobs.JobQueueCoordinator
-	queueName   string
 	site        *Site
 }
 
 // NewFileShadowingMigrationScanJob creates a new scan job
-func NewFileShadowingMigrationScanJob(dataDir string, coordinator *jobs.JobQueueCoordinator, queueName string, site *Site) *FileShadowingMigrationScanJob {
+func NewFileShadowingMigrationScanJob(dataDir string, coordinator *jobs.JobQueueCoordinator, site *Site) *FileShadowingMigrationScanJob {
 	return &FileShadowingMigrationScanJob{
 		dataDir:     dataDir,
 		coordinator: coordinator,
-		queueName:   queueName,
 		site:        site,
 	}
 }
@@ -46,7 +44,7 @@ func (j *FileShadowingMigrationScanJob) Execute() error {
 	// Enqueue a migration job for each PascalCase identifier
 	for _, identifier := range pascalIdentifiers {
 		migrationJob := NewFileShadowingMigrationJob(j.site, identifier)
-		j.coordinator.EnqueueJob(j.queueName, migrationJob)
+		j.coordinator.EnqueueJob(migrationJob)
 	}
 
 	return nil

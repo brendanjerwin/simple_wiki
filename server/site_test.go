@@ -54,7 +54,6 @@ var _ = Describe("Site", func() {
 		logger := lumber.NewConsoleLogger(lumber.WARN) // Quiet logger for tests
 		coordinator = jobs.NewJobQueueCoordinator(logger)
 		indexingService = NewIndexingService(coordinator, mockFrontmatter, mockBleve)
-		indexingService.InitializeQueues()
 
 		// Set up empty migration applicator for unit testing
 		// (integration tests will configure their own mocks)
