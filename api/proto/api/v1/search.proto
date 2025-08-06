@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package api.v1;
+
+option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
+
+// The Search service definition.
+service Search {
+  // Searches the wiki content and returns matching results.
+  rpc SearchContent(SearchContentRequest) returns (SearchContentResponse) {}
+}
+
+// The request message for searching content.
+message SearchContentRequest {
+  string query = 1;
+}
+
+// The response message containing search results.
+message SearchContentResponse {
+  repeated SearchResult results = 1;
+}
+
+// A search result item.
+message SearchResult {
+  string identifier = 1;      // Page identifier
+  string title = 2;           // Page title
+  string fragment = 3;        // Plain text fragment (no HTML)
+  repeated HighlightSpan highlights = 4; // Highlight positions
+}
+
+// A span of text to be highlighted.
+message HighlightSpan {
+  int32 start = 1;    // Start position in fragment
+  int32 end = 2;      // End position in fragment  
+}
