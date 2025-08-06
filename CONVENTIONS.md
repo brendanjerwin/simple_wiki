@@ -147,6 +147,7 @@ Storybook is used for developing and documenting UI components in isolation. Fol
   - Always mention "Open the browser developer tools console to see the action logs"
 
 **Example Pattern:**
+
 ```typescript
 export const InteractiveExample: Story = {
   render: (args) => html`
@@ -749,16 +750,21 @@ return fmt.Errorf("context: %w", err)
 Action: CHECK, ACT, & LOG ONCE.
 
 How to Check:
+
 - **Sentinel Error Pattern**: Check for a known error value.
+
   ```go
   if errors.Is(err, ErrNotFound) { /* Act */ }
   ```
+
 - **Custom Error Type Pattern**: Check for and extract a specific error type.
+
   ```go
   if errors.As(err, &myErr) { /* Act on myErr data */ }
   ```
 
 How to Log:
+
 - Log the full error chain once at the end.
 - `log.Printf("error: %v", err)` (Use %v for the full chain)
 

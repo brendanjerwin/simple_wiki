@@ -58,22 +58,8 @@ var _ = Describe("FrontmatterIndexJob", func() {
 	})
 
 	Describe("when creating a new job", func() {
-		BeforeEach(func() {
-			job = index.NewFrontmatterIndexJob(mockIndex, "test-page", index.Add)
-		})
-
-		It("should store the index operator", func() {
-			// Note: These fields are not exported, so we test via behavior
-			Expect(job).NotTo(BeNil())
-		})
-
-		It("should store the page identifier", func() {
-			// Note: These fields are not exported, so we test via behavior
-			Expect(job).NotTo(BeNil())
-		})
-
-		It("should store the operation type", func() {
-			// Note: These fields are not exported, so we test via behavior
+		It("should create a job", func() {
+			job := index.NewFrontmatterIndexJob(mockIndex, "test-page", index.Add)
 			Expect(job).NotTo(BeNil())
 		})
 	})
@@ -206,22 +192,8 @@ var _ = Describe("BleveIndexJob", func() {
 	})
 
 	Describe("when creating a new job", func() {
-		BeforeEach(func() {
-			job = index.NewBleveIndexJob(mockIndex, "test-page", index.Add)
-		})
-
-		It("should store the index operator", func() {
-			// Note: These fields are not exported, so we test via behavior
-			Expect(job).NotTo(BeNil())
-		})
-
-		It("should store the page identifier", func() {
-			// Note: These fields are not exported, so we test via behavior
-			Expect(job).NotTo(BeNil())
-		})
-
-		It("should store the operation type", func() {
-			// Note: These fields are not exported, so we test via behavior
+		It("should create a job", func() {
+			job := index.NewBleveIndexJob(mockIndex, "test-page", index.Add)
 			Expect(job).NotTo(BeNil())
 		})
 	})
