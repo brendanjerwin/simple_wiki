@@ -42,7 +42,7 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 			BeforeEach(func() {
 				// Create PascalCase page directly on filesystem to simulate legacy state
 				// These files represent pages created before the munging system was implemented
-				createPascalCasePage(testDataDir, "LabInventory", "# Rich PascalCase Lab Inventory")
+				CreatePascalCasePage(testDataDir, "LabInventory", "# Rich PascalCase Lab Inventory")
 				
 				// Create existing munged page with poor content
 				err = deps.UpdatePageContent("lab_inventory", "# Poor Munged Lab")
@@ -82,7 +82,7 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 
 			BeforeEach(func() {
 				// Create PascalCase page directly on filesystem to simulate legacy state
-				createPascalCasePage(testDataDir, "UserGuide", "# User Guide Content")
+				CreatePascalCasePage(testDataDir, "UserGuide", "# User Guide Content")
 				
 				// No munged version exists
 				
@@ -119,7 +119,7 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 
 			BeforeEach(func() {
 				// Create PascalCase page with poor content directly on filesystem
-				createPascalCasePage(testDataDir, "LabInventory", "# Poor Lab")
+				CreatePascalCasePage(testDataDir, "LabInventory", "# Poor Lab")
 				
 				// Create munged page with much richer content
 				richContent := "# Rich Munged Lab Inventory\n\nThis munged version has extensive content:\n\n## Equipment List\n- Advanced Microscope\n- High-speed Centrifuge\n- Spectrophotometer\n\n## Procedures\nDetailed procedures here..."

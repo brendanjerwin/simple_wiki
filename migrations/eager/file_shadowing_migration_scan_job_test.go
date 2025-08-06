@@ -47,17 +47,17 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 			BeforeEach(func() {
 				// Create PascalCase pages directly on filesystem to simulate legacy state
 				// These would have been created before the munging system was implemented
-				createPascalCasePage(testDataDir, "LabInventory", "# Lab Inventory")
-				createPascalCasePage(testDataDir, "UserGuide", "# User Guide") 
-				createPascalCasePage(testDataDir, "DeviceManual", "# Device Manual")
+				CreatePascalCasePage(testDataDir, "LabInventory", "# Lab Inventory")
+				CreatePascalCasePage(testDataDir, "UserGuide", "# User Guide") 
+				CreatePascalCasePage(testDataDir, "DeviceManual", "# Device Manual")
 				
 				// Create already-munged page using mock deps (should be ignored by scan)
 				existingErr := deps.UpdatePageContent("lab_inventory", "# Existing Lab")
 				Expect(existingErr).NotTo(HaveOccurred())
 				
 				// Non-page files (should be ignored)
-				createTestFile(testDataDir, "sha256_somehash", "binary content")
-				createTestFile(testDataDir, "random.txt", "text file")
+				CreateTestFile(testDataDir, "sha256_somehash", "binary content")
+				CreateTestFile(testDataDir, "random.txt", "text file")
 
 				// Act
 				err = job.Execute()
@@ -94,7 +94,7 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 				Expect(userErr).NotTo(HaveOccurred())
 				
 				// Non-page files
-				createTestFile(testDataDir, "sha256_somehash", "binary content")
+				CreateTestFile(testDataDir, "sha256_somehash", "binary content")
 
 				// Act
 				err = job.Execute()
@@ -137,17 +137,17 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 
 			BeforeEach(func() {
 				// Create PascalCase pages directly on filesystem to simulate legacy state
-				createPascalCasePage(testDataDir, "LabInventory", "# Lab Inventory")
-				createPascalCasePage(testDataDir, "UserGuide", "# User Guide") 
-				createPascalCasePage(testDataDir, "DeviceList", "# Device List")
+				CreatePascalCasePage(testDataDir, "LabInventory", "# Lab Inventory")
+				CreatePascalCasePage(testDataDir, "UserGuide", "# User Guide") 
+				CreatePascalCasePage(testDataDir, "DeviceList", "# Device List")
 				
 				// Create already-munged page using mock deps (creates base32-encoded files)
 				existingErr := deps.UpdatePageContent("existing_page", "# Existing Page")
 				Expect(existingErr).NotTo(HaveOccurred())
 				
 				// Non-page files (should be ignored)
-				createTestFile(testDataDir, "sha256_abcdef", "binary")
-				createTestFile(testDataDir, "config.txt", "config")
+				CreateTestFile(testDataDir, "sha256_abcdef", "binary")
+				CreateTestFile(testDataDir, "config.txt", "config")
 
 				// Act
 				pascalIdentifiers = job.FindPascalCaseIdentifiers()
@@ -168,10 +168,10 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 			BeforeEach(func() {
 				// Create a page that has mixed case but would result in same base32 when munged
 				// This should NOT be detected as PascalCase for migration since it'd cause file conflicts
-				createPascalCasePage(testDataDir, "lab_smallparts_2B4", "# Lab Smallparts 2B4")
+				CreatePascalCasePage(testDataDir, "lab_smallparts_2B4", "# Lab Smallparts 2B4")
 				
 				// Create a true PascalCase identifier that would have different base32 encoding
-				createPascalCasePage(testDataDir, "TruePascalCase", "# True Pascal Case")
+				CreatePascalCasePage(testDataDir, "TruePascalCase", "# True Pascal Case")
 
 				// Act
 				pascalIdentifiers = job.FindPascalCaseIdentifiers()
