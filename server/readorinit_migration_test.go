@@ -42,7 +42,7 @@ func (m *MockMigrationApplicator) LastContentReceived() []byte {
 	return m.lastContentReceived
 }
 
-var _ = Describe("Migration Coordination in ReadOrInitPageForTesting", func() {
+var _ = Describe("Migration Coordination in ReadOrInit", func() {
 	var (
 		testDataDir             string
 		site                    *server.Site
@@ -70,7 +70,7 @@ var _ = Describe("Migration Coordination in ReadOrInitPageForTesting", func() {
 		}
 	})
 
-	Context("when opening existing file via ReadOrInitPageForTesting", func() {
+	Context("when opening existing file via ReadOrInit", func() {
 		var (
 			identifier   string
 			fileContent  string
@@ -106,7 +106,7 @@ title = 'Test Page'
 			}
 		})
 
-		Context("when calling ReadOrInitPageForTesting", func() {
+		Context("when calling ReadOrInit", func() {
 			BeforeEach(func() {
 				openedPage, err = site.ReadOrInitPageForTesting(identifier, req)
 			})
