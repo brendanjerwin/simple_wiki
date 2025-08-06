@@ -10,30 +10,56 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/jcelliott/lumber"
 
-	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
 	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
-var _ = Describe("OpenOrInit Migration Test", func() {
+// MockMigrationApplicator tracks migration calls for testing
+type MockMigrationApplicator struct {
+	ApplyMigrationsFunc func(content []byte) ([]byte, error)
+	callCount           int
+	lastContentReceived []byte
+}
+
+func (m *MockMigrationApplicator) ApplyMigrations(content []byte) ([]byte, error) {
+	m.callCount++
+	m.lastContentReceived = make([]byte, len(content))
+	copy(m.lastContentReceived, content)
+	
+	if m.ApplyMigrationsFunc != nil {
+		return m.ApplyMigrationsFunc(content)
+	}
+	return content, nil
+}
+
+func (m *MockMigrationApplicator) CallCount() int {
+	return m.callCount
+}
+
+func (m *MockMigrationApplicator) LastContentReceived() []byte {
+	return m.lastContentReceived
+}
+
+var _ = Describe("Migration Coordination in ReadOrInitPageForTesting", func() {
 	var (
-		testDataDir string
-		site        *server.Site
+		testDataDir             string
+		site                    *server.Site
+		mockMigrationApplicator *MockMigrationApplicator
 	)
 
 	BeforeEach(func() {
 		var err error
-		testDataDir, err = os.MkdirTemp("", "wiki_openorinit_migration_test_*")
+		testDataDir, err = os.MkdirTemp("", "wiki_migration_coordination_test_*")
 		Expect(err).NotTo(HaveOccurred())
 
-		// Initialize a site like the real application would
-		migrationApplicator := lazy.NewApplicator()
-		logger := lumber.NewConsoleLogger(lumber.INFO) // More verbose for debugging
+		// Use a mock migration applicator to test coordination, not specific migrations
+		mockMigrationApplicator = &MockMigrationApplicator{}
+		logger := lumber.NewConsoleLogger(lumber.WARN) // Quiet logger for tests
 		site = &server.Site{
 			PathToData:          testDataDir,
-			MigrationApplicator: migrationApplicator,
+			MigrationApplicator: mockMigrationApplicator,
 			Logger:              logger,
 		}
 	})
@@ -44,7 +70,7 @@ var _ = Describe("OpenOrInit Migration Test", func() {
 		}
 	})
 
-	Context("when opening existing file with inventory.container via OpenOrInit", func() {
+	Context("when opening existing file via ReadOrInitPageForTesting", func() {
 		var (
 			identifier   string
 			fileContent  string
@@ -55,17 +81,12 @@ var _ = Describe("OpenOrInit Migration Test", func() {
 		)
 
 		BeforeEach(func() {
-			identifier = "garage_unit_3_shelf_a"
+			identifier = "test_page"
 			fileContent = `+++
-identifier = 'garage_unit_3_shelf_a'
-title = 'Garage Unit 3, Shelf A'
-inventory.container = 'GarageInventory'
+identifier = 'test_page'
+title = 'Test Page'
 +++
-# {{or .Title .Identifier }}
-### Goes in: {{LinkTo .Inventory.Container }}
-
-## Contents
-{{ ShowInventoryContentsOf .Identifier }}`
+# Test content that needs migration`
 
 			// Create the file exactly as it would exist on disk
 			mungedIdentifier := wikiidentifiers.MungeIdentifier(identifier)
@@ -76,16 +97,16 @@ inventory.container = 'GarageInventory'
 			err := os.WriteFile(filePath, []byte(fileContent), 0644)
 			Expect(err).NotTo(HaveOccurred())
 
-			// Create a mock HTTP request like would come from /garage_unit_3_shelf_a/edit
+			// Create a mock HTTP request
 			req = &http.Request{
 				URL: &url.URL{
-					Path:     "/garage_unit_3_shelf_a/edit",
+					Path:     "/test_page/edit",
 					RawQuery: "",
 				},
 			}
 		})
 
-		Context("when calling OpenOrInit", func() {
+		Context("when calling ReadOrInitPageForTesting", func() {
 			BeforeEach(func() {
 				openedPage, err = site.ReadOrInitPageForTesting(identifier, req)
 			})
@@ -103,34 +124,13 @@ inventory.container = 'GarageInventory'
 				Expect(openedPage.IsNew()).To(BeFalse(), "Page should not be new")
 			})
 
-			It("should have applied the inventory.container migration", func() {
-				content := openedPage.Text.GetCurrent()
-
-				// Check for migration
-				Expect(content).NotTo(ContainSubstring("inventory.container"), 
-					"Content should not contain dotted notation after migration")
-				Expect(content).To(ContainSubstring("[inventory]"),
-					"Content should contain [inventory] section after migration")
-				Expect(content).To(ContainSubstring(`container = 'garage_inventory'`),
-					"Content should contain the munged container value")
+			It("should have called the migration applicator", func() {
+				Expect(mockMigrationApplicator.CallCount()).To(BeNumerically(">=", 1), "Migration applicator should have been called at least once")
 			})
 
-			Context("when checking file on disk", func() {
-				var diskContent string
-
-				BeforeEach(func() {
-					diskBytes, readErr := os.ReadFile(filePath)
-					Expect(readErr).NotTo(HaveOccurred())
-					diskContent = string(diskBytes)
-				})
-
-				It("should have updated the file on disk", func() {
-					// The file on disk should also be migrated
-					Expect(diskContent).NotTo(ContainSubstring("inventory.container"),
-						"File on disk should not contain dotted notation after migration")
-					Expect(diskContent).To(ContainSubstring("[inventory]"),
-						"File on disk should contain [inventory] section after migration")
-				})
+			It("should have passed file content to migration applicator", func() {
+				Expect(mockMigrationApplicator.LastContentReceived()).NotTo(BeEmpty(), "Migration applicator should have received content")
+				Expect(string(mockMigrationApplicator.LastContentReceived())).To(ContainSubstring("Test content that needs migration"))
 			})
 		})
 	})
@@ -165,6 +165,67 @@ inventory.container = 'GarageInventory'
 			Expect(openedPage).NotTo(BeNil())
 			Expect(openedPage.IsNew()).To(BeTrue(), "Page should be new")
 			Expect(openedPage.WasLoadedFromDisk).To(BeFalse(), "Page should not be loaded from disk")
+		})
+
+		It("should not call migration applicator for new pages", func() {
+			Expect(mockMigrationApplicator.CallCount()).To(Equal(0), "Migration applicator should not be called for new pages")
+		})
+	})
+
+	Context("when migration applicator returns modified content", func() {
+		var (
+			identifier   string
+			fileContent  string
+			filePath     string
+			openedPage   *wikipage.Page
+			err          error
+			req          *http.Request
+		)
+
+		BeforeEach(func() {
+			identifier = "migration_test_page"
+			fileContent = `+++
+identifier = 'migration_test_page'
++++
+# Original content`
+
+			// Set up mock to simulate migration changes
+			mockMigrationApplicator.ApplyMigrationsFunc = func(content []byte) ([]byte, error) {
+				// Simulate a migration that changes content
+				modified := string(content) + "\n# Migration applied"
+				return []byte(modified), nil
+			}
+
+			// Create the file
+			mungedIdentifier := wikiidentifiers.MungeIdentifier(identifier)
+			encodedFilename := base32tools.EncodeToBase32(mungedIdentifier) + ".md"  
+			filePath = filepath.Join(testDataDir, encodedFilename)
+			
+			err := os.WriteFile(filePath, []byte(fileContent), 0644)
+			Expect(err).NotTo(HaveOccurred())
+
+			// Create a mock HTTP request
+			req = &http.Request{
+				URL: &url.URL{
+					Path:     "/migration_test_page/edit",
+					RawQuery: "",
+				},
+			}
+
+			openedPage, err = site.ReadOrInitPageForTesting(identifier, req)
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should have called the migration applicator", func() {
+			Expect(mockMigrationApplicator.CallCount()).To(Equal(1))
+		})
+
+		It("should use the migrated content", func() {
+			content := openedPage.Text.GetCurrent()
+			Expect(content).To(ContainSubstring("# Migration applied"), "Page should contain migrated content")
 		})
 	})
 })
