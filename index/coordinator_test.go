@@ -1,5 +1,5 @@
 //revive:disable:dot-imports
-package server_test
+package index_test
 
 import (
 	"context"
@@ -11,19 +11,18 @@ import (
 
 	"github.com/brendanjerwin/simple_wiki/index"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
-	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
-// MockIntegrationIndexOperator is a test implementation of index.IndexOperator for integration tests.
-type MockIntegrationIndexOperator struct {
+// MockCoordinatorIndexOperator is a test implementation of index.IndexOperator for coordinator tests.
+type MockCoordinatorIndexOperator struct {
 	AddPageToIndexFunc    func(identifier wikipage.PageIdentifier) error
 	RemovePageFromIndexFunc func(identifier wikipage.PageIdentifier) error
 	addCalled             []wikipage.PageIdentifier
 	removeCalled          []wikipage.PageIdentifier
 }
 
-func (m *MockIntegrationIndexOperator) AddPageToIndex(identifier wikipage.PageIdentifier) error {
+func (m *MockCoordinatorIndexOperator) AddPageToIndex(identifier wikipage.PageIdentifier) error {
 	m.addCalled = append(m.addCalled, identifier)
 	if m.AddPageToIndexFunc != nil {
 		return m.AddPageToIndexFunc(identifier)
@@ -31,7 +30,7 @@ func (m *MockIntegrationIndexOperator) AddPageToIndex(identifier wikipage.PageId
 	return nil
 }
 
-func (m *MockIntegrationIndexOperator) RemovePageFromIndex(identifier wikipage.PageIdentifier) error {
+func (m *MockCoordinatorIndexOperator) RemovePageFromIndex(identifier wikipage.PageIdentifier) error {
 	m.removeCalled = append(m.removeCalled, identifier)
 	if m.RemovePageFromIndexFunc != nil {
 		return m.RemovePageFromIndexFunc(identifier)
@@ -39,31 +38,30 @@ func (m *MockIntegrationIndexOperator) RemovePageFromIndex(identifier wikipage.P
 	return nil
 }
 
-var _ = Describe("IndexingQueueIntegration", func() {
+var _ = Describe("IndexCoordinator", func() {
 	var (
 		coordinator          *jobs.JobQueueCoordinator
-		frontmatterMock      *MockIntegrationIndexOperator
-		bleveMock           *MockIntegrationIndexOperator
-		indexingService     *server.IndexingService
+		frontmatterMock      *MockCoordinatorIndexOperator
+		bleveMock           *MockCoordinatorIndexOperator
+		indexCoordinator    *index.IndexCoordinator
 	)
 
 	BeforeEach(func() {
 		logger := lumber.NewConsoleLogger(lumber.WARN) // Quiet logger for tests
 		coordinator = jobs.NewJobQueueCoordinator(logger)
-		frontmatterMock = &MockIntegrationIndexOperator{}
-		bleveMock = &MockIntegrationIndexOperator{}
-		indexingService = server.NewIndexingService(coordinator, frontmatterMock, bleveMock)
+		frontmatterMock = &MockCoordinatorIndexOperator{}
+		bleveMock = &MockCoordinatorIndexOperator{}
+		indexCoordinator = index.NewIndexCoordinator(coordinator, frontmatterMock, bleveMock)
 	})
 
 	It("should exist", func() {
-		Expect(indexingService).NotTo(BeNil())
+		Expect(indexCoordinator).NotTo(BeNil())
 	})
-
 
 	Describe("EnqueueIndexJob", func() {
 		Describe("when enqueuing add job", func() {
 			BeforeEach(func() {
-				indexingService.EnqueueIndexJob("test-page", index.Add)
+				indexCoordinator.EnqueueIndexJob("test-page", index.Add)
 				// Allow time for job execution
 				time.Sleep(100 * time.Millisecond)
 			})
@@ -84,7 +82,7 @@ var _ = Describe("IndexingQueueIntegration", func() {
 
 		Describe("when enqueuing remove job", func() {
 			BeforeEach(func() {
-				indexingService.EnqueueIndexJob("test-page", index.Remove)
+				indexCoordinator.EnqueueIndexJob("test-page", index.Remove)
 				// Allow time for job execution
 				time.Sleep(100 * time.Millisecond)
 			})
@@ -108,7 +106,7 @@ var _ = Describe("IndexingQueueIntegration", func() {
 		var returnedCoordinator *jobs.JobQueueCoordinator
 
 		BeforeEach(func() {
-			returnedCoordinator = indexingService.GetJobQueueCoordinator()
+			returnedCoordinator = indexCoordinator.GetJobQueueCoordinator()
 		})
 
 		It("should return the coordinator", func() {
@@ -125,7 +123,7 @@ var _ = Describe("IndexingQueueIntegration", func() {
 
 		Describe("when enqueuing add jobs", func() {
 			BeforeEach(func() {
-				indexingService.BulkEnqueuePages(pageIdentifiers, index.Add)
+				indexCoordinator.BulkEnqueuePages(pageIdentifiers, index.Add)
 				// Allow time for job execution
 				time.Sleep(200 * time.Millisecond)
 			})
@@ -156,9 +154,9 @@ var _ = Describe("IndexingQueueIntegration", func() {
 
 			BeforeEach(func() {
 				// Enqueue jobs that will complete quickly
-				indexingService.EnqueueIndexJob("fast-page", index.Add)
+				indexCoordinator.EnqueueIndexJob("fast-page", index.Add)
 				
-				completed, timedOut = indexingService.WaitForCompletionWithTimeout(context.Background(), 1*time.Second)
+				completed, timedOut = indexCoordinator.WaitForCompletionWithTimeout(context.Background(), 1*time.Second)
 			})
 
 			It("should complete without timeout", func() {
@@ -178,8 +176,8 @@ var _ = Describe("IndexingQueueIntegration", func() {
 				ctx, cancel = context.WithCancel(context.Background())
 				cancel() // Cancel immediately
 				
-				indexingService.EnqueueIndexJob("slow-page", index.Add)
-				completed, timedOut = indexingService.WaitForCompletionWithTimeout(ctx, 1*time.Second)
+				indexCoordinator.EnqueueIndexJob("slow-page", index.Add)
+				completed, timedOut = indexCoordinator.WaitForCompletionWithTimeout(ctx, 1*time.Second)
 			})
 
 			It("should not complete and should indicate context cancellation", func() {
@@ -203,8 +201,8 @@ var _ = Describe("IndexingQueueIntegration", func() {
 					return nil
 				}
 				
-				indexingService.EnqueueIndexJob("slow-page", index.Add)
-				completed, timedOut = indexingService.WaitForCompletionWithTimeout(context.Background(), 50*time.Millisecond)
+				indexCoordinator.EnqueueIndexJob("slow-page", index.Add)
+				completed, timedOut = indexCoordinator.WaitForCompletionWithTimeout(context.Background(), 50*time.Millisecond)
 			})
 
 			It("should timeout", func() {

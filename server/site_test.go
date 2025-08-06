@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/brendanjerwin/simple_wiki/index"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
 	"github.com/brendanjerwin/simple_wiki/sec"
@@ -22,6 +23,45 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+// MockIndexOperator is a test implementation of index.IndexOperator.
+type MockIndexOperator struct {
+	AddPageToIndexFunc    func(identifier wikipage.PageIdentifier) error
+	RemovePageFromIndexFunc func(identifier wikipage.PageIdentifier) error
+	addCalled             []wikipage.PageIdentifier
+	removeCalled          []wikipage.PageIdentifier
+}
+
+func (m *MockIndexOperator) AddPageToIndex(identifier wikipage.PageIdentifier) error {
+	m.addCalled = append(m.addCalled, identifier)
+	if m.AddPageToIndexFunc != nil {
+		return m.AddPageToIndexFunc(identifier)
+	}
+	return nil
+}
+
+func (m *MockIndexOperator) RemovePageFromIndex(identifier wikipage.PageIdentifier) error {
+	m.removeCalled = append(m.removeCalled, identifier)
+	if m.RemovePageFromIndexFunc != nil {
+		return m.RemovePageFromIndexFunc(identifier)
+	}
+	return nil
+}
+
+// LastAddPageCall returns the last identifier passed to AddPageToIndex
+func (m *MockIndexOperator) LastAddPageCall() wikipage.PageIdentifier {
+	if len(m.addCalled) == 0 {
+		return ""
+	}
+	return m.addCalled[len(m.addCalled)-1]
+}
+
+// LastRemovePageCall returns the last identifier passed to RemovePageFromIndex
+func (m *MockIndexOperator) LastRemovePageCall() wikipage.PageIdentifier {
+	if len(m.removeCalled) == 0 {
+		return ""
+	}
+	return m.removeCalled[len(m.removeCalled)-1]
+}
 
 var _ = Describe("Site", func() {
 	var (
@@ -30,13 +70,13 @@ var _ = Describe("Site", func() {
 		mockFrontmatter  *MockIndexOperator
 		mockBleve        *MockIndexOperator
 		coordinator      *jobs.JobQueueCoordinator
-		indexingService  *IndexingService
+		indexCoordinator *index.IndexCoordinator
 	)
 
 	// Helper function to wait for indexing jobs to complete
 	waitForIndexing := func() {
-		if indexingService != nil {
-			completed, _ := indexingService.WaitForCompletionWithTimeout(context.Background(), 1*time.Second)
+		if indexCoordinator != nil {
+			completed, _ := indexCoordinator.WaitForCompletionWithTimeout(context.Background(), 1*time.Second)
 			Expect(completed).To(BeTrue())
 		}
 	}
@@ -49,10 +89,10 @@ var _ = Describe("Site", func() {
 		mockFrontmatter = &MockIndexOperator{}
 		mockBleve = &MockIndexOperator{}
 
-		// Set up job queue coordinator and indexing service
+		// Set up job queue coordinator and index coordinator
 		logger := lumber.NewConsoleLogger(lumber.WARN) // Quiet logger for tests
 		coordinator = jobs.NewJobQueueCoordinator(logger)
-		indexingService = NewIndexingService(coordinator, mockFrontmatter, mockBleve)
+		indexCoordinator = index.NewIndexCoordinator(coordinator, mockFrontmatter, mockBleve)
 
 		// Set up empty migration applicator for unit testing
 		// (integration tests will configure their own mocks)
@@ -61,7 +101,7 @@ var _ = Describe("Site", func() {
 		s = &Site{
 			Logger:                  lumber.NewConsoleLogger(lumber.INFO),
 			PathToData:              tempDir,
-			IndexingService:         indexingService,
+			IndexCoordinator:        indexCoordinator,
 			MarkdownRenderer:        &goldmarkrenderer.GoldmarkRenderer{},
 			FrontmatterIndexQueryer: &mockFrontmatterIndexQueryer{},
 			MigrationApplicator:     applicator,
@@ -772,8 +812,8 @@ test content to be soft deleted`
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("should initialize IndexingService", func() {
-				Expect(s.IndexingService).NotTo(BeNil())
+			It("should initialize IndexCoordinator", func() {
+				Expect(s.IndexCoordinator).NotTo(BeNil())
 			})
 
 			It("should initialize FrontmatterIndexQueryer", func() {

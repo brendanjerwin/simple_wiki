@@ -60,7 +60,7 @@ type Site struct {
 	MaxDocumentSize         uint // in runes; about a 10mb limit by default
 	Logger                  *lumber.ConsoleLogger
 	MarkdownRenderer        IRenderMarkdownToHTML
-	IndexingService         *IndexingService
+	IndexCoordinator        *index.IndexCoordinator
 	JobQueueCoordinator     *jobs.JobQueueCoordinator
 	FrontmatterIndexQueryer frontmatter.IQueryFrontmatterIndex
 	BleveIndexQueryer       bleve.IQueryBleveIndex
@@ -170,9 +170,9 @@ func (s *Site) InitializeIndexing() error {
 	s.FrontmatterIndexQueryer = frontmatterIndex
 	s.BleveIndexQueryer = bleveIndex
 
-	// Create new job queue coordinator and indexing service
+	// Create new job queue coordinator and index coordinator
 	s.JobQueueCoordinator = jobs.NewJobQueueCoordinator(s.Logger)
-	s.IndexingService = NewIndexingService(s.JobQueueCoordinator, frontmatterIndex, bleveIndex)
+	s.IndexCoordinator = index.NewIndexCoordinator(s.JobQueueCoordinator, frontmatterIndex, bleveIndex)
 
 	// Start file shadowing scan
 	scanJob := eager.NewFileShadowingMigrationScanJob(s.PathToData, s.JobQueueCoordinator, s)
@@ -193,7 +193,7 @@ func (s *Site) InitializeIndexing() error {
 	}
 
 	// Start background indexing
-	s.IndexingService.BulkEnqueuePages(pageIdentifiers, index.Add)
+	s.IndexCoordinator.BulkEnqueuePages(pageIdentifiers, index.Add)
 	s.Logger.Info("Background indexing started for %d pages. Application is ready.", len(files))
 	return nil
 }
@@ -207,7 +207,7 @@ func (s *Site) InitializeIndexingAndWait(timeout time.Duration) error {
 
 	// Wait for all initial indexing jobs to complete
 	ctx := context.Background()
-	completed, timedOut := s.IndexingService.WaitForCompletionWithTimeout(ctx, timeout)
+	completed, timedOut := s.IndexCoordinator.WaitForCompletionWithTimeout(ctx, timeout)
 	if timedOut {
 		return fmt.Errorf("timed out waiting for initial indexing to complete after %v", timeout)
 	}
@@ -614,8 +614,8 @@ func (s *Site) DeletePage(identifier wikipage.PageIdentifier) error {
 	s.Logger.Trace("Deleting page %s", identifier)
 
 	// Enqueue removal jobs for both frontmatter and bleve indexes
-	if s.IndexingService != nil {
-		s.IndexingService.EnqueueIndexJob(string(identifier), index.Remove)
+	if s.IndexCoordinator != nil {
+		s.IndexCoordinator.EnqueueIndexJob(string(identifier), index.Remove)
 	}
 
 	// Soft delete: move files to __deleted__/<timestamp>/ directory
@@ -706,8 +706,8 @@ func (s *Site) savePage(p *wikipage.Page) error {
 	}
 
 	// Enqueue indexing jobs for both frontmatter and bleve indexes
-	if s.IndexingService != nil {
-		s.IndexingService.EnqueueIndexJob(p.Identifier, index.Add)
+	if s.IndexCoordinator != nil {
+		s.IndexCoordinator.EnqueueIndexJob(p.Identifier, index.Add)
 	}
 
 	return nil
@@ -735,7 +735,7 @@ func (s *Site) savePageWithoutIndexing(p *wikipage.Page) error {
 		return err
 	}
 
-	// Note: Intentionally NOT calling IndexingService to prevent circular references
+	// Note: Intentionally NOT calling IndexCoordinator to prevent circular references
 	return nil
 }
 

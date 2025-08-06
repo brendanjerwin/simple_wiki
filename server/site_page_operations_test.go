@@ -81,8 +81,8 @@ var _ = Describe("Site Page Operations", func() {
 				Expect(err).ToNot(HaveOccurred())
 
 				// Wait for any background indexing operations to complete
-				if s.IndexingService != nil {
-					completed, _ := s.IndexingService.WaitForCompletionWithTimeout(context.Background(), 1*time.Second)
+				if s.IndexCoordinator != nil {
+					completed, _ := s.IndexCoordinator.WaitForCompletionWithTimeout(context.Background(), 1*time.Second)
 					Expect(completed).To(BeTrue())
 				}
 
@@ -212,8 +212,8 @@ var _ = Describe("Site Page Operations", func() {
 				Expect(err).NotTo(HaveOccurred())
 				
 				// Wait for any background indexing operations triggered by the save
-				if s.IndexingService != nil {
-					completed, _ := s.IndexingService.WaitForCompletionWithTimeout(context.Background(), 1*time.Second)
+				if s.IndexCoordinator != nil {
+					completed, _ := s.IndexCoordinator.WaitForCompletionWithTimeout(context.Background(), 1*time.Second)
 					Expect(completed).To(BeTrue())
 				}
 				
