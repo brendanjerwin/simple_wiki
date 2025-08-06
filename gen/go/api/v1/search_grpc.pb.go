@@ -19,96 +19,96 @@ import (
 const _ = grpc.SupportPackageIsVersion8
 
 const (
-	Search_SearchContent_FullMethodName = "/api.v1.Search/SearchContent"
+	SearchService_SearchContent_FullMethodName = "/api.v1.SearchService/SearchContent"
 )
 
-// SearchClient is the client API for Search service.
+// SearchServiceClient is the client API for SearchService service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 //
 // The Search service definition.
-type SearchClient interface {
+type SearchServiceClient interface {
 	// Searches the wiki content and returns matching results.
 	SearchContent(ctx context.Context, in *SearchContentRequest, opts ...grpc.CallOption) (*SearchContentResponse, error)
 }
 
-type searchClient struct {
+type searchServiceClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewSearchClient(cc grpc.ClientConnInterface) SearchClient {
-	return &searchClient{cc}
+func NewSearchServiceClient(cc grpc.ClientConnInterface) SearchServiceClient {
+	return &searchServiceClient{cc}
 }
 
-func (c *searchClient) SearchContent(ctx context.Context, in *SearchContentRequest, opts ...grpc.CallOption) (*SearchContentResponse, error) {
+func (c *searchServiceClient) SearchContent(ctx context.Context, in *SearchContentRequest, opts ...grpc.CallOption) (*SearchContentResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(SearchContentResponse)
-	err := c.cc.Invoke(ctx, Search_SearchContent_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, SearchService_SearchContent_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// SearchServer is the server API for Search service.
-// All implementations must embed UnimplementedSearchServer
+// SearchServiceServer is the server API for SearchService service.
+// All implementations must embed UnimplementedSearchServiceServer
 // for forward compatibility
 //
 // The Search service definition.
-type SearchServer interface {
+type SearchServiceServer interface {
 	// Searches the wiki content and returns matching results.
 	SearchContent(context.Context, *SearchContentRequest) (*SearchContentResponse, error)
-	mustEmbedUnimplementedSearchServer()
+	mustEmbedUnimplementedSearchServiceServer()
 }
 
-// UnimplementedSearchServer must be embedded to have forward compatible implementations.
-type UnimplementedSearchServer struct {
+// UnimplementedSearchServiceServer must be embedded to have forward compatible implementations.
+type UnimplementedSearchServiceServer struct {
 }
 
-func (UnimplementedSearchServer) SearchContent(context.Context, *SearchContentRequest) (*SearchContentResponse, error) {
+func (UnimplementedSearchServiceServer) SearchContent(context.Context, *SearchContentRequest) (*SearchContentResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SearchContent not implemented")
 }
-func (UnimplementedSearchServer) mustEmbedUnimplementedSearchServer() {}
+func (UnimplementedSearchServiceServer) mustEmbedUnimplementedSearchServiceServer() {}
 
-// UnsafeSearchServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to SearchServer will
+// UnsafeSearchServiceServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to SearchServiceServer will
 // result in compilation errors.
-type UnsafeSearchServer interface {
-	mustEmbedUnimplementedSearchServer()
+type UnsafeSearchServiceServer interface {
+	mustEmbedUnimplementedSearchServiceServer()
 }
 
-func RegisterSearchServer(s grpc.ServiceRegistrar, srv SearchServer) {
-	s.RegisterService(&Search_ServiceDesc, srv)
+func RegisterSearchServiceServer(s grpc.ServiceRegistrar, srv SearchServiceServer) {
+	s.RegisterService(&SearchService_ServiceDesc, srv)
 }
 
-func _Search_SearchContent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _SearchService_SearchContent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(SearchContentRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(SearchServer).SearchContent(ctx, in)
+		return srv.(SearchServiceServer).SearchContent(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Search_SearchContent_FullMethodName,
+		FullMethod: SearchService_SearchContent_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SearchServer).SearchContent(ctx, req.(*SearchContentRequest))
+		return srv.(SearchServiceServer).SearchContent(ctx, req.(*SearchContentRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// Search_ServiceDesc is the grpc.ServiceDesc for Search service.
+// SearchService_ServiceDesc is the grpc.ServiceDesc for SearchService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var Search_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "api.v1.Search",
-	HandlerType: (*SearchServer)(nil),
+var SearchService_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "api.v1.SearchService",
+	HandlerType: (*SearchServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "SearchContent",
-			Handler:    _Search_SearchContent_Handler,
+			Handler:    _SearchService_SearchContent_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

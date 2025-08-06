@@ -105,7 +105,60 @@ func (b *Index) RemovePageFromIndex(identifier wikipage.PageIdentifier) error {
 	return b.index.Delete(identifier)
 }
 
-var newlineRegex = regexp.MustCompile("\n")
+var (
+	newlineRegex = regexp.MustCompile("\n")
+	highlightRegex = regexp.MustCompile(`<mark>([^<]*)</mark>`)
+)
+
+// extractFragmentAndHighlights converts a Bleve HTML fragment with <mark> tags
+// to plain text with highlight position spans.
+func extractFragmentAndHighlights(fragmentHTML string) (string, []HighlightSpan) {
+	// Replace newlines with spaces for consistent fragment display
+	cleanHTML := newlineRegex.ReplaceAllString(fragmentHTML, " ")
+	
+	var highlights []HighlightSpan
+	var plainText strings.Builder
+	var currentPos int
+	
+	// Find all <mark> tags and their positions
+	matches := highlightRegex.FindAllStringSubmatchIndex(cleanHTML, -1)
+	
+	for _, match := range matches {
+		// match[0], match[1] = start and end of entire match including <mark> tags
+		// match[2], match[3] = start and end of captured group (text inside <mark>)
+		
+		// Add text before the <mark> tag
+		if currentPos < match[0] {
+			plainText.WriteString(cleanHTML[currentPos:match[0]])
+		}
+		
+		// Record where the highlighted text starts in the plain text
+		highlightStart := int32(plainText.Len())
+		
+		// Add the highlighted text (without <mark> tags)
+		highlightedText := cleanHTML[match[2]:match[3]]
+		plainText.WriteString(highlightedText)
+		
+		// Record where the highlighted text ends
+		highlightEnd := int32(plainText.Len())
+		
+		// Add the highlight span
+		highlights = append(highlights, HighlightSpan{
+			Start: highlightStart,
+			End:   highlightEnd,
+		})
+		
+		// Move past the closing </mark> tag
+		currentPos = match[1]
+	}
+	
+	// Add any remaining text after the last highlight
+	if currentPos < len(cleanHTML) {
+		plainText.WriteString(cleanHTML[currentPos:])
+	}
+	
+	return plainText.String(), highlights
+}
 
 // Query searches the Bleve index.
 func (b *Index) Query(query string) ([]SearchResult, error) {
@@ -138,19 +191,30 @@ func (b *Index) Query(query string) ([]SearchResult, error) {
 			result.Title = result.Identifier
 		}
 
-		if hit.Fragments != nil && hit.Fragments["content"] != nil {
-			result.FragmentHTML = hit.Fragments["content"][0]
-			result.FragmentHTML = newlineRegex.ReplaceAllString(result.FragmentHTML, "<br>")
+		// Get the fragment text
+		if hit.Fragments != nil && hit.Fragments["content"] != nil && len(hit.Fragments["content"]) > 0 {
+			// Use the fragment text from Bleve (which contains <mark> tags for highlights)
+			fragmentHTML := hit.Fragments["content"][0]
+			// Extract plain text and highlight positions from the HTML fragment
+			result.Fragment, result.Highlights = extractFragmentAndHighlights(fragmentHTML)
 		}
+
 		results = append(results, result)
 	}
 
 	return results, nil
 }
 
+// HighlightSpan represents a text span that should be highlighted in search results.
+type HighlightSpan struct {
+	Start int32
+	End   int32
+}
+
 // SearchResult represents a search result from the Bleve index.
 type SearchResult struct {
-	Identifier   wikipage.PageIdentifier
-	Title        string
-	FragmentHTML string
+	Identifier wikipage.PageIdentifier
+	Title      string
+	Fragment   string
+	Highlights []HighlightSpan
 }

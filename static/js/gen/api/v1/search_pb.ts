@@ -163,7 +163,7 @@ export class HighlightSpan extends Message<HighlightSpan> {
   start = 0;
 
   /**
-   * End position in fragment  
+   * End position in fragment
    *
    * @generated from field: int32 end = 2;
    */

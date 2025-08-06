@@ -9,6 +9,7 @@ import (
 	"time"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
+	"github.com/brendanjerwin/simple_wiki/index/bleve"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
@@ -70,9 +71,11 @@ type Server struct {
 	apiv1.UnimplementedSystemInfoServiceServer
 	apiv1.UnimplementedFrontmatterServer
 	apiv1.UnimplementedPageManagementServiceServer
+	apiv1.UnimplementedSearchServiceServer
 	Commit              string
 	BuildTime           time.Time
 	PageReaderMutator   wikipage.PageReaderMutator
+	BleveIndexQueryer   bleve.IQueryBleveIndex
 	JobProgressProvider jobs.IProvideJobProgress
 	Logger              *lumber.ConsoleLogger
 }
@@ -285,11 +288,12 @@ func removeAtPath(data any, path []*apiv1.PathComponent) (any, error) {
 }
 
 // NewServer creates a new debug server
-func NewServer(commit string, buildTime time.Time, pageReadWriter wikipage.PageReaderMutator, jobProgressProvider jobs.IProvideJobProgress, logger *lumber.ConsoleLogger) *Server {
+func NewServer(commit string, buildTime time.Time, pageReadWriter wikipage.PageReaderMutator, bleveIndexQueryer bleve.IQueryBleveIndex, jobProgressProvider jobs.IProvideJobProgress, logger *lumber.ConsoleLogger) *Server {
 	return &Server{
 		Commit:              commit,
 		BuildTime:           buildTime,
 		PageReaderMutator:   pageReadWriter,
+		BleveIndexQueryer:   bleveIndexQueryer,
 		JobProgressProvider: jobProgressProvider,
 		Logger:              logger,
 	}
@@ -300,6 +304,7 @@ func (s *Server) RegisterWithServer(grpcServer *grpc.Server) {
 	apiv1.RegisterSystemInfoServiceServer(grpcServer, s)
 	apiv1.RegisterFrontmatterServer(grpcServer, s)
 	apiv1.RegisterPageManagementServiceServer(grpcServer, s)
+	apiv1.RegisterSearchServiceServer(grpcServer, s)
 }
 
 // GetVersion implements the GetVersion RPC.
@@ -455,5 +460,48 @@ func (s *Server) DeletePage(_ context.Context, req *apiv1.DeletePageRequest) (*a
 	return &apiv1.DeletePageResponse{
 		Success: true,
 		Error:   "",
+	}, nil
+}
+
+// SearchContent implements the SearchContent RPC.
+func (s *Server) SearchContent(_ context.Context, req *apiv1.SearchContentRequest) (*apiv1.SearchContentResponse, error) {
+	v := reflect.ValueOf(s.BleveIndexQueryer)
+	if s.BleveIndexQueryer == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
+		return nil, status.Error(codes.Internal, "Search index is not available")
+	}
+
+	// Validate query is not empty
+	if req.Query == "" {
+		return nil, status.Error(codes.InvalidArgument, "query cannot be empty")
+	}
+
+	// Perform the search
+	searchResults, err := s.BleveIndexQueryer.Query(req.Query)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to search: %v", err)
+	}
+
+	// Convert bleve.SearchResult to apiv1.SearchResult
+	var results []*apiv1.SearchResult
+	for _, result := range searchResults {
+		// Convert highlight spans
+		var highlights []*apiv1.HighlightSpan
+		for _, hl := range result.Highlights {
+			highlights = append(highlights, &apiv1.HighlightSpan{
+				Start: hl.Start,
+				End:   hl.End,
+			})
+		}
+
+		results = append(results, &apiv1.SearchResult{
+			Identifier: string(result.Identifier),
+			Title:      result.Title,
+			Fragment:   result.Fragment,
+			Highlights: highlights,
+		})
+	}
+
+	return &apiv1.SearchContentResponse{
+		Results: results,
 	}, nil
 }

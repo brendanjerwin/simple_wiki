@@ -380,9 +380,10 @@ var _ = Describe("API Handlers", func() {
 							if query == "searchterm" {
 								return []bleve.SearchResult{
 									{
-										Identifier:   wikipage.PageIdentifier("id1"),
-										Title:        "Title 1",
-										FragmentHTML: "fragment",
+										Identifier: wikipage.PageIdentifier("id1"),
+										Title:      "Title 1",
+										Fragment:   "fragment",
+										Highlights: []bleve.HighlightSpan{},
 									},
 								}, nil
 							}
@@ -408,7 +409,7 @@ var _ = Describe("API Handlers", func() {
 
 				It("returns the search results", func() {
 					Expect(response.Results).To(Equal(
-						[]bleve.SearchResult{{Identifier: wikipage.PageIdentifier("id1"), Title: "Title 1", FragmentHTML: "fragment"}},
+						[]bleve.SearchResult{{Identifier: wikipage.PageIdentifier("id1"), Title: "Title 1", Fragment: "fragment", Highlights: []bleve.HighlightSpan{}}},
 					))
 				})
 			})

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
+	"github.com/brendanjerwin/simple_wiki/index/bleve"
 	"github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
@@ -208,6 +209,19 @@ func (*MockJobStreamServer) RecvMsg(any) error {
 	return nil
 }
 
+// MockBleveIndexQueryer is a mock implementation of bleve.IQueryBleveIndex for testing.
+type MockBleveIndexQueryer struct {
+	Results []bleve.SearchResult
+	Err     error
+}
+
+func (m *MockBleveIndexQueryer) Query(query string) ([]bleve.SearchResult, error) {
+	if m.Err != nil {
+		return nil, m.Err
+	}
+	return m.Results, nil
+}
+
 var _ = Describe("Server", func() {
 	var (
 		server *v1.Server
@@ -234,7 +248,7 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, nil, lumber.NewConsoleLogger(lumber.WARN))
+			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, nil, nil, lumber.NewConsoleLogger(lumber.WARN))
 			res, err = server.GetFrontmatter(ctx, req)
 		})
 
@@ -377,7 +391,7 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, nil, lumber.NewConsoleLogger(lumber.WARN))
+			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, nil, nil, lumber.NewConsoleLogger(lumber.WARN))
 			resp, err = server.MergeFrontmatter(ctx, req)
 		})
 
@@ -585,7 +599,7 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, nil, lumber.NewConsoleLogger(lumber.WARN))
+			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, nil, nil, lumber.NewConsoleLogger(lumber.WARN))
 			resp, err = server.ReplaceFrontmatter(ctx, req)
 		})
 
@@ -784,7 +798,7 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, nil, lumber.NewConsoleLogger(lumber.WARN))
+			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, nil, nil, lumber.NewConsoleLogger(lumber.WARN))
 			resp, err = server.RemoveKeyAtPath(ctx, req)
 		})
 
@@ -1136,7 +1150,7 @@ var _ = Describe("Server", func() {
 			// Create a mock logger
 			logger = lumber.NewConsoleLogger(lumber.INFO)
 
-			server = v1.NewServer("test-commit", time.Now(), nil, nil, logger)
+			server = v1.NewServer("test-commit", time.Now(), nil, nil, nil, logger)
 		})
 
 		When("a successful gRPC call is made", func() {
@@ -1223,7 +1237,7 @@ var _ = Describe("Server", func() {
 			)
 
 			BeforeEach(func() {
-				server = v1.NewServer("test-commit", time.Now(), nil, nil, nil)
+				server = v1.NewServer("test-commit", time.Now(), nil, nil, nil, nil)
 
 				handler = func(ctx context.Context, req any) (any, error) {
 					return &apiv1.GetVersionResponse{Commit: "test"}, nil
@@ -1259,7 +1273,7 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, nil, lumber.NewConsoleLogger(lumber.WARN))
+			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, nil, nil, lumber.NewConsoleLogger(lumber.WARN))
 			resp, err = server.DeletePage(ctx, req)
 		})
 
@@ -1323,7 +1337,7 @@ var _ = Describe("Server", func() {
 
 		BeforeEach(func() {
 			req = &apiv1.GetJobStatusRequest{}
-			server = v1.NewServer("commit", time.Now(), nil, nil, lumber.NewConsoleLogger(lumber.WARN))
+			server = v1.NewServer("commit", time.Now(), nil, nil, nil, lumber.NewConsoleLogger(lumber.WARN))
 			res, err = server.GetJobStatus(ctx, req)
 		})
 
@@ -1346,7 +1360,7 @@ var _ = Describe("Server", func() {
 		BeforeEach(func() {
 			req = &apiv1.StreamJobStatusRequest{}
 			streamServer = &MockJobStreamServer{}
-			server = v1.NewServer("commit", time.Now(), nil, nil, lumber.NewConsoleLogger(lumber.WARN))
+			server = v1.NewServer("commit", time.Now(), nil, nil, nil, lumber.NewConsoleLogger(lumber.WARN))
 		})
 
 		var (
@@ -1371,6 +1385,87 @@ var _ = Describe("Server", func() {
 			Expect(streamServer.SentMessages).To(HaveLen(1))
 			Expect(firstMessage).NotTo(BeNil())
 			Expect(firstMessage.JobQueues).To(BeEmpty())
+		})
+	})
+
+	Describe("SearchContent", func() {
+		var (
+			req                   *apiv1.SearchContentRequest
+			resp                  *apiv1.SearchContentResponse
+			err                   error
+			mockBleveIndexQueryer *MockBleveIndexQueryer
+		)
+
+		BeforeEach(func() {
+			req = &apiv1.SearchContentRequest{
+				Query: "test query",
+			}
+			mockBleveIndexQueryer = &MockBleveIndexQueryer{}
+		})
+
+		JustBeforeEach(func() {
+			server = v1.NewServer("commit", time.Now(), nil, mockBleveIndexQueryer, nil, lumber.NewConsoleLogger(lumber.WARN))
+			resp, err = server.SearchContent(ctx, req)
+		})
+
+		When("the search index is not available", func() {
+			BeforeEach(func() {
+				mockBleveIndexQueryer = nil
+			})
+
+			It("should return an internal error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.Internal, "Search index is not available"))
+			})
+		})
+
+		When("a valid query is provided", func() {
+			var searchResults []bleve.SearchResult
+
+			BeforeEach(func() {
+				searchResults = []bleve.SearchResult{
+					{
+						Identifier: "test-page",
+						Title:      "Test Page",
+						Fragment:   "This is a test fragment",
+						Highlights: []bleve.HighlightSpan{
+							{Start: 10, End: 14}, // "test"
+						},
+					},
+				}
+				mockBleveIndexQueryer.Results = searchResults
+			})
+
+			It("should return search results", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.Results).To(HaveLen(1))
+				Expect(resp.Results[0].Identifier).To(Equal("test-page"))
+				Expect(resp.Results[0].Title).To(Equal("Test Page"))
+				Expect(resp.Results[0].Fragment).To(Equal("This is a test fragment"))
+				Expect(resp.Results[0].Highlights).To(HaveLen(1))
+				Expect(resp.Results[0].Highlights[0].Start).To(Equal(int32(10)))
+				Expect(resp.Results[0].Highlights[0].End).To(Equal(int32(14)))
+			})
+		})
+
+		When("the search index returns an error", func() {
+			BeforeEach(func() {
+				mockBleveIndexQueryer.Err = errors.New("index error")
+			})
+
+			It("should return an internal error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to search"))
+			})
+		})
+
+		When("an empty query is provided", func() {
+			BeforeEach(func() {
+				req.Query = ""
+			})
+
+			It("should return invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "query cannot be empty"))
+			})
 		})
 	})
 })

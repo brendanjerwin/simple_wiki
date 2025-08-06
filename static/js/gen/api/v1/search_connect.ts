@@ -9,15 +9,15 @@ import { MethodKind } from "@bufbuild/protobuf";
 /**
  * The Search service definition.
  *
- * @generated from service api.v1.Search
+ * @generated from service api.v1.SearchService
  */
-export const Search = {
-  typeName: "api.v1.Search",
+export const SearchService = {
+  typeName: "api.v1.SearchService",
   methods: {
     /**
      * Searches the wiki content and returns matching results.
      *
-     * @generated from rpc api.v1.Search.SearchContent
+     * @generated from rpc api.v1.SearchService.SearchContent
      */
     searchContent: {
       name: "SearchContent",
