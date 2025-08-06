@@ -1,4 +1,4 @@
-package rollingmigrations
+package lazy
 
 import (
 	. "github.com/onsi/ginkgo/v2"

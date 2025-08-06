@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
-	"github.com/brendanjerwin/simple_wiki/rollingmigrations"
+	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/gin-gonic/gin"
 	. "github.com/onsi/ginkgo/v2"
@@ -340,7 +340,7 @@ var _ = Describe("API Handlers", func() {
 			BeforeEach(func() {
 				gin.SetMode(gin.TestMode)
 				s = &Site{
-					MigrationApplicator: rollingmigrations.NewEmptyApplicator(),
+					MigrationApplicator: lazy.NewEmptyApplicator(),
 				}
 				w = httptest.NewRecorder()
 				router = gin.Default()
@@ -440,7 +440,7 @@ var _ = Describe("API Handlers", func() {
 			BeforeEach(func() {
 				gin.SetMode(gin.TestMode)
 				s = &Site{
-					MigrationApplicator: rollingmigrations.NewEmptyApplicator(),
+					MigrationApplicator: lazy.NewEmptyApplicator(),
 				}
 				w = httptest.NewRecorder()
 				router = gin.Default()

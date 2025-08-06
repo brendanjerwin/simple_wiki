@@ -1,4 +1,4 @@
-package rollingmigrations_test
+package lazy_test
 
 import (
 	"errors"
@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/jcelliott/lumber"
 
-	"github.com/brendanjerwin/simple_wiki/rollingmigrations"
+	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
 	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
@@ -27,7 +27,7 @@ var _ = Describe("Rolling Migrations during Open()", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		// Initialize a minimal site with rolling migrations
-		migrationApplicator := rollingmigrations.NewApplicator()
+		migrationApplicator := lazy.NewApplicator()
 		logger := lumber.NewConsoleLogger(lumber.WARN) // Quiet logger for tests
 		site = &server.Site{
 			PathToData:          testDataDir,

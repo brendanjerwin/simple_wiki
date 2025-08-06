@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brendanjerwin/simple_wiki/rollingmigrations"
+	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
@@ -48,7 +48,7 @@ var _ = Describe("Page Functions", func() {
 			PathToData:          pathToData,
 			MarkdownRenderer:    &goldmarkrenderer.GoldmarkRenderer{},
 			Logger:              lumber.NewConsoleLogger(lumber.INFO),
-			MigrationApplicator: rollingmigrations.NewEmptyApplicator(),
+			MigrationApplicator: lazy.NewEmptyApplicator(),
 		}
 		err = s.InitializeIndexing()
 		Expect(err).NotTo(HaveOccurred())

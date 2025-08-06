@@ -10,7 +10,7 @@ import (
 	. "github.com/onsi/gomega"
 	"github.com/jcelliott/lumber"
 
-	"github.com/brendanjerwin/simple_wiki/rollingmigrations"
+	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
 	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
@@ -28,7 +28,7 @@ var _ = Describe("OpenOrInit Migration Test", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		// Initialize a site like the real application would
-		migrationApplicator := rollingmigrations.NewApplicator()
+		migrationApplicator := lazy.NewApplicator()
 		logger := lumber.NewConsoleLogger(lumber.INFO) // More verbose for debugging
 		site = &server.Site{
 			PathToData:          testDataDir,

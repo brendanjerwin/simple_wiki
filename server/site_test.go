@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
-	"github.com/brendanjerwin/simple_wiki/rollingmigrations"
+	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
 	"github.com/brendanjerwin/simple_wiki/sec"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
@@ -56,7 +56,7 @@ var _ = Describe("Site", func() {
 
 		// Set up empty migration applicator for unit testing
 		// (integration tests will configure their own mocks)
-		applicator := rollingmigrations.NewEmptyApplicator()
+		applicator := lazy.NewEmptyApplicator()
 
 		s = &Site{
 			Logger:                  lumber.NewConsoleLogger(lumber.INFO),
@@ -795,15 +795,15 @@ test content to be soft deleted`
 
 	Describe("Rolling migrations integration", func() {
 		var (
-			mockApplicator *rollingmigrations.DefaultApplicator
-			mockMig        *rollingmigrations.MockMigration
+			mockApplicator *lazy.DefaultApplicator
+			mockMig        *lazy.MockMigration
 		)
 
 		BeforeEach(func() {
 			// Set up mock migration applicator for integration testing
-			mockApplicator = rollingmigrations.NewEmptyApplicator()
-			mockMig = &rollingmigrations.MockMigration{
-				SupportedTypesResult: []rollingmigrations.FrontmatterType{rollingmigrations.FrontmatterTOML},
+			mockApplicator = lazy.NewEmptyApplicator()
+			mockMig = &lazy.MockMigration{
+				SupportedTypesResult: []lazy.FrontmatterType{lazy.FrontmatterTOML},
 				AppliesToResult:      true,
 			}
 			mockApplicator.RegisterMigration(mockMig)
@@ -1018,9 +1018,9 @@ title = "Test Page"
 				pageIdentifier = "save-migration-test"
 				
 				// Set up mock migration applicator
-				mockApplicator = rollingmigrations.NewEmptyApplicator()
-				mockMig = &rollingmigrations.MockMigration{
-					SupportedTypesResult: []rollingmigrations.FrontmatterType{rollingmigrations.FrontmatterTOML},
+				mockApplicator = lazy.NewEmptyApplicator()
+				mockMig = &lazy.MockMigration{
+					SupportedTypesResult: []lazy.FrontmatterType{lazy.FrontmatterTOML},
 					AppliesToResult:      true,
 					ApplyResult:          []byte(`+++
 title = "Fixed Title"

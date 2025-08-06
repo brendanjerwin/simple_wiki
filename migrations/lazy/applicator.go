@@ -1,4 +1,4 @@
-package rollingmigrations
+package lazy
 
 import (
 	"bytes"

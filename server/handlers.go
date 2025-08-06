@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brendanjerwin/simple_wiki/rollingmigrations"
+	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
 	"github.com/brendanjerwin/simple_wiki/sec"
 	"github.com/brendanjerwin/simple_wiki/static"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
@@ -84,7 +84,7 @@ func NewSite(
 	
 	// Set up migration applicator with default migrations
 	logger.Info("Setting up rolling migrations system")
-	applicator := rollingmigrations.NewApplicator()
+	applicator := lazy.NewApplicator()
 
 	site := &Site{
 		PathToData:          filepathToData,

@@ -19,8 +19,8 @@ import (
 	"github.com/brendanjerwin/simple_wiki/index"
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
+	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
-	"github.com/brendanjerwin/simple_wiki/rollingmigrations"
 	"github.com/brendanjerwin/simple_wiki/sec"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
@@ -52,18 +52,17 @@ type Site struct {
 	Logger                  *lumber.ConsoleLogger
 	MarkdownRenderer        IRenderMarkdownToHTML
 	IndexingService         *IndexingService
-	FileShadowingService    *FileShadowingService
 	JobQueueCoordinator     *jobs.JobQueueCoordinator
 	FrontmatterIndexQueryer frontmatter.IQueryFrontmatterIndex
 	BleveIndexQueryer       bleve.IQueryBleveIndex
-	MigrationApplicator     rollingmigrations.FrontmatterMigrationApplicator
+	MigrationApplicator     lazy.FrontmatterMigrationApplicator
 	saveMut                 sync.RWMutex
 }
 
 const (
-	tomlDelimiter         = "+++\n"
-	mdExtension           = "md"
-	newline               = "\n"
+	tomlDelimiter          = "+++\n"
+	mdExtension            = "md"
+	newline                = "\n"
 	failedToOpenPageErrFmt = "failed to open page %s: %w"
 )
 
@@ -109,11 +108,9 @@ func (s *Site) InitializeIndexing() error {
 	s.JobQueueCoordinator = jobs.NewJobQueueCoordinator(s.Logger)
 	s.IndexingService = NewIndexingService(s.JobQueueCoordinator, frontmatterIndex, bleveIndex)
 
-	// Initialize file shadowing service using the same coordinator
-	s.FileShadowingService = NewFileShadowingService(s.JobQueueCoordinator, s)
-
 	// Start file shadowing scan
-	s.FileShadowingService.EnqueueScanJob()
+	scanJob := NewFileShadowingMigrationScanJob(s.PathToData, s.JobQueueCoordinator, s)
+	s.JobQueueCoordinator.EnqueueJob(scanJob)
 	s.Logger.Info("File shadowing scan started.")
 
 	// Get all files that need to be indexed
@@ -205,7 +202,7 @@ func (s *Site) Open(requestedIdentifier string) (*Page, error) {
 			return nil, fmt.Errorf("failed to unmarshal page %s: %w", identifier, errJSON)
 		}
 		p.WasLoadedFromDisk = true
-		
+
 		// IMPORTANT: Apply migrations to JSON-loaded content too!
 		// Get the current text content from the versioned text
 		currentContent := p.Text.GetCurrent()
@@ -214,13 +211,13 @@ func (s *Site) Open(requestedIdentifier string) (*Page, error) {
 			if migrationErr != nil {
 				return nil, fmt.Errorf("migration failed for page %s: %w", identifier, migrationErr)
 			}
-			
+
 			// Update the page's text if migration changed it
 			if string(migratedContent) != currentContent {
 				p.Text = versionedtext.NewVersionedText(string(migratedContent))
 			}
 		}
-		
+
 		return p, nil
 	}
 
@@ -546,23 +543,23 @@ func (s *Site) ReadMarkdown(identifier wikipage.PageIdentifier) (wikipage.PageId
 func (s *Site) DeletePage(identifier wikipage.PageIdentifier) error {
 	s.saveMut.Lock()
 	defer s.saveMut.Unlock()
-	
+
 	s.Logger.Trace("Deleting page %s", identifier)
-	
+
 	// Enqueue removal jobs for both frontmatter and bleve indexes
 	if s.IndexingService != nil {
 		s.IndexingService.EnqueueIndexJob(string(identifier), index.Remove)
 	}
-	
+
 	// Soft delete: move files to __deleted__/<timestamp>/ directory
 	timestamp := time.Now().Unix()
 	deletedDir := path.Join(s.PathToData, "__deleted__", fmt.Sprintf("%d", timestamp))
-	
+
 	// Create the timestamped deleted directory
 	if err := os.MkdirAll(deletedDir, 0755); err != nil {
 		return fmt.Errorf("failed to create deleted directory: %w", err)
 	}
-	
+
 	// Move JSON file if it exists
 	jsonPath := path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(string(identifier)))+".json")
 	deletedJSONPath := path.Join(deletedDir, base32tools.EncodeToBase32(strings.ToLower(string(identifier)))+".json")
@@ -571,7 +568,7 @@ func (s *Site) DeletePage(identifier wikipage.PageIdentifier) error {
 	if jsonErr != nil && !os.IsNotExist(jsonErr) {
 		return fmt.Errorf("failed to move JSON file for page %s: %w", identifier, jsonErr)
 	}
-	
+
 	// Move Markdown file if it exists
 	mdPath := path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(string(identifier)))+".md")
 	deletedMdPath := path.Join(deletedDir, base32tools.EncodeToBase32(strings.ToLower(string(identifier)))+".md")
@@ -580,12 +577,12 @@ func (s *Site) DeletePage(identifier wikipage.PageIdentifier) error {
 	if mdErr != nil && !os.IsNotExist(mdErr) {
 		return fmt.Errorf("failed to move Markdown file for page %s: %w", identifier, mdErr)
 	}
-	
+
 	// If neither file existed, return not found error
 	if !jsonExists && !mdExists {
 		return os.ErrNotExist
 	}
-	
+
 	return nil
 }
 
@@ -622,7 +619,7 @@ func (s *Site) UpdatePageContent(identifier wikipage.PageIdentifier, newText str
 func (s *Site) savePage(p *Page) error {
 	s.saveMut.Lock()
 	defer s.saveMut.Unlock()
-	
+
 	bJSON, err := json.MarshalIndent(p, "", " ")
 	if err != nil {
 		return err
@@ -652,7 +649,7 @@ func (s *Site) savePage(p *Page) error {
 func (s *Site) savePageWithoutIndexing(p *Page) error {
 	s.saveMut.Lock()
 	defer s.saveMut.Unlock()
-	
+
 	bJSON, err := json.MarshalIndent(p, "", " ")
 	if err != nil {
 		return err

@@ -1,18 +1,18 @@
 //revive:disable:dot-imports
-package rollingmigrations_test
+package lazy_test
 
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/brendanjerwin/simple_wiki/rollingmigrations"
+	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
 )
 
 var _ = Describe("IdentifierMungingMigration", func() {
-	var migration *rollingmigrations.IdentifierMungingMigration
+	var migration *lazy.IdentifierMungingMigration
 
 	BeforeEach(func() {
-		migration = rollingmigrations.NewIdentifierMungingMigration()
+		migration = lazy.NewIdentifierMungingMigration()
 	})
 
 	It("should exist", func() {
@@ -20,7 +20,7 @@ var _ = Describe("IdentifierMungingMigration", func() {
 	})
 
 	Describe("SupportedTypes", func() {
-		var supportedTypes []rollingmigrations.FrontmatterType
+		var supportedTypes []lazy.FrontmatterType
 
 		BeforeEach(func() {
 			supportedTypes = migration.SupportedTypes()
@@ -31,7 +31,7 @@ var _ = Describe("IdentifierMungingMigration", func() {
 		})
 
 		It("should support TOML frontmatter", func() {
-			Expect(supportedTypes[0]).To(Equal(rollingmigrations.FrontmatterTOML))
+			Expect(supportedTypes[0]).To(Equal(lazy.FrontmatterTOML))
 		})
 	})
 

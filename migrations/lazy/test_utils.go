@@ -1,4 +1,4 @@
-package rollingmigrations
+package lazy
 
 // MockMigration is a test utility for mocking FrontmatterMigration behavior
 type MockMigration struct {

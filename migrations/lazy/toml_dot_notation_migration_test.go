@@ -1,17 +1,17 @@
-package rollingmigrations_test
+package lazy_test
 
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/brendanjerwin/simple_wiki/rollingmigrations"
+	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
 )
 
 var _ = Describe("TOMLDotNotationMigration", func() {
-	var migration *rollingmigrations.TOMLDotNotationMigration
+	var migration *lazy.TOMLDotNotationMigration
 
 	BeforeEach(func() {
-		migration = rollingmigrations.NewTOMLDotNotationMigration()
+		migration = lazy.NewTOMLDotNotationMigration()
 	})
 
 	It("should exist", func() {
@@ -19,7 +19,7 @@ var _ = Describe("TOMLDotNotationMigration", func() {
 	})
 
 	Describe("SupportedTypes", func() {
-		var supportedTypes []rollingmigrations.FrontmatterType
+		var supportedTypes []lazy.FrontmatterType
 
 		BeforeEach(func() {
 			supportedTypes = migration.SupportedTypes()
@@ -30,7 +30,7 @@ var _ = Describe("TOMLDotNotationMigration", func() {
 		})
 
 		It("should support TOML frontmatter", func() {
-			Expect(supportedTypes[0]).To(Equal(rollingmigrations.FrontmatterTOML))
+			Expect(supportedTypes[0]).To(Equal(lazy.FrontmatterTOML))
 		})
 	})
 

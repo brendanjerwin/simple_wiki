@@ -11,7 +11,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/brendanjerwin/simple_wiki/rollingmigrations"
+	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/jcelliott/lumber"
 	"github.com/schollz/versionedtext"
@@ -34,7 +34,7 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 		site = &Site{
 			PathToData: testDataDir,
 			Logger:     lumber.NewConsoleLogger(lumber.WARN),
-			MigrationApplicator: rollingmigrations.NewEmptyApplicator(),
+			MigrationApplicator: lazy.NewEmptyApplicator(),
 		}
 		
 		job = NewFileShadowingMigrationJob(site, "")

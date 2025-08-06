@@ -1,4 +1,4 @@
-package rollingmigrations_test
+package lazy_test
 
 import (
 	"testing"

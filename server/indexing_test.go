@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brendanjerwin/simple_wiki/rollingmigrations"
+	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
@@ -28,7 +28,7 @@ var _ = Describe("InitializeIndexing Concurrently", func() {
 		s = &Site{
 			Logger:     lumber.NewConsoleLogger(lumber.INFO),
 			PathToData: tempDir,
-			MigrationApplicator: &rollingmigrations.DefaultApplicator{},
+			MigrationApplicator: &lazy.DefaultApplicator{},
 		}
 	})
 

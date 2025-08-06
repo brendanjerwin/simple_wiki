@@ -13,7 +13,7 @@ import (
 	"github.com/jcelliott/lumber"
 	"github.com/pelletier/go-toml/v2"
 
-	"github.com/brendanjerwin/simple_wiki/rollingmigrations"
+	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
 )
@@ -34,7 +34,7 @@ var _ = Describe("Site.OpenOrInit with URL parameters", func() {
 
 
 		// Set up empty migration applicator for unit testing
-		applicator := rollingmigrations.NewEmptyApplicator()
+		applicator := lazy.NewEmptyApplicator()
 
 		s = &Site{
 			PathToData:              tmpDir,

@@ -1,17 +1,17 @@
-package rollingmigrations_test
+package lazy_test
 
 import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/brendanjerwin/simple_wiki/rollingmigrations"
+	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
 )
 
 var _ = Describe("Frontmatter Migration for inventory.container", func() {
-	var migrationApplicator *rollingmigrations.DefaultApplicator
+	var migrationApplicator *lazy.DefaultApplicator
 
 	BeforeEach(func() {
-		migrationApplicator = rollingmigrations.NewApplicator()
+		migrationApplicator = lazy.NewApplicator()
 	})
 
 	Describe("ApplyMigrations", func() {

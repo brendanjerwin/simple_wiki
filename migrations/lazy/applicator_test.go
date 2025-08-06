@@ -1,4 +1,4 @@
-package rollingmigrations_test
+package lazy_test
 
 import (
 	"errors"
@@ -6,16 +6,16 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/brendanjerwin/simple_wiki/rollingmigrations"
+	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
 )
 
 
 var _ = Describe("DefaultApplicator", func() {
-	var applicator rollingmigrations.FrontmatterMigrationApplicator
+	var applicator lazy.FrontmatterMigrationApplicator
 
 	BeforeEach(func() {
 		// Create empty applicator without default migrations for unit testing
-		applicator = rollingmigrations.NewEmptyApplicator()
+		applicator = lazy.NewEmptyApplicator()
 	})
 
 	It("should exist", func() {
@@ -43,19 +43,19 @@ var _ = Describe("DefaultApplicator", func() {
 
 	Describe("when applying migrations to YAML frontmatter", func() {
 		var content []byte
-		var migration *rollingmigrations.MockMigration
+		var migration *lazy.MockMigration
 		var result []byte
 		var err error
 
 		BeforeEach(func() {
 			content = []byte("---\ntitle: test\n---\ncontent")
-			migration = &rollingmigrations.MockMigration{
-				SupportedTypesResult: []rollingmigrations.FrontmatterType{rollingmigrations.FrontmatterYAML},
+			migration = &lazy.MockMigration{
+				SupportedTypesResult: []lazy.FrontmatterType{lazy.FrontmatterYAML},
 				AppliesToResult:      true,
 				ApplyResult:          []byte("---\ntitle: migrated\n---\ncontent"),
 			}
 			
-			registry, ok := applicator.(rollingmigrations.FrontmatterMigrationRegistry)
+			registry, ok := applicator.(lazy.FrontmatterMigrationRegistry)
 			Expect(ok).To(BeTrue())
 			registry.RegisterMigration(migration)
 			
@@ -73,19 +73,19 @@ var _ = Describe("DefaultApplicator", func() {
 
 	Describe("when applying migrations to TOML frontmatter", func() {
 		var content []byte
-		var migration *rollingmigrations.MockMigration
+		var migration *lazy.MockMigration
 		var result []byte
 		var err error
 
 		BeforeEach(func() {
 			content = []byte("+++\ntitle = \"test\"\n+++\ncontent")
-			migration = &rollingmigrations.MockMigration{
-				SupportedTypesResult: []rollingmigrations.FrontmatterType{rollingmigrations.FrontmatterTOML},
+			migration = &lazy.MockMigration{
+				SupportedTypesResult: []lazy.FrontmatterType{lazy.FrontmatterTOML},
 				AppliesToResult:      true,
 				ApplyResult:          []byte("+++\ntitle = \"migrated\"\n+++\ncontent"),
 			}
 			
-			registry, ok := applicator.(rollingmigrations.FrontmatterMigrationRegistry)
+			registry, ok := applicator.(lazy.FrontmatterMigrationRegistry)
 			Expect(ok).To(BeTrue())
 			registry.RegisterMigration(migration)
 			
@@ -103,18 +103,18 @@ var _ = Describe("DefaultApplicator", func() {
 
 	Describe("when migration doesn't apply to content", func() {
 		var content []byte
-		var migration *rollingmigrations.MockMigration
+		var migration *lazy.MockMigration
 		var result []byte
 		var err error
 
 		BeforeEach(func() {
 			content = []byte("+++\ntitle = \"test\"\n+++\ncontent")
-			migration = &rollingmigrations.MockMigration{
-				SupportedTypesResult: []rollingmigrations.FrontmatterType{rollingmigrations.FrontmatterTOML},
+			migration = &lazy.MockMigration{
+				SupportedTypesResult: []lazy.FrontmatterType{lazy.FrontmatterTOML},
 				AppliesToResult:      false, // Migration doesn't apply
 			}
 			
-			registry, ok := applicator.(rollingmigrations.FrontmatterMigrationRegistry)
+			registry, ok := applicator.(lazy.FrontmatterMigrationRegistry)
 			Expect(ok).To(BeTrue())
 			registry.RegisterMigration(migration)
 			
@@ -132,19 +132,19 @@ var _ = Describe("DefaultApplicator", func() {
 
 	Describe("when migration fails", func() {
 		var content []byte
-		var migration *rollingmigrations.MockMigration
+		var migration *lazy.MockMigration
 		var result []byte
 		var err error
 
 		BeforeEach(func() {
 			content = []byte("+++\ntitle = \"test\"\n+++\ncontent")
-			migration = &rollingmigrations.MockMigration{
-				SupportedTypesResult: []rollingmigrations.FrontmatterType{rollingmigrations.FrontmatterTOML},
+			migration = &lazy.MockMigration{
+				SupportedTypesResult: []lazy.FrontmatterType{lazy.FrontmatterTOML},
 				AppliesToResult:      true,
 				ApplyError:           errors.New("migration failed"),
 			}
 			
-			registry, ok := applicator.(rollingmigrations.FrontmatterMigrationRegistry)
+			registry, ok := applicator.(lazy.FrontmatterMigrationRegistry)
 			Expect(ok).To(BeTrue())
 			registry.RegisterMigration(migration)
 			
@@ -163,19 +163,19 @@ var _ = Describe("DefaultApplicator", func() {
 
 	Describe("when migration doesn't support the frontmatter type", func() {
 		var content []byte
-		var migration *rollingmigrations.MockMigration
+		var migration *lazy.MockMigration
 		var result []byte
 		var err error
 
 		BeforeEach(func() {
 			content = []byte("+++\ntitle = \"test\"\n+++\ncontent")
-			migration = &rollingmigrations.MockMigration{
-				SupportedTypesResult: []rollingmigrations.FrontmatterType{rollingmigrations.FrontmatterYAML}, // Only supports YAML
+			migration = &lazy.MockMigration{
+				SupportedTypesResult: []lazy.FrontmatterType{lazy.FrontmatterYAML}, // Only supports YAML
 				AppliesToResult:      true,
 				ApplyResult:          []byte("should not be applied"),
 			}
 			
-			registry, ok := applicator.(rollingmigrations.FrontmatterMigrationRegistry)
+			registry, ok := applicator.(lazy.FrontmatterMigrationRegistry)
 			Expect(ok).To(BeTrue())
 			registry.RegisterMigration(migration)
 			
