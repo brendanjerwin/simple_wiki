@@ -179,7 +179,7 @@ func markdownToHTMLAndJSONFrontmatter(s string, site wikipage.PageReader, render
 	}
 	matter, _ = json.Marshal(matterMap)
 
-	markdownBytes, err = templating.ExecuteTemplateForServer(string(markdownBytes), *matterMap, site, query)
+	markdownBytes, err = templating.ExecuteTemplate(string(markdownBytes), *matterMap, site, query)
 	if err != nil {
 		return []byte(err.Error()), nil, err
 	}

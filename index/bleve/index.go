@@ -64,7 +64,7 @@ func (b *Index) AddPageToIndex(requestedIdentifier wikipage.PageIdentifier) erro
 		return fmt.Errorf("bleve indexer failed to read frontmatter for page %q: %w", requestedIdentifier, err)
 	}
 
-	renderedBytes, err := templating.ExecuteTemplateForIndexing(markdown, pageFrontmatter, b.pageReader, b.frontmatterQueryer)
+	renderedBytes, err := templating.ExecuteTemplate(markdown, pageFrontmatter, b.pageReader, b.frontmatterQueryer)
 	if err != nil {
 		return fmt.Errorf("bleve indexer failed to execute template for page %q: %w", requestedIdentifier, err)
 	}

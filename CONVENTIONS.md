@@ -737,7 +737,7 @@ beforeEach(async () => {
 
 Follow these modern, correct patterns for consistent error handling:
 
-**1. In Functions (Service/Repo): The Error Wrapping Pattern**
+#### 1. In Functions (Service/Repo): The Error Wrapping Pattern
 
 Action: WRAP & RETURN. Add context. Never log.
 
@@ -745,7 +745,7 @@ Action: WRAP & RETURN. Add context. Never log.
 return fmt.Errorf("context: %w", err)
 ```
 
-**2. At Boundary (main, HTTP Handlers): The Boundary Handling Pattern**
+#### 2. At Boundary (main, HTTP Handlers): The Boundary Handling Pattern
 
 Action: CHECK, ACT, & LOG ONCE.
 

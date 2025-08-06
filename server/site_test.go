@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"net/http"
@@ -792,7 +791,6 @@ test content to be soft deleted`
 				Expect(files[0].Name()).To(Equal("test"))
 			})
 		})
-
 	})
 
 	Describe("Rolling migrations integration", func() {
@@ -1120,11 +1118,3 @@ title = "Migrated"
 	})
 })
 
-// testWriteCloser wraps a buffer and implements io.WriteCloser for testing
-type testWriteCloser struct {
-	*bytes.Buffer
-}
-
-func (*testWriteCloser) Close() error {
-	return nil
-}

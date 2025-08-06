@@ -24,13 +24,6 @@ type InventoryFrontmatter struct {
 	Items     []string `json:"items"`
 }
 
-// ExecutionContext tracks the source and context of template execution.
-type ExecutionContext struct {
-	PageIdentifier string    // The page being processed
-	Source         string    // "server", "indexing", "label", etc.
-	StartTime      time.Time // When execution started
-	Depth          int       // Current recursion depth
-}
 
 type TemplateContext struct {
 	// CAUTION: avoid changing the structure of TemplateContext without considering backward compatibility.
@@ -114,14 +107,8 @@ func ConstructTemplateContextFromFrontmatterWithVisited(fm wikipage.FrontMatter,
 const (
 	maxRecursionDepth        = 10
 	maxInventoryDepth        = 10               // Maximum depth for recursive inventory traversal  
-	maxExecutionDepth        = 50               // Maximum template execution depth before failing fast
 	templateExecutionTimeout = 30 * time.Second // Timeout for template execution
-	templatePreviewLength    = 200              // Maximum length for template preview in error messages
 	timeoutMessage           = "  [Template execution timeout]"
-	unknownSource            = "unknown"
-	unknownPageID            = "unknown"
-	identifierKey            = "identifier"
-	spaceSeparator           = " "
 )
 
 
@@ -303,167 +290,51 @@ func BuildIsContainer(query frontmatter.IQueryFrontmatterIndex) func(string) boo
 // ExecuteTemplate executes a template string with the given frontmatter and site context.
 // Includes timeout protection to prevent infinite hangs.
 func ExecuteTemplate(templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex) ([]byte, error) {
-	// Create execution context with default values
-	pageID := unknownPageID
-	if identifier, exists := fm[identifierKey]; exists {
-		if id, ok := identifier.(string); ok {
-			pageID = id
-		}
-	}
-
-	execCtx := ExecutionContext{
-		PageIdentifier: pageID,
-		Source:         unknownSource,
-		StartTime:      time.Now(),
-		Depth:          0,
-	}
-
-	// Create a new visited map for this template execution context to prevent circular references
-	return ExecuteTemplateWithContext(templateString, fm, site, query, make(map[string]bool), execCtx)
-}
-
-// ExecuteTemplateForServer executes a template for server page rendering.
-func ExecuteTemplateForServer(templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex) ([]byte, error) {
-	pageID := unknownPageID
-	if identifier, exists := fm[identifierKey]; exists {
-		if id, ok := identifier.(string); ok {
-			pageID = id
-		}
-	}
-
-	execCtx := ExecutionContext{
-		PageIdentifier: pageID,
-		Source:         "server",
-		StartTime:      time.Now(),
-		Depth:          0,
-	}
-
-	return ExecuteTemplateWithContext(templateString, fm, site, query, make(map[string]bool), execCtx)
-}
-
-// ExecuteTemplateForIndexing executes a template for search indexing.
-func ExecuteTemplateForIndexing(templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex) ([]byte, error) {
-	pageID := unknownPageID
-	if identifier, exists := fm[identifierKey]; exists {
-		if id, ok := identifier.(string); ok {
-			pageID = id
-		}
-	}
-
-	execCtx := ExecutionContext{
-		PageIdentifier: pageID,
-		Source:         "indexing",
-		StartTime:      time.Now(),
-		Depth:          0,
-	}
-
-	return ExecuteTemplateWithContext(templateString, fm, site, query, make(map[string]bool), execCtx)
-}
-
-// ExecuteTemplateForLabels executes a template for label generation.
-func ExecuteTemplateForLabels(templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex) ([]byte, error) {
-	pageID := unknownPageID
-	if identifier, exists := fm[identifierKey]; exists {
-		if id, ok := identifier.(string); ok {
-			pageID = id
-		}
-	}
-
-	execCtx := ExecutionContext{
-		PageIdentifier: pageID,
-		Source:         "labels",
-		StartTime:      time.Now(),
-		Depth:          0,
-	}
-
-	return ExecuteTemplateWithContext(templateString, fm, site, query, make(map[string]bool), execCtx)
-}
-
-// ExecuteTemplateWithVisited executes a template string with the given frontmatter and site context,
-// using a shared visited map to prevent circular references across all template functions.
-// Deprecated: Use ExecuteTemplateWithContext instead.
-func ExecuteTemplateWithVisited(templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, visited map[string]bool) ([]byte, error) {
-	pageID := unknownPageID
-	if identifier, exists := fm[identifierKey]; exists {
-		if id, ok := identifier.(string); ok {
-			pageID = id
-		}
-	}
-
-	execCtx := ExecutionContext{
-		PageIdentifier: pageID,
-		Source:         "legacy",
-		StartTime:      time.Now(),
-		Depth:          0,
-	}
-
-	return ExecuteTemplateWithContext(templateString, fm, site, query, visited, execCtx)
-}
-
-// ExecuteTemplateWithContext executes a template string with the given frontmatter and site context,
-// using a shared visited map and execution context for error reporting.
-func ExecuteTemplateWithContext(templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, visited map[string]bool, execCtx ExecutionContext) ([]byte, error) {
 	// Set a reasonable timeout for template execution to prevent hangs
 	ctx, cancel := context.WithTimeout(context.Background(), templateExecutionTimeout)
 	defer cancel()
 
-	return executeTemplateWorker(ctx, templateString, fm, site, query, visited, execCtx)
+	// Create a new visited map for this template execution to prevent circular references
+	return executeTemplateWorker(ctx, templateString, fm, site, query, make(map[string]bool))
 }
 
-// executeTemplateWorker performs the actual template execution with context cancellation support.
-func executeTemplateWorker(ctx context.Context, templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, visited map[string]bool, execCtx ExecutionContext) ([]byte, error) {
-	defer func() {
-		if r := recover(); r != nil {
-			panic(fmt.Errorf("template execution panic: %v", r))
-		}
-	}()
 
+
+
+
+
+// executeTemplateWorker performs the actual template execution with context cancellation support.
+func executeTemplateWorker(ctx context.Context, templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, visited map[string]bool) ([]byte, error) {
 	// Check context cancellation before starting
 	select {
 	case <-ctx.Done():
-		errorMsg := formatTimeoutError(execCtx, visited, templateString, templateExecutionTimeout)
-		return nil, fmt.Errorf("%s", errorMsg)
+		return nil, fmt.Errorf("template execution timed out after %v", templateExecutionTimeout)
 	default:
 	}
 
-	// Check execution depth to fail fast before timeout
-	if err := checkExecutionDepth(execCtx); err != nil {
-		return nil, err
-	}
-
-
 	templateContext, err := ConstructTemplateContextFromFrontmatterWithVisited(fm, query, visited)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to construct template context: %w", err)
 	}
 
 	// Check context cancellation after frontmatter construction
 	select {
 	case <-ctx.Done():
-		errorMsg := formatTimeoutError(execCtx, visited, templateString, templateExecutionTimeout)
-		return nil, fmt.Errorf("%s", errorMsg)
+		return nil, fmt.Errorf("template execution timed out after %v", templateExecutionTimeout)
 	default:
 	}
 
-	tmpl, err := buildTemplateWithFunctions(ctx, templateString, site, query, templateContext, visited)
+	tmpl, err := buildTemplateWithFunctions(ctx, templateString, site, query, templateContext)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to build template: %w", err)
 	}
 
-	return executeTemplateInternal(ctx, tmpl, templateContext, execCtx)
+	return executeTemplateInternal(ctx, tmpl, templateContext)
 }
 
-// checkExecutionDepth validates that execution depth hasn't exceeded the maximum.
-func checkExecutionDepth(execCtx ExecutionContext) error {
-	if execCtx.Depth > maxExecutionDepth {
-		return fmt.Errorf("template execution depth limit exceeded (%d > %d) for page %s (source: %s) - likely infinite recursion",
-			execCtx.Depth, maxExecutionDepth, execCtx.PageIdentifier, execCtx.Source)
-	}
-	return nil
-}
 
 // buildTemplateWithFunctions creates a template with all necessary functions.
-func buildTemplateWithFunctions(ctx context.Context, templateString string, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, templateContext TemplateContext, _ map[string]bool) (*template.Template, error) {
+func buildTemplateWithFunctions(ctx context.Context, templateString string, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, templateContext TemplateContext) (*template.Template, error) {
 	// Check context cancellation before building functions
 	select {
 	case <-ctx.Done():
@@ -484,7 +355,7 @@ func buildTemplateWithFunctions(ctx context.Context, templateString string, site
 }
 
 // executeTemplateInternal executes the template and returns the result.
-func executeTemplateInternal(ctx context.Context, tmpl *template.Template, templateContext TemplateContext, _ ExecutionContext) ([]byte, error) {
+func executeTemplateInternal(ctx context.Context, tmpl *template.Template, templateContext TemplateContext) ([]byte, error) {
 	// Check context cancellation before template execution
 	select {
 	case <-ctx.Done():
@@ -492,43 +363,13 @@ func executeTemplateInternal(ctx context.Context, tmpl *template.Template, templ
 	default:
 	}
 
-
 	buf := &bytes.Buffer{}
 	err := tmpl.Execute(buf, templateContext)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("template execution failed: %w", err)
 	}
 
 	return buf.Bytes(), nil
 }
 
 
-// formatTimeoutError creates a detailed error message for template execution timeouts.
-func formatTimeoutError(execCtx ExecutionContext, visited map[string]bool, templateString string, timeout time.Duration) string {
-	duration := time.Since(execCtx.StartTime)
-
-	// Get list of visited pages for debugging circular references
-	visitedPages := make([]string, 0, len(visited))
-	for page := range visited {
-		visitedPages = append(visitedPages, page)
-	}
-
-	// Get template preview (first N characters)
-	templatePreview := templateString
-	if len(templatePreview) > templatePreviewLength {
-		templatePreview = templatePreview[:templatePreviewLength] + "..."
-	}
-	templatePreview = strings.ReplaceAll(templatePreview, "\n", spaceSeparator)
-
-	errorMsg := fmt.Sprintf(
-		"template execution timed out after %v (actual duration: %v)\n"+
-			"Page: %s\n"+
-			"Source: %s\n"+
-			"Depth: %d\n"+
-			"Visited pages: %v\n"+
-			"Template preview: %q\n"+
-			"This suggests a circular reference or infinite loop in template execution.",
-		timeout, duration, execCtx.PageIdentifier, execCtx.Source, execCtx.Depth, visitedPages, templatePreview)
-
-	return errorMsg
-}

@@ -61,7 +61,6 @@ var _ = Describe("IndexingQueueIntegration", func() {
 
 
 	Describe("EnqueueIndexJob", func() {
-
 		Describe("when enqueuing add job", func() {
 			BeforeEach(func() {
 				indexingService.EnqueueIndexJob("test-page", index.Add)
@@ -151,7 +150,6 @@ var _ = Describe("IndexingQueueIntegration", func() {
 	})
 
 	Describe("WaitForCompletionWithTimeout", func() {
-
 		Describe("when jobs complete quickly", func() {
 			var completed bool
 			var timedOut bool
