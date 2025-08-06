@@ -1,7 +1,7 @@
 import { createPromiseClient, PromiseClient } from '@connectrpc/connect';
 import { createConnectTransport } from '@connectrpc/connect-web';
 import { SearchService } from '../gen/api/v1/search_connect.js';
-import type { SearchContentRequest, SearchContentResponse, SearchResult, HighlightSpan } from '../gen/api/v1/search_pb.js';
+import type { SearchContentRequest, SearchResult, HighlightSpan } from '../gen/api/v1/search_pb.js';
 
 export interface SearchResultWithHTML extends SearchResult {
   fragmentHTML?: string;

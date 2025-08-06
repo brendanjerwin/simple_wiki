@@ -10,7 +10,7 @@ describe('SearchClient', () => {
   beforeEach(() => {
     searchClient = new SearchClient();
     // Stub the gRPC client method
-    searchContentStub = stub((searchClient as any).client, 'searchContent');
+    searchContentStub = stub((searchClient as { client: object }).client, 'searchContent');
   });
 
   afterEach(() => {

@@ -1,9 +1,5 @@
 package server
 
-import (
-	"github.com/brendanjerwin/simple_wiki/index/bleve"
-)
-
 // mockFrontmatterIndexQueryer is a mock implementation of the FrontmatterIndexQueryer for testing.
 type mockFrontmatterIndexQueryer struct {
 	data                  map[string]map[string]string
@@ -38,15 +34,4 @@ func (m *mockFrontmatterIndexQueryer) QueryKeyExistence(key string) []string {
 		return m.QueryKeyExistenceFunc(key)
 	}
 	return nil
-}
-
-type mockBleveIndexQueryer struct {
-	QueryFunc func(query string) ([]bleve.SearchResult, error)
-}
-
-func (m *mockBleveIndexQueryer) Query(query string) ([]bleve.SearchResult, error) {
-	if m.QueryFunc != nil {
-		return m.QueryFunc(query)
-	}
-	return nil, nil
 }

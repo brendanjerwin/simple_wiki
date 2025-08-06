@@ -94,7 +94,7 @@ title = 'Test Page'
 			filePath = filepath.Join(testDataDir, encodedFilename)
 			
 
-			err := os.WriteFile(filePath, []byte(fileContent), 0644)
+			err = os.WriteFile(filePath, []byte(fileContent), 0644)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create a mock HTTP request
@@ -201,7 +201,7 @@ identifier = 'migration_test_page'
 			encodedFilename := base32tools.EncodeToBase32(mungedIdentifier) + ".md"  
 			filePath = filepath.Join(testDataDir, encodedFilename)
 			
-			err := os.WriteFile(filePath, []byte(fileContent), 0644)
+			err = os.WriteFile(filePath, []byte(fileContent), 0644)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Create a mock HTTP request

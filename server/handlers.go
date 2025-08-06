@@ -115,7 +115,6 @@ func (s *Site) GinRouter() *gin.Engine {
 	router.GET("/api/find_by", s.handleFindBy)
 	router.GET("/api/find_by_prefix", s.handleFindByPrefix)
 	router.GET("/api/find_by_key_existence", s.handleFindByKeyExistence)
-	router.GET("/api/search", s.handleSearch)
 	return router
 }
 

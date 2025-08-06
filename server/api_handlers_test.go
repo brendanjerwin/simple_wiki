@@ -3,14 +3,11 @@ package server
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 
-	"github.com/brendanjerwin/simple_wiki/index/bleve"
 	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
-	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/gin-gonic/gin"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -336,106 +333,6 @@ var _ = Describe("API Handlers", func() {
 			})
 		})
 
-		Describe("handleSearch", func() {
-			BeforeEach(func() {
-				gin.SetMode(gin.TestMode)
-				s = &Site{
-					MigrationApplicator: lazy.NewEmptyApplicator(),
-				}
-				w = httptest.NewRecorder()
-				router = gin.Default()
-				router.GET("/api/search", s.handleSearch)
-			})
-
-			When("the BleveIndexQueryer is not initialized", func() {
-				BeforeEach(func() {
-					s.BleveIndexQueryer = nil // ensure it's nil
-					req, err := http.NewRequest(http.MethodGet, "/api/search?q=searchterm", nil)
-					Expect(err).NotTo(HaveOccurred())
-					router.ServeHTTP(w, req)
-				})
-
-				It("returns http.StatusInternalServerError", func() {
-					Expect(w.Code).To(Equal(http.StatusInternalServerError))
-				})
-
-				It("returns a helpful error message", func() {
-					var response map[string]any
-					err := json.Unmarshal(w.Body.Bytes(), &response)
-					Expect(err).NotTo(HaveOccurred())
-					Expect(response["success"]).To(BeFalse())
-					Expect(response["message"]).To(Equal("Search index is not available"))
-				})
-			})
-
-			When("a valid request is made", func() {
-				var response struct {
-					Success bool                       `json:"success"`
-					Results []bleve.SearchResult `json:"results"`
-				}
-
-				BeforeEach(func() {
-					mockBleveIndex := &mockBleveIndexQueryer{
-						QueryFunc: func(query string) ([]bleve.SearchResult, error) {
-							if query == "searchterm" {
-								return []bleve.SearchResult{
-									{
-										Identifier: wikipage.PageIdentifier("id1"),
-										Title:      "Title 1",
-										Fragment:   "fragment",
-										Highlights: []bleve.HighlightSpan{},
-									},
-								}, nil
-							}
-							return nil, nil
-						},
-					}
-					s.BleveIndexQueryer = mockBleveIndex
-					req, err := http.NewRequest(http.MethodGet, "/api/search?q=searchterm", nil)
-					Expect(err).NotTo(HaveOccurred())
-					router.ServeHTTP(w, req)
-
-					err = json.Unmarshal(w.Body.Bytes(), &response)
-					Expect(err).NotTo(HaveOccurred())
-				})
-
-				It("returns http.StatusOK", func() {
-					Expect(w.Code).To(Equal(http.StatusOK))
-				})
-
-				It("returns success=true", func() {
-					Expect(response.Success).To(BeTrue())
-				})
-
-				It("returns the search results", func() {
-					Expect(response.Results).To(Equal(
-						[]bleve.SearchResult{{Identifier: wikipage.PageIdentifier("id1"), Title: "Title 1", Fragment: "fragment", Highlights: []bleve.HighlightSpan{}}},
-					))
-				})
-			})
-
-			When("the query fails", func() {
-				BeforeEach(func() {
-					mockBleveIndex := &mockBleveIndexQueryer{
-						QueryFunc: func(_ string) ([]bleve.SearchResult, error) {
-							return nil, errors.New("index is borked")
-						},
-					}
-					s.BleveIndexQueryer = mockBleveIndex
-					req, err := http.NewRequest(http.MethodGet, "/api/search?q=searchterm", nil)
-					Expect(err).NotTo(HaveOccurred())
-					router.ServeHTTP(w, req)
-				})
-
-				It("returns http.StatusInternalServerError", func() {
-					Expect(w.Code).To(Equal(http.StatusInternalServerError))
-				})
-
-				It("returns a helpful error message", func() {
-					Expect(w.Body.String()).To(ContainSubstring("Problem querying index"))
-				})
-			})
-		})
 
 		Describe("handlePrintLabel", func() {
 			BeforeEach(func() {
