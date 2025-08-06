@@ -1,18 +1,14 @@
 //revive:disable:dot-imports
-package server
+package eager
 
 import (
 	"os"
-	"path/filepath"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
-	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
 	"github.com/jcelliott/lumber"
-	"github.com/schollz/versionedtext"
 )
 
 var _ = Describe("FileShadowingMigrationScanJob", func() {
@@ -20,7 +16,7 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 		job         *FileShadowingMigrationScanJob
 		testDataDir string
 		coordinator *jobs.JobQueueCoordinator
-		site        *Site
+		deps        *MockMigrationDeps
 	)
 
 	BeforeEach(func() {
@@ -32,13 +28,9 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 		logger := lumber.NewConsoleLogger(lumber.WARN) // Quiet logger for tests
 		coordinator = jobs.NewJobQueueCoordinator(logger)
 		
-		// Initialize Site with Logger for DirectoryList() to work
-		site = &Site{
-			PathToData: testDataDir,
-			Logger:     lumber.NewConsoleLogger(lumber.WARN),
-			MigrationApplicator: lazy.NewEmptyApplicator(),
-		}
-		job = NewFileShadowingMigrationScanJob(testDataDir, coordinator, site)
+		// Initialize mock deps for testing
+		deps = NewMockMigrationDeps(testDataDir)
+		job = NewFileShadowingMigrationScanJob(testDataDir, coordinator, deps)
 	})
 
 	AfterEach(func() {
@@ -59,11 +51,9 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 				createPascalCasePage(testDataDir, "UserGuide", "# User Guide") 
 				createPascalCasePage(testDataDir, "DeviceManual", "# Device Manual")
 				
-				// Create already-munged page using Site.Open() (should be ignored by scan)
-				existingPage, existingErr := site.Open("lab_inventory")
+				// Create already-munged page using mock deps (should be ignored by scan)
+				existingErr := deps.UpdatePageContent("lab_inventory", "# Existing Lab")
 				Expect(existingErr).NotTo(HaveOccurred())
-				existingPage.Text = versionedtext.NewVersionedText("# Existing Lab")
-				site.UpdatePageContent(existingPage.Identifier, existingPage.Text.GetCurrent())
 				
 				// Non-page files (should be ignored)
 				createTestFile(testDataDir, "sha256_somehash", "binary content")
@@ -96,16 +86,12 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 			)
 
 			BeforeEach(func() {
-				// Only munged identifiers using Site.Open (creates base32-encoded files)
-				labPage, labErr := site.Open("lab_inventory")
+				// Only munged identifiers using mock deps (creates base32-encoded files)
+				labErr := deps.UpdatePageContent("lab_inventory", "# Lab Inventory")
 				Expect(labErr).NotTo(HaveOccurred())
-				labPage.Text = versionedtext.NewVersionedText("# Lab Inventory")
-				site.UpdatePageContent(labPage.Identifier, labPage.Text.GetCurrent())
 				
-				userPage, userErr := site.Open("user_guide")
+				userErr := deps.UpdatePageContent("user_guide", "# User Guide")
 				Expect(userErr).NotTo(HaveOccurred())
-				userPage.Text = versionedtext.NewVersionedText("# User Guide")  
-				site.UpdatePageContent(userPage.Identifier, userPage.Text.GetCurrent())
 				
 				// Non-page files
 				createTestFile(testDataDir, "sha256_somehash", "binary content")
@@ -155,11 +141,9 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 				createPascalCasePage(testDataDir, "UserGuide", "# User Guide") 
 				createPascalCasePage(testDataDir, "DeviceList", "# Device List")
 				
-				// Create already-munged page using Site.Open (creates base32-encoded files)
-				existingPage, existingErr := site.Open("existing_page")
+				// Create already-munged page using mock deps (creates base32-encoded files)
+				existingErr := deps.UpdatePageContent("existing_page", "# Existing Page")
 				Expect(existingErr).NotTo(HaveOccurred())
-				existingPage.Text = versionedtext.NewVersionedText("# Existing Page")
-				site.UpdatePageContent(existingPage.Identifier, existingPage.Text.GetCurrent())
 				
 				// Non-page files (should be ignored)
 				createTestFile(testDataDir, "sha256_abcdef", "binary")
@@ -209,18 +193,3 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 	})
 })
 
-const testFileTimestamp = 1609459200 // 2021-01-01 Unix timestamp
-
-// Helper function to create test files
-func createTestFile(dir, filename, content string) {
-	filePath := filepath.Join(dir, filename)
-	err := os.WriteFile(filePath, []byte(content), 0644)
-	if err != nil {
-		panic(err)
-	}
-	// Set a consistent timestamp for testing
-	timestamp := time.Unix(testFileTimestamp, 0)
-	if err := os.Chtimes(filePath, timestamp, timestamp); err != nil {
-		panic(err)
-	}
-}

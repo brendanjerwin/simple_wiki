@@ -13,6 +13,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
 var _ = Describe("Rolling Migrations during Open()", func() {
@@ -79,11 +80,11 @@ inventory.container = 'GarageInventory'
 		})
 
 		Describe("when calling Open()", func() {
-			var openedPage *server.Page
+			var openedPage *wikipage.Page
 
 			BeforeEach(func() {
 				var openErr error
-				openedPage, openErr = site.Open(identifier)
+				openedPage, openErr = site.ReadPage(identifier)
 				Expect(openErr).NotTo(HaveOccurred())
 				openedContent = openedPage.Text.GetCurrent()
 				if openedPage.WasLoadedFromDisk {
@@ -141,7 +142,7 @@ inventory.container = 'GarageInventory'
 			BeforeEach(func() {
 				// Test with no migration applicator
 				site.MigrationApplicator = nil
-				_, openErr := site.Open(identifier)
+				_, openErr := site.ReadPage(identifier)
 				err = openErr // Capture the error for testing
 			})
 
@@ -183,7 +184,7 @@ container = 'already_migrated'
 			Expect(writeErr).NotTo(HaveOccurred())
 
 			// Open it
-			openedPage, openErr := site.Open(identifier)
+			openedPage, openErr := site.ReadPage(identifier)
 			Expect(openErr).NotTo(HaveOccurred())
 			openedContent = openedPage.Text.GetCurrent()
 			if openedPage.WasLoadedFromDisk {

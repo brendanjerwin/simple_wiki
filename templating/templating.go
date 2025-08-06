@@ -11,7 +11,6 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/stoewer/go-strcase"
@@ -34,11 +33,11 @@ type TemplateContext struct {
 	Inventory  InventoryFrontmatter `json:"inventory"`
 }
 
-func ConstructTemplateContextFromFrontmatter(fm wikipage.FrontMatter, query frontmatter.IQueryFrontmatterIndex) (TemplateContext, error) {
+func ConstructTemplateContextFromFrontmatter(fm wikipage.FrontMatter, query wikipage.IQueryFrontmatterIndex) (TemplateContext, error) {
 	return ConstructTemplateContextFromFrontmatterWithVisited(fm, query, make(map[string]bool))
 }
 
-func ConstructTemplateContextFromFrontmatterWithVisited(fm wikipage.FrontMatter, query frontmatter.IQueryFrontmatterIndex, visited map[string]bool) (TemplateContext, error) {
+func ConstructTemplateContextFromFrontmatterWithVisited(fm wikipage.FrontMatter, query wikipage.IQueryFrontmatterIndex, visited map[string]bool) (TemplateContext, error) {
 	fmBytes, err := json.Marshal(fm)
 	if err != nil {
 		return TemplateContext{}, err
@@ -112,13 +111,13 @@ const (
 )
 
 
-func BuildShowInventoryContentsOf(site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, indent int) func(string) string {
+func BuildShowInventoryContentsOf(site wikipage.PageReader, query wikipage.IQueryFrontmatterIndex, indent int) func(string) string {
 	// Create a background context for backward compatibility
 	ctx := context.Background()
 	return BuildShowInventoryContentsOfWithContext(ctx, site, query, indent)
 }
 
-func BuildShowInventoryContentsOfWithContext(ctx context.Context, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, indent int) func(string) string {
+func BuildShowInventoryContentsOfWithContext(ctx context.Context, site wikipage.PageReader, query wikipage.IQueryFrontmatterIndex, indent int) func(string) string {
 	isContainer := BuildIsContainer(query)
 
 	return func(containerIdentifier string) string {
@@ -138,7 +137,7 @@ func BuildShowInventoryContentsOfWithContext(ctx context.Context, site wikipage.
 	}
 }
 
-func buildShowInventoryContentsOfSync(ctx context.Context, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, containerIdentifier string, indent int, isContainer func(string) bool) string {
+func buildShowInventoryContentsOfSync(ctx context.Context, site wikipage.PageReader, query wikipage.IQueryFrontmatterIndex, containerIdentifier string, indent int, isContainer func(string) bool) string {
 	// Check context cancellation at the start
 	select {
 	case <-ctx.Done():
@@ -206,12 +205,12 @@ func buildShowInventoryContentsOfSync(ctx context.Context, site wikipage.PageRea
 	return buf.String()
 }
 
-func BuildLinkTo(site wikipage.PageReader, currentPageTemplateContext TemplateContext, query frontmatter.IQueryFrontmatterIndex) func(string) string {
+func BuildLinkTo(site wikipage.PageReader, currentPageTemplateContext TemplateContext, query wikipage.IQueryFrontmatterIndex) func(string) string {
 	// Legacy function without visited map for backward compatibility
 	return BuildLinkToWithVisited(site, currentPageTemplateContext, query, make(map[string]bool))
 }
 
-func BuildLinkToWithVisited(site wikipage.PageReader, currentPageTemplateContext TemplateContext, query frontmatter.IQueryFrontmatterIndex, visited map[string]bool) func(string) string {
+func BuildLinkToWithVisited(site wikipage.PageReader, currentPageTemplateContext TemplateContext, query wikipage.IQueryFrontmatterIndex, visited map[string]bool) func(string) string {
 	isContainer := BuildIsContainer(query)
 	return func(identifierToLink string) string {
 		if identifierToLink == "" {
@@ -269,7 +268,7 @@ func BuildLinkToWithVisited(site wikipage.PageReader, currentPageTemplateContext
 	}
 }
 
-func BuildIsContainer(query frontmatter.IQueryFrontmatterIndex) func(string) bool {
+func BuildIsContainer(query wikipage.IQueryFrontmatterIndex) func(string) bool {
 	return func(identifier string) bool {
 		if identifier == "" {
 			return false
@@ -289,7 +288,7 @@ func BuildIsContainer(query frontmatter.IQueryFrontmatterIndex) func(string) boo
 
 // ExecuteTemplate executes a template string with the given frontmatter and site context.
 // Includes timeout protection to prevent infinite hangs.
-func ExecuteTemplate(templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex) ([]byte, error) {
+func ExecuteTemplate(templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query wikipage.IQueryFrontmatterIndex) ([]byte, error) {
 	// Set a reasonable timeout for template execution to prevent hangs
 	ctx, cancel := context.WithTimeout(context.Background(), templateExecutionTimeout)
 	defer cancel()
@@ -304,7 +303,7 @@ func ExecuteTemplate(templateString string, fm wikipage.FrontMatter, site wikipa
 
 
 // executeTemplateWorker performs the actual template execution with context cancellation support.
-func executeTemplateWorker(ctx context.Context, templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, visited map[string]bool) ([]byte, error) {
+func executeTemplateWorker(ctx context.Context, templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query wikipage.IQueryFrontmatterIndex, visited map[string]bool) ([]byte, error) {
 	// Check context cancellation before starting
 	select {
 	case <-ctx.Done():
@@ -334,7 +333,7 @@ func executeTemplateWorker(ctx context.Context, templateString string, fm wikipa
 
 
 // buildTemplateWithFunctions creates a template with all necessary functions.
-func buildTemplateWithFunctions(ctx context.Context, templateString string, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex, templateContext TemplateContext) (*template.Template, error) {
+func buildTemplateWithFunctions(ctx context.Context, templateString string, site wikipage.PageReader, query wikipage.IQueryFrontmatterIndex, templateContext TemplateContext) (*template.Template, error) {
 	// Check context cancellation before building functions
 	select {
 	case <-ctx.Done():

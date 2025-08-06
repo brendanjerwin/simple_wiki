@@ -14,6 +14,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
 var _ = Describe("OpenOrInit Migration Test", func() {
@@ -48,7 +49,7 @@ var _ = Describe("OpenOrInit Migration Test", func() {
 			identifier   string
 			fileContent  string
 			filePath     string
-			openedPage   *server.Page
+			openedPage   *wikipage.Page
 			err          error
 			req          *http.Request
 		)
@@ -86,7 +87,7 @@ inventory.container = 'GarageInventory'
 
 		Context("when calling OpenOrInit", func() {
 			BeforeEach(func() {
-				openedPage, err = site.OpenOrInit(identifier, req)
+				openedPage, err = site.ReadOrInitPageForTesting(identifier, req)
 			})
 
 			It("should not return an error", func() {
@@ -137,7 +138,7 @@ inventory.container = 'GarageInventory'
 	Context("when file doesn't exist (new page)", func() {
 		var (
 			identifier string
-			openedPage *server.Page
+			openedPage *wikipage.Page
 			err        error
 			req        *http.Request
 		)
@@ -153,7 +154,7 @@ inventory.container = 'GarageInventory'
 				},
 			}
 
-			openedPage, err = site.OpenOrInit(identifier, req)
+			openedPage, err = site.ReadOrInitPageForTesting(identifier, req)
 		})
 
 		It("should not return an error", func() {

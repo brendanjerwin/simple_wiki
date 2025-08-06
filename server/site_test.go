@@ -701,11 +701,11 @@ test content to be soft deleted`
 		})
 
 		When("creating a new page successfully", func() {
-			var p *Page
+			var p *wikipage.Page
 			var err error
 
 			BeforeEach(func() {
-				p, err = s.OpenOrInit(pageToCreate, req)
+				p, err = s.readOrInitPage(pageToCreate, req)
 			})
 
 			It("should not return an error", func() {
@@ -719,7 +719,7 @@ test content to be soft deleted`
 		})
 
 		PWhen("creating a new page fails to save", func() {
-			var p *Page
+			var p *wikipage.Page
 			var err error
 
 			BeforeEach(func() {
@@ -732,7 +732,7 @@ test content to be soft deleted`
 				chmodErr := os.Chmod(tempDir, 0444)
 				Expect(chmodErr).NotTo(HaveOccurred())
 
-				p, err = s.OpenOrInit(pageToCreate, req)
+				p, err = s.readOrInitPage(pageToCreate, req)
 			})
 
 			AfterEach(func() {
@@ -996,7 +996,7 @@ title = "Test Page"
 				Expect(fileErr).NotTo(HaveOccurred())
 
 				// With no migration applicator, Open() should return an error
-				_, openErr = s.Open(string(pageIdentifier))
+				_, openErr = s.ReadPage(string(pageIdentifier))
 			})
 
 			It("should return an error", func() {
@@ -1008,7 +1008,7 @@ title = "Test Page"
 
 		Describe("migrations on page save", func() {
 			var (
-				page           *Page
+				page           *wikipage.Page
 				pageIdentifier string
 				originalContent string
 				err            error
@@ -1035,13 +1035,13 @@ title = "Fixed Title"
 title = "Bad Title"
 +++
 # Content`
-				page, err = s.Open(pageIdentifier)
+				page, err = s.ReadPage(pageIdentifier)
 				Expect(err).NotTo(HaveOccurred())
 				err = s.UpdatePageContent(wikipage.PageIdentifier(page.Identifier), originalContent)
 				
 				// Re-fetch the page to get the updated content
 				if err == nil {
-					page, err = s.Open(pageIdentifier)
+					page, err = s.ReadPage(pageIdentifier)
 					Expect(err).NotTo(HaveOccurred())
 				}
 			})
@@ -1067,13 +1067,13 @@ title = "Bad Title"
 					// Set mock to not apply
 					mockMig.AppliesToResult = false
 					
-					page, err = s.Open(pageIdentifier + "-no-migration")
+					page, err = s.ReadPage(pageIdentifier + "-no-migration")
 					Expect(err).NotTo(HaveOccurred())
 					err = s.UpdatePageContent(wikipage.PageIdentifier(page.Identifier), originalContent)
 					
 					// Re-fetch the page to get the updated content
 					if err == nil {
-						page, err = s.Open(pageIdentifier + "-no-migration")
+						page, err = s.ReadPage(pageIdentifier + "-no-migration")
 						Expect(err).NotTo(HaveOccurred())
 					}
 				})
@@ -1095,13 +1095,13 @@ title = "Migrated"
 +++
 # Content`)
 					
-					page, err = s.Open(pageIdentifier + "-recursive")
+					page, err = s.ReadPage(pageIdentifier + "-recursive")
 					Expect(err).NotTo(HaveOccurred())
 					err = s.UpdatePageContent(wikipage.PageIdentifier(page.Identifier), originalContent)
 					
 					// Re-fetch the page to get the updated content
 					if err == nil {
-						page, err = s.Open(pageIdentifier + "-recursive")
+						page, err = s.ReadPage(pageIdentifier + "-recursive")
 						Expect(err).NotTo(HaveOccurred())
 					}
 				})

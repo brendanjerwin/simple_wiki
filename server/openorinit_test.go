@@ -16,13 +16,14 @@ import (
 	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
 var _ = Describe("Site.OpenOrInit with URL parameters", func() {
 	var (
 		s         *Site
 		req       *http.Request
-		p         *Page
+		p         *wikipage.Page
 		err       error
 		tmpDir    string
 		reqURL    *url.URL
@@ -76,7 +77,7 @@ var _ = Describe("Site.OpenOrInit with URL parameters", func() {
 			reqURL.RawQuery = params.Encode()
 
 			// Act
-			p, err = s.OpenOrInit("kinect_to_windows_adapter", req)
+			p, err = s.readOrInitPage("kinect_to_windows_adapter", req)
 			
 			// Capture test data after action
 			if p != nil {
@@ -178,7 +179,7 @@ var _ = Describe("Site.OpenOrInit with URL parameters", func() {
 			reqURL.RawQuery = params.Encode()
 
 			// Act
-			p, err = s.OpenOrInit("test_page_arrays", req)
+			p, err = s.readOrInitPage("test_page_arrays", req)
 			
 			// Capture test data after action
 			if p != nil {

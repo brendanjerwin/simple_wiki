@@ -17,7 +17,6 @@ import (
 	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/schollz/versionedtext"
 )
 
 // mockMigrationApplicatorForCircularTest simulates a migration that modifies content
@@ -34,7 +33,7 @@ func (m *mockMigrationApplicatorForCircularTest) ApplyMigrations(content []byte)
 	return content, nil
 }
 
-var _ = Describe("Page Functions", func() {
+var _ = Describe("Site Page Operations", func() {
 	var (
 		pathToData string
 		s          *Site
@@ -64,19 +63,19 @@ var _ = Describe("Page Functions", func() {
 
 			BeforeEach(func() {
 				req, _ := http.NewRequest("GET", "/", nil)
-				p, err := s.OpenOrInit("testpage", req)
+				p, err := s.readOrInitPage("testpage", req)
 				Expect(err).ToNot(HaveOccurred())
 				err = s.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "Some data")
 				Expect(err).ToNot(HaveOccurred())
 				time.Sleep(10 * time.Millisecond)
 
-				p, err = s.OpenOrInit("testpage2", req)
+				p, err = s.readOrInitPage("testpage2", req)
 				Expect(err).ToNot(HaveOccurred())
 				err = s.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "A different bunch of data")
 				Expect(err).ToNot(HaveOccurred())
 				time.Sleep(10 * time.Millisecond)
 
-				p, err = s.OpenOrInit("testpage3", req)
+				p, err = s.readOrInitPage("testpage3", req)
 				Expect(err).ToNot(HaveOccurred())
 				err = s.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "Not much else")
 				Expect(err).ToNot(HaveOccurred())
@@ -104,12 +103,12 @@ var _ = Describe("Page Functions", func() {
 	})
 
 	Describe("Page update and render", func() {
-		var p *Page
+		var p *wikipage.Page
 
 		BeforeEach(func() {
 			req, _ := http.NewRequest("GET", "/", nil)
 			var err error
-			p, err = s.OpenOrInit("testpage", req)
+			p, err = s.readOrInitPage("testpage", req)
 			Expect(err).ToNot(HaveOccurred())
 		})
 
@@ -119,9 +118,9 @@ var _ = Describe("Page Functions", func() {
 				Expect(err).ToNot(HaveOccurred())
 				
 				// Re-fetch the page to get the updated content
-				p, err = s.Open(p.Identifier)
+				p, err = s.ReadPage(p.Identifier)
 				Expect(err).ToNot(HaveOccurred())
-				p.Render()
+				p.Render(s, s.MarkdownRenderer, TemplateExecutor{}, s.FrontmatterIndexQueryer)
 			})
 
 			It("should render correctly", func() {
@@ -134,9 +133,9 @@ var _ = Describe("Page Functions", func() {
 					Expect(err).ToNot(HaveOccurred())
 					
 					// Re-fetch the page to get the updated content
-					p, err = s.Open(p.Identifier)
+					p, err = s.ReadPage(p.Identifier)
 					Expect(err).ToNot(HaveOccurred())
-					p.Render()
+					p.Render(s, s.MarkdownRenderer, TemplateExecutor{}, s.FrontmatterIndexQueryer)
 				})
 
 				It("should render the new content", func() {
@@ -145,12 +144,12 @@ var _ = Describe("Page Functions", func() {
 
 				When("the page is retrieved from disk", func() {
 					var (
-						p2  *Page
+						p2  *wikipage.Page
 						err error
 					)
 
 					BeforeEach(func() {
-						p2, err = s.Open("testpage")
+						p2, err = s.ReadPage("testpage")
 						Expect(err).NotTo(HaveOccurred())
 					})
 
@@ -160,7 +159,7 @@ var _ = Describe("Page Functions", func() {
 
 					When("the retrieved page is rendered", func() {
 						BeforeEach(func() {
-							p2.Render()
+							p2.Render(s, s.MarkdownRenderer, TemplateExecutor{}, s.FrontmatterIndexQueryer)
 						})
 
 						It("should render correctly", func() {
@@ -172,144 +171,6 @@ var _ = Describe("Page Functions", func() {
 		})
 	})
 
-	Describe("Page.parse", func() {
-		var (
-			p           *Page
-			frontmatter wikipage.FrontMatter
-			markdown    wikipage.Markdown
-			err         error
-		)
-
-		BeforeEach(func() {
-			p = &Page{
-				Site:       s,
-				Identifier: "testpage",
-				Text:       versionedtext.NewVersionedText(""),
-			}
-		})
-
-		JustBeforeEach(func() {
-			frontmatter, markdown, err = p.parse()
-		})
-
-		When("the page has no frontmatter", func() {
-			BeforeEach(func() {
-				p.Text.Update("Just some markdown content.")
-			})
-
-			It("should return empty frontmatter", func() {
-				Expect(frontmatter).To(BeEmpty())
-			})
-
-			It("should return the full text as markdown", func() {
-				Expect(string(markdown)).To(Equal("Just some markdown content."))
-			})
-
-			It("should not return an error", func() {
-				Expect(err).NotTo(HaveOccurred())
-			})
-		})
-
-		When("the page has valid frontmatter", func() {
-			BeforeEach(func() {
-				content := `---
-title: Test Page
-tags: [one, two]
----
-This is the markdown content.`
-				p.Text.Update(content)
-			})
-
-			It("should correctly parse the frontmatter", func() {
-				Expect(frontmatter).To(HaveKeyWithValue("title", "Test Page"))
-				Expect(frontmatter).To(HaveKey("tags"))
-				Expect(frontmatter["tags"]).To(BeEquivalentTo([]any{"one", "two"}))
-			})
-
-			It("should return the content after the frontmatter as markdown", func() {
-				Expect(string(markdown)).To(Equal("This is the markdown content."))
-			})
-
-			It("should not return an error", func() {
-				Expect(err).NotTo(HaveOccurred())
-			})
-		})
-
-		When("the page has invalid YAML in frontmatter", func() {
-			BeforeEach(func() {
-				content := `---
-title: Test Page
-tags: [one, two
----
-This is the markdown content.`
-				p.Text.Update(content)
-			})
-
-			It("should return an error", func() {
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("failed to unmarshal frontmatter for testpage"))
-			})
-		})
-
-		When("the content is empty", func() {
-			BeforeEach(func() {
-				p.Text.Update("")
-			})
-
-			It("should return empty frontmatter and markdown", func() {
-				Expect(frontmatter).To(BeEmpty())
-				Expect(string(markdown)).To(BeEmpty())
-			})
-
-			It("should not return an error", func() {
-				Expect(err).NotTo(HaveOccurred())
-			})
-		})
-
-		When("there is only frontmatter", func() {
-			BeforeEach(func() {
-				content := `---
-title: Only Frontmatter
----
-`
-				p.Text.Update(content)
-			})
-
-			It("should parse the frontmatter", func() {
-				Expect(frontmatter).To(HaveKeyWithValue("title", "Only Frontmatter"))
-			})
-
-			It("should return empty markdown", func() {
-				Expect(string(markdown)).To(BeEmpty())
-			})
-
-			It("should not return an error", func() {
-				Expect(err).NotTo(HaveOccurred())
-			})
-		})
-
-		When("the text contains '---' but not as a separator", func() {
-			var content string
-			BeforeEach(func() {
-				content = `Here is some text.
----
-And some more text. But this is not frontmatter.`
-				p.Text.Update(content)
-			})
-
-			It("should return empty frontmatter", func() {
-				Expect(frontmatter).To(BeEmpty())
-			})
-
-			It("should return the full text as markdown", func() {
-				Expect(string(markdown)).To(Equal(content))
-			})
-
-			It("should not return an error", func() {
-				Expect(err).NotTo(HaveOccurred())
-			})
-		})
-	})
 
 	Describe("Site.Open migration integration", func() {
 		var (
@@ -329,7 +190,7 @@ And some more text. But this is not frontmatter.`
 
 		When("Open is called with migrations that modify content", func() {
 			var (
-				p              *Page
+				p              *wikipage.Page
 				err            error
 				originalDiskContent string
 				finalContent   string
@@ -347,7 +208,7 @@ And some more text. But this is not frontmatter.`
 				s.MigrationApplicator = mockApplicator
 				
 				// This call should complete without hanging and apply migrations
-				p, err = s.Open(pageIdentifier)
+				p, err = s.ReadPage(pageIdentifier)
 				Expect(err).NotTo(HaveOccurred())
 				
 				// Wait for any background indexing operations triggered by the save

@@ -1,4 +1,4 @@
-package server
+package eager
 
 import (
 	"encoding/json"
@@ -14,20 +14,26 @@ import (
 	"github.com/schollz/versionedtext"
 )
 
+// MigrationDependencies combines interfaces needed for migrations
+type MigrationDependencies interface {
+	wikipage.PageReaderMutator
+	wikipage.PageOpener
+}
+
 // FileShadowingMigrationScanJob scans the data directory for PascalCase files
 // and enqueues migration jobs for each one
 type FileShadowingMigrationScanJob struct {
 	dataDir     string
 	coordinator *jobs.JobQueueCoordinator
-	site        *Site
+	deps        MigrationDependencies
 }
 
 // NewFileShadowingMigrationScanJob creates a new scan job
-func NewFileShadowingMigrationScanJob(dataDir string, coordinator *jobs.JobQueueCoordinator, site *Site) *FileShadowingMigrationScanJob {
+func NewFileShadowingMigrationScanJob(dataDir string, coordinator *jobs.JobQueueCoordinator, deps MigrationDependencies) *FileShadowingMigrationScanJob {
 	return &FileShadowingMigrationScanJob{
 		dataDir:     dataDir,
 		coordinator: coordinator,
-		site:        site,
+		deps:        deps,
 	}
 }
 
@@ -43,7 +49,7 @@ func (j *FileShadowingMigrationScanJob) Execute() error {
 
 	// Enqueue a migration job for each PascalCase identifier
 	for _, identifier := range pascalIdentifiers {
-		migrationJob := NewFileShadowingMigrationJob(j.site, identifier)
+		migrationJob := NewFileShadowingMigrationJob(j.deps, j.dataDir, identifier)
 		j.coordinator.EnqueueJob(migrationJob)
 	}
 
@@ -119,21 +125,23 @@ func (j *FileShadowingMigrationScanJob) FindPascalCaseIdentifiers() []string {
 
 // FileShadowingMigrationJob handles migrating a specific PascalCase page to munged_name
 type FileShadowingMigrationJob struct {
-	site          *Site
+	deps          MigrationDependencies
+	dataDir       string
 	logicalPageID string
 }
 
 // NewFileShadowingMigrationJob creates a new migration job
-func NewFileShadowingMigrationJob(site *Site, logicalPageID string) *FileShadowingMigrationJob {
+func NewFileShadowingMigrationJob(deps MigrationDependencies, dataDir string, logicalPageID string) *FileShadowingMigrationJob {
 	return &FileShadowingMigrationJob{
-		site:          site,
+		deps:          deps,
+		dataDir:       dataDir,
 		logicalPageID: logicalPageID,
 	}
 }
 
 // Execute migrates a PascalCase page to munged_name format
 func (j *FileShadowingMigrationJob) Execute() error {
-	// We can't use Site.Open() to read the PascalCase page because it will prefer
+	// We can't use ReadPage() to read the PascalCase page because it will prefer
 	// munged versions when both exist (this is the shadowing problem we're solving).
 	// Instead, we need to read the PascalCase files directly.
 	pascalPage := j.readPascalPageDirectly(j.logicalPageID)
@@ -144,15 +152,15 @@ func (j *FileShadowingMigrationJob) Execute() error {
 	// Get munged identifier
 	mungedID := wikiidentifiers.MungeIdentifier(j.logicalPageID)
 
-	// Check for shadowing conflicts using Site methods
-	// We can use Site.Open() for the munged version since we want to read it normally
-	mungedPage, err := j.site.Open(mungedID)
+	// Check for shadowing conflicts using interface methods
+	// We can use ReadPage() for the munged version since we want to read it normally
+	mungedPage, err := j.deps.ReadPage(mungedID)
 	if err != nil {
 		return fmt.Errorf("failed to open munged page %s: %w", mungedID, err)
 	}
 	hasShadowing := !mungedPage.IsNew()
 
-	var finalPage *Page
+	var finalPage *wikipage.Page
 
 	if hasShadowing {
 		// Compare content richness and choose the richer version
@@ -175,15 +183,29 @@ func (j *FileShadowingMigrationJob) Execute() error {
 	// IMPORTANT: Delete the original files FIRST, then save the new content
 	// This prevents data loss in cases where the original and munged identifiers
 	// would result in the same base32-encoded filename
-	
-	// Use Site.DeletePage for soft delete (moves to __deleted__ directory)
-	if err := j.site.DeletePage(wikipage.PageIdentifier(j.logicalPageID)); err != nil && !os.IsNotExist(err) {
+
+	// Use DeletePage for soft delete (moves to __deleted__ directory)
+	if err := j.deps.DeletePage(wikipage.PageIdentifier(j.logicalPageID)); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to soft delete original PascalCase page %s: %v", j.logicalPageID, err)
 	}
 
-	// Now save the page with munged identifier (this will save using base32-encoded filenames)
-	if err := finalPage.Site.savePage(finalPage); err != nil {
-		return fmt.Errorf("failed to save munged page: %v", err)
+	// Now save the page using WriteFrontMatter and WriteMarkdown
+	fm, err := finalPage.GetFrontMatter()
+	if err != nil {
+		return fmt.Errorf("failed to get frontmatter: %v", err)
+	}
+	md, err := finalPage.GetMarkdown()
+	if err != nil {
+		return fmt.Errorf("failed to get markdown: %v", err)
+	}
+
+	// First write the frontmatter
+	if err := j.deps.WriteFrontMatter(wikipage.PageIdentifier(finalPage.Identifier), fm); err != nil {
+		return fmt.Errorf("failed to write frontmatter: %v", err)
+	}
+	// Then write the markdown
+	if err := j.deps.WriteMarkdown(wikipage.PageIdentifier(finalPage.Identifier), md); err != nil {
+		return fmt.Errorf("failed to write markdown: %v", err)
 	}
 
 	return nil
@@ -191,16 +213,15 @@ func (j *FileShadowingMigrationJob) Execute() error {
 
 // readPascalPageDirectly reads a PascalCase page by directly accessing the base32-encoded files
 // for the PascalCase identifier (not the munged version)
-func (j *FileShadowingMigrationJob) readPascalPageDirectly(pascalID string) *Page {
-	page := &Page{
+func (j *FileShadowingMigrationJob) readPascalPageDirectly(pascalID string) *wikipage.Page {
+	page := &wikipage.Page{
 		Identifier: pascalID,
-		Site:       j.site,
 	}
 
 	// Calculate the base32-encoded filenames for the PascalCase identifier
 	// Note: we use the lowercase PascalCase identifier, not the munged version
-	jsonPath := filepath.Join(j.site.PathToData, base32tools.EncodeToBase32(strings.ToLower(pascalID))+".json")
-	mdPath := filepath.Join(j.site.PathToData, base32tools.EncodeToBase32(strings.ToLower(pascalID))+".md")
+	jsonPath := filepath.Join(j.dataDir, base32tools.EncodeToBase32(strings.ToLower(pascalID))+".json")
+	mdPath := filepath.Join(j.dataDir, base32tools.EncodeToBase32(strings.ToLower(pascalID))+".md")
 
 	// Read JSON file if it exists
 	if jsonData, err := os.ReadFile(jsonPath); err == nil {
@@ -256,13 +277,13 @@ func (j *FileShadowingMigrationJob) CheckForShadowing(logicalPageID string) (boo
 	var mungedFiles []string
 
 	// Check for .json file
-	jsonPath := filepath.Join(j.site.PathToData, base32tools.EncodeToBase32(strings.ToLower(mungedID))+".json")
+	jsonPath := filepath.Join(j.dataDir, base32tools.EncodeToBase32(strings.ToLower(mungedID))+".json")
 	if _, err := os.Stat(jsonPath); err == nil {
 		mungedFiles = append(mungedFiles, jsonPath)
 	}
 
 	// Check for .md file
-	mdPath := filepath.Join(j.site.PathToData, base32tools.EncodeToBase32(strings.ToLower(mungedID))+".md")
+	mdPath := filepath.Join(j.dataDir, base32tools.EncodeToBase32(strings.ToLower(mungedID))+".md")
 	if _, err := os.Stat(mdPath); err == nil {
 		mungedFiles = append(mungedFiles, mdPath)
 	}

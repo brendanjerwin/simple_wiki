@@ -84,7 +84,7 @@ var _ = Describe("Handlers", func() {
 
 			BeforeEach(func() {
 				pageName = "test-relinquish"
-				p, err := site.Open(pageName)
+				p, err := site.ReadPage(pageName)
 				Expect(err).NotTo(HaveOccurred())
 				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
 
@@ -105,7 +105,7 @@ var _ = Describe("Handlers", func() {
 			})
 
 			It("should erase the page", func() {
-				p, err := site.Open(pageName)
+				p, err := site.ReadPage(pageName)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(p.Text.GetCurrent()).To(BeEmpty())
 			})
@@ -117,7 +117,7 @@ var _ = Describe("Handlers", func() {
 
 			BeforeEach(func() {
 				pageName = "test-relinquish-fail"
-				p, err := site.Open(pageName)
+				p, err := site.ReadPage(pageName)
 				Expect(err).NotTo(HaveOccurred())
 				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
 
@@ -165,7 +165,7 @@ var _ = Describe("Handlers", func() {
 
 			BeforeEach(func() {
 				pageName = "test-exists"
-				p, err := site.Open(pageName)
+				p, err := site.ReadPage(pageName)
 				Expect(err).NotTo(HaveOccurred())
 				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
 
@@ -275,7 +275,7 @@ var _ = Describe("Handlers", func() {
 				customRouter = customSite.GinRouter()
 
 				// Create and save a page first
-				p, err := customSite.Open(pageName)
+				p, err := customSite.ReadPage(pageName)
 				Expect(err).NotTo(HaveOccurred())
 				_ = customSite.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
 
@@ -325,7 +325,7 @@ var _ = Describe("Handlers", func() {
 			BeforeEach(func() {
 				pageName = "test-update"
 				newText = "new content"
-				p, err := site.Open(pageName)
+				p, err := site.ReadPage(pageName)
 				Expect(err).NotTo(HaveOccurred())
 				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
 
@@ -350,7 +350,7 @@ var _ = Describe("Handlers", func() {
 			})
 
 			It("should update the page content", func() {
-				p, err := site.Open(pageName)
+				p, err := site.ReadPage(pageName)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(p.Text.GetCurrent()).To(Equal(newText))
 			})
@@ -367,7 +367,7 @@ var _ = Describe("Handlers", func() {
 				newText = "new content that should fail to save"
 				
 				// Create the page first
-				p, err := site.Open(pageName)
+				p, err := site.ReadPage(pageName)
 				Expect(err).NotTo(HaveOccurred())
 				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "initial content")
 				_ = site.UpdatePageContent(p.Identifier, p.Text.GetCurrent())
@@ -414,7 +414,7 @@ var _ = Describe("Handlers", func() {
 			BeforeEach(func() {
 				pageName = "test-update-fail"
 				newText = "new content"
-				p, err := site.Open(pageName)
+				p, err := site.ReadPage(pageName)
 				Expect(err).NotTo(HaveOccurred())
 				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
 
@@ -474,7 +474,7 @@ var _ = Describe("Handlers", func() {
 
 			BeforeEach(func() {
 				pageName = "test-lock"
-				p, err := site.Open(pageName)
+				p, err := site.ReadPage(pageName)
 				Expect(err).NotTo(HaveOccurred())
 				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
 
@@ -498,7 +498,7 @@ var _ = Describe("Handlers", func() {
 			})
 
 			It("should lock the page", func() {
-				p, err := site.Open(pageName)
+				p, err := site.ReadPage(pageName)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(p.IsLocked).To(BeTrue())
 			})
@@ -511,7 +511,7 @@ var _ = Describe("Handlers", func() {
 
 			BeforeEach(func() {
 				pageName = "test-lock-fail"
-				p, err := site.Open(pageName)
+				p, err := site.ReadPage(pageName)
 				Expect(err).NotTo(HaveOccurred())
 				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
 
@@ -558,7 +558,7 @@ var _ = Describe("Handlers", func() {
 
 			BeforeEach(func() {
 				pageName = "test-lock-fail-filesystem"
-				p, err := site.Open(pageName)
+				p, err := site.ReadPage(pageName)
 				Expect(err).NotTo(HaveOccurred())
 				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
 
@@ -866,7 +866,7 @@ var _ = Describe("Session Logging Functions", func() {
 	Describe("pageIsLocked", func() {
 		When("calling with logger parameter", func() {
 			var isLocked bool
-			var page *server.Page
+			var page *wikipage.Page
 			var c *gin.Context
 			var err error
 
@@ -880,7 +880,7 @@ var _ = Describe("Session Logging Functions", func() {
 				sessions.Sessions("_session", store)(c)
 
 				// Create a test page
-				page, err = site.Open("test-page")
+				page, err = site.ReadPage("test-page")
 				Expect(err).NotTo(HaveOccurred())
 
 				// Call the function under test
@@ -905,7 +905,7 @@ var _ = Describe("Session Logging Functions", func() {
 				w = httptest.NewRecorder()
 
 				// Create a page to work with
-				p, err := site.Open("test-integration")
+				p, err := site.ReadPage("test-integration")
 				Expect(err).NotTo(HaveOccurred())
 				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "test content")
 				_ = site.UpdatePageContent(p.Identifier, p.Text.GetCurrent())

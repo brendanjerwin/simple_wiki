@@ -56,6 +56,13 @@ func BuildFrontmatterFromURLParams(identifier string, params url.Values) (wikipa
 				return nil, err
 			}
 		} else {
+			// Check if this key already exists as a nested structure
+			if existing, exists := frontmatter[key]; exists {
+				if _, isMap := existing.(map[string]any); isMap {
+					// Cannot set simple value on key that already has nested structure
+					return nil, fmt.Errorf("parameter '%s' cannot be both a value and a table", key)
+				}
+			}
 			frontmatter[key] = value
 		}
 	}
