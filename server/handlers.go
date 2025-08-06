@@ -18,17 +18,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
 	"github.com/brendanjerwin/simple_wiki/sec"
 	"github.com/brendanjerwin/simple_wiki/static"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
-	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
 	"github.com/brendanjerwin/simple_wiki/utils/slicetools"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	ginteenysecurity "github.com/danielheath/gin-teeny-security"
 	"github.com/gin-contrib/multitemplate"
 	"github.com/gin-contrib/sessions"
-	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 	"github.com/jcelliott/lumber"
 )
@@ -56,61 +53,6 @@ var (
 	LogLevel             int = lumber.WARN
 )
 
-func NewSite(
-	filepathToData string,
-	cssFile string,
-	defaultPage string,
-	defaultPassword string,
-	debounce int,
-	secret string,
-	secretCode string,
-	fileuploads bool,
-	maxUploadSize uint,
-	maxDocumentSize uint,
-	logger *lumber.ConsoleLogger,
-) (*Site, error) {
-	var customCSS []byte
-	// collect custom CSS
-	if len(cssFile) > 0 {
-		var errRead error
-		customCSS, errRead = os.ReadFile(cssFile)
-		if errRead != nil {
-			return nil, fmt.Errorf("failed to read CSS file %s: %w", cssFile, errRead)
-		}
-		_, _ = fmt.Printf("Loaded CSS file, %d bytes\n", len(customCSS))
-	}
-
-	logger.Info("Initializing simple_wiki site...")
-	
-	// Set up migration applicator with default migrations
-	logger.Info("Setting up rolling migrations system")
-	applicator := lazy.NewApplicator()
-
-	site := &Site{
-		PathToData:          filepathToData,
-		CSS:                 customCSS,
-		DefaultPage:         defaultPage,
-		DefaultPassword:     defaultPassword,
-		Debounce:            debounce,
-		SessionStore:        cookie.NewStore([]byte(secret)),
-		SecretCode:          secretCode,
-		Fileuploads:         fileuploads,
-		MaxUploadSize:       maxUploadSize,
-		MaxDocumentSize:     maxDocumentSize,
-		Logger:              logger,
-		MigrationApplicator: applicator,
-		MarkdownRenderer:    &goldmarkrenderer.GoldmarkRenderer{},
-	}
-
-	logger.Info("Initializing site indexing...")
-	err := site.InitializeIndexing()
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize site: %w", err)
-	}
-	
-	logger.Info("Site initialization complete")
-	return site, nil
-}
 
 // GinRouter returns a new Gin router configured for the site.
 func (s *Site) GinRouter() *gin.Engine {

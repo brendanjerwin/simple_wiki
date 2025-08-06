@@ -25,6 +25,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/sec"
 	"github.com/brendanjerwin/simple_wiki/templating"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
+	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/gabriel-vasile/mimetype"
@@ -65,6 +66,63 @@ type Site struct {
 	BleveIndexQueryer       bleve.IQueryBleveIndex
 	MigrationApplicator     lazy.FrontmatterMigrationApplicator
 	saveMut                 sync.RWMutex
+}
+
+// NewSite creates and initializes a new Site instance.
+func NewSite(
+	filepathToData string,
+	cssFile string,
+	defaultPage string,
+	defaultPassword string,
+	debounce int,
+	secret string,
+	secretCode string,
+	fileuploads bool,
+	maxUploadSize uint,
+	maxDocumentSize uint,
+	logger *lumber.ConsoleLogger,
+) (*Site, error) {
+	var customCSS []byte
+	// collect custom CSS
+	if len(cssFile) > 0 {
+		var errRead error
+		customCSS, errRead = os.ReadFile(cssFile)
+		if errRead != nil {
+			return nil, fmt.Errorf("failed to read CSS file %s: %w", cssFile, errRead)
+		}
+		_, _ = fmt.Printf("Loaded CSS file, %d bytes\n", len(customCSS))
+	}
+
+	logger.Info("Initializing simple_wiki site...")
+	
+	// Set up migration applicator with default migrations
+	logger.Info("Setting up rolling migrations system")
+	applicator := lazy.NewApplicator()
+
+	site := &Site{
+		PathToData:          filepathToData,
+		CSS:                 customCSS,
+		DefaultPage:         defaultPage,
+		DefaultPassword:     defaultPassword,
+		Debounce:            debounce,
+		SessionStore:        cookie.NewStore([]byte(secret)),
+		SecretCode:          secretCode,
+		Fileuploads:         fileuploads,
+		MaxUploadSize:       maxUploadSize,
+		MaxDocumentSize:     maxDocumentSize,
+		Logger:              logger,
+		MigrationApplicator: applicator,
+		MarkdownRenderer:    &goldmarkrenderer.GoldmarkRenderer{},
+	}
+
+	logger.Info("Initializing site indexing...")
+	err := site.InitializeIndexing()
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize site: %w", err)
+	}
+	
+	logger.Info("Site initialization complete")
+	return site, nil
 }
 
 const (
