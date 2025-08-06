@@ -1,12 +1,7 @@
 import { html, css, LitElement } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { sharedStyles, foundationCSS } from './shared-styles.js';
-
-interface SearchResult {
-  Identifier: string;
-  Title: string;
-  FragmentHTML?: string;
-}
+import type { SearchResultWithHTML } from '../services/search-client.js';
 
 class WikiSearchResults extends LitElement {
   static override styles = [
@@ -112,7 +107,7 @@ class WikiSearchResults extends LitElement {
     open: { type: Boolean, reflect: true }
   };
 
-  declare results: SearchResult[];
+  declare results: SearchResultWithHTML[];
   declare open: boolean;
 
   private _handleClickOutside: (event: Event) => void;
@@ -173,8 +168,8 @@ class WikiSearchResults extends LitElement {
                 </div>
                 <div id="results">
                 ${this.results.map(result => html`
-                    <a href="/${result.Identifier}" class="border-radius-small">${result.Title}</a>
-                    <div class="fragment border-radius-small">${unsafeHTML(result.FragmentHTML) || "N/A"}</div> 
+                    <a href="/${result.identifier}" class="border-radius-small">${result.title}</a>
+                    <div class="fragment border-radius-small">${unsafeHTML(result.fragmentHTML) || "N/A"}</div> 
                 `)}
                 </div>
             </div>

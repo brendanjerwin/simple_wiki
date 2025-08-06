@@ -1,18 +1,16 @@
 import { html, fixture, expect } from '@open-wc/testing';
 import sinon from 'sinon';
 import './wiki-search.js';
+import { searchClient } from '../services/search-client.js';
+import type { SearchResultWithHTML } from '../services/search-client.js';
 
 interface WikiSearchElement extends HTMLElement {
-  searchEndpoint?: string;
-  resultArrayPath?: string;
-  results: Array<{
-    Identifier: string;
-    Title: string;
-    FragmentHTML?: string;
-  }>;
+  results: SearchResultWithHTML[];
   noResults: boolean;
+  loading: boolean;
+  error?: string;
   _handleKeydown: (event: KeyboardEvent) => void;
-  handleFormSubmit: (event: Event) => void;
+  handleFormSubmit: (event: Event) => Promise<void>;
   updateComplete: Promise<boolean>;
   shadowRoot: ShadowRoot;
 }
@@ -35,9 +33,10 @@ describe('WikiSearch', () => {
 
   describe('when component is initialized', () => {
     it('should have the correct default properties', () => {
-      expect(el.resultArrayPath).to.equal('results');
       expect(el.results).to.deep.equal([]);
       expect(el.noResults).to.equal(false);
+      expect(el.loading).to.equal(false);
+      expect(el.error).to.be.undefined;
     });
 
     it('should have a search input', () => {
@@ -173,35 +172,97 @@ describe('WikiSearch', () => {
     });
   });
 
-  describe('when searching with special characters', () => {
-    let fetchStub: sinon.SinonStub;
+  describe('when searching', () => {
+    let searchStub: sinon.SinonStub;
+    let form: HTMLFormElement;
+    let searchInput: HTMLInputElement;
 
     beforeEach(async () => {
-      el.searchEndpoint = 'https://example.com/search';
-      fetchStub = sinon.stub(window, 'fetch');
-      fetchStub.resolves(new Response(JSON.stringify({ results: [] })));
+      searchStub = sinon.stub(searchClient, 'search');
       await el.updateComplete;
+      form = el.shadowRoot?.querySelector('form') as HTMLFormElement;
+      searchInput = el.shadowRoot?.querySelector('input[type="search"]') as HTMLInputElement;
     });
 
-    it('should encode special characters in search term', async () => {
-      const searchInput = el.shadowRoot?.querySelector('input[type="search"]') as HTMLInputElement;
-      const form = el.shadowRoot?.querySelector('form') as HTMLFormElement;
-      
-      // Set search term with special characters
-      searchInput.value = 'test & query with spaces';
-      
-      // Create form submit event with form as target
-      const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
-      Object.defineProperty(submitEvent, 'target', { value: form, writable: false });
-      
-      // Trigger form submit
-      el.handleFormSubmit(submitEvent);
-      
-      // Wait for the async operation to start
-      await new Promise(resolve => setTimeout(resolve, 0));
-      
-      // Check that fetch was called with properly encoded URL
-      expect(fetchStub).to.have.been.calledWith('https://example.com/search?q=test%20%26%20query%20with%20spaces');
+    afterEach(() => {
+      searchStub.restore();
+    });
+
+    describe('when search is successful', () => {
+      const mockResults: SearchResultWithHTML[] = [
+        {
+          identifier: 'page1',
+          title: 'Page 1',
+          fragment: 'Test fragment',
+          highlights: [],
+          fragmentHTML: 'Test fragment',
+        },
+      ];
+
+      beforeEach(async () => {
+        searchStub.resolves(mockResults);
+        searchInput.value = 'test query';
+        
+        const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+        Object.defineProperty(submitEvent, 'target', { value: form, writable: false });
+        
+        await el.handleFormSubmit(submitEvent);
+      });
+
+      it('should call search with the query', () => {
+        expect(searchStub).to.have.been.calledWith('test query');
+      });
+
+      it('should update results', () => {
+        expect(el.results).to.deep.equal(mockResults);
+      });
+
+      it('should set noResults to false', () => {
+        expect(el.noResults).to.equal(false);
+      });
+    });
+
+    describe('when search returns no results', () => {
+      let selectSpy: sinon.SinonSpy;
+
+      beforeEach(async () => {
+        searchStub.resolves([]);
+        selectSpy = sinon.spy(searchInput, 'select');
+        searchInput.value = 'empty query';
+        
+        const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+        Object.defineProperty(submitEvent, 'target', { value: form, writable: false });
+        
+        await el.handleFormSubmit(submitEvent);
+      });
+
+      it('should set noResults to true', () => {
+        expect(el.noResults).to.equal(true);
+      });
+
+      it('should select the search input', () => {
+        expect(selectSpy).to.have.been.calledOnce;
+      });
+    });
+
+    describe('when search fails', () => {
+      beforeEach(async () => {
+        searchStub.rejects(new Error('Network error'));
+        searchInput.value = 'failing query';
+        
+        const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+        Object.defineProperty(submitEvent, 'target', { value: form, writable: false });
+        
+        await el.handleFormSubmit(submitEvent);
+      });
+
+      it('should clear results', () => {
+        expect(el.results).to.deep.equal([]);
+      });
+
+      it('should set error message', () => {
+        expect(el.error).to.equal('Network error');
+      });
     });
   });
 });
