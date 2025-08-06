@@ -42,12 +42,12 @@ var _ = Describe("InventoryContainerMungingMigration", func() {
 
 			BeforeEach(func() {
 				content = []byte(`+++
-identifier = "test_page"
-title = "Test Page"
+identifier = 'test_page'
+title = 'Test Page'
 
 [inventory]
-container = "GarageInventory"
-items = ["hammer", "screwdriver"]
+container = 'GarageInventory'
+items = ['hammer', 'screwdriver']
 +++
 
 # Test Page Content`)
@@ -65,12 +65,12 @@ items = ["hammer", "screwdriver"]
 
 			BeforeEach(func() {
 				content = []byte(`+++
-identifier = "test_page"
-title = "Test Page"
+identifier = 'test_page'
+title = 'Test Page'
 
 [inventory]
-container = "garage_inventory"
-items = ["hammer", "screwdriver"]
+container = 'garage_inventory'
+items = ['hammer', 'screwdriver']
 +++
 
 # Test Page Content`)
@@ -88,8 +88,8 @@ items = ["hammer", "screwdriver"]
 
 			BeforeEach(func() {
 				content = []byte(`+++
-identifier = "test_page"
-title = "Test Page"
+identifier = 'test_page'
+title = 'Test Page'
 +++
 
 # Test Page Content`)
@@ -107,11 +107,11 @@ title = "Test Page"
 
 			BeforeEach(func() {
 				content = []byte(`+++
-identifier = "test_page"
-title = "Test Page"
+identifier = 'test_page'
+title = 'Test Page'
 
 [inventory]
-items = ["hammer", "screwdriver"]
+items = ['hammer', 'screwdriver']
 +++
 
 # Test Page Content`)
@@ -152,12 +152,12 @@ inventory:
 
 			BeforeEach(func() {
 				content = []byte(`+++
-identifier = "test_page"
-title = "Test Page"
+identifier = 'test_page'
+title = 'Test Page'
 
 [inventory]
-container = "GarageInventory"
-items = ["hammer", "screwdriver"]
+container = 'GarageInventory'
+items = ['hammer', 'screwdriver']
 +++
 
 # Test Page Content`)
@@ -169,17 +169,17 @@ items = ["hammer", "screwdriver"]
 			})
 
 			It("should munge the container value", func() {
-				Expect(string(result)).To(ContainSubstring(`container = "garage_inventory"`))
+				Expect(string(result)).To(ContainSubstring(`container = 'garage_inventory'`))
 			})
 
 			It("should not change GarageInventory in the content", func() {
-				Expect(string(result)).NotTo(ContainSubstring(`container = "GarageInventory"`))
+				Expect(string(result)).NotTo(ContainSubstring(`container = 'GarageInventory'`))
 			})
 
 			It("should preserve other fields", func() {
-				Expect(string(result)).To(ContainSubstring(`identifier = "test_page"`))
-				Expect(string(result)).To(ContainSubstring(`title = "Test Page"`))
-				Expect(string(result)).To(ContainSubstring(`items = ["hammer", "screwdriver"]`))
+				Expect(string(result)).To(ContainSubstring(`identifier = 'test_page'`))
+				Expect(string(result)).To(ContainSubstring(`title = 'Test Page'`))
+				Expect(string(result)).To(ContainSubstring(`items = ['hammer', 'screwdriver']`))
 			})
 
 			It("should preserve body content", func() {
@@ -196,7 +196,7 @@ items = ["hammer", "screwdriver"]
 				BeforeEach(func() {
 					content = []byte(`+++
 [inventory]
-container = "KitchenCabinet"
+container = 'KitchenCabinet'
 +++
 `)
 					result, err = migration.Apply(content)
@@ -207,7 +207,7 @@ container = "KitchenCabinet"
 				})
 
 				It("should munge to kitchen_cabinet", func() {
-					Expect(string(result)).To(ContainSubstring(`container = "kitchen_cabinet"`))
+					Expect(string(result)).To(ContainSubstring(`container = 'kitchen_cabinet'`))
 				})
 			})
 
@@ -219,7 +219,7 @@ container = "KitchenCabinet"
 				BeforeEach(func() {
 					content = []byte(`+++
 [inventory]
-container = "MixedCASEExample"
+container = 'MixedCASEExample'
 +++
 `)
 					result, err = migration.Apply(content)
@@ -230,7 +230,7 @@ container = "MixedCASEExample"
 				})
 
 				It("should munge to mixed_case_example", func() {
-					Expect(string(result)).To(ContainSubstring(`container = "mixed_case_example"`))
+					Expect(string(result)).To(ContainSubstring(`container = 'mixed_case_example'`))
 				})
 			})
 
@@ -242,7 +242,7 @@ container = "MixedCASEExample"
 				BeforeEach(func() {
 					content = []byte(`+++
 [inventory]
-container = "SimpleTest"
+container = 'SimpleTest'
 +++
 `)
 					result, err = migration.Apply(content)
@@ -253,7 +253,7 @@ container = "SimpleTest"
 				})
 
 				It("should munge to simple_test", func() {
-					Expect(string(result)).To(ContainSubstring(`container = "simple_test"`))
+					Expect(string(result)).To(ContainSubstring(`container = 'simple_test'`))
 				})
 			})
 
@@ -265,7 +265,7 @@ container = "SimpleTest"
 				BeforeEach(func() {
 					content = []byte(`+++
 [inventory]
-container = "ALLCAPS"
+container = 'ALLCAPS'
 +++
 `)
 					result, err = migration.Apply(content)
@@ -276,7 +276,7 @@ container = "ALLCAPS"
 				})
 
 				It("should munge to allcaps", func() {
-					Expect(string(result)).To(ContainSubstring(`container = "allcaps"`))
+					Expect(string(result)).To(ContainSubstring(`container = 'allcaps'`))
 				})
 			})
 		})
@@ -288,12 +288,12 @@ container = "ALLCAPS"
 
 			BeforeEach(func() {
 				content = []byte(`+++
-identifier = "test_page"
-title = "Test Page"
+identifier = 'test_page'
+title = 'Test Page'
 
 [inventory]
-container = "garage_inventory"
-items = ["hammer", "screwdriver"]
+container = 'garage_inventory'
+items = ['hammer', 'screwdriver']
 +++
 
 # Test Page Content`)
@@ -318,7 +318,7 @@ items = ["hammer", "screwdriver"]
 				BeforeEach(func() {
 					content = []byte(`+++
 [inventory]
-container = "LabTub_61c0030e-00e3-47b5-a797-1ac01f8d05b1"
+container = 'LabTub_61c0030e-00e3-47b5-a797-1ac01f8d05b1'
 +++
 `)
 					result, err = migration.Apply(content)
@@ -329,7 +329,7 @@ container = "LabTub_61c0030e-00e3-47b5-a797-1ac01f8d05b1"
 				})
 
 				It("should lowercase the identifier with UUID", func() {
-					Expect(string(result)).To(ContainSubstring(`container = "labtub_61c0030e-00e3-47b5-a797-1ac01f8d05b1"`))
+					Expect(string(result)).To(ContainSubstring(`container = 'labtub_61c0030e-00e3-47b5-a797-1ac01f8d05b1'`))
 				})
 			})
 
@@ -341,7 +341,7 @@ container = "LabTub_61c0030e-00e3-47b5-a797-1ac01f8d05b1"
 				BeforeEach(func() {
 					content = []byte(`+++
 [inventory]
-container = ""
+container = ''
 +++
 `)
 					result, err = migration.Apply(content)
@@ -363,19 +363,19 @@ container = ""
 
 				BeforeEach(func() {
 					content = []byte(`+++
-identifier = "test_page"
-title = "Test Page"
+identifier = 'test_page'
+title = 'Test Page'
 
 [metadata]
-author = "John Doe"
-date = "2024-01-01"
+author = 'John Doe'
+date = '2024-01-01'
 
 [inventory]
-container = "StorageRoom"
-location = "Building A"
+container = 'StorageRoom'
+location = 'Building A'
 
 [tags]
-primary = ["tools", "hardware"]
+primary = ['tools', 'hardware']
 +++
 
 # Content`)
@@ -387,21 +387,21 @@ primary = ["tools", "hardware"]
 				})
 
 				It("should munge only the container value", func() {
-					Expect(string(result)).To(ContainSubstring(`container = "storage_room"`))
+					Expect(string(result)).To(ContainSubstring(`container = 'storage_room'`))
 				})
 
 				It("should preserve metadata section", func() {
 					Expect(string(result)).To(ContainSubstring("[metadata]"))
-					Expect(string(result)).To(ContainSubstring(`author = "John Doe"`))
+					Expect(string(result)).To(ContainSubstring(`author = 'John Doe'`))
 				})
 
 				It("should preserve tags section", func() {
 					Expect(string(result)).To(ContainSubstring("[tags]"))
-					Expect(string(result)).To(ContainSubstring(`primary = ["tools", "hardware"]`))
+					Expect(string(result)).To(ContainSubstring(`primary = ['tools', 'hardware']`))
 				})
 
 				It("should preserve other inventory fields", func() {
-					Expect(string(result)).To(ContainSubstring(`location = "Building A"`))
+					Expect(string(result)).To(ContainSubstring(`location = 'Building A'`))
 				})
 			})
 		})

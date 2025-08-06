@@ -55,8 +55,8 @@ var _ = Describe("Rolling Migrations during Open()", func() {
 			identifier = "garage_unit_3_shelf_a"
 			fileContent = `+++
 identifier = "garage_unit_3_shelf_a"
-title = "Garage Unit 3, Shelf A"
-inventory.container = "GarageInventory"
+title = 'Garage Unit 3, Shelf A'
+inventory.container = 'GarageInventory'
 +++
 # {{or .Title .Identifier }}
 ### Goes in: {{LinkTo .Inventory.Container }}
@@ -110,7 +110,7 @@ inventory.container = "GarageInventory"
 			})
 
 			It("should preserve container value in munged format", func() {
-				Expect(openedContent).To(ContainSubstring(`container = "garage_inventory"`))
+				Expect(openedContent).To(ContainSubstring(`container = 'garage_inventory'`))
 			})
 
 			Describe("when checking if file on disk was updated", func() {
@@ -164,13 +164,13 @@ inventory.container = "GarageInventory"
 		)
 
 		BeforeEach(func() {
-			identifier = "already_migrated_page"
+			identifier = "garage_unit_3_shelf_a"
 			fileContent = `+++
-identifier = "already_migrated_page"
-title = "Already Migrated Page"
+identifier = "garage_unit_3_shelf_a"
+title = 'Already Migrated Page'
 
 [inventory]
-container = "already_migrated"
+container = 'already_migrated'
 +++
 # Already migrated content`
 

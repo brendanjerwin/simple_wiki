@@ -1,10 +1,9 @@
 package rollingmigrations
 
 import (
-	"bytes"
 	"strings"
 
-	"github.com/BurntSushi/toml"
+	"github.com/pelletier/go-toml/v2"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 )
 
@@ -85,14 +84,13 @@ func (*InventoryContainerMungingMigration) Apply(content []byte) ([]byte, error)
 	inventory["container"] = munged
 
 	// Marshal back to TOML
-	var buf bytes.Buffer
-	encoder := toml.NewEncoder(&buf)
-	if err := encoder.Encode(data); err != nil {
+	newFrontmatterBytes, err := toml.Marshal(data)
+	if err != nil {
 		return content, err
 	}
 
 	// Reconstruct the full content
-	newFrontmatter := strings.TrimSpace(buf.String())
+	newFrontmatter := strings.TrimSpace(string(newFrontmatterBytes))
 	result := "+++\n" + newFrontmatter + "\n+++\n" + body
 	return []byte(result), nil
 }

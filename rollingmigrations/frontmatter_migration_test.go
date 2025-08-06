@@ -24,8 +24,8 @@ var _ = Describe("Frontmatter Migration for inventory.container", func() {
 
 			BeforeEach(func() {
 				originalContent = `+++
-identifier = "garage_unit_3_shelf_a"
-title = "Garage Unit 3, Shelf A"
+identifier = 'garage_unit_3_shelf_a'
+title = 'Garage Unit 3, Shelf A'
 inventory.container = "GarageInventory"
 +++
 
@@ -47,7 +47,7 @@ This is the content.`
 			})
 
 			It("should convert container value to munged format", func() {
-				Expect(migratedContent).To(ContainSubstring(`container = "garage_inventory"`))
+				Expect(migratedContent).To(ContainSubstring(`container = 'garage_inventory'`))
 			})
 
 			It("should remove dotted notation", func() {
@@ -55,11 +55,11 @@ This is the content.`
 			})
 
 			It("should preserve identifier field", func() {
-				Expect(migratedContent).To(ContainSubstring(`identifier = "garage_unit_3_shelf_a"`))
+				Expect(migratedContent).To(ContainSubstring(`identifier = 'garage_unit_3_shelf_a'`))
 			})
 
 			It("should preserve title field", func() {
-				Expect(migratedContent).To(ContainSubstring(`title = "Garage Unit 3, Shelf A"`))
+				Expect(migratedContent).To(ContainSubstring(`title = 'Garage Unit 3, Shelf A'`))
 			})
 
 			It("should preserve body header", func() {
@@ -117,7 +117,7 @@ inventory.container = "TestContainer"
 				input = `+++
 identifier = "test2"
 inventory.container = "TestContainer"
-inventory.items = ["item1", "item2"]
+inventory.items = ['item1', 'item2']
 +++`
 
 				var resultBytes []byte
@@ -142,7 +142,7 @@ inventory.items = ["item1", "item2"]
 			})
 
 			It("should preserve other inventory fields", func() {
-				Expect(result).To(ContainSubstring(`items = ["item1", "item2"]`))
+				Expect(result).To(ContainSubstring(`items = ['item1', 'item2']`))
 			})
 		})
 
@@ -189,7 +189,7 @@ title = "Test"
 inventory.container = "TestContainer"
 
 [other]
-field = "value"
+field = 'value'
 +++`
 
 				var resultBytes []byte
@@ -218,7 +218,7 @@ field = "value"
 			})
 
 			It("should preserve other section field", func() {
-				Expect(result).To(ContainSubstring(`field = "value"`))
+				Expect(result).To(ContainSubstring(`field = 'value'`))
 			})
 		})
 

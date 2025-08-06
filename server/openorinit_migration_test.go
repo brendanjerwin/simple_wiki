@@ -56,9 +56,9 @@ var _ = Describe("OpenOrInit Migration Test", func() {
 		BeforeEach(func() {
 			identifier = "garage_unit_3_shelf_a"
 			fileContent = `+++
-identifier = "garage_unit_3_shelf_a"
-title = "Garage Unit 3, Shelf A"
-inventory.container = "GarageInventory"
+identifier = 'garage_unit_3_shelf_a'
+title = 'Garage Unit 3, Shelf A'
+inventory.container = 'GarageInventory'
 +++
 # {{or .Title .Identifier }}
 ### Goes in: {{LinkTo .Inventory.Container }}
@@ -110,7 +110,7 @@ inventory.container = "GarageInventory"
 					"Content should not contain dotted notation after migration")
 				Expect(content).To(ContainSubstring("[inventory]"),
 					"Content should contain [inventory] section after migration")
-				Expect(content).To(ContainSubstring(`container = "garage_inventory"`),
+				Expect(content).To(ContainSubstring(`container = 'garage_inventory'`),
 					"Content should contain the munged container value")
 			})
 

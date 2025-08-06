@@ -42,8 +42,8 @@ var _ = Describe("IdentifierMungingMigration", func() {
 
 			BeforeEach(func() {
 				content = []byte(`+++
-identifier = "lab_smallparts_1A6"
-title = "Lab Small Parts Bin 1A6"
+identifier = 'lab_smallparts_1A6'
+title = 'Lab Small Parts Bin 1A6'
 +++
 
 # Lab Small Parts Content`)
@@ -61,8 +61,8 @@ title = "Lab Small Parts Bin 1A6"
 
 			BeforeEach(func() {
 				content = []byte(`+++
-identifier = "lab_smallparts_1a6"
-title = "Lab Small Parts Bin 1A6"
+identifier = 'lab_smallparts_1a6'
+title = 'Lab Small Parts Bin 1A6'
 +++
 
 # Lab Small Parts Content`)
@@ -80,8 +80,8 @@ title = "Lab Small Parts Bin 1A6"
 
 			BeforeEach(func() {
 				content = []byte(`+++
-title = "Test Page"
-author = "John Doe"
+title = 'Test Page'
+author = 'John Doe'
 +++
 
 # Test Page Content`)
@@ -119,7 +119,7 @@ title: Lab Small Parts Bin 1A6
 			BeforeEach(func() {
 				content = []byte(`+++
 identifier = "unclosed_string
-title = "Test"
+title = 'Test'
 +++`)
 				applies = migration.AppliesTo(content)
 			})
@@ -138,8 +138,8 @@ title = "Test"
 
 			BeforeEach(func() {
 				content = []byte(`+++
-identifier = "lab_smallparts_1A6"
-title = "Lab Small Parts Bin 1A6"
+identifier = 'lab_smallparts_1A6'
+title = 'Lab Small Parts Bin 1A6'
 +++
 
 # Lab Small Parts Content`)
@@ -151,15 +151,15 @@ title = "Lab Small Parts Bin 1A6"
 			})
 
 			It("should munge the identifier value", func() {
-				Expect(string(result)).To(ContainSubstring(`identifier = "lab_smallparts_1a6"`))
+				Expect(string(result)).To(ContainSubstring(`identifier = 'lab_smallparts_1a6'`))
 			})
 
 			It("should not change the original casing in identifier", func() {
-				Expect(string(result)).NotTo(ContainSubstring(`identifier = "lab_smallparts_1A6"`))
+				Expect(string(result)).NotTo(ContainSubstring(`identifier = 'lab_smallparts_1A6'`))
 			})
 
 			It("should preserve other fields", func() {
-				Expect(string(result)).To(ContainSubstring(`title = "Lab Small Parts Bin 1A6"`))
+				Expect(string(result)).To(ContainSubstring(`title = 'Lab Small Parts Bin 1A6'`))
 			})
 
 			It("should preserve body content", func() {
@@ -175,7 +175,7 @@ title = "Lab Small Parts Bin 1A6"
 
 				BeforeEach(func() {
 					content = []byte(`+++
-identifier = "lab_smallparts_1A6"
+identifier = 'lab_smallparts_1A6'
 +++
 `)
 					result, err = migration.Apply(content)
@@ -186,7 +186,7 @@ identifier = "lab_smallparts_1A6"
 				})
 
 				It("should munge to lab_smallparts_1a6", func() {
-					Expect(string(result)).To(ContainSubstring(`identifier = "lab_smallparts_1a6"`))
+					Expect(string(result)).To(ContainSubstring(`identifier = 'lab_smallparts_1a6'`))
 				})
 			})
 
@@ -197,7 +197,7 @@ identifier = "lab_smallparts_1A6"
 
 				BeforeEach(func() {
 					content = []byte(`+++
-identifier = "KitchenCabinet"
+identifier = 'KitchenCabinet'
 +++
 `)
 					result, err = migration.Apply(content)
@@ -208,7 +208,7 @@ identifier = "KitchenCabinet"
 				})
 
 				It("should munge to kitchen_cabinet", func() {
-					Expect(string(result)).To(ContainSubstring(`identifier = "kitchen_cabinet"`))
+					Expect(string(result)).To(ContainSubstring(`identifier = 'kitchen_cabinet'`))
 				})
 			})
 
@@ -219,7 +219,7 @@ identifier = "KitchenCabinet"
 
 				BeforeEach(func() {
 					content = []byte(`+++
-identifier = "MixedCASEExample"
+identifier = 'MixedCASEExample'
 +++
 `)
 					result, err = migration.Apply(content)
@@ -230,7 +230,7 @@ identifier = "MixedCASEExample"
 				})
 
 				It("should munge to mixed_case_example", func() {
-					Expect(string(result)).To(ContainSubstring(`identifier = "mixed_case_example"`))
+					Expect(string(result)).To(ContainSubstring(`identifier = 'mixed_case_example'`))
 				})
 			})
 
@@ -241,7 +241,7 @@ identifier = "MixedCASEExample"
 
 				BeforeEach(func() {
 					content = []byte(`+++
-identifier = "SimpleTest"
+identifier = 'SimpleTest'
 +++
 `)
 					result, err = migration.Apply(content)
@@ -252,7 +252,7 @@ identifier = "SimpleTest"
 				})
 
 				It("should munge to simple_test", func() {
-					Expect(string(result)).To(ContainSubstring(`identifier = "simple_test"`))
+					Expect(string(result)).To(ContainSubstring(`identifier = 'simple_test'`))
 				})
 			})
 
@@ -263,7 +263,7 @@ identifier = "SimpleTest"
 
 				BeforeEach(func() {
 					content = []byte(`+++
-identifier = "ALLCAPS"
+identifier = 'ALLCAPS'
 +++
 `)
 					result, err = migration.Apply(content)
@@ -274,7 +274,7 @@ identifier = "ALLCAPS"
 				})
 
 				It("should munge to allcaps", func() {
-					Expect(string(result)).To(ContainSubstring(`identifier = "allcaps"`))
+					Expect(string(result)).To(ContainSubstring(`identifier = 'allcaps'`))
 				})
 			})
 		})
@@ -286,8 +286,8 @@ identifier = "ALLCAPS"
 
 			BeforeEach(func() {
 				content = []byte(`+++
-identifier = "lab_smallparts_1a6"
-title = "Lab Small Parts Bin 1A6"
+identifier = 'lab_smallparts_1a6'
+title = 'Lab Small Parts Bin 1A6'
 +++
 
 # Lab Small Parts Content`)
@@ -311,7 +311,7 @@ title = "Lab Small Parts Bin 1A6"
 
 				BeforeEach(func() {
 					content = []byte(`+++
-identifier = "LabTub_61c0030e-00e3-47b5-a797-1ac01f8d05b1"
+identifier = 'LabTub_61c0030e-00e3-47b5-a797-1ac01f8d05b1'
 +++
 `)
 					result, err = migration.Apply(content)
@@ -322,7 +322,7 @@ identifier = "LabTub_61c0030e-00e3-47b5-a797-1ac01f8d05b1"
 				})
 
 				It("should lowercase the identifier with UUID", func() {
-					Expect(string(result)).To(ContainSubstring(`identifier = "labtub_61c0030e-00e3-47b5-a797-1ac01f8d05b1"`))
+					Expect(string(result)).To(ContainSubstring(`identifier = 'labtub_61c0030e-00e3-47b5-a797-1ac01f8d05b1'`))
 				})
 			})
 
@@ -333,7 +333,7 @@ identifier = "LabTub_61c0030e-00e3-47b5-a797-1ac01f8d05b1"
 
 				BeforeEach(func() {
 					content = []byte(`+++
-identifier = ""
+identifier = ''
 +++
 `)
 					result, err = migration.Apply(content)
@@ -355,19 +355,19 @@ identifier = ""
 
 				BeforeEach(func() {
 					content = []byte(`+++
-identifier = "TestPageID"
-title = "Test Page"
+identifier = 'TestPageID'
+title = 'Test Page'
 
 [metadata]
-author = "John Doe"
-date = "2024-01-01"
+author = 'John Doe'
+date = '2024-01-01'
 
 [inventory]
-container = "storage_room"
-location = "Building A"
+container = 'storage_room'
+location = 'Building A'
 
 [tags]
-primary = ["tools", "hardware"]
+primary = ['tools', 'hardware']
 +++
 
 # Content`)
@@ -379,22 +379,22 @@ primary = ["tools", "hardware"]
 				})
 
 				It("should munge only the identifier value", func() {
-					Expect(string(result)).To(ContainSubstring(`identifier = "test_page_id"`))
+					Expect(string(result)).To(ContainSubstring(`identifier = 'test_page_id'`))
 				})
 
 				It("should preserve metadata section", func() {
 					Expect(string(result)).To(ContainSubstring("[metadata]"))
-					Expect(string(result)).To(ContainSubstring(`author = "John Doe"`))
+					Expect(string(result)).To(ContainSubstring(`author = 'John Doe'`))
 				})
 
 				It("should preserve inventory section", func() {
 					Expect(string(result)).To(ContainSubstring("[inventory]"))
-					Expect(string(result)).To(ContainSubstring(`container = "storage_room"`))
+					Expect(string(result)).To(ContainSubstring(`container = 'storage_room'`))
 				})
 
 				It("should preserve tags section", func() {
 					Expect(string(result)).To(ContainSubstring("[tags]"))
-					Expect(string(result)).To(ContainSubstring(`primary = ["tools", "hardware"]`))
+					Expect(string(result)).To(ContainSubstring(`primary = ['tools', 'hardware']`))
 				})
 			})
 
@@ -405,8 +405,8 @@ primary = ["tools", "hardware"]
 
 				BeforeEach(func() {
 					content = []byte(`+++
-title = "Test Page"
-author = "John Doe"
+title = 'Test Page'
+author = 'John Doe'
 +++
 
 # Content`)
@@ -430,7 +430,7 @@ author = "John Doe"
 				BeforeEach(func() {
 					content = []byte(`+++
 identifier = "unclosed_string
-title = "Test"
+title = 'Test'
 +++`)
 					result, err = migration.Apply(content)
 				})
