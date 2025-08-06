@@ -46,15 +46,14 @@ var _ = Describe("FrontmatterIndexJob", func() {
 		mockIndex = &MockIndexOperator{}
 	})
 
-	It("should exist", func() {
-		job := &index.FrontmatterIndexJob{}
-		Expect(job).NotTo(BeNil())
-	})
 
 	It("should implement the Job interface", func() {
 		job := index.NewFrontmatterIndexJob(mockIndex, "test-page", index.Add)
 		var jobInterface jobs.Job = job
-		Expect(jobInterface).NotTo(BeNil())
+		
+		// Test that interface methods can be called
+		Expect(jobInterface.GetName()).To(Equal("FrontmatterIndex"))
+		Expect(jobInterface.Execute).NotTo(BeNil())
 	})
 
 	Describe("when creating a new job", func() {
@@ -180,15 +179,14 @@ var _ = Describe("BleveIndexJob", func() {
 		mockIndex = &MockIndexOperator{}
 	})
 
-	It("should exist", func() {
-		job := &index.BleveIndexJob{}
-		Expect(job).NotTo(BeNil())
-	})
 
 	It("should implement the Job interface", func() {
 		job := index.NewBleveIndexJob(mockIndex, "test-page", index.Add)
 		var jobInterface jobs.Job = job
-		Expect(jobInterface).NotTo(BeNil())
+		
+		// Test that interface methods can be called
+		Expect(jobInterface.GetName()).To(Equal("BleveIndex"))
+		Expect(jobInterface.Execute).NotTo(BeNil())
 	})
 
 	Describe("when creating a new job", func() {
