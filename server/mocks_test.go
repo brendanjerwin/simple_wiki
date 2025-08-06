@@ -1,36 +1,8 @@
 package server
 
 import (
-	"github.com/brendanjerwin/simple_wiki/index"
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
-	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
-
-// MockIndexMaintainer is a mock implementation of index.IMaintainIndex for testing.
-type MockIndexMaintainer struct {
-	AddPageToIndexCalledWith      wikipage.PageIdentifier
-	RemovePageFromIndexCalledWith wikipage.PageIdentifier
-	AddPageToIndexError           error // Error to return from AddPageToIndex
-}
-
-func (m *MockIndexMaintainer) AddPageToIndex(identifier wikipage.PageIdentifier) error {
-	m.AddPageToIndexCalledWith = identifier
-	if m.AddPageToIndexError != nil {
-		return m.AddPageToIndexError
-	}
-	return nil
-}
-
-func (m *MockIndexMaintainer) RemovePageFromIndex(identifier wikipage.PageIdentifier) error {
-	m.RemovePageFromIndexCalledWith = identifier
-	return nil
-}
-
-func (*MockIndexMaintainer) Name() string {
-	return "mock"
-}
-
-var _ index.IMaintainIndex = (*MockIndexMaintainer)(nil)
 
 // mockFrontmatterIndexQueryer is a mock implementation of the FrontmatterIndexQueryer for testing.
 type mockFrontmatterIndexQueryer struct {

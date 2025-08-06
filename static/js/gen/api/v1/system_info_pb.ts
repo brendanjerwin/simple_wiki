@@ -84,3 +84,181 @@ export class GetVersionResponse extends Message<GetVersionResponse> {
   }
 }
 
+/**
+ * The request message for the GetJobStatus RPC.
+ *
+ * @generated from message api.v1.GetJobStatusRequest
+ */
+export class GetJobStatusRequest extends Message<GetJobStatusRequest> {
+  constructor(data?: PartialMessage<GetJobStatusRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "api.v1.GetJobStatusRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GetJobStatusRequest {
+    return new GetJobStatusRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): GetJobStatusRequest {
+    return new GetJobStatusRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): GetJobStatusRequest {
+    return new GetJobStatusRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: GetJobStatusRequest | PlainMessage<GetJobStatusRequest> | undefined, b: GetJobStatusRequest | PlainMessage<GetJobStatusRequest> | undefined): boolean {
+    return proto3.util.equals(GetJobStatusRequest, a, b);
+  }
+}
+
+/**
+ * The request message for the StreamJobStatus RPC.
+ *
+ * @generated from message api.v1.StreamJobStatusRequest
+ */
+export class StreamJobStatusRequest extends Message<StreamJobStatusRequest> {
+  /**
+   * Optional: interval in milliseconds for updates (default: 1000ms)
+   *
+   * @generated from field: optional int32 update_interval_ms = 1;
+   */
+  updateIntervalMs?: number;
+
+  constructor(data?: PartialMessage<StreamJobStatusRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "api.v1.StreamJobStatusRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "update_interval_ms", kind: "scalar", T: 5 /* ScalarType.INT32 */, opt: true },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): StreamJobStatusRequest {
+    return new StreamJobStatusRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): StreamJobStatusRequest {
+    return new StreamJobStatusRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): StreamJobStatusRequest {
+    return new StreamJobStatusRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: StreamJobStatusRequest | PlainMessage<StreamJobStatusRequest> | undefined, b: StreamJobStatusRequest | PlainMessage<StreamJobStatusRequest> | undefined): boolean {
+    return proto3.util.equals(StreamJobStatusRequest, a, b);
+  }
+}
+
+/**
+ * The response message for the GetJobStatus RPC.
+ *
+ * @generated from message api.v1.GetJobStatusResponse
+ */
+export class GetJobStatusResponse extends Message<GetJobStatusResponse> {
+  /**
+   * @generated from field: repeated api.v1.JobQueueStatus job_queues = 1;
+   */
+  jobQueues: JobQueueStatus[] = [];
+
+  constructor(data?: PartialMessage<GetJobStatusResponse>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "api.v1.GetJobStatusResponse";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "job_queues", kind: "message", T: JobQueueStatus, repeated: true },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GetJobStatusResponse {
+    return new GetJobStatusResponse().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): GetJobStatusResponse {
+    return new GetJobStatusResponse().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): GetJobStatusResponse {
+    return new GetJobStatusResponse().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: GetJobStatusResponse | PlainMessage<GetJobStatusResponse> | undefined, b: GetJobStatusResponse | PlainMessage<GetJobStatusResponse> | undefined): boolean {
+    return proto3.util.equals(GetJobStatusResponse, a, b);
+  }
+}
+
+/**
+ * Status information for a single job queue.
+ *
+ * @generated from message api.v1.JobQueueStatus
+ */
+export class JobQueueStatus extends Message<JobQueueStatus> {
+  /**
+   * "Frontmatter", "Bleve", "File Scan"
+   *
+   * @generated from field: string name = 1;
+   */
+  name = "";
+
+  /**
+   * Current queue depth
+   *
+   * @generated from field: int32 jobs_remaining = 2;
+   */
+  jobsRemaining = 0;
+
+  /**
+   * Peak, resets to 0 when empty
+   *
+   * @generated from field: int32 high_water_mark = 3;
+   */
+  highWaterMark = 0;
+
+  /**
+   * jobs_remaining > 0
+   *
+   * @generated from field: bool is_active = 4;
+   */
+  isActive = false;
+
+  constructor(data?: PartialMessage<JobQueueStatus>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "api.v1.JobQueueStatus";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "jobs_remaining", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 3, name: "high_water_mark", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
+    { no: 4, name: "is_active", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): JobQueueStatus {
+    return new JobQueueStatus().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): JobQueueStatus {
+    return new JobQueueStatus().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): JobQueueStatus {
+    return new JobQueueStatus().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: JobQueueStatus | PlainMessage<JobQueueStatus> | undefined, b: JobQueueStatus | PlainMessage<JobQueueStatus> | undefined): boolean {
+    return proto3.util.equals(JobQueueStatus, a, b);
+  }
+}
+

@@ -26,6 +26,11 @@ type PageDeleter interface {
 	DeletePage(identifier PageIdentifier) error
 }
 
+// PageOpener is an interface for opening pages as full Page objects.
+type PageOpener interface {
+	ReadPage(identifier PageIdentifier) (*Page, error)
+}
+
 // PageReaderMutator is an interface that combines PageReader, PageWriter, and PageDeleter.
 type PageReaderMutator interface {
 	PageReader

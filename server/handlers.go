@@ -18,16 +18,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brendanjerwin/simple_wiki/rollingmigrations"
 	"github.com/brendanjerwin/simple_wiki/sec"
 	"github.com/brendanjerwin/simple_wiki/static"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
-	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
 	"github.com/brendanjerwin/simple_wiki/utils/slicetools"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 	ginteenysecurity "github.com/danielheath/gin-teeny-security"
 	"github.com/gin-contrib/multitemplate"
 	"github.com/gin-contrib/sessions"
-	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 	"github.com/jcelliott/lumber"
 )
@@ -55,61 +53,6 @@ var (
 	LogLevel             int = lumber.WARN
 )
 
-func NewSite(
-	filepathToData string,
-	cssFile string,
-	defaultPage string,
-	defaultPassword string,
-	debounce int,
-	secret string,
-	secretCode string,
-	fileuploads bool,
-	maxUploadSize uint,
-	maxDocumentSize uint,
-	logger *lumber.ConsoleLogger,
-) (*Site, error) {
-	var customCSS []byte
-	// collect custom CSS
-	if len(cssFile) > 0 {
-		var errRead error
-		customCSS, errRead = os.ReadFile(cssFile)
-		if errRead != nil {
-			return nil, fmt.Errorf("failed to read CSS file %s: %w", cssFile, errRead)
-		}
-		_, _ = fmt.Printf("Loaded CSS file, %d bytes\n", len(customCSS))
-	}
-
-	logger.Info("Initializing simple_wiki site...")
-	
-	// Set up migration applicator with default migrations
-	logger.Info("Setting up rolling migrations system")
-	applicator := rollingmigrations.NewApplicator()
-
-	site := &Site{
-		PathToData:          filepathToData,
-		CSS:                 customCSS,
-		DefaultPage:         defaultPage,
-		DefaultPassword:     defaultPassword,
-		Debounce:            debounce,
-		SessionStore:        cookie.NewStore([]byte(secret)),
-		SecretCode:          secretCode,
-		Fileuploads:         fileuploads,
-		MaxUploadSize:       maxUploadSize,
-		MaxDocumentSize:     maxDocumentSize,
-		Logger:              logger,
-		MigrationApplicator: applicator,
-		MarkdownRenderer:    &goldmarkrenderer.GoldmarkRenderer{},
-	}
-
-	logger.Info("Initializing site indexing...")
-	err := site.InitializeIndexing()
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize site: %w", err)
-	}
-	
-	logger.Info("Site initialization complete")
-	return site, nil
-}
 
 // GinRouter returns a new Gin router configured for the site.
 func (s *Site) GinRouter() *gin.Engine {
@@ -191,7 +134,7 @@ func (s *Site) loadTemplate() multitemplate.Render {
 	return r
 }
 
-func pageIsLocked(p *Page, c *gin.Context, logger *lumber.ConsoleLogger) bool {
+func pageIsLocked(p *wikipage.Page, c *gin.Context, logger *lumber.ConsoleLogger) bool {
 	// it is easier to reason about when the page is actually unlocked
 	unlocked := !p.IsLocked ||
 		(p.IsLocked && p.UnlockedFor == getSetSessionID(c, logger))
@@ -214,7 +157,12 @@ func (s *Site) handlePageRelinquish(c *gin.Context) {
 		return
 	}
 	message := "Relinquished"
-	p := s.Open(json.Page)
+	p, err := s.ReadPage(json.Page)
+	if err != nil {
+		s.Logger.Error("Failed to open page %s for relinquish: %v", json.Page, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to open page"})
+		return
+	}
 	name := p.Meta
 	if name == "" {
 		name = json.Page
@@ -222,7 +170,7 @@ func (s *Site) handlePageRelinquish(c *gin.Context) {
 	text := p.Text.GetCurrent()
 	isLocked := pageIsLocked(p, c, s.Logger)
 	if !isLocked {
-		if err := p.Erase(); err != nil {
+		if err := s.DeletePage(p.Identifier); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to erase page"})
 			return
 		}
@@ -282,7 +230,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		return
 	}
 
-	p, err := s.OpenOrInit(page, c.Request)
+	p, err := s.readOrInitPage(page, c.Request)
 	if err != nil {
 		s.Logger.Error("Failed to initialize page '%s': %v", page, err)
 		c.String(http.StatusInternalServerError, "Failed to initialize page")
@@ -328,7 +276,7 @@ func (s *Site) handleSpecialPages(c *gin.Context, page, command string) bool {
 }
 
 // renderPageContent handles the final page content rendering
-func (s *Site) renderPageContent(c *gin.Context, page, command string, p *Page, version string, isLocked bool) {
+func (s *Site) renderPageContent(c *gin.Context, page, command string, p *wikipage.Page, version string, isLocked bool) {
 	rawText, contentHTML := s.getPageContent(p, version)
 	contentHTML = fmt.Appendf(nil, "<article class='content' id='%s'>%s</article>", page, string(contentHTML))
 
@@ -353,7 +301,7 @@ func (s *Site) renderPageContent(c *gin.Context, page, command string, p *Page, 
 	c.HTML(http.StatusOK, "index.tmpl", templateData)
 }
 
-func (*Site) getPageContent(p *Page, version string) (rawText string, contentHTML []byte) {
+func (s *Site) getPageContent(p *wikipage.Page, version string) (rawText string, contentHTML []byte) {
 	rawText = p.Text.GetCurrent()
 	contentHTML = p.RenderedPage
 
@@ -363,7 +311,7 @@ func (*Site) getPageContent(p *Page, version string) (rawText string, contentHTM
 		versionText, err := p.Text.GetPreviousByTimestamp(int64(versionInt))
 		if err == nil {
 			rawText = versionText
-			contentHTML, _ = p.Site.MarkdownRenderer.Render([]byte(rawText))
+			contentHTML, _ = s.MarkdownRenderer.Render([]byte(rawText))
 		}
 	}
 	return rawText, contentHTML
@@ -386,7 +334,7 @@ func (s *Site) getDirectoryEntries(page, command string) ([]os.FileInfo, string,
 	return directoryEntries, command, nil
 }
 
-func (*Site) getVersionHistory(command string, p *Page) (versionsInt64 []int64, versionsChangeSums []int, versionsText []string) {
+func (*Site) getVersionHistory(command string, p *wikipage.Page) (versionsInt64 []int64, versionsChangeSums []int, versionsText []string) {
 	if command[0:2] == "/h" {
 		versionsInt64, versionsChangeSums = p.Text.GetMajorSnapshotsAndChangeSums(maxCacheControl) // get snapshots 60 seconds apart
 		versionsText = make([]string, len(versionsInt64))
@@ -480,7 +428,12 @@ func (s *Site) handlePageExists(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Wrong JSON", "exists": false})
 		return
 	}
-	p := s.Open(json.Page)
+	p, err := s.ReadPage(json.Page)
+	if err != nil {
+		s.Logger.Error("Failed to open page %s for exists check: %v", json.Page, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to open page", "exists": false})
+		return
+	}
 	if len(p.Text.GetCurrent()) > 0 {
 		c.JSON(http.StatusOK, gin.H{"success": true, "message": json.Page + " found", "exists": true})
 	} else {
@@ -511,10 +464,15 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 		return
 	}
 	s.Logger.Trace("Update: %v", json)
-	p := s.Open(json.Page)
+	p, err := s.ReadPage(json.Page)
+	if err != nil {
+		s.Logger.Error("Failed to open page %s for update: %v", json.Page, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to open page"})
+		return
+	}
 	var (
 		message       string
-		sinceLastEdit = time.Since(p.LastEditTime())
+		sinceLastEdit = time.Since(lastEditTime(p))
 	)
 	success := false
 	if pageIsLocked(p, c, s.Logger) {
@@ -525,11 +483,11 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 			// editing thus they both suceeds but only one is able to edit
 			message = "Locked, must unlock first"
 		}
-	} else if json.FetchedAt > 0 && p.LastEditUnixTime() > json.FetchedAt {
+	} else if json.FetchedAt > 0 && lastEditUnixTime(p) > json.FetchedAt {
 		message = "Refusing to overwrite others work"
 	} else {
 		p.Meta = json.Meta
-		if err := p.Update(json.NewText); err != nil {
+		if err := s.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), json.NewText); err != nil {
 			s.Logger.Error("Failed to save page '%s': %v", json.Page, err)
 			message = "Failed to save page"
 			success = false
@@ -552,7 +510,12 @@ func (s *Site) handleLock(c *gin.Context) {
 		c.String(http.StatusBadRequest, "Problem binding keys")
 		return
 	}
-	p := s.Open(json.Page)
+	p, err := s.ReadPage(json.Page)
+	if err != nil {
+		s.Logger.Error("Failed to open page %s for lock: %v", json.Page, err)
+		c.String(http.StatusInternalServerError, "Failed to open page")
+		return
+	}
 	if s.defaultLock() != "" && p.IsNew() {
 		p.IsLocked = true
 		p.PassphraseToUnlock = s.defaultLock()
@@ -561,7 +524,7 @@ func (s *Site) handleLock(c *gin.Context) {
 	var (
 		message       string
 		sessionID     = getSetSessionID(c, s.Logger)
-		sinceLastEdit = time.Since(p.LastEditTime())
+		sinceLastEdit = time.Since(lastEditTime(p))
 	)
 
 	// both lock/unlock ends here on locked&timeout combination
@@ -589,7 +552,7 @@ func (s *Site) handleLock(c *gin.Context) {
 		p.UnlockedFor = sessionID
 		message = "Unlocked only for you"
 	}
-	if err := p.Save(); err != nil {
+	if err := s.savePage(p); err != nil {
 		s.Logger.Error("Failed to save page lock state for '%s': %v", json.Page, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to save lock information"})
 		return
@@ -681,7 +644,7 @@ func (s *Site) handleUploads(c *gin.Context, command string) {
 	}
 }
 
-func (*Site) handleRawContent(c *gin.Context, command string, p *Page, rawText string) bool {
+func (*Site) handleRawContent(c *gin.Context, command string, p *wikipage.Page, rawText string) bool {
 	if len(command) > maxContentLength && command[0:maxContentLength] == "/ra" {
 		c.Writer.Header().Set("Content-Type", "text/plain")
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
@@ -695,7 +658,7 @@ func (*Site) handleRawContent(c *gin.Context, command string, p *Page, rawText s
 	return false
 }
 
-func (*Site) handleFrontmatter(c *gin.Context, command string, p *Page) bool {
+func (*Site) handleFrontmatter(c *gin.Context, command string, p *wikipage.Page) bool {
 	if strings.HasPrefix(command, "/frontmatter") {
 		c.Data(http.StatusOK, gin.MIMEJSON, p.FrontmatterJSON)
 		return true
@@ -726,6 +689,6 @@ func GetRecentlyEditedForTesting(title string, c *gin.Context, logger *lumber.Co
 }
 
 // PageIsLockedForTesting exposes pageIsLocked for testing
-func PageIsLockedForTesting(p *Page, c *gin.Context, logger *lumber.ConsoleLogger) bool {
+func PageIsLockedForTesting(p *wikipage.Page, c *gin.Context, logger *lumber.ConsoleLogger) bool {
 	return pageIsLocked(p, c, logger)
 }

@@ -1,6 +1,6 @@
 import { html, css, LitElement } from 'lit';
 import { state } from 'lit/decorators.js';
-import { foundationCSS, dialogCSS, responsiveCSS, buttonCSS } from './shared-styles.js';
+import { colorCSS, typographyCSS, themeCSS, foundationCSS, dialogCSS, responsiveCSS, buttonCSS } from './shared-styles.js';
 import './error-display.js';
 import { type AugmentedError, type ErrorIcon, AugmentErrorService } from './augment-error-service.js';
 
@@ -60,6 +60,9 @@ export interface ConfirmationConfig {
  */
 export class ConfirmationDialog extends LitElement {
   static override styles = [
+    colorCSS,
+    typographyCSS,
+    themeCSS,
     foundationCSS,
     dialogCSS,
     responsiveCSS,
@@ -67,6 +70,8 @@ export class ConfirmationDialog extends LitElement {
     css`
       :host {
         display: none;
+        font-size: 11px;
+        line-height: 1.2;
       }
       
       :host([open]) {
@@ -74,61 +79,57 @@ export class ConfirmationDialog extends LitElement {
       }
 
       .dialog-content {
-        padding: 24px;
-        min-width: 400px;
-        max-width: 500px;
+        padding: 16px;
+        min-width: 320px;
+        max-width: 420px;
       }
 
       .dialog-icon {
-        font-size: 48px;
+        font-size: 24px;
         text-align: center;
-        margin-bottom: 16px;
+        margin-bottom: 12px;
+        opacity: 0.9;
       }
 
       .dialog-icon.warning {
-        color: #d9534f;
+        color: #dc3545;
       }
 
       .dialog-icon.info {
-        color: #5bc0de;
+        color: #6c757d;
       }
 
       .dialog-message {
         text-align: center;
-        margin-bottom: 16px;
-        line-height: 1.5;
-        font-size: 16px;
-        font-weight: 500;
+        margin-bottom: 12px;
+        font-weight: 600;
       }
 
       .dialog-description {
         text-align: center;
-        margin-bottom: 24px;
-        line-height: 1.5;
-        color: #666;
+        margin-bottom: 16px;
       }
 
       .dialog-description.irreversible {
-        font-weight: bold;
-        color: #d9534f;
+        font-weight: 600;
+        color: #dc3545;
       }
 
       .dialog-actions {
         display: flex;
-        gap: 12px;
+        gap: 8px;
         justify-content: flex-end;
-        margin-top: 24px;
+        margin-top: 16px;
       }
 
       .button {
-        padding: 8px 16px;
+        padding: 6px 12px;
         border: none;
         border-radius: 4px;
         cursor: pointer;
-        font-size: 14px;
         font-weight: 500;
-        transition: background-color 0.2s;
-        min-width: 80px;
+        transition: all 0.2s ease;
+        min-width: 64px;
       }
 
       .button:disabled {
@@ -136,61 +137,97 @@ export class ConfirmationDialog extends LitElement {
         cursor: not-allowed;
       }
 
+      .button:hover:not(:disabled) {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+
+      .button:active {
+        transform: translateY(0);
+      }
+
       .button-cancel {
         background: #6c757d;
         color: white;
+        border: 1px solid #6c757d;
       }
 
       .button-cancel:hover:not(:disabled) {
         background: #5a6268;
+        border-color: #5a6268;
       }
 
       .button-primary {
         background: #007bff;
         color: white;
+        border: 1px solid #007bff;
       }
 
       .button-primary:hover:not(:disabled) {
         background: #0056b3;
+        border-color: #0056b3;
       }
 
       .button-danger {
-        background: #d9534f;
+        background: #dc3545;
         color: white;
+        border: 1px solid #dc3545;
       }
 
       .button-danger:hover:not(:disabled) {
-        background: #c9302c;
+        background: #c82333;
+        border-color: #c82333;
       }
 
       .button-warning {
-        background: #f0ad4e;
-        color: white;
+        background: #ffc107;
+        color: #212529;
+        border: 1px solid #ffc107;
       }
 
       .button-warning:hover:not(:disabled) {
-        background: #ec971f;
-      }
-
-      .dialog-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.5);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 1000;
+        background: #e0a800;
+        border-color: #e0a800;
       }
 
       .dialog-box {
-        background: white;
-        border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         max-height: 90vh;
         overflow-y: auto;
+      }
+
+      /* Mobile responsive */
+      @media (max-width: 768px) {
+        .dialog-content {
+          padding: 12px;
+          min-width: 280px;
+          max-width: 320px;
+        }
+
+        .dialog-icon {
+          font-size: 20px;
+          margin-bottom: 8px;
+        }
+
+        .dialog-message {
+          font-size: 11px;
+          margin-bottom: 8px;
+        }
+
+        .dialog-description {
+          font-size: 10px;
+          margin-bottom: 12px;
+        }
+
+        .dialog-actions {
+          gap: 6px;
+          margin-top: 12px;
+        }
+
+        .button {
+          padding: 4px 8px;
+          font-size: 10px;
+          min-width: 48px;
+        }
       }
     `
   ];
@@ -293,25 +330,25 @@ export class ConfirmationDialog extends LitElement {
     const confirmButtonClass = `button button-${config.confirmVariant || 'danger'}`;
     
     return html`
-      <div class="dialog-overlay" @click=${this.handleOverlayClick}>
-        <div class="dialog-box">
-          <div class="dialog-content">
+      <div class="overlay" @click=${this.handleOverlayClick}>
+        <div class="container container-modal dialog-box">
+          <div class="dialog-content panel gap-sm">
             <div class="dialog-icon ${iconClass}">
               ${AugmentErrorService.getIconString(config.icon || 'warning')}
             </div>
             
-            <div class="dialog-message">
+            <div class="dialog-message text-primary font-mono text-base">
               ${config.message}
             </div>
 
             ${config.description ? html`
-              <div class="dialog-description ${config.irreversible ? 'irreversible' : ''}">
+              <div class="dialog-description text-muted font-mono text-sm ${config.irreversible ? 'irreversible' : ''}">
                 ${config.description}
               </div>
             ` : ''}
 
             ${config.irreversible ? html`
-              <div class="dialog-description irreversible">
+              <div class="dialog-description text-error font-mono text-sm irreversible">
                 This action cannot be undone.
               </div>
             ` : ''}
@@ -322,14 +359,14 @@ export class ConfirmationDialog extends LitElement {
 
             <div class="dialog-actions">
               <button 
-                class="button button-cancel" 
+                class="button button-cancel font-mono text-sm" 
                 @click=${this.handleCancel}
                 ?disabled=${this.loading}
               >
                 ${config.cancelText || 'Cancel'}
               </button>
               <button 
-                class="${confirmButtonClass}" 
+                class="${confirmButtonClass} font-mono text-sm" 
                 @click=${this.handleConfirm}
                 ?disabled=${this.loading}
               >

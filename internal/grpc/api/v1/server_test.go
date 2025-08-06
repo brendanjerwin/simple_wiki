@@ -20,6 +20,7 @@ import (
 	"github.com/onsi/gomega/types"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -163,6 +164,50 @@ func (m *MockPageReaderMutator) DeletePage(identifier wikipage.PageIdentifier) e
 	return m.DeleteErr
 }
 
+
+// MockJobStreamServer is a mock implementation of apiv1.SystemInfoService_StreamJobStatusServer for testing.
+type MockJobStreamServer struct {
+	SentMessages []*apiv1.GetJobStatusResponse
+	SendErr      error
+	ContextDone  bool
+}
+
+func (m *MockJobStreamServer) Send(response *apiv1.GetJobStatusResponse) error {
+	if m.SendErr != nil {
+		return m.SendErr
+	}
+	m.SentMessages = append(m.SentMessages, response)
+	return nil
+}
+
+func (m *MockJobStreamServer) Context() context.Context {
+	if m.ContextDone {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		return ctx
+	}
+	return context.Background()
+}
+
+func (*MockJobStreamServer) SetHeader(metadata.MD) error {
+	return nil
+}
+
+func (*MockJobStreamServer) SendHeader(metadata.MD) error {
+	return nil
+}
+
+func (*MockJobStreamServer) SetTrailer(metadata.MD) {
+}
+
+func (*MockJobStreamServer) SendMsg(any) error {
+	return nil
+}
+
+func (*MockJobStreamServer) RecvMsg(any) error {
+	return nil
+}
+
 var _ = Describe("Server", func() {
 	var (
 		server *v1.Server
@@ -189,7 +234,7 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, lumber.NewConsoleLogger(lumber.WARN))
+			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, nil, lumber.NewConsoleLogger(lumber.WARN))
 			res, err = server.GetFrontmatter(ctx, req)
 		})
 
@@ -332,7 +377,7 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, lumber.NewConsoleLogger(lumber.WARN))
+			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, nil, lumber.NewConsoleLogger(lumber.WARN))
 			resp, err = server.MergeFrontmatter(ctx, req)
 		})
 
@@ -540,7 +585,7 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, lumber.NewConsoleLogger(lumber.WARN))
+			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, nil, lumber.NewConsoleLogger(lumber.WARN))
 			resp, err = server.ReplaceFrontmatter(ctx, req)
 		})
 
@@ -739,7 +784,7 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, lumber.NewConsoleLogger(lumber.WARN))
+			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, nil, lumber.NewConsoleLogger(lumber.WARN))
 			resp, err = server.RemoveKeyAtPath(ctx, req)
 		})
 
@@ -1091,7 +1136,7 @@ var _ = Describe("Server", func() {
 			// Create a mock logger
 			logger = lumber.NewConsoleLogger(lumber.INFO)
 
-			server = v1.NewServer("test-commit", time.Now(), nil, logger)
+			server = v1.NewServer("test-commit", time.Now(), nil, nil, logger)
 		})
 
 		When("a successful gRPC call is made", func() {
@@ -1178,7 +1223,7 @@ var _ = Describe("Server", func() {
 			)
 
 			BeforeEach(func() {
-				server = v1.NewServer("test-commit", time.Now(), nil, nil)
+				server = v1.NewServer("test-commit", time.Now(), nil, nil, nil)
 
 				handler = func(ctx context.Context, req any) (any, error) {
 					return &apiv1.GetVersionResponse{Commit: "test"}, nil
@@ -1214,7 +1259,7 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, lumber.NewConsoleLogger(lumber.WARN))
+			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, nil, lumber.NewConsoleLogger(lumber.WARN))
 			resp, err = server.DeletePage(ctx, req)
 		})
 
@@ -1265,6 +1310,67 @@ var _ = Describe("Server", func() {
 			It("should call delete on the PageReaderMutator", func() {
 				Expect(mockPageReaderMutator.DeletedIdentifier).To(Equal(wikipage.PageIdentifier("test-page")))
 			})
+		})
+	})
+
+
+	Describe("GetJobStatus", func() {
+		var (
+			req *apiv1.GetJobStatusRequest
+			res *apiv1.GetJobStatusResponse
+			err error
+		)
+
+		BeforeEach(func() {
+			req = &apiv1.GetJobStatusRequest{}
+			server = v1.NewServer("commit", time.Now(), nil, nil, lumber.NewConsoleLogger(lumber.WARN))
+			res, err = server.GetJobStatus(ctx, req)
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return empty job queues for now", func() {
+			Expect(res).NotTo(BeNil())
+			Expect(res.JobQueues).To(BeEmpty())
+		})
+	})
+
+	Describe("StreamJobStatus", func() {
+		var (
+			req          *apiv1.StreamJobStatusRequest
+			streamServer *MockJobStreamServer
+		)
+
+		BeforeEach(func() {
+			req = &apiv1.StreamJobStatusRequest{}
+			streamServer = &MockJobStreamServer{}
+			server = v1.NewServer("commit", time.Now(), nil, nil, lumber.NewConsoleLogger(lumber.WARN))
+		})
+
+		var (
+			err          error
+			firstMessage *apiv1.GetJobStatusResponse
+		)
+
+		BeforeEach(func() {
+			// Set up context that gets cancelled after initial send
+			streamServer.ContextDone = true
+			err = server.StreamJobStatus(req, streamServer)
+			if len(streamServer.SentMessages) > 0 {
+				firstMessage = streamServer.SentMessages[0]
+			}
+		})
+
+		It("should handle context cancellation", func() {
+			Expect(err).To(Equal(context.Canceled))
+		})
+
+		It("should send initial empty response", func() {
+			Expect(streamServer.SentMessages).To(HaveLen(1))
+			Expect(firstMessage).NotTo(BeNil())
+			Expect(firstMessage.JobQueues).To(BeEmpty())
 		})
 	})
 })

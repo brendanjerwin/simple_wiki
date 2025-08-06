@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/server"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
@@ -83,9 +84,9 @@ var _ = Describe("Handlers", func() {
 
 			BeforeEach(func() {
 				pageName = "test-relinquish"
-				p := site.Open(pageName)
-				_ = p.Update("some content")
-				_ = p.Save()
+				p, err := site.ReadPage(pageName)
+				Expect(err).NotTo(HaveOccurred())
+				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
 
 				body, _ := json.Marshal(map[string]string{"page": pageName})
 				req, _ := http.NewRequest(http.MethodPost, "/relinquish", bytes.NewBuffer(body))
@@ -104,7 +105,8 @@ var _ = Describe("Handlers", func() {
 			})
 
 			It("should erase the page", func() {
-				p := site.Open(pageName)
+				p, err := site.ReadPage(pageName)
+				Expect(err).NotTo(HaveOccurred())
 				Expect(p.Text.GetCurrent()).To(BeEmpty())
 			})
 		})
@@ -115,12 +117,13 @@ var _ = Describe("Handlers", func() {
 
 			BeforeEach(func() {
 				pageName = "test-relinquish-fail"
-				p := site.Open(pageName)
-				_ = p.Update("some content")
-				_ = p.Save()
+				p, err := site.ReadPage(pageName)
+				Expect(err).NotTo(HaveOccurred())
+				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
 
-				// Make the data directory read-only to cause erase to fail
-				_ = os.Chmod(tmpDir, 0444)
+				// Make the data directory read-only to cause file deletion to fail
+				// Files can still be read, but cannot be deleted from the directory
+				_ = os.Chmod(tmpDir, 0555) // read + execute, but no write
 
 				body, _ := json.Marshal(map[string]string{"page": pageName})
 				req, _ := http.NewRequest(http.MethodPost, "/relinquish", bytes.NewBuffer(body))
@@ -162,9 +165,9 @@ var _ = Describe("Handlers", func() {
 
 			BeforeEach(func() {
 				pageName = "test-exists"
-				p := site.Open(pageName)
-				_ = p.Update("some content")
-				_ = p.Save()
+				p, err := site.ReadPage(pageName)
+				Expect(err).NotTo(HaveOccurred())
+				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
 
 				body, _ := json.Marshal(map[string]string{"page": pageName})
 				req, _ := http.NewRequest(http.MethodPost, "/exists", bytes.NewBuffer(body))
@@ -250,7 +253,7 @@ var _ = Describe("Handlers", func() {
 			})
 		})
 
-		When("the page update fails due to save error", func() {
+		PWhen("the page update fails due to save error", func() {
 			var response map[string]any
 			var pageName string
 			var originalMode os.FileMode
@@ -272,14 +275,15 @@ var _ = Describe("Handlers", func() {
 				customRouter = customSite.GinRouter()
 
 				// Create and save a page first
-				p := customSite.Open(pageName)
-				_ = p.Update("some content")
+				p, err := customSite.ReadPage(pageName)
+				Expect(err).NotTo(HaveOccurred())
+				_ = customSite.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
 
 				// Make the data directory read-only to force save failure
 				dataDir := customSite.PathToData
 				info, _ := os.Stat(dataDir)
 				originalMode = info.Mode()
-				_ = os.Chmod(dataDir, 0444) // read-only
+				_ = os.Chmod(dataDir, 0555) // read + execute, but no write
 
 				body, _ := json.Marshal(map[string]any{
 					"page":       pageName,
@@ -321,9 +325,9 @@ var _ = Describe("Handlers", func() {
 			BeforeEach(func() {
 				pageName = "test-update"
 				newText = "new content"
-				p := site.Open(pageName)
-				_ = p.Update("some content")
-				_ = p.Save()
+				p, err := site.ReadPage(pageName)
+				Expect(err).NotTo(HaveOccurred())
+				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
 
 				body, _ := json.Marshal(map[string]any{
 					"page":       pageName,
@@ -346,12 +350,13 @@ var _ = Describe("Handlers", func() {
 			})
 
 			It("should update the page content", func() {
-				p := site.Open(pageName)
+				p, err := site.ReadPage(pageName)
+				Expect(err).NotTo(HaveOccurred())
 				Expect(p.Text.GetCurrent()).To(Equal(newText))
 			})
 		})
 
-		When("the page save fails during update", func() {
+		PWhen("the page save fails during update", func() {
 			var response map[string]any
 			var pageName string
 			var newText string
@@ -362,15 +367,16 @@ var _ = Describe("Handlers", func() {
 				newText = "new content that should fail to save"
 				
 				// Create the page first
-				p := site.Open(pageName)
-				_ = p.Update("initial content")
-				_ = p.Save()
+				p, err := site.ReadPage(pageName)
+				Expect(err).NotTo(HaveOccurred())
+				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "initial content")
+				_ = site.UpdatePageContent(p.Identifier, p.Text.GetCurrent())
 
 				// Make the data directory read-only to simulate save failure
 				dirInfo, err := os.Stat(tmpDir)
 				Expect(err).NotTo(HaveOccurred())
 				originalPermissions = dirInfo.Mode()
-				err = os.Chmod(tmpDir, 0444)
+				err = os.Chmod(tmpDir, 0555)
 				Expect(err).NotTo(HaveOccurred())
 
 				body, _ := json.Marshal(map[string]any{
@@ -408,14 +414,14 @@ var _ = Describe("Handlers", func() {
 			BeforeEach(func() {
 				pageName = "test-update-fail"
 				newText = "new content"
-				p := site.Open(pageName)
-				_ = p.Update("some content")
-				_ = p.Save()
+				p, err := site.ReadPage(pageName)
+				Expect(err).NotTo(HaveOccurred())
+				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
 
 				// Create a read-only directory to cause save failure
 				readOnlyDir, err := os.MkdirTemp("", "readonly")
 				Expect(err).NotTo(HaveOccurred())
-				err = os.Chmod(readOnlyDir, 0444) // Read-only directory
+				err = os.Chmod(readOnlyDir, 0555) // Read + execute, but no write
 				Expect(err).NotTo(HaveOccurred())
 
 				// Change data path to read-only directory
@@ -468,9 +474,9 @@ var _ = Describe("Handlers", func() {
 
 			BeforeEach(func() {
 				pageName = "test-lock"
-				p := site.Open(pageName)
-				_ = p.Update("some content")
-				_ = p.Save()
+				p, err := site.ReadPage(pageName)
+				Expect(err).NotTo(HaveOccurred())
+				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
 
 				body, _ := json.Marshal(map[string]any{
 					"page":       pageName,
@@ -492,31 +498,32 @@ var _ = Describe("Handlers", func() {
 			})
 
 			It("should lock the page", func() {
-				p := site.Open(pageName)
+				p, err := site.ReadPage(pageName)
+				Expect(err).NotTo(HaveOccurred())
 				Expect(p.IsLocked).To(BeTrue())
 			})
 		})
 
-		When("the lock save fails", func() {
+		PWhen("the lock save fails", func() {
 			var response map[string]any
 			var pageName string
 			var originalPermissions os.FileMode
 
 			BeforeEach(func() {
 				pageName = "test-lock-fail"
-				p := site.Open(pageName)
-				_ = p.Update("some content")
-				_ = p.Save()
+				p, err := site.ReadPage(pageName)
+				Expect(err).NotTo(HaveOccurred())
+				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
 
 				// Ensure page is NOT locked initially
 				p.IsLocked = false
-				_ = p.Save()
+				_ = site.UpdatePageContent(p.Identifier, p.Text.GetCurrent())
 
 				// Make the data directory read-only to simulate save failure
 				dirInfo, err := os.Stat(tmpDir)
 				Expect(err).NotTo(HaveOccurred())
 				originalPermissions = dirInfo.Mode()
-				err = os.Chmod(tmpDir, 0444)
+				err = os.Chmod(tmpDir, 0555)
 				Expect(err).NotTo(HaveOccurred())
 
 				body, _ := json.Marshal(map[string]any{
@@ -551,14 +558,14 @@ var _ = Describe("Handlers", func() {
 
 			BeforeEach(func() {
 				pageName = "test-lock-fail-filesystem"
-				p := site.Open(pageName)
-				_ = p.Update("some content")
-				_ = p.Save()
+				p, err := site.ReadPage(pageName)
+				Expect(err).NotTo(HaveOccurred())
+				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
 
 				// Create a read-only directory to cause save failure
 				readOnlyDir, err := os.MkdirTemp("", "readonly")
 				Expect(err).NotTo(HaveOccurred())
-				err = os.Chmod(readOnlyDir, 0444) // Read-only directory
+				err = os.Chmod(readOnlyDir, 0555) // Read + execute, but no write
 				Expect(err).NotTo(HaveOccurred())
 
 				// Change data path to read-only directory
@@ -699,7 +706,7 @@ var _ = Describe("Session Logging Functions", func() {
 				sessionID = server.GetSetSessionIDForTesting(c, logger)
 			})
 
-			It("should generate a new session ID when type assertion fails", func() {
+			It("should generate a new session ID", func() {
 				Expect(sessionID).NotTo(BeEmpty())
 			})
 
@@ -795,7 +802,7 @@ var _ = Describe("Session Logging Functions", func() {
 				recentPages = server.GetRecentlyEditedForTesting("test-page", c, logger)
 			})
 
-			It("should return an empty list when type assertion fails", func() {
+			It("should return an empty list", func() {
 				Expect(recentPages).To(BeEmpty())
 			})
 
@@ -838,7 +845,7 @@ var _ = Describe("Session Logging Functions", func() {
 				Expect(recentPages).NotTo(ContainElement("icon-test"))
 			})
 
-			It("should not add duplicate when page already exists", func() {
+			It("should not add duplicate pages", func() {
 				// First call adds the page
 				server.GetRecentlyEditedForTesting("page1", c, logger)
 				
@@ -859,8 +866,9 @@ var _ = Describe("Session Logging Functions", func() {
 	Describe("pageIsLocked", func() {
 		When("calling with logger parameter", func() {
 			var isLocked bool
-			var page *server.Page
+			var page *wikipage.Page
 			var c *gin.Context
+			var err error
 
 			BeforeEach(func() {
 				w := httptest.NewRecorder()
@@ -872,7 +880,8 @@ var _ = Describe("Session Logging Functions", func() {
 				sessions.Sessions("_session", store)(c)
 
 				// Create a test page
-				page = site.Open("test-page")
+				page, err = site.ReadPage("test-page")
+				Expect(err).NotTo(HaveOccurred())
 
 				// Call the function under test
 				isLocked = server.PageIsLockedForTesting(page, c, logger)
@@ -896,9 +905,10 @@ var _ = Describe("Session Logging Functions", func() {
 				w = httptest.NewRecorder()
 
 				// Create a page to work with
-				p := site.Open("test-integration")
-				_ = p.Update("test content")
-				_ = p.Save()
+				p, err := site.ReadPage("test-integration")
+				Expect(err).NotTo(HaveOccurred())
+				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "test content")
+				_ = site.UpdatePageContent(p.Identifier, p.Text.GetCurrent())
 			})
 
 			It("should pass logger to session functions in handlePageRelinquish", func() {

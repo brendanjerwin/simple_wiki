@@ -15,9 +15,6 @@ var _ = Describe("GoldmarkRenderer", func() {
 		renderer = &goldmarkrenderer.GoldmarkRenderer{}
 	})
 
-	It("should exist", func() {
-		Expect(renderer).NotTo(BeNil())
-	})
 
 	Describe("Render", func() {
 		var (

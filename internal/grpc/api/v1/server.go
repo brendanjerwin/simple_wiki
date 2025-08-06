@@ -9,6 +9,7 @@ import (
 	"time"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
+	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
 	"google.golang.org/grpc"
@@ -69,10 +70,11 @@ type Server struct {
 	apiv1.UnimplementedSystemInfoServiceServer
 	apiv1.UnimplementedFrontmatterServer
 	apiv1.UnimplementedPageManagementServiceServer
-	Commit         string
-	BuildTime      time.Time
-	PageReaderMutator wikipage.PageReaderMutator
-	Logger         *lumber.ConsoleLogger
+	Commit              string
+	BuildTime           time.Time
+	PageReaderMutator   wikipage.PageReaderMutator
+	JobProgressProvider jobs.IProvideJobProgress
+	Logger              *lumber.ConsoleLogger
 }
 
 // MergeFrontmatter implements the MergeFrontmatter RPC.
@@ -283,12 +285,13 @@ func removeAtPath(data any, path []*apiv1.PathComponent) (any, error) {
 }
 
 // NewServer creates a new debug server
-func NewServer(commit string, buildTime time.Time, pageReadWriter wikipage.PageReaderMutator, logger *lumber.ConsoleLogger) *Server {
+func NewServer(commit string, buildTime time.Time, pageReadWriter wikipage.PageReaderMutator, jobProgressProvider jobs.IProvideJobProgress, logger *lumber.ConsoleLogger) *Server {
 	return &Server{
-		Commit:         commit,
-		BuildTime:      buildTime,
-		PageReaderMutator: pageReadWriter,
-		Logger:         logger,
+		Commit:              commit,
+		BuildTime:           buildTime,
+		PageReaderMutator:   pageReadWriter,
+		JobProgressProvider: jobProgressProvider,
+		Logger:              logger,
 	}
 }
 
@@ -305,6 +308,74 @@ func (s *Server) GetVersion(_ context.Context, _ *apiv1.GetVersionRequest) (*api
 		Commit:    s.Commit,
 		BuildTime: timestamppb.New(s.BuildTime),
 	}, nil
+}
+
+// GetJobStatus implements the GetJobStatus RPC.
+func (s *Server) GetJobStatus(_ context.Context, _ *apiv1.GetJobStatusRequest) (*apiv1.GetJobStatusResponse, error) {
+	return s.buildJobStatusResponse(), nil
+}
+
+// StreamJobStatus implements the StreamJobStatus RPC for real-time job queue updates.
+func (s *Server) StreamJobStatus(req *apiv1.StreamJobStatusRequest, stream apiv1.SystemInfoService_StreamJobStatusServer) error {
+	// Default to 1-second intervals, allow client to customize
+	interval := time.Duration(req.GetUpdateIntervalMs()) * time.Millisecond
+	if interval == 0 {
+		interval = 1 * time.Second
+	}
+
+	// Minimum interval to prevent excessive server load
+	const minIntervalMs = 100
+	if interval < minIntervalMs*time.Millisecond {
+		interval = minIntervalMs * time.Millisecond
+	}
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	// Send initial status immediately
+	response := s.buildJobStatusResponse()
+	if err := stream.Send(response); err != nil {
+		return err
+	}
+
+	// Stream updates at the specified interval
+	for {
+		select {
+		case <-ticker.C:
+			response := s.buildJobStatusResponse()
+			if err := stream.Send(response); err != nil {
+				return err
+			}
+		case <-stream.Context().Done():
+			return stream.Context().Err()
+		}
+	}
+}
+
+// buildJobStatusResponse builds a GetJobStatusResponse from the job progress provider.
+func (s *Server) buildJobStatusResponse() *apiv1.GetJobStatusResponse {
+	if s.JobProgressProvider == nil {
+		return &apiv1.GetJobStatusResponse{
+			JobQueues: []*apiv1.JobQueueStatus{},
+		}
+	}
+
+	progress := s.JobProgressProvider.GetJobProgress()
+	var protoQueues []*apiv1.JobQueueStatus
+
+	for _, queueStats := range progress.QueueStats {
+		protoQueue := &apiv1.JobQueueStatus{
+			Name:          queueStats.QueueName,
+			JobsRemaining: queueStats.JobsRemaining,
+			HighWaterMark: queueStats.HighWaterMark,
+			IsActive:      queueStats.IsActive,
+		}
+		protoQueues = append(protoQueues, protoQueue)
+	}
+
+	return &apiv1.GetJobStatusResponse{
+		JobQueues: protoQueues,
+	}
 }
 
 // GetFrontmatter implements the GetFrontmatter RPC.

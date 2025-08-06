@@ -8,6 +8,27 @@ const meta: Meta = {
   component: 'error-display',
   parameters: {
     layout: 'centered',
+    docs: {
+      description: {
+        component: `
+A compact error display component styled to match the system-info design language.
+
+**Key Visual Features:**
+- Dark grey background (#2d2d2d) matching system-info component
+- Red error accents (#dc3545) for clear error indication
+- Compact monospace typography for technical error details
+- Expandable stack trace with subtle red background
+- Maintains error semantics while using system-info styling
+- No opacity effects since it's always embedded in containers
+
+**Usage:**
+\`\`\`typescript
+import { ErrorDisplay } from './error-display.js';
+<error-display .augmentedError=\${augmentedError}></error-display>
+\`\`\`
+        `,
+      },
+    },
   },
   argTypes: {
     augmentedError: { control: 'object' },

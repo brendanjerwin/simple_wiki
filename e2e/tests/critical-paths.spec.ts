@@ -11,6 +11,14 @@ function formatTimestamp(): string {
   return new Date().toISOString().slice(0, 19);
 }
 
+// Helper function to match frontmatter fields with flexible quote handling
+function frontMatterStringMatcher(key: string, value: string): RegExp {
+  // Matches: key = "value" or key = 'value'
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escapedValue = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`${escapedKey}\\s*=\\s*['"]${escapedValue}['"]`);
+}
+
 test.describe('Simple Wiki E2E Critical Paths', () => {
   
   test('should load the home page editing interface successfully', async ({ page }) => {
@@ -27,7 +35,7 @@ test.describe('Simple Wiki E2E Critical Paths', () => {
     // Should have some default content with frontmatter
     const textarea = page.locator('#userInput');
     const content = await textarea.inputValue();
-    expect(content).toContain('identifier = "home"');
+    expect(content).toMatch(frontMatterStringMatcher('identifier', 'home'));
   });
 
   test('should create and edit a new page', async ({ page }) => {

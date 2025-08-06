@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { GetVersionRequest, GetVersionResponse } from "./system_info_pb.js";
+import { GetJobStatusRequest, GetJobStatusResponse, GetVersionRequest, GetVersionResponse, StreamJobStatusRequest } from "./system_info_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -22,6 +22,29 @@ export const SystemInfoService = {
       I: GetVersionRequest,
       O: GetVersionResponse,
       kind: MethodKind.Unary,
+    },
+    /**
+     * GetJobStatus returns the current status of background job queues.
+     *
+     * @generated from rpc api.v1.SystemInfoService.GetJobStatus
+     */
+    getJobStatus: {
+      name: "GetJobStatus",
+      I: GetJobStatusRequest,
+      O: GetJobStatusResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * StreamJobStatus provides real-time streaming updates of job queue status.
+     * The stream will automatically terminate when all queues are idle.
+     *
+     * @generated from rpc api.v1.SystemInfoService.StreamJobStatus
+     */
+    streamJobStatus: {
+      name: "StreamJobStatus",
+      I: StreamJobStatusRequest,
+      O: GetJobStatusResponse,
+      kind: MethodKind.ServerStreaming,
     },
   }
 } as const;

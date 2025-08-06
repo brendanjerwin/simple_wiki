@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
+	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/gin-gonic/gin"
 	. "github.com/onsi/ginkgo/v2"
@@ -338,7 +339,9 @@ var _ = Describe("API Handlers", func() {
 		Describe("handleSearch", func() {
 			BeforeEach(func() {
 				gin.SetMode(gin.TestMode)
-				s = &Site{}
+				s = &Site{
+					MigrationApplicator: lazy.NewEmptyApplicator(),
+				}
 				w = httptest.NewRecorder()
 				router = gin.Default()
 				router.GET("/api/search", s.handleSearch)
@@ -436,7 +439,9 @@ var _ = Describe("API Handlers", func() {
 		Describe("handlePrintLabel", func() {
 			BeforeEach(func() {
 				gin.SetMode(gin.TestMode)
-				s = &Site{}
+				s = &Site{
+					MigrationApplicator: lazy.NewEmptyApplicator(),
+				}
 				w = httptest.NewRecorder()
 				router = gin.Default()
 				router.POST("/api/print_label", s.handlePrintLabel)

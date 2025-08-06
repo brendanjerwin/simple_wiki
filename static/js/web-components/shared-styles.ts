@@ -6,11 +6,204 @@ export const sharedStyles = html`
 `;
 
 /* ==========================================================================
-   Foundation Styles
+   Color System
+   ========================================================================== */
+
+export const colorCSS = css`
+  :host {
+    /* Background Colors */
+    --color-background-primary: #2d2d2d;
+    --color-background-overlay: rgba(0, 0, 0, 0.5);
+    --color-border-primary: #404040;
+    --color-border-subtle: rgba(255, 255, 255, 0.1);
+    
+    /* Text Colors */
+    --color-text-primary: #e9ecef;
+    --color-text-muted: #adb5bd;
+    --color-text-inverse: #333;
+    
+    /* Semantic Colors */
+    --color-success: #28a745;
+    --color-error: #dc3545;
+    --color-warning: #ffc107;
+    --color-info: #6c757d;
+    
+    /* Interactive States */
+    --color-hover-light: rgba(255, 255, 255, 0.1);
+    --color-hover-error: #ff6b7a;
+    
+    /* Shadows */
+    --shadow-subtle: 0 1px 3px rgba(0, 0, 0, 0.3);
+    --shadow-medium: 0 4px 12px rgba(0, 0, 0, 0.15);
+    
+    /* Transitions */
+    --transition-opacity: opacity 0.3s ease;
+    --transition-all: all 0.2s ease;
+  }
+`;
+
+/* ==========================================================================
+   Typography System
+   ========================================================================== */
+
+export const typographyCSS = css`
+  /* Font Families */
+  .font-system {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+      'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+      sans-serif;
+  }
+
+  .font-mono {
+    font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+  }
+
+  /* Font Sizes */
+  .text-xs {
+    font-size: 10px;
+    line-height: 1.2;
+  }
+
+  .text-sm {
+    font-size: 11px;
+    line-height: 1.2;
+  }
+
+  .text-base {
+    font-size: 12px;
+    line-height: 1.2;
+  }
+
+  /* Font Weights */
+  .text-normal {
+    font-weight: 400;
+  }
+
+  .text-medium {
+    font-weight: 500;
+  }
+
+  .text-semibold {
+    font-weight: 600;
+  }
+
+  /* Text Colors */
+  .text-primary {
+    color: var(--color-text-primary);
+  }
+
+  .text-muted {
+    color: var(--color-text-muted);
+  }
+
+  .text-success {
+    color: var(--color-success);
+  }
+
+  .text-error {
+    color: var(--color-error);
+  }
+
+  .text-warning {
+    color: var(--color-warning);
+  }
+
+  .text-info {
+    color: var(--color-info);
+  }
+`;
+
+/* ==========================================================================
+   Theme System - Core UI Patterns
+   ========================================================================== */
+
+export const themeCSS = css`
+  /* Container Patterns */
+  .container {
+    background: var(--color-background-primary);
+    border: 1px solid var(--color-border-primary);
+    border-radius: 4px;
+    box-shadow: var(--shadow-subtle);
+  }
+
+  /* Ambient containers fade in on hover (toasts, system-info) */
+  .container-ambient {
+    opacity: 0.2;
+    transition: var(--transition-opacity);
+  }
+
+  .container-ambient:hover {
+    opacity: 0.9;
+  }
+
+  /* Modal containers are always fully visible (dialogs, popovers) */
+  .container-modal {
+    opacity: 0.9;
+  }
+
+  /* Embedded containers have no opacity effects (error displays inside other components) */
+  .container-embedded {
+    opacity: 1;
+  }
+
+  /* Panel Patterns */
+  .panel {
+    padding: 8px 12px;
+    gap: 4px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .panel-compact {
+    padding: 4px 8px;
+    gap: 2px;
+  }
+
+  /* Overlay Patterns */
+  .overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--color-background-overlay);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    backdrop-filter: blur(4px);
+  }
+
+  /* Interactive States */
+  .interactive {
+    cursor: pointer;
+    transition: var(--transition-all);
+  }
+
+  .interactive:hover {
+    background: var(--color-hover-light);
+  }
+
+  /* Spacing */
+  .gap-xs {
+    gap: 2px;
+  }
+
+  .gap-sm {
+    gap: 4px;
+  }
+
+  .gap-base {
+    gap: 8px;
+  }
+`;
+
+/* ==========================================================================
+   Foundation Styles (Legacy - keeping for compatibility)
    ========================================================================== */
 
 export const foundationCSS = css`
-  /* Typography */
+  /* Legacy Typography - use typographyCSS instead */
   .system-font {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
       'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
@@ -34,7 +227,7 @@ export const foundationCSS = css`
     border-radius: 10px;
   }
 
-  /* Shadow utilities */
+  /* Legacy Shadow utilities - use themeCSS instead */
   .box-shadow-light {
     box-shadow: 0px 5px 15px rgba(0, 0, 0, 0.3);
   }

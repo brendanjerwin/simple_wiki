@@ -2,10 +2,12 @@
 package bleve
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 
-		"github.com/blevesearch/bleve"
+	"github.com/blevesearch/bleve"
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/templating"
 	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
@@ -19,6 +21,7 @@ type Index struct {
 	index              bleve.Index
 	pageReader         wikipage.PageReader
 	frontmatterQueryer frontmatter.IQueryFrontmatterIndex
+	mu                 sync.RWMutex // Protects concurrent access to bleve operations
 }
 
 // IQueryBleveIndex defines the interface for querying the Bleve index.
@@ -42,6 +45,7 @@ func NewIndex(pageReader wikipage.PageReader, frontmatterQueryer frontmatter.IQu
 	}, nil
 }
 
+
 var (
 	linkRemoval          = regexp.MustCompile(`<.*?>`)
 	repeatedNewlineRegex = regexp.MustCompile(`\s*\n\s*\n\s*\n(\s*\n)*`)
@@ -52,16 +56,17 @@ func (b *Index) AddPageToIndex(requestedIdentifier wikipage.PageIdentifier) erro
 	mungedIdentifier := wikiidentifiers.MungeIdentifier(requestedIdentifier)
 	identifier, markdown, err := b.pageReader.ReadMarkdown(requestedIdentifier)
 	if err != nil {
-		return err
+		return fmt.Errorf("bleve indexer failed to read markdown for page %q: %w", requestedIdentifier, err)
 	}
 
 	_, pageFrontmatter, err := b.pageReader.ReadFrontMatter(identifier)
 	if err != nil {
-		return err
+		return fmt.Errorf("bleve indexer failed to read frontmatter for page %q: %w", requestedIdentifier, err)
 	}
+
 	renderedBytes, err := templating.ExecuteTemplate(markdown, pageFrontmatter, b.pageReader, b.frontmatterQueryer)
 	if err != nil {
-		return err
+		return fmt.Errorf("bleve indexer failed to execute template for page %q: %w", requestedIdentifier, err)
 	}
 	markdownRenderer := goldmarkrenderer.GoldmarkRenderer{}
 	htmlBytes, err := markdownRenderer.Render(renderedBytes)
@@ -77,16 +82,26 @@ func (b *Index) AddPageToIndex(requestedIdentifier wikipage.PageIdentifier) erro
 
 	pageFrontmatter["content"] = content
 
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
 	_ = b.index.Delete(identifier)
 	_ = b.index.Delete(requestedIdentifier)
 	_ = b.index.Delete(mungedIdentifier)
 
-	return b.index.Index(identifier, pageFrontmatter)
+	err = b.index.Index(identifier, pageFrontmatter)
+	if err != nil {
+		return fmt.Errorf("bleve indexer failed to index page %q: %w", requestedIdentifier, err)
+	}
+
+	return nil
 }
 
 // RemovePageFromIndex removes a page from the Bleve index.
 func (b *Index) RemovePageFromIndex(identifier wikipage.PageIdentifier) error {
 	identifier = wikiidentifiers.MungeIdentifier(identifier)
+	b.mu.Lock()
+	defer b.mu.Unlock()
 	return b.index.Delete(identifier)
 }
 
@@ -94,6 +109,9 @@ var newlineRegex = regexp.MustCompile("\n")
 
 // Query searches the Bleve index.
 func (b *Index) Query(query string) ([]SearchResult, error) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
 	titleQuery := bleve.NewMatchQuery(query)
 	titleQuery.SetField("title")
 	titleQuery.SetBoost(2.0)

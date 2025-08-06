@@ -19,7 +19,9 @@ import (
 const _ = grpc.SupportPackageIsVersion8
 
 const (
-	SystemInfoService_GetVersion_FullMethodName = "/api.v1.SystemInfoService/GetVersion"
+	SystemInfoService_GetVersion_FullMethodName      = "/api.v1.SystemInfoService/GetVersion"
+	SystemInfoService_GetJobStatus_FullMethodName    = "/api.v1.SystemInfoService/GetJobStatus"
+	SystemInfoService_StreamJobStatus_FullMethodName = "/api.v1.SystemInfoService/StreamJobStatus"
 )
 
 // SystemInfoServiceClient is the client API for SystemInfoService service.
@@ -28,6 +30,11 @@ const (
 type SystemInfoServiceClient interface {
 	// GetVersion returns the server version and build time.
 	GetVersion(ctx context.Context, in *GetVersionRequest, opts ...grpc.CallOption) (*GetVersionResponse, error)
+	// GetJobStatus returns the current status of background job queues.
+	GetJobStatus(ctx context.Context, in *GetJobStatusRequest, opts ...grpc.CallOption) (*GetJobStatusResponse, error)
+	// StreamJobStatus provides real-time streaming updates of job queue status.
+	// The stream will automatically terminate when all queues are idle.
+	StreamJobStatus(ctx context.Context, in *StreamJobStatusRequest, opts ...grpc.CallOption) (SystemInfoService_StreamJobStatusClient, error)
 }
 
 type systemInfoServiceClient struct {
@@ -48,12 +55,60 @@ func (c *systemInfoServiceClient) GetVersion(ctx context.Context, in *GetVersion
 	return out, nil
 }
 
+func (c *systemInfoServiceClient) GetJobStatus(ctx context.Context, in *GetJobStatusRequest, opts ...grpc.CallOption) (*GetJobStatusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetJobStatusResponse)
+	err := c.cc.Invoke(ctx, SystemInfoService_GetJobStatus_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *systemInfoServiceClient) StreamJobStatus(ctx context.Context, in *StreamJobStatusRequest, opts ...grpc.CallOption) (SystemInfoService_StreamJobStatusClient, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &SystemInfoService_ServiceDesc.Streams[0], SystemInfoService_StreamJobStatus_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &systemInfoServiceStreamJobStatusClient{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type SystemInfoService_StreamJobStatusClient interface {
+	Recv() (*GetJobStatusResponse, error)
+	grpc.ClientStream
+}
+
+type systemInfoServiceStreamJobStatusClient struct {
+	grpc.ClientStream
+}
+
+func (x *systemInfoServiceStreamJobStatusClient) Recv() (*GetJobStatusResponse, error) {
+	m := new(GetJobStatusResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // SystemInfoServiceServer is the server API for SystemInfoService service.
 // All implementations must embed UnimplementedSystemInfoServiceServer
 // for forward compatibility
 type SystemInfoServiceServer interface {
 	// GetVersion returns the server version and build time.
 	GetVersion(context.Context, *GetVersionRequest) (*GetVersionResponse, error)
+	// GetJobStatus returns the current status of background job queues.
+	GetJobStatus(context.Context, *GetJobStatusRequest) (*GetJobStatusResponse, error)
+	// StreamJobStatus provides real-time streaming updates of job queue status.
+	// The stream will automatically terminate when all queues are idle.
+	StreamJobStatus(*StreamJobStatusRequest, SystemInfoService_StreamJobStatusServer) error
 	mustEmbedUnimplementedSystemInfoServiceServer()
 }
 
@@ -63,6 +118,12 @@ type UnimplementedSystemInfoServiceServer struct {
 
 func (UnimplementedSystemInfoServiceServer) GetVersion(context.Context, *GetVersionRequest) (*GetVersionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetVersion not implemented")
+}
+func (UnimplementedSystemInfoServiceServer) GetJobStatus(context.Context, *GetJobStatusRequest) (*GetJobStatusResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetJobStatus not implemented")
+}
+func (UnimplementedSystemInfoServiceServer) StreamJobStatus(*StreamJobStatusRequest, SystemInfoService_StreamJobStatusServer) error {
+	return status.Errorf(codes.Unimplemented, "method StreamJobStatus not implemented")
 }
 func (UnimplementedSystemInfoServiceServer) mustEmbedUnimplementedSystemInfoServiceServer() {}
 
@@ -95,6 +156,45 @@ func _SystemInfoService_GetVersion_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SystemInfoService_GetJobStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetJobStatusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SystemInfoServiceServer).GetJobStatus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SystemInfoService_GetJobStatus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SystemInfoServiceServer).GetJobStatus(ctx, req.(*GetJobStatusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _SystemInfoService_StreamJobStatus_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(StreamJobStatusRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(SystemInfoServiceServer).StreamJobStatus(m, &systemInfoServiceStreamJobStatusServer{ServerStream: stream})
+}
+
+type SystemInfoService_StreamJobStatusServer interface {
+	Send(*GetJobStatusResponse) error
+	grpc.ServerStream
+}
+
+type systemInfoServiceStreamJobStatusServer struct {
+	grpc.ServerStream
+}
+
+func (x *systemInfoServiceStreamJobStatusServer) Send(m *GetJobStatusResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 // SystemInfoService_ServiceDesc is the grpc.ServiceDesc for SystemInfoService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -106,7 +206,17 @@ var SystemInfoService_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "GetVersion",
 			Handler:    _SystemInfoService_GetVersion_Handler,
 		},
+		{
+			MethodName: "GetJobStatus",
+			Handler:    _SystemInfoService_GetJobStatus_Handler,
+		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "StreamJobStatus",
+			Handler:       _SystemInfoService_StreamJobStatus_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "api/v1/system_info.proto",
 }

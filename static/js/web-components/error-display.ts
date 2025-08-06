@@ -1,6 +1,6 @@
 import { html, css, LitElement } from 'lit';
 import { property, state } from 'lit/decorators.js';
-import { foundationCSS, buttonCSS } from './shared-styles.js';
+import { colorCSS, typographyCSS, themeCSS, foundationCSS, buttonCSS } from './shared-styles.js';
 import { AugmentedError, AugmentErrorService } from './augment-error-service.js';
 
 /**
@@ -8,17 +8,16 @@ import { AugmentedError, AugmentErrorService } from './augment-error-service.js'
  */
 export class ErrorDisplay extends LitElement {
   static override styles = [
+    colorCSS,
+    typographyCSS,
+    themeCSS,
     foundationCSS,
     buttonCSS,
     css`
     :host {
       display: block;
-      background: #fef2f2;
-      border: 1px solid #fca5a5;
-      border-radius: 6px;
-      padding: 16px;
       margin: 8px 0;
-      color: #991b1b;
+      border: 1px solid var(--color-error);
     }
 
     .error-header {
@@ -41,7 +40,6 @@ export class ErrorDisplay extends LitElement {
 
     .error-message {
       font-weight: 500;
-      line-height: 1.4;
       margin: 0;
       word-wrap: break-word;
     }
@@ -76,45 +74,40 @@ export class ErrorDisplay extends LitElement {
     }
 
     .error-details-content {
-      padding: 12px;
-      background: #fee2e2;
-      border: 1px solid #fca5a5;
+      padding: 8px;
+      background: rgba(220, 53, 69, 0.1);
+      border: 1px solid rgba(220, 53, 69, 0.3);
       border-radius: 4px;
-      font-size: 13px;
-      line-height: 1.4;
       white-space: pre-wrap;
       word-wrap: break-word;
       overflow-wrap: break-word;
-      font-family: ui-monospace, 'SFMono-Regular', 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-      color: black;
     }
 
     .expand-button {
-      margin-top: 8px;
+      margin-top: 6px;
       background: none;
       border: none;
-      color: #991b1b;
-      font-size: 13px;
       cursor: pointer;
-      padding: 4px 0;
+      padding: 2px 0;
       text-decoration: underline;
       display: flex;
       align-items: center;
       gap: 4px;
+      transition: color 0.2s ease;
     }
 
     .expand-button:hover {
-      color: #7f1d1d;
+      color: var(--color-hover-error);
     }
 
     .expand-button:focus {
-      outline: 2px solid #991b1b;
-      outline-offset: 2px;
+      outline: 2px solid var(--color-error);
+      outline-offset: 1px;
       border-radius: 2px;
     }
 
     .expand-icon {
-      font-size: 12px;
+      font-size: 10px;
       transition: transform 0.2s ease;
     }
 
@@ -166,38 +159,40 @@ export class ErrorDisplay extends LitElement {
     const hasDetails = Boolean(this.augmentedError.stack && this.augmentedError.stack.trim());
 
     return html`
-      <div class="error-header">
-        <span class="error-icon" aria-hidden="true">${displayIcon}</span>
-        <div class="error-content">
-          <div class="error-message">
-            ${this.augmentedError.failedGoalDescription
-        ? html`
-                <span class="error-goal">Error while ${this.augmentedError.failedGoalDescription}:</span>
-                <span class="error-detail">${this.augmentedError.message}</span>
-              `
-        : html`${this.augmentedError.message}`}
-          </div>
-          
-          ${hasDetails ? html`
-            <button
-              class="expand-button"
-              @click="${this._handleExpandToggle}"
-              @keydown="${this._handleKeydown}"
-              aria-expanded="${this.expanded}"
-              aria-controls="error-details"
-            >
-              ${this.expanded ? 'Hide' : 'Show'} details
-              <span class="expand-icon ${this.expanded ? 'expanded' : ''}" aria-hidden="true">▼</span>
-            </button>
-            
-            <div
-              id="error-details"
-              class="error-details"
-              aria-hidden="${!this.expanded}"
-            >
-              <div class="error-details-content">${this.augmentedError.stack}</div>
+      <div class="container container-embedded panel gap-sm">
+        <div class="error-header">
+          <span class="error-icon text-error" aria-hidden="true">${displayIcon}</span>
+          <div class="error-content">
+            <div class="error-message text-primary font-mono text-sm">
+              ${this.augmentedError.failedGoalDescription
+          ? html`
+                  <span class="error-goal text-warning">Error while ${this.augmentedError.failedGoalDescription}:</span>
+                  <span class="error-detail text-muted">${this.augmentedError.message}</span>
+                `
+          : html`${this.augmentedError.message}`}
             </div>
-          ` : ''}
+            
+            ${hasDetails ? html`
+              <button
+                class="expand-button text-error font-mono text-xs"
+                @click="${this._handleExpandToggle}"
+                @keydown="${this._handleKeydown}"
+                aria-expanded="${this.expanded}"
+                aria-controls="error-details"
+              >
+                ${this.expanded ? 'Hide' : 'Show'} details
+                <span class="expand-icon ${this.expanded ? 'expanded' : ''}" aria-hidden="true">▼</span>
+              </button>
+              
+              <div
+                id="error-details"
+                class="error-details"
+                aria-hidden="${!this.expanded}"
+              >
+                <div class="error-details-content text-muted font-mono text-xs">${this.augmentedError.stack}</div>
+              </div>
+            ` : ''}
+          </div>
         </div>
       </div>
     `;
