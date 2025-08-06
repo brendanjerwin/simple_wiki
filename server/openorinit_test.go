@@ -26,14 +26,12 @@ var _ = Describe("Site.OpenOrInit with URL parameters", func() {
 		err       error
 		tmpDir    string
 		reqURL    *url.URL
-		mockIndex *MockIndexMaintainer
 	)
 
 	BeforeEach(func() {
 		tmpDir, err = os.MkdirTemp("", "site-openorinit-test")
 		Expect(err).NotTo(HaveOccurred())
 
-		mockIndex = &MockIndexMaintainer{}
 
 		// Set up empty migration applicator for unit testing
 		applicator := rollingmigrations.NewEmptyApplicator()
@@ -42,7 +40,6 @@ var _ = Describe("Site.OpenOrInit with URL parameters", func() {
 			PathToData:              tmpDir,
 			Logger:                  lumber.NewConsoleLogger(lumber.INFO),
 			MarkdownRenderer:        &goldmarkrenderer.GoldmarkRenderer{},
-			IndexMaintainer:         mockIndex,
 			FrontmatterIndexQueryer: &mockFrontmatterIndexQueryer{},
 			MigrationApplicator:     applicator,
 		}

@@ -58,17 +58,6 @@ var _ = Describe("Index", func() {
 		Expect(index).NotTo(BeNil())
 	})
 
-	Describe("GetIndexName", func() {
-		var indexName string
-
-		BeforeEach(func() {
-			indexName = index.GetIndexName()
-		})
-
-		It("should return frontmatter", func() {
-			Expect(indexName).To(Equal("frontmatter"))
-		})
-	})
 
 	Describe("AddPageToIndex", func() {
 		Describe("when adding a page with simple string frontmatter", func() {

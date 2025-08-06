@@ -2,8 +2,6 @@
 package index
 
 import (
-	"time"
-
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
@@ -13,10 +11,6 @@ type IMaintainIndex interface {
 	RemovePageFromIndex(identifier wikipage.PageIdentifier) error
 }
 
-// IProvideIndexName defines the interface for indexes that can provide their name.
-type IProvideIndexName interface {
-	GetIndexName() string
-}
 
 // IProvideIndexingProgress defines the interface for components that can provide indexing progress.
 type IProvideIndexingProgress interface {
@@ -29,8 +23,6 @@ type IndexingProgress struct {
 	TotalPages          int
 	CompletedPages      int
 	QueueDepth          int
-	ProcessingRatePerSecond float64
-	EstimatedCompletion *time.Duration
 	IndexProgress       map[string]SingleIndexProgress
 }
 
@@ -39,8 +31,6 @@ type SingleIndexProgress struct {
 	Name                string
 	Completed           int
 	Total               int
-	ProcessingRatePerSecond float64
-	LastError           *string
 	QueueDepth          int
 	WorkDistributionComplete bool
 }

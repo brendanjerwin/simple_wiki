@@ -51,7 +51,6 @@ type Site struct {
 	MaxDocumentSize         uint // in runes; about a 10mb limit by default
 	Logger                  *lumber.ConsoleLogger
 	MarkdownRenderer        IRenderMarkdownToHTML
-	IndexMaintainer         index.IMaintainIndex
 	IndexingService         *IndexingService
 	FileShadowingService    *FileShadowingService
 	JobQueueCoordinator     *jobs.JobQueueCoordinator
@@ -102,11 +101,9 @@ func (s *Site) InitializeIndexing() error {
 	if err != nil {
 		return err
 	}
-	multiMaintainer := index.NewMultiMaintainer(frontmatterIndex, bleveIndex)
 
 	s.FrontmatterIndexQueryer = frontmatterIndex
 	s.BleveIndexQueryer = bleveIndex
-	s.IndexMaintainer = multiMaintainer
 
 	// Create new job queue coordinator and indexing service
 	s.JobQueueCoordinator = jobs.NewJobQueueCoordinator(s.Logger)

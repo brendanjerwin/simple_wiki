@@ -44,10 +44,6 @@ func NewIndex(pageReader wikipage.PageReader) *Index {
 	}
 }
 
-// GetIndexName returns the name of this index for progress tracking.
-func (*Index) GetIndexName() string {
-	return "frontmatter"
-}
 
 // AddPageToIndex adds a page's frontmatter to the index.
 func (f *Index) AddPageToIndex(requestedIdentifier wikipage.PageIdentifier) error {

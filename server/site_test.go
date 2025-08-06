@@ -28,7 +28,6 @@ var _ = Describe("Site", func() {
 	var (
 		s                *Site
 		tempDir          string
-		mockIndex        *MockIndexMaintainer
 		mockFrontmatter  *MockIndexOperator
 		mockBleve        *MockIndexOperator
 		coordinator      *jobs.JobQueueCoordinator
@@ -48,7 +47,6 @@ var _ = Describe("Site", func() {
 		tempDir, err = os.MkdirTemp("", "site-test")
 		Expect(err).NotTo(HaveOccurred())
 
-		mockIndex = &MockIndexMaintainer{}
 		mockFrontmatter = &MockIndexOperator{}
 		mockBleve = &MockIndexOperator{}
 
@@ -65,7 +63,6 @@ var _ = Describe("Site", func() {
 		s = &Site{
 			Logger:                  lumber.NewConsoleLogger(lumber.INFO),
 			PathToData:              tempDir,
-			IndexMaintainer:         mockIndex,
 			IndexingService:         indexingService,
 			MarkdownRenderer:        &goldmarkrenderer.GoldmarkRenderer{},
 			FrontmatterIndexQueryer: &mockFrontmatterIndexQueryer{},
@@ -777,8 +774,8 @@ test content to be soft deleted`
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("should initialize IndexMaintainer", func() {
-				Expect(s.IndexMaintainer).NotTo(BeNil())
+			It("should initialize IndexingService", func() {
+				Expect(s.IndexingService).NotTo(BeNil())
 			})
 
 			It("should initialize FrontmatterIndexQueryer", func() {
@@ -797,57 +794,6 @@ test content to be soft deleted`
 			})
 		})
 
-		When("the indexing process encounters errors", func() {
-			var (
-				files []os.FileInfo
-				logBuffer *bytes.Buffer
-				logOutput string
-			)
-
-			BeforeEach(func() {
-				// Create a test page
-				encodedFilename := base32tools.EncodeToBase32(strings.ToLower("test"))
-				pagePath := filepath.Join(s.PathToData, encodedFilename+".json")
-				testPageContent := `{"identifier":"test","text":{"current":"test content","history":[]}}`
-				fileErr := os.WriteFile(pagePath, []byte(testPageContent), 0644)
-				Expect(fileErr).NotTo(HaveOccurred())
-
-				// Set up a logger that writes to a buffer so we can capture log output
-				logBuffer = &bytes.Buffer{}
-				s.Logger = lumber.NewBasicLogger(&testWriteCloser{logBuffer}, lumber.ERROR)
-
-				// Set up a mock that returns an error
-				mockIndex.AddPageToIndexError = errors.New("mock index error")
-				s.IndexMaintainer = mockIndex
-
-				// Call the loop logic directly by simulating what InitializeIndexing does
-				files = s.DirectoryList()
-				for _, file := range files {
-					if err := s.IndexMaintainer.AddPageToIndex(file.Name()); err != nil {
-						s.Logger.Error("Failed to add page '%s' to index during initialization: %v", file.Name(), err)
-					}
-				}
-
-				// Capture log output after the actions are performed
-				logOutput = logBuffer.String()
-			})
-
-			It("should handle indexing errors gracefully", func() {
-				// The mock should have been called
-				Expect(mockIndex.AddPageToIndexCalledWith).To(Equal(wikipage.PageIdentifier("test")))
-			})
-
-			It("should continue processing despite errors", func() {
-				// Should find the test file in DirectoryList
-				Expect(len(files)).To(BeNumerically(">", 0))
-				Expect(files[0].Name()).To(Equal("test"))
-			})
-
-			It("should log the error", func() {
-				Expect(logOutput).To(ContainSubstring("Failed to add page 'test' to index during initialization"))
-				Expect(logOutput).To(ContainSubstring("mock index error"))
-			})
-		})
 	})
 
 	Describe("Rolling migrations integration", func() {

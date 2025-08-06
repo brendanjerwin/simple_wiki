@@ -45,10 +45,6 @@ func NewIndex(pageReader wikipage.PageReader, frontmatterQueryer frontmatter.IQu
 	}, nil
 }
 
-// GetIndexName returns the name of this index for progress tracking.
-func (*Index) GetIndexName() string {
-	return "bleve"
-}
 
 var (
 	linkRemoval          = regexp.MustCompile(`<.*?>`)
