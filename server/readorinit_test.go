@@ -19,7 +19,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
-var _ = Describe("Site.OpenOrInit with URL parameters", func() {
+var _ = Describe("Site.ReadOrInit with URL parameters", func() {
 	var (
 		s         *Site
 		req       *http.Request
@@ -30,7 +30,7 @@ var _ = Describe("Site.OpenOrInit with URL parameters", func() {
 	)
 
 	BeforeEach(func() {
-		tmpDir, err = os.MkdirTemp("", "site-openorinit-test")
+		tmpDir, err = os.MkdirTemp("", "site-readorinit-test")
 		Expect(err).NotTo(HaveOccurred())
 
 
