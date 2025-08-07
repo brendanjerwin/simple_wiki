@@ -14,7 +14,6 @@ import (
 type Page struct {
 	Identifier         string
 	Text               string
-	Meta               string
 	RenderedPage       []byte `json:"-"`
 	FrontmatterJSON    []byte `json:"-"`
 	WasLoadedFromDisk  bool   `json:"-"`

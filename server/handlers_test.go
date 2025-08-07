@@ -356,7 +356,7 @@ var _ = Describe("Handlers", func() {
 
 			It("should return a failure response", func() {
 				Expect(response["success"]).To(BeFalse())
-				Expect(response["message"]).To(Equal("Failed to save page"))
+				Expect(response["message"]).To(ContainSubstring("permission denied"))
 			})
 		})
 	})

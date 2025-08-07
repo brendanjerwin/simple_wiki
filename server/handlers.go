@@ -26,7 +26,6 @@ import (
 	"github.com/jcelliott/lumber"
 )
 
-
 const (
 	// HTTP status codes
 	httpStatusFound = 302
@@ -47,7 +46,6 @@ var (
 	hotTemplateReloading bool
 	LogLevel             int = lumber.WARN
 )
-
 
 // GinRouter returns a new Gin router configured for the site.
 func (s *Site) GinRouter() *gin.Engine {
@@ -108,9 +106,6 @@ func (s *Site) loadTemplate() multitemplate.Render {
 
 	return r
 }
-
-
-
 
 func getSetSessionID(c *gin.Context, logger *lumber.ConsoleLogger) (sid string) {
 	var (
@@ -234,7 +229,6 @@ func (s *Site) getDirectoryEntries(page, command string) ([]os.FileInfo, string,
 	return directoryEntries, command, nil
 }
 
-
 func (s *Site) buildTemplateData(page, command string, directoryEntries []os.FileInfo, contentHTML []byte, rawText string, c *gin.Context) gin.H {
 	return gin.H{
 		"EditPage": command[0:2] == "/e", // /edit
@@ -244,21 +238,21 @@ func (s *Site) buildTemplateData(page, command string, directoryEntries []os.Fil
 			command[0:2] != "/v" &&
 			command[0:2] != "/l" &&
 			command[0:2] != "/r",
-		"DirectoryPage":      page == "ls" || page == uploadsPage,
-		"UploadPage":         page == uploadsPage,
-		"DirectoryEntries":   directoryEntries,
-		"Page":               page,
-		"RenderedPage":       template.HTML([]byte(contentHTML)),
-		"RawPage":            rawText,
-		"Route":              "/" + page + command,
-		"HasDotInName":       strings.Contains(page, "."),
-		"RecentlyEdited":     getRecentlyEdited(page, c, s.Logger),
-		"CustomCSS":          len(s.CSS) > 0,
-		"Debounce":           s.Debounce,
-		"Date":               time.Now().Format("2006-01-02"),
-		"UnixTime":           time.Now().Unix(),
-		"AllowFileUploads":   s.Fileuploads,
-		"MaxUploadMB":        s.MaxUploadSize,
+		"DirectoryPage":    page == "ls" || page == uploadsPage,
+		"UploadPage":       page == uploadsPage,
+		"DirectoryEntries": directoryEntries,
+		"Page":             page,
+		"RenderedPage":     template.HTML([]byte(contentHTML)),
+		"RawPage":          rawText,
+		"Route":            "/" + page + command,
+		"HasDotInName":     strings.Contains(page, "."),
+		"RecentlyEdited":   getRecentlyEdited(page, c, s.Logger),
+		"CustomCSS":        len(s.CSS) > 0,
+		"Debounce":         s.Debounce,
+		"Date":             time.Now().Format("2006-01-02"),
+		"UnixTime":         time.Now().Unix(),
+		"AllowFileUploads": s.Fileuploads,
+		"MaxUploadMB":      s.MaxUploadSize,
 	}
 }
 
@@ -329,7 +323,6 @@ type PageUpdateRequest struct {
 	Page      string `json:"page"`
 	NewText   string `json:"new_text"`
 	FetchedAt int64  `json:"fetched_at"`
-	Meta      string `json:"meta"`
 }
 
 func (s *Site) handlePageUpdate(c *gin.Context) {
@@ -355,14 +348,20 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to open page"})
 		return
 	}
-	var (
-		message       string
-	)
+	var message string
 	success := false
 	if json.FetchedAt > 0 && s.isPageModifiedSince(p.Identifier, json.FetchedAt) {
 		message = "Refusing to overwrite others work"
 	} else {
-		message, success = s.savePageUpdate(p, json)
+		p.Text = json.NewText
+		err := s.savePageAndIndex(p)
+		if err != nil {
+			message = err.Error()
+			success = false
+		} else {
+			message = "Saved"
+			success = true
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{"success": success, "message": message, "unix_time": time.Now().Unix()})
 }
@@ -370,7 +369,7 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 // isPageModifiedSince checks if a page has been modified since the given timestamp
 func (s *Site) isPageModifiedSince(pageIdentifier string, timestamp int64) bool {
 	mungedPath, originalPath, _ := s.getFilePathsForIdentifier(pageIdentifier, "json")
-	
+
 	// Check JSON file first, then MD file
 	if stat, err := os.Stat(mungedPath); err == nil {
 		return stat.ModTime().Unix() > timestamp
@@ -378,7 +377,7 @@ func (s *Site) isPageModifiedSince(pageIdentifier string, timestamp int64) bool 
 	if stat, err := os.Stat(originalPath); err == nil {
 		return stat.ModTime().Unix() > timestamp
 	}
-	
+
 	// Try MD files
 	mungedMDPath, originalMDPath, _ := s.getFilePathsForIdentifier(pageIdentifier, "md")
 	if stat, err := os.Stat(mungedMDPath); err == nil {
@@ -387,18 +386,8 @@ func (s *Site) isPageModifiedSince(pageIdentifier string, timestamp int64) bool 
 	if stat, err := os.Stat(originalMDPath); err == nil {
 		return stat.ModTime().Unix() > timestamp
 	}
-	
-	return false
-}
 
-// savePageUpdate saves a page update and returns the result message and success status
-func (s *Site) savePageUpdate(p *wikipage.Page, json PageUpdateRequest) (message string, success bool) {
-	p.Meta = json.Meta
-	if err := s.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), json.NewText); err != nil {
-		s.Logger.Error("Failed to save page '%s': %v", json.Page, err)
-		return "Failed to save page", false
-	}
-	return "Saved", true
+	return false
 }
 
 func (s *Site) handleUpload(c *gin.Context) {

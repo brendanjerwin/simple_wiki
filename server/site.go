@@ -615,24 +615,15 @@ func (s *Site) UpdatePageContent(identifier wikipage.PageIdentifier, newText str
 		return fmt.Errorf("failed to open page %s for update: %w", identifier, err)
 	}
 
+	p.Text = newText
+
 	// Apply migrations to fix user mistakes in real-time
 	migratedContent, err := s.applyMigrationsForPage(p, []byte(newText))
 	if err != nil {
 		return fmt.Errorf("failed to apply migrations during update: %w", err)
 	}
 
-	// If migration changed the content, use the migrated version
-	if string(migratedContent) != newText {
-		newText = string(migratedContent)
-	}
-
-	// Update the text content
-	p.Text = newText
-
-	// Render the new page
-	if renderErr := p.Render(s, s.MarkdownRenderer, TemplateExecutor{}, s.FrontmatterIndexQueryer); renderErr != nil {
-		s.Logger.Error("Error rendering page: %v", renderErr)
-	}
+	p.Text = string(migratedContent)
 
 	// Save to disk with proper locking
 	return s.savePageAndIndex(p)
