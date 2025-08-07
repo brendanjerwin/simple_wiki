@@ -83,7 +83,6 @@ func (s *Site) GinRouter() *gin.Engine {
 	})
 	router.GET("/:page/*command", s.handlePageRequest)
 	router.POST("/update", s.handlePageUpdate)
-	router.POST("/exists", s.handlePageExists)
 	router.POST("/api/print_label", s.handlePrintLabel)
 	router.GET("/api/find_by", s.handleFindBy)
 	router.GET("/api/find_by_prefix", s.handleFindByPrefix)
@@ -287,32 +286,6 @@ func getRecentlyEdited(title string, c *gin.Context, logger *lumber.ConsoleLogge
 		i++
 	}
 	return editedThingsWithoutCurrent[:i]
-}
-
-// PageExistsRequest represents the JSON structure for page existence checks
-type PageExistsRequest struct {
-	Page string `json:"page"`
-}
-
-func (s *Site) handlePageExists(c *gin.Context) {
-	var json PageExistsRequest
-	err := c.BindJSON(&json)
-	if err != nil {
-		s.Logger.Trace("Failed to bind JSON in handlePageExists: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Wrong JSON", "exists": false})
-		return
-	}
-	p, err := s.ReadPage(json.Page)
-	if err != nil {
-		s.Logger.Error("Failed to open page %s for exists check: %v", json.Page, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to open page", "exists": false})
-		return
-	}
-	if len(p.Text) > 0 {
-		c.JSON(http.StatusOK, gin.H{"success": true, "message": json.Page + " found", "exists": true})
-	} else {
-		c.JSON(http.StatusOK, gin.H{"success": true, "message": json.Page + " not found", "exists": false})
-	}
 }
 
 // PageUpdateRequest represents the JSON structure for page update requests
