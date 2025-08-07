@@ -2,6 +2,8 @@
 package wikipage_test
 
 import (
+	"time"
+
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -146,6 +148,66 @@ And some more text. But this is not frontmatter.`
 
 			It("should not return an error", func() {
 				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+	})
+
+	Describe("IsModifiedSince", func() {
+		var (
+			p              *wikipage.Page
+			baseTime       time.Time
+			result         bool
+		)
+
+		BeforeEach(func() {
+			baseTime = time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
+			p = &wikipage.Page{
+				Identifier: "testpage",
+				ModTime:    baseTime,
+			}
+		})
+
+		When("checking against earlier timestamp", func() {
+			BeforeEach(func() {
+				earlierTimestamp := baseTime.Add(-1 * time.Hour).Unix()
+				result = p.IsModifiedSince(earlierTimestamp)
+			})
+
+			It("should return true", func() {
+				Expect(result).To(BeTrue())
+			})
+		})
+
+		When("checking against later timestamp", func() {
+			BeforeEach(func() {
+				laterTimestamp := baseTime.Add(1 * time.Hour).Unix()
+				result = p.IsModifiedSince(laterTimestamp)
+			})
+
+			It("should return false", func() {
+				Expect(result).To(BeFalse())
+			})
+		})
+
+		When("checking against same timestamp", func() {
+			BeforeEach(func() {
+				sameTimestamp := baseTime.Unix()
+				result = p.IsModifiedSince(sameTimestamp)
+			})
+
+			It("should return false", func() {
+				Expect(result).To(BeFalse())
+			})
+		})
+
+		When("ModTime is zero", func() {
+			BeforeEach(func() {
+				p.ModTime = time.Time{}
+				result = p.IsModifiedSince(time.Now().Unix())
+			})
+
+			It("should return false", func() {
+				Expect(result).To(BeFalse())
 			})
 		})
 	})

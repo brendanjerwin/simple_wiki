@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	adrgfrontmatter "github.com/adrg/frontmatter"
 )
@@ -17,6 +18,7 @@ type Page struct {
 	RenderedPage       []byte `json:"-"`
 	FrontmatterJSON    []byte `json:"-"`
 	WasLoadedFromDisk  bool   `json:"-"`
+	ModTime            time.Time `json:"-"`
 }
 
 // parse parses the page content into frontmatter and markdown
@@ -126,4 +128,9 @@ func (p *Page) Render(reader PageReader, renderer IRenderMarkdownToHTML, templat
 // IsNew returns true if the page has not been loaded from disk
 func (p *Page) IsNew() bool {
 	return !p.WasLoadedFromDisk
+}
+
+// IsModifiedSince returns true if the page has been modified since the given timestamp
+func (p *Page) IsModifiedSince(timestamp int64) bool {
+	return p.ModTime.Unix() > timestamp
 }

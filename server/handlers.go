@@ -320,7 +320,7 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 	}
 	var message string
 	success := false
-	if json.FetchedAt > 0 && s.isPageModifiedSince(p.Identifier, json.FetchedAt) {
+	if json.FetchedAt > 0 && p.IsModifiedSince(json.FetchedAt) {
 		message = "Refusing to overwrite others work"
 	} else {
 		p.Text = json.NewText
@@ -336,18 +336,6 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": success, "message": message, "unix_time": time.Now().Unix()})
 }
 
-// isPageModifiedSince checks if a page has been modified since the given timestamp
-func (s *Site) isPageModifiedSince(pageIdentifier string, timestamp int64) bool {
-	mungedMDPath, originalMDPath, _ := s.getFilePathsForIdentifier(pageIdentifier, "md")
-	if stat, err := os.Stat(mungedMDPath); err == nil {
-		return stat.ModTime().Unix() > timestamp
-	}
-	if stat, err := os.Stat(originalMDPath); err == nil {
-		return stat.ModTime().Unix() > timestamp
-	}
-
-	return false
-}
 
 func (s *Site) handleUpload(c *gin.Context) {
 	if !s.Fileuploads {

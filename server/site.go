@@ -256,6 +256,14 @@ func (s *Site) ReadPage(requestedIdentifier string) (*wikipage.Page, error) {
 
 	p.Identifier = identifier
 
+	// Get the file modification time for conflict detection
+	mungedPath, originalPath, _ := s.getFilePathsForIdentifier(identifier, mdExtension)
+	if stat, statErr := os.Stat(mungedPath); statErr == nil {
+		p.ModTime = stat.ModTime()
+	} else if stat, statErr := os.Stat(originalPath); statErr == nil {
+		p.ModTime = stat.ModTime()
+	}
+
 	// Apply migrations to the loaded content
 	migratedContent, migrationErr := s.applyMigrationsForPage(p, mdBytes)
 	if migrationErr != nil {
