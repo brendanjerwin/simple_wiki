@@ -9,6 +9,8 @@ describe('SearchClient', () => {
 
   beforeEach(() => {
     searchClient = new SearchClient();
+    // Ensure the client is initialized before stubbing
+    (searchClient as { getClient: () => object }).getClient();
     // Stub the gRPC client method
     searchContentStub = stub((searchClient as { client: object }).client, 'searchContent');
   });
