@@ -163,7 +163,7 @@ func (b *Index) extractFragmentFromLocations(contentText string, locations searc
 // calculateFragmentWindow determines the best window of text to show for search results
 func (*Index) calculateFragmentWindow(contentText string, locations []*search.Location) (start int, end int) {
 	if len(locations) == 0 {
-		return 0, minInt(len(contentText), maxFragmentLength)
+		return 0, min(len(contentText), maxFragmentLength)
 	}
 
 	// Find the first and last match positions
@@ -179,35 +179,22 @@ func (*Index) calculateFragmentWindow(contentText string, locations []*search.Lo
 	if totalNeeded <= maxFragmentLength {
 		// All matches fit with context, center them
 		center := int(firstMatch + lastMatch) / 2
-		fragmentStart = maxInt(0, center-maxFragmentLength/2)
-		fragmentEnd = minInt(len(contentText), fragmentStart+maxFragmentLength)
+		fragmentStart = max(0, center-maxFragmentLength/2)
+		fragmentEnd = min(len(contentText), fragmentStart+maxFragmentLength)
 		
 		// Adjust start if we hit the end
 		if fragmentEnd-fragmentStart < maxFragmentLength {
-			fragmentStart = maxInt(0, fragmentEnd-maxFragmentLength)
+			fragmentStart = max(0, fragmentEnd-maxFragmentLength)
 		}
 	} else {
 		// Matches span too wide, focus on first match with some context
-		fragmentStart = maxInt(0, int(firstMatch)-contextPadding)
-		fragmentEnd = minInt(len(contentText), fragmentStart+maxFragmentLength)
+		fragmentStart = max(0, int(firstMatch)-contextPadding)
+		fragmentEnd = min(len(contentText), fragmentStart+maxFragmentLength)
 	}
 
 	return fragmentStart, fragmentEnd
 }
 
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
 
 // Query searches the Bleve index.
 func (b *Index) Query(query string) ([]SearchResult, error) {
