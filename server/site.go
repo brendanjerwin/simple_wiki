@@ -745,11 +745,6 @@ func (s *Site) ReadOrInitPageForTesting(requestedIdentifier string, req *http.Re
 
 const nanosecondsPerSecond = 1000000000
 
-// lastEditTime returns the last edit time of the page.
-func lastEditTime(p *wikipage.Page) time.Time {
-	return time.Unix(lastEditUnixTime(p), 0)
-}
-
 // lastEditUnixTime returns the last edit time of the page in Unix nanoseconds.
 func lastEditUnixTime(p *wikipage.Page) int64 {
 	return p.Text.LastEditTime() / nanosecondsPerSecond

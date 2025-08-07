@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { CreatePageRequest, CreatePageResponse, DeletePageRequest, DeletePageResponse, ReadPageRequest, ReadPageResponse, RenderPageRequest, RenderPageResponse, TogglePageLockRequest, TogglePageLockResponse, UpdatePageContentRequest, UpdatePageContentResponse, UpdatePageRequest, UpdatePageResponse, UpdateWholePageRequest, UpdateWholePageResponse } from "./page_management_pb.js";
+import { CreatePageRequest, CreatePageResponse, DeletePageRequest, DeletePageResponse, ReadPageRequest, ReadPageResponse, RenderPageRequest, RenderPageResponse, UpdatePageContentRequest, UpdatePageContentResponse, UpdatePageRequest, UpdatePageResponse, UpdateWholePageRequest, UpdateWholePageResponse } from "./page_management_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -73,15 +73,6 @@ export const PageManagementService = {
       name: "DeletePage",
       I: DeletePageRequest,
       O: DeletePageResponse,
-      kind: MethodKind.Unary,
-    },
-    /**
-     * @generated from rpc api.v1.PageManagementService.TogglePageLock
-     */
-    togglePageLock: {
-      name: "TogglePageLock",
-      I: TogglePageLockRequest,
-      O: TogglePageLockResponse,
       kind: MethodKind.Unary,
     },
   }

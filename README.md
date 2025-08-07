@@ -25,10 +25,10 @@ and it will start a server listening on `0.0.0.0:8050`. To view it, just go to <
 There are a couple of command-line flags that you can use to make _simple_wiki_ your own micro-CMS.
 
 ```shell
-simple_wiki -lock 123 -default-page index.html -css mystyle.css
+simple_wiki -default-page index.html -css mystyle.css
 ```
 
-The `-lock` flag will automatically lock every page with the passphrase "123". Also, the default behavior will be to redirect `/` to `/index.html`.
+The default behavior will be to redirect `/` to `/index.html`.
 
 ## Usage
 
@@ -49,12 +49,6 @@ When you open a document you'll be directed to an alliterative animal (which is 
 You can easily see previous versions of your documents.
 
 ![History](http://i.imgur.com/CxhRkyo.gif)
-
-### Locking
-
-Locking prevents other users from editing your pages without a passphrase.
-
-![Locking](http://i.imgur.com/xwUFV8b.gif)
 
 ## Thanks
 
