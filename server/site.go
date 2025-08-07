@@ -167,6 +167,11 @@ func (s *Site) InitializeIndexing() error {
 	s.JobQueueCoordinator.EnqueueJob(scanJob)
 	s.Logger.Info("File shadowing scan started.")
 
+	// Start JSON archive migration to move .json files to __deleted__
+	jsonArchiveJob := eager.NewJSONArchiveMigrationScanJob(s.PathToData, s.JobQueueCoordinator, s)
+	s.JobQueueCoordinator.EnqueueJob(jsonArchiveJob)
+	s.Logger.Info("JSON archive migration started.")
+
 	// Get all files that need to be indexed
 	files := s.DirectoryList()
 	if len(files) == 0 {
