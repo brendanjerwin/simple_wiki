@@ -1,6 +1,6 @@
 import { expect } from '@open-wc/testing';
 import { stub, SinonStub } from 'sinon';
-import { SearchClient, SearchResultWithHTML } from './search-client.js';
+import { SearchClient } from './search-client.js';
 import { SearchContentResponse, SearchResult, HighlightSpan } from '../gen/api/v1/search_pb.js';
 
 describe('SearchClient', () => {
@@ -19,7 +19,7 @@ describe('SearchClient', () => {
 
   describe('search', () => {
     describe('when searching with a valid query', () => {
-      let results: SearchResultWithHTML[];
+      let results: SearchResult[];
       const mockResponse = new SearchContentResponse({
         results: [
           new SearchResult({
@@ -54,26 +54,20 @@ describe('SearchClient', () => {
         expect(results).to.have.lengthOf(2);
       });
 
-      it('should preserve identifier and title', () => {
+      it('should preserve identifier, title, fragment, and highlights', () => {
         expect(results[0].identifier).to.equal('test-page');
         expect(results[0].title).to.equal('Test Page');
+        expect(results[0].fragment).to.equal('This is a test fragment with highlighted text.');
+        expect(results[0].highlights).to.have.lengthOf(2);
         expect(results[1].identifier).to.equal('another-page');
         expect(results[1].title).to.equal('Another Page');
-      });
-
-      it('should generate HTML with highlights', () => {
-        expect(results[0].fragmentHTML).to.equal(
-          'This is a <mark>test</mark> fragment with <mark>highlighted</mark> text.'
-        );
-      });
-
-      it('should handle fragments without highlights', () => {
-        expect(results[1].fragmentHTML).to.equal('No highlights here.');
+        expect(results[1].fragment).to.equal('No highlights here.');
+        expect(results[1].highlights).to.have.lengthOf(0);
       });
     });
 
     describe('when searching returns no results', () => {
-      let results: SearchResultWithHTML[];
+      let results: SearchResult[];
 
       beforeEach(async () => {
         searchContentStub.resolves(new SearchContentResponse({ results: [] }));
@@ -104,74 +98,34 @@ describe('SearchClient', () => {
     });
   });
 
-  describe('HTML fragment generation', () => {
-    describe('when building HTML fragments', () => {
-      it('should escape HTML special characters', () => {
-        const mockResponse = new SearchContentResponse({
-          results: [
-            new SearchResult({
-              identifier: 'xss-test',
-              title: 'XSS Test',
-              fragment: '<script>alert("XSS")</script> & <b>bold</b>',
-              highlights: [],
-            }),
-          ],
-        });
-
-        searchContentStub.resolves(mockResponse);
-        
-        return searchClient.search('xss').then(results => {
-          expect(results[0].fragmentHTML).to.equal(
-            '&lt;script&gt;alert("XSS")&lt;/script&gt; &amp; &lt;b&gt;bold&lt;/b&gt;'
-          );
-        });
+  describe('simplified data structure', () => {
+    it('should return structured data without HTML generation', () => {
+      const mockResponse = new SearchContentResponse({
+        results: [
+          new SearchResult({
+            identifier: 'structured-data-test',
+            title: 'Structured Data Test',
+            fragment: 'This fragment contains <script>dangerous</script> content & symbols.',
+            highlights: [
+              new HighlightSpan({ start: 21, end: 29 }), // "<script>"
+              new HighlightSpan({ start: 54, end: 61 }), // "content"
+            ],
+          }),
+        ],
       });
 
-      it('should handle overlapping highlights correctly', () => {
-        const mockResponse = new SearchContentResponse({
-          results: [
-            new SearchResult({
-              identifier: 'overlap-test',
-              title: 'Overlap Test',
-              fragment: 'overlapping text here',
-              highlights: [
-                new HighlightSpan({ start: 0, end: 11 }), // "overlapping"
-                new HighlightSpan({ start: 12, end: 16 }), // "text"
-              ],
-            }),
-          ],
-        });
-
-        searchContentStub.resolves(mockResponse);
-        
-        return searchClient.search('overlap').then(results => {
-          expect(results[0].fragmentHTML).to.equal(
-            '<mark>overlapping</mark> <mark>text</mark> here'
-          );
-        });
-      });
-
-      it('should convert newlines to <br> tags', () => {
-        const mockResponse = new SearchContentResponse({
-          results: [
-            new SearchResult({
-              identifier: 'multiline',
-              title: 'Multiline',
-              fragment: 'Line 1\nLine 2\nLine 3',
-              highlights: [
-                new HighlightSpan({ start: 0, end: 6 }), // "Line 1"
-              ],
-            }),
-          ],
-        });
-
-        searchContentStub.resolves(mockResponse);
-        
-        return searchClient.search('multiline').then(results => {
-          expect(results[0].fragmentHTML).to.equal(
-            '<mark>Line 1</mark><br>Line 2<br>Line 3'
-          );
-        });
+      searchContentStub.resolves(mockResponse);
+      
+      return searchClient.search('test').then(results => {
+        // Should return the raw data without HTML processing
+        expect(results[0].fragment).to.equal('This fragment contains <script>dangerous</script> content & symbols.');
+        expect(results[0].highlights).to.have.lengthOf(2);
+        expect(results[0].highlights[0].start).to.equal(21);
+        expect(results[0].highlights[0].end).to.equal(29);
+        expect(results[0].highlights[1].start).to.equal(54);
+        expect(results[0].highlights[1].end).to.equal(61);
+        // Should NOT have fragmentHTML property
+        expect((results[0] as any).fragmentHTML).to.be.undefined;
       });
     });
   });

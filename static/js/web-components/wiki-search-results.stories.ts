@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/web-components-vite';
 import { html } from 'lit';
 import { action } from 'storybook/actions';
 import './wiki-search-results.js';
-import type { SearchResultWithHTML } from '../services/search-client.js';
+import type { SearchResult, HighlightSpan } from '../gen/api/v1/search_pb.js';
 
 const meta: Meta = {
   title: 'Components/WikiSearchResults',
@@ -26,45 +26,59 @@ const meta: Meta = {
 export default meta;
 type Story = StoryObj;
 
-const mockResults: SearchResultWithHTML[] = [
+// Create highlight spans for the mock data
+function createHighlight(start: number, end: number): HighlightSpan {
+  return { start, end } as HighlightSpan;
+}
+
+const mockResults: SearchResult[] = [
   {
     identifier: 'getting-started',
     title: 'Getting Started with Simple Wiki',
     fragment: 'Welcome to Simple Wiki! This guide will help you get started with creating and editing pages.',
-    highlights: [],
-    fragmentHTML: 'Welcome to <mark>Simple</mark> <mark>Wiki</mark>! This guide will help you get started with creating and editing pages.'
-  },
+    highlights: [
+      createHighlight(11, 17), // "Simple"
+      createHighlight(18, 22),  // "Wiki"
+    ]
+  } as SearchResult,
   {
     identifier: 'advanced-features', 
     title: 'Advanced Features',
     fragment: 'Learn about frontmatter, search functionality, and other advanced features.',
-    highlights: [],
-    fragmentHTML: 'Learn about <mark>frontmatter</mark>, search functionality, and other <mark>advanced</mark> features.'
-  },
+    highlights: [
+      createHighlight(12, 23), // "frontmatter"
+      createHighlight(58, 66),  // "advanced"
+    ]
+  } as SearchResult,
   {
     identifier: 'troubleshooting',
     title: 'Troubleshooting Common Issues',
     fragment: 'Solutions to common problems you might encounter while using the wiki.',
-    highlights: [],
-    fragmentHTML: 'Solutions to <mark>common</mark> problems you might encounter while using the wiki.'
-  }
+    highlights: [
+      createHighlight(13, 19), // "common"
+    ]
+  } as SearchResult
 ];
 
-const longContentResults: SearchResultWithHTML[] = [
+const longContentResults: SearchResult[] = [
   {
     identifier: 'long-article',
     title: 'Very Long Article with Multiple Matches',
-    fragment: 'This is a very long fragment that demonstrates how the search results handle longer content with multiple highlighted terms and line breaks.',
-    highlights: [],
-    fragmentHTML: 'This is a very <mark>long</mark> fragment that demonstrates how the <mark>search</mark> results handle longer content with multiple <mark>highlighted</mark> terms and line breaks.<br>It can span multiple lines and still display properly in the popover.'
-  },
+    fragment: 'This is a very long fragment that demonstrates how the search results handle longer content with multiple highlighted terms and line breaks.\nIt can span multiple lines and still display properly in the popover.',
+    highlights: [
+      createHighlight(15, 19), // "long"
+      createHighlight(66, 72),  // "search"
+      createHighlight(112, 123), // "highlighted"
+    ]
+  } as SearchResult,
   {
     identifier: 'special-chars',
     title: 'Article with Special Characters & HTML',
     fragment: 'Content with <script> tags and & special characters that should be properly escaped.',
-    highlights: [],
-    fragmentHTML: 'Content with &lt;script&gt; tags and &amp; <mark>special</mark> characters that should be properly escaped.'
-  }
+    highlights: [
+      createHighlight(39, 46), // "special"
+    ]
+  } as SearchResult
 ];
 
 export const Open: Story = {
@@ -150,6 +164,32 @@ export const LongContent: Story = {
   }
 };
 
+export const NoHighlights: Story = {
+  args: {
+    results: [{
+      identifier: 'no-highlights',
+      title: 'Article Without Highlights',
+      fragment: 'This fragment has no highlighted terms and should display as plain text.',
+      highlights: []
+    } as SearchResult],
+    open: true,
+  },
+  render: (args) => html`
+    <wiki-search-results 
+      .results="${args.results}"
+      .open="${args.open}"
+      @search-results-closed="${action('search-results-closed')}">
+    </wiki-search-results>
+  `,
+  parameters: {
+    docs: {
+      description: {
+        story: 'Search results with no highlights to test plain text rendering.'
+      }
+    }
+  }
+};
+
 export const InteractiveTesting: Story = {
   args: {
     results: mockResults,
@@ -163,6 +203,7 @@ export const InteractiveTesting: Story = {
         @search-results-closed="${action('search-results-closed')}">
       </wiki-search-results>
       <p style="margin-top: 20px; text-align: center; color: #666;">
+        Component now handles HTML generation from structured data (fragment + highlights).<br>
         Click on search result links, close button, or outside the popover to test interactions.
       </p>
     </div>
@@ -170,7 +211,7 @@ export const InteractiveTesting: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Interactive testing story for manual interaction with the search results component. Open browser dev tools to see action logs for close events.'
+        story: 'Interactive testing story showing proper separation of concerns. The component generates HTML from structured data (fragment + highlights) instead of receiving pre-generated HTML. Open browser dev tools to see action logs.'
       }
     }
   }
