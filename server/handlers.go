@@ -368,17 +368,6 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 
 // isPageModifiedSince checks if a page has been modified since the given timestamp
 func (s *Site) isPageModifiedSince(pageIdentifier string, timestamp int64) bool {
-	mungedPath, originalPath, _ := s.getFilePathsForIdentifier(pageIdentifier, "json")
-
-	// Check JSON file first, then MD file
-	if stat, err := os.Stat(mungedPath); err == nil {
-		return stat.ModTime().Unix() > timestamp
-	}
-	if stat, err := os.Stat(originalPath); err == nil {
-		return stat.ModTime().Unix() > timestamp
-	}
-
-	// Try MD files
 	mungedMDPath, originalMDPath, _ := s.getFilePathsForIdentifier(pageIdentifier, "md")
 	if stat, err := os.Stat(mungedMDPath); err == nil {
 		return stat.ModTime().Unix() > timestamp
