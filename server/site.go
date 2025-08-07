@@ -3,7 +3,6 @@ package server
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -250,37 +249,7 @@ func (s *Site) ReadPage(requestedIdentifier string) (*wikipage.Page, error) {
 	p.Text = ""
 	p.WasLoadedFromDisk = false
 
-	identifier, bJSON, err := s.readFileByIdentifier(requestedIdentifier, "json")
-	if err == nil {
-		// Found JSON file, decode it.
-		// The previous code `json.Unmarshal(bJSON, &p)` was incorrect. It replaces the pointer p,
-		// wiping out the p.Site assignment. The correct way is to unmarshal into the struct pointed to by p.
-		if errJSON := json.Unmarshal(bJSON, p); errJSON != nil {
-			return nil, fmt.Errorf("failed to unmarshal page %s: %w", identifier, errJSON)
-		}
-		p.WasLoadedFromDisk = true
-
-		// IMPORTANT: Apply migrations to JSON-loaded content too!
-		// Get the current text content
-		if p.Text != "" {
-			migratedContent, migrationErr := s.applyMigrationsForPage(p, []byte(p.Text))
-			if migrationErr != nil {
-				return nil, fmt.Errorf("migration failed for page %s: %w", identifier, migrationErr)
-			}
-
-			// Update the page's text if migration changed it
-			if string(migratedContent) != p.Text {
-				p.Text = string(migratedContent)
-			}
-		}
-
-		return p, nil
-	}
-
-	if !os.IsNotExist(err) {
-		return nil, fmt.Errorf("error reading page json for %s: %w", requestedIdentifier, err)
-	}
-	// JSON file not found, try to load from .md file.
+	// Load from .md file
 	identifier, mdBytes, err := s.readFileByIdentifier(requestedIdentifier, mdExtension)
 	if err != nil {
 		// File not found - return empty page (this is normal for new pages)
@@ -626,15 +595,6 @@ func (s *Site) DeletePage(identifier wikipage.PageIdentifier) error {
 		return fmt.Errorf("failed to create deleted directory: %w", err)
 	}
 
-	// Move JSON file if it exists
-	jsonPath := path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(string(identifier)))+".json")
-	deletedJSONPath := path.Join(deletedDir, base32tools.EncodeToBase32(strings.ToLower(string(identifier)))+".json")
-	jsonErr := os.Rename(jsonPath, deletedJSONPath)
-	jsonExists := jsonErr == nil
-	if jsonErr != nil && !os.IsNotExist(jsonErr) {
-		return fmt.Errorf("failed to move JSON file for page %s: %w", identifier, jsonErr)
-	}
-
 	// Move Markdown file if it exists
 	mdPath := path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(string(identifier)))+".md")
 	deletedMdPath := path.Join(deletedDir, base32tools.EncodeToBase32(strings.ToLower(string(identifier)))+".md")
@@ -644,8 +604,8 @@ func (s *Site) DeletePage(identifier wikipage.PageIdentifier) error {
 		return fmt.Errorf("failed to move Markdown file for page %s: %w", identifier, mdErr)
 	}
 
-	// If neither file existed, return not found error
-	if !jsonExists && !mdExists {
+	// If file didn't exist, return not found error
+	if !mdExists {
 		return os.ErrNotExist
 	}
 
@@ -688,18 +648,8 @@ func (s *Site) savePage(p *wikipage.Page) error {
 	s.saveMut.Lock()
 	defer s.saveMut.Unlock()
 
-	bJSON, err := json.MarshalIndent(p, "", " ")
-	if err != nil {
-		return err
-	}
-
-	err = os.WriteFile(path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(p.Identifier))+".json"), bJSON, 0644)
-	if err != nil {
-		return err
-	}
-
 	// Write the current Markdown
-	err = os.WriteFile(path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(p.Identifier))+".md"), []byte(p.Text), 0644)
+	err := os.WriteFile(path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(p.Identifier))+".md"), []byte(p.Text), 0644)
 	if err != nil {
 		return err
 	}
@@ -718,18 +668,8 @@ func (s *Site) savePageWithoutIndexing(p *wikipage.Page) error {
 	s.saveMut.Lock()
 	defer s.saveMut.Unlock()
 
-	bJSON, err := json.MarshalIndent(p, "", " ")
-	if err != nil {
-		return err
-	}
-
-	err = os.WriteFile(path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(p.Identifier))+".json"), bJSON, 0644)
-	if err != nil {
-		return err
-	}
-
 	// Write the current Markdown
-	err = os.WriteFile(path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(p.Identifier))+".md"), []byte(p.Text), 0644)
+	err := os.WriteFile(path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(p.Identifier))+".md"), []byte(p.Text), 0644)
 	if err != nil {
 		return err
 	}
