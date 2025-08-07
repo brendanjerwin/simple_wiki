@@ -87,7 +87,7 @@ func NewSite(
 	}
 
 	logger.Info("Initializing simple_wiki site...")
-	
+
 	// Set up migration applicator with default migrations
 	logger.Info("Setting up rolling migrations system")
 	applicator := lazy.NewApplicator()
@@ -111,7 +111,7 @@ func NewSite(
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize site: %w", err)
 	}
-	
+
 	logger.Info("Site initialization complete")
 	return site, nil
 }
@@ -122,8 +122,6 @@ const (
 	newline                = "\n"
 	failedToOpenPageErrFmt = "failed to open page %s: %w"
 )
-
-
 
 func (s *Site) sniffContentType(name string) (string, error) {
 	file, err := os.Open(path.Join(s.PathToData, name))
@@ -286,7 +284,7 @@ func (s *Site) applyMigrationsForPage(page *wikipage.Page, content []byte) ([]by
 	if !bytes.Equal(content, migratedContent) {
 		// Update the page's text with migrated content and save
 		page.Text = string(migratedContent)
-		if saveErr := s.savePageWithoutIndexing(page); saveErr != nil {
+		if saveErr := s.savePage(page); saveErr != nil {
 			s.Logger.Warn("Failed to save migrated content for %s: %v", page.Identifier, saveErr)
 		} else {
 			s.Logger.Info("Successfully migrated and saved content for page: %s", page.Identifier)
@@ -358,7 +356,7 @@ func (s *Site) readOrInitPage(requestedIdentifier string, req *http.Request) (*w
 		if renderErr := p.Render(s, s.MarkdownRenderer, TemplateExecutor{}, s.FrontmatterIndexQueryer); renderErr != nil {
 			s.Logger.Error("Error rendering new page: %v", renderErr)
 		}
-		if err := s.savePage(p); err != nil {
+		if err := s.savePageAndIndex(p); err != nil {
 			s.Logger.Error("Failed to save new page '%s': %v", p.Identifier, err)
 			return nil, fmt.Errorf("failed to save new page '%s': %w", p.Identifier, err)
 		}
@@ -375,7 +373,6 @@ type DirectoryEntry struct {
 	Length     int
 	LastEdited time.Time
 }
-
 
 // Name returns the name of the directory entry.
 func (d DirectoryEntry) Name() string {
@@ -421,14 +418,14 @@ func (s *Site) DirectoryList() []os.FileInfo {
 				s.Logger.Warn("Failed to open page %s for directory listing: %v", name, err)
 				continue
 			}
-			
+
 			// Get file modification time from filesystem
 			fileInfo, statErr := os.Stat(filepath.Join(s.PathToData, f.Name()))
 			lastEdited := time.Now()
 			if statErr == nil {
 				lastEdited = fileInfo.ModTime()
 			}
-			
+
 			entries[found] = DirectoryEntry{
 				Path:       p.Identifier, // Use the actual Page.Identifier, not the decoded filename
 				Length:     len(p.Text),
@@ -638,16 +635,12 @@ func (s *Site) UpdatePageContent(identifier wikipage.PageIdentifier, newText str
 	}
 
 	// Save to disk with proper locking
-	return s.savePage(p)
+	return s.savePageAndIndex(p)
 }
 
-// savePage handles the low-level persistence of a page to disk
-func (s *Site) savePage(p *wikipage.Page) error {
-	s.saveMut.Lock()
-	defer s.saveMut.Unlock()
-
-	// Write the current Markdown
-	err := os.WriteFile(path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(p.Identifier))+".md"), []byte(p.Text), 0644)
+// savePageAndIndex handles the low-level persistence of a page to disk
+func (s *Site) savePageAndIndex(p *wikipage.Page) error {
+	err := s.savePage(p)
 	if err != nil {
 		return err
 	}
@@ -660,9 +653,9 @@ func (s *Site) savePage(p *wikipage.Page) error {
 	return nil
 }
 
-// savePageWithoutIndexing saves a page to disk without triggering indexing.
+// savePage saves a page to disk without triggering indexing.
 // This is used by migrations to avoid circular references during read operations.
-func (s *Site) savePageWithoutIndexing(p *wikipage.Page) error {
+func (s *Site) savePage(p *wikipage.Page) error {
 	s.saveMut.Lock()
 	defer s.saveMut.Unlock()
 
@@ -672,7 +665,6 @@ func (s *Site) savePageWithoutIndexing(p *wikipage.Page) error {
 		return err
 	}
 
-	// Note: Intentionally NOT calling IndexCoordinator to prevent circular references
 	return nil
 }
 
