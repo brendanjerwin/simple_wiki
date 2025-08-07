@@ -148,7 +148,7 @@ func (s *Site) InitializeIndexing() error {
 	frontmatterIndex := frontmatter.NewIndex(s)
 	bleveIndex, err := bleve.NewIndex(s, frontmatterIndex)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create bleve index: %w", err)
 	}
 
 	s.FrontmatterIndexQueryer = frontmatterIndex
@@ -191,7 +191,7 @@ func (s *Site) InitializeIndexing() error {
 // This is primarily for testing to ensure all background jobs complete before tests proceed.
 func (s *Site) InitializeIndexingAndWait(timeout time.Duration) error {
 	if err := s.InitializeIndexing(); err != nil {
-		return err
+		return fmt.Errorf("failed to initialize indexing: %w", err)
 	}
 
 	// Wait for all initial indexing jobs to complete
@@ -236,7 +236,7 @@ func (s *Site) readFileByIdentifier(identifier, extension string) (string, []byt
 		return identifier, b, nil
 	}
 
-	return mungedIdentifier, nil, err
+	return mungedIdentifier, nil, fmt.Errorf("failed to read file for identifier %s: %w", identifier, err)
 }
 
 // ReadPage opens a page by its identifier.
@@ -262,6 +262,10 @@ func (s *Site) ReadPage(requestedIdentifier string) (*wikipage.Page, error) {
 		p.ModTime = stat.ModTime()
 	} else if stat, statErr := os.Stat(originalPath); statErr == nil {
 		p.ModTime = stat.ModTime()
+	} else {
+		// Both stat attempts failed, but this is not critical for page loading
+		// Just log and continue with zero ModTime
+		s.Logger.Trace("Could not get modification time for page %s: %v", identifier, statErr)
 	}
 
 	// Apply migrations to the loaded content
@@ -521,7 +525,7 @@ func (s *Site) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.
 
 	newText, err := combineFrontmatterAndMarkdown(fm, md)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to combine frontmatter and markdown: %w", err)
 	}
 
 	// Use UpdatePageContent to save current content
@@ -538,7 +542,7 @@ func (s *Site) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Mar
 
 	newText, err := combineFrontmatterAndMarkdown(fm, md)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to combine frontmatter and markdown: %w", err)
 	}
 
 	// Use UpdatePageContent to save current content
@@ -650,7 +654,7 @@ func (s *Site) UpdatePageContent(identifier wikipage.PageIdentifier, newText str
 func (s *Site) savePageAndIndex(p *wikipage.Page) error {
 	err := s.savePage(p)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to save page and index: %w", err)
 	}
 
 	// Enqueue indexing jobs for both frontmatter and bleve indexes
@@ -670,7 +674,7 @@ func (s *Site) savePage(p *wikipage.Page) error {
 	// Write the current Markdown
 	err := os.WriteFile(path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(p.Identifier))+".md"), []byte(p.Text), 0644)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to save page %s: %w", p.Identifier, err)
 	}
 
 	return nil

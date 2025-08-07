@@ -322,12 +322,13 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 	success := false
 	if json.FetchedAt > 0 && p.IsModifiedSince(json.FetchedAt) {
 		message = "Refusing to overwrite others work"
+		success = false  // Explicitly set to make error handling clear
 	} else {
 		p.Text = json.NewText
 		err := s.savePageAndIndex(p)
 		if err != nil {
 			message = err.Error()
-			success = false
+			success = false  // Explicitly set to make error handling clear
 		} else {
 			message = "Saved"
 			success = true
