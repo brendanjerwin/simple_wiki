@@ -549,25 +549,17 @@ test content`
 				})
 			})
 
-			When("the page exists with both .md and .json files", func() {
-				var (
-					err      error
-					jsonPath string
-				)
+			When("the page exists as .md file", func() {
+				var err error
 
 				BeforeEach(func() {
-					// Create both .md and .json files for the same page
+					// Create .md file for the page
 					content := `---
 title: Test Page
 ---
 test content`
 					fileErr := os.WriteFile(pagePath, []byte(content), 0644)
 					Expect(fileErr).NotTo(HaveOccurred())
-
-					jsonPath = filepath.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(string(pageIdentifier)))+".json")
-					jsonContent := `{"identifier":"test-page","text":{"current":"test content","history":[]}}`
-					jsonErr := os.WriteFile(jsonPath, []byte(jsonContent), 0644)
-					Expect(jsonErr).NotTo(HaveOccurred())
 
 					err = s.DeletePage(pageIdentifier)
 					waitForIndexing()
@@ -577,12 +569,9 @@ test content`
 					Expect(err).NotTo(HaveOccurred())
 				})
 
-				It("should remove both the .md and .json files", func() {
+				It("should remove the .md file", func() {
 					_, mdStatErr := os.Stat(pagePath)
 					Expect(os.IsNotExist(mdStatErr)).To(BeTrue())
-
-					_, jsonStatErr := os.Stat(jsonPath)
-					Expect(os.IsNotExist(jsonStatErr)).To(BeTrue())
 				})
 
 				It("should remove the page from the index", func() {
@@ -612,24 +601,18 @@ test content`
 			When("the page exists and should be soft deleted", func() {
 				var (
 					err         error
-					jsonPath    string
 					deletedDir  string
 					currentTime int64
 				)
 
 				BeforeEach(func() {
-					// Create both .md and .json files for the same page
+					// Create .md file for the page
 					content := `---
 title: Test Page
 ---
 test content to be soft deleted`
 					fileErr := os.WriteFile(pagePath, []byte(content), 0644)
 					Expect(fileErr).NotTo(HaveOccurred())
-
-					jsonPath = filepath.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(string(pageIdentifier)))+".json")
-					jsonContent := `{"identifier":"test-page","text":{"current":"test content","history":[]}}`
-					jsonErr := os.WriteFile(jsonPath, []byte(jsonContent), 0644)
-					Expect(jsonErr).NotTo(HaveOccurred())
 
 					// Capture current time before deletion
 					currentTime = time.Now().Unix()
@@ -650,9 +633,6 @@ test content to be soft deleted`
 					_, mdStatErr := os.Stat(pagePath)
 					Expect(os.IsNotExist(mdStatErr)).To(BeTrue())
 
-					_, jsonStatErr := os.Stat(jsonPath)
-					Expect(os.IsNotExist(jsonStatErr)).To(BeTrue())
-
 					// Files should exist in the __deleted__ directory structure
 					Expect(deletedDir).To(BeADirectory())
 
@@ -670,25 +650,17 @@ test content to be soft deleted`
 					Expect(timestamp).To(BeNumerically(">=", currentTime))
 					Expect(timestamp).To(BeNumerically("<=", currentTime+5))
 
-					// Check that files exist in the timestamped directory
+					// Check that .md file exists in the timestamped directory
 					timestampPath := filepath.Join(deletedDir, timestampDir.Name())
 					deletedMdPath := filepath.Join(timestampPath, base32tools.EncodeToBase32(strings.ToLower(string(pageIdentifier)))+".md")
-					deletedJSONPath := filepath.Join(timestampPath, base32tools.EncodeToBase32(strings.ToLower(string(pageIdentifier)))+".json")
 
 					_, deletedMdStatErr := os.Stat(deletedMdPath)
 					Expect(deletedMdStatErr).NotTo(HaveOccurred())
-
-					_, deletedJSONStatErr := os.Stat(deletedJSONPath)
-					Expect(deletedJSONStatErr).NotTo(HaveOccurred())
 
 					// Verify file contents were preserved
 					deletedMdContent, readErr := os.ReadFile(deletedMdPath)
 					Expect(readErr).NotTo(HaveOccurred())
 					Expect(string(deletedMdContent)).To(ContainSubstring("test content to be soft deleted"))
-
-					deletedJSONContent, jsonReadErr := os.ReadFile(deletedJSONPath)
-					Expect(jsonReadErr).NotTo(HaveOccurred())
-					Expect(string(deletedJSONContent)).To(ContainSubstring("test content"))
 				})
 
 				It("should remove the page from the index", func() {
@@ -724,8 +696,8 @@ test content to be soft deleted`
 			})
 
 			It("should create a page with initial content", func() {
-				Expect(p.Text.GetCurrent()).To(ContainSubstring("# {{or .Title .Identifier}}"))
-				Expect(p.Text.GetCurrent()).To(ContainSubstring(`identifier = '` + pageToCreate + `'`))
+				Expect(p.Text).To(ContainSubstring("# {{or .Title .Identifier}}"))
+				Expect(p.Text).To(ContainSubstring(`identifier = '` + pageToCreate + `'`))
 			})
 		})
 
@@ -763,16 +735,19 @@ test content to be soft deleted`
 	})
 
 	Describe("InitializeIndexing", func() {
-		When("a JSON file exists in the data directory", func() {
+		When("an MD file exists in the data directory", func() {
 			var (
 				err error
 			)
 
 			BeforeEach(func() {
-				// Create a test page as a JSON file with proper base32-encoded filename
+				// Create a test page as an MD file since JSON files are now migrated
 				encodedFilename := base32tools.EncodeToBase32(strings.ToLower("test"))
-				pagePath := filepath.Join(s.PathToData, encodedFilename+".json")
-				testPageContent := `{"identifier":"test","text":{"current":"test content","history":[]}}`
+				pagePath := filepath.Join(s.PathToData, encodedFilename+".md")
+				testPageContent := `+++
+identifier = "test"
++++
+# Test Content`
 				fileErr := os.WriteFile(pagePath, []byte(testPageContent), 0644)
 				Expect(fileErr).NotTo(HaveOccurred())
 
@@ -1061,16 +1036,13 @@ title = "Bad Title"
 				Expect(err).NotTo(HaveOccurred())
 				
 				// Verify the page now contains the migrated content
-				currentContent := page.Text.GetCurrent()
+				currentContent := page.Text
 				Expect(currentContent).To(ContainSubstring(`title = "Fixed Title"`))
 				Expect(currentContent).NotTo(ContainSubstring(`title = "Bad Title"`))
 			})
 
-			It("should create history entry for the migration", func() {
+			It("should complete migration successfully", func() {
 				Expect(err).NotTo(HaveOccurred())
-				
-				// Check that there are multiple versions (original + migrated)
-				Expect(page.Text.NumEdits()).To(BeNumerically(">=", 1))
 			})
 
 			Describe("when no migration applies", func() {
@@ -1092,7 +1064,7 @@ title = "Bad Title"
 				It("should save original content unchanged", func() {
 					Expect(err).NotTo(HaveOccurred())
 					
-					currentContent := page.Text.GetCurrent()
+					currentContent := page.Text
 					Expect(currentContent).To(ContainSubstring(`title = "Bad Title"`))
 				})
 			})
@@ -1121,7 +1093,7 @@ title = "Migrated"
 					Expect(err).NotTo(HaveOccurred())
 					
 					// Should complete successfully without hanging
-					currentContent := page.Text.GetCurrent()
+					currentContent := page.Text
 					Expect(currentContent).To(ContainSubstring(`title = "Migrated"`))
 				})
 			})

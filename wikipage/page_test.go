@@ -2,11 +2,12 @@
 package wikipage_test
 
 import (
+	"time"
+
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/schollz/versionedtext"
 )
 
 var _ = Describe("Page", func() {
@@ -21,7 +22,7 @@ var _ = Describe("Page", func() {
 		BeforeEach(func() {
 			p = &wikipage.Page{
 				Identifier: "testpage",
-				Text:       versionedtext.NewVersionedText(""),
+				Text:       "",
 			}
 		})
 
@@ -34,7 +35,7 @@ var _ = Describe("Page", func() {
 
 		When("the page has no frontmatter", func() {
 			BeforeEach(func() {
-				p.Text.Update("Just some markdown content.")
+				p.Text = "Just some markdown content."
 			})
 
 			It("should return empty frontmatter", func() {
@@ -57,7 +58,7 @@ title: Test Page
 tags: [one, two]
 ---
 This is the markdown content.`
-				p.Text.Update(content)
+				p.Text = content
 			})
 
 			It("should correctly parse the frontmatter", func() {
@@ -82,7 +83,7 @@ title: Test Page
 tags: [one, two
 ---
 This is the markdown content.`
-				p.Text.Update(content)
+				p.Text = content
 			})
 
 			It("should return an error", func() {
@@ -93,7 +94,7 @@ This is the markdown content.`
 
 		When("the content is empty", func() {
 			BeforeEach(func() {
-				p.Text.Update("")
+				p.Text = ""
 			})
 
 			It("should return empty frontmatter and markdown", func() {
@@ -112,7 +113,7 @@ This is the markdown content.`
 title: Only Frontmatter
 ---
 `
-				p.Text.Update(content)
+				p.Text = content
 			})
 
 			It("should parse the frontmatter", func() {
@@ -134,7 +135,7 @@ title: Only Frontmatter
 				content = `Here is some text.
 ---
 And some more text. But this is not frontmatter.`
-				p.Text.Update(content)
+				p.Text = content
 			})
 
 			It("should return empty frontmatter", func() {
@@ -147,6 +148,66 @@ And some more text. But this is not frontmatter.`
 
 			It("should not return an error", func() {
 				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+	})
+
+	Describe("IsModifiedSince", func() {
+		var (
+			p              *wikipage.Page
+			baseTime       time.Time
+			result         bool
+		)
+
+		BeforeEach(func() {
+			baseTime = time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
+			p = &wikipage.Page{
+				Identifier: "testpage",
+				ModTime:    baseTime,
+			}
+		})
+
+		When("checking against earlier timestamp", func() {
+			BeforeEach(func() {
+				earlierTimestamp := baseTime.Add(-1 * time.Hour).Unix()
+				result = p.IsModifiedSince(earlierTimestamp)
+			})
+
+			It("should return true", func() {
+				Expect(result).To(BeTrue())
+			})
+		})
+
+		When("checking against later timestamp", func() {
+			BeforeEach(func() {
+				laterTimestamp := baseTime.Add(1 * time.Hour).Unix()
+				result = p.IsModifiedSince(laterTimestamp)
+			})
+
+			It("should return false", func() {
+				Expect(result).To(BeFalse())
+			})
+		})
+
+		When("checking against same timestamp", func() {
+			BeforeEach(func() {
+				sameTimestamp := baseTime.Unix()
+				result = p.IsModifiedSince(sameTimestamp)
+			})
+
+			It("should return false", func() {
+				Expect(result).To(BeFalse())
+			})
+		})
+
+		When("ModTime is zero", func() {
+			BeforeEach(func() {
+				p.ModTime = time.Time{}
+				result = p.IsModifiedSince(time.Now().Unix())
+			})
+
+			It("should return false", func() {
+				Expect(result).To(BeFalse())
 			})
 		})
 	})

@@ -10,7 +10,6 @@ import (
 
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
-	"github.com/schollz/versionedtext"
 )
 
 const testFileTimestamp = 1609459200 // 2021-01-01 Unix timestamp
@@ -40,7 +39,7 @@ func (m *MockMigrationDeps) ReadPage(identifier wikipage.PageIdentifier) (*wikip
 	// Return empty page for non-existing pages
 	return &wikipage.Page{
 		Identifier:        string(identifier),
-		Text:              versionedtext.NewVersionedText(""),
+		Text:              "",
 		WasLoadedFromDisk: false,
 	}, nil
 }
@@ -88,7 +87,7 @@ func (m *MockMigrationDeps) UpdatePageContent(identifier wikipage.PageIdentifier
 	
 	page := &wikipage.Page{
 		Identifier:        string(identifier),
-		Text:              versionedtext.NewVersionedText(newText),
+		Text:              newText,
 		WasLoadedFromDisk: true,
 	}
 	

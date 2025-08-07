@@ -145,7 +145,7 @@ func (j *FileShadowingMigrationJob) Execute() error {
 	// munged versions when both exist (this is the shadowing problem we're solving).
 	// Instead, we need to read the PascalCase files directly.
 	pascalPage := j.readPascalPageDirectly(j.logicalPageID)
-	if len(pascalPage.Text.GetCurrent()) == 0 {
+	if len(pascalPage.Text) == 0 {
 		return fmt.Errorf("no page found for PascalCase identifier: %s", j.logicalPageID)
 	}
 
@@ -165,8 +165,8 @@ func (j *FileShadowingMigrationJob) Execute() error {
 	if hasShadowing {
 		// Compare content richness and choose the richer version
 		// Choose richer content (simple heuristic: longer content)
-		pascalLength := len(pascalPage.Text.GetCurrent())
-		mungedLength := len(mungedPage.Text.GetCurrent())
+		pascalLength := len(pascalPage.Text)
+		mungedLength := len(mungedPage.Text)
 
 		if pascalLength > mungedLength {
 			finalPage = pascalPage
@@ -236,7 +236,7 @@ func (j *FileShadowingMigrationJob) readPascalPageDirectly(pascalID string) *wik
 				// Use the current text from the parsed versionedtext
 				currentText := vText.GetCurrent()
 				if currentText != "" {
-					page.Text = versionedtext.NewVersionedText(currentText)
+					page.Text = currentText
 					return page
 				}
 			}
@@ -246,7 +246,7 @@ func (j *FileShadowingMigrationJob) readPascalPageDirectly(pascalID string) *wik
 				Current string `json:"current"`
 			}
 			if json.Unmarshal(pageData.Text, &simpleText) == nil && simpleText.Current != "" {
-				page.Text = versionedtext.NewVersionedText(simpleText.Current)
+				page.Text = simpleText.Current
 				return page
 			}
 		}
@@ -254,12 +254,12 @@ func (j *FileShadowingMigrationJob) readPascalPageDirectly(pascalID string) *wik
 
 	// Read MD file if JSON didn't work or doesn't exist
 	if mdData, err := os.ReadFile(mdPath); err == nil {
-		page.Text = versionedtext.NewVersionedText(string(mdData))
+		page.Text = string(mdData)
 		return page
 	}
 
 	// Return empty page if neither file could be read
-	page.Text = versionedtext.NewVersionedText("")
+	page.Text = ""
 	return page
 }
 

@@ -224,7 +224,7 @@ identifier = 'migration_test_page'
 		})
 
 		It("should use the migrated content", func() {
-			content := openedPage.Text.GetCurrent()
+			content := openedPage.Text
 			Expect(content).To(ContainSubstring("# Migration applied"), "Page should contain migrated content")
 		})
 	})

@@ -3,7 +3,6 @@ package server
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -31,7 +30,6 @@ import (
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/jcelliott/lumber"
 	"github.com/pelletier/go-toml/v2"
-	"github.com/schollz/versionedtext"
 )
 
 // IRenderMarkdownToHTML is an interface that abstracts the rendering process
@@ -89,7 +87,7 @@ func NewSite(
 	}
 
 	logger.Info("Initializing simple_wiki site...")
-	
+
 	// Set up migration applicator with default migrations
 	logger.Info("Setting up rolling migrations system")
 	applicator := lazy.NewApplicator()
@@ -113,7 +111,7 @@ func NewSite(
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize site: %w", err)
 	}
-	
+
 	logger.Info("Site initialization complete")
 	return site, nil
 }
@@ -124,8 +122,6 @@ const (
 	newline                = "\n"
 	failedToOpenPageErrFmt = "failed to open page %s: %w"
 )
-
-
 
 func (s *Site) sniffContentType(name string) (string, error) {
 	file, err := os.Open(path.Join(s.PathToData, name))
@@ -152,7 +148,7 @@ func (s *Site) InitializeIndexing() error {
 	frontmatterIndex := frontmatter.NewIndex(s)
 	bleveIndex, err := bleve.NewIndex(s, frontmatterIndex)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create bleve index: %w", err)
 	}
 
 	s.FrontmatterIndexQueryer = frontmatterIndex
@@ -166,6 +162,11 @@ func (s *Site) InitializeIndexing() error {
 	scanJob := eager.NewFileShadowingMigrationScanJob(s.PathToData, s.JobQueueCoordinator, s)
 	s.JobQueueCoordinator.EnqueueJob(scanJob)
 	s.Logger.Info("File shadowing scan started.")
+
+	// Start JSON archive migration to move .json files to __deleted__
+	jsonArchiveJob := eager.NewJSONArchiveMigrationScanJob(s.PathToData, s.JobQueueCoordinator, s)
+	s.JobQueueCoordinator.EnqueueJob(jsonArchiveJob)
+	s.Logger.Info("JSON archive migration started.")
 
 	// Get all files that need to be indexed
 	files := s.DirectoryList()
@@ -190,7 +191,7 @@ func (s *Site) InitializeIndexing() error {
 // This is primarily for testing to ensure all background jobs complete before tests proceed.
 func (s *Site) InitializeIndexingAndWait(timeout time.Duration) error {
 	if err := s.InitializeIndexing(); err != nil {
-		return err
+		return fmt.Errorf("failed to initialize indexing: %w", err)
 	}
 
 	// Wait for all initial indexing jobs to complete
@@ -235,7 +236,7 @@ func (s *Site) readFileByIdentifier(identifier, extension string) (string, []byt
 		return identifier, b, nil
 	}
 
-	return mungedIdentifier, nil, err
+	return mungedIdentifier, nil, fmt.Errorf("failed to read file for identifier %s: %w", identifier, err)
 }
 
 // ReadPage opens a page by its identifier.
@@ -243,41 +244,10 @@ func (s *Site) ReadPage(requestedIdentifier string) (*wikipage.Page, error) {
 	// Create a new page object to be returned if no file is found.
 	p := new(wikipage.Page)
 	p.Identifier = requestedIdentifier
-	p.Text = versionedtext.NewVersionedText("")
+	p.Text = ""
 	p.WasLoadedFromDisk = false
 
-	identifier, bJSON, err := s.readFileByIdentifier(requestedIdentifier, "json")
-	if err == nil {
-		// Found JSON file, decode it.
-		// The previous code `json.Unmarshal(bJSON, &p)` was incorrect. It replaces the pointer p,
-		// wiping out the p.Site assignment. The correct way is to unmarshal into the struct pointed to by p.
-		if errJSON := json.Unmarshal(bJSON, p); errJSON != nil {
-			return nil, fmt.Errorf("failed to unmarshal page %s: %w", identifier, errJSON)
-		}
-		p.WasLoadedFromDisk = true
-
-		// IMPORTANT: Apply migrations to JSON-loaded content too!
-		// Get the current text content from the versioned text
-		currentContent := p.Text.GetCurrent()
-		if currentContent != "" {
-			migratedContent, migrationErr := s.applyMigrationsForPage(p, []byte(currentContent))
-			if migrationErr != nil {
-				return nil, fmt.Errorf("migration failed for page %s: %w", identifier, migrationErr)
-			}
-
-			// Update the page's text if migration changed it
-			if string(migratedContent) != currentContent {
-				p.Text = versionedtext.NewVersionedText(string(migratedContent))
-			}
-		}
-
-		return p, nil
-	}
-
-	if !os.IsNotExist(err) {
-		return nil, fmt.Errorf("error reading page json for %s: %w", requestedIdentifier, err)
-	}
-	// JSON file not found, try to load from .md file.
+	// Load from .md file
 	identifier, mdBytes, err := s.readFileByIdentifier(requestedIdentifier, mdExtension)
 	if err != nil {
 		// File not found - return empty page (this is normal for new pages)
@@ -286,13 +256,25 @@ func (s *Site) ReadPage(requestedIdentifier string) (*wikipage.Page, error) {
 
 	p.Identifier = identifier
 
+	// Get the file modification time for conflict detection
+	mungedPath, originalPath, _ := s.getFilePathsForIdentifier(identifier, mdExtension)
+	if stat, statErr := os.Stat(mungedPath); statErr == nil {
+		p.ModTime = stat.ModTime()
+	} else if stat, statErr := os.Stat(originalPath); statErr == nil {
+		p.ModTime = stat.ModTime()
+	} else {
+		// Both stat attempts failed, but this is not critical for page loading
+		// Just log and continue with zero ModTime
+		s.Logger.Trace("Could not get modification time for page %s: %v", identifier, statErr)
+	}
+
 	// Apply migrations to the loaded content
 	migratedContent, migrationErr := s.applyMigrationsForPage(p, mdBytes)
 	if migrationErr != nil {
 		return nil, fmt.Errorf("migration failed for page %s: %w", identifier, migrationErr)
 	}
 
-	p.Text = versionedtext.NewVersionedText(string(migratedContent))
+	p.Text = string(migratedContent)
 	p.WasLoadedFromDisk = true
 	return p, nil
 }
@@ -313,8 +295,8 @@ func (s *Site) applyMigrationsForPage(page *wikipage.Page, content []byte) ([]by
 	// If migration was applied, save the migrated content
 	if !bytes.Equal(content, migratedContent) {
 		// Update the page's text with migrated content and save
-		page.Text = versionedtext.NewVersionedText(string(migratedContent))
-		if saveErr := s.savePageWithoutIndexing(page); saveErr != nil {
+		page.Text = string(migratedContent)
+		if saveErr := s.savePage(page); saveErr != nil {
 			s.Logger.Warn("Failed to save migrated content for %s: %v", page.Identifier, saveErr)
 		} else {
 			s.Logger.Info("Successfully migrated and saved content for page: %s", page.Identifier)
@@ -382,11 +364,11 @@ func (s *Site) readOrInitPage(requestedIdentifier string, req *http.Request) (*w
 `
 		}
 
-		p.Text = versionedtext.NewVersionedText(initialText)
+		p.Text = initialText
 		if renderErr := p.Render(s, s.MarkdownRenderer, TemplateExecutor{}, s.FrontmatterIndexQueryer); renderErr != nil {
 			s.Logger.Error("Error rendering new page: %v", renderErr)
 		}
-		if err := s.savePage(p); err != nil {
+		if err := s.savePageAndIndex(p); err != nil {
 			s.Logger.Error("Failed to save new page '%s': %v", p.Identifier, err)
 			return nil, fmt.Errorf("failed to save new page '%s': %w", p.Identifier, err)
 		}
@@ -401,10 +383,8 @@ func (s *Site) readOrInitPage(requestedIdentifier string, req *http.Request) (*w
 type DirectoryEntry struct {
 	Path       string
 	Length     int
-	Numchanges int
 	LastEdited time.Time
 }
-
 
 // Name returns the name of the directory entry.
 func (d DirectoryEntry) Name() string {
@@ -442,7 +422,7 @@ func (s *Site) DirectoryList() []os.FileInfo {
 	entries := make([]os.FileInfo, len(files))
 	found := 0
 	for _, f := range files {
-		if strings.HasSuffix(f.Name(), ".json") {
+		if strings.HasSuffix(f.Name(), ".md") {
 			name := decodeFileName(f.Name())
 			// Each ReadPage() call will acquire its own read lock
 			p, err := s.ReadPage(name)
@@ -450,11 +430,18 @@ func (s *Site) DirectoryList() []os.FileInfo {
 				s.Logger.Warn("Failed to open page %s for directory listing: %v", name, err)
 				continue
 			}
+
+			// Get file modification time from filesystem
+			fileInfo, statErr := os.Stat(filepath.Join(s.PathToData, f.Name()))
+			lastEdited := time.Now()
+			if statErr == nil {
+				lastEdited = fileInfo.ModTime()
+			}
+
 			entries[found] = DirectoryEntry{
 				Path:       p.Identifier, // Use the actual Page.Identifier, not the decoded filename
-				Length:     len(p.Text.GetCurrent()),
-				Numchanges: p.Text.NumEdits(),
-				LastEdited: time.Unix(p.Text.LastEditTime()/1000000000, 0),
+				Length:     len(p.Text),
+				LastEdited: lastEdited,
 			}
 			found = found + 1
 		}
@@ -538,10 +525,10 @@ func (s *Site) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.
 
 	newText, err := combineFrontmatterAndMarkdown(fm, md)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to combine frontmatter and markdown: %w", err)
 	}
 
-	// Use UpdatePageContent to correctly save history to .json and current version to .md
+	// Use UpdatePageContent to save current content
 	return s.UpdatePageContent(identifier, newText)
 }
 
@@ -555,10 +542,10 @@ func (s *Site) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Mar
 
 	newText, err := combineFrontmatterAndMarkdown(fm, md)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to combine frontmatter and markdown: %w", err)
 	}
 
-	// Use UpdatePageContent to correctly save history to .json and current version to .md
+	// Use UpdatePageContent to save current content
 	return s.UpdatePageContent(identifier, newText)
 }
 
@@ -615,15 +602,6 @@ func (s *Site) DeletePage(identifier wikipage.PageIdentifier) error {
 		return fmt.Errorf("failed to create deleted directory: %w", err)
 	}
 
-	// Move JSON file if it exists
-	jsonPath := path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(string(identifier)))+".json")
-	deletedJSONPath := path.Join(deletedDir, base32tools.EncodeToBase32(strings.ToLower(string(identifier)))+".json")
-	jsonErr := os.Rename(jsonPath, deletedJSONPath)
-	jsonExists := jsonErr == nil
-	if jsonErr != nil && !os.IsNotExist(jsonErr) {
-		return fmt.Errorf("failed to move JSON file for page %s: %w", identifier, jsonErr)
-	}
-
 	// Move Markdown file if it exists
 	mdPath := path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(string(identifier)))+".md")
 	deletedMdPath := path.Join(deletedDir, base32tools.EncodeToBase32(strings.ToLower(string(identifier)))+".md")
@@ -633,8 +611,8 @@ func (s *Site) DeletePage(identifier wikipage.PageIdentifier) error {
 		return fmt.Errorf("failed to move Markdown file for page %s: %w", identifier, mdErr)
 	}
 
-	// If neither file existed, return not found error
-	if !jsonExists && !mdExists {
+	// If file didn't exist, return not found error
+	if !mdExists {
 		return os.ErrNotExist
 	}
 
@@ -660,8 +638,8 @@ func (s *Site) UpdatePageContent(identifier wikipage.PageIdentifier, newText str
 		newText = string(migratedContent)
 	}
 
-	// Update the versioned text
-	p.Text.Update(newText)
+	// Update the text content
+	p.Text = newText
 
 	// Render the new page
 	if renderErr := p.Render(s, s.MarkdownRenderer, TemplateExecutor{}, s.FrontmatterIndexQueryer); renderErr != nil {
@@ -669,28 +647,14 @@ func (s *Site) UpdatePageContent(identifier wikipage.PageIdentifier, newText str
 	}
 
 	// Save to disk with proper locking
-	return s.savePage(p)
+	return s.savePageAndIndex(p)
 }
 
-// savePage handles the low-level persistence of a page to disk
-func (s *Site) savePage(p *wikipage.Page) error {
-	s.saveMut.Lock()
-	defer s.saveMut.Unlock()
-
-	bJSON, err := json.MarshalIndent(p, "", " ")
+// savePageAndIndex handles the low-level persistence of a page to disk
+func (s *Site) savePageAndIndex(p *wikipage.Page) error {
+	err := s.savePage(p)
 	if err != nil {
-		return err
-	}
-
-	err = os.WriteFile(path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(p.Identifier))+".json"), bJSON, 0644)
-	if err != nil {
-		return err
-	}
-
-	// Write the current Markdown
-	err = os.WriteFile(path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(p.Identifier))+".md"), []byte(p.Text.CurrentText), 0644)
-	if err != nil {
-		return err
+		return fmt.Errorf("failed to save page and index: %w", err)
 	}
 
 	// Enqueue indexing jobs for both frontmatter and bleve indexes
@@ -701,29 +665,18 @@ func (s *Site) savePage(p *wikipage.Page) error {
 	return nil
 }
 
-// savePageWithoutIndexing saves a page to disk without triggering indexing.
+// savePage saves a page to disk without triggering indexing.
 // This is used by migrations to avoid circular references during read operations.
-func (s *Site) savePageWithoutIndexing(p *wikipage.Page) error {
+func (s *Site) savePage(p *wikipage.Page) error {
 	s.saveMut.Lock()
 	defer s.saveMut.Unlock()
 
-	bJSON, err := json.MarshalIndent(p, "", " ")
-	if err != nil {
-		return err
-	}
-
-	err = os.WriteFile(path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(p.Identifier))+".json"), bJSON, 0644)
-	if err != nil {
-		return err
-	}
-
 	// Write the current Markdown
-	err = os.WriteFile(path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(p.Identifier))+".md"), []byte(p.Text.CurrentText), 0644)
+	err := os.WriteFile(path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(p.Identifier))+".md"), []byte(p.Text), 0644)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to save page %s: %w", p.Identifier, err)
 	}
 
-	// Note: Intentionally NOT calling IndexCoordinator to prevent circular references
 	return nil
 }
 
@@ -739,13 +692,6 @@ func (s *Site) ReadOrInitPageForTesting(requestedIdentifier string, req *http.Re
 }
 
 // Utility functions for working with pages
-
-const nanosecondsPerSecond = 1000000000
-
-// lastEditUnixTime returns the last edit time of the page in Unix nanoseconds.
-func lastEditUnixTime(p *wikipage.Page) int64 {
-	return p.Text.LastEditTime() / nanosecondsPerSecond
-}
 
 // decodeFileName decodes a filename from base32.
 func decodeFileName(s string) string {

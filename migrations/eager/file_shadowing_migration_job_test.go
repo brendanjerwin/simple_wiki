@@ -58,7 +58,7 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 				if err == nil {
 					mungedPage, _ = deps.ReadPage("lab_inventory")
 					if mungedPage != nil {
-						content = mungedPage.Text.GetCurrent()
+						content = mungedPage.Text
 					}
 				}
 			})
@@ -96,7 +96,7 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 				if err == nil {
 					mungedPage, _ = deps.ReadPage("user_guide")
 					if mungedPage != nil {
-						content = mungedPage.Text.GetCurrent()
+						content = mungedPage.Text
 					}
 				}
 			})
@@ -136,7 +136,7 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 				if err == nil {
 					mungedPage, _ = deps.ReadPage("lab_inventory")
 					if mungedPage != nil {
-						content = mungedPage.Text.GetCurrent()
+						content = mungedPage.Text
 					}
 				}
 			})

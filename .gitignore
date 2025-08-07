@@ -51,6 +51,10 @@ storybook-static
 e2e-test-data/
 test-manual-data/
 
+# Backup directories that may be created during development
+data__bak/
+data_bak/
+
 # Crush agent directory
 .crush
 

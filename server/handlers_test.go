@@ -52,70 +52,6 @@ var _ = Describe("Handlers", func() {
 		_ = os.RemoveAll(tmpDir)
 	})
 
-	Describe("handlePageExists", func() {
-		When("the request has bad json", func() {
-			BeforeEach(func() {
-				req, _ := http.NewRequest(http.MethodPost, "/exists", bytes.NewBuffer([]byte("bad json")))
-				req.Header.Set("Content-Type", "application/json")
-				router.ServeHTTP(w, req)
-			})
-
-			It("should return a 400 error", func() {
-				Expect(w.Code).To(Equal(http.StatusBadRequest))
-			})
-		})
-
-		When("the page exists", func() {
-			var response map[string]any
-			var pageName string
-
-			BeforeEach(func() {
-				pageName = "test-exists"
-				p, err := site.ReadPage(pageName)
-				Expect(err).NotTo(HaveOccurred())
-				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
-
-				body, _ := json.Marshal(map[string]string{"page": pageName})
-				req, _ := http.NewRequest(http.MethodPost, "/exists", bytes.NewBuffer(body))
-				req.Header.Set("Content-Type", "application/json")
-				router.ServeHTTP(w, req)
-				_ = json.Unmarshal(w.Body.Bytes(), &response)
-			})
-
-			It("should return a 200 status code", func() {
-				Expect(w.Code).To(Equal(http.StatusOK))
-			})
-
-			It("should return a success message", func() {
-				Expect(response["success"]).To(BeTrue())
-				Expect(response["exists"]).To(BeTrue())
-			})
-		})
-
-		When("the page does not exist", func() {
-			var response map[string]any
-			var pageName string
-
-			BeforeEach(func() {
-				pageName = "test-does-not-exist"
-
-				body, _ := json.Marshal(map[string]string{"page": pageName})
-				req, _ := http.NewRequest(http.MethodPost, "/exists", bytes.NewBuffer(body))
-				req.Header.Set("Content-Type", "application/json")
-				router.ServeHTTP(w, req)
-				_ = json.Unmarshal(w.Body.Bytes(), &response)
-			})
-
-			It("should return a 200 status code", func() {
-				Expect(w.Code).To(Equal(http.StatusOK))
-			})
-
-			It("should return a success message", func() {
-				Expect(response["success"]).To(BeTrue())
-				Expect(response["exists"]).To(BeFalse())
-			})
-		})
-	})
 
 	Describe("handlePageUpdate", func() {
 		When("the request has bad json", func() {
@@ -258,7 +194,7 @@ var _ = Describe("Handlers", func() {
 			It("should update the page content", func() {
 				p, err := site.ReadPage(pageName)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(p.Text.GetCurrent()).To(Equal(newText))
+				Expect(p.Text).To(Equal(newText))
 			})
 		})
 
@@ -276,7 +212,7 @@ var _ = Describe("Handlers", func() {
 				p, err := site.ReadPage(pageName)
 				Expect(err).NotTo(HaveOccurred())
 				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "initial content")
-				_ = site.UpdatePageContent(p.Identifier, p.Text.GetCurrent())
+				_ = site.UpdatePageContent(p.Identifier, p.Text)
 
 				// Make the data directory read-only to simulate save failure
 				dirInfo, err := os.Stat(tmpDir)
@@ -356,7 +292,7 @@ var _ = Describe("Handlers", func() {
 
 			It("should return a failure response", func() {
 				Expect(response["success"]).To(BeFalse())
-				Expect(response["message"]).To(Equal("Failed to save page"))
+				Expect(response["message"]).To(ContainSubstring("permission denied"))
 			})
 		})
 	})
@@ -637,7 +573,7 @@ var _ = Describe("Session Logging Functions", func() {
 				p, err := site.ReadPage("test-integration")
 				Expect(err).NotTo(HaveOccurred())
 				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "test content")
-				_ = site.UpdatePageContent(p.Identifier, p.Text.GetCurrent())
+				_ = site.UpdatePageContent(p.Identifier, p.Text)
 			})
 
 			It("should pass logger to session functions in handlePageRequest", func() {

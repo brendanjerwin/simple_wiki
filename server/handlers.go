@@ -14,20 +14,17 @@ import (
 	"os"
 	"path"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/static"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
-	"github.com/brendanjerwin/simple_wiki/utils/slicetools"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/gin-contrib/multitemplate"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 	"github.com/jcelliott/lumber"
 )
-
 
 const (
 	// HTTP status codes
@@ -36,7 +33,6 @@ const (
 
 	// Magic numbers
 	maxSecretAttempts = 8
-	maxCacheControl   = 60
 	maxContentLength  = 3
 
 	// String constants
@@ -49,7 +45,6 @@ var (
 	hotTemplateReloading bool
 	LogLevel             int = lumber.WARN
 )
-
 
 // GinRouter returns a new Gin router configured for the site.
 func (s *Site) GinRouter() *gin.Engine {
@@ -88,7 +83,6 @@ func (s *Site) GinRouter() *gin.Engine {
 	})
 	router.GET("/:page/*command", s.handlePageRequest)
 	router.POST("/update", s.handlePageUpdate)
-	router.POST("/exists", s.handlePageExists)
 	router.POST("/api/print_label", s.handlePrintLabel)
 	router.GET("/api/find_by", s.handleFindBy)
 	router.GET("/api/find_by_prefix", s.handleFindByPrefix)
@@ -110,9 +104,6 @@ func (s *Site) loadTemplate() multitemplate.Render {
 
 	return r
 }
-
-
-
 
 func getSetSessionID(c *gin.Context, logger *lumber.ConsoleLogger) (sid string) {
 	var (
@@ -166,10 +157,8 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		return
 	}
 
-	version := c.DefaultQuery("version", "ajksldfjl")
-
 	// Render the page content
-	s.renderPageContent(c, page, command, p, version)
+	s.renderPageContent(c, page, command, p)
 }
 
 // handleSpecialPages handles special page routes (favicon, static, uploads)
@@ -191,12 +180,9 @@ func (s *Site) handleSpecialPages(c *gin.Context, page, command string) bool {
 }
 
 // renderPageContent handles the final page content rendering
-func (s *Site) renderPageContent(c *gin.Context, page, command string, p *wikipage.Page, version string) {
-	rawText, contentHTML := s.getPageContent(p, version)
+func (s *Site) renderPageContent(c *gin.Context, page, command string, p *wikipage.Page) {
+	rawText, contentHTML := s.getPageContent(p)
 	contentHTML = fmt.Appendf(nil, "<article class='content' id='%s'>%s</article>", page, string(contentHTML))
-
-	// Get history
-	versionsInt64, versionsChangeSums, versionsText := s.getVersionHistory(command, p)
 
 	if s.handleRawContent(c, command, p, rawText) {
 		return
@@ -212,23 +198,13 @@ func (s *Site) renderPageContent(c *gin.Context, page, command string, p *wikipa
 		return
 	}
 
-	templateData := s.buildTemplateData(page, command, directoryEntries, contentHTML, rawText, versionsInt64, versionsText, versionsChangeSums, c)
+	templateData := s.buildTemplateData(page, command, directoryEntries, contentHTML, rawText, c)
 	c.HTML(http.StatusOK, "index.tmpl", templateData)
 }
 
-func (s *Site) getPageContent(p *wikipage.Page, version string) (rawText string, contentHTML []byte) {
-	rawText = p.Text.GetCurrent()
+func (*Site) getPageContent(p *wikipage.Page) (rawText string, contentHTML []byte) {
+	rawText = p.Text
 	contentHTML = p.RenderedPage
-
-	// Check to see if an old version is requested
-	versionInt, versionErr := strconv.Atoi(version)
-	if versionErr == nil && versionInt > 0 {
-		versionText, err := p.Text.GetPreviousByTimestamp(int64(versionInt))
-		if err == nil {
-			rawText = versionText
-			contentHTML, _ = s.MarkdownRenderer.Render([]byte(rawText))
-		}
-	}
 	return rawText, contentHTML
 }
 
@@ -249,49 +225,30 @@ func (s *Site) getDirectoryEntries(page, command string) ([]os.FileInfo, string,
 	return directoryEntries, command, nil
 }
 
-func (*Site) getVersionHistory(command string, p *wikipage.Page) (versionsInt64 []int64, versionsChangeSums []int, versionsText []string) {
-	if command[0:2] == "/h" {
-		versionsInt64, versionsChangeSums = p.Text.GetMajorSnapshotsAndChangeSums(maxCacheControl) // get snapshots 60 seconds apart
-		versionsText = make([]string, len(versionsInt64))
-		for i, v := range versionsInt64 {
-			versionsText[i] = time.Unix(v/1000000000, 0).Format("Mon Jan 2 15:04:05 MST 2006")
-		}
-		versionsText = slicetools.ReverseSliceString(versionsText)
-		versionsInt64 = slicetools.ReverseSliceInt64(versionsInt64)
-		versionsChangeSums = slicetools.ReverseSliceInt(versionsChangeSums)
-	}
-	return versionsInt64, versionsChangeSums, versionsText
-}
-
-func (s *Site) buildTemplateData(page, command string, directoryEntries []os.FileInfo, contentHTML []byte, rawText string, versionsInt64 []int64, versionsText []string, versionsChangeSums []int, c *gin.Context) gin.H {
+func (s *Site) buildTemplateData(page, command string, directoryEntries []os.FileInfo, contentHTML []byte, rawText string, c *gin.Context) gin.H {
 	return gin.H{
-		"EditPage":    command[0:2] == "/e", // /edit
-		"ViewPage":    command[0:2] == "/v", // /view
-		"HistoryPage": command[0:2] == "/h", // /history
-		"ReadPage":    command[0:2] == "/r", // /history
+		"EditPage": command[0:2] == "/e", // /edit
+		"ViewPage": command[0:2] == "/v", // /view
+		"ReadPage": command[0:2] == "/r", // /read
 		"DontKnowPage": command[0:2] != "/e" &&
 			command[0:2] != "/v" &&
 			command[0:2] != "/l" &&
-			command[0:2] != "/r" &&
-			command[0:2] != "/h",
-		"DirectoryPage":      page == "ls" || page == uploadsPage,
-		"UploadPage":         page == uploadsPage,
-		"DirectoryEntries":   directoryEntries,
-		"Page":               page,
-		"RenderedPage":       template.HTML([]byte(contentHTML)),
-		"RawPage":            rawText,
-		"Versions":           versionsInt64,
-		"VersionsText":       versionsText,
-		"VersionsChangeSums": versionsChangeSums,
-		"Route":              "/" + page + command,
-		"HasDotInName":       strings.Contains(page, "."),
-		"RecentlyEdited":     getRecentlyEdited(page, c, s.Logger),
-		"CustomCSS":          len(s.CSS) > 0,
-		"Debounce":           s.Debounce,
-		"Date":               time.Now().Format("2006-01-02"),
-		"UnixTime":           time.Now().Unix(),
-		"AllowFileUploads":   s.Fileuploads,
-		"MaxUploadMB":        s.MaxUploadSize,
+			command[0:2] != "/r",
+		"DirectoryPage":    page == "ls" || page == uploadsPage,
+		"UploadPage":       page == uploadsPage,
+		"DirectoryEntries": directoryEntries,
+		"Page":             page,
+		"RenderedPage":     template.HTML([]byte(contentHTML)),
+		"RawPage":          rawText,
+		"Route":            "/" + page + command,
+		"HasDotInName":     strings.Contains(page, "."),
+		"RecentlyEdited":   getRecentlyEdited(page, c, s.Logger),
+		"CustomCSS":        len(s.CSS) > 0,
+		"Debounce":         s.Debounce,
+		"Date":             time.Now().Format("2006-01-02"),
+		"UnixTime":         time.Now().Unix(),
+		"AllowFileUploads": s.Fileuploads,
+		"MaxUploadMB":      s.MaxUploadSize,
 	}
 }
 
@@ -331,38 +288,15 @@ func getRecentlyEdited(title string, c *gin.Context, logger *lumber.ConsoleLogge
 	return editedThingsWithoutCurrent[:i]
 }
 
-func (s *Site) handlePageExists(c *gin.Context) {
-	type QueryJSON struct {
-		Page string `json:"page"`
-	}
-	var json QueryJSON
-	err := c.BindJSON(&json)
-	if err != nil {
-		s.Logger.Trace("Failed to bind JSON in handlePageExists: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Wrong JSON", "exists": false})
-		return
-	}
-	p, err := s.ReadPage(json.Page)
-	if err != nil {
-		s.Logger.Error("Failed to open page %s for exists check: %v", json.Page, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to open page", "exists": false})
-		return
-	}
-	if len(p.Text.GetCurrent()) > 0 {
-		c.JSON(http.StatusOK, gin.H{"success": true, "message": json.Page + " found", "exists": true})
-	} else {
-		c.JSON(http.StatusOK, gin.H{"success": true, "message": json.Page + " not found", "exists": false})
-	}
+// PageUpdateRequest represents the JSON structure for page update requests
+type PageUpdateRequest struct {
+	Page      string `json:"page"`
+	NewText   string `json:"new_text"`
+	FetchedAt int64  `json:"fetched_at"`
 }
 
 func (s *Site) handlePageUpdate(c *gin.Context) {
-	type QueryJSON struct {
-		Page      string `json:"page"`
-		NewText   string `json:"new_text"`
-		FetchedAt int64  `json:"fetched_at"`
-		Meta      string `json:"meta"`
-	}
-	var json QueryJSON
+	var json PageUpdateRequest
 	err := c.BindJSON(&json)
 	if err != nil {
 		s.Logger.Trace("Failed to bind JSON in handlePageUpdate: %v", err)
@@ -384,18 +318,17 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to open page"})
 		return
 	}
-	var (
-		message       string
-	)
+	var message string
 	success := false
-	if json.FetchedAt > 0 && lastEditUnixTime(p) > json.FetchedAt {
+	if json.FetchedAt > 0 && p.IsModifiedSince(json.FetchedAt) {
 		message = "Refusing to overwrite others work"
+		success = false  // Explicitly set to make error handling clear
 	} else {
-		p.Meta = json.Meta
-		if err := s.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), json.NewText); err != nil {
-			s.Logger.Error("Failed to save page '%s': %v", json.Page, err)
-			message = "Failed to save page"
-			success = false
+		p.Text = json.NewText
+		err := s.savePageAndIndex(p)
+		if err != nil {
+			message = err.Error()
+			success = false  // Explicitly set to make error handling clear
 		} else {
 			message = "Saved"
 			success = true
@@ -403,6 +336,7 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"success": success, "message": message, "unix_time": time.Now().Unix()})
 }
+
 
 func (s *Site) handleUpload(c *gin.Context) {
 	if !s.Fileuploads {

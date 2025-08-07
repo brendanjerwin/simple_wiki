@@ -86,7 +86,7 @@ inventory.container = 'GarageInventory'
 				var openErr error
 				openedPage, openErr = site.ReadPage(identifier)
 				Expect(openErr).NotTo(HaveOccurred())
-				openedContent = openedPage.Text.GetCurrent()
+				openedContent = openedPage.Text
 				if openedPage.WasLoadedFromDisk {
 					err = nil
 				} else {
@@ -186,7 +186,7 @@ container = 'already_migrated'
 			// Open it
 			openedPage, openErr := site.ReadPage(identifier)
 			Expect(openErr).NotTo(HaveOccurred())
-			openedContent = openedPage.Text.GetCurrent()
+			openedContent = openedPage.Text
 			if openedPage.WasLoadedFromDisk {
 				err = nil
 			} else {

@@ -81,7 +81,7 @@ var _ = Describe("Site.ReadOrInit with URL parameters", func() {
 			
 			// Capture test data after action
 			if p != nil {
-				content = p.Text.GetCurrent()
+				content = p.Text
 				
 				// Extract frontmatter between +++ delimiters
 				if strings.Contains(content, "+++") {
@@ -183,7 +183,7 @@ var _ = Describe("Site.ReadOrInit with URL parameters", func() {
 			
 			// Capture test data after action
 			if p != nil {
-				content = p.Text.GetCurrent()
+				content = p.Text
 				
 				// Extract and parse frontmatter
 				if strings.Contains(content, "+++") {
