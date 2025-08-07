@@ -79,7 +79,6 @@ func setupServer(c *cli.Context) (*http.Server, error) {
 		pathToData,
 		c.GlobalString("css"),
 		c.GlobalString("default-page"),
-		c.GlobalString("lock"),
 		c.GlobalInt("debounce"),
 		c.GlobalString("cookie-secret"),
 		c.GlobalString("access-code"),
@@ -185,11 +184,6 @@ func getFlags() []cli.Flag {
 			Name:  "default-page",
 			Value: "home",
 			Usage: "show default-page/read instead of editing (default: show random editing)",
-		},
-		cli.StringFlag{
-			Name:  "lock",
-			Value: "",
-			Usage: "password to lock editing all files (default: all pages unlocked)",
 		},
 		cli.IntFlag{
 			Name:  "debounce",

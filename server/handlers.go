@@ -18,7 +18,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brendanjerwin/simple_wiki/sec"
 	"github.com/brendanjerwin/simple_wiki/static"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/utils/slicetools"
@@ -30,7 +29,6 @@ import (
 	"github.com/jcelliott/lumber"
 )
 
-const minutesToUnlock = 10.0
 
 const (
 	// HTTP status codes
@@ -110,7 +108,6 @@ func (s *Site) GinRouter() *gin.Engine {
 	router.POST("/update", s.handlePageUpdate)
 	router.POST("/relinquish", s.handlePageRelinquish) // relinquish returns the page no matter what (and destroys if nessecary)
 	router.POST("/exists", s.handlePageExists)
-	router.POST("/lock", s.handleLock)
 	router.POST("/api/print_label", s.handlePrintLabel)
 	router.GET("/api/find_by", s.handleFindBy)
 	router.GET("/api/find_by_prefix", s.handleFindByPrefix)
@@ -133,12 +130,7 @@ func (s *Site) loadTemplate() multitemplate.Render {
 	return r
 }
 
-func pageIsLocked(p *wikipage.Page, c *gin.Context, logger *lumber.ConsoleLogger) bool {
-	// it is easier to reason about when the page is actually unlocked
-	unlocked := !p.IsLocked ||
-		(p.IsLocked && p.UnlockedFor == getSetSessionID(c, logger))
-	return !unlocked
-}
+
 
 func (s *Site) handlePageRelinquish(c *gin.Context) {
 	type QueryJSON struct {
@@ -155,7 +147,7 @@ func (s *Site) handlePageRelinquish(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Must specify `page`"})
 		return
 	}
-	message := "Relinquished"
+	message := "Relinquished and erased"
 	p, err := s.ReadPage(json.Page)
 	if err != nil {
 		s.Logger.Error("Failed to open page %s for relinquish: %v", json.Page, err)
@@ -167,20 +159,15 @@ func (s *Site) handlePageRelinquish(c *gin.Context) {
 		name = json.Page
 	}
 	text := p.Text.GetCurrent()
-	isLocked := pageIsLocked(p, c, s.Logger)
-	if !isLocked {
-		if err := s.DeletePage(p.Identifier); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to erase page"})
-			return
-		}
-		message = "Relinquished and erased"
+	if err := s.DeletePage(p.Identifier); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to erase page"})
+		return
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"name":    name,
 		"message": message,
 		"text":    text,
-		"locked":  isLocked,
 	})
 }
 
@@ -236,24 +223,10 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		return
 	}
 
-	// use the default lock
-	if s.defaultLock() != "" && p.IsNew() {
-		p.IsLocked = true
-		p.PassphraseToUnlock = s.defaultLock()
-	}
-
 	version := c.DefaultQuery("version", "ajksldfjl")
-	isLocked := pageIsLocked(p, c, s.Logger)
-
-	// Disallow anything but viewing locked pages
-	if (isLocked) &&
-		(command[0:2] != "/v" && command[0:2] != "/r") {
-		c.Redirect(httpStatusFound, "/"+page+"/view")
-		return
-	}
 
 	// Render the page content
-	s.renderPageContent(c, page, command, p, version, isLocked)
+	s.renderPageContent(c, page, command, p, version)
 }
 
 // handleSpecialPages handles special page routes (favicon, static, uploads)
@@ -275,7 +248,7 @@ func (s *Site) handleSpecialPages(c *gin.Context, page, command string) bool {
 }
 
 // renderPageContent handles the final page content rendering
-func (s *Site) renderPageContent(c *gin.Context, page, command string, p *wikipage.Page, version string, isLocked bool) {
+func (s *Site) renderPageContent(c *gin.Context, page, command string, p *wikipage.Page, version string) {
 	rawText, contentHTML := s.getPageContent(p, version)
 	contentHTML = fmt.Appendf(nil, "<article class='content' id='%s'>%s</article>", page, string(contentHTML))
 
@@ -296,7 +269,7 @@ func (s *Site) renderPageContent(c *gin.Context, page, command string, p *wikipa
 		return
 	}
 
-	templateData := s.buildTemplateData(page, command, directoryEntries, contentHTML, rawText, versionsInt64, versionsText, versionsChangeSums, isLocked, c)
+	templateData := s.buildTemplateData(page, command, directoryEntries, contentHTML, rawText, versionsInt64, versionsText, versionsChangeSums, c)
 	c.HTML(http.StatusOK, "index.tmpl", templateData)
 }
 
@@ -347,7 +320,7 @@ func (*Site) getVersionHistory(command string, p *wikipage.Page) (versionsInt64 
 	return versionsInt64, versionsChangeSums, versionsText
 }
 
-func (s *Site) buildTemplateData(page, command string, directoryEntries []os.FileInfo, contentHTML []byte, rawText string, versionsInt64 []int64, versionsText []string, versionsChangeSums []int, isLocked bool, c *gin.Context) gin.H {
+func (s *Site) buildTemplateData(page, command string, directoryEntries []os.FileInfo, contentHTML []byte, rawText string, versionsInt64 []int64, versionsText []string, versionsChangeSums []int, c *gin.Context) gin.H {
 	return gin.H{
 		"EditPage":    command[0:2] == "/e", // /edit
 		"ViewPage":    command[0:2] == "/v", // /view
@@ -367,7 +340,6 @@ func (s *Site) buildTemplateData(page, command string, directoryEntries []os.Fil
 		"Versions":           versionsInt64,
 		"VersionsText":       versionsText,
 		"VersionsChangeSums": versionsChangeSums,
-		"IsLocked":           isLocked,
 		"Route":              "/" + page + command,
 		"HasDotInName":       strings.Contains(page, "."),
 		"RecentlyEdited":     getRecentlyEdited(page, c, s.Logger),
@@ -471,18 +443,9 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 	}
 	var (
 		message       string
-		sinceLastEdit = time.Since(lastEditTime(p))
 	)
 	success := false
-	if pageIsLocked(p, c, s.Logger) {
-		if sinceLastEdit < minutesToUnlock {
-			message = "This page is being edited by someone else"
-		} else {
-			// here what might have happened is that two people unlock without
-			// editing thus they both suceeds but only one is able to edit
-			message = "Locked, must unlock first"
-		}
-	} else if json.FetchedAt > 0 && lastEditUnixTime(p) > json.FetchedAt {
+	if json.FetchedAt > 0 && lastEditUnixTime(p) > json.FetchedAt {
 		message = "Refusing to overwrite others work"
 	} else {
 		p.Meta = json.Meta
@@ -496,67 +459,6 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{"success": success, "message": message, "unix_time": time.Now().Unix()})
-}
-
-func (s *Site) handleLock(c *gin.Context) {
-	type QueryJSON struct {
-		Page       string `json:"page"`
-		Passphrase string `json:"passphrase"`
-	}
-
-	var json QueryJSON
-	if c.BindJSON(&json) != nil {
-		c.String(http.StatusBadRequest, "Problem binding keys")
-		return
-	}
-	p, err := s.ReadPage(json.Page)
-	if err != nil {
-		s.Logger.Error("Failed to open page %s for lock: %v", json.Page, err)
-		c.String(http.StatusInternalServerError, "Failed to open page")
-		return
-	}
-	if s.defaultLock() != "" && p.IsNew() {
-		p.IsLocked = true
-		p.PassphraseToUnlock = s.defaultLock()
-	}
-
-	var (
-		message       string
-		sessionID     = getSetSessionID(c, s.Logger)
-		sinceLastEdit = time.Since(lastEditTime(p))
-	)
-
-	// both lock/unlock ends here on locked&timeout combination
-	if p.IsLocked &&
-		p.UnlockedFor != sessionID &&
-		p.UnlockedFor != "" &&
-		sinceLastEdit.Minutes() < minutesToUnlock {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": fmt.Sprintf("This page is being edited by someone else! Will unlock automatically %2.0f minutes after the last change.", minutesToUnlock-sinceLastEdit.Minutes()),
-		})
-		return
-	}
-	if !pageIsLocked(p, c, s.Logger) {
-		p.IsLocked = true
-		p.PassphraseToUnlock = sec.HashPassword(json.Passphrase)
-		p.UnlockedFor = ""
-		message = "Locked"
-	} else {
-		err2 := sec.CheckPasswordHash(json.Passphrase, p.PassphraseToUnlock)
-		if err2 != nil {
-			c.JSON(http.StatusOK, gin.H{"success": false, "message": "Can't unlock"})
-			return
-		}
-		p.UnlockedFor = sessionID
-		message = "Unlocked only for you"
-	}
-	if err := s.savePage(p); err != nil {
-		s.Logger.Error("Failed to save page lock state for '%s': %v", json.Page, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to save lock information"})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "message": message})
 }
 
 func (s *Site) handleUpload(c *gin.Context) {
@@ -685,9 +587,4 @@ func GetSetSessionIDForTesting(c *gin.Context, logger *lumber.ConsoleLogger) str
 // GetRecentlyEditedForTesting exposes getRecentlyEdited for testing
 func GetRecentlyEditedForTesting(title string, c *gin.Context, logger *lumber.ConsoleLogger) []string {
 	return getRecentlyEdited(title, c, logger)
-}
-
-// PageIsLockedForTesting exposes pageIsLocked for testing
-func PageIsLockedForTesting(p *wikipage.Page, c *gin.Context, logger *lumber.ConsoleLogger) bool {
-	return pageIsLocked(p, c, logger)
 }
