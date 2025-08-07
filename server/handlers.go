@@ -106,7 +106,6 @@ func (s *Site) GinRouter() *gin.Engine {
 	})
 	router.GET("/:page/*command", s.handlePageRequest)
 	router.POST("/update", s.handlePageUpdate)
-	router.POST("/relinquish", s.handlePageRelinquish) // relinquish returns the page no matter what (and destroys if nessecary)
 	router.POST("/exists", s.handlePageExists)
 	router.POST("/api/print_label", s.handlePrintLabel)
 	router.GET("/api/find_by", s.handleFindBy)
@@ -132,44 +131,6 @@ func (s *Site) loadTemplate() multitemplate.Render {
 
 
 
-func (s *Site) handlePageRelinquish(c *gin.Context) {
-	type QueryJSON struct {
-		Page string `json:"page"`
-	}
-	var json QueryJSON
-	err := c.BindJSON(&json)
-	if err != nil {
-		s.Logger.Trace("Failed to bind JSON in handlePageRelinquish: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Wrong JSON"})
-		return
-	}
-	if len(json.Page) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Must specify `page`"})
-		return
-	}
-	message := "Relinquished and erased"
-	p, err := s.ReadPage(json.Page)
-	if err != nil {
-		s.Logger.Error("Failed to open page %s for relinquish: %v", json.Page, err)
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to open page"})
-		return
-	}
-	name := p.Meta
-	if name == "" {
-		name = json.Page
-	}
-	text := p.Text.GetCurrent()
-	if err := s.DeletePage(p.Identifier); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to erase page"})
-		return
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"name":    name,
-		"message": message,
-		"text":    text,
-	})
-}
 
 func getSetSessionID(c *gin.Context, logger *lumber.ConsoleLogger) (sid string) {
 	var (

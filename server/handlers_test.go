@@ -52,100 +52,6 @@ var _ = Describe("Handlers", func() {
 		_ = os.RemoveAll(tmpDir)
 	})
 
-	Describe("handlePageRelinquish", func() {
-		When("the request has bad json", func() {
-			BeforeEach(func() {
-				req, _ := http.NewRequest(http.MethodPost, "/relinquish", bytes.NewBuffer([]byte("bad json")))
-				req.Header.Set("Content-Type", "application/json")
-				router.ServeHTTP(w, req)
-			})
-
-			It("should return a 400 error", func() {
-				Expect(w.Code).To(Equal(http.StatusBadRequest))
-			})
-		})
-
-		When("the request is missing the page field", func() {
-			BeforeEach(func() {
-				body, _ := json.Marshal(map[string]string{})
-				req, _ := http.NewRequest(http.MethodPost, "/relinquish", bytes.NewBuffer(body))
-				req.Header.Set("Content-Type", "application/json")
-				router.ServeHTTP(w, req)
-			})
-
-			It("should return a 400 error", func() {
-				Expect(w.Code).To(Equal(http.StatusBadRequest))
-			})
-		})
-
-		When("the page is relinquished successfully", func() {
-			var response map[string]any
-			var pageName string
-
-			BeforeEach(func() {
-				pageName = "test-relinquish"
-				p, err := site.ReadPage(pageName)
-				Expect(err).NotTo(HaveOccurred())
-				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
-
-				body, _ := json.Marshal(map[string]string{"page": pageName})
-				req, _ := http.NewRequest(http.MethodPost, "/relinquish", bytes.NewBuffer(body))
-				req.Header.Set("Content-Type", "application/json")
-				router.ServeHTTP(w, req)
-				_ = json.Unmarshal(w.Body.Bytes(), &response)
-			})
-
-			It("should return a 200 status code", func() {
-				Expect(w.Code).To(Equal(http.StatusOK))
-			})
-
-			It("should return a success message", func() {
-				Expect(response["success"]).To(BeTrue())
-				Expect(response["message"]).To(Equal("Relinquished and erased"))
-			})
-
-			It("should erase the page", func() {
-				p, err := site.ReadPage(pageName)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(p.Text.GetCurrent()).To(BeEmpty())
-			})
-		})
-
-		When("the page erase fails during relinquish", func() {
-			var response map[string]any
-			var pageName string
-
-			BeforeEach(func() {
-				pageName = "test-relinquish-fail"
-				p, err := site.ReadPage(pageName)
-				Expect(err).NotTo(HaveOccurred())
-				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
-
-				// Make the data directory read-only to cause file deletion to fail
-				// Files can still be read, but cannot be deleted from the directory
-				_ = os.Chmod(tmpDir, 0555) // read + execute, but no write
-
-				body, _ := json.Marshal(map[string]string{"page": pageName})
-				req, _ := http.NewRequest(http.MethodPost, "/relinquish", bytes.NewBuffer(body))
-				req.Header.Set("Content-Type", "application/json")
-				router.ServeHTTP(w, req)
-				_ = json.Unmarshal(w.Body.Bytes(), &response)
-
-				// Restore permissions for cleanup
-				_ = os.Chmod(tmpDir, 0755)
-			})
-
-			It("should return a 500 status code", func() {
-				Expect(w.Code).To(Equal(http.StatusInternalServerError))
-			})
-
-			It("should return an error message", func() {
-				Expect(response["success"]).To(BeFalse())
-				Expect(response["message"]).To(Equal("Failed to erase page"))
-			})
-		})
-	})
-
 	Describe("handlePageExists", func() {
 		When("the request has bad json", func() {
 			BeforeEach(func() {
@@ -732,18 +638,6 @@ var _ = Describe("Session Logging Functions", func() {
 				Expect(err).NotTo(HaveOccurred())
 				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "test content")
 				_ = site.UpdatePageContent(p.Identifier, p.Text.GetCurrent())
-			})
-
-			It("should pass logger to session functions in handlePageRelinquish", func() {
-				body, _ := json.Marshal(map[string]string{"page": "test-integration"})
-				req, _ := http.NewRequest(http.MethodPost, "/relinquish", bytes.NewBuffer(body))
-				req.Header.Set("Content-Type", "application/json")
-
-				router.ServeHTTP(w, req)
-
-				// Should succeed without session logging errors
-				Expect(w.Code).To(Equal(http.StatusOK))
-				Expect(logBuffer.String()).NotTo(ContainSubstring("Failed to save session"))
 			})
 
 			It("should pass logger to session functions in handlePageRequest", func() {
