@@ -17,9 +17,6 @@ type Page struct {
 	Text               versionedtext.VersionedText
 	Meta               string
 	RenderedPage       []byte `json:"-"`
-	IsLocked           bool
-	PassphraseToUnlock string
-	UnlockedFor        string
 	FrontmatterJSON    []byte `json:"-"`
 	WasLoadedFromDisk  bool   `json:"-"`
 }

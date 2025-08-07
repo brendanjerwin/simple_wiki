@@ -46,6 +46,9 @@
       "go:generate": [
         "go generate ./..."
       ],
+      "go:deadcode": [
+        "go run golang.org/x/tools/cmd/deadcode@latest ."
+      ],
       "lint:everything": [
         "if git status --porcelain api/proto | grep -q '.'; then buf generate; else echo 'No changes in api/proto, skipping buf generate.'; fi",
         "go mod tidy",
@@ -53,6 +56,7 @@
         "staticcheck $(go list ./... | grep -v /gen/)",
         "revive -config revive.toml ./...",
         "go test ./...",
+        "go run golang.org/x/tools/cmd/deadcode@latest .",
         "markdownlint --fix '**/*.md' --ignore vendor",
         "export CHROMIUM_BIN=$(which chromium)",
         "cd static/js && bun install && bun run build && bun run test && bun run lint"

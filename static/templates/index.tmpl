@@ -67,13 +67,9 @@
                                 {{ if not .EditPage }}
                                 <li class="pure-menu-item"><a href="#" class="pure-menu-link" id="editFrontmatter"><i class="fas fa-file-lines"></i> Edit Frontmatter</a></li>
                                 {{ end }}
-                                {{ if (.IsLocked) }}
-                                {{ else }}
-                                <li class="pure-menu-item"><a href="#" class="pure-menu-link" id="lockPage">{{ if .IsLocked }}<i class="fas fa-unlock"></i>  Unlock{{ else }}<i class="fas fa-lock"></i> Lock{{end}}</a></li>
                                 <li class="pure-menu-item"><a href="/{{ .Page }}/history" class="pure-menu-link"><i class="fas fa-clock-rotate-left"></i> History</a></li>
                                 <hr>
                                 <li class="pure-menu-item"><a href="#" class="pure-menu-link" id="erasePage"><i class="fas fa-recycle"></i> Erase</a></li>
-                                {{ end }}
                             </ul>
                         </li>
 
@@ -81,12 +77,7 @@
                             <a href="/{{ .Page }}/view"  class="pure-menu-link"><i class="fas fa-eye"></i> View</a>
                         </li>
 
-                        {{ if .IsLocked }}
-                        <li class="pure-menu-item"><a href="#" class="pure-menu-link" id="lockPage">{{ if .IsLocked }}<i class="fas fa-unlock"></i> Unlock{{ else }}<i class="fas fa-lock"></i> Lock{{end}}</a></li>
-                        <li class="pure-menu-item" class="pure-menu-link"><a href="#"><span id="saveEditButton"></span></a></li>
-                        {{else}}
                         <li class="pure-menu-item {{ with .EditPage }}pure-menu-selected{{ end }}"><a href="/{{ .Page }}/edit" class="pure-menu-link"><span id="saveEditButton"><i class="fas fa-pen-to-square"></i> Edit</span></a></li>
-                        {{end}}
                     </ul>
                     {{ if .ViewPage }}
                     <wiki-search id="site-search"></wiki-search>

@@ -12,7 +12,6 @@ service PageManagementService {
   rpc UpdatePageContent(UpdatePageContentRequest) returns (UpdatePageContentResponse);
   rpc UpdateWholePage(UpdateWholePageRequest) returns (UpdateWholePageResponse);
   rpc DeletePage(DeletePageRequest) returns (DeletePageResponse);
-  rpc TogglePageLock(TogglePageLockRequest) returns (TogglePageLockResponse);
 }
 
 // Create Page
@@ -87,17 +86,6 @@ message DeletePageRequest {
 }
 
 message DeletePageResponse {
-  bool success = 1;
-  string error = 2;
-}
-
-// Toggle Page Lock
-message TogglePageLockRequest {
-  string page_name = 1;
-  string passphrase = 2;
-}
-
-message TogglePageLockResponse {
   bool success = 1;
   string error = 2;
 }

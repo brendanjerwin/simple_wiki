@@ -42,7 +42,7 @@ var _ = Describe("Handlers", func() {
 		tmpDir, err = os.MkdirTemp("", "simple_wiki_test")
 		Expect(err).NotTo(HaveOccurred())
 		logger := lumber.NewConsoleLogger(lumber.TRACE)
-		site, err = server.NewSite(tmpDir, "", "testpage", "password", 0, "secret", "", true, 1024, 1024, logger)
+		site, err = server.NewSite(tmpDir, "", "testpage", 0, "secret", true, 1024, 1024, logger)
 		Expect(err).NotTo(HaveOccurred())
 		router = site.GinRouter()
 		w = httptest.NewRecorder()
@@ -50,100 +50,6 @@ var _ = Describe("Handlers", func() {
 
 	AfterEach(func() {
 		_ = os.RemoveAll(tmpDir)
-	})
-
-	Describe("handlePageRelinquish", func() {
-		When("the request has bad json", func() {
-			BeforeEach(func() {
-				req, _ := http.NewRequest(http.MethodPost, "/relinquish", bytes.NewBuffer([]byte("bad json")))
-				req.Header.Set("Content-Type", "application/json")
-				router.ServeHTTP(w, req)
-			})
-
-			It("should return a 400 error", func() {
-				Expect(w.Code).To(Equal(http.StatusBadRequest))
-			})
-		})
-
-		When("the request is missing the page field", func() {
-			BeforeEach(func() {
-				body, _ := json.Marshal(map[string]string{})
-				req, _ := http.NewRequest(http.MethodPost, "/relinquish", bytes.NewBuffer(body))
-				req.Header.Set("Content-Type", "application/json")
-				router.ServeHTTP(w, req)
-			})
-
-			It("should return a 400 error", func() {
-				Expect(w.Code).To(Equal(http.StatusBadRequest))
-			})
-		})
-
-		When("the page is relinquished successfully", func() {
-			var response map[string]any
-			var pageName string
-
-			BeforeEach(func() {
-				pageName = "test-relinquish"
-				p, err := site.ReadPage(pageName)
-				Expect(err).NotTo(HaveOccurred())
-				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
-
-				body, _ := json.Marshal(map[string]string{"page": pageName})
-				req, _ := http.NewRequest(http.MethodPost, "/relinquish", bytes.NewBuffer(body))
-				req.Header.Set("Content-Type", "application/json")
-				router.ServeHTTP(w, req)
-				_ = json.Unmarshal(w.Body.Bytes(), &response)
-			})
-
-			It("should return a 200 status code", func() {
-				Expect(w.Code).To(Equal(http.StatusOK))
-			})
-
-			It("should return a success message", func() {
-				Expect(response["success"]).To(BeTrue())
-				Expect(response["message"]).To(Equal("Relinquished and erased"))
-			})
-
-			It("should erase the page", func() {
-				p, err := site.ReadPage(pageName)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(p.Text.GetCurrent()).To(BeEmpty())
-			})
-		})
-
-		When("the page erase fails during relinquish", func() {
-			var response map[string]any
-			var pageName string
-
-			BeforeEach(func() {
-				pageName = "test-relinquish-fail"
-				p, err := site.ReadPage(pageName)
-				Expect(err).NotTo(HaveOccurred())
-				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
-
-				// Make the data directory read-only to cause file deletion to fail
-				// Files can still be read, but cannot be deleted from the directory
-				_ = os.Chmod(tmpDir, 0555) // read + execute, but no write
-
-				body, _ := json.Marshal(map[string]string{"page": pageName})
-				req, _ := http.NewRequest(http.MethodPost, "/relinquish", bytes.NewBuffer(body))
-				req.Header.Set("Content-Type", "application/json")
-				router.ServeHTTP(w, req)
-				_ = json.Unmarshal(w.Body.Bytes(), &response)
-
-				// Restore permissions for cleanup
-				_ = os.Chmod(tmpDir, 0755)
-			})
-
-			It("should return a 500 status code", func() {
-				Expect(w.Code).To(Equal(http.StatusInternalServerError))
-			})
-
-			It("should return an error message", func() {
-				Expect(response["success"]).To(BeFalse())
-				Expect(response["message"]).To(Equal("Failed to erase page"))
-			})
-		})
 	})
 
 	Describe("handlePageExists", func() {
@@ -270,7 +176,7 @@ var _ = Describe("Handlers", func() {
 				logBuffer = &bytes.Buffer{}
 				customLogger := lumber.NewBasicLogger(&writeCloserBuffer{logBuffer}, lumber.TRACE)
 				var err error
-				customSite, err = server.NewSite(tmpDir, "", "testpage", "password", 0, "secret", "", true, 1024, 1024, customLogger)
+				customSite, err = server.NewSite(tmpDir, "", "testpage", 0, "secret", true, 1024, 1024, customLogger)
 				Expect(err).NotTo(HaveOccurred())
 				customRouter = customSite.GinRouter()
 
@@ -454,149 +360,6 @@ var _ = Describe("Handlers", func() {
 			})
 		})
 	})
-
-	Describe("handleLock", func() {
-		When("the request has bad json", func() {
-			BeforeEach(func() {
-				req, _ := http.NewRequest(http.MethodPost, "/lock", bytes.NewBuffer([]byte("bad json")))
-				req.Header.Set("Content-Type", "application/json")
-				router.ServeHTTP(w, req)
-			})
-
-			It("should return a 400 error", func() {
-				Expect(w.Code).To(Equal(http.StatusBadRequest))
-			})
-		})
-
-		When("the request has valid data and saves successfully", func() {
-			var response map[string]any
-			var pageName string
-
-			BeforeEach(func() {
-				pageName = "test-lock"
-				p, err := site.ReadPage(pageName)
-				Expect(err).NotTo(HaveOccurred())
-				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
-
-				body, _ := json.Marshal(map[string]any{
-					"page":       pageName,
-					"passphrase": "testpass",
-				})
-				req, _ := http.NewRequest(http.MethodPost, "/lock", bytes.NewBuffer(body))
-				req.Header.Set("Content-Type", "application/json")
-				router.ServeHTTP(w, req)
-				_ = json.Unmarshal(w.Body.Bytes(), &response)
-			})
-
-			It("should return a 200 status code", func() {
-				Expect(w.Code).To(Equal(http.StatusOK))
-			})
-
-			It("should return a success response", func() {
-				Expect(response["success"]).To(BeTrue())
-				Expect(response["message"]).To(Equal("Locked"))
-			})
-
-			It("should lock the page", func() {
-				p, err := site.ReadPage(pageName)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(p.IsLocked).To(BeTrue())
-			})
-		})
-
-		PWhen("the lock save fails", func() {
-			var response map[string]any
-			var pageName string
-			var originalPermissions os.FileMode
-
-			BeforeEach(func() {
-				pageName = "test-lock-fail"
-				p, err := site.ReadPage(pageName)
-				Expect(err).NotTo(HaveOccurred())
-				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
-
-				// Ensure page is NOT locked initially
-				p.IsLocked = false
-				_ = site.UpdatePageContent(p.Identifier, p.Text.GetCurrent())
-
-				// Make the data directory read-only to simulate save failure
-				dirInfo, err := os.Stat(tmpDir)
-				Expect(err).NotTo(HaveOccurred())
-				originalPermissions = dirInfo.Mode()
-				err = os.Chmod(tmpDir, 0555)
-				Expect(err).NotTo(HaveOccurred())
-
-				body, _ := json.Marshal(map[string]any{
-					"page":       pageName,
-					"passphrase": "password", // Use default password since page will be auto-locked
-				})
-				req, _ := http.NewRequest(http.MethodPost, "/lock", bytes.NewBuffer(body))
-				req.Header.Set("Content-Type", "application/json")
-				router.ServeHTTP(w, req)
-				_ = json.Unmarshal(w.Body.Bytes(), &response)
-			})
-
-			AfterEach(func() {
-				// Restore permissions for cleanup
-				_ = os.Chmod(tmpDir, originalPermissions)
-			})
-
-			It("should return an error status code", func() {
-				Expect(w.Code).To(Equal(http.StatusInternalServerError))
-			})
-
-			It("should return a failure response", func() {
-				Expect(response["success"]).To(BeFalse())
-				Expect(response["message"]).To(ContainSubstring("Failed to save lock"))
-			})
-		})
-
-		When("the lock save fails due to filesystem error", func() {
-			var response map[string]any
-			var pageName string
-			var originalDataPath string
-
-			BeforeEach(func() {
-				pageName = "test-lock-fail-filesystem"
-				p, err := site.ReadPage(pageName)
-				Expect(err).NotTo(HaveOccurred())
-				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
-
-				// Create a read-only directory to cause save failure
-				readOnlyDir, err := os.MkdirTemp("", "readonly")
-				Expect(err).NotTo(HaveOccurred())
-				err = os.Chmod(readOnlyDir, 0555) // Read + execute, but no write
-				Expect(err).NotTo(HaveOccurred())
-
-				// Change data path to read-only directory
-				originalDataPath = site.PathToData
-				site.PathToData = readOnlyDir
-
-				body, _ := json.Marshal(map[string]any{
-					"page":       pageName,
-					"passphrase": "password", // Use the default password
-				})
-				req, _ := http.NewRequest(http.MethodPost, "/lock", bytes.NewBuffer(body))
-				req.Header.Set("Content-Type", "application/json")
-				router.ServeHTTP(w, req)
-				_ = json.Unmarshal(w.Body.Bytes(), &response)
-			})
-
-			AfterEach(func() {
-				// Restore original data path
-				site.PathToData = originalDataPath
-			})
-
-			It("should return a 500 status code", func() {
-				Expect(w.Code).To(Equal(http.StatusInternalServerError))
-			})
-
-			It("should return a failure response", func() {
-				Expect(response["success"]).To(BeFalse())
-				Expect(response["message"]).To(Equal("Failed to save lock information"))
-			})
-		})
-	})
 })
 
 var _ = Describe("Session Logging Functions", func() {
@@ -615,7 +378,7 @@ var _ = Describe("Session Logging Functions", func() {
 		logBuffer = &bytes.Buffer{}
 		logger = lumber.NewBasicLogger(&handlerTestWriteCloser{logBuffer}, lumber.ERROR)
 
-		site, err = server.NewSite(tmpDir, "", "testpage", "password", 0, "secret", "", true, 1024, 1024, logger)
+		site, err = server.NewSite(tmpDir, "", "testpage", 0, "secret", true, 1024, 1024, logger)
 		Expect(err).NotTo(HaveOccurred())
 		router = site.GinRouter()
 	})
@@ -863,40 +626,6 @@ var _ = Describe("Session Logging Functions", func() {
 		})
 	})
 
-	Describe("pageIsLocked", func() {
-		When("calling with logger parameter", func() {
-			var isLocked bool
-			var page *wikipage.Page
-			var c *gin.Context
-			var err error
-
-			BeforeEach(func() {
-				w := httptest.NewRecorder()
-				c, _ = gin.CreateTestContext(w)
-				c.Request, _ = http.NewRequest("GET", "/", nil)
-
-				// Set up session middleware with cookie store
-				store := cookie.NewStore([]byte("test-secret"))
-				sessions.Sessions("_session", store)(c)
-
-				// Create a test page
-				page, err = site.ReadPage("test-page")
-				Expect(err).NotTo(HaveOccurred())
-
-				// Call the function under test
-				isLocked = server.PageIsLockedForTesting(page, c, logger)
-			})
-
-			It("should return false for unlocked page", func() {
-				Expect(isLocked).To(BeFalse())
-			})
-
-			It("should not log any errors for normal operation", func() {
-				Expect(logBuffer.String()).To(BeEmpty())
-			})
-		})
-	})
-
 	Describe("Integration with handlers", func() {
 		When("handler methods call session functions", func() {
 			var w *httptest.ResponseRecorder
@@ -909,18 +638,6 @@ var _ = Describe("Session Logging Functions", func() {
 				Expect(err).NotTo(HaveOccurred())
 				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "test content")
 				_ = site.UpdatePageContent(p.Identifier, p.Text.GetCurrent())
-			})
-
-			It("should pass logger to session functions in handlePageRelinquish", func() {
-				body, _ := json.Marshal(map[string]string{"page": "test-integration"})
-				req, _ := http.NewRequest(http.MethodPost, "/relinquish", bytes.NewBuffer(body))
-				req.Header.Set("Content-Type", "application/json")
-
-				router.ServeHTTP(w, req)
-
-				// Should succeed without session logging errors
-				Expect(w.Code).To(Equal(http.StatusOK))
-				Expect(logBuffer.String()).NotTo(ContainSubstring("Failed to save session"))
 			})
 
 			It("should pass logger to session functions in handlePageRequest", func() {

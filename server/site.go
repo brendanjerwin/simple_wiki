@@ -22,7 +22,6 @@ import (
 	"github.com/brendanjerwin/simple_wiki/migrations/eager"
 	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
-	"github.com/brendanjerwin/simple_wiki/sec"
 	"github.com/brendanjerwin/simple_wiki/templating"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
@@ -51,10 +50,8 @@ type Site struct {
 	PathToData              string
 	CSS                     []byte
 	DefaultPage             string
-	DefaultPassword         string
 	Debounce                int
 	SessionStore            cookie.Store
-	SecretCode              string
 	Fileuploads             bool
 	MaxUploadSize           uint
 	MaxDocumentSize         uint // in runes; about a 10mb limit by default
@@ -73,10 +70,8 @@ func NewSite(
 	filepathToData string,
 	cssFile string,
 	defaultPage string,
-	defaultPassword string,
 	debounce int,
 	secret string,
-	secretCode string,
 	fileuploads bool,
 	maxUploadSize uint,
 	maxDocumentSize uint,
@@ -103,10 +98,8 @@ func NewSite(
 		PathToData:          filepathToData,
 		CSS:                 customCSS,
 		DefaultPage:         defaultPage,
-		DefaultPassword:     defaultPassword,
 		Debounce:            debounce,
 		SessionStore:        cookie.NewStore([]byte(secret)),
-		SecretCode:          secretCode,
 		Fileuploads:         fileuploads,
 		MaxUploadSize:       maxUploadSize,
 		MaxDocumentSize:     maxDocumentSize,
@@ -132,12 +125,7 @@ const (
 	failedToOpenPageErrFmt = "failed to open page %s: %w"
 )
 
-func (s *Site) defaultLock() string {
-	if s.DefaultPassword == "" {
-		return ""
-	}
-	return sec.HashPassword(s.DefaultPassword)
-}
+
 
 func (s *Site) sniffContentType(name string) (string, error) {
 	file, err := os.Open(path.Join(s.PathToData, name))
@@ -753,11 +741,6 @@ func (s *Site) ReadOrInitPageForTesting(requestedIdentifier string, req *http.Re
 // Utility functions for working with pages
 
 const nanosecondsPerSecond = 1000000000
-
-// lastEditTime returns the last edit time of the page.
-func lastEditTime(p *wikipage.Page) time.Time {
-	return time.Unix(lastEditUnixTime(p), 0)
-}
 
 // lastEditUnixTime returns the last edit time of the page in Unix nanoseconds.
 func lastEditUnixTime(p *wikipage.Page) int64 {

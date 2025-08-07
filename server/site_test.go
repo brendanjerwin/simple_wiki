@@ -14,7 +14,6 @@ import (
 	"github.com/brendanjerwin/simple_wiki/index"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
-	"github.com/brendanjerwin/simple_wiki/sec"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
@@ -110,34 +109,6 @@ var _ = Describe("Site", func() {
 
 	AfterEach(func() {
 		_ = os.RemoveAll(tempDir)
-	})
-
-	Describe("defaultLock", func() {
-		When("DefaultPassword is not set", func() {
-			BeforeEach(func() {
-				s.DefaultPassword = ""
-			})
-
-			It("should return an empty string", func() {
-				Expect(s.defaultLock()).To(BeEmpty())
-			})
-		})
-
-		When("DefaultPassword is set", func() {
-			var password string
-
-			BeforeEach(func() {
-				password = "test_password"
-				s.DefaultPassword = password
-			})
-
-			It("should return a valid hash of the password", func() {
-				hashedPassword := s.defaultLock()
-				Expect(hashedPassword).ToNot(BeEmpty())
-				Expect(hashedPassword).ToNot(Equal(password))
-				Expect(sec.CheckPasswordHash(password, hashedPassword)).To(Succeed())
-			})
-		})
 	})
 
 	Describe("sniffContentType", func() {

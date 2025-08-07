@@ -79,10 +79,8 @@ func setupServer(c *cli.Context) (*http.Server, error) {
 		pathToData,
 		c.GlobalString("css"),
 		c.GlobalString("default-page"),
-		c.GlobalString("lock"),
 		c.GlobalInt("debounce"),
 		c.GlobalString("cookie-secret"),
-		c.GlobalString("access-code"),
 		!c.GlobalBool("block-file-uploads"),
 		c.GlobalUint("max-upload-mb"),
 		c.GlobalUint("max-document-length"),
@@ -186,11 +184,6 @@ func getFlags() []cli.Flag {
 			Value: "home",
 			Usage: "show default-page/read instead of editing (default: show random editing)",
 		},
-		cli.StringFlag{
-			Name:  "lock",
-			Value: "",
-			Usage: "password to lock editing all files (default: all pages unlocked)",
-		},
 		cli.IntFlag{
 			Name:  "debounce",
 			Value: defaultDebounce,
@@ -199,11 +192,6 @@ func getFlags() []cli.Flag {
 		cli.BoolFlag{
 			Name:  "debug, d",
 			Usage: "turn on debugging",
-		},
-		cli.StringFlag{
-			Name:  "access-code",
-			Value: "",
-			Usage: "Secret code to login with before accessing any wiki stuff",
 		},
 		cli.StringFlag{
 			Name:  "cookie-secret",
