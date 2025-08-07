@@ -1,18 +1,16 @@
-import { html, fixture, expect } from '@open-wc/testing';
+import { expect } from '@open-wc/testing';
 import sinon from 'sinon';
 import './wiki-search.js';
+import type { SearchResult } from '../gen/api/v1/search_pb.js';
 
 interface WikiSearchElement extends HTMLElement {
-  searchEndpoint?: string;
-  resultArrayPath?: string;
-  results: Array<{
-    Identifier: string;
-    Title: string;
-    FragmentHTML?: string;
-  }>;
+  results: SearchResult[];
   noResults: boolean;
+  loading: boolean;
+  error?: string;
   _handleKeydown: (event: KeyboardEvent) => void;
-  handleFormSubmit: (event: Event) => void;
+  handleFormSubmit: (event: Event) => Promise<void>;
+  performSearch: (query: string) => Promise<SearchResult[]>;
   updateComplete: Promise<boolean>;
   shadowRoot: ShadowRoot;
 }
@@ -21,12 +19,16 @@ describe('WikiSearch', () => {
   let el: WikiSearchElement;
 
   beforeEach(async () => {
-    el = await fixture(html`<wiki-search></wiki-search>`) as WikiSearchElement;
+    el = document.createElement('wiki-search') as WikiSearchElement;
+    document.body.appendChild(el);
     await el.updateComplete;
   });
 
   afterEach(() => {
     sinon.restore();
+    if (el.parentNode) {
+      el.parentNode.removeChild(el);
+    }
   });
 
   it('should exist', () => {
@@ -35,9 +37,10 @@ describe('WikiSearch', () => {
 
   describe('when component is initialized', () => {
     it('should have the correct default properties', () => {
-      expect(el.resultArrayPath).to.equal('results');
       expect(el.results).to.deep.equal([]);
       expect(el.noResults).to.equal(false);
+      expect(el.loading).to.equal(false);
+      expect(el.error).to.be.undefined;
     });
 
     it('should have a search input', () => {
@@ -50,9 +53,8 @@ describe('WikiSearch', () => {
       expect(submitButton).to.exist;
     });
 
-    it('should have a search results component', () => {
-      const searchResults = el.shadowRoot?.querySelector('wiki-search-results');
-      expect(searchResults).to.exist;
+    it('should have the performSearch method', () => {
+      expect(el.performSearch).to.be.a('function');
     });
   });
 
@@ -146,7 +148,8 @@ describe('WikiSearch', () => {
     beforeEach(async () => {
       addEventListenerSpy = sinon.spy(window, 'addEventListener');
       // Re-create the element to trigger connectedCallback
-      el = await fixture(html`<wiki-search></wiki-search>`) as WikiSearchElement;
+      el = document.createElement('wiki-search') as WikiSearchElement;
+      document.body.appendChild(el);
       await el.updateComplete;
     });
 
@@ -161,7 +164,8 @@ describe('WikiSearch', () => {
     beforeEach(async () => {
       removeEventListenerSpy = sinon.spy(window, 'removeEventListener');
       // Re-create and then remove the element to trigger disconnectedCallback
-      el = await fixture(html`<wiki-search></wiki-search>`) as WikiSearchElement;
+      el = document.createElement('wiki-search') as WikiSearchElement;
+      document.body.appendChild(el);
       await el.updateComplete;
       el.remove();
       // Wait for the next microtask to ensure disconnectedCallback runs
@@ -173,35 +177,47 @@ describe('WikiSearch', () => {
     });
   });
 
-  describe('when searching with special characters', () => {
-    let fetchStub: sinon.SinonStub;
+  describe('when searching', () => {
+    let form: HTMLFormElement;
+    let searchInput: HTMLInputElement;
 
     beforeEach(async () => {
-      el.searchEndpoint = 'https://example.com/search';
-      fetchStub = sinon.stub(window, 'fetch');
-      fetchStub.resolves(new Response(JSON.stringify({ results: [] })));
       await el.updateComplete;
+      form = el.shadowRoot?.querySelector('form') as HTMLFormElement;
+      searchInput = el.shadowRoot?.querySelector('input[type="search"]') as HTMLInputElement;
     });
 
-    it('should encode special characters in search term', async () => {
-      const searchInput = el.shadowRoot?.querySelector('input[type="search"]') as HTMLInputElement;
-      const form = el.shadowRoot?.querySelector('form') as HTMLFormElement;
-      
-      // Set search term with special characters
-      searchInput.value = 'test & query with spaces';
-      
-      // Create form submit event with form as target
-      const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
-      Object.defineProperty(submitEvent, 'target', { value: form, writable: false });
-      
-      // Trigger form submit
-      el.handleFormSubmit(submitEvent);
-      
-      // Wait for the async operation to start
-      await new Promise(resolve => setTimeout(resolve, 0));
-      
-      // Check that fetch was called with properly encoded URL
-      expect(fetchStub).to.have.been.calledWith('https://example.com/search?q=test%20%26%20query%20with%20spaces');
+    describe('when form is submitted', () => {
+      beforeEach(() => {
+        searchInput.value = 'test query';
+        
+        const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+        form.dispatchEvent(submitEvent);
+      });
+
+      it('should prevent default form submission', () => {
+        const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+        const preventDefaultSpy = sinon.spy(submitEvent, 'preventDefault');
+        
+        form.dispatchEvent(submitEvent);
+        expect(preventDefaultSpy).to.have.been.calledOnce;
+      });
+
+      it('should set loading state during search', () => {
+        expect(el.loading).to.be.true;
+      });
+    });
+
+    describe('when search input is empty', () => {
+      beforeEach(() => {
+        searchInput.value = '';
+        const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+        form.dispatchEvent(submitEvent);
+      });
+
+      it('should not perform search', () => {
+        expect(el.loading).to.be.false;
+      });
     });
   });
 });

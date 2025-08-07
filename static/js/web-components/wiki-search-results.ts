@@ -1,12 +1,6 @@
 import { html, css, LitElement } from 'lit';
-import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { sharedStyles, foundationCSS } from './shared-styles.js';
-
-interface SearchResult {
-  Identifier: string;
-  Title: string;
-  FragmentHTML?: string;
-}
+import type { SearchResult, HighlightSpan } from '../gen/api/v1/search_pb.js';
 
 class WikiSearchResults extends LitElement {
   static override styles = [
@@ -163,6 +157,67 @@ class WikiSearchResults extends LitElement {
     }
   }
 
+  /**
+   * Render a fragment with highlights as HTML template
+   * @param fragment - Plain text fragment
+   * @param highlights - Array of highlight spans
+   * @returns HTML template with marked highlights
+   */
+  private renderFragment(fragment: string, highlights: HighlightSpan[]) {
+    if (!fragment) return html`N/A`;
+    if (!highlights || highlights.length === 0) {
+      // No highlights, escape and convert newlines
+      return html`${this.escapeAndFormatText(fragment)}`;
+    }
+
+    // Sort highlights by start position
+    const sortedHighlights = [...highlights].sort((a, b) => a.start - b.start);
+    
+    const parts = [];
+    let lastEnd = 0;
+    
+    for (const highlight of sortedHighlights) {
+      // Add text before the highlight
+      if (highlight.start > lastEnd) {
+        const beforeText = fragment.substring(lastEnd, highlight.start);
+        parts.push(html`${this.escapeAndFormatText(beforeText)}`);
+      }
+      
+      // Add the highlighted text
+      const highlightedText = fragment.substring(highlight.start, highlight.end);
+      parts.push(html`<mark>${this.escapeAndFormatText(highlightedText)}</mark>`);
+      lastEnd = highlight.end;
+    }
+    
+    // Add any remaining text after the last highlight
+    if (lastEnd < fragment.length) {
+      const afterText = fragment.substring(lastEnd);
+      parts.push(html`${this.escapeAndFormatText(afterText)}`);
+    }
+    
+    return parts;
+  }
+
+  /**
+   * Escape HTML and convert newlines to line breaks
+   * @param text - Text to process
+   * @returns Array of template parts with line breaks
+   */
+  private escapeAndFormatText(text: string) {
+    // Split by newlines and create template parts
+    const lines = text.split('\n');
+    const parts = [];
+    
+    for (let i = 0; i < lines.length; i++) {
+      if (i > 0) {
+        parts.push(html`<br>`);
+      }
+      parts.push(lines[i]); // Lit automatically escapes plain strings
+    }
+    
+    return parts;
+  }
+
   override render() {
     return html`
             ${sharedStyles}
@@ -173,8 +228,8 @@ class WikiSearchResults extends LitElement {
                 </div>
                 <div id="results">
                 ${this.results.map(result => html`
-                    <a href="/${result.Identifier}" class="border-radius-small">${result.Title}</a>
-                    <div class="fragment border-radius-small">${unsafeHTML(result.FragmentHTML) || "N/A"}</div> 
+                    <a href="/${result.identifier}" class="border-radius-small">${result.title}</a>
+                    <div class="fragment border-radius-small">${this.renderFragment(result.fragment, result.highlights)}</div> 
                 `)}
                 </div>
             </div>

@@ -1,14 +1,29 @@
 import { html, css, LitElement } from 'lit';
+import { createPromiseClient, PromiseClient } from '@connectrpc/connect';
+import { createGrpcWebTransport } from '@connectrpc/connect-web';
 import { sharedStyles } from './shared-styles.js';
 import './wiki-search-results.js';
-
-interface SearchResult {
-  Identifier: string;
-  Title: string;
-  FragmentHTML?: string;
-}
+import { SearchService } from '../gen/api/v1/search_connect.js';
+import type { SearchContentRequest, SearchResult } from '../gen/api/v1/search_pb.js';
 
 export class WikiSearch extends LitElement {
+  private client: PromiseClient<typeof SearchService> | null = null;
+
+  private getClient(): PromiseClient<typeof SearchService> {
+    if (!this.client) {
+      this.client = createPromiseClient(SearchService, createGrpcWebTransport({
+        baseUrl: window.location.origin,
+      }));
+    }
+    return this.client;
+  }
+
+  // Method that can be stubbed in tests to prevent network calls
+  async performSearch(query: string): Promise<SearchResult[]> {
+    const request: Partial<SearchContentRequest> = { query };
+    const response = await this.getClient().searchContent(request);
+    return response.results;
+  }
   static override styles = css`
     div#container {
         position: relative;
@@ -82,22 +97,22 @@ export class WikiSearch extends LitElement {
     `;
 
   static override properties = {
-    searchEndpoint: { type: String, attribute: 'search-endpoint' },
-    resultArrayPath: { type: String, attribute: 'result-array-path' },
     results: { type: Array },
     noResults: { type: Boolean, reflect: true, attribute: 'no-results' },
+    loading: { type: Boolean },
+    error: { type: String },
   };
 
-  declare searchEndpoint?: string;
-  declare resultArrayPath?: string;
   declare results: SearchResult[];
   declare noResults: boolean;
+  declare loading: boolean;
+  declare error?: string;
 
   constructor() {
     super();
-    this.resultArrayPath = "results";
     this.results = [];
     this.noResults = false;
+    this.loading = false;
     this._handleKeydown = this._handleKeydown.bind(this);
   }
 
@@ -125,47 +140,39 @@ export class WikiSearch extends LitElement {
     target.select();
   }
 
-  handleFormSubmit(e: Event) {
+  async handleFormSubmit(e: Event) {
     e.preventDefault();
     this.noResults = false;
+    this.error = undefined;
 
     const form = e.target as HTMLFormElement;
     const formData = new FormData(form);
     const searchTerm = formData.get('search') as string;
     
-    if (!this.searchEndpoint) {
-      console.error('Search endpoint not configured');
+    if (!searchTerm || searchTerm.trim() === '') {
       return;
     }
     
-    const url = `${this.searchEndpoint}?q=${encodeURIComponent(searchTerm)}`;
-
-    fetch(url)
-      .then((response) => response.json())
-      .then((data) => {
-        if (this.resultArrayPath) {
-          data = this.getNestedProperty(data, this.resultArrayPath);
-          if (!Array.isArray(data)) {
-            data = [];
-          }
-        }
-        this.results = [...data];
-        if (data.length > 0) {
-          this.noResults = false;
-        } else {
-          this.noResults = true;
-          const searchInput = this.shadowRoot!.querySelector('input[type="search"]') as HTMLInputElement;
-          searchInput.select();
-        }
-      })
-      .catch((error) => {
-        this.results = [];
-        console.error('Error:', error);
-      });
-  }
-
-  getNestedProperty(obj: unknown, path: string): unknown {
-    return path.split('.').reduce((o: unknown, p: string) => (o && typeof o === 'object' && p in o) ? (o as Record<string, unknown>)[p] : null, obj);
+    this.loading = true;
+    
+    try {
+      const results = await this.performSearch(searchTerm);
+      this.results = [...results];
+      
+      if (results.length > 0) {
+        this.noResults = false;
+      } else {
+        this.noResults = true;
+        const searchInput = this.shadowRoot!.querySelector('input[type="search"]') as HTMLInputElement;
+        searchInput.select();
+      }
+    } catch (error) {
+      this.results = [];
+      this.error = error instanceof Error ? error.message : 'Search failed';
+      console.error('Search error:', error);
+    } finally {
+      this.loading = false;
+    }
   }
 
   handleSearchResultsClosed() {

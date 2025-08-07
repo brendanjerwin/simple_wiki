@@ -107,28 +107,3 @@ func (s *Site) createPageReferences(ids []string) []PageReference {
 	return results
 }
 
-// handleSearch handles requests to search the wiki.
-func (s *Site) handleSearch(c *gin.Context) {
-	if s.BleveIndexQueryer == nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Search index is not available"})
-		return
-	}
-
-	type Req struct {
-		Query string `form:"q" binding:"required"`
-	}
-
-	var req Req
-	if err := c.ShouldBindQuery(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": fmt.Sprintf("Problem binding keys: %v", err)})
-		return
-	}
-
-	results, err := s.BleveIndexQueryer.Query(req.Query)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": fmt.Sprintf("Problem querying index: %v", err)})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"success": true, "results": results})
-}

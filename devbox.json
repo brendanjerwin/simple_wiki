@@ -43,6 +43,9 @@
         "go list ./... | grep -v \"/gen/\" | xargs go test -coverprofile=coverage.out",
         "go tool cover -func=coverage.out | tail -1"
       ],
+      "go:generate": [
+        "go generate ./..."
+      ],
       "lint:everything": [
         "if git status --porcelain api/proto | grep -q '.'; then buf generate; else echo 'No changes in api/proto, skipping buf generate.'; fi",
         "go mod tidy",
