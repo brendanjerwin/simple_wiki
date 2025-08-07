@@ -1,9 +1,29 @@
 import { html, css, LitElement } from 'lit';
+import { createPromiseClient, PromiseClient } from '@connectrpc/connect';
+import { createGrpcWebTransport } from '@connectrpc/connect-web';
 import { sharedStyles } from './shared-styles.js';
 import './wiki-search-results.js';
-import { searchClient, SearchResultWithHTML } from '../services/search-client.js';
+import { SearchService } from '../gen/api/v1/search_connect.js';
+import type { SearchContentRequest, SearchResult } from '../gen/api/v1/search_pb.js';
 
 export class WikiSearch extends LitElement {
+  private client: PromiseClient<typeof SearchService> | null = null;
+
+  private getClient(): PromiseClient<typeof SearchService> {
+    if (!this.client) {
+      this.client = createPromiseClient(SearchService, createGrpcWebTransport({
+        baseUrl: window.location.origin,
+      }));
+    }
+    return this.client;
+  }
+
+  // Method that can be stubbed in tests to prevent network calls
+  async performSearch(query: string): Promise<SearchResult[]> {
+    const request: Partial<SearchContentRequest> = { query };
+    const response = await this.getClient().searchContent(request);
+    return response.results;
+  }
   static override styles = css`
     div#container {
         position: relative;
@@ -83,7 +103,7 @@ export class WikiSearch extends LitElement {
     error: { type: String },
   };
 
-  declare results: SearchResultWithHTML[];
+  declare results: SearchResult[];
   declare noResults: boolean;
   declare loading: boolean;
   declare error?: string;
@@ -136,7 +156,7 @@ export class WikiSearch extends LitElement {
     this.loading = true;
     
     try {
-      const results = await searchClient.search(searchTerm);
+      const results = await this.performSearch(searchTerm);
       this.results = [...results];
       
       if (results.length > 0) {

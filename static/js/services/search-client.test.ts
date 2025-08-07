@@ -125,7 +125,7 @@ describe('SearchClient', () => {
         expect(results[0].highlights[1].start).to.equal(54);
         expect(results[0].highlights[1].end).to.equal(61);
         // Should NOT have fragmentHTML property
-        expect((results[0] as any).fragmentHTML).to.be.undefined;
+        expect('fragmentHTML' in results[0]).to.be.false;
       });
     });
   });

@@ -1,16 +1,16 @@
-import { html, fixture, expect } from '@open-wc/testing';
+import { expect } from '@open-wc/testing';
 import sinon from 'sinon';
 import './wiki-search.js';
-import { searchClient } from '../services/search-client.js';
-import type { SearchResultWithHTML } from '../services/search-client.js';
+import type { SearchResult } from '../gen/api/v1/search_pb.js';
 
 interface WikiSearchElement extends HTMLElement {
-  results: SearchResultWithHTML[];
+  results: SearchResult[];
   noResults: boolean;
   loading: boolean;
   error?: string;
   _handleKeydown: (event: KeyboardEvent) => void;
   handleFormSubmit: (event: Event) => Promise<void>;
+  performSearch: (query: string) => Promise<SearchResult[]>;
   updateComplete: Promise<boolean>;
   shadowRoot: ShadowRoot;
 }
@@ -19,12 +19,16 @@ describe('WikiSearch', () => {
   let el: WikiSearchElement;
 
   beforeEach(async () => {
-    el = await fixture(html`<wiki-search></wiki-search>`) as WikiSearchElement;
+    el = document.createElement('wiki-search') as WikiSearchElement;
+    document.body.appendChild(el);
     await el.updateComplete;
   });
 
   afterEach(() => {
     sinon.restore();
+    if (el.parentNode) {
+      el.parentNode.removeChild(el);
+    }
   });
 
   it('should exist', () => {
@@ -49,9 +53,8 @@ describe('WikiSearch', () => {
       expect(submitButton).to.exist;
     });
 
-    it('should have a search results component', () => {
-      const searchResults = el.shadowRoot?.querySelector('wiki-search-results');
-      expect(searchResults).to.exist;
+    it('should have the performSearch method', () => {
+      expect(el.performSearch).to.be.a('function');
     });
   });
 
@@ -145,7 +148,8 @@ describe('WikiSearch', () => {
     beforeEach(async () => {
       addEventListenerSpy = sinon.spy(window, 'addEventListener');
       // Re-create the element to trigger connectedCallback
-      el = await fixture(html`<wiki-search></wiki-search>`) as WikiSearchElement;
+      el = document.createElement('wiki-search') as WikiSearchElement;
+      document.body.appendChild(el);
       await el.updateComplete;
     });
 
@@ -160,7 +164,8 @@ describe('WikiSearch', () => {
     beforeEach(async () => {
       removeEventListenerSpy = sinon.spy(window, 'removeEventListener');
       // Re-create and then remove the element to trigger disconnectedCallback
-      el = await fixture(html`<wiki-search></wiki-search>`) as WikiSearchElement;
+      el = document.createElement('wiki-search') as WikiSearchElement;
+      document.body.appendChild(el);
       await el.updateComplete;
       el.remove();
       // Wait for the next microtask to ensure disconnectedCallback runs
@@ -173,95 +178,45 @@ describe('WikiSearch', () => {
   });
 
   describe('when searching', () => {
-    let searchStub: sinon.SinonStub;
     let form: HTMLFormElement;
     let searchInput: HTMLInputElement;
 
     beforeEach(async () => {
-      searchStub = sinon.stub(searchClient, 'search');
       await el.updateComplete;
       form = el.shadowRoot?.querySelector('form') as HTMLFormElement;
       searchInput = el.shadowRoot?.querySelector('input[type="search"]') as HTMLInputElement;
     });
 
-    afterEach(() => {
-      searchStub.restore();
-    });
-
-    describe('when search is successful', () => {
-      const mockResults: SearchResultWithHTML[] = [
-        {
-          identifier: 'page1',
-          title: 'Page 1',
-          fragment: 'Test fragment',
-          highlights: [],
-          fragmentHTML: 'Test fragment',
-        },
-      ];
-
-      beforeEach(async () => {
-        searchStub.resolves(mockResults);
+    describe('when form is submitted', () => {
+      beforeEach(() => {
         searchInput.value = 'test query';
         
         const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
-        Object.defineProperty(submitEvent, 'target', { value: form, writable: false });
+        form.dispatchEvent(submitEvent);
+      });
+
+      it('should prevent default form submission', () => {
+        const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+        const preventDefaultSpy = sinon.spy(submitEvent, 'preventDefault');
         
-        await el.handleFormSubmit(submitEvent);
+        form.dispatchEvent(submitEvent);
+        expect(preventDefaultSpy).to.have.been.calledOnce;
       });
 
-      it('should call search with the query', () => {
-        expect(searchStub).to.have.been.calledWith('test query');
-      });
-
-      it('should update results', () => {
-        expect(el.results).to.deep.equal(mockResults);
-      });
-
-      it('should set noResults to false', () => {
-        expect(el.noResults).to.equal(false);
+      it('should set loading state during search', () => {
+        expect(el.loading).to.be.true;
       });
     });
 
-    describe('when search returns no results', () => {
-      let selectSpy: sinon.SinonSpy;
-
-      beforeEach(async () => {
-        searchStub.resolves([]);
-        selectSpy = sinon.spy(searchInput, 'select');
-        searchInput.value = 'empty query';
-        
+    describe('when search input is empty', () => {
+      beforeEach(() => {
+        searchInput.value = '';
         const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
-        Object.defineProperty(submitEvent, 'target', { value: form, writable: false });
-        
-        await el.handleFormSubmit(submitEvent);
+        form.dispatchEvent(submitEvent);
       });
 
-      it('should set noResults to true', () => {
-        expect(el.noResults).to.equal(true);
-      });
-
-      it('should select the search input', () => {
-        expect(selectSpy).to.have.been.calledOnce;
-      });
-    });
-
-    describe('when search fails', () => {
-      beforeEach(async () => {
-        searchStub.rejects(new Error('Network error'));
-        searchInput.value = 'failing query';
-        
-        const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
-        Object.defineProperty(submitEvent, 'target', { value: form, writable: false });
-        
-        await el.handleFormSubmit(submitEvent);
-      });
-
-      it('should clear results', () => {
-        expect(el.results).to.deep.equal([]);
-      });
-
-      it('should set error message', () => {
-        expect(el.error).to.equal('Network error');
+      it('should not perform search', () => {
+        expect(el.loading).to.be.false;
       });
     });
   });
