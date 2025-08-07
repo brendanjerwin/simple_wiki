@@ -52,7 +52,6 @@ type Site struct {
 	DefaultPage             string
 	Debounce                int
 	SessionStore            cookie.Store
-	SecretCode              string
 	Fileuploads             bool
 	MaxUploadSize           uint
 	MaxDocumentSize         uint // in runes; about a 10mb limit by default
@@ -73,7 +72,6 @@ func NewSite(
 	defaultPage string,
 	debounce int,
 	secret string,
-	secretCode string,
 	fileuploads bool,
 	maxUploadSize uint,
 	maxDocumentSize uint,
@@ -102,7 +100,6 @@ func NewSite(
 		DefaultPage:         defaultPage,
 		Debounce:            debounce,
 		SessionStore:        cookie.NewStore([]byte(secret)),
-		SecretCode:          secretCode,
 		Fileuploads:         fileuploads,
 		MaxUploadSize:       maxUploadSize,
 		MaxDocumentSize:     maxDocumentSize,

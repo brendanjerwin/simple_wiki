@@ -22,7 +22,7 @@ and it will start a server listening on `0.0.0.0:8050`. To view it, just go to <
 
 ## Server customization
 
-There are a couple of command-line flags that you can use to make _simple_wiki_ your own micro-CMS.
+There are a couple of command-line flags that you can use to customize _simple_wiki_.
 
 ```shell
 simple_wiki -default-page index.html -css mystyle.css

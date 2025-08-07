@@ -22,7 +22,6 @@ import (
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/utils/slicetools"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
-	ginteenysecurity "github.com/danielheath/gin-teeny-security"
 	"github.com/gin-contrib/multitemplate"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
@@ -76,23 +75,6 @@ func (s *Site) GinRouter() *gin.Engine {
 	}
 
 	router.Use(sessions.Sessions("_session", s.SessionStore))
-	if s.SecretCode != "" {
-		cfg := &ginteenysecurity.Config{
-			Secret: s.SecretCode,
-			Path:   "/login/",
-			RequireAuth: func(c *gin.Context) bool {
-				page := c.Param("page")
-
-				switch page {
-				case "favicon.ico", "static", uploadsPage:
-					return false // no auth for these
-				default:
-					return true
-				}
-			},
-		}
-		router.Use(cfg.Middleware)
-	}
 
 	router.GET("/", func(c *gin.Context) {
 		c.Redirect(httpStatusFound, "/"+s.DefaultPage+"/view")

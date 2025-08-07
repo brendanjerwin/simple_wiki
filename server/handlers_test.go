@@ -42,7 +42,7 @@ var _ = Describe("Handlers", func() {
 		tmpDir, err = os.MkdirTemp("", "simple_wiki_test")
 		Expect(err).NotTo(HaveOccurred())
 		logger := lumber.NewConsoleLogger(lumber.TRACE)
-		site, err = server.NewSite(tmpDir, "", "testpage", 0, "secret", "", true, 1024, 1024, logger)
+		site, err = server.NewSite(tmpDir, "", "testpage", 0, "secret", true, 1024, 1024, logger)
 		Expect(err).NotTo(HaveOccurred())
 		router = site.GinRouter()
 		w = httptest.NewRecorder()
@@ -176,7 +176,7 @@ var _ = Describe("Handlers", func() {
 				logBuffer = &bytes.Buffer{}
 				customLogger := lumber.NewBasicLogger(&writeCloserBuffer{logBuffer}, lumber.TRACE)
 				var err error
-				customSite, err = server.NewSite(tmpDir, "", "testpage", 0, "secret", "", true, 1024, 1024, customLogger)
+				customSite, err = server.NewSite(tmpDir, "", "testpage", 0, "secret", true, 1024, 1024, customLogger)
 				Expect(err).NotTo(HaveOccurred())
 				customRouter = customSite.GinRouter()
 
@@ -378,7 +378,7 @@ var _ = Describe("Session Logging Functions", func() {
 		logBuffer = &bytes.Buffer{}
 		logger = lumber.NewBasicLogger(&handlerTestWriteCloser{logBuffer}, lumber.ERROR)
 
-		site, err = server.NewSite(tmpDir, "", "testpage", 0, "secret", "", true, 1024, 1024, logger)
+		site, err = server.NewSite(tmpDir, "", "testpage", 0, "secret", true, 1024, 1024, logger)
 		Expect(err).NotTo(HaveOccurred())
 		router = site.GinRouter()
 	})

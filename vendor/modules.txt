@@ -133,9 +133,6 @@ github.com/couchbase/vellum
 github.com/couchbase/vellum/levenshtein
 github.com/couchbase/vellum/regexp
 github.com/couchbase/vellum/utf8
-# github.com/danielheath/gin-teeny-security v0.0.0-20180331042316-bb11804dd0e2
-## explicit
-github.com/danielheath/gin-teeny-security
 # github.com/desertbit/timer v0.0.0-20180107155436-c41aec40b27f
 ## explicit
 github.com/desertbit/timer
@@ -401,8 +398,6 @@ go.uber.org/automaxprocs/maxprocs
 golang.org/x/arch/x86/x86asm
 # golang.org/x/crypto v0.40.0
 ## explicit; go 1.23.0
-golang.org/x/crypto/bcrypt
-golang.org/x/crypto/blowfish
 golang.org/x/crypto/sha3
 # golang.org/x/net v0.42.0
 ## explicit; go 1.23.0

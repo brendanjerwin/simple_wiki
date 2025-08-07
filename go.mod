@@ -5,7 +5,6 @@ go 1.24
 require (
 	github.com/adrg/frontmatter v0.2.0
 	github.com/blevesearch/bleve v1.0.14
-	github.com/danielheath/gin-teeny-security v0.0.0-20180331042316-bb11804dd0e2
 	github.com/gabriel-vasile/mimetype v1.4.9
 	github.com/gin-contrib/multitemplate v1.1.1
 	github.com/gin-contrib/sessions v1.0.4
@@ -26,7 +25,6 @@ require (
 	github.com/yuin/goldmark-emoji v1.0.6
 	go.abhg.dev/goldmark/mermaid v0.5.0
 	go.abhg.dev/goldmark/wikilink v0.6.0
-	golang.org/x/crypto v0.40.0
 	golang.org/x/net v0.42.0
 	golang.org/x/text v0.27.0
 	google.golang.org/grpc v1.74.2
@@ -89,6 +87,7 @@ require (
 	go.etcd.io/bbolt v1.3.5 // indirect
 	go.uber.org/automaxprocs v1.6.0 // indirect
 	golang.org/x/arch v0.16.0 // indirect
+	golang.org/x/crypto v0.40.0 // indirect
 	golang.org/x/sys v0.34.0 // indirect
 	golang.org/x/tools v0.34.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250528174236-200df99c418a // indirect

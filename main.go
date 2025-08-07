@@ -81,7 +81,6 @@ func setupServer(c *cli.Context) (*http.Server, error) {
 		c.GlobalString("default-page"),
 		c.GlobalInt("debounce"),
 		c.GlobalString("cookie-secret"),
-		c.GlobalString("access-code"),
 		!c.GlobalBool("block-file-uploads"),
 		c.GlobalUint("max-upload-mb"),
 		c.GlobalUint("max-document-length"),
@@ -193,11 +192,6 @@ func getFlags() []cli.Flag {
 		cli.BoolFlag{
 			Name:  "debug, d",
 			Usage: "turn on debugging",
-		},
-		cli.StringFlag{
-			Name:  "access-code",
-			Value: "",
-			Usage: "Secret code to login with before accessing any wiki stuff",
 		},
 		cli.StringFlag{
 			Name:  "cookie-secret",
