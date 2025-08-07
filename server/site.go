@@ -373,7 +373,6 @@ func (s *Site) readOrInitPage(requestedIdentifier string, req *http.Request) (*w
 type DirectoryEntry struct {
 	Path       string
 	Length     int
-	Numchanges int
 	LastEdited time.Time
 }
 
@@ -433,7 +432,6 @@ func (s *Site) DirectoryList() []os.FileInfo {
 			entries[found] = DirectoryEntry{
 				Path:       p.Identifier, // Use the actual Page.Identifier, not the decoded filename
 				Length:     len(p.Text),
-				Numchanges: 1, // Current content only
 				LastEdited: lastEdited,
 			}
 			found = found + 1
