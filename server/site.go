@@ -445,7 +445,7 @@ func (s *Site) DirectoryList() []os.FileInfo {
 	entries := make([]os.FileInfo, len(files))
 	found := 0
 	for _, f := range files {
-		if strings.HasSuffix(f.Name(), ".json") {
+		if strings.HasSuffix(f.Name(), ".md") {
 			name := decodeFileName(f.Name())
 			// Each ReadPage() call will acquire its own read lock
 			p, err := s.ReadPage(name)
@@ -464,7 +464,7 @@ func (s *Site) DirectoryList() []os.FileInfo {
 			entries[found] = DirectoryEntry{
 				Path:       p.Identifier, // Use the actual Page.Identifier, not the decoded filename
 				Length:     len(p.Text),
-				Numchanges: 1, // Since we removed version history, always 1 edit
+				Numchanges: 1, // Current content only
 				LastEdited: lastEdited,
 			}
 			found = found + 1
@@ -552,7 +552,7 @@ func (s *Site) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.
 		return err
 	}
 
-	// Use UpdatePageContent to correctly save history to .json and current version to .md
+	// Use UpdatePageContent to save current content
 	return s.UpdatePageContent(identifier, newText)
 }
 
@@ -569,7 +569,7 @@ func (s *Site) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Mar
 		return err
 	}
 
-	// Use UpdatePageContent to correctly save history to .json and current version to .md
+	// Use UpdatePageContent to save current content
 	return s.UpdatePageContent(identifier, newText)
 }
 

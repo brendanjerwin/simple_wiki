@@ -763,16 +763,19 @@ test content to be soft deleted`
 	})
 
 	Describe("InitializeIndexing", func() {
-		When("a JSON file exists in the data directory", func() {
+		When("an MD file exists in the data directory", func() {
 			var (
 				err error
 			)
 
 			BeforeEach(func() {
-				// Create a test page as a JSON file with proper base32-encoded filename
+				// Create a test page as an MD file since JSON files are now migrated
 				encodedFilename := base32tools.EncodeToBase32(strings.ToLower("test"))
-				pagePath := filepath.Join(s.PathToData, encodedFilename+".json")
-				testPageContent := `{"identifier":"test","text":{"current":"test content","history":[]}}`
+				pagePath := filepath.Join(s.PathToData, encodedFilename+".md")
+				testPageContent := `+++
+identifier = "test"
++++
+# Test Content`
 				fileErr := os.WriteFile(pagePath, []byte(testPageContent), 0644)
 				Expect(fileErr).NotTo(HaveOccurred())
 
@@ -1066,12 +1069,8 @@ title = "Bad Title"
 				Expect(currentContent).NotTo(ContainSubstring(`title = "Bad Title"`))
 			})
 
-			It("should create history entry for the migration", func() {
+			It("should complete migration successfully", func() {
 				Expect(err).NotTo(HaveOccurred())
-				
-				// Check that there are multiple versions (original + migrated)
-				// NumEdits removed - always 1 edit now  
-				Expect(1).To(BeNumerically(">=", 1))
 			})
 
 			Describe("when no migration applies", func() {

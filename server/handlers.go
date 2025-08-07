@@ -193,7 +193,6 @@ func (s *Site) renderPageContent(c *gin.Context, page, command string, p *wikipa
 	rawText, contentHTML := s.getPageContent(p, version)
 	contentHTML = fmt.Appendf(nil, "<article class='content' id='%s'>%s</article>", page, string(contentHTML))
 
-	// Get history
 	versionsInt64, versionsChangeSums, versionsText := s.getVersionHistory(command, p)
 
 	if s.handleRawContent(c, command, p, rawText) {
@@ -215,7 +214,6 @@ func (s *Site) renderPageContent(c *gin.Context, page, command string, p *wikipa
 }
 
 func (*Site) getPageContent(p *wikipage.Page, _ string) (rawText string, contentHTML []byte) {
-	// Version history removed - always return current content
 	rawText = p.Text
 	contentHTML = p.RenderedPage
 	return rawText, contentHTML
@@ -239,33 +237,27 @@ func (s *Site) getDirectoryEntries(page, command string) ([]os.FileInfo, string,
 }
 
 func (*Site) getVersionHistory(_ string, _ *wikipage.Page) (versionsInt64 []int64, versionsChangeSums []int, versionsText []string) {
-	// Version history removed - return empty slices
 	versionsInt64 = []int64{}
 	versionsChangeSums = []int{}
 	versionsText = []string{}
 	return versionsInt64, versionsChangeSums, versionsText
 }
 
-func (s *Site) buildTemplateData(page, command string, directoryEntries []os.FileInfo, contentHTML []byte, rawText string, versionsInt64 []int64, versionsText []string, versionsChangeSums []int, c *gin.Context) gin.H {
+func (s *Site) buildTemplateData(page, command string, directoryEntries []os.FileInfo, contentHTML []byte, rawText string, _ []int64, _ []string, _ []int, c *gin.Context) gin.H {
 	return gin.H{
-		"EditPage":    command[0:2] == "/e", // /edit
-		"ViewPage":    command[0:2] == "/v", // /view
-		"HistoryPage": command[0:2] == "/h", // /history
-		"ReadPage":    command[0:2] == "/r", // /history
+		"EditPage": command[0:2] == "/e", // /edit
+		"ViewPage": command[0:2] == "/v", // /view
+		"ReadPage": command[0:2] == "/r", // /read
 		"DontKnowPage": command[0:2] != "/e" &&
 			command[0:2] != "/v" &&
 			command[0:2] != "/l" &&
-			command[0:2] != "/r" &&
-			command[0:2] != "/h",
+			command[0:2] != "/r",
 		"DirectoryPage":      page == "ls" || page == uploadsPage,
 		"UploadPage":         page == uploadsPage,
 		"DirectoryEntries":   directoryEntries,
 		"Page":               page,
 		"RenderedPage":       template.HTML([]byte(contentHTML)),
 		"RawPage":            rawText,
-		"Versions":           versionsInt64,
-		"VersionsText":       versionsText,
-		"VersionsChangeSums": versionsChangeSums,
 		"Route":              "/" + page + command,
 		"HasDotInName":       strings.Contains(page, "."),
 		"RecentlyEdited":     getRecentlyEdited(page, c, s.Logger),
@@ -314,11 +306,13 @@ func getRecentlyEdited(title string, c *gin.Context, logger *lumber.ConsoleLogge
 	return editedThingsWithoutCurrent[:i]
 }
 
+// PageExistsRequest represents the JSON structure for page existence checks
+type PageExistsRequest struct {
+	Page string `json:"page"`
+}
+
 func (s *Site) handlePageExists(c *gin.Context) {
-	type QueryJSON struct {
-		Page string `json:"page"`
-	}
-	var json QueryJSON
+	var json PageExistsRequest
 	err := c.BindJSON(&json)
 	if err != nil {
 		s.Logger.Trace("Failed to bind JSON in handlePageExists: %v", err)
@@ -338,14 +332,16 @@ func (s *Site) handlePageExists(c *gin.Context) {
 	}
 }
 
+// PageUpdateRequest represents the JSON structure for page update requests
+type PageUpdateRequest struct {
+	Page      string `json:"page"`
+	NewText   string `json:"new_text"`
+	FetchedAt int64  `json:"fetched_at"`
+	Meta      string `json:"meta"`
+}
+
 func (s *Site) handlePageUpdate(c *gin.Context) {
-	type QueryJSON struct {
-		Page      string `json:"page"`
-		NewText   string `json:"new_text"`
-		FetchedAt int64  `json:"fetched_at"`
-		Meta      string `json:"meta"`
-	}
-	var json QueryJSON
+	var json PageUpdateRequest
 	err := c.BindJSON(&json)
 	if err != nil {
 		s.Logger.Trace("Failed to bind JSON in handlePageUpdate: %v", err)
@@ -371,20 +367,46 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 		message       string
 	)
 	success := false
-	// Version history removed - simplified edit conflict checking
-	// For now, accept all edits (no concurrent edit protection)
-	{
-		p.Meta = json.Meta
-		if err := s.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), json.NewText); err != nil {
-			s.Logger.Error("Failed to save page '%s': %v", json.Page, err)
-			message = "Failed to save page"
-			success = false
-		} else {
-			message = "Saved"
-			success = true
-		}
+	if json.FetchedAt > 0 && s.isPageModifiedSince(p.Identifier, json.FetchedAt) {
+		message = "Refusing to overwrite others work"
+	} else {
+		message, success = s.savePageUpdate(p, json)
 	}
 	c.JSON(http.StatusOK, gin.H{"success": success, "message": message, "unix_time": time.Now().Unix()})
+}
+
+// isPageModifiedSince checks if a page has been modified since the given timestamp
+func (s *Site) isPageModifiedSince(pageIdentifier string, timestamp int64) bool {
+	mungedPath, originalPath, _ := s.getFilePathsForIdentifier(pageIdentifier, "json")
+	
+	// Check JSON file first, then MD file
+	if stat, err := os.Stat(mungedPath); err == nil {
+		return stat.ModTime().Unix() > timestamp
+	}
+	if stat, err := os.Stat(originalPath); err == nil {
+		return stat.ModTime().Unix() > timestamp
+	}
+	
+	// Try MD files
+	mungedMDPath, originalMDPath, _ := s.getFilePathsForIdentifier(pageIdentifier, "md")
+	if stat, err := os.Stat(mungedMDPath); err == nil {
+		return stat.ModTime().Unix() > timestamp
+	}
+	if stat, err := os.Stat(originalMDPath); err == nil {
+		return stat.ModTime().Unix() > timestamp
+	}
+	
+	return false
+}
+
+// savePageUpdate saves a page update and returns the result message and success status
+func (s *Site) savePageUpdate(p *wikipage.Page, json PageUpdateRequest) (message string, success bool) {
+	p.Meta = json.Meta
+	if err := s.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), json.NewText); err != nil {
+		s.Logger.Error("Failed to save page '%s': %v", json.Page, err)
+		return "Failed to save page", false
+	}
+	return "Saved", true
 }
 
 func (s *Site) handleUpload(c *gin.Context) {

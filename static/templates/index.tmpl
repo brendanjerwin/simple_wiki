@@ -46,7 +46,6 @@
     <body id="pad" class="
         {{ if .EditPage }} EditPage {{ end }}
         {{ if .ViewPage }} ViewPage {{ end }}
-        {{ if .HistoryPage }} HistoryPage {{ end }}
         {{ if .ReadPage }} ReadPage {{ end }}
         {{ if .DontKnowPage }} DontKnowPage {{ end }}
         {{ if .DirectoryPage }} DirectoryPage {{ end }}
@@ -67,7 +66,6 @@
                                 {{ if not .EditPage }}
                                 <li class="pure-menu-item"><a href="#" class="pure-menu-link" id="editFrontmatter"><i class="fas fa-file-lines"></i> Edit Frontmatter</a></li>
                                 {{ end }}
-                                <li class="pure-menu-item"><a href="/{{ .Page }}/history" class="pure-menu-link"><i class="fas fa-clock-rotate-left"></i> History</a></li>
                                 <hr>
                                 <li class="pure-menu-item"><a href="#" class="pure-menu-link" id="erasePage"><i class="fas fa-recycle"></i> Erase</a></li>
                             </ul>
@@ -134,19 +132,6 @@
                         {{ .RenderedPage }}
                     {{ end }}
 
-                    {{ if .HistoryPage }}
-                        <h1>History</h1>
-                        <ul>
-                            {{range $i, $e := .Versions}}
-                                <li style="list-style: none;">
-                                <a href="/{{ $.Page }}/view?version={{$e}}">View</a>
-                                &nbsp;&nbsp;
-                                <a href="/{{ $.Page }}/raw?version={{$e}}">Raw</a>
-                                &nbsp;&nbsp;
-                                {{index $.VersionsText $i}}&nbsp;({{if lt (index $.VersionsChangeSums $i) 0}}<span style="color:red">{{else}}<span style="color:green">+{{end}}{{index $.VersionsChangeSums $i}}</span>)</li>
-                            {{end}}
-                        </ul>
-                    {{ end }}
 
                     {{ if .DirectoryPage }}
                         <table style="width:100%">
@@ -154,9 +139,6 @@
                           <tr>
                             <th>Document</th>
                             <th>Current size</th>
-                            {{ if not $upload }}
-                            <th>Num Edits</th>
-                            {{ end }}
                             <th>Last Edited</th>
                           </tr>
                           {{range .DirectoryEntries}}
@@ -169,9 +151,6 @@
                                 {{ end }}
                             </td>
                             <td>{{.Size}}</td>
-                            {{ if not $upload }}
-                            <td>{{.Numchanges}}</td>
-                            {{ end }}
                             <td>{{.ModTime.Format "Mon Jan 2 15:04:05 MST 2006" }}</td>
                           </tr>
                           {{ end }}
