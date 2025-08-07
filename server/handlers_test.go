@@ -258,7 +258,7 @@ var _ = Describe("Handlers", func() {
 			It("should update the page content", func() {
 				p, err := site.ReadPage(pageName)
 				Expect(err).NotTo(HaveOccurred())
-				Expect(p.Text.GetCurrent()).To(Equal(newText))
+				Expect(p.Text).To(Equal(newText))
 			})
 		})
 
@@ -276,7 +276,7 @@ var _ = Describe("Handlers", func() {
 				p, err := site.ReadPage(pageName)
 				Expect(err).NotTo(HaveOccurred())
 				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "initial content")
-				_ = site.UpdatePageContent(p.Identifier, p.Text.GetCurrent())
+				_ = site.UpdatePageContent(p.Identifier, p.Text)
 
 				// Make the data directory read-only to simulate save failure
 				dirInfo, err := os.Stat(tmpDir)
@@ -637,7 +637,7 @@ var _ = Describe("Session Logging Functions", func() {
 				p, err := site.ReadPage("test-integration")
 				Expect(err).NotTo(HaveOccurred())
 				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "test content")
-				_ = site.UpdatePageContent(p.Identifier, p.Text.GetCurrent())
+				_ = site.UpdatePageContent(p.Identifier, p.Text)
 			})
 
 			It("should pass logger to session functions in handlePageRequest", func() {

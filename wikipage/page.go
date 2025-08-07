@@ -8,13 +8,12 @@ import (
 	"strings"
 
 	adrgfrontmatter "github.com/adrg/frontmatter"
-	"github.com/schollz/versionedtext"
 )
 
 // Page represents a wiki page
 type Page struct {
 	Identifier         string
-	Text               versionedtext.VersionedText
+	Text               string
 	Meta               string
 	RenderedPage       []byte `json:"-"`
 	FrontmatterJSON    []byte `json:"-"`
@@ -24,7 +23,7 @@ type Page struct {
 // parse parses the page content into frontmatter and markdown
 func (p *Page) parse() (FrontMatter, Markdown, error) {
 	frontmatter := &map[string]any{}
-	r := strings.NewReader(p.Text.GetCurrent())
+	r := strings.NewReader(p.Text)
 
 	// Try to parse with default delimiter which is ---
 	mdContent, err := adrgfrontmatter.Parse(r, frontmatter)
@@ -32,7 +31,7 @@ func (p *Page) parse() (FrontMatter, Markdown, error) {
 		// Failed to parse, try swapping delimiters
 		// This handles the case where content has TOML-like frontmatter with +++ delimiters
 		// but the parser expects YAML-like frontmatter with --- delimiters
-		swapped := strings.Replace(p.Text.GetCurrent(), "+++", "---", 2)
+		swapped := strings.Replace(p.Text, "+++", "---", 2)
 		mdContent, err = adrgfrontmatter.Parse(strings.NewReader(swapped), frontmatter)
 		if err != nil && err != io.EOF {
 			// Neither delimiter worked, return the error
@@ -117,7 +116,7 @@ func markdownToHTMLAndJSONFrontmatter(s string, reader PageReader, renderer IRen
 // Render renders the page content to HTML
 func (p *Page) Render(reader PageReader, renderer IRenderMarkdownToHTML, templateExecutor IExecuteTemplate, query IQueryFrontmatterIndex) error {
 	var err error
-	p.RenderedPage, p.FrontmatterJSON, err = markdownToHTMLAndJSONFrontmatter(p.Text.GetCurrent(), reader, renderer, templateExecutor, query)
+	p.RenderedPage, p.FrontmatterJSON, err = markdownToHTMLAndJSONFrontmatter(p.Text, reader, renderer, templateExecutor, query)
 	if err != nil {
 		p.RenderedPage = []byte(err.Error())
 		return fmt.Errorf("error rendering page: %w", err)

@@ -6,7 +6,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/schollz/versionedtext"
 )
 
 var _ = Describe("Page", func() {
@@ -21,7 +20,7 @@ var _ = Describe("Page", func() {
 		BeforeEach(func() {
 			p = &wikipage.Page{
 				Identifier: "testpage",
-				Text:       versionedtext.NewVersionedText(""),
+				Text:       "",
 			}
 		})
 
@@ -34,7 +33,7 @@ var _ = Describe("Page", func() {
 
 		When("the page has no frontmatter", func() {
 			BeforeEach(func() {
-				p.Text.Update("Just some markdown content.")
+				p.Text = "Just some markdown content."
 			})
 
 			It("should return empty frontmatter", func() {
@@ -57,7 +56,7 @@ title: Test Page
 tags: [one, two]
 ---
 This is the markdown content.`
-				p.Text.Update(content)
+				p.Text = content
 			})
 
 			It("should correctly parse the frontmatter", func() {
@@ -82,7 +81,7 @@ title: Test Page
 tags: [one, two
 ---
 This is the markdown content.`
-				p.Text.Update(content)
+				p.Text = content
 			})
 
 			It("should return an error", func() {
@@ -93,7 +92,7 @@ This is the markdown content.`
 
 		When("the content is empty", func() {
 			BeforeEach(func() {
-				p.Text.Update("")
+				p.Text = ""
 			})
 
 			It("should return empty frontmatter and markdown", func() {
@@ -112,7 +111,7 @@ This is the markdown content.`
 title: Only Frontmatter
 ---
 `
-				p.Text.Update(content)
+				p.Text = content
 			})
 
 			It("should parse the frontmatter", func() {
@@ -134,7 +133,7 @@ title: Only Frontmatter
 				content = `Here is some text.
 ---
 And some more text. But this is not frontmatter.`
-				p.Text.Update(content)
+				p.Text = content
 			})
 
 			It("should return empty frontmatter", func() {

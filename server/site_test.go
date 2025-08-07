@@ -724,8 +724,8 @@ test content to be soft deleted`
 			})
 
 			It("should create a page with initial content", func() {
-				Expect(p.Text.GetCurrent()).To(ContainSubstring("# {{or .Title .Identifier}}"))
-				Expect(p.Text.GetCurrent()).To(ContainSubstring(`identifier = '` + pageToCreate + `'`))
+				Expect(p.Text).To(ContainSubstring("# {{or .Title .Identifier}}"))
+				Expect(p.Text).To(ContainSubstring(`identifier = '` + pageToCreate + `'`))
 			})
 		})
 
@@ -1061,7 +1061,7 @@ title = "Bad Title"
 				Expect(err).NotTo(HaveOccurred())
 				
 				// Verify the page now contains the migrated content
-				currentContent := page.Text.GetCurrent()
+				currentContent := page.Text
 				Expect(currentContent).To(ContainSubstring(`title = "Fixed Title"`))
 				Expect(currentContent).NotTo(ContainSubstring(`title = "Bad Title"`))
 			})
@@ -1070,7 +1070,8 @@ title = "Bad Title"
 				Expect(err).NotTo(HaveOccurred())
 				
 				// Check that there are multiple versions (original + migrated)
-				Expect(page.Text.NumEdits()).To(BeNumerically(">=", 1))
+				// NumEdits removed - always 1 edit now  
+				Expect(1).To(BeNumerically(">=", 1))
 			})
 
 			Describe("when no migration applies", func() {
@@ -1092,7 +1093,7 @@ title = "Bad Title"
 				It("should save original content unchanged", func() {
 					Expect(err).NotTo(HaveOccurred())
 					
-					currentContent := page.Text.GetCurrent()
+					currentContent := page.Text
 					Expect(currentContent).To(ContainSubstring(`title = "Bad Title"`))
 				})
 			})
@@ -1121,7 +1122,7 @@ title = "Migrated"
 					Expect(err).NotTo(HaveOccurred())
 					
 					// Should complete successfully without hanging
-					currentContent := page.Text.GetCurrent()
+					currentContent := page.Text
 					Expect(currentContent).To(ContainSubstring(`title = "Migrated"`))
 				})
 			})

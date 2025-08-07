@@ -154,7 +154,7 @@ var _ = Describe("Site Page Operations", func() {
 					})
 
 					It("should have its content preserved", func() {
-						Expect(p2.Text.GetCurrent()).To(Equal("**bold** and *italic*"))
+						Expect(p2.Text).To(Equal("**bold** and *italic*"))
 					})
 
 					When("the retrieved page is rendered", func() {
@@ -218,7 +218,7 @@ var _ = Describe("Site Page Operations", func() {
 				}
 				
 				// Check final content after open
-				finalContent = p.Text.GetCurrent()
+				finalContent = p.Text
 			})
 
 			It("should complete without hanging", func() {

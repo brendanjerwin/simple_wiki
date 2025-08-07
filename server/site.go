@@ -31,7 +31,6 @@ import (
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/jcelliott/lumber"
 	"github.com/pelletier/go-toml/v2"
-	"github.com/schollz/versionedtext"
 )
 
 // IRenderMarkdownToHTML is an interface that abstracts the rendering process
@@ -248,7 +247,7 @@ func (s *Site) ReadPage(requestedIdentifier string) (*wikipage.Page, error) {
 	// Create a new page object to be returned if no file is found.
 	p := new(wikipage.Page)
 	p.Identifier = requestedIdentifier
-	p.Text = versionedtext.NewVersionedText("")
+	p.Text = ""
 	p.WasLoadedFromDisk = false
 
 	identifier, bJSON, err := s.readFileByIdentifier(requestedIdentifier, "json")
@@ -262,17 +261,16 @@ func (s *Site) ReadPage(requestedIdentifier string) (*wikipage.Page, error) {
 		p.WasLoadedFromDisk = true
 
 		// IMPORTANT: Apply migrations to JSON-loaded content too!
-		// Get the current text content from the versioned text
-		currentContent := p.Text.GetCurrent()
-		if currentContent != "" {
-			migratedContent, migrationErr := s.applyMigrationsForPage(p, []byte(currentContent))
+		// Get the current text content
+		if p.Text != "" {
+			migratedContent, migrationErr := s.applyMigrationsForPage(p, []byte(p.Text))
 			if migrationErr != nil {
 				return nil, fmt.Errorf("migration failed for page %s: %w", identifier, migrationErr)
 			}
 
 			// Update the page's text if migration changed it
-			if string(migratedContent) != currentContent {
-				p.Text = versionedtext.NewVersionedText(string(migratedContent))
+			if string(migratedContent) != p.Text {
+				p.Text = string(migratedContent)
 			}
 		}
 
@@ -297,7 +295,7 @@ func (s *Site) ReadPage(requestedIdentifier string) (*wikipage.Page, error) {
 		return nil, fmt.Errorf("migration failed for page %s: %w", identifier, migrationErr)
 	}
 
-	p.Text = versionedtext.NewVersionedText(string(migratedContent))
+	p.Text = string(migratedContent)
 	p.WasLoadedFromDisk = true
 	return p, nil
 }
@@ -318,7 +316,7 @@ func (s *Site) applyMigrationsForPage(page *wikipage.Page, content []byte) ([]by
 	// If migration was applied, save the migrated content
 	if !bytes.Equal(content, migratedContent) {
 		// Update the page's text with migrated content and save
-		page.Text = versionedtext.NewVersionedText(string(migratedContent))
+		page.Text = string(migratedContent)
 		if saveErr := s.savePageWithoutIndexing(page); saveErr != nil {
 			s.Logger.Warn("Failed to save migrated content for %s: %v", page.Identifier, saveErr)
 		} else {
@@ -387,7 +385,7 @@ func (s *Site) readOrInitPage(requestedIdentifier string, req *http.Request) (*w
 `
 		}
 
-		p.Text = versionedtext.NewVersionedText(initialText)
+		p.Text = initialText
 		if renderErr := p.Render(s, s.MarkdownRenderer, TemplateExecutor{}, s.FrontmatterIndexQueryer); renderErr != nil {
 			s.Logger.Error("Error rendering new page: %v", renderErr)
 		}
@@ -455,11 +453,19 @@ func (s *Site) DirectoryList() []os.FileInfo {
 				s.Logger.Warn("Failed to open page %s for directory listing: %v", name, err)
 				continue
 			}
+			
+			// Get file modification time from filesystem
+			fileInfo, statErr := os.Stat(filepath.Join(s.PathToData, f.Name()))
+			lastEdited := time.Now()
+			if statErr == nil {
+				lastEdited = fileInfo.ModTime()
+			}
+			
 			entries[found] = DirectoryEntry{
 				Path:       p.Identifier, // Use the actual Page.Identifier, not the decoded filename
-				Length:     len(p.Text.GetCurrent()),
-				Numchanges: p.Text.NumEdits(),
-				LastEdited: time.Unix(p.Text.LastEditTime()/1000000000, 0),
+				Length:     len(p.Text),
+				Numchanges: 1, // Since we removed version history, always 1 edit
+				LastEdited: lastEdited,
 			}
 			found = found + 1
 		}
@@ -665,8 +671,8 @@ func (s *Site) UpdatePageContent(identifier wikipage.PageIdentifier, newText str
 		newText = string(migratedContent)
 	}
 
-	// Update the versioned text
-	p.Text.Update(newText)
+	// Update the text content
+	p.Text = newText
 
 	// Render the new page
 	if renderErr := p.Render(s, s.MarkdownRenderer, TemplateExecutor{}, s.FrontmatterIndexQueryer); renderErr != nil {
@@ -693,7 +699,7 @@ func (s *Site) savePage(p *wikipage.Page) error {
 	}
 
 	// Write the current Markdown
-	err = os.WriteFile(path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(p.Identifier))+".md"), []byte(p.Text.CurrentText), 0644)
+	err = os.WriteFile(path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(p.Identifier))+".md"), []byte(p.Text), 0644)
 	if err != nil {
 		return err
 	}
@@ -723,7 +729,7 @@ func (s *Site) savePageWithoutIndexing(p *wikipage.Page) error {
 	}
 
 	// Write the current Markdown
-	err = os.WriteFile(path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(p.Identifier))+".md"), []byte(p.Text.CurrentText), 0644)
+	err = os.WriteFile(path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(p.Identifier))+".md"), []byte(p.Text), 0644)
 	if err != nil {
 		return err
 	}
@@ -744,13 +750,6 @@ func (s *Site) ReadOrInitPageForTesting(requestedIdentifier string, req *http.Re
 }
 
 // Utility functions for working with pages
-
-const nanosecondsPerSecond = 1000000000
-
-// lastEditUnixTime returns the last edit time of the page in Unix nanoseconds.
-func lastEditUnixTime(p *wikipage.Page) int64 {
-	return p.Text.LastEditTime() / nanosecondsPerSecond
-}
 
 // decodeFileName decodes a filename from base32.
 func decodeFileName(s string) string {

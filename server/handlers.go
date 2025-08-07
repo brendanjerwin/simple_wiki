@@ -14,13 +14,11 @@ import (
 	"os"
 	"path"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/static"
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
-	"github.com/brendanjerwin/simple_wiki/utils/slicetools"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/gin-contrib/multitemplate"
 	"github.com/gin-contrib/sessions"
@@ -216,19 +214,10 @@ func (s *Site) renderPageContent(c *gin.Context, page, command string, p *wikipa
 	c.HTML(http.StatusOK, "index.tmpl", templateData)
 }
 
-func (s *Site) getPageContent(p *wikipage.Page, version string) (rawText string, contentHTML []byte) {
-	rawText = p.Text.GetCurrent()
+func (*Site) getPageContent(p *wikipage.Page, _ string) (rawText string, contentHTML []byte) {
+	// Version history removed - always return current content
+	rawText = p.Text
 	contentHTML = p.RenderedPage
-
-	// Check to see if an old version is requested
-	versionInt, versionErr := strconv.Atoi(version)
-	if versionErr == nil && versionInt > 0 {
-		versionText, err := p.Text.GetPreviousByTimestamp(int64(versionInt))
-		if err == nil {
-			rawText = versionText
-			contentHTML, _ = s.MarkdownRenderer.Render([]byte(rawText))
-		}
-	}
 	return rawText, contentHTML
 }
 
@@ -249,17 +238,11 @@ func (s *Site) getDirectoryEntries(page, command string) ([]os.FileInfo, string,
 	return directoryEntries, command, nil
 }
 
-func (*Site) getVersionHistory(command string, p *wikipage.Page) (versionsInt64 []int64, versionsChangeSums []int, versionsText []string) {
-	if command[0:2] == "/h" {
-		versionsInt64, versionsChangeSums = p.Text.GetMajorSnapshotsAndChangeSums(maxCacheControl) // get snapshots 60 seconds apart
-		versionsText = make([]string, len(versionsInt64))
-		for i, v := range versionsInt64 {
-			versionsText[i] = time.Unix(v/1000000000, 0).Format("Mon Jan 2 15:04:05 MST 2006")
-		}
-		versionsText = slicetools.ReverseSliceString(versionsText)
-		versionsInt64 = slicetools.ReverseSliceInt64(versionsInt64)
-		versionsChangeSums = slicetools.ReverseSliceInt(versionsChangeSums)
-	}
+func (*Site) getVersionHistory(_ string, _ *wikipage.Page) (versionsInt64 []int64, versionsChangeSums []int, versionsText []string) {
+	// Version history removed - return empty slices
+	versionsInt64 = []int64{}
+	versionsChangeSums = []int{}
+	versionsText = []string{}
 	return versionsInt64, versionsChangeSums, versionsText
 }
 
@@ -348,7 +331,7 @@ func (s *Site) handlePageExists(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to open page", "exists": false})
 		return
 	}
-	if len(p.Text.GetCurrent()) > 0 {
+	if len(p.Text) > 0 {
 		c.JSON(http.StatusOK, gin.H{"success": true, "message": json.Page + " found", "exists": true})
 	} else {
 		c.JSON(http.StatusOK, gin.H{"success": true, "message": json.Page + " not found", "exists": false})
@@ -388,9 +371,9 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 		message       string
 	)
 	success := false
-	if json.FetchedAt > 0 && lastEditUnixTime(p) > json.FetchedAt {
-		message = "Refusing to overwrite others work"
-	} else {
+	// Version history removed - simplified edit conflict checking
+	// For now, accept all edits (no concurrent edit protection)
+	{
 		p.Meta = json.Meta
 		if err := s.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), json.NewText); err != nil {
 			s.Logger.Error("Failed to save page '%s': %v", json.Page, err)
