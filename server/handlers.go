@@ -33,7 +33,6 @@ const (
 
 	// Magic numbers
 	maxSecretAttempts = 8
-	maxCacheControl   = 60
 	maxContentLength  = 3
 
 	// String constants
@@ -159,10 +158,8 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 		return
 	}
 
-	version := c.DefaultQuery("version", "ajksldfjl")
-
 	// Render the page content
-	s.renderPageContent(c, page, command, p, version)
+	s.renderPageContent(c, page, command, p)
 }
 
 // handleSpecialPages handles special page routes (favicon, static, uploads)
@@ -184,8 +181,8 @@ func (s *Site) handleSpecialPages(c *gin.Context, page, command string) bool {
 }
 
 // renderPageContent handles the final page content rendering
-func (s *Site) renderPageContent(c *gin.Context, page, command string, p *wikipage.Page, version string) {
-	rawText, contentHTML := s.getPageContent(p, version)
+func (s *Site) renderPageContent(c *gin.Context, page, command string, p *wikipage.Page) {
+	rawText, contentHTML := s.getPageContent(p)
 	contentHTML = fmt.Appendf(nil, "<article class='content' id='%s'>%s</article>", page, string(contentHTML))
 
 	if s.handleRawContent(c, command, p, rawText) {
@@ -206,7 +203,7 @@ func (s *Site) renderPageContent(c *gin.Context, page, command string, p *wikipa
 	c.HTML(http.StatusOK, "index.tmpl", templateData)
 }
 
-func (*Site) getPageContent(p *wikipage.Page, _ string) (rawText string, contentHTML []byte) {
+func (*Site) getPageContent(p *wikipage.Page) (rawText string, contentHTML []byte) {
 	rawText = p.Text
 	contentHTML = p.RenderedPage
 	return rawText, contentHTML
