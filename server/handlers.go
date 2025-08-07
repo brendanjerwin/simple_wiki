@@ -193,8 +193,6 @@ func (s *Site) renderPageContent(c *gin.Context, page, command string, p *wikipa
 	rawText, contentHTML := s.getPageContent(p, version)
 	contentHTML = fmt.Appendf(nil, "<article class='content' id='%s'>%s</article>", page, string(contentHTML))
 
-	versionsInt64, versionsChangeSums, versionsText := s.getVersionHistory(command, p)
-
 	if s.handleRawContent(c, command, p, rawText) {
 		return
 	}
@@ -209,7 +207,7 @@ func (s *Site) renderPageContent(c *gin.Context, page, command string, p *wikipa
 		return
 	}
 
-	templateData := s.buildTemplateData(page, command, directoryEntries, contentHTML, rawText, versionsInt64, versionsText, versionsChangeSums, c)
+	templateData := s.buildTemplateData(page, command, directoryEntries, contentHTML, rawText, c)
 	c.HTML(http.StatusOK, "index.tmpl", templateData)
 }
 
@@ -236,14 +234,8 @@ func (s *Site) getDirectoryEntries(page, command string) ([]os.FileInfo, string,
 	return directoryEntries, command, nil
 }
 
-func (*Site) getVersionHistory(_ string, _ *wikipage.Page) (versionsInt64 []int64, versionsChangeSums []int, versionsText []string) {
-	versionsInt64 = []int64{}
-	versionsChangeSums = []int{}
-	versionsText = []string{}
-	return versionsInt64, versionsChangeSums, versionsText
-}
 
-func (s *Site) buildTemplateData(page, command string, directoryEntries []os.FileInfo, contentHTML []byte, rawText string, _ []int64, _ []string, _ []int, c *gin.Context) gin.H {
+func (s *Site) buildTemplateData(page, command string, directoryEntries []os.FileInfo, contentHTML []byte, rawText string, c *gin.Context) gin.H {
 	return gin.H{
 		"EditPage": command[0:2] == "/e", // /edit
 		"ViewPage": command[0:2] == "/v", // /view
