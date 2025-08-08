@@ -17,7 +17,8 @@
     "playwright@latest",
     "playwright-driver@latest",
     "playwright-test@latest",
-    "gh@latest"
+    "gh@latest",
+    "ollama@latest"
   ],
   "shell": {
     "init_hook": [

@@ -12,3 +12,7 @@ processes:
     command: cd static/js && bun install && bun run storybook
     availability:
       restart: "always"
+  ollama:
+    command: ollama serve
+    availability:
+      restart: "always"

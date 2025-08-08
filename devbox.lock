@@ -487,6 +487,54 @@
         }
       }
     },
+    "ollama@latest": {
+      "last_modified": "2025-08-01T06:30:45Z",
+      "resolved": "github:NixOS/nixpkgs/a7822a17050fedda63794775b9090880c8214290#ollama",
+      "source": "devbox-search",
+      "version": "0.10.0",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/2x1v2ny8783ybrz7bbay5bs06plgpdgh-ollama-0.10.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/2x1v2ny8783ybrz7bbay5bs06plgpdgh-ollama-0.10.0"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/xsy98cz0yad3bd4s24i6x695ml09jqbi-ollama-0.10.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/xsy98cz0yad3bd4s24i6x695ml09jqbi-ollama-0.10.0"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/59r6ivzxnakhnp89z72lh88b12n0yssd-ollama-0.10.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/59r6ivzxnakhnp89z72lh88b12n0yssd-ollama-0.10.0"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/9j7l7cia0wnxi5fffa5h32zs81h1c7c9-ollama-0.10.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/9j7l7cia0wnxi5fffa5h32zs81h1c7c9-ollama-0.10.0"
+        }
+      }
+    },
     "playwright-driver@latest": {
       "last_modified": "2024-12-23T21:10:33Z",
       "resolved": "github:NixOS/nixpkgs/de1864217bfa9b5845f465e771e0ecb48b30e02d#playwright-driver",
