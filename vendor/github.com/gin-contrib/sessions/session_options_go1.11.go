@@ -1,12 +1,10 @@
-//go:build go1.11
 // +build go1.11
 
 package sessions
 
 import (
-	"net/http"
-
 	gsessions "github.com/gorilla/sessions"
+	"net/http"
 )
 
 // Options stores configuration for a session or session store.
