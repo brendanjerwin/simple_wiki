@@ -135,6 +135,7 @@ func main() {
 	app = cli.NewApp()
 	app.Name = "simple_wiki"
 	app.Usage = "a simple wiki"
+	app.Version = getCommitHash()
 	app.Compiled = time.Now()
 	app.Action = func(c *cli.Context) error {
 		srv, err := setupServer(c)
