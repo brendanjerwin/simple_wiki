@@ -26,8 +26,20 @@ elif [[ "$TAG_OR_BRANCH" =~ ^v[0-9] ]]; then
     DEPLOY_TYPE="tag"
 else
     # Otherwise treat as branch
-    REF_TO_DEPLOY="$TAG_OR_BRANCH" 
+    REF_TO_DEPLOY="$TAG_OR_BRANCH"
     DEPLOY_TYPE="branch"
+fi
+
+# Prevent accidental deployment of main branch
+if [[ "$REF_TO_DEPLOY" == "main" ]]; then
+    echo "❌ ERROR: Direct deployment of 'main' branch is not allowed"
+    echo ""
+    echo "📋 To deploy to production, use a tagged release instead:"
+    echo "   devbox run deploy v3.3.X"
+    echo ""
+    echo "💡 This ensures you're deploying tested, versioned releases"
+    echo "   rather than potentially unstable branch code."
+    exit 1
 fi
 
 echo "🚀 Deploying $DEPLOY_TYPE: $REF_TO_DEPLOY"

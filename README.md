@@ -50,6 +50,22 @@ You can easily see previous versions of your documents.
 
 ![History](http://i.imgur.com/CxhRkyo.gif)
 
+## Development
+
+### Running Locally
+
+Use `devbox services start` to run the application locally with all required dependencies.
+
+### Deployment
+
+To deploy to production, always deploy tagged releases, not branches:
+
+```shell
+devbox run deploy v3.3.X
+```
+
+**Important:** Direct deployment of the `main` branch is blocked to ensure only tested, versioned releases are deployed to production. The deploy script will reject attempts to deploy `main` with a helpful error message.
+
 ## Thanks
 
 To the original project I started from: [cowyo](https://github.com/schollz/cowyo).
