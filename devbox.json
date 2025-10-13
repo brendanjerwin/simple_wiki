@@ -17,11 +17,15 @@
     "playwright@latest",
     "playwright-driver@latest",
     "playwright-test@latest",
-    "gh@latest"
+    "gh@latest",
+    "jdk21@latest",
+    "android-tools@latest",
+    "gradle@latest"
   ],
   "shell": {
     "init_hook": [
-      "echo 'Welcome to devbox!' > /dev/null"
+      "echo 'Welcome to devbox!' > /dev/null",
+      "source ./.devbox_run_scripts/setup_android_env.sh"
     ],
     "scripts": {
       "fe:test": [
@@ -91,6 +95,28 @@
       ],
       "deploy": [
         "./.devbox_run_scripts/deploy.sh $@"
+      ],
+      "android:setup": [
+        "./.devbox_run_scripts/setup_android_sdk.sh"
+      ],
+      "android:sync": [
+        "CAPACITOR_DEV=true bunx cap sync android",
+        "rm -rf android/app/src/main/assets/public/js/node_modules"
+      ],
+      "android:build:debug": [
+        "cd android && ./gradlew assembleDebug"
+      ],
+      "android:build:release": [
+        "cd android && ./gradlew assembleRelease"
+      ],
+      "android:test": [
+        "cd android && ./gradlew test"
+      ],
+      "android:install": [
+        "adb install -r android/app/build/outputs/apk/debug/app-debug.apk"
+      ],
+      "android:clean": [
+        "cd android && ./gradlew clean"
       ]
     }
   }
