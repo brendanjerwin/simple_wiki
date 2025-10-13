@@ -248,7 +248,7 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, nil, nil, lumber.NewConsoleLogger(lumber.WARN))
+			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, nil, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, nil)
 			res, err = server.GetFrontmatter(ctx, req)
 		})
 
@@ -391,7 +391,7 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, nil, nil, lumber.NewConsoleLogger(lumber.WARN))
+			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, nil, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, nil)
 			resp, err = server.MergeFrontmatter(ctx, req)
 		})
 
@@ -599,7 +599,7 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, nil, nil, lumber.NewConsoleLogger(lumber.WARN))
+			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, nil, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, nil)
 			resp, err = server.ReplaceFrontmatter(ctx, req)
 		})
 
@@ -798,7 +798,7 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, nil, nil, lumber.NewConsoleLogger(lumber.WARN))
+			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, nil, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, nil)
 			resp, err = server.RemoveKeyAtPath(ctx, req)
 		})
 
@@ -1150,7 +1150,7 @@ var _ = Describe("Server", func() {
 			// Create a mock logger
 			logger = lumber.NewConsoleLogger(lumber.INFO)
 
-			server = v1.NewServer("test-commit", time.Now(), nil, nil, nil, logger)
+			server = v1.NewServer("test-commit", time.Now(), nil, nil, nil, logger, nil, nil, nil)
 		})
 
 		When("a successful gRPC call is made", func() {
@@ -1237,7 +1237,7 @@ var _ = Describe("Server", func() {
 			)
 
 			BeforeEach(func() {
-				server = v1.NewServer("test-commit", time.Now(), nil, nil, nil, nil)
+				server = v1.NewServer("test-commit", time.Now(), nil, nil, nil, nil, nil, nil, nil)
 
 				handler = func(ctx context.Context, req any) (any, error) {
 					return &apiv1.GetVersionResponse{Commit: "test"}, nil
@@ -1273,7 +1273,7 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, nil, nil, lumber.NewConsoleLogger(lumber.WARN))
+			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, nil, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, nil)
 			resp, err = server.DeletePage(ctx, req)
 		})
 
@@ -1337,7 +1337,7 @@ var _ = Describe("Server", func() {
 
 		BeforeEach(func() {
 			req = &apiv1.GetJobStatusRequest{}
-			server = v1.NewServer("commit", time.Now(), nil, nil, nil, lumber.NewConsoleLogger(lumber.WARN))
+			server = v1.NewServer("commit", time.Now(), nil, nil, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, nil)
 			res, err = server.GetJobStatus(ctx, req)
 		})
 
@@ -1360,7 +1360,7 @@ var _ = Describe("Server", func() {
 		BeforeEach(func() {
 			req = &apiv1.StreamJobStatusRequest{}
 			streamServer = &MockJobStreamServer{}
-			server = v1.NewServer("commit", time.Now(), nil, nil, nil, lumber.NewConsoleLogger(lumber.WARN))
+			server = v1.NewServer("commit", time.Now(), nil, nil, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, nil)
 		})
 
 		var (
@@ -1404,7 +1404,7 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("commit", time.Now(), nil, mockBleveIndexQueryer, nil, lumber.NewConsoleLogger(lumber.WARN))
+			server = v1.NewServer("commit", time.Now(), nil, mockBleveIndexQueryer, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, nil)
 			resp, err = server.SearchContent(ctx, req)
 		})
 
@@ -1468,4 +1468,209 @@ var _ = Describe("Server", func() {
 			})
 		})
 	})
+
+	Describe("ReadPage", func() {
+		var (
+			req                      *apiv1.ReadPageRequest
+			resp                     *apiv1.ReadPageResponse
+			err                      error
+			mockPageReaderMutator    *MockPageReaderMutator
+			mockMarkdownRenderer     *MockMarkdownRenderer
+			mockTemplateExecutor     *MockTemplateExecutor
+			mockFrontmatterIndexQueryer *MockFrontmatterIndexQueryer
+		)
+
+		BeforeEach(func() {
+			req = &apiv1.ReadPageRequest{
+				PageName: "test-page",
+			}
+			mockPageReaderMutator = &MockPageReaderMutator{}
+			mockMarkdownRenderer = &MockMarkdownRenderer{}
+			mockTemplateExecutor = &MockTemplateExecutor{}
+			mockFrontmatterIndexQueryer = &MockFrontmatterIndexQueryer{}
+		})
+
+		JustBeforeEach(func() {
+			server = v1.NewServer(
+				"commit",
+				time.Now(),
+				mockPageReaderMutator,
+				nil,
+				nil,
+				lumber.NewConsoleLogger(lumber.WARN),
+				mockMarkdownRenderer,
+				mockTemplateExecutor,
+				mockFrontmatterIndexQueryer,
+			)
+			resp, err = server.ReadPage(ctx, req)
+		})
+
+		When("the PageReaderMutator is not configured", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator = nil
+			})
+
+			It("should return an internal error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.Internal, "PageReaderMutator not available"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("the page does not exist", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = os.ErrNotExist
+			})
+
+			It("should return a not found error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.NotFound, "page not found: test-page"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("reading markdown fails with a generic error", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = errors.New("disk read error")
+			})
+
+			It("should return an internal error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to read page"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("rendering fails", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Markdown = "# Test Page"
+				mockPageReaderMutator.Frontmatter = map[string]any{"title": "Test"}
+				mockMarkdownRenderer.Err = errors.New("rendering error")
+			})
+
+			It("should return an internal error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to render page"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("the page exists with valid content", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Markdown = "# Test Page\n\nThis is test content."
+				mockPageReaderMutator.Frontmatter = map[string]any{
+					"title": "Test Page",
+					"tags":  []any{"test"},
+				}
+				mockTemplateExecutor.Result = []byte("# Test Page\n\nThis is test content.")
+				mockMarkdownRenderer.Result = []byte("<h1>Test Page</h1>\n<p>This is test content.</p>")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a response", func() {
+				Expect(resp).NotTo(BeNil())
+			})
+
+			It("should return the markdown content", func() {
+				Expect(resp.ContentMarkdown).To(Equal("# Test Page\n\nThis is test content."))
+			})
+
+			It("should return the frontmatter as TOML", func() {
+				Expect(resp.FrontMatterToml).To(ContainSubstring("title = 'Test Page'"))
+			})
+
+			It("should return the rendered HTML", func() {
+				Expect(resp.RenderedContentHtml).To(Equal("<h1>Test Page</h1>\n<p>This is test content.</p>"))
+			})
+
+			It("should return the rendered markdown", func() {
+				Expect(resp.RenderedContentMarkdown).To(Equal("# Test Page\n\nThis is test content."))
+			})
+		})
+
+		When("the page exists with no frontmatter", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Markdown = "# Simple Page"
+				mockPageReaderMutator.Frontmatter = nil
+				mockTemplateExecutor.Result = []byte("# Simple Page")
+				mockMarkdownRenderer.Result = []byte("<h1>Simple Page</h1>")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return empty frontmatter TOML", func() {
+				Expect(resp.FrontMatterToml).To(BeEmpty())
+			})
+
+			It("should return the markdown content", func() {
+				Expect(resp.ContentMarkdown).To(Equal("# Simple Page"))
+			})
+		})
+	})
 })
+
+// MockMarkdownRenderer is a mock implementation of wikipage.IRenderMarkdownToHTML
+type MockMarkdownRenderer struct {
+	Result []byte
+	Err    error
+}
+
+func (m *MockMarkdownRenderer) Render(input []byte) ([]byte, error) {
+	if m.Err != nil {
+		return nil, m.Err
+	}
+	return m.Result, nil
+}
+
+// MockTemplateExecutor is a mock implementation of wikipage.IExecuteTemplate
+type MockTemplateExecutor struct {
+	Result []byte
+	Err    error
+}
+
+func (m *MockTemplateExecutor) ExecuteTemplate(templateString string, fm wikipage.FrontMatter, reader wikipage.PageReader, query wikipage.IQueryFrontmatterIndex) ([]byte, error) {
+	if m.Err != nil {
+		return nil, m.Err
+	}
+	if m.Result != nil {
+		return m.Result, nil
+	}
+	return []byte(templateString), nil
+}
+
+// MockFrontmatterIndexQueryer is a mock implementation of wikipage.IQueryFrontmatterIndex
+type MockFrontmatterIndexQueryer struct {
+	ExactMatchResults    []wikipage.PageIdentifier
+	KeyExistsResults     []wikipage.PageIdentifier
+	PrefixMatchResults   []wikipage.PageIdentifier
+	GetValueResult       string
+}
+
+func (m *MockFrontmatterIndexQueryer) QueryExactMatch(dottedKeyPath wikipage.DottedKeyPath, value wikipage.Value) []wikipage.PageIdentifier {
+	return m.ExactMatchResults
+}
+
+func (m *MockFrontmatterIndexQueryer) QueryKeyExistence(dottedKeyPath wikipage.DottedKeyPath) []wikipage.PageIdentifier {
+	return m.KeyExistsResults
+}
+
+func (m *MockFrontmatterIndexQueryer) QueryPrefixMatch(dottedKeyPath wikipage.DottedKeyPath, valuePrefix string) []wikipage.PageIdentifier {
+	return m.PrefixMatchResults
+}
+
+func (m *MockFrontmatterIndexQueryer) GetValue(identifier wikipage.PageIdentifier, dottedKeyPath wikipage.DottedKeyPath) wikipage.Value {
+	return m.GetValueResult
+}
