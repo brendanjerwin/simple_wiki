@@ -35,6 +35,11 @@ message ReadPageResponse {
   string content_markdown = 1;
   string front_matter_toml = 2;
   string rendered_content_html = 3;
+  // rendered_content_markdown contains the markdown content after template expansion
+  // but before HTML conversion. This is useful for LLM consumption as it provides
+  // ~47% token savings compared to HTML while including all template-expanded content
+  // like inventory lists from ShowInventoryContentsOf.
+  string rendered_content_markdown = 4;
 }
 
 // Render Page
