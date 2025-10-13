@@ -1,6 +1,6 @@
 module github.com/brendanjerwin/simple_wiki
 
-go 1.24
+go 1.24.0
 
 require (
 	github.com/adrg/frontmatter v0.2.0
@@ -27,7 +27,7 @@ require (
 	go.abhg.dev/goldmark/wikilink v0.6.0
 	golang.org/x/net v0.42.0
 	golang.org/x/text v0.27.0
-	google.golang.org/grpc v1.74.2
+	google.golang.org/grpc v1.76.0
 	google.golang.org/protobuf v1.36.6
 	gopkg.in/urfave/cli.v1 v1.20.0
 	gopkg.in/yaml.v2 v2.4.0
@@ -90,7 +90,7 @@ require (
 	golang.org/x/crypto v0.40.0 // indirect
 	golang.org/x/sys v0.34.0 // indirect
 	golang.org/x/tools v0.34.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250528174236-200df99c418a // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250804133106-a7a43d27e69b // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	nhooyr.io/websocket v1.8.6 // indirect
 )
