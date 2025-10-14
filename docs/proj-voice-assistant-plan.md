@@ -47,10 +47,10 @@ docs: Update voice assistant plan - Phase N [status]
 | Phase 1: Android Infrastructure | 🟢 | 2025-10-13 | 2025-10-13 | ✅ |
 | Phase 2: gRPC Client | 🟢 | 2025-10-13 | 2025-10-13 | ✅ |
 | Phase 3: Two-Phase Retrieval | 🟢 | 2025-10-13 | 2025-10-13 | ✅ |
-| Phase 4: App Action Integration | 🔴 | - | - | ⬜ |
+| Phase 4: App Action Integration | 🟡 | 2025-10-13 | - | ⬜ |
 | Phase 5: E2E Validation | 🔴 | - | - | ⬜ |
 
-**Current Phase**: Phase 3 Complete, Ready for Phase 4
+**Current Phase**: Phase 4 In Progress (App Action Integration)
 **Blockers**: None
 **Last Updated**: 2025-10-13
 
@@ -836,10 +836,10 @@ Phase 3 completed successfully on 2025-10-13.
 
 ## Phase 4: App Action Integration
 
-**Status**: 🔴 Not Started
+**Status**: 🟡 In Progress
 **Goal**: Wire up Google Assistant with voice commands
 **Duration Estimate**: 8-10 hours
-**Started**: -
+**Started**: 2025-10-13
 **Completed**: -
 
 ### Prerequisites

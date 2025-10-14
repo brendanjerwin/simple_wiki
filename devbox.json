@@ -20,7 +20,8 @@
     "gh@latest",
     "jdk21@latest",
     "android-tools@latest",
-    "gradle@latest"
+    "gradle@latest",
+    "libxml2@latest"
   ],
   "shell": {
     "init_hook": [
@@ -36,6 +37,9 @@
       ],
       "lint:md": [
         "markdownlint --fix '**/*.md' --ignore vendor"
+      ],
+      "lint:xml": [
+        "find android/app/src/main -name '*.xml' -type f -exec xmllint --noout {} \\;"
       ],
       "go:test": [
         "go test ./..."
@@ -63,6 +67,7 @@
         "./.devbox_run_scripts/android_gradle.sh test",
         "go run golang.org/x/tools/cmd/deadcode@latest .",
         "markdownlint --fix '**/*.md' --ignore vendor",
+        "find android/app/src/main -name '*.xml' -type f -exec xmllint --noout {} \\; || true",
         "export CHROMIUM_BIN=$(which chromium)",
         "cd static/js && bun install && bun run build && bun run test && bun run lint"
       ],
