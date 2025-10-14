@@ -1,5 +1,6 @@
 apply plugin: 'com.android.application'
 apply plugin: 'kotlin-android'
+apply plugin: 'kotlinx-serialization'
 
 android {
     namespace "com.github.brendanjerwin.simple_wiki"
@@ -30,6 +31,10 @@ android {
     }
 }
 
+// Proto code is generated using buf, not the Gradle plugin
+// Run: cd android && buf generate
+// Generated files are in app/src/main/java
+
 repositories {
     flatDir{
         dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
@@ -43,6 +48,19 @@ dependencies {
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
 
+    // gRPC and networking dependencies
+    implementation "com.connectrpc:connect-kotlin-okhttp:$connectKotlinVersion"
+    implementation "com.connectrpc:connect-kotlin-google-java-ext:$connectKotlinVersion"
+    implementation "com.squareup.okhttp3:okhttp:$okhttpVersion"
+    implementation "com.google.protobuf:protobuf-java:$protobufVersion"
+
+    // TOML parsing
+    implementation "com.akuleshov7:ktoml-core:$ktomlVersion"
+
+    // Kotlin coroutines
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:$coroutinesVersion"
+
     // Unit testing dependencies
     testImplementation "junit:junit:$junitVersion"
     testImplementation "org.junit.jupiter:junit-jupiter-api:$junit5Version"
@@ -51,6 +69,7 @@ dependencies {
     testImplementation "io.mockk:mockk:$mockkVersion"
     testImplementation "androidx.test:core:$androidxTestCoreVersion"
     testImplementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion"
+    testImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:$coroutinesVersion"
 
     // Android instrumentation testing dependencies
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"

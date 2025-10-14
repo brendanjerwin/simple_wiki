@@ -44,13 +44,13 @@ docs: Update voice assistant plan - Phase N [status]
 | Phase | Status | Started | Completed | Gate Passed |
 |-------|--------|---------|-----------|-------------|
 | Phase 0: Backend API Extension | 🟢 | 2025-10-13 | 2025-10-13 | ✅ |
-| Phase 1: Android Infrastructure | 🔴 | - | - | ⬜ |
-| Phase 2: gRPC Client | 🔴 | - | - | ⬜ |
+| Phase 1: Android Infrastructure | 🟢 | 2025-10-13 | 2025-10-13 | ✅ |
+| Phase 2: gRPC Client | 🟢 | 2025-10-13 | 2025-10-13 | ✅ |
 | Phase 3: Two-Phase Retrieval | 🔴 | - | - | ⬜ |
 | Phase 4: App Action Integration | 🔴 | - | - | ⬜ |
 | Phase 5: E2E Validation | 🔴 | - | - | ⬜ |
 
-**Current Phase**: Phase 0 Complete, Ready for Phase 1
+**Current Phase**: Phase 2 Complete, Ready for Phase 3
 **Blockers**: None
 **Last Updated**: 2025-10-13
 
@@ -541,8 +541,44 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 ### Progress Notes
 
 ```
-[Add notes here as you work through this phase]
--
+Phase 2 completed successfully on 2025-10-13.
+
+**Implementation Summary:**
+- Created WikiApiClient interface with searchContent() and readPage() methods
+- Implemented GrpcWikiApiClient using ConnectRPC-Kotlin library
+- Comprehensive test coverage: 13 test scenarios using Context-Specification pattern
+- Custom exception hierarchy (WikiApiException, ApiUnavailableException, PageNotFoundException, ApiTimeoutException)
+- Proper error mapping from ConnectRPC error codes to domain exceptions
+- All tests passing (BUILD SUCCESSFUL)
+
+**Key Files Created:**
+- android/app/src/main/java/com/github/brendanjerwin/simple_wiki/api/WikiApiClient.kt
+- android/app/src/main/java/com/github/brendanjerwin/simple_wiki/api/GrpcWikiApiClient.kt
+- android/app/src/main/java/com/github/brendanjerwin/simple_wiki/api/WikiApiException.kt
+- android/app/src/test/java/com/github/brendanjerwin/simple_wiki/api/WikiApiClientTest.kt
+
+**Key Files Modified:**
+- buf.gen.yaml (added Kotlin/Android proto generation)
+- android/build.gradle (upgraded Kotlin to 2.1.0)
+- android/app/build.gradle (removed protobuf-gradle-plugin, documented buf usage)
+- .devbox_run_scripts/setup_android_sdk.sh (fixed SDK location to be local to repo)
+- .devbox_run_scripts/setup_android_env.sh (fixed ANDROID_HOME path)
+- .devbox_run_scripts/android_gradle.sh (fixed JAVA_HOME detection for Nix)
+- devbox.json (added Android tests to lint:everything)
+
+**Technical Decisions:**
+1. ConnectRPC-Kotlin over gRPC-Kotlin: Modern API, better Kotlin integration
+2. Buf-based generation over Gradle plugin: ConnectRPC's recommended approach, uses remote plugins
+3. Context-Specification testing: JUnit 5 @Nested classes for clear test organization
+4. MockK over Mockito: Kotlin-native mocking library
+
+**Lessons Learned:**
+1. Devbox environment management: All dependencies must be local to project, not system-wide
+   - Android SDK at ${PROJECT_ROOT}/.android-sdk
+   - JAVA_HOME detection needed special handling for Nix store paths
+2. Kotlin version compatibility: Generated proto code requires compatible Kotlin stdlib
+3. TDD approach caught integration issues early (correct proto field names, proper coroutine usage)
+4. Context-Specification pattern provides excellent test readability and maintainability
 ```
 
 ---

@@ -1,6 +1,54 @@
 {
   "lockfile_version": "1",
   "packages": {
+    "android-tools@latest": {
+      "last_modified": "2025-09-18T16:33:27Z",
+      "resolved": "github:NixOS/nixpkgs/f4b140d5b253f5e2a1ff4e5506edbf8267724bde#android-tools",
+      "source": "devbox-search",
+      "version": "35.0.2",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/56lqb104d6cndzlb26qgmi6s7yafxyih-android-tools-35.0.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/56lqb104d6cndzlb26qgmi6s7yafxyih-android-tools-35.0.2"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/sjxgj3mn9r26jx5phzcgrnzhkkypp8g6-android-tools-35.0.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/sjxgj3mn9r26jx5phzcgrnzhkkypp8g6-android-tools-35.0.2"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/i8y5b0qb6pmz22rvmlvvsdb6sr2chanx-android-tools-35.0.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/i8y5b0qb6pmz22rvmlvvsdb6sr2chanx-android-tools-35.0.2"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/q17av8m8k96y1yqqssbbpi9r8fnbyhp2-android-tools-35.0.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/q17av8m8k96y1yqqssbbpi9r8fnbyhp2-android-tools-35.0.2"
+        }
+      }
+    },
     "ast-grep@latest": {
       "last_modified": "2025-07-24T23:24:55Z",
       "resolved": "github:NixOS/nixpkgs/0d00f23f023b7215b3f1035adb5247c8ec180dbc#ast-grep",
@@ -391,6 +439,55 @@
         }
       }
     },
+    "gradle@latest": {
+      "last_modified": "2025-09-18T16:33:27Z",
+      "plugin_version": "0.0.1",
+      "resolved": "github:NixOS/nixpkgs/f4b140d5b253f5e2a1ff4e5506edbf8267724bde#gradle",
+      "source": "devbox-search",
+      "version": "8.14.3",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/pz962sb4bs0wwd7wknbjga0l6cp1x9w7-gradle-8.14.3",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/pz962sb4bs0wwd7wknbjga0l6cp1x9w7-gradle-8.14.3"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/qpg5q26fhy1dw87fh4p0n97nlc73x1rs-gradle-8.14.3",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/qpg5q26fhy1dw87fh4p0n97nlc73x1rs-gradle-8.14.3"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/s29qlp0pzpkl63mbr54zjaxcyfjz7aqk-gradle-8.14.3",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/s29qlp0pzpkl63mbr54zjaxcyfjz7aqk-gradle-8.14.3"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/68937qi3gq3204ix7ybsacfk4al02x3k-gradle-8.14.3",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/68937qi3gq3204ix7ybsacfk4al02x3k-gradle-8.14.3"
+        }
+      }
+    },
     "grpcurl@latest": {
       "last_modified": "2025-07-13T22:45:35Z",
       "resolved": "github:NixOS/nixpkgs/a421ac6595024edcfbb1ef950a3712b89161c359#grpcurl",
@@ -436,6 +533,34 @@
             }
           ],
           "store_path": "/nix/store/lzc6vgrz9r5awm7v24i7pnrbfz55ch1v-grpcurl-1.9.3"
+        }
+      }
+    },
+    "jdk21@latest": {
+      "last_modified": "2024-10-13T23:44:06Z",
+      "resolved": "github:NixOS/nixpkgs/d4f247e89f6e10120f911e2e2d2254a050d0f732#jdk",
+      "source": "devbox-search",
+      "version": "21.0.2",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/0q256qa09wnplr1fs9c24fm59mn8l76n-zulu-ca-jdk-21.0.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/0q256qa09wnplr1fs9c24fm59mn8l76n-zulu-ca-jdk-21.0.2"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/2x7xn14k5cvrh5j0hvw7v8j9zfp5hlln-zulu-ca-jdk-21.0.2",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/2x7xn14k5cvrh5j0hvw7v8j9zfp5hlln-zulu-ca-jdk-21.0.2"
         }
       }
     },

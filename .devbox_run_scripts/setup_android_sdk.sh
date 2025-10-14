@@ -6,7 +6,9 @@
 
 set -e  # Exit on error
 
-ANDROID_HOME="${HOME}/.android-sdk"
+# Determine project root (directory containing devbox.json)
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ANDROID_HOME="${PROJECT_ROOT}/.android-sdk"
 CMDLINE_TOOLS_VERSION="11076708"  # Latest as of 2025
 CMDLINE_TOOLS_URL="https://dl.google.com/android/repository/commandlinetools-linux-${CMDLINE_TOOLS_VERSION}_latest.zip"
 

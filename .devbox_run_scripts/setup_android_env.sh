@@ -2,8 +2,17 @@
 # Setup Android environment variables for devbox shell
 # This script is sourced by the devbox init_hook
 
-# Set Android SDK location
-export ANDROID_HOME="${HOME}/.android-sdk"
+# Set JAVA_HOME for Gradle to find the Java compiler
+# Devbox provides jdk21, so we need to point to it
+if command -v java >/dev/null 2>&1; then
+  JAVA_BIN=$(which java)
+  export JAVA_HOME=$(dirname $(dirname $(readlink -f "$JAVA_BIN")))
+fi
+
+# Set Android SDK location (local to project for devbox reproducibility)
+# Find project root by looking for devbox.json
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export ANDROID_HOME="${PROJECT_ROOT}/.android-sdk"
 export ANDROID_SDK_ROOT="${ANDROID_HOME}"
 
 # Add Android SDK tools to PATH if they exist
