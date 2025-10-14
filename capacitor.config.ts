@@ -9,13 +9,11 @@ const config: CapacitorConfig = {
   appId: 'com.github.brendanjerwin.simple_wiki',
   appName: 'Simple Wiki',
   webDir: 'static',
-  ...(isDevelopment && {
-    server: {
-      // In development, point to local Go server
-      url: 'http://localhost:8050',
-      cleartext: true
-    }
-  })
+  server: {
+    // Point to Tailscale wiki server
+    url: isDevelopment ? 'http://localhost:8050' : 'https://wiki.monster-orfe.ts.net',
+    cleartext: isDevelopment
+  }
 };
 
 export default config;

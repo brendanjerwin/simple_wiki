@@ -104,6 +104,10 @@
         "CAPACITOR_DEV=true bunx cap sync android",
         "rm -rf android/app/src/main/assets/public/js/node_modules"
       ],
+      "android:sync:prod": [
+        "bunx cap sync android",
+        "rm -rf android/app/src/main/assets/public/js/node_modules"
+      ],
       "android:build:debug": [
         "./.devbox_run_scripts/android_gradle.sh assembleDebug"
       ],
