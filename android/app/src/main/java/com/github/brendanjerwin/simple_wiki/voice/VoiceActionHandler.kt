@@ -3,9 +3,18 @@ package com.github.brendanjerwin.simple_wiki.voice
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import api.v1.PageManagementServiceClient
+import api.v1.SearchServiceClient
+import com.connectrpc.ProtocolClientConfig
+import com.connectrpc.extensions.GoogleJavaProtobufStrategy
+import com.connectrpc.impl.ProtocolClient
+import com.connectrpc.okhttp.ConnectOkHttpClient
+import com.connectrpc.protocols.NetworkProtocol
 import com.github.brendanjerwin.simple_wiki.api.ApiTimeoutException
 import com.github.brendanjerwin.simple_wiki.api.ApiUnavailableException
+import com.github.brendanjerwin.simple_wiki.api.GrpcWikiApiClient
 import com.github.brendanjerwin.simple_wiki.retrieval.SearchOrchestrator
+import com.github.brendanjerwin.simple_wiki.retrieval.TokenBudgetManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -29,15 +38,21 @@ import org.json.JSONObject
  * - ApiUnavailableException -> "Could not reach wiki. Check Tailscale connection."
  * - ApiTimeoutException -> "Wiki search timed out. Try again."
  * - PageNotFoundException / Empty results -> "No results found for your query."
- *
- * @property orchestrator The search orchestrator for executing queries
  */
-class VoiceActionHandler(
-    private val orchestrator: SearchOrchestrator
-) : Activity() {
+class VoiceActionHandler : Activity() {
+
+    companion object {
+        // Production Tailscale URL - matches capacitor.config.ts production setting
+        private const val WIKI_BASE_URL = "https://wiki.monster-orfe.ts.net"
+    }
+
+    private lateinit var orchestrator: SearchOrchestrator
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Initialize gRPC client and orchestrator
+        orchestrator = createSearchOrchestrator()
 
         // Extract query from Intent
         val query = intent.getStringExtra("query")
@@ -63,6 +78,44 @@ class VoiceActionHandler(
                 finish()
             }
         }
+    }
+
+    /**
+     * Creates the SearchOrchestrator with all required dependencies.
+     *
+     * This sets up the gRPC client stack:
+     * 1. ConnectOkHttpClient for networking
+     * 2. ProtocolClient for Connect RPC
+     * 3. Generated service clients (SearchService, PageManagementService)
+     * 4. GrpcWikiApiClient wrapper
+     * 5. TokenBudgetManager
+     * 6. SearchOrchestrator
+     *
+     * @return Configured SearchOrchestrator ready for queries
+     */
+    private fun createSearchOrchestrator(): SearchOrchestrator {
+        // Create Connect RPC protocol client
+        val protocolClient = ProtocolClient(
+            httpClient = ConnectOkHttpClient(),
+            config = ProtocolClientConfig(
+                host = WIKI_BASE_URL,
+                serializationStrategy = GoogleJavaProtobufStrategy(),
+                networkProtocol = NetworkProtocol.CONNECT
+            )
+        )
+
+        // Create gRPC service clients
+        val searchService = SearchServiceClient(protocolClient)
+        val pageService = PageManagementServiceClient(protocolClient)
+
+        // Create API client wrapper
+        val apiClient = GrpcWikiApiClient(searchService, pageService)
+
+        // Create token budget manager (default 100k tokens)
+        val budgetManager = TokenBudgetManager()
+
+        // Create and return orchestrator
+        return SearchOrchestrator(apiClient, budgetManager)
     }
 
     /**
