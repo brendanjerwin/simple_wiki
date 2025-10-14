@@ -25,8 +25,12 @@ android {
         }
     }
     testOptions {
-        unitTests.all {
-            useJUnitPlatform()
+        unitTests {
+            includeAndroidResources = true
+            returnDefaultValues = true
+            all {
+                useJUnitPlatform()
+            }
         }
     }
 }
@@ -60,6 +64,9 @@ dependencies {
     // Kotlin coroutines
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion"
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:$coroutinesVersion"
+
+    // Kotlin serialization (for JSON)
+    implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3"
 
     // Unit testing dependencies
     testImplementation "junit:junit:$junitVersion"
