@@ -3,6 +3,7 @@ package com.github.brendanjerwin.simple_wiki.voice
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import api.v1.PageManagementServiceClient
 import api.v1.SearchServiceClient
 import com.connectrpc.ProtocolClientConfig
@@ -42,6 +43,7 @@ import org.json.JSONObject
 class VoiceActionHandler : Activity() {
 
     companion object {
+        private const val TAG = "VoiceActionHandler"
         // Production Tailscale URL - matches capacitor.config.ts production setting
         private const val WIKI_BASE_URL = "https://wiki.monster-orfe.ts.net"
     }
@@ -50,29 +52,39 @@ class VoiceActionHandler : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Log.d(TAG, "onCreate: Starting voice action handler")
 
         // Initialize gRPC client and orchestrator
+        Log.d(TAG, "onCreate: Initializing orchestrator")
         orchestrator = createSearchOrchestrator()
 
-        // Extract query from Intent
-        val query = intent.getStringExtra("query")
+        // Extract query from Intent URI or extras
+        val query = intent.data?.getQueryParameter("query") ?: intent.getStringExtra("query")
+        Log.d(TAG, "onCreate: Intent URI: ${intent.data}")
+        Log.d(TAG, "onCreate: Received query: $query")
 
         if (query == null || query.isEmpty()) {
+            Log.w(TAG, "onCreate: No query provided")
             returnError("No search query provided.")
             finish()
             return
         }
 
         // Execute search in coroutine
+        Log.d(TAG, "onCreate: Starting search for query: $query")
         CoroutineScope(Dispatchers.Main).launch {
             try {
                 val result = performSearch(query)
+                Log.d(TAG, "Search successful: ${result.totalPages} pages found")
                 returnSuccess(result)
             } catch (e: ApiUnavailableException) {
+                Log.e(TAG, "API unavailable", e)
                 returnError("Could not reach wiki. Check Tailscale connection.")
             } catch (e: ApiTimeoutException) {
+                Log.e(TAG, "API timeout", e)
                 returnError("Wiki search timed out. Try again.")
             } catch (e: Exception) {
+                Log.e(TAG, "Unexpected error during search", e)
                 returnError("An error occurred while searching. Please try again.")
             } finally {
                 finish()
