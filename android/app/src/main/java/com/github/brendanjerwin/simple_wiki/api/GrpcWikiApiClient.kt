@@ -1,5 +1,6 @@
 package com.github.brendanjerwin.simple_wiki.api
 
+import android.util.Log
 import api.v1.PageManagement
 import api.v1.PageManagementServiceClientInterface
 import api.v1.Search
@@ -22,15 +23,23 @@ class GrpcWikiApiClient(
     private val pageService: PageManagementServiceClientInterface
 ) : WikiApiClient {
 
+    companion object {
+        private const val TAG = "GrpcWikiApiClient"
+    }
+
     override suspend fun searchContent(query: String): List<Search.SearchResult> {
         try {
             val request = searchContentRequest {
                 this.query = query
             }
 
+            Log.d(TAG, "searchContent: Sending search request for query: $query")
             val response = searchService.searchContent(request)
             return when (response) {
-                is com.connectrpc.ResponseMessage.Success -> response.message.resultsList
+                is com.connectrpc.ResponseMessage.Success -> {
+                    Log.d(TAG, "searchContent: Received ${response.message.resultsList.size} results")
+                    response.message.resultsList
+                }
                 is com.connectrpc.ResponseMessage.Failure -> throw response.cause
             }
         } catch (e: ConnectException) {

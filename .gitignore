@@ -76,3 +76,4 @@ android/.DS_Store
 
 # Android SDK (installed via devbox script)
 .android-sdk/
+android/app/release-key.keystore

@@ -1,5 +1,6 @@
 package com.github.brendanjerwin.simple_wiki.retrieval
 
+import android.util.Log
 import com.github.brendanjerwin.simple_wiki.api.WikiApiClient
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -20,6 +21,9 @@ class SearchOrchestrator(
     private val apiClient: WikiApiClient,
     private val budgetManager: TokenBudgetManager
 ) {
+    companion object {
+        private const val TAG = "SearchOrchestrator"
+    }
     /**
      * Executes a two-phase search and retrieval for the given query.
      *
@@ -33,7 +37,9 @@ class SearchOrchestrator(
      */
     suspend fun search(query: String, maxResults: Int = 10): WikiContext = coroutineScope {
         // Phase 1: Search for pages
+        Log.d(TAG, "search: Starting search for query: $query")
         val searchResults = apiClient.searchContent(query)
+        Log.d(TAG, "search: Found ${searchResults.size} search results")
 
         if (searchResults.isEmpty()) {
             return@coroutineScope WikiContext(emptyList(), 0, false)
@@ -41,6 +47,7 @@ class SearchOrchestrator(
 
         // Limit to maxResults
         val limitedResults = searchResults.take(maxResults)
+        Log.d(TAG, "search: Fetching full content for ${limitedResults.size} pages")
 
         // Phase 2: Fetch pages in parallel
         val fetchJobs = limitedResults.map { result ->
@@ -68,6 +75,7 @@ class SearchOrchestrator(
                     )
                 } catch (e: Exception) {
                     // Swallow individual page fetch failures - partial results are acceptable
+                    Log.w(TAG, "search: Failed to fetch page ${result.identifier}: ${e.message}", e)
                     null
                 }
             }
@@ -75,9 +83,11 @@ class SearchOrchestrator(
 
         // Wait for all fetches to complete
         val fetchedPages = fetchJobs.mapNotNull { it.await() }
+        Log.d(TAG, "search: Successfully fetched ${fetchedPages.size} pages")
 
         // Phase 3: Apply token budget
         val (includedPages, truncated) = budgetManager.filterPagesWithinBudget(fetchedPages)
+        Log.d(TAG, "search: After budget filtering: ${includedPages.size} pages (truncated=$truncated)")
 
         // Calculate total tokens
         val totalTokens = includedPages.sumOf { it.tokenCount }

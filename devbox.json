@@ -117,7 +117,7 @@
         "./.devbox_run_scripts/android_gradle.sh assembleDebug"
       ],
       "android:build:release": [
-        "./.devbox_run_scripts/android_gradle.sh assembleRelease"
+        "./.devbox_run_scripts/android_gradle.sh bundleRelease"
       ],
       "android:test": [
         "./.devbox_run_scripts/android_gradle.sh test"

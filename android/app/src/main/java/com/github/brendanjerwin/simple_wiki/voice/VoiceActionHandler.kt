@@ -112,7 +112,7 @@ class VoiceActionHandler : Activity() {
             config = ProtocolClientConfig(
                 host = WIKI_BASE_URL,
                 serializationStrategy = GoogleJavaProtobufStrategy(),
-                networkProtocol = NetworkProtocol.CONNECT
+                networkProtocol = NetworkProtocol.GRPC_WEB
             )
         )
 
