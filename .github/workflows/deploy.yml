@@ -26,7 +26,7 @@ jobs:
       - name: Setup Devbox
         uses: jetify-com/devbox-install-action@v0.11.0
         with:
-          enable-cache: true
+          enable-cache: false
         
       - name: Check if release exists
         id: check_release
