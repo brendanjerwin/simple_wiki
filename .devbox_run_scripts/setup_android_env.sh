@@ -5,8 +5,11 @@
 # Set JAVA_HOME for Gradle to find the Java compiler
 # Devbox provides jdk21, so we need to point to it
 if command -v java >/dev/null 2>&1; then
-  JAVA_BIN=$(which java)
-  export JAVA_HOME=$(dirname $(dirname $(readlink -f "$JAVA_BIN")))
+  JAVA_BIN=$(which java 2>/dev/null)
+  if [ -n "$JAVA_BIN" ] && [ -f "$JAVA_BIN" ]; then
+    REAL_JAVA=$(readlink -f "$JAVA_BIN" 2>/dev/null || echo "$JAVA_BIN")
+    export JAVA_HOME=$(dirname $(dirname "$REAL_JAVA"))
+  fi
 fi
 
 # Set Android SDK location (local to project for devbox reproducibility)
