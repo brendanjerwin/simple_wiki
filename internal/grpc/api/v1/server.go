@@ -2,10 +2,12 @@
 package v1
 
 import (
+	"bytes"
 	"context"
 	"maps"
 	"os"
 	"reflect"
+	"strings"
 	"time"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
@@ -13,6 +15,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
+	"github.com/pelletier/go-toml/v2"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -23,6 +26,9 @@ import (
 const (
 	pageReadWriterNotAvailableError = "PageReaderMutator not available"
 	identifierKey                   = "identifier"
+	pageNotFoundErrFmt              = "page not found: %s"
+	failedToReadFrontmatterErrFmt   = "failed to read frontmatter: %v"
+	failedToBuildPageTextErrFmt     = "failed to build page text: %v"
 )
 
 // filterIdentifierKey removes the identifier key from a frontmatter map.
@@ -72,12 +78,15 @@ type Server struct {
 	apiv1.UnimplementedFrontmatterServer
 	apiv1.UnimplementedPageManagementServiceServer
 	apiv1.UnimplementedSearchServiceServer
-	Commit              string
-	BuildTime           time.Time
-	PageReaderMutator   wikipage.PageReaderMutator
-	BleveIndexQueryer   bleve.IQueryBleveIndex
-	JobProgressProvider jobs.IProvideJobProgress
-	Logger              *lumber.ConsoleLogger
+	Commit                  string
+	BuildTime               time.Time
+	PageReaderMutator       wikipage.PageReaderMutator
+	BleveIndexQueryer       bleve.IQueryBleveIndex
+	JobProgressProvider     jobs.IProvideJobProgress
+	Logger                  *lumber.ConsoleLogger
+	MarkdownRenderer        wikipage.IRenderMarkdownToHTML
+	TemplateExecutor        wikipage.IExecuteTemplate
+	FrontmatterIndexQueryer wikipage.IQueryFrontmatterIndex
 }
 
 // MergeFrontmatter implements the MergeFrontmatter RPC.
@@ -97,7 +106,7 @@ func (s *Server) MergeFrontmatter(_ context.Context, req *apiv1.MergeFrontmatter
 
 	_, existingFm, err := s.PageReaderMutator.ReadFrontMatter(req.Page)
 	if err != nil && !os.IsNotExist(err) {
-		return nil, status.Errorf(codes.Internal, "failed to read frontmatter: %v", err)
+		return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, err)
 	}
 
 	if existingFm == nil {
@@ -184,9 +193,9 @@ func (s *Server) RemoveKeyAtPath(_ context.Context, req *apiv1.RemoveKeyAtPathRe
 	_, fm, err := s.PageReaderMutator.ReadFrontMatter(req.Page)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, status.Errorf(codes.NotFound, "page not found: %s", req.Page)
+			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.Page)
 		}
-		return nil, status.Errorf(codes.Internal, "failed to read frontmatter: %v", err)
+		return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, err)
 	}
 
 	if fm == nil {
@@ -288,14 +297,27 @@ func removeAtPath(data any, path []*apiv1.PathComponent) (any, error) {
 }
 
 // NewServer creates a new debug server
-func NewServer(commit string, buildTime time.Time, pageReadWriter wikipage.PageReaderMutator, bleveIndexQueryer bleve.IQueryBleveIndex, jobProgressProvider jobs.IProvideJobProgress, logger *lumber.ConsoleLogger) *Server {
+func NewServer(
+	commit string,
+	buildTime time.Time,
+	pageReadWriter wikipage.PageReaderMutator,
+	bleveIndexQueryer bleve.IQueryBleveIndex,
+	jobProgressProvider jobs.IProvideJobProgress,
+	logger *lumber.ConsoleLogger,
+	markdownRenderer wikipage.IRenderMarkdownToHTML,
+	templateExecutor wikipage.IExecuteTemplate,
+	frontmatterIndexQueryer wikipage.IQueryFrontmatterIndex,
+) *Server {
 	return &Server{
-		Commit:              commit,
-		BuildTime:           buildTime,
-		PageReaderMutator:   pageReadWriter,
-		BleveIndexQueryer:   bleveIndexQueryer,
-		JobProgressProvider: jobProgressProvider,
-		Logger:              logger,
+		Commit:                  commit,
+		BuildTime:               buildTime,
+		PageReaderMutator:       pageReadWriter,
+		BleveIndexQueryer:       bleveIndexQueryer,
+		JobProgressProvider:     jobProgressProvider,
+		Logger:                  logger,
+		MarkdownRenderer:        markdownRenderer,
+		TemplateExecutor:        templateExecutor,
+		FrontmatterIndexQueryer: frontmatterIndexQueryer,
 	}
 }
 
@@ -394,9 +416,9 @@ func (s *Server) GetFrontmatter(_ context.Context, req *apiv1.GetFrontmatterRequ
 	_, fm, err = s.PageReaderMutator.ReadFrontMatter(req.Page)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, status.Errorf(codes.NotFound, "page not found: %s", req.Page)
+			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.Page)
 		}
-		return nil, status.Errorf(codes.Internal, "failed to read frontmatter: %v", err)
+		return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, err)
 	}
 
 	// Filter out the identifier key from the response
@@ -503,5 +525,81 @@ func (s *Server) SearchContent(_ context.Context, req *apiv1.SearchContentReques
 
 	return &apiv1.SearchContentResponse{
 		Results: results,
+	}, nil
+}
+
+// ReadPage implements the ReadPage RPC.
+func (s *Server) ReadPage(_ context.Context, req *apiv1.ReadPageRequest) (*apiv1.ReadPageResponse, error) {
+	v := reflect.ValueOf(s.PageReaderMutator)
+	if s.PageReaderMutator == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
+		return nil, status.Error(codes.Internal, "PageReaderMutator not available")
+	}
+
+	// Read the page markdown and frontmatter
+	_, markdown, err := s.PageReaderMutator.ReadMarkdown(wikipage.PageIdentifier(req.PageName))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.PageName)
+		}
+		return nil, status.Errorf(codes.Internal, "failed to read page: %v", err)
+	}
+
+	_, frontmatter, err := s.PageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.PageName))
+	if err != nil && !os.IsNotExist(err) {
+		return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, err)
+	}
+
+	// Convert frontmatter to TOML
+	frontmatterToml, err := toml.Marshal(frontmatter)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to marshal frontmatter: %v", err)
+	}
+
+	// Build the page text with frontmatter
+	var pageTextBuilder strings.Builder
+	if len(frontmatter) > 0 {
+		if _, err := pageTextBuilder.WriteString("+++\n"); err != nil {
+			return nil, status.Errorf(codes.Internal, failedToBuildPageTextErrFmt, err)
+		}
+		if _, err := pageTextBuilder.Write(frontmatterToml); err != nil {
+			return nil, status.Errorf(codes.Internal, failedToBuildPageTextErrFmt, err)
+		}
+		if !bytes.HasSuffix(frontmatterToml, []byte("\n")) {
+			if _, err := pageTextBuilder.WriteString("\n"); err != nil {
+				return nil, status.Errorf(codes.Internal, failedToBuildPageTextErrFmt, err)
+			}
+		}
+		if _, err := pageTextBuilder.WriteString("+++\n"); err != nil {
+			return nil, status.Errorf(codes.Internal, failedToBuildPageTextErrFmt, err)
+		}
+	}
+	if _, err := pageTextBuilder.WriteString(string(markdown)); err != nil {
+		return nil, status.Errorf(codes.Internal, failedToBuildPageTextErrFmt, err)
+	}
+
+	// Create a Page object and render it
+	page := &wikipage.Page{
+		Identifier: req.PageName,
+		Text:       pageTextBuilder.String(),
+	}
+
+	// Render the page if rendering dependencies are available
+	var renderedHTML string
+	var renderedMarkdown string
+
+	if s.MarkdownRenderer != nil && s.TemplateExecutor != nil {
+		renderErr := page.Render(s.PageReaderMutator, s.MarkdownRenderer, s.TemplateExecutor, s.FrontmatterIndexQueryer)
+		if renderErr != nil {
+			return nil, status.Errorf(codes.Internal, "failed to render page: %v", renderErr)
+		}
+		renderedHTML = string(page.RenderedPage)
+		renderedMarkdown = string(page.RenderedMarkdown)
+	}
+
+	return &apiv1.ReadPageResponse{
+		ContentMarkdown:         string(markdown),
+		FrontMatterToml:         string(frontmatterToml),
+		RenderedContentHtml:     renderedHTML,
+		RenderedContentMarkdown: renderedMarkdown,
 	}, nil
 }

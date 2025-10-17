@@ -1,0 +1,112 @@
+apply plugin: 'com.android.application'
+apply plugin: 'kotlin-android'
+apply plugin: 'kotlinx-serialization'
+
+android {
+    namespace "com.github.brendanjerwin.simple_wiki"
+    compileSdk rootProject.ext.compileSdkVersion
+    defaultConfig {
+        applicationId "com.github.brendanjerwin.simple_wiki"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 3
+        versionName "1.1.0-voice"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        aaptOptions {
+             // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+            ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+    }
+    signingConfigs {
+        release {
+            // For internal testing, we'll use a keystore
+            // Create keystore with: keytool -genkey -v -keystore release-key.keystore -alias release -keyalg RSA -keysize 2048 -validity 10000
+            storeFile file(System.getenv("KEYSTORE_FILE") ?: "release-key.keystore")
+            storePassword System.getenv("KEYSTORE_PASSWORD") ?: "android"
+            keyAlias System.getenv("KEY_ALIAS") ?: "release"
+            keyPassword System.getenv("KEY_PASSWORD") ?: "android"
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
+        }
+    }
+    testOptions {
+        unitTests {
+            includeAndroidResources = true
+            returnDefaultValues = true
+            all {
+                useJUnitPlatform()
+            }
+        }
+    }
+}
+
+// Proto code is generated using buf, not the Gradle plugin
+// Run: cd android && buf generate
+// Generated files are in app/src/main/java
+
+repositories {
+    flatDir{
+        dirs '../capacitor-cordova-android-plugins/src/main/libs', 'libs'
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+    implementation project(':capacitor-android')
+
+    // gRPC and networking dependencies
+    implementation "com.connectrpc:connect-kotlin-okhttp:$connectKotlinVersion"
+    implementation "com.connectrpc:connect-kotlin-google-java-ext:$connectKotlinVersion"
+    implementation "com.squareup.okhttp3:okhttp:$okhttpVersion"
+    implementation "com.google.protobuf:protobuf-java:$protobufVersion"
+
+    // TOML parsing
+    implementation "com.akuleshov7:ktoml-core:$ktomlVersion"
+
+    // Kotlin coroutines
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:$coroutinesVersion"
+
+    // Kotlin serialization (for JSON)
+    implementation "org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3"
+
+    // Unit testing dependencies
+    testImplementation "junit:junit:$junitVersion"
+    testImplementation "org.junit.jupiter:junit-jupiter-api:$junit5Version"
+    testRuntimeOnly "org.junit.jupiter:junit-jupiter-engine:$junit5Version"
+    testImplementation "org.junit.jupiter:junit-jupiter-params:$junit5Version"
+    testImplementation "io.mockk:mockk:$mockkVersion"
+    testImplementation "androidx.test:core:$androidxTestCoreVersion"
+    testImplementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlinVersion"
+    testImplementation "org.jetbrains.kotlinx:kotlinx-coroutines-test:$coroutinesVersion"
+
+    // Android instrumentation testing dependencies
+    androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
+    androidTestImplementation "androidx.test:runner:$androidxTestRunnerVersion"
+    androidTestImplementation "androidx.test:rules:$androidxTestRulesVersion"
+    androidTestImplementation "io.mockk:mockk-android:$mockkVersion"
+
+    implementation project(':capacitor-cordova-android-plugins')
+}
+
+apply from: 'capacitor.build.gradle'
+
+try {
+    def servicesJSON = file('google-services.json')
+    if (servicesJSON.text) {
+        apply plugin: 'com.google.gms.google-services'
+    }
+} catch(Exception e) {
+    logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}

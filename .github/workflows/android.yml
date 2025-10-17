@@ -1,0 +1,63 @@
+name: Android
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      CI: 'true'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Devbox
+        uses: jetify-com/devbox-install-action@v0.12.0
+        with:
+          enable-cache: 'true'
+
+      - name: Setup Android SDK
+        run: devbox run android:setup
+        env:
+          ANDROID_SETUP_NON_INTERACTIVE: '1'
+
+      - name: Build and sync frontend assets
+        run: devbox run android:sync:prod
+
+      - name: Build debug APK
+        run: devbox run android:build:debug
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+
+  test:
+    runs-on: ubuntu-latest
+    env:
+      CI: 'true'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Devbox
+        uses: jetify-com/devbox-install-action@v0.12.0
+        with:
+          enable-cache: 'true'
+
+      - name: Setup Android SDK
+        run: devbox run android:setup
+        env:
+          ANDROID_SETUP_NON_INTERACTIVE: '1'
+
+      - name: Build and sync frontend assets
+        run: devbox run android:sync:prod
+
+      - name: Run Android unit tests
+        run: devbox run android:test
