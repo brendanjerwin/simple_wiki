@@ -26,10 +26,7 @@ jobs:
           ANDROID_SETUP_NON_INTERACTIVE: '1'
 
       - name: Build and sync frontend assets
-        run: |
-          cd static/js && bun install && bun run build && cd ../..
-          bun x @capacitor/cli sync android
-          rm -rf android/app/src/main/assets/public/js/node_modules
+        run: devbox run android:sync:prod
 
       - name: Build debug APK
         run: devbox run android:build:debug
@@ -60,10 +57,7 @@ jobs:
           ANDROID_SETUP_NON_INTERACTIVE: '1'
 
       - name: Build and sync frontend assets
-        run: |
-          cd static/js && bun install && bun run build && cd ../..
-          bun x @capacitor/cli sync android
-          rm -rf android/app/src/main/assets/public/js/node_modules
+        run: devbox run android:sync:prod
 
       - name: Run Android unit tests
         run: devbox run android:test
