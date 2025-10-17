@@ -105,11 +105,11 @@
         "./.devbox_run_scripts/setup_android_sdk.sh"
       ],
       "android:sync": [
-        "cd static/js && CAPACITOR_DEV=true bunx @capacitor/cli sync android",
+        "CAPACITOR_DEV=true bun --cwd static/js x @capacitor/cli sync android",
         "rm -rf android/app/src/main/assets/public/js/node_modules"
       ],
       "android:sync:prod": [
-        "cd static/js && bunx @capacitor/cli sync android",
+        "bun --cwd static/js x @capacitor/cli sync android",
         "rm -rf android/app/src/main/assets/public/js/node_modules"
       ],
       "android:build:debug": [
