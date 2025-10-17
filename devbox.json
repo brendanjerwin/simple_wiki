@@ -105,14 +105,10 @@
         "./.devbox_run_scripts/setup_android_sdk.sh"
       ],
       "android:sync": [
-        "cd static/js && bun install && bun run build && cd ../..",
-        "bash -c 'export PATH=\"$PWD/static/js/node_modules/.bin:$PATH\" && CAPACITOR_DEV=true npx @capacitor/cli sync android'",
-        "rm -rf android/app/src/main/assets/public/js/node_modules"
+        "CAPACITOR_DEV=true ./.devbox_run_scripts/capacitor_sync.sh"
       ],
       "android:sync:prod": [
-        "cd static/js && bun install && bun run build && cd ../..",
-        "bash -c 'export PATH=\"$PWD/static/js/node_modules/.bin:$PATH\" && npx @capacitor/cli sync android'",
-        "rm -rf android/app/src/main/assets/public/js/node_modules"
+        "./.devbox_run_scripts/capacitor_sync.sh"
       ],
       "android:build:debug": [
         "./.devbox_run_scripts/android_gradle.sh assembleDebug"
