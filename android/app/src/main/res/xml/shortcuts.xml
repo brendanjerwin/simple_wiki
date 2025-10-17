@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <capability android:name="actions.intent.SEARCH_WIKI">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.github.brendanjerwin.simple_wiki"
+            android:targetClass="com.github.brendanjerwin.simple_wiki.voice.VoiceActionHandler">
+            <parameter
+                android:name="query"
+                android:key="searchQuery" />
+        </intent>
+    </capability>
+</shortcuts>

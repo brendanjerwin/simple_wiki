@@ -17,7 +17,11 @@
     "playwright@latest",
     "playwright-driver@latest",
     "playwright-test@latest",
-    "gh@latest"
+    "gh@latest",
+    "jdk21@latest",
+    "android-tools@latest",
+    "gradle@latest",
+    "libxml2@latest"
   ],
   "shell": {
     "init_hook": [
@@ -32,6 +36,9 @@
       ],
       "lint:md": [
         "markdownlint --fix '**/*.md' --ignore vendor"
+      ],
+      "lint:xml": [
+        "find android/app/src/main -name '*.xml' -type f -exec xmllint --noout {} \\;"
       ],
       "go:test": [
         "go test ./..."
@@ -56,8 +63,10 @@
         "staticcheck $(go list ./... | grep -v /gen/)",
         "revive -config revive.toml ./...",
         "go test ./...",
+        "./.devbox_run_scripts/android_gradle.sh test",
         "go run golang.org/x/tools/cmd/deadcode@latest .",
         "markdownlint --fix '**/*.md' --ignore vendor",
+        "find android/app/src/main -name '*.xml' -type f -exec xmllint --noout {} \\; || true",
         "export CHROMIUM_BIN=$(which chromium)",
         "cd static/js && bun install && bun run build && bun run test && bun run lint"
       ],
@@ -91,6 +100,30 @@
       ],
       "deploy": [
         "./.devbox_run_scripts/deploy.sh $@"
+      ],
+      "android:setup": [
+        "./.devbox_run_scripts/setup_android_sdk.sh"
+      ],
+      "android:sync": [
+        "CAPACITOR_DEV=true ./.devbox_run_scripts/capacitor_sync.sh"
+      ],
+      "android:sync:prod": [
+        "./.devbox_run_scripts/capacitor_sync.sh"
+      ],
+      "android:build:debug": [
+        "./.devbox_run_scripts/android_gradle.sh assembleDebug"
+      ],
+      "android:build:release": [
+        "./.devbox_run_scripts/android_gradle.sh bundleRelease"
+      ],
+      "android:test": [
+        "./.devbox_run_scripts/android_gradle.sh test"
+      ],
+      "android:install": [
+        "adb install -r android/app/build/outputs/apk/debug/app-debug.apk"
+      ],
+      "android:clean": [
+        "cd android && ./gradlew clean"
       ]
     }
   }

@@ -158,6 +158,16 @@ export class ReadPageResponse extends Message<ReadPageResponse> {
    */
   renderedContentHtml = "";
 
+  /**
+   * rendered_content_markdown contains the markdown content after template expansion
+   * but before HTML conversion. This is useful for LLM consumption as it provides
+   * ~47% token savings compared to HTML while including all template-expanded content
+   * like inventory lists from ShowInventoryContentsOf.
+   *
+   * @generated from field: string rendered_content_markdown = 4;
+   */
+  renderedContentMarkdown = "";
+
   constructor(data?: PartialMessage<ReadPageResponse>) {
     super();
     proto3.util.initPartial(data, this);
@@ -169,6 +179,7 @@ export class ReadPageResponse extends Message<ReadPageResponse> {
     { no: 1, name: "content_markdown", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "front_matter_toml", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 3, name: "rendered_content_html", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "rendered_content_markdown", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ReadPageResponse {

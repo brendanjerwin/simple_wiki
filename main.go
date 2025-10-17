@@ -72,7 +72,7 @@ func setupServer(c *cli.Context) (*http.Server, error) {
 	} else {
 		logger = makeProductionLogger()
 	}
-	
+
 	logger.Info("Starting simple_wiki server...")
 
 	site, err := server.NewSite(
@@ -92,22 +92,47 @@ func setupServer(c *cli.Context) (*http.Server, error) {
 	}
 
 	logger.Info("Setting up HTTP and gRPC servers...")
+	handler := createMultiplexedHandler(site)
+
+	host := c.GlobalString("host")
+	if host == "" {
+		host = "0.0.0.0"
+	}
+	addr := fmt.Sprintf("%s:%s", host, c.GlobalString("port"))
+	actualCommit := getCommitHash()
+	logger.Info("Running simple_wiki server (commit %s) at http://%s", actualCommit, addr)
+
+	return &http.Server{
+		Addr:    addr,
+		Handler: h2c.NewHandler(handler, &http2.Server{}),
+	}, nil
+}
+
+func createMultiplexedHandler(site *server.Site) http.Handler {
 	ginRouter := site.GinRouter()
 	actualCommit := getCommitHash()
 	buildTime := getBuildTime()
-	grpcAPIServer := grpcapi.NewServer(actualCommit, buildTime, site, site.BleveIndexQueryer, site.GetJobQueueCoordinator(), logger)
+	grpcAPIServer := grpcapi.NewServer(
+		actualCommit,
+		buildTime,
+		site,
+		site.BleveIndexQueryer,
+		site.GetJobQueueCoordinator(),
+		logger,
+		site.MarkdownRenderer,
+		server.TemplateExecutor{},
+		site.FrontmatterIndexQueryer,
+	)
 	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(grpcAPIServer.LoggingInterceptor()))
 	grpcAPIServer.RegisterWithServer(grpcServer)
 
 	reflection.Register(grpcServer)
 
 	wrappedGrpc := grpcweb.WrapServer(grpcServer,
-		// Enable CORS so browser clients can make requests
 		grpcweb.WithOriginFunc(func(_ string) bool { return true }),
 	)
 
-	// Create a multiplexer to route traffic to either gRPC or Gin.
-	multiplexedHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
 			logger.Debug("gRPC-ish request: %s %s", r.Method, r.URL.Path)
 			wrappedGrpc.ServeHTTP(w, r)
@@ -116,19 +141,6 @@ func setupServer(c *cli.Context) (*http.Server, error) {
 		logger.Debug("Gin request: %s %s", r.Method, r.URL.Path)
 		ginRouter.ServeHTTP(w, r)
 	})
-
-	// Determine host and port, then start the server
-	host := c.GlobalString("host")
-	if host == "" {
-		host = "0.0.0.0"
-	}
-	addr := fmt.Sprintf("%s:%s", host, c.GlobalString("port"))
-	logger.Info("Running simple_wiki server (commit %s) at http://%s", actualCommit, addr)
-
-	return &http.Server{
-		Addr:    addr,
-		Handler: h2c.NewHandler(multiplexedHandler, &http2.Server{}),
-	}, nil
 }
 
 func main() {
