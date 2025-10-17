@@ -106,12 +106,12 @@
       ],
       "android:sync": [
         "cd static/js && bun install && bun run build && cd ../..",
-        "CAPACITOR_DEV=true bun --cwd static/js x @capacitor/cli sync android",
+        "bash -c 'export PATH=\"$PWD/static/js/node_modules/.bin:$PATH\" && CAPACITOR_DEV=true npx @capacitor/cli sync android'",
         "rm -rf android/app/src/main/assets/public/js/node_modules"
       ],
       "android:sync:prod": [
         "cd static/js && bun install && bun run build && cd ../..",
-        "bun --cwd static/js x @capacitor/cli sync android",
+        "bash -c 'export PATH=\"$PWD/static/js/node_modules/.bin:$PATH\" && npx @capacitor/cli sync android'",
         "rm -rf android/app/src/main/assets/public/js/node_modules"
       ],
       "android:build:debug": [
