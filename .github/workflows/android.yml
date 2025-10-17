@@ -25,8 +25,11 @@ jobs:
         env:
           ANDROID_SETUP_NON_INTERACTIVE: '1'
 
+      - name: Build frontend assets
+        run: devbox run -- bash -c "cd static/js && bun install && bun run build"
+
       - name: Sync Capacitor assets
-        run: devbox run android:sync
+        run: devbox run android:sync:prod
 
       - name: Build debug APK
         run: devbox run android:build:debug
@@ -55,6 +58,12 @@ jobs:
         run: devbox run android:setup
         env:
           ANDROID_SETUP_NON_INTERACTIVE: '1'
+
+      - name: Build frontend assets
+        run: devbox run -- bash -c "cd static/js && bun install && bun run build"
+
+      - name: Sync Capacitor assets
+        run: devbox run android:sync:prod
 
       - name: Run Android unit tests
         run: devbox run android:test
