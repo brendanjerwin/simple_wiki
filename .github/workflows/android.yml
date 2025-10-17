@@ -25,11 +25,10 @@ jobs:
         env:
           ANDROID_SETUP_NON_INTERACTIVE: '1'
 
-      - name: Build and copy frontend assets
+      - name: Build and sync frontend assets
         run: |
-          devbox run -- bash -c "cd static/js && bun install && bun run build"
-          mkdir -p android/app/src/main/assets/public
-          cp -r static/* android/app/src/main/assets/public/
+          cd static/js && bun install && bun run build && cd ../..
+          bun x @capacitor/cli sync android
           rm -rf android/app/src/main/assets/public/js/node_modules
 
       - name: Build debug APK
@@ -60,11 +59,10 @@ jobs:
         env:
           ANDROID_SETUP_NON_INTERACTIVE: '1'
 
-      - name: Build and copy frontend assets
+      - name: Build and sync frontend assets
         run: |
-          devbox run -- bash -c "cd static/js && bun install && bun run build"
-          mkdir -p android/app/src/main/assets/public
-          cp -r static/* android/app/src/main/assets/public/
+          cd static/js && bun install && bun run build && cd ../..
+          bun x @capacitor/cli sync android
           rm -rf android/app/src/main/assets/public/js/node_modules
 
       - name: Run Android unit tests
