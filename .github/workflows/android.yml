@@ -25,11 +25,12 @@ jobs:
         env:
           ANDROID_SETUP_NON_INTERACTIVE: '1'
 
-      - name: Build frontend assets
-        run: devbox run -- bash -c "cd static/js && bun install && bun run build"
-
-      - name: Sync Capacitor assets
-        run: devbox run android:sync:prod
+      - name: Build and copy frontend assets
+        run: |
+          devbox run -- bash -c "cd static/js && bun install && bun run build"
+          mkdir -p android/app/src/main/assets/public
+          cp -r static/* android/app/src/main/assets/public/
+          rm -rf android/app/src/main/assets/public/js/node_modules
 
       - name: Build debug APK
         run: devbox run android:build:debug
@@ -59,11 +60,12 @@ jobs:
         env:
           ANDROID_SETUP_NON_INTERACTIVE: '1'
 
-      - name: Build frontend assets
-        run: devbox run -- bash -c "cd static/js && bun install && bun run build"
-
-      - name: Sync Capacitor assets
-        run: devbox run android:sync:prod
+      - name: Build and copy frontend assets
+        run: |
+          devbox run -- bash -c "cd static/js && bun install && bun run build"
+          mkdir -p android/app/src/main/assets/public
+          cp -r static/* android/app/src/main/assets/public/
+          rm -rf android/app/src/main/assets/public/js/node_modules
 
       - name: Run Android unit tests
         run: devbox run android:test
