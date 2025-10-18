@@ -30,12 +30,12 @@
 
 **Commit messages** when updating this plan:
 
-```
+```text
 docs: Update voice assistant plan - Phase N [status]
 
 - Brief description of what was completed
 - Any blockers or changes to plan
-```
+```text
 
 ---
 
@@ -60,7 +60,7 @@ docs: Update voice assistant plan - Phase N [status]
 
 ### Branch Structure
 
-```
+```text
 main
 └── feature/voice-assistant-integration (feature branch)
     ├── feature/voice-assistant-phase-0 (API extension)
@@ -69,7 +69,7 @@ main
     ├── feature/voice-assistant-phase-3 (Two-phase retrieval)
     ├── feature/voice-assistant-phase-4 (App Actions)
     └── feature/voice-assistant-phase-5 (E2E validation)
-```
+```text
 
 ### Workflow
 
@@ -168,7 +168,7 @@ devbox run go:test
 
 # Deploy to test environment
 devbox run deploy
-```
+```text
 
 **Verify**:
 
@@ -182,7 +182,7 @@ grpcurl -d '{"page": "test_inventory_page"}' \
 # - content_markdown (raw)
 # - rendered_content_markdown (templates expanded) ← NEW
 # - rendered_content_html (templates + HTML)
-```
+```text
 
 ### Demo Requirements
 
@@ -208,7 +208,7 @@ grpcurl -d '{"page": "test_inventory_page"}' \
 
 ### Progress Notes
 
-```
+```text
 Phase 0 completed successfully on 2025-10-13.
 
 **Implementation Summary:**
@@ -233,7 +233,7 @@ Phase 0 completed successfully on 2025-10-13.
 - Code review process essential - initial implementation had 4 critical issues that were fixed
 - Defensive programming with nil checks prevented panics in test suite
 - Refactoring for SRP made code more maintainable and testable
-```
+```text
 
 ---
 
@@ -322,7 +322,7 @@ cd android && ./gradlew assembleDebug
 
 # Or use devbox script (create in devbox.json)
 devbox run android:build:debug
-```
+```text
 
 **Deploy to Device**:
 
@@ -335,7 +335,7 @@ adb shell am start -n com.monsterofe.wiki/.MainActivity
 
 # Check logs
 adb logcat | grep -i wiki
-```
+```text
 
 **Verify**:
 
@@ -368,10 +368,10 @@ adb logcat | grep -i wiki
 
 ### Progress Notes
 
-```
+```text
 [Add notes here as you work through this phase]
 -
-```
+```text
 
 ---
 
@@ -496,7 +496,7 @@ cd android && ./gradlew assembleDebug
 
 # Install on device
 adb install -r app/build/outputs/apk/debug/app-debug.apk
-```
+```text
 
 **Add Debug Screen** (temporary for testing):
 
@@ -540,7 +540,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 ### Progress Notes
 
-```
+```text
 Phase 2 completed successfully on 2025-10-13.
 
 **Implementation Summary:**
@@ -579,7 +579,7 @@ Phase 2 completed successfully on 2025-10-13.
 2. Kotlin version compatibility: Generated proto code requires compatible Kotlin stdlib
 3. TDD approach caught integration issues early (correct proto field names, proper coroutine usage)
 4. Context-Specification pattern provides excellent test readability and maintainability
-```
+```text
 
 ---
 
@@ -713,7 +713,7 @@ Phase 2 completed successfully on 2025-10-13.
 npx cap sync android
 cd android && ./gradlew assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
-```
+```text
 
 **Add Debug UI** (enhanced):
 
@@ -765,7 +765,7 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 
 ### Progress Notes
 
-```
+```text
 Phase 3 completed successfully on 2025-10-13.
 
 **Implementation Summary:**
@@ -830,7 +830,7 @@ Phase 3 completed successfully on 2025-10-13.
 5. Error resilience pattern: try-catch returning null allows mapNotNull to filter failures naturally
 6. Context-Specification testing: @Nested classes provide excellent test organization and readability
 7. TOML/Frontmatter flexibility: Following the proto pattern (string front_matter_toml), kept frontmatter as flexible Map<String, Any> rather than creating typed structure with hardcoded fields. Parser handles common patterns (key="value", arrays like tags=["one","two"]) and returns Map where values can be String or List<String>. This maintains flexibility for user-defined frontmatter fields while properly parsing arrays and timestamps. Production-ready with documented limitations (no nested tables, no multiline strings - not currently needed).
-```
+```text
 
 ---
 
@@ -1007,7 +1007,7 @@ Phase 3 completed successfully on 2025-10-13.
 npx cap sync android
 cd android && ./gradlew assembleDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
-```
+```text
 
 **Test App Action Registration**:
 
@@ -1016,14 +1016,14 @@ adb install -r app/build/outputs/apk/debug/app-debug.apk
 adb shell am start -a android.intent.action.VIEW \
   -d "wiki://search?query=batteries" \
   com.monsterofe.wiki
-```
+```text
 
 **Verify in Logs**:
 
 ```bash
 # Monitor logs during voice query
 adb logcat | grep -i "VoiceAction"
-```
+```text
 
 ### Demo Requirements
 
@@ -1058,7 +1058,7 @@ adb logcat | grep -i "VoiceAction"
 
 ### Progress Notes
 
-```
+```text
 Phase 4 completed successfully on 2025-10-13.
 
 **Implementation Summary:**
@@ -1126,7 +1126,7 @@ Phase 4 completed successfully on 2025-10-13.
 3. XML validation: xmllint integration ensures manifest and shortcuts.xml are well-formed
 4. TDD approach: Writing tests first caught design issues early (JSON formatting, error handling)
 5. Context-Specification testing: Excellent for documenting behavior and organizing complex test scenarios
-```
+```text
 
 ---
 
@@ -1294,7 +1294,7 @@ cd android
 adb install -r app/build/outputs/apk/release/app-release.apk
 
 # Verify functionality
-```
+```text
 
 **Final Verification**:
 
@@ -1358,10 +1358,10 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 
 ### Progress Notes
 
-```
+```text
 [Add notes here as you work through this phase]
 -
-```
+```text
 
 ---
 
@@ -1520,7 +1520,7 @@ N/A - New feature, no migration needed.
 - [x] Performance targets met
 - [x] Demo video created
 - [x] CHANGELOG updated
-```
+```text
 
 ---
 
@@ -1707,7 +1707,7 @@ N/A - New feature, no migration needed.
 
 ### Phase 0: Backend API Extension
 
-```
+```text
 Completed: 2025-10-13
 
 Key Takeaways:
@@ -1737,42 +1737,42 @@ Key Takeaways:
    - Verified ~47% savings of markdown vs HTML
    - This will significantly extend the context window for LLM queries
    - Real-world testing with actual wiki pages confirmed the savings
-```
+```text
 
 ### Phase 1: Android Infrastructure
 
-```
+```text
 [Add lessons learned after completing this phase]
 -
-```
+```text
 
 ### Phase 2: gRPC Client
 
-```
+```text
 [Add lessons learned after completing this phase]
 -
-```
+```text
 
 ### Phase 3: Two-Phase Retrieval
 
-```
+```text
 [Add lessons learned after completing this phase]
 -
-```
+```text
 
 ### Phase 4: App Action Integration
 
-```
+```text
 [Add lessons learned after completing this phase]
 -
-```
+```text
 
 ### Phase 5: Optimization & Documentation
 
-```
+```text
 [Add lessons learned after completing this phase]
 -
-```
+```text
 
 ---
 
@@ -1809,7 +1809,7 @@ adb logcat | grep -i wiki
 grpcurl -d '{"page": "test_page"}' \
   wiki.monster-orfe.ts.net:443 \
   api.v1.PageManagementService/ReadPage
-```
+```text
 
 ### Key Files
 
@@ -1846,33 +1846,33 @@ All new code must meet these coverage thresholds:
 
 Follow Conventional Commits:
 
-```
+```text
 <type>(<scope>): <subject>
 
 <body>
 
 <footer>
-```
+```text
 
 **Types**: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`, `perf`
 
 **Examples**:
 
-```
+```text
 feat(api): Add rendered_content_markdown field to ReadPageResponse
 
 Captures template-expanded markdown before HTML conversion.
 Provides 47% token savings compared to HTML format.
 
 Closes #123
-```
+```text
 
-```
+```text
 test(android): Add unit tests for SearchOrchestrator
 
 Tests two-phase retrieval flow with token budget enforcement.
 Covers happy path, empty results, and error scenarios.
-```
+```text
 
 ### C: Error Message Guidelines
 

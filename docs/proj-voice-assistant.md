@@ -17,7 +17,7 @@ Enable Google Assistant (Gemini Nano) to query simple_wiki via voice commands wi
 
 **Example Flow:**
 
-```
+```text
 User: "Hey Google, what's the warranty on my Space Navigator?"
   ↓ Gemini extracts: search for Space Navigator + warranty info needed
   ↓ Phase 1: SearchContent → finds Space Navigator page
@@ -27,7 +27,7 @@ User: "Hey Google, what's the warranty on my Space Navigator?"
   ↓ If no: Platform routes to cloud for larger context window
   ↓ Gemini reasons: Warranty is "2 years, expires June 2025"
   ↓ "Your Space Navigator has a 2-year warranty that expires in June 2025"
-```
+```text
 
 **Token Efficiency Matters**: We design for a **4K-8K token context window** to optimize for on-device inference (privacy, latency, battery). Using markdown instead of HTML could mean the difference between fitting 1 page vs 3 pages in context. Cloud fallback handles edge cases requiring more context. This approach maximizes the percentage of queries that can run on-device.
 
@@ -65,7 +65,7 @@ User: "Hey Google, what's the warranty on my Space Navigator?"
 
 ### Implementation Files
 
-```
+```text
 Android App Structure:
 ├── res/xml/shortcuts.xml              (App Actions declarations)
 ├── MainActivity.kt                    (Capacitor bridge setup)
@@ -75,7 +75,7 @@ Android App Structure:
 Backend Extension:
 └── api/proto/api/v1/
     └── page_management.proto          (Add rendered_content_markdown)
-```
+```text
 
 ### Key Dependencies
 
@@ -144,7 +144,7 @@ Raw markdown with templates (what's stored):
 ### Goes in: {{LinkTo .Inventory.Container}}
 
 {{ ShowInventoryContentsOf .Identifier }}
-```
+```text
 
 Template-rendered markdown (what LLM receives):
 
@@ -156,15 +156,15 @@ Template-rendered markdown (what LLM receives):
 - [5mm Barrel Plug to 10a 12v Socket](/item1)
 - [12AWG inline blade fuse pigtails](/item2)
 - [RCA Patch Cable](/item3)
-```
+```text
 
 The `ShowInventoryContentsOf` function dynamically queries the wiki's inventory index to generate the contents list. This information doesn't exist in the raw markdown—it's computed from frontmatter relationships across multiple pages. Without template expansion, the LLM cannot answer "what's in bin F1?"
 
 **Data Flow:**
 
-```
+```text
 Raw markdown + Frontmatter → Template expansion → Rendered markdown + Frontmatter (JSON) → LLM
-```
+```text
 
 This solves the debate between "complete context" vs "token efficiency" - we get both.
 
@@ -203,7 +203,7 @@ Enable Google Assistant and Siri to query simple_wiki's existing gRPC APIs via v
 
 **Core Flow**:
 
-```
+```text
 "Hey Google, where are my CR2032 batteries?"
     ↓
 Gemini (cloud or on-device based on device capability)
@@ -220,7 +220,7 @@ Returns token-efficient context with template-expanded content:
 Gemini reasons over complete page content
     ↓
 "Your CR2032 batteries are in Lab Desk Wall Bin C1" (spoken)
-```
+```text
 
 **Note on Cloud vs Device**: We're not forcing on-device Gemini Nano. The platform (Google Assistant/Gemini) will automatically choose between on-device Nano or cloud-based models based on query complexity, device capability, and network availability. Our job is just to provide token-efficient data.
 
@@ -248,7 +248,7 @@ Raw markdown (stored in wiki):
 ### Goes in: {{LinkTo .Inventory.Container}}
 
 {{ ShowInventoryContentsOf .Identifier }}
-```
+```text
 
 Template-rendered markdown (sent to LLM):
 
@@ -260,7 +260,7 @@ Template-rendered markdown (sent to LLM):
 - [5mm Barrel Plug to 10a 12v Socket](/item1)
 - [12AWG inline blade fuse pigtails](/item2)
 - [RCA Patch Cable](/item3)
-```
+```text
 
 The `ShowInventoryContentsOf` function dynamically queries the wiki's inventory index (pages with `inventory.container = 'lab_wallbins_f1'`) to generate the contents list. This information doesn't exist in the raw markdown—it's computed from frontmatter relationships across multiple pages.
 
@@ -333,7 +333,7 @@ message ReadPageResponse {
   string front_matter_toml = 2;       // TOML frontmatter
   string rendered_content_html = 3;   // Templates + HTML conversion
 }
-```
+```text
 
 **Proposed Addition**:
 
@@ -344,7 +344,7 @@ message ReadPageResponse {
   string rendered_content_html = 3;         // Templates + HTML conversion
   string rendered_content_markdown = 4;     // Templates applied, markdown format ← NEW
 }
-```
+```text
 
 **Rationale**:
 
@@ -367,7 +367,7 @@ Raw markdown (`content_markdown`):
 # Lab Desk Wall Bin C1
 
 Inventory container for small electronics.
-```
+```text
 
 Template-rendered markdown (`rendered_content_markdown` - NEW):
 
@@ -380,7 +380,7 @@ Inventory container for small electronics.
 - [CR2032 Batteries](/cr2032_batteries)
 - [CR2025 Batteries](/cr2025_batteries)
 - [LED Assortment](/led_assortment)
-```
+```text
 
 Rendered HTML (`rendered_content_html`):
 
@@ -393,7 +393,7 @@ Rendered HTML (`rendered_content_html`):
 <li><a href="/cr2025_batteries">CR2025 Batteries</a></li>
 <li><a href="/led_assortment">LED Assortment</a></li>
 </ul>
-```
+```text
 
 **Token Comparison**:
 
@@ -438,7 +438,7 @@ Rendered HTML (`rendered_content_html`):
     </intent>
   </capability>
 </shortcuts>
-```
+```text
 
 **Built-in Intents (BIIs)**:
 
@@ -468,7 +468,7 @@ val searchWikiFunction = FunctionDeclaration(
         "required" to jsonArray("query")
     }
 )
-```
+```text
 
 **Configure Gemini Client**:
 
@@ -481,7 +481,7 @@ val response = geminiClient.generateContent(
     prompt = userQuery,
     config = config
 )
-```
+```text
 
 **Handle Function Call**:
 
@@ -502,7 +502,7 @@ when (val part = response.candidates[0].content.parts[0]) {
         )
     }
 }
-```
+```text
 
 ### Capacitor Native Bridge
 
@@ -529,7 +529,7 @@ class WikiSearchPlugin : Plugin() {
         call.resolve(JSObject().put("response", response))
     }
 }
-```
+```text
 
 **Registration** in `MainActivity.kt`:
 
@@ -540,7 +540,7 @@ class MainActivity : BridgeActivity() {
         super.onCreate(savedInstanceState)
     }
 }
-```
+```text
 
 ### Token Budget Management
 
@@ -584,7 +584,7 @@ fun fetchPagesWithinBudget(searchResults: List<SearchResult>, maxTokens: Int): L
     
     return pages
 }
-```
+```text
 
 **Data Format Strategy**:
 
@@ -605,7 +605,7 @@ data class TemplateData(
     val inventoryItems: List<InventoryItem>? = null,
     val relatedPages: List<RelatedPage>? = null
 )
-```
+```text
 
 **Why This Format**:
 
@@ -634,7 +634,7 @@ The user asked: "$userQuery"
 Here are the relevant wiki pages:
 $wikiContext
 """.trimIndent()
-```
+```text
 
 ## Required Implementation Steps
 
@@ -652,7 +652,7 @@ message ReadPageResponse {
   string rendered_content_html = 3;
   string rendered_content_markdown = 4;  // NEW
 }
-```
+```text
 
 **Step 2**: Update backend to capture template-rendered markdown
 
@@ -681,7 +681,7 @@ fun testVoiceQuery() {
     // Expected: Assistant responds with location
     // Verify: Check logs for search query, page fetch, LLM response
 }
-```
+```text
 
 ### Test 2: Template Content Accessibility
 
@@ -706,7 +706,7 @@ fun testTemplateContent() {
     // Expected: Lists CR2032, CR2025, LED Assortment
     println("Response: ${response.text}")
 }
-```
+```text
 
 **Success Criteria**:
 
@@ -799,7 +799,7 @@ struct SearchResult: Codable {
     let location: String?
     let identifier: String?
 }
-```
+```text
 
 **How Apple Intelligence Uses This:**
 
@@ -831,7 +831,7 @@ struct SearchResult: Codable {
         </fulfillment>
     </action>
 </actions>
-```
+```text
 
 ```kotlin
 // Intent handler
@@ -863,7 +863,7 @@ class SearchWikiActivity : AppCompatActivity() {
         }
     }
 }
-```
+```text
 
 **How Gemini Nano Uses This:**
 
@@ -890,17 +890,17 @@ When iOS support is added later, the same two-phase retrieval pattern will be us
 
 **Traditional App Actions/Intents** (Pre-LLM):
 
-```
+```text
 User: "Search wiki for batteries"
   ↓ [Rigid slot filling]
 Action: search(query="batteries")
   ↓ [App formats response]
 Response: "CR2032 Batteries go in Lab Desk Wall Bin C1"
-```
+```text
 
 **LLM-Enhanced App Actions** (Modern with Full Context):
 
-```
+```text
 User: "Hey, where did I put those coin cell batteries?"
   ↓ [LLM reasoning: user wants location of batteries]
 Action: SearchWiki(query="coin cell batteries")
@@ -914,7 +914,7 @@ Data: {
 }
   ↓ [LLM reasons over complete rendered content]
 Response: "I found your CR2032 coin cell batteries in Lab Desk Wall Bin C1"
-```
+```text
 
 The app becomes a **data provider to an intelligent agent**, not a speech formatter. By providing complete rendered HTML (with all templating logic applied) instead of fragments, the LLM can answer questions that require information beyond search snippets or that depends on template-expanded content like inventory relationships.
 
@@ -942,7 +942,7 @@ Simple_wiki already has gRPC APIs that provide everything needed:
 
 ### Voice Integration Flow
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │  User: "Hey Google, where did I put my CR2032 batteries?"  │
 └─────────────────────────────────────────────────────────────┘
@@ -998,7 +998,7 @@ Simple_wiki already has gRPC APIs that provide everything needed:
 │  Siri/Assistant: "Your CR2032 batteries are in Lab Desk    │
 │                   Wall Bin C1"                              │
 └─────────────────────────────────────────────────────────────┘
-```
+```text
 
 **Key Architectural Difference from Traditional App Actions/Intents:**
 
@@ -1041,7 +1041,7 @@ Current API returns:
     }
   ]
 }
-```
+```text
 
 **Intent Handler Response Strategy**:
 
@@ -1054,7 +1054,7 @@ return .result(value: {
   content: result.fragment,  // Full context
   identifier: result.identifier
 })
-```
+```text
 
 The platform LLM then reasons:
 
@@ -1072,7 +1072,7 @@ The platform LLM then reasons:
 
 **Real Example Transformation**:
 
-```
+```text
 API Response for "batteries":
 {
   "identifier": "cr2032_batteries",
@@ -1094,7 +1094,7 @@ API Response for "space navigator":
 
 Speakable Response:
 "The 3Dconnexion Space Navigator is in Lab Desk Wall Bin L1. It's a 3D navigation knob with USB connectivity."
-```
+```text
 
 ### gRPC Integration Details
 
@@ -1118,7 +1118,7 @@ message SearchResult {
   string fragment = 3;     // Plain text excerpt with context
   repeated HighlightSpan highlights = 4;  // Match positions
 }
-```
+```text
 
 **Voice Handler Implementation Pattern**:
 
@@ -1155,7 +1155,7 @@ fun extractSpeakableAnswer(result: SearchResult): String {
         "I found ${result.title} but couldn't extract a clear answer" 
     }
 }
-```
+```text
 
 **Swift Implementation** (iOS):
 
@@ -1190,7 +1190,7 @@ func extractSpeakableAnswer(from result: SearchResult) -> String {
         "I found \(result.title) but couldn't extract a clear answer" : 
         String(sentences)
 }
-```
+```text
 
 **Error Handling**:
 
@@ -1249,7 +1249,7 @@ PWAs **can** (but insufficient for this use case):
 
 ## Architecture
 
-```
+```text
 ┌──────────────────────────────────────────────────────────────┐
 │   Native App Shell (Capacitor) - Sideloaded Installation    │
 │   ┌──────────────────────────────────────────────────────┐   │
@@ -1283,13 +1283,13 @@ PWAs **can** (but insufficient for this use case):
 │   - Page search and retrieval                               │
 │   - No authentication (protected by Tailscale)              │
 └──────────────────────────────────────────────────────────────┘
-```
+```text
 
 ## Technical Design
 
 ### Directory Structure
 
-```
+```text
 simple_wiki/
 ├── static/              # Existing web app (unchanged)
 ├── ios/                 # Generated iOS project (Xcode)
@@ -1304,7 +1304,7 @@ simple_wiki/
 └── docs/
     ├── proj-pwa.md
     └── proj-voice-assistant.md
-```
+```text
 
 ### Key Integration Points
 
@@ -1330,7 +1330,7 @@ const config: CapacitorConfig = {
 };
 
 export default config;
-```
+```text
 
 **Note**: Production and development use the same Tailscale URL since there's no public deployment.
 
@@ -1351,7 +1351,7 @@ export default config;
     </fulfillment>
   </action>
 </actions>
-```
+```text
 
 **Handler**: `android/app/src/main/java/.../VoiceActionHandler.kt`
 
@@ -1387,7 +1387,7 @@ class VoiceActionHandler : Activity() {
         }
     }
 }
-```
+```text
 
 **Key Change**: Return structured data in Intent extras, not pre-formatted speech. Gemini Nano interprets the context and generates natural language appropriate to the user's original query.
 
@@ -1410,7 +1410,7 @@ class VoiceActionHandler : Activity() {
     </intent-filter>
   </activity>
 </application>
-```
+```text
 
 **Natural Language Commands Enabled:**
 
@@ -1491,7 +1491,7 @@ struct WikiAppShortcuts: AppShortcutsProvider {
         )
     }
 }
-```
+```text
 
 **Key Change**: Return structured `SearchResult` type, not pre-formatted dialog. Apple Intelligence interprets the content and generates natural language response appropriate to the user's original question.
 
@@ -1508,7 +1508,7 @@ Both Android and iOS intent handlers need to call the existing gRPC APIs over Ta
 
 **Shared gRPC Client Interface** (implemented in each platform's native language):
 
-```
+```text
 interface WikiGrpcClient {
     async searchContent(query: string) -> SearchContentResponse
     async getPage(pageId: string) -> PageContent
@@ -1529,7 +1529,7 @@ Configuration:
 - Transport: gRPC-Web or HTTP/2
 - Timeout: 5 seconds (voice responses need quick turnaround)
 - Error handling: Network errors, timeouts, empty results
-```
+```text
 
 **Android Implementation**: Use gRPC-Kotlin or gRPC-Java libraries
 **iOS Implementation**: Use gRPC-Swift or Connect-Swift libraries
@@ -1554,7 +1554,7 @@ devbox add gradle         # Build system for Android
 
 # Note: Xcode (iOS) must be installed via Mac App Store (macOS only)
 # Android Studio and Xcode are GUI tools, installed separately
-```
+```text
 
 **Install Capacitor via Bun (managed in package.json):**
 
@@ -1573,7 +1573,7 @@ npx cap init "Simple Wiki" "net.ts.monster-orfe.wiki" --web-dir=static
 # Add platforms
 npx cap add android
 npx cap add ios
-```
+```text
 
 **Update devbox.json scripts:**
 
@@ -1590,7 +1590,7 @@ Add Capacitor-specific scripts to `devbox.json`:
     }
   }
 }
-```
+```text
 
 ### Daily Development
 
@@ -1613,7 +1613,7 @@ devbox run cap:android      # Opens Android Studio
 devbox run cap:sync         # Copy web assets to native projects
 devbox run cap:ios          # Opens Xcode
 # Then run from Xcode
-```
+```text
 
 ### Making Web Changes
 
@@ -1623,7 +1623,7 @@ devbox run cap:ios          # Opens Xcode
 
 # Sync changes to native apps
 devbox run cap:sync
-```
+```text
 
 ### Making Native Changes
 
@@ -1695,7 +1695,7 @@ devbox run cap:build:android 1.0.0
 # - Upload signed APK to GitHub Releases or direct hosting
 # - Tag release with version (e.g., v1.0.0)
 # - Users add via Obtainium app
-```
+```text
 
 ### iOS Build Process
 
@@ -1745,7 +1745,7 @@ devbox run cap:build:android 1.0.0
 git tag v1.0.0
 git push origin v1.0.0
 # GitHub Actions builds on macOS runner and uploads artifact
-```
+```text
 
 # Sync latest web assets
 
@@ -1763,7 +1763,7 @@ devbox run cap:ios
 # 1. Product → Archive
 # 2. Distribute App → Ad Hoc (for direct IPA) or App Store Connect (for TestFlight)
 # 3. Export IPA or upload to TestFlight
-```
+```text
 
 ### Distribution Summary
 
@@ -1790,7 +1790,7 @@ devbox run cap:ios
 base64 -i certificate.p12 | pbcopy  # Copy to clipboard
 base64 -i profile.mobileprovision | pbcopy
 
-```
+```text
 
 **GitHub Actions workflow:**
 
@@ -1876,7 +1876,7 @@ jobs:
         with:
           name: ios-app
           path: ios/App/build/App.ipa
-```
+```text
 
 **Automated release process:**
 
@@ -1894,7 +1894,7 @@ git push origin v1.0.0
 # 3. Save IPA as artifact (downloadable from Actions tab)
 
 # No macOS required! 🎉
-```
+```text
 
 ## Implementation Phases
 
@@ -2464,7 +2464,7 @@ class WikiAPIClientTest {
         }
     }
 }
-```
+```text
 
 **Data Transformation Layer** - Test result mapping:
 
@@ -2503,7 +2503,7 @@ class WikiSearchResultMapperTest {
         assertEquals("", wikiPage.frontmatter)
     }
 }
-```
+```text
 
 **Error Handling Layer** - Test all error scenarios:
 
@@ -2561,7 +2561,7 @@ class SearchWikiActionErrorTest {
         }
     }
 }
-```
+```text
 
 #### 2. Integration Tests (Multi-Component)
 
@@ -2619,7 +2619,7 @@ class SearchWikiActionIntegrationTest {
         assertLessThan(elapsed, 150) // Parallel execution threshold
     }
 }
-```
+```text
 
 **Tailscale Network Testing** - Test over actual Tailscale connection:
 
@@ -2644,7 +2644,7 @@ class TailscaleIntegrationTest {
         assertNotNull(result)
     }
 }
-```
+```text
 
 #### 3. LLM Response Validation Tests
 
@@ -2721,7 +2721,7 @@ class ManualLLMTestCases {
      *   Expected semantic: Lists multiple battery types or asks for clarification
      */
 }
-```
+```text
 
 #### 4. Performance Tests
 
@@ -2749,7 +2749,7 @@ class PerformanceTest {
         // Don't block indefinitely
     }
 }
-```
+```text
 
 #### 5. Chaos/Resilience Tests
 
@@ -2789,7 +2789,7 @@ class ChaosTest {
         assertLessThan(result.pages[0].markdown.length, 100_000)
     }
 }
-```
+```text
 
 ### TDD Workflow
 
@@ -3256,7 +3256,7 @@ sealed class ActionResult {
         val technicalDetail: String? = null  // For logging, not shown to user
     ) : ActionResult()
 }
-```
+```text
 
 **Structured Error Responses for LLM**:
 
@@ -3281,7 +3281,7 @@ ActionResult.Success(
     pages = listOf(page1, page2)  // Only 2 of 3 fetched
     // Gemini doesn't know 1 failed - responds based on available data
 )
-```
+```text
 
 The LLM receives this structured information and generates contextually appropriate natural language.
 
@@ -3289,18 +3289,18 @@ The LLM receives this structured information and generates contextually appropri
 
 **Old (Pre-LLM)**: App must format exact speech
 
-```
+```text
 User: "search wiki for batteries"
 App returns: "CR2032 Batteries go in Lab Desk Wall Bin C1"
-```
+```text
 
 **New (LLM-Enhanced)**: App provides context, LLM adapts response
 
-```
+```text
 User: "where are my batteries?" OR "do I have batteries?" OR "find my CR2032s"
 App returns: {title, content, location}
 LLM generates: Appropriate response for the specific question asked
-```
+```text
 
 ### Two-Phase API Response Examples
 
@@ -3323,7 +3323,7 @@ LLM generates: Appropriate response for the specific question asked
     }
   ]
 }
-```
+```text
 
 **Phase 2 - ReadPage Response (for "cr2032_batteries"):**
 
@@ -3332,7 +3332,7 @@ LLM generates: Appropriate response for the specific question asked
   "front_matter_toml": "location = 'Lab Desk Wall Bin C1'\ncategory = 'Electronics'\ntags = ['batteries', 'coin-cell', 'cr2032']\npurchase_date = '2024-01-15'",
   "rendered_content_html": "<h1>CR2032 Batteries</h1>\n<p>Coin cell batteries commonly used in electronics.</p>\n<h2>Specifications</h2>\n<ul>\n<li>Voltage: 3V</li>\n<li>Diameter: 20mm</li>\n<li>Thickness: 3.2mm</li>\n<li>Chemistry: Lithium</li>\n</ul>\n<h2>Typical Applications</h2>\n<ul>\n<li>Motherboard CMOS batteries</li>\n<li>Key fobs</li>\n<li>Small electronics</li>\n</ul>\n<h2>Inventory</h2>\n<p>Quantity: ~20 batteries in stock</p>"
 }
-```
+```text
 
 **What Gemini Receives:**
 
@@ -3351,7 +3351,7 @@ WikiSearchResult(
     )
   )
 )
-```
+```text
 
 **Example User Questions Gemini Can Now Answer:**
 
@@ -3378,7 +3378,7 @@ WikiSearchResult(
     }
   ]
 }
-```
+```text
 
 **Phase 2 - ReadPage:**
 
@@ -3387,7 +3387,7 @@ WikiSearchResult(
   "front_matter_toml": "container_type = 'wall_bin'\ncategory = 'Storage'",
   "rendered_content_html": "<h1>Lab Desk Wall Bin C1</h1>\n<p>Inventory container for small electronics.</p>\n<h2>Contents</h2>\n<ul>\n<li><a href=\"/cr2032_batteries\">CR2032 Batteries</a></li>\n<li><a href=\"/cr2025_batteries\">CR2025 Batteries</a></li>\n<li><a href=\"/led_assortment\">LED Assortment</a></li>\n</ul>"
 }
-```
+```text
 
 **Note**: The "Contents" list was **generated by the templating system** based on the inventory index (pages with `inventory.container = 'lab_desk_wall_bin_c1'`). This information doesn't exist in the raw markdown—it's dynamically constructed. By providing rendered HTML, the LLM sees the final processed output.
 
@@ -3409,7 +3409,7 @@ WikiSearchResult(
     }
   ]
 }
-```
+```text
 
 **Phase 2 - ReadPage:**
 
@@ -3418,7 +3418,7 @@ WikiSearchResult(
   "front_matter_toml": "location = 'Lab Desk Wall Bin L1 (Big Yellow)'\ncategory = 'Hardware'\nsubcategory = 'Input Devices'\ntags = ['3d', 'cad', 'navigation']\ncondition = 'excellent'",
   "rendered_content_html": "<h1>3Dconnexion Space Navigator</h1>\n<p>3D navigation device for CAD and 3D modeling.</p>\n<h2>Product Information</h2>\n<ul>\n<li>Product Name: SpaceNavigator</li>\n<li>Manufacturer: 3Dconnexion</li>\n<li>Model: 3DX-700028</li>\n<li>Purchase Date: 2023-06-12</li>\n<li>Warranty: 2 years (expires 2025-06-12)</li>\n</ul>\n<h2>Features</h2>\n<ul>\n<li>6 degrees of freedom navigation</li>\n<li>USB connectivity (USB-A)</li>\n<li>Plug and play - no drivers needed on Linux</li>\n<li>Compatible with Blender, FreeCAD, Fusion 360</li>\n</ul>\n<h2>Usage Notes</h2>\n<p>Works great with Blender. Minor configuration needed for FreeCAD (enable 3D mouse in preferences).</p>"
 }
-```
+```text
 
 **Gemini Can Answer:**
 

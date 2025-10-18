@@ -22,10 +22,23 @@ android {
         release {
             // For internal testing, we'll use a keystore
             // Create keystore with: keytool -genkey -v -keystore release-key.keystore -alias release -keyalg RSA -keysize 2048 -validity 10000
-            storeFile file(System.getenv("KEYSTORE_FILE") ?: "release-key.keystore")
-            storePassword System.getenv("KEYSTORE_PASSWORD") ?: "android"
-            keyAlias System.getenv("KEY_ALIAS") ?: "release"
-            keyPassword System.getenv("KEY_PASSWORD") ?: "android"
+            // Environment variables must be set for release builds - no fallbacks for security
+            def keystoreFile = System.getenv("KEYSTORE_FILE")
+            def keystorePassword = System.getenv("KEYSTORE_PASSWORD")
+            def keyAlias = System.getenv("KEY_ALIAS")
+            def keyPassword = System.getenv("KEY_PASSWORD")
+
+            // Only set signing config if environment variables are provided
+            // This allows tests and debug builds to run without credentials
+            if (keystoreFile && keystorePassword && keyAlias && keyPassword) {
+                storeFile file(keystoreFile)
+                storePassword keystorePassword
+                keyAlias keyAlias
+                keyPassword keyPassword
+            } else if (gradle.startParameter.taskNames.any { it.contains("Release") || it.contains("bundle") }) {
+                // But fail if actually trying to build a release without credentials
+                throw new GradleException("Release signing requires KEYSTORE_FILE, KEYSTORE_PASSWORD, KEY_ALIAS, and KEY_PASSWORD environment variables")
+            }
         }
     }
 
@@ -71,7 +84,7 @@ dependencies {
     implementation "com.google.protobuf:protobuf-java:$protobufVersion"
 
     // TOML parsing
-    implementation "com.akuleshov7:ktoml-core:$ktomlVersion"
+    implementation "com.moandjiezana.toml:toml4j:$toml4jVersion"
 
     // Kotlin coroutines
     implementation "org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion"

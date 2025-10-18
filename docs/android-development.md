@@ -8,7 +8,7 @@ Simple Wiki uses [Capacitor 7](https://capacitorjs.com/) to wrap the web applica
 
 ## Architecture
 
-```
+```text
 android/
 ├── app/                          # Main application module
 │   ├── build.gradle             # App-specific build config (customized)
@@ -20,7 +20,7 @@ android/
 ├── build.gradle                 # Root build config (Kotlin plugin added)
 ├── variables.gradle             # Version management (test frameworks added)
 └── capacitor.settings.gradle    # Capacitor plugin config
-```
+```text
 
 ## What Was Customized vs Generated
 
@@ -73,12 +73,13 @@ All tools are managed by `devbox` for reproducibility:
    ```
 
    This downloads and installs the Android SDK to `~/.android-sdk`. The script:
-   - Downloads command-line tools from Google
-   - Accepts SDK licenses automatically
-   - Installs required platform and build tools
-   - Configures environment variables
 
-2. **Verify Installation**:
+- Downloads command-line tools from Google
+- Accepts SDK licenses automatically
+- Installs required platform and build tools
+- Configures environment variables
+
+1. **Verify Installation**:
 
    ```bash
    which adb
@@ -103,7 +104,7 @@ devbox run android:build:debug
 
 # 4. Install on device/emulator
 devbox run android:install
-```
+```text
 
 **How it works**: The `android:sync` command sets `CAPACITOR_DEV=true`, which configures `capacitor.config.ts` to point to `http://localhost:8050`.
 
@@ -118,7 +119,7 @@ rm -rf android/app/src/main/assets/public/js/node_modules
 
 # Build release APK
 devbox run android:build:release
-```
+```text
 
 The production APK will serve the app from the bundled assets, not from a server.
 
@@ -133,7 +134,7 @@ devbox run android:test
 
 # Open Android Studio (if installed)
 open -a "Android Studio" android/
-```
+```text
 
 ## Environment Variables
 
@@ -148,7 +149,7 @@ Used in `capacitor.config.ts`:
 
 ```typescript
 const isDevelopment = process.env.CAPACITOR_DEV === 'true';
-```
+```text
 
 ### `ANDROID_SETUP_NON_INTERACTIVE`
 
@@ -174,7 +175,7 @@ Used in `.devbox_run_scripts/setup_android_env.sh`.
 
 ```bash
 devbox run android:test
-```
+```text
 
 Runs all JUnit 5 unit tests in `android/app/src/test/`.
 
@@ -209,7 +210,7 @@ class MyFeatureTest {
         assertEquals(expected, actual)
     }
 }
-```
+```text
 
 Follow the project's TDD conventions (Context-Specification style, AAA pattern).
 
@@ -246,7 +247,7 @@ devbox run android:setup
 # Then restart your devbox shell
 exit
 devbox shell
-```
+```text
 
 ### "Failed to accept Android SDK licenses"
 
@@ -256,7 +257,7 @@ devbox shell
 
 ```bash
 $HOME/.android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses
-```
+```text
 
 Accept all licenses when prompted.
 
@@ -287,7 +288,7 @@ Accept all licenses when prompted.
 ```bash
 rm -rf android/app/src/main/assets/public/js/node_modules
 devbox run android:build:debug
-```
+```text
 
 ## Key Configurations
 
@@ -297,14 +298,14 @@ Set in `android/variables.gradle`:
 
 ```gradle
 minSdkVersion = 23  // Android 6.0 (Marshmallow)
-```
+```text
 
 ### Target SDK Version
 
 ```gradle
 compileSdkVersion = 34  // Android 14
 targetSdkVersion = 34
-```
+```text
 
 ### App Identification
 
@@ -326,7 +327,7 @@ bunx cap add android
 # - Update MainActivity.java package name
 # - Add test dependencies to build.gradle
 # - Add Kotlin plugin to root build.gradle
-```
+```text
 
 **Note**: Avoid regenerating unless absolutely necessary. Prefer updating specific files.
 

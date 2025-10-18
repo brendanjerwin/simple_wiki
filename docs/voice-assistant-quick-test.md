@@ -24,27 +24,33 @@ adb logcat -c && adb logcat | grep -E "(VoiceAction|SearchOrchestrator)"
 ## Test Scenarios
 
 ### 1. Successful Search
+
 ```bash
 adb shell am start -a android.intent.action.VIEW \
   -d "wiki://search?query=<your-known-page>" \
   com.github.brendanjerwin.simple_wiki/.voice.VoiceActionHandler
 ```
+
 Expected: Results returned, no errors
 
 ### 2. Empty Results
+
 ```bash
 adb shell am start -a android.intent.action.VIEW \
   -d "wiki://search?query=xyz_nonexistent" \
   com.github.brendanjerwin.simple_wiki/.voice.VoiceActionHandler
 ```
+
 Expected: Empty results, success=true, no error
 
 ### 3. Network Error (disconnect Tailscale first)
+
 ```bash
 adb shell am start -a android.intent.action.VIEW \
   -d "wiki://search?query=test" \
   com.github.brendanjerwin.simple_wiki/.voice.VoiceActionHandler
 ```
+
 Expected: error="Could not reach wiki. Check Tailscale connection."
 
 ## Verify Installation

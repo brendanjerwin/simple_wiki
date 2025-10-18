@@ -7,12 +7,14 @@ This guide provides step-by-step instructions for manually testing the voice ass
 ## Prerequisites
 
 ### Device Requirements
+
 - Physical Android device (not emulator)
 - Android OS with Google Assistant support
 - Tailscale app installed and configured
 - USB debugging enabled
 
 ### Development Machine Setup
+
 - ADB installed and configured
 - Device connected via USB
 - Wiki backend running and accessible via Tailscale
@@ -30,6 +32,7 @@ adb install -r android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
 Verify installation:
+
 ```bash
 adb shell pm list packages | grep simple_wiki
 ```
@@ -39,6 +42,7 @@ Expected output: `package:com.github.brendanjerwin.simple_wiki`
 ### 2. Verify Tailscale Connection
 
 On your Android device:
+
 1. Open Tailscale app
 2. Ensure it's connected (green checkmark)
 3. Verify the wiki backend hostname is accessible
@@ -46,6 +50,7 @@ On your Android device:
 ### 3. Configure Google Assistant (Optional)
 
 For testing with voice commands:
+
 1. Open Settings → Apps → Default apps → Digital assistant app
 2. Ensure Google Assistant is set as default
 3. Grant necessary permissions
@@ -57,6 +62,7 @@ For testing with voice commands:
 Test the deep link functionality without Google Assistant.
 
 **Test Command:**
+
 ```bash
 adb shell am start -a android.intent.action.VIEW \
   -d "wiki://search?query=batteries" \
@@ -64,17 +70,20 @@ adb shell am start -a android.intent.action.VIEW \
 ```
 
 **Expected Behavior:**
+
 - App launches
 - VoiceActionHandler receives the query
 - Search is performed for "batteries"
 - Check logcat for results
 
 **Verification:**
+
 ```bash
 adb logcat | grep -i "VoiceAction"
 ```
 
 Look for:
+
 - Query parameter extracted: "batteries"
 - SearchOrchestrator called
 - Results returned or error message
@@ -84,12 +93,14 @@ Look for:
 Verify that the app's actions are registered with the system.
 
 **Test Command:**
+
 ```bash
 # Check app's declared capabilities
 adb shell dumpsys package com.github.brendanjerwin.simple_wiki | grep -A 20 "Activity:"
 ```
 
 **Expected Output:**
+
 - VoiceActionHandler activity listed
 - Intent filter for `wiki` scheme visible
 - `android:exported="true"` present
@@ -100,17 +111,20 @@ adb shell dumpsys package com.github.brendanjerwin.simple_wiki | grep -A 20 "Act
 Ensure you have wiki pages that will match the query (e.g., a page about batteries).
 
 **Test Steps:**
+
 1. Use Test 1 command with a known query
 2. Monitor logcat output
 3. Verify search results
 
 **Expected Results:**
+
 - VoiceSearchResult with `success=true`
 - Pages list populated
 - frontmatterJson contains valid JSON
 - renderedMarkdown contains template-expanded content
 
 **Verification Commands:**
+
 ```bash
 # Watch logs during test
 adb logcat -c  # Clear logs first
@@ -123,6 +137,7 @@ adb logcat | grep -E "(VoiceAction|SearchOrchestrator|WikiApiClient)"
 Test handling of queries that return no results.
 
 **Test Command:**
+
 ```bash
 adb shell am start -a android.intent.action.VIEW \
   -d "wiki://search?query=xyz_nonexistent_page" \
@@ -130,6 +145,7 @@ adb shell am start -a android.intent.action.VIEW \
 ```
 
 **Expected Results:**
+
 - VoiceSearchResult with `success=true` (empty results are valid)
 - Empty pages list
 - totalPages=0
@@ -140,17 +156,20 @@ adb shell am start -a android.intent.action.VIEW \
 Test error handling when Tailscale is disconnected.
 
 **Test Steps:**
+
 1. Disconnect Tailscale on the device
 2. Run the search intent
 3. Monitor logcat for error handling
 
 **Expected Results:**
+
 - VoiceSearchResult with `success=false`
 - error="Could not reach wiki. Check Tailscale connection."
 - Empty pages list
 - User-friendly error message (no technical details)
 
 **Verification:**
+
 ```bash
 adb logcat | grep -i "error"
 ```
@@ -160,10 +179,12 @@ adb logcat | grep -i "error"
 Test behavior when API requests time out.
 
 **Test Steps:**
+
 1. This requires temporarily blocking network or slowing it down
 2. Alternative: Check logs for timeout exception handling code paths
 
 **Expected Results:**
+
 - VoiceSearchResult with `success=false`
 - error="Wiki search timed out. Try again."
 - Includes retry suggestion
@@ -173,6 +194,7 @@ Test behavior when API requests time out.
 Test formatting of multiple search results.
 
 **Test Command:**
+
 ```bash
 # Use a query that returns multiple pages
 adb shell am start -a android.intent.action.VIEW \
@@ -181,6 +203,7 @@ adb shell am start -a android.intent.action.VIEW \
 ```
 
 **Expected Results:**
+
 - Multiple pages in pages list
 - Each page has: title, identifier, frontmatterJson, renderedMarkdown
 - Pages maintain search result order
@@ -192,6 +215,7 @@ Test that complex TOML frontmatter is correctly converted to JSON.
 
 **Setup:**
 Create a test page with complex frontmatter:
+
 ```toml
 title = "Test Page"
 tags = ["tag1", "tag2", "tag3"]
@@ -200,10 +224,12 @@ location = "Lab"
 ```
 
 **Test Steps:**
+
 1. Search for the test page
 2. Verify frontmatterJson in logs
 
 **Expected Results:**
+
 - JSON contains all fields
 - tags array is properly formatted: `["tag1","tag2","tag3"]`
 - Timestamps preserved as strings
@@ -230,26 +256,35 @@ adb logcat -v time | grep -i wiki
 ## Common Issues and Solutions
 
 ### Issue: App not launching
+
 **Solution:** Check if package is installed:
+
 ```bash
 adb shell pm list packages | grep simple_wiki
 ```
+
 If not present, reinstall APK.
 
 ### Issue: Intent not triggering
+
 **Solution:** Verify intent filter registration:
+
 ```bash
 adb shell dumpsys package com.github.brendanjerwin.simple_wiki | grep -A 10 "android.intent.action.VIEW"
 ```
 
 ### Issue: Network errors
+
 **Solution:** Verify Tailscale connection:
+
 ```bash
 adb shell ping <wiki-backend-hostname>
 ```
 
 ### Issue: No logs visible
+
 **Solution:** Increase log buffer size:
+
 ```bash
 adb logcat -G 16M
 ```

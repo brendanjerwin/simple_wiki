@@ -160,22 +160,41 @@ class VoiceActionHandler : Activity() {
     /**
      * Converts frontmatter Map to JSON string for LLM consumption.
      *
+     * Handles all types that toml4j can return:
+     * - Primitives: String, Number, Boolean, null
+     * - Collections: List, Map (nested structures)
+     * - Dates: Calendar (converted to ISO 8601 string)
+     *
      * @param frontmatter The frontmatter map
      * @return JSON string representation
      */
     private fun convertFrontmatterToJson(frontmatter: Map<String, Any>): String {
-        val json = JSONObject()
-        frontmatter.forEach { (key, value) ->
-            when (value) {
+        fun valueToJson(value: Any?): Any? {
+            return when (value) {
+                null -> JSONObject.NULL
+                is String, is Number, is Boolean -> value
+                is java.util.Calendar -> value.toInstant().toString()
+                is Map<*, *> -> {
+                    val obj = JSONObject()
+                    value.forEach { (k, v) ->
+                        obj.put(k as String, valueToJson(v))
+                    }
+                    obj
+                }
                 is List<*> -> {
                     val array = JSONArray()
                     value.forEach { item ->
-                        array.put(item)
+                        array.put(valueToJson(item))
                     }
-                    json.put(key, array)
+                    array
                 }
-                else -> json.put(key, value)
+                else -> value.toString() // Fallback for unknown types
             }
+        }
+
+        val json = JSONObject()
+        frontmatter.forEach { (key, value) ->
+            json.put(key, valueToJson(value))
         }
         return json.toString()
     }
