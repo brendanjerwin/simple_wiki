@@ -2,6 +2,7 @@ package com.github.brendanjerwin.simple_wiki.retrieval
 
 import android.util.Log
 import com.github.brendanjerwin.simple_wiki.api.WikiApiClient
+import com.moandjiezana.toml.Toml
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 
@@ -100,27 +101,23 @@ class SearchOrchestrator(
     }
 
     /**
-     * Parses TOML frontmatter into flexible key-value map.
+     * Parses TOML frontmatter into flexible key-value map using toml4j library.
      *
-     * Handles common TOML patterns from the wiki backend:
-     * - Simple key = "value" pairs → String values
-     * - Arrays: tags = ["one", "two", "three"] → List<String> values
-     * - ISO 8601 timestamps: created = "2025-01-10T14:30:00Z" → String values
+     * Uses the toml4j library to properly parse TOML according to the TOML spec.
+     * This directly returns a Map<String, Any> without requiring predefined schemas,
+     * allowing frontmatter to have any user-defined fields.
      *
-     * Note: This is a pragmatic parser for the specific TOML format returned by
-     * the Go backend (using pelletier/go-toml/v2). It handles the common cases we
-     * actually encounter rather than supporting the full TOML 1.0 spec.
-     *
-     * Following the proto pattern of keeping frontmatter flexible and untyped,
-     * this returns Map<String, Any> where values can be String or List<String>.
-     *
-     * Limitations documented but acceptable for production:
-     * - Nested tables/inline tables not currently needed
-     * - Multiline strings not used in frontmatter
-     * - Complex data types can be added when needed
+     * This handles all TOML features properly including:
+     * - Quoted and unquoted strings
+     * - Arrays
+     * - Numbers, booleans
+     * - ISO 8601 timestamps
+     * - Escaped characters
+     * - Comments
+     * - Nested tables
      *
      * @param toml The TOML frontmatter string from the backend
-     * @return Map of key-value pairs with String or List<String> values
+     * @return Map of key-value pairs with flexible types (String, List, Number, Boolean, etc.)
      */
     private fun parseFrontmatter(toml: String): Map<String, Any> {
         if (toml.isBlank()) {
@@ -128,44 +125,12 @@ class SearchOrchestrator(
         }
 
         return try {
-            val result = mutableMapOf<String, Any>()
-
-            toml.lines().forEach { line ->
-                val trimmed = line.trim()
-                if (trimmed.isEmpty() || trimmed.startsWith("#")) {
-                    return@forEach
-                }
-
-                val parts = trimmed.split("=", limit = 2)
-                if (parts.size != 2) {
-                    return@forEach
-                }
-
-                val key = parts[0].trim()
-                val value = parts[1].trim()
-
-                // Check if value is an array: ["value1", "value2"]
-                if (value.startsWith("[") && value.endsWith("]")) {
-                    val arrayContent = value.removeSurrounding("[", "]").trim()
-                    if (arrayContent.isEmpty()) {
-                        result[key] = emptyList<String>()
-                    } else {
-                        val items = arrayContent.split(",").mapNotNull { item ->
-                            val cleanItem = item.trim().removeSurrounding("\"")
-                            if (cleanItem.isNotEmpty()) cleanItem else null
-                        }
-                        result[key] = items
-                    }
-                } else {
-                    // Simple string value
-                    result[key] = value.removeSurrounding("\"")
-                }
-            }
-
-            result
+            // Parse with toml4j library - directly returns Map<String, Object>
+            Toml().read(toml).toMap()
         } catch (e: Exception) {
             // If parsing fails, return empty map rather than crashing
             // This gracefully handles malformed TOML
+            Log.w(TAG, "Failed to parse frontmatter TOML, returning empty map: ${e.message}")
             emptyMap()
         }
     }
