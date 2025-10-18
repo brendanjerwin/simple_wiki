@@ -11,8 +11,11 @@ import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import java.util.Calendar
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -468,28 +471,36 @@ class VoiceActionHandlerTest {
 
     /**
      * Helper function to convert frontmatter to JSON (mimics VoiceActionHandler logic).
-     * Uses kotlinx.serialization for proper JSON encoding instead of manual string building.
+     * Uses kotlinx.serialization for proper JSON encoding with recursive handling of nested structures.
+     *
+     * Handles all types that toml4j can return:
+     * - Primitives: String, Number, Boolean, null
+     * - Collections: List, Map (nested structures)
+     * - Dates: Calendar (converted to ISO 8601 string)
      */
     private fun convertFrontmatterToJson(frontmatter: Map<String, Any>): String {
-        val jsonMap = frontmatter.mapValues { (_, value) ->
-            when (value) {
+        fun valueToJsonElement(value: Any?): JsonElement {
+            return when (value) {
+                null -> JsonNull
                 is String -> JsonPrimitive(value)
                 is Number -> JsonPrimitive(value)
                 is Boolean -> JsonPrimitive(value)
-                is List<*> -> {
-                    val items = value.mapNotNull { item ->
-                        when (item) {
-                            is String -> JsonPrimitive(item)
-                            is Number -> JsonPrimitive(item)
-                            is Boolean -> JsonPrimitive(item)
-                            else -> null
-                        }
+                is Calendar -> JsonPrimitive(value.toInstant().toString())
+                is Map<*, *> -> {
+                    val entries = value.entries.associate {
+                        (it.key as String) to valueToJsonElement(it.value)
                     }
+                    JsonObject(entries)
+                }
+                is List<*> -> {
+                    val items = value.map { valueToJsonElement(it) }
                     JsonArray(items)
                 }
-                else -> JsonPrimitive(null as String?)
+                else -> JsonPrimitive(value.toString()) // Fallback for unknown types
             }
         }
+
+        val jsonMap = frontmatter.mapValues { (_, value) -> valueToJsonElement(value) }
         return Json.encodeToString(JsonObject.serializer(), JsonObject(jsonMap))
     }
 }

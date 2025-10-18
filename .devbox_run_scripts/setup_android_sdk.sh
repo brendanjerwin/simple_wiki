@@ -43,7 +43,7 @@ mkdir -p "${ANDROID_HOME}/cmdline-tools"
 # Download command-line tools
 echo "📥 Downloading Android command-line tools..."
 TEMP_ZIP=$(mktemp)
-trap 'rm -f "$TEMP_ZIP"' EXIT
+trap 'rm -f "$TEMP_ZIP"' EXIT INT TERM
 curl -L "${CMDLINE_TOOLS_URL}" -o "${TEMP_ZIP}"
 
 # Extract to temporary location
