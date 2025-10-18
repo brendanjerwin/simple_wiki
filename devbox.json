@@ -66,7 +66,7 @@
         "./.devbox_run_scripts/android_gradle.sh test",
         "go run golang.org/x/tools/cmd/deadcode@latest .",
         "markdownlint --fix '**/*.md' --ignore vendor",
-        "find android/app/src/main -name '*.xml' -type f -exec xmllint --noout {} \\; || true",
+        "find android/app/src/main -name '*.xml' -type f -exec xmllint --noout {} \\;",
         "export CHROMIUM_BIN=$(which chromium)",
         "cd static/js && bun install && bun run build && bun run test && bun run lint"
       ],

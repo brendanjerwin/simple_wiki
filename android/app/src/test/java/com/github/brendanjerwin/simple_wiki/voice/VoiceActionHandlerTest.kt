@@ -9,6 +9,10 @@ import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
@@ -464,35 +468,28 @@ class VoiceActionHandlerTest {
 
     /**
      * Helper function to convert frontmatter to JSON (mimics VoiceActionHandler logic).
-     * Simple manual JSON builder for unit tests to avoid Android framework dependencies.
+     * Uses kotlinx.serialization for proper JSON encoding instead of manual string building.
      */
     private fun convertFrontmatterToJson(frontmatter: Map<String, Any>): String {
-        val json = StringBuilder("{")
-        frontmatter.entries.forEachIndexed { index, (key, value) ->
-            if (index > 0) json.append(",")
-            json.append("\"").append(key).append("\":")
-
+        val jsonMap = frontmatter.mapValues { (_, value) ->
             when (value) {
-                is String -> json.append("\"").append(value).append("\"")
-                is Number -> json.append(value)
-                is Boolean -> json.append(value)
+                is String -> JsonPrimitive(value)
+                is Number -> JsonPrimitive(value)
+                is Boolean -> JsonPrimitive(value)
                 is List<*> -> {
-                    json.append("[")
-                    value.forEachIndexed { i, item ->
-                        if (i > 0) json.append(",")
+                    val items = value.mapNotNull { item ->
                         when (item) {
-                            is String -> json.append("\"").append(item).append("\"")
-                            is Number -> json.append(item)
-                            is Boolean -> json.append(item)
-                            else -> json.append("null")
+                            is String -> JsonPrimitive(item)
+                            is Number -> JsonPrimitive(item)
+                            is Boolean -> JsonPrimitive(item)
+                            else -> null
                         }
                     }
-                    json.append("]")
+                    JsonArray(items)
                 }
-                else -> json.append("null")
+                else -> JsonPrimitive(null as String?)
             }
         }
-        json.append("}")
-        return json.toString()
+        return Json.encodeToString(JsonObject.serializer(), JsonObject(jsonMap))
     }
 }

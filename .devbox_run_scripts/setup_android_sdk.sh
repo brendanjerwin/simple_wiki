@@ -42,7 +42,8 @@ mkdir -p "${ANDROID_HOME}/cmdline-tools"
 
 # Download command-line tools
 echo "📥 Downloading Android command-line tools..."
-TEMP_ZIP="/tmp/android-cmdline-tools.zip"
+TEMP_ZIP=$(mktemp)
+trap 'rm -f "$TEMP_ZIP"' EXIT
 curl -L "${CMDLINE_TOOLS_URL}" -o "${TEMP_ZIP}"
 
 # Extract to temporary location
@@ -51,9 +52,6 @@ unzip -q "${TEMP_ZIP}" -d "${ANDROID_HOME}/cmdline-tools"
 
 # Move to 'latest' directory (required structure)
 mv "${ANDROID_HOME}/cmdline-tools/cmdline-tools" "${ANDROID_HOME}/cmdline-tools/latest"
-
-# Clean up
-rm "${TEMP_ZIP}"
 
 # Set up environment for sdkmanager
 export ANDROID_SDK_ROOT="${ANDROID_HOME}"
