@@ -16,7 +16,7 @@ message ReadPageResponse {
   string front_matter_toml = 2;        // TOML frontmatter
   string rendered_content_html = 3;    // Templates applied + HTML conversion
 }
-```
+```text
 
 **Required Addition**:
 
@@ -27,7 +27,7 @@ message ReadPageResponse {
   string rendered_content_html = 3;
   string rendered_content_markdown = 4;  // ← NEW: Templates applied, markdown format
 }
-```
+```text
 
 ### Implementation Notes
 
@@ -77,7 +77,7 @@ val response = geminiClient.generateContent(
     prompt = userPrompt,
     config = config
 )
-```
+```text
 
 **Documentation**: <https://developer.android.com/ai/gemini-nano>
 
@@ -105,7 +105,7 @@ val response = geminiClient.generateContent(
     </intent>
   </capability>
 </shortcuts>
-```
+```text
 
 **Manifest Declaration**:
 
@@ -115,14 +115,14 @@ val response = geminiClient.generateContent(
     android:name="com.google.android.actions"
     android:resource="@xml/shortcuts" />
 </application>
-```
+```text
 
 **User Invocation**:
 
-```
+```text
 "Hey Google, search my wiki for batteries"
 "Hey Google, find Space Navigator in my wiki"
-```
+```text
 
 **Documentation**:
 
@@ -157,7 +157,7 @@ val searchWikiFunction = FunctionDeclaration(
 )
 
 val tools = listOf(Tool(functionDeclarations = listOf(searchWikiFunction)))
-```
+```text
 
 **Configure Client**:
 
@@ -176,7 +176,7 @@ val response = geminiClient.generateContent(
     prompt = userQuery,
     config = config
 )
-```
+```text
 
 **Handle Function Call**:
 
@@ -201,7 +201,7 @@ when (val part = response.candidates[0].content.parts[0]) {
         return finalResponse.text  // Spoken response
     }
 }
-```
+```text
 
 **Documentation**: <https://ai.google.dev/gemini-api/docs/function-calling>
 
@@ -217,7 +217,7 @@ when (val part = response.candidates[0].content.parts[0]) {
 npm install @capacitor/core @capacitor/android
 npx cap init
 npx cap add android
-```
+```text
 
 **Plugin Definition** (`WikiSearchPlugin.kt`):
 
@@ -253,7 +253,7 @@ class WikiSearchPlugin : Plugin() {
         })
     }
 }
-```
+```text
 
 **Register Plugin** (`MainActivity.kt`):
 
@@ -266,7 +266,7 @@ class MainActivity : BridgeActivity() {
         super.onCreate(savedInstanceState)
     }
 }
-```
+```text
 
 **Call from Web** (JavaScript):
 
@@ -279,7 +279,7 @@ async function handleVoiceQuery(query: string) {
   console.log('Response:', result.response);
   return result.response;
 }
-```
+```text
 
 **Documentation**: <https://capacitorjs.com/docs/plugins/tutorial/android-implementation>
 
@@ -287,7 +287,7 @@ async function handleVoiceQuery(query: string) {
 
 ## Data Flow
 
-```
+```text
 User Voice Command
       ↓
 Google Assistant (recognizes via App Actions)
@@ -321,7 +321,7 @@ WikiSearchPlugin.searchAndRespond()
 Text-to-Speech
       ↓
 User hears response
-```
+```text
 
 ---
 
@@ -338,7 +338,7 @@ User hears response
   "rendered_content_html": "<h1>CR2032 Batteries</h1><p>Button cell batteries.</p>",
   "rendered_content_markdown": "# CR2032 Batteries\n\nButton cell batteries.\n\n## Location\nLab Desk Wall Bin C1"
 }
-```
+```text
 
 ### Test Function Calling
 
@@ -356,7 +356,7 @@ fun `test search wiki function call`() {
     assertNotNull(result)
     assertTrue(result.contains("CR2032"))
 }
-```
+```text
 
 ### Test End-to-End
 
@@ -373,7 +373,7 @@ fun `test voice query end to end`() {
     
     assertTrue(response.contains("bin C1") || response.contains("Bin C1"))
 }
-```
+```text
 
 ---
 
@@ -389,7 +389,7 @@ val channel = ManagedChannelBuilder
     .forAddress("simple-wiki.tailnet-xyz.ts.net", 50051)  // Tailscale hostname
     .useTransportSecurity()  // TLS required
     .build()
-```
+```text
 
 **Never**:
 

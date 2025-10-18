@@ -1,6 +1,6 @@
 # Privacy Policy for Simple Wiki
 
-**Last Updated: October 16, 2025**
+Last Updated: October 16, 2025
 
 ## Overview
 
@@ -36,9 +36,9 @@ We may update this privacy policy from time to time. Any changes will be posted 
 
 ## Contact
 
-For questions about this privacy policy, please visit: https://github.com/brendanjerwin/simple_wiki
+For questions about this privacy policy, please visit: <https://github.com/brendanjerwin/simple_wiki>
 
 ---
 
 **Simple Wiki is open source software. You can review the complete source code at:**
-https://github.com/brendanjerwin/simple_wiki
+<https://github.com/brendanjerwin/simple_wiki>

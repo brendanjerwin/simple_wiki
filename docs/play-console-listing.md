@@ -4,19 +4,19 @@ Content to use when setting up the app listing in Google Play Console.
 
 ## App Title
 
-```
+```text
 Simple Wiki
-```
+```text
 
 ## Short Description (80 characters max)
 
-```
+```text
 Voice-controlled personal wiki with Google Assistant integration
-```
+```text
 
 ## Full Description (4000 characters max)
 
-```
+```text
 Simple Wiki brings your personal knowledge base to life with natural voice commands through Google Assistant.
 
 🎙️ VOICE COMMANDS
@@ -68,41 +68,42 @@ Google Assistant uses Gemini to understand your wiki content and answer in natur
 This is a companion app for your self-hosted Simple Wiki instance. Voice commands work only when connected to your Tailscale network with an accessible wiki backend.
 
 For setup instructions and documentation, visit the project repository.
-```
+```text
 
 ## App Category
 
-```
+```text
 Productivity
-```
+```text
 
 ## Tags
 
-```
+```text
 wiki, knowledge management, voice assistant, personal, productivity, self-hosted, tailscale, notes
-```
+```text
 
 ## Contact Email
 
-```
+```text
 [Your email address]
-```
+```text
 
 ## Website
 
-```
+```text
 https://github.com/brendanjerwin/simple_wiki
-```
+```text
 
 ## Feature Graphic Dimensions
 
 **Required**: 1024 x 500 pixels
 
 **Text for graphic**:
-```
+
+```text
 Simple Wiki
 Voice-Controlled Personal Knowledge
-```
+```text
 
 ## App Icon
 
@@ -121,6 +122,7 @@ You'll need 2-8 screenshots. Recommended:
 5. **Tailscale requirement** - Show connection status
 
 **Dimensions**:
+
 - Phone: 1080 x 1920 (16:9) or 1080 x 2340 (19.5:9)
 - Tablet: 1920 x 1200 or 2560 x 1600
 
@@ -129,6 +131,7 @@ You'll need 2-8 screenshots. Recommended:
 **URL**: Upload to YouTube (unlisted is fine)
 
 **Content**: 30-120 second demo showing:
+
 1. "Hey Google, search my wiki for batteries"
 2. App processes query
 3. Gemini responds with answer
@@ -136,17 +139,17 @@ You'll need 2-8 screenshots. Recommended:
 
 ## Store Listing Preview Text
 
-```
+```text
 Voice-controlled access to your personal wiki through Google Assistant.
 Private, secure, and hands-free. Perfect for home lab tracking and
 personal knowledge management.
-```
+```text
 
 ## Release Notes Template
 
 For each release:
 
-```
+```text
 Version 1.1.0-voice
 • Initial voice assistant integration
 • Google Assistant support with natural language queries
@@ -157,7 +160,7 @@ Version 1.1.0-voice
 Requirements:
 • Tailscale connection active
 • Wiki backend accessible
-```
+```text
 
 ## Content Rating Responses
 
@@ -179,7 +182,7 @@ For the Content Rating questionnaire:
 
 ## Privacy Policy Text
 
-```
+```text
 # Privacy Policy for Simple Wiki
 
 Last updated: [Date]
@@ -221,11 +224,11 @@ For questions: [Your email]
 
 ## Changes
 We will update this policy as needed. Check this page for updates.
-```
+```text
 
 ## App Access Explanation
 
-```
+```text
 This app requires a self-hosted Simple Wiki backend accessible via Tailscale.
 All functionality is available to any user with:
 1. A self-hosted wiki instance
@@ -233,7 +236,7 @@ All functionality is available to any user with:
 3. The wiki URL configured correctly
 
 No special credentials or paid features.
-```
+```text
 
 ## Target Audience
 
@@ -255,7 +258,7 @@ When setting up in Play Console, copy these:
 - [ ] Full description: [See above]
 - [ ] App category: Productivity
 - [ ] Contact email: [Your email]
-- [ ] Website: https://github.com/brendanjerwin/simple_wiki
+- [ ] Website: <https://github.com/brendanjerwin/simple_wiki>
 - [ ] Privacy policy: [Host the text above and provide URL]
 - [ ] Content rating: Answer all "No" → Everyone
 - [ ] Target audience: 18+

@@ -11,6 +11,7 @@ This guide walks you through setting up Simple Wiki for internal testing on Goog
 **Cost**: $25 one-time Google Play Console developer fee
 
 **Timeline**:
+
 - Setup: 1-2 hours
 - Google validation: 24-48 hours
 - Total: 2-3 days until voice commands work
@@ -60,9 +61,10 @@ Play Console requires several mandatory declarations before you can upload an AP
 Since the app accesses personal wiki data over Tailscale:
 
 1. Go to **App content** → **Privacy policy**
-2. Enter privacy policy URL or create a simple one:
+1. Enter privacy policy URL or create a simple one:
 
-**Option A: Simple Privacy Policy**
+#### Option A: Simple Privacy Policy
+
 ```markdown
 # Simple Wiki Privacy Policy
 
@@ -77,7 +79,7 @@ Simple Wiki is a personal note-taking application.
 **Contact**: [Your email]
 
 Last updated: [Today's date]
-```
+```text
 
 Host this on GitHub Pages or paste it into a Google Doc (set to public).
 
@@ -132,7 +134,8 @@ Host this on GitHub Pages or paste it into a Google Doc (set to public).
 4. Fill in release details:
    - **Release name**: "1.1.0-voice - Initial Voice Assistant Release"
    - **Release notes**:
-   ```
+
+   ```text
    Initial release with Google Assistant voice integration.
 
    Features:
@@ -145,9 +148,10 @@ Host this on GitHub Pages or paste it into a Google Doc (set to public).
    - Tailscale connection required
    - Wiki backend must be accessible at https://wiki.monster-orfe.ts.net
    ```
-5. Click **Save**
-6. Click **Review release**
-7. Click **Start rollout to Internal testing**
+
+1. Click **Save**
+1. Click **Review release**
+1. Click **Start rollout to Internal testing**
 
 **Time**: 5-10 minutes
 
@@ -199,6 +203,7 @@ After uploading App Actions:
 3. **Timeline**: 24-48 hours typically
 
 You'll receive an email when:
+
 - ✅ App Actions approved
 - ❌ App Actions rejected (with reasons)
 
@@ -224,13 +229,14 @@ Once Google approves your App Actions (24-48 hours later):
 
 Try these commands:
 
-```
+```text
 "Hey Google, search my wiki for batteries"
 "Hey Google, search my wiki for arduino"
 "Hey Google, where are my CR2032 batteries?"
-```
+```text
 
 **Expected behavior**:
+
 1. Google Assistant activates
 2. Your app receives the query
 3. Wiki search executes over Tailscale
@@ -242,10 +248,12 @@ Try these commands:
 ### App Actions Not Working After 48 Hours
 
 **Check status**:
+
 1. Play Console → **App Actions** → Check status
 2. Look for rejection reasons
 
 **Common issues**:
+
 - `shortcuts.xml` validation errors
 - Missing required fields in manifest
 - Package name mismatch
@@ -255,22 +263,25 @@ Try these commands:
 ### Voice Commands Don't Trigger App
 
 **Possible causes**:
+
 1. **App Actions not approved yet**: Wait 24-48 hours
 2. **App not installed from Play Store**: Must use Play Store version, not sideloaded
 3. **Google Assistant not updated**: Update Google app
 4. **Query doesn't match intent**: Try exact phrase "search my wiki for batteries"
 
 **Debug**:
+
 ```bash
 # Check if app is registered
 adb shell dumpsys package com.github.brendanjerwin.simple_wiki | grep -A 5 "VoiceActionHandler"
-```
+```text
 
 ### "I couldn't reach the wiki" Error
 
 **Cause**: Tailscale not connected or backend not running
 
 **Fix**:
+
 1. Open Tailscale app → Ensure connected
 2. Test backend: `curl https://wiki.monster-orfe.ts.net`
 3. Check wiki server is running
@@ -280,6 +291,7 @@ adb shell dumpsys package com.github.brendanjerwin.simple_wiki | grep -A 5 "Voic
 **Cause**: Query doesn't match any wiki pages
 
 **Fix**:
+
 1. Test with known query: "batteries"
 2. Check wiki has content
 3. Verify search is working: `grpcurl -d '{"query":"batteries"}' wiki.monster-orfe.ts.net:443 api.v1.SearchService/SearchContent`
@@ -289,23 +301,27 @@ adb shell dumpsys package com.github.brendanjerwin.simple_wiki | grep -A 5 "Voic
 When you make changes:
 
 1. **Increment version** in `android/app/build.gradle`:
+
    ```gradle
    versionCode 3  // Increment by 1
    versionName "1.2.0"
    ```
 
-2. **Rebuild release APK**:
+1. **Rebuild release APK**:
+
    ```bash
    devbox run android:build:release
    ```
 
-3. **Upload new APK** to Play Console:
+1. **Upload new APK** to Play Console:
+
    - Testing → Internal testing → Create new release
    - Upload APK
    - Add release notes
    - Review and rollout
 
-4. **Wait for testers to update**:
+1. **Wait for testers to update**:
+
    - You'll get notification in Play Store
    - Update like any other app
 

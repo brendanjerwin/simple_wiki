@@ -45,14 +45,10 @@
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
 
+        <!-- App Actions shortcuts declaration -->
         <meta-data
             android:name="android.app.shortcuts"
             android:resource="@xml/shortcuts" />
-
-        <!-- App Actions capability declaration -->
-        <meta-data
-            android:name="com.google.android.actions"
-            android:resource="@xml/actions" />
     </application>
 
     <!-- Permissions -->
