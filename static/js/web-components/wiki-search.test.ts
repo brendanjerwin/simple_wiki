@@ -219,5 +219,33 @@ describe('WikiSearch', () => {
         expect(el.loading).to.be.false;
       });
     });
+
+    describe('when search fails', () => {
+      let stubPerformSearch: sinon.SinonStub;
+
+      beforeEach(async () => {
+        stubPerformSearch = sinon.stub(el, 'performSearch');
+        stubPerformSearch.rejects(new Error('Network error'));
+
+        searchInput.value = 'fail';
+        const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+        form.dispatchEvent(submitEvent);
+        await el.updateComplete;
+      });
+
+      afterEach(() => {
+        stubPerformSearch.restore();
+      });
+
+      it('should set error property', () => {
+        expect(el.error).to.equal('Network error');
+      });
+
+      it('should display error message', () => {
+        const errorDiv = el.shadowRoot?.querySelector('.error');
+        expect(errorDiv).to.exist;
+        expect(errorDiv?.textContent).to.equal('Network error');
+      });
+    });
   });
 });
