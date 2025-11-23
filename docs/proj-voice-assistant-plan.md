@@ -561,9 +561,9 @@ Phase 2 completed successfully on 2025-10-13.
 - buf.gen.yaml (added Kotlin/Android proto generation)
 - android/build.gradle (upgraded Kotlin to 2.1.0)
 - android/app/build.gradle (removed protobuf-gradle-plugin, documented buf usage)
-- .devbox_run_scripts/setup_android_sdk.sh (fixed SDK location to be local to repo)
-- .devbox_run_scripts/setup_android_env.sh (fixed ANDROID_HOME path)
-- .devbox_run_scripts/android_gradle.sh (fixed JAVA_HOME detection for Nix)
+- scripts/setup_android_sdk.sh (fixed SDK location to be local to repo)
+- scripts/setup_android_env.sh (fixed ANDROID_HOME path)
+- scripts/android_gradle.sh (fixed JAVA_HOME detection for Nix)
 - devbox.json (added Android tests to lint:everything)
 
 **Technical Decisions:**

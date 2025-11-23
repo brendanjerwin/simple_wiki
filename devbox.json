@@ -29,7 +29,7 @@
     ],
     "scripts": {
       "fe:test": [
-        "./.devbox_run_scripts/run_fe_tests.sh $@"
+        "./scripts/run_fe_tests.sh $@"
       ],
       "fe:lint": [
         "cd static/js && bun install && bun run -- eslint . --ext .ts --max-warnings 0"
@@ -63,7 +63,7 @@
         "staticcheck $(go list ./... | grep -v /gen/)",
         "revive -config revive.toml ./...",
         "go test ./...",
-        "./.devbox_run_scripts/android_gradle.sh test",
+        "./scripts/android_gradle.sh test",
         "go run golang.org/x/tools/cmd/deadcode@latest . || true",
         "markdownlint --fix '**/*.md' --ignore vendor",
         "find android/app/src/main -name '*.xml' -type f -exec xmllint --noout {} \\;",
@@ -71,7 +71,7 @@
         "cd static/js && bun install && bun run build && bun run test && bun run lint"
       ],
       "build": [
-        "./.devbox_run_scripts/build.sh $@"
+        "./scripts/build.sh $@"
       ],
       "storybook": [
         "cd static/js && bun install && bun run storybook"
@@ -99,25 +99,25 @@
         "cd e2e & playwright codegen --browser=chromium http://localhost:8050/home"
       ],
       "deploy": [
-        "./.devbox_run_scripts/deploy.sh $@"
+        "./scripts/deploy.sh $@"
       ],
       "android:setup": [
-        "./.devbox_run_scripts/setup_android_sdk.sh"
+        "./scripts/setup_android_sdk.sh"
       ],
       "android:sync": [
-        "CAPACITOR_DEV=true ./.devbox_run_scripts/capacitor_sync.sh"
+        "CAPACITOR_DEV=true ./scripts/capacitor_sync.sh"
       ],
       "android:sync:prod": [
-        "./.devbox_run_scripts/capacitor_sync.sh"
+        "./scripts/capacitor_sync.sh"
       ],
       "android:build:debug": [
-        "./.devbox_run_scripts/android_gradle.sh assembleDebug"
+        "./scripts/android_gradle.sh assembleDebug"
       ],
       "android:build:release": [
-        "./.devbox_run_scripts/android_gradle.sh bundleRelease"
+        "./scripts/android_gradle.sh bundleRelease"
       ],
       "android:test": [
-        "./.devbox_run_scripts/android_gradle.sh test"
+        "./scripts/android_gradle.sh test"
       ],
       "android:install": [
         "adb install -r android/app/build/outputs/apk/debug/app-debug.apk"
