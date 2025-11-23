@@ -1,4 +1,4 @@
-import { expect } from '@open-wc/testing';
+import { expect, waitUntil } from '@open-wc/testing';
 import sinon from 'sinon';
 import './wiki-search.js';
 import type { SearchResult } from '../gen/api/v1/search_pb.js';
@@ -230,6 +230,8 @@ describe('WikiSearch', () => {
         searchInput.value = 'fail';
         const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
         form.dispatchEvent(submitEvent);
+
+        await waitUntil(() => el.error === 'Network error', 'Error should be set');
         await el.updateComplete;
       });
 
