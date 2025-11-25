@@ -158,7 +158,7 @@ Prevents the Android SDK setup script from prompting for user input.
 - **Set to `1`**: Skip interactive prompts (for CI/CD)
 - **Unset**: Allow interactive mode (for local setup)
 
-Used in `.devbox_run_scripts/setup_android_sdk.sh`.
+Used in `scripts/setup_android_sdk.sh`.
 
 ### `CI`
 
@@ -167,7 +167,7 @@ Controls Gradle daemon behavior for build performance vs reproducibility.
 - **Set to `true`**: Disables Gradle daemon (for CI/CD)
 - **Unset or `false`**: Enables Gradle daemon (for local development)
 
-Used in `.devbox_run_scripts/setup_android_env.sh`.
+Used in `scripts/setup_android_env.sh`.
 
 ## Testing
 

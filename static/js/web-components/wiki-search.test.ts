@@ -1,4 +1,4 @@
-import { expect } from '@open-wc/testing';
+import { expect, waitUntil } from '@open-wc/testing';
 import sinon from 'sinon';
 import './wiki-search.js';
 import type { SearchResult } from '../gen/api/v1/search_pb.js';
@@ -217,6 +217,36 @@ describe('WikiSearch', () => {
 
       it('should not perform search', () => {
         expect(el.loading).to.be.false;
+      });
+    });
+
+    describe('when search fails', () => {
+      let stubPerformSearch: sinon.SinonStub;
+
+      beforeEach(async () => {
+        stubPerformSearch = sinon.stub(el, 'performSearch');
+        stubPerformSearch.rejects(new Error('Network error'));
+
+        searchInput.value = 'fail';
+        const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+        form.dispatchEvent(submitEvent);
+
+        await waitUntil(() => el.error === 'Network error', 'Error should be set');
+        await el.updateComplete;
+      });
+
+      afterEach(() => {
+        stubPerformSearch.restore();
+      });
+
+      it('should set error property', () => {
+        expect(el.error).to.equal('Network error');
+      });
+
+      it('should display error message', () => {
+        const errorDiv = el.shadowRoot?.querySelector('.error');
+        expect(errorDiv).to.exist;
+        expect(errorDiv?.textContent).to.equal('Network error');
       });
     });
   });
