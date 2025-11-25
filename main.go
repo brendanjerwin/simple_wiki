@@ -87,7 +87,6 @@ func setupServer(c *cli.Context) (*http.Server, error) {
 		logger,
 	)
 	if err != nil {
-		logger.Error("Failed to initialize site: %v", err)
 		return nil, err
 	}
 
