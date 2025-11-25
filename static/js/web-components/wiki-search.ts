@@ -94,6 +94,16 @@ export class WikiSearch extends LitElement {
     button:hover {
         background-color: #9da5ab;
     }
+
+    .error {
+        color: #721c24;
+        background-color: #f8d7da;
+        border: 1px solid #f5c6cb;
+        padding: 10px;
+        margin: 10px 0;
+        border-radius: 5px;
+        text-align: center;
+    }
     `;
 
   static override properties = {
@@ -187,6 +197,7 @@ export class WikiSearch extends LitElement {
                 <input type="search" name="search" placeholder="Search..." required @focus="${this.handleSearchInputFocused}">
                 <button type="submit"><i class="fa-solid fa-search"></i></button>
             </form>
+            ${this.error ? html`<div class="error">${this.error}</div>` : ''}
             <wiki-search-results 
                 .results="${this.results}" 
                 .open="${this.results.length > 0}" 
