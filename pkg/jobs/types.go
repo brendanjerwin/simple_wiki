@@ -42,3 +42,39 @@ func (m *MockJob) Execute() error {
 func (m *MockJob) GetName() string {
 	return m.Name
 }
+
+// BlockingMockJob is a test job that blocks until Release is called.
+type BlockingMockJob struct {
+	Name     string
+	Err      error
+	release  chan struct{}
+	released bool
+}
+
+// NewBlockingMockJob creates a new BlockingMockJob.
+func NewBlockingMockJob(name string) *BlockingMockJob {
+	return &BlockingMockJob{
+		Name:    name,
+		release: make(chan struct{}),
+	}
+}
+
+// Execute implements the Job interface for BlockingMockJob.
+// It blocks until Release is called.
+func (m *BlockingMockJob) Execute() error {
+	<-m.release
+	return m.Err
+}
+
+// GetName implements the Job interface for BlockingMockJob.
+func (m *BlockingMockJob) GetName() string {
+	return m.Name
+}
+
+// Release unblocks the Execute method. Safe to call multiple times.
+func (m *BlockingMockJob) Release() {
+	if !m.released {
+		m.released = true
+		close(m.release)
+	}
+}

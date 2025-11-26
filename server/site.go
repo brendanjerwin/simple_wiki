@@ -57,6 +57,7 @@ type Site struct {
 	MarkdownRenderer        IRenderMarkdownToHTML
 	IndexCoordinator        *index.IndexCoordinator
 	JobQueueCoordinator     *jobs.JobQueueCoordinator
+	CronScheduler           *jobs.CronScheduler
 	FrontmatterIndexQueryer frontmatter.IQueryFrontmatterIndex
 	BleveIndexQueryer       bleve.IQueryBleveIndex
 	MigrationApplicator     lazy.FrontmatterMigrationApplicator
@@ -157,6 +158,20 @@ func (s *Site) InitializeIndexing() error {
 	// Create new job queue coordinator and index coordinator
 	s.JobQueueCoordinator = jobs.NewJobQueueCoordinator(s.Logger)
 	s.IndexCoordinator = index.NewIndexCoordinator(s.JobQueueCoordinator, frontmatterIndex, bleveIndex)
+
+	// Create and start cron scheduler for periodic jobs
+	s.CronScheduler = jobs.NewCronScheduler(s.Logger)
+	s.CronScheduler.Start()
+
+	// Schedule inventory normalization job to run hourly at minute 0
+	// This creates pages for items listed in inventory.items that don't have their own pages,
+	// and generates an audit report of any inventory anomalies
+	_, err = ScheduleInventoryNormalization(s.CronScheduler, s, "0 0 * * * *")
+	if err != nil {
+		s.Logger.Warn("Failed to schedule inventory normalization job: %v", err)
+	} else {
+		s.Logger.Info("Inventory normalization job scheduled to run hourly")
+	}
 
 	// Start file shadowing scan
 	scanJob := eager.NewFileShadowingMigrationScanJob(s.PathToData, s.JobQueueCoordinator, s)
@@ -325,15 +340,7 @@ func (s *Site) readOrInitPage(requestedIdentifier string, req *http.Request) (*w
 
 		// Add inventory structure for inv_item template
 		if tmpl == "inv_item" {
-			// Ensure inventory exists and has items array
-			if _, exists := fm["inventory"]; !exists {
-				fm["inventory"] = make(map[string]any)
-			}
-			if inventory, ok := fm["inventory"].(map[string]any); ok {
-				if _, exists := inventory["items"]; !exists {
-					inventory["items"] = []string{}
-				}
-			}
+			EnsureInventoryFrontmatterStructure(fm)
 		}
 
 		// Convert frontmatter to TOML

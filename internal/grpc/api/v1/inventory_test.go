@@ -1,0 +1,513 @@
+//revive:disable:dot-imports
+package v1_test
+
+import (
+	"context"
+	"os"
+	"time"
+
+	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
+	"github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
+	"github.com/jcelliott/lumber"
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+	"google.golang.org/grpc/codes"
+)
+
+var _ = Describe("InventoryManagementService", func() {
+	var (
+		server *v1.Server
+		ctx    context.Context
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+	})
+
+	Describe("CreateInventoryItem", func() {
+		var (
+			req                      *apiv1.CreateInventoryItemRequest
+			resp                     *apiv1.CreateInventoryItemResponse
+			err                      error
+			mockPageReaderMutator    *MockPageReaderMutator
+			mockFrontmatterIndexQueryer *MockFrontmatterIndexQueryer
+		)
+
+		BeforeEach(func() {
+			req = &apiv1.CreateInventoryItemRequest{
+				ItemIdentifier: "test-item",
+			}
+			mockPageReaderMutator = &MockPageReaderMutator{}
+			mockFrontmatterIndexQueryer = &MockFrontmatterIndexQueryer{}
+		})
+
+		JustBeforeEach(func() {
+			server = v1.NewServer(
+				"commit",
+				time.Now(),
+				mockPageReaderMutator,
+				nil,
+				nil,
+				lumber.NewConsoleLogger(lumber.WARN),
+				nil,
+				nil,
+				mockFrontmatterIndexQueryer,
+			)
+			resp, err = server.CreateInventoryItem(ctx, req)
+		})
+
+		When("the PageReaderMutator is not configured", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator = nil
+			})
+
+			It("should return an internal error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.Internal, "PageReaderMutator not available"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("the item_identifier is empty", func() {
+			BeforeEach(func() {
+				req.ItemIdentifier = ""
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "item_identifier is required"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("the page already exists", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Frontmatter = map[string]any{"title": "Existing Item"}
+			})
+
+			It("should not return a gRPC error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return success=false", func() {
+				Expect(resp.Success).To(BeFalse())
+			})
+
+			It("should return an error message", func() {
+				Expect(resp.Error).To(ContainSubstring("already exists"))
+			})
+		})
+
+		When("creating a new item without container", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = os.ErrNotExist
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return success", func() {
+				Expect(resp.Success).To(BeTrue())
+			})
+
+			It("should return the munged identifier", func() {
+				Expect(resp.ItemIdentifier).To(Equal("test_item"))
+			})
+
+			It("should return a summary", func() {
+				Expect(resp.Summary).To(ContainSubstring("Created"))
+			})
+
+			It("should write the frontmatter", func() {
+				Expect(mockPageReaderMutator.WrittenFrontmatter).NotTo(BeNil())
+				Expect(mockPageReaderMutator.WrittenFrontmatter["identifier"]).To(Equal("test_item"))
+			})
+
+			It("should write the markdown", func() {
+				Expect(mockPageReaderMutator.WrittenMarkdown).NotTo(BeEmpty())
+			})
+		})
+
+		When("creating a new item with a container", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = os.ErrNotExist
+				req.Container = "my-drawer"
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return success", func() {
+				Expect(resp.Success).To(BeTrue())
+			})
+
+			It("should include container in the summary", func() {
+				Expect(resp.Summary).To(ContainSubstring("my_drawer"))
+			})
+
+			It("should set the inventory.container in frontmatter", func() {
+				inventory, ok := mockPageReaderMutator.WrittenFrontmatter["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue(), "expected inventory to be map[string]any")
+				Expect(inventory["container"]).To(Equal("my_drawer"))
+			})
+		})
+
+		When("creating a new item with a custom title", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = os.ErrNotExist
+				req.Title = "My Custom Title"
+			})
+
+			It("should use the custom title", func() {
+				Expect(mockPageReaderMutator.WrittenFrontmatter["title"]).To(Equal("My Custom Title"))
+			})
+		})
+	})
+
+	Describe("MoveInventoryItem", func() {
+		var (
+			req                      *apiv1.MoveInventoryItemRequest
+			resp                     *apiv1.MoveInventoryItemResponse
+			err                      error
+			mockPageReaderMutator    *MockPageReaderMutator
+		)
+
+		BeforeEach(func() {
+			req = &apiv1.MoveInventoryItemRequest{
+				ItemIdentifier: "test-item",
+				NewContainer:   "new-container",
+			}
+			mockPageReaderMutator = &MockPageReaderMutator{}
+		})
+
+		JustBeforeEach(func() {
+			server = v1.NewServer(
+				"commit",
+				time.Now(),
+				mockPageReaderMutator,
+				nil,
+				nil,
+				lumber.NewConsoleLogger(lumber.WARN),
+				nil,
+				nil,
+				nil,
+			)
+			resp, err = server.MoveInventoryItem(ctx, req)
+		})
+
+		When("the item does not exist", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = os.ErrNotExist
+			})
+
+			It("should not return a gRPC error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return success=false", func() {
+				Expect(resp.Success).To(BeFalse())
+			})
+
+			It("should return an error message", func() {
+				Expect(resp.Error).To(ContainSubstring("not found"))
+			})
+		})
+
+		When("moving an item to a new container", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Frontmatter = map[string]any{
+					"title": "Test Item",
+					"inventory": map[string]any{
+						"container": "old_container",
+						"items":     []string{},
+					},
+				}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return success", func() {
+				Expect(resp.Success).To(BeTrue())
+			})
+
+			It("should return the previous container", func() {
+				Expect(resp.PreviousContainer).To(Equal("old_container"))
+			})
+
+			It("should return the new container", func() {
+				Expect(resp.NewContainer).To(Equal("new_container"))
+			})
+
+			It("should update the frontmatter", func() {
+				inventory, ok := mockPageReaderMutator.WrittenFrontmatter["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue(), "expected inventory to be map[string]any")
+				Expect(inventory["container"]).To(Equal("new_container"))
+			})
+		})
+
+		When("removing an item from container (making root-level)", func() {
+			BeforeEach(func() {
+				req.NewContainer = ""
+				mockPageReaderMutator.Frontmatter = map[string]any{
+					"title": "Test Item",
+					"inventory": map[string]any{
+						"container": "old_container",
+					},
+				}
+			})
+
+			It("should return success", func() {
+				Expect(resp.Success).To(BeTrue())
+			})
+
+			It("should remove the container from frontmatter", func() {
+				inventory, ok := mockPageReaderMutator.WrittenFrontmatter["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue(), "expected inventory to be map[string]any")
+				_, hasContainer := inventory["container"]
+				Expect(hasContainer).To(BeFalse())
+			})
+		})
+
+		When("item is already in the target container", func() {
+			BeforeEach(func() {
+				req.NewContainer = "same_container"
+				mockPageReaderMutator.Frontmatter = map[string]any{
+					"title": "Test Item",
+					"inventory": map[string]any{
+						"container": "same_container",
+					},
+				}
+			})
+
+			It("should return success", func() {
+				Expect(resp.Success).To(BeTrue())
+			})
+
+			It("should indicate item is already there", func() {
+				Expect(resp.Summary).To(ContainSubstring("already"))
+			})
+		})
+	})
+
+	Describe("ListContainerContents", func() {
+		var (
+			req                         *apiv1.ListContainerContentsRequest
+			resp                        *apiv1.ListContainerContentsResponse
+			err                         error
+			mockFrontmatterIndexQueryer *FlexibleMockFrontmatterIndexQueryer
+		)
+
+		BeforeEach(func() {
+			req = &apiv1.ListContainerContentsRequest{
+				ContainerIdentifier: "test-container",
+			}
+			mockFrontmatterIndexQueryer = &FlexibleMockFrontmatterIndexQueryer{
+				ExactMatchResults: make(map[string][]string),
+				GetValueResults:   make(map[string]map[string]string),
+			}
+		})
+
+		JustBeforeEach(func() {
+			server = v1.NewServer(
+				"commit",
+				time.Now(),
+				nil,
+				nil,
+				nil,
+				lumber.NewConsoleLogger(lumber.WARN),
+				nil,
+				nil,
+				mockFrontmatterIndexQueryer,
+			)
+			resp, err = server.ListContainerContents(ctx, req)
+		})
+
+		When("the FrontmatterIndexQueryer is not configured", func() {
+			BeforeEach(func() {
+				mockFrontmatterIndexQueryer = nil
+			})
+
+			It("should return an internal error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.Internal, "FrontmatterIndexQueryer not available"))
+			})
+		})
+
+		When("container_identifier is empty", func() {
+			BeforeEach(func() {
+				req.ContainerIdentifier = ""
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "container_identifier is required"))
+			})
+		})
+
+		When("container has items", func() {
+			BeforeEach(func() {
+				mockFrontmatterIndexQueryer.ExactMatchResults["inventory.container:test_container"] = []string{
+					"item_1",
+					"item_2",
+				}
+				mockFrontmatterIndexQueryer.GetValueResults["item_1"] = map[string]string{"title": "Item One"}
+				mockFrontmatterIndexQueryer.GetValueResults["item_2"] = map[string]string{"title": "Item Two"}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return the items", func() {
+				Expect(resp.Items).To(HaveLen(2))
+			})
+
+			It("should include item details", func() {
+				identifiers := []string{resp.Items[0].Identifier, resp.Items[1].Identifier}
+				Expect(identifiers).To(ContainElements("item_1", "item_2"))
+			})
+
+			It("should return total count", func() {
+				Expect(resp.TotalCount).To(Equal(int32(2)))
+			})
+		})
+
+		When("container is empty", func() {
+			It("should return empty items list", func() {
+				Expect(resp.Items).To(BeEmpty())
+			})
+
+			It("should return summary indicating empty", func() {
+				Expect(resp.Summary).To(ContainSubstring("empty"))
+			})
+		})
+	})
+
+	Describe("FindItemLocation", func() {
+		var (
+			req                   *apiv1.FindItemLocationRequest
+			resp                  *apiv1.FindItemLocationResponse
+			err                   error
+			mockPageReaderMutator *MockPageReaderMutator
+		)
+
+		BeforeEach(func() {
+			req = &apiv1.FindItemLocationRequest{
+				ItemIdentifier: "test-item",
+			}
+			mockPageReaderMutator = &MockPageReaderMutator{}
+		})
+
+		JustBeforeEach(func() {
+			server = v1.NewServer(
+				"commit",
+				time.Now(),
+				mockPageReaderMutator,
+				nil,
+				nil,
+				lumber.NewConsoleLogger(lumber.WARN),
+				nil,
+				nil,
+				nil,
+			)
+			resp, err = server.FindItemLocation(ctx, req)
+		})
+
+		When("the item does not exist", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = os.ErrNotExist
+			})
+
+			It("should not return a gRPC error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return found=false", func() {
+				Expect(resp.Found).To(BeFalse())
+			})
+		})
+
+		When("item exists with a container", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Frontmatter = map[string]any{
+					"title": "Test Item",
+					"inventory": map[string]any{
+						"container": "my_drawer",
+					},
+				}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return found=true", func() {
+				Expect(resp.Found).To(BeTrue())
+			})
+
+			It("should return the container", func() {
+				Expect(resp.Locations).To(HaveLen(1))
+				Expect(resp.Locations[0].Container).To(Equal("my_drawer"))
+			})
+		})
+
+		When("item exists without a container", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Frontmatter = map[string]any{
+					"title": "Test Item",
+				}
+			})
+
+			It("should return found=true", func() {
+				Expect(resp.Found).To(BeTrue())
+			})
+
+			It("should return empty locations", func() {
+				Expect(resp.Locations).To(BeEmpty())
+			})
+
+			It("should indicate root-level in summary", func() {
+				Expect(resp.Summary).To(ContainSubstring("root-level"))
+			})
+		})
+	})
+})
+
+// FlexibleMockFrontmatterIndexQueryer is a more flexible mock for testing
+type FlexibleMockFrontmatterIndexQueryer struct {
+	ExactMatchResults map[string][]string     // key:value -> results
+	GetValueResults   map[string]map[string]string // identifier -> keypath -> value
+}
+
+func (m *FlexibleMockFrontmatterIndexQueryer) QueryExactMatch(dottedKeyPath wikipage.DottedKeyPath, value wikipage.Value) []wikipage.PageIdentifier {
+	if m == nil || m.ExactMatchResults == nil {
+		return nil
+	}
+	key := string(dottedKeyPath) + ":" + string(value)
+	return m.ExactMatchResults[key]
+}
+
+func (*FlexibleMockFrontmatterIndexQueryer) QueryKeyExistence(_ wikipage.DottedKeyPath) []wikipage.PageIdentifier {
+	return nil
+}
+
+func (*FlexibleMockFrontmatterIndexQueryer) QueryPrefixMatch(_ wikipage.DottedKeyPath, _ string) []wikipage.PageIdentifier {
+	return nil
+}
+
+func (m *FlexibleMockFrontmatterIndexQueryer) GetValue(identifier wikipage.PageIdentifier, dottedKeyPath wikipage.DottedKeyPath) wikipage.Value {
+	if m == nil || m.GetValueResults == nil {
+		return ""
+	}
+	if values, ok := m.GetValueResults[string(identifier)]; ok {
+		return wikipage.Value(values[string(dottedKeyPath)])
+	}
+	return ""
+}

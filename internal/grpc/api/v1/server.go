@@ -78,6 +78,7 @@ type Server struct {
 	apiv1.UnimplementedFrontmatterServer
 	apiv1.UnimplementedPageManagementServiceServer
 	apiv1.UnimplementedSearchServiceServer
+	apiv1.UnimplementedInventoryManagementServiceServer
 	Commit                  string
 	BuildTime               time.Time
 	PageReaderMutator       wikipage.PageReaderMutator
@@ -327,6 +328,7 @@ func (s *Server) RegisterWithServer(grpcServer *grpc.Server) {
 	apiv1.RegisterFrontmatterServer(grpcServer, s)
 	apiv1.RegisterPageManagementServiceServer(grpcServer, s)
 	apiv1.RegisterSearchServiceServer(grpcServer, s)
+	apiv1.RegisterInventoryManagementServiceServer(grpcServer, s)
 }
 
 // GetVersion implements the GetVersion RPC.

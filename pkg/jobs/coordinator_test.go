@@ -29,11 +29,16 @@ var _ = Describe("JobQueueCoordinator", func() {
 
 
 	Describe("when enqueueing a job", func() {
-		var mockJob *jobs.MockJob
+		var blockingJob *jobs.BlockingMockJob
 
 		BeforeEach(func() {
-			mockJob = &jobs.MockJob{Name: "TestQueue"}
-			coordinator.EnqueueJob(mockJob)
+			blockingJob = jobs.NewBlockingMockJob("TestQueue")
+			coordinator.EnqueueJob(blockingJob)
+		})
+
+		AfterEach(func() {
+			// Always release the job to prevent goroutine leaks
+			blockingJob.Release()
 		})
 
 		It("should increase jobs remaining", func() {
@@ -53,7 +58,10 @@ var _ = Describe("JobQueueCoordinator", func() {
 
 		Describe("when the job completes", func() {
 			BeforeEach(func() {
-				// Allow job to complete by waiting briefly
+				// Release the job to let it complete
+				blockingJob.Release()
+
+				// Wait for job to complete
 				Eventually(func() int32 {
 					return coordinator.GetQueueStats("TestQueue").JobsRemaining
 				}).Should(Equal(int32(0)))

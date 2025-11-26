@@ -19,6 +19,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.27.2
 	github.com/onsi/gomega v1.38.2
 	github.com/pelletier/go-toml/v2 v2.2.4
+	github.com/robfig/cron/v3 v3.0.1
 	github.com/schollz/versionedtext v1.0.0
 	github.com/stoewer/go-strcase v1.3.1
 	github.com/yuin/goldmark v1.7.13
@@ -77,7 +78,6 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/mschoch/smat v0.2.0 // indirect
 	github.com/philhofer/fwd v1.0.0 // indirect
-	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/rs/cors v1.7.0 // indirect
 	github.com/sergi/go-diff v1.4.0 // indirect
 	github.com/steveyen/gtreap v0.1.0 // indirect
