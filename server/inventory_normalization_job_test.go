@@ -796,4 +796,154 @@ var _ = Describe("InventoryNormalizationJob", func() {
 			})
 		})
 	})
+
+	Describe("createMissingItemPages", func() {
+		BeforeEach(func() {
+			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger, nil)
+		})
+
+		When("page creation fails", func() {
+			var (
+				createdPages []string
+				anomalies    []InventoryAnomaly
+			)
+
+			BeforeEach(func() {
+				// Set up a container with items
+				mockDeps.pages["tool_box"] = &mockPageData{
+					frontmatter: map[string]any{
+						"title": "Tool Box",
+						"inventory": map[string]any{
+							"items": []any{"failing_item"},
+						},
+					},
+				}
+
+				// Override the WriteFrontMatter to fail
+				failingDeps := &mockNormalizationDepsWithFailure{
+					mockNormalizationDeps: mockDeps,
+					writeError:            os.ErrPermission,
+				}
+				job = NewInventoryNormalizationJob(failingDeps, mockFmIndex, logger, nil)
+
+				createdPages, anomalies = job.createMissingItemPages([]string{"tool_box"})
+			})
+
+			It("should return no created pages", func() {
+				Expect(createdPages).To(BeEmpty())
+			})
+
+			It("should return page_creation_failed anomaly", func() {
+				Expect(anomalies).To(HaveLen(1))
+				Expect(anomalies[0].Type).To(Equal("page_creation_failed"))
+			})
+		})
+	})
+
+	Describe("detectCircularReferenceAnomalies", func() {
+		BeforeEach(func() {
+			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger, nil)
+		})
+
+		When("there are circular references", func() {
+			var anomalies []InventoryAnomaly
+
+			BeforeEach(func() {
+				// A -> B -> A (circular)
+				mockFmIndex.data["container_a"] = map[string]string{"inventory.container": "container_b"}
+				mockFmIndex.data["container_b"] = map[string]string{"inventory.container": "container_a"}
+
+				anomalies = job.detectCircularReferenceAnomalies([]string{"container_a", "container_b"})
+			})
+
+			It("should detect anomalies", func() {
+				Expect(anomalies).NotTo(BeEmpty())
+			})
+
+			It("should have circular_reference type", func() {
+				Expect(anomalies[0].Type).To(Equal("circular_reference"))
+			})
+
+			It("should have error severity", func() {
+				Expect(anomalies[0].Severity).To(Equal("error"))
+			})
+		})
+	})
+
+	Describe("buildItemContainerMap", func() {
+		BeforeEach(func() {
+			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger, nil)
+		})
+
+		When("items are in containers from both sources", func() {
+			var itemContainers map[string]map[string]bool
+
+			BeforeEach(func() {
+				// Item in drawer via inventory.container reference
+				mockFmIndex.QueryExactMatchFunc = func(key, value string) []string {
+					if key == "inventory.container" && value == "drawer" {
+						return []string{"item_a"}
+					}
+					return nil
+				}
+
+				// Item in drawer via items array
+				mockDeps.pages["drawer"] = &mockPageData{
+					frontmatter: map[string]any{
+						"inventory": map[string]any{
+							"items": []any{"item_b"},
+						},
+					},
+				}
+
+				itemContainers = job.buildItemContainerMap([]string{"drawer"})
+			})
+
+			It("should include items from both sources", func() {
+				Expect(itemContainers).To(HaveKey("item_a"))
+				Expect(itemContainers).To(HaveKey("item_b"))
+			})
+		})
+	})
+
+	Describe("detectOrphanedItems", func() {
+		BeforeEach(func() {
+			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger, nil)
+		})
+
+		When("item has empty container reference", func() {
+			var anomalies []InventoryAnomaly
+
+			BeforeEach(func() {
+				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
+					if key == "inventory.container" {
+						return []string{"item_with_empty_container"}
+					}
+					return []string{}
+				}
+				mockFmIndex.data["item_with_empty_container"] = map[string]string{
+					"inventory.container": "",
+				}
+
+				anomalies = job.detectOrphanedItems()
+			})
+
+			It("should not detect orphan for empty container", func() {
+				Expect(anomalies).To(BeEmpty())
+			})
+		})
+	})
 })
+
+// mockNormalizationDepsWithFailure is a mock that can simulate write failures.
+type mockNormalizationDepsWithFailure struct {
+	*mockNormalizationDeps
+	writeError error
+}
+
+func (m *mockNormalizationDepsWithFailure) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
+	if m.writeError != nil {
+		return m.writeError
+	}
+	return m.mockNormalizationDeps.WriteFrontMatter(id, fm)
+}

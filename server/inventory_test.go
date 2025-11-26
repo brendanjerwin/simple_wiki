@@ -207,6 +207,31 @@ var _ = Describe("inventory.go", func() {
 		})
 	})
 
+	Describe("buildInventoryItemPageText edge cases", func() {
+		When("frontmatter bytes end with a newline already", func() {
+			var (
+				pageText string
+				err      error
+			)
+
+			BeforeEach(func() {
+				// Create frontmatter that ends with newline when marshaled
+				fm := map[string]any{
+					"key": "value",
+				}
+				pageText, err = buildInventoryItemPageText(fm)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should produce valid page text", func() {
+				Expect(pageText).To(ContainSubstring("+++"))
+			})
+		})
+	})
+
 	Describe("buildInventoryItemPageText", func() {
 		When("given valid frontmatter", func() {
 			var (
