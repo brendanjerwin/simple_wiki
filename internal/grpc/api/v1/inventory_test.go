@@ -389,6 +389,86 @@ var _ = Describe("InventoryManagementService", func() {
 				Expect(resp.Summary).To(ContainSubstring("into container"))
 			})
 		})
+
+		When("moving item between containers with existing items lists", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.FrontmatterByID = map[string]map[string]any{
+					"test_item": {
+						"title": "Test Item",
+						"inventory": map[string]any{
+							"container": "old_container",
+						},
+					},
+					"old_container": {
+						"title": "Old Container",
+						"inventory": map[string]any{
+							"items": []any{"test_item", "other_item"},
+						},
+					},
+					"new_container": {
+						"title": "New Container",
+						"inventory": map[string]any{
+							"items": []any{"existing_item"},
+						},
+					},
+				}
+			})
+
+			It("should remove the item from old container's items list", func() {
+				oldContainerFm := mockPageReaderMutator.WrittenFrontmatterByID["old_container"]
+				Expect(oldContainerFm).NotTo(BeNil())
+				inv, ok := oldContainerFm["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue())
+				items, ok := inv["items"].([]string)
+				Expect(ok).To(BeTrue())
+				Expect(items).NotTo(ContainElement("test_item"))
+				Expect(items).To(ContainElement("other_item"))
+			})
+
+			It("should add the item to new container's items list", func() {
+				newContainerFm := mockPageReaderMutator.WrittenFrontmatterByID["new_container"]
+				Expect(newContainerFm).NotTo(BeNil())
+				inv, ok := newContainerFm["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue())
+				items, ok := inv["items"].([]string)
+				Expect(ok).To(BeTrue())
+				Expect(items).To(ContainElement("test_item"))
+				Expect(items).To(ContainElement("existing_item"))
+			})
+		})
+
+		When("moving item to container that doesn't have items list yet", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.FrontmatterByID = map[string]map[string]any{
+					"test_item": {
+						"title": "Test Item",
+						"inventory": map[string]any{
+							"container": "old_container",
+						},
+					},
+					"old_container": {
+						"title": "Old Container",
+						"inventory": map[string]any{
+							"items": []any{"test_item"},
+						},
+					},
+					"new_container": {
+						"title": "New Container",
+						"inventory": map[string]any{}, // No items list
+					},
+				}
+			})
+
+			It("should create items list in new container", func() {
+				newContainerFm := mockPageReaderMutator.WrittenFrontmatterByID["new_container"]
+				Expect(newContainerFm).NotTo(BeNil())
+				inv, ok := newContainerFm["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue())
+				items, ok := inv["items"].([]string)
+				Expect(ok).To(BeTrue())
+				Expect(items).To(ContainElement("test_item"))
+			})
+		})
 	})
 
 	Describe("ListContainerContents", func() {
@@ -479,6 +559,90 @@ var _ = Describe("InventoryManagementService", func() {
 
 			It("should return summary indicating empty", func() {
 				Expect(resp.Summary).To(ContainSubstring("empty"))
+			})
+		})
+
+		When("container has items in inventory.items array but not indexed yet", func() {
+			var mockPageReaderMutator *MockPageReaderMutator
+
+			BeforeEach(func() {
+				// Item not in index yet (no inventory.container set)
+				mockFrontmatterIndexQueryer.ExactMatchResults["inventory.container:test_container"] = []string{}
+				mockPageReaderMutator = &MockPageReaderMutator{
+					FrontmatterByID: map[string]map[string]any{
+						"test_container": {
+							"title": "Test Container",
+							"inventory": map[string]any{
+								"items": []any{"unindexed_item"},
+							},
+						},
+					},
+				}
+			})
+
+			JustBeforeEach(func() {
+				server = v1.NewServer(
+					"commit",
+					time.Now(),
+					mockPageReaderMutator,
+					nil,
+					nil,
+					lumber.NewConsoleLogger(lumber.WARN),
+					nil,
+					nil,
+					mockFrontmatterIndexQueryer,
+				)
+				resp, err = server.ListContainerContents(ctx, req)
+			})
+
+			It("should include items from inventory.items array", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.Items).To(HaveLen(1))
+				Expect(resp.Items[0].Identifier).To(Equal("unindexed_item"))
+			})
+		})
+
+		When("container has items from both sources (deduplication)", func() {
+			var mockPageReaderMutator *MockPageReaderMutator
+
+			BeforeEach(func() {
+				// Same item appears in both index and inventory.items array
+				mockFrontmatterIndexQueryer.ExactMatchResults["inventory.container:test_container"] = []string{"shared_item"}
+				mockPageReaderMutator = &MockPageReaderMutator{
+					FrontmatterByID: map[string]map[string]any{
+						"test_container": {
+							"title": "Test Container",
+							"inventory": map[string]any{
+								"items": []any{"shared_item", "items_only"},
+							},
+						},
+					},
+				}
+			})
+
+			JustBeforeEach(func() {
+				server = v1.NewServer(
+					"commit",
+					time.Now(),
+					mockPageReaderMutator,
+					nil,
+					nil,
+					lumber.NewConsoleLogger(lumber.WARN),
+					nil,
+					nil,
+					mockFrontmatterIndexQueryer,
+				)
+				resp, err = server.ListContainerContents(ctx, req)
+			})
+
+			It("should deduplicate items from both sources", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.Items).To(HaveLen(2))
+				identifiers := []string{}
+				for _, item := range resp.Items {
+					identifiers = append(identifiers, item.Identifier)
+				}
+				Expect(identifiers).To(ContainElements("shared_item", "items_only"))
 			})
 		})
 	})

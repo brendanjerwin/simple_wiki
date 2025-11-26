@@ -109,21 +109,42 @@ func (j *InventoryNormalizationJob) Execute() error {
 
 	// Step 3: Detect anomalies
 	// 3a: Items in multiple containers
-	itemContainers := make(map[string][]string) // item -> containers
+	// We check two sources:
+	// - Items that have inventory.container set to a container
+	// - Items listed in containers' inventory.items arrays
+	itemContainers := make(map[string]map[string]bool) // item -> containers (set)
 	for _, containerID := range containers {
+		// Source 1: Items with inventory.container set to this container
 		items := j.getItemsWithContainerReference(containerID)
 		for _, itemID := range items {
-			itemContainers[itemID] = append(itemContainers[itemID], containerID)
+			if itemContainers[itemID] == nil {
+				itemContainers[itemID] = make(map[string]bool)
+			}
+			itemContainers[itemID][containerID] = true
+		}
+
+		// Source 2: Items listed in this container's inventory.items array
+		containerItems := j.getContainerItems(containerID)
+		for _, itemID := range containerItems {
+			if itemContainers[itemID] == nil {
+				itemContainers[itemID] = make(map[string]bool)
+			}
+			itemContainers[itemID][containerID] = true
 		}
 	}
 
-	for itemID, containers := range itemContainers {
-		if len(containers) > 1 {
+	for itemID, containerSet := range itemContainers {
+		if len(containerSet) > 1 {
+			containerList := make([]string, 0, len(containerSet))
+			for c := range containerSet {
+				containerList = append(containerList, c)
+			}
+			sort.Strings(containerList)
 			anomalies = append(anomalies, InventoryAnomaly{
 				Type:        "multiple_containers",
 				ItemID:      itemID,
-				Description: fmt.Sprintf("Item '%s' is referenced in multiple containers: %v", itemID, containers),
-				Containers:  containers,
+				Description: fmt.Sprintf("Item '%s' is referenced in multiple containers: %v", itemID, containerList),
+				Containers:  containerList,
 				Severity:    "warning",
 			})
 		}

@@ -188,6 +188,22 @@ func (s *Server) MoveInventoryItem(_ context.Context, req *apiv1.MoveInventoryIt
 		return nil, status.Errorf(codes.Internal, "failed to update item frontmatter: %v", err)
 	}
 
+	// Update the previous container's inventory.items list (remove the item)
+	if previousContainer != "" {
+		if err := s.removeItemFromContainerList(previousContainer, identifier); err != nil {
+			// Log but don't fail - the item's container reference is the authoritative source
+			s.Logger.Warn("failed to remove item from previous container's items list: %v", err)
+		}
+	}
+
+	// Update the new container's inventory.items list (add the item)
+	if newContainer != "" {
+		if err := s.addItemToContainerList(newContainer, identifier); err != nil {
+			// Log but don't fail - the item's container reference is the authoritative source
+			s.Logger.Warn("failed to add item to new container's items list: %v", err)
+		}
+	}
+
 	// Build summary
 	title := identifier
 	if t, ok := itemFm[titleKey].(string); ok && t != "" {
@@ -249,16 +265,48 @@ func (s *Server) ListContainerContents(_ context.Context, req *apiv1.ListContain
 }
 
 // listContainerContentsRecursive recursively lists items in a container.
+// It combines items from two sources:
+// 1. Items that have inventory.container set to this container
+// 2. Items listed in this container's inventory.items array
 //
 //revive:disable:flag-parameter
 func (s *Server) listContainerContentsRecursive(containerID string, recursive bool, maxDepth, currentDepth int) ([]*apiv1.InventoryItem, int) {
-	// Query for items that have this container as their inventory.container
-	itemIDs := s.FrontmatterIndexQueryer.QueryExactMatch("inventory.container", containerID)
+	// Use a set to avoid duplicate items
+	itemIDSet := make(map[string]bool)
+
+	// Source 1: Query for items that have this container as their inventory.container
+	itemIDsFromContainer := s.FrontmatterIndexQueryer.QueryExactMatch("inventory.container", containerID)
+	for _, itemID := range itemIDsFromContainer {
+		itemIDSet[itemID] = true
+	}
+
+	// Source 2: Get items from the container's inventory.items array
+	if s.PageReaderMutator != nil {
+		_, containerFm, err := s.PageReaderMutator.ReadFrontMatter(containerID)
+		if err == nil {
+			if inv, ok := containerFm[inventoryKey].(map[string]any); ok {
+				if itemsRaw, ok := inv[itemsKey]; ok {
+					switch items := itemsRaw.(type) {
+					case []string:
+						for _, itemID := range items {
+							itemIDSet[itemID] = true
+						}
+					case []any:
+						for _, item := range items {
+							if itemID, ok := item.(string); ok {
+								itemIDSet[itemID] = true
+							}
+						}
+					}
+				}
+			}
+		}
+	}
 
 	var items []*apiv1.InventoryItem
 	totalCount := 0
 
-	for _, itemID := range itemIDs {
+	for itemID := range itemIDSet {
 		item := &apiv1.InventoryItem{
 			Identifier: itemID,
 			Container:  containerID,
@@ -394,4 +442,97 @@ func buildInventoryItemMarkdown() string {
 	_, _ = builder.WriteString(newlineConst)
 	_, _ = builder.WriteString(inventoryItemMarkdownTemplate)
 	return builder.String()
+}
+
+// removeItemFromContainerList removes an item from a container's inventory.items list.
+func (s *Server) removeItemFromContainerList(containerID, itemID string) error {
+	_, containerFm, err := s.PageReaderMutator.ReadFrontMatter(containerID)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Container doesn't exist, nothing to update
+			return nil
+		}
+		return fmt.Errorf("failed to read container frontmatter: %w", err)
+	}
+
+	inv, ok := containerFm[inventoryKey].(map[string]any)
+	if !ok {
+		// No inventory section, nothing to update
+		return nil
+	}
+
+	itemsRaw, ok := inv[itemsKey]
+	if !ok {
+		// No items list, nothing to update
+		return nil
+	}
+
+	// Handle both []string and []any types
+	var newItems []string
+	switch items := itemsRaw.(type) {
+	case []string:
+		for _, item := range items {
+			if item != itemID {
+				newItems = append(newItems, item)
+			}
+		}
+	case []any:
+		for _, item := range items {
+			if itemStr, ok := item.(string); ok && itemStr != itemID {
+				newItems = append(newItems, itemStr)
+			}
+		}
+	default:
+		return nil // Unknown type, skip
+	}
+
+	inv[itemsKey] = newItems
+	return s.PageReaderMutator.WriteFrontMatter(containerID, containerFm)
+}
+
+// addItemToContainerList adds an item to a container's inventory.items list if not already present.
+func (s *Server) addItemToContainerList(containerID, itemID string) error {
+	_, containerFm, err := s.PageReaderMutator.ReadFrontMatter(containerID)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Container doesn't exist, can't update
+			return nil
+		}
+		return fmt.Errorf("failed to read container frontmatter: %w", err)
+	}
+
+	// Ensure inventory section exists
+	inv, ok := containerFm[inventoryKey].(map[string]any)
+	if !ok {
+		inv = make(map[string]any)
+		containerFm[inventoryKey] = inv
+	}
+
+	// Get or initialize items list
+	var items []string
+	switch itemsRaw := inv[itemsKey].(type) {
+	case []string:
+		items = itemsRaw
+	case []any:
+		for _, item := range itemsRaw {
+			if itemStr, ok := item.(string); ok {
+				items = append(items, itemStr)
+			}
+		}
+	default:
+		items = []string{}
+	}
+
+	// Check if item already exists
+	for _, item := range items {
+		if item == itemID {
+			return nil // Already in the list
+		}
+	}
+
+	// Add the item
+	items = append(items, itemID)
+	inv[itemsKey] = items
+
+	return s.PageReaderMutator.WriteFrontMatter(containerID, containerFm)
 }

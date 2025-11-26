@@ -133,13 +133,21 @@ type MockPageReaderMutator struct {
 	WriteErr           error
 	DeletedIdentifier  wikipage.PageIdentifier
 	DeleteErr          error
+	// WrittenFrontmatterByID tracks all writes per identifier for multi-page scenarios
+	WrittenFrontmatterByID map[string]map[string]any
 }
 
 func (m *MockPageReaderMutator) ReadFrontMatter(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
 	if m.Err != nil {
 		return "", nil, m.Err
 	}
-	// Check FrontmatterByID first for multi-page scenarios
+	// Check WrittenFrontmatterByID first to get the latest written value
+	if m.WrittenFrontmatterByID != nil {
+		if fm, ok := m.WrittenFrontmatterByID[string(identifier)]; ok {
+			return identifier, fm, nil
+		}
+	}
+	// Check FrontmatterByID for initial multi-page scenarios
 	if m.FrontmatterByID != nil {
 		if fm, ok := m.FrontmatterByID[string(identifier)]; ok {
 			return identifier, fm, nil
@@ -152,6 +160,16 @@ func (m *MockPageReaderMutator) ReadFrontMatter(identifier wikipage.PageIdentifi
 func (m *MockPageReaderMutator) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
 	m.WrittenIdentifier = identifier
 	m.WrittenFrontmatter = fm
+	// Track writes per identifier for multi-page scenarios
+	if m.WrittenFrontmatterByID == nil {
+		m.WrittenFrontmatterByID = make(map[string]map[string]any)
+	}
+	// Deep copy the frontmatter to avoid mutation issues
+	fmCopy := make(map[string]any)
+	for k, v := range fm {
+		fmCopy[k] = v
+	}
+	m.WrittenFrontmatterByID[string(identifier)] = fmCopy
 	return m.WriteErr
 }
 

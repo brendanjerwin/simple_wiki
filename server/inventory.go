@@ -58,7 +58,6 @@ func (s *Site) CreateInventoryItemPage(params InventoryItemParams) (*wikipage.Pa
 	if title == "" {
 		titleCaser := cases.Title(language.AmericanEnglish)
 		title = titleCaser.String(strcase.SnakeCase(identifier))
-		title = titleCaser.String(title) // Ensure title case
 	}
 	fm["title"] = title
 
