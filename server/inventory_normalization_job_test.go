@@ -582,4 +582,218 @@ var _ = Describe("InventoryNormalizationJob", func() {
 			Expect(result).To(Equal("Unknown Type"))
 		})
 	})
+
+	Describe("getContainerItems edge cases", func() {
+		BeforeEach(func() {
+			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger, nil)
+		})
+
+		When("container has items as []string type", func() {
+			var items []string
+
+			BeforeEach(func() {
+				mockDeps.pages["drawer"] = &mockPageData{
+					frontmatter: map[string]any{
+						"title": "My Drawer",
+						"inventory": map[string]any{
+							"items": []string{"screwdriver", "hammer"},
+						},
+					},
+				}
+
+				items = job.getContainerItems("drawer")
+			})
+
+			It("should return all items", func() {
+				Expect(items).To(HaveLen(2))
+				Expect(items).To(ContainElements("screwdriver", "hammer"))
+			})
+		})
+
+		When("container has no items key", func() {
+			var items []string
+
+			BeforeEach(func() {
+				mockDeps.pages["drawer"] = &mockPageData{
+					frontmatter: map[string]any{
+						"title": "My Drawer",
+						"inventory": map[string]any{
+							"container": "parent",
+						},
+					},
+				}
+
+				items = job.getContainerItems("drawer")
+			})
+
+			It("should return nil", func() {
+				Expect(items).To(BeNil())
+			})
+		})
+	})
+
+	Describe("getItemsWithContainerReference", func() {
+		BeforeEach(func() {
+			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger, nil)
+		})
+
+		When("items reference a container", func() {
+			var items []string
+
+			BeforeEach(func() {
+				mockFmIndex.QueryExactMatchFunc = func(key, value string) []string {
+					if key == "inventory.container" && value == "drawer" {
+						return []string{"screwdriver", "hammer"}
+					}
+					return nil
+				}
+
+				items = job.getItemsWithContainerReference("drawer")
+			})
+
+			It("should return items referencing the container", func() {
+				Expect(items).To(HaveLen(2))
+				Expect(items).To(ContainElements("screwdriver", "hammer"))
+			})
+		})
+	})
+
+	Describe("buildNormalizationItemMarkdown", func() {
+		When("called", func() {
+			var markdown string
+
+			BeforeEach(func() {
+				markdown = buildNormalizationItemMarkdown()
+			})
+
+			It("should contain the title template", func() {
+				Expect(markdown).To(ContainSubstring("# {{or .Title .Identifier}}"))
+			})
+
+			It("should contain the inventory template", func() {
+				Expect(markdown).To(ContainSubstring("Goes in:"))
+			})
+		})
+	})
+
+	Describe("mapKeysToSortedSlice", func() {
+		When("given an empty map", func() {
+			var result []string
+
+			BeforeEach(func() {
+				result = mapKeysToSortedSlice(map[string]bool{})
+			})
+
+			It("should return empty slice", func() {
+				Expect(result).To(BeEmpty())
+			})
+		})
+
+		When("given a map with keys", func() {
+			var result []string
+
+			BeforeEach(func() {
+				result = mapKeysToSortedSlice(map[string]bool{
+					"zebra":    true,
+					"apple":    true,
+					"mango":    true,
+				})
+			})
+
+			It("should return sorted keys", func() {
+				Expect(result).To(Equal([]string{"apple", "mango", "zebra"}))
+			})
+		})
+	})
+
+	Describe("GetName", func() {
+		BeforeEach(func() {
+			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger, nil)
+		})
+
+		When("called", func() {
+			var name string
+
+			BeforeEach(func() {
+				name = job.GetName()
+			})
+
+			It("should return the job name", func() {
+				Expect(name).To(Equal(InventoryNormalizationJobName))
+			})
+		})
+	})
+
+	Describe("generateAuditReport with error anomalies", func() {
+		BeforeEach(func() {
+			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger, nil)
+		})
+
+		When("there is an error severity anomaly", func() {
+			var err error
+
+			BeforeEach(func() {
+				anomalies := []InventoryAnomaly{
+					{
+						Type:        "circular_reference",
+						ItemID:      "looping_item",
+						Description: "Item 'looping_item' has circular reference",
+						Severity:    "error",
+					},
+				}
+
+				err = job.generateAuditReport(anomalies, []string{})
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should include error icon in report", func() {
+				report := mockDeps.writtenPages[AuditReportPage].markdown
+				Expect(report).To(ContainSubstring("❌"))
+			})
+		})
+	})
+
+	Describe("findCycle edge cases", func() {
+		BeforeEach(func() {
+			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger, nil)
+		})
+
+		When("there is no parent container", func() {
+			var cycle []string
+
+			BeforeEach(func() {
+				mockFmIndex.data["root_container"] = map[string]string{"inventory.container": ""}
+
+				visited := make(map[string]bool)
+				path := []string{}
+				cycle = job.findCycle("root_container", visited, path)
+			})
+
+			It("should return nil", func() {
+				Expect(cycle).To(BeNil())
+			})
+		})
+
+		When("item is visited but not in path", func() {
+			var cycle []string
+
+			BeforeEach(func() {
+				// Set up data
+				mockFmIndex.data["container_a"] = map[string]string{"inventory.container": "container_b"}
+				mockFmIndex.data["container_b"] = map[string]string{"inventory.container": ""}
+
+				// Pre-mark container_a as visited but don't include in path
+				visited := map[string]bool{"container_a": true}
+				path := []string{"container_b"}
+				cycle = job.findCycle("container_a", visited, path)
+			})
+
+			It("should return nil for non-cycle revisit", func() {
+				Expect(cycle).To(BeNil())
+			})
+		})
+	})
 })
