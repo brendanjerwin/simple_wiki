@@ -145,7 +145,8 @@ public object ContainerPathKt {
     @kotlin.jvm.JvmName("setPath")
     public operator fun com.google.protobuf.kotlin.DslList<kotlin.String, PathProxy>.set(index: kotlin.Int, value: kotlin.String) {
       _builder.setPath(index, value)
-    }/**
+    }
+    /**
      * ```
      * Full path from root to this item (if include_hierarchy was true).
      * Each entry is a container identifier, from outermost to innermost.
