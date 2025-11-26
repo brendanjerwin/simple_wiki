@@ -3,6 +3,7 @@ package v1_test
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"time"
 
@@ -296,6 +297,98 @@ var _ = Describe("InventoryManagementService", func() {
 				Expect(resp.Summary).To(ContainSubstring("already"))
 			})
 		})
+
+		When("item is already a root-level item and moving to root", func() {
+			BeforeEach(func() {
+				req.NewContainer = ""
+				mockPageReaderMutator.Frontmatter = map[string]any{
+					"title": "Test Item",
+					"inventory": map[string]any{},
+				}
+			})
+
+			It("should indicate item is already root-level", func() {
+				Expect(resp.Summary).To(ContainSubstring("root-level"))
+			})
+		})
+
+		When("the PageReaderMutator is not configured", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator = nil
+			})
+
+			It("should return an internal error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.Internal, "PageReaderMutator not available"))
+			})
+		})
+
+		When("the item_identifier is empty", func() {
+			BeforeEach(func() {
+				req.ItemIdentifier = ""
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "item_identifier is required"))
+			})
+		})
+
+		When("reading frontmatter fails with unexpected error", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = fmt.Errorf("database connection failed")
+			})
+
+			It("should return an internal error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+		})
+
+		When("writing frontmatter fails", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Frontmatter = map[string]any{
+					"title": "Test Item",
+					"inventory": map[string]any{
+						"container": "old_container",
+					},
+				}
+				mockPageReaderMutator.WriteErr = fmt.Errorf("write failed")
+			})
+
+			It("should return an internal error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+		})
+
+		When("moving item without existing inventory section", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Frontmatter = map[string]any{
+					"title": "Test Item",
+				}
+			})
+
+			It("should create inventory section and set container", func() {
+				Expect(resp.Success).To(BeTrue())
+				inventory, ok := mockPageReaderMutator.WrittenFrontmatter["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue())
+				Expect(inventory["container"]).To(Equal("new_container"))
+			})
+		})
+
+		When("moving root-level item into container", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Frontmatter = map[string]any{
+					"title": "Test Item",
+					"inventory": map[string]any{},
+				}
+			})
+
+			It("should return success", func() {
+				Expect(resp.Success).To(BeTrue())
+			})
+
+			It("should include 'into container' in summary", func() {
+				Expect(resp.Summary).To(ContainSubstring("into container"))
+			})
+		})
 	})
 
 	Describe("ListContainerContents", func() {
@@ -475,6 +568,75 @@ var _ = Describe("InventoryManagementService", func() {
 
 			It("should indicate root-level in summary", func() {
 				Expect(resp.Summary).To(ContainSubstring("root-level"))
+			})
+		})
+
+		When("requesting hierarchy for nested item", func() {
+			BeforeEach(func() {
+				req.IncludeHierarchy = true
+				// Set up a nested hierarchy: item -> drawer -> cabinet -> room
+				mockPageReaderMutator.FrontmatterByID = map[string]map[string]any{
+					"test_item": {
+						"title": "Test Item",
+						"inventory": map[string]any{
+							"container": "drawer",
+						},
+					},
+					"drawer": {
+						"title": "Drawer",
+						"inventory": map[string]any{
+							"container": "cabinet",
+						},
+					},
+					"cabinet": {
+						"title": "Cabinet",
+						"inventory": map[string]any{
+							"container": "room",
+						},
+					},
+					"room": {
+						"title": "Room",
+					},
+				}
+			})
+
+			It("should return the full hierarchy path", func() {
+				Expect(resp.Locations).To(HaveLen(1))
+				Expect(resp.Locations[0].Path).To(Equal([]string{"room", "cabinet", "drawer"}))
+			})
+
+			It("should include hierarchy in summary", func() {
+				Expect(resp.Summary).To(ContainSubstring("Full path"))
+			})
+		})
+
+		When("the PageReaderMutator is not configured", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator = nil
+			})
+
+			It("should return an internal error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.Internal, "PageReaderMutator not available"))
+			})
+		})
+
+		When("the item_identifier is empty", func() {
+			BeforeEach(func() {
+				req.ItemIdentifier = ""
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "item_identifier is required"))
+			})
+		})
+
+		When("reading frontmatter fails with unexpected error", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = fmt.Errorf("database connection failed")
+			})
+
+			It("should return an internal error", func() {
+				Expect(err).To(HaveOccurred())
 			})
 		})
 	})

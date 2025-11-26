@@ -178,6 +178,40 @@ var _ = Describe("CronScheduler", func() {
 			})
 		})
 	})
+
+	Describe("Entries", func() {
+		When("jobs are scheduled", func() {
+			var entryCount int
+
+			BeforeEach(func() {
+				job1 := &jobs.MockJob{Name: "job1"}
+				job2 := &jobs.MockJob{Name: "job2"}
+
+				_, err := scheduler.Schedule("@every 1h", job1)
+				Expect(err).NotTo(HaveOccurred())
+				_, err = scheduler.Schedule("@every 2h", job2)
+				Expect(err).NotTo(HaveOccurred())
+
+				entryCount = scheduler.Entries()
+			})
+
+			It("should return the count of scheduled entries", func() {
+				Expect(entryCount).To(Equal(2))
+			})
+		})
+
+		When("no jobs are scheduled", func() {
+			var entryCount int
+
+			BeforeEach(func() {
+				entryCount = scheduler.Entries()
+			})
+
+			It("should return zero", func() {
+				Expect(entryCount).To(Equal(0))
+			})
+		})
+	})
 })
 
 // countingJob is a test job that counts executions

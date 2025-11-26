@@ -124,6 +124,7 @@ func TestServer(t *testing.T) {
 // MockPageReaderMutator is a mock implementation of wikipage.PageReaderMutator for testing.
 type MockPageReaderMutator struct {
 	Frontmatter        wikipage.FrontMatter
+	FrontmatterByID    map[string]map[string]any // For multi-page scenarios
 	Markdown           wikipage.Markdown
 	Err                error
 	WrittenFrontmatter wikipage.FrontMatter
@@ -137,6 +138,13 @@ type MockPageReaderMutator struct {
 func (m *MockPageReaderMutator) ReadFrontMatter(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
 	if m.Err != nil {
 		return "", nil, m.Err
+	}
+	// Check FrontmatterByID first for multi-page scenarios
+	if m.FrontmatterByID != nil {
+		if fm, ok := m.FrontmatterByID[string(identifier)]; ok {
+			return identifier, fm, nil
+		}
+		return "", nil, os.ErrNotExist
 	}
 	return identifier, m.Frontmatter, nil
 }
