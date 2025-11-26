@@ -3,7 +3,7 @@ package v1_test
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"os"
 	"time"
 
@@ -334,7 +334,7 @@ var _ = Describe("InventoryManagementService", func() {
 
 		When("reading frontmatter fails with unexpected error", func() {
 			BeforeEach(func() {
-				mockPageReaderMutator.Err = fmt.Errorf("database connection failed")
+				mockPageReaderMutator.Err = errors.New("database connection failed")
 			})
 
 			It("should return an internal error", func() {
@@ -350,7 +350,7 @@ var _ = Describe("InventoryManagementService", func() {
 						"container": "old_container",
 					},
 				}
-				mockPageReaderMutator.WriteErr = fmt.Errorf("write failed")
+				mockPageReaderMutator.WriteErr = errors.New("write failed")
 			})
 
 			It("should return an internal error", func() {
@@ -796,7 +796,7 @@ var _ = Describe("InventoryManagementService", func() {
 
 		When("reading frontmatter fails with unexpected error", func() {
 			BeforeEach(func() {
-				mockPageReaderMutator.Err = fmt.Errorf("database connection failed")
+				mockPageReaderMutator.Err = errors.New("database connection failed")
 			})
 
 			It("should return an internal error", func() {

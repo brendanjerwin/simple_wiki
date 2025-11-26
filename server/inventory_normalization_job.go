@@ -75,48 +75,88 @@ type InventoryAnomaly struct {
 func (j *InventoryNormalizationJob) Execute() error {
 	j.logger.Info("Starting inventory normalization job")
 
-	var anomalies []InventoryAnomaly
-	var createdPages []string
-
-	// Step 1: Find all containers (pages that have inventory.items or are referenced as inventory.container)
+	// Step 1: Find all containers
 	containers := j.findAllContainers()
 	j.logger.Info("Found %d containers to scan", len(containers))
 
-	// Step 2: Scan each container for items that need pages created
+	// Step 2: Create missing pages and collect anomalies
+	createdPages, creationAnomalies := j.createMissingItemPages(containers)
+
+	// Step 3: Detect all anomalies
+	anomalies := creationAnomalies
+	anomalies = append(anomalies, j.detectMultipleContainerAnomalies(containers)...)
+	anomalies = append(anomalies, j.detectCircularReferenceAnomalies(containers)...)
+	anomalies = append(anomalies, j.detectOrphanedItems()...)
+
+	// Step 4: Generate audit report page
+	if err := j.generateAuditReport(anomalies, createdPages); err != nil {
+		j.logger.Error("Failed to generate audit report: %v", err)
+	}
+
+	j.logger.Info("Inventory normalization complete: %d pages created, %d anomalies detected", len(createdPages), len(anomalies))
+	return nil
+}
+
+// createMissingItemPages creates pages for items that don't have their own page yet.
+func (j *InventoryNormalizationJob) createMissingItemPages(containers []string) ([]string, []InventoryAnomaly) {
+	var createdPages []string
+	var anomalies []InventoryAnomaly
+
 	for _, containerID := range containers {
 		items := j.getContainerItems(containerID)
 		for _, itemID := range items {
-			// Check if the item has its own page
 			_, _, err := j.deps.ReadFrontMatter(itemID)
-			if err != nil {
-				// Page doesn't exist - create it
-				if err := j.createItemPage(itemID, containerID); err != nil {
-					j.logger.Error("Failed to create page for item %s: %v", itemID, err)
-					anomalies = append(anomalies, InventoryAnomaly{
-						Type:        "page_creation_failed",
-						ItemID:      itemID,
-						Description: fmt.Sprintf("Failed to create page for item '%s' in container '%s': %v", itemID, containerID, err),
-						Containers:  []string{containerID},
-						Severity:    "error",
-					})
-				} else {
-					createdPages = append(createdPages, itemID)
-					j.logger.Info("Created page for item: %s in container: %s", itemID, containerID)
-				}
+			if err == nil {
+				continue // Page exists
+			}
+
+			if createErr := j.createItemPage(itemID, containerID); createErr != nil {
+				j.logger.Error("Failed to create page for item %s: %v", itemID, createErr)
+				anomalies = append(anomalies, InventoryAnomaly{
+					Type:        "page_creation_failed",
+					ItemID:      itemID,
+					Description: fmt.Sprintf("Failed to create page for item '%s' in container '%s': %v", itemID, containerID, createErr),
+					Containers:  []string{containerID},
+					Severity:    "error",
+				})
+			} else {
+				createdPages = append(createdPages, itemID)
+				j.logger.Info("Created page for item: %s in container: %s", itemID, containerID)
 			}
 		}
 	}
 
-	// Step 3: Detect anomalies
-	// 3a: Items in multiple containers
-	// We check two sources:
-	// - Items that have inventory.container set to a container
-	// - Items listed in containers' inventory.items arrays
-	itemContainers := make(map[string]map[string]bool) // item -> containers (set)
+	return createdPages, anomalies
+}
+
+// detectMultipleContainerAnomalies finds items that appear in multiple containers.
+func (j *InventoryNormalizationJob) detectMultipleContainerAnomalies(containers []string) []InventoryAnomaly {
+	itemContainers := j.buildItemContainerMap(containers)
+
+	var anomalies []InventoryAnomaly
+	for itemID, containerSet := range itemContainers {
+		if len(containerSet) <= 1 {
+			continue
+		}
+		containerList := mapKeysToSortedSlice(containerSet)
+		anomalies = append(anomalies, InventoryAnomaly{
+			Type:        "multiple_containers",
+			ItemID:      itemID,
+			Description: fmt.Sprintf("Item '%s' is referenced in multiple containers: %v", itemID, containerList),
+			Containers:  containerList,
+			Severity:    "warning",
+		})
+	}
+	return anomalies
+}
+
+// buildItemContainerMap builds a map of item IDs to the containers they belong to.
+func (j *InventoryNormalizationJob) buildItemContainerMap(containers []string) map[string]map[string]bool {
+	itemContainers := make(map[string]map[string]bool)
+
 	for _, containerID := range containers {
 		// Source 1: Items with inventory.container set to this container
-		items := j.getItemsWithContainerReference(containerID)
-		for _, itemID := range items {
+		for _, itemID := range j.getItemsWithContainerReference(containerID) {
 			if itemContainers[itemID] == nil {
 				itemContainers[itemID] = make(map[string]bool)
 			}
@@ -124,8 +164,7 @@ func (j *InventoryNormalizationJob) Execute() error {
 		}
 
 		// Source 2: Items listed in this container's inventory.items array
-		containerItems := j.getContainerItems(containerID)
-		for _, itemID := range containerItems {
+		for _, itemID := range j.getContainerItems(containerID) {
 			if itemContainers[itemID] == nil {
 				itemContainers[itemID] = make(map[string]bool)
 			}
@@ -133,25 +172,23 @@ func (j *InventoryNormalizationJob) Execute() error {
 		}
 	}
 
-	for itemID, containerSet := range itemContainers {
-		if len(containerSet) > 1 {
-			containerList := make([]string, 0, len(containerSet))
-			for c := range containerSet {
-				containerList = append(containerList, c)
-			}
-			sort.Strings(containerList)
-			anomalies = append(anomalies, InventoryAnomaly{
-				Type:        "multiple_containers",
-				ItemID:      itemID,
-				Description: fmt.Sprintf("Item '%s' is referenced in multiple containers: %v", itemID, containerList),
-				Containers:  containerList,
-				Severity:    "warning",
-			})
-		}
-	}
+	return itemContainers
+}
 
-	// 3b: Circular references
+// mapKeysToSortedSlice converts map keys to a sorted slice.
+func mapKeysToSortedSlice(m map[string]bool) []string {
+	result := make([]string, 0, len(m))
+	for k := range m {
+		result = append(result, k)
+	}
+	sort.Strings(result)
+	return result
+}
+
+// detectCircularReferenceAnomalies wraps detectCircularReferences for the Execute flow.
+func (j *InventoryNormalizationJob) detectCircularReferenceAnomalies(containers []string) []InventoryAnomaly {
 	circularRefs := j.detectCircularReferences(containers)
+	anomalies := make([]InventoryAnomaly, 0, len(circularRefs))
 	for _, ref := range circularRefs {
 		anomalies = append(anomalies, InventoryAnomaly{
 			Type:        "circular_reference",
@@ -161,33 +198,32 @@ func (j *InventoryNormalizationJob) Execute() error {
 			Severity:    "error",
 		})
 	}
+	return anomalies
+}
 
-	// 3c: Orphaned items (have inventory.container set but container doesn't exist)
+// detectOrphanedItems finds items that reference non-existent containers.
+func (j *InventoryNormalizationJob) detectOrphanedItems() []InventoryAnomaly {
+	var anomalies []InventoryAnomaly
+
 	allItemsWithContainer := j.fmIndex.QueryKeyExistence(inventoryContainerKeyPath)
 	for _, itemID := range allItemsWithContainer {
 		containerRef := j.fmIndex.GetValue(itemID, inventoryContainerKeyPath)
-		if containerRef != "" {
-			// Check if container page exists
-			_, _, err := j.deps.ReadFrontMatter(containerRef)
-			if err != nil {
-				anomalies = append(anomalies, InventoryAnomaly{
-					Type:        "orphan",
-					ItemID:      itemID,
-					Description: fmt.Sprintf("Item '%s' references non-existent container '%s'", itemID, containerRef),
-					Containers:  []string{containerRef},
-					Severity:    "warning",
-				})
-			}
+		if containerRef == "" {
+			continue
+		}
+		_, _, err := j.deps.ReadFrontMatter(containerRef)
+		if err != nil {
+			anomalies = append(anomalies, InventoryAnomaly{
+				Type:        "orphan",
+				ItemID:      itemID,
+				Description: fmt.Sprintf("Item '%s' references non-existent container '%s'", itemID, containerRef),
+				Containers:  []string{containerRef},
+				Severity:    "warning",
+			})
 		}
 	}
 
-	// Step 4: Generate audit report page
-	if err := j.generateAuditReport(anomalies, createdPages); err != nil {
-		j.logger.Error("Failed to generate audit report: %v", err)
-	}
-
-	j.logger.Info("Inventory normalization complete: %d pages created, %d anomalies detected", len(createdPages), len(anomalies))
-	return nil
+	return anomalies
 }
 
 // GetName returns the job name.

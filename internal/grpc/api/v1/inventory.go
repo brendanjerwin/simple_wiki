@@ -126,98 +126,35 @@ func (s *Server) MoveInventoryItem(_ context.Context, req *apiv1.MoveInventoryIt
 	}
 
 	identifier := wikiidentifiers.MungeIdentifier(req.ItemIdentifier)
-	newContainer := ""
-	if req.NewContainer != "" {
-		newContainer = wikiidentifiers.MungeIdentifier(req.NewContainer)
-	}
+	newContainer := mungeOptionalContainer(req.NewContainer)
 
 	// Read the item's current frontmatter
 	_, itemFm, err := s.PageReaderMutator.ReadFrontMatter(identifier)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return &apiv1.MoveInventoryItemResponse{
-				Success: false,
-				Error:   fmt.Sprintf("item not found: %s", identifier),
-				Summary: fmt.Sprintf("Could not find item '%s'.", identifier),
-			}, nil
-		}
-		return nil, status.Errorf(codes.Internal, "failed to read item frontmatter: %v", err)
+		return handleMoveItemReadError(err, identifier)
 	}
 
-	// Get the previous container
-	previousContainer := ""
-	if inv, ok := itemFm[inventoryKey].(map[string]any); ok {
-		if cont, ok := inv[containerKey].(string); ok {
-			previousContainer = cont
-		}
-	}
+	previousContainer := getContainerFromFrontmatter(itemFm)
 
 	// If the item is already in the target container, return success
 	if previousContainer == newContainer {
-		summary := fmt.Sprintf("Item '%s' is already ", identifier)
-		if newContainer == "" {
-			summary += "a root-level item."
-		} else {
-			summary += fmt.Sprintf("in container '%s'.", newContainer)
-		}
-		return &apiv1.MoveInventoryItemResponse{
-			Success:           true,
-			PreviousContainer: previousContainer,
-			NewContainer:      newContainer,
-			Summary:           summary,
-		}, nil
+		return buildAlreadyInContainerResponse(identifier, previousContainer, newContainer), nil
 	}
 
 	// Update the item's inventory.container
-	if itemFm[inventoryKey] == nil {
-		itemFm[inventoryKey] = make(map[string]any)
-	}
-	inv, ok := itemFm[inventoryKey].(map[string]any)
-	if !ok {
-		inv = make(map[string]any)
-		itemFm[inventoryKey] = inv
-	}
-	if newContainer == "" {
-		delete(inv, containerKey)
-	} else {
-		inv[containerKey] = newContainer
-	}
+	updateItemContainer(itemFm, newContainer)
 
 	// Write the updated item frontmatter
 	if err := s.PageReaderMutator.WriteFrontMatter(identifier, itemFm); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to update item frontmatter: %v", err)
 	}
 
-	// Update the previous container's inventory.items list (remove the item)
-	if previousContainer != "" {
-		if err := s.removeItemFromContainerList(previousContainer, identifier); err != nil {
-			// Log but don't fail - the item's container reference is the authoritative source
-			s.Logger.Warn("failed to remove item from previous container's items list: %v", err)
-		}
-	}
+	// Update container item lists
+	s.updateContainerItemLists(previousContainer, newContainer, identifier)
 
-	// Update the new container's inventory.items list (add the item)
-	if newContainer != "" {
-		if err := s.addItemToContainerList(newContainer, identifier); err != nil {
-			// Log but don't fail - the item's container reference is the authoritative source
-			s.Logger.Warn("failed to add item to new container's items list: %v", err)
-		}
-	}
-
-	// Build summary
-	title := identifier
-	if t, ok := itemFm[titleKey].(string); ok && t != "" {
-		title = t
-	}
-
-	var summary string
-	if previousContainer == "" && newContainer != "" {
-		summary = fmt.Sprintf("Moved '%s' into container '%s'.", title, newContainer)
-	} else if previousContainer != "" && newContainer == "" {
-		summary = fmt.Sprintf("Removed '%s' from container '%s' (now a root-level item).", title, previousContainer)
-	} else {
-		summary = fmt.Sprintf("Moved '%s' from '%s' to '%s'.", title, previousContainer, newContainer)
-	}
+	// Build and return response
+	title := getItemTitle(itemFm, identifier)
+	summary := buildMoveSummary(title, previousContainer, newContainer)
 
 	return &apiv1.MoveInventoryItemResponse{
 		Success:           true,
@@ -225,6 +162,105 @@ func (s *Server) MoveInventoryItem(_ context.Context, req *apiv1.MoveInventoryIt
 		NewContainer:      newContainer,
 		Summary:           summary,
 	}, nil
+}
+
+// mungeOptionalContainer munges a container identifier if non-empty.
+func mungeOptionalContainer(container string) string {
+	if container == "" {
+		return ""
+	}
+	return wikiidentifiers.MungeIdentifier(container)
+}
+
+// handleMoveItemReadError handles errors when reading item frontmatter for move.
+func handleMoveItemReadError(err error, identifier string) (*apiv1.MoveInventoryItemResponse, error) {
+	if os.IsNotExist(err) {
+		return &apiv1.MoveInventoryItemResponse{
+			Success: false,
+			Error:   fmt.Sprintf("item not found: %s", identifier),
+			Summary: fmt.Sprintf("Could not find item '%s'.", identifier),
+		}, nil
+	}
+	return nil, status.Errorf(codes.Internal, "failed to read item frontmatter: %v", err)
+}
+
+// getContainerFromFrontmatter extracts the container value from frontmatter.
+func getContainerFromFrontmatter(fm map[string]any) string {
+	inv, ok := fm[inventoryKey].(map[string]any)
+	if !ok {
+		return ""
+	}
+	cont, ok := inv[containerKey].(string)
+	if !ok {
+		return ""
+	}
+	return cont
+}
+
+// buildAlreadyInContainerResponse builds a response when item is already in target container.
+func buildAlreadyInContainerResponse(identifier, previousContainer, newContainer string) *apiv1.MoveInventoryItemResponse {
+	summary := fmt.Sprintf("Item '%s' is already ", identifier)
+	if newContainer == "" {
+		summary += "a root-level item."
+	} else {
+		summary += fmt.Sprintf("in container '%s'.", newContainer)
+	}
+	return &apiv1.MoveInventoryItemResponse{
+		Success:           true,
+		PreviousContainer: previousContainer,
+		NewContainer:      newContainer,
+		Summary:           summary,
+	}
+}
+
+// updateItemContainer updates the inventory.container in frontmatter.
+func updateItemContainer(fm map[string]any, newContainer string) {
+	if fm[inventoryKey] == nil {
+		fm[inventoryKey] = make(map[string]any)
+	}
+	inv, ok := fm[inventoryKey].(map[string]any)
+	if !ok {
+		inv = make(map[string]any)
+		fm[inventoryKey] = inv
+	}
+	if newContainer == "" {
+		delete(inv, containerKey)
+	} else {
+		inv[containerKey] = newContainer
+	}
+}
+
+// updateContainerItemLists updates the inventory.items lists on containers after a move.
+func (s *Server) updateContainerItemLists(previousContainer, newContainer, identifier string) {
+	if previousContainer != "" {
+		if err := s.removeItemFromContainerList(previousContainer, identifier); err != nil {
+			s.Logger.Warn("failed to remove item from previous container's items list: %v", err)
+		}
+	}
+	if newContainer != "" {
+		if err := s.addItemToContainerList(newContainer, identifier); err != nil {
+			s.Logger.Warn("failed to add item to new container's items list: %v", err)
+		}
+	}
+}
+
+// getItemTitle extracts the title from frontmatter or returns the identifier as fallback.
+func getItemTitle(fm map[string]any, identifier string) string {
+	if t, ok := fm[titleKey].(string); ok && t != "" {
+		return t
+	}
+	return identifier
+}
+
+// buildMoveSummary builds a human-readable summary of a move operation.
+func buildMoveSummary(title, previousContainer, newContainer string) string {
+	if previousContainer == "" && newContainer != "" {
+		return fmt.Sprintf("Moved '%s' into container '%s'.", title, newContainer)
+	}
+	if previousContainer != "" && newContainer == "" {
+		return fmt.Sprintf("Removed '%s' from container '%s' (now a root-level item).", title, previousContainer)
+	}
+	return fmt.Sprintf("Moved '%s' from '%s' to '%s'.", title, previousContainer, newContainer)
 }
 
 // ListContainerContents implements the ListContainerContents RPC.
@@ -271,58 +307,16 @@ func (s *Server) ListContainerContents(_ context.Context, req *apiv1.ListContain
 //
 //revive:disable:flag-parameter
 func (s *Server) listContainerContentsRecursive(containerID string, recursive bool, maxDepth, currentDepth int) ([]*apiv1.InventoryItem, int) {
-	// Use a set to avoid duplicate items
-	itemIDSet := make(map[string]bool)
-
-	// Source 1: Query for items that have this container as their inventory.container
-	itemIDsFromContainer := s.FrontmatterIndexQueryer.QueryExactMatch("inventory.container", containerID)
-	for _, itemID := range itemIDsFromContainer {
-		itemIDSet[itemID] = true
-	}
-
-	// Source 2: Get items from the container's inventory.items array
-	if s.PageReaderMutator != nil {
-		_, containerFm, err := s.PageReaderMutator.ReadFrontMatter(containerID)
-		if err == nil {
-			if inv, ok := containerFm[inventoryKey].(map[string]any); ok {
-				if itemsRaw, ok := inv[itemsKey]; ok {
-					switch items := itemsRaw.(type) {
-					case []string:
-						for _, itemID := range items {
-							itemIDSet[itemID] = true
-						}
-					case []any:
-						for _, item := range items {
-							if itemID, ok := item.(string); ok {
-								itemIDSet[itemID] = true
-							}
-						}
-					}
-				}
-			}
-		}
-	}
+	itemIDSet := s.collectContainerItemIDs(containerID)
 
 	var items []*apiv1.InventoryItem
 	totalCount := 0
 
 	for itemID := range itemIDSet {
-		item := &apiv1.InventoryItem{
-			Identifier: itemID,
-			Container:  containerID,
-		}
-
-		// Get the title
-		if title := s.FrontmatterIndexQueryer.GetValue(itemID, titleKey); title != "" {
-			item.Title = title
-		}
-
-		// Check if this item is itself a container
-		isContainer := len(s.FrontmatterIndexQueryer.QueryExactMatch("inventory.container", itemID)) > 0
-		item.IsContainer = isContainer
+		item := s.buildInventoryItem(itemID, containerID)
 
 		// Recursively get nested items if requested
-		if recursive && isContainer && currentDepth < maxDepth {
+		if recursive && item.IsContainer && currentDepth < maxDepth {
 			nestedItems, nestedCount := s.listContainerContentsRecursive(itemID, true, maxDepth, currentDepth+1)
 			item.NestedItems = nestedItems
 			totalCount += nestedCount
@@ -333,6 +327,78 @@ func (s *Server) listContainerContentsRecursive(containerID string, recursive bo
 	}
 
 	return items, totalCount
+}
+
+// collectContainerItemIDs collects all item IDs associated with a container from both sources.
+func (s *Server) collectContainerItemIDs(containerID string) map[string]bool {
+	itemIDSet := make(map[string]bool)
+
+	// Source 1: Query for items that have this container as their inventory.container
+	itemIDsFromContainer := s.FrontmatterIndexQueryer.QueryExactMatch("inventory.container", containerID)
+	for _, itemID := range itemIDsFromContainer {
+		itemIDSet[itemID] = true
+	}
+
+	// Source 2: Get items from the container's inventory.items array
+	s.addItemsFromContainerArray(containerID, itemIDSet)
+
+	return itemIDSet
+}
+
+// addItemsFromContainerArray adds items from the container's inventory.items array to the set.
+func (s *Server) addItemsFromContainerArray(containerID string, itemIDSet map[string]bool) {
+	if s.PageReaderMutator == nil {
+		return
+	}
+
+	_, containerFm, err := s.PageReaderMutator.ReadFrontMatter(containerID)
+	if err != nil {
+		return
+	}
+
+	inv, ok := containerFm[inventoryKey].(map[string]any)
+	if !ok {
+		return
+	}
+
+	itemsRaw, ok := inv[itemsKey]
+	if !ok {
+		return
+	}
+
+	extractItemIDs(itemsRaw, itemIDSet)
+}
+
+// extractItemIDs extracts item IDs from a raw items value and adds them to the set.
+func extractItemIDs(itemsRaw any, itemIDSet map[string]bool) {
+	switch items := itemsRaw.(type) {
+	case []string:
+		for _, itemID := range items {
+			itemIDSet[itemID] = true
+		}
+	case []any:
+		for _, item := range items {
+			if itemID, ok := item.(string); ok {
+				itemIDSet[itemID] = true
+			}
+		}
+	}
+}
+
+// buildInventoryItem creates an InventoryItem with title and container status.
+func (s *Server) buildInventoryItem(itemID, containerID string) *apiv1.InventoryItem {
+	item := &apiv1.InventoryItem{
+		Identifier: itemID,
+		Container:  containerID,
+	}
+
+	if title := s.FrontmatterIndexQueryer.GetValue(itemID, titleKey); title != "" {
+		item.Title = title
+	}
+
+	item.IsContainer = len(s.FrontmatterIndexQueryer.QueryExactMatch("inventory.container", itemID)) > 0
+
+	return item
 }
 
 // FindItemLocation implements the FindItemLocation RPC.
