@@ -228,14 +228,40 @@ ul.pure-menu-list {
   z-index: 100;
 }
 
-/* Show nested sub-menu on hover */
+/* Show nested sub-menu on hover (desktop) */
 .pure-menu-children .pure-menu-has-children:hover > .pure-menu-children {
+  display: block;
+}
+
+/* Show nested sub-menu when toggled open (touch/click) */
+.pure-menu-children .pure-menu-has-children.submenu-open > .pure-menu-children {
   display: block;
 }
 
 /* Ensure proper stacking */
 .pure-menu-has-children {
   position: relative;
+}
+
+/* Mobile: position sub-menu below parent instead of to the right */
+@media (max-width: 600px) {
+  .pure-menu-children .pure-menu-children {
+    position: relative;
+    left: 0;
+    top: 0;
+    margin-left: 1em;
+    border: none;
+    box-shadow: none;
+    background: transparent;
+  }
+
+  .pure-menu-children .pure-menu-has-children > .pure-menu-link::after {
+    content: '\f078'; /* FontAwesome chevron-down */
+  }
+
+  .pure-menu-children .pure-menu-has-children.submenu-open > .pure-menu-link::after {
+    content: '\f077'; /* FontAwesome chevron-up */
+  }
 }
 
 /*---- Components ----*/

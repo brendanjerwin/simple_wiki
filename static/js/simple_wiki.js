@@ -242,8 +242,8 @@ function buildInventoryMenu(currentPage, frontmatter) {
 
     // Build the parent menu item with nested sub-menu
     var inventoryMenu = `
-        <li class="pure-menu-item pure-menu-has-children">
-            <a href="#" class="pure-menu-link"><i class="fa-solid fa-box-open"></i> Inventory</a>
+        <li class="pure-menu-item pure-menu-has-children" id="inventory-submenu">
+            <a href="#" class="pure-menu-link" id="inventory-submenu-trigger"><i class="fa-solid fa-box-open"></i> Inventory</a>
             <ul class="pure-menu-children">
                 ${subMenuItems.join('')}
             </ul>
@@ -253,9 +253,24 @@ function buildInventoryMenu(currentPage, frontmatter) {
     // Insert after utility section
     $("#utilityMenuSection").after(inventoryMenu);
 
+    // Set up click/tap toggle for sub-menu (touch device support)
+    $('#inventory-submenu-trigger').on('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        $('#inventory-submenu').toggleClass('submenu-open');
+    });
+
+    // Close sub-menu when clicking outside
+    $(document).on('click', function(e) {
+        if (!$(e.target).closest('#inventory-submenu').length) {
+            $('#inventory-submenu').removeClass('submenu-open');
+        }
+    });
+
     // Set up click handlers
     $('#inventory-find-item').on('click', function(e) {
         e.preventDefault();
+        $('#inventory-submenu').removeClass('submenu-open');
         var dialog = document.getElementById('inventory-find-dialog');
         if (dialog && typeof dialog.openDialog === 'function') {
             dialog.openDialog();
@@ -265,6 +280,7 @@ function buildInventoryMenu(currentPage, frontmatter) {
     if (isContainer) {
         $('#inventory-add-item').on('click', function(e) {
             e.preventDefault();
+            $('#inventory-submenu').removeClass('submenu-open');
             var dialog = document.getElementById('inventory-add-dialog');
             if (dialog && typeof dialog.openDialog === 'function') {
                 dialog.openDialog(currentPage);
@@ -275,6 +291,7 @@ function buildInventoryMenu(currentPage, frontmatter) {
     if (isItem) {
         $('#inventory-move-item').on('click', function(e) {
             e.preventDefault();
+            $('#inventory-submenu').removeClass('submenu-open');
             var dialog = document.getElementById('inventory-move-dialog');
             if (dialog && typeof dialog.openDialog === 'function') {
                 dialog.openDialog(currentPage, currentContainer);
