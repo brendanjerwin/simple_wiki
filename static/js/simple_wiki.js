@@ -212,8 +212,15 @@ function buildInventoryMenu(currentPage, frontmatter) {
     var isItem = inventory && typeof inventory.container === 'string' && inventory.container !== '';
     var currentContainer = (inventory && inventory.container) || '';
 
-    // Build menu items
+    // Build menu items as flat list with header
     var menuItems = [];
+
+    // Add section header
+    menuItems.push(`
+        <li class="pure-menu-item pure-menu-disabled">
+            <span class="pure-menu-link"><i class="fa-solid fa-box-open"></i> <strong>Inventory</strong></span>
+        </li>
+    `);
 
     // Always add Find Item
     menuItems.push(`
@@ -240,15 +247,8 @@ function buildInventoryMenu(currentPage, frontmatter) {
         `);
     }
 
-    // Insert menu
-    $("#utilityMenuSection").after(`
-        <li class="pure-menu-item pure-menu-has-children">
-            <span class="pure-menu-link"><i class="fa-solid fa-box-open"></i> Inventory</span>
-            <ul class="pure-menu-children">
-                ${menuItems.join('')}
-            </ul>
-        </li>
-    `);
+    // Insert flat menu items after utility section
+    $("#utilityMenuSection").after(menuItems.join(''));
 
     // Set up click handlers
     $('#inventory-find-item').on('click', function(e) {
