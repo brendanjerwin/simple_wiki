@@ -1,5 +1,5 @@
 import { html, css, LitElement, nothing } from 'lit';
-import { foundationCSS, dialogCSS, responsiveCSS, buttonCSS, inputCSS } from './shared-styles.js';
+import { sharedStyles, foundationCSS, dialogCSS, responsiveCSS, buttonCSS } from './shared-styles.js';
 import { inventoryActionService } from './inventory-action-service.js';
 
 interface FindResults {
@@ -20,7 +20,6 @@ export class InventoryFindItemDialog extends LitElement {
     dialogCSS,
     responsiveCSS,
     buttonCSS,
-    inputCSS,
     css`
       :host {
         position: fixed;
@@ -64,7 +63,6 @@ export class InventoryFindItemDialog extends LitElement {
         z-index: 1;
         animation: slideIn 0.2s ease-out;
         border-radius: 8px;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
       }
 
       @keyframes slideIn {
@@ -92,20 +90,6 @@ export class InventoryFindItemDialog extends LitElement {
           border-radius: 0;
           margin: 0;
         }
-      }
-
-      .header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 16px 20px;
-        border-bottom: 1px solid #e0e0e0;
-      }
-
-      .header h2 {
-        margin: 0;
-        font-size: 18px;
-        font-weight: 600;
       }
 
       .content {
@@ -167,10 +151,6 @@ export class InventoryFindItemDialog extends LitElement {
         gap: 8px;
       }
 
-      .anomaly-warning .icon {
-        font-size: 18px;
-      }
-
       .location-list {
         list-style: none;
         padding: 0;
@@ -213,7 +193,7 @@ export class InventoryFindItemDialog extends LitElement {
         color: #666;
       }
 
-      .not-found .icon {
+      .not-found .not-found-icon {
         font-size: 32px;
         margin-bottom: 12px;
       }
@@ -342,7 +322,7 @@ export class InventoryFindItemDialog extends LitElement {
     if (!this.results.found || this.results.locations.length === 0) {
       return html`
         <div class="not-found">
-          <div class="icon">📭</div>
+          <div class="not-found-icon"><i class="fa-solid fa-inbox"></i></div>
           <div>Item "${this.searchQuery}" has no container assignment</div>
         </div>
       `;
@@ -358,7 +338,7 @@ export class InventoryFindItemDialog extends LitElement {
 
         ${isAnomaly ? html`
           <div class="anomaly-warning">
-            <span class="icon">⚠️</span>
+            <i class="fa-solid fa-triangle-exclamation"></i>
             <span>Anomaly: Item appears in multiple containers</span>
           </div>
         ` : nothing}
@@ -390,47 +370,47 @@ export class InventoryFindItemDialog extends LitElement {
 
   override render() {
     return html`
-      <div class="backdrop" @click=${this._handleBackdropClick}>
-        <div class="dialog" @click=${this._handleDialogClick}>
-          <div class="header">
-            <h2>Find Item</h2>
-          </div>
+      ${sharedStyles}
+      <div class="backdrop" @click=${this._handleBackdropClick}></div>
+      <div class="dialog system-font border-radius box-shadow" @click=${this._handleDialogClick}>
+        <div class="dialog-header">
+          <h2 class="dialog-title">Find Item</h2>
+        </div>
 
-          <div class="content">
-            ${this.error
-              ? html`<div class="error-message">${this.error}</div>`
-              : nothing}
+        <div class="content">
+          ${this.error
+            ? html`<div class="error-message">${this.error}</div>`
+            : nothing}
 
-            <div class="search-form">
-              <input
-                type="text"
-                name="searchQuery"
-                .value=${this.searchQuery}
-                @input=${this._handleSearchQueryInput}
-                @keydown=${this._handleSearchKeydown}
-                placeholder="Enter item identifier to search"
-                ?disabled=${this.loading}
-              />
-              <button
-                class="primary"
-                @click=${this._handleSearch}
-                ?disabled=${!this.canSearch}
-              >
-                ${this.loading ? 'Searching...' : 'Search'}
-              </button>
-            </div>
-
-            ${this._renderResults()}
-          </div>
-
-          <div class="footer">
+          <div class="search-form">
+            <input
+              type="text"
+              name="searchQuery"
+              .value=${this.searchQuery}
+              @input=${this._handleSearchQueryInput}
+              @keydown=${this._handleSearchKeydown}
+              placeholder="Enter item identifier to search"
+              ?disabled=${this.loading}
+            />
             <button
-              class="secondary"
-              @click=${this._handleClose}
+              class="button-base button-primary button-large border-radius-small"
+              @click=${this._handleSearch}
+              ?disabled=${!this.canSearch}
             >
-              Close
+              ${this.loading ? 'Searching...' : 'Search'}
             </button>
           </div>
+
+          ${this._renderResults()}
+        </div>
+
+        <div class="footer">
+          <button
+            class="button-base button-secondary button-large border-radius-small"
+            @click=${this._handleClose}
+          >
+            Close
+          </button>
         </div>
       </div>
     `;

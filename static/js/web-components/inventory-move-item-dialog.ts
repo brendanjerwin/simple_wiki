@@ -1,5 +1,5 @@
 import { html, css, LitElement } from 'lit';
-import { foundationCSS, dialogCSS, responsiveCSS, buttonCSS, inputCSS } from './shared-styles.js';
+import { sharedStyles, foundationCSS, dialogCSS, responsiveCSS, buttonCSS } from './shared-styles.js';
 import { inventoryActionService } from './inventory-action-service.js';
 
 /**
@@ -14,7 +14,6 @@ export class InventoryMoveItemDialog extends LitElement {
     dialogCSS,
     responsiveCSS,
     buttonCSS,
-    inputCSS,
     css`
       :host {
         position: fixed;
@@ -57,7 +56,6 @@ export class InventoryMoveItemDialog extends LitElement {
         z-index: 1;
         animation: slideIn 0.2s ease-out;
         border-radius: 8px;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
       }
 
       @keyframes slideIn {
@@ -84,20 +82,6 @@ export class InventoryMoveItemDialog extends LitElement {
           border-radius: 0;
           margin: 0;
         }
-      }
-
-      .header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 16px 20px;
-        border-bottom: 1px solid #e0e0e0;
-      }
-
-      .header h2 {
-        margin: 0;
-        font-size: 18px;
-        font-weight: 600;
       }
 
       .content {
@@ -282,74 +266,76 @@ export class InventoryMoveItemDialog extends LitElement {
 
   override render() {
     return html`
-      <div class="backdrop" @click=${this._handleBackdropClick}>
-        <div class="dialog" @click=${this._handleDialogClick}>
-          <div class="header">
-            <h2>Move Item</h2>
+      ${sharedStyles}
+      <div class="backdrop" @click=${this._handleBackdropClick}></div>
+      <div class="dialog system-font border-radius box-shadow" @click=${this._handleDialogClick}>
+        <div class="dialog-header">
+          <h2 class="dialog-title">Move Item</h2>
+        </div>
+
+        <div class="content">
+          ${this.error
+            ? html`<div class="error-message">${this.error}</div>`
+            : ''}
+
+          <div class="form-group">
+            <label for="itemIdentifier">Item</label>
+            <input
+              type="text"
+              id="itemIdentifier"
+              name="itemIdentifier"
+              .value=${this.itemIdentifier}
+              readonly
+            />
+            <div class="help-text">The item being moved</div>
           </div>
 
-          <div class="content">
-            ${this.error
-              ? html`<div class="error-message">${this.error}</div>`
-              : ''}
-
-            <div class="form-group">
-              <label for="itemIdentifier">Item</label>
-              <input
-                type="text"
-                id="itemIdentifier"
-                name="itemIdentifier"
-                .value=${this.itemIdentifier}
-                readonly
-              />
-              <div class="help-text">The item being moved</div>
-            </div>
-
-            <div class="form-group">
-              <label for="currentContainer">Current Location</label>
-              <input
-                type="text"
-                id="currentContainer"
-                name="currentContainer"
-                .value=${this.currentContainer}
-                readonly
-              />
-              <div class="help-text">Where the item is currently stored</div>
-            </div>
-
-            <div class="move-arrow">↓</div>
-
-            <div class="form-group">
-              <label for="newContainer">New Location *</label>
-              <input
-                type="text"
-                id="newContainer"
-                name="newContainer"
-                .value=${this.newContainer}
-                @input=${this._handleNewContainerInput}
-                placeholder="e.g., toolbox_garage"
-                ?disabled=${this.loading}
-              />
-              <div class="help-text">Container identifier to move the item to (required)</div>
-            </div>
+          <div class="form-group">
+            <label for="currentContainer">Current Location</label>
+            <input
+              type="text"
+              id="currentContainer"
+              name="currentContainer"
+              .value=${this.currentContainer}
+              readonly
+            />
+            <div class="help-text">Where the item is currently stored</div>
           </div>
 
-          <div class="footer">
-            <button
-              class="secondary"
-              @click=${this._handleCancel}
+          <div class="move-arrow">
+            <i class="fa-solid fa-arrow-down"></i>
+          </div>
+
+          <div class="form-group">
+            <label for="newContainer">New Location *</label>
+            <input
+              type="text"
+              id="newContainer"
+              name="newContainer"
+              .value=${this.newContainer}
+              @input=${this._handleNewContainerInput}
+              placeholder="e.g., toolbox_garage"
               ?disabled=${this.loading}
-            >
-              Cancel
-            </button>
-            <button
-              class="primary"
-              @click=${this._handleSubmit}
-              ?disabled=${!this.canSubmit}
-            >
-              ${this.loading ? 'Moving...' : 'Move Item'}
-            </button>
+            />
+            <div class="help-text">Container identifier to move the item to (required)</div>
           </div>
+        </div>
+
+        <div class="footer">
+          <button
+            class="button-base button-secondary button-large border-radius-small"
+            @click=${this._handleCancel}
+            ?disabled=${this.loading}
+          >
+            Cancel
+          </button>
+          <button
+            class="button-base button-primary button-large border-radius-small"
+            @click=${this._handleSubmit}
+            ?disabled=${!this.canSubmit}
+          >
+            ${this.loading ? 'Moving...' : 'Move Item'}
+          </button>
         </div>
       </div>
     `;

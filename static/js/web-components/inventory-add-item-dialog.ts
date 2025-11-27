@@ -1,5 +1,5 @@
 import { html, css, LitElement } from 'lit';
-import { foundationCSS, dialogCSS, responsiveCSS, buttonCSS, inputCSS } from './shared-styles.js';
+import { sharedStyles, foundationCSS, dialogCSS, responsiveCSS, buttonCSS } from './shared-styles.js';
 import { inventoryActionService } from './inventory-action-service.js';
 
 /**
@@ -14,7 +14,6 @@ export class InventoryAddItemDialog extends LitElement {
     dialogCSS,
     responsiveCSS,
     buttonCSS,
-    inputCSS,
     css`
       :host {
         position: fixed;
@@ -57,7 +56,6 @@ export class InventoryAddItemDialog extends LitElement {
         z-index: 1;
         animation: slideIn 0.2s ease-out;
         border-radius: 8px;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
       }
 
       @keyframes slideIn {
@@ -84,20 +82,6 @@ export class InventoryAddItemDialog extends LitElement {
           border-radius: 0;
           margin: 0;
         }
-      }
-
-      .header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 16px 20px;
-        border-bottom: 1px solid #e0e0e0;
-      }
-
-      .header h2 {
-        margin: 0;
-        font-size: 18px;
-        font-weight: 600;
       }
 
       .content {
@@ -278,74 +262,74 @@ export class InventoryAddItemDialog extends LitElement {
 
   override render() {
     return html`
-      <div class="backdrop" @click=${this._handleBackdropClick}>
-        <div class="dialog" @click=${this._handleDialogClick}>
-          <div class="header">
-            <h2>Add Item to Container</h2>
+      ${sharedStyles}
+      <div class="backdrop" @click=${this._handleBackdropClick}></div>
+      <div class="dialog system-font border-radius box-shadow" @click=${this._handleDialogClick}>
+        <div class="dialog-header">
+          <h2 class="dialog-title">Add Item to Container</h2>
+        </div>
+
+        <div class="content">
+          ${this.error
+            ? html`<div class="error-message">${this.error}</div>`
+            : ''}
+
+          <div class="form-group">
+            <label for="container">Container</label>
+            <input
+              type="text"
+              id="container"
+              name="container"
+              .value=${this.container}
+              readonly
+            />
+            <div class="help-text">The container this item will be added to</div>
           </div>
 
-          <div class="content">
-            ${this.error
-              ? html`<div class="error-message">${this.error}</div>`
-              : ''}
-
-            <div class="form-group">
-              <label for="container">Container</label>
-              <input
-                type="text"
-                id="container"
-                name="container"
-                .value=${this.container}
-                readonly
-              />
-              <div class="help-text">The container this item will be added to</div>
-            </div>
-
-            <div class="form-group">
-              <label for="itemIdentifier">Item Identifier *</label>
-              <input
-                type="text"
-                id="itemIdentifier"
-                name="itemIdentifier"
-                .value=${this.itemIdentifier}
-                @input=${this._handleItemIdentifierInput}
-                placeholder="e.g., screwdriver, hammer"
-                ?disabled=${this.loading}
-              />
-              <div class="help-text">Unique identifier for this item (required)</div>
-            </div>
-
-            <div class="form-group">
-              <label for="title">Title (optional)</label>
-              <input
-                type="text"
-                id="title"
-                name="title"
-                .value=${this.itemTitle}
-                @input=${this._handleTitleInput}
-                placeholder="e.g., Phillips Head Screwdriver"
-                ?disabled=${this.loading}
-              />
-              <div class="help-text">Human-readable name for display</div>
-            </div>
-          </div>
-
-          <div class="footer">
-            <button
-              class="secondary"
-              @click=${this._handleCancel}
+          <div class="form-group">
+            <label for="itemIdentifier">Item Identifier *</label>
+            <input
+              type="text"
+              id="itemIdentifier"
+              name="itemIdentifier"
+              .value=${this.itemIdentifier}
+              @input=${this._handleItemIdentifierInput}
+              placeholder="e.g., screwdriver, hammer"
               ?disabled=${this.loading}
-            >
-              Cancel
-            </button>
-            <button
-              class="primary"
-              @click=${this._handleSubmit}
-              ?disabled=${!this.canSubmit}
-            >
-              ${this.loading ? 'Adding...' : 'Add Item'}
-            </button>
+            />
+            <div class="help-text">Unique identifier for this item (required)</div>
           </div>
+
+          <div class="form-group">
+            <label for="title">Title (optional)</label>
+            <input
+              type="text"
+              id="title"
+              name="title"
+              .value=${this.itemTitle}
+              @input=${this._handleTitleInput}
+              placeholder="e.g., Phillips Head Screwdriver"
+              ?disabled=${this.loading}
+            />
+            <div class="help-text">Human-readable name for display</div>
+          </div>
+        </div>
+
+        <div class="footer">
+          <button
+            class="button-base button-secondary button-large border-radius-small"
+            @click=${this._handleCancel}
+            ?disabled=${this.loading}
+          >
+            Cancel
+          </button>
+          <button
+            class="button-base button-primary button-large border-radius-small"
+            @click=${this._handleSubmit}
+            ?disabled=${!this.canSubmit}
+          >
+            ${this.loading ? 'Adding...' : 'Add Item'}
+          </button>
         </div>
       </div>
     `;

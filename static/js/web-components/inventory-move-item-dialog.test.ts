@@ -154,7 +154,7 @@ describe('InventoryMoveItemDialog', () => {
       });
 
       it('should render dialog title', () => {
-        const title = el.shadowRoot?.querySelector('.header h2');
+        const title = el.shadowRoot?.querySelector('.dialog-title');
         expect(title?.textContent).to.contain('Move Item');
       });
 
@@ -176,12 +176,12 @@ describe('InventoryMoveItemDialog', () => {
       });
 
       it('should render cancel button', () => {
-        const cancelBtn = el.shadowRoot?.querySelector('button.secondary');
+        const cancelBtn = el.shadowRoot?.querySelector('.button-secondary');
         expect(cancelBtn?.textContent).to.contain('Cancel');
       });
 
       it('should render move button', () => {
-        const moveBtn = el.shadowRoot?.querySelector('button.primary');
+        const moveBtn = el.shadowRoot?.querySelector('.button-primary');
         expect(moveBtn?.textContent).to.contain('Move');
       });
     });
@@ -201,7 +201,7 @@ describe('InventoryMoveItemDialog', () => {
       });
 
       it('should disable the move button', () => {
-        const moveBtn = el.shadowRoot?.querySelector('button.primary') as HTMLButtonElement;
+        const moveBtn = el.shadowRoot?.querySelector('.button-primary') as HTMLButtonElement;
         expect(moveBtn?.disabled).to.be.true;
       });
     });
@@ -229,7 +229,7 @@ describe('InventoryMoveItemDialog', () => {
       });
 
       it('should disable the move button', () => {
-        const moveBtn = el.shadowRoot?.querySelector('button.primary') as HTMLButtonElement;
+        const moveBtn = el.shadowRoot?.querySelector('.button-primary') as HTMLButtonElement;
         expect(moveBtn?.disabled).to.be.true;
       });
     });
@@ -242,7 +242,7 @@ describe('InventoryMoveItemDialog', () => {
       });
 
       it('should enable the move button', () => {
-        const moveBtn = el.shadowRoot?.querySelector('button.primary') as HTMLButtonElement;
+        const moveBtn = el.shadowRoot?.querySelector('.button-primary') as HTMLButtonElement;
         expect(moveBtn?.disabled).to.be.false;
       });
     });
@@ -255,7 +255,7 @@ describe('InventoryMoveItemDialog', () => {
       });
 
       it('should disable the move button', () => {
-        const moveBtn = el.shadowRoot?.querySelector('button.primary') as HTMLButtonElement;
+        const moveBtn = el.shadowRoot?.querySelector('.button-primary') as HTMLButtonElement;
         expect(moveBtn?.disabled).to.be.true;
       });
     });

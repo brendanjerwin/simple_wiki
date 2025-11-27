@@ -159,7 +159,7 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should render dialog title', () => {
-        const title = el.shadowRoot?.querySelector('.header h2');
+        const title = el.shadowRoot?.querySelector('.dialog-title');
         expect(title?.textContent).to.contain('Add Item');
       });
 
@@ -180,12 +180,12 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should render cancel button', () => {
-        const cancelBtn = el.shadowRoot?.querySelector('button.secondary');
+        const cancelBtn = el.shadowRoot?.querySelector('.button-secondary');
         expect(cancelBtn?.textContent).to.contain('Cancel');
       });
 
       it('should render add button', () => {
-        const addBtn = el.shadowRoot?.querySelector('button.primary');
+        const addBtn = el.shadowRoot?.querySelector('.button-primary');
         expect(addBtn?.textContent).to.contain('Add');
       });
     });
@@ -204,7 +204,7 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should disable the add button', () => {
-        const addBtn = el.shadowRoot?.querySelector('button.primary') as HTMLButtonElement;
+        const addBtn = el.shadowRoot?.querySelector('.button-primary') as HTMLButtonElement;
         expect(addBtn?.disabled).to.be.true;
       });
     });
@@ -232,7 +232,7 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should disable the add button', () => {
-        const addBtn = el.shadowRoot?.querySelector('button.primary') as HTMLButtonElement;
+        const addBtn = el.shadowRoot?.querySelector('.button-primary') as HTMLButtonElement;
         expect(addBtn?.disabled).to.be.true;
       });
     });
@@ -245,7 +245,7 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should enable the add button', () => {
-        const addBtn = el.shadowRoot?.querySelector('button.primary') as HTMLButtonElement;
+        const addBtn = el.shadowRoot?.querySelector('.button-primary') as HTMLButtonElement;
         expect(addBtn?.disabled).to.be.false;
       });
     });

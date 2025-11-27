@@ -161,7 +161,7 @@ describe('InventoryFindItemDialog', () => {
       });
 
       it('should render dialog title', () => {
-        const title = el.shadowRoot?.querySelector('.header h2');
+        const title = el.shadowRoot?.querySelector('.dialog-title');
         expect(title?.textContent).to.contain('Find Item');
       });
 
@@ -171,12 +171,12 @@ describe('InventoryFindItemDialog', () => {
       });
 
       it('should render search button', () => {
-        const searchBtn = el.shadowRoot?.querySelector('button.primary');
+        const searchBtn = el.shadowRoot?.querySelector('.button-primary');
         expect(searchBtn?.textContent).to.contain('Search');
       });
 
       it('should render close button', () => {
-        const closeBtn = el.shadowRoot?.querySelector('button.secondary');
+        const closeBtn = el.shadowRoot?.querySelector('.button-secondary');
         expect(closeBtn?.textContent).to.contain('Close');
       });
     });
@@ -196,7 +196,7 @@ describe('InventoryFindItemDialog', () => {
       });
 
       it('should disable the search button', () => {
-        const searchBtn = el.shadowRoot?.querySelector('button.primary') as HTMLButtonElement;
+        const searchBtn = el.shadowRoot?.querySelector('.button-primary') as HTMLButtonElement;
         expect(searchBtn?.disabled).to.be.true;
       });
     });
@@ -290,7 +290,7 @@ describe('InventoryFindItemDialog', () => {
       });
 
       it('should disable the search button', () => {
-        const searchBtn = el.shadowRoot?.querySelector('button.primary') as HTMLButtonElement;
+        const searchBtn = el.shadowRoot?.querySelector('.button-primary') as HTMLButtonElement;
         expect(searchBtn?.disabled).to.be.true;
       });
     });
@@ -303,7 +303,7 @@ describe('InventoryFindItemDialog', () => {
       });
 
       it('should enable the search button', () => {
-        const searchBtn = el.shadowRoot?.querySelector('button.primary') as HTMLButtonElement;
+        const searchBtn = el.shadowRoot?.querySelector('.button-primary') as HTMLButtonElement;
         expect(searchBtn?.disabled).to.be.false;
       });
     });
