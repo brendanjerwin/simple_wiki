@@ -1493,6 +1493,356 @@ var _ = Describe("Server", func() {
 				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "query cannot be empty"))
 			})
 		})
+
+		When("a frontmatter key include filter is provided", func() {
+			var (
+				mockFrontmatterIndexQueryer *MockFrontmatterIndexQueryer
+				searchResults               []bleve.SearchResult
+			)
+
+			BeforeEach(func() {
+				mockFrontmatterIndexQueryer = &MockFrontmatterIndexQueryer{}
+				// Search returns 3 results (bleve may return non-munged identifiers)
+				searchResults = []bleve.SearchResult{
+					{Identifier: "page-with-inventory", Title: "Inventory Page", Fragment: "This has inventory"},
+					{Identifier: "page-without-inventory", Title: "Normal Page", Fragment: "This is normal"},
+					{Identifier: "another-inventory-page", Title: "Another Inventory", Fragment: "More inventory"},
+				}
+				mockBleveIndexQueryer.Results = searchResults
+				// Only 2 pages have the "inventory" frontmatter key
+				// Note: Frontmatter index stores MUNGED identifiers (snake_case)
+				mockFrontmatterIndexQueryer.KeyExistsResults = []wikipage.PageIdentifier{"page_with_inventory", "another_inventory_page"}
+				req.FrontmatterKeyIncludeFilters = []string{"inventory"}
+			})
+
+			JustBeforeEach(func() {
+				server = v1.NewServer("commit", time.Now(), nil, mockBleveIndexQueryer, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, mockFrontmatterIndexQueryer)
+				resp, err = server.SearchContent(ctx, req)
+			})
+
+			It("should return only pages that have the include filter key", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.Results).To(HaveLen(2))
+				identifiers := []string{resp.Results[0].Identifier, resp.Results[1].Identifier}
+				Expect(identifiers).To(ContainElements("page-with-inventory", "another-inventory-page"))
+			})
+
+			It("should exclude pages that do NOT have the include filter key", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp).NotTo(BeNil())
+				identifiers := make([]string, len(resp.Results))
+				for i, r := range resp.Results {
+					identifiers[i] = r.Identifier
+				}
+				Expect(identifiers).NotTo(ContainElement("page-without-inventory"))
+			})
+
+			When("the frontmatter index is not available", func() {
+				BeforeEach(func() {
+					mockFrontmatterIndexQueryer = nil
+				})
+
+				JustBeforeEach(func() {
+					server = v1.NewServer("commit", time.Now(), nil, mockBleveIndexQueryer, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, nil)
+					resp, err = server.SearchContent(ctx, req)
+				})
+
+				It("should return an internal error", func() {
+					Expect(err).To(HaveGrpcStatus(codes.Internal, "Frontmatter index not available for filtering"))
+				})
+			})
+
+			When("no pages match the filter", func() {
+				BeforeEach(func() {
+					mockFrontmatterIndexQueryer.KeyExistsResults = []wikipage.PageIdentifier{}
+				})
+
+				It("should return empty results", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(resp).NotTo(BeNil())
+					Expect(resp.Results).To(BeEmpty())
+				})
+			})
+		})
+
+		When("search returns pages that all lack the include filter key", func() {
+			var (
+				mockFrontmatterIndexQueryer *MockFrontmatterIndexQueryer
+				searchResults               []bleve.SearchResult
+			)
+
+			BeforeEach(func() {
+				mockFrontmatterIndexQueryer = &MockFrontmatterIndexQueryer{}
+				// Search returns pages that do NOT have the required key
+				searchResults = []bleve.SearchResult{
+					{Identifier: "page-without-key-1", Title: "Page Without Key 1", Fragment: "No key here"},
+					{Identifier: "page-without-key-2", Title: "Page Without Key 2", Fragment: "No key here either"},
+					{Identifier: "page-without-key-3", Title: "Page Without Key 3", Fragment: "Still no key"},
+				}
+				mockBleveIndexQueryer.Results = searchResults
+				// The include filter key exists ONLY on pages that are NOT in the search results
+				mockFrontmatterIndexQueryer.KeyExistsResults = []wikipage.PageIdentifier{"completely-different-page", "another-unrelated-page"}
+				req.FrontmatterKeyIncludeFilters = []string{"inventory.container"}
+			})
+
+			JustBeforeEach(func() {
+				server = v1.NewServer("commit", time.Now(), nil, mockBleveIndexQueryer, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, mockFrontmatterIndexQueryer)
+				resp, err = server.SearchContent(ctx, req)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return empty results since none have the required key", func() {
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.Results).To(BeEmpty())
+			})
+		})
+
+		When("search results have non-munged identifiers but frontmatter index uses munged identifiers", func() {
+			var (
+				mockFrontmatterIndexQueryer *MockFrontmatterIndexQueryer
+				searchResults               []bleve.SearchResult
+			)
+
+			BeforeEach(func() {
+				mockFrontmatterIndexQueryer = &MockFrontmatterIndexQueryer{}
+				// Bleve returns identifiers in original format (e.g., with hyphens, mixed case)
+				searchResults = []bleve.SearchResult{
+					{Identifier: "My-Inventory-Item", Title: "My Inventory Item", Fragment: "Has inventory"},
+					{Identifier: "Another-Item", Title: "Another Item", Fragment: "Also has inventory"},
+					{Identifier: "Non-Inventory-Page", Title: "Non Inventory", Fragment: "No inventory here"},
+				}
+				mockBleveIndexQueryer.Results = searchResults
+				// Frontmatter index stores identifiers in munged format (lowercase snake_case)
+				// Note: "My-Inventory-Item" becomes "my_inventory_item" when munged
+				mockFrontmatterIndexQueryer.KeyExistsResults = []wikipage.PageIdentifier{
+					"my_inventory_item",    // munged version of "My-Inventory-Item"
+					"another_item",         // munged version of "Another-Item"
+				}
+				req.FrontmatterKeyIncludeFilters = []string{"inventory.container"}
+			})
+
+			JustBeforeEach(func() {
+				server = v1.NewServer("commit", time.Now(), nil, mockBleveIndexQueryer, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, mockFrontmatterIndexQueryer)
+				resp, err = server.SearchContent(ctx, req)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should correctly match pages by munging search result identifiers", func() {
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.Results).To(HaveLen(2))
+				identifiers := []string{resp.Results[0].Identifier, resp.Results[1].Identifier}
+				// Should return the ORIGINAL identifiers from bleve, not the munged ones
+				Expect(identifiers).To(ContainElements("My-Inventory-Item", "Another-Item"))
+			})
+
+			It("should exclude pages without the include filter key", func() {
+				Expect(resp).NotTo(BeNil())
+				identifiers := make([]string, len(resp.Results))
+				for i, r := range resp.Results {
+					identifiers[i] = r.Identifier
+				}
+				Expect(identifiers).NotTo(ContainElement("Non-Inventory-Page"))
+			})
+		})
+
+		When("multiple frontmatter key include filters are provided", func() {
+			var (
+				mockFrontmatterIndexQueryer *MockFrontmatterIndexQueryer
+				searchResults               []bleve.SearchResult
+			)
+
+			BeforeEach(func() {
+				mockFrontmatterIndexQueryer = &MockFrontmatterIndexQueryer{
+					KeyExistsResultsMap: make(map[string][]wikipage.PageIdentifier),
+				}
+				// Search returns 4 results (bleve may return non-munged identifiers)
+				searchResults = []bleve.SearchResult{
+					{Identifier: "page-with-both", Title: "Both Keys", Fragment: "Has both"},
+					{Identifier: "page-with-inventory", Title: "Inventory Only", Fragment: "Has inventory"},
+					{Identifier: "page-with-container", Title: "Container Only", Fragment: "Has container"},
+					{Identifier: "page-with-neither", Title: "Neither", Fragment: "Has neither"},
+				}
+				mockBleveIndexQueryer.Results = searchResults
+				// Pages with "inventory" key (MUNGED identifiers in frontmatter index)
+				mockFrontmatterIndexQueryer.KeyExistsResultsMap["inventory"] = []wikipage.PageIdentifier{
+					"page_with_both", "page_with_inventory",
+				}
+				// Pages with "inventory.container" key (MUNGED identifiers)
+				mockFrontmatterIndexQueryer.KeyExistsResultsMap["inventory.container"] = []wikipage.PageIdentifier{
+					"page_with_both", "page_with_container",
+				}
+				// Require both keys (intersection)
+				req.FrontmatterKeyIncludeFilters = []string{"inventory", "inventory.container"}
+			})
+
+			JustBeforeEach(func() {
+				server = v1.NewServer("commit", time.Now(), nil, mockBleveIndexQueryer, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, mockFrontmatterIndexQueryer)
+				resp, err = server.SearchContent(ctx, req)
+			})
+
+			It("should return only results matching ALL include filters", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.Results).To(HaveLen(1))
+				Expect(resp.Results[0].Identifier).To(Equal("page-with-both"))
+			})
+		})
+
+		When("a frontmatter key exclude filter is provided", func() {
+			var (
+				mockFrontmatterIndexQueryer *MockFrontmatterIndexQueryer
+				searchResults               []bleve.SearchResult
+			)
+
+			BeforeEach(func() {
+				mockFrontmatterIndexQueryer = &MockFrontmatterIndexQueryer{}
+				// Search returns 3 results: 2 containers (have items key) and 1 item (no items key)
+				searchResults = []bleve.SearchResult{
+					{Identifier: "container-one", Title: "Container One", Fragment: "This is a container"},
+					{Identifier: "item-one", Title: "Item One", Fragment: "This is an item"},
+					{Identifier: "container-two", Title: "Container Two", Fragment: "Another container"},
+				}
+				mockBleveIndexQueryer.Results = searchResults
+				// 2 pages have the "inventory.items" key (containers) - MUNGED identifiers
+				mockFrontmatterIndexQueryer.KeyExistsResults = []wikipage.PageIdentifier{"container_one", "container_two"}
+				req.FrontmatterKeyExcludeFilters = []string{"inventory.items"}
+			})
+
+			JustBeforeEach(func() {
+				server = v1.NewServer("commit", time.Now(), nil, mockBleveIndexQueryer, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, mockFrontmatterIndexQueryer)
+				resp, err = server.SearchContent(ctx, req)
+			})
+
+			It("should return only results without the excluded key", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.Results).To(HaveLen(1))
+				Expect(resp.Results[0].Identifier).To(Equal("item-one"))
+			})
+
+			When("the frontmatter index is not available", func() {
+				BeforeEach(func() {
+					mockFrontmatterIndexQueryer = nil
+				})
+
+				JustBeforeEach(func() {
+					server = v1.NewServer("commit", time.Now(), nil, mockBleveIndexQueryer, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, nil)
+					resp, err = server.SearchContent(ctx, req)
+				})
+
+				It("should return an internal error", func() {
+					Expect(err).To(HaveGrpcStatus(codes.Internal, "Frontmatter index not available for filtering"))
+				})
+			})
+
+			When("no pages have the excluded key", func() {
+				BeforeEach(func() {
+					mockFrontmatterIndexQueryer.KeyExistsResults = []wikipage.PageIdentifier{}
+				})
+
+				It("should return all results", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(resp).NotTo(BeNil())
+					Expect(resp.Results).To(HaveLen(3))
+				})
+			})
+		})
+
+		When("multiple frontmatter key exclude filters are provided", func() {
+			var (
+				mockFrontmatterIndexQueryer *MockFrontmatterIndexQueryer
+				searchResults               []bleve.SearchResult
+			)
+
+			BeforeEach(func() {
+				mockFrontmatterIndexQueryer = &MockFrontmatterIndexQueryer{
+					KeyExistsResultsMap: make(map[string][]wikipage.PageIdentifier),
+				}
+				// Search returns 4 results (bleve may return non-munged identifiers)
+				searchResults = []bleve.SearchResult{
+					{Identifier: "page-with-both-excluded", Title: "Both Excluded", Fragment: "Has both bad keys"},
+					{Identifier: "page-with-items", Title: "Has Items", Fragment: "Has items key"},
+					{Identifier: "page-with-archived", Title: "Has Archived", Fragment: "Has archived key"},
+					{Identifier: "page-clean", Title: "Clean Page", Fragment: "Has neither"},
+				}
+				mockBleveIndexQueryer.Results = searchResults
+				// Pages with "inventory.items" key (MUNGED identifiers)
+				mockFrontmatterIndexQueryer.KeyExistsResultsMap["inventory.items"] = []wikipage.PageIdentifier{
+					"page_with_both_excluded", "page_with_items",
+				}
+				// Pages with "archived" key (MUNGED identifiers)
+				mockFrontmatterIndexQueryer.KeyExistsResultsMap["archived"] = []wikipage.PageIdentifier{
+					"page_with_both_excluded", "page_with_archived",
+				}
+				// Exclude both keys (union of exclusions)
+				req.FrontmatterKeyExcludeFilters = []string{"inventory.items", "archived"}
+			})
+
+			JustBeforeEach(func() {
+				server = v1.NewServer("commit", time.Now(), nil, mockBleveIndexQueryer, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, mockFrontmatterIndexQueryer)
+				resp, err = server.SearchContent(ctx, req)
+			})
+
+			It("should return only results matching NONE of the exclude filters", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.Results).To(HaveLen(1))
+				Expect(resp.Results[0].Identifier).To(Equal("page-clean"))
+			})
+		})
+
+		When("both inclusion and exclusion filters are provided", func() {
+			var (
+				mockFrontmatterIndexQueryer *MockFrontmatterIndexQueryer
+				searchResults               []bleve.SearchResult
+			)
+
+			BeforeEach(func() {
+				mockFrontmatterIndexQueryer = &MockFrontmatterIndexQueryer{
+					KeyExistsResultsMap: make(map[string][]wikipage.PageIdentifier),
+				}
+				// Search returns 4 results (bleve may return non-munged identifiers)
+				searchResults = []bleve.SearchResult{
+					{Identifier: "inventory-container", Title: "Container", Fragment: "A container"},
+					{Identifier: "inventory-item", Title: "Item", Fragment: "An item"},
+					{Identifier: "non-inventory-page", Title: "Regular Page", Fragment: "Not inventory"},
+					{Identifier: "another-inventory-item", Title: "Another Item", Fragment: "Another item"},
+				}
+				mockBleveIndexQueryer.Results = searchResults
+				// 3 pages have "inventory" key (MUNGED identifiers)
+				mockFrontmatterIndexQueryer.KeyExistsResultsMap["inventory"] = []wikipage.PageIdentifier{
+					"inventory_container", "inventory_item", "another_inventory_item",
+				}
+				// 1 page has "inventory.items" key (it's a container) (MUNGED identifier)
+				mockFrontmatterIndexQueryer.KeyExistsResultsMap["inventory.items"] = []wikipage.PageIdentifier{
+					"inventory_container",
+				}
+				req.FrontmatterKeyIncludeFilters = []string{"inventory"}
+				req.FrontmatterKeyExcludeFilters = []string{"inventory.items"}
+			})
+
+			JustBeforeEach(func() {
+				server = v1.NewServer("commit", time.Now(), nil, mockBleveIndexQueryer, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, mockFrontmatterIndexQueryer)
+				resp, err = server.SearchContent(ctx, req)
+			})
+
+			It("should return only inventory items (has inventory, no items)", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.Results).To(HaveLen(2))
+				identifiers := []string{resp.Results[0].Identifier, resp.Results[1].Identifier}
+				Expect(identifiers).To(ContainElements("inventory-item", "another-inventory-item"))
+				Expect(identifiers).NotTo(ContainElement("inventory-container"))
+				Expect(identifiers).NotTo(ContainElement("non-inventory-page"))
+			})
+		})
 	})
 
 	Describe("ReadPage", func() {
@@ -1679,10 +2029,11 @@ func (m *MockTemplateExecutor) ExecuteTemplate(templateString string, fm wikipag
 
 // MockFrontmatterIndexQueryer is a mock implementation of wikipage.IQueryFrontmatterIndex
 type MockFrontmatterIndexQueryer struct {
-	ExactMatchResults    []wikipage.PageIdentifier
-	KeyExistsResults     []wikipage.PageIdentifier
-	PrefixMatchResults   []wikipage.PageIdentifier
-	GetValueResult       string
+	ExactMatchResults   []wikipage.PageIdentifier
+	KeyExistsResults    []wikipage.PageIdentifier
+	KeyExistsResultsMap map[string][]wikipage.PageIdentifier
+	PrefixMatchResults  []wikipage.PageIdentifier
+	GetValueResult      string
 }
 
 func (m *MockFrontmatterIndexQueryer) QueryExactMatch(dottedKeyPath wikipage.DottedKeyPath, value wikipage.Value) []wikipage.PageIdentifier {
@@ -1690,6 +2041,13 @@ func (m *MockFrontmatterIndexQueryer) QueryExactMatch(dottedKeyPath wikipage.Dot
 }
 
 func (m *MockFrontmatterIndexQueryer) QueryKeyExistence(dottedKeyPath wikipage.DottedKeyPath) []wikipage.PageIdentifier {
+	// Use map if available, otherwise fall back to simple results
+	if m.KeyExistsResultsMap != nil {
+		if results, ok := m.KeyExistsResultsMap[string(dottedKeyPath)]; ok {
+			return results
+		}
+		return nil
+	}
 	return m.KeyExistsResults
 }
 

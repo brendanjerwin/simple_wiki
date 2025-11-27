@@ -1,8 +1,8 @@
 import { html, css, LitElement, nothing } from 'lit';
 import { sharedStyles, foundationCSS, dialogCSS, responsiveCSS, buttonCSS } from './shared-styles.js';
-import { inventoryActionService } from './inventory-action-service.js';
+import { inventoryActionService, type InventorySearchResult } from './inventory-action-service.js';
 
-interface FindResults {
+interface LocationInfo {
   found: boolean;
   locations: Array<{ container: string; path: string[] }>;
   summary?: string;
@@ -198,6 +198,79 @@ export class InventoryFindItemDialog extends LitElement {
         margin-bottom: 12px;
       }
 
+      /* Search results list */
+      .search-results {
+        margin-top: 16px;
+      }
+
+      .search-results-header {
+        font-weight: 600;
+        margin-bottom: 12px;
+        color: #333;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .back-button {
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: #4a90d9;
+        padding: 4px 8px;
+        font-size: 14px;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
+
+      .back-button:hover {
+        text-decoration: underline;
+      }
+
+      .search-result-item {
+        padding: 12px;
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 4px;
+        margin-bottom: 8px;
+        cursor: pointer;
+        transition: background 0.15s ease;
+      }
+
+      .search-result-item:hover {
+        background: #e9ecef;
+      }
+
+      .search-result-item:last-child {
+        margin-bottom: 0;
+      }
+
+      .result-title {
+        font-weight: 500;
+        color: #333;
+        margin-bottom: 4px;
+      }
+
+      .result-identifier {
+        font-size: 12px;
+        color: #666;
+        font-family: monospace;
+        margin-bottom: 4px;
+      }
+
+      .result-fragment {
+        font-size: 13px;
+        color: #555;
+        line-height: 1.4;
+      }
+
+      .result-fragment mark {
+        background: #fff3cd;
+        padding: 0 2px;
+        border-radius: 2px;
+      }
+
       .footer {
         display: flex;
         gap: 12px;
@@ -213,14 +286,20 @@ export class InventoryFindItemDialog extends LitElement {
     searchQuery: { type: String },
     loading: { state: true },
     error: { state: true },
-    results: { state: true },
+    searchResults: { state: true },
+    selectedItem: { state: true },
+    locationInfo: { state: true },
+    loadingLocation: { state: true },
   };
 
   declare open: boolean;
   declare searchQuery: string;
   declare loading: boolean;
   declare error?: string;
-  declare results?: FindResults;
+  declare searchResults?: InventorySearchResult[];
+  declare selectedItem?: InventorySearchResult;
+  declare locationInfo?: LocationInfo;
+  declare loadingLocation: boolean;
 
   constructor() {
     super();
@@ -228,7 +307,10 @@ export class InventoryFindItemDialog extends LitElement {
     this.searchQuery = '';
     this.loading = false;
     this.error = undefined;
-    this.results = undefined;
+    this.searchResults = undefined;
+    this.selectedItem = undefined;
+    this.locationInfo = undefined;
+    this.loadingLocation = false;
   }
 
   override connectedCallback(): void {
@@ -250,8 +332,11 @@ export class InventoryFindItemDialog extends LitElement {
   public openDialog(prefilledQuery?: string): void {
     this.searchQuery = prefilledQuery || '';
     this.error = undefined;
-    this.results = undefined;
+    this.searchResults = undefined;
+    this.selectedItem = undefined;
+    this.locationInfo = undefined;
     this.loading = false;
+    this.loadingLocation = false;
     this.open = true;
   }
 
@@ -259,8 +344,11 @@ export class InventoryFindItemDialog extends LitElement {
     this.open = false;
     this.searchQuery = '';
     this.error = undefined;
-    this.results = undefined;
+    this.searchResults = undefined;
+    this.selectedItem = undefined;
+    this.locationInfo = undefined;
     this.loading = false;
+    this.loadingLocation = false;
   }
 
   private _handleBackdropClick = (): void => {
@@ -295,14 +383,33 @@ export class InventoryFindItemDialog extends LitElement {
 
     this.loading = true;
     this.error = undefined;
-    this.results = undefined;
+    this.searchResults = undefined;
+    this.selectedItem = undefined;
+    this.locationInfo = undefined;
 
-    const result = await inventoryActionService.findItem(this.searchQuery.trim());
+    const result = await inventoryActionService.searchInventory(this.searchQuery.trim());
 
     this.loading = false;
 
     if (result.success) {
-      this.results = {
+      this.searchResults = result.results ?? [];
+    } else {
+      this.error = result.error;
+    }
+  };
+
+  private _handleSelectItem = async (item: InventorySearchResult): Promise<void> => {
+    this.selectedItem = item;
+    this.loadingLocation = true;
+    this.error = undefined;
+    this.locationInfo = undefined;
+
+    const result = await inventoryActionService.findItem(item.identifier);
+
+    this.loadingLocation = false;
+
+    if (result.success) {
+      this.locationInfo = {
         found: result.found ?? false,
         locations: result.locations ?? [],
         summary: result.summary,
@@ -312,60 +419,183 @@ export class InventoryFindItemDialog extends LitElement {
     }
   };
 
+  private _handleBack = (): void => {
+    this.selectedItem = undefined;
+    this.locationInfo = undefined;
+    this.error = undefined;
+  };
+
   private _navigateToContainer(container: string): void {
     window.location.href = `/${container}`;
   }
 
-  private _renderResults() {
-    if (!this.results) return nothing;
+  private _navigateToItem(identifier: string): void {
+    window.location.href = `/${identifier}`;
+  }
 
-    if (!this.results.found || this.results.locations.length === 0) {
+  /**
+   * Renders text with highlighted spans
+   */
+  private _renderHighlightedFragment(fragment: string, highlights: Array<{ start: number; end: number }>) {
+    if (highlights.length === 0) {
+      return fragment;
+    }
+
+    // Sort highlights by start position
+    const sortedHighlights = [...highlights].sort((a, b) => a.start - b.start);
+
+    const parts: (string | ReturnType<typeof html>)[] = [];
+    let lastEnd = 0;
+
+    for (const hl of sortedHighlights) {
+      // Add text before this highlight
+      if (hl.start > lastEnd) {
+        parts.push(fragment.slice(lastEnd, hl.start));
+      }
+      // Add highlighted text
+      parts.push(html`<mark>${fragment.slice(hl.start, hl.end)}</mark>`);
+      lastEnd = hl.end;
+    }
+
+    // Add remaining text
+    if (lastEnd < fragment.length) {
+      parts.push(fragment.slice(lastEnd));
+    }
+
+    return parts;
+  }
+
+  /**
+   * Renders search results list
+   */
+  private _renderSearchResults() {
+    if (!this.searchResults) return nothing;
+
+    if (this.searchResults.length === 0) {
       return html`
         <div class="not-found">
-          <div class="not-found-icon"><i class="fa-solid fa-inbox"></i></div>
-          <div>Item "${this.searchQuery}" has no container assignment</div>
+          <div class="not-found-icon"><i class="fa-solid fa-search"></i></div>
+          <div>No inventory items match "${this.searchQuery}"</div>
         </div>
       `;
     }
 
-    const isAnomaly = this.results.locations.length > 1;
+    return html`
+      <div class="search-results">
+        <div class="search-results-header">
+          Found ${this.searchResults.length} item${this.searchResults.length > 1 ? 's' : ''}
+        </div>
+        ${this.searchResults.map(result => html`
+          <div
+            class="search-result-item"
+            @click=${() => this._handleSelectItem(result)}
+          >
+            <div class="result-title">${result.title || result.identifier}</div>
+            ${result.title ? html`<div class="result-identifier">${result.identifier}</div>` : nothing}
+            ${result.fragment ? html`
+              <div class="result-fragment">
+                ${this._renderHighlightedFragment(result.fragment, result.highlights)}
+              </div>
+            ` : nothing}
+          </div>
+        `)}
+      </div>
+    `;
+  }
+
+  /**
+   * Renders location details for selected item
+   */
+  private _renderLocationDetails() {
+    if (!this.selectedItem) return nothing;
 
     return html`
       <div class="results">
         <div class="results-header">
-          Found in ${this.results.locations.length} location${this.results.locations.length > 1 ? 's' : ''}
+          <button class="back-button" @click=${this._handleBack}>
+            <i class="fa-solid fa-arrow-left"></i> Back
+          </button>
+          Location for:
+          <a
+            class="location-link"
+            href="/${this.selectedItem.identifier}"
+            @click=${(e: Event) => {
+              e.preventDefault();
+              this._navigateToItem(this.selectedItem!.identifier);
+            }}
+          >${this.selectedItem.title || this.selectedItem.identifier}</a>
         </div>
 
-        ${isAnomaly ? html`
-          <div class="anomaly-warning">
-            <i class="fa-solid fa-triangle-exclamation"></i>
-            <span>Anomaly: Item appears in multiple containers</span>
+        ${this.loadingLocation ? html`
+          <div class="not-found">
+            <div class="not-found-icon"><i class="fa-solid fa-spinner fa-spin"></i></div>
+            <div>Loading location...</div>
           </div>
-        ` : nothing}
-
-        <ul class="location-list">
-          ${this.results.locations.map(loc => html`
-            <li class="location-item">
-              <a
-                class="location-link"
-                href="/${loc.container}"
-                @click=${(e: Event) => {
-                  e.preventDefault();
-                  this._navigateToContainer(loc.container);
-                }}
-              >
-                ${loc.container}
-              </a>
-              ${loc.path.length > 0 ? html`
-                <div class="location-path">
-                  ${loc.path.join(' → ')}
-                </div>
-              ` : nothing}
-            </li>
-          `)}
-        </ul>
+        ` : this._renderLocationInfo()}
       </div>
     `;
+  }
+
+  /**
+   * Renders location info for an item
+   */
+  private _renderLocationInfo() {
+    if (!this.locationInfo) return nothing;
+
+    if (!this.locationInfo.found || this.locationInfo.locations.length === 0) {
+      return html`
+        <div class="not-found">
+          <div class="not-found-icon"><i class="fa-solid fa-inbox"></i></div>
+          <div>Item has no container assignment</div>
+        </div>
+      `;
+    }
+
+    const isAnomaly = this.locationInfo.locations.length > 1;
+
+    return html`
+      ${isAnomaly ? html`
+        <div class="anomaly-warning">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+          <span>Anomaly: Item appears in multiple containers</span>
+        </div>
+      ` : nothing}
+
+      <ul class="location-list">
+        ${this.locationInfo.locations.map(loc => html`
+          <li class="location-item">
+            <a
+              class="location-link"
+              href="/${loc.container}"
+              @click=${(e: Event) => {
+                e.preventDefault();
+                this._navigateToContainer(loc.container);
+              }}
+            >
+              ${loc.container}
+            </a>
+            ${loc.path.length > 0 ? html`
+              <div class="location-path">
+                ${loc.path.join(' → ')}
+              </div>
+            ` : nothing}
+          </li>
+        `)}
+      </ul>
+    `;
+  }
+
+  /**
+   * Renders the appropriate content based on state
+   */
+  private _renderContent() {
+    // If an item is selected, show its location details
+    if (this.selectedItem) {
+      return this._renderLocationDetails();
+    }
+
+    // Otherwise show search results
+    return this._renderSearchResults();
   }
 
   override render() {
@@ -389,7 +619,7 @@ export class InventoryFindItemDialog extends LitElement {
               .value=${this.searchQuery}
               @input=${this._handleSearchQueryInput}
               @keydown=${this._handleSearchKeydown}
-              placeholder="Enter item identifier to search"
+              placeholder="Search inventory items..."
               ?disabled=${this.loading}
             />
             <button
@@ -401,7 +631,7 @@ export class InventoryFindItemDialog extends LitElement {
             </button>
           </div>
 
-          ${this._renderResults()}
+          ${this._renderContent()}
         </div>
 
         <div class="footer">

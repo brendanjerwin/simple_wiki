@@ -13,6 +13,7 @@ import (
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
+	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
 	"github.com/pelletier/go-toml/v2"
@@ -505,9 +506,65 @@ func (s *Server) SearchContent(_ context.Context, req *apiv1.SearchContentReques
 		return nil, status.Errorf(codes.Internal, "failed to search: %v", err)
 	}
 
+	// Build sets of pages for each include filter (page must match ALL include filters)
+	var includeFilterSets []map[wikipage.PageIdentifier]bool
+	if len(req.FrontmatterKeyIncludeFilters) > 0 {
+		vFm := reflect.ValueOf(s.FrontmatterIndexQueryer)
+		if s.FrontmatterIndexQueryer == nil || (vFm.Kind() == reflect.Ptr && vFm.IsNil()) {
+			return nil, status.Error(codes.Internal, "Frontmatter index not available for filtering")
+		}
+		for _, filterKey := range req.FrontmatterKeyIncludeFilters {
+			pageIDs := s.FrontmatterIndexQueryer.QueryKeyExistence(wikipage.DottedKeyPath(filterKey))
+			pageSet := make(map[wikipage.PageIdentifier]bool, len(pageIDs))
+			for _, id := range pageIDs {
+				pageSet[id] = true
+			}
+			includeFilterSets = append(includeFilterSets, pageSet)
+		}
+	}
+
+	// Build set of pages to exclude (page is excluded if it matches ANY exclude filter)
+	var excludedPages map[wikipage.PageIdentifier]bool
+	if len(req.FrontmatterKeyExcludeFilters) > 0 {
+		vFm := reflect.ValueOf(s.FrontmatterIndexQueryer)
+		if s.FrontmatterIndexQueryer == nil || (vFm.Kind() == reflect.Ptr && vFm.IsNil()) {
+			return nil, status.Error(codes.Internal, "Frontmatter index not available for filtering")
+		}
+		excludedPages = make(map[wikipage.PageIdentifier]bool)
+		for _, filterKey := range req.FrontmatterKeyExcludeFilters {
+			pageIDs := s.FrontmatterIndexQueryer.QueryKeyExistence(wikipage.DottedKeyPath(filterKey))
+			for _, id := range pageIDs {
+				excludedPages[id] = true
+			}
+		}
+	}
+
 	// Convert bleve.SearchResult to apiv1.SearchResult
 	var results []*apiv1.SearchResult
 	for _, result := range searchResults {
+		// Munge the identifier to match the format used in the frontmatter index
+		// The frontmatter index stores identifiers in munged format (lowercase snake_case)
+		mungedIdentifier := wikipage.PageIdentifier(wikiidentifiers.MungeIdentifier(string(result.Identifier)))
+
+		// Skip if page doesn't match ALL include filters
+		if len(includeFilterSets) > 0 {
+			matchesAll := true
+			for _, filterSet := range includeFilterSets {
+				if !filterSet[mungedIdentifier] {
+					matchesAll = false
+					break
+				}
+			}
+			if !matchesAll {
+				continue
+			}
+		}
+
+		// Skip if page matches ANY exclude filter
+		if excludedPages != nil && excludedPages[mungedIdentifier] {
+			continue
+		}
+
 		// Convert highlight spans
 		var highlights []*apiv1.HighlightSpan
 		for _, hl := range result.Highlights {

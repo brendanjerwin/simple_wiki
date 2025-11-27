@@ -25,6 +25,88 @@ public final class Search {
      */
     com.google.protobuf.ByteString
         getQueryBytes();
+
+    /**
+     * <pre>
+     * Optional: filter results to only pages that have ALL of these frontmatter keys
+     * </pre>
+     *
+     * <code>repeated string frontmatter_key_include_filters = 2 [json_name = "frontmatterKeyIncludeFilters"];</code>
+     * @return A list containing the frontmatterKeyIncludeFilters.
+     */
+    java.util.List<java.lang.String>
+        getFrontmatterKeyIncludeFiltersList();
+    /**
+     * <pre>
+     * Optional: filter results to only pages that have ALL of these frontmatter keys
+     * </pre>
+     *
+     * <code>repeated string frontmatter_key_include_filters = 2 [json_name = "frontmatterKeyIncludeFilters"];</code>
+     * @return The count of frontmatterKeyIncludeFilters.
+     */
+    int getFrontmatterKeyIncludeFiltersCount();
+    /**
+     * <pre>
+     * Optional: filter results to only pages that have ALL of these frontmatter keys
+     * </pre>
+     *
+     * <code>repeated string frontmatter_key_include_filters = 2 [json_name = "frontmatterKeyIncludeFilters"];</code>
+     * @param index The index of the element to return.
+     * @return The frontmatterKeyIncludeFilters at the given index.
+     */
+    java.lang.String getFrontmatterKeyIncludeFilters(int index);
+    /**
+     * <pre>
+     * Optional: filter results to only pages that have ALL of these frontmatter keys
+     * </pre>
+     *
+     * <code>repeated string frontmatter_key_include_filters = 2 [json_name = "frontmatterKeyIncludeFilters"];</code>
+     * @param index The index of the element to return.
+     * @return The frontmatterKeyIncludeFilters at the given index.
+     */
+    com.google.protobuf.ByteString
+        getFrontmatterKeyIncludeFiltersBytes(int index);
+
+    /**
+     * <pre>
+     * Optional: filter OUT results that have ANY of these frontmatter keys
+     * </pre>
+     *
+     * <code>repeated string frontmatter_key_exclude_filters = 3 [json_name = "frontmatterKeyExcludeFilters"];</code>
+     * @return A list containing the frontmatterKeyExcludeFilters.
+     */
+    java.util.List<java.lang.String>
+        getFrontmatterKeyExcludeFiltersList();
+    /**
+     * <pre>
+     * Optional: filter OUT results that have ANY of these frontmatter keys
+     * </pre>
+     *
+     * <code>repeated string frontmatter_key_exclude_filters = 3 [json_name = "frontmatterKeyExcludeFilters"];</code>
+     * @return The count of frontmatterKeyExcludeFilters.
+     */
+    int getFrontmatterKeyExcludeFiltersCount();
+    /**
+     * <pre>
+     * Optional: filter OUT results that have ANY of these frontmatter keys
+     * </pre>
+     *
+     * <code>repeated string frontmatter_key_exclude_filters = 3 [json_name = "frontmatterKeyExcludeFilters"];</code>
+     * @param index The index of the element to return.
+     * @return The frontmatterKeyExcludeFilters at the given index.
+     */
+    java.lang.String getFrontmatterKeyExcludeFilters(int index);
+    /**
+     * <pre>
+     * Optional: filter OUT results that have ANY of these frontmatter keys
+     * </pre>
+     *
+     * <code>repeated string frontmatter_key_exclude_filters = 3 [json_name = "frontmatterKeyExcludeFilters"];</code>
+     * @param index The index of the element to return.
+     * @return The frontmatterKeyExcludeFilters at the given index.
+     */
+    com.google.protobuf.ByteString
+        getFrontmatterKeyExcludeFiltersBytes(int index);
   }
   /**
    * <pre>
@@ -40,6 +122,8 @@ public final class Search {
       SearchContentRequestOrBuilder {
     private SearchContentRequest() {
       query_ = "";
+      frontmatterKeyIncludeFilters_ = com.google.protobuf.GeneratedMessageLite.emptyProtobufList();
+      frontmatterKeyExcludeFilters_ = com.google.protobuf.GeneratedMessageLite.emptyProtobufList();
     }
     public static final int QUERY_FIELD_NUMBER = 1;
     private java.lang.String query_;
@@ -86,6 +170,264 @@ public final class Search {
       checkByteStringIsUtf8(value);
       query_ = value.toStringUtf8();
 
+    }
+
+    public static final int FRONTMATTER_KEY_INCLUDE_FILTERS_FIELD_NUMBER = 2;
+    private com.google.protobuf.Internal.ProtobufList<java.lang.String> frontmatterKeyIncludeFilters_;
+    /**
+     * <pre>
+     * Optional: filter results to only pages that have ALL of these frontmatter keys
+     * </pre>
+     *
+     * <code>repeated string frontmatter_key_include_filters = 2 [json_name = "frontmatterKeyIncludeFilters"];</code>
+     * @return A list containing the frontmatterKeyIncludeFilters.
+     */
+    @java.lang.Override
+    public java.util.List<java.lang.String> getFrontmatterKeyIncludeFiltersList() {
+      return frontmatterKeyIncludeFilters_;
+    }
+    /**
+     * <pre>
+     * Optional: filter results to only pages that have ALL of these frontmatter keys
+     * </pre>
+     *
+     * <code>repeated string frontmatter_key_include_filters = 2 [json_name = "frontmatterKeyIncludeFilters"];</code>
+     * @return The count of frontmatterKeyIncludeFilters.
+     */
+    @java.lang.Override
+    public int getFrontmatterKeyIncludeFiltersCount() {
+      return frontmatterKeyIncludeFilters_.size();
+    }
+    /**
+     * <pre>
+     * Optional: filter results to only pages that have ALL of these frontmatter keys
+     * </pre>
+     *
+     * <code>repeated string frontmatter_key_include_filters = 2 [json_name = "frontmatterKeyIncludeFilters"];</code>
+     * @param index The index of the element to return.
+     * @return The frontmatterKeyIncludeFilters at the given index.
+     */
+    @java.lang.Override
+    public java.lang.String getFrontmatterKeyIncludeFilters(int index) {
+      return frontmatterKeyIncludeFilters_.get(index);
+    }
+    /**
+     * <pre>
+     * Optional: filter results to only pages that have ALL of these frontmatter keys
+     * </pre>
+     *
+     * <code>repeated string frontmatter_key_include_filters = 2 [json_name = "frontmatterKeyIncludeFilters"];</code>
+     * @param index The index of the value to return.
+     * @return The bytes of the frontmatterKeyIncludeFilters at the given index.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getFrontmatterKeyIncludeFiltersBytes(int index) {
+      return com.google.protobuf.ByteString.copyFromUtf8(
+          frontmatterKeyIncludeFilters_.get(index));
+    }
+    private void ensureFrontmatterKeyIncludeFiltersIsMutable() {
+      com.google.protobuf.Internal.ProtobufList<java.lang.String> tmp =
+          frontmatterKeyIncludeFilters_;  if (!tmp.isModifiable()) {
+        frontmatterKeyIncludeFilters_ =
+            com.google.protobuf.GeneratedMessageLite.mutableCopy(tmp);
+       }
+    }
+    /**
+     * <pre>
+     * Optional: filter results to only pages that have ALL of these frontmatter keys
+     * </pre>
+     *
+     * <code>repeated string frontmatter_key_include_filters = 2 [json_name = "frontmatterKeyIncludeFilters"];</code>
+     * @param index The index to set the value at.
+     * @param value The frontmatterKeyIncludeFilters to set.
+     */
+    private void setFrontmatterKeyIncludeFilters(
+        int index, java.lang.String value) {
+      java.lang.Class<?> valueClass = value.getClass();
+  ensureFrontmatterKeyIncludeFiltersIsMutable();
+      frontmatterKeyIncludeFilters_.set(index, value);
+    }
+    /**
+     * <pre>
+     * Optional: filter results to only pages that have ALL of these frontmatter keys
+     * </pre>
+     *
+     * <code>repeated string frontmatter_key_include_filters = 2 [json_name = "frontmatterKeyIncludeFilters"];</code>
+     * @param value The frontmatterKeyIncludeFilters to add.
+     */
+    private void addFrontmatterKeyIncludeFilters(
+        java.lang.String value) {
+      java.lang.Class<?> valueClass = value.getClass();
+  ensureFrontmatterKeyIncludeFiltersIsMutable();
+      frontmatterKeyIncludeFilters_.add(value);
+    }
+    /**
+     * <pre>
+     * Optional: filter results to only pages that have ALL of these frontmatter keys
+     * </pre>
+     *
+     * <code>repeated string frontmatter_key_include_filters = 2 [json_name = "frontmatterKeyIncludeFilters"];</code>
+     * @param values The frontmatterKeyIncludeFilters to add.
+     */
+    private void addAllFrontmatterKeyIncludeFilters(
+        java.lang.Iterable<java.lang.String> values) {
+      ensureFrontmatterKeyIncludeFiltersIsMutable();
+      com.google.protobuf.AbstractMessageLite.addAll(
+          values, frontmatterKeyIncludeFilters_);
+    }
+    /**
+     * <pre>
+     * Optional: filter results to only pages that have ALL of these frontmatter keys
+     * </pre>
+     *
+     * <code>repeated string frontmatter_key_include_filters = 2 [json_name = "frontmatterKeyIncludeFilters"];</code>
+     */
+    private void clearFrontmatterKeyIncludeFilters() {
+      frontmatterKeyIncludeFilters_ = com.google.protobuf.GeneratedMessageLite.emptyProtobufList();
+    }
+    /**
+     * <pre>
+     * Optional: filter results to only pages that have ALL of these frontmatter keys
+     * </pre>
+     *
+     * <code>repeated string frontmatter_key_include_filters = 2 [json_name = "frontmatterKeyIncludeFilters"];</code>
+     * @param value The bytes of the frontmatterKeyIncludeFilters to add.
+     */
+    private void addFrontmatterKeyIncludeFiltersBytes(
+        com.google.protobuf.ByteString value) {
+      checkByteStringIsUtf8(value);
+      ensureFrontmatterKeyIncludeFiltersIsMutable();
+      frontmatterKeyIncludeFilters_.add(value.toStringUtf8());
+    }
+
+    public static final int FRONTMATTER_KEY_EXCLUDE_FILTERS_FIELD_NUMBER = 3;
+    private com.google.protobuf.Internal.ProtobufList<java.lang.String> frontmatterKeyExcludeFilters_;
+    /**
+     * <pre>
+     * Optional: filter OUT results that have ANY of these frontmatter keys
+     * </pre>
+     *
+     * <code>repeated string frontmatter_key_exclude_filters = 3 [json_name = "frontmatterKeyExcludeFilters"];</code>
+     * @return A list containing the frontmatterKeyExcludeFilters.
+     */
+    @java.lang.Override
+    public java.util.List<java.lang.String> getFrontmatterKeyExcludeFiltersList() {
+      return frontmatterKeyExcludeFilters_;
+    }
+    /**
+     * <pre>
+     * Optional: filter OUT results that have ANY of these frontmatter keys
+     * </pre>
+     *
+     * <code>repeated string frontmatter_key_exclude_filters = 3 [json_name = "frontmatterKeyExcludeFilters"];</code>
+     * @return The count of frontmatterKeyExcludeFilters.
+     */
+    @java.lang.Override
+    public int getFrontmatterKeyExcludeFiltersCount() {
+      return frontmatterKeyExcludeFilters_.size();
+    }
+    /**
+     * <pre>
+     * Optional: filter OUT results that have ANY of these frontmatter keys
+     * </pre>
+     *
+     * <code>repeated string frontmatter_key_exclude_filters = 3 [json_name = "frontmatterKeyExcludeFilters"];</code>
+     * @param index The index of the element to return.
+     * @return The frontmatterKeyExcludeFilters at the given index.
+     */
+    @java.lang.Override
+    public java.lang.String getFrontmatterKeyExcludeFilters(int index) {
+      return frontmatterKeyExcludeFilters_.get(index);
+    }
+    /**
+     * <pre>
+     * Optional: filter OUT results that have ANY of these frontmatter keys
+     * </pre>
+     *
+     * <code>repeated string frontmatter_key_exclude_filters = 3 [json_name = "frontmatterKeyExcludeFilters"];</code>
+     * @param index The index of the value to return.
+     * @return The bytes of the frontmatterKeyExcludeFilters at the given index.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getFrontmatterKeyExcludeFiltersBytes(int index) {
+      return com.google.protobuf.ByteString.copyFromUtf8(
+          frontmatterKeyExcludeFilters_.get(index));
+    }
+    private void ensureFrontmatterKeyExcludeFiltersIsMutable() {
+      com.google.protobuf.Internal.ProtobufList<java.lang.String> tmp =
+          frontmatterKeyExcludeFilters_;  if (!tmp.isModifiable()) {
+        frontmatterKeyExcludeFilters_ =
+            com.google.protobuf.GeneratedMessageLite.mutableCopy(tmp);
+       }
+    }
+    /**
+     * <pre>
+     * Optional: filter OUT results that have ANY of these frontmatter keys
+     * </pre>
+     *
+     * <code>repeated string frontmatter_key_exclude_filters = 3 [json_name = "frontmatterKeyExcludeFilters"];</code>
+     * @param index The index to set the value at.
+     * @param value The frontmatterKeyExcludeFilters to set.
+     */
+    private void setFrontmatterKeyExcludeFilters(
+        int index, java.lang.String value) {
+      java.lang.Class<?> valueClass = value.getClass();
+  ensureFrontmatterKeyExcludeFiltersIsMutable();
+      frontmatterKeyExcludeFilters_.set(index, value);
+    }
+    /**
+     * <pre>
+     * Optional: filter OUT results that have ANY of these frontmatter keys
+     * </pre>
+     *
+     * <code>repeated string frontmatter_key_exclude_filters = 3 [json_name = "frontmatterKeyExcludeFilters"];</code>
+     * @param value The frontmatterKeyExcludeFilters to add.
+     */
+    private void addFrontmatterKeyExcludeFilters(
+        java.lang.String value) {
+      java.lang.Class<?> valueClass = value.getClass();
+  ensureFrontmatterKeyExcludeFiltersIsMutable();
+      frontmatterKeyExcludeFilters_.add(value);
+    }
+    /**
+     * <pre>
+     * Optional: filter OUT results that have ANY of these frontmatter keys
+     * </pre>
+     *
+     * <code>repeated string frontmatter_key_exclude_filters = 3 [json_name = "frontmatterKeyExcludeFilters"];</code>
+     * @param values The frontmatterKeyExcludeFilters to add.
+     */
+    private void addAllFrontmatterKeyExcludeFilters(
+        java.lang.Iterable<java.lang.String> values) {
+      ensureFrontmatterKeyExcludeFiltersIsMutable();
+      com.google.protobuf.AbstractMessageLite.addAll(
+          values, frontmatterKeyExcludeFilters_);
+    }
+    /**
+     * <pre>
+     * Optional: filter OUT results that have ANY of these frontmatter keys
+     * </pre>
+     *
+     * <code>repeated string frontmatter_key_exclude_filters = 3 [json_name = "frontmatterKeyExcludeFilters"];</code>
+     */
+    private void clearFrontmatterKeyExcludeFilters() {
+      frontmatterKeyExcludeFilters_ = com.google.protobuf.GeneratedMessageLite.emptyProtobufList();
+    }
+    /**
+     * <pre>
+     * Optional: filter OUT results that have ANY of these frontmatter keys
+     * </pre>
+     *
+     * <code>repeated string frontmatter_key_exclude_filters = 3 [json_name = "frontmatterKeyExcludeFilters"];</code>
+     * @param value The bytes of the frontmatterKeyExcludeFilters to add.
+     */
+    private void addFrontmatterKeyExcludeFiltersBytes(
+        com.google.protobuf.ByteString value) {
+      checkByteStringIsUtf8(value);
+      ensureFrontmatterKeyExcludeFiltersIsMutable();
+      frontmatterKeyExcludeFilters_.add(value.toStringUtf8());
     }
 
     public static api.v1.Search.SearchContentRequest parseFrom(
@@ -238,6 +580,262 @@ public final class Search {
         return this;
       }
 
+      /**
+       * <pre>
+       * Optional: filter results to only pages that have ALL of these frontmatter keys
+       * </pre>
+       *
+       * <code>repeated string frontmatter_key_include_filters = 2 [json_name = "frontmatterKeyIncludeFilters"];</code>
+       * @return A list containing the frontmatterKeyIncludeFilters.
+       */
+      @java.lang.Override
+      public java.util.List<java.lang.String>
+          getFrontmatterKeyIncludeFiltersList() {
+        return java.util.Collections.unmodifiableList(
+            instance.getFrontmatterKeyIncludeFiltersList());
+      }
+      /**
+       * <pre>
+       * Optional: filter results to only pages that have ALL of these frontmatter keys
+       * </pre>
+       *
+       * <code>repeated string frontmatter_key_include_filters = 2 [json_name = "frontmatterKeyIncludeFilters"];</code>
+       * @return The count of frontmatterKeyIncludeFilters.
+       */
+      @java.lang.Override
+      public int getFrontmatterKeyIncludeFiltersCount() {
+        return instance.getFrontmatterKeyIncludeFiltersCount();
+      }
+      /**
+       * <pre>
+       * Optional: filter results to only pages that have ALL of these frontmatter keys
+       * </pre>
+       *
+       * <code>repeated string frontmatter_key_include_filters = 2 [json_name = "frontmatterKeyIncludeFilters"];</code>
+       * @param index The index of the element to return.
+       * @return The frontmatterKeyIncludeFilters at the given index.
+       */
+      @java.lang.Override
+      public java.lang.String getFrontmatterKeyIncludeFilters(int index) {
+        return instance.getFrontmatterKeyIncludeFilters(index);
+      }
+      /**
+       * <pre>
+       * Optional: filter results to only pages that have ALL of these frontmatter keys
+       * </pre>
+       *
+       * <code>repeated string frontmatter_key_include_filters = 2 [json_name = "frontmatterKeyIncludeFilters"];</code>
+       * @param index The index of the value to return.
+       * @return The bytes of the frontmatterKeyIncludeFilters at the given index.
+       */
+      @java.lang.Override
+      public com.google.protobuf.ByteString
+          getFrontmatterKeyIncludeFiltersBytes(int index) {
+        return instance.getFrontmatterKeyIncludeFiltersBytes(index);
+      }
+      /**
+       * <pre>
+       * Optional: filter results to only pages that have ALL of these frontmatter keys
+       * </pre>
+       *
+       * <code>repeated string frontmatter_key_include_filters = 2 [json_name = "frontmatterKeyIncludeFilters"];</code>
+       * @param index The index to set the value at.
+       * @param value The frontmatterKeyIncludeFilters to set.
+       * @return This builder for chaining.
+       */
+      public Builder setFrontmatterKeyIncludeFilters(
+          int index, java.lang.String value) {
+        copyOnWrite();
+        instance.setFrontmatterKeyIncludeFilters(index, value);
+        return this;
+      }
+      /**
+       * <pre>
+       * Optional: filter results to only pages that have ALL of these frontmatter keys
+       * </pre>
+       *
+       * <code>repeated string frontmatter_key_include_filters = 2 [json_name = "frontmatterKeyIncludeFilters"];</code>
+       * @param value The frontmatterKeyIncludeFilters to add.
+       * @return This builder for chaining.
+       */
+      public Builder addFrontmatterKeyIncludeFilters(
+          java.lang.String value) {
+        copyOnWrite();
+        instance.addFrontmatterKeyIncludeFilters(value);
+        return this;
+      }
+      /**
+       * <pre>
+       * Optional: filter results to only pages that have ALL of these frontmatter keys
+       * </pre>
+       *
+       * <code>repeated string frontmatter_key_include_filters = 2 [json_name = "frontmatterKeyIncludeFilters"];</code>
+       * @param values The frontmatterKeyIncludeFilters to add.
+       * @return This builder for chaining.
+       */
+      public Builder addAllFrontmatterKeyIncludeFilters(
+          java.lang.Iterable<java.lang.String> values) {
+        copyOnWrite();
+        instance.addAllFrontmatterKeyIncludeFilters(values);
+        return this;
+      }
+      /**
+       * <pre>
+       * Optional: filter results to only pages that have ALL of these frontmatter keys
+       * </pre>
+       *
+       * <code>repeated string frontmatter_key_include_filters = 2 [json_name = "frontmatterKeyIncludeFilters"];</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearFrontmatterKeyIncludeFilters() {
+        copyOnWrite();
+        instance.clearFrontmatterKeyIncludeFilters();
+        return this;
+      }
+      /**
+       * <pre>
+       * Optional: filter results to only pages that have ALL of these frontmatter keys
+       * </pre>
+       *
+       * <code>repeated string frontmatter_key_include_filters = 2 [json_name = "frontmatterKeyIncludeFilters"];</code>
+       * @param value The bytes of the frontmatterKeyIncludeFilters to add.
+       * @return This builder for chaining.
+       */
+      public Builder addFrontmatterKeyIncludeFiltersBytes(
+          com.google.protobuf.ByteString value) {
+        copyOnWrite();
+        instance.addFrontmatterKeyIncludeFiltersBytes(value);
+        return this;
+      }
+
+      /**
+       * <pre>
+       * Optional: filter OUT results that have ANY of these frontmatter keys
+       * </pre>
+       *
+       * <code>repeated string frontmatter_key_exclude_filters = 3 [json_name = "frontmatterKeyExcludeFilters"];</code>
+       * @return A list containing the frontmatterKeyExcludeFilters.
+       */
+      @java.lang.Override
+      public java.util.List<java.lang.String>
+          getFrontmatterKeyExcludeFiltersList() {
+        return java.util.Collections.unmodifiableList(
+            instance.getFrontmatterKeyExcludeFiltersList());
+      }
+      /**
+       * <pre>
+       * Optional: filter OUT results that have ANY of these frontmatter keys
+       * </pre>
+       *
+       * <code>repeated string frontmatter_key_exclude_filters = 3 [json_name = "frontmatterKeyExcludeFilters"];</code>
+       * @return The count of frontmatterKeyExcludeFilters.
+       */
+      @java.lang.Override
+      public int getFrontmatterKeyExcludeFiltersCount() {
+        return instance.getFrontmatterKeyExcludeFiltersCount();
+      }
+      /**
+       * <pre>
+       * Optional: filter OUT results that have ANY of these frontmatter keys
+       * </pre>
+       *
+       * <code>repeated string frontmatter_key_exclude_filters = 3 [json_name = "frontmatterKeyExcludeFilters"];</code>
+       * @param index The index of the element to return.
+       * @return The frontmatterKeyExcludeFilters at the given index.
+       */
+      @java.lang.Override
+      public java.lang.String getFrontmatterKeyExcludeFilters(int index) {
+        return instance.getFrontmatterKeyExcludeFilters(index);
+      }
+      /**
+       * <pre>
+       * Optional: filter OUT results that have ANY of these frontmatter keys
+       * </pre>
+       *
+       * <code>repeated string frontmatter_key_exclude_filters = 3 [json_name = "frontmatterKeyExcludeFilters"];</code>
+       * @param index The index of the value to return.
+       * @return The bytes of the frontmatterKeyExcludeFilters at the given index.
+       */
+      @java.lang.Override
+      public com.google.protobuf.ByteString
+          getFrontmatterKeyExcludeFiltersBytes(int index) {
+        return instance.getFrontmatterKeyExcludeFiltersBytes(index);
+      }
+      /**
+       * <pre>
+       * Optional: filter OUT results that have ANY of these frontmatter keys
+       * </pre>
+       *
+       * <code>repeated string frontmatter_key_exclude_filters = 3 [json_name = "frontmatterKeyExcludeFilters"];</code>
+       * @param index The index to set the value at.
+       * @param value The frontmatterKeyExcludeFilters to set.
+       * @return This builder for chaining.
+       */
+      public Builder setFrontmatterKeyExcludeFilters(
+          int index, java.lang.String value) {
+        copyOnWrite();
+        instance.setFrontmatterKeyExcludeFilters(index, value);
+        return this;
+      }
+      /**
+       * <pre>
+       * Optional: filter OUT results that have ANY of these frontmatter keys
+       * </pre>
+       *
+       * <code>repeated string frontmatter_key_exclude_filters = 3 [json_name = "frontmatterKeyExcludeFilters"];</code>
+       * @param value The frontmatterKeyExcludeFilters to add.
+       * @return This builder for chaining.
+       */
+      public Builder addFrontmatterKeyExcludeFilters(
+          java.lang.String value) {
+        copyOnWrite();
+        instance.addFrontmatterKeyExcludeFilters(value);
+        return this;
+      }
+      /**
+       * <pre>
+       * Optional: filter OUT results that have ANY of these frontmatter keys
+       * </pre>
+       *
+       * <code>repeated string frontmatter_key_exclude_filters = 3 [json_name = "frontmatterKeyExcludeFilters"];</code>
+       * @param values The frontmatterKeyExcludeFilters to add.
+       * @return This builder for chaining.
+       */
+      public Builder addAllFrontmatterKeyExcludeFilters(
+          java.lang.Iterable<java.lang.String> values) {
+        copyOnWrite();
+        instance.addAllFrontmatterKeyExcludeFilters(values);
+        return this;
+      }
+      /**
+       * <pre>
+       * Optional: filter OUT results that have ANY of these frontmatter keys
+       * </pre>
+       *
+       * <code>repeated string frontmatter_key_exclude_filters = 3 [json_name = "frontmatterKeyExcludeFilters"];</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearFrontmatterKeyExcludeFilters() {
+        copyOnWrite();
+        instance.clearFrontmatterKeyExcludeFilters();
+        return this;
+      }
+      /**
+       * <pre>
+       * Optional: filter OUT results that have ANY of these frontmatter keys
+       * </pre>
+       *
+       * <code>repeated string frontmatter_key_exclude_filters = 3 [json_name = "frontmatterKeyExcludeFilters"];</code>
+       * @param value The bytes of the frontmatterKeyExcludeFilters to add.
+       * @return This builder for chaining.
+       */
+      public Builder addFrontmatterKeyExcludeFiltersBytes(
+          com.google.protobuf.ByteString value) {
+        copyOnWrite();
+        instance.addFrontmatterKeyExcludeFiltersBytes(value);
+        return this;
+      }
+
       // @@protoc_insertion_point(builder_scope:api.v1.SearchContentRequest)
     }
     @java.lang.Override
@@ -255,9 +853,12 @@ public final class Search {
         case BUILD_MESSAGE_INFO: {
             java.lang.Object[] objects = new java.lang.Object[] {
               "query_",
+              "frontmatterKeyIncludeFilters_",
+              "frontmatterKeyExcludeFilters_",
             };
             java.lang.String info =
-                "\u0000\u0001\u0000\u0000\u0001\u0001\u0001\u0000\u0000\u0000\u0001\u0208";
+                "\u0000\u0003\u0000\u0000\u0001\u0003\u0003\u0000\u0002\u0000\u0001\u0208\u0002\u021a" +
+                "\u0003\u021a";
             return newMessageInfo(DEFAULT_INSTANCE, info, objects);
         }
         // fall through

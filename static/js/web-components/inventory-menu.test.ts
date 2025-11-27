@@ -1,5 +1,4 @@
 import { expect } from '@esm-bundle/chai';
-import sinon, { SinonStub } from 'sinon';
 
 // Test the buildInventoryMenu logic by extracting and testing the core functionality
 // Since simple_wiki.js uses global functions, we test the logic patterns here

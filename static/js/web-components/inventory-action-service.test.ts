@@ -56,8 +56,8 @@ describe('InventoryActionService', () => {
 
       beforeEach(async () => {
         // Access private client via type assertion and stub its method
-        const serviceWithClient = service as unknown as { client: { createInventoryItem: () => Promise<unknown> } };
-        clientStub = sinon.stub(serviceWithClient.client, 'createInventoryItem').resolves({
+        const serviceWithClient = service as unknown as { inventoryClient: { createInventoryItem: () => Promise<unknown> } };
+        clientStub = sinon.stub(serviceWithClient.inventoryClient, 'createInventoryItem').resolves({
           success: true,
           itemIdentifier: 'screwdriver',
           summary: 'Created screwdriver in drawer_kitchen',
@@ -91,8 +91,8 @@ describe('InventoryActionService', () => {
       let result: Awaited<ReturnType<typeof service.addItem>>;
 
       beforeEach(async () => {
-        const serviceWithClient = service as unknown as { client: { createInventoryItem: () => Promise<unknown> } };
-        sinon.stub(serviceWithClient.client, 'createInventoryItem').resolves({
+        const serviceWithClient = service as unknown as { inventoryClient: { createInventoryItem: () => Promise<unknown> } };
+        sinon.stub(serviceWithClient.inventoryClient, 'createInventoryItem').resolves({
           success: false,
           error: 'Item already exists',
         });
@@ -113,8 +113,8 @@ describe('InventoryActionService', () => {
       let result: Awaited<ReturnType<typeof service.addItem>>;
 
       beforeEach(async () => {
-        const serviceWithClient = service as unknown as { client: { createInventoryItem: () => Promise<unknown> } };
-        sinon.stub(serviceWithClient.client, 'createInventoryItem').rejects(new Error('Network error'));
+        const serviceWithClient = service as unknown as { inventoryClient: { createInventoryItem: () => Promise<unknown> } };
+        sinon.stub(serviceWithClient.inventoryClient, 'createInventoryItem').rejects(new Error('Network error'));
 
         result = await service.addItem('drawer_kitchen', 'screwdriver');
       });
@@ -151,8 +151,8 @@ describe('InventoryActionService', () => {
       let clientStub: sinon.SinonStub;
 
       beforeEach(async () => {
-        const serviceWithClient = service as unknown as { client: { moveInventoryItem: () => Promise<unknown> } };
-        clientStub = sinon.stub(serviceWithClient.client, 'moveInventoryItem').resolves({
+        const serviceWithClient = service as unknown as { inventoryClient: { moveInventoryItem: () => Promise<unknown> } };
+        clientStub = sinon.stub(serviceWithClient.inventoryClient, 'moveInventoryItem').resolves({
           success: true,
           previousContainer: 'drawer_kitchen',
           newContainer: 'toolbox_garage',
@@ -190,8 +190,8 @@ describe('InventoryActionService', () => {
       let result: Awaited<ReturnType<typeof service.moveItem>>;
 
       beforeEach(async () => {
-        const serviceWithClient = service as unknown as { client: { moveInventoryItem: () => Promise<unknown> } };
-        sinon.stub(serviceWithClient.client, 'moveInventoryItem').resolves({
+        const serviceWithClient = service as unknown as { inventoryClient: { moveInventoryItem: () => Promise<unknown> } };
+        sinon.stub(serviceWithClient.inventoryClient, 'moveInventoryItem').resolves({
           success: false,
           error: 'Container not found',
         });
@@ -212,8 +212,8 @@ describe('InventoryActionService', () => {
       let result: Awaited<ReturnType<typeof service.moveItem>>;
 
       beforeEach(async () => {
-        const serviceWithClient = service as unknown as { client: { moveInventoryItem: () => Promise<unknown> } };
-        sinon.stub(serviceWithClient.client, 'moveInventoryItem').rejects(new Error('Network error'));
+        const serviceWithClient = service as unknown as { inventoryClient: { moveInventoryItem: () => Promise<unknown> } };
+        sinon.stub(serviceWithClient.inventoryClient, 'moveInventoryItem').rejects(new Error('Network error'));
 
         result = await service.moveItem('screwdriver', 'toolbox_garage');
       });
@@ -250,8 +250,8 @@ describe('InventoryActionService', () => {
       let clientStub: sinon.SinonStub;
 
       beforeEach(async () => {
-        const serviceWithClient = service as unknown as { client: { findItemLocation: () => Promise<unknown> } };
-        clientStub = sinon.stub(serviceWithClient.client, 'findItemLocation').resolves({
+        const serviceWithClient = service as unknown as { inventoryClient: { findItemLocation: () => Promise<unknown> } };
+        clientStub = sinon.stub(serviceWithClient.inventoryClient, 'findItemLocation').resolves({
           found: true,
           locations: [
             { container: 'drawer_kitchen', path: ['house', 'kitchen', 'drawer_kitchen'] },
@@ -292,8 +292,8 @@ describe('InventoryActionService', () => {
       let result: Awaited<ReturnType<typeof service.findItem>>;
 
       beforeEach(async () => {
-        const serviceWithClient = service as unknown as { client: { findItemLocation: () => Promise<unknown> } };
-        sinon.stub(serviceWithClient.client, 'findItemLocation').resolves({
+        const serviceWithClient = service as unknown as { inventoryClient: { findItemLocation: () => Promise<unknown> } };
+        sinon.stub(serviceWithClient.inventoryClient, 'findItemLocation').resolves({
           found: true,
           locations: [
             { container: 'drawer_kitchen', path: ['kitchen', 'drawer_kitchen'] },
@@ -314,8 +314,8 @@ describe('InventoryActionService', () => {
       let result: Awaited<ReturnType<typeof service.findItem>>;
 
       beforeEach(async () => {
-        const serviceWithClient = service as unknown as { client: { findItemLocation: () => Promise<unknown> } };
-        sinon.stub(serviceWithClient.client, 'findItemLocation').resolves({
+        const serviceWithClient = service as unknown as { inventoryClient: { findItemLocation: () => Promise<unknown> } };
+        sinon.stub(serviceWithClient.inventoryClient, 'findItemLocation').resolves({
           found: false,
           locations: [],
           summary: 'Item not found',
@@ -341,8 +341,8 @@ describe('InventoryActionService', () => {
       let result: Awaited<ReturnType<typeof service.findItem>>;
 
       beforeEach(async () => {
-        const serviceWithClient = service as unknown as { client: { findItemLocation: () => Promise<unknown> } };
-        sinon.stub(serviceWithClient.client, 'findItemLocation').rejects(new Error('Network error'));
+        const serviceWithClient = service as unknown as { inventoryClient: { findItemLocation: () => Promise<unknown> } };
+        sinon.stub(serviceWithClient.inventoryClient, 'findItemLocation').rejects(new Error('Network error'));
 
         result = await service.findItem('screwdriver');
       });

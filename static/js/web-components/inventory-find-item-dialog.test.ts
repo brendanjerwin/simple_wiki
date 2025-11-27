@@ -56,8 +56,20 @@ describe('InventoryFindItemDialog', () => {
       expect(el.error).to.be.undefined;
     });
 
-    it('should have no results by default', () => {
-      expect(el.results).to.be.undefined;
+    it('should have no searchResults by default', () => {
+      expect(el.searchResults).to.be.undefined;
+    });
+
+    it('should have no selectedItem by default', () => {
+      expect(el.selectedItem).to.be.undefined;
+    });
+
+    it('should have no locationInfo by default', () => {
+      expect(el.locationInfo).to.be.undefined;
+    });
+
+    it('should not be loadingLocation by default', () => {
+      expect(el.loadingLocation).to.be.false;
     });
   });
 
@@ -75,8 +87,16 @@ describe('InventoryFindItemDialog', () => {
         expect(el.searchQuery).to.equal('');
       });
 
-      it('should clear results', () => {
-        expect(el.results).to.be.undefined;
+      it('should clear searchResults', () => {
+        expect(el.searchResults).to.be.undefined;
+      });
+
+      it('should clear selectedItem', () => {
+        expect(el.selectedItem).to.be.undefined;
+      });
+
+      it('should clear locationInfo', () => {
+        expect(el.locationInfo).to.be.undefined;
       });
 
       it('should clear error', () => {
@@ -99,7 +119,9 @@ describe('InventoryFindItemDialog', () => {
     beforeEach(() => {
       el.openDialog();
       el.searchQuery = 'screwdriver';
-      el.results = { found: true, locations: [] };
+      el.searchResults = [{ identifier: 'screwdriver', title: 'Screwdriver', fragment: '', highlights: [] }];
+      el.selectedItem = { identifier: 'screwdriver', title: 'Screwdriver', fragment: '', highlights: [] };
+      el.locationInfo = { found: true, locations: [] };
       el.close();
     });
 
@@ -111,8 +133,16 @@ describe('InventoryFindItemDialog', () => {
       expect(el.searchQuery).to.equal('');
     });
 
-    it('should clear results', () => {
-      expect(el.results).to.be.undefined;
+    it('should clear searchResults', () => {
+      expect(el.searchResults).to.be.undefined;
+    });
+
+    it('should clear selectedItem', () => {
+      expect(el.selectedItem).to.be.undefined;
+    });
+
+    it('should clear locationInfo', () => {
+      expect(el.locationInfo).to.be.undefined;
     });
 
     it('should clear error', () => {
@@ -214,10 +244,71 @@ describe('InventoryFindItemDialog', () => {
       });
     });
 
-    describe('when results show item found', () => {
+    describe('when search results are present', () => {
       beforeEach(async () => {
         el.openDialog();
-        el.results = {
+        el.searchResults = [
+          { identifier: 'screwdriver', title: 'Screwdriver', fragment: 'A Phillips head screwdriver', highlights: [{ start: 2, end: 10 }] },
+          { identifier: 'hammer', title: 'Hammer', fragment: 'A claw hammer', highlights: [] },
+        ];
+        await el.updateComplete;
+      });
+
+      it('should display search results section', () => {
+        const resultsSection = el.shadowRoot?.querySelector('.search-results');
+        expect(resultsSection).to.exist;
+      });
+
+      it('should display all search results', () => {
+        const resultItems = el.shadowRoot?.querySelectorAll('.search-result-item');
+        expect(resultItems?.length).to.equal(2);
+      });
+
+      it('should display result titles', () => {
+        const firstTitle = el.shadowRoot?.querySelector('.result-title');
+        expect(firstTitle?.textContent).to.contain('Screwdriver');
+      });
+    });
+
+    describe('when search results are empty', () => {
+      beforeEach(async () => {
+        el.openDialog();
+        el.searchQuery = 'nonexistent';
+        el.searchResults = [];
+        await el.updateComplete;
+      });
+
+      it('should display not found message', () => {
+        const notFound = el.shadowRoot?.querySelector('.not-found');
+        expect(notFound).to.exist;
+      });
+    });
+
+    describe('when an item is selected and location is loading', () => {
+      beforeEach(async () => {
+        el.openDialog();
+        el.searchResults = [{ identifier: 'screwdriver', title: 'Screwdriver', fragment: '', highlights: [] }];
+        el.selectedItem = { identifier: 'screwdriver', title: 'Screwdriver', fragment: '', highlights: [] };
+        el.loadingLocation = true;
+        await el.updateComplete;
+      });
+
+      it('should display loading indicator', () => {
+        const spinner = el.shadowRoot?.querySelector('.fa-spinner');
+        expect(spinner).to.exist;
+      });
+
+      it('should display back button', () => {
+        const backButton = el.shadowRoot?.querySelector('.back-button');
+        expect(backButton).to.exist;
+      });
+    });
+
+    describe('when location shows item found', () => {
+      beforeEach(async () => {
+        el.openDialog();
+        el.selectedItem = { identifier: 'screwdriver', title: 'Screwdriver', fragment: '', highlights: [] };
+        el.locationInfo = {
           found: true,
           locations: [
             { container: 'drawer_kitchen', path: ['house', 'kitchen', 'drawer_kitchen'] },
@@ -236,12 +327,18 @@ describe('InventoryFindItemDialog', () => {
         const locationLink = el.shadowRoot?.querySelector('.location-link');
         expect(locationLink).to.exist;
       });
+
+      it('should display back button', () => {
+        const backButton = el.shadowRoot?.querySelector('.back-button');
+        expect(backButton).to.exist;
+      });
     });
 
-    describe('when results show item not found', () => {
+    describe('when location shows item not found', () => {
       beforeEach(async () => {
         el.openDialog();
-        el.results = {
+        el.selectedItem = { identifier: 'screwdriver', title: 'Screwdriver', fragment: '', highlights: [] };
+        el.locationInfo = {
           found: false,
           locations: [],
           summary: 'Item not found',
@@ -258,7 +355,8 @@ describe('InventoryFindItemDialog', () => {
     describe('when item found in multiple locations', () => {
       beforeEach(async () => {
         el.openDialog();
-        el.results = {
+        el.selectedItem = { identifier: 'screwdriver', title: 'Screwdriver', fragment: '', highlights: [] };
+        el.locationInfo = {
           found: true,
           locations: [
             { container: 'drawer_kitchen', path: ['kitchen', 'drawer_kitchen'] },
