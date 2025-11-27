@@ -17,6 +17,20 @@ export class SearchContentRequest extends Message<SearchContentRequest> {
    */
   query = "";
 
+  /**
+   * Optional: filter results to only pages that have ALL of these frontmatter keys
+   *
+   * @generated from field: repeated string frontmatter_key_include_filters = 2;
+   */
+  frontmatterKeyIncludeFilters: string[] = [];
+
+  /**
+   * Optional: filter OUT results that have ANY of these frontmatter keys
+   *
+   * @generated from field: repeated string frontmatter_key_exclude_filters = 3;
+   */
+  frontmatterKeyExcludeFilters: string[] = [];
+
   constructor(data?: PartialMessage<SearchContentRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -26,6 +40,8 @@ export class SearchContentRequest extends Message<SearchContentRequest> {
   static readonly typeName = "api.v1.SearchContentRequest";
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "query", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "frontmatter_key_include_filters", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 3, name: "frontmatter_key_exclude_filters", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SearchContentRequest {

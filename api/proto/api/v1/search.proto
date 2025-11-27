@@ -13,6 +13,10 @@ service SearchService {
 // The request message for searching content.
 message SearchContentRequest {
   string query = 1;
+  // Optional: filter results to only pages that have ALL of these frontmatter keys
+  repeated string frontmatter_key_include_filters = 2;
+  // Optional: filter OUT results that have ANY of these frontmatter keys
+  repeated string frontmatter_key_exclude_filters = 3;
 }
 
 // The response message containing search results.

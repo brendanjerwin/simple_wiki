@@ -1,0 +1,159 @@
+syntax = "proto3";
+
+package api.v1;
+
+option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
+
+// InventoryManagementService provides operations for managing inventory items.
+// This service enables AI agents and other clients to manage household inventory
+// through natural language commands like "put the batteries in the drawer".
+service InventoryManagementService {
+  // Creates a new inventory item page with the inv_item template structure.
+  rpc CreateInventoryItem(CreateInventoryItemRequest) returns (CreateInventoryItemResponse);
+
+  // Moves an item from one container to another by updating both
+  // the item's inventory.container and the containers' inventory.items lists.
+  rpc MoveInventoryItem(MoveInventoryItemRequest) returns (MoveInventoryItemResponse);
+
+  // Lists all items in a container, including items in nested containers.
+  rpc ListContainerContents(ListContainerContentsRequest) returns (ListContainerContentsResponse);
+
+  // Finds which container(s) an item is in.
+  rpc FindItemLocation(FindItemLocationRequest) returns (FindItemLocationResponse);
+}
+
+// CreateInventoryItem messages
+
+message CreateInventoryItemRequest {
+  // The identifier for the new item (will be munged to wiki identifier format).
+  string item_identifier = 1;
+
+  // Optional: The container this item belongs to.
+  string container = 2;
+
+  // Optional: Human-readable title for the item.
+  // If not provided, will be auto-generated from the identifier.
+  string title = 3;
+}
+
+message CreateInventoryItemResponse {
+  // Whether the operation was successful.
+  bool success = 1;
+
+  // The final identifier of the created item (after munging).
+  string item_identifier = 2;
+
+  // Human-readable summary of the action taken, suitable for LLM consumption.
+  string summary = 3;
+
+  // Error message if the operation failed.
+  string error = 4;
+}
+
+// MoveInventoryItem messages
+
+message MoveInventoryItemRequest {
+  // The identifier of the item to move.
+  string item_identifier = 1;
+
+  // The new container to move the item to.
+  // If empty, removes the item from any container (makes it a root-level item).
+  string new_container = 2;
+}
+
+message MoveInventoryItemResponse {
+  // Whether the operation was successful.
+  bool success = 1;
+
+  // The previous container the item was in (empty if it was a root-level item).
+  string previous_container = 2;
+
+  // The new container the item is now in.
+  string new_container = 3;
+
+  // Human-readable summary of the action taken, suitable for LLM consumption.
+  string summary = 4;
+
+  // Error message if the operation failed.
+  string error = 5;
+}
+
+// ListContainerContents messages
+
+message ListContainerContentsRequest {
+  // The identifier of the container to list contents of.
+  string container_identifier = 1;
+
+  // Whether to recursively include items in nested containers.
+  // Default: false (only direct items)
+  bool recursive = 2;
+
+  // Maximum depth for recursive listing. 0 means unlimited.
+  // Only used when recursive is true.
+  int32 max_depth = 3;
+}
+
+message InventoryItem {
+  // The identifier of the item.
+  string identifier = 1;
+
+  // The title of the item (if set in frontmatter).
+  string title = 2;
+
+  // Whether this item is itself a container (has items inside it).
+  bool is_container = 3;
+
+  // The direct container this item is in.
+  string container = 4;
+
+  // Nested items if this is a container and recursive listing was requested.
+  repeated InventoryItem nested_items = 5;
+}
+
+message ListContainerContentsResponse {
+  // The container being queried.
+  string container_identifier = 1;
+
+  // Items directly in this container.
+  repeated InventoryItem items = 2;
+
+  // Total count of items (including nested if recursive).
+  int32 total_count = 3;
+
+  // Human-readable summary suitable for LLM consumption.
+  string summary = 4;
+}
+
+// FindItemLocation messages
+
+message FindItemLocationRequest {
+  // The identifier of the item to find.
+  string item_identifier = 1;
+
+  // Whether to include the full container hierarchy path.
+  bool include_hierarchy = 2;
+}
+
+message ContainerPath {
+  // The immediate container.
+  string container = 1;
+
+  // Full path from root to this item (if include_hierarchy was true).
+  // Each entry is a container identifier, from outermost to innermost.
+  repeated string path = 2;
+}
+
+message FindItemLocationResponse {
+  // The item being queried.
+  string item_identifier = 1;
+
+  // The container(s) this item is in.
+  // Usually just one, but could be multiple if there are anomalies.
+  repeated ContainerPath locations = 2;
+
+  // Whether the item was found.
+  bool found = 3;
+
+  // Human-readable summary suitable for LLM consumption.
+  string summary = 4;
+}

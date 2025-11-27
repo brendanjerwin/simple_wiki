@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Cross-compilation build script for simple_wiki
 # This script should be run through devbox to ensure proper environment setup.
