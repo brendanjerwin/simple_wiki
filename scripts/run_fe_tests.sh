@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # This script runs frontend tests, handling path trimming for web-test-runner.
 

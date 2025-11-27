@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Fix Android USB permissions for ADB
 
 echo "Setting up Android USB permissions..."
