@@ -23,8 +23,9 @@ type InventoryItemParams struct {
 	Title      string // Optional: human-readable title (auto-generated if empty)
 }
 
-// inventoryItemMarkdownTemplate is the markdown template for inventory item pages.
-const inventoryItemMarkdownTemplate = `
+// InventoryItemMarkdownTemplate is the markdown template for inventory item pages.
+// It is exported so it can be used by both the server and the gRPC API layer.
+const InventoryItemMarkdownTemplate = `
 ### Goes in: {{LinkTo .Inventory.Container }}
 
 {{if IsContainer .Identifier }}
@@ -111,7 +112,7 @@ func buildInventoryItemPageText(fm map[string]any) (string, error) {
 	_, _ = builder.WriteString(newline)
 	_, _ = builder.WriteString("# {{or .Title .Identifier}}")
 	_, _ = builder.WriteString(newline)
-	_, _ = builder.WriteString(inventoryItemMarkdownTemplate)
+	_, _ = builder.WriteString(InventoryItemMarkdownTemplate)
 
 	return builder.String(), nil
 }

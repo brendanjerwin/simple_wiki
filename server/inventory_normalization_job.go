@@ -337,7 +337,7 @@ func (j *InventoryNormalizationJob) createItemPage(itemID, containerID string) e
 func buildNormalizationItemMarkdown() string {
 	var builder bytes.Buffer
 	_, _ = builder.WriteString("# {{or .Title .Identifier}}" + newlineDelim)
-	_, _ = builder.WriteString(inventoryItemMarkdownTemplate)
+	_, _ = builder.WriteString(InventoryItemMarkdownTemplate)
 	return builder.String()
 }
 

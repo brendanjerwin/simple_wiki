@@ -8,6 +8,7 @@ import (
 	"reflect"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
+	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/stoewer/go-strcase"
 	"golang.org/x/text/cases"
@@ -17,24 +18,13 @@ import (
 )
 
 const (
-	inventoryKey           = "inventory"
-	containerKey           = "container"
-	itemsKey               = "items"
-	titleKey               = "title"
-	tomlDelimiterConst     = "+++\n"
-	newlineConst           = "\n"
-	defaultMaxRecursion    = 10
+	inventoryKey        = "inventory"
+	containerKey        = "container"
+	itemsKey            = "items"
+	titleKey            = "title"
+	newlineConst        = "\n"
+	defaultMaxRecursion = 10
 )
-
-// inventoryItemMarkdownTemplate is the markdown template for inventory item pages.
-const inventoryItemMarkdownTemplate = `
-### Goes in: {{LinkTo .Inventory.Container }}
-
-{{if IsContainer .Identifier }}
-## Contents
-{{ ShowInventoryContentsOf .Identifier }}
-{{ end }}
-`
 
 // CreateInventoryItem implements the CreateInventoryItem RPC.
 func (s *Server) CreateInventoryItem(_ context.Context, req *apiv1.CreateInventoryItemRequest) (*apiv1.CreateInventoryItemResponse, error) {
@@ -506,7 +496,7 @@ func buildInventoryItemMarkdown() string {
 	var builder bytes.Buffer
 	_, _ = builder.WriteString("# {{or .Title .Identifier}}")
 	_, _ = builder.WriteString(newlineConst)
-	_, _ = builder.WriteString(inventoryItemMarkdownTemplate)
+	_, _ = builder.WriteString(server.InventoryItemMarkdownTemplate)
 	return builder.String()
 }
 
