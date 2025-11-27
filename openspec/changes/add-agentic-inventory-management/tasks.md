@@ -37,3 +37,22 @@
 - [x] 5.2 Unit tests for normalization job logic
 - [x] 5.3 Integration tests for move operations (both container approaches)
 - [x] 5.4 Integration tests for normalization job page creation
+
+## 6. UI Implementation
+
+- [x] 6.1 Create `inventory-ui/spec.md` under change specs
+- [x] 6.2 Create `inventory-action-service.ts` skeleton and tests
+- [x] 6.3 Implement `inventory-action-service.ts` with gRPC client integration
+- [x] 6.4 Create `inventory-add-item-dialog.ts` skeleton and tests
+- [x] 6.5 Implement `inventory-add-item-dialog.ts` component
+- [x] 6.6 Create `inventory-add-item-dialog.stories.ts`
+- [x] 6.7 Create `inventory-move-item-dialog.ts` skeleton and tests
+- [x] 6.8 Implement `inventory-move-item-dialog.ts` component
+- [x] 6.9 Create `inventory-move-item-dialog.stories.ts`
+- [x] 6.10 Create `inventory-find-item-dialog.ts` skeleton and tests
+- [x] 6.11 Implement `inventory-find-item-dialog.ts` component
+- [x] 6.12 Create `inventory-find-item-dialog.stories.ts`
+- [x] 6.13 Add `addInventoryMenu()` to `simple_wiki.js`
+- [x] 6.14 Update `index.tmpl` with dialog element slots
+- [x] 6.15 Register components in `index.ts`
+- [ ] 6.16 Manual integration testing

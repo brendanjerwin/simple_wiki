@@ -124,6 +124,9 @@ $(window).load(function () {
 
     //add print menu
     addPrintMenu();
+
+    //add inventory menu
+    addInventoryMenu();
 });
 
 function addPrintMenu() {
@@ -144,6 +147,114 @@ function addPrintMenu() {
                 console.error('Error:', error);
             });
     }
+}
+
+function addInventoryMenu() {
+    if ($('article.content').length == 0) {
+        return;
+    }
+
+    var currentPage = $('article.content').attr('id');
+    if (!currentPage) {
+        return;
+    }
+
+    // Check if the current page has inventory frontmatter
+    fetch('/api/find_by_key_existence?k=inventory')
+        .then(response => response.json())
+        .then(data => {
+            // Check if current page is in the list of pages with inventory
+            var hasInventory = data.ids.some(function(item) {
+                return item.identifier === currentPage;
+            });
+
+            if (hasInventory) {
+                // Get page metadata to determine if it's a container or item
+                fetch('/api/frontmatter/' + encodeURIComponent(currentPage))
+                    .then(response => response.json())
+                    .then(frontmatter => {
+                        var inventory = frontmatter.frontmatter?.inventory;
+                        var isContainer = inventory?.items !== undefined;
+                        var isItem = inventory?.container !== undefined;
+                        var currentContainer = inventory?.container || '';
+
+                        // Add inventory submenu section
+                        var menuItems = [];
+
+                        // Always add Find Item
+                        menuItems.push(`
+                            <li class="pure-menu-item">
+                                <a href="#" class="pure-menu-link" id="inventory-find-item"><i class="fa-solid fa-magnifying-glass"></i> Find Item</a>
+                            </li>
+                        `);
+
+                        // Add Item Here - only for containers
+                        if (isContainer) {
+                            menuItems.push(`
+                                <li class="pure-menu-item">
+                                    <a href="#" class="pure-menu-link" id="inventory-add-item"><i class="fa-solid fa-plus"></i> Add Item Here</a>
+                                </li>
+                            `);
+                        }
+
+                        // Move This Item - only for items
+                        if (isItem) {
+                            menuItems.push(`
+                                <li class="pure-menu-item">
+                                    <a href="#" class="pure-menu-link" id="inventory-move-item"><i class="fa-solid fa-arrows-up-down-left-right"></i> Move This Item</a>
+                                </li>
+                            `);
+                        }
+
+                        // Insert menu items
+                        if (menuItems.length > 0) {
+                            $("#utilityMenuSection").after(`
+                                <li class="pure-menu-item pure-menu-has-children">
+                                    <span class="pure-menu-link"><i class="fa-solid fa-box-open"></i> Inventory</span>
+                                    <ul class="pure-menu-children">
+                                        ${menuItems.join('')}
+                                    </ul>
+                                </li>
+                            `);
+
+                            // Set up click handlers
+                            $('#inventory-find-item').on('click', function(e) {
+                                e.preventDefault();
+                                var dialog = document.getElementById('inventory-find-dialog');
+                                if (dialog) {
+                                    dialog.openDialog();
+                                }
+                            });
+
+                            if (isContainer) {
+                                $('#inventory-add-item').on('click', function(e) {
+                                    e.preventDefault();
+                                    var dialog = document.getElementById('inventory-add-dialog');
+                                    if (dialog) {
+                                        dialog.openDialog(currentPage);
+                                    }
+                                });
+                            }
+
+                            if (isItem) {
+                                $('#inventory-move-item').on('click', function(e) {
+                                    e.preventDefault();
+                                    var dialog = document.getElementById('inventory-move-dialog');
+                                    if (dialog) {
+                                        dialog.openDialog(currentPage, currentContainer);
+                                    }
+                                });
+                            }
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error fetching frontmatter:', error);
+                    });
+            }
+        })
+        .catch(error => {
+            console.error('Error checking inventory:', error);
+        });
 }
 
 function printLabel(template_identifier) {
