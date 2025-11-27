@@ -212,18 +212,11 @@ function buildInventoryMenu(currentPage, frontmatter) {
     var isItem = inventory && typeof inventory.container === 'string' && inventory.container !== '';
     var currentContainer = (inventory && inventory.container) || '';
 
-    // Build menu items as flat list with header
-    var menuItems = [];
-
-    // Add section header
-    menuItems.push(`
-        <li class="pure-menu-item pure-menu-disabled">
-            <span class="pure-menu-link"><i class="fa-solid fa-box-open"></i> <strong>Inventory</strong></span>
-        </li>
-    `);
+    // Build sub-menu items
+    var subMenuItems = [];
 
     // Always add Find Item
-    menuItems.push(`
+    subMenuItems.push(`
         <li class="pure-menu-item">
             <a href="#" class="pure-menu-link" id="inventory-find-item"><i class="fa-solid fa-magnifying-glass"></i> Find Item</a>
         </li>
@@ -231,7 +224,7 @@ function buildInventoryMenu(currentPage, frontmatter) {
 
     // Add Item Here - only for containers
     if (isContainer) {
-        menuItems.push(`
+        subMenuItems.push(`
             <li class="pure-menu-item">
                 <a href="#" class="pure-menu-link" id="inventory-add-item"><i class="fa-solid fa-plus"></i> Add Item Here</a>
             </li>
@@ -240,15 +233,25 @@ function buildInventoryMenu(currentPage, frontmatter) {
 
     // Move This Item - only for items
     if (isItem) {
-        menuItems.push(`
+        subMenuItems.push(`
             <li class="pure-menu-item">
                 <a href="#" class="pure-menu-link" id="inventory-move-item"><i class="fa-solid fa-arrows-up-down-left-right"></i> Move This Item</a>
             </li>
         `);
     }
 
-    // Insert flat menu items after utility section
-    $("#utilityMenuSection").after(menuItems.join(''));
+    // Build the parent menu item with nested sub-menu
+    var inventoryMenu = `
+        <li class="pure-menu-item pure-menu-has-children">
+            <a href="#" class="pure-menu-link"><i class="fa-solid fa-box-open"></i> Inventory</a>
+            <ul class="pure-menu-children">
+                ${subMenuItems.join('')}
+            </ul>
+        </li>
+    `;
+
+    // Insert after utility section
+    $("#utilityMenuSection").after(inventoryMenu);
 
     // Set up click handlers
     $('#inventory-find-item').on('click', function(e) {

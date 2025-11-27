@@ -197,6 +197,47 @@ ul.pure-menu-list {
   }
 }
 
+/*---- Nested Sub-menus ----*/
+/* Sub-menu items that have children */
+.pure-menu-children .pure-menu-has-children {
+  position: relative;
+}
+
+/* Arrow indicator for sub-menu items */
+.pure-menu-children .pure-menu-has-children > .pure-menu-link::after {
+  content: '\f054'; /* FontAwesome chevron-right */
+  font-family: 'Font Awesome 6 Free';
+  font-weight: 900;
+  font-size: 0.7em;
+  margin-left: 0.5em;
+  opacity: 0.6;
+}
+
+/* Nested sub-menu container - appears to the right */
+.pure-menu-children .pure-menu-children {
+  position: absolute;
+  left: 100%;
+  top: 0;
+  display: none;
+  min-width: 150px;
+  background: white;
+  border: grey;
+  border-style: solid;
+  border-radius: 8px;
+  box-shadow: 2px 2px 5px rgba(0,0,0,0.15);
+  z-index: 100;
+}
+
+/* Show nested sub-menu on hover */
+.pure-menu-children .pure-menu-has-children:hover > .pure-menu-children {
+  display: block;
+}
+
+/* Ensure proper stacking */
+.pure-menu-has-children {
+  position: relative;
+}
+
 /*---- Components ----*/
 wiki-search#site-search {
   margin: auto;
