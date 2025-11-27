@@ -170,10 +170,10 @@ function addInventoryMenu() {
 
             if (hasInventory) {
                 // Get page metadata to determine if it's a container or item
-                fetch('/api/frontmatter/' + encodeURIComponent(currentPage))
+                fetch('/' + encodeURIComponent(currentPage) + '/frontmatter')
                     .then(response => response.json())
                     .then(frontmatter => {
-                        var inventory = frontmatter.frontmatter?.inventory;
+                        var inventory = frontmatter?.inventory;
                         var isContainer = inventory?.items !== undefined;
                         var isItem = inventory?.container !== undefined;
                         var currentContainer = inventory?.container || '';
