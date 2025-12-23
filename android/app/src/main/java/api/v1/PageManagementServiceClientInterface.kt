@@ -21,4 +21,10 @@ public interface PageManagementServiceClientInterface {
   public suspend fun updateWholePage(request: PageManagement.UpdateWholePageRequest, headers: Headers = emptyMap()): ResponseMessage<PageManagement.UpdateWholePageResponse>
 
   public suspend fun deletePage(request: PageManagement.DeletePageRequest, headers: Headers = emptyMap()): ResponseMessage<PageManagement.DeletePageResponse>
+
+  /**
+   *  GenerateIdentifier converts text to a wiki page identifier format.
+   *  Used by UI to auto-generate identifiers from titles and check availability.
+   */
+  public suspend fun generateIdentifier(request: PageManagement.GenerateIdentifierRequest, headers: Headers = emptyMap()): ResponseMessage<PageManagement.GenerateIdentifierResponse>
 }

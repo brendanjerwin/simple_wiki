@@ -1,10 +1,15 @@
 import { createClient } from '@connectrpc/connect';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import { InventoryManagementService } from '../gen/api/v1/inventory_connect.js';
+import { PageManagementService } from '../gen/api/v1/page_management_connect.js';
 import {
   CreateInventoryItemRequest,
   MoveInventoryItemRequest,
 } from '../gen/api/v1/inventory_pb.js';
+import {
+  GenerateIdentifierRequest,
+  ExistingPageInfo,
+} from '../gen/api/v1/page_management_pb.js';
 import { AugmentErrorService } from './augment-error-service.js';
 import { showToastAfter } from './toast-message.js';
 
@@ -24,15 +29,20 @@ import { showToastAfter } from './toast-message.js';
  */
 export class InventoryActionService {
   private inventoryClient = createClient(InventoryManagementService, getGrpcWebTransport());
+  private pageManagementClient = createClient(PageManagementService, getGrpcWebTransport());
 
   /**
-   * Opens the Add Item dialog for a container
+   * Creates a new inventory item in a container
    * @param containerIdentifier The container to add the item to
+   * @param itemIdentifier The identifier for the new item
+   * @param title Optional title for the item
+   * @param description Optional description for the item
    */
   async addItem(
     containerIdentifier: string,
     itemIdentifier: string,
-    title?: string
+    title?: string,
+    description?: string
   ): Promise<{ success: boolean; itemIdentifier?: string; summary?: string; error?: string }> {
     if (!containerIdentifier || !itemIdentifier) {
       return { success: false, error: 'Container and item identifier are required' };
@@ -43,6 +53,7 @@ export class InventoryActionService {
         itemIdentifier,
         container: containerIdentifier,
         title: title || '',
+        description: description || '',
       });
 
       const response = await this.inventoryClient.createInventoryItem(request);
@@ -63,6 +74,48 @@ export class InventoryActionService {
       const augmentedError = AugmentErrorService.augmentError(err, 'create inventory item');
       return {
         success: false,
+        error: augmentedError.message,
+      };
+    }
+  }
+
+  /**
+   * Generates a wiki identifier from text
+   * @param text The text to convert to an identifier
+   * @param ensureUnique If true, appends suffix to ensure no page exists with this identifier
+   * @returns The generated identifier and availability info
+   */
+  async generateIdentifier(
+    text: string,
+    ensureUnique = false
+  ): Promise<{
+    identifier: string;
+    isUnique: boolean;
+    existingPage?: ExistingPageInfo;
+    error?: string;
+  }> {
+    if (!text) {
+      return { identifier: '', isUnique: true };
+    }
+
+    try {
+      const request = new GenerateIdentifierRequest({
+        text,
+        ensureUnique,
+      });
+
+      const response = await this.pageManagementClient.generateIdentifier(request);
+
+      return {
+        identifier: response.identifier,
+        isUnique: response.isUnique,
+        existingPage: response.existingPage,
+      };
+    } catch (err) {
+      const augmentedError = AugmentErrorService.augmentError(err, 'generate identifier');
+      return {
+        identifier: '',
+        isUnique: true,
         error: augmentedError.message,
       };
     }

@@ -34,6 +34,10 @@ message CreateInventoryItemRequest {
   // Optional: Human-readable title for the item.
   // If not provided, will be auto-generated from the identifier.
   string title = 3;
+
+  // Optional: Description for the item.
+  // Will be written to frontmatter as 'description'.
+  string description = 4;
 }
 
 message CreateInventoryItemResponse {

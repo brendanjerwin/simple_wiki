@@ -4,6 +4,7 @@ package v1
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"maps"
 	"os"
 	"reflect"
@@ -674,4 +675,87 @@ func (s *Server) ReadPage(_ context.Context, req *apiv1.ReadPageRequest) (*apiv1
 		RenderedContentHtml:     renderedHTML,
 		RenderedContentMarkdown: renderedMarkdown,
 	}, nil
+}
+
+// GenerateIdentifier implements the GenerateIdentifier RPC.
+// Converts text to wiki identifier format and checks if it's available.
+func (s *Server) GenerateIdentifier(_ context.Context, req *apiv1.GenerateIdentifierRequest) (*apiv1.GenerateIdentifierResponse, error) {
+	if req.Text == "" {
+		return nil, status.Error(codes.InvalidArgument, "text is required")
+	}
+
+	// Generate the base identifier
+	identifier := wikiidentifiers.MungeIdentifier(req.Text)
+
+	// Check if page exists
+	isUnique, existingPage := s.checkIdentifierAvailability(identifier)
+
+	// If ensure_unique is requested and page exists, find a unique suffix
+	if req.EnsureUnique && !isUnique {
+		identifier = s.findUniqueIdentifier(identifier)
+		isUnique = true
+		existingPage = nil
+	}
+
+	return &apiv1.GenerateIdentifierResponse{
+		Identifier:   identifier,
+		IsUnique:     isUnique,
+		ExistingPage: existingPage,
+	}, nil
+}
+
+// checkIdentifierAvailability checks if an identifier is available and returns info about existing page if not.
+func (s *Server) checkIdentifierAvailability(identifier string) (bool, *apiv1.ExistingPageInfo) {
+	v := reflect.ValueOf(s.PageReaderMutator)
+	if s.PageReaderMutator == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
+		// If we can't check, assume it's unique
+		return true, nil
+	}
+
+	_, fm, err := s.PageReaderMutator.ReadFrontMatter(identifier)
+	if err != nil {
+		// Page doesn't exist
+		return true, nil
+	}
+
+	// Page exists, build info
+	existingPage := &apiv1.ExistingPageInfo{
+		Identifier: identifier,
+	}
+
+	// Get title from frontmatter
+	if title, ok := fm["title"].(string); ok {
+		existingPage.Title = title
+	}
+
+	// Get container from inventory.container
+	if inv, ok := fm["inventory"].(map[string]any); ok {
+		if container, ok := inv["container"].(string); ok {
+			existingPage.Container = container
+		}
+	}
+
+	return false, existingPage
+}
+
+// findUniqueIdentifier finds a unique identifier by adding numeric suffixes.
+func (s *Server) findUniqueIdentifier(baseIdentifier string) string {
+	v := reflect.ValueOf(s.PageReaderMutator)
+	if s.PageReaderMutator == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
+		return baseIdentifier
+	}
+
+	// Try suffixes _1, _2, _3, etc.
+	for i := 1; i < 1000; i++ {
+		candidate := fmt.Sprintf("%s_%d", baseIdentifier, i)
+
+		_, _, err := s.PageReaderMutator.ReadFrontMatter(candidate)
+		if err != nil {
+			// Page doesn't exist, we found a unique identifier
+			return candidate
+		}
+	}
+
+	// Fallback: return with a high number
+	return baseIdentifier + "_999"
 }

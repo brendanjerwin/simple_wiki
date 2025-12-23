@@ -32,6 +32,14 @@ export class CreateInventoryItemRequest extends Message<CreateInventoryItemReque
    */
   title = "";
 
+  /**
+   * Optional: Description for the item.
+   * Will be written to frontmatter as 'description'.
+   *
+   * @generated from field: string description = 4;
+   */
+  description = "";
+
   constructor(data?: PartialMessage<CreateInventoryItemRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -43,6 +51,7 @@ export class CreateInventoryItemRequest extends Message<CreateInventoryItemReque
     { no: 1, name: "item_identifier", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "container", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 3, name: "title", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "description", kind: "scalar", T: 9 /* ScalarType.STRING */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): CreateInventoryItemRequest {

@@ -170,6 +170,29 @@ var _ = Describe("InventoryManagementService", func() {
 				Expect(mockPageReaderMutator.WrittenFrontmatter["title"]).To(Equal("My Custom Title"))
 			})
 		})
+
+		When("creating a new item with a description", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = os.ErrNotExist
+				req.Description = "A useful phillips head screwdriver"
+			})
+
+			It("should write the description to frontmatter", func() {
+				Expect(mockPageReaderMutator.WrittenFrontmatter["description"]).To(Equal("A useful phillips head screwdriver"))
+			})
+		})
+
+		When("creating a new item without a description", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = os.ErrNotExist
+				req.Description = ""
+			})
+
+			It("should not include description in frontmatter", func() {
+				_, hasDescription := mockPageReaderMutator.WrittenFrontmatter["description"]
+				Expect(hasDescription).To(BeFalse())
+			})
+		})
 	})
 
 	Describe("MoveInventoryItem", func() {

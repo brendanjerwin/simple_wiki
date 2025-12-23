@@ -1996,6 +1996,179 @@ var _ = Describe("Server", func() {
 			})
 		})
 	})
+
+	Describe("GenerateIdentifier", func() {
+		var (
+			req                   *apiv1.GenerateIdentifierRequest
+			resp                  *apiv1.GenerateIdentifierResponse
+			err                   error
+			mockPageReaderMutator *MockPageReaderMutator
+		)
+
+		BeforeEach(func() {
+			req = &apiv1.GenerateIdentifierRequest{
+				Text: "Phillips Screwdriver",
+			}
+			mockPageReaderMutator = &MockPageReaderMutator{
+				Err: os.ErrNotExist, // By default, no pages exist
+			}
+		})
+
+		JustBeforeEach(func() {
+			server = v1.NewServer(
+				"commit",
+				time.Now(),
+				mockPageReaderMutator,
+				nil,
+				nil,
+				lumber.NewConsoleLogger(lumber.WARN),
+				nil,
+				nil,
+				nil,
+			)
+			resp, err = server.GenerateIdentifier(ctx, req)
+		})
+
+		When("the text is empty", func() {
+			BeforeEach(func() {
+				req.Text = ""
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "text is required"))
+			})
+		})
+
+		When("the text is provided and no page exists with the identifier", func() {
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return the munged identifier", func() {
+				Expect(resp.Identifier).To(Equal("phillips_screwdriver"))
+			})
+
+			It("should indicate the identifier is unique", func() {
+				Expect(resp.IsUnique).To(BeTrue())
+			})
+
+			It("should not return existing page info", func() {
+				Expect(resp.ExistingPage).To(BeNil())
+			})
+		})
+
+		When("a page already exists with the generated identifier", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator = &MockPageReaderMutator{
+					FrontmatterByID: map[string]map[string]any{
+						"phillips_screwdriver": {
+							"title": "Existing Phillips Screwdriver",
+							"inventory": map[string]any{
+								"container": "toolbox",
+							},
+						},
+					},
+				}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return the munged identifier", func() {
+				Expect(resp.Identifier).To(Equal("phillips_screwdriver"))
+			})
+
+			It("should indicate the identifier is not unique", func() {
+				Expect(resp.IsUnique).To(BeFalse())
+			})
+
+			It("should return existing page info with identifier", func() {
+				Expect(resp.ExistingPage).NotTo(BeNil())
+				Expect(resp.ExistingPage.Identifier).To(Equal("phillips_screwdriver"))
+			})
+
+			It("should return existing page info with title", func() {
+				Expect(resp.ExistingPage.Title).To(Equal("Existing Phillips Screwdriver"))
+			})
+
+			It("should return existing page info with container", func() {
+				Expect(resp.ExistingPage.Container).To(Equal("toolbox"))
+			})
+		})
+
+		When("ensure_unique is requested and a page already exists", func() {
+			BeforeEach(func() {
+				req.EnsureUnique = true
+				mockPageReaderMutator = &MockPageReaderMutator{
+					FrontmatterByID: map[string]map[string]any{
+						"phillips_screwdriver": {
+							"title": "Existing Phillips Screwdriver",
+						},
+					},
+				}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a unique identifier with suffix", func() {
+				Expect(resp.Identifier).To(Equal("phillips_screwdriver_1"))
+			})
+
+			It("should indicate the identifier is unique", func() {
+				Expect(resp.IsUnique).To(BeTrue())
+			})
+
+			It("should not return existing page info", func() {
+				Expect(resp.ExistingPage).To(BeNil())
+			})
+		})
+
+		When("ensure_unique is requested and multiple pages exist with suffixes", func() {
+			BeforeEach(func() {
+				req.EnsureUnique = true
+				mockPageReaderMutator = &MockPageReaderMutator{
+					FrontmatterByID: map[string]map[string]any{
+						"phillips_screwdriver":   {"title": "First"},
+						"phillips_screwdriver_1": {"title": "Second"},
+						"phillips_screwdriver_2": {"title": "Third"},
+					},
+				}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return the next available suffix", func() {
+				Expect(resp.Identifier).To(Equal("phillips_screwdriver_3"))
+			})
+
+			It("should indicate the identifier is unique", func() {
+				Expect(resp.IsUnique).To(BeTrue())
+			})
+		})
+
+		When("the PageReaderMutator is nil", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator = nil
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return the munged identifier", func() {
+				Expect(resp.Identifier).To(Equal("phillips_screwdriver"))
+			})
+
+			It("should indicate the identifier is unique (cannot verify)", func() {
+				Expect(resp.IsUnique).To(BeTrue())
+			})
+		})
+	})
 })
 
 // MockMarkdownRenderer is a mock implementation of wikipage.IRenderMarkdownToHTML

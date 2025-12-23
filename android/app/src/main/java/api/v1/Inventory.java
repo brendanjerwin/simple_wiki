@@ -75,6 +75,28 @@ public final class Inventory {
      */
     com.google.protobuf.ByteString
         getTitleBytes();
+
+    /**
+     * <pre>
+     * Optional: Description for the item.
+     * Will be written to frontmatter as 'description'.
+     * </pre>
+     *
+     * <code>string description = 4 [json_name = "description"];</code>
+     * @return The description.
+     */
+    java.lang.String getDescription();
+    /**
+     * <pre>
+     * Optional: Description for the item.
+     * Will be written to frontmatter as 'description'.
+     * </pre>
+     *
+     * <code>string description = 4 [json_name = "description"];</code>
+     * @return The bytes for description.
+     */
+    com.google.protobuf.ByteString
+        getDescriptionBytes();
   }
   /**
    * Protobuf type {@code api.v1.CreateInventoryItemRequest}
@@ -88,6 +110,7 @@ public final class Inventory {
       itemIdentifier_ = "";
       container_ = "";
       title_ = "";
+      description_ = "";
     }
     public static final int ITEM_IDENTIFIER_FIELD_NUMBER = 1;
     private java.lang.String itemIdentifier_;
@@ -292,6 +315,78 @@ public final class Inventory {
         com.google.protobuf.ByteString value) {
       checkByteStringIsUtf8(value);
       title_ = value.toStringUtf8();
+
+    }
+
+    public static final int DESCRIPTION_FIELD_NUMBER = 4;
+    private java.lang.String description_;
+    /**
+     * <pre>
+     * Optional: Description for the item.
+     * Will be written to frontmatter as 'description'.
+     * </pre>
+     *
+     * <code>string description = 4 [json_name = "description"];</code>
+     * @return The description.
+     */
+    @java.lang.Override
+    public java.lang.String getDescription() {
+      return description_;
+    }
+    /**
+     * <pre>
+     * Optional: Description for the item.
+     * Will be written to frontmatter as 'description'.
+     * </pre>
+     *
+     * <code>string description = 4 [json_name = "description"];</code>
+     * @return The bytes for description.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getDescriptionBytes() {
+      return com.google.protobuf.ByteString.copyFromUtf8(description_);
+    }
+    /**
+     * <pre>
+     * Optional: Description for the item.
+     * Will be written to frontmatter as 'description'.
+     * </pre>
+     *
+     * <code>string description = 4 [json_name = "description"];</code>
+     * @param value The description to set.
+     */
+    private void setDescription(
+        java.lang.String value) {
+      java.lang.Class<?> valueClass = value.getClass();
+  
+      description_ = value;
+    }
+    /**
+     * <pre>
+     * Optional: Description for the item.
+     * Will be written to frontmatter as 'description'.
+     * </pre>
+     *
+     * <code>string description = 4 [json_name = "description"];</code>
+     */
+    private void clearDescription() {
+
+      description_ = getDefaultInstance().getDescription();
+    }
+    /**
+     * <pre>
+     * Optional: Description for the item.
+     * Will be written to frontmatter as 'description'.
+     * </pre>
+     *
+     * <code>string description = 4 [json_name = "description"];</code>
+     * @param value The bytes for description to set.
+     */
+    private void setDescriptionBytes(
+        com.google.protobuf.ByteString value) {
+      checkByteStringIsUtf8(value);
+      description_ = value.toStringUtf8();
 
     }
 
@@ -604,6 +699,80 @@ public final class Inventory {
         return this;
       }
 
+      /**
+       * <pre>
+       * Optional: Description for the item.
+       * Will be written to frontmatter as 'description'.
+       * </pre>
+       *
+       * <code>string description = 4 [json_name = "description"];</code>
+       * @return The description.
+       */
+      @java.lang.Override
+      public java.lang.String getDescription() {
+        return instance.getDescription();
+      }
+      /**
+       * <pre>
+       * Optional: Description for the item.
+       * Will be written to frontmatter as 'description'.
+       * </pre>
+       *
+       * <code>string description = 4 [json_name = "description"];</code>
+       * @return The bytes for description.
+       */
+      @java.lang.Override
+      public com.google.protobuf.ByteString
+          getDescriptionBytes() {
+        return instance.getDescriptionBytes();
+      }
+      /**
+       * <pre>
+       * Optional: Description for the item.
+       * Will be written to frontmatter as 'description'.
+       * </pre>
+       *
+       * <code>string description = 4 [json_name = "description"];</code>
+       * @param value The description to set.
+       * @return This builder for chaining.
+       */
+      public Builder setDescription(
+          java.lang.String value) {
+        copyOnWrite();
+        instance.setDescription(value);
+        return this;
+      }
+      /**
+       * <pre>
+       * Optional: Description for the item.
+       * Will be written to frontmatter as 'description'.
+       * </pre>
+       *
+       * <code>string description = 4 [json_name = "description"];</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearDescription() {
+        copyOnWrite();
+        instance.clearDescription();
+        return this;
+      }
+      /**
+       * <pre>
+       * Optional: Description for the item.
+       * Will be written to frontmatter as 'description'.
+       * </pre>
+       *
+       * <code>string description = 4 [json_name = "description"];</code>
+       * @param value The bytes for description to set.
+       * @return This builder for chaining.
+       */
+      public Builder setDescriptionBytes(
+          com.google.protobuf.ByteString value) {
+        copyOnWrite();
+        instance.setDescriptionBytes(value);
+        return this;
+      }
+
       // @@protoc_insertion_point(builder_scope:api.v1.CreateInventoryItemRequest)
     }
     @java.lang.Override
@@ -623,10 +792,11 @@ public final class Inventory {
               "itemIdentifier_",
               "container_",
               "title_",
+              "description_",
             };
             java.lang.String info =
-                "\u0000\u0003\u0000\u0000\u0001\u0003\u0003\u0000\u0000\u0000\u0001\u0208\u0002\u0208" +
-                "\u0003\u0208";
+                "\u0000\u0004\u0000\u0000\u0001\u0004\u0004\u0000\u0000\u0000\u0001\u0208\u0002\u0208" +
+                "\u0003\u0208\u0004\u0208";
             return newMessageInfo(DEFAULT_INSTANCE, info, objects);
         }
         // fall through

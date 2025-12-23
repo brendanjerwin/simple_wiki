@@ -22,6 +22,7 @@ const (
 	containerKey        = "container"
 	itemsKey            = "items"
 	titleKey            = "title"
+	descriptionKey      = "description"
 	newlineConst        = "\n"
 	defaultMaxRecursion = 10
 )
@@ -67,6 +68,11 @@ func (s *Server) CreateInventoryItem(_ context.Context, req *apiv1.CreateInvento
 		title = titleCaser.String(snaked)
 	}
 	fm[titleKey] = title
+
+	// Set description if provided
+	if req.Description != "" {
+		fm[descriptionKey] = req.Description
+	}
 
 	// Set up inventory structure
 	inventory := make(map[string]any)

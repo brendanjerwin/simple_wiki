@@ -104,6 +104,33 @@ public object CreateInventoryItemRequestKt {
     public fun clearTitle() {
       _builder.clearTitle()
     }
+
+    /**
+     * ```
+     * Optional: Description for the item.
+     * Will be written to frontmatter as 'description'.
+     * ```
+     *
+     * `string description = 4 [json_name = "description"];`
+     */
+    public var description: kotlin.String
+      @JvmName("getDescription")
+      get() = _builder.description
+      @JvmName("setDescription")
+      set(value) {
+        _builder.description = value
+      }
+    /**
+     * ```
+     * Optional: Description for the item.
+     * Will be written to frontmatter as 'description'.
+     * ```
+     *
+     * `string description = 4 [json_name = "description"];`
+     */
+    public fun clearDescription() {
+      _builder.clearDescription()
+    }
   }
 }
 @kotlin.jvm.JvmSynthetic

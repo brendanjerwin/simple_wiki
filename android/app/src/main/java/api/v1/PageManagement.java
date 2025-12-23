@@ -5619,6 +5619,1704 @@ public final class PageManagement {
     }
   }
 
+  public interface GenerateIdentifierRequestOrBuilder extends
+      // @@protoc_insertion_point(interface_extends:api.v1.GenerateIdentifierRequest)
+      com.google.protobuf.MessageLiteOrBuilder {
+
+    /**
+     * <pre>
+     * The text to convert to an identifier (typically a title).
+     * </pre>
+     *
+     * <code>string text = 1 [json_name = "text"];</code>
+     * @return The text.
+     */
+    java.lang.String getText();
+    /**
+     * <pre>
+     * The text to convert to an identifier (typically a title).
+     * </pre>
+     *
+     * <code>string text = 1 [json_name = "text"];</code>
+     * @return The bytes for text.
+     */
+    com.google.protobuf.ByteString
+        getTextBytes();
+
+    /**
+     * <pre>
+     * If true, add suffix (e.g., _1, _2) to ensure no existing page has this identifier.
+     * </pre>
+     *
+     * <code>bool ensure_unique = 2 [json_name = "ensureUnique"];</code>
+     * @return The ensureUnique.
+     */
+    boolean getEnsureUnique();
+  }
+  /**
+   * <pre>
+   * Generate Identifier
+   * </pre>
+   *
+   * Protobuf type {@code api.v1.GenerateIdentifierRequest}
+   */
+  public  static final class GenerateIdentifierRequest extends
+      com.google.protobuf.GeneratedMessageLite<
+          GenerateIdentifierRequest, GenerateIdentifierRequest.Builder> implements
+      // @@protoc_insertion_point(message_implements:api.v1.GenerateIdentifierRequest)
+      GenerateIdentifierRequestOrBuilder {
+    private GenerateIdentifierRequest() {
+      text_ = "";
+    }
+    public static final int TEXT_FIELD_NUMBER = 1;
+    private java.lang.String text_;
+    /**
+     * <pre>
+     * The text to convert to an identifier (typically a title).
+     * </pre>
+     *
+     * <code>string text = 1 [json_name = "text"];</code>
+     * @return The text.
+     */
+    @java.lang.Override
+    public java.lang.String getText() {
+      return text_;
+    }
+    /**
+     * <pre>
+     * The text to convert to an identifier (typically a title).
+     * </pre>
+     *
+     * <code>string text = 1 [json_name = "text"];</code>
+     * @return The bytes for text.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getTextBytes() {
+      return com.google.protobuf.ByteString.copyFromUtf8(text_);
+    }
+    /**
+     * <pre>
+     * The text to convert to an identifier (typically a title).
+     * </pre>
+     *
+     * <code>string text = 1 [json_name = "text"];</code>
+     * @param value The text to set.
+     */
+    private void setText(
+        java.lang.String value) {
+      java.lang.Class<?> valueClass = value.getClass();
+  
+      text_ = value;
+    }
+    /**
+     * <pre>
+     * The text to convert to an identifier (typically a title).
+     * </pre>
+     *
+     * <code>string text = 1 [json_name = "text"];</code>
+     */
+    private void clearText() {
+
+      text_ = getDefaultInstance().getText();
+    }
+    /**
+     * <pre>
+     * The text to convert to an identifier (typically a title).
+     * </pre>
+     *
+     * <code>string text = 1 [json_name = "text"];</code>
+     * @param value The bytes for text to set.
+     */
+    private void setTextBytes(
+        com.google.protobuf.ByteString value) {
+      checkByteStringIsUtf8(value);
+      text_ = value.toStringUtf8();
+
+    }
+
+    public static final int ENSURE_UNIQUE_FIELD_NUMBER = 2;
+    private boolean ensureUnique_;
+    /**
+     * <pre>
+     * If true, add suffix (e.g., _1, _2) to ensure no existing page has this identifier.
+     * </pre>
+     *
+     * <code>bool ensure_unique = 2 [json_name = "ensureUnique"];</code>
+     * @return The ensureUnique.
+     */
+    @java.lang.Override
+    public boolean getEnsureUnique() {
+      return ensureUnique_;
+    }
+    /**
+     * <pre>
+     * If true, add suffix (e.g., _1, _2) to ensure no existing page has this identifier.
+     * </pre>
+     *
+     * <code>bool ensure_unique = 2 [json_name = "ensureUnique"];</code>
+     * @param value The ensureUnique to set.
+     */
+    private void setEnsureUnique(boolean value) {
+      
+      ensureUnique_ = value;
+    }
+    /**
+     * <pre>
+     * If true, add suffix (e.g., _1, _2) to ensure no existing page has this identifier.
+     * </pre>
+     *
+     * <code>bool ensure_unique = 2 [json_name = "ensureUnique"];</code>
+     */
+    private void clearEnsureUnique() {
+
+      ensureUnique_ = false;
+    }
+
+    public static api.v1.PageManagement.GenerateIdentifierRequest parseFrom(
+        java.nio.ByteBuffer data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return com.google.protobuf.GeneratedMessageLite.parseFrom(
+          DEFAULT_INSTANCE, data);
+    }
+    public static api.v1.PageManagement.GenerateIdentifierRequest parseFrom(
+        java.nio.ByteBuffer data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return com.google.protobuf.GeneratedMessageLite.parseFrom(
+          DEFAULT_INSTANCE, data, extensionRegistry);
+    }
+    public static api.v1.PageManagement.GenerateIdentifierRequest parseFrom(
+        com.google.protobuf.ByteString data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return com.google.protobuf.GeneratedMessageLite.parseFrom(
+          DEFAULT_INSTANCE, data);
+    }
+    public static api.v1.PageManagement.GenerateIdentifierRequest parseFrom(
+        com.google.protobuf.ByteString data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return com.google.protobuf.GeneratedMessageLite.parseFrom(
+          DEFAULT_INSTANCE, data, extensionRegistry);
+    }
+    public static api.v1.PageManagement.GenerateIdentifierRequest parseFrom(byte[] data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return com.google.protobuf.GeneratedMessageLite.parseFrom(
+          DEFAULT_INSTANCE, data);
+    }
+    public static api.v1.PageManagement.GenerateIdentifierRequest parseFrom(
+        byte[] data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return com.google.protobuf.GeneratedMessageLite.parseFrom(
+          DEFAULT_INSTANCE, data, extensionRegistry);
+    }
+    public static api.v1.PageManagement.GenerateIdentifierRequest parseFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageLite.parseFrom(
+          DEFAULT_INSTANCE, input);
+    }
+    public static api.v1.PageManagement.GenerateIdentifierRequest parseFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageLite.parseFrom(
+          DEFAULT_INSTANCE, input, extensionRegistry);
+    }
+
+    public static api.v1.PageManagement.GenerateIdentifierRequest parseDelimitedFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return parseDelimitedFrom(DEFAULT_INSTANCE, input);
+    }
+
+    public static api.v1.PageManagement.GenerateIdentifierRequest parseDelimitedFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return parseDelimitedFrom(DEFAULT_INSTANCE, input, extensionRegistry);
+    }
+    public static api.v1.PageManagement.GenerateIdentifierRequest parseFrom(
+        com.google.protobuf.CodedInputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageLite.parseFrom(
+          DEFAULT_INSTANCE, input);
+    }
+    public static api.v1.PageManagement.GenerateIdentifierRequest parseFrom(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageLite.parseFrom(
+          DEFAULT_INSTANCE, input, extensionRegistry);
+    }
+
+    public static Builder newBuilder() {
+      return (Builder) DEFAULT_INSTANCE.createBuilder();
+    }
+    public static Builder newBuilder(api.v1.PageManagement.GenerateIdentifierRequest prototype) {
+      return DEFAULT_INSTANCE.createBuilder(prototype);
+    }
+
+    /**
+     * <pre>
+     * Generate Identifier
+     * </pre>
+     *
+     * Protobuf type {@code api.v1.GenerateIdentifierRequest}
+     */
+    public static final class Builder extends
+        com.google.protobuf.GeneratedMessageLite.Builder<
+          api.v1.PageManagement.GenerateIdentifierRequest, Builder> implements
+        // @@protoc_insertion_point(builder_implements:api.v1.GenerateIdentifierRequest)
+        api.v1.PageManagement.GenerateIdentifierRequestOrBuilder {
+      // Construct using api.v1.PageManagement.GenerateIdentifierRequest.newBuilder()
+      private Builder() {
+        super(DEFAULT_INSTANCE);
+      }
+
+
+      /**
+       * <pre>
+       * The text to convert to an identifier (typically a title).
+       * </pre>
+       *
+       * <code>string text = 1 [json_name = "text"];</code>
+       * @return The text.
+       */
+      @java.lang.Override
+      public java.lang.String getText() {
+        return instance.getText();
+      }
+      /**
+       * <pre>
+       * The text to convert to an identifier (typically a title).
+       * </pre>
+       *
+       * <code>string text = 1 [json_name = "text"];</code>
+       * @return The bytes for text.
+       */
+      @java.lang.Override
+      public com.google.protobuf.ByteString
+          getTextBytes() {
+        return instance.getTextBytes();
+      }
+      /**
+       * <pre>
+       * The text to convert to an identifier (typically a title).
+       * </pre>
+       *
+       * <code>string text = 1 [json_name = "text"];</code>
+       * @param value The text to set.
+       * @return This builder for chaining.
+       */
+      public Builder setText(
+          java.lang.String value) {
+        copyOnWrite();
+        instance.setText(value);
+        return this;
+      }
+      /**
+       * <pre>
+       * The text to convert to an identifier (typically a title).
+       * </pre>
+       *
+       * <code>string text = 1 [json_name = "text"];</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearText() {
+        copyOnWrite();
+        instance.clearText();
+        return this;
+      }
+      /**
+       * <pre>
+       * The text to convert to an identifier (typically a title).
+       * </pre>
+       *
+       * <code>string text = 1 [json_name = "text"];</code>
+       * @param value The bytes for text to set.
+       * @return This builder for chaining.
+       */
+      public Builder setTextBytes(
+          com.google.protobuf.ByteString value) {
+        copyOnWrite();
+        instance.setTextBytes(value);
+        return this;
+      }
+
+      /**
+       * <pre>
+       * If true, add suffix (e.g., _1, _2) to ensure no existing page has this identifier.
+       * </pre>
+       *
+       * <code>bool ensure_unique = 2 [json_name = "ensureUnique"];</code>
+       * @return The ensureUnique.
+       */
+      @java.lang.Override
+      public boolean getEnsureUnique() {
+        return instance.getEnsureUnique();
+      }
+      /**
+       * <pre>
+       * If true, add suffix (e.g., _1, _2) to ensure no existing page has this identifier.
+       * </pre>
+       *
+       * <code>bool ensure_unique = 2 [json_name = "ensureUnique"];</code>
+       * @param value The ensureUnique to set.
+       * @return This builder for chaining.
+       */
+      public Builder setEnsureUnique(boolean value) {
+        copyOnWrite();
+        instance.setEnsureUnique(value);
+        return this;
+      }
+      /**
+       * <pre>
+       * If true, add suffix (e.g., _1, _2) to ensure no existing page has this identifier.
+       * </pre>
+       *
+       * <code>bool ensure_unique = 2 [json_name = "ensureUnique"];</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearEnsureUnique() {
+        copyOnWrite();
+        instance.clearEnsureUnique();
+        return this;
+      }
+
+      // @@protoc_insertion_point(builder_scope:api.v1.GenerateIdentifierRequest)
+    }
+    @java.lang.Override
+    @java.lang.SuppressWarnings({"unchecked", "fallthrough"})
+    protected final java.lang.Object dynamicMethod(
+        com.google.protobuf.GeneratedMessageLite.MethodToInvoke method,
+        java.lang.Object arg0, java.lang.Object arg1) {
+      switch (method) {
+        case NEW_MUTABLE_INSTANCE: {
+          return new api.v1.PageManagement.GenerateIdentifierRequest();
+        }
+        case NEW_BUILDER: {
+          return new Builder();
+        }
+        case BUILD_MESSAGE_INFO: {
+            java.lang.Object[] objects = new java.lang.Object[] {
+              "text_",
+              "ensureUnique_",
+            };
+            java.lang.String info =
+                "\u0000\u0002\u0000\u0000\u0001\u0002\u0002\u0000\u0000\u0000\u0001\u0208\u0002\u0007" +
+                "";
+            return newMessageInfo(DEFAULT_INSTANCE, info, objects);
+        }
+        // fall through
+        case GET_DEFAULT_INSTANCE: {
+          return DEFAULT_INSTANCE;
+        }
+        case GET_PARSER: {
+          com.google.protobuf.Parser<api.v1.PageManagement.GenerateIdentifierRequest> parser = PARSER;
+          if (parser == null) {
+            synchronized (api.v1.PageManagement.GenerateIdentifierRequest.class) {
+              parser = PARSER;
+              if (parser == null) {
+                parser =
+                    new DefaultInstanceBasedParser<api.v1.PageManagement.GenerateIdentifierRequest>(
+                        DEFAULT_INSTANCE);
+                PARSER = parser;
+              }
+            }
+          }
+          return parser;
+      }
+      case GET_MEMOIZED_IS_INITIALIZED: {
+        return (byte) 1;
+      }
+      case SET_MEMOIZED_IS_INITIALIZED: {
+        return null;
+      }
+      }
+      throw new UnsupportedOperationException();
+    }
+
+
+    // @@protoc_insertion_point(class_scope:api.v1.GenerateIdentifierRequest)
+    private static final api.v1.PageManagement.GenerateIdentifierRequest DEFAULT_INSTANCE;
+    static {
+      GenerateIdentifierRequest defaultInstance = new GenerateIdentifierRequest();
+      // New instances are implicitly immutable so no need to make
+      // immutable.
+      DEFAULT_INSTANCE = defaultInstance;
+      com.google.protobuf.GeneratedMessageLite.registerDefaultInstance(
+        GenerateIdentifierRequest.class, defaultInstance);
+    }
+
+    public static api.v1.PageManagement.GenerateIdentifierRequest getDefaultInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    private static volatile com.google.protobuf.Parser<GenerateIdentifierRequest> PARSER;
+
+    public static com.google.protobuf.Parser<GenerateIdentifierRequest> parser() {
+      return DEFAULT_INSTANCE.getParserForType();
+    }
+  }
+
+  public interface GenerateIdentifierResponseOrBuilder extends
+      // @@protoc_insertion_point(interface_extends:api.v1.GenerateIdentifierResponse)
+      com.google.protobuf.MessageLiteOrBuilder {
+
+    /**
+     * <pre>
+     * The generated identifier (munged to wiki format, possibly with suffix if ensure_unique).
+     * </pre>
+     *
+     * <code>string identifier = 1 [json_name = "identifier"];</code>
+     * @return The identifier.
+     */
+    java.lang.String getIdentifier();
+    /**
+     * <pre>
+     * The generated identifier (munged to wiki format, possibly with suffix if ensure_unique).
+     * </pre>
+     *
+     * <code>string identifier = 1 [json_name = "identifier"];</code>
+     * @return The bytes for identifier.
+     */
+    com.google.protobuf.ByteString
+        getIdentifierBytes();
+
+    /**
+     * <pre>
+     * Whether this identifier is available (no existing page with this identifier).
+     * </pre>
+     *
+     * <code>bool is_unique = 2 [json_name = "isUnique"];</code>
+     * @return The isUnique.
+     */
+    boolean getIsUnique();
+
+    /**
+     * <pre>
+     * Info about the existing page if is_unique is false.
+     * </pre>
+     *
+     * <code>.api.v1.ExistingPageInfo existing_page = 3 [json_name = "existingPage"];</code>
+     * @return Whether the existingPage field is set.
+     */
+    boolean hasExistingPage();
+    /**
+     * <pre>
+     * Info about the existing page if is_unique is false.
+     * </pre>
+     *
+     * <code>.api.v1.ExistingPageInfo existing_page = 3 [json_name = "existingPage"];</code>
+     * @return The existingPage.
+     */
+    api.v1.PageManagement.ExistingPageInfo getExistingPage();
+  }
+  /**
+   * Protobuf type {@code api.v1.GenerateIdentifierResponse}
+   */
+  public  static final class GenerateIdentifierResponse extends
+      com.google.protobuf.GeneratedMessageLite<
+          GenerateIdentifierResponse, GenerateIdentifierResponse.Builder> implements
+      // @@protoc_insertion_point(message_implements:api.v1.GenerateIdentifierResponse)
+      GenerateIdentifierResponseOrBuilder {
+    private GenerateIdentifierResponse() {
+      identifier_ = "";
+    }
+    private int bitField0_;
+    public static final int IDENTIFIER_FIELD_NUMBER = 1;
+    private java.lang.String identifier_;
+    /**
+     * <pre>
+     * The generated identifier (munged to wiki format, possibly with suffix if ensure_unique).
+     * </pre>
+     *
+     * <code>string identifier = 1 [json_name = "identifier"];</code>
+     * @return The identifier.
+     */
+    @java.lang.Override
+    public java.lang.String getIdentifier() {
+      return identifier_;
+    }
+    /**
+     * <pre>
+     * The generated identifier (munged to wiki format, possibly with suffix if ensure_unique).
+     * </pre>
+     *
+     * <code>string identifier = 1 [json_name = "identifier"];</code>
+     * @return The bytes for identifier.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getIdentifierBytes() {
+      return com.google.protobuf.ByteString.copyFromUtf8(identifier_);
+    }
+    /**
+     * <pre>
+     * The generated identifier (munged to wiki format, possibly with suffix if ensure_unique).
+     * </pre>
+     *
+     * <code>string identifier = 1 [json_name = "identifier"];</code>
+     * @param value The identifier to set.
+     */
+    private void setIdentifier(
+        java.lang.String value) {
+      java.lang.Class<?> valueClass = value.getClass();
+  
+      identifier_ = value;
+    }
+    /**
+     * <pre>
+     * The generated identifier (munged to wiki format, possibly with suffix if ensure_unique).
+     * </pre>
+     *
+     * <code>string identifier = 1 [json_name = "identifier"];</code>
+     */
+    private void clearIdentifier() {
+
+      identifier_ = getDefaultInstance().getIdentifier();
+    }
+    /**
+     * <pre>
+     * The generated identifier (munged to wiki format, possibly with suffix if ensure_unique).
+     * </pre>
+     *
+     * <code>string identifier = 1 [json_name = "identifier"];</code>
+     * @param value The bytes for identifier to set.
+     */
+    private void setIdentifierBytes(
+        com.google.protobuf.ByteString value) {
+      checkByteStringIsUtf8(value);
+      identifier_ = value.toStringUtf8();
+
+    }
+
+    public static final int IS_UNIQUE_FIELD_NUMBER = 2;
+    private boolean isUnique_;
+    /**
+     * <pre>
+     * Whether this identifier is available (no existing page with this identifier).
+     * </pre>
+     *
+     * <code>bool is_unique = 2 [json_name = "isUnique"];</code>
+     * @return The isUnique.
+     */
+    @java.lang.Override
+    public boolean getIsUnique() {
+      return isUnique_;
+    }
+    /**
+     * <pre>
+     * Whether this identifier is available (no existing page with this identifier).
+     * </pre>
+     *
+     * <code>bool is_unique = 2 [json_name = "isUnique"];</code>
+     * @param value The isUnique to set.
+     */
+    private void setIsUnique(boolean value) {
+      
+      isUnique_ = value;
+    }
+    /**
+     * <pre>
+     * Whether this identifier is available (no existing page with this identifier).
+     * </pre>
+     *
+     * <code>bool is_unique = 2 [json_name = "isUnique"];</code>
+     */
+    private void clearIsUnique() {
+
+      isUnique_ = false;
+    }
+
+    public static final int EXISTING_PAGE_FIELD_NUMBER = 3;
+    private api.v1.PageManagement.ExistingPageInfo existingPage_;
+    /**
+     * <pre>
+     * Info about the existing page if is_unique is false.
+     * </pre>
+     *
+     * <code>.api.v1.ExistingPageInfo existing_page = 3 [json_name = "existingPage"];</code>
+     */
+    @java.lang.Override
+    public boolean hasExistingPage() {
+      return ((bitField0_ & 0x00000001) != 0);
+    }
+    /**
+     * <pre>
+     * Info about the existing page if is_unique is false.
+     * </pre>
+     *
+     * <code>.api.v1.ExistingPageInfo existing_page = 3 [json_name = "existingPage"];</code>
+     */
+    @java.lang.Override
+    public api.v1.PageManagement.ExistingPageInfo getExistingPage() {
+      return existingPage_ == null ? api.v1.PageManagement.ExistingPageInfo.getDefaultInstance() : existingPage_;
+    }
+    /**
+     * <pre>
+     * Info about the existing page if is_unique is false.
+     * </pre>
+     *
+     * <code>.api.v1.ExistingPageInfo existing_page = 3 [json_name = "existingPage"];</code>
+     */
+    private void setExistingPage(api.v1.PageManagement.ExistingPageInfo value) {
+      value.getClass();
+  existingPage_ = value;
+      bitField0_ |= 0x00000001;
+      }
+    /**
+     * <pre>
+     * Info about the existing page if is_unique is false.
+     * </pre>
+     *
+     * <code>.api.v1.ExistingPageInfo existing_page = 3 [json_name = "existingPage"];</code>
+     */
+    @java.lang.SuppressWarnings({"ReferenceEquality"})
+    private void mergeExistingPage(api.v1.PageManagement.ExistingPageInfo value) {
+      value.getClass();
+  if (existingPage_ != null &&
+          existingPage_ != api.v1.PageManagement.ExistingPageInfo.getDefaultInstance()) {
+        existingPage_ =
+          api.v1.PageManagement.ExistingPageInfo.newBuilder(existingPage_).mergeFrom(value).buildPartial();
+      } else {
+        existingPage_ = value;
+      }
+      bitField0_ |= 0x00000001;
+    }
+    /**
+     * <pre>
+     * Info about the existing page if is_unique is false.
+     * </pre>
+     *
+     * <code>.api.v1.ExistingPageInfo existing_page = 3 [json_name = "existingPage"];</code>
+     */
+    private void clearExistingPage() {  existingPage_ = null;
+      bitField0_ = (bitField0_ & ~0x00000001);
+    }
+
+    public static api.v1.PageManagement.GenerateIdentifierResponse parseFrom(
+        java.nio.ByteBuffer data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return com.google.protobuf.GeneratedMessageLite.parseFrom(
+          DEFAULT_INSTANCE, data);
+    }
+    public static api.v1.PageManagement.GenerateIdentifierResponse parseFrom(
+        java.nio.ByteBuffer data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return com.google.protobuf.GeneratedMessageLite.parseFrom(
+          DEFAULT_INSTANCE, data, extensionRegistry);
+    }
+    public static api.v1.PageManagement.GenerateIdentifierResponse parseFrom(
+        com.google.protobuf.ByteString data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return com.google.protobuf.GeneratedMessageLite.parseFrom(
+          DEFAULT_INSTANCE, data);
+    }
+    public static api.v1.PageManagement.GenerateIdentifierResponse parseFrom(
+        com.google.protobuf.ByteString data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return com.google.protobuf.GeneratedMessageLite.parseFrom(
+          DEFAULT_INSTANCE, data, extensionRegistry);
+    }
+    public static api.v1.PageManagement.GenerateIdentifierResponse parseFrom(byte[] data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return com.google.protobuf.GeneratedMessageLite.parseFrom(
+          DEFAULT_INSTANCE, data);
+    }
+    public static api.v1.PageManagement.GenerateIdentifierResponse parseFrom(
+        byte[] data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return com.google.protobuf.GeneratedMessageLite.parseFrom(
+          DEFAULT_INSTANCE, data, extensionRegistry);
+    }
+    public static api.v1.PageManagement.GenerateIdentifierResponse parseFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageLite.parseFrom(
+          DEFAULT_INSTANCE, input);
+    }
+    public static api.v1.PageManagement.GenerateIdentifierResponse parseFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageLite.parseFrom(
+          DEFAULT_INSTANCE, input, extensionRegistry);
+    }
+
+    public static api.v1.PageManagement.GenerateIdentifierResponse parseDelimitedFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return parseDelimitedFrom(DEFAULT_INSTANCE, input);
+    }
+
+    public static api.v1.PageManagement.GenerateIdentifierResponse parseDelimitedFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return parseDelimitedFrom(DEFAULT_INSTANCE, input, extensionRegistry);
+    }
+    public static api.v1.PageManagement.GenerateIdentifierResponse parseFrom(
+        com.google.protobuf.CodedInputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageLite.parseFrom(
+          DEFAULT_INSTANCE, input);
+    }
+    public static api.v1.PageManagement.GenerateIdentifierResponse parseFrom(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageLite.parseFrom(
+          DEFAULT_INSTANCE, input, extensionRegistry);
+    }
+
+    public static Builder newBuilder() {
+      return (Builder) DEFAULT_INSTANCE.createBuilder();
+    }
+    public static Builder newBuilder(api.v1.PageManagement.GenerateIdentifierResponse prototype) {
+      return DEFAULT_INSTANCE.createBuilder(prototype);
+    }
+
+    /**
+     * Protobuf type {@code api.v1.GenerateIdentifierResponse}
+     */
+    public static final class Builder extends
+        com.google.protobuf.GeneratedMessageLite.Builder<
+          api.v1.PageManagement.GenerateIdentifierResponse, Builder> implements
+        // @@protoc_insertion_point(builder_implements:api.v1.GenerateIdentifierResponse)
+        api.v1.PageManagement.GenerateIdentifierResponseOrBuilder {
+      // Construct using api.v1.PageManagement.GenerateIdentifierResponse.newBuilder()
+      private Builder() {
+        super(DEFAULT_INSTANCE);
+      }
+
+
+      /**
+       * <pre>
+       * The generated identifier (munged to wiki format, possibly with suffix if ensure_unique).
+       * </pre>
+       *
+       * <code>string identifier = 1 [json_name = "identifier"];</code>
+       * @return The identifier.
+       */
+      @java.lang.Override
+      public java.lang.String getIdentifier() {
+        return instance.getIdentifier();
+      }
+      /**
+       * <pre>
+       * The generated identifier (munged to wiki format, possibly with suffix if ensure_unique).
+       * </pre>
+       *
+       * <code>string identifier = 1 [json_name = "identifier"];</code>
+       * @return The bytes for identifier.
+       */
+      @java.lang.Override
+      public com.google.protobuf.ByteString
+          getIdentifierBytes() {
+        return instance.getIdentifierBytes();
+      }
+      /**
+       * <pre>
+       * The generated identifier (munged to wiki format, possibly with suffix if ensure_unique).
+       * </pre>
+       *
+       * <code>string identifier = 1 [json_name = "identifier"];</code>
+       * @param value The identifier to set.
+       * @return This builder for chaining.
+       */
+      public Builder setIdentifier(
+          java.lang.String value) {
+        copyOnWrite();
+        instance.setIdentifier(value);
+        return this;
+      }
+      /**
+       * <pre>
+       * The generated identifier (munged to wiki format, possibly with suffix if ensure_unique).
+       * </pre>
+       *
+       * <code>string identifier = 1 [json_name = "identifier"];</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearIdentifier() {
+        copyOnWrite();
+        instance.clearIdentifier();
+        return this;
+      }
+      /**
+       * <pre>
+       * The generated identifier (munged to wiki format, possibly with suffix if ensure_unique).
+       * </pre>
+       *
+       * <code>string identifier = 1 [json_name = "identifier"];</code>
+       * @param value The bytes for identifier to set.
+       * @return This builder for chaining.
+       */
+      public Builder setIdentifierBytes(
+          com.google.protobuf.ByteString value) {
+        copyOnWrite();
+        instance.setIdentifierBytes(value);
+        return this;
+      }
+
+      /**
+       * <pre>
+       * Whether this identifier is available (no existing page with this identifier).
+       * </pre>
+       *
+       * <code>bool is_unique = 2 [json_name = "isUnique"];</code>
+       * @return The isUnique.
+       */
+      @java.lang.Override
+      public boolean getIsUnique() {
+        return instance.getIsUnique();
+      }
+      /**
+       * <pre>
+       * Whether this identifier is available (no existing page with this identifier).
+       * </pre>
+       *
+       * <code>bool is_unique = 2 [json_name = "isUnique"];</code>
+       * @param value The isUnique to set.
+       * @return This builder for chaining.
+       */
+      public Builder setIsUnique(boolean value) {
+        copyOnWrite();
+        instance.setIsUnique(value);
+        return this;
+      }
+      /**
+       * <pre>
+       * Whether this identifier is available (no existing page with this identifier).
+       * </pre>
+       *
+       * <code>bool is_unique = 2 [json_name = "isUnique"];</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearIsUnique() {
+        copyOnWrite();
+        instance.clearIsUnique();
+        return this;
+      }
+
+      /**
+       * <pre>
+       * Info about the existing page if is_unique is false.
+       * </pre>
+       *
+       * <code>.api.v1.ExistingPageInfo existing_page = 3 [json_name = "existingPage"];</code>
+       */
+      @java.lang.Override
+      public boolean hasExistingPage() {
+        return instance.hasExistingPage();
+      }
+      /**
+       * <pre>
+       * Info about the existing page if is_unique is false.
+       * </pre>
+       *
+       * <code>.api.v1.ExistingPageInfo existing_page = 3 [json_name = "existingPage"];</code>
+       */
+      @java.lang.Override
+      public api.v1.PageManagement.ExistingPageInfo getExistingPage() {
+        return instance.getExistingPage();
+      }
+      /**
+       * <pre>
+       * Info about the existing page if is_unique is false.
+       * </pre>
+       *
+       * <code>.api.v1.ExistingPageInfo existing_page = 3 [json_name = "existingPage"];</code>
+       */
+      public Builder setExistingPage(api.v1.PageManagement.ExistingPageInfo value) {
+        copyOnWrite();
+        instance.setExistingPage(value);
+        return this;
+        }
+      /**
+       * <pre>
+       * Info about the existing page if is_unique is false.
+       * </pre>
+       *
+       * <code>.api.v1.ExistingPageInfo existing_page = 3 [json_name = "existingPage"];</code>
+       */
+      public Builder setExistingPage(
+          api.v1.PageManagement.ExistingPageInfo.Builder builderForValue) {
+        copyOnWrite();
+        instance.setExistingPage(builderForValue.build());
+        return this;
+      }
+      /**
+       * <pre>
+       * Info about the existing page if is_unique is false.
+       * </pre>
+       *
+       * <code>.api.v1.ExistingPageInfo existing_page = 3 [json_name = "existingPage"];</code>
+       */
+      public Builder mergeExistingPage(api.v1.PageManagement.ExistingPageInfo value) {
+        copyOnWrite();
+        instance.mergeExistingPage(value);
+        return this;
+      }
+      /**
+       * <pre>
+       * Info about the existing page if is_unique is false.
+       * </pre>
+       *
+       * <code>.api.v1.ExistingPageInfo existing_page = 3 [json_name = "existingPage"];</code>
+       */
+      public Builder clearExistingPage() {  copyOnWrite();
+        instance.clearExistingPage();
+        return this;
+      }
+
+      // @@protoc_insertion_point(builder_scope:api.v1.GenerateIdentifierResponse)
+    }
+    @java.lang.Override
+    @java.lang.SuppressWarnings({"unchecked", "fallthrough"})
+    protected final java.lang.Object dynamicMethod(
+        com.google.protobuf.GeneratedMessageLite.MethodToInvoke method,
+        java.lang.Object arg0, java.lang.Object arg1) {
+      switch (method) {
+        case NEW_MUTABLE_INSTANCE: {
+          return new api.v1.PageManagement.GenerateIdentifierResponse();
+        }
+        case NEW_BUILDER: {
+          return new Builder();
+        }
+        case BUILD_MESSAGE_INFO: {
+            java.lang.Object[] objects = new java.lang.Object[] {
+              "bitField0_",
+              "identifier_",
+              "isUnique_",
+              "existingPage_",
+            };
+            java.lang.String info =
+                "\u0000\u0003\u0000\u0001\u0001\u0003\u0003\u0000\u0000\u0000\u0001\u0208\u0002\u0007" +
+                "\u0003\u1009\u0000";
+            return newMessageInfo(DEFAULT_INSTANCE, info, objects);
+        }
+        // fall through
+        case GET_DEFAULT_INSTANCE: {
+          return DEFAULT_INSTANCE;
+        }
+        case GET_PARSER: {
+          com.google.protobuf.Parser<api.v1.PageManagement.GenerateIdentifierResponse> parser = PARSER;
+          if (parser == null) {
+            synchronized (api.v1.PageManagement.GenerateIdentifierResponse.class) {
+              parser = PARSER;
+              if (parser == null) {
+                parser =
+                    new DefaultInstanceBasedParser<api.v1.PageManagement.GenerateIdentifierResponse>(
+                        DEFAULT_INSTANCE);
+                PARSER = parser;
+              }
+            }
+          }
+          return parser;
+      }
+      case GET_MEMOIZED_IS_INITIALIZED: {
+        return (byte) 1;
+      }
+      case SET_MEMOIZED_IS_INITIALIZED: {
+        return null;
+      }
+      }
+      throw new UnsupportedOperationException();
+    }
+
+
+    // @@protoc_insertion_point(class_scope:api.v1.GenerateIdentifierResponse)
+    private static final api.v1.PageManagement.GenerateIdentifierResponse DEFAULT_INSTANCE;
+    static {
+      GenerateIdentifierResponse defaultInstance = new GenerateIdentifierResponse();
+      // New instances are implicitly immutable so no need to make
+      // immutable.
+      DEFAULT_INSTANCE = defaultInstance;
+      com.google.protobuf.GeneratedMessageLite.registerDefaultInstance(
+        GenerateIdentifierResponse.class, defaultInstance);
+    }
+
+    public static api.v1.PageManagement.GenerateIdentifierResponse getDefaultInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    private static volatile com.google.protobuf.Parser<GenerateIdentifierResponse> PARSER;
+
+    public static com.google.protobuf.Parser<GenerateIdentifierResponse> parser() {
+      return DEFAULT_INSTANCE.getParserForType();
+    }
+  }
+
+  public interface ExistingPageInfoOrBuilder extends
+      // @@protoc_insertion_point(interface_extends:api.v1.ExistingPageInfo)
+      com.google.protobuf.MessageLiteOrBuilder {
+
+    /**
+     * <pre>
+     * The page identifier.
+     * </pre>
+     *
+     * <code>string identifier = 1 [json_name = "identifier"];</code>
+     * @return The identifier.
+     */
+    java.lang.String getIdentifier();
+    /**
+     * <pre>
+     * The page identifier.
+     * </pre>
+     *
+     * <code>string identifier = 1 [json_name = "identifier"];</code>
+     * @return The bytes for identifier.
+     */
+    com.google.protobuf.ByteString
+        getIdentifierBytes();
+
+    /**
+     * <pre>
+     * The page title from frontmatter.
+     * </pre>
+     *
+     * <code>string title = 2 [json_name = "title"];</code>
+     * @return The title.
+     */
+    java.lang.String getTitle();
+    /**
+     * <pre>
+     * The page title from frontmatter.
+     * </pre>
+     *
+     * <code>string title = 2 [json_name = "title"];</code>
+     * @return The bytes for title.
+     */
+    com.google.protobuf.ByteString
+        getTitleBytes();
+
+    /**
+     * <pre>
+     * The inventory.container value if this is an inventory item.
+     * </pre>
+     *
+     * <code>string container = 3 [json_name = "container"];</code>
+     * @return The container.
+     */
+    java.lang.String getContainer();
+    /**
+     * <pre>
+     * The inventory.container value if this is an inventory item.
+     * </pre>
+     *
+     * <code>string container = 3 [json_name = "container"];</code>
+     * @return The bytes for container.
+     */
+    com.google.protobuf.ByteString
+        getContainerBytes();
+  }
+  /**
+   * <pre>
+   * Info about an existing page (used when identifier already exists).
+   * </pre>
+   *
+   * Protobuf type {@code api.v1.ExistingPageInfo}
+   */
+  public  static final class ExistingPageInfo extends
+      com.google.protobuf.GeneratedMessageLite<
+          ExistingPageInfo, ExistingPageInfo.Builder> implements
+      // @@protoc_insertion_point(message_implements:api.v1.ExistingPageInfo)
+      ExistingPageInfoOrBuilder {
+    private ExistingPageInfo() {
+      identifier_ = "";
+      title_ = "";
+      container_ = "";
+    }
+    public static final int IDENTIFIER_FIELD_NUMBER = 1;
+    private java.lang.String identifier_;
+    /**
+     * <pre>
+     * The page identifier.
+     * </pre>
+     *
+     * <code>string identifier = 1 [json_name = "identifier"];</code>
+     * @return The identifier.
+     */
+    @java.lang.Override
+    public java.lang.String getIdentifier() {
+      return identifier_;
+    }
+    /**
+     * <pre>
+     * The page identifier.
+     * </pre>
+     *
+     * <code>string identifier = 1 [json_name = "identifier"];</code>
+     * @return The bytes for identifier.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getIdentifierBytes() {
+      return com.google.protobuf.ByteString.copyFromUtf8(identifier_);
+    }
+    /**
+     * <pre>
+     * The page identifier.
+     * </pre>
+     *
+     * <code>string identifier = 1 [json_name = "identifier"];</code>
+     * @param value The identifier to set.
+     */
+    private void setIdentifier(
+        java.lang.String value) {
+      java.lang.Class<?> valueClass = value.getClass();
+  
+      identifier_ = value;
+    }
+    /**
+     * <pre>
+     * The page identifier.
+     * </pre>
+     *
+     * <code>string identifier = 1 [json_name = "identifier"];</code>
+     */
+    private void clearIdentifier() {
+
+      identifier_ = getDefaultInstance().getIdentifier();
+    }
+    /**
+     * <pre>
+     * The page identifier.
+     * </pre>
+     *
+     * <code>string identifier = 1 [json_name = "identifier"];</code>
+     * @param value The bytes for identifier to set.
+     */
+    private void setIdentifierBytes(
+        com.google.protobuf.ByteString value) {
+      checkByteStringIsUtf8(value);
+      identifier_ = value.toStringUtf8();
+
+    }
+
+    public static final int TITLE_FIELD_NUMBER = 2;
+    private java.lang.String title_;
+    /**
+     * <pre>
+     * The page title from frontmatter.
+     * </pre>
+     *
+     * <code>string title = 2 [json_name = "title"];</code>
+     * @return The title.
+     */
+    @java.lang.Override
+    public java.lang.String getTitle() {
+      return title_;
+    }
+    /**
+     * <pre>
+     * The page title from frontmatter.
+     * </pre>
+     *
+     * <code>string title = 2 [json_name = "title"];</code>
+     * @return The bytes for title.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getTitleBytes() {
+      return com.google.protobuf.ByteString.copyFromUtf8(title_);
+    }
+    /**
+     * <pre>
+     * The page title from frontmatter.
+     * </pre>
+     *
+     * <code>string title = 2 [json_name = "title"];</code>
+     * @param value The title to set.
+     */
+    private void setTitle(
+        java.lang.String value) {
+      java.lang.Class<?> valueClass = value.getClass();
+  
+      title_ = value;
+    }
+    /**
+     * <pre>
+     * The page title from frontmatter.
+     * </pre>
+     *
+     * <code>string title = 2 [json_name = "title"];</code>
+     */
+    private void clearTitle() {
+
+      title_ = getDefaultInstance().getTitle();
+    }
+    /**
+     * <pre>
+     * The page title from frontmatter.
+     * </pre>
+     *
+     * <code>string title = 2 [json_name = "title"];</code>
+     * @param value The bytes for title to set.
+     */
+    private void setTitleBytes(
+        com.google.protobuf.ByteString value) {
+      checkByteStringIsUtf8(value);
+      title_ = value.toStringUtf8();
+
+    }
+
+    public static final int CONTAINER_FIELD_NUMBER = 3;
+    private java.lang.String container_;
+    /**
+     * <pre>
+     * The inventory.container value if this is an inventory item.
+     * </pre>
+     *
+     * <code>string container = 3 [json_name = "container"];</code>
+     * @return The container.
+     */
+    @java.lang.Override
+    public java.lang.String getContainer() {
+      return container_;
+    }
+    /**
+     * <pre>
+     * The inventory.container value if this is an inventory item.
+     * </pre>
+     *
+     * <code>string container = 3 [json_name = "container"];</code>
+     * @return The bytes for container.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getContainerBytes() {
+      return com.google.protobuf.ByteString.copyFromUtf8(container_);
+    }
+    /**
+     * <pre>
+     * The inventory.container value if this is an inventory item.
+     * </pre>
+     *
+     * <code>string container = 3 [json_name = "container"];</code>
+     * @param value The container to set.
+     */
+    private void setContainer(
+        java.lang.String value) {
+      java.lang.Class<?> valueClass = value.getClass();
+  
+      container_ = value;
+    }
+    /**
+     * <pre>
+     * The inventory.container value if this is an inventory item.
+     * </pre>
+     *
+     * <code>string container = 3 [json_name = "container"];</code>
+     */
+    private void clearContainer() {
+
+      container_ = getDefaultInstance().getContainer();
+    }
+    /**
+     * <pre>
+     * The inventory.container value if this is an inventory item.
+     * </pre>
+     *
+     * <code>string container = 3 [json_name = "container"];</code>
+     * @param value The bytes for container to set.
+     */
+    private void setContainerBytes(
+        com.google.protobuf.ByteString value) {
+      checkByteStringIsUtf8(value);
+      container_ = value.toStringUtf8();
+
+    }
+
+    public static api.v1.PageManagement.ExistingPageInfo parseFrom(
+        java.nio.ByteBuffer data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return com.google.protobuf.GeneratedMessageLite.parseFrom(
+          DEFAULT_INSTANCE, data);
+    }
+    public static api.v1.PageManagement.ExistingPageInfo parseFrom(
+        java.nio.ByteBuffer data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return com.google.protobuf.GeneratedMessageLite.parseFrom(
+          DEFAULT_INSTANCE, data, extensionRegistry);
+    }
+    public static api.v1.PageManagement.ExistingPageInfo parseFrom(
+        com.google.protobuf.ByteString data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return com.google.protobuf.GeneratedMessageLite.parseFrom(
+          DEFAULT_INSTANCE, data);
+    }
+    public static api.v1.PageManagement.ExistingPageInfo parseFrom(
+        com.google.protobuf.ByteString data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return com.google.protobuf.GeneratedMessageLite.parseFrom(
+          DEFAULT_INSTANCE, data, extensionRegistry);
+    }
+    public static api.v1.PageManagement.ExistingPageInfo parseFrom(byte[] data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return com.google.protobuf.GeneratedMessageLite.parseFrom(
+          DEFAULT_INSTANCE, data);
+    }
+    public static api.v1.PageManagement.ExistingPageInfo parseFrom(
+        byte[] data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return com.google.protobuf.GeneratedMessageLite.parseFrom(
+          DEFAULT_INSTANCE, data, extensionRegistry);
+    }
+    public static api.v1.PageManagement.ExistingPageInfo parseFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageLite.parseFrom(
+          DEFAULT_INSTANCE, input);
+    }
+    public static api.v1.PageManagement.ExistingPageInfo parseFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageLite.parseFrom(
+          DEFAULT_INSTANCE, input, extensionRegistry);
+    }
+
+    public static api.v1.PageManagement.ExistingPageInfo parseDelimitedFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return parseDelimitedFrom(DEFAULT_INSTANCE, input);
+    }
+
+    public static api.v1.PageManagement.ExistingPageInfo parseDelimitedFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return parseDelimitedFrom(DEFAULT_INSTANCE, input, extensionRegistry);
+    }
+    public static api.v1.PageManagement.ExistingPageInfo parseFrom(
+        com.google.protobuf.CodedInputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageLite.parseFrom(
+          DEFAULT_INSTANCE, input);
+    }
+    public static api.v1.PageManagement.ExistingPageInfo parseFrom(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageLite.parseFrom(
+          DEFAULT_INSTANCE, input, extensionRegistry);
+    }
+
+    public static Builder newBuilder() {
+      return (Builder) DEFAULT_INSTANCE.createBuilder();
+    }
+    public static Builder newBuilder(api.v1.PageManagement.ExistingPageInfo prototype) {
+      return DEFAULT_INSTANCE.createBuilder(prototype);
+    }
+
+    /**
+     * <pre>
+     * Info about an existing page (used when identifier already exists).
+     * </pre>
+     *
+     * Protobuf type {@code api.v1.ExistingPageInfo}
+     */
+    public static final class Builder extends
+        com.google.protobuf.GeneratedMessageLite.Builder<
+          api.v1.PageManagement.ExistingPageInfo, Builder> implements
+        // @@protoc_insertion_point(builder_implements:api.v1.ExistingPageInfo)
+        api.v1.PageManagement.ExistingPageInfoOrBuilder {
+      // Construct using api.v1.PageManagement.ExistingPageInfo.newBuilder()
+      private Builder() {
+        super(DEFAULT_INSTANCE);
+      }
+
+
+      /**
+       * <pre>
+       * The page identifier.
+       * </pre>
+       *
+       * <code>string identifier = 1 [json_name = "identifier"];</code>
+       * @return The identifier.
+       */
+      @java.lang.Override
+      public java.lang.String getIdentifier() {
+        return instance.getIdentifier();
+      }
+      /**
+       * <pre>
+       * The page identifier.
+       * </pre>
+       *
+       * <code>string identifier = 1 [json_name = "identifier"];</code>
+       * @return The bytes for identifier.
+       */
+      @java.lang.Override
+      public com.google.protobuf.ByteString
+          getIdentifierBytes() {
+        return instance.getIdentifierBytes();
+      }
+      /**
+       * <pre>
+       * The page identifier.
+       * </pre>
+       *
+       * <code>string identifier = 1 [json_name = "identifier"];</code>
+       * @param value The identifier to set.
+       * @return This builder for chaining.
+       */
+      public Builder setIdentifier(
+          java.lang.String value) {
+        copyOnWrite();
+        instance.setIdentifier(value);
+        return this;
+      }
+      /**
+       * <pre>
+       * The page identifier.
+       * </pre>
+       *
+       * <code>string identifier = 1 [json_name = "identifier"];</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearIdentifier() {
+        copyOnWrite();
+        instance.clearIdentifier();
+        return this;
+      }
+      /**
+       * <pre>
+       * The page identifier.
+       * </pre>
+       *
+       * <code>string identifier = 1 [json_name = "identifier"];</code>
+       * @param value The bytes for identifier to set.
+       * @return This builder for chaining.
+       */
+      public Builder setIdentifierBytes(
+          com.google.protobuf.ByteString value) {
+        copyOnWrite();
+        instance.setIdentifierBytes(value);
+        return this;
+      }
+
+      /**
+       * <pre>
+       * The page title from frontmatter.
+       * </pre>
+       *
+       * <code>string title = 2 [json_name = "title"];</code>
+       * @return The title.
+       */
+      @java.lang.Override
+      public java.lang.String getTitle() {
+        return instance.getTitle();
+      }
+      /**
+       * <pre>
+       * The page title from frontmatter.
+       * </pre>
+       *
+       * <code>string title = 2 [json_name = "title"];</code>
+       * @return The bytes for title.
+       */
+      @java.lang.Override
+      public com.google.protobuf.ByteString
+          getTitleBytes() {
+        return instance.getTitleBytes();
+      }
+      /**
+       * <pre>
+       * The page title from frontmatter.
+       * </pre>
+       *
+       * <code>string title = 2 [json_name = "title"];</code>
+       * @param value The title to set.
+       * @return This builder for chaining.
+       */
+      public Builder setTitle(
+          java.lang.String value) {
+        copyOnWrite();
+        instance.setTitle(value);
+        return this;
+      }
+      /**
+       * <pre>
+       * The page title from frontmatter.
+       * </pre>
+       *
+       * <code>string title = 2 [json_name = "title"];</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearTitle() {
+        copyOnWrite();
+        instance.clearTitle();
+        return this;
+      }
+      /**
+       * <pre>
+       * The page title from frontmatter.
+       * </pre>
+       *
+       * <code>string title = 2 [json_name = "title"];</code>
+       * @param value The bytes for title to set.
+       * @return This builder for chaining.
+       */
+      public Builder setTitleBytes(
+          com.google.protobuf.ByteString value) {
+        copyOnWrite();
+        instance.setTitleBytes(value);
+        return this;
+      }
+
+      /**
+       * <pre>
+       * The inventory.container value if this is an inventory item.
+       * </pre>
+       *
+       * <code>string container = 3 [json_name = "container"];</code>
+       * @return The container.
+       */
+      @java.lang.Override
+      public java.lang.String getContainer() {
+        return instance.getContainer();
+      }
+      /**
+       * <pre>
+       * The inventory.container value if this is an inventory item.
+       * </pre>
+       *
+       * <code>string container = 3 [json_name = "container"];</code>
+       * @return The bytes for container.
+       */
+      @java.lang.Override
+      public com.google.protobuf.ByteString
+          getContainerBytes() {
+        return instance.getContainerBytes();
+      }
+      /**
+       * <pre>
+       * The inventory.container value if this is an inventory item.
+       * </pre>
+       *
+       * <code>string container = 3 [json_name = "container"];</code>
+       * @param value The container to set.
+       * @return This builder for chaining.
+       */
+      public Builder setContainer(
+          java.lang.String value) {
+        copyOnWrite();
+        instance.setContainer(value);
+        return this;
+      }
+      /**
+       * <pre>
+       * The inventory.container value if this is an inventory item.
+       * </pre>
+       *
+       * <code>string container = 3 [json_name = "container"];</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearContainer() {
+        copyOnWrite();
+        instance.clearContainer();
+        return this;
+      }
+      /**
+       * <pre>
+       * The inventory.container value if this is an inventory item.
+       * </pre>
+       *
+       * <code>string container = 3 [json_name = "container"];</code>
+       * @param value The bytes for container to set.
+       * @return This builder for chaining.
+       */
+      public Builder setContainerBytes(
+          com.google.protobuf.ByteString value) {
+        copyOnWrite();
+        instance.setContainerBytes(value);
+        return this;
+      }
+
+      // @@protoc_insertion_point(builder_scope:api.v1.ExistingPageInfo)
+    }
+    @java.lang.Override
+    @java.lang.SuppressWarnings({"unchecked", "fallthrough"})
+    protected final java.lang.Object dynamicMethod(
+        com.google.protobuf.GeneratedMessageLite.MethodToInvoke method,
+        java.lang.Object arg0, java.lang.Object arg1) {
+      switch (method) {
+        case NEW_MUTABLE_INSTANCE: {
+          return new api.v1.PageManagement.ExistingPageInfo();
+        }
+        case NEW_BUILDER: {
+          return new Builder();
+        }
+        case BUILD_MESSAGE_INFO: {
+            java.lang.Object[] objects = new java.lang.Object[] {
+              "identifier_",
+              "title_",
+              "container_",
+            };
+            java.lang.String info =
+                "\u0000\u0003\u0000\u0000\u0001\u0003\u0003\u0000\u0000\u0000\u0001\u0208\u0002\u0208" +
+                "\u0003\u0208";
+            return newMessageInfo(DEFAULT_INSTANCE, info, objects);
+        }
+        // fall through
+        case GET_DEFAULT_INSTANCE: {
+          return DEFAULT_INSTANCE;
+        }
+        case GET_PARSER: {
+          com.google.protobuf.Parser<api.v1.PageManagement.ExistingPageInfo> parser = PARSER;
+          if (parser == null) {
+            synchronized (api.v1.PageManagement.ExistingPageInfo.class) {
+              parser = PARSER;
+              if (parser == null) {
+                parser =
+                    new DefaultInstanceBasedParser<api.v1.PageManagement.ExistingPageInfo>(
+                        DEFAULT_INSTANCE);
+                PARSER = parser;
+              }
+            }
+          }
+          return parser;
+      }
+      case GET_MEMOIZED_IS_INITIALIZED: {
+        return (byte) 1;
+      }
+      case SET_MEMOIZED_IS_INITIALIZED: {
+        return null;
+      }
+      }
+      throw new UnsupportedOperationException();
+    }
+
+
+    // @@protoc_insertion_point(class_scope:api.v1.ExistingPageInfo)
+    private static final api.v1.PageManagement.ExistingPageInfo DEFAULT_INSTANCE;
+    static {
+      ExistingPageInfo defaultInstance = new ExistingPageInfo();
+      // New instances are implicitly immutable so no need to make
+      // immutable.
+      DEFAULT_INSTANCE = defaultInstance;
+      com.google.protobuf.GeneratedMessageLite.registerDefaultInstance(
+        ExistingPageInfo.class, defaultInstance);
+    }
+
+    public static api.v1.PageManagement.ExistingPageInfo getDefaultInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    private static volatile com.google.protobuf.Parser<ExistingPageInfo> PARSER;
+
+    public static com.google.protobuf.Parser<ExistingPageInfo> parser() {
+      return DEFAULT_INSTANCE.getParserForType();
+    }
+  }
+
 
   static {
   }

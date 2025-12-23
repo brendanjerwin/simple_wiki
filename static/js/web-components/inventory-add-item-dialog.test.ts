@@ -56,12 +56,32 @@ describe('InventoryAddItemDialog', () => {
       expect(el.itemTitle).to.equal('');
     });
 
+    it('should have empty description by default', () => {
+      expect(el.description).to.equal('');
+    });
+
+    it('should have automagicMode enabled by default', () => {
+      expect(el.automagicMode).to.be.true;
+    });
+
     it('should not be loading by default', () => {
       expect(el.loading).to.be.false;
     });
 
     it('should have no error by default', () => {
       expect(el.error).to.be.undefined;
+    });
+
+    it('should have isUnique true by default', () => {
+      expect(el.isUnique).to.be.true;
+    });
+
+    it('should have no existingPage by default', () => {
+      expect(el.existingPage).to.be.undefined;
+    });
+
+    it('should have empty searchResults by default', () => {
+      expect(el.searchResults).to.deep.equal([]);
     });
   });
 
@@ -87,8 +107,28 @@ describe('InventoryAddItemDialog', () => {
         expect(el.itemTitle).to.equal('');
       });
 
+      it('should clear description', () => {
+        expect(el.description).to.equal('');
+      });
+
+      it('should set automagicMode to true', () => {
+        expect(el.automagicMode).to.be.true;
+      });
+
       it('should clear error', () => {
         expect(el.error).to.be.undefined;
+      });
+
+      it('should reset isUnique to true', () => {
+        expect(el.isUnique).to.be.true;
+      });
+
+      it('should clear existingPage', () => {
+        expect(el.existingPage).to.be.undefined;
+      });
+
+      it('should clear searchResults', () => {
+        expect(el.searchResults).to.deep.equal([]);
       });
     });
   });
@@ -98,6 +138,8 @@ describe('InventoryAddItemDialog', () => {
       el.openDialog('drawer_kitchen');
       el.itemIdentifier = 'screwdriver';
       el.itemTitle = 'Phillips Screwdriver';
+      el.description = 'A yellow-handled screwdriver';
+      el.automagicMode = false;
       el.close();
     });
 
@@ -113,8 +155,24 @@ describe('InventoryAddItemDialog', () => {
       expect(el.itemTitle).to.equal('');
     });
 
+    it('should clear description', () => {
+      expect(el.description).to.equal('');
+    });
+
     it('should clear error', () => {
       expect(el.error).to.be.undefined;
+    });
+
+    it('should reset isUnique to true', () => {
+      expect(el.isUnique).to.be.true;
+    });
+
+    it('should clear existingPage', () => {
+      expect(el.existingPage).to.be.undefined;
+    });
+
+    it('should clear searchResults', () => {
+      expect(el.searchResults).to.deep.equal([]);
     });
   });
 
@@ -169,14 +227,24 @@ describe('InventoryAddItemDialog', () => {
         expect(containerInput?.value).to.equal('drawer_kitchen');
       });
 
+      it('should render title field', () => {
+        const titleInput = el.shadowRoot?.querySelector('input[name="title"]');
+        expect(titleInput).to.exist;
+      });
+
       it('should render item identifier field', () => {
         const itemInput = el.shadowRoot?.querySelector('input[name="itemIdentifier"]');
         expect(itemInput).to.exist;
       });
 
-      it('should render title field', () => {
-        const titleInput = el.shadowRoot?.querySelector('input[name="title"]');
-        expect(titleInput).to.exist;
+      it('should render description field', () => {
+        const descriptionInput = el.shadowRoot?.querySelector('textarea[name="description"]');
+        expect(descriptionInput).to.exist;
+      });
+
+      it('should render automagic button', () => {
+        const automagicBtn = el.shadowRoot?.querySelector('.automagic-button');
+        expect(automagicBtn).to.exist;
       });
 
       it('should render cancel button', () => {
@@ -221,12 +289,151 @@ describe('InventoryAddItemDialog', () => {
         expect(errorDiv?.textContent).to.contain('Item already exists');
       });
     });
+
+    describe('when identifier conflict exists', () => {
+      beforeEach(async () => {
+        el.openDialog('drawer_kitchen');
+        el.itemTitle = 'Screwdriver';
+        el.itemIdentifier = 'screwdriver';
+        el.isUnique = false;
+        el.existingPage = {
+          identifier: 'screwdriver',
+          title: 'Phillips Screwdriver',
+          container: 'toolbox_garage',
+        } as import('../gen/api/v1/page_management_pb.js').ExistingPageInfo;
+        await el.updateComplete;
+      });
+
+      it('should display conflict warning', () => {
+        const warningDiv = el.shadowRoot?.querySelector('.conflict-warning');
+        expect(warningDiv).to.exist;
+        expect(warningDiv?.textContent).to.contain('Identifier already exists');
+      });
+
+      it('should include link to existing page', () => {
+        const warningDiv = el.shadowRoot?.querySelector('.conflict-warning');
+        const link = warningDiv?.querySelector('a');
+        expect(link?.getAttribute('href')).to.equal('/screwdriver');
+      });
+
+      it('should disable add button', () => {
+        const addBtn = el.shadowRoot?.querySelector('.button-primary') as HTMLButtonElement;
+        expect(addBtn?.disabled).to.be.true;
+      });
+    });
+
+    describe('when search results exist', () => {
+      beforeEach(async () => {
+        el.openDialog('drawer_kitchen');
+        el.searchResults = [
+          {
+            identifier: 'hammer',
+            title: 'Claw Hammer',
+            fragment: 'A useful tool',
+            highlights: [],
+            frontmatter: { 'inventory.container': 'toolbox_garage' },
+          } as unknown as import('../gen/api/v1/search_pb.js').SearchResult,
+        ];
+        await el.updateComplete;
+      });
+
+      it('should display search results section', () => {
+        const resultsDiv = el.shadowRoot?.querySelector('.search-results');
+        expect(resultsDiv).to.exist;
+      });
+
+      it('should display search result item', () => {
+        const resultItem = el.shadowRoot?.querySelector('.search-result-item');
+        expect(resultItem).to.exist;
+      });
+
+      it('should display result title', () => {
+        const titleDiv = el.shadowRoot?.querySelector('.search-result-title');
+        expect(titleDiv?.textContent).to.equal('Claw Hammer');
+      });
+
+      it('should display result container', () => {
+        const containerDiv = el.shadowRoot?.querySelector('.search-result-container');
+        expect(containerDiv?.textContent).to.contain('toolbox_garage');
+      });
+    });
+
+    describe('when in automagic mode', () => {
+      beforeEach(async () => {
+        el.openDialog('drawer_kitchen');
+        el.automagicMode = true;
+        await el.updateComplete;
+      });
+
+      it('should show sparkle icon', () => {
+        const icon = el.shadowRoot?.querySelector('.automagic-button i');
+        expect(icon?.classList.contains('fa-wand-magic-sparkles')).to.be.true;
+      });
+
+      it('should have automagic class on button', () => {
+        const btn = el.shadowRoot?.querySelector('.automagic-button');
+        expect(btn?.classList.contains('automagic')).to.be.true;
+      });
+
+      it('should make identifier field readonly', () => {
+        const input = el.shadowRoot?.querySelector('input[name="itemIdentifier"]') as HTMLInputElement;
+        expect(input?.readOnly).to.be.true;
+      });
+
+      it('should set identifier tabindex to -1', () => {
+        const input = el.shadowRoot?.querySelector('input[name="itemIdentifier"]') as HTMLInputElement;
+        expect(input?.tabIndex).to.equal(-1);
+      });
+    });
+
+    describe('when in manual mode', () => {
+      beforeEach(async () => {
+        el.openDialog('drawer_kitchen');
+        el.automagicMode = false;
+        await el.updateComplete;
+      });
+
+      it('should show pen icon', () => {
+        const icon = el.shadowRoot?.querySelector('.automagic-button i');
+        expect(icon?.classList.contains('fa-pen')).to.be.true;
+      });
+
+      it('should have manual class on button', () => {
+        const btn = el.shadowRoot?.querySelector('.automagic-button');
+        expect(btn?.classList.contains('manual')).to.be.true;
+      });
+
+      it('should not make identifier field readonly', () => {
+        const input = el.shadowRoot?.querySelector('input[name="itemIdentifier"]') as HTMLInputElement;
+        expect(input?.readOnly).to.be.false;
+      });
+
+      it('should set identifier tabindex to 0', () => {
+        const input = el.shadowRoot?.querySelector('input[name="itemIdentifier"]') as HTMLInputElement;
+        expect(input?.tabIndex).to.equal(0);
+      });
+    });
   });
 
   describe('form validation', () => {
-    describe('when item identifier is empty', () => {
+    describe('when title is empty', () => {
       beforeEach(async () => {
         el.openDialog('drawer_kitchen');
+        el.itemTitle = '';
+        el.itemIdentifier = 'screwdriver';
+        await el.updateComplete;
+      });
+
+      it('should disable the add button', () => {
+        const addBtn = el.shadowRoot?.querySelector('.button-primary') as HTMLButtonElement;
+        expect(addBtn?.disabled).to.be.true;
+      });
+    });
+
+    describe('when identifier is empty', () => {
+      beforeEach(async () => {
+        el.openDialog('drawer_kitchen');
+        el.itemTitle = 'Screwdriver';
         el.itemIdentifier = '';
         await el.updateComplete;
       });
@@ -237,10 +444,27 @@ describe('InventoryAddItemDialog', () => {
       });
     });
 
-    describe('when item identifier has value', () => {
+    describe('when identifier is not unique', () => {
       beforeEach(async () => {
         el.openDialog('drawer_kitchen');
+        el.itemTitle = 'Screwdriver';
         el.itemIdentifier = 'screwdriver';
+        el.isUnique = false;
+        await el.updateComplete;
+      });
+
+      it('should disable the add button', () => {
+        const addBtn = el.shadowRoot?.querySelector('.button-primary') as HTMLButtonElement;
+        expect(addBtn?.disabled).to.be.true;
+      });
+    });
+
+    describe('when all fields are valid', () => {
+      beforeEach(async () => {
+        el.openDialog('drawer_kitchen');
+        el.itemTitle = 'Phillips Screwdriver';
+        el.itemIdentifier = 'phillips_screwdriver';
+        el.isUnique = true;
         await el.updateComplete;
       });
 

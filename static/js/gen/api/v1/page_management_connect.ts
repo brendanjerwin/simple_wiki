@@ -3,7 +3,7 @@
 /* eslint-disable */
 // @ts-nocheck
 
-import { CreatePageRequest, CreatePageResponse, DeletePageRequest, DeletePageResponse, ReadPageRequest, ReadPageResponse, RenderPageRequest, RenderPageResponse, UpdatePageContentRequest, UpdatePageContentResponse, UpdatePageRequest, UpdatePageResponse, UpdateWholePageRequest, UpdateWholePageResponse } from "./page_management_pb.js";
+import { CreatePageRequest, CreatePageResponse, DeletePageRequest, DeletePageResponse, GenerateIdentifierRequest, GenerateIdentifierResponse, ReadPageRequest, ReadPageResponse, RenderPageRequest, RenderPageResponse, UpdatePageContentRequest, UpdatePageContentResponse, UpdatePageRequest, UpdatePageResponse, UpdateWholePageRequest, UpdateWholePageResponse } from "./page_management_pb.js";
 import { MethodKind } from "@bufbuild/protobuf";
 
 /**
@@ -73,6 +73,18 @@ export const PageManagementService = {
       name: "DeletePage",
       I: DeletePageRequest,
       O: DeletePageResponse,
+      kind: MethodKind.Unary,
+    },
+    /**
+     * GenerateIdentifier converts text to a wiki page identifier format.
+     * Used by UI to auto-generate identifiers from titles and check availability.
+     *
+     * @generated from rpc api.v1.PageManagementService.GenerateIdentifier
+     */
+    generateIdentifier: {
+      name: "GenerateIdentifier",
+      I: GenerateIdentifierRequest,
+      O: GenerateIdentifierResponse,
       kind: MethodKind.Unary,
     },
   }

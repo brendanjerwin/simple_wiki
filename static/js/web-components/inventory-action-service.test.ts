@@ -87,6 +87,26 @@ describe('InventoryActionService', () => {
       });
     });
 
+    describe('when called with description', () => {
+      let clientStub: sinon.SinonStub;
+
+      beforeEach(async () => {
+        const serviceWithClient = service as unknown as { inventoryClient: { createInventoryItem: () => Promise<unknown> } };
+        clientStub = sinon.stub(serviceWithClient.inventoryClient, 'createInventoryItem').resolves({
+          success: true,
+          itemIdentifier: 'screwdriver',
+          summary: 'Created screwdriver',
+        });
+
+        await service.addItem('drawer_kitchen', 'screwdriver', 'Phillips Screwdriver', 'A yellow-handled Phillips head screwdriver');
+      });
+
+      it('should pass description to client', () => {
+        const request = clientStub.firstCall.args[0];
+        expect(request.description).to.equal('A yellow-handled Phillips head screwdriver');
+      });
+    });
+
     describe('when called with valid parameters and client returns error response', () => {
       let result: Awaited<ReturnType<typeof service.addItem>>;
 
@@ -124,6 +144,141 @@ describe('InventoryActionService', () => {
       });
 
       it('should return an error message', () => {
+        expect(result.error).to.exist;
+      });
+    });
+  });
+
+  describe('generateIdentifier', () => {
+    describe('when called with empty text', () => {
+      let result: Awaited<ReturnType<typeof service.generateIdentifier>>;
+
+      beforeEach(async () => {
+        result = await service.generateIdentifier('');
+      });
+
+      it('should return empty identifier', () => {
+        expect(result.identifier).to.equal('');
+      });
+
+      it('should return isUnique true', () => {
+        expect(result.isUnique).to.be.true;
+      });
+    });
+
+    describe('when called with valid text and identifier is unique', () => {
+      let result: Awaited<ReturnType<typeof service.generateIdentifier>>;
+      let clientStub: sinon.SinonStub;
+
+      beforeEach(async () => {
+        const serviceWithClient = service as unknown as { pageManagementClient: { generateIdentifier: () => Promise<unknown> } };
+        clientStub = sinon.stub(serviceWithClient.pageManagementClient, 'generateIdentifier').resolves({
+          identifier: 'phillips_screwdriver',
+          isUnique: true,
+          existingPage: undefined,
+        });
+
+        result = await service.generateIdentifier('Phillips Screwdriver');
+      });
+
+      it('should return the generated identifier', () => {
+        expect(result.identifier).to.equal('phillips_screwdriver');
+      });
+
+      it('should return isUnique true', () => {
+        expect(result.isUnique).to.be.true;
+      });
+
+      it('should not have existingPage', () => {
+        expect(result.existingPage).to.be.undefined;
+      });
+
+      it('should call client with correct request', () => {
+        expect(clientStub).to.have.been.calledOnce;
+        const request = clientStub.firstCall.args[0];
+        expect(request.text).to.equal('Phillips Screwdriver');
+        expect(request.ensureUnique).to.be.false;
+      });
+    });
+
+    describe('when called with valid text and identifier already exists', () => {
+      let result: Awaited<ReturnType<typeof service.generateIdentifier>>;
+
+      beforeEach(async () => {
+        const serviceWithClient = service as unknown as { pageManagementClient: { generateIdentifier: () => Promise<unknown> } };
+        sinon.stub(serviceWithClient.pageManagementClient, 'generateIdentifier').resolves({
+          identifier: 'screwdriver',
+          isUnique: false,
+          existingPage: {
+            identifier: 'screwdriver',
+            title: 'Screwdriver',
+            container: 'toolbox_garage',
+          },
+        });
+
+        result = await service.generateIdentifier('Screwdriver');
+      });
+
+      it('should return the generated identifier', () => {
+        expect(result.identifier).to.equal('screwdriver');
+      });
+
+      it('should return isUnique false', () => {
+        expect(result.isUnique).to.be.false;
+      });
+
+      it('should return existingPage with identifier', () => {
+        expect(result.existingPage?.identifier).to.equal('screwdriver');
+      });
+
+      it('should return existingPage with title', () => {
+        expect(result.existingPage?.title).to.equal('Screwdriver');
+      });
+
+      it('should return existingPage with container', () => {
+        expect(result.existingPage?.container).to.equal('toolbox_garage');
+      });
+    });
+
+    describe('when called with ensureUnique true', () => {
+      let clientStub: sinon.SinonStub;
+
+      beforeEach(async () => {
+        const serviceWithClient = service as unknown as { pageManagementClient: { generateIdentifier: () => Promise<unknown> } };
+        clientStub = sinon.stub(serviceWithClient.pageManagementClient, 'generateIdentifier').resolves({
+          identifier: 'screwdriver_1',
+          isUnique: true,
+          existingPage: undefined,
+        });
+
+        await service.generateIdentifier('Screwdriver', true);
+      });
+
+      it('should call client with ensureUnique true', () => {
+        const request = clientStub.firstCall.args[0];
+        expect(request.ensureUnique).to.be.true;
+      });
+    });
+
+    describe('when client throws error', () => {
+      let result: Awaited<ReturnType<typeof service.generateIdentifier>>;
+
+      beforeEach(async () => {
+        const serviceWithClient = service as unknown as { pageManagementClient: { generateIdentifier: () => Promise<unknown> } };
+        sinon.stub(serviceWithClient.pageManagementClient, 'generateIdentifier').rejects(new Error('Network error'));
+
+        result = await service.generateIdentifier('Some Text');
+      });
+
+      it('should return empty identifier', () => {
+        expect(result.identifier).to.equal('');
+      });
+
+      it('should return isUnique true', () => {
+        expect(result.isUnique).to.be.true;
+      });
+
+      it('should return error message', () => {
         expect(result.error).to.exist;
       });
     });
