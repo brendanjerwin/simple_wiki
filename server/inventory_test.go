@@ -87,7 +87,7 @@ var _ = Describe("inventory.go", func() {
 			})
 
 			It("should contain the inventory markdown template", func() {
-				Expect(page.Text).To(ContainSubstring("Goes in:"))
+				Expect(page.Text).To(ContainSubstring("IsContainer"))
 			})
 		})
 
@@ -280,7 +280,7 @@ var _ = Describe("inventory.go", func() {
 			})
 
 			It("should contain the inventory markdown template", func() {
-				Expect(pageText).To(ContainSubstring("Goes in:"))
+				Expect(pageText).To(ContainSubstring("IsContainer"))
 			})
 		})
 

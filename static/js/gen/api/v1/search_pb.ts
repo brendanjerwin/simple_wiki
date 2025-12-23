@@ -31,6 +31,13 @@ export class SearchContentRequest extends Message<SearchContentRequest> {
    */
   frontmatterKeyExcludeFilters: string[] = [];
 
+  /**
+   * Optional: frontmatter dot-paths whose values should be returned in each result
+   *
+   * @generated from field: repeated string frontmatter_keys_to_return_in_results = 4;
+   */
+  frontmatterKeysToReturnInResults: string[] = [];
+
   constructor(data?: PartialMessage<SearchContentRequest>) {
     super();
     proto3.util.initPartial(data, this);
@@ -42,6 +49,7 @@ export class SearchContentRequest extends Message<SearchContentRequest> {
     { no: 1, name: "query", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "frontmatter_key_include_filters", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
     { no: 3, name: "frontmatter_key_exclude_filters", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
+    { no: 4, name: "frontmatter_keys_to_return_in_results", kind: "scalar", T: 9 /* ScalarType.STRING */, repeated: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SearchContentRequest {
@@ -134,6 +142,13 @@ export class SearchResult extends Message<SearchResult> {
    */
   highlights: HighlightSpan[] = [];
 
+  /**
+   * Requested frontmatter values (dot-path -> value)
+   *
+   * @generated from field: map<string, string> frontmatter = 5;
+   */
+  frontmatter: { [key: string]: string } = {};
+
   constructor(data?: PartialMessage<SearchResult>) {
     super();
     proto3.util.initPartial(data, this);
@@ -146,6 +161,7 @@ export class SearchResult extends Message<SearchResult> {
     { no: 2, name: "title", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 3, name: "fragment", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 4, name: "highlights", kind: "message", T: HighlightSpan, repeated: true },
+    { no: 5, name: "frontmatter", kind: "map", K: 9 /* ScalarType.STRING */, V: {kind: "scalar", T: 9 /* ScalarType.STRING */} },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SearchResult {

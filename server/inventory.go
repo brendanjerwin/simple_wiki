@@ -26,8 +26,6 @@ type InventoryItemParams struct {
 // InventoryItemMarkdownTemplate is the markdown template for inventory item pages.
 // It is exported so it can be used by both the server and the gRPC API layer.
 const InventoryItemMarkdownTemplate = `
-### Goes in: {{LinkTo .Inventory.Container }}
-
 {{if IsContainer .Identifier }}
 ## Contents
 {{ ShowInventoryContentsOf .Identifier }}

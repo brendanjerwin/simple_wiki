@@ -107,6 +107,47 @@ public final class Search {
      */
     com.google.protobuf.ByteString
         getFrontmatterKeyExcludeFiltersBytes(int index);
+
+    /**
+     * <pre>
+     * Optional: frontmatter dot-paths whose values should be returned in each result
+     * </pre>
+     *
+     * <code>repeated string frontmatter_keys_to_return_in_results = 4 [json_name = "frontmatterKeysToReturnInResults"];</code>
+     * @return A list containing the frontmatterKeysToReturnInResults.
+     */
+    java.util.List<java.lang.String>
+        getFrontmatterKeysToReturnInResultsList();
+    /**
+     * <pre>
+     * Optional: frontmatter dot-paths whose values should be returned in each result
+     * </pre>
+     *
+     * <code>repeated string frontmatter_keys_to_return_in_results = 4 [json_name = "frontmatterKeysToReturnInResults"];</code>
+     * @return The count of frontmatterKeysToReturnInResults.
+     */
+    int getFrontmatterKeysToReturnInResultsCount();
+    /**
+     * <pre>
+     * Optional: frontmatter dot-paths whose values should be returned in each result
+     * </pre>
+     *
+     * <code>repeated string frontmatter_keys_to_return_in_results = 4 [json_name = "frontmatterKeysToReturnInResults"];</code>
+     * @param index The index of the element to return.
+     * @return The frontmatterKeysToReturnInResults at the given index.
+     */
+    java.lang.String getFrontmatterKeysToReturnInResults(int index);
+    /**
+     * <pre>
+     * Optional: frontmatter dot-paths whose values should be returned in each result
+     * </pre>
+     *
+     * <code>repeated string frontmatter_keys_to_return_in_results = 4 [json_name = "frontmatterKeysToReturnInResults"];</code>
+     * @param index The index of the element to return.
+     * @return The frontmatterKeysToReturnInResults at the given index.
+     */
+    com.google.protobuf.ByteString
+        getFrontmatterKeysToReturnInResultsBytes(int index);
   }
   /**
    * <pre>
@@ -124,6 +165,7 @@ public final class Search {
       query_ = "";
       frontmatterKeyIncludeFilters_ = com.google.protobuf.GeneratedMessageLite.emptyProtobufList();
       frontmatterKeyExcludeFilters_ = com.google.protobuf.GeneratedMessageLite.emptyProtobufList();
+      frontmatterKeysToReturnInResults_ = com.google.protobuf.GeneratedMessageLite.emptyProtobufList();
     }
     public static final int QUERY_FIELD_NUMBER = 1;
     private java.lang.String query_;
@@ -428,6 +470,135 @@ public final class Search {
       checkByteStringIsUtf8(value);
       ensureFrontmatterKeyExcludeFiltersIsMutable();
       frontmatterKeyExcludeFilters_.add(value.toStringUtf8());
+    }
+
+    public static final int FRONTMATTER_KEYS_TO_RETURN_IN_RESULTS_FIELD_NUMBER = 4;
+    private com.google.protobuf.Internal.ProtobufList<java.lang.String> frontmatterKeysToReturnInResults_;
+    /**
+     * <pre>
+     * Optional: frontmatter dot-paths whose values should be returned in each result
+     * </pre>
+     *
+     * <code>repeated string frontmatter_keys_to_return_in_results = 4 [json_name = "frontmatterKeysToReturnInResults"];</code>
+     * @return A list containing the frontmatterKeysToReturnInResults.
+     */
+    @java.lang.Override
+    public java.util.List<java.lang.String> getFrontmatterKeysToReturnInResultsList() {
+      return frontmatterKeysToReturnInResults_;
+    }
+    /**
+     * <pre>
+     * Optional: frontmatter dot-paths whose values should be returned in each result
+     * </pre>
+     *
+     * <code>repeated string frontmatter_keys_to_return_in_results = 4 [json_name = "frontmatterKeysToReturnInResults"];</code>
+     * @return The count of frontmatterKeysToReturnInResults.
+     */
+    @java.lang.Override
+    public int getFrontmatterKeysToReturnInResultsCount() {
+      return frontmatterKeysToReturnInResults_.size();
+    }
+    /**
+     * <pre>
+     * Optional: frontmatter dot-paths whose values should be returned in each result
+     * </pre>
+     *
+     * <code>repeated string frontmatter_keys_to_return_in_results = 4 [json_name = "frontmatterKeysToReturnInResults"];</code>
+     * @param index The index of the element to return.
+     * @return The frontmatterKeysToReturnInResults at the given index.
+     */
+    @java.lang.Override
+    public java.lang.String getFrontmatterKeysToReturnInResults(int index) {
+      return frontmatterKeysToReturnInResults_.get(index);
+    }
+    /**
+     * <pre>
+     * Optional: frontmatter dot-paths whose values should be returned in each result
+     * </pre>
+     *
+     * <code>repeated string frontmatter_keys_to_return_in_results = 4 [json_name = "frontmatterKeysToReturnInResults"];</code>
+     * @param index The index of the value to return.
+     * @return The bytes of the frontmatterKeysToReturnInResults at the given index.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getFrontmatterKeysToReturnInResultsBytes(int index) {
+      return com.google.protobuf.ByteString.copyFromUtf8(
+          frontmatterKeysToReturnInResults_.get(index));
+    }
+    private void ensureFrontmatterKeysToReturnInResultsIsMutable() {
+      com.google.protobuf.Internal.ProtobufList<java.lang.String> tmp =
+          frontmatterKeysToReturnInResults_;  if (!tmp.isModifiable()) {
+        frontmatterKeysToReturnInResults_ =
+            com.google.protobuf.GeneratedMessageLite.mutableCopy(tmp);
+       }
+    }
+    /**
+     * <pre>
+     * Optional: frontmatter dot-paths whose values should be returned in each result
+     * </pre>
+     *
+     * <code>repeated string frontmatter_keys_to_return_in_results = 4 [json_name = "frontmatterKeysToReturnInResults"];</code>
+     * @param index The index to set the value at.
+     * @param value The frontmatterKeysToReturnInResults to set.
+     */
+    private void setFrontmatterKeysToReturnInResults(
+        int index, java.lang.String value) {
+      java.lang.Class<?> valueClass = value.getClass();
+  ensureFrontmatterKeysToReturnInResultsIsMutable();
+      frontmatterKeysToReturnInResults_.set(index, value);
+    }
+    /**
+     * <pre>
+     * Optional: frontmatter dot-paths whose values should be returned in each result
+     * </pre>
+     *
+     * <code>repeated string frontmatter_keys_to_return_in_results = 4 [json_name = "frontmatterKeysToReturnInResults"];</code>
+     * @param value The frontmatterKeysToReturnInResults to add.
+     */
+    private void addFrontmatterKeysToReturnInResults(
+        java.lang.String value) {
+      java.lang.Class<?> valueClass = value.getClass();
+  ensureFrontmatterKeysToReturnInResultsIsMutable();
+      frontmatterKeysToReturnInResults_.add(value);
+    }
+    /**
+     * <pre>
+     * Optional: frontmatter dot-paths whose values should be returned in each result
+     * </pre>
+     *
+     * <code>repeated string frontmatter_keys_to_return_in_results = 4 [json_name = "frontmatterKeysToReturnInResults"];</code>
+     * @param values The frontmatterKeysToReturnInResults to add.
+     */
+    private void addAllFrontmatterKeysToReturnInResults(
+        java.lang.Iterable<java.lang.String> values) {
+      ensureFrontmatterKeysToReturnInResultsIsMutable();
+      com.google.protobuf.AbstractMessageLite.addAll(
+          values, frontmatterKeysToReturnInResults_);
+    }
+    /**
+     * <pre>
+     * Optional: frontmatter dot-paths whose values should be returned in each result
+     * </pre>
+     *
+     * <code>repeated string frontmatter_keys_to_return_in_results = 4 [json_name = "frontmatterKeysToReturnInResults"];</code>
+     */
+    private void clearFrontmatterKeysToReturnInResults() {
+      frontmatterKeysToReturnInResults_ = com.google.protobuf.GeneratedMessageLite.emptyProtobufList();
+    }
+    /**
+     * <pre>
+     * Optional: frontmatter dot-paths whose values should be returned in each result
+     * </pre>
+     *
+     * <code>repeated string frontmatter_keys_to_return_in_results = 4 [json_name = "frontmatterKeysToReturnInResults"];</code>
+     * @param value The bytes of the frontmatterKeysToReturnInResults to add.
+     */
+    private void addFrontmatterKeysToReturnInResultsBytes(
+        com.google.protobuf.ByteString value) {
+      checkByteStringIsUtf8(value);
+      ensureFrontmatterKeysToReturnInResultsIsMutable();
+      frontmatterKeysToReturnInResults_.add(value.toStringUtf8());
     }
 
     public static api.v1.Search.SearchContentRequest parseFrom(
@@ -836,6 +1007,134 @@ public final class Search {
         return this;
       }
 
+      /**
+       * <pre>
+       * Optional: frontmatter dot-paths whose values should be returned in each result
+       * </pre>
+       *
+       * <code>repeated string frontmatter_keys_to_return_in_results = 4 [json_name = "frontmatterKeysToReturnInResults"];</code>
+       * @return A list containing the frontmatterKeysToReturnInResults.
+       */
+      @java.lang.Override
+      public java.util.List<java.lang.String>
+          getFrontmatterKeysToReturnInResultsList() {
+        return java.util.Collections.unmodifiableList(
+            instance.getFrontmatterKeysToReturnInResultsList());
+      }
+      /**
+       * <pre>
+       * Optional: frontmatter dot-paths whose values should be returned in each result
+       * </pre>
+       *
+       * <code>repeated string frontmatter_keys_to_return_in_results = 4 [json_name = "frontmatterKeysToReturnInResults"];</code>
+       * @return The count of frontmatterKeysToReturnInResults.
+       */
+      @java.lang.Override
+      public int getFrontmatterKeysToReturnInResultsCount() {
+        return instance.getFrontmatterKeysToReturnInResultsCount();
+      }
+      /**
+       * <pre>
+       * Optional: frontmatter dot-paths whose values should be returned in each result
+       * </pre>
+       *
+       * <code>repeated string frontmatter_keys_to_return_in_results = 4 [json_name = "frontmatterKeysToReturnInResults"];</code>
+       * @param index The index of the element to return.
+       * @return The frontmatterKeysToReturnInResults at the given index.
+       */
+      @java.lang.Override
+      public java.lang.String getFrontmatterKeysToReturnInResults(int index) {
+        return instance.getFrontmatterKeysToReturnInResults(index);
+      }
+      /**
+       * <pre>
+       * Optional: frontmatter dot-paths whose values should be returned in each result
+       * </pre>
+       *
+       * <code>repeated string frontmatter_keys_to_return_in_results = 4 [json_name = "frontmatterKeysToReturnInResults"];</code>
+       * @param index The index of the value to return.
+       * @return The bytes of the frontmatterKeysToReturnInResults at the given index.
+       */
+      @java.lang.Override
+      public com.google.protobuf.ByteString
+          getFrontmatterKeysToReturnInResultsBytes(int index) {
+        return instance.getFrontmatterKeysToReturnInResultsBytes(index);
+      }
+      /**
+       * <pre>
+       * Optional: frontmatter dot-paths whose values should be returned in each result
+       * </pre>
+       *
+       * <code>repeated string frontmatter_keys_to_return_in_results = 4 [json_name = "frontmatterKeysToReturnInResults"];</code>
+       * @param index The index to set the value at.
+       * @param value The frontmatterKeysToReturnInResults to set.
+       * @return This builder for chaining.
+       */
+      public Builder setFrontmatterKeysToReturnInResults(
+          int index, java.lang.String value) {
+        copyOnWrite();
+        instance.setFrontmatterKeysToReturnInResults(index, value);
+        return this;
+      }
+      /**
+       * <pre>
+       * Optional: frontmatter dot-paths whose values should be returned in each result
+       * </pre>
+       *
+       * <code>repeated string frontmatter_keys_to_return_in_results = 4 [json_name = "frontmatterKeysToReturnInResults"];</code>
+       * @param value The frontmatterKeysToReturnInResults to add.
+       * @return This builder for chaining.
+       */
+      public Builder addFrontmatterKeysToReturnInResults(
+          java.lang.String value) {
+        copyOnWrite();
+        instance.addFrontmatterKeysToReturnInResults(value);
+        return this;
+      }
+      /**
+       * <pre>
+       * Optional: frontmatter dot-paths whose values should be returned in each result
+       * </pre>
+       *
+       * <code>repeated string frontmatter_keys_to_return_in_results = 4 [json_name = "frontmatterKeysToReturnInResults"];</code>
+       * @param values The frontmatterKeysToReturnInResults to add.
+       * @return This builder for chaining.
+       */
+      public Builder addAllFrontmatterKeysToReturnInResults(
+          java.lang.Iterable<java.lang.String> values) {
+        copyOnWrite();
+        instance.addAllFrontmatterKeysToReturnInResults(values);
+        return this;
+      }
+      /**
+       * <pre>
+       * Optional: frontmatter dot-paths whose values should be returned in each result
+       * </pre>
+       *
+       * <code>repeated string frontmatter_keys_to_return_in_results = 4 [json_name = "frontmatterKeysToReturnInResults"];</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearFrontmatterKeysToReturnInResults() {
+        copyOnWrite();
+        instance.clearFrontmatterKeysToReturnInResults();
+        return this;
+      }
+      /**
+       * <pre>
+       * Optional: frontmatter dot-paths whose values should be returned in each result
+       * </pre>
+       *
+       * <code>repeated string frontmatter_keys_to_return_in_results = 4 [json_name = "frontmatterKeysToReturnInResults"];</code>
+       * @param value The bytes of the frontmatterKeysToReturnInResults to add.
+       * @return This builder for chaining.
+       */
+      public Builder addFrontmatterKeysToReturnInResultsBytes(
+          com.google.protobuf.ByteString value) {
+        copyOnWrite();
+        instance.addFrontmatterKeysToReturnInResultsBytes(value);
+        return this;
+      }
+
       // @@protoc_insertion_point(builder_scope:api.v1.SearchContentRequest)
     }
     @java.lang.Override
@@ -855,10 +1154,11 @@ public final class Search {
               "query_",
               "frontmatterKeyIncludeFilters_",
               "frontmatterKeyExcludeFilters_",
+              "frontmatterKeysToReturnInResults_",
             };
             java.lang.String info =
-                "\u0000\u0003\u0000\u0000\u0001\u0003\u0003\u0000\u0002\u0000\u0001\u0208\u0002\u021a" +
-                "\u0003\u021a";
+                "\u0000\u0004\u0000\u0000\u0001\u0004\u0004\u0000\u0003\u0000\u0001\u0208\u0002\u021a" +
+                "\u0003\u021a\u0004\u021a";
             return newMessageInfo(DEFAULT_INSTANCE, info, objects);
         }
         // fall through
@@ -1407,6 +1707,62 @@ public final class Search {
      * <code>repeated .api.v1.HighlightSpan highlights = 4 [json_name = "highlights"];</code>
      */
     int getHighlightsCount();
+
+    /**
+     * <pre>
+     * Requested frontmatter values (dot-path -&gt; value)
+     * </pre>
+     *
+     * <code>map&lt;string, string&gt; frontmatter = 5 [json_name = "frontmatter"];</code>
+     */
+    int getFrontmatterCount();
+    /**
+     * <pre>
+     * Requested frontmatter values (dot-path -&gt; value)
+     * </pre>
+     *
+     * <code>map&lt;string, string&gt; frontmatter = 5 [json_name = "frontmatter"];</code>
+     */
+    boolean containsFrontmatter(
+        java.lang.String key);
+    /**
+     * Use {@link #getFrontmatterMap()} instead.
+     */
+    @java.lang.Deprecated
+    java.util.Map<java.lang.String, java.lang.String>
+    getFrontmatter();
+    /**
+     * <pre>
+     * Requested frontmatter values (dot-path -&gt; value)
+     * </pre>
+     *
+     * <code>map&lt;string, string&gt; frontmatter = 5 [json_name = "frontmatter"];</code>
+     */
+    java.util.Map<java.lang.String, java.lang.String>
+    getFrontmatterMap();
+    /**
+     * <pre>
+     * Requested frontmatter values (dot-path -&gt; value)
+     * </pre>
+     *
+     * <code>map&lt;string, string&gt; frontmatter = 5 [json_name = "frontmatter"];</code>
+     */
+
+    /* nullable */
+java.lang.String getFrontmatterOrDefault(
+        java.lang.String key,
+        /* nullable */
+java.lang.String defaultValue);
+    /**
+     * <pre>
+     * Requested frontmatter values (dot-path -&gt; value)
+     * </pre>
+     *
+     * <code>map&lt;string, string&gt; frontmatter = 5 [json_name = "frontmatter"];</code>
+     */
+
+    java.lang.String getFrontmatterOrThrow(
+        java.lang.String key);
   }
   /**
    * <pre>
@@ -1763,6 +2119,121 @@ public final class Search {
     private void removeHighlights(int index) {
       ensureHighlightsIsMutable();
       highlights_.remove(index);
+    }
+
+    public static final int FRONTMATTER_FIELD_NUMBER = 5;
+    private static final class FrontmatterDefaultEntryHolder {
+      static final com.google.protobuf.MapEntryLite<
+          java.lang.String, java.lang.String> defaultEntry =
+              com.google.protobuf.MapEntryLite
+              .<java.lang.String, java.lang.String>newDefaultInstance(
+                  com.google.protobuf.WireFormat.FieldType.STRING,
+                  "",
+                  com.google.protobuf.WireFormat.FieldType.STRING,
+                  "");
+    }
+    private com.google.protobuf.MapFieldLite<
+        java.lang.String, java.lang.String> frontmatter_ =
+            com.google.protobuf.MapFieldLite.emptyMapField();
+    private com.google.protobuf.MapFieldLite<java.lang.String, java.lang.String>
+    internalGetFrontmatter() {
+      return frontmatter_;
+    }
+    private com.google.protobuf.MapFieldLite<java.lang.String, java.lang.String>
+    internalGetMutableFrontmatter() {
+      if (!frontmatter_.isMutable()) {
+        frontmatter_ = frontmatter_.mutableCopy();
+      }
+      return frontmatter_;
+    }
+    @java.lang.Override
+
+    public int getFrontmatterCount() {
+      return internalGetFrontmatter().size();
+    }
+    /**
+     * <pre>
+     * Requested frontmatter values (dot-path -&gt; value)
+     * </pre>
+     *
+     * <code>map&lt;string, string&gt; frontmatter = 5 [json_name = "frontmatter"];</code>
+     */
+    @java.lang.Override
+
+    public boolean containsFrontmatter(
+        java.lang.String key) {
+      java.lang.Class<?> keyClass = key.getClass();
+      return internalGetFrontmatter().containsKey(key);
+    }
+    /**
+     * Use {@link #getFrontmatterMap()} instead.
+     */
+    @java.lang.Override
+    @java.lang.Deprecated
+    public java.util.Map<java.lang.String, java.lang.String> getFrontmatter() {
+      return getFrontmatterMap();
+    }
+    /**
+     * <pre>
+     * Requested frontmatter values (dot-path -&gt; value)
+     * </pre>
+     *
+     * <code>map&lt;string, string&gt; frontmatter = 5 [json_name = "frontmatter"];</code>
+     */
+    @java.lang.Override
+
+    public java.util.Map<java.lang.String, java.lang.String> getFrontmatterMap() {
+      return java.util.Collections.unmodifiableMap(
+          internalGetFrontmatter());
+    }
+    /**
+     * <pre>
+     * Requested frontmatter values (dot-path -&gt; value)
+     * </pre>
+     *
+     * <code>map&lt;string, string&gt; frontmatter = 5 [json_name = "frontmatter"];</code>
+     */
+    @java.lang.Override
+
+    public /* nullable */
+java.lang.String getFrontmatterOrDefault(
+        java.lang.String key,
+        /* nullable */
+java.lang.String defaultValue) {
+      java.lang.Class<?> keyClass = key.getClass();
+      java.util.Map<java.lang.String, java.lang.String> map =
+          internalGetFrontmatter();
+      return map.containsKey(key) ? map.get(key) : defaultValue;
+    }
+    /**
+     * <pre>
+     * Requested frontmatter values (dot-path -&gt; value)
+     * </pre>
+     *
+     * <code>map&lt;string, string&gt; frontmatter = 5 [json_name = "frontmatter"];</code>
+     */
+    @java.lang.Override
+
+    public java.lang.String getFrontmatterOrThrow(
+        java.lang.String key) {
+      java.lang.Class<?> keyClass = key.getClass();
+      java.util.Map<java.lang.String, java.lang.String> map =
+          internalGetFrontmatter();
+      if (!map.containsKey(key)) {
+        throw new java.lang.IllegalArgumentException();
+      }
+      return map.get(key);
+    }
+    /**
+     * <pre>
+     * Requested frontmatter values (dot-path -&gt; value)
+     * </pre>
+     *
+     * <code>map&lt;string, string&gt; frontmatter = 5 [json_name = "frontmatter"];</code>
+     */
+    private java.util.Map<java.lang.String, java.lang.String>
+    getMutableFrontmatterMap() {
+      return internalGetMutableFrontmatter();
     }
 
     public static api.v1.Search.SearchResult parseFrom(
@@ -2223,6 +2694,134 @@ public final class Search {
         return this;
       }
 
+      @java.lang.Override
+
+      public int getFrontmatterCount() {
+        return instance.getFrontmatterMap().size();
+      }
+      /**
+       * <pre>
+       * Requested frontmatter values (dot-path -&gt; value)
+       * </pre>
+       *
+       * <code>map&lt;string, string&gt; frontmatter = 5 [json_name = "frontmatter"];</code>
+       */
+      @java.lang.Override
+
+      public boolean containsFrontmatter(
+          java.lang.String key) {
+        java.lang.Class<?> keyClass = key.getClass();
+        return instance.getFrontmatterMap().containsKey(key);
+      }
+
+      public Builder clearFrontmatter() {
+        copyOnWrite();
+        instance.getMutableFrontmatterMap().clear();
+        return this;
+      }
+      /**
+       * <pre>
+       * Requested frontmatter values (dot-path -&gt; value)
+       * </pre>
+       *
+       * <code>map&lt;string, string&gt; frontmatter = 5 [json_name = "frontmatter"];</code>
+       */
+
+      public Builder removeFrontmatter(
+          java.lang.String key) {
+        java.lang.Class<?> keyClass = key.getClass();
+        copyOnWrite();
+        instance.getMutableFrontmatterMap().remove(key);
+        return this;
+      }
+      /**
+       * Use {@link #getFrontmatterMap()} instead.
+       */
+      @java.lang.Override
+      @java.lang.Deprecated
+      public java.util.Map<java.lang.String, java.lang.String> getFrontmatter() {
+        return getFrontmatterMap();
+      }
+      /**
+       * <pre>
+       * Requested frontmatter values (dot-path -&gt; value)
+       * </pre>
+       *
+       * <code>map&lt;string, string&gt; frontmatter = 5 [json_name = "frontmatter"];</code>
+       */
+      @java.lang.Override
+      public java.util.Map<java.lang.String, java.lang.String> getFrontmatterMap() {
+        return java.util.Collections.unmodifiableMap(
+            instance.getFrontmatterMap());
+      }
+      /**
+       * <pre>
+       * Requested frontmatter values (dot-path -&gt; value)
+       * </pre>
+       *
+       * <code>map&lt;string, string&gt; frontmatter = 5 [json_name = "frontmatter"];</code>
+       */
+      @java.lang.Override
+
+      public /* nullable */
+java.lang.String getFrontmatterOrDefault(
+          java.lang.String key,
+          /* nullable */
+java.lang.String defaultValue) {
+        java.lang.Class<?> keyClass = key.getClass();
+        java.util.Map<java.lang.String, java.lang.String> map =
+            instance.getFrontmatterMap();
+        return map.containsKey(key) ? map.get(key) : defaultValue;
+      }
+      /**
+       * <pre>
+       * Requested frontmatter values (dot-path -&gt; value)
+       * </pre>
+       *
+       * <code>map&lt;string, string&gt; frontmatter = 5 [json_name = "frontmatter"];</code>
+       */
+      @java.lang.Override
+
+      public java.lang.String getFrontmatterOrThrow(
+          java.lang.String key) {
+        java.lang.Class<?> keyClass = key.getClass();
+        java.util.Map<java.lang.String, java.lang.String> map =
+            instance.getFrontmatterMap();
+        if (!map.containsKey(key)) {
+          throw new java.lang.IllegalArgumentException();
+        }
+        return map.get(key);
+      }
+      /**
+       * <pre>
+       * Requested frontmatter values (dot-path -&gt; value)
+       * </pre>
+       *
+       * <code>map&lt;string, string&gt; frontmatter = 5 [json_name = "frontmatter"];</code>
+       */
+      public Builder putFrontmatter(
+          java.lang.String key,
+          java.lang.String value) {
+        java.lang.Class<?> keyClass = key.getClass();
+        java.lang.Class<?> valueClass = value.getClass();
+        copyOnWrite();
+        instance.getMutableFrontmatterMap().put(key, value);
+        return this;
+      }
+      /**
+       * <pre>
+       * Requested frontmatter values (dot-path -&gt; value)
+       * </pre>
+       *
+       * <code>map&lt;string, string&gt; frontmatter = 5 [json_name = "frontmatter"];</code>
+       */
+      public Builder putAllFrontmatter(
+          java.util.Map<java.lang.String, java.lang.String> values) {
+        copyOnWrite();
+        instance.getMutableFrontmatterMap().putAll(values);
+        return this;
+      }
+
       // @@protoc_insertion_point(builder_scope:api.v1.SearchResult)
     }
     @java.lang.Override
@@ -2244,10 +2843,12 @@ public final class Search {
               "fragment_",
               "highlights_",
               api.v1.Search.HighlightSpan.class,
+              "frontmatter_",
+              FrontmatterDefaultEntryHolder.defaultEntry,
             };
             java.lang.String info =
-                "\u0000\u0004\u0000\u0000\u0001\u0004\u0004\u0000\u0001\u0000\u0001\u0208\u0002\u0208" +
-                "\u0003\u0208\u0004\u001b";
+                "\u0000\u0005\u0000\u0000\u0001\u0005\u0005\u0001\u0001\u0000\u0001\u0208\u0002\u0208" +
+                "\u0003\u0208\u0004\u001b\u00052";
             return newMessageInfo(DEFAULT_INSTANCE, info, objects);
         }
         // fall through

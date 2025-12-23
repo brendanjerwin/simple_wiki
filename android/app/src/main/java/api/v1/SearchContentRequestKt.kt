@@ -244,6 +244,104 @@ public object SearchContentRequestKt {
     @kotlin.jvm.JvmName("clearFrontmatterKeyExcludeFilters")
     public fun com.google.protobuf.kotlin.DslList<kotlin.String, FrontmatterKeyExcludeFiltersProxy>.clear() {
       _builder.clearFrontmatterKeyExcludeFilters()
+    }
+    /**
+     * An uninstantiable, behaviorless type to represent the field in
+     * generics.
+     */
+    @kotlin.OptIn(com.google.protobuf.kotlin.OnlyForUseByGeneratedProtoCode::class)
+    public class FrontmatterKeysToReturnInResultsProxy private constructor() : com.google.protobuf.kotlin.DslProxy()
+    /**
+     * ```
+     * Optional: frontmatter dot-paths whose values should be returned in each result
+     * ```
+     *
+     * `repeated string frontmatter_keys_to_return_in_results = 4 [json_name = "frontmatterKeysToReturnInResults"];`
+     * @return A list containing the frontmatterKeysToReturnInResults.
+     */
+    public val frontmatterKeysToReturnInResults: com.google.protobuf.kotlin.DslList<kotlin.String, FrontmatterKeysToReturnInResultsProxy>
+      @kotlin.jvm.JvmSynthetic
+      get() = com.google.protobuf.kotlin.DslList(
+        _builder.frontmatterKeysToReturnInResultsList
+      )
+    /**
+     * ```
+     * Optional: frontmatter dot-paths whose values should be returned in each result
+     * ```
+     *
+     * `repeated string frontmatter_keys_to_return_in_results = 4 [json_name = "frontmatterKeysToReturnInResults"];`
+     * @param value The frontmatterKeysToReturnInResults to add.
+     */
+    @kotlin.jvm.JvmSynthetic
+    @kotlin.jvm.JvmName("addFrontmatterKeysToReturnInResults")
+    public fun com.google.protobuf.kotlin.DslList<kotlin.String, FrontmatterKeysToReturnInResultsProxy>.add(value: kotlin.String) {
+      _builder.addFrontmatterKeysToReturnInResults(value)
+    }
+    /**
+     * ```
+     * Optional: frontmatter dot-paths whose values should be returned in each result
+     * ```
+     *
+     * `repeated string frontmatter_keys_to_return_in_results = 4 [json_name = "frontmatterKeysToReturnInResults"];`
+     * @param value The frontmatterKeysToReturnInResults to add.
+     */
+    @kotlin.jvm.JvmSynthetic
+    @kotlin.jvm.JvmName("plusAssignFrontmatterKeysToReturnInResults")
+    @Suppress("NOTHING_TO_INLINE")
+    public inline operator fun com.google.protobuf.kotlin.DslList<kotlin.String, FrontmatterKeysToReturnInResultsProxy>.plusAssign(value: kotlin.String) {
+      add(value)
+    }
+    /**
+     * ```
+     * Optional: frontmatter dot-paths whose values should be returned in each result
+     * ```
+     *
+     * `repeated string frontmatter_keys_to_return_in_results = 4 [json_name = "frontmatterKeysToReturnInResults"];`
+     * @param values The frontmatterKeysToReturnInResults to add.
+     */
+    @kotlin.jvm.JvmSynthetic
+    @kotlin.jvm.JvmName("addAllFrontmatterKeysToReturnInResults")
+    public fun com.google.protobuf.kotlin.DslList<kotlin.String, FrontmatterKeysToReturnInResultsProxy>.addAll(values: kotlin.collections.Iterable<kotlin.String>) {
+      _builder.addAllFrontmatterKeysToReturnInResults(values)
+    }
+    /**
+     * ```
+     * Optional: frontmatter dot-paths whose values should be returned in each result
+     * ```
+     *
+     * `repeated string frontmatter_keys_to_return_in_results = 4 [json_name = "frontmatterKeysToReturnInResults"];`
+     * @param values The frontmatterKeysToReturnInResults to add.
+     */
+    @kotlin.jvm.JvmSynthetic
+    @kotlin.jvm.JvmName("plusAssignAllFrontmatterKeysToReturnInResults")
+    @Suppress("NOTHING_TO_INLINE")
+    public inline operator fun com.google.protobuf.kotlin.DslList<kotlin.String, FrontmatterKeysToReturnInResultsProxy>.plusAssign(values: kotlin.collections.Iterable<kotlin.String>) {
+      addAll(values)
+    }
+    /**
+     * ```
+     * Optional: frontmatter dot-paths whose values should be returned in each result
+     * ```
+     *
+     * `repeated string frontmatter_keys_to_return_in_results = 4 [json_name = "frontmatterKeysToReturnInResults"];`
+     * @param index The index to set the value at.
+     * @param value The frontmatterKeysToReturnInResults to set.
+     */
+    @kotlin.jvm.JvmSynthetic
+    @kotlin.jvm.JvmName("setFrontmatterKeysToReturnInResults")
+    public operator fun com.google.protobuf.kotlin.DslList<kotlin.String, FrontmatterKeysToReturnInResultsProxy>.set(index: kotlin.Int, value: kotlin.String) {
+      _builder.setFrontmatterKeysToReturnInResults(index, value)
+    }/**
+     * ```
+     * Optional: frontmatter dot-paths whose values should be returned in each result
+     * ```
+     *
+     * `repeated string frontmatter_keys_to_return_in_results = 4 [json_name = "frontmatterKeysToReturnInResults"];`
+     */
+    @kotlin.jvm.JvmSynthetic
+    @kotlin.jvm.JvmName("clearFrontmatterKeysToReturnInResults")
+    public fun com.google.protobuf.kotlin.DslList<kotlin.String, FrontmatterKeysToReturnInResultsProxy>.clear() {
+      _builder.clearFrontmatterKeysToReturnInResults()
     }}
 }
 @kotlin.jvm.JvmSynthetic

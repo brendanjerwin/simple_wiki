@@ -215,13 +215,6 @@ function buildInventoryMenu(currentPage, frontmatter) {
     // Build sub-menu items
     var subMenuItems = [];
 
-    // Always add Find Item
-    subMenuItems.push(`
-        <li class="pure-menu-item">
-            <a href="#" class="pure-menu-link" id="inventory-find-item"><i class="fa-solid fa-magnifying-glass"></i> Find Item</a>
-        </li>
-    `);
-
     // Add Item Here - only for containers
     if (isContainer) {
         subMenuItems.push(`
@@ -268,15 +261,6 @@ function buildInventoryMenu(currentPage, frontmatter) {
     });
 
     // Set up click handlers
-    $('#inventory-find-item').on('click', function(e) {
-        e.preventDefault();
-        $('#inventory-submenu').removeClass('submenu-open');
-        var dialog = document.getElementById('inventory-find-dialog');
-        if (dialog && typeof dialog.openDialog === 'function') {
-            dialog.openDialog();
-        }
-    });
-
     if (isContainer) {
         $('#inventory-add-item').on('click', function(e) {
             e.preventDefault();

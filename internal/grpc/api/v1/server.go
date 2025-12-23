@@ -574,12 +574,25 @@ func (s *Server) SearchContent(_ context.Context, req *apiv1.SearchContentReques
 			})
 		}
 
-		results = append(results, &apiv1.SearchResult{
+		searchResult := &apiv1.SearchResult{
 			Identifier: string(result.Identifier),
 			Title:      result.Title,
 			Fragment:   result.Fragment,
 			Highlights: highlights,
-		})
+		}
+
+		// Populate requested frontmatter values
+		if len(req.FrontmatterKeysToReturnInResults) > 0 {
+			searchResult.Frontmatter = make(map[string]string)
+			for _, key := range req.FrontmatterKeysToReturnInResults {
+				value := s.FrontmatterIndexQueryer.GetValue(mungedIdentifier, key)
+				if value != "" {
+					searchResult.Frontmatter[key] = value
+				}
+			}
+		}
+
+		results = append(results, searchResult)
 	}
 
 	return &apiv1.SearchContentResponse{

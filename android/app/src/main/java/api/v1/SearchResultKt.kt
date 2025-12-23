@@ -206,6 +206,91 @@ public object SearchResultKt {
       _builder.clearHighlights()
     }
 
+
+    /**
+     * An uninstantiable, behaviorless type to represent the field in
+     * generics.
+     */
+    @kotlin.OptIn(com.google.protobuf.kotlin.OnlyForUseByGeneratedProtoCode::class)
+    public class FrontmatterProxy private constructor() : com.google.protobuf.kotlin.DslProxy()
+    /**
+     * ```
+     * Requested frontmatter values (dot-path -> value)
+     * ```
+     *
+     * `map<string, string> frontmatter = 5 [json_name = "frontmatter"];`
+     */
+     public val frontmatter: com.google.protobuf.kotlin.DslMap<kotlin.String, kotlin.String, FrontmatterProxy>
+      @kotlin.jvm.JvmSynthetic
+      @JvmName("getFrontmatterMap")
+      get() = com.google.protobuf.kotlin.DslMap(
+        _builder.frontmatterMap
+      )
+    /**
+     * ```
+     * Requested frontmatter values (dot-path -> value)
+     * ```
+     *
+     * `map<string, string> frontmatter = 5 [json_name = "frontmatter"];`
+     */
+    @JvmName("putFrontmatter")
+    public fun com.google.protobuf.kotlin.DslMap<kotlin.String, kotlin.String, FrontmatterProxy>
+      .put(key: kotlin.String, value: kotlin.String) {
+         _builder.putFrontmatter(key, value)
+       }
+    /**
+     * ```
+     * Requested frontmatter values (dot-path -> value)
+     * ```
+     *
+     * `map<string, string> frontmatter = 5 [json_name = "frontmatter"];`
+     */
+    @kotlin.jvm.JvmSynthetic
+    @JvmName("setFrontmatter")
+    @Suppress("NOTHING_TO_INLINE")
+    public inline operator fun com.google.protobuf.kotlin.DslMap<kotlin.String, kotlin.String, FrontmatterProxy>
+      .set(key: kotlin.String, value: kotlin.String) {
+         put(key, value)
+       }
+    /**
+     * ```
+     * Requested frontmatter values (dot-path -> value)
+     * ```
+     *
+     * `map<string, string> frontmatter = 5 [json_name = "frontmatter"];`
+     */
+    @kotlin.jvm.JvmSynthetic
+    @JvmName("removeFrontmatter")
+    public fun com.google.protobuf.kotlin.DslMap<kotlin.String, kotlin.String, FrontmatterProxy>
+      .remove(key: kotlin.String) {
+         _builder.removeFrontmatter(key)
+       }
+    /**
+     * ```
+     * Requested frontmatter values (dot-path -> value)
+     * ```
+     *
+     * `map<string, string> frontmatter = 5 [json_name = "frontmatter"];`
+     */
+    @kotlin.jvm.JvmSynthetic
+    @JvmName("putAllFrontmatter")
+    public fun com.google.protobuf.kotlin.DslMap<kotlin.String, kotlin.String, FrontmatterProxy>
+      .putAll(map: kotlin.collections.Map<kotlin.String, kotlin.String>) {
+         _builder.putAllFrontmatter(map)
+       }
+    /**
+     * ```
+     * Requested frontmatter values (dot-path -> value)
+     * ```
+     *
+     * `map<string, string> frontmatter = 5 [json_name = "frontmatter"];`
+     */
+    @kotlin.jvm.JvmSynthetic
+    @JvmName("clearFrontmatter")
+    public fun com.google.protobuf.kotlin.DslMap<kotlin.String, kotlin.String, FrontmatterProxy>
+      .clear() {
+         _builder.clearFrontmatter()
+       }
   }
 }
 @kotlin.jvm.JvmSynthetic

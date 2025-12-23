@@ -69,18 +69,34 @@ class WikiSearchResults extends LitElement {
             font-size: 16px;
             padding: 0;
         }
-        .fragment {
+        .filter-divider {
+            color: #ccc;
+            margin: 0 8px;
+        }
+        .inventory-filter {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 13px;
+            color: #666;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .inventory-filter input[type="checkbox"] {
+            cursor: pointer;
+        }
+        .item_content {
             background-color: #e8e8e8;
             font-size: 12px;
             margin: 5px;
             margin-bottom: 10px;
             padding: 5px;
-            width: auto; 
-            max-height: 500px; 
+            width: auto;
+            max-height: 500px;
             overflow: hidden;
             border-radius: 5px;
         }
-        .fragment br {
+        .item_content br {
             display: block;
             content: "";
             margin-top: 2px;
@@ -91,6 +107,26 @@ class WikiSearchResults extends LitElement {
             font-weight: bold;
             border-radius: 4px;
             padding: 2px 3px;
+        }
+        .found-in {
+            font-size: 12px;
+            margin-bottom: 4px;
+            color: #666;
+            display: flex;
+            flex-direction: row;
+            align-items: baseline;
+            gap: 4px;
+        }
+        .found-in strong {
+            color: #333;
+        }
+        .found-in a {
+            color: #0066cc;
+            text-decoration: none;
+            font-weight: normal;
+        }
+        .found-in a:hover {
+            text-decoration: underline;
         }
 
         @media (max-width: 410px) {
@@ -103,11 +139,13 @@ class WikiSearchResults extends LitElement {
 
   static override properties = {
     results: { type: Array },
-    open: { type: Boolean, reflect: true }
+    open: { type: Boolean, reflect: true },
+    inventoryOnly: { type: Boolean }
   };
 
   declare results: SearchResult[];
   declare open: boolean;
+  declare inventoryOnly: boolean;
 
   private _handleClickOutside: (event: Event) => void;
 
@@ -115,6 +153,7 @@ class WikiSearchResults extends LitElement {
     super();
     this.results = [];
     this.open = false;
+    this.inventoryOnly = false;
     this._handleClickOutside = this.handleClickOutside.bind(this);
   }
 
@@ -138,6 +177,16 @@ class WikiSearchResults extends LitElement {
 
   close() {
     this.dispatchEvent(new CustomEvent('search-results-closed', {
+      bubbles: true,
+      composed: true
+    }));
+  }
+
+  private _handleInventoryOnlyChange(event: Event) {
+    const target = event.target as HTMLInputElement;
+    this.inventoryOnly = target.checked;
+    this.dispatchEvent(new CustomEvent('inventory-filter-changed', {
+      detail: { inventoryOnly: this.inventoryOnly },
       bubbles: true,
       composed: true
     }));
@@ -224,12 +273,24 @@ class WikiSearchResults extends LitElement {
             <div class="popover border-radius-large box-shadow-light" @click="${this.handlePopoverClick}">
                 <div class="title-bar">
                     <h2><i class="fa-solid fa-search"></i> Search Results</h2>
+                    <span class="filter-divider">|</span>
+                    <label class="inventory-filter">
+                        <input type="checkbox"
+                               .checked="${this.inventoryOnly}"
+                               @change="${this._handleInventoryOnlyChange}">
+                        Inventory Only?
+                    </label>
                     <button class="close border-radius-small" @click="${this.close}"><i class="fa-solid fa-xmark"></i></button>
                 </div>
                 <div id="results">
                 ${this.results.map(result => html`
                     <a href="/${result.identifier}" class="border-radius-small">${result.title}</a>
-                    <div class="fragment border-radius-small">${this.renderFragment(result.fragment, result.highlights)}</div> 
+                    <div class="item_content border-radius-small">
+                        ${result.frontmatter?.['inventory.container']
+                          ? html`<div class="found-in"><strong>Found In:</strong> <a href="/${result.frontmatter['inventory.container']}">${result.frontmatter['inventory.container']}</a></div>`
+                          : ''}
+                        ${this.renderFragment(result.fragment, result.highlights)}
+                    </div>
                 `)}
                 </div>
             </div>

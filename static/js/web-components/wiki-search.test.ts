@@ -3,13 +3,17 @@ import sinon from 'sinon';
 import './wiki-search.js';
 import type { SearchResult } from '../gen/api/v1/search_pb.js';
 
+const INVENTORY_ONLY_STORAGE_KEY = 'wiki-search-inventory-only';
+
 interface WikiSearchElement extends HTMLElement {
   results: SearchResult[];
   noResults: boolean;
   loading: boolean;
   error?: string;
+  inventoryOnly: boolean;
   _handleKeydown: (event: KeyboardEvent) => void;
   handleFormSubmit: (event: Event) => Promise<void>;
+  handleInventoryFilterChanged: (event: CustomEvent<{ inventoryOnly: boolean }>) => Promise<void>;
   performSearch: (query: string) => Promise<SearchResult[]>;
   updateComplete: Promise<boolean>;
   shadowRoot: ShadowRoot;
@@ -26,6 +30,7 @@ describe('WikiSearch', () => {
 
   afterEach(() => {
     sinon.restore();
+    localStorage.removeItem(INVENTORY_ONLY_STORAGE_KEY);
     if (el.parentNode) {
       el.parentNode.removeChild(el);
     }
@@ -41,6 +46,7 @@ describe('WikiSearch', () => {
       expect(el.noResults).to.equal(false);
       expect(el.loading).to.equal(false);
       expect(el.error).to.be.undefined;
+      expect(el.inventoryOnly).to.equal(false);
     });
 
     it('should have a search input', () => {
@@ -247,6 +253,178 @@ describe('WikiSearch', () => {
         const errorDiv = el.shadowRoot?.querySelector('.error');
         expect(errorDiv).to.exist;
         expect(errorDiv?.textContent).to.equal('Network error');
+      });
+    });
+  });
+
+  describe('when inventory-filter-changed event is received', () => {
+    let stubPerformSearch: sinon.SinonStub;
+    let form: HTMLFormElement;
+    let searchInput: HTMLInputElement;
+
+    beforeEach(async () => {
+      await el.updateComplete;
+      form = el.shadowRoot?.querySelector('form') as HTMLFormElement;
+      searchInput = el.shadowRoot?.querySelector('input[type="search"]') as HTMLInputElement;
+
+      // Stub performSearch to return mock results
+      stubPerformSearch = sinon.stub(el, 'performSearch');
+      stubPerformSearch.resolves([]);
+    });
+
+    afterEach(() => {
+      stubPerformSearch.restore();
+    });
+
+    describe('when there is a previous search query', () => {
+      beforeEach(async () => {
+        // Perform an initial search
+        searchInput.value = 'test query';
+        const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+        form.dispatchEvent(submitEvent);
+        await waitUntil(() => !el.loading, 'Loading should complete');
+
+        // Reset the stub to track the re-search
+        stubPerformSearch.resetHistory();
+
+        // Trigger the inventory filter change
+        const event = new CustomEvent('inventory-filter-changed', {
+          detail: { inventoryOnly: true },
+          bubbles: true,
+          composed: true
+        });
+        await el.handleInventoryFilterChanged(event);
+        await el.updateComplete;
+      });
+
+      it('should set inventoryOnly to true', () => {
+        expect(el.inventoryOnly).to.equal(true);
+      });
+
+      it('should re-run the search', () => {
+        expect(stubPerformSearch).to.have.been.calledWith('test query');
+      });
+    });
+
+    describe('when there is no previous search query', () => {
+      beforeEach(async () => {
+        // Don't perform an initial search - just trigger the filter change
+        const event = new CustomEvent('inventory-filter-changed', {
+          detail: { inventoryOnly: true },
+          bubbles: true,
+          composed: true
+        });
+        await el.handleInventoryFilterChanged(event);
+        await el.updateComplete;
+      });
+
+      it('should set inventoryOnly to true', () => {
+        expect(el.inventoryOnly).to.equal(true);
+      });
+
+      it('should not perform a search', () => {
+        expect(stubPerformSearch).to.not.have.been.called;
+      });
+    });
+  });
+
+  describe('localStorage persistence', () => {
+    describe('when localStorage has inventoryOnly set to true', () => {
+      let newEl: WikiSearchElement;
+
+      beforeEach(async () => {
+        localStorage.setItem(INVENTORY_ONLY_STORAGE_KEY, 'true');
+        newEl = document.createElement('wiki-search') as WikiSearchElement;
+        document.body.appendChild(newEl);
+        await newEl.updateComplete;
+      });
+
+      afterEach(() => {
+        if (newEl.parentNode) {
+          newEl.parentNode.removeChild(newEl);
+        }
+      });
+
+      it('should load inventoryOnly as true', () => {
+        expect(newEl.inventoryOnly).to.equal(true);
+      });
+    });
+
+    describe('when localStorage has inventoryOnly set to false', () => {
+      let newEl: WikiSearchElement;
+
+      beforeEach(async () => {
+        localStorage.setItem(INVENTORY_ONLY_STORAGE_KEY, 'false');
+        newEl = document.createElement('wiki-search') as WikiSearchElement;
+        document.body.appendChild(newEl);
+        await newEl.updateComplete;
+      });
+
+      afterEach(() => {
+        if (newEl.parentNode) {
+          newEl.parentNode.removeChild(newEl);
+        }
+      });
+
+      it('should load inventoryOnly as false', () => {
+        expect(newEl.inventoryOnly).to.equal(false);
+      });
+    });
+
+    describe('when localStorage has no inventoryOnly value', () => {
+      let newEl: WikiSearchElement;
+
+      beforeEach(async () => {
+        localStorage.removeItem(INVENTORY_ONLY_STORAGE_KEY);
+        newEl = document.createElement('wiki-search') as WikiSearchElement;
+        document.body.appendChild(newEl);
+        await newEl.updateComplete;
+      });
+
+      afterEach(() => {
+        if (newEl.parentNode) {
+          newEl.parentNode.removeChild(newEl);
+        }
+      });
+
+      it('should default inventoryOnly to false', () => {
+        expect(newEl.inventoryOnly).to.equal(false);
+      });
+    });
+
+    describe('when inventory filter is changed to true', () => {
+      beforeEach(async () => {
+        localStorage.removeItem(INVENTORY_ONLY_STORAGE_KEY);
+
+        const event = new CustomEvent('inventory-filter-changed', {
+          detail: { inventoryOnly: true },
+          bubbles: true,
+          composed: true
+        });
+        await el.handleInventoryFilterChanged(event);
+        await el.updateComplete;
+      });
+
+      it('should save true to localStorage', () => {
+        expect(localStorage.getItem(INVENTORY_ONLY_STORAGE_KEY)).to.equal('true');
+      });
+    });
+
+    describe('when inventory filter is changed to false', () => {
+      beforeEach(async () => {
+        localStorage.setItem(INVENTORY_ONLY_STORAGE_KEY, 'true');
+
+        const event = new CustomEvent('inventory-filter-changed', {
+          detail: { inventoryOnly: false },
+          bubbles: true,
+          composed: true
+        });
+        await el.handleInventoryFilterChanged(event);
+        await el.updateComplete;
+      });
+
+      it('should save false to localStorage', () => {
+        expect(localStorage.getItem(INVENTORY_ONLY_STORAGE_KEY)).to.equal('false');
       });
     });
   });

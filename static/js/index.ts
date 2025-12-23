@@ -7,7 +7,6 @@ import './web-components/toast-message.js';
 import './web-components/kernel-panic.js'; // Import to register the component
 import './web-components/inventory-add-item-dialog.js';
 import './web-components/inventory-move-item-dialog.js';
-import './web-components/inventory-find-item-dialog.js';
 import { showStoredToast } from './web-components/toast-message.js';
 import { setupGlobalErrorHandler } from './web-components/global-error-handler.js';
 import { pageDeleteService } from './web-components/page-deletion-service.js';

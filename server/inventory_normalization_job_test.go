@@ -671,7 +671,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 			})
 
 			It("should contain the inventory template", func() {
-				Expect(markdown).To(ContainSubstring("Goes in:"))
+				Expect(markdown).To(ContainSubstring("IsContainer"))
 			})
 		})
 	})
