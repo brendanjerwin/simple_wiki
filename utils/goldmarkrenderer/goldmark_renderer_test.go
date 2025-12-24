@@ -161,6 +161,21 @@ var _ = Describe("GoldmarkRenderer", func() {
 			})
 		})
 
+		When("rendering markdown with images", func() {
+			BeforeEach(func() {
+				source = []byte("![alt text](image.jpg)")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should render an img tag", func() {
+				expected := "<p><img src=\"image.jpg\" alt=\"alt text\"/></p>\n"
+				Expect(string(output)).To(Equal(expected))
+			})
+		})
+
 		When("rendering nil source", func() {
 			BeforeEach(func() {
 				source = nil

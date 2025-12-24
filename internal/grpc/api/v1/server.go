@@ -522,6 +522,13 @@ func (s *Server) validateSearchRequest(req *apiv1.SearchContentRequest) error {
 	if s.BleveIndexQueryer == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
 		return status.Error(codes.Internal, "Search index is not available")
 	}
+	
+	// FrontmatterIndexQueryer is required for search operations
+	v = reflect.ValueOf(s.FrontmatterIndexQueryer)
+	if s.FrontmatterIndexQueryer == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
+		return status.Error(codes.Internal, "Frontmatter index is not available")
+	}
+	
 	if req.Query == "" {
 		return status.Error(codes.InvalidArgument, "query cannot be empty")
 	}
@@ -627,13 +634,74 @@ func (s *Server) convertSearchResult(result bleve.SearchResult, mungedID wikipag
 
 	if len(fmKeysToReturn) > 0 {
 		apiResult.Frontmatter = make(map[string]string)
+		
 		for _, key := range fmKeysToReturn {
 			if value := s.FrontmatterIndexQueryer.GetValue(mungedID, key); value != "" {
 				apiResult.Frontmatter[key] = value
 			}
 		}
 	}
+	
+	apiResult.InventoryContext = s.buildInventoryContext(mungedID)
+	
 	return apiResult
+}
+
+// buildInventoryContext builds inventory context for a search result if applicable.
+// Returns nil only when the item is not inventory-related (no inventory.container in frontmatter).
+func (s *Server) buildInventoryContext(itemID wikipage.PageIdentifier) *apiv1.InventoryContext {
+	containerID := s.FrontmatterIndexQueryer.GetValue(itemID, "inventory.container")
+	if containerID == "" {
+		return nil
+	}
+	
+	// Build the full path from root to immediate container
+	path := s.buildContainerPath(containerID)
+	
+	return &apiv1.InventoryContext{
+		IsInventoryRelated: true,
+		Path:               path,
+	}
+}
+
+// buildContainerPath recursively builds the full container path from root to the given container.
+func (s *Server) buildContainerPath(containerID string) []*apiv1.ContainerPathElement {
+	const maxDepth = 20 // Prevent infinite loops
+	var path []*apiv1.ContainerPathElement
+	visited := make(map[string]bool)
+	
+	currentID := containerID
+	
+	// Build path from immediate container up to root
+	for currentID != "" && len(path) < maxDepth {
+		if visited[currentID] {
+			// Circular reference detected, break
+			break
+		}
+		visited[currentID] = true
+		
+		mungedID := wikipage.PageIdentifier(wikiidentifiers.MungeIdentifier(currentID))
+		title := s.FrontmatterIndexQueryer.GetValue(mungedID, "title")
+		
+		element := &apiv1.ContainerPathElement{
+			Identifier: currentID,
+			Title:      title,
+			// Depth will be set after we know the total path length
+		}
+		
+		// Prepend to path (we're going from immediate container to root)
+		path = append([]*apiv1.ContainerPathElement{element}, path...)
+		
+		// Get the parent container
+		currentID = s.FrontmatterIndexQueryer.GetValue(mungedID, "inventory.container")
+	}
+	
+	// Now assign depth values: root=0, each child +1
+	for i := range path {
+		path[i].Depth = int32(i)
+	}
+	
+	return path
 }
 
 // ReadPage implements the ReadPage RPC.

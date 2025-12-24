@@ -33,6 +33,20 @@ message SearchResult {
   string fragment = 3; // Plain text fragment (no HTML)
   repeated HighlightSpan highlights = 4; // Highlight positions
   map<string, string> frontmatter = 5; // Requested frontmatter values (dot-path -> value)
+  InventoryContext inventory_context = 6; // Inventory context (if result is an inventory item)
+}
+
+// Inventory context for search results.
+message InventoryContext {
+  bool is_inventory_related = 1; // Whether this result is inventory-related
+  repeated ContainerPathElement path = 2; // Full path from root to immediate container
+}
+
+// A single element in a container path.
+message ContainerPathElement {
+  string identifier = 1; // Container identifier
+  string title = 2; // Container title (if available, otherwise will be empty)
+  int32 depth = 3; // Depth level in hierarchy (0 = root, higher = deeper)
 }
 
 // A span of text to be highlighted.
