@@ -62,7 +62,7 @@ func (m *mockNormalizerDeps) WriteMarkdown(page wikipage.PageIdentifier, md stri
 	return nil
 }
 
-func (m *mockNormalizerDeps) DeletePage(_ wikipage.PageIdentifier) error {
+func (*mockNormalizerDeps) DeletePage(_ wikipage.PageIdentifier) error {
 	return nil
 }
 
@@ -285,7 +285,8 @@ var _ = Describe("InventoryNormalizer", func() {
 			})
 
 			It("should not set is_container", func() {
-				inventory := deps.frontmatters["test_page"]["inventory"].(map[string]any)
+				inventory, ok := deps.frontmatters["test_page"]["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue(), "inventory should be a map")
 				Expect(inventory).NotTo(HaveKey("is_container"))
 			})
 		})
@@ -327,7 +328,8 @@ var _ = Describe("InventoryNormalizer", func() {
 			})
 
 			It("should set is_container to true", func() {
-				inventory := deps.frontmatters["test_page"]["inventory"].(map[string]any)
+				inventory, ok := deps.frontmatters["test_page"]["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue(), "inventory should be a map")
 				Expect(inventory["is_container"]).To(BeTrue())
 			})
 		})
@@ -455,7 +457,8 @@ var _ = Describe("InventoryNormalizer", func() {
 
 			It("should create frontmatter with container reference", func() {
 				fm := deps.frontmatters["new_item"]
-				inventory := fm["inventory"].(map[string]any)
+				inventory, ok := fm["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue(), "inventory should be a map")
 				Expect(inventory["container"]).To(Equal("container_id"))
 			})
 		})
@@ -473,7 +476,8 @@ var _ = Describe("InventoryNormalizer", func() {
 
 			It("should not have container in inventory", func() {
 				fm := deps.frontmatters["standalone_item"]
-				inventory := fm["inventory"].(map[string]any)
+				inventory, ok := fm["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue(), "inventory should be a map")
 				Expect(inventory).NotTo(HaveKey("container"))
 			})
 		})
