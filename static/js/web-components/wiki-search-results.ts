@@ -306,7 +306,7 @@ class WikiSearchResults extends LitElement {
                     <a href="/${result.identifier}" class="border-radius-small">${result.title}</a>
                     <div class="item_content border-radius-small">
                         ${result.frontmatter?.['inventory.container']
-                          ? html`<div class="found-in"><strong>Found In:</strong> <a href="/${result.frontmatter['inventory.container']}">${result.frontmatter['inventory.container']}</a></div>`
+                          ? html`<div class="found-in"><strong>Found In:</strong> <a href="/${result.frontmatter['inventory.container']}">${result.frontmatter['inventory.container.title'] || result.frontmatter['inventory.container']}</a></div>`
                           : ''}
                         ${this.renderFragment(result.fragment, result.highlights)}
                     </div>

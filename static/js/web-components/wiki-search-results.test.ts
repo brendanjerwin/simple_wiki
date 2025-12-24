@@ -241,6 +241,43 @@ describe('WikiSearchResults', () => {
     });
   });
 
+  describe('when result has inventory.container with title in frontmatter', () => {
+    beforeEach(async () => {
+      el.open = true;
+      el.results = [{
+        identifier: 'screwdriver',
+        title: 'Screwdriver',
+        fragment: 'A useful tool',
+        highlights: [],
+        frontmatter: { 
+          'inventory.container': 'toolbox',
+          'inventory.container.title': 'My Toolbox'
+        }
+      }] as unknown as WikiSearchResultsElement['results'];
+      await el.updateComplete;
+    });
+
+    it('should render the Found In link', () => {
+      const foundIn = el.shadowRoot?.querySelector('.found-in');
+      expect(foundIn).to.exist;
+    });
+
+    it('should display "Found In:" text', () => {
+      const foundIn = el.shadowRoot?.querySelector('.found-in');
+      expect(foundIn?.textContent).to.contain('Found In:');
+    });
+
+    it('should link to the container', () => {
+      const link = el.shadowRoot?.querySelector('.found-in a') as HTMLAnchorElement;
+      expect(link?.getAttribute('href')).to.equal('/toolbox');
+    });
+
+    it('should display container title in link', () => {
+      const link = el.shadowRoot?.querySelector('.found-in a');
+      expect(link?.textContent).to.equal('My Toolbox');
+    });
+  });
+
   describe('when result has no frontmatter', () => {
     beforeEach(async () => {
       el.open = true;

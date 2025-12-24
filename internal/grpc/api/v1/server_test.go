@@ -1843,6 +1843,69 @@ var _ = Describe("Server", func() {
 				Expect(identifiers).NotTo(ContainElement("non-inventory-page"))
 			})
 		})
+
+		When("frontmatter keys are requested to be returned in results", func() {
+			var (
+				mockFrontmatterIndexQueryer *FlexibleMockFrontmatterIndexQueryer
+				searchResults               []bleve.SearchResult
+			)
+
+			BeforeEach(func() {
+				mockFrontmatterIndexQueryer = &FlexibleMockFrontmatterIndexQueryer{
+					ExactMatchResults: make(map[string][]string),
+					GetValueResults:   make(map[string]map[string]string),
+				}
+				// Search returns an item with a container
+				searchResults = []bleve.SearchResult{
+					{Identifier: "screwdriver", Title: "Screwdriver", Fragment: "A useful tool"},
+				}
+				mockBleveIndexQueryer.Results = searchResults
+				// Item has container "toolbox"
+				mockFrontmatterIndexQueryer.GetValueResults["screwdriver"] = map[string]string{
+					"inventory.container": "toolbox",
+				}
+				// Container has a title
+				mockFrontmatterIndexQueryer.GetValueResults["toolbox"] = map[string]string{
+					"title": "My Toolbox",
+				}
+				req.FrontmatterKeysToReturnInResults = []string{"inventory.container"}
+			})
+
+			JustBeforeEach(func() {
+				server = v1.NewServer("commit", time.Now(), nil, mockBleveIndexQueryer, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, mockFrontmatterIndexQueryer)
+				resp, err = server.SearchContent(ctx, req)
+			})
+
+			It("should include the requested frontmatter keys", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.Results).To(HaveLen(1))
+				Expect(resp.Results[0].Frontmatter).To(HaveKey("inventory.container"))
+				Expect(resp.Results[0].Frontmatter["inventory.container"]).To(Equal("toolbox"))
+			})
+
+			It("should also include the container's title as inventory.container.title", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.Results).To(HaveLen(1))
+				Expect(resp.Results[0].Frontmatter).To(HaveKey("inventory.container.title"))
+				Expect(resp.Results[0].Frontmatter["inventory.container.title"]).To(Equal("My Toolbox"))
+			})
+
+			When("container has no title", func() {
+				BeforeEach(func() {
+					mockFrontmatterIndexQueryer.GetValueResults["toolbox"] = map[string]string{}
+				})
+
+				It("should not include inventory.container.title", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(resp).NotTo(BeNil())
+					Expect(resp.Results).To(HaveLen(1))
+					Expect(resp.Results[0].Frontmatter).To(HaveKey("inventory.container"))
+					Expect(resp.Results[0].Frontmatter).NotTo(HaveKey("inventory.container.title"))
+				})
+			})
+		})
 	})
 
 	Describe("ReadPage", func() {

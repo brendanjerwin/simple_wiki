@@ -627,9 +627,22 @@ func (s *Server) convertSearchResult(result bleve.SearchResult, mungedID wikipag
 
 	if len(fmKeysToReturn) > 0 {
 		apiResult.Frontmatter = make(map[string]string)
-		for _, key := range fmKeysToReturn {
-			if value := s.FrontmatterIndexQueryer.GetValue(mungedID, key); value != "" {
-				apiResult.Frontmatter[key] = value
+		
+		// Only proceed if FrontmatterIndexQueryer is available
+		v := reflect.ValueOf(s.FrontmatterIndexQueryer)
+		if s.FrontmatterIndexQueryer != nil && !(v.Kind() == reflect.Ptr && v.IsNil()) {
+			for _, key := range fmKeysToReturn {
+				if value := s.FrontmatterIndexQueryer.GetValue(mungedID, key); value != "" {
+					apiResult.Frontmatter[key] = value
+				}
+			}
+			
+			// If inventory.container is present, also fetch and include the container's title
+			if containerID := apiResult.Frontmatter["inventory.container"]; containerID != "" {
+				containerPageID := wikipage.PageIdentifier(wikiidentifiers.MungeIdentifier(containerID))
+				if containerTitle := s.FrontmatterIndexQueryer.GetValue(containerPageID, "title"); containerTitle != "" {
+					apiResult.Frontmatter["inventory.container.title"] = containerTitle
+				}
 			}
 		}
 	}
