@@ -77,6 +77,11 @@
                                 <li class="pure-menu-item"><a href="#" class="pure-menu-link" id="erasePage"><i class="fas fa-recycle"></i> Erase</a></li>
                             </ul>
                         </li>
+                        {{ if .EditPage }}
+                        <li class="pure-menu-item">
+                            <span id="saveEditButton" class="pure-menu-link">Edit</span>
+                        </li>
+                        {{ end }}
                     </ul>
                     {{ if .ViewPage }}
                     <wiki-search id="site-search"></wiki-search>
