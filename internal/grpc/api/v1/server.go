@@ -640,19 +640,21 @@ func (s *Server) convertSearchResult(result bleve.SearchResult, mungedID wikipag
 	}
 	
 	// Populate inventory context if this is an inventory item
-	apiResult.InventoryContext = s.buildInventoryContext(mungedID)
+	// Only do this if FrontmatterIndexQueryer is available (required dependency)
+	v := reflect.ValueOf(s.FrontmatterIndexQueryer)
+	if s.FrontmatterIndexQueryer != nil && !(v.Kind() == reflect.Ptr && v.IsNil()) {
+		apiResult.InventoryContext = s.buildInventoryContext(mungedID)
+	}
 	
 	return apiResult
 }
 
 // buildInventoryContext builds inventory context for a search result if applicable.
+// Returns nil only when the item is not inventory-related (no inventory.container in frontmatter).
+// Panics if FrontmatterIndexQueryer is not properly configured - this is a dependency injection error.
 func (s *Server) buildInventoryContext(itemID wikipage.PageIdentifier) *apiv1.InventoryContext {
-	v := reflect.ValueOf(s.FrontmatterIndexQueryer)
-	if s.FrontmatterIndexQueryer == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
-		return nil
-	}
-	
 	// Check if this item has a container (inventory.container key)
+	// Only return nil here - indicating the item is NOT inventory-related
 	containerID := s.FrontmatterIndexQueryer.GetValue(itemID, "inventory.container")
 	if containerID == "" {
 		return nil
