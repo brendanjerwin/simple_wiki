@@ -56,45 +56,6 @@ You can easily see previous versions of your documents.
 
 Use `devbox services start` to run the application locally with all required dependencies.
 
-### Android Development
-
-simple_wiki can be packaged as an Android app using Capacitor 7 for voice assistant integration and offline access.
-
-**📘 For comprehensive documentation, see [Android Development Guide](docs/android-development.md)**
-
-#### Quick Start
-
-1. **Install Android SDK** (one-time):
-
-   ```shell
-   devbox shell
-   devbox run android:setup
-   ```
-
-2. **Build for local development**:
-
-   ```shell
-   devbox run android:sync        # Syncs with dev server config
-   devbox run android:build:debug # Builds APK
-   devbox run android:install     # Installs on connected device
-   ```
-
-3. **Build for production**:
-
-   ```shell
-   bunx cap sync android
-   rm -rf android/app/src/main/assets/public/js/node_modules
-   devbox run android:build:release
-   ```
-
-#### Key Differences: Dev vs Production
-
-- **Development builds**: Connect to `http://localhost:8050` for live updates
-- **Production builds**: Serve from bundled assets, no server connection
-- Configuration is environment-based (no manual file edits required)
-
-See the [full documentation](docs/android-development.md) for details on testing, CI/CD, troubleshooting, and customizations.
-
 ### Deployment
 
 To deploy to production, always deploy tagged releases, not branches:

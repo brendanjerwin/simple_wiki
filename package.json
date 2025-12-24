@@ -1,15 +1,6 @@
 {
   "name": "simple_wiki",
   "version": "1.0.0",
-  "description": "A simple wiki with Capacitor mobile support",
-  "private": true,
-  "scripts": {
-    "cap": "cap"
-  },
-  "dependencies": {
-    "@capacitor/cli": "^7.4.3"
-  },
-  "devDependencies": {
-    "typescript": "^5.0.0"
-  }
+  "description": "A simple wiki",
+  "private": true
 }

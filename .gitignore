@@ -65,18 +65,5 @@ CRUSH.md
 node_modules/
 bun.lockb
 
-# Capacitor
-android/.gradle/
-android/.idea/
-android/build/
-android/app/build/
-android/local.properties
-android/*.iml
-android/.DS_Store
-
-# Android SDK (installed via devbox script)
-.android-sdk/
-android/app/release-key.keystore
-
 # bv (beads viewer) local config and caches
 .bv/
