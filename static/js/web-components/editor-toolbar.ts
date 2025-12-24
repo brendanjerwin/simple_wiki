@@ -15,8 +15,8 @@ export class EditorToolbar extends LitElement {
         display: none; /* Hidden by default (desktop) */
       }
 
-      /* Show toolbar on mobile/tablet - fixed at top */
-      @media (max-width: 1024px) {
+      /* Show toolbar on touch devices - fixed at top */
+      @media (pointer: coarse) {
         :host {
           display: block;
           background: var(--color-background-primary, #2d2d2d);

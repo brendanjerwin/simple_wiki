@@ -36,8 +36,8 @@ describe('EditorContextMenu', () => {
     });
 
     it('should position at specified coordinates', () => {
-      expect(el.x).to.equal(100);
-      expect(el.y).to.equal(200);
+      expect(el.style.getPropertyValue('--menu-x')).to.equal('100px');
+      expect(el.style.getPropertyValue('--menu-y')).to.equal('200px');
     });
 
     it('should render Upload Image option', () => {

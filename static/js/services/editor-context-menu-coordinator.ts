@@ -38,7 +38,7 @@ export class EditorContextMenuCoordinator {
   }
 
   private detectMobile(): boolean {
-    return window.innerWidth <= 768 || ('ontouchstart' in window && navigator.maxTouchPoints > 0);
+    return window.matchMedia('(pointer: coarse)').matches;
   }
 
   private attachEventListeners(): void {

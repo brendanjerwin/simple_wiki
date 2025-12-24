@@ -134,9 +134,9 @@ ul.pure-menu-list {
   }
 }
 
-/* Mobile edit page: simplified fixed toolbar layout */
-@media (max-width: 1024px) {
-  /* Hide the main menu on mobile edit pages - toolbar provides exit */
+/* Touch device edit page: simplified fixed toolbar layout */
+@media (pointer: coarse) {
+  /* Hide the main menu on touch edit pages - toolbar provides exit */
   body.EditPage div#menu {
     display: none;
   }
