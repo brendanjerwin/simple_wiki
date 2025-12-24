@@ -492,6 +492,111 @@ var _ = Describe("InventoryManagementService", func() {
 				Expect(items).To(ContainElement("test_item"))
 			})
 		})
+
+		When("moving item with containers having []string items lists", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.FrontmatterByID = map[string]map[string]any{
+					"test_item": {
+						"title": "Test Item",
+						"inventory": map[string]any{
+							"container": "old_container",
+						},
+					},
+					"old_container": {
+						"title": "Old Container",
+						"inventory": map[string]any{
+							"items": []string{"test_item", "other_item"},
+						},
+					},
+					"new_container": {
+						"title": "New Container",
+						"inventory": map[string]any{
+							"items": []string{"existing_item"},
+						},
+					},
+				}
+			})
+
+			It("should handle []string items list correctly", func() {
+				Expect(resp.Success).To(BeTrue())
+			})
+
+			It("should remove item from old container's []string list", func() {
+				oldContainerFm := mockPageReaderMutator.WrittenFrontmatterByID["old_container"]
+				Expect(oldContainerFm).NotTo(BeNil())
+				inv, ok := oldContainerFm["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue())
+				items, ok := inv["items"].([]string)
+				Expect(ok).To(BeTrue())
+				Expect(items).NotTo(ContainElement("test_item"))
+			})
+
+			It("should add item to new container's list", func() {
+				newContainerFm := mockPageReaderMutator.WrittenFrontmatterByID["new_container"]
+				Expect(newContainerFm).NotTo(BeNil())
+				inv, ok := newContainerFm["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue())
+				items, ok := inv["items"].([]string)
+				Expect(ok).To(BeTrue())
+				Expect(items).To(ContainElement("test_item"))
+			})
+		})
+
+		When("moving item and container has no inventory section", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.FrontmatterByID = map[string]map[string]any{
+					"test_item": {
+						"title": "Test Item",
+						"inventory": map[string]any{
+							"container": "old_container",
+						},
+					},
+					"old_container": {
+						"title": "Old Container",
+						// No inventory section
+					},
+					"new_container": {
+						"title": "New Container",
+						// No inventory section
+					},
+				}
+			})
+
+			It("should succeed", func() {
+				Expect(resp.Success).To(BeTrue())
+			})
+
+			It("should create inventory section in new container", func() {
+				newContainerFm := mockPageReaderMutator.WrittenFrontmatterByID["new_container"]
+				Expect(newContainerFm).NotTo(BeNil())
+				inv, ok := newContainerFm["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue())
+				items, ok := inv["items"].([]string)
+				Expect(ok).To(BeTrue())
+				Expect(items).To(ContainElement("test_item"))
+			})
+		})
+
+		When("moving item from non-existent old container", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.FrontmatterByID = map[string]map[string]any{
+					"test_item": {
+						"title": "Test Item",
+						"inventory": map[string]any{
+							"container": "nonexistent_container",
+						},
+					},
+					"new_container": {
+						"title": "New Container",
+						"inventory": map[string]any{},
+					},
+				}
+			})
+
+			It("should succeed even if old container doesn't exist", func() {
+				Expect(resp.Success).To(BeTrue())
+			})
+		})
 	})
 
 	Describe("ListContainerContents", func() {
