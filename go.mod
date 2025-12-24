@@ -24,7 +24,7 @@ require (
 	github.com/stoewer/go-strcase v1.3.1
 	github.com/yuin/goldmark v1.7.13
 	github.com/yuin/goldmark-emoji v1.0.6
-	go.abhg.dev/goldmark/mermaid v0.5.0
+	go.abhg.dev/goldmark/mermaid v0.6.0
 	go.abhg.dev/goldmark/wikilink v0.6.0
 	golang.org/x/net v0.47.0
 	golang.org/x/text v0.31.0
