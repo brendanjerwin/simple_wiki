@@ -291,9 +291,50 @@ public object SearchResultKt {
       .clear() {
          _builder.clearFrontmatter()
        }
+
+    /**
+     * ```
+     * Inventory context (if result is an inventory item)
+     * ```
+     *
+     * `.api.v1.InventoryContext inventory_context = 6 [json_name = "inventoryContext"];`
+     */
+    public var inventoryContext: api.v1.Search.InventoryContext
+      @JvmName("getInventoryContext")
+      get() = _builder.inventoryContext
+      @JvmName("setInventoryContext")
+      set(value) {
+        _builder.inventoryContext = value
+      }
+    /**
+     * ```
+     * Inventory context (if result is an inventory item)
+     * ```
+     *
+     * `.api.v1.InventoryContext inventory_context = 6 [json_name = "inventoryContext"];`
+     */
+    public fun clearInventoryContext() {
+      _builder.clearInventoryContext()
+    }
+    /**
+     * ```
+     * Inventory context (if result is an inventory item)
+     * ```
+     *
+     * `.api.v1.InventoryContext inventory_context = 6 [json_name = "inventoryContext"];`
+     * @return Whether the inventoryContext field is set.
+     */
+    public fun hasInventoryContext(): kotlin.Boolean {
+      return _builder.hasInventoryContext()
+    }
+    public val SearchResultKt.Dsl.inventoryContextOrNull: api.v1.Search.InventoryContext?
+      get() = _builder.inventoryContextOrNull
   }
 }
 @kotlin.jvm.JvmSynthetic
 public inline fun api.v1.Search.SearchResult.copy(block: `api.v1`.SearchResultKt.Dsl.() -> kotlin.Unit): api.v1.Search.SearchResult =
   `api.v1`.SearchResultKt.Dsl._create(this.toBuilder()).apply { block() }._build()
+
+public val api.v1.Search.SearchResultOrBuilder.inventoryContextOrNull: api.v1.Search.InventoryContext?
+  get() = if (hasInventoryContext()) getInventoryContext() else null
 
