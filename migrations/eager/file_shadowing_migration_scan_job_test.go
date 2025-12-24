@@ -131,6 +131,12 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 		})
 	})
 
+	Describe("GetName", func() {
+		It("should return the job name", func() {
+			Expect(job.GetName()).To(Equal("FileShadowingMigrationScanJob"))
+		})
+	})
+
 	Describe("FindPascalCaseIdentifiers", func() {
 		When("directory contains mixed page types", func() {
 			var pascalIdentifiers []string
