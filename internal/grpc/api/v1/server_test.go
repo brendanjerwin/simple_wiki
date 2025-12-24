@@ -1905,6 +1905,123 @@ var _ = Describe("Server", func() {
 					Expect(resp.Results[0].InventoryContext.ContainerTitle).To(Equal(""))
 				})
 			})
+
+			It("should set IsInventoryRelated to true", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.Results).To(HaveLen(1))
+				Expect(resp.Results[0].InventoryContext).NotTo(BeNil())
+				Expect(resp.Results[0].InventoryContext.IsInventoryRelated).To(BeTrue())
+			})
+
+			It("should include path with single container element", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.Results).To(HaveLen(1))
+				Expect(resp.Results[0].InventoryContext).NotTo(BeNil())
+				Expect(resp.Results[0].InventoryContext.Path).To(HaveLen(1))
+				Expect(resp.Results[0].InventoryContext.Path[0].Identifier).To(Equal("toolbox"))
+				Expect(resp.Results[0].InventoryContext.Path[0].Title).To(Equal("My Toolbox"))
+			})
+
+			When("item has nested containers", func() {
+				BeforeEach(func() {
+					// Item is in toolbox, toolbox is in garage, garage is in house
+					mockFrontmatterIndexQueryer.GetValueResults["screwdriver"] = map[string]string{
+						"inventory.container": "toolbox",
+					}
+					mockFrontmatterIndexQueryer.GetValueResults["toolbox"] = map[string]string{
+						"title":               "My Toolbox",
+						"inventory.container": "garage",
+					}
+					mockFrontmatterIndexQueryer.GetValueResults["garage"] = map[string]string{
+						"title":               "Main Garage",
+						"inventory.container": "house",
+					}
+					mockFrontmatterIndexQueryer.GetValueResults["house"] = map[string]string{
+						"title": "My House",
+					}
+				})
+
+				It("should build full path from root to immediate container", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(resp).NotTo(BeNil())
+					Expect(resp.Results).To(HaveLen(1))
+					Expect(resp.Results[0].InventoryContext).NotTo(BeNil())
+					Expect(resp.Results[0].InventoryContext.Path).To(HaveLen(3))
+					
+					// Path should be: house > garage > toolbox
+					Expect(resp.Results[0].InventoryContext.Path[0].Identifier).To(Equal("house"))
+					Expect(resp.Results[0].InventoryContext.Path[0].Title).To(Equal("My House"))
+					
+					Expect(resp.Results[0].InventoryContext.Path[1].Identifier).To(Equal("garage"))
+					Expect(resp.Results[0].InventoryContext.Path[1].Title).To(Equal("Main Garage"))
+					
+					Expect(resp.Results[0].InventoryContext.Path[2].Identifier).To(Equal("toolbox"))
+					Expect(resp.Results[0].InventoryContext.Path[2].Title).To(Equal("My Toolbox"))
+				})
+			})
+
+			When("path element has no title", func() {
+				BeforeEach(func() {
+					mockFrontmatterIndexQueryer.GetValueResults["screwdriver"] = map[string]string{
+						"inventory.container": "toolbox",
+					}
+					mockFrontmatterIndexQueryer.GetValueResults["toolbox"] = map[string]string{
+						"inventory.container": "garage",
+					}
+					mockFrontmatterIndexQueryer.GetValueResults["garage"] = map[string]string{
+						"title": "Main Garage",
+					}
+				})
+
+				It("should include empty title in path element", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(resp).NotTo(BeNil())
+					Expect(resp.Results).To(HaveLen(1))
+					Expect(resp.Results[0].InventoryContext).NotTo(BeNil())
+					Expect(resp.Results[0].InventoryContext.Path).To(HaveLen(2))
+					
+					Expect(resp.Results[0].InventoryContext.Path[0].Identifier).To(Equal("garage"))
+					Expect(resp.Results[0].InventoryContext.Path[0].Title).To(Equal("Main Garage"))
+					
+					Expect(resp.Results[0].InventoryContext.Path[1].Identifier).To(Equal("toolbox"))
+					Expect(resp.Results[0].InventoryContext.Path[1].Title).To(Equal(""))
+				})
+			})
+		})
+
+		When("result is not an inventory item", func() {
+			var (
+				mockFrontmatterIndexQueryer *FlexibleMockFrontmatterIndexQueryer
+				searchResults               []bleve.SearchResult
+			)
+
+			BeforeEach(func() {
+				mockFrontmatterIndexQueryer = &FlexibleMockFrontmatterIndexQueryer{
+					ExactMatchResults: make(map[string][]string),
+					GetValueResults:   make(map[string]map[string]string),
+				}
+				searchResults = []bleve.SearchResult{
+					{Identifier: "regular_page", Title: "Regular Page", Fragment: "Some content"},
+				}
+				mockBleveIndexQueryer.Results = searchResults
+				mockFrontmatterIndexQueryer.GetValueResults["regular_page"] = map[string]string{
+					"title": "Regular Page",
+				}
+			})
+
+			JustBeforeEach(func() {
+				server = v1.NewServer("commit", time.Now(), nil, mockBleveIndexQueryer, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, mockFrontmatterIndexQueryer)
+				resp, err = server.SearchContent(ctx, req)
+			})
+
+			It("should not include inventory context", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.Results).To(HaveLen(1))
+				Expect(resp.Results[0].InventoryContext).To(BeNil())
+			})
 		})
 	})
 

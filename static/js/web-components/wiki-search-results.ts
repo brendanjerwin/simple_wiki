@@ -116,6 +116,7 @@ class WikiSearchResults extends LitElement {
             flex-direction: row;
             align-items: baseline;
             gap: 4px;
+            flex-wrap: wrap;
         }
         .found-in strong {
             color: #333;
@@ -127,6 +128,10 @@ class WikiSearchResults extends LitElement {
         }
         .found-in a:hover {
             text-decoration: underline;
+        }
+        .path-separator {
+            color: #999;
+            margin: 0 4px;
         }
         .no-results {
             text-align: center;
@@ -305,8 +310,17 @@ class WikiSearchResults extends LitElement {
                   : this.results.map(result => html`
                     <a href="/${result.identifier}" class="border-radius-small">${result.title}</a>
                     <div class="item_content border-radius-small">
-                        ${result.inventoryContext
-                          ? html`<div class="found-in"><strong>Found In:</strong> <a href="/${result.inventoryContext.containerId}">${result.inventoryContext.containerTitle || result.inventoryContext.containerId}</a></div>`
+                        ${result.inventoryContext?.isInventoryRelated
+                          ? html`<div class="found-in">
+                              <strong>Found In:</strong>
+                              ${result.inventoryContext.path && result.inventoryContext.path.length > 0
+                                ? result.inventoryContext.path.map((element, index) => html`
+                                    ${index > 0 ? html`<span class="path-separator">›</span>` : ''}
+                                    <a href="/${element.identifier}">${element.title || element.identifier}</a>
+                                  `)
+                                : html`<a href="/${result.inventoryContext.containerId}">${result.inventoryContext.containerTitle || result.inventoryContext.containerId}</a>`
+                              }
+                            </div>`
                           : ''}
                         ${this.renderFragment(result.fragment, result.highlights)}
                     </div>

@@ -228,8 +228,14 @@ export const WithInventoryContainer: Story = {
           createHighlight(14, 25), // "screwdriver"
         ],
         inventoryContext: {
+          isInventoryRelated: true,
           containerId: 'toolbox',
-          containerTitle: 'My Toolbox'
+          containerTitle: 'My Toolbox',
+          path: [
+            { identifier: 'house', title: 'My House' },
+            { identifier: 'garage', title: 'Main Garage' },
+            { identifier: 'toolbox', title: 'My Toolbox' }
+          ]
         }
       } as SearchResult,
       {
@@ -240,8 +246,14 @@ export const WithInventoryContainer: Story = {
           createHighlight(18, 24), // "hammer"
         ],
         inventoryContext: {
+          isInventoryRelated: true,
           containerId: 'toolbox',
-          containerTitle: 'My Toolbox'
+          containerTitle: 'My Toolbox',
+          path: [
+            { identifier: 'house', title: 'My House' },
+            { identifier: 'garage', title: 'Main Garage' },
+            { identifier: 'toolbox', title: 'My Toolbox' }
+          ]
         }
       } as SearchResult,
       {
@@ -252,8 +264,12 @@ export const WithInventoryContainer: Story = {
           createHighlight(27, 33), // "wrench"
         ],
         inventoryContext: {
+          isInventoryRelated: true,
           containerId: 'garage_cabinet',
-          containerTitle: '', // No title for this container - will fall back to identifier
+          containerTitle: '',
+          path: [
+            { identifier: 'garage_cabinet', title: '' }
+          ]
         }
       } as SearchResult
     ],
@@ -269,7 +285,7 @@ export const WithInventoryContainer: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Search results showing items with inventory containers. The "Found In" section displays the container title when available (e.g., "My Toolbox"), or falls back to the identifier (e.g., "garage_cabinet") when no title is set.'
+        story: 'Search results showing items with inventory containers. The "Found In" section displays the full container path with each level clickable. Titles are shown when available (e.g., "My House › Main Garage › My Toolbox"), or falls back to identifiers (e.g., "garage_cabinet") when no title is set.'
       }
     }
   }

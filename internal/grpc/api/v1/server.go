@@ -658,14 +658,55 @@ func (s *Server) buildInventoryContext(itemID wikipage.PageIdentifier) *apiv1.In
 		return nil
 	}
 	
-	// Fetch the container's title
+	// Build the full path from root to immediate container
+	path := s.buildContainerPath(containerID)
+	
+	// For backward compatibility, also set the direct container fields
 	containerPageID := wikipage.PageIdentifier(wikiidentifiers.MungeIdentifier(containerID))
 	containerTitle := s.FrontmatterIndexQueryer.GetValue(containerPageID, "title")
 	
 	return &apiv1.InventoryContext{
-		ContainerId:    containerID,
-		ContainerTitle: containerTitle,
+		IsInventoryRelated: true,
+		ContainerId:        containerID,
+		ContainerTitle:     containerTitle,
+		Path:               path,
 	}
+}
+
+// buildContainerPath recursively builds the full container path from root to the given container.
+func (s *Server) buildContainerPath(containerID string) []*apiv1.ContainerPathElement {
+	const maxDepth = 20 // Prevent infinite loops
+	var path []*apiv1.ContainerPathElement
+	visited := make(map[string]bool)
+	
+	currentID := containerID
+	depth := 0
+	
+	// Build path from immediate container up to root
+	for currentID != "" && depth < maxDepth {
+		if visited[currentID] {
+			// Circular reference detected, break
+			break
+		}
+		visited[currentID] = true
+		
+		mungedID := wikipage.PageIdentifier(wikiidentifiers.MungeIdentifier(currentID))
+		title := s.FrontmatterIndexQueryer.GetValue(mungedID, "title")
+		
+		element := &apiv1.ContainerPathElement{
+			Identifier: currentID,
+			Title:      title,
+		}
+		
+		// Prepend to path (we're going from immediate container to root)
+		path = append([]*apiv1.ContainerPathElement{element}, path...)
+		
+		// Get the parent container
+		currentID = s.FrontmatterIndexQueryer.GetValue(mungedID, "inventory.container")
+		depth++
+	}
+	
+	return path
 }
 
 // ReadPage implements the ReadPage RPC.

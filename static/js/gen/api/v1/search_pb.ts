@@ -196,18 +196,32 @@ export class SearchResult extends Message<SearchResult> {
  */
 export class InventoryContext extends Message<InventoryContext> {
   /**
-   * Container identifier
+   * Whether this result is inventory-related
    *
-   * @generated from field: string container_id = 1;
+   * @generated from field: bool is_inventory_related = 1;
+   */
+  isInventoryRelated = false;
+
+  /**
+   * Direct container identifier (deprecated, use path instead)
+   *
+   * @generated from field: string container_id = 2;
    */
   containerId = "";
 
   /**
-   * Container title (if available)
+   * Direct container title (deprecated, use path instead)
    *
-   * @generated from field: string container_title = 2;
+   * @generated from field: string container_title = 3;
    */
   containerTitle = "";
+
+  /**
+   * Full path from root to immediate container
+   *
+   * @generated from field: repeated api.v1.ContainerPathElement path = 4;
+   */
+  path: ContainerPathElement[] = [];
 
   constructor(data?: PartialMessage<InventoryContext>) {
     super();
@@ -217,8 +231,10 @@ export class InventoryContext extends Message<InventoryContext> {
   static readonly runtime: typeof proto3 = proto3;
   static readonly typeName = "api.v1.InventoryContext";
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
-    { no: 1, name: "container_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 2, name: "container_title", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 1, name: "is_inventory_related", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 2, name: "container_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "container_title", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 4, name: "path", kind: "message", T: ContainerPathElement, repeated: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): InventoryContext {
@@ -235,6 +251,55 @@ export class InventoryContext extends Message<InventoryContext> {
 
   static equals(a: InventoryContext | PlainMessage<InventoryContext> | undefined, b: InventoryContext | PlainMessage<InventoryContext> | undefined): boolean {
     return proto3.util.equals(InventoryContext, a, b);
+  }
+}
+
+/**
+ * A single element in a container path.
+ *
+ * @generated from message api.v1.ContainerPathElement
+ */
+export class ContainerPathElement extends Message<ContainerPathElement> {
+  /**
+   * Container identifier
+   *
+   * @generated from field: string identifier = 1;
+   */
+  identifier = "";
+
+  /**
+   * Container title (if available, otherwise will be empty)
+   *
+   * @generated from field: string title = 2;
+   */
+  title = "";
+
+  constructor(data?: PartialMessage<ContainerPathElement>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "api.v1.ContainerPathElement";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "identifier", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "title", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ContainerPathElement {
+    return new ContainerPathElement().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): ContainerPathElement {
+    return new ContainerPathElement().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): ContainerPathElement {
+    return new ContainerPathElement().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: ContainerPathElement | PlainMessage<ContainerPathElement> | undefined, b: ContainerPathElement | PlainMessage<ContainerPathElement> | undefined): boolean {
+    return proto3.util.equals(ContainerPathElement, a, b);
   }
 }
 

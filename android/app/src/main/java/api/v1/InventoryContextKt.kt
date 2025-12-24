@@ -34,10 +34,35 @@ public object InventoryContextKt {
 
     /**
      * ```
-     * Container identifier
+     * Whether this result is inventory-related
      * ```
      *
-     * `string container_id = 1 [json_name = "containerId"];`
+     * `bool is_inventory_related = 1 [json_name = "isInventoryRelated"];`
+     */
+    public var isInventoryRelated: kotlin.Boolean
+      @JvmName("getIsInventoryRelated")
+      get() = _builder.isInventoryRelated
+      @JvmName("setIsInventoryRelated")
+      set(value) {
+        _builder.isInventoryRelated = value
+      }
+    /**
+     * ```
+     * Whether this result is inventory-related
+     * ```
+     *
+     * `bool is_inventory_related = 1 [json_name = "isInventoryRelated"];`
+     */
+    public fun clearIsInventoryRelated() {
+      _builder.clearIsInventoryRelated()
+    }
+
+    /**
+     * ```
+     * Direct container identifier (deprecated, use path instead)
+     * ```
+     *
+     * `string container_id = 2 [json_name = "containerId"];`
      */
     public var containerId: kotlin.String
       @JvmName("getContainerId")
@@ -48,10 +73,10 @@ public object InventoryContextKt {
       }
     /**
      * ```
-     * Container identifier
+     * Direct container identifier (deprecated, use path instead)
      * ```
      *
-     * `string container_id = 1 [json_name = "containerId"];`
+     * `string container_id = 2 [json_name = "containerId"];`
      */
     public fun clearContainerId() {
       _builder.clearContainerId()
@@ -59,10 +84,10 @@ public object InventoryContextKt {
 
     /**
      * ```
-     * Container title (if available)
+     * Direct container title (deprecated, use path instead)
      * ```
      *
-     * `string container_title = 2 [json_name = "containerTitle"];`
+     * `string container_title = 3 [json_name = "containerTitle"];`
      */
     public var containerTitle: kotlin.String
       @JvmName("getContainerTitle")
@@ -73,14 +98,114 @@ public object InventoryContextKt {
       }
     /**
      * ```
-     * Container title (if available)
+     * Direct container title (deprecated, use path instead)
      * ```
      *
-     * `string container_title = 2 [json_name = "containerTitle"];`
+     * `string container_title = 3 [json_name = "containerTitle"];`
      */
     public fun clearContainerTitle() {
       _builder.clearContainerTitle()
     }
+
+    /**
+     * An uninstantiable, behaviorless type to represent the field in
+     * generics.
+     */
+    @kotlin.OptIn(com.google.protobuf.kotlin.OnlyForUseByGeneratedProtoCode::class)
+    public class PathProxy private constructor() : com.google.protobuf.kotlin.DslProxy()
+    /**
+     * ```
+     * Full path from root to immediate container
+     * ```
+     *
+     * `repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];`
+     */
+     public val path: com.google.protobuf.kotlin.DslList<api.v1.Search.ContainerPathElement, PathProxy>
+      @kotlin.jvm.JvmSynthetic
+      get() = com.google.protobuf.kotlin.DslList(
+        _builder.pathList
+      )
+    /**
+     * ```
+     * Full path from root to immediate container
+     * ```
+     *
+     * `repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];`
+     * @param value The path to add.
+     */
+    @kotlin.jvm.JvmSynthetic
+    @kotlin.jvm.JvmName("addPath")
+    public fun com.google.protobuf.kotlin.DslList<api.v1.Search.ContainerPathElement, PathProxy>.add(value: api.v1.Search.ContainerPathElement) {
+      _builder.addPath(value)
+    }
+    /**
+     * ```
+     * Full path from root to immediate container
+     * ```
+     *
+     * `repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];`
+     * @param value The path to add.
+     */
+    @kotlin.jvm.JvmSynthetic
+    @kotlin.jvm.JvmName("plusAssignPath")
+    @Suppress("NOTHING_TO_INLINE")
+    public inline operator fun com.google.protobuf.kotlin.DslList<api.v1.Search.ContainerPathElement, PathProxy>.plusAssign(value: api.v1.Search.ContainerPathElement) {
+      add(value)
+    }
+    /**
+     * ```
+     * Full path from root to immediate container
+     * ```
+     *
+     * `repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];`
+     * @param values The path to add.
+     */
+    @kotlin.jvm.JvmSynthetic
+    @kotlin.jvm.JvmName("addAllPath")
+    public fun com.google.protobuf.kotlin.DslList<api.v1.Search.ContainerPathElement, PathProxy>.addAll(values: kotlin.collections.Iterable<api.v1.Search.ContainerPathElement>) {
+      _builder.addAllPath(values)
+    }
+    /**
+     * ```
+     * Full path from root to immediate container
+     * ```
+     *
+     * `repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];`
+     * @param values The path to add.
+     */
+    @kotlin.jvm.JvmSynthetic
+    @kotlin.jvm.JvmName("plusAssignAllPath")
+    @Suppress("NOTHING_TO_INLINE")
+    public inline operator fun com.google.protobuf.kotlin.DslList<api.v1.Search.ContainerPathElement, PathProxy>.plusAssign(values: kotlin.collections.Iterable<api.v1.Search.ContainerPathElement>) {
+      addAll(values)
+    }
+    /**
+     * ```
+     * Full path from root to immediate container
+     * ```
+     *
+     * `repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];`
+     * @param index The index to set the value at.
+     * @param value The path to set.
+     */
+    @kotlin.jvm.JvmSynthetic
+    @kotlin.jvm.JvmName("setPath")
+    public operator fun com.google.protobuf.kotlin.DslList<api.v1.Search.ContainerPathElement, PathProxy>.set(index: kotlin.Int, value: api.v1.Search.ContainerPathElement) {
+      _builder.setPath(index, value)
+    }
+    /**
+     * ```
+     * Full path from root to immediate container
+     * ```
+     *
+     * `repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];`
+     */
+    @kotlin.jvm.JvmSynthetic
+    @kotlin.jvm.JvmName("clearPath")
+    public fun com.google.protobuf.kotlin.DslList<api.v1.Search.ContainerPathElement, PathProxy>.clear() {
+      _builder.clearPath()
+    }
+
   }
 }
 @kotlin.jvm.JvmSynthetic

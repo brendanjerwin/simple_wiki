@@ -216,8 +216,13 @@ describe('WikiSearchResults', () => {
         fragment: 'A useful tool',
         highlights: [],
         inventoryContext: {
+          isInventoryRelated: true,
           containerId: 'toolbox',
-          containerTitle: ''
+          containerTitle: '',
+          path: [{
+            identifier: 'toolbox',
+            title: ''
+          }]
         }
       }] as unknown as WikiSearchResultsElement['results'];
       await el.updateComplete;
@@ -253,8 +258,13 @@ describe('WikiSearchResults', () => {
         fragment: 'A useful tool',
         highlights: [],
         inventoryContext: {
+          isInventoryRelated: true,
           containerId: 'toolbox',
-          containerTitle: 'My Toolbox'
+          containerTitle: 'My Toolbox',
+          path: [{
+            identifier: 'toolbox',
+            title: 'My Toolbox'
+          }]
         }
       }] as unknown as WikiSearchResultsElement['results'];
       await el.updateComplete;
@@ -278,6 +288,110 @@ describe('WikiSearchResults', () => {
     it('should display container title in link', () => {
       const link = el.shadowRoot?.querySelector('.found-in a');
       expect(link?.textContent).to.equal('My Toolbox');
+    });
+  });
+
+  describe('when result has inventory context with nested path', () => {
+    beforeEach(async () => {
+      el.open = true;
+      el.results = [{
+        identifier: 'screwdriver',
+        title: 'Screwdriver',
+        fragment: 'A useful tool',
+        highlights: [],
+        inventoryContext: {
+          isInventoryRelated: true,
+          containerId: 'toolbox',
+          containerTitle: 'My Toolbox',
+          path: [
+            { identifier: 'house', title: 'My House' },
+            { identifier: 'garage', title: 'Main Garage' },
+            { identifier: 'toolbox', title: 'My Toolbox' }
+          ]
+        }
+      }] as unknown as WikiSearchResultsElement['results'];
+      await el.updateComplete;
+    });
+
+    it('should render the Found In section', () => {
+      const foundIn = el.shadowRoot?.querySelector('.found-in');
+      expect(foundIn).to.exist;
+    });
+
+    it('should display all path elements', () => {
+      const links = el.shadowRoot?.querySelectorAll('.found-in a');
+      expect(links).to.have.lengthOf(3);
+    });
+
+    it('should display path elements in order', () => {
+      const links = el.shadowRoot?.querySelectorAll('.found-in a');
+      expect(links?.[0]?.textContent).to.equal('My House');
+      expect(links?.[1]?.textContent).to.equal('Main Garage');
+      expect(links?.[2]?.textContent).to.equal('My Toolbox');
+    });
+
+    it('should link each path element correctly', () => {
+      const links = el.shadowRoot?.querySelectorAll('.found-in a') as NodeListOf<HTMLAnchorElement>;
+      expect(links[0]?.getAttribute('href')).to.equal('/house');
+      expect(links[1]?.getAttribute('href')).to.equal('/garage');
+      expect(links[2]?.getAttribute('href')).to.equal('/toolbox');
+    });
+
+    it('should display separators between path elements', () => {
+      const foundIn = el.shadowRoot?.querySelector('.found-in');
+      expect(foundIn?.textContent).to.match(/My House\s*›\s*Main Garage\s*›\s*My Toolbox/);
+    });
+  });
+
+  describe('when result has inventory context with path but no titles', () => {
+    beforeEach(async () => {
+      el.open = true;
+      el.results = [{
+        identifier: 'screwdriver',
+        title: 'Screwdriver',
+        fragment: 'A useful tool',
+        highlights: [],
+        inventoryContext: {
+          isInventoryRelated: true,
+          containerId: 'toolbox',
+          containerTitle: '',
+          path: [
+            { identifier: 'garage', title: '' },
+            { identifier: 'toolbox', title: '' }
+          ]
+        }
+      }] as unknown as WikiSearchResultsElement['results'];
+      await el.updateComplete;
+    });
+
+    it('should fall back to identifiers when titles are empty', () => {
+      const links = el.shadowRoot?.querySelectorAll('.found-in a');
+      expect(links?.[0]?.textContent).to.equal('garage');
+      expect(links?.[1]?.textContent).to.equal('toolbox');
+    });
+  });
+
+  describe('when result is not inventory related', () => {
+    beforeEach(async () => {
+      el.open = true;
+      el.results = [{
+        identifier: 'regular_page',
+        title: 'Regular Page',
+        fragment: 'Some content',
+        highlights: [],
+        inventoryContext: {
+          isInventoryRelated: false,
+          containerId: '',
+          containerTitle: '',
+          path: []
+        }
+      }] as unknown as WikiSearchResultsElement['results'];
+      await el.updateComplete;
+    });
+
+    it('should not render the Found In section', () => {
+      const foundIn = el.shadowRoot?.querySelector('.found-in');
+      expect(foundIn).to.not.exist;
     });
   });
 
