@@ -121,6 +121,19 @@ const (
 	contentField      = "content"
 )
 
+// Test-only exports for internal functions
+// These allow us to test private implementation details
+
+// CalculateFragmentWindow is exported for testing
+func (b *Index) CalculateFragmentWindow(contentText string, locations []*search.Location) (start int, end int) {
+	return b.calculateFragmentWindow(contentText, locations)
+}
+
+// ExtractFragmentFromLocations is exported for testing
+func (b *Index) ExtractFragmentFromLocations(contentText string, locations search.FieldTermLocationMap) (string, []HighlightSpan) {
+	return b.extractFragmentFromLocations(contentText, locations)
+}
+
 // extractFragmentFromLocations creates a text fragment with highlights using Bleve's structured location data
 func (b *Index) extractFragmentFromLocations(contentText string, locations search.FieldTermLocationMap) (string, []HighlightSpan) {
 	if locations == nil || locations[contentField] == nil {

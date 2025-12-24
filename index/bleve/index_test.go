@@ -3,7 +3,9 @@ package bleve_test
 
 import (
 	"errors"
+	"strings"
 
+	"github.com/blevesearch/bleve/search"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -198,6 +200,145 @@ var _ = Describe("Index", func() {
 			results, err := index.Query("Test Page")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(results).To(BeEmpty())
+		})
+	})
+
+	Describe("calculateFragmentWindow", func() {
+		var idx *bleve.Index
+
+		BeforeEach(func() {
+			var err error
+			idx, err = bleve.NewIndex(mockReader, frontmatterIndex)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		Context("when there are no locations", func() {
+			It("should return fragment from start with max length", func() {
+				contentText := "This is a test content that is longer than the max fragment length"
+				start, end := idx.CalculateFragmentWindow(contentText, []*search.Location{})
+				Expect(start).To(Equal(0))
+				Expect(end).To(Equal(min(len(contentText), 200))) // maxFragmentLength is 200
+			})
+		})
+
+		Context("when matches fit within fragment with context", func() {
+			It("should center the fragment around matches", func() {
+				contentText := strings.Repeat("x", 500)
+				locations := []*search.Location{
+					{Start: 100, End: 110},
+					{Start: 120, End: 130},
+				}
+				start, end := idx.CalculateFragmentWindow(contentText, locations)
+				Expect(start).To(BeNumerically(">=", 0))
+				Expect(end).To(BeNumerically("<=", len(contentText)))
+				Expect(end - start).To(Equal(200)) // maxFragmentLength
+				// Should include both matches
+				Expect(start).To(BeNumerically("<=", 100))
+				Expect(end).To(BeNumerically(">=", 130))
+			})
+		})
+
+		Context("when matches span too wide", func() {
+			It("should focus on first match with context", func() {
+				contentText := strings.Repeat("x", 500)
+				locations := []*search.Location{
+					{Start: 100, End: 110},
+					{Start: 400, End: 410}, // Too far from first match
+				}
+				start, end := idx.CalculateFragmentWindow(contentText, locations)
+				Expect(start).To(BeNumerically(">=", 0))
+				Expect(end - start).To(Equal(200)) // maxFragmentLength
+				// Should be near first match
+				Expect(start).To(BeNumerically("<=", 100))
+				Expect(start).To(BeNumerically(">=", 50)) // contextPadding is 50
+			})
+		})
+
+		Context("when content is shorter than max fragment", func() {
+			It("should return entire content", func() {
+				contentText := "Short content"
+				locations := []*search.Location{{Start: 0, End: 5}}
+				start, end := idx.CalculateFragmentWindow(contentText, locations)
+				Expect(start).To(Equal(0))
+				Expect(end).To(Equal(len(contentText)))
+			})
+		})
+	})
+
+	Describe("extractFragmentFromLocations", func() {
+		var idx *bleve.Index
+
+		BeforeEach(func() {
+			var err error
+			idx, err = bleve.NewIndex(mockReader, frontmatterIndex)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		Context("when locations is nil", func() {
+			It("should return empty fragment", func() {
+				fragment, highlights := idx.ExtractFragmentFromLocations("test content", nil)
+				Expect(fragment).To(BeEmpty())
+				Expect(highlights).To(BeNil())
+			})
+		})
+
+		Context("when content field is nil", func() {
+			It("should return empty fragment", func() {
+				locations := search.FieldTermLocationMap{
+					"other_field": map[string]search.Locations{},
+				}
+				fragment, highlights := idx.ExtractFragmentFromLocations("test content", locations)
+				Expect(fragment).To(BeEmpty())
+				Expect(highlights).To(BeNil())
+			})
+		})
+
+		Context("when there are no term locations", func() {
+			It("should return empty fragment", func() {
+				locations := search.FieldTermLocationMap{
+					"content": map[string]search.Locations{},
+				}
+				fragment, highlights := idx.ExtractFragmentFromLocations("test content", locations)
+				Expect(fragment).To(BeEmpty())
+				Expect(highlights).To(BeNil())
+			})
+		})
+
+		Context("when there are valid locations", func() {
+			It("should extract fragment with highlights", func() {
+				contentText := "The quick brown fox jumps over the lazy dog"
+				locations := search.FieldTermLocationMap{
+					"content": map[string]search.Locations{
+						"quick": []*search.Location{{Start: 4, End: 9}},
+						"fox":   []*search.Location{{Start: 16, End: 19}},
+					},
+				}
+				fragment, highlights := idx.ExtractFragmentFromLocations(contentText, locations)
+				Expect(fragment).NotTo(BeEmpty())
+				Expect(highlights).To(HaveLen(2))
+				// Highlights should be relative to fragment start
+				Expect(highlights[0].Start).To(BeNumerically(">=", 0))
+				Expect(highlights[1].Start).To(BeNumerically(">=", 0))
+			})
+		})
+
+		Context("when locations are outside fragment window", func() {
+			It("should only include highlights within fragment", func() {
+				contentText := strings.Repeat("x", 500)
+				// Create locations where some are outside the window
+				locations := search.FieldTermLocationMap{
+					"content": map[string]search.Locations{
+						"term": []*search.Location{
+							{Start: 100, End: 105},
+							{Start: 450, End: 455}, // This might be outside the window
+						},
+					},
+				}
+				fragment, highlights := idx.ExtractFragmentFromLocations(contentText, locations)
+				Expect(fragment).NotTo(BeEmpty())
+				// Should have at least one highlight
+				Expect(len(highlights)).To(BeNumerically(">=", 1))
+			})
 		})
 	})
 })
