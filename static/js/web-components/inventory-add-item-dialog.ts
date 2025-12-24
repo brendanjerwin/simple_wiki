@@ -494,7 +494,7 @@ export class InventoryAddItemDialog extends LitElement {
       const request = new SearchContentRequest({
         query,
         frontmatterKeyIncludeFilters: ['inventory.container'],
-        frontmatterKeyExcludeFilters: ['inventory.items'],
+        frontmatterKeyExcludeFilters: ['inventory.is_container'],
         frontmatterKeysToReturnInResults: ['inventory.container'],
       });
 
