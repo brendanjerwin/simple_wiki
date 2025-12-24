@@ -48,6 +48,7 @@ message InventoryContext {
 message ContainerPathElement {
   string identifier = 1; // Container identifier
   string title = 2; // Container title (if available, otherwise will be empty)
+  int32 depth = 3; // Depth level in hierarchy (0 = root, higher = deeper)
 }
 
 // A span of text to be highlighted.

@@ -1953,12 +1953,15 @@ var _ = Describe("Server", func() {
 					// Path should be: house > garage > toolbox
 					Expect(resp.Results[0].InventoryContext.Path[0].Identifier).To(Equal("house"))
 					Expect(resp.Results[0].InventoryContext.Path[0].Title).To(Equal("My House"))
+					Expect(resp.Results[0].InventoryContext.Path[0].Depth).To(Equal(int32(0)))
 					
 					Expect(resp.Results[0].InventoryContext.Path[1].Identifier).To(Equal("garage"))
 					Expect(resp.Results[0].InventoryContext.Path[1].Title).To(Equal("Main Garage"))
+					Expect(resp.Results[0].InventoryContext.Path[1].Depth).To(Equal(int32(1)))
 					
 					Expect(resp.Results[0].InventoryContext.Path[2].Identifier).To(Equal("toolbox"))
 					Expect(resp.Results[0].InventoryContext.Path[2].Title).To(Equal("My Toolbox"))
+					Expect(resp.Results[0].InventoryContext.Path[2].Depth).To(Equal(int32(2)))
 				})
 			})
 

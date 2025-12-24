@@ -232,9 +232,9 @@ export const WithInventoryContainer: Story = {
           containerId: 'toolbox',
           containerTitle: 'My Toolbox',
           path: [
-            { identifier: 'house', title: 'My House' },
-            { identifier: 'garage', title: 'Main Garage' },
-            { identifier: 'toolbox', title: 'My Toolbox' }
+            { identifier: 'house', title: 'My House', depth: 0 },
+            { identifier: 'garage', title: 'Main Garage', depth: 1 },
+            { identifier: 'toolbox', title: 'My Toolbox', depth: 2 }
           ]
         }
       } as SearchResult,
@@ -250,9 +250,9 @@ export const WithInventoryContainer: Story = {
           containerId: 'toolbox',
           containerTitle: 'My Toolbox',
           path: [
-            { identifier: 'house', title: 'My House' },
-            { identifier: 'garage', title: 'Main Garage' },
-            { identifier: 'toolbox', title: 'My Toolbox' }
+            { identifier: 'house', title: 'My House', depth: 0 },
+            { identifier: 'garage', title: 'Main Garage', depth: 1 },
+            { identifier: 'toolbox', title: 'My Toolbox', depth: 2 }
           ]
         }
       } as SearchResult,
@@ -268,7 +268,25 @@ export const WithInventoryContainer: Story = {
           containerId: 'garage_cabinet',
           containerTitle: '',
           path: [
-            { identifier: 'garage_cabinet', title: '' }
+            { identifier: 'garage_cabinet', title: '', depth: 0 }
+          ]
+        }
+      } as SearchResult,
+      {
+        identifier: 'power_drill',
+        title: 'Cordless Power Drill',
+        fragment: '18V cordless drill with battery and charger.',
+        highlights: [
+          createHighlight(19, 24), // "drill"
+        ],
+        inventoryContext: {
+          isInventoryRelated: true,
+          containerId: 'red_case',
+          containerTitle: 'Red Tool Case',
+          path: [
+            { identifier: 'house', title: 'My House', depth: 0 },
+            { identifier: 'workshop_shed', title: '', depth: 1 },
+            { identifier: 'red_case', title: 'Red Tool Case', depth: 2 }
           ]
         }
       } as SearchResult
@@ -285,7 +303,7 @@ export const WithInventoryContainer: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Search results showing items with inventory containers. The "Found In" section displays the full container path with each level clickable. Titles are shown when available (e.g., "My House › Main Garage › My Toolbox"), or falls back to identifiers (e.g., "garage_cabinet") when no title is set.'
+        story: 'Search results showing items with inventory containers. The "Found In" section displays the full container path with each level clickable. Demonstrates various scenarios:\n- Full path with all titles (screwdriver & hammer)\n- Single level with no title, falls back to identifier (wrench)\n- **Mixed scenario**: Path with some titles and some identifiers (drill shows "My House › workshop_shed › Red Tool Case")'
       }
     }
   }

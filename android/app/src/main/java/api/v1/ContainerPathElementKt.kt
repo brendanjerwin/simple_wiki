@@ -81,6 +81,31 @@ public object ContainerPathElementKt {
     public fun clearTitle() {
       _builder.clearTitle()
     }
+
+    /**
+     * ```
+     * Depth level in hierarchy (0 = root, higher = deeper)
+     * ```
+     *
+     * `int32 depth = 3 [json_name = "depth"];`
+     */
+    public var depth: kotlin.Int
+      @JvmName("getDepth")
+      get() = _builder.depth
+      @JvmName("setDepth")
+      set(value) {
+        _builder.depth = value
+      }
+    /**
+     * ```
+     * Depth level in hierarchy (0 = root, higher = deeper)
+     * ```
+     *
+     * `int32 depth = 3 [json_name = "depth"];`
+     */
+    public fun clearDepth() {
+      _builder.clearDepth()
+    }
   }
 }
 @kotlin.jvm.JvmSynthetic

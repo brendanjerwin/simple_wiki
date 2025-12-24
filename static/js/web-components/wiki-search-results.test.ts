@@ -304,9 +304,9 @@ describe('WikiSearchResults', () => {
           containerId: 'toolbox',
           containerTitle: 'My Toolbox',
           path: [
-            { identifier: 'house', title: 'My House' },
-            { identifier: 'garage', title: 'Main Garage' },
-            { identifier: 'toolbox', title: 'My Toolbox' }
+            { identifier: 'house', title: 'My House', depth: 0 },
+            { identifier: 'garage', title: 'Main Garage', depth: 1 },
+            { identifier: 'toolbox', title: 'My Toolbox', depth: 2 }
           ]
         }
       }] as unknown as WikiSearchResultsElement['results'];
@@ -356,8 +356,8 @@ describe('WikiSearchResults', () => {
           containerId: 'toolbox',
           containerTitle: '',
           path: [
-            { identifier: 'garage', title: '' },
-            { identifier: 'toolbox', title: '' }
+            { identifier: 'garage', title: '', depth: 0 },
+            { identifier: 'toolbox', title: '', depth: 1 }
           ]
         }
       }] as unknown as WikiSearchResultsElement['results'];
@@ -368,6 +368,49 @@ describe('WikiSearchResults', () => {
       const links = el.shadowRoot?.querySelectorAll('.found-in a');
       expect(links?.[0]?.textContent).to.equal('garage');
       expect(links?.[1]?.textContent).to.equal('toolbox');
+    });
+  });
+
+  describe('when result has inventory context with mixed titles and identifiers', () => {
+    beforeEach(async () => {
+      el.open = true;
+      el.results = [{
+        identifier: 'power_drill',
+        title: 'Cordless Power Drill',
+        fragment: '18V cordless drill',
+        highlights: [],
+        inventoryContext: {
+          isInventoryRelated: true,
+          containerId: 'red_case',
+          containerTitle: 'Red Tool Case',
+          path: [
+            { identifier: 'house', title: 'My House', depth: 0 },
+            { identifier: 'workshop_shed', title: '', depth: 1 },
+            { identifier: 'red_case', title: 'Red Tool Case', depth: 2 }
+          ]
+        }
+      }] as unknown as WikiSearchResultsElement['results'];
+      await el.updateComplete;
+    });
+
+    it('should display path with mixed titles and identifiers', () => {
+      const links = el.shadowRoot?.querySelectorAll('.found-in a');
+      expect(links).to.have.lengthOf(3);
+      expect(links?.[0]?.textContent).to.equal('My House');
+      expect(links?.[1]?.textContent).to.equal('workshop_shed');
+      expect(links?.[2]?.textContent).to.equal('Red Tool Case');
+    });
+
+    it('should link all path elements correctly', () => {
+      const links = el.shadowRoot?.querySelectorAll('.found-in a') as NodeListOf<HTMLAnchorElement>;
+      expect(links[0]?.getAttribute('href')).to.equal('/house');
+      expect(links[1]?.getAttribute('href')).to.equal('/workshop_shed');
+      expect(links[2]?.getAttribute('href')).to.equal('/red_case');
+    });
+
+    it('should display separators between all elements', () => {
+      const foundIn = el.shadowRoot?.querySelector('.found-in');
+      expect(foundIn?.textContent).to.match(/My House\s*›\s*workshop_shed\s*›\s*Red Tool Case/);
     });
   });
 

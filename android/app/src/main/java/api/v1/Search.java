@@ -4020,6 +4020,16 @@ java.lang.String defaultValue) {
      */
     com.google.protobuf.ByteString
         getTitleBytes();
+
+    /**
+     * <pre>
+     * Depth level in hierarchy (0 = root, higher = deeper)
+     * </pre>
+     *
+     * <code>int32 depth = 3 [json_name = "depth"];</code>
+     * @return The depth.
+     */
+    int getDepth();
   }
   /**
    * <pre>
@@ -4169,6 +4179,44 @@ java.lang.String defaultValue) {
       checkByteStringIsUtf8(value);
       title_ = value.toStringUtf8();
 
+    }
+
+    public static final int DEPTH_FIELD_NUMBER = 3;
+    private int depth_;
+    /**
+     * <pre>
+     * Depth level in hierarchy (0 = root, higher = deeper)
+     * </pre>
+     *
+     * <code>int32 depth = 3 [json_name = "depth"];</code>
+     * @return The depth.
+     */
+    @java.lang.Override
+    public int getDepth() {
+      return depth_;
+    }
+    /**
+     * <pre>
+     * Depth level in hierarchy (0 = root, higher = deeper)
+     * </pre>
+     *
+     * <code>int32 depth = 3 [json_name = "depth"];</code>
+     * @param value The depth to set.
+     */
+    private void setDepth(int value) {
+      
+      depth_ = value;
+    }
+    /**
+     * <pre>
+     * Depth level in hierarchy (0 = root, higher = deeper)
+     * </pre>
+     *
+     * <code>int32 depth = 3 [json_name = "depth"];</code>
+     */
+    private void clearDepth() {
+
+      depth_ = 0;
     }
 
     public static api.v1.Search.ContainerPathElement parseFrom(
@@ -4410,6 +4458,46 @@ java.lang.String defaultValue) {
         return this;
       }
 
+      /**
+       * <pre>
+       * Depth level in hierarchy (0 = root, higher = deeper)
+       * </pre>
+       *
+       * <code>int32 depth = 3 [json_name = "depth"];</code>
+       * @return The depth.
+       */
+      @java.lang.Override
+      public int getDepth() {
+        return instance.getDepth();
+      }
+      /**
+       * <pre>
+       * Depth level in hierarchy (0 = root, higher = deeper)
+       * </pre>
+       *
+       * <code>int32 depth = 3 [json_name = "depth"];</code>
+       * @param value The depth to set.
+       * @return This builder for chaining.
+       */
+      public Builder setDepth(int value) {
+        copyOnWrite();
+        instance.setDepth(value);
+        return this;
+      }
+      /**
+       * <pre>
+       * Depth level in hierarchy (0 = root, higher = deeper)
+       * </pre>
+       *
+       * <code>int32 depth = 3 [json_name = "depth"];</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearDepth() {
+        copyOnWrite();
+        instance.clearDepth();
+        return this;
+      }
+
       // @@protoc_insertion_point(builder_scope:api.v1.ContainerPathElement)
     }
     @java.lang.Override
@@ -4428,10 +4516,11 @@ java.lang.String defaultValue) {
             java.lang.Object[] objects = new java.lang.Object[] {
               "identifier_",
               "title_",
+              "depth_",
             };
             java.lang.String info =
-                "\u0000\u0002\u0000\u0000\u0001\u0002\u0002\u0000\u0000\u0000\u0001\u0208\u0002\u0208" +
-                "";
+                "\u0000\u0003\u0000\u0000\u0001\u0003\u0003\u0000\u0000\u0000\u0001\u0208\u0002\u0208" +
+                "\u0003\u0004";
             return newMessageInfo(DEFAULT_INSTANCE, info, objects);
         }
         // fall through

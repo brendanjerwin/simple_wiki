@@ -274,6 +274,13 @@ export class ContainerPathElement extends Message<ContainerPathElement> {
    */
   title = "";
 
+  /**
+   * Depth level in hierarchy (0 = root, higher = deeper)
+   *
+   * @generated from field: int32 depth = 3;
+   */
+  depth = 0;
+
   constructor(data?: PartialMessage<ContainerPathElement>) {
     super();
     proto3.util.initPartial(data, this);
@@ -284,6 +291,7 @@ export class ContainerPathElement extends Message<ContainerPathElement> {
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "identifier", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "title", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "depth", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ContainerPathElement {

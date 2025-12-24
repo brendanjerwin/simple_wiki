@@ -680,10 +680,9 @@ func (s *Server) buildContainerPath(containerID string) []*apiv1.ContainerPathEl
 	visited := make(map[string]bool)
 	
 	currentID := containerID
-	depth := 0
 	
 	// Build path from immediate container up to root
-	for currentID != "" && depth < maxDepth {
+	for currentID != "" && len(path) < maxDepth {
 		if visited[currentID] {
 			// Circular reference detected, break
 			break
@@ -696,6 +695,7 @@ func (s *Server) buildContainerPath(containerID string) []*apiv1.ContainerPathEl
 		element := &apiv1.ContainerPathElement{
 			Identifier: currentID,
 			Title:      title,
+			// Depth will be set after we know the total path length
 		}
 		
 		// Prepend to path (we're going from immediate container to root)
@@ -703,7 +703,11 @@ func (s *Server) buildContainerPath(containerID string) []*apiv1.ContainerPathEl
 		
 		// Get the parent container
 		currentID = s.FrontmatterIndexQueryer.GetValue(mungedID, "inventory.container")
-		depth++
+	}
+	
+	// Now assign depth values: root=0, each child +1
+	for i := range path {
+		path[i].Depth = int32(i)
 	}
 	
 	return path
