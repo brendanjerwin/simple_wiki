@@ -185,6 +185,7 @@ export class WikiSearch extends LitElement {
 
   handleSearchResultsClosed() {
     this.results = [];
+    this.noResults = false;
   }
 
   async handleInventoryFilterChanged(e: CustomEvent<{ inventoryOnly: boolean }>) {
