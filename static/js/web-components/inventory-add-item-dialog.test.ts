@@ -415,6 +415,305 @@ describe('InventoryAddItemDialog', () => {
     });
   });
 
+  describe('backdrop click handling', () => {
+    describe('when backdrop is clicked', () => {
+      let closeSpy: sinon.SinonSpy;
+
+      beforeEach(async () => {
+        closeSpy = sinon.spy(el, 'close');
+        el.openDialog('drawer_kitchen');
+        await el.updateComplete;
+        const backdrop = el.shadowRoot?.querySelector('.backdrop') as HTMLElement;
+        backdrop?.click();
+      });
+
+      it('should close the dialog', () => {
+        expect(closeSpy).to.have.been.calledOnce;
+      });
+    });
+  });
+
+  describe('dialog click handling', () => {
+    describe('when dialog content is clicked', () => {
+      let closeSpy: sinon.SinonSpy;
+
+      beforeEach(async () => {
+        closeSpy = sinon.spy(el, 'close');
+        el.openDialog('drawer_kitchen');
+        await el.updateComplete;
+        const dialog = el.shadowRoot?.querySelector('.dialog') as HTMLElement;
+        dialog?.click();
+      });
+
+      it('should not close the dialog', () => {
+        expect(closeSpy).to.not.have.been.called;
+      });
+    });
+  });
+
+  describe('cancel button', () => {
+    describe('when cancel button is clicked', () => {
+      let closeSpy: sinon.SinonSpy;
+
+      beforeEach(async () => {
+        closeSpy = sinon.spy(el, 'close');
+        el.openDialog('drawer_kitchen');
+        await el.updateComplete;
+        const cancelBtn = el.shadowRoot?.querySelector('.button-secondary') as HTMLButtonElement;
+        cancelBtn?.click();
+      });
+
+      it('should close the dialog', () => {
+        expect(closeSpy).to.have.been.calledOnce;
+      });
+    });
+  });
+
+  describe('title input handling', () => {
+    describe('when title is typed', () => {
+      beforeEach(async () => {
+        el.openDialog('drawer_kitchen');
+        await el.updateComplete;
+        const titleInput = el.shadowRoot?.querySelector('input[name="title"]') as HTMLInputElement;
+        titleInput.value = 'Test Item';
+        titleInput.dispatchEvent(new Event('input'));
+      });
+
+      it('should update itemTitle property', () => {
+        expect(el.itemTitle).to.equal('Test Item');
+      });
+    });
+  });
+
+  describe('description input handling', () => {
+    describe('when description is typed', () => {
+      beforeEach(async () => {
+        el.openDialog('drawer_kitchen');
+        await el.updateComplete;
+        const descInput = el.shadowRoot?.querySelector('textarea[name="description"]') as HTMLTextAreaElement;
+        descInput.value = 'Test description';
+        descInput.dispatchEvent(new Event('input'));
+      });
+
+      it('should update description property', () => {
+        expect(el.description).to.equal('Test description');
+      });
+    });
+  });
+
+  describe('identifier input handling', () => {
+    describe('when in manual mode and identifier is typed', () => {
+      beforeEach(async () => {
+        el.openDialog('drawer_kitchen');
+        el.automagicMode = false;
+        await el.updateComplete;
+        const identifierInput = el.shadowRoot?.querySelector('input[name="itemIdentifier"]') as HTMLInputElement;
+        identifierInput.value = 'custom_identifier';
+        identifierInput.dispatchEvent(new Event('input'));
+      });
+
+      it('should update itemIdentifier property', () => {
+        expect(el.itemIdentifier).to.equal('custom_identifier');
+      });
+    });
+
+    describe('when in automagic mode and identifier input is triggered', () => {
+      beforeEach(async () => {
+        el.openDialog('drawer_kitchen');
+        el.automagicMode = true;
+        el.itemIdentifier = 'original_value';
+        await el.updateComplete;
+        const identifierInput = el.shadowRoot?.querySelector('input[name="itemIdentifier"]') as HTMLInputElement;
+        identifierInput.value = 'attempted_change';
+        identifierInput.dispatchEvent(new Event('input'));
+      });
+
+      it('should not update itemIdentifier property', () => {
+        expect(el.itemIdentifier).to.equal('original_value');
+      });
+    });
+  });
+
+  describe('automagic toggle', () => {
+    describe('when toggle is clicked to switch to manual mode', () => {
+      beforeEach(async () => {
+        el.openDialog('drawer_kitchen');
+        el.automagicMode = true;
+        await el.updateComplete;
+        const toggleBtn = el.shadowRoot?.querySelector('.automagic-button') as HTMLButtonElement;
+        toggleBtn?.click();
+      });
+
+      it('should switch to manual mode', () => {
+        expect(el.automagicMode).to.be.false;
+      });
+    });
+
+    describe('when toggle is clicked to switch back to automagic mode', () => {
+      beforeEach(async () => {
+        el.openDialog('drawer_kitchen');
+        el.automagicMode = false;
+        await el.updateComplete;
+        const toggleBtn = el.shadowRoot?.querySelector('.automagic-button') as HTMLButtonElement;
+        toggleBtn?.click();
+      });
+
+      it('should switch to automagic mode', () => {
+        expect(el.automagicMode).to.be.true;
+      });
+    });
+  });
+
+  describe('event listener lifecycle', () => {
+    describe('when component is connected', () => {
+      let addEventListenerSpy: sinon.SinonSpy;
+
+      beforeEach(async () => {
+        addEventListenerSpy = sinon.spy(document, 'addEventListener');
+        el = await fixture(html`<inventory-add-item-dialog></inventory-add-item-dialog>`);
+        await el.updateComplete;
+      });
+
+      it('should add keydown event listener', () => {
+        expect(addEventListenerSpy).to.have.been.calledWith('keydown', el._handleKeydown);
+      });
+    });
+
+    describe('when component is disconnected', () => {
+      let removeEventListenerSpy: sinon.SinonSpy;
+
+      beforeEach(async () => {
+        removeEventListenerSpy = sinon.spy(document, 'removeEventListener');
+        el = await fixture(html`<inventory-add-item-dialog></inventory-add-item-dialog>`);
+        await el.updateComplete;
+        el.remove();
+      });
+
+      it('should remove keydown event listener', () => {
+        expect(removeEventListenerSpy).to.have.been.calledWith('keydown', el._handleKeydown);
+      });
+    });
+  });
+
+  describe('search results rendering edge cases', () => {
+    describe('when search is loading', () => {
+      beforeEach(async () => {
+        el.openDialog('drawer_kitchen');
+        el.searchLoading = true;
+        el.searchResults = [];
+        await el.updateComplete;
+      });
+
+      it('should display loading text', () => {
+        const header = el.shadowRoot?.querySelector('.search-results-header');
+        expect(header?.textContent).to.contain('Searching...');
+      });
+    });
+
+    describe('when exactly one result is found', () => {
+      beforeEach(async () => {
+        el.openDialog('drawer_kitchen');
+        el.searchResults = [
+          {
+            identifier: 'item1',
+            title: 'Item One',
+            fragment: '',
+            highlights: [],
+            frontmatter: {},
+          } as unknown as import('../gen/api/v1/search_pb.js').SearchResult,
+        ];
+        el.searchLoading = false;
+        await el.updateComplete;
+      });
+
+      it('should display singular text', () => {
+        const header = el.shadowRoot?.querySelector('.search-results-header');
+        expect(header?.textContent).to.contain('1 similar item found');
+      });
+    });
+
+    describe('when search result has no container', () => {
+      beforeEach(async () => {
+        el.openDialog('drawer_kitchen');
+        el.searchResults = [
+          {
+            identifier: 'item1',
+            title: 'Item One',
+            fragment: '',
+            highlights: [],
+            frontmatter: {},
+          } as unknown as import('../gen/api/v1/search_pb.js').SearchResult,
+        ];
+        await el.updateComplete;
+      });
+
+      it('should not display container info', () => {
+        const containerDiv = el.shadowRoot?.querySelector('.search-result-container');
+        expect(containerDiv).to.not.exist;
+      });
+    });
+
+    describe('when search result uses identifier as title', () => {
+      beforeEach(async () => {
+        el.openDialog('drawer_kitchen');
+        el.searchResults = [
+          {
+            identifier: 'item_identifier',
+            title: '',
+            fragment: '',
+            highlights: [],
+            frontmatter: {},
+          } as unknown as import('../gen/api/v1/search_pb.js').SearchResult,
+        ];
+        await el.updateComplete;
+      });
+
+      it('should display identifier as title', () => {
+        const titleDiv = el.shadowRoot?.querySelector('.search-result-title');
+        expect(titleDiv?.textContent).to.equal('item_identifier');
+      });
+    });
+  });
+
+  describe('conflict warning edge cases', () => {
+    describe('when existingPage has no title', () => {
+      beforeEach(async () => {
+        el.openDialog('drawer_kitchen');
+        el.isUnique = false;
+        el.existingPage = {
+          identifier: 'test_item',
+          title: '',
+          container: '',
+        } as import('../gen/api/v1/page_management_pb.js').ExistingPageInfo;
+        await el.updateComplete;
+      });
+
+      it('should display identifier as link text', () => {
+        const warningDiv = el.shadowRoot?.querySelector('.conflict-warning');
+        const link = warningDiv?.querySelector('a');
+        expect(link?.textContent).to.equal('test_item');
+      });
+    });
+
+    describe('when existingPage has no container', () => {
+      beforeEach(async () => {
+        el.openDialog('drawer_kitchen');
+        el.isUnique = false;
+        el.existingPage = {
+          identifier: 'test_item',
+          title: 'Test Item',
+          container: '',
+        } as import('../gen/api/v1/page_management_pb.js').ExistingPageInfo;
+        await el.updateComplete;
+      });
+
+      it('should not display container info in warning', () => {
+        const warningDiv = el.shadowRoot?.querySelector('.conflict-warning');
+        expect(warningDiv?.textContent).to.not.contain('Found In');
+      });
+    });
+  });
+
   describe('form validation', () => {
     describe('when title is empty', () => {
       beforeEach(async () => {
