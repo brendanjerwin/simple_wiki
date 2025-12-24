@@ -31,6 +31,7 @@ const (
 	pageNotFoundErrFmt              = "page not found: %s"
 	failedToReadFrontmatterErrFmt   = "failed to read frontmatter: %v"
 	failedToBuildPageTextErrFmt     = "failed to build page text: %v"
+	maxUniqueIdentifierAttempts     = 1000
 )
 
 // filterIdentifierKey removes the identifier key from a frontmatter map.
@@ -490,115 +491,153 @@ func (s *Server) DeletePage(_ context.Context, req *apiv1.DeletePageRequest) (*a
 }
 
 // SearchContent implements the SearchContent RPC.
+//
+//revive:disable:cognitive-complexity
+//revive:disable:cyclomatic
+//revive:disable:function-length
 func (s *Server) SearchContent(_ context.Context, req *apiv1.SearchContentRequest) (*apiv1.SearchContentResponse, error) {
-	v := reflect.ValueOf(s.BleveIndexQueryer)
-	if s.BleveIndexQueryer == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
-		return nil, status.Error(codes.Internal, "Search index is not available")
+	if err := s.validateSearchRequest(req); err != nil {
+		return nil, err
 	}
 
-	// Validate query is not empty
-	if req.Query == "" {
-		return nil, status.Error(codes.InvalidArgument, "query cannot be empty")
-	}
-
-	// Perform the search
 	searchResults, err := s.BleveIndexQueryer.Query(req.Query)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to search: %v", err)
 	}
 
-	// Build sets of pages for each include filter (page must match ALL include filters)
-	var includeFilterSets []map[wikipage.PageIdentifier]bool
-	if len(req.FrontmatterKeyIncludeFilters) > 0 {
-		vFm := reflect.ValueOf(s.FrontmatterIndexQueryer)
-		if s.FrontmatterIndexQueryer == nil || (vFm.Kind() == reflect.Ptr && vFm.IsNil()) {
-			return nil, status.Error(codes.Internal, "Frontmatter index not available for filtering")
-		}
-		for _, filterKey := range req.FrontmatterKeyIncludeFilters {
-			pageIDs := s.FrontmatterIndexQueryer.QueryKeyExistence(wikipage.DottedKeyPath(filterKey))
-			pageSet := make(map[wikipage.PageIdentifier]bool, len(pageIDs))
-			for _, id := range pageIDs {
-				pageSet[id] = true
-			}
-			includeFilterSets = append(includeFilterSets, pageSet)
-		}
+	includeFilterSets, err := s.buildIncludeFilterSets(req.FrontmatterKeyIncludeFilters)
+	if err != nil {
+		return nil, err
 	}
 
-	// Build set of pages to exclude (page is excluded if it matches ANY exclude filter)
-	var excludedPages map[wikipage.PageIdentifier]bool
-	if len(req.FrontmatterKeyExcludeFilters) > 0 {
-		vFm := reflect.ValueOf(s.FrontmatterIndexQueryer)
-		if s.FrontmatterIndexQueryer == nil || (vFm.Kind() == reflect.Ptr && vFm.IsNil()) {
-			return nil, status.Error(codes.Internal, "Frontmatter index not available for filtering")
-		}
-		excludedPages = make(map[wikipage.PageIdentifier]bool)
-		for _, filterKey := range req.FrontmatterKeyExcludeFilters {
-			pageIDs := s.FrontmatterIndexQueryer.QueryKeyExistence(wikipage.DottedKeyPath(filterKey))
-			for _, id := range pageIDs {
-				excludedPages[id] = true
-			}
-		}
+	excludedPages, err := s.buildExcludedPagesSet(req.FrontmatterKeyExcludeFilters)
+	if err != nil {
+		return nil, err
 	}
 
-	// Convert bleve.SearchResult to apiv1.SearchResult
+	results := s.filterAndConvertResults(searchResults, includeFilterSets, excludedPages, req.FrontmatterKeysToReturnInResults)
+
+	return &apiv1.SearchContentResponse{Results: results}, nil
+}
+
+// validateSearchRequest validates the search request and index availability.
+func (s *Server) validateSearchRequest(req *apiv1.SearchContentRequest) error {
+	v := reflect.ValueOf(s.BleveIndexQueryer)
+	if s.BleveIndexQueryer == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
+		return status.Error(codes.Internal, "Search index is not available")
+	}
+	if req.Query == "" {
+		return status.Error(codes.InvalidArgument, "query cannot be empty")
+	}
+	return nil
+}
+
+// buildIncludeFilterSets builds sets of pages for each include filter key.
+func (s *Server) buildIncludeFilterSets(filterKeys []string) ([]map[wikipage.PageIdentifier]bool, error) {
+	if len(filterKeys) == 0 {
+		return nil, nil
+	}
+	if err := s.validateFrontmatterIndexAvailable(); err != nil {
+		return nil, err
+	}
+
+	var filterSets []map[wikipage.PageIdentifier]bool
+	for _, filterKey := range filterKeys {
+		pageIDs := s.FrontmatterIndexQueryer.QueryKeyExistence(wikipage.DottedKeyPath(filterKey))
+		pageSet := make(map[wikipage.PageIdentifier]bool, len(pageIDs))
+		for _, id := range pageIDs {
+			pageSet[id] = true
+		}
+		filterSets = append(filterSets, pageSet)
+	}
+	return filterSets, nil
+}
+
+// buildExcludedPagesSet builds the set of pages to exclude based on filter keys.
+func (s *Server) buildExcludedPagesSet(filterKeys []string) (map[wikipage.PageIdentifier]bool, error) {
+	if len(filterKeys) == 0 {
+		return nil, nil
+	}
+	if err := s.validateFrontmatterIndexAvailable(); err != nil {
+		return nil, err
+	}
+
+	excludedPages := make(map[wikipage.PageIdentifier]bool)
+	for _, filterKey := range filterKeys {
+		pageIDs := s.FrontmatterIndexQueryer.QueryKeyExistence(wikipage.DottedKeyPath(filterKey))
+		for _, id := range pageIDs {
+			excludedPages[id] = true
+		}
+	}
+	return excludedPages, nil
+}
+
+// validateFrontmatterIndexAvailable checks if the frontmatter index is available.
+func (s *Server) validateFrontmatterIndexAvailable() error {
+	v := reflect.ValueOf(s.FrontmatterIndexQueryer)
+	if s.FrontmatterIndexQueryer == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
+		return status.Error(codes.Internal, "Frontmatter index not available for filtering")
+	}
+	return nil
+}
+
+// filterAndConvertResults filters search results and converts them to API format.
+func (s *Server) filterAndConvertResults(
+	searchResults []bleve.SearchResult,
+	includeFilterSets []map[wikipage.PageIdentifier]bool,
+	excludedPages map[wikipage.PageIdentifier]bool,
+	fmKeysToReturn []string,
+) []*apiv1.SearchResult {
 	var results []*apiv1.SearchResult
 	for _, result := range searchResults {
-		// Munge the identifier to match the format used in the frontmatter index
-		// The frontmatter index stores identifiers in munged format (lowercase snake_case)
-		mungedIdentifier := wikipage.PageIdentifier(wikiidentifiers.MungeIdentifier(string(result.Identifier)))
+		mungedID := wikipage.PageIdentifier(wikiidentifiers.MungeIdentifier(string(result.Identifier)))
 
-		// Skip if page doesn't match ALL include filters
-		if len(includeFilterSets) > 0 {
-			matchesAll := true
-			for _, filterSet := range includeFilterSets {
-				if !filterSet[mungedIdentifier] {
-					matchesAll = false
-					break
-				}
-			}
-			if !matchesAll {
-				continue
-			}
+		if !matchesAllIncludeFilters(mungedID, includeFilterSets) {
+			continue
 		}
-
-		// Skip if page matches ANY exclude filter
-		if excludedPages != nil && excludedPages[mungedIdentifier] {
+		if excludedPages[mungedID] {
 			continue
 		}
 
-		// Convert highlight spans
-		var highlights []*apiv1.HighlightSpan
-		for _, hl := range result.Highlights {
-			highlights = append(highlights, &apiv1.HighlightSpan{
-				Start: hl.Start,
-				End:   hl.End,
-			})
-		}
+		apiResult := s.convertSearchResult(result, mungedID, fmKeysToReturn)
+		results = append(results, apiResult)
+	}
+	return results
+}
 
-		searchResult := &apiv1.SearchResult{
-			Identifier: string(result.Identifier),
-			Title:      result.Title,
-			Fragment:   result.Fragment,
-			Highlights: highlights,
+// matchesAllIncludeFilters checks if a page matches all include filter sets.
+func matchesAllIncludeFilters(pageID wikipage.PageIdentifier, filterSets []map[wikipage.PageIdentifier]bool) bool {
+	for _, filterSet := range filterSets {
+		if !filterSet[pageID] {
+			return false
 		}
+	}
+	return true
+}
 
-		// Populate requested frontmatter values
-		if len(req.FrontmatterKeysToReturnInResults) > 0 {
-			searchResult.Frontmatter = make(map[string]string)
-			for _, key := range req.FrontmatterKeysToReturnInResults {
-				value := s.FrontmatterIndexQueryer.GetValue(mungedIdentifier, key)
-				if value != "" {
-					searchResult.Frontmatter[key] = value
-				}
-			}
-		}
-
-		results = append(results, searchResult)
+// convertSearchResult converts a bleve search result to an API search result.
+func (s *Server) convertSearchResult(result bleve.SearchResult, mungedID wikipage.PageIdentifier, fmKeysToReturn []string) *apiv1.SearchResult {
+	var highlights []*apiv1.HighlightSpan
+	for _, hl := range result.Highlights {
+		highlights = append(highlights, &apiv1.HighlightSpan{Start: hl.Start, End: hl.End})
 	}
 
-	return &apiv1.SearchContentResponse{
-		Results: results,
-	}, nil
+	apiResult := &apiv1.SearchResult{
+		Identifier: string(result.Identifier),
+		Title:      result.Title,
+		Fragment:   result.Fragment,
+		Highlights: highlights,
+	}
+
+	if len(fmKeysToReturn) > 0 {
+		apiResult.Frontmatter = make(map[string]string)
+		for _, key := range fmKeysToReturn {
+			if value := s.FrontmatterIndexQueryer.GetValue(mungedID, key); value != "" {
+				apiResult.Frontmatter[key] = value
+			}
+		}
+	}
+	return apiResult
 }
 
 // ReadPage implements the ReadPage RPC.
@@ -746,7 +785,7 @@ func (s *Server) findUniqueIdentifier(baseIdentifier string) string {
 	}
 
 	// Try suffixes _1, _2, _3, etc.
-	for i := 1; i < 1000; i++ {
+	for i := 1; i < maxUniqueIdentifierAttempts; i++ {
 		candidate := fmt.Sprintf("%s_%d", baseIdentifier, i)
 
 		_, _, err := s.PageReaderMutator.ReadFrontMatter(candidate)

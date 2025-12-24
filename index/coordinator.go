@@ -60,7 +60,7 @@ func (c *IndexCoordinator) BulkEnqueuePagesWithCompletion(
 	}
 
 	// Track completion of frontmatter jobs (the ones normalization depends on)
-	var remaining int32 = int32(len(pageIdentifiers))
+	remaining := int32(len(pageIdentifiers))
 
 	for _, pageID := range pageIdentifiers {
 		// Capture pageID for closure

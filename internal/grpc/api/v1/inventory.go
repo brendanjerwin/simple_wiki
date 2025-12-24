@@ -95,17 +95,19 @@ func (s *Server) CreateInventoryItem(_ context.Context, req *apiv1.CreateInvento
 		return nil, status.Errorf(codes.Internal, "failed to write markdown: %v", err)
 	}
 
-	summary := fmt.Sprintf("Created inventory item '%s'", title)
-	if container != "" {
-		summary += fmt.Sprintf(" in container '%s'", container)
-	}
-	summary += "."
-
 	return &apiv1.CreateInventoryItemResponse{
 		Success:        true,
 		ItemIdentifier: identifier,
-		Summary:        summary,
+		Summary:        buildCreateItemSummary(title, container),
 	}, nil
+}
+
+// buildCreateItemSummary creates the summary for a new inventory item.
+func buildCreateItemSummary(title, container string) string {
+	if container != "" {
+		return fmt.Sprintf("Created inventory item '%s' in container '%s'.", title, container)
+	}
+	return fmt.Sprintf("Created inventory item '%s'.", title)
 }
 
 // MoveInventoryItem implements the MoveInventoryItem RPC.
