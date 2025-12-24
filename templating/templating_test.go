@@ -1158,6 +1158,34 @@ var _ = Describe("ExecuteTemplate", func() {
 		})
 	})
 
+	Context("with template parsing error", func() {
+		It("should return error with context", func() {
+			templateString := "{{ .Title }"  // Missing closing brace
+			frontmatter := wikipage.FrontMatter{
+				identifierKey: "test_page",
+				titleKey:      "Test Page",
+			}
+
+			_, err := templating.ExecuteTemplate(templateString, frontmatter, mockSite, mockIndex)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("failed to build template"))
+		})
+	})
+
+	Context("with template execution error", func() {
+		It("should return error with context", func() {
+			templateString := "{{ .NonExistentField.SubField }}"  // Will cause nil pointer during execution
+			frontmatter := wikipage.FrontMatter{
+				identifierKey: "test_page",
+				titleKey:      "Test Page",
+			}
+
+			_, err := templating.ExecuteTemplate(templateString, frontmatter, mockSite, mockIndex)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("template execution failed"))
+		})
+	})
+
 	Context("with FindByPrefix function", func() {
 		It("should execute template with FindByPrefix function", func() {
 			mockIndex.index["tag"] = map[string][]string{
