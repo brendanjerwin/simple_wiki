@@ -289,6 +289,27 @@ export const WithInventoryContainer: Story = {
             { identifier: 'red_case', title: 'Red Tool Case', depth: 2 }
           ]
         }
+      } as SearchResult,
+      {
+        identifier: 'hex_key',
+        title: 'Allen Hex Key Set',
+        fragment: 'Metric hex key set in organized case.',
+        highlights: [
+          createHighlight(7, 10), // "hex"
+        ],
+        inventoryContext: {
+          isInventoryRelated: true,
+          containerId: 'small_box',
+          containerTitle: 'Small Organizer Box',
+          path: [
+            { identifier: 'building', title: 'Main Building', depth: 0 },
+            { identifier: 'floor2', title: 'Second Floor', depth: 1 },
+            { identifier: 'storage_room', title: 'Storage Room', depth: 2 },
+            { identifier: 'shelf_a', title: 'Metal Shelf A', depth: 3 },
+            { identifier: 'big_box', title: 'Large Storage Box', depth: 4 },
+            { identifier: 'small_box', title: 'Small Organizer Box', depth: 5 }
+          ]
+        }
       } as SearchResult
     ],
     open: true,
@@ -303,7 +324,7 @@ export const WithInventoryContainer: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Search results showing items with inventory containers. The "Found In" section displays the full container path with each level clickable. Demonstrates various scenarios:\n- Full path with all titles (screwdriver & hammer)\n- Single level with no title, falls back to identifier (wrench)\n- **Mixed scenario**: Path with some titles and some identifiers (drill shows "My House › workshop_shed › Red Tool Case")'
+        story: 'Search results showing items with inventory containers. The "Found In" section displays the full container path with each level clickable. Demonstrates various scenarios:\n- Full path with all titles (screwdriver & hammer)\n- Single level with no title, falls back to identifier (wrench)\n- **Mixed scenario**: Path with some titles and some identifiers (drill shows "My House › workshop_shed › Red Tool Case")\n- **Long path truncation**: Paths with more than 4 levels show "..." for early items, keeping the deepest (most useful) levels visible (hex key shows "... › Metal Shelf A › Large Storage Box › Small Organizer Box")'
       }
     }
   }

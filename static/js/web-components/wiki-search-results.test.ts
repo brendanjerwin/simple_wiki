@@ -414,6 +414,133 @@ describe('WikiSearchResults', () => {
     });
   });
 
+  describe('when result has long container path (more than 4 levels)', () => {
+    beforeEach(async () => {
+      el.open = true;
+      el.results = [{
+        identifier: 'screwdriver',
+        title: 'Screwdriver',
+        fragment: 'A useful tool',
+        highlights: [],
+        inventoryContext: {
+          isInventoryRelated: true,
+          containerId: 'small_box',
+          containerTitle: 'Small Box',
+          path: [
+            { identifier: 'building', title: 'Main Building', depth: 0 },
+            { identifier: 'floor2', title: 'Second Floor', depth: 1 },
+            { identifier: 'storage_room', title: 'Storage Room', depth: 2 },
+            { identifier: 'shelf_a', title: 'Shelf A', depth: 3 },
+            { identifier: 'big_box', title: 'Big Box', depth: 4 },
+            { identifier: 'small_box', title: 'Small Box', depth: 5 }
+          ]
+        }
+      }] as unknown as WikiSearchResultsElement['results'];
+      await el.updateComplete;
+    });
+
+    it('should truncate path and show ellipsis', () => {
+      const foundIn = el.shadowRoot?.querySelector('.found-in');
+      expect(foundIn).to.exist;
+      
+      // Should have ellipsis
+      const ellipsis = foundIn?.querySelector('.path-ellipsis');
+      expect(ellipsis).to.exist;
+      expect(ellipsis?.textContent).to.equal('...');
+    });
+
+    it('should show last 3 items after ellipsis (total 4 visible)', () => {
+      const links = el.shadowRoot?.querySelectorAll('.found-in a');
+      expect(links).to.have.lengthOf(3); // Last 3 items
+      
+      // Should show the deepest (most useful) items
+      expect(links?.[0]?.textContent).to.equal('Shelf A');
+      expect(links?.[1]?.textContent).to.equal('Big Box');
+      expect(links?.[2]?.textContent).to.equal('Small Box');
+    });
+
+    it('should not show the early items', () => {
+      const foundIn = el.shadowRoot?.querySelector('.found-in');
+      expect(foundIn?.textContent).to.not.contain('Main Building');
+      expect(foundIn?.textContent).to.not.contain('Second Floor');
+      expect(foundIn?.textContent).to.not.contain('Storage Room');
+    });
+
+    it('should maintain correct order with ellipsis first', () => {
+      const foundIn = el.shadowRoot?.querySelector('.found-in');
+      const content = foundIn?.textContent || '';
+      
+      // Ellipsis should come before the visible items
+      const ellipsisIndex = content.indexOf('...');
+      const shelfIndex = content.indexOf('Shelf A');
+      expect(ellipsisIndex).to.be.lessThan(shelfIndex);
+    });
+  });
+
+  describe('when result has exactly 4 container levels', () => {
+    beforeEach(async () => {
+      el.open = true;
+      el.results = [{
+        identifier: 'item',
+        title: 'Item',
+        fragment: 'Some item',
+        highlights: [],
+        inventoryContext: {
+          isInventoryRelated: true,
+          containerId: 'level4',
+          containerTitle: 'Level 4',
+          path: [
+            { identifier: 'level1', title: 'Level 1', depth: 0 },
+            { identifier: 'level2', title: 'Level 2', depth: 1 },
+            { identifier: 'level3', title: 'Level 3', depth: 2 },
+            { identifier: 'level4', title: 'Level 4', depth: 3 }
+          ]
+        }
+      }] as unknown as WikiSearchResultsElement['results'];
+      await el.updateComplete;
+    });
+
+    it('should not show ellipsis when path is exactly 4 items', () => {
+      const ellipsis = el.shadowRoot?.querySelector('.path-ellipsis');
+      expect(ellipsis).to.not.exist;
+    });
+
+    it('should show all 4 items', () => {
+      const links = el.shadowRoot?.querySelectorAll('.found-in a');
+      expect(links).to.have.lengthOf(4);
+    });
+  });
+
+  describe('when result has unsorted path', () => {
+    beforeEach(async () => {
+      el.open = true;
+      el.results = [{
+        identifier: 'item',
+        title: 'Item',
+        fragment: 'Some item',
+        highlights: [],
+        inventoryContext: {
+          isInventoryRelated: true,
+          containerId: 'c',
+          containerTitle: 'C',
+          path: [
+            { identifier: 'b', title: 'B', depth: 1 },
+            { identifier: 'c', title: 'C', depth: 2 },
+            { identifier: 'a', title: 'A', depth: 0 }
+          ]
+        }
+      }] as unknown as WikiSearchResultsElement['results'];
+      await el.updateComplete;
+    });
+
+    it('should sort path by depth before rendering', () => {
+      const links = el.shadowRoot?.querySelectorAll('.found-in a');
+      expect(links?.[0]?.textContent).to.equal('A');
+      expect(links?.[1]?.textContent).to.equal('B');
+      expect(links?.[2]?.textContent).to.equal('C');
+    });
+  });
+
   describe('when result is not inventory related', () => {
     beforeEach(async () => {
       el.open = true;
