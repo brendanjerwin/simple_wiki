@@ -2,6 +2,7 @@
 package bleve
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"sort"
@@ -106,10 +107,11 @@ func (b *Index) RemovePageFromIndex(identifier wikipage.PageIdentifier) error {
 	defer b.mu.Unlock()
 	
 	// Try to delete all possible variations of the identifier to ensure complete removal
-	_ = b.index.Delete(identifier)
-	_ = b.index.Delete(mungedIdentifier)
+	err1 := b.index.Delete(identifier)
+	err2 := b.index.Delete(mungedIdentifier)
 	
-	return nil
+	// Combine any errors that occurred
+	return errors.Join(err1, err2)
 }
 
 const (
