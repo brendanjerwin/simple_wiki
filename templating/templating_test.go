@@ -569,6 +569,69 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 			Expect(result).To(ContainSubstring("Index Item"))
 		})
 	})
+
+	Describe("when reading frontmatter fails", func() {
+		var (
+			mockSite  *mockPageReader
+			mockIndex *mockFrontmatterIndex
+			result    string
+		)
+
+		BeforeEach(func() {
+			// Create a mock site that returns error for a specific container
+			mockSite = &mockPageReader{
+				pages: map[string]wikipage.FrontMatter{},
+			}
+
+			mockIndex = &mockFrontmatterIndex{
+				index:  map[string]map[string][]string{},
+				values: map[string]map[string]string{},
+			}
+
+			// Act - Try to show inventory for non-existent container
+			showInventoryFunc := templating.BuildShowInventoryContentsOf(mockSite, mockIndex, 0)
+			result = showInventoryFunc("nonexistent_container")
+		})
+
+		It("should return error message", func() {
+			Expect(result).To(ContainSubstring("page not found"))
+		})
+	})
+
+	Describe("when ConstructTemplateContextFromFrontmatter fails", func() {
+		var (
+			mockSite  *mockPageReader
+			mockIndex *mockFrontmatterIndex
+			result    string
+		)
+
+		BeforeEach(func() {
+			// Create container with invalid frontmatter structure
+			mockSite = &mockPageReader{
+				pages: map[string]wikipage.FrontMatter{
+					"bad_container": {
+						identifierKey: make(chan int), // Invalid type that can't be marshaled
+						titleKey:      "Bad Container",
+					},
+				},
+			}
+
+			mockIndex = &mockFrontmatterIndex{
+				index:  map[string]map[string][]string{},
+				values: map[string]map[string]string{},
+			}
+
+			// Act
+			showInventoryFunc := templating.BuildShowInventoryContentsOf(mockSite, mockIndex, 0)
+			result = showInventoryFunc("bad_container")
+		})
+
+		It("should return error message", func() {
+			Expect(result).NotTo(BeEmpty())
+			// Should contain some error indication
+			Expect(len(result) > 0).To(BeTrue())
+		})
+	})
 })
 
 var _ = Describe("ConstructTemplateContextFromFrontmatterWithVisited", func() {
@@ -751,6 +814,17 @@ var _ = Describe("BuildLinkTo", func() {
 		It("should include container reference", func() {
 			// Should include the container reference
 			Expect(result).To(ContainSubstring("inventory.container=current_page"))
+		})
+	})
+
+	Describe("when linking to empty identifier", func() {
+		BeforeEach(func() {
+			// Act - Link to empty identifier
+			result = linkToFunc("")
+		})
+
+		It("should return N/A", func() {
+			Expect(result).To(Equal("N/A"))
 		})
 	})
 })
