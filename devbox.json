@@ -22,7 +22,8 @@
     "android-tools@latest",
     "gradle@latest",
     "libxml2@latest",
-    "beads@latest"
+    "beads@latest",
+    "path:.#bv"
   ],
   "shell": {
     "init_hook": [
