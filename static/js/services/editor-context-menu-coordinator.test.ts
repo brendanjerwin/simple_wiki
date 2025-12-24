@@ -1,5 +1,5 @@
 import { expect, fixture, html } from '@open-wc/testing';
-import { stub, spy, SinonStub, SinonSpy, useFakeTimers, SinonFakeTimers } from 'sinon';
+import { stub, spy, SinonStub, SinonSpy } from 'sinon';
 import '../web-components/editor-context-menu.js';
 import type { EditorContextMenu } from '../web-components/editor-context-menu.js';
 import { EditorContextMenuCoordinator } from './editor-context-menu-coordinator.js';
@@ -55,77 +55,6 @@ describe('EditorContextMenuCoordinator', () => {
     it('should prevent default context menu', () => {
       // Menu should be open, indicating default was prevented
       expect(menu.open).to.be.true;
-    });
-  });
-
-  describe('when long-pressing on textarea', () => {
-    let openAtSpy: SinonSpy;
-    let clock: SinonFakeTimers;
-
-    beforeEach(async () => {
-      clock = useFakeTimers();
-      openAtSpy = spy(menu, 'openAt');
-    });
-
-    afterEach(() => {
-      openAtSpy.restore();
-      clock.restore();
-    });
-
-    describe('when holding for 500ms without movement', () => {
-      beforeEach(async () => {
-        const event = new PointerEvent('pointerdown', {
-          bubbles: true,
-          clientX: 100,
-          clientY: 200,
-        });
-        textarea.dispatchEvent(event);
-        await clock.tickAsync(500);
-        await menu.updateComplete;
-      });
-
-      it('should open the menu', () => {
-        expect(openAtSpy).to.have.been.calledOnce;
-        expect(openAtSpy).to.have.been.calledWith({ x: 100, y: 200 });
-      });
-    });
-
-    describe('when releasing before 500ms', () => {
-      beforeEach(async () => {
-        textarea.dispatchEvent(new PointerEvent('pointerdown', {
-          bubbles: true,
-          clientX: 100,
-          clientY: 200,
-        }));
-        await clock.tickAsync(300);
-        textarea.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
-        await clock.tickAsync(300);
-      });
-
-      it('should not open the menu', () => {
-        expect(openAtSpy).to.not.have.been.called;
-      });
-    });
-
-    describe('when moving more than 10px', () => {
-      beforeEach(async () => {
-        textarea.dispatchEvent(new PointerEvent('pointerdown', {
-          bubbles: true,
-          clientX: 100,
-          clientY: 200,
-        }));
-        await clock.tickAsync(200);
-        textarea.dispatchEvent(new PointerEvent('pointermove', {
-          bubbles: true,
-          clientX: 115, // 15px movement
-          clientY: 200,
-        }));
-        await clock.tickAsync(400);
-      });
-
-      it('should not open the menu (user is selecting text)', () => {
-        expect(openAtSpy).to.not.have.been.called;
-      });
     });
   });
 

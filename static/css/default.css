@@ -124,24 +124,28 @@ ul.pure-menu-list {
 }
 
 @media (max-width: 600px) {
-  div.pure-menu-horizontal {
-    flex-direction: column;
-    height: auto;
+  /* Add bottom padding on mobile to allow scrolling past bottom */
+  div#rendered {
+    padding-bottom: 50vh;
   }
 
-  div#wrap {
-    top: 5.5em;
-  }
-
-  div#menu {
-    height: 5.5em;
-  }
-
-  wiki-search#site-search {
-    margin-top: .35em;
+  body#pad textarea {
+    padding-bottom: 50vh;
   }
 }
 
+/* Mobile edit page: simplified fixed toolbar layout */
+@media (max-width: 1024px) {
+  /* Hide the main menu on mobile edit pages - toolbar provides exit */
+  body.EditPage div#menu {
+    display: none;
+  }
+
+  /* Position wrap below the fixed toolbar */
+  body.EditPage div#wrap {
+    top: 50px; /* toolbar height */
+  }
+}
 
 @media (min-width: 5em) {
 

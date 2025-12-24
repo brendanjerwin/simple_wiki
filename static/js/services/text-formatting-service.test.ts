@@ -79,6 +79,37 @@ describe('TextFormattingService', () => {
         expect(result.newText).to.equal('Hello **world**');
       });
     });
+
+    describe('when selection is already bold (toggle off)', () => {
+      let result: FormattingResult;
+
+      beforeEach(() => {
+        // Select the inner text "world" within **world**
+        result = service.wrapBold('Hello **world**!', 8, 13);
+      });
+
+      it('should remove the bold markers', () => {
+        expect(result.newText).to.equal('Hello world!');
+      });
+
+      it('should adjust selection to unwrapped text', () => {
+        expect(result.newSelectionStart).to.equal(6);
+        expect(result.newSelectionEnd).to.equal(11);
+      });
+    });
+
+    describe('when entire bold text including markers is selected', () => {
+      let result: FormattingResult;
+
+      beforeEach(() => {
+        // Select "**world**" including the markers
+        result = service.wrapBold('Hello **world**!', 6, 15);
+      });
+
+      it('should remove the bold markers', () => {
+        expect(result.newText).to.equal('Hello world!');
+      });
+    });
   });
 
   describe('wrapItalic', () => {
@@ -121,6 +152,37 @@ describe('TextFormattingService', () => {
       it('should select the placeholder text', () => {
         expect(result.newSelectionStart).to.equal(7);
         expect(result.newSelectionEnd).to.equal(13);
+      });
+    });
+
+    describe('when selection is already italic (toggle off)', () => {
+      let result: FormattingResult;
+
+      beforeEach(() => {
+        // Select the inner text "world" within *world*
+        result = service.wrapItalic('Hello *world*!', 7, 12);
+      });
+
+      it('should remove the italic markers', () => {
+        expect(result.newText).to.equal('Hello world!');
+      });
+
+      it('should adjust selection to unwrapped text', () => {
+        expect(result.newSelectionStart).to.equal(6);
+        expect(result.newSelectionEnd).to.equal(11);
+      });
+    });
+
+    describe('when entire italic text including markers is selected', () => {
+      let result: FormattingResult;
+
+      beforeEach(() => {
+        // Select "*world*" including the markers
+        result = service.wrapItalic('Hello *world*!', 6, 13);
+      });
+
+      it('should remove the italic markers', () => {
+        expect(result.newText).to.equal('Hello world!');
       });
     });
   });

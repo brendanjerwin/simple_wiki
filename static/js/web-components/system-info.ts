@@ -25,6 +25,13 @@ export class SystemInfo extends LitElement {
         transition: opacity 0.3s ease;
       }
 
+      /* Hide system-info in edit mode on mobile to avoid obstructing the textarea */
+      @media (max-width: 768px) {
+        :host-context(body.EditPage) {
+          display: none;
+        }
+      }
+
       .system-panel {
         background: #2d2d2d;
         border: 1px solid #404040;

@@ -62,25 +62,30 @@
                             <a href="#" id="tools-menu" class="pure-menu-link"><i class="fa-solid fa-bars"></i></a>
                             <ul class="pure-menu-children">
                                 <li class="pure-menu-item"><a href="/" class="pure-menu-link"><i class="fa-solid fa-home"></i> Home</a></li>
+                                <hr>
+                                {{ if .ViewPage }}
+                                <li class="pure-menu-item"><a href="/{{ .Page }}/edit" class="pure-menu-link"><i class="fas fa-pen-to-square"></i> Edit</a></li>
+                                {{ end }}
+                                {{ if .EditPage }}
+                                <li class="pure-menu-item"><a href="/{{ .Page }}/view" class="pure-menu-link"><i class="fas fa-eye"></i> View</a></li>
+                                {{ end }}
                                 <hr id="utilityMenuSection">
                                 {{ if not .EditPage }}
                                 <li class="pure-menu-item"><a href="#" class="pure-menu-link" id="editFrontmatter"><i class="fas fa-file-lines"></i> Edit Frontmatter</a></li>
-                                {{ end }}
                                 <hr>
+                                {{ end }}
                                 <li class="pure-menu-item"><a href="#" class="pure-menu-link" id="erasePage"><i class="fas fa-recycle"></i> Erase</a></li>
                             </ul>
                         </li>
-
-                        <li class="pure-menu-item pure-menu-allow-hover  {{ with .ViewPage }}pure-menu-selected{{ end }}">
-                            <a href="/{{ .Page }}/view"  class="pure-menu-link"><i class="fas fa-eye"></i> View</a>
-                        </li>
-
-                        <li class="pure-menu-item {{ with .EditPage }}pure-menu-selected{{ end }}"><a href="/{{ .Page }}/edit" class="pure-menu-link"><span id="saveEditButton"><i class="fas fa-pen-to-square"></i> Edit</span></a></li>
                     </ul>
                     {{ if .ViewPage }}
                     <wiki-search id="site-search"></wiki-search>
                     {{ end }}
                 </div>
+            {{ end }}
+
+            {{ if .EditPage }}
+            <editor-toolbar id="editor-toolbar"></editor-toolbar>
             {{ end }}
 
             <div id="wrap">
@@ -159,7 +164,9 @@
                 </div>
             </div>
         </article>
+        {{ if not .EditPage }}
         <system-info></system-info>
+        {{ end }}
         <frontmatter-editor-dialog id="frontmatter-dialog"></frontmatter-editor-dialog>
         <inventory-add-item-dialog id="inventory-add-dialog"></inventory-add-item-dialog>
         <inventory-move-item-dialog id="inventory-move-dialog"></inventory-move-item-dialog>

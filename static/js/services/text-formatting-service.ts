@@ -96,7 +96,34 @@ export class TextFormattingService {
       };
     }
 
-    // Has selection - wrap it
+    // Check if selection is already wrapped (markers just outside selection)
+    const hasMarkersOutside = before.endsWith(openMarker) && after.startsWith(closeMarker);
+    if (hasMarkersOutside) {
+      // Remove the markers (toggle off)
+      const newBefore = before.substring(0, before.length - openMarker.length);
+      const newAfter = after.substring(closeMarker.length);
+      const newText = `${newBefore}${selected}${newAfter}`;
+      return {
+        newText,
+        newSelectionStart: selectionStart - openMarker.length,
+        newSelectionEnd: selectionEnd - openMarker.length,
+      };
+    }
+
+    // Check if selection includes the markers (e.g., user selected "**text**")
+    const hasMarkersInside = selected.startsWith(openMarker) && selected.endsWith(closeMarker);
+    if (hasMarkersInside) {
+      // Remove the markers (toggle off)
+      const innerText = selected.substring(openMarker.length, selected.length - closeMarker.length);
+      const newText = `${before}${innerText}${after}`;
+      return {
+        newText,
+        newSelectionStart: selectionStart,
+        newSelectionEnd: selectionStart + innerText.length,
+      };
+    }
+
+    // Has selection, not wrapped - wrap it
     const newText = `${before}${openMarker}${selected}${closeMarker}${after}`;
     return {
       newText,
