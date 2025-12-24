@@ -253,8 +253,7 @@ export const WithInventoryContainer: Story = {
         ],
         inventoryContext: {
           containerId: 'garage_cabinet',
-          containerTitle: ''
-          // No title for this container - will fall back to identifier
+          containerTitle: '', // No title for this container - will fall back to identifier
         }
       } as SearchResult
     ],
