@@ -186,6 +186,9 @@ export class WikiSearch extends LitElement {
   handleSearchResultsClosed() {
     this.results = [];
     this.noResults = false;
+    // Focus back on search input for keyboard workflow
+    const searchInput = this.shadowRoot?.querySelector('input[type="search"]') as HTMLInputElement;
+    searchInput?.focus();
   }
 
   async handleInventoryFilterChanged(e: CustomEvent<{ inventoryOnly: boolean }>) {

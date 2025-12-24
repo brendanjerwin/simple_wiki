@@ -154,6 +154,7 @@ class WikiSearchResults extends LitElement {
   declare inventoryOnly: boolean;
 
   private _handleClickOutside: (event: Event) => void;
+  private _handleKeydown: (event: KeyboardEvent) => void;
 
   constructor() {
     super();
@@ -161,16 +162,26 @@ class WikiSearchResults extends LitElement {
     this.open = false;
     this.inventoryOnly = false;
     this._handleClickOutside = this.handleClickOutside.bind(this);
+    this._handleKeydown = this.handleKeydown.bind(this);
   }
 
   override connectedCallback() {
     super.connectedCallback();
     document.addEventListener('click', this._handleClickOutside);
+    document.addEventListener('keydown', this._handleKeydown);
   }
 
   override disconnectedCallback() {
     document.removeEventListener('click', this._handleClickOutside);
+    document.removeEventListener('keydown', this._handleKeydown);
     super.disconnectedCallback();
+  }
+
+  handleKeydown(event: KeyboardEvent) {
+    if (this.open && event.key === 'Escape') {
+      event.preventDefault();
+      this.close();
+    }
   }
 
   handleClickOutside(event: Event) {
