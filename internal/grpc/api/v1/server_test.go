@@ -2007,6 +2007,77 @@ var _ = Describe("Server", func() {
 					Expect(resp.Results[0].InventoryContext.Path[1].Title).To(Equal(""))
 				})
 			})
+
+			When("item has circular reference in container chain", func() {
+				BeforeEach(func() {
+					// Create circular reference: A -> B -> C -> A
+					mockFrontmatterIndexQueryer.GetValueResults["screwdriver"] = map[string]string{
+						"inventory.container": "container_a",
+					}
+					mockFrontmatterIndexQueryer.GetValueResults["container_a"] = map[string]string{
+						"title":               "Container A",
+						"inventory.container": "container_b",
+					}
+					mockFrontmatterIndexQueryer.GetValueResults["container_b"] = map[string]string{
+						"title":               "Container B",
+						"inventory.container": "container_c",
+					}
+					mockFrontmatterIndexQueryer.GetValueResults["container_c"] = map[string]string{
+						"title":               "Container C",
+						"inventory.container": "container_a", // Circular!
+					}
+				})
+
+				It("should detect circular reference and stop building path", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(resp).NotTo(BeNil())
+					Expect(resp.Results).To(HaveLen(1))
+					Expect(resp.Results[0].InventoryContext).NotTo(BeNil())
+					
+					// Should have stopped when it detected the circular reference
+					// Path built from immediate container to root, so order is: container_c, container_b, container_a
+					Expect(resp.Results[0].InventoryContext.Path).To(HaveLen(3))
+					Expect(resp.Results[0].InventoryContext.Path[0].Identifier).To(Equal("container_c"))
+					Expect(resp.Results[0].InventoryContext.Path[1].Identifier).To(Equal("container_b"))
+					Expect(resp.Results[0].InventoryContext.Path[2].Identifier).To(Equal("container_a"))
+				})
+			})
+
+			When("item has container chain exceeding max depth", func() {
+				BeforeEach(func() {
+					// Create a chain of 25 containers (exceeds maxDepth of 20)
+					mockFrontmatterIndexQueryer.GetValueResults["screwdriver"] = map[string]string{
+						"inventory.container": "container_0",
+					}
+					for i := 0; i < 25; i++ {
+						containerID := fmt.Sprintf("container_%d", i)
+						nextID := fmt.Sprintf("container_%d", i+1)
+						mockFrontmatterIndexQueryer.GetValueResults[containerID] = map[string]string{
+							"title":               fmt.Sprintf("Container %d", i),
+							"inventory.container": nextID,
+						}
+					}
+					// Last container has no parent
+					mockFrontmatterIndexQueryer.GetValueResults["container_25"] = map[string]string{
+						"title": "Container 25",
+					}
+				})
+
+				It("should stop at max depth of 20", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(resp).NotTo(BeNil())
+					Expect(resp.Results).To(HaveLen(1))
+					Expect(resp.Results[0].InventoryContext).NotTo(BeNil())
+					
+					// Should have stopped at maxDepth (20)
+					Expect(resp.Results[0].InventoryContext.Path).To(HaveLen(20))
+					
+					// Verify depth values are correct (0 to 19)
+					for i := 0; i < 20; i++ {
+						Expect(resp.Results[0].InventoryContext.Path[i].Depth).To(Equal(int32(i)))
+					}
+				})
+			})
 		})
 
 		When("result is not an inventory item", func() {

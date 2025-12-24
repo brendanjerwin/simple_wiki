@@ -523,7 +523,7 @@ func (s *Server) validateSearchRequest(req *apiv1.SearchContentRequest) error {
 		return status.Error(codes.Internal, "Search index is not available")
 	}
 	
-	// FrontmatterIndexQueryer is required for search operations (inventory context, frontmatter filtering)
+	// FrontmatterIndexQueryer is required for search operations
 	v = reflect.ValueOf(s.FrontmatterIndexQueryer)
 	if s.FrontmatterIndexQueryer == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
 		return status.Error(codes.Internal, "Frontmatter index is not available")
@@ -635,8 +635,6 @@ func (s *Server) convertSearchResult(result bleve.SearchResult, mungedID wikipag
 	if len(fmKeysToReturn) > 0 {
 		apiResult.Frontmatter = make(map[string]string)
 		
-		// FrontmatterIndexQueryer is required when frontmatter keys are requested
-		// It should have been validated earlier in the call chain
 		for _, key := range fmKeysToReturn {
 			if value := s.FrontmatterIndexQueryer.GetValue(mungedID, key); value != "" {
 				apiResult.Frontmatter[key] = value
@@ -644,9 +642,6 @@ func (s *Server) convertSearchResult(result bleve.SearchResult, mungedID wikipag
 		}
 	}
 	
-	// Populate inventory context if this is an inventory item
-	// FrontmatterIndexQueryer is required for inventory context
-	// It should have been validated earlier in the call chain
 	apiResult.InventoryContext = s.buildInventoryContext(mungedID)
 	
 	return apiResult
@@ -654,10 +649,7 @@ func (s *Server) convertSearchResult(result bleve.SearchResult, mungedID wikipag
 
 // buildInventoryContext builds inventory context for a search result if applicable.
 // Returns nil only when the item is not inventory-related (no inventory.container in frontmatter).
-// Panics if FrontmatterIndexQueryer is not properly configured - this is a dependency injection error.
 func (s *Server) buildInventoryContext(itemID wikipage.PageIdentifier) *apiv1.InventoryContext {
-	// Check if this item has a container (inventory.container key)
-	// Only return nil here - indicating the item is NOT inventory-related
 	containerID := s.FrontmatterIndexQueryer.GetValue(itemID, "inventory.container")
 	if containerID == "" {
 		return nil
