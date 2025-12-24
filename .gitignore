@@ -77,3 +77,6 @@ android/.DS_Store
 # Android SDK (installed via devbox script)
 .android-sdk/
 android/app/release-key.keystore
+
+# bv (beads viewer) local config and caches
+.bv/

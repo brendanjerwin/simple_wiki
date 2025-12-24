@@ -216,3 +216,106 @@ export const InteractiveTesting: Story = {
     }
   }
 };
+
+export const WithInventoryContainer: Story = {
+  args: {
+    results: [
+      {
+        identifier: 'screwdriver',
+        title: 'Phillips Head Screwdriver',
+        fragment: 'A versatile screwdriver with a #2 Phillips head, perfect for most household tasks.',
+        highlights: [
+          createHighlight(14, 25), // "screwdriver"
+        ],
+        inventoryContext: {
+          isInventoryRelated: true,
+          path: [
+            { identifier: 'house', title: 'My House', depth: 0 },
+            { identifier: 'garage', title: 'Main Garage', depth: 1 },
+            { identifier: 'toolbox', title: 'My Toolbox', depth: 2 }
+          ]
+        }
+      } as SearchResult,
+      {
+        identifier: 'hammer',
+        title: 'Claw Hammer',
+        fragment: 'Standard 16oz claw hammer for general construction and demolition work.',
+        highlights: [
+          createHighlight(18, 24), // "hammer"
+        ],
+        inventoryContext: {
+          isInventoryRelated: true,
+          path: [
+            { identifier: 'house', title: 'My House', depth: 0 },
+            { identifier: 'garage', title: 'Main Garage', depth: 1 },
+            { identifier: 'toolbox', title: 'My Toolbox', depth: 2 }
+          ]
+        }
+      } as SearchResult,
+      {
+        identifier: 'wrench',
+        title: 'Adjustable Wrench',
+        fragment: '10-inch adjustable wrench for nuts and bolts.',
+        highlights: [
+          createHighlight(27, 33), // "wrench"
+        ],
+        inventoryContext: {
+          isInventoryRelated: true,
+          path: [
+            { identifier: 'garage_cabinet', title: '', depth: 0 }
+          ]
+        }
+      } as SearchResult,
+      {
+        identifier: 'power_drill',
+        title: 'Cordless Power Drill',
+        fragment: '18V cordless drill with battery and charger.',
+        highlights: [
+          createHighlight(19, 24), // "drill"
+        ],
+        inventoryContext: {
+          isInventoryRelated: true,
+          path: [
+            { identifier: 'house', title: 'My House', depth: 0 },
+            { identifier: 'workshop_shed', title: '', depth: 1 },
+            { identifier: 'red_case', title: 'Red Tool Case', depth: 2 }
+          ]
+        }
+      } as SearchResult,
+      {
+        identifier: 'hex_key',
+        title: 'Allen Hex Key Set',
+        fragment: 'Metric hex key set in organized case.',
+        highlights: [
+          createHighlight(7, 10), // "hex"
+        ],
+        inventoryContext: {
+          isInventoryRelated: true,
+          path: [
+            { identifier: 'building', title: 'Main Building', depth: 0 },
+            { identifier: 'floor2', title: 'Second Floor', depth: 1 },
+            { identifier: 'storage_room', title: 'Storage Room', depth: 2 },
+            { identifier: 'shelf_a', title: 'Metal Shelf A', depth: 3 },
+            { identifier: 'big_box', title: 'Large Storage Box', depth: 4 },
+            { identifier: 'small_box', title: 'Small Organizer Box', depth: 5 }
+          ]
+        }
+      } as SearchResult
+    ],
+    open: true,
+  },
+  render: (args) => html`
+    <wiki-search-results 
+      .results="${args.results}"
+      .open="${args.open}"
+      @search-results-closed="${action('search-results-closed')}">
+    </wiki-search-results>
+  `,
+  parameters: {
+    docs: {
+      description: {
+        story: 'Search results showing items with inventory containers. The "In" section displays the full container path with each level clickable. Demonstrates various scenarios:\n- Full path with all titles (screwdriver & hammer)\n- Single level with no title, falls back to identifier (wrench)\n- **Mixed scenario**: Path with some titles and some identifiers (drill shows "My House › workshop_shed › Red Tool Case")\n- **Long path truncation**: Paths with more than 4 levels show "..." for early items, keeping the deepest (most useful) levels visible (hex key shows "... › Metal Shelf A › Large Storage Box › Small Organizer Box")'
+      }
+    }
+  }
+};

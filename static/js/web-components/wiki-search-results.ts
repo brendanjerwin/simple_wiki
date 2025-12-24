@@ -116,6 +116,7 @@ class WikiSearchResults extends LitElement {
             flex-direction: row;
             align-items: baseline;
             gap: 4px;
+            flex-wrap: wrap;
         }
         .found-in strong {
             color: #333;
@@ -127,6 +128,15 @@ class WikiSearchResults extends LitElement {
         }
         .found-in a:hover {
             text-decoration: underline;
+        }
+        .path-separator {
+            color: #999;
+            margin: 0 2px;
+        }
+        .path-ellipsis {
+            color: #999;
+            font-weight: normal;
+            user-select: none;
         }
         .no-results {
             text-align: center;
@@ -224,6 +234,31 @@ class WikiSearchResults extends LitElement {
   }
 
   /**
+   * Process container path for display, sorting by depth and truncating if too long.
+   * Keeps the last (deepest) items which are most useful, replacing early items with "...".
+   * @param path - Array of container path elements
+   * @returns Processed path ready for rendering
+   */
+  private processContainerPath(path: ContainerPathElement[]) {
+    if (!path || path.length === 0) return [];
+    
+    // Sort by depth to ensure correct ordering
+    const sorted = [...path].sort((a, b) => (a.depth || 0) - (b.depth || 0));
+    
+    const maxVisible = 4;
+    if (sorted.length <= maxVisible) {
+      return sorted;
+    }
+    
+    // Too many items - keep the last (deepest) ones and add ellipsis
+    const numToShow = maxVisible - 1; // Reserve one slot for "..."
+    const visibleItems = sorted.slice(-numToShow);
+    
+    // Add ellipsis marker at the beginning
+    return [{ isEllipsis: true }, ...visibleItems];
+  }
+
+  /**
    * Render a fragment with highlights as HTML template
    * @param fragment - Plain text fragment
    * @param highlights - Array of highlight spans
@@ -305,8 +340,20 @@ class WikiSearchResults extends LitElement {
                   : this.results.map(result => html`
                     <a href="/${result.identifier}" class="border-radius-small">${result.title}</a>
                     <div class="item_content border-radius-small">
-                        ${result.frontmatter?.['inventory.container']
-                          ? html`<div class="found-in"><strong>Found In:</strong> <a href="/${result.frontmatter['inventory.container']}">${result.frontmatter['inventory.container']}</a></div>`
+                        ${result.inventoryContext?.isInventoryRelated
+                          ? html`<div class="found-in">
+                              <strong>In:</strong>
+                              ${result.inventoryContext.path && result.inventoryContext.path.length > 0
+                                ? this.processContainerPath(result.inventoryContext.path).map((element, index) => html`
+                                    ${index > 0 ? html`<span class="path-separator">›</span>` : ''}
+                                    ${element.isEllipsis
+                                      ? html`<span class="path-ellipsis">...</span>`
+                                      : html`<a href="/${element.identifier}">${element.title || element.identifier}</a>`
+                                    }
+                                  `)
+                                : ''
+                              }
+                            </div>`
                           : ''}
                         ${this.renderFragment(result.fragment, result.highlights)}
                     </div>
