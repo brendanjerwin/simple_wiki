@@ -52,12 +52,20 @@ describe('InventoryMoveItemDialog', () => {
       expect(el.currentContainer).to.equal('');
     });
 
-    it('should have empty newContainer by default', () => {
-      expect(el.newContainer).to.equal('');
+    it('should have empty searchQuery by default', () => {
+      expect(el.searchQuery).to.equal('');
     });
 
-    it('should not be loading by default', () => {
-      expect(el.loading).to.be.false;
+    it('should have empty searchResults by default', () => {
+      expect(el.searchResults).to.deep.equal([]);
+    });
+
+    it('should have searchLoading false by default', () => {
+      expect(el.searchLoading).to.be.false;
+    });
+
+    it('should have movingTo null by default', () => {
+      expect(el.movingTo).to.be.null;
     });
 
     it('should have no error by default', () => {
@@ -83,8 +91,16 @@ describe('InventoryMoveItemDialog', () => {
         expect(el.currentContainer).to.equal('drawer_kitchen');
       });
 
-      it('should clear newContainer', () => {
-        expect(el.newContainer).to.equal('');
+      it('should clear searchQuery', () => {
+        expect(el.searchQuery).to.equal('');
+      });
+
+      it('should clear searchResults', () => {
+        expect(el.searchResults).to.deep.equal([]);
+      });
+
+      it('should set movingTo to null', () => {
+        expect(el.movingTo).to.be.null;
       });
 
       it('should clear error', () => {
@@ -96,7 +112,7 @@ describe('InventoryMoveItemDialog', () => {
   describe('close', () => {
     beforeEach(() => {
       el.openDialog('screwdriver', 'drawer_kitchen');
-      el.newContainer = 'toolbox_garage';
+      el.searchQuery = 'toolbox';
       el.close();
     });
 
@@ -104,8 +120,16 @@ describe('InventoryMoveItemDialog', () => {
       expect(el.open).to.be.false;
     });
 
-    it('should clear newContainer', () => {
-      expect(el.newContainer).to.equal('');
+    it('should clear searchQuery', () => {
+      expect(el.searchQuery).to.equal('');
+    });
+
+    it('should clear searchResults', () => {
+      expect(el.searchResults).to.deep.equal([]);
+    });
+
+    it('should set movingTo to null', () => {
+      expect(el.movingTo).to.be.null;
     });
 
     it('should clear error', () => {
@@ -170,9 +194,9 @@ describe('InventoryMoveItemDialog', () => {
         expect(containerInput?.value).to.equal('drawer_kitchen');
       });
 
-      it('should render new container field', () => {
-        const newContainerInput = el.shadowRoot?.querySelector('input[name="newContainer"]');
-        expect(newContainerInput).to.exist;
+      it('should render search query field', () => {
+        const searchInput = el.shadowRoot?.querySelector('input[name="searchQuery"]');
+        expect(searchInput).to.exist;
       });
 
       it('should render cancel button', () => {
@@ -180,29 +204,15 @@ describe('InventoryMoveItemDialog', () => {
         expect(cancelBtn?.textContent).to.contain('Cancel');
       });
 
-      it('should render move button', () => {
-        const moveBtn = el.shadowRoot?.querySelector('.button-primary');
-        expect(moveBtn?.textContent).to.contain('Move');
+      it('should render footer hint', () => {
+        const footerHint = el.shadowRoot?.querySelector('.footer-hint');
+        expect(footerHint?.textContent).to.contain('Select a destination');
       });
     });
 
     describe('when dialog is closed', () => {
       it('should not have open attribute', () => {
         expect(el.hasAttribute('open')).to.be.false;
-      });
-    });
-
-    describe('when loading', () => {
-      beforeEach(async () => {
-        el.openDialog('screwdriver', 'drawer_kitchen');
-        el.newContainer = 'toolbox_garage';
-        el.loading = true;
-        await el.updateComplete;
-      });
-
-      it('should disable the move button', () => {
-        const moveBtn = el.shadowRoot?.querySelector('.button-primary') as HTMLButtonElement;
-        expect(moveBtn?.disabled).to.be.true;
       });
     });
 
@@ -218,45 +228,121 @@ describe('InventoryMoveItemDialog', () => {
         expect(errorDiv?.textContent).to.contain('Container not found');
       });
     });
-  });
 
-  describe('form validation', () => {
-    describe('when new container is empty', () => {
+    describe('when searchLoading is true', () => {
       beforeEach(async () => {
         el.openDialog('screwdriver', 'drawer_kitchen');
-        el.newContainer = '';
+        el.searchQuery = 'toolbox';
+        el.searchLoading = true;
         await el.updateComplete;
       });
 
-      it('should disable the move button', () => {
-        const moveBtn = el.shadowRoot?.querySelector('.button-primary') as HTMLButtonElement;
-        expect(moveBtn?.disabled).to.be.true;
+      it('should show loading message', () => {
+        const resultsHeader = el.shadowRoot?.querySelector('.search-results-header');
+        expect(resultsHeader?.textContent).to.contain('Searching');
       });
     });
 
-    describe('when new container has value', () => {
+    describe('when searchQuery has value but no results', () => {
       beforeEach(async () => {
         el.openDialog('screwdriver', 'drawer_kitchen');
-        el.newContainer = 'toolbox_garage';
+        el.searchQuery = 'nonexistent';
+        el.searchResults = [];
+        el.searchLoading = false;
         await el.updateComplete;
       });
 
-      it('should enable the move button', () => {
-        const moveBtn = el.shadowRoot?.querySelector('.button-primary') as HTMLButtonElement;
-        expect(moveBtn?.disabled).to.be.false;
+      it('should show no results message', () => {
+        const noResults = el.shadowRoot?.querySelector('.no-results');
+        expect(noResults?.textContent).to.contain('No containers found');
       });
     });
 
-    describe('when new container is same as current', () => {
+    describe('when search results exist', () => {
       beforeEach(async () => {
         el.openDialog('screwdriver', 'drawer_kitchen');
-        el.newContainer = 'drawer_kitchen';
+        el.searchQuery = 'toolbox';
+        el.searchResults = [
+          {
+            identifier: 'toolbox_garage',
+            title: 'Garage Toolbox',
+            fragment: '',
+            highlights: [],
+            frontmatter: { 'inventory.container': 'garage' },
+          } as unknown as import('../gen/api/v1/search_pb.js').SearchResult,
+          {
+            identifier: 'toolbox_shed',
+            title: 'Shed Toolbox',
+            fragment: '',
+            highlights: [],
+            frontmatter: {},
+          } as unknown as import('../gen/api/v1/search_pb.js').SearchResult,
+        ];
         await el.updateComplete;
       });
 
-      it('should disable the move button', () => {
-        const moveBtn = el.shadowRoot?.querySelector('.button-primary') as HTMLButtonElement;
-        expect(moveBtn?.disabled).to.be.true;
+      it('should display search results header', () => {
+        const resultsHeader = el.shadowRoot?.querySelector('.search-results-header');
+        expect(resultsHeader?.textContent).to.contain('2 containers found');
+      });
+
+      it('should display result items', () => {
+        const resultItems = el.shadowRoot?.querySelectorAll('.search-result-item');
+        expect(resultItems?.length).to.equal(2);
+      });
+
+      it('should display result title', () => {
+        const resultTitle = el.shadowRoot?.querySelector('.result-title');
+        expect(resultTitle?.textContent).to.equal('Garage Toolbox');
+      });
+
+      it('should display result container if present', () => {
+        const resultContainer = el.shadowRoot?.querySelector('.result-container');
+        expect(resultContainer?.textContent).to.contain('garage');
+      });
+
+      it('should render Move To buttons', () => {
+        const moveButtons = el.shadowRoot?.querySelectorAll('.move-to-button');
+        expect(moveButtons?.length).to.equal(2);
+        expect(moveButtons?.[0]?.textContent).to.contain('Move To');
+      });
+    });
+
+    describe('when movingTo is set', () => {
+      beforeEach(async () => {
+        el.openDialog('screwdriver', 'drawer_kitchen');
+        el.searchQuery = 'toolbox';
+        el.searchResults = [
+          {
+            identifier: 'toolbox_garage',
+            title: 'Garage Toolbox',
+            fragment: '',
+            highlights: [],
+            frontmatter: {},
+          } as unknown as import('../gen/api/v1/search_pb.js').SearchResult,
+        ];
+        el.movingTo = 'toolbox_garage';
+        await el.updateComplete;
+      });
+
+      it('should show Moving... on active button', () => {
+        const moveButton = el.shadowRoot?.querySelector('.move-to-button');
+        expect(moveButton?.textContent).to.contain('Moving...');
+      });
+
+      it('should disable all Move To buttons', () => {
+        const moveButton = el.shadowRoot?.querySelector('.move-to-button') as HTMLButtonElement;
+        expect(moveButton?.disabled).to.be.true;
+      });
+
+      it('should disable search input', () => {
+        const searchInput = el.shadowRoot?.querySelector('input[name="searchQuery"]') as HTMLInputElement;
+        expect(searchInput?.disabled).to.be.true;
+      });
+
+      it('should disable cancel button', () => {
+        const cancelBtn = el.shadowRoot?.querySelector('.button-secondary') as HTMLButtonElement;
+        expect(cancelBtn?.disabled).to.be.true;
       });
     });
   });

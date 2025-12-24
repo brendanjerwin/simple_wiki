@@ -104,6 +104,10 @@ func (f *Index) recursiveAddFrontmatter(identifier wikipage.PageIdentifier, keyP
 	case string:
 		f.saveToIndex(identifier, keyPath, v)
 	case []any:
+		// Save empty string to ensure QueryKeyExistence works for empty arrays
+		if len(v) == 0 {
+			f.saveToIndex(identifier, keyPath, "")
+		}
 		for _, array := range v {
 			switch str := array.(type) {
 			case string:
@@ -111,6 +115,11 @@ func (f *Index) recursiveAddFrontmatter(identifier wikipage.PageIdentifier, keyP
 			default:
 				return fmt.Errorf("frontmatter indexer: invalid array element type for page %q key %q (type: %T)", identifier, keyPath, array)
 			}
+		}
+	case bool:
+		// Only index true values - we rely on key existence for filtering containers
+		if v {
+			f.saveToIndex(identifier, keyPath, "true")
 		}
 	default:
 		return fmt.Errorf("frontmatter indexer: invalid value type for page %q key %q (type: %T)", identifier, keyPath, v)

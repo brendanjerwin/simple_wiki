@@ -645,12 +645,14 @@ func createDeepNestedIndex() *mockFrontmatterIndex {
 		index:  map[string]map[string][]string{},
 		values: make(map[string]map[string]string),
 	}
-	
+
 	// Set up values for all levels
 	for i := 0; i <= maxTestLevels; i++ {
 		levelKey := fmt.Sprintf(levelTemplate, i)
 		mockIndex.values[levelKey] = map[string]string{
 			titleKey: fmt.Sprintf("Level %d", i),
+			// Mark all levels as containers so they get processed recursively
+			"inventory.is_container": "true",
 		}
 		if i < maxTestLevels {
 			nextLevel := fmt.Sprintf(levelTemplate, i+1)
@@ -732,9 +734,9 @@ var _ = Describe("BuildLinkTo", func() {
 
 	Describe("when current page is container and linking to inventory item with spaces", func() {
 		BeforeEach(func() {
-			// Setup current page as container
+			// Setup current page as container (using is_container flag)
 			mockIndex.values["current_page"] = map[string]string{
-				"inventory.items": "some_item",
+				"inventory.is_container": "true",
 			}
 
 			// Act

@@ -392,7 +392,13 @@ func (s *Server) buildInventoryItem(itemID, containerID string) *apiv1.Inventory
 		item.Title = title
 	}
 
-	item.IsContainer = len(s.FrontmatterIndexQueryer.QueryExactMatch("inventory.container", itemID)) > 0
+	// Primary: Check explicit is_container field
+	if s.FrontmatterIndexQueryer.GetValue(itemID, "inventory.is_container") == "true" {
+		item.IsContainer = true
+	} else {
+		// Fallback for legacy: items reference this as their container
+		item.IsContainer = len(s.FrontmatterIndexQueryer.QueryExactMatch("inventory.container", itemID)) > 0
+	}
 
 	return item
 }

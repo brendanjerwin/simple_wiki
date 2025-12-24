@@ -28,6 +28,9 @@ type InventoryItemParams struct {
 const InventoryItemMarkdownTemplate = `{{if .Description}}
 {{.Description}}
 {{end}}
+{{if .Inventory.Container }}
+### Goes in: {{LinkTo .Inventory.Container }}
+{{end}}
 {{if IsContainer .Identifier }}
 ## Contents
 {{ ShowInventoryContentsOf .Identifier }}
@@ -62,12 +65,12 @@ func (s *Site) CreateInventoryItemPage(params InventoryItemParams) (*wikipage.Pa
 	}
 	fm["title"] = title
 
-	// Set up inventory structure
+	// Set up inventory structure - only add container reference, not items array
+	// Items array and is_container are only for actual containers
 	inventory := make(map[string]any)
 	if params.Container != "" {
 		inventory["container"] = wikiidentifiers.MungeIdentifier(params.Container)
 	}
-	inventory["items"] = []string{}
 	fm[inventoryKeyPath] = inventory
 
 	// Build page content
@@ -119,13 +122,10 @@ func buildInventoryItemPageText(fm map[string]any) (string, error) {
 
 // EnsureInventoryFrontmatterStructure ensures the frontmatter has the proper inventory structure.
 // This is used when creating inventory items from URL params.
+// Note: This only ensures the inventory map exists, not the items array.
+// Items array and is_container are only added for actual containers.
 func EnsureInventoryFrontmatterStructure(fm map[string]any) {
 	if _, exists := fm[inventoryKeyPath]; !exists {
 		fm[inventoryKeyPath] = make(map[string]any)
-	}
-	if inventory, ok := fm[inventoryKeyPath].(map[string]any); ok {
-		if _, exists := inventory["items"]; !exists {
-			inventory["items"] = []string{}
-		}
 	}
 }

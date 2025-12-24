@@ -275,11 +275,13 @@ func BuildIsContainer(query wikipage.IQueryFrontmatterIndex) func(string) bool {
 			return false
 		}
 
-		if len(query.QueryExactMatch("inventory.container", identifier)) > 0 {
+		// Primary: Check explicit is_container field
+		if query.GetValue(identifier, "inventory.is_container") == "true" {
 			return true
 		}
 
-		if query.GetValue(identifier, "inventory.items") != "" {
+		// Fallback for legacy: items reference this as their container
+		if len(query.QueryExactMatch("inventory.container", identifier)) > 0 {
 			return true
 		}
 

@@ -118,6 +118,9 @@ var _ = Describe("InventoryNormalizationJob", func() {
 					if key == "inventory.container" {
 						return []string{}
 					}
+					if key == "inventory.is_container" {
+						return []string{}
+					}
 					return nil
 				}
 
@@ -135,6 +138,9 @@ var _ = Describe("InventoryNormalizationJob", func() {
 			BeforeEach(func() {
 				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
 					if key == "inventory.items" {
+						return []string{}
+					}
+					if key == "inventory.is_container" {
 						return []string{}
 					}
 					if key == "inventory.container" {
@@ -172,7 +178,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 					},
 				}
 
-				items = job.getContainerItems("drawer")
+				items = job.GetNormalizer().GetContainerItems("drawer")
 			})
 
 			It("should return all items", func() {
@@ -185,7 +191,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 			var items []string
 
 			BeforeEach(func() {
-				items = job.getContainerItems("nonexistent")
+				items = job.GetNormalizer().GetContainerItems("nonexistent")
 			})
 
 			It("should return nil", func() {
@@ -203,7 +209,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 					},
 				}
 
-				items = job.getContainerItems("page")
+				items = job.GetNormalizer().GetContainerItems("page")
 			})
 
 			It("should return nil", func() {
@@ -221,7 +227,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 			var err error
 
 			BeforeEach(func() {
-				err = job.createItemPage("my-screwdriver", "tool_drawer")
+				err = job.GetNormalizer().CreateItemPage("my-screwdriver", "tool_drawer")
 			})
 
 			It("should not return an error", func() {
@@ -249,13 +255,21 @@ var _ = Describe("InventoryNormalizationJob", func() {
 			It("should write markdown content", func() {
 				Expect(mockDeps.writtenPages["my_screwdriver"].markdown).NotTo(BeEmpty())
 			})
+
+			It("should write markdown with title template", func() {
+				Expect(mockDeps.writtenPages["my_screwdriver"].markdown).To(ContainSubstring("# {{or .Title .Identifier}}"))
+			})
+
+			It("should write markdown with inventory template", func() {
+				Expect(mockDeps.writtenPages["my_screwdriver"].markdown).To(ContainSubstring("IsContainer"))
+			})
 		})
 
 		When("creating an item without a container", func() {
 			var err error
 
 			BeforeEach(func() {
-				err = job.createItemPage("standalone-item", "")
+				err = job.GetNormalizer().CreateItemPage("standalone-item", "")
 			})
 
 			It("should not return an error", func() {
@@ -327,7 +341,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 			var err error
 
 			BeforeEach(func() {
-				// Set up a container with items
+				// Set up a container with items (legacy style - no is_container field)
 				mockDeps.pages["tool_box"] = &mockPageData{
 					frontmatter: map[string]any{
 						"title": "Tool Box",
@@ -340,6 +354,9 @@ var _ = Describe("InventoryNormalizationJob", func() {
 				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
 					if key == "inventory.items" {
 						return []string{"tool_box"}
+					}
+					if key == "inventory.is_container" {
+						return []string{}
 					}
 					return []string{}
 				}
@@ -372,7 +389,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 			var err error
 
 			BeforeEach(func() {
-				// Container with items
+				// Container with items (legacy style - no is_container field)
 				mockDeps.pages["tool_box"] = &mockPageData{
 					frontmatter: map[string]any{
 						"title": "Tool Box",
@@ -384,7 +401,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 				// Existing page for the item
 				mockDeps.pages["hammer"] = &mockPageData{
 					frontmatter: map[string]any{
-						"title": "Hammer",
+						"title":      "Hammer",
 						"identifier": "hammer",
 					},
 				}
@@ -392,6 +409,9 @@ var _ = Describe("InventoryNormalizationJob", func() {
 				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
 					if key == "inventory.items" {
 						return []string{"tool_box"}
+					}
+					if key == "inventory.is_container" {
+						return []string{}
 					}
 					return []string{}
 				}
@@ -407,6 +427,41 @@ var _ = Describe("InventoryNormalizationJob", func() {
 				// hammer should not be in writtenPages (only audit report should be written)
 				_, hammerWritten := mockDeps.writtenPages["hammer"]
 				Expect(hammerWritten).To(BeFalse())
+			})
+		})
+
+		When("page has empty inventory.items array", func() {
+			var err error
+
+			BeforeEach(func() {
+				// Page with empty items array should NOT be marked as container
+				mockDeps.pages["empty_box"] = &mockPageData{
+					frontmatter: map[string]any{
+						"title": "Empty Box",
+						"inventory": map[string]any{
+							"items": []any{},
+						},
+					},
+				}
+
+				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
+					if key == "inventory.items" {
+						return []string{"empty_box"}
+					}
+					return []string{}
+				}
+
+				err = job.Execute()
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should not set is_container on page with empty items", func() {
+				// The page should not be modified (only audit report written)
+				_, boxWritten := mockDeps.writtenPages["empty_box"]
+				Expect(boxWritten).To(BeFalse(), "page with empty items should not be modified")
 			})
 		})
 
@@ -601,7 +656,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 					},
 				}
 
-				items = job.getContainerItems("drawer")
+				items = job.GetNormalizer().GetContainerItems("drawer")
 			})
 
 			It("should return all items", func() {
@@ -623,7 +678,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 					},
 				}
 
-				items = job.getContainerItems("drawer")
+				items = job.GetNormalizer().GetContainerItems("drawer")
 			})
 
 			It("should return nil", func() {
@@ -654,24 +709,6 @@ var _ = Describe("InventoryNormalizationJob", func() {
 			It("should return items referencing the container", func() {
 				Expect(items).To(HaveLen(2))
 				Expect(items).To(ContainElements("screwdriver", "hammer"))
-			})
-		})
-	})
-
-	Describe("buildNormalizationItemMarkdown", func() {
-		When("called", func() {
-			var markdown string
-
-			BeforeEach(func() {
-				markdown = buildNormalizationItemMarkdown()
-			})
-
-			It("should contain the title template", func() {
-				Expect(markdown).To(ContainSubstring("# {{or .Title .Identifier}}"))
-			})
-
-			It("should contain the inventory template", func() {
-				Expect(markdown).To(ContainSubstring("IsContainer"))
 			})
 		})
 	})

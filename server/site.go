@@ -196,9 +196,16 @@ func (s *Site) InitializeIndexing() error {
 		pageIdentifiers[i] = file.Name()
 	}
 
-	// Start background indexing
-	s.IndexCoordinator.BulkEnqueuePages(pageIdentifiers, index.Add)
+	// Start background indexing with completion callback to chain the normalization job
+	s.IndexCoordinator.BulkEnqueuePagesWithCompletion(pageIdentifiers, index.Add, func() {
+		// Run inventory normalization after frontmatter indexing completes
+		// This ensures the frontmatter index is fully populated before migration runs
+		normJob := NewInventoryNormalizationJob(s, s.FrontmatterIndexQueryer, s.Logger, s.JobQueueCoordinator)
+		s.JobQueueCoordinator.EnqueueJob(normJob)
+		s.Logger.Info("Inventory normalization job queued after indexing completed")
+	})
 	s.Logger.Info("Background indexing started for %d pages. Application is ready.", len(files))
+
 	return nil
 }
 
@@ -665,6 +672,12 @@ func (s *Site) savePageAndIndex(p *wikipage.Page) error {
 	// Enqueue indexing jobs for both frontmatter and bleve indexes
 	if s.IndexCoordinator != nil {
 		s.IndexCoordinator.EnqueueIndexJob(p.Identifier, index.Add)
+	}
+
+	// Enqueue per-page inventory normalization job
+	if s.JobQueueCoordinator != nil {
+		normJob := NewPageInventoryNormalizationJob(p.Identifier, s, s.Logger)
+		s.JobQueueCoordinator.EnqueueJob(normJob)
 	}
 
 	return nil

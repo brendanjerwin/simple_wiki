@@ -380,6 +380,30 @@ var _ = Describe("Index", func() {
 				Expect(results).To(ContainElement("array_page"))
 			})
 		})
+
+		Describe("when frontmatter has empty array values", func() {
+			var err error
+
+			BeforeEach(func() {
+				mockReader.AddPage("container-page", wikipage.FrontMatter{
+					"identifier": "container-page",
+					"title":      "Empty Container",
+					"inventory": map[string]any{
+						"items": []any{},
+					},
+				})
+				err = index.AddPageToIndex("container-page")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should allow key existence queries for empty arrays", func() {
+				results := index.QueryKeyExistence("inventory.items")
+				Expect(results).To(ContainElement("container_page"))
+			})
+		})
 	})
 })
 

@@ -201,13 +201,19 @@ func (b *Index) Query(query string) ([]SearchResult, error) {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 
+	// Exact match on title (boosted highest)
 	titleQuery := bleve.NewMatchQuery(query)
 	titleQuery.SetField("title")
 	titleQuery.SetBoost(2.0)
 
+	// Prefix match on title (for partial matches like "Container" → "ContainerFoo")
+	titlePrefixQuery := bleve.NewPrefixQuery(strings.ToLower(query))
+	titlePrefixQuery.SetField("title")
+	titlePrefixQuery.SetBoost(1.5)
+
 	overallQuery := bleve.NewQueryStringQuery(query)
 
-	q := bleve.NewDisjunctionQuery(titleQuery, overallQuery)
+	q := bleve.NewDisjunctionQuery(titleQuery, titlePrefixQuery, overallQuery)
 
 	searchReq := bleve.NewSearchRequest(q)
 	searchReq.Highlight = bleve.NewHighlight()

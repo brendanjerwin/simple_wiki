@@ -9,11 +9,9 @@ import (
 
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
-	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
 	"github.com/pelletier/go-toml/v2"
-	"github.com/stoewer/go-strcase"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -26,9 +24,10 @@ const (
 	InventoryNormalizationJobName = "InventoryNormalizationJob"
 
 	// frontmatter key paths
-	inventoryContainerKeyPath = "inventory.container"
-	inventoryItemsKeyPath     = "inventory.items"
-	newlineDelim              = "\n"
+	inventoryContainerKeyPath   = "inventory.container"
+	inventoryItemsKeyPath       = "inventory.items"
+	inventoryIsContainerKeyPath = "inventory.is_container"
+	newlineDelim                = "\n"
 )
 
 // InventoryNormalizationDependencies defines the interfaces needed for the normalization job.
@@ -39,9 +38,10 @@ type InventoryNormalizationDependencies interface {
 
 // InventoryNormalizationJob scans for inventory anomalies and creates missing item pages.
 type InventoryNormalizationJob struct {
-	deps          InventoryNormalizationDependencies
-	fmIndex       frontmatter.IQueryFrontmatterIndex
-	logger        lumber.Logger
+	normalizer     *InventoryNormalizer
+	deps           InventoryNormalizationDependencies
+	fmIndex        frontmatter.IQueryFrontmatterIndex
+	logger         lumber.Logger
 	jobCoordinator *jobs.JobQueueCoordinator
 }
 
@@ -53,9 +53,10 @@ func NewInventoryNormalizationJob(
 	coordinator *jobs.JobQueueCoordinator,
 ) *InventoryNormalizationJob {
 	return &InventoryNormalizationJob{
-		deps:          deps,
-		fmIndex:       fmIndex,
-		logger:        logger,
+		normalizer:     NewInventoryNormalizer(deps, logger),
+		deps:           deps,
+		fmIndex:        fmIndex,
+		logger:         logger,
 		jobCoordinator: coordinator,
 	}
 }
@@ -75,20 +76,26 @@ type InventoryAnomaly struct {
 func (j *InventoryNormalizationJob) Execute() error {
 	j.logger.Info("Starting inventory normalization job")
 
-	// Step 1: Find all containers
+	// Step 1: Migrate containers to use is_container field
+	migratedCount := j.migrateContainersToIsContainerField()
+	if migratedCount > 0 {
+		j.logger.Info("Migrated %d containers to use is_container field", migratedCount)
+	}
+
+	// Step 2: Find all containers
 	containers := j.findAllContainers()
 	j.logger.Info("Found %d containers to scan", len(containers))
 
-	// Step 2: Create missing pages and collect anomalies
+	// Step 3: Create missing pages and collect anomalies
 	createdPages, creationAnomalies := j.createMissingItemPages(containers)
 
-	// Step 3: Detect all anomalies
+	// Step 4: Detect all anomalies
 	anomalies := creationAnomalies
 	anomalies = append(anomalies, j.detectMultipleContainerAnomalies(containers)...)
 	anomalies = append(anomalies, j.detectCircularReferenceAnomalies(containers)...)
 	anomalies = append(anomalies, j.detectOrphanedItems()...)
 
-	// Step 4: Generate audit report page
+	// Step 5: Generate audit report page
 	if err := j.generateAuditReport(anomalies, createdPages); err != nil {
 		j.logger.Error("Failed to generate audit report: %v", err)
 	}
@@ -103,14 +110,14 @@ func (j *InventoryNormalizationJob) createMissingItemPages(containers []string) 
 	var anomalies []InventoryAnomaly
 
 	for _, containerID := range containers {
-		items := j.getContainerItems(containerID)
+		items := j.normalizer.GetContainerItems(containerID)
 		for _, itemID := range items {
 			_, _, err := j.deps.ReadFrontMatter(itemID)
 			if err == nil {
 				continue // Page exists
 			}
 
-			if createErr := j.createItemPage(itemID, containerID); createErr != nil {
+			if createErr := j.normalizer.CreateItemPage(itemID, containerID); createErr != nil {
 				j.logger.Error("Failed to create page for item %s: %v", itemID, createErr)
 				anomalies = append(anomalies, InventoryAnomaly{
 					Type:        "page_creation_failed",
@@ -164,7 +171,7 @@ func (j *InventoryNormalizationJob) buildItemContainerMap(containers []string) m
 		}
 
 		// Source 2: Items listed in this container's inventory.items array
-		for _, itemID := range j.getContainerItems(containerID) {
+		for _, itemID := range j.normalizer.GetContainerItems(containerID) {
 			if itemContainers[itemID] == nil {
 				itemContainers[itemID] = make(map[string]bool)
 			}
@@ -231,17 +238,30 @@ func (*InventoryNormalizationJob) GetName() string {
 	return InventoryNormalizationJobName
 }
 
+// GetNormalizer returns the underlying normalizer for testing purposes.
+func (j *InventoryNormalizationJob) GetNormalizer() *InventoryNormalizer {
+	return j.normalizer
+}
+
 // findAllContainers finds all pages that act as containers.
 func (j *InventoryNormalizationJob) findAllContainers() []string {
 	containerSet := make(map[string]bool)
 
-	// Pages with inventory.items
+	// Source 1: Pages with explicit is_container = true
+	pagesWithIsContainer := j.fmIndex.QueryKeyExistence(inventoryIsContainerKeyPath)
+	for _, pageID := range pagesWithIsContainer {
+		if j.fmIndex.GetValue(pageID, inventoryIsContainerKeyPath) == "true" {
+			containerSet[pageID] = true
+		}
+	}
+
+	// Source 2: Pages with inventory.items (legacy containers)
 	pagesWithItems := j.fmIndex.QueryKeyExistence(inventoryItemsKeyPath)
 	for _, pageID := range pagesWithItems {
 		containerSet[pageID] = true
 	}
 
-	// Pages referenced as inventory.container
+	// Source 3: Pages referenced as inventory.container by other items
 	pagesWithContainer := j.fmIndex.QueryKeyExistence(inventoryContainerKeyPath)
 	for _, pageID := range pagesWithContainer {
 		containerRef := j.fmIndex.GetValue(pageID, inventoryContainerKeyPath)
@@ -258,87 +278,71 @@ func (j *InventoryNormalizationJob) findAllContainers() []string {
 	return containers
 }
 
-// getContainerItems gets items listed in a container's inventory.items array.
-func (j *InventoryNormalizationJob) getContainerItems(containerID string) []string {
-	_, fm, err := j.deps.ReadFrontMatter(containerID)
-	if err != nil {
-		return nil
-	}
+// migrateContainersToIsContainerField finds containers that don't have is_container set
+// and adds it to their frontmatter. This migrates legacy containers that were identified
+// by having items reference them or by having an inventory.items array.
+func (j *InventoryNormalizationJob) migrateContainersToIsContainerField() int {
+	migratedCount := 0
 
-	inventory, ok := fm["inventory"].(map[string]any)
-	if !ok {
-		return nil
-	}
-
-	itemsRaw, ok := inventory["items"]
-	if !ok {
-		return nil
-	}
-
-	// Handle both []string and []any
-	var items []string
-	switch v := itemsRaw.(type) {
-	case []string:
-		items = v
-	case []any:
-		for _, item := range v {
-			if s, ok := item.(string); ok {
-				items = append(items, wikiidentifiers.MungeIdentifier(s))
-			}
+	// Find pages that are referenced as containers by other items
+	containerSet := make(map[string]bool)
+	pagesWithContainer := j.fmIndex.QueryKeyExistence(inventoryContainerKeyPath)
+	for _, pageID := range pagesWithContainer {
+		containerRef := j.fmIndex.GetValue(pageID, inventoryContainerKeyPath)
+		if containerRef != "" {
+			containerSet[containerRef] = true
 		}
 	}
 
-	return items
+	// Also include pages that have non-empty inventory.items arrays
+	pagesWithItems := j.fmIndex.QueryKeyExistence(inventoryItemsKeyPath)
+	for _, pageID := range pagesWithItems {
+		// Check if the page has actual items in its inventory.items array
+		items := j.normalizer.GetContainerItems(pageID)
+		if len(items) > 0 {
+			containerSet[pageID] = true
+		}
+	}
+
+	// For each identified container, check if it needs migration
+	for containerID := range containerSet {
+		// Check if already has is_container = true
+		if j.fmIndex.GetValue(containerID, inventoryIsContainerKeyPath) == "true" {
+			continue
+		}
+
+		// Read frontmatter and add is_container
+		_, fm, err := j.deps.ReadFrontMatter(containerID)
+		if err != nil {
+			j.logger.Error("Failed to read frontmatter for container %s during migration: %v", containerID, err)
+			continue
+		}
+
+		// Ensure inventory map exists
+		inventory, ok := fm["inventory"].(map[string]any)
+		if !ok {
+			inventory = make(map[string]any)
+			fm["inventory"] = inventory
+		}
+
+		// Set is_container = true
+		inventory["is_container"] = true
+
+		// Write back frontmatter
+		if err := j.deps.WriteFrontMatter(containerID, fm); err != nil {
+			j.logger.Error("Failed to write frontmatter for container %s during migration: %v", containerID, err)
+			continue
+		}
+
+		migratedCount++
+	}
+
+	return migratedCount
 }
 
 // getItemsWithContainerReference gets items that have inventory.container set to this container.
 func (j *InventoryNormalizationJob) getItemsWithContainerReference(containerID string) []string {
 	return j.fmIndex.QueryExactMatch(inventoryContainerKeyPath, containerID)
-}
-
-// createItemPage creates a new inventory item page.
-func (j *InventoryNormalizationJob) createItemPage(itemID, containerID string) error {
-	identifier := wikiidentifiers.MungeIdentifier(itemID)
-
-	// Build frontmatter
-	fm := make(map[string]any)
-	fm["identifier"] = identifier
-
-	// Generate title from identifier
-	titleCaser := cases.Title(language.AmericanEnglish)
-	snaked := strcase.SnakeCase(identifier)
-	// Replace underscores with spaces for a nicer title
-	titleStr := strings.ReplaceAll(snaked, "_", " ")
-	fm["title"] = titleCaser.String(titleStr)
-
-	// Set up inventory structure
-	inventory := make(map[string]any)
-	if containerID != "" {
-		inventory["container"] = wikiidentifiers.MungeIdentifier(containerID)
-	}
-	inventory["items"] = []string{}
-	fm["inventory"] = inventory
-
-	// Write frontmatter
-	if err := j.deps.WriteFrontMatter(identifier, fm); err != nil {
-		return fmt.Errorf("failed to write frontmatter: %w", err)
-	}
-
-	// Build and write markdown
-	markdown := buildNormalizationItemMarkdown()
-	if err := j.deps.WriteMarkdown(identifier, markdown); err != nil {
-		return fmt.Errorf("failed to write markdown: %w", err)
-	}
-
-	return nil
-}
-
-// buildNormalizationItemMarkdown creates the markdown content for an inventory item page.
-func buildNormalizationItemMarkdown() string {
-	var builder bytes.Buffer
-	_, _ = builder.WriteString("# {{or .Title .Identifier}}" + newlineDelim)
-	_, _ = builder.WriteString(InventoryItemMarkdownTemplate)
-	return builder.String()
 }
 
 // detectCircularReferences detects circular references in the container hierarchy.

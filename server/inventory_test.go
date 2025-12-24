@@ -82,8 +82,8 @@ var _ = Describe("inventory.go", func() {
 				Expect(page.Text).To(ContainSubstring("container = 'my_drawer'"))
 			})
 
-			It("should have empty items array", func() {
-				Expect(page.Text).To(ContainSubstring("items = []"))
+			It("should not have items array (items array is only for containers)", func() {
+				Expect(page.Text).NotTo(ContainSubstring("items"))
 			})
 
 			It("should contain the inventory markdown template", func() {
@@ -325,13 +325,10 @@ var _ = Describe("inventory.go", func() {
 				Expect(fm).To(HaveKey("inventory"))
 			})
 
-			It("should create an empty items array", func() {
+			It("should not add items array (items array is only for containers)", func() {
 				inventory, ok := fm["inventory"].(map[string]any)
 				Expect(ok).To(BeTrue())
-				Expect(inventory).To(HaveKey("items"))
-				items, ok := inventory["items"].([]string)
-				Expect(ok).To(BeTrue())
-				Expect(items).To(BeEmpty())
+				Expect(inventory).NotTo(HaveKey("items"))
 			})
 		})
 
@@ -354,10 +351,10 @@ var _ = Describe("inventory.go", func() {
 				Expect(inventory["container"]).To(Equal("parent_box"))
 			})
 
-			It("should add items array", func() {
+			It("should not add items array (items array is only for containers)", func() {
 				inventory, ok := fm["inventory"].(map[string]any)
 				Expect(ok).To(BeTrue())
-				Expect(inventory).To(HaveKey("items"))
+				Expect(inventory).NotTo(HaveKey("items"))
 			})
 		})
 
