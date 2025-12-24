@@ -2,6 +2,7 @@ package index
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
@@ -40,6 +41,44 @@ func (c *IndexCoordinator) EnqueueIndexJob(pageIdentifier wikipage.PageIdentifie
 func (c *IndexCoordinator) BulkEnqueuePages(pageIdentifiers []wikipage.PageIdentifier, operation Operation) {
 	for _, pageID := range pageIdentifiers {
 		c.EnqueueIndexJob(pageID, operation)
+	}
+}
+
+// BulkEnqueuePagesWithCompletion enqueues multiple pages for indexing and calls the callback
+// when all frontmatter indexing jobs complete. This allows dependent jobs to be scheduled
+// after the frontmatter index is fully populated.
+func (c *IndexCoordinator) BulkEnqueuePagesWithCompletion(
+	pageIdentifiers []wikipage.PageIdentifier,
+	operation Operation,
+	onAllComplete func(),
+) {
+	if len(pageIdentifiers) == 0 {
+		if onAllComplete != nil {
+			onAllComplete()
+		}
+		return
+	}
+
+	// Track completion of frontmatter jobs (the ones normalization depends on)
+	remaining := int32(len(pageIdentifiers))
+
+	for _, pageID := range pageIdentifiers {
+		// Capture pageID for closure
+		pageID := pageID
+
+		// Enqueue frontmatter job with completion tracking
+		frontmatterJob := NewFrontmatterIndexJob(c.frontmatterIndex, pageID, operation)
+		c.coordinator.EnqueueJobWithCompletion(frontmatterJob, func(_ error) {
+			if atomic.AddInt32(&remaining, -1) == 0 {
+				if onAllComplete != nil {
+					onAllComplete()
+				}
+			}
+		})
+
+		// Enqueue bleve job normally (normalization doesn't depend on it)
+		bleveJob := NewBleveIndexJob(c.bleveIndex, pageID, operation)
+		c.coordinator.EnqueueJob(bleveJob)
 	}
 }
 

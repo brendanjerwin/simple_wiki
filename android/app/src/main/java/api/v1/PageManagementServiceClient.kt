@@ -96,4 +96,20 @@ public class PageManagementServiceClient(
     ),
   )
 
+
+  /**
+   *  GenerateIdentifier converts text to a wiki page identifier format.
+   *  Used by UI to auto-generate identifiers from titles and check availability.
+   */
+  override suspend fun generateIdentifier(request: PageManagement.GenerateIdentifierRequest, headers: Headers): ResponseMessage<PageManagement.GenerateIdentifierResponse> = client.unary(
+    request,
+    headers,
+    MethodSpec(
+    "api.v1.PageManagementService/GenerateIdentifier",
+      api.v1.PageManagement.GenerateIdentifierRequest::class,
+      api.v1.PageManagement.GenerateIdentifierResponse::class,
+      StreamType.UNARY,
+    ),
+  )
+
 }

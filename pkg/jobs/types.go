@@ -1,5 +1,7 @@
 package jobs
 
+import "sync"
+
 // Job represents a unit of work that can be executed by a job queue.
 type Job interface {
 	Execute() error
@@ -41,4 +43,39 @@ func (m *MockJob) Execute() error {
 // GetName implements the Job interface for MockJob.
 func (m *MockJob) GetName() string {
 	return m.Name
+}
+
+// BlockingMockJob is a test job that blocks until Release is called.
+type BlockingMockJob struct {
+	Name        string
+	Err         error
+	release     chan struct{}
+	releaseOnce sync.Once
+}
+
+// NewBlockingMockJob creates a new BlockingMockJob.
+func NewBlockingMockJob(name string) *BlockingMockJob {
+	return &BlockingMockJob{
+		Name:    name,
+		release: make(chan struct{}),
+	}
+}
+
+// Execute implements the Job interface for BlockingMockJob.
+// It blocks until Release is called.
+func (m *BlockingMockJob) Execute() error {
+	<-m.release
+	return m.Err
+}
+
+// GetName implements the Job interface for BlockingMockJob.
+func (m *BlockingMockJob) GetName() string {
+	return m.Name
+}
+
+// Release unblocks the Execute method. Safe to call multiple times concurrently.
+func (m *BlockingMockJob) Release() {
+	m.releaseOnce.Do(func() {
+		close(m.release)
+	})
 }

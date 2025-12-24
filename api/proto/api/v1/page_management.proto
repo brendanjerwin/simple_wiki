@@ -12,6 +12,10 @@ service PageManagementService {
   rpc UpdatePageContent(UpdatePageContentRequest) returns (UpdatePageContentResponse);
   rpc UpdateWholePage(UpdateWholePageRequest) returns (UpdateWholePageResponse);
   rpc DeletePage(DeletePageRequest) returns (DeletePageResponse);
+
+  // GenerateIdentifier converts text to a wiki page identifier format.
+  // Used by UI to auto-generate identifiers from titles and check availability.
+  rpc GenerateIdentifier(GenerateIdentifierRequest) returns (GenerateIdentifierResponse);
 }
 
 // Create Page
@@ -93,4 +97,36 @@ message DeletePageRequest {
 message DeletePageResponse {
   bool success = 1;
   string error = 2;
+}
+
+// Generate Identifier
+message GenerateIdentifierRequest {
+  // The text to convert to an identifier (typically a title).
+  string text = 1;
+
+  // If true, add suffix (e.g., _1, _2) to ensure no existing page has this identifier.
+  bool ensure_unique = 2;
+}
+
+message GenerateIdentifierResponse {
+  // The generated identifier (munged to wiki format, possibly with suffix if ensure_unique).
+  string identifier = 1;
+
+  // Whether this identifier is available (no existing page with this identifier).
+  bool is_unique = 2;
+
+  // Info about the existing page if is_unique is false.
+  ExistingPageInfo existing_page = 3;
+}
+
+// Info about an existing page (used when identifier already exists).
+message ExistingPageInfo {
+  // The page identifier.
+  string identifier = 1;
+
+  // The page title from frontmatter.
+  string title = 2;
+
+  // The inventory.container value if this is an inventory item.
+  string container = 3;
 }

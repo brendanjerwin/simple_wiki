@@ -63,17 +63,79 @@ func (c *JobQueueCoordinator) EnqueueJob(job Job) {
 		defer func() {
 			c.mu.Lock()
 			defer c.mu.Unlock()
-			
+
 			stats.JobsRemaining--
 			if stats.JobsRemaining == 0 {
 				stats.IsActive = false
 				stats.HighWaterMark = 0 // Reset high water mark when queue is empty
 			}
 		}()
-		
+
 		err := job.Execute()
 		if err != nil {
 			c.logger.Error("Job execution failed: queue=%s job=%s error=%v", queueName, job.GetName(), err)
+		}
+	})
+}
+
+// CompletionCallback is called when a job completes, with the error (if any).
+type CompletionCallback func(err error)
+
+// EnqueueJobWithCompletion adds a job to its queue and calls the callback when it completes.
+// This allows job chaining - the callback can enqueue dependent jobs.
+func (c *JobQueueCoordinator) EnqueueJobWithCompletion(job Job, onComplete CompletionCallback) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	queueName := job.GetName()
+
+	// Auto-register queue if it doesn't exist
+	dispatcher, exists := c.queues[queueName]
+	if !exists {
+		// Create new queue for this job type
+		const defaultQueueCapacity = 10
+		dispatcher = artifex.NewDispatcher(1, defaultQueueCapacity)
+		dispatcher.Start()
+
+		c.queues[queueName] = dispatcher
+		c.stats[queueName] = &QueueStats{
+			QueueName:     queueName,
+			JobsRemaining: 0,
+			HighWaterMark: 0,
+			IsActive:      false,
+		}
+	}
+
+	stats := c.stats[queueName]
+
+	// Increment jobs remaining and update high water mark
+	stats.JobsRemaining++
+	if stats.JobsRemaining > stats.HighWaterMark {
+		stats.HighWaterMark = stats.JobsRemaining
+	}
+	stats.IsActive = true
+
+	// Submit job to Artifex dispatcher
+	dispatcher.Dispatch(func() {
+		defer func() {
+			c.mu.Lock()
+			defer c.mu.Unlock()
+
+			stats.JobsRemaining--
+			if stats.JobsRemaining == 0 {
+				stats.IsActive = false
+				stats.HighWaterMark = 0 // Reset high water mark when queue is empty
+			}
+		}()
+
+		err := job.Execute()
+		if err != nil {
+			c.logger.Error("Job execution failed: queue=%s job=%s error=%v", queueName, job.GetName(), err)
+		}
+
+		// Call completion callback after job execution
+		if onComplete != nil {
+			onComplete(err)
 		}
 	})
 }

@@ -19,13 +19,14 @@ import (
 const _ = grpc.SupportPackageIsVersion8
 
 const (
-	PageManagementService_CreatePage_FullMethodName        = "/api.v1.PageManagementService/CreatePage"
-	PageManagementService_ReadPage_FullMethodName          = "/api.v1.PageManagementService/ReadPage"
-	PageManagementService_RenderPage_FullMethodName        = "/api.v1.PageManagementService/RenderPage"
-	PageManagementService_UpdatePage_FullMethodName        = "/api.v1.PageManagementService/UpdatePage"
-	PageManagementService_UpdatePageContent_FullMethodName = "/api.v1.PageManagementService/UpdatePageContent"
-	PageManagementService_UpdateWholePage_FullMethodName   = "/api.v1.PageManagementService/UpdateWholePage"
-	PageManagementService_DeletePage_FullMethodName        = "/api.v1.PageManagementService/DeletePage"
+	PageManagementService_CreatePage_FullMethodName         = "/api.v1.PageManagementService/CreatePage"
+	PageManagementService_ReadPage_FullMethodName           = "/api.v1.PageManagementService/ReadPage"
+	PageManagementService_RenderPage_FullMethodName         = "/api.v1.PageManagementService/RenderPage"
+	PageManagementService_UpdatePage_FullMethodName         = "/api.v1.PageManagementService/UpdatePage"
+	PageManagementService_UpdatePageContent_FullMethodName  = "/api.v1.PageManagementService/UpdatePageContent"
+	PageManagementService_UpdateWholePage_FullMethodName    = "/api.v1.PageManagementService/UpdateWholePage"
+	PageManagementService_DeletePage_FullMethodName         = "/api.v1.PageManagementService/DeletePage"
+	PageManagementService_GenerateIdentifier_FullMethodName = "/api.v1.PageManagementService/GenerateIdentifier"
 )
 
 // PageManagementServiceClient is the client API for PageManagementService service.
@@ -39,6 +40,9 @@ type PageManagementServiceClient interface {
 	UpdatePageContent(ctx context.Context, in *UpdatePageContentRequest, opts ...grpc.CallOption) (*UpdatePageContentResponse, error)
 	UpdateWholePage(ctx context.Context, in *UpdateWholePageRequest, opts ...grpc.CallOption) (*UpdateWholePageResponse, error)
 	DeletePage(ctx context.Context, in *DeletePageRequest, opts ...grpc.CallOption) (*DeletePageResponse, error)
+	// GenerateIdentifier converts text to a wiki page identifier format.
+	// Used by UI to auto-generate identifiers from titles and check availability.
+	GenerateIdentifier(ctx context.Context, in *GenerateIdentifierRequest, opts ...grpc.CallOption) (*GenerateIdentifierResponse, error)
 }
 
 type pageManagementServiceClient struct {
@@ -119,6 +123,16 @@ func (c *pageManagementServiceClient) DeletePage(ctx context.Context, in *Delete
 	return out, nil
 }
 
+func (c *pageManagementServiceClient) GenerateIdentifier(ctx context.Context, in *GenerateIdentifierRequest, opts ...grpc.CallOption) (*GenerateIdentifierResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GenerateIdentifierResponse)
+	err := c.cc.Invoke(ctx, PageManagementService_GenerateIdentifier_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PageManagementServiceServer is the server API for PageManagementService service.
 // All implementations must embed UnimplementedPageManagementServiceServer
 // for forward compatibility
@@ -130,6 +144,9 @@ type PageManagementServiceServer interface {
 	UpdatePageContent(context.Context, *UpdatePageContentRequest) (*UpdatePageContentResponse, error)
 	UpdateWholePage(context.Context, *UpdateWholePageRequest) (*UpdateWholePageResponse, error)
 	DeletePage(context.Context, *DeletePageRequest) (*DeletePageResponse, error)
+	// GenerateIdentifier converts text to a wiki page identifier format.
+	// Used by UI to auto-generate identifiers from titles and check availability.
+	GenerateIdentifier(context.Context, *GenerateIdentifierRequest) (*GenerateIdentifierResponse, error)
 	mustEmbedUnimplementedPageManagementServiceServer()
 }
 
@@ -157,6 +174,9 @@ func (UnimplementedPageManagementServiceServer) UpdateWholePage(context.Context,
 }
 func (UnimplementedPageManagementServiceServer) DeletePage(context.Context, *DeletePageRequest) (*DeletePageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeletePage not implemented")
+}
+func (UnimplementedPageManagementServiceServer) GenerateIdentifier(context.Context, *GenerateIdentifierRequest) (*GenerateIdentifierResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GenerateIdentifier not implemented")
 }
 func (UnimplementedPageManagementServiceServer) mustEmbedUnimplementedPageManagementServiceServer() {}
 
@@ -297,6 +317,24 @@ func _PageManagementService_DeletePage_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PageManagementService_GenerateIdentifier_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GenerateIdentifierRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PageManagementServiceServer).GenerateIdentifier(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PageManagementService_GenerateIdentifier_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PageManagementServiceServer).GenerateIdentifier(ctx, req.(*GenerateIdentifierRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PageManagementService_ServiceDesc is the grpc.ServiceDesc for PageManagementService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -331,6 +369,10 @@ var PageManagementService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeletePage",
 			Handler:    _PageManagementService_DeletePage_Handler,
+		},
+		{
+			MethodName: "GenerateIdentifier",
+			Handler:    _PageManagementService_GenerateIdentifier_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

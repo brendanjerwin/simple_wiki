@@ -6,6 +6,8 @@ import './wiki-search-results.js';
 import { SearchService } from '../gen/api/v1/search_connect.js';
 import type { SearchContentRequest, SearchResult } from '../gen/api/v1/search_pb.js';
 
+const INVENTORY_ONLY_STORAGE_KEY = 'wiki-search-inventory-only';
+
 export class WikiSearch extends LitElement {
   private client: PromiseClient<typeof SearchService> | null = null;
 
@@ -20,7 +22,16 @@ export class WikiSearch extends LitElement {
 
   // Method that can be stubbed in tests to prevent network calls
   async performSearch(query: string): Promise<SearchResult[]> {
-    const request: Partial<SearchContentRequest> = { query };
+    const request: Partial<SearchContentRequest> = {
+      query,
+      frontmatterKeysToReturnInResults: ['inventory.container'],
+    };
+
+    if (this.inventoryOnly) {
+      request.frontmatterKeyIncludeFilters = ['inventory.container'];
+      request.frontmatterKeyExcludeFilters = ['inventory.is_container'];
+    }
+
     const response = await this.getClient().searchContent(request);
     return response.results;
   }
@@ -31,24 +42,6 @@ export class WikiSearch extends LitElement {
         padding: 0;
         margin: 0;
         max-width: 100%;
-    }
-
-    :host([no-results]) div#container {
-        animation: shake 0.5s linear;
-    }
-
-    @keyframes shake {
-        0% { transform: translate(1px, 1px) rotate(0deg); }
-        10% { transform: translate(-1px, -2px) rotate(-1deg); }
-        20% { transform: translate(-3px, 0px) rotate(1deg); }
-        30% { transform: translate(3px, 2px) rotate(0deg); }
-        40% { transform: translate(1px, -1px) rotate(1deg); }
-        50% { transform: translate(-1px, 2px) rotate(-1deg); }
-        60% { transform: translate(-3px, 1px) rotate(0deg); }
-        70% { transform: translate(3px, 1px) rotate(-1deg); }
-        80% { transform: translate(-1px, -1px) rotate(1deg); }
-        90% { transform: translate(1px, 2px) rotate(0deg); }
-        100% { transform: translate(1px, -2px) rotate(-1deg); }
     }
 
     form { 
@@ -111,18 +104,22 @@ export class WikiSearch extends LitElement {
     noResults: { type: Boolean, reflect: true, attribute: 'no-results' },
     loading: { type: Boolean },
     error: { type: String },
+    inventoryOnly: { type: Boolean },
   };
 
   declare results: SearchResult[];
   declare noResults: boolean;
   declare loading: boolean;
   declare error?: string;
+  declare inventoryOnly: boolean;
+  private lastSearchQuery: string = '';
 
   constructor() {
     super();
     this.results = [];
     this.noResults = false;
     this.loading = false;
+    this.inventoryOnly = localStorage.getItem(INVENTORY_ONLY_STORAGE_KEY) === 'true';
     this._handleKeydown = this._handleKeydown.bind(this);
   }
 
@@ -158,17 +155,18 @@ export class WikiSearch extends LitElement {
     const form = e.target as HTMLFormElement;
     const formData = new FormData(form);
     const searchTerm = formData.get('search') as string;
-    
+
     if (!searchTerm || searchTerm.trim() === '') {
       return;
     }
-    
+
+    this.lastSearchQuery = searchTerm;
     this.loading = true;
-    
+
     try {
       const results = await this.performSearch(searchTerm);
       this.results = [...results];
-      
+
       if (results.length > 0) {
         this.noResults = false;
       } else {
@@ -187,6 +185,33 @@ export class WikiSearch extends LitElement {
 
   handleSearchResultsClosed() {
     this.results = [];
+    this.noResults = false;
+    // Focus back on search input for keyboard workflow
+    const searchInput = this.shadowRoot?.querySelector('input[type="search"]') as HTMLInputElement;
+    searchInput?.focus();
+  }
+
+  async handleInventoryFilterChanged(e: CustomEvent<{ inventoryOnly: boolean }>) {
+    this.inventoryOnly = e.detail.inventoryOnly;
+    localStorage.setItem(INVENTORY_ONLY_STORAGE_KEY, String(this.inventoryOnly));
+
+    // Re-run the search with the new filter if we have a previous query
+    if (this.lastSearchQuery) {
+      this.loading = true;
+      this.error = undefined;
+
+      try {
+        const results = await this.performSearch(this.lastSearchQuery);
+        this.results = [...results];
+        this.noResults = results.length === 0;
+      } catch (error) {
+        this.results = [];
+        this.error = error instanceof Error ? error.message : 'Search failed';
+        console.error('Search error:', error);
+      } finally {
+        this.loading = false;
+      }
+    }
   }
 
   override render() {
@@ -198,10 +223,12 @@ export class WikiSearch extends LitElement {
                 <button type="submit"><i class="fa-solid fa-search"></i></button>
             </form>
             ${this.error ? html`<div class="error">${this.error}</div>` : ''}
-            <wiki-search-results 
-                .results="${this.results}" 
-                .open="${this.results.length > 0}" 
-                @search-results-closed="${this.handleSearchResultsClosed}">
+            <wiki-search-results
+                .results="${this.results}"
+                .open="${this.results.length > 0 || this.noResults}"
+                .inventoryOnly="${this.inventoryOnly}"
+                @search-results-closed="${this.handleSearchResultsClosed}"
+                @inventory-filter-changed="${this.handleInventoryFilterChanged}">
             </wiki-search-results>
         </div>
         `;

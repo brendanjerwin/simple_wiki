@@ -147,10 +147,10 @@ var _ = Describe("Site.ReadOrInit with URL parameters", func() {
 			Expect(inventory).To(HaveKeyWithValue("location", "Lab A"))
 		})
 
-		It("should include items key in inventory", func() {
+		It("should not include items key in inventory (items array is only for containers)", func() {
 			inventory, ok := parsed["inventory"].(map[string]any)
 			Expect(ok).To(BeTrue())
-			Expect(inventory).To(HaveKey("items"))
+			Expect(inventory).NotTo(HaveKey("items"))
 		})
 
 		It("should not include tmpl parameter in frontmatter", func() {

@@ -29,11 +29,16 @@ var _ = Describe("JobQueueCoordinator", func() {
 
 
 	Describe("when enqueueing a job", func() {
-		var mockJob *jobs.MockJob
+		var blockingJob *jobs.BlockingMockJob
 
 		BeforeEach(func() {
-			mockJob = &jobs.MockJob{Name: "TestQueue"}
-			coordinator.EnqueueJob(mockJob)
+			blockingJob = jobs.NewBlockingMockJob("TestQueue")
+			coordinator.EnqueueJob(blockingJob)
+		})
+
+		AfterEach(func() {
+			// Always release the job to prevent goroutine leaks
+			blockingJob.Release()
 		})
 
 		It("should increase jobs remaining", func() {
@@ -53,7 +58,10 @@ var _ = Describe("JobQueueCoordinator", func() {
 
 		Describe("when the job completes", func() {
 			BeforeEach(func() {
-				// Allow job to complete by waiting briefly
+				// Release the job to let it complete
+				blockingJob.Release()
+
+				// Wait for job to complete
 				Eventually(func() int32 {
 					return coordinator.GetQueueStats("TestQueue").JobsRemaining
 				}).Should(Equal(int32(0)))
@@ -81,17 +89,17 @@ var _ = Describe("JobQueueCoordinator", func() {
 			// Enqueue jobs - queues are auto-registered
 			coordinator.EnqueueJob(&jobs.MockJob{Name: "Queue1"})
 			coordinator.EnqueueJob(&jobs.MockJob{Name: "Queue3"})
-			
+
 			// Check immediately after enqueueing, before jobs complete
 			activeQueues := coordinator.GetActiveQueues()
 			Expect(len(activeQueues)).To(Equal(2))
 		})
 
 		It("should return only active queues", func() {
-			// Enqueue jobs - queues are auto-registered  
+			// Enqueue jobs - queues are auto-registered
 			coordinator.EnqueueJob(&jobs.MockJob{Name: "Queue1"})
 			coordinator.EnqueueJob(&jobs.MockJob{Name: "Queue3"})
-			
+
 			// Check immediately after enqueueing, before jobs complete
 			activeQueues := coordinator.GetActiveQueues()
 			queueNames := make([]string, len(activeQueues))
@@ -101,4 +109,90 @@ var _ = Describe("JobQueueCoordinator", func() {
 			Expect(queueNames).To(ContainElements("Queue1", "Queue3"))
 		})
 	})
+
+	Describe("EnqueueJobWithCompletion", func() {
+		Describe("when job completes successfully", func() {
+			var callbackCalled bool
+			var callbackError error
+
+			BeforeEach(func() {
+				callbackCalled = false
+				callbackError = nil
+
+				job := &jobs.MockJob{Name: "CompletionTestQueue", Err: nil}
+				coordinator.EnqueueJobWithCompletion(job, func(err error) {
+					callbackCalled = true
+					callbackError = err
+				})
+
+				// Wait for job and callback to complete
+				Eventually(func() bool {
+					return callbackCalled
+				}).Should(BeTrue())
+			})
+
+			It("should call the completion callback", func() {
+				Expect(callbackCalled).To(BeTrue())
+			})
+
+			It("should pass nil error to callback", func() {
+				Expect(callbackError).To(BeNil())
+			})
+		})
+
+		Describe("when job fails with error", func() {
+			var callbackCalled bool
+			var callbackError error
+			var expectedErr error
+
+			BeforeEach(func() {
+				callbackCalled = false
+				callbackError = nil
+				expectedErr = &testError{msg: "job failed"}
+
+				job := &jobs.MockJob{Name: "ErrorTestQueue", Err: expectedErr}
+				coordinator.EnqueueJobWithCompletion(job, func(err error) {
+					callbackCalled = true
+					callbackError = err
+				})
+
+				// Wait for job and callback to complete
+				Eventually(func() bool {
+					return callbackCalled
+				}).Should(BeTrue())
+			})
+
+			It("should call the completion callback", func() {
+				Expect(callbackCalled).To(BeTrue())
+			})
+
+			It("should pass the error to callback", func() {
+				Expect(callbackError).To(Equal(expectedErr))
+			})
+		})
+
+		Describe("when callback is nil", func() {
+			It("should not panic", func() {
+				job := &jobs.MockJob{Name: "NilCallbackQueue", Err: nil}
+				Expect(func() {
+					coordinator.EnqueueJobWithCompletion(job, nil)
+				}).NotTo(Panic())
+
+				// Wait for job to complete
+				Eventually(func() bool {
+					stats := coordinator.GetQueueStats("NilCallbackQueue")
+					return stats != nil && !stats.IsActive
+				}).Should(BeTrue())
+			})
+		})
+	})
 })
+
+// testError is a simple error type for testing.
+type testError struct {
+	msg string
+}
+
+func (e *testError) Error() string {
+	return e.msg
+}

@@ -629,3 +629,164 @@ export class DeletePageResponse extends Message<DeletePageResponse> {
   }
 }
 
+/**
+ * Generate Identifier
+ *
+ * @generated from message api.v1.GenerateIdentifierRequest
+ */
+export class GenerateIdentifierRequest extends Message<GenerateIdentifierRequest> {
+  /**
+   * The text to convert to an identifier (typically a title).
+   *
+   * @generated from field: string text = 1;
+   */
+  text = "";
+
+  /**
+   * If true, add suffix (e.g., _1, _2) to ensure no existing page has this identifier.
+   *
+   * @generated from field: bool ensure_unique = 2;
+   */
+  ensureUnique = false;
+
+  constructor(data?: PartialMessage<GenerateIdentifierRequest>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "api.v1.GenerateIdentifierRequest";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "text", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "ensure_unique", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GenerateIdentifierRequest {
+    return new GenerateIdentifierRequest().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): GenerateIdentifierRequest {
+    return new GenerateIdentifierRequest().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): GenerateIdentifierRequest {
+    return new GenerateIdentifierRequest().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: GenerateIdentifierRequest | PlainMessage<GenerateIdentifierRequest> | undefined, b: GenerateIdentifierRequest | PlainMessage<GenerateIdentifierRequest> | undefined): boolean {
+    return proto3.util.equals(GenerateIdentifierRequest, a, b);
+  }
+}
+
+/**
+ * @generated from message api.v1.GenerateIdentifierResponse
+ */
+export class GenerateIdentifierResponse extends Message<GenerateIdentifierResponse> {
+  /**
+   * The generated identifier (munged to wiki format, possibly with suffix if ensure_unique).
+   *
+   * @generated from field: string identifier = 1;
+   */
+  identifier = "";
+
+  /**
+   * Whether this identifier is available (no existing page with this identifier).
+   *
+   * @generated from field: bool is_unique = 2;
+   */
+  isUnique = false;
+
+  /**
+   * Info about the existing page if is_unique is false.
+   *
+   * @generated from field: api.v1.ExistingPageInfo existing_page = 3;
+   */
+  existingPage?: ExistingPageInfo;
+
+  constructor(data?: PartialMessage<GenerateIdentifierResponse>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "api.v1.GenerateIdentifierResponse";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "identifier", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "is_unique", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
+    { no: 3, name: "existing_page", kind: "message", T: ExistingPageInfo },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GenerateIdentifierResponse {
+    return new GenerateIdentifierResponse().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): GenerateIdentifierResponse {
+    return new GenerateIdentifierResponse().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): GenerateIdentifierResponse {
+    return new GenerateIdentifierResponse().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: GenerateIdentifierResponse | PlainMessage<GenerateIdentifierResponse> | undefined, b: GenerateIdentifierResponse | PlainMessage<GenerateIdentifierResponse> | undefined): boolean {
+    return proto3.util.equals(GenerateIdentifierResponse, a, b);
+  }
+}
+
+/**
+ * Info about an existing page (used when identifier already exists).
+ *
+ * @generated from message api.v1.ExistingPageInfo
+ */
+export class ExistingPageInfo extends Message<ExistingPageInfo> {
+  /**
+   * The page identifier.
+   *
+   * @generated from field: string identifier = 1;
+   */
+  identifier = "";
+
+  /**
+   * The page title from frontmatter.
+   *
+   * @generated from field: string title = 2;
+   */
+  title = "";
+
+  /**
+   * The inventory.container value if this is an inventory item.
+   *
+   * @generated from field: string container = 3;
+   */
+  container = "";
+
+  constructor(data?: PartialMessage<ExistingPageInfo>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "api.v1.ExistingPageInfo";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "identifier", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "title", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "container", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): ExistingPageInfo {
+    return new ExistingPageInfo().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): ExistingPageInfo {
+    return new ExistingPageInfo().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): ExistingPageInfo {
+    return new ExistingPageInfo().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: ExistingPageInfo | PlainMessage<ExistingPageInfo> | undefined, b: ExistingPageInfo | PlainMessage<ExistingPageInfo> | undefined): boolean {
+    return proto3.util.equals(ExistingPageInfo, a, b);
+  }
+}
+

@@ -57,6 +57,7 @@ type Site struct {
 	MarkdownRenderer        IRenderMarkdownToHTML
 	IndexCoordinator        *index.IndexCoordinator
 	JobQueueCoordinator     *jobs.JobQueueCoordinator
+	CronScheduler           *jobs.CronScheduler
 	FrontmatterIndexQueryer frontmatter.IQueryFrontmatterIndex
 	BleveIndexQueryer       bleve.IQueryBleveIndex
 	MigrationApplicator     lazy.FrontmatterMigrationApplicator
@@ -158,6 +159,20 @@ func (s *Site) InitializeIndexing() error {
 	s.JobQueueCoordinator = jobs.NewJobQueueCoordinator(s.Logger)
 	s.IndexCoordinator = index.NewIndexCoordinator(s.JobQueueCoordinator, frontmatterIndex, bleveIndex)
 
+	// Create and start cron scheduler for periodic jobs
+	s.CronScheduler = jobs.NewCronScheduler(s.Logger)
+	s.CronScheduler.Start()
+
+	// Schedule inventory normalization job to run hourly at minute 0
+	// This creates pages for items listed in inventory.items that don't have their own pages,
+	// and generates an audit report of any inventory anomalies
+	_, err = ScheduleInventoryNormalization(s.CronScheduler, s, "0 0 * * * *")
+	if err != nil {
+		s.Logger.Warn("Failed to schedule inventory normalization job: %v", err)
+	} else {
+		s.Logger.Info("Inventory normalization job scheduled to run hourly")
+	}
+
 	// Start file shadowing scan
 	scanJob := eager.NewFileShadowingMigrationScanJob(s.PathToData, s.JobQueueCoordinator, s)
 	s.JobQueueCoordinator.EnqueueJob(scanJob)
@@ -181,9 +196,16 @@ func (s *Site) InitializeIndexing() error {
 		pageIdentifiers[i] = file.Name()
 	}
 
-	// Start background indexing
-	s.IndexCoordinator.BulkEnqueuePages(pageIdentifiers, index.Add)
+	// Start background indexing with completion callback to chain the normalization job
+	s.IndexCoordinator.BulkEnqueuePagesWithCompletion(pageIdentifiers, index.Add, func() {
+		// Run inventory normalization after frontmatter indexing completes
+		// This ensures the frontmatter index is fully populated before migration runs
+		normJob := NewInventoryNormalizationJob(s, s.FrontmatterIndexQueryer, s.Logger)
+		s.JobQueueCoordinator.EnqueueJob(normJob)
+		s.Logger.Info("Inventory normalization job queued after indexing completed")
+	})
 	s.Logger.Info("Background indexing started for %d pages. Application is ready.", len(files))
+
 	return nil
 }
 
@@ -325,15 +347,7 @@ func (s *Site) readOrInitPage(requestedIdentifier string, req *http.Request) (*w
 
 		// Add inventory structure for inv_item template
 		if tmpl == "inv_item" {
-			// Ensure inventory exists and has items array
-			if _, exists := fm["inventory"]; !exists {
-				fm["inventory"] = make(map[string]any)
-			}
-			if inventory, ok := fm["inventory"].(map[string]any); ok {
-				if _, exists := inventory["items"]; !exists {
-					inventory["items"] = []string{}
-				}
-			}
+			EnsureInventoryFrontmatterStructure(fm)
 		}
 
 		// Convert frontmatter to TOML
@@ -355,8 +369,6 @@ func (s *Site) readOrInitPage(requestedIdentifier string, req *http.Request) (*w
 
 		if tmpl == "inv_item" {
 			initialText += `
-### Goes in: {{LinkTo .Inventory.Container }}
-
 {{if IsContainer .Identifier }}
 ## Contents
 {{ ShowInventoryContentsOf .Identifier }}
@@ -660,6 +672,12 @@ func (s *Site) savePageAndIndex(p *wikipage.Page) error {
 	// Enqueue indexing jobs for both frontmatter and bleve indexes
 	if s.IndexCoordinator != nil {
 		s.IndexCoordinator.EnqueueIndexJob(p.Identifier, index.Add)
+	}
+
+	// Enqueue per-page inventory normalization job
+	if s.JobQueueCoordinator != nil {
+		normJob := NewPageInventoryNormalizationJob(p.Identifier, s, s.Logger)
+		s.JobQueueCoordinator.EnqueueJob(normJob)
 	}
 
 	return nil

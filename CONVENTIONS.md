@@ -1,3 +1,22 @@
+<!-- OPENSPEC:START -->
+# OpenSpec Instructions
+
+These instructions are for AI assistants working in this project.
+
+Always open `@/openspec/AGENTS.md` when the request:
+- Mentions planning or proposals (words like proposal, spec, change, plan)
+- Introduces new capabilities, breaking changes, architecture shifts, or big performance/security work
+- Sounds ambiguous and you need the authoritative spec before coding
+
+Use `@/openspec/AGENTS.md` to learn:
+- How to create and apply change proposals
+- Spec format and conventions
+- Project structure and guidelines
+
+Keep this managed block so 'openspec update' can refresh the instructions.
+
+<!-- OPENSPEC:END -->
+
 # Code and Structure Conventions
 
 <!--toc:start-->
@@ -712,24 +731,6 @@ beforeEach(async () => {
     })
   })
   ```
-
-- When asserting an error, check for the specific error type or message. Do not just check that an error is not `nil`. This ensures that the test is validating the specific error that is expected to be returned.
-
-  **Bad:**
-
-  ```go
-  Expect(err).To(HaveOccurred())
-  ```
-
-  **Good:**
-
-  ```go
-  Expect(err).To(MatchError("specific error message"))
-  ```
-
-- Use the `Describe` blocks first to describe the function/component being tested, then use nested `When` blocks to establish the scenarios. Besides the basic `It("Should exist")` tests, everything should be in those nested "When" blocks.
-- **Important**: Use "when" in `describe` block descriptions to establish scenarios, not in `it` block descriptions. The `it` blocks should describe the expected behavior or outcome.
-- Include a blank line between all the various Ginkgo blocks. This makes it easier to read the tests.
 
 ## Fixing Problems
 

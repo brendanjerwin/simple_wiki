@@ -4,6 +4,7 @@ package v1
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"maps"
 	"os"
 	"reflect"
@@ -13,6 +14,7 @@ import (
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
+	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
 	"github.com/pelletier/go-toml/v2"
@@ -29,6 +31,7 @@ const (
 	pageNotFoundErrFmt              = "page not found: %s"
 	failedToReadFrontmatterErrFmt   = "failed to read frontmatter: %v"
 	failedToBuildPageTextErrFmt     = "failed to build page text: %v"
+	maxUniqueIdentifierAttempts     = 1000
 )
 
 // filterIdentifierKey removes the identifier key from a frontmatter map.
@@ -78,6 +81,7 @@ type Server struct {
 	apiv1.UnimplementedFrontmatterServer
 	apiv1.UnimplementedPageManagementServiceServer
 	apiv1.UnimplementedSearchServiceServer
+	apiv1.UnimplementedInventoryManagementServiceServer
 	Commit                  string
 	BuildTime               time.Time
 	PageReaderMutator       wikipage.PageReaderMutator
@@ -327,6 +331,7 @@ func (s *Server) RegisterWithServer(grpcServer *grpc.Server) {
 	apiv1.RegisterFrontmatterServer(grpcServer, s)
 	apiv1.RegisterPageManagementServiceServer(grpcServer, s)
 	apiv1.RegisterSearchServiceServer(grpcServer, s)
+	apiv1.RegisterInventoryManagementServiceServer(grpcServer, s)
 }
 
 // GetVersion implements the GetVersion RPC.
@@ -487,45 +492,148 @@ func (s *Server) DeletePage(_ context.Context, req *apiv1.DeletePageRequest) (*a
 
 // SearchContent implements the SearchContent RPC.
 func (s *Server) SearchContent(_ context.Context, req *apiv1.SearchContentRequest) (*apiv1.SearchContentResponse, error) {
-	v := reflect.ValueOf(s.BleveIndexQueryer)
-	if s.BleveIndexQueryer == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
-		return nil, status.Error(codes.Internal, "Search index is not available")
+	if err := s.validateSearchRequest(req); err != nil {
+		return nil, err
 	}
 
-	// Validate query is not empty
-	if req.Query == "" {
-		return nil, status.Error(codes.InvalidArgument, "query cannot be empty")
-	}
-
-	// Perform the search
 	searchResults, err := s.BleveIndexQueryer.Query(req.Query)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to search: %v", err)
 	}
 
-	// Convert bleve.SearchResult to apiv1.SearchResult
-	var results []*apiv1.SearchResult
-	for _, result := range searchResults {
-		// Convert highlight spans
-		var highlights []*apiv1.HighlightSpan
-		for _, hl := range result.Highlights {
-			highlights = append(highlights, &apiv1.HighlightSpan{
-				Start: hl.Start,
-				End:   hl.End,
-			})
-		}
-
-		results = append(results, &apiv1.SearchResult{
-			Identifier: string(result.Identifier),
-			Title:      result.Title,
-			Fragment:   result.Fragment,
-			Highlights: highlights,
-		})
+	includeFilterSets, err := s.buildIncludeFilterSets(req.FrontmatterKeyIncludeFilters)
+	if err != nil {
+		return nil, err
 	}
 
-	return &apiv1.SearchContentResponse{
-		Results: results,
-	}, nil
+	excludedPages, err := s.buildExcludedPagesSet(req.FrontmatterKeyExcludeFilters)
+	if err != nil {
+		return nil, err
+	}
+
+	results := s.filterAndConvertResults(searchResults, includeFilterSets, excludedPages, req.FrontmatterKeysToReturnInResults)
+
+	return &apiv1.SearchContentResponse{Results: results}, nil
+}
+
+// validateSearchRequest validates the search request and index availability.
+func (s *Server) validateSearchRequest(req *apiv1.SearchContentRequest) error {
+	v := reflect.ValueOf(s.BleveIndexQueryer)
+	if s.BleveIndexQueryer == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
+		return status.Error(codes.Internal, "Search index is not available")
+	}
+	if req.Query == "" {
+		return status.Error(codes.InvalidArgument, "query cannot be empty")
+	}
+	return nil
+}
+
+// buildIncludeFilterSets builds sets of pages for each include filter key.
+func (s *Server) buildIncludeFilterSets(filterKeys []string) ([]map[wikipage.PageIdentifier]bool, error) {
+	if len(filterKeys) == 0 {
+		return nil, nil
+	}
+	if err := s.validateFrontmatterIndexAvailable(); err != nil {
+		return nil, err
+	}
+
+	var filterSets []map[wikipage.PageIdentifier]bool
+	for _, filterKey := range filterKeys {
+		pageIDs := s.FrontmatterIndexQueryer.QueryKeyExistence(wikipage.DottedKeyPath(filterKey))
+		pageSet := make(map[wikipage.PageIdentifier]bool, len(pageIDs))
+		for _, id := range pageIDs {
+			pageSet[id] = true
+		}
+		filterSets = append(filterSets, pageSet)
+	}
+	return filterSets, nil
+}
+
+// buildExcludedPagesSet builds the set of pages to exclude based on filter keys.
+func (s *Server) buildExcludedPagesSet(filterKeys []string) (map[wikipage.PageIdentifier]bool, error) {
+	if len(filterKeys) == 0 {
+		return nil, nil
+	}
+	if err := s.validateFrontmatterIndexAvailable(); err != nil {
+		return nil, err
+	}
+
+	excludedPages := make(map[wikipage.PageIdentifier]bool)
+	for _, filterKey := range filterKeys {
+		pageIDs := s.FrontmatterIndexQueryer.QueryKeyExistence(wikipage.DottedKeyPath(filterKey))
+		for _, id := range pageIDs {
+			excludedPages[id] = true
+		}
+	}
+	return excludedPages, nil
+}
+
+// validateFrontmatterIndexAvailable checks if the frontmatter index is available.
+func (s *Server) validateFrontmatterIndexAvailable() error {
+	v := reflect.ValueOf(s.FrontmatterIndexQueryer)
+	if s.FrontmatterIndexQueryer == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
+		return status.Error(codes.Internal, "Frontmatter index not available for filtering")
+	}
+	return nil
+}
+
+// filterAndConvertResults filters search results and converts them to API format.
+func (s *Server) filterAndConvertResults(
+	searchResults []bleve.SearchResult,
+	includeFilterSets []map[wikipage.PageIdentifier]bool,
+	excludedPages map[wikipage.PageIdentifier]bool,
+	fmKeysToReturn []string,
+) []*apiv1.SearchResult {
+	var results []*apiv1.SearchResult
+	for _, result := range searchResults {
+		mungedID := wikipage.PageIdentifier(wikiidentifiers.MungeIdentifier(string(result.Identifier)))
+
+		if !matchesAllIncludeFilters(mungedID, includeFilterSets) {
+			continue
+		}
+		if excludedPages[mungedID] {
+			continue
+		}
+
+		apiResult := s.convertSearchResult(result, mungedID, fmKeysToReturn)
+		results = append(results, apiResult)
+	}
+	return results
+}
+
+// matchesAllIncludeFilters checks if a page matches all include filter sets.
+func matchesAllIncludeFilters(pageID wikipage.PageIdentifier, filterSets []map[wikipage.PageIdentifier]bool) bool {
+	for _, filterSet := range filterSets {
+		if !filterSet[pageID] {
+			return false
+		}
+	}
+	return true
+}
+
+// convertSearchResult converts a bleve search result to an API search result.
+func (s *Server) convertSearchResult(result bleve.SearchResult, mungedID wikipage.PageIdentifier, fmKeysToReturn []string) *apiv1.SearchResult {
+	var highlights []*apiv1.HighlightSpan
+	for _, hl := range result.Highlights {
+		highlights = append(highlights, &apiv1.HighlightSpan{Start: hl.Start, End: hl.End})
+	}
+
+	apiResult := &apiv1.SearchResult{
+		Identifier: string(result.Identifier),
+		Title:      result.Title,
+		Fragment:   result.Fragment,
+		Highlights: highlights,
+	}
+
+	if len(fmKeysToReturn) > 0 {
+		apiResult.Frontmatter = make(map[string]string)
+		for _, key := range fmKeysToReturn {
+			if value := s.FrontmatterIndexQueryer.GetValue(mungedID, key); value != "" {
+				apiResult.Frontmatter[key] = value
+			}
+		}
+	}
+	return apiResult
 }
 
 // ReadPage implements the ReadPage RPC.
@@ -602,4 +710,87 @@ func (s *Server) ReadPage(_ context.Context, req *apiv1.ReadPageRequest) (*apiv1
 		RenderedContentHtml:     renderedHTML,
 		RenderedContentMarkdown: renderedMarkdown,
 	}, nil
+}
+
+// GenerateIdentifier implements the GenerateIdentifier RPC.
+// Converts text to wiki identifier format and checks if it's available.
+func (s *Server) GenerateIdentifier(_ context.Context, req *apiv1.GenerateIdentifierRequest) (*apiv1.GenerateIdentifierResponse, error) {
+	if req.Text == "" {
+		return nil, status.Error(codes.InvalidArgument, "text is required")
+	}
+
+	// Generate the base identifier
+	identifier := wikiidentifiers.MungeIdentifier(req.Text)
+
+	// Check if page exists
+	isUnique, existingPage := s.checkIdentifierAvailability(identifier)
+
+	// If ensure_unique is requested and page exists, find a unique suffix
+	if req.EnsureUnique && !isUnique {
+		identifier = s.findUniqueIdentifier(identifier)
+		isUnique = true
+		existingPage = nil
+	}
+
+	return &apiv1.GenerateIdentifierResponse{
+		Identifier:   identifier,
+		IsUnique:     isUnique,
+		ExistingPage: existingPage,
+	}, nil
+}
+
+// checkIdentifierAvailability checks if an identifier is available and returns info about existing page if not.
+func (s *Server) checkIdentifierAvailability(identifier string) (bool, *apiv1.ExistingPageInfo) {
+	v := reflect.ValueOf(s.PageReaderMutator)
+	if s.PageReaderMutator == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
+		// If we can't check, assume it's unique
+		return true, nil
+	}
+
+	_, fm, err := s.PageReaderMutator.ReadFrontMatter(identifier)
+	if err != nil {
+		// Page doesn't exist
+		return true, nil
+	}
+
+	// Page exists, build info
+	existingPage := &apiv1.ExistingPageInfo{
+		Identifier: identifier,
+	}
+
+	// Get title from frontmatter
+	if title, ok := fm["title"].(string); ok {
+		existingPage.Title = title
+	}
+
+	// Get container from inventory.container
+	if inv, ok := fm["inventory"].(map[string]any); ok {
+		if container, ok := inv["container"].(string); ok {
+			existingPage.Container = container
+		}
+	}
+
+	return false, existingPage
+}
+
+// findUniqueIdentifier finds a unique identifier by adding numeric suffixes.
+func (s *Server) findUniqueIdentifier(baseIdentifier string) string {
+	v := reflect.ValueOf(s.PageReaderMutator)
+	if s.PageReaderMutator == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
+		return baseIdentifier
+	}
+
+	// Try suffixes _1, _2, _3, etc.
+	for i := 1; i < maxUniqueIdentifierAttempts; i++ {
+		candidate := fmt.Sprintf("%s_%d", baseIdentifier, i)
+
+		_, _, err := s.PageReaderMutator.ReadFrontMatter(candidate)
+		if err != nil {
+			// Page doesn't exist, we found a unique identifier
+			return candidate
+		}
+	}
+
+	// Fallback: return with a high number
+	return baseIdentifier + "_999"
 }

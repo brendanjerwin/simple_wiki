@@ -27,10 +27,11 @@ type InventoryFrontmatter struct {
 type TemplateContext struct {
 	// CAUTION: avoid changing the structure of TemplateContext without considering backward compatibility.
 	// If you change the structure, consider adding a migration to handle existing pages that may rely on the old structure.
-	Identifier string `json:"identifier"`
-	Title      string `json:"title"`
-	Map        map[string]any
-	Inventory  InventoryFrontmatter `json:"inventory"`
+	Identifier  string `json:"identifier"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Map         map[string]any
+	Inventory   InventoryFrontmatter `json:"inventory"`
 }
 
 func ConstructTemplateContextFromFrontmatter(fm wikipage.FrontMatter, query wikipage.IQueryFrontmatterIndex) (TemplateContext, error) {
@@ -274,11 +275,13 @@ func BuildIsContainer(query wikipage.IQueryFrontmatterIndex) func(string) bool {
 			return false
 		}
 
-		if len(query.QueryExactMatch("inventory.container", identifier)) > 0 {
+		// Primary: Check explicit is_container field
+		if query.GetValue(identifier, "inventory.is_container") == "true" {
 			return true
 		}
 
-		if query.GetValue(identifier, "inventory.items") != "" {
+		// Fallback for legacy: items reference this as their container
+		if len(query.QueryExactMatch("inventory.container", identifier)) > 0 {
 			return true
 		}
 
