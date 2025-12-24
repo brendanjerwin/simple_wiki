@@ -216,3 +216,61 @@ export const InteractiveTesting: Story = {
     }
   }
 };
+
+export const WithInventoryContainer: Story = {
+  args: {
+    results: [
+      {
+        identifier: 'screwdriver',
+        title: 'Phillips Head Screwdriver',
+        fragment: 'A versatile screwdriver with a #2 Phillips head, perfect for most household tasks.',
+        highlights: [
+          createHighlight(14, 25), // "screwdriver"
+        ],
+        frontmatter: {
+          'inventory.container': 'toolbox',
+          'inventory.container.title': 'My Toolbox'
+        }
+      } as SearchResult,
+      {
+        identifier: 'hammer',
+        title: 'Claw Hammer',
+        fragment: 'Standard 16oz claw hammer for general construction and demolition work.',
+        highlights: [
+          createHighlight(18, 24), // "hammer"
+        ],
+        frontmatter: {
+          'inventory.container': 'toolbox',
+          'inventory.container.title': 'My Toolbox'
+        }
+      } as SearchResult,
+      {
+        identifier: 'wrench',
+        title: 'Adjustable Wrench',
+        fragment: '10-inch adjustable wrench for nuts and bolts.',
+        highlights: [
+          createHighlight(27, 33), // "wrench"
+        ],
+        frontmatter: {
+          'inventory.container': 'garage_cabinet'
+          // No title for this container - will fall back to identifier
+        }
+      } as SearchResult
+    ],
+    open: true,
+  },
+  render: (args) => html`
+    <wiki-search-results 
+      .results="${args.results}"
+      .open="${args.open}"
+      @search-results-closed="${action('search-results-closed')}">
+    </wiki-search-results>
+  `,
+  parameters: {
+    docs: {
+      description: {
+        story: 'Search results showing items with inventory containers. The "Found In" section displays the container title when available (e.g., "My Toolbox"), or falls back to the identifier (e.g., "garage_cabinet") when no title is set.'
+      }
+    }
+  }
+};
