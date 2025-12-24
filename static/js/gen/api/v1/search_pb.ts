@@ -149,6 +149,13 @@ export class SearchResult extends Message<SearchResult> {
    */
   frontmatter: { [key: string]: string } = {};
 
+  /**
+   * Inventory context (if result is an inventory item)
+   *
+   * @generated from field: api.v1.InventoryContext inventory_context = 6;
+   */
+  inventoryContext?: InventoryContext;
+
   constructor(data?: PartialMessage<SearchResult>) {
     super();
     proto3.util.initPartial(data, this);
@@ -162,6 +169,7 @@ export class SearchResult extends Message<SearchResult> {
     { no: 3, name: "fragment", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 4, name: "highlights", kind: "message", T: HighlightSpan, repeated: true },
     { no: 5, name: "frontmatter", kind: "map", K: 9 /* ScalarType.STRING */, V: {kind: "scalar", T: 9 /* ScalarType.STRING */} },
+    { no: 6, name: "inventory_context", kind: "message", T: InventoryContext },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SearchResult {
@@ -178,6 +186,55 @@ export class SearchResult extends Message<SearchResult> {
 
   static equals(a: SearchResult | PlainMessage<SearchResult> | undefined, b: SearchResult | PlainMessage<SearchResult> | undefined): boolean {
     return proto3.util.equals(SearchResult, a, b);
+  }
+}
+
+/**
+ * Inventory context for search results.
+ *
+ * @generated from message api.v1.InventoryContext
+ */
+export class InventoryContext extends Message<InventoryContext> {
+  /**
+   * Container identifier
+   *
+   * @generated from field: string container_id = 1;
+   */
+  containerId = "";
+
+  /**
+   * Container title (if available)
+   *
+   * @generated from field: string container_title = 2;
+   */
+  containerTitle = "";
+
+  constructor(data?: PartialMessage<InventoryContext>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "api.v1.InventoryContext";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "container_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "container_title", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): InventoryContext {
+    return new InventoryContext().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): InventoryContext {
+    return new InventoryContext().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): InventoryContext {
+    return new InventoryContext().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: InventoryContext | PlainMessage<InventoryContext> | undefined, b: InventoryContext | PlainMessage<InventoryContext> | undefined): boolean {
+    return proto3.util.equals(InventoryContext, a, b);
   }
 }
 

@@ -207,7 +207,7 @@ describe('WikiSearchResults', () => {
     });
   });
 
-  describe('when result has inventory.container in frontmatter', () => {
+  describe('when result has inventory context without title', () => {
     beforeEach(async () => {
       el.open = true;
       el.results = [{
@@ -215,7 +215,10 @@ describe('WikiSearchResults', () => {
         title: 'Screwdriver',
         fragment: 'A useful tool',
         highlights: [],
-        frontmatter: { 'inventory.container': 'toolbox' }
+        inventoryContext: {
+          containerId: 'toolbox',
+          containerTitle: ''
+        }
       }] as unknown as WikiSearchResultsElement['results'];
       await el.updateComplete;
     });
@@ -241,7 +244,7 @@ describe('WikiSearchResults', () => {
     });
   });
 
-  describe('when result has inventory.container with title in frontmatter', () => {
+  describe('when result has inventory context with title', () => {
     beforeEach(async () => {
       el.open = true;
       el.results = [{
@@ -249,9 +252,9 @@ describe('WikiSearchResults', () => {
         title: 'Screwdriver',
         fragment: 'A useful tool',
         highlights: [],
-        frontmatter: { 
-          'inventory.container': 'toolbox',
-          'inventory.container.title': 'My Toolbox'
+        inventoryContext: {
+          containerId: 'toolbox',
+          containerTitle: 'My Toolbox'
         }
       }] as unknown as WikiSearchResultsElement['results'];
       await el.updateComplete;

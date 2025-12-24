@@ -636,17 +636,36 @@ func (s *Server) convertSearchResult(result bleve.SearchResult, mungedID wikipag
 					apiResult.Frontmatter[key] = value
 				}
 			}
-			
-			// If inventory.container is present, also fetch and include the container's title
-			if containerID := apiResult.Frontmatter["inventory.container"]; containerID != "" {
-				containerPageID := wikipage.PageIdentifier(wikiidentifiers.MungeIdentifier(containerID))
-				if containerTitle := s.FrontmatterIndexQueryer.GetValue(containerPageID, "title"); containerTitle != "" {
-					apiResult.Frontmatter["inventory.container.title"] = containerTitle
-				}
-			}
 		}
 	}
+	
+	// Populate inventory context if this is an inventory item
+	apiResult.InventoryContext = s.buildInventoryContext(mungedID)
+	
 	return apiResult
+}
+
+// buildInventoryContext builds inventory context for a search result if applicable.
+func (s *Server) buildInventoryContext(itemID wikipage.PageIdentifier) *apiv1.InventoryContext {
+	v := reflect.ValueOf(s.FrontmatterIndexQueryer)
+	if s.FrontmatterIndexQueryer == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
+		return nil
+	}
+	
+	// Check if this item has a container (inventory.container key)
+	containerID := s.FrontmatterIndexQueryer.GetValue(itemID, "inventory.container")
+	if containerID == "" {
+		return nil
+	}
+	
+	// Fetch the container's title
+	containerPageID := wikipage.PageIdentifier(wikiidentifiers.MungeIdentifier(containerID))
+	containerTitle := s.FrontmatterIndexQueryer.GetValue(containerPageID, "title")
+	
+	return &apiv1.InventoryContext{
+		ContainerId:    containerID,
+		ContainerTitle: containerTitle,
+	}
 }
 
 // ReadPage implements the ReadPage RPC.

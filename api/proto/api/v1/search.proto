@@ -33,6 +33,13 @@ message SearchResult {
   string fragment = 3; // Plain text fragment (no HTML)
   repeated HighlightSpan highlights = 4; // Highlight positions
   map<string, string> frontmatter = 5; // Requested frontmatter values (dot-path -> value)
+  InventoryContext inventory_context = 6; // Inventory context (if result is an inventory item)
+}
+
+// Inventory context for search results.
+message InventoryContext {
+  string container_id = 1; // Container identifier
+  string container_title = 2; // Container title (if available)
 }
 
 // A span of text to be highlighted.

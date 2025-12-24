@@ -1844,7 +1844,7 @@ var _ = Describe("Server", func() {
 			})
 		})
 
-		When("frontmatter keys are requested to be returned in results", func() {
+		When("result is an inventory item with container", func() {
 			var (
 				mockFrontmatterIndexQueryer *FlexibleMockFrontmatterIndexQueryer
 				searchResults               []bleve.SearchResult
@@ -1868,7 +1868,6 @@ var _ = Describe("Server", func() {
 				mockFrontmatterIndexQueryer.GetValueResults["toolbox"] = map[string]string{
 					"title": "My Toolbox",
 				}
-				req.FrontmatterKeysToReturnInResults = []string{"inventory.container"}
 			})
 
 			JustBeforeEach(func() {
@@ -1876,20 +1875,20 @@ var _ = Describe("Server", func() {
 				resp, err = server.SearchContent(ctx, req)
 			})
 
-			It("should include the requested frontmatter keys", func() {
+			It("should include inventory context with container ID", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(resp).NotTo(BeNil())
 				Expect(resp.Results).To(HaveLen(1))
-				Expect(resp.Results[0].Frontmatter).To(HaveKey("inventory.container"))
-				Expect(resp.Results[0].Frontmatter["inventory.container"]).To(Equal("toolbox"))
+				Expect(resp.Results[0].InventoryContext).NotTo(BeNil())
+				Expect(resp.Results[0].InventoryContext.ContainerId).To(Equal("toolbox"))
 			})
 
-			It("should also include the container's title as inventory.container.title", func() {
+			It("should include the container's title in inventory context", func() {
 				Expect(err).NotTo(HaveOccurred())
 				Expect(resp).NotTo(BeNil())
 				Expect(resp.Results).To(HaveLen(1))
-				Expect(resp.Results[0].Frontmatter).To(HaveKey("inventory.container.title"))
-				Expect(resp.Results[0].Frontmatter["inventory.container.title"]).To(Equal("My Toolbox"))
+				Expect(resp.Results[0].InventoryContext).NotTo(BeNil())
+				Expect(resp.Results[0].InventoryContext.ContainerTitle).To(Equal("My Toolbox"))
 			})
 
 			When("container has no title", func() {
@@ -1897,12 +1896,13 @@ var _ = Describe("Server", func() {
 					mockFrontmatterIndexQueryer.GetValueResults["toolbox"] = map[string]string{}
 				})
 
-				It("should not include inventory.container.title", func() {
+				It("should include inventory context with empty container title", func() {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(resp).NotTo(BeNil())
 					Expect(resp.Results).To(HaveLen(1))
-					Expect(resp.Results[0].Frontmatter).To(HaveKey("inventory.container"))
-					Expect(resp.Results[0].Frontmatter).NotTo(HaveKey("inventory.container.title"))
+					Expect(resp.Results[0].InventoryContext).NotTo(BeNil())
+					Expect(resp.Results[0].InventoryContext.ContainerId).To(Equal("toolbox"))
+					Expect(resp.Results[0].InventoryContext.ContainerTitle).To(Equal(""))
 				})
 			})
 		})

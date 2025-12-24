@@ -227,9 +227,9 @@ export const WithInventoryContainer: Story = {
         highlights: [
           createHighlight(14, 25), // "screwdriver"
         ],
-        frontmatter: {
-          'inventory.container': 'toolbox',
-          'inventory.container.title': 'My Toolbox'
+        inventoryContext: {
+          containerId: 'toolbox',
+          containerTitle: 'My Toolbox'
         }
       } as SearchResult,
       {
@@ -239,9 +239,9 @@ export const WithInventoryContainer: Story = {
         highlights: [
           createHighlight(18, 24), // "hammer"
         ],
-        frontmatter: {
-          'inventory.container': 'toolbox',
-          'inventory.container.title': 'My Toolbox'
+        inventoryContext: {
+          containerId: 'toolbox',
+          containerTitle: 'My Toolbox'
         }
       } as SearchResult,
       {
@@ -251,8 +251,9 @@ export const WithInventoryContainer: Story = {
         highlights: [
           createHighlight(27, 33), // "wrench"
         ],
-        frontmatter: {
-          'inventory.container': 'garage_cabinet'
+        inventoryContext: {
+          containerId: 'garage_cabinet',
+          containerTitle: ''
           // No title for this container - will fall back to identifier
         }
       } as SearchResult
