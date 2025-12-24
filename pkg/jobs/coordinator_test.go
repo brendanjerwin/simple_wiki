@@ -186,6 +186,49 @@ var _ = Describe("JobQueueCoordinator", func() {
 			})
 		})
 	})
+
+	Describe("GetJobProgress", func() {
+		var blockingJob1, blockingJob2 *jobs.BlockingMockJob
+
+		BeforeEach(func() {
+			// Enqueue multiple jobs in different queues
+			blockingJob1 = jobs.NewBlockingMockJob("Queue1")
+			blockingJob2 = jobs.NewBlockingMockJob("Queue2")
+			
+			coordinator.EnqueueJob(blockingJob1)
+			coordinator.EnqueueJob(blockingJob2)
+		})
+
+		AfterEach(func() {
+			// Always release jobs to prevent goroutine leaks
+			blockingJob1.Release()
+			blockingJob2.Release()
+		})
+
+		It("should return progress for all queues", func() {
+			progress := coordinator.GetJobProgress()
+			Expect(progress.QueueStats).To(HaveLen(2))
+		})
+
+		It("should report active queues count", func() {
+			progress := coordinator.GetJobProgress()
+			Expect(progress.TotalActive).To(BeNumerically(">", 0))
+		})
+
+		It("should report total queues count", func() {
+			progress := coordinator.GetJobProgress()
+			Expect(progress.TotalQueues).To(Equal(int32(2)))
+		})
+
+		It("should include queue statistics", func() {
+			progress := coordinator.GetJobProgress()
+			queueNames := []string{}
+			for _, q := range progress.QueueStats {
+				queueNames = append(queueNames, q.QueueName)
+			}
+			Expect(queueNames).To(ContainElements("Queue1", "Queue2"))
+		})
+	})
 })
 
 // testError is a simple error type for testing.

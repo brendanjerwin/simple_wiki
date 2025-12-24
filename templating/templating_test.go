@@ -755,6 +755,57 @@ var _ = Describe("BuildLinkTo", func() {
 	})
 })
 
+var _ = Describe("BuildIsContainer edge cases", func() {
+	var (
+		mockIndex      *mockFrontmatterIndex
+		isContainerFunc func(string) bool
+	)
+
+	BeforeEach(func() {
+		mockIndex = &mockFrontmatterIndex{
+			index:  map[string]map[string][]string{},
+			values: map[string]map[string]string{},
+		}
+		isContainerFunc = templating.BuildIsContainer(mockIndex)
+	})
+
+	Context("with empty identifier", func() {
+		It("should return false", func() {
+			Expect(isContainerFunc("")).To(BeFalse())
+		})
+	})
+
+	Context("with container marked by is_container field", func() {
+		BeforeEach(func() {
+			mockIndex.values["explicit_container"] = map[string]string{
+				"inventory.is_container": "true",
+			}
+		})
+
+		It("should return true", func() {
+			Expect(isContainerFunc("explicit_container")).To(BeTrue())
+		})
+	})
+
+	Context("with legacy container (items reference it)", func() {
+		BeforeEach(func() {
+			mockIndex.index["inventory.container"] = map[string][]string{
+				"legacy_container": []string{"item1", "item2"},
+			}
+		})
+
+		It("should return true", func() {
+			Expect(isContainerFunc("legacy_container")).To(BeTrue())
+		})
+	})
+
+	Context("with non-container identifier", func() {
+		It("should return false", func() {
+			Expect(isContainerFunc("regular_page")).To(BeFalse())
+		})
+	})
+})
+
 var _ = Describe("ExecuteTemplate", func() {
 	var (
 		mockSite  *mockPageReader
@@ -933,6 +984,42 @@ var _ = Describe("ExecuteTemplate", func() {
 			case <-time.After(5 * time.Second):
 				Fail("ExecuteTemplate timed out with circular reference")
 			}
+		})
+	})
+
+	Context("with FindByPrefix function", func() {
+		It("should execute template with FindByPrefix function", func() {
+			mockIndex.index["tag"] = map[string][]string{
+				"electronics": []string{"item1", "item2"},
+			}
+
+			templateString := "{{ $items := FindByPrefix \"tag\" \"elect\" }}Count: {{ len $items }}"
+			frontmatter := wikipage.FrontMatter{
+				identifierKey: "test_page",
+				titleKey:      "Test Page",
+			}
+
+			result, err := templating.ExecuteTemplate(templateString, frontmatter, mockSite, mockIndex)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(result)).To(ContainSubstring("Count:"))
+		})
+	})
+
+	Context("with FindByKeyExistence function", func() {
+		It("should execute template with FindByKeyExistence function", func() {
+			mockIndex.index["has_serial"] = map[string][]string{
+				"": []string{"item1", "item2"},
+			}
+
+			templateString := "{{ $items := FindByKeyExistence \"has_serial\" }}Count: {{ len $items }}"
+			frontmatter := wikipage.FrontMatter{
+				identifierKey: "test_page",
+				titleKey:      "Test Page",
+			}
+
+			result, err := templating.ExecuteTemplate(templateString, frontmatter, mockSite, mockIndex)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(result)).To(ContainSubstring("Count:"))
 		})
 	})
 })
