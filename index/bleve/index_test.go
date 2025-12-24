@@ -193,5 +193,11 @@ var _ = Describe("Index", func() {
 		It("should not return an error", func() {
 			Expect(err).NotTo(HaveOccurred())
 		})
+
+		It("should remove from the index", func() {
+			results, err := index.Query("Test Page")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(results).To(BeEmpty())
+		})
 	})
 })

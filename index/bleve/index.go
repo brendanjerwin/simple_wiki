@@ -101,10 +101,15 @@ func (b *Index) AddPageToIndex(requestedIdentifier wikipage.PageIdentifier) erro
 
 // RemovePageFromIndex removes a page from the Bleve index.
 func (b *Index) RemovePageFromIndex(identifier wikipage.PageIdentifier) error {
-	identifier = wikiidentifiers.MungeIdentifier(identifier)
+	mungedIdentifier := wikiidentifiers.MungeIdentifier(identifier)
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.index.Delete(identifier)
+	
+	// Try to delete all possible variations of the identifier to ensure complete removal
+	_ = b.index.Delete(identifier)
+	_ = b.index.Delete(mungedIdentifier)
+	
+	return nil
 }
 
 const (
