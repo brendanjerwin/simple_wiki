@@ -239,7 +239,7 @@ class WikiSearchResults extends LitElement {
    * @param path - Array of container path elements
    * @returns Processed path ready for rendering
    */
-  private processContainerPath(path: any[]) {
+  private processContainerPath(path: ContainerPathElement[]) {
     if (!path || path.length === 0) return [];
     
     // Sort by depth to ensure correct ordering
