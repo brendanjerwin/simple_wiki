@@ -168,4 +168,30 @@ var _ = Describe("Index", func() {
 			})
 		})
 	})
+
+	Describe("RemovePageFromIndex", func() {
+		var err error
+
+		BeforeEach(func() {
+			// Add a page
+			mockReader.AddPage("test-page", wikipage.FrontMatter{
+				"identifier": "test-page",
+				"title":      "Test Page",
+			})
+			Expect(frontmatterIndex.AddPageToIndex("test-page")).To(Succeed())
+			Expect(index.AddPageToIndex("test-page")).To(Succeed())
+
+			// Verify it's there first
+			results, err := index.Query("Test Page")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(results).NotTo(BeEmpty())
+
+			// Remove it
+			err = index.RemovePageFromIndex("test-page")
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
 })

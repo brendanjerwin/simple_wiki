@@ -174,5 +174,34 @@ var _ = Describe("GoldmarkRenderer", func() {
 				Expect(string(output)).To(BeEmpty())
 			})
 		})
+
+		When("rendering markdown with wikilinks", func() {
+			BeforeEach(func() {
+				source = []byte("This is a [[wikilink]] in text")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should render wikilink as an anchor tag", func() {
+				Expect(string(output)).To(ContainSubstring("href=\"/wikilink?title=wikilink\""))
+				Expect(string(output)).To(ContainSubstring(">wikilink</a>"))
+			})
+		})
+
+		When("rendering markdown with wikilink with spaces", func() {
+			BeforeEach(func() {
+				source = []byte("Link to [[My Page]] here")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should render wikilink with munged identifier in path", func() {
+				Expect(string(output)).To(ContainSubstring("href=\"/my_page?title=My+Page\""))
+			})
+		})
 	})
 })
