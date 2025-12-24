@@ -1221,4 +1221,76 @@ var _ = Describe("ExecuteTemplate", func() {
 			Expect(string(result)).To(ContainSubstring("Count:"))
 		})
 	})
+
+	Context("with nested template functions", func() {
+		It("should execute nested ShowInventoryContentsOf calls", func() {
+			mockSite.pages["outer_container"] = wikipage.FrontMatter{
+				identifierKey: "outer_container",
+				titleKey:      "Outer Container",
+				inventoryKey: map[string]any{
+					itemsKey: []string{"inner_container"},
+				},
+			}
+			mockSite.pages["inner_container"] = wikipage.FrontMatter{
+				identifierKey: "inner_container",
+				titleKey:      "Inner Container",
+				inventoryKey: map[string]any{
+					itemsKey: []string{"nested_item"},
+				},
+			}
+			mockSite.pages["nested_item"] = wikipage.FrontMatter{
+				identifierKey: "nested_item",
+				titleKey:      "Nested Item",
+			}
+			mockIndex.values["inner_container"] = map[string]string{
+				"inventory.is_container": "true",
+			}
+			mockIndex.values["nested_item"] = map[string]string{
+				titleKey: "Nested Item",
+			}
+
+			templateString := "{{ ShowInventoryContentsOf \"outer_container\" }}"
+			frontmatter := wikipage.FrontMatter{
+				identifierKey: "test_page",
+				titleKey:      "Test Page",
+			}
+
+			result, err := templating.ExecuteTemplate(templateString, frontmatter, mockSite, mockIndex)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(result)).To(ContainSubstring("Inner Container"))
+			Expect(string(result)).To(ContainSubstring("Nested Item"))
+		})
+	})
+
+	Context("with multiple function types in same template", func() {
+		It("should execute all functions correctly", func() {
+			mockSite.pages["page1"] = wikipage.FrontMatter{
+				identifierKey: "page1",
+				titleKey:      "Page 1",
+			}
+			mockIndex.index["tag"] = map[string][]string{
+				"important": []string{"page1"},
+			}
+			mockIndex.values["test_container"] = map[string]string{
+				"inventory.is_container": "true",
+			}
+
+			templateString := `
+{{ LinkTo "page1" }}
+{{ $items := FindBy "tag" "important" }}
+Found {{ len $items }} items
+{{ if IsContainer "test_container" }}Container exists{{ end }}
+`
+			frontmatter := wikipage.FrontMatter{
+				identifierKey: "test_page",
+				titleKey:      "Test Page",
+			}
+
+			result, err := templating.ExecuteTemplate(templateString, frontmatter, mockSite, mockIndex)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(result)).To(ContainSubstring("Page 1"))
+			Expect(string(result)).To(ContainSubstring("Found 1 items"))
+			Expect(string(result)).To(ContainSubstring("Container exists"))
+		})
+	})
 })
