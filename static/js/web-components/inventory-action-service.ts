@@ -13,6 +13,9 @@ import {
 import { AugmentErrorService } from './augment-error-service.js';
 import { showToastAfter } from './toast-message.js';
 
+const SUCCESS_TOAST_DURATION_SECONDS = 5;
+const ERROR_TOAST_DURATION_SECONDS = 8;
+
 /**
  * InventoryActionService - Handles inventory management workflows via modal dialogs
  *
@@ -174,16 +177,13 @@ export class InventoryActionService {
    * Shows a success toast message
    */
   showSuccess(message: string, callback?: () => void) {
-    showToastAfter(message, 'success', 5, callback);
+    showToastAfter(message, 'success', SUCCESS_TOAST_DURATION_SECONDS, callback);
   }
 
   /**
    * Shows an error toast message
    */
   showError(message: string) {
-    showToastAfter(message, 'error', 8);
+    showToastAfter(message, 'error', ERROR_TOAST_DURATION_SECONDS);
   }
 }
-
-// Create a singleton instance for global use
-export const inventoryActionService = new InventoryActionService();

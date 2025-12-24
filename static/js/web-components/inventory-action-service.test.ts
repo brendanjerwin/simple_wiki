@@ -1,6 +1,6 @@
 import { expect } from '@open-wc/testing';
 import sinon from 'sinon';
-import { InventoryActionService, inventoryActionService } from './inventory-action-service.js';
+import { InventoryActionService } from './inventory-action-service.js';
 
 describe('InventoryActionService', () => {
   let service: InventoryActionService;
@@ -395,9 +395,4 @@ describe('InventoryActionService', () => {
     });
   });
 
-  describe('singleton export', () => {
-    it('should export a singleton instance', () => {
-      expect(inventoryActionService).to.be.instanceOf(InventoryActionService);
-    });
-  });
 });

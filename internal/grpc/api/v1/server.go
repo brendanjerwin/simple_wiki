@@ -491,10 +491,6 @@ func (s *Server) DeletePage(_ context.Context, req *apiv1.DeletePageRequest) (*a
 }
 
 // SearchContent implements the SearchContent RPC.
-//
-//revive:disable:cognitive-complexity
-//revive:disable:cyclomatic
-//revive:disable:function-length
 func (s *Server) SearchContent(_ context.Context, req *apiv1.SearchContentRequest) (*apiv1.SearchContentResponse, error) {
 	if err := s.validateSearchRequest(req); err != nil {
 		return nil, err

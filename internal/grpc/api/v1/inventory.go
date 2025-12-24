@@ -17,6 +17,12 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// ERROR HANDLING CONTRACT:
+// - gRPC errors (codes.Internal, codes.InvalidArgument, etc.): Infrastructure/unexpected failures
+// - Response with Success=false: Domain-level "can't do that" (item not found, already exists, etc.)
+//
+// Clients should handle gRPC errors as exceptional, Success=false as normal control flow.
+
 const (
 	inventoryKey        = "inventory"
 	containerKey        = "container"
@@ -27,11 +33,19 @@ const (
 	defaultMaxRecursion = 10
 )
 
-// CreateInventoryItem implements the CreateInventoryItem RPC.
-func (s *Server) CreateInventoryItem(_ context.Context, req *apiv1.CreateInventoryItemRequest) (*apiv1.CreateInventoryItemResponse, error) {
+// validatePageReaderMutator checks that PageReaderMutator is available and not nil.
+func (s *Server) validatePageReaderMutator() error {
 	v := reflect.ValueOf(s.PageReaderMutator)
 	if s.PageReaderMutator == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
-		return nil, status.Error(codes.Internal, pageReadWriterNotAvailableError)
+		return status.Error(codes.Internal, pageReadWriterNotAvailableError)
+	}
+	return nil
+}
+
+// CreateInventoryItem implements the CreateInventoryItem RPC.
+func (s *Server) CreateInventoryItem(_ context.Context, req *apiv1.CreateInventoryItemRequest) (*apiv1.CreateInventoryItemResponse, error) {
+	if err := s.validatePageReaderMutator(); err != nil {
+		return nil, err
 	}
 
 	if req.ItemIdentifier == "" {
@@ -95,28 +109,24 @@ func (s *Server) CreateInventoryItem(_ context.Context, req *apiv1.CreateInvento
 		return nil, status.Errorf(codes.Internal, "failed to write markdown: %v", err)
 	}
 
+	containerSuffix := ""
+	if container != "" {
+		containerSuffix = fmt.Sprintf(" in container '%s'", container)
+	}
+
 	return &apiv1.CreateInventoryItemResponse{
 		Success:        true,
 		ItemIdentifier: identifier,
-		Summary:        buildCreateItemSummary(title, container),
+		Summary:        fmt.Sprintf("Created inventory item '%s'%s.", title, containerSuffix),
 	}, nil
-}
-
-// buildCreateItemSummary creates the summary for a new inventory item.
-func buildCreateItemSummary(title, container string) string {
-	if container != "" {
-		return fmt.Sprintf("Created inventory item '%s' in container '%s'.", title, container)
-	}
-	return fmt.Sprintf("Created inventory item '%s'.", title)
 }
 
 // MoveInventoryItem implements the MoveInventoryItem RPC.
 //
 //revive:disable:function-length
 func (s *Server) MoveInventoryItem(_ context.Context, req *apiv1.MoveInventoryItemRequest) (*apiv1.MoveInventoryItemResponse, error) {
-	v := reflect.ValueOf(s.PageReaderMutator)
-	if s.PageReaderMutator == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
-		return nil, status.Error(codes.Internal, pageReadWriterNotAvailableError)
+	if err := s.validatePageReaderMutator(); err != nil {
+		return nil, err
 	}
 
 	if req.ItemIdentifier == "" {
@@ -407,9 +417,8 @@ func (s *Server) buildInventoryItem(itemID, containerID string) *apiv1.Inventory
 
 // FindItemLocation implements the FindItemLocation RPC.
 func (s *Server) FindItemLocation(_ context.Context, req *apiv1.FindItemLocationRequest) (*apiv1.FindItemLocationResponse, error) {
-	v := reflect.ValueOf(s.PageReaderMutator)
-	if s.PageReaderMutator == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
-		return nil, status.Error(codes.Internal, pageReadWriterNotAvailableError)
+	if err := s.validatePageReaderMutator(); err != nil {
+		return nil, err
 	}
 
 	if req.ItemIdentifier == "" {
@@ -433,12 +442,7 @@ func (s *Server) FindItemLocation(_ context.Context, req *apiv1.FindItemLocation
 
 	// Get the container from inventory.container
 	var locations []*apiv1.ContainerPath
-	container := ""
-	if inv, ok := itemFm[inventoryKey].(map[string]any); ok {
-		if cont, ok := inv[containerKey].(string); ok {
-			container = cont
-		}
-	}
+	container := getContainerFromFrontmatter(itemFm)
 
 	if container != "" {
 		path := &apiv1.ContainerPath{
@@ -493,13 +497,7 @@ func (s *Server) buildContainerHierarchy(containerID string) []string {
 			break
 		}
 
-		parent := ""
-		if inv, ok := fm[inventoryKey].(map[string]any); ok {
-			if cont, ok := inv[containerKey].(string); ok {
-				parent = cont
-			}
-		}
-		current = parent
+		current = getContainerFromFrontmatter(fm)
 	}
 
 	return path

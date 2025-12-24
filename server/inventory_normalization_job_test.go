@@ -104,7 +104,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 	Describe("findAllContainers", func() {
 		BeforeEach(func() {
-			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger, nil)
+			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
 		})
 
 		When("there are pages with inventory.items", func() {
@@ -162,7 +162,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 	Describe("getContainerItems", func() {
 		BeforeEach(func() {
-			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger, nil)
+			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
 		})
 
 		When("container has items in inventory.items array", func() {
@@ -220,7 +220,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 	Describe("createItemPage", func() {
 		BeforeEach(func() {
-			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger, nil)
+			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
 		})
 
 		When("creating a new item page", func() {
@@ -288,7 +288,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 	Describe("detectCircularReferences", func() {
 		BeforeEach(func() {
-			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger, nil)
+			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
 		})
 
 		When("there are no circular references", func() {
@@ -334,7 +334,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 	Describe("Execute", func() {
 		BeforeEach(func() {
-			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger, nil)
+			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
 		})
 
 		When("container has items without pages", func() {
@@ -552,7 +552,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 	Describe("generateAuditReport", func() {
 		BeforeEach(func() {
-			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger, nil)
+			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
 		})
 
 		When("there are anomalies and created pages", func() {
@@ -640,7 +640,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 	Describe("getContainerItems edge cases", func() {
 		BeforeEach(func() {
-			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger, nil)
+			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
 		})
 
 		When("container has items as []string type", func() {
@@ -689,7 +689,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 	Describe("getItemsWithContainerReference", func() {
 		BeforeEach(func() {
-			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger, nil)
+			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
 		})
 
 		When("items reference a container", func() {
@@ -745,7 +745,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 	Describe("GetName", func() {
 		BeforeEach(func() {
-			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger, nil)
+			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
 		})
 
 		When("called", func() {
@@ -763,7 +763,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 	Describe("generateAuditReport with error anomalies", func() {
 		BeforeEach(func() {
-			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger, nil)
+			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
 		})
 
 		When("there is an error severity anomaly", func() {
@@ -795,7 +795,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 	Describe("findCycle edge cases", func() {
 		BeforeEach(func() {
-			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger, nil)
+			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
 		})
 
 		When("there is no parent container", func() {
@@ -836,7 +836,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 	Describe("createMissingItemPages", func() {
 		BeforeEach(func() {
-			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger, nil)
+			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
 		})
 
 		When("page creation fails", func() {
@@ -861,7 +861,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 					mockNormalizationDeps: mockDeps,
 					writeError:            os.ErrPermission,
 				}
-				job = NewInventoryNormalizationJob(failingDeps, mockFmIndex, logger, nil)
+				job = NewInventoryNormalizationJob(failingDeps, mockFmIndex, logger)
 
 				createdPages, anomalies = job.createMissingItemPages([]string{"tool_box"})
 			})
@@ -879,7 +879,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 	Describe("detectCircularReferenceAnomalies", func() {
 		BeforeEach(func() {
-			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger, nil)
+			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
 		})
 
 		When("there are circular references", func() {
@@ -909,7 +909,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 	Describe("buildItemContainerMap", func() {
 		BeforeEach(func() {
-			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger, nil)
+			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
 		})
 
 		When("items are in containers from both sources", func() {
@@ -945,7 +945,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 	Describe("detectOrphanedItems", func() {
 		BeforeEach(func() {
-			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger, nil)
+			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
 		})
 
 		When("item has empty container reference", func() {

@@ -1,6 +1,6 @@
 import { html, css, LitElement, nothing } from 'lit';
 import { sharedStyles, foundationCSS, dialogCSS, responsiveCSS, buttonCSS } from './shared-styles.js';
-import { inventoryActionService } from './inventory-action-service.js';
+import { InventoryActionService } from './inventory-action-service.js';
 import { createClient } from '@connectrpc/connect';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import { SearchService } from '../gen/api/v1/search_connect.js';
@@ -305,6 +305,7 @@ export class InventoryAddItemDialog extends LitElement {
   private _titleDebounceTimer?: ReturnType<typeof setTimeout>;
   private _identifierDebounceTimer?: ReturnType<typeof setTimeout>;
   private searchClient = createClient(SearchService, getGrpcWebTransport());
+  private inventoryActionService = new InventoryActionService();
 
   constructor() {
     super();
@@ -421,7 +422,7 @@ export class InventoryAddItemDialog extends LitElement {
 
     // Generate identifier if in automagic mode
     if (this.automagicMode) {
-      const result = await inventoryActionService.generateIdentifier(title);
+      const result = await this.inventoryActionService.generateIdentifier(title);
       if (!result.error) {
         this.itemIdentifier = result.identifier;
         this.isUnique = result.isUnique;
@@ -461,7 +462,7 @@ export class InventoryAddItemDialog extends LitElement {
     }
 
     // We call generateIdentifier with ensure_unique=false just to check availability
-    const result = await inventoryActionService.generateIdentifier(identifier);
+    const result = await this.inventoryActionService.generateIdentifier(identifier);
     if (!result.error) {
       this.isUnique = result.isUnique;
       this.existingPage = result.existingPage;
@@ -527,7 +528,7 @@ export class InventoryAddItemDialog extends LitElement {
     this.loading = true;
     this.error = undefined;
 
-    const result = await inventoryActionService.addItem(
+    const result = await this.inventoryActionService.addItem(
       this.container,
       this.itemIdentifier.trim(),
       this.itemTitle.trim(),
@@ -537,7 +538,7 @@ export class InventoryAddItemDialog extends LitElement {
     this.loading = false;
 
     if (result.success) {
-      inventoryActionService.showSuccess(
+      this.inventoryActionService.showSuccess(
         result.summary || `Added ${this.itemTitle} to ${this.container}`,
         () => window.location.reload()
       );

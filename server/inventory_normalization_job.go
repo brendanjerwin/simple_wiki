@@ -16,6 +16,15 @@ import (
 	"golang.org/x/text/language"
 )
 
+// DESIGN NOTE: Inventory uses a dual-representation model:
+//  1. inventory.items array on containers - Used for UX (quick item entry in frontmatter)
+//  2. inventory.container reference on items - Canonical child→parent relationship
+//
+// The normalization job reconciles these into eventual consistency.
+// The items array is a UX convenience; the container reference is the source of truth.
+// This allows users to quickly add items by editing a container's frontmatter,
+// while the system maintains proper parent references on each item.
+
 const (
 	// AuditReportPage is the identifier for the inventory audit report page
 	AuditReportPage = "inventory_audit_report"
@@ -38,11 +47,10 @@ type InventoryNormalizationDependencies interface {
 
 // InventoryNormalizationJob scans for inventory anomalies and creates missing item pages.
 type InventoryNormalizationJob struct {
-	normalizer     *InventoryNormalizer
-	deps           InventoryNormalizationDependencies
-	fmIndex        frontmatter.IQueryFrontmatterIndex
-	logger         lumber.Logger
-	jobCoordinator *jobs.JobQueueCoordinator
+	normalizer *InventoryNormalizer
+	deps       InventoryNormalizationDependencies
+	fmIndex    frontmatter.IQueryFrontmatterIndex
+	logger     lumber.Logger
 }
 
 // NewInventoryNormalizationJob creates a new inventory normalization job.
@@ -50,14 +58,12 @@ func NewInventoryNormalizationJob(
 	deps InventoryNormalizationDependencies,
 	fmIndex frontmatter.IQueryFrontmatterIndex,
 	logger lumber.Logger,
-	coordinator *jobs.JobQueueCoordinator,
 ) *InventoryNormalizationJob {
 	return &InventoryNormalizationJob{
-		normalizer:     NewInventoryNormalizer(deps, logger),
-		deps:           deps,
-		fmIndex:        fmIndex,
-		logger:         logger,
-		jobCoordinator: coordinator,
+		normalizer: NewInventoryNormalizer(deps, logger),
+		deps:       deps,
+		fmIndex:    fmIndex,
+		logger:     logger,
 	}
 }
 
@@ -502,7 +508,6 @@ func ScheduleInventoryNormalization(
 		site,
 		site.FrontmatterIndexQueryer,
 		site.Logger,
-		site.JobQueueCoordinator,
 	)
 
 	return scheduler.Schedule(schedule, job)

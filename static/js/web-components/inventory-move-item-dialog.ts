@@ -1,6 +1,6 @@
 import { html, css, LitElement, nothing } from 'lit';
 import { sharedStyles, foundationCSS, dialogCSS, responsiveCSS, buttonCSS } from './shared-styles.js';
-import { inventoryActionService } from './inventory-action-service.js';
+import { InventoryActionService } from './inventory-action-service.js';
 import { createClient } from '@connectrpc/connect';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import { SearchService } from '../gen/api/v1/search_connect.js';
@@ -280,6 +280,7 @@ export class InventoryMoveItemDialog extends LitElement {
   private _searchDebounceTimeoutMs = 300;
   private _searchDebounceTimer?: ReturnType<typeof setTimeout>;
   private searchClient = createClient(SearchService, getGrpcWebTransport());
+  private inventoryActionService = new InventoryActionService();
 
   constructor() {
     super();
@@ -411,13 +412,13 @@ export class InventoryMoveItemDialog extends LitElement {
     this.movingTo = containerIdentifier;
     this.error = undefined;
 
-    const result = await inventoryActionService.moveItem(
+    const result = await this.inventoryActionService.moveItem(
       this.itemIdentifier,
       containerIdentifier
     );
 
     if (result.success) {
-      inventoryActionService.showSuccess(
+      this.inventoryActionService.showSuccess(
         result.summary || `Moved ${this.itemIdentifier} to ${containerIdentifier}`,
         () => window.location.reload()
       );
