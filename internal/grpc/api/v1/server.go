@@ -658,14 +658,8 @@ func (s *Server) buildInventoryContext(itemID wikipage.PageIdentifier) *apiv1.In
 	// Build the full path from root to immediate container
 	path := s.buildContainerPath(containerID)
 	
-	// For backward compatibility, also set the direct container fields
-	containerPageID := wikipage.PageIdentifier(wikiidentifiers.MungeIdentifier(containerID))
-	containerTitle := s.FrontmatterIndexQueryer.GetValue(containerPageID, "title")
-	
 	return &apiv1.InventoryContext{
 		IsInventoryRelated: true,
-		ContainerId:        containerID,
-		ContainerTitle:     containerTitle,
 		Path:               path,
 	}
 }

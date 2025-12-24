@@ -203,23 +203,9 @@ export class InventoryContext extends Message<InventoryContext> {
   isInventoryRelated = false;
 
   /**
-   * Direct container identifier (deprecated, use path instead)
-   *
-   * @generated from field: string container_id = 2;
-   */
-  containerId = "";
-
-  /**
-   * Direct container title (deprecated, use path instead)
-   *
-   * @generated from field: string container_title = 3;
-   */
-  containerTitle = "";
-
-  /**
    * Full path from root to immediate container
    *
-   * @generated from field: repeated api.v1.ContainerPathElement path = 4;
+   * @generated from field: repeated api.v1.ContainerPathElement path = 2;
    */
   path: ContainerPathElement[] = [];
 
@@ -232,9 +218,7 @@ export class InventoryContext extends Message<InventoryContext> {
   static readonly typeName = "api.v1.InventoryContext";
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "is_inventory_related", kind: "scalar", T: 8 /* ScalarType.BOOL */ },
-    { no: 2, name: "container_id", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 3, name: "container_title", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 4, name: "path", kind: "message", T: ContainerPathElement, repeated: true },
+    { no: 2, name: "path", kind: "message", T: ContainerPathElement, repeated: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): InventoryContext {

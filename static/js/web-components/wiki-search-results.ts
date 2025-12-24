@@ -351,7 +351,7 @@ class WikiSearchResults extends LitElement {
                                       : html`<a href="/${element.identifier}">${element.title || element.identifier}</a>`
                                     }
                                   `)
-                                : html`<a href="/${result.inventoryContext.containerId}">${result.inventoryContext.containerTitle || result.inventoryContext.containerId}</a>`
+                                : ''
                               }
                             </div>`
                           : ''}

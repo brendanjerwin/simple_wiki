@@ -3078,50 +3078,10 @@ java.lang.String defaultValue) {
 
     /**
      * <pre>
-     * Direct container identifier (deprecated, use path instead)
-     * </pre>
-     *
-     * <code>string container_id = 2 [json_name = "containerId"];</code>
-     * @return The containerId.
-     */
-    java.lang.String getContainerId();
-    /**
-     * <pre>
-     * Direct container identifier (deprecated, use path instead)
-     * </pre>
-     *
-     * <code>string container_id = 2 [json_name = "containerId"];</code>
-     * @return The bytes for containerId.
-     */
-    com.google.protobuf.ByteString
-        getContainerIdBytes();
-
-    /**
-     * <pre>
-     * Direct container title (deprecated, use path instead)
-     * </pre>
-     *
-     * <code>string container_title = 3 [json_name = "containerTitle"];</code>
-     * @return The containerTitle.
-     */
-    java.lang.String getContainerTitle();
-    /**
-     * <pre>
-     * Direct container title (deprecated, use path instead)
-     * </pre>
-     *
-     * <code>string container_title = 3 [json_name = "containerTitle"];</code>
-     * @return The bytes for containerTitle.
-     */
-    com.google.protobuf.ByteString
-        getContainerTitleBytes();
-
-    /**
-     * <pre>
      * Full path from root to immediate container
      * </pre>
      *
-     * <code>repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];</code>
+     * <code>repeated .api.v1.ContainerPathElement path = 2 [json_name = "path"];</code>
      */
     java.util.List<api.v1.Search.ContainerPathElement> 
         getPathList();
@@ -3130,7 +3090,7 @@ java.lang.String defaultValue) {
      * Full path from root to immediate container
      * </pre>
      *
-     * <code>repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];</code>
+     * <code>repeated .api.v1.ContainerPathElement path = 2 [json_name = "path"];</code>
      */
     api.v1.Search.ContainerPathElement getPath(int index);
     /**
@@ -3138,7 +3098,7 @@ java.lang.String defaultValue) {
      * Full path from root to immediate container
      * </pre>
      *
-     * <code>repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];</code>
+     * <code>repeated .api.v1.ContainerPathElement path = 2 [json_name = "path"];</code>
      */
     int getPathCount();
   }
@@ -3155,8 +3115,6 @@ java.lang.String defaultValue) {
       // @@protoc_insertion_point(message_implements:api.v1.InventoryContext)
       InventoryContextOrBuilder {
     private InventoryContext() {
-      containerId_ = "";
-      containerTitle_ = "";
       path_ = emptyProtobufList();
     }
     public static final int IS_INVENTORY_RELATED_FIELD_NUMBER = 1;
@@ -3197,148 +3155,14 @@ java.lang.String defaultValue) {
       isInventoryRelated_ = false;
     }
 
-    public static final int CONTAINER_ID_FIELD_NUMBER = 2;
-    private java.lang.String containerId_;
-    /**
-     * <pre>
-     * Direct container identifier (deprecated, use path instead)
-     * </pre>
-     *
-     * <code>string container_id = 2 [json_name = "containerId"];</code>
-     * @return The containerId.
-     */
-    @java.lang.Override
-    public java.lang.String getContainerId() {
-      return containerId_;
-    }
-    /**
-     * <pre>
-     * Direct container identifier (deprecated, use path instead)
-     * </pre>
-     *
-     * <code>string container_id = 2 [json_name = "containerId"];</code>
-     * @return The bytes for containerId.
-     */
-    @java.lang.Override
-    public com.google.protobuf.ByteString
-        getContainerIdBytes() {
-      return com.google.protobuf.ByteString.copyFromUtf8(containerId_);
-    }
-    /**
-     * <pre>
-     * Direct container identifier (deprecated, use path instead)
-     * </pre>
-     *
-     * <code>string container_id = 2 [json_name = "containerId"];</code>
-     * @param value The containerId to set.
-     */
-    private void setContainerId(
-        java.lang.String value) {
-      java.lang.Class<?> valueClass = value.getClass();
-  
-      containerId_ = value;
-    }
-    /**
-     * <pre>
-     * Direct container identifier (deprecated, use path instead)
-     * </pre>
-     *
-     * <code>string container_id = 2 [json_name = "containerId"];</code>
-     */
-    private void clearContainerId() {
-
-      containerId_ = getDefaultInstance().getContainerId();
-    }
-    /**
-     * <pre>
-     * Direct container identifier (deprecated, use path instead)
-     * </pre>
-     *
-     * <code>string container_id = 2 [json_name = "containerId"];</code>
-     * @param value The bytes for containerId to set.
-     */
-    private void setContainerIdBytes(
-        com.google.protobuf.ByteString value) {
-      checkByteStringIsUtf8(value);
-      containerId_ = value.toStringUtf8();
-
-    }
-
-    public static final int CONTAINER_TITLE_FIELD_NUMBER = 3;
-    private java.lang.String containerTitle_;
-    /**
-     * <pre>
-     * Direct container title (deprecated, use path instead)
-     * </pre>
-     *
-     * <code>string container_title = 3 [json_name = "containerTitle"];</code>
-     * @return The containerTitle.
-     */
-    @java.lang.Override
-    public java.lang.String getContainerTitle() {
-      return containerTitle_;
-    }
-    /**
-     * <pre>
-     * Direct container title (deprecated, use path instead)
-     * </pre>
-     *
-     * <code>string container_title = 3 [json_name = "containerTitle"];</code>
-     * @return The bytes for containerTitle.
-     */
-    @java.lang.Override
-    public com.google.protobuf.ByteString
-        getContainerTitleBytes() {
-      return com.google.protobuf.ByteString.copyFromUtf8(containerTitle_);
-    }
-    /**
-     * <pre>
-     * Direct container title (deprecated, use path instead)
-     * </pre>
-     *
-     * <code>string container_title = 3 [json_name = "containerTitle"];</code>
-     * @param value The containerTitle to set.
-     */
-    private void setContainerTitle(
-        java.lang.String value) {
-      java.lang.Class<?> valueClass = value.getClass();
-  
-      containerTitle_ = value;
-    }
-    /**
-     * <pre>
-     * Direct container title (deprecated, use path instead)
-     * </pre>
-     *
-     * <code>string container_title = 3 [json_name = "containerTitle"];</code>
-     */
-    private void clearContainerTitle() {
-
-      containerTitle_ = getDefaultInstance().getContainerTitle();
-    }
-    /**
-     * <pre>
-     * Direct container title (deprecated, use path instead)
-     * </pre>
-     *
-     * <code>string container_title = 3 [json_name = "containerTitle"];</code>
-     * @param value The bytes for containerTitle to set.
-     */
-    private void setContainerTitleBytes(
-        com.google.protobuf.ByteString value) {
-      checkByteStringIsUtf8(value);
-      containerTitle_ = value.toStringUtf8();
-
-    }
-
-    public static final int PATH_FIELD_NUMBER = 4;
+    public static final int PATH_FIELD_NUMBER = 2;
     private com.google.protobuf.Internal.ProtobufList<api.v1.Search.ContainerPathElement> path_;
     /**
      * <pre>
      * Full path from root to immediate container
      * </pre>
      *
-     * <code>repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];</code>
+     * <code>repeated .api.v1.ContainerPathElement path = 2 [json_name = "path"];</code>
      */
     @java.lang.Override
     public java.util.List<api.v1.Search.ContainerPathElement> getPathList() {
@@ -3349,7 +3173,7 @@ java.lang.String defaultValue) {
      * Full path from root to immediate container
      * </pre>
      *
-     * <code>repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];</code>
+     * <code>repeated .api.v1.ContainerPathElement path = 2 [json_name = "path"];</code>
      */
     public java.util.List<? extends api.v1.Search.ContainerPathElementOrBuilder> 
         getPathOrBuilderList() {
@@ -3360,7 +3184,7 @@ java.lang.String defaultValue) {
      * Full path from root to immediate container
      * </pre>
      *
-     * <code>repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];</code>
+     * <code>repeated .api.v1.ContainerPathElement path = 2 [json_name = "path"];</code>
      */
     @java.lang.Override
     public int getPathCount() {
@@ -3371,7 +3195,7 @@ java.lang.String defaultValue) {
      * Full path from root to immediate container
      * </pre>
      *
-     * <code>repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];</code>
+     * <code>repeated .api.v1.ContainerPathElement path = 2 [json_name = "path"];</code>
      */
     @java.lang.Override
     public api.v1.Search.ContainerPathElement getPath(int index) {
@@ -3382,7 +3206,7 @@ java.lang.String defaultValue) {
      * Full path from root to immediate container
      * </pre>
      *
-     * <code>repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];</code>
+     * <code>repeated .api.v1.ContainerPathElement path = 2 [json_name = "path"];</code>
      */
     public api.v1.Search.ContainerPathElementOrBuilder getPathOrBuilder(
         int index) {
@@ -3401,7 +3225,7 @@ java.lang.String defaultValue) {
      * Full path from root to immediate container
      * </pre>
      *
-     * <code>repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];</code>
+     * <code>repeated .api.v1.ContainerPathElement path = 2 [json_name = "path"];</code>
      */
     private void setPath(
         int index, api.v1.Search.ContainerPathElement value) {
@@ -3414,7 +3238,7 @@ java.lang.String defaultValue) {
      * Full path from root to immediate container
      * </pre>
      *
-     * <code>repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];</code>
+     * <code>repeated .api.v1.ContainerPathElement path = 2 [json_name = "path"];</code>
      */
     private void addPath(api.v1.Search.ContainerPathElement value) {
       value.getClass();
@@ -3426,7 +3250,7 @@ java.lang.String defaultValue) {
      * Full path from root to immediate container
      * </pre>
      *
-     * <code>repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];</code>
+     * <code>repeated .api.v1.ContainerPathElement path = 2 [json_name = "path"];</code>
      */
     private void addPath(
         int index, api.v1.Search.ContainerPathElement value) {
@@ -3439,7 +3263,7 @@ java.lang.String defaultValue) {
      * Full path from root to immediate container
      * </pre>
      *
-     * <code>repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];</code>
+     * <code>repeated .api.v1.ContainerPathElement path = 2 [json_name = "path"];</code>
      */
     private void addAllPath(
         java.lang.Iterable<? extends api.v1.Search.ContainerPathElement> values) {
@@ -3452,7 +3276,7 @@ java.lang.String defaultValue) {
      * Full path from root to immediate container
      * </pre>
      *
-     * <code>repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];</code>
+     * <code>repeated .api.v1.ContainerPathElement path = 2 [json_name = "path"];</code>
      */
     private void clearPath() {
       path_ = emptyProtobufList();
@@ -3462,7 +3286,7 @@ java.lang.String defaultValue) {
      * Full path from root to immediate container
      * </pre>
      *
-     * <code>repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];</code>
+     * <code>repeated .api.v1.ContainerPathElement path = 2 [json_name = "path"];</code>
      */
     private void removePath(int index) {
       ensurePathIsMutable();
@@ -3612,148 +3436,10 @@ java.lang.String defaultValue) {
 
       /**
        * <pre>
-       * Direct container identifier (deprecated, use path instead)
-       * </pre>
-       *
-       * <code>string container_id = 2 [json_name = "containerId"];</code>
-       * @return The containerId.
-       */
-      @java.lang.Override
-      public java.lang.String getContainerId() {
-        return instance.getContainerId();
-      }
-      /**
-       * <pre>
-       * Direct container identifier (deprecated, use path instead)
-       * </pre>
-       *
-       * <code>string container_id = 2 [json_name = "containerId"];</code>
-       * @return The bytes for containerId.
-       */
-      @java.lang.Override
-      public com.google.protobuf.ByteString
-          getContainerIdBytes() {
-        return instance.getContainerIdBytes();
-      }
-      /**
-       * <pre>
-       * Direct container identifier (deprecated, use path instead)
-       * </pre>
-       *
-       * <code>string container_id = 2 [json_name = "containerId"];</code>
-       * @param value The containerId to set.
-       * @return This builder for chaining.
-       */
-      public Builder setContainerId(
-          java.lang.String value) {
-        copyOnWrite();
-        instance.setContainerId(value);
-        return this;
-      }
-      /**
-       * <pre>
-       * Direct container identifier (deprecated, use path instead)
-       * </pre>
-       *
-       * <code>string container_id = 2 [json_name = "containerId"];</code>
-       * @return This builder for chaining.
-       */
-      public Builder clearContainerId() {
-        copyOnWrite();
-        instance.clearContainerId();
-        return this;
-      }
-      /**
-       * <pre>
-       * Direct container identifier (deprecated, use path instead)
-       * </pre>
-       *
-       * <code>string container_id = 2 [json_name = "containerId"];</code>
-       * @param value The bytes for containerId to set.
-       * @return This builder for chaining.
-       */
-      public Builder setContainerIdBytes(
-          com.google.protobuf.ByteString value) {
-        copyOnWrite();
-        instance.setContainerIdBytes(value);
-        return this;
-      }
-
-      /**
-       * <pre>
-       * Direct container title (deprecated, use path instead)
-       * </pre>
-       *
-       * <code>string container_title = 3 [json_name = "containerTitle"];</code>
-       * @return The containerTitle.
-       */
-      @java.lang.Override
-      public java.lang.String getContainerTitle() {
-        return instance.getContainerTitle();
-      }
-      /**
-       * <pre>
-       * Direct container title (deprecated, use path instead)
-       * </pre>
-       *
-       * <code>string container_title = 3 [json_name = "containerTitle"];</code>
-       * @return The bytes for containerTitle.
-       */
-      @java.lang.Override
-      public com.google.protobuf.ByteString
-          getContainerTitleBytes() {
-        return instance.getContainerTitleBytes();
-      }
-      /**
-       * <pre>
-       * Direct container title (deprecated, use path instead)
-       * </pre>
-       *
-       * <code>string container_title = 3 [json_name = "containerTitle"];</code>
-       * @param value The containerTitle to set.
-       * @return This builder for chaining.
-       */
-      public Builder setContainerTitle(
-          java.lang.String value) {
-        copyOnWrite();
-        instance.setContainerTitle(value);
-        return this;
-      }
-      /**
-       * <pre>
-       * Direct container title (deprecated, use path instead)
-       * </pre>
-       *
-       * <code>string container_title = 3 [json_name = "containerTitle"];</code>
-       * @return This builder for chaining.
-       */
-      public Builder clearContainerTitle() {
-        copyOnWrite();
-        instance.clearContainerTitle();
-        return this;
-      }
-      /**
-       * <pre>
-       * Direct container title (deprecated, use path instead)
-       * </pre>
-       *
-       * <code>string container_title = 3 [json_name = "containerTitle"];</code>
-       * @param value The bytes for containerTitle to set.
-       * @return This builder for chaining.
-       */
-      public Builder setContainerTitleBytes(
-          com.google.protobuf.ByteString value) {
-        copyOnWrite();
-        instance.setContainerTitleBytes(value);
-        return this;
-      }
-
-      /**
-       * <pre>
        * Full path from root to immediate container
        * </pre>
        *
-       * <code>repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];</code>
+       * <code>repeated .api.v1.ContainerPathElement path = 2 [json_name = "path"];</code>
        */
       @java.lang.Override
       public java.util.List<api.v1.Search.ContainerPathElement> getPathList() {
@@ -3765,7 +3451,7 @@ java.lang.String defaultValue) {
        * Full path from root to immediate container
        * </pre>
        *
-       * <code>repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];</code>
+       * <code>repeated .api.v1.ContainerPathElement path = 2 [json_name = "path"];</code>
        */
       @java.lang.Override
       public int getPathCount() {
@@ -3775,7 +3461,7 @@ java.lang.String defaultValue) {
        * Full path from root to immediate container
        * </pre>
        *
-       * <code>repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];</code>
+       * <code>repeated .api.v1.ContainerPathElement path = 2 [json_name = "path"];</code>
        */
       @java.lang.Override
       public api.v1.Search.ContainerPathElement getPath(int index) {
@@ -3786,7 +3472,7 @@ java.lang.String defaultValue) {
        * Full path from root to immediate container
        * </pre>
        *
-       * <code>repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];</code>
+       * <code>repeated .api.v1.ContainerPathElement path = 2 [json_name = "path"];</code>
        */
       public Builder setPath(
           int index, api.v1.Search.ContainerPathElement value) {
@@ -3799,7 +3485,7 @@ java.lang.String defaultValue) {
        * Full path from root to immediate container
        * </pre>
        *
-       * <code>repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];</code>
+       * <code>repeated .api.v1.ContainerPathElement path = 2 [json_name = "path"];</code>
        */
       public Builder setPath(
           int index, api.v1.Search.ContainerPathElement.Builder builderForValue) {
@@ -3813,7 +3499,7 @@ java.lang.String defaultValue) {
        * Full path from root to immediate container
        * </pre>
        *
-       * <code>repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];</code>
+       * <code>repeated .api.v1.ContainerPathElement path = 2 [json_name = "path"];</code>
        */
       public Builder addPath(api.v1.Search.ContainerPathElement value) {
         copyOnWrite();
@@ -3825,7 +3511,7 @@ java.lang.String defaultValue) {
        * Full path from root to immediate container
        * </pre>
        *
-       * <code>repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];</code>
+       * <code>repeated .api.v1.ContainerPathElement path = 2 [json_name = "path"];</code>
        */
       public Builder addPath(
           int index, api.v1.Search.ContainerPathElement value) {
@@ -3838,7 +3524,7 @@ java.lang.String defaultValue) {
        * Full path from root to immediate container
        * </pre>
        *
-       * <code>repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];</code>
+       * <code>repeated .api.v1.ContainerPathElement path = 2 [json_name = "path"];</code>
        */
       public Builder addPath(
           api.v1.Search.ContainerPathElement.Builder builderForValue) {
@@ -3851,7 +3537,7 @@ java.lang.String defaultValue) {
        * Full path from root to immediate container
        * </pre>
        *
-       * <code>repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];</code>
+       * <code>repeated .api.v1.ContainerPathElement path = 2 [json_name = "path"];</code>
        */
       public Builder addPath(
           int index, api.v1.Search.ContainerPathElement.Builder builderForValue) {
@@ -3865,7 +3551,7 @@ java.lang.String defaultValue) {
        * Full path from root to immediate container
        * </pre>
        *
-       * <code>repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];</code>
+       * <code>repeated .api.v1.ContainerPathElement path = 2 [json_name = "path"];</code>
        */
       public Builder addAllPath(
           java.lang.Iterable<? extends api.v1.Search.ContainerPathElement> values) {
@@ -3878,7 +3564,7 @@ java.lang.String defaultValue) {
        * Full path from root to immediate container
        * </pre>
        *
-       * <code>repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];</code>
+       * <code>repeated .api.v1.ContainerPathElement path = 2 [json_name = "path"];</code>
        */
       public Builder clearPath() {
         copyOnWrite();
@@ -3890,7 +3576,7 @@ java.lang.String defaultValue) {
        * Full path from root to immediate container
        * </pre>
        *
-       * <code>repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];</code>
+       * <code>repeated .api.v1.ContainerPathElement path = 2 [json_name = "path"];</code>
        */
       public Builder removePath(int index) {
         copyOnWrite();
@@ -3915,14 +3601,12 @@ java.lang.String defaultValue) {
         case BUILD_MESSAGE_INFO: {
             java.lang.Object[] objects = new java.lang.Object[] {
               "isInventoryRelated_",
-              "containerId_",
-              "containerTitle_",
               "path_",
               api.v1.Search.ContainerPathElement.class,
             };
             java.lang.String info =
-                "\u0000\u0004\u0000\u0000\u0001\u0004\u0004\u0000\u0001\u0000\u0001\u0007\u0002\u0208" +
-                "\u0003\u0208\u0004\u001b";
+                "\u0000\u0002\u0000\u0000\u0001\u0002\u0002\u0000\u0001\u0000\u0001\u0007\u0002\u001b" +
+                "";
             return newMessageInfo(DEFAULT_INSTANCE, info, objects);
         }
         // fall through

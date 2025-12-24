@@ -217,8 +217,6 @@ describe('WikiSearchResults', () => {
         highlights: [],
         inventoryContext: {
           isInventoryRelated: true,
-          containerId: 'toolbox',
-          containerTitle: '',
           path: [{
             identifier: 'toolbox',
             title: ''
@@ -259,8 +257,6 @@ describe('WikiSearchResults', () => {
         highlights: [],
         inventoryContext: {
           isInventoryRelated: true,
-          containerId: 'toolbox',
-          containerTitle: 'My Toolbox',
           path: [{
             identifier: 'toolbox',
             title: 'My Toolbox'
@@ -301,8 +297,6 @@ describe('WikiSearchResults', () => {
         highlights: [],
         inventoryContext: {
           isInventoryRelated: true,
-          containerId: 'toolbox',
-          containerTitle: 'My Toolbox',
           path: [
             { identifier: 'house', title: 'My House', depth: 0 },
             { identifier: 'garage', title: 'Main Garage', depth: 1 },
@@ -353,8 +347,6 @@ describe('WikiSearchResults', () => {
         highlights: [],
         inventoryContext: {
           isInventoryRelated: true,
-          containerId: 'toolbox',
-          containerTitle: '',
           path: [
             { identifier: 'garage', title: '', depth: 0 },
             { identifier: 'toolbox', title: '', depth: 1 }
@@ -381,8 +373,6 @@ describe('WikiSearchResults', () => {
         highlights: [],
         inventoryContext: {
           isInventoryRelated: true,
-          containerId: 'red_case',
-          containerTitle: 'Red Tool Case',
           path: [
             { identifier: 'house', title: 'My House', depth: 0 },
             { identifier: 'workshop_shed', title: '', depth: 1 },
@@ -424,8 +414,6 @@ describe('WikiSearchResults', () => {
         highlights: [],
         inventoryContext: {
           isInventoryRelated: true,
-          containerId: 'small_box',
-          containerTitle: 'Small Box',
           path: [
             { identifier: 'building', title: 'Main Building', depth: 0 },
             { identifier: 'floor2', title: 'Second Floor', depth: 1 },
@@ -487,8 +475,6 @@ describe('WikiSearchResults', () => {
         highlights: [],
         inventoryContext: {
           isInventoryRelated: true,
-          containerId: 'level4',
-          containerTitle: 'Level 4',
           path: [
             { identifier: 'level1', title: 'Level 1', depth: 0 },
             { identifier: 'level2', title: 'Level 2', depth: 1 },
@@ -521,8 +507,6 @@ describe('WikiSearchResults', () => {
         highlights: [],
         inventoryContext: {
           isInventoryRelated: true,
-          containerId: 'c',
-          containerTitle: 'C',
           path: [
             { identifier: 'b', title: 'B', depth: 1 },
             { identifier: 'c', title: 'C', depth: 2 },
@@ -551,8 +535,6 @@ describe('WikiSearchResults', () => {
         highlights: [],
         inventoryContext: {
           isInventoryRelated: false,
-          containerId: '',
-          containerTitle: '',
           path: []
         }
       }] as unknown as WikiSearchResultsElement['results'];

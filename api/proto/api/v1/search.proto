@@ -39,9 +39,7 @@ message SearchResult {
 // Inventory context for search results.
 message InventoryContext {
   bool is_inventory_related = 1; // Whether this result is inventory-related
-  string container_id = 2; // Direct container identifier (deprecated, use path instead)
-  string container_title = 3; // Direct container title (deprecated, use path instead)
-  repeated ContainerPathElement path = 4; // Full path from root to immediate container
+  repeated ContainerPathElement path = 2; // Full path from root to immediate container
 }
 
 // A single element in a container path.

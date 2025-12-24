@@ -58,56 +58,6 @@ public object InventoryContextKt {
     }
 
     /**
-     * ```
-     * Direct container identifier (deprecated, use path instead)
-     * ```
-     *
-     * `string container_id = 2 [json_name = "containerId"];`
-     */
-    public var containerId: kotlin.String
-      @JvmName("getContainerId")
-      get() = _builder.containerId
-      @JvmName("setContainerId")
-      set(value) {
-        _builder.containerId = value
-      }
-    /**
-     * ```
-     * Direct container identifier (deprecated, use path instead)
-     * ```
-     *
-     * `string container_id = 2 [json_name = "containerId"];`
-     */
-    public fun clearContainerId() {
-      _builder.clearContainerId()
-    }
-
-    /**
-     * ```
-     * Direct container title (deprecated, use path instead)
-     * ```
-     *
-     * `string container_title = 3 [json_name = "containerTitle"];`
-     */
-    public var containerTitle: kotlin.String
-      @JvmName("getContainerTitle")
-      get() = _builder.containerTitle
-      @JvmName("setContainerTitle")
-      set(value) {
-        _builder.containerTitle = value
-      }
-    /**
-     * ```
-     * Direct container title (deprecated, use path instead)
-     * ```
-     *
-     * `string container_title = 3 [json_name = "containerTitle"];`
-     */
-    public fun clearContainerTitle() {
-      _builder.clearContainerTitle()
-    }
-
-    /**
      * An uninstantiable, behaviorless type to represent the field in
      * generics.
      */
@@ -118,7 +68,7 @@ public object InventoryContextKt {
      * Full path from root to immediate container
      * ```
      *
-     * `repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];`
+     * `repeated .api.v1.ContainerPathElement path = 2 [json_name = "path"];`
      */
      public val path: com.google.protobuf.kotlin.DslList<api.v1.Search.ContainerPathElement, PathProxy>
       @kotlin.jvm.JvmSynthetic
@@ -130,7 +80,7 @@ public object InventoryContextKt {
      * Full path from root to immediate container
      * ```
      *
-     * `repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];`
+     * `repeated .api.v1.ContainerPathElement path = 2 [json_name = "path"];`
      * @param value The path to add.
      */
     @kotlin.jvm.JvmSynthetic
@@ -143,7 +93,7 @@ public object InventoryContextKt {
      * Full path from root to immediate container
      * ```
      *
-     * `repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];`
+     * `repeated .api.v1.ContainerPathElement path = 2 [json_name = "path"];`
      * @param value The path to add.
      */
     @kotlin.jvm.JvmSynthetic
@@ -157,7 +107,7 @@ public object InventoryContextKt {
      * Full path from root to immediate container
      * ```
      *
-     * `repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];`
+     * `repeated .api.v1.ContainerPathElement path = 2 [json_name = "path"];`
      * @param values The path to add.
      */
     @kotlin.jvm.JvmSynthetic
@@ -170,7 +120,7 @@ public object InventoryContextKt {
      * Full path from root to immediate container
      * ```
      *
-     * `repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];`
+     * `repeated .api.v1.ContainerPathElement path = 2 [json_name = "path"];`
      * @param values The path to add.
      */
     @kotlin.jvm.JvmSynthetic
@@ -184,7 +134,7 @@ public object InventoryContextKt {
      * Full path from root to immediate container
      * ```
      *
-     * `repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];`
+     * `repeated .api.v1.ContainerPathElement path = 2 [json_name = "path"];`
      * @param index The index to set the value at.
      * @param value The path to set.
      */
@@ -198,7 +148,7 @@ public object InventoryContextKt {
      * Full path from root to immediate container
      * ```
      *
-     * `repeated .api.v1.ContainerPathElement path = 4 [json_name = "path"];`
+     * `repeated .api.v1.ContainerPathElement path = 2 [json_name = "path"];`
      */
     @kotlin.jvm.JvmSynthetic
     @kotlin.jvm.JvmName("clearPath")

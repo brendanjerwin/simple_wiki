@@ -1895,30 +1895,6 @@ var _ = Describe("Server", func() {
 				Expect(resp).NotTo(BeNil())
 				Expect(resp.Results).To(HaveLen(1))
 				Expect(resp.Results[0].InventoryContext).NotTo(BeNil())
-				Expect(resp.Results[0].InventoryContext.ContainerId).To(Equal("toolbox"))
-			})
-
-			It("should include the container's title in inventory context", func() {
-				Expect(err).NotTo(HaveOccurred())
-				Expect(resp).NotTo(BeNil())
-				Expect(resp.Results).To(HaveLen(1))
-				Expect(resp.Results[0].InventoryContext).NotTo(BeNil())
-				Expect(resp.Results[0].InventoryContext.ContainerTitle).To(Equal("My Toolbox"))
-			})
-
-			When("container has no title", func() {
-				BeforeEach(func() {
-					mockFrontmatterIndexQueryer.GetValueResults["toolbox"] = map[string]string{}
-				})
-
-				It("should include inventory context with empty container title", func() {
-					Expect(err).NotTo(HaveOccurred())
-					Expect(resp).NotTo(BeNil())
-					Expect(resp.Results).To(HaveLen(1))
-					Expect(resp.Results[0].InventoryContext).NotTo(BeNil())
-					Expect(resp.Results[0].InventoryContext.ContainerId).To(Equal("toolbox"))
-					Expect(resp.Results[0].InventoryContext.ContainerTitle).To(Equal(""))
-				})
 			})
 
 			It("should set IsInventoryRelated to true", func() {

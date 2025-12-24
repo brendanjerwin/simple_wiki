@@ -229,8 +229,6 @@ export const WithInventoryContainer: Story = {
         ],
         inventoryContext: {
           isInventoryRelated: true,
-          containerId: 'toolbox',
-          containerTitle: 'My Toolbox',
           path: [
             { identifier: 'house', title: 'My House', depth: 0 },
             { identifier: 'garage', title: 'Main Garage', depth: 1 },
@@ -247,8 +245,6 @@ export const WithInventoryContainer: Story = {
         ],
         inventoryContext: {
           isInventoryRelated: true,
-          containerId: 'toolbox',
-          containerTitle: 'My Toolbox',
           path: [
             { identifier: 'house', title: 'My House', depth: 0 },
             { identifier: 'garage', title: 'Main Garage', depth: 1 },
@@ -265,8 +261,6 @@ export const WithInventoryContainer: Story = {
         ],
         inventoryContext: {
           isInventoryRelated: true,
-          containerId: 'garage_cabinet',
-          containerTitle: '',
           path: [
             { identifier: 'garage_cabinet', title: '', depth: 0 }
           ]
@@ -281,8 +275,6 @@ export const WithInventoryContainer: Story = {
         ],
         inventoryContext: {
           isInventoryRelated: true,
-          containerId: 'red_case',
-          containerTitle: 'Red Tool Case',
           path: [
             { identifier: 'house', title: 'My House', depth: 0 },
             { identifier: 'workshop_shed', title: '', depth: 1 },
@@ -299,8 +291,6 @@ export const WithInventoryContainer: Story = {
         ],
         inventoryContext: {
           isInventoryRelated: true,
-          containerId: 'small_box',
-          containerTitle: 'Small Organizer Box',
           path: [
             { identifier: 'building', title: 'Main Building', depth: 0 },
             { identifier: 'floor2', title: 'Second Floor', depth: 1 },
