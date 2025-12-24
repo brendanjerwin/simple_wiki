@@ -1416,10 +1416,11 @@ var _ = Describe("Server", func() {
 
 	Describe("SearchContent", func() {
 		var (
-			req                   *apiv1.SearchContentRequest
-			resp                  *apiv1.SearchContentResponse
-			err                   error
-			mockBleveIndexQueryer *MockBleveIndexQueryer
+			req                         *apiv1.SearchContentRequest
+			resp                        *apiv1.SearchContentResponse
+			err                         error
+			mockBleveIndexQueryer       *MockBleveIndexQueryer
+			mockFrontmatterIndexQueryer *FlexibleMockFrontmatterIndexQueryer
 		)
 
 		BeforeEach(func() {
@@ -1427,10 +1428,14 @@ var _ = Describe("Server", func() {
 				Query: "test query",
 			}
 			mockBleveIndexQueryer = &MockBleveIndexQueryer{}
+			mockFrontmatterIndexQueryer = &FlexibleMockFrontmatterIndexQueryer{
+				ExactMatchResults: make(map[string][]string),
+				GetValueResults:   make(map[string]map[string]string),
+			}
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("commit", time.Now(), nil, mockBleveIndexQueryer, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, nil)
+			server = v1.NewServer("commit", time.Now(), nil, mockBleveIndexQueryer, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, mockFrontmatterIndexQueryer)
 			resp, err = server.SearchContent(ctx, req)
 		})
 
@@ -1441,6 +1446,16 @@ var _ = Describe("Server", func() {
 
 			It("should return an internal error", func() {
 				Expect(err).To(HaveGrpcStatus(codes.Internal, "Search index is not available"))
+			})
+		})
+
+		When("the frontmatter index is not available", func() {
+			BeforeEach(func() {
+				mockFrontmatterIndexQueryer = nil
+			})
+
+			It("should return an internal error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.Internal, "Frontmatter index is not available"))
 			})
 		})
 
@@ -1549,7 +1564,7 @@ var _ = Describe("Server", func() {
 				})
 
 				It("should return an internal error", func() {
-					Expect(err).To(HaveGrpcStatus(codes.Internal, "Frontmatter index not available for filtering"))
+					Expect(err).To(HaveGrpcStatus(codes.Internal, "Frontmatter index is not available"))
 				})
 			})
 
@@ -1738,7 +1753,7 @@ var _ = Describe("Server", func() {
 				})
 
 				It("should return an internal error", func() {
-					Expect(err).To(HaveGrpcStatus(codes.Internal, "Frontmatter index not available for filtering"))
+					Expect(err).To(HaveGrpcStatus(codes.Internal, "Frontmatter index is not available"))
 				})
 			})
 

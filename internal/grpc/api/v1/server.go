@@ -522,6 +522,13 @@ func (s *Server) validateSearchRequest(req *apiv1.SearchContentRequest) error {
 	if s.BleveIndexQueryer == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
 		return status.Error(codes.Internal, "Search index is not available")
 	}
+	
+	// FrontmatterIndexQueryer is required for search operations (inventory context, frontmatter filtering)
+	v = reflect.ValueOf(s.FrontmatterIndexQueryer)
+	if s.FrontmatterIndexQueryer == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
+		return status.Error(codes.Internal, "Frontmatter index is not available")
+	}
+	
 	if req.Query == "" {
 		return status.Error(codes.InvalidArgument, "query cannot be empty")
 	}
@@ -628,23 +635,19 @@ func (s *Server) convertSearchResult(result bleve.SearchResult, mungedID wikipag
 	if len(fmKeysToReturn) > 0 {
 		apiResult.Frontmatter = make(map[string]string)
 		
-		// Only proceed if FrontmatterIndexQueryer is available
-		v := reflect.ValueOf(s.FrontmatterIndexQueryer)
-		if s.FrontmatterIndexQueryer != nil && !(v.Kind() == reflect.Ptr && v.IsNil()) {
-			for _, key := range fmKeysToReturn {
-				if value := s.FrontmatterIndexQueryer.GetValue(mungedID, key); value != "" {
-					apiResult.Frontmatter[key] = value
-				}
+		// FrontmatterIndexQueryer is required when frontmatter keys are requested
+		// It should have been validated earlier in the call chain
+		for _, key := range fmKeysToReturn {
+			if value := s.FrontmatterIndexQueryer.GetValue(mungedID, key); value != "" {
+				apiResult.Frontmatter[key] = value
 			}
 		}
 	}
 	
 	// Populate inventory context if this is an inventory item
-	// Only do this if FrontmatterIndexQueryer is available (required dependency)
-	v := reflect.ValueOf(s.FrontmatterIndexQueryer)
-	if s.FrontmatterIndexQueryer != nil && !(v.Kind() == reflect.Ptr && v.IsNil()) {
-		apiResult.InventoryContext = s.buildInventoryContext(mungedID)
-	}
+	// FrontmatterIndexQueryer is required for inventory context
+	// It should have been validated earlier in the call chain
+	apiResult.InventoryContext = s.buildInventoryContext(mungedID)
 	
 	return apiResult
 }
