@@ -29,7 +29,7 @@ export class WikiSearch extends LitElement {
 
     if (this.inventoryOnly) {
       request.frontmatterKeyIncludeFilters = ['inventory.container'];
-      request.frontmatterKeyExcludeFilters = ['inventory.items'];
+      request.frontmatterKeyExcludeFilters = ['inventory.is_container'];
     }
 
     const response = await this.getClient().searchContent(request);
@@ -42,24 +42,6 @@ export class WikiSearch extends LitElement {
         padding: 0;
         margin: 0;
         max-width: 100%;
-    }
-
-    :host([no-results]) div#container {
-        animation: shake 0.5s linear;
-    }
-
-    @keyframes shake {
-        0% { transform: translate(1px, 1px) rotate(0deg); }
-        10% { transform: translate(-1px, -2px) rotate(-1deg); }
-        20% { transform: translate(-3px, 0px) rotate(1deg); }
-        30% { transform: translate(3px, 2px) rotate(0deg); }
-        40% { transform: translate(1px, -1px) rotate(1deg); }
-        50% { transform: translate(-1px, 2px) rotate(-1deg); }
-        60% { transform: translate(-3px, 1px) rotate(0deg); }
-        70% { transform: translate(3px, 1px) rotate(-1deg); }
-        80% { transform: translate(-1px, -1px) rotate(1deg); }
-        90% { transform: translate(1px, 2px) rotate(0deg); }
-        100% { transform: translate(1px, -2px) rotate(-1deg); }
     }
 
     form { 
@@ -239,7 +221,7 @@ export class WikiSearch extends LitElement {
             ${this.error ? html`<div class="error">${this.error}</div>` : ''}
             <wiki-search-results
                 .results="${this.results}"
-                .open="${this.results.length > 0}"
+                .open="${this.results.length > 0 || this.noResults}"
                 .inventoryOnly="${this.inventoryOnly}"
                 @search-results-closed="${this.handleSearchResultsClosed}"
                 @inventory-filter-changed="${this.handleInventoryFilterChanged}">

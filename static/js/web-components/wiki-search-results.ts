@@ -128,6 +128,12 @@ class WikiSearchResults extends LitElement {
         .found-in a:hover {
             text-decoration: underline;
         }
+        .no-results {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+            font-style: italic;
+        }
 
         @media (max-width: 410px) {
             div#results {
@@ -283,7 +289,9 @@ class WikiSearchResults extends LitElement {
                     <button class="close border-radius-small" @click="${this.close}"><i class="fa-solid fa-xmark"></i></button>
                 </div>
                 <div id="results">
-                ${this.results.map(result => html`
+                ${this.results.length === 0
+                  ? html`<div class="no-results">No results found</div>`
+                  : this.results.map(result => html`
                     <a href="/${result.identifier}" class="border-radius-small">${result.title}</a>
                     <div class="item_content border-radius-small">
                         ${result.frontmatter?.['inventory.container']
