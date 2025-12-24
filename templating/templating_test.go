@@ -683,6 +683,54 @@ var _ = Describe("ConstructTemplateContextFromFrontmatterWithVisited", func() {
 	})
 })
 
+var _ = Describe("ConstructTemplateContextFromFrontmatterWithVisited with circular reference", func() {
+	var (
+		mockIndex       *mockFrontmatterIndex
+		templateContext templating.TemplateContext
+		err            error
+	)
+
+	BeforeEach(func() {
+		mockIndex = &mockFrontmatterIndex{
+			index: map[string]map[string][]string{
+				"inventory.container": {
+					"circular_container": []string{"item1", "item2"},
+				},
+			},
+			values: map[string]map[string]string{
+				"item1": {titleKey: "Item 1"},
+				"item2": {titleKey: "Item 2"},
+			},
+		}
+
+		frontmatter := wikipage.FrontMatter{
+			identifierKey: "circular_container",
+			titleKey:      "Circular Container",
+		}
+
+		// Create a visited map with the container already visited
+		visited := map[string]bool{
+			"circular_container": true,
+		}
+
+		// Act - this should handle circular reference gracefully
+		templateContext, err = templating.ConstructTemplateContextFromFrontmatterWithVisited(
+			frontmatter, mockIndex, visited)
+	})
+
+	It("should not return an error", func() {
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should have empty inventory items to prevent infinite recursion", func() {
+		Expect(templateContext.Inventory.Items).To(BeEmpty())
+	})
+
+	It("should have correct identifier", func() {
+		Expect(templateContext.Identifier).To(Equal("circular_container"))
+	})
+})
+
 func createDeepNestedPages() map[string]wikipage.FrontMatter {
 	pages := make(map[string]wikipage.FrontMatter)
 	for i := 0; i <= maxTestLevels; i++ {
@@ -825,6 +873,55 @@ var _ = Describe("BuildLinkTo", func() {
 
 		It("should return N/A", func() {
 			Expect(result).To(Equal("N/A"))
+		})
+	})
+
+	Describe("when circular reference is detected", func() {
+		BeforeEach(func() {
+			// Create a page that would cause circular reference
+			mockSite.pages["circular_page"] = wikipage.FrontMatter{
+				identifierKey: "circular_page",
+				titleKey:      "Circular Page",
+			}
+
+			// Use BuildLinkToWithVisited with a visited map that already contains the page
+			visited := map[string]bool{
+				"circular_page": true,
+			}
+			linkToFunc = templating.BuildLinkToWithVisited(mockSite, currentPageTemplateContext, mockIndex, visited)
+
+			// Act
+			result = linkToFunc("circular_page")
+		})
+
+		It("should return circular reference link", func() {
+			Expect(result).To(ContainSubstring("(circular reference)"))
+		})
+
+		It("should use munged identifier", func() {
+			Expect(result).To(ContainSubstring("/circular_page"))
+		})
+	})
+
+	Describe("when linking to non-existent page from non-container", func() {
+		BeforeEach(func() {
+			// Ensure current page is not a container
+			currentPageTemplateContext = templating.TemplateContext{
+				Identifier: "regular_page",
+				Title:      "Regular Page",
+			}
+			linkToFunc = templating.BuildLinkTo(mockSite, currentPageTemplateContext, mockIndex)
+
+			// Act - link to non-existent page
+			result = linkToFunc("new_page")
+		})
+
+		It("should create a link to create the page", func() {
+			Expect(result).To(ContainSubstring("/new_page?title="))
+		})
+
+		It("should not include inventory container parameter", func() {
+			Expect(result).NotTo(ContainSubstring("inventory.container"))
 		})
 	})
 })
