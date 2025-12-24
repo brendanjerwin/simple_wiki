@@ -314,7 +314,7 @@ export const WithInventoryContainer: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Search results showing items with inventory containers. The "Found In" section displays the full container path with each level clickable. Demonstrates various scenarios:\n- Full path with all titles (screwdriver & hammer)\n- Single level with no title, falls back to identifier (wrench)\n- **Mixed scenario**: Path with some titles and some identifiers (drill shows "My House › workshop_shed › Red Tool Case")\n- **Long path truncation**: Paths with more than 4 levels show "..." for early items, keeping the deepest (most useful) levels visible (hex key shows "... › Metal Shelf A › Large Storage Box › Small Organizer Box")'
+        story: 'Search results showing items with inventory containers. The "In" section displays the full container path with each level clickable. Demonstrates various scenarios:\n- Full path with all titles (screwdriver & hammer)\n- Single level with no title, falls back to identifier (wrench)\n- **Mixed scenario**: Path with some titles and some identifiers (drill shows "My House › workshop_shed › Red Tool Case")\n- **Long path truncation**: Paths with more than 4 levels show "..." for early items, keeping the deepest (most useful) levels visible (hex key shows "... › Metal Shelf A › Large Storage Box › Small Organizer Box")'
       }
     }
   }

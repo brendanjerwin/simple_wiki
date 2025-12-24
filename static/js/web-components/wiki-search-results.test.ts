@@ -231,9 +231,9 @@ describe('WikiSearchResults', () => {
       expect(foundIn).to.exist;
     });
 
-    it('should display "Found In:" text', () => {
+    it('should display "In:" text', () => {
       const foundIn = el.shadowRoot?.querySelector('.found-in');
-      expect(foundIn?.textContent).to.contain('Found In:');
+      expect(foundIn?.textContent).to.contain('In:');
     });
 
     it('should link to the container', () => {
@@ -271,9 +271,9 @@ describe('WikiSearchResults', () => {
       expect(foundIn).to.exist;
     });
 
-    it('should display "Found In:" text', () => {
+    it('should display "In:" text', () => {
       const foundIn = el.shadowRoot?.querySelector('.found-in');
-      expect(foundIn?.textContent).to.contain('Found In:');
+      expect(foundIn?.textContent).to.contain('In:');
     });
 
     it('should link to the container', () => {

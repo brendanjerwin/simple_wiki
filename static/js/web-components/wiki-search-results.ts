@@ -131,7 +131,7 @@ class WikiSearchResults extends LitElement {
         }
         .path-separator {
             color: #999;
-            margin: 0 4px;
+            margin: 0 2px;
         }
         .path-ellipsis {
             color: #999;
@@ -342,7 +342,7 @@ class WikiSearchResults extends LitElement {
                     <div class="item_content border-radius-small">
                         ${result.inventoryContext?.isInventoryRelated
                           ? html`<div class="found-in">
-                              <strong>Found In:</strong>
+                              <strong>In:</strong>
                               ${result.inventoryContext.path && result.inventoryContext.path.length > 0
                                 ? this.processContainerPath(result.inventoryContext.path).map((element, index) => html`
                                     ${index > 0 ? html`<span class="path-separator">›</span>` : ''}
