@@ -94,9 +94,6 @@ type Config struct {
 
     // Encode Infinity or Nan float into `null`, instead of returning an error.
     EncodeNullForInfOrNan bool
-
-    // CaseSensitive indicates that the decoder should not ignore the case of object keys.
-    CaseSensitive bool
 }
  
 var (
@@ -114,6 +111,7 @@ var (
  
     // ConfigFastest is the fastest config of APIs, aiming at speed.
     ConfigFastest = Config{
+        NoQuoteTextMarshaler: true,
         NoValidateJSONMarshaler: true,
         NoValidateJSONSkip: true,
     }.Froze()

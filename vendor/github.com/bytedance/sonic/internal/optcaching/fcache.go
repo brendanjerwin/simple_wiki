@@ -324,7 +324,7 @@ func (self *NormalFieldMap) Set(fields []resolver.FieldMeta) {
 
 }
 
-// use hashmap
+// use hashnap
 type FallbackFieldMap struct {
 	oders  []string
 	inner  map[string]int
