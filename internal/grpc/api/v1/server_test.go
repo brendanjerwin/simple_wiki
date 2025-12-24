@@ -1859,6 +1859,68 @@ var _ = Describe("Server", func() {
 			})
 		})
 
+		When("frontmatter_keys_to_return_in_results is specified", func() {
+			var (
+				mockFrontmatterIndexQueryer *FlexibleMockFrontmatterIndexQueryer
+				searchResults               []bleve.SearchResult
+			)
+
+			BeforeEach(func() {
+				mockFrontmatterIndexQueryer = &FlexibleMockFrontmatterIndexQueryer{
+					ExactMatchResults: make(map[string][]string),
+					GetValueResults:   make(map[string]map[string]string),
+				}
+				// Search returns a page with various frontmatter fields
+				searchResults = []bleve.SearchResult{
+					{Identifier: "test_page", Title: "Test Page", Fragment: "Test content"},
+				}
+				mockBleveIndexQueryer.Results = searchResults
+				// Page has multiple frontmatter fields
+				mockFrontmatterIndexQueryer.GetValueResults["test_page"] = map[string]string{
+					"author":      "John Doe",
+					"category":    "Technology",
+					"tags":        "golang,testing",
+					"draft":       "false",
+				}
+				// Request specific frontmatter keys to return
+				req = &apiv1.SearchContentRequest{
+					Query:                             "test",
+					FrontmatterKeysToReturnInResults: []string{"author", "category", "missing_key"},
+				}
+			})
+
+			JustBeforeEach(func() {
+				server = v1.NewServer("commit", time.Now(), nil, mockBleveIndexQueryer, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, mockFrontmatterIndexQueryer)
+				resp, err = server.SearchContent(ctx, req)
+			})
+
+			It("should return requested frontmatter keys in results", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.Results).To(HaveLen(1))
+				Expect(resp.Results[0].Frontmatter).NotTo(BeNil())
+				Expect(resp.Results[0].Frontmatter).To(HaveKey("author"))
+				Expect(resp.Results[0].Frontmatter["author"]).To(Equal("John Doe"))
+				Expect(resp.Results[0].Frontmatter).To(HaveKey("category"))
+				Expect(resp.Results[0].Frontmatter["category"]).To(Equal("Technology"))
+			})
+
+			It("should not include frontmatter keys not requested", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.Results).To(HaveLen(1))
+				Expect(resp.Results[0].Frontmatter).NotTo(HaveKey("tags"))
+				Expect(resp.Results[0].Frontmatter).NotTo(HaveKey("draft"))
+			})
+
+			It("should not include missing keys in frontmatter map", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.Results).To(HaveLen(1))
+				Expect(resp.Results[0].Frontmatter).NotTo(HaveKey("missing_key"))
+			})
+		})
+
 		When("result is an inventory item with container", func() {
 			var (
 				mockFrontmatterIndexQueryer *FlexibleMockFrontmatterIndexQueryer
