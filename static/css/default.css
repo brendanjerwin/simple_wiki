@@ -75,6 +75,10 @@ div#rendered ol {
   line-height: 1.1;
 }
 
+div#rendered img {
+  border-radius: 8px;
+}
+
 li.tools-menu {
   margin-right: 1em;
 }
