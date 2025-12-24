@@ -7,9 +7,12 @@ import './web-components/toast-message.js';
 import './web-components/kernel-panic.js'; // Import to register the component
 import './web-components/inventory-add-item-dialog.js';
 import './web-components/inventory-move-item-dialog.js';
+import './web-components/editor-context-menu.js';
 import { showStoredToast } from './web-components/toast-message.js';
 import { setupGlobalErrorHandler } from './web-components/global-error-handler.js';
 import { pageDeleteService } from './web-components/page-deletion-service.js';
+import { EditorContextMenuCoordinator } from './services/editor-context-menu-coordinator.js';
+import type { EditorContextMenu } from './web-components/editor-context-menu.js';
 
 // Set up global error handling to catch unhandled errors
 setupGlobalErrorHandler();
@@ -26,4 +29,11 @@ declare global {
 // Show any stored toast messages after page load
 document.addEventListener('DOMContentLoaded', () => {
   showStoredToast();
+
+  // Initialize editor context menu on edit pages
+  const textarea = document.getElementById('userInput') as HTMLTextAreaElement | null;
+  const menu = document.getElementById('editor-context-menu') as EditorContextMenu | null;
+  if (textarea && menu) {
+    new EditorContextMenuCoordinator(textarea, menu);
+  }
 });

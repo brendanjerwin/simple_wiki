@@ -164,5 +164,8 @@
         <inventory-add-item-dialog id="inventory-add-dialog"></inventory-add-item-dialog>
         <inventory-move-item-dialog id="inventory-move-dialog"></inventory-move-item-dialog>
         <inventory-find-item-dialog id="inventory-find-dialog"></inventory-find-item-dialog>
+        {{ if .EditPage }}
+        <editor-context-menu id="editor-context-menu"></editor-context-menu>
+        {{ end }}
     </body>
 </html>
