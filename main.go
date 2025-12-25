@@ -119,62 +119,77 @@ func setupServer(c *cli.Context) (*serverConfig, error) {
 
 	var identityResolver tailscale.IResolveIdentity
 	var config *serverConfig
+	noTLS := c.GlobalBool("no-tls")
 
 	if tsStatus.Available && tsStatus.DNSName != "" {
-		// Tailscale is available - set up HTTPS
+		// Tailscale is available
 		logger.Info("Tailscale detected: %s", tsStatus.DNSName)
-
 		identityResolver = tailscale.NewIdentityResolver()
 		handler := createMultiplexedHandler(site, identityResolver, logger)
 
-		// Determine TLS port: use 443 for production (port 80), otherwise port+1 for dev
-		portStr := c.GlobalString("port")
-		port, err := strconv.Atoi(portStr)
-		if err != nil {
-			return nil, fmt.Errorf("invalid port %q: %w", portStr, err)
-		}
-		var tlsPort int
-		if port == 80 {
-			tlsPort = 443 // Standard HTTPS port for production
-		} else {
-			tlsPort = port + 1 // Adjacent port for development (e.g., 8050 -> 8051)
-		}
-		tlsProvider := tailscale.NewTLSProvider()
-		tlsConfig := tlsProvider.GetTLSConfig()
-		httpsAddr := fmt.Sprintf("%s:%d", host, tlsPort)
-		tlsListener, err := tls.Listen("tcp", httpsAddr, tlsConfig)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create TLS listener: %w", err)
-		}
+		if noTLS {
+			// --no-tls: HTTP only with identity (e.g., when Tailscale Serve handles HTTPS)
+			logger.Info("TLS disabled (--no-tls). Running HTTP on %s with identity support", httpAddr)
 
-		logger.Info("HTTPS server listening on %s", httpsAddr)
-
-		// Create HTTP redirect server on the configured port
-		redirectHandler := tailscale.NewRedirectHandler(tsStatus.DNSName, tlsPort, identityResolver, h2c.NewHandler(handler, &http2.Server{}))
-		httpListener, err := net.Listen("tcp", httpAddr)
-		if err != nil {
-			tlsListener.Close()
-			return nil, fmt.Errorf("failed to create HTTP listener: %w", err)
-		}
-
-		logger.Info("HTTP server listening on %s (redirects tailnet, serves others)", httpAddr)
-
-		config = &serverConfig{
-			mainServer: &http.Server{
-				Handler: handler,
-			},
-			mainListener: tlsListener,
-			redirectServer: &http.Server{
-				Addr:    httpAddr,
-				Handler: redirectHandler,
-			},
-		}
-		// Start redirect server in background
-		go func() {
-			if err := config.redirectServer.Serve(httpListener); err != nil && err != http.ErrServerClosed {
-				logger.Error("HTTP redirect server error: %v", err)
+			httpListener, err := net.Listen("tcp", httpAddr)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create HTTP listener: %w", err)
 			}
-		}()
+
+			config = &serverConfig{
+				mainServer: &http.Server{
+					Handler: h2c.NewHandler(handler, &http2.Server{}),
+				},
+				mainListener: httpListener,
+			}
+		} else {
+			// Full TLS mode: HTTPS + HTTP redirect
+			portStr := c.GlobalString("port")
+			port, err := strconv.Atoi(portStr)
+			if err != nil {
+				return nil, fmt.Errorf("invalid port %q: %w", portStr, err)
+			}
+			tlsPort := c.GlobalInt("tls-port")
+			if tlsPort == 0 {
+				tlsPort = port + 1 // Default to adjacent port (e.g., 80 -> 81, 8050 -> 8051)
+			}
+			tlsProvider := tailscale.NewTLSProvider()
+			tlsConfig := tlsProvider.GetTLSConfig()
+			httpsAddr := fmt.Sprintf("%s:%d", host, tlsPort)
+			tlsListener, err := tls.Listen("tcp", httpsAddr, tlsConfig)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create TLS listener: %w", err)
+			}
+
+			logger.Info("HTTPS server listening on %s", httpsAddr)
+
+			// Create HTTP redirect server on the configured port
+			redirectHandler := tailscale.NewRedirectHandler(tsStatus.DNSName, tlsPort, identityResolver, h2c.NewHandler(handler, &http2.Server{}))
+			httpListener, err := net.Listen("tcp", httpAddr)
+			if err != nil {
+				tlsListener.Close()
+				return nil, fmt.Errorf("failed to create HTTP listener: %w", err)
+			}
+
+			logger.Info("HTTP server listening on %s (redirects tailnet, serves others)", httpAddr)
+
+			config = &serverConfig{
+				mainServer: &http.Server{
+					Handler: handler,
+				},
+				mainListener: tlsListener,
+				redirectServer: &http.Server{
+					Addr:    httpAddr,
+					Handler: redirectHandler,
+				},
+			}
+			// Start redirect server in background
+			go func() {
+				if err := config.redirectServer.Serve(httpListener); err != nil && err != http.ErrServerClosed {
+					logger.Error("HTTP redirect server error: %v", err)
+				}
+			}()
+		}
 	} else {
 		// Tailscale not available - plain HTTP fallback
 		logger.Info("Tailscale not available. Running as plain HTTP on %s", httpAddr)
@@ -297,6 +312,15 @@ func getFlags() []cli.Flag {
 			Name:  "port,p",
 			Value: "8050",
 			Usage: "port to use",
+		},
+		cli.IntFlag{
+			Name:  "tls-port",
+			Value: 0,
+			Usage: "TLS port for HTTPS when Tailscale is available (0 = auto: port+1)",
+		},
+		cli.BoolFlag{
+			Name:  "no-tls",
+			Usage: "Disable TLS listener (use when Tailscale Serve handles HTTPS)",
 		},
 		cli.StringFlag{
 			Name:  "css",

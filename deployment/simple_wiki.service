@@ -3,7 +3,7 @@ Description=Simple Home Wiki
 After=network-online.target 
 
 [Service]
-ExecStart=/srv/wiki/bin/simple_wiki -port 80 -data /srv/wiki/data
+ExecStart=/srv/wiki/bin/simple_wiki -port 80 -no-tls -data /srv/wiki/data
 Environment=WIKI_TEMPLATE_DEBUG=true
 Restart=always
 RestartSec=30
