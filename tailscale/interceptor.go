@@ -17,19 +17,16 @@ func IdentityInterceptor(resolver IResolveIdentity, logger *lumber.ConsoleLogger
 		var identity *Identity
 
 		// Method 1: Check gRPC metadata for Tailscale headers (set by Tailscale Serve/Funnel)
+		// Note: Tailscale Serve only provides user identity, not node name
 		if md, ok := metadata.FromIncomingContext(ctx); ok {
 			if loginNames := md.Get("tailscale-user-login"); len(loginNames) > 0 {
-				var displayName, nodeName string
+				var displayName string
 				if names := md.Get("tailscale-user-name"); len(names) > 0 {
 					displayName = names[0]
-				}
-				if nodes := md.Get("tailscale-node-name"); len(nodes) > 0 {
-					nodeName = nodes[0]
 				}
 				identity = &Identity{
 					LoginName:   loginNames[0],
 					DisplayName: displayName,
-					NodeName:    nodeName,
 				}
 			}
 		}

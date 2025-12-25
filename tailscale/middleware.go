@@ -14,11 +14,11 @@ func IdentityMiddleware(resolver IResolveIdentity, logger *lumber.ConsoleLogger)
 		var identity *Identity
 
 		// Method 1: Check Tailscale headers (set by Tailscale Serve/Funnel)
+		// Note: Tailscale Serve only provides user identity, not node name
 		if loginName := c.Request.Header.Get("Tailscale-User-Login"); loginName != "" {
 			identity = &Identity{
 				LoginName:   loginName,
 				DisplayName: c.Request.Header.Get("Tailscale-User-Name"),
-				NodeName:    c.Request.Header.Get("Tailscale-Node-Name"),
 			}
 		}
 
