@@ -136,9 +136,12 @@ func setupServer(c *cli.Context) (*serverConfig, error) {
 				return nil, fmt.Errorf("failed to create HTTP listener: %w", err)
 			}
 
+			// Wrap handler with redirect to tailnet HTTPS (port 443 via Tailscale Serve)
+			redirectHandler := tailscale.NewRedirectHandler(tsStatus.DNSName, 443, identityResolver, h2c.NewHandler(handler, &http2.Server{}))
+
 			config = &serverConfig{
 				mainServer: &http.Server{
-					Handler: h2c.NewHandler(handler, &http2.Server{}),
+					Handler: redirectHandler,
 				},
 				mainListener: httpListener,
 			}
