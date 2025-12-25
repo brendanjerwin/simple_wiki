@@ -33,7 +33,9 @@
         <title>{{ .Page }}</title>
 
         <script type='text/javascript'>
-            hljs.highlightAll();
+            document.addEventListener('DOMContentLoaded', function() {
+                hljs.highlightAll();
+            });
             window.simple_wiki = {
                 debounceMS: {{ .Debounce }},
                 lastFetch: {{ .UnixTime }},

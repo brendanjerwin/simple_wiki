@@ -417,11 +417,10 @@ func (s *Site) handleUploads(c *gin.Context, command string) {
 		}
 		pathname := path.Join(s.PathToData, command)
 
-		// Verify the resolved path is within PathToData
+		// Verify the resolved path is within PathToData (not the directory itself)
 		cleanPath := filepath.Clean(pathname)
 		cleanDataPath := filepath.Clean(s.PathToData)
-		if !strings.HasPrefix(cleanPath, cleanDataPath+string(filepath.Separator)) &&
-			cleanPath != cleanDataPath {
+		if !strings.HasPrefix(cleanPath, cleanDataPath+string(filepath.Separator)) {
 			c.AbortWithStatus(http.StatusBadRequest)
 			return
 		}
