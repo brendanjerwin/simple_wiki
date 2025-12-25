@@ -34,8 +34,11 @@ var _ = Describe("USBPrinter", func() {
 				// This will likely fail because no USB device is connected
 				_, err := labels.GetUSBPrinter(config)
 				
-				// If there's an error, it should not be the vendor error
-				// If no error, that's also fine (device found)
+				// This test validates vendor ID parameter handling specifically.
+				// The assertion verifies that if an error occurs, it's NOT due to missing vendor ID.
+				// In hardware-dependent tests, both nil (device found) and other errors (device issues)
+				// are acceptable outcomes - we only care that the vendor ID parameter was processed correctly.
+				// This conditional pattern is intentional for hardware-dependent validation.
 				if err != nil {
 					Expect(err).NotTo(Equal(labels.ErrorVendorNotSpecified))
 				}
