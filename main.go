@@ -1,7 +1,10 @@
 package main
 
 import (
+	"context"
+	"crypto/tls"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -10,6 +13,7 @@ import (
 
 	grpcapi "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
 	"github.com/brendanjerwin/simple_wiki/server"
+	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"github.com/jcelliott/lumber"
 	"golang.org/x/net/http2"
@@ -61,7 +65,14 @@ func getBuildTime() time.Time {
 
 var app *cli.App
 
-func setupServer(c *cli.Context) (*http.Server, error) {
+// serverConfig holds the configuration for running the server.
+type serverConfig struct {
+	mainServer     *http.Server
+	mainListener   net.Listener
+	redirectServer *http.Server // Optional: HTTP->HTTPS redirect server
+}
+
+func setupServer(c *cli.Context) (*serverConfig, error) {
 	pathToData := c.GlobalString("data")
 	if err := os.MkdirAll(pathToData, 0755); err != nil {
 		return nil, err
@@ -90,25 +101,102 @@ func setupServer(c *cli.Context) (*http.Server, error) {
 		return nil, err
 	}
 
-	logger.Info("Setting up HTTP and gRPC servers...")
-	handler := createMultiplexedHandler(site)
-
 	host := c.GlobalString("host")
 	if host == "" {
 		host = "0.0.0.0"
 	}
-	addr := fmt.Sprintf("%s:%s", host, c.GlobalString("port"))
-	actualCommit := getCommitHash()
-	logger.Info("Running simple_wiki server (commit %s) at http://%s", actualCommit, addr)
+	httpAddr := fmt.Sprintf("%s:%s", host, c.GlobalString("port"))
 
-	return &http.Server{
-		Addr:    addr,
-		Handler: h2c.NewHandler(handler, &http2.Server{}),
-	}, nil
+	// Detect Tailscale availability
+	ctx := context.Background()
+	detector := tailscale.NewDetector()
+	tsStatus, err := detector.Detect(ctx)
+	if err != nil {
+		logger.Warn("Error detecting Tailscale: %v", err)
+		tsStatus = &tailscale.Status{Available: false}
+	}
+
+	var identityResolver tailscale.IResolveIdentity
+	var config *serverConfig
+
+	if tsStatus.Available && tsStatus.DNSName != "" {
+		// Tailscale is available - set up HTTPS
+		logger.Info("Tailscale detected: %s", tsStatus.DNSName)
+
+		identityResolver = tailscale.NewIdentityResolver()
+		handler := createMultiplexedHandler(site, identityResolver, logger)
+
+		// Create TLS listener on port 443
+		tlsProvider := tailscale.NewTLSProvider()
+		tlsConfig := tlsProvider.GetTLSConfig()
+		httpsAddr := fmt.Sprintf("%s:443", host)
+		tlsListener, err := tls.Listen("tcp", httpsAddr, tlsConfig)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create TLS listener: %w", err)
+		}
+
+		logger.Info("HTTPS server listening on %s", httpsAddr)
+
+		// Create HTTP redirect server on the configured port
+		redirectHandler := tailscale.NewRedirectHandler(tsStatus.DNSName, identityResolver, h2c.NewHandler(handler, &http2.Server{}))
+		httpListener, err := net.Listen("tcp", httpAddr)
+		if err != nil {
+			tlsListener.Close()
+			return nil, fmt.Errorf("failed to create HTTP listener: %w", err)
+		}
+
+		logger.Info("HTTP server listening on %s (redirects tailnet, serves others)", httpAddr)
+
+		config = &serverConfig{
+			mainServer: &http.Server{
+				Handler: handler,
+			},
+			mainListener: tlsListener,
+			redirectServer: &http.Server{
+				Addr:    httpAddr,
+				Handler: redirectHandler,
+			},
+		}
+		// Start redirect server in background
+		go func() {
+			if err := config.redirectServer.Serve(httpListener); err != nil && err != http.ErrServerClosed {
+				logger.Error("HTTP redirect server error: %v", err)
+			}
+		}()
+	} else {
+		// Tailscale not available - plain HTTP fallback
+		logger.Info("Tailscale not available. Running as plain HTTP on %s", httpAddr)
+		logger.Info("For secure access with user identity, install Tailscale: https://tailscale.com/download")
+
+		handler := createMultiplexedHandler(site, nil, logger)
+
+		httpListener, err := net.Listen("tcp", httpAddr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create HTTP listener: %w", err)
+		}
+
+		config = &serverConfig{
+			mainServer: &http.Server{
+				Handler: h2c.NewHandler(handler, &http2.Server{}),
+			},
+			mainListener: httpListener,
+		}
+	}
+
+	actualCommit := getCommitHash()
+	logger.Info("Running simple_wiki server (commit %s)", actualCommit)
+
+	return config, nil
 }
 
-func createMultiplexedHandler(site *server.Site) http.Handler {
+func createMultiplexedHandler(site *server.Site, identityResolver tailscale.IResolveIdentity, log *lumber.ConsoleLogger) http.Handler {
 	ginRouter := site.GinRouter()
+
+	// Add Tailscale identity middleware if resolver is available
+	if identityResolver != nil {
+		ginRouter.Use(tailscale.IdentityMiddleware(identityResolver, log))
+	}
+
 	actualCommit := getCommitHash()
 	buildTime := getBuildTime()
 	grpcAPIServer := grpcapi.NewServer(
@@ -117,12 +205,20 @@ func createMultiplexedHandler(site *server.Site) http.Handler {
 		site,
 		site.BleveIndexQueryer,
 		site.GetJobQueueCoordinator(),
-		logger,
+		log,
 		site.MarkdownRenderer,
 		server.TemplateExecutor{},
 		site.FrontmatterIndexQueryer,
 	)
-	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(grpcAPIServer.LoggingInterceptor()))
+
+	// Build interceptor chain
+	var interceptors []grpc.UnaryServerInterceptor
+	if identityResolver != nil {
+		interceptors = append(interceptors, tailscale.IdentityInterceptor(identityResolver, log))
+	}
+	interceptors = append(interceptors, grpcAPIServer.LoggingInterceptor())
+
+	grpcServer := grpc.NewServer(grpc.ChainUnaryInterceptor(interceptors...))
 	grpcAPIServer.RegisterWithServer(grpcServer)
 
 	reflection.Register(grpcServer)
@@ -133,11 +229,11 @@ func createMultiplexedHandler(site *server.Site) http.Handler {
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
-			logger.Debug("gRPC-ish request: %s %s", r.Method, r.URL.Path)
+			log.Debug("gRPC-ish request: %s %s", r.Method, r.URL.Path)
 			wrappedGrpc.ServeHTTP(w, r)
 			return
 		}
-		logger.Debug("Gin request: %s %s", r.Method, r.URL.Path)
+		log.Debug("Gin request: %s %s", r.Method, r.URL.Path)
 		ginRouter.ServeHTTP(w, r)
 	})
 }
@@ -149,16 +245,20 @@ func main() {
 	app.Version = getCommitHash()
 	app.Compiled = time.Now()
 	app.Action = func(c *cli.Context) error {
-		srv, err := setupServer(c)
+		config, err := setupServer(c)
 		if err != nil {
 			return err
 		}
-		return srv.ListenAndServe()
+		return config.mainServer.Serve(config.mainListener)
 	}
 	app.Flags = getFlags()
 
 	if err := app.Run(os.Args); err != nil {
-		logger.Error("Error running app: %v", err)
+		if logger != nil {
+			logger.Error("Error running app: %v", err)
+		} else {
+			fmt.Fprintf(os.Stderr, "Error running app: %v\n", err)
+		}
 		os.Exit(1)
 	}
 }

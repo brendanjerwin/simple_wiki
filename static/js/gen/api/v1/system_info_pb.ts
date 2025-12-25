@@ -55,6 +55,13 @@ export class GetVersionResponse extends Message<GetVersionResponse> {
    */
   buildTime?: Timestamp;
 
+  /**
+   * The Tailscale identity of the requesting user, if available.
+   *
+   * @generated from field: optional api.v1.TailscaleIdentity tailscale_identity = 3;
+   */
+  tailscaleIdentity?: TailscaleIdentity;
+
   constructor(data?: PartialMessage<GetVersionResponse>) {
     super();
     proto3.util.initPartial(data, this);
@@ -65,6 +72,7 @@ export class GetVersionResponse extends Message<GetVersionResponse> {
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "commit", kind: "scalar", T: 9 /* ScalarType.STRING */ },
     { no: 2, name: "build_time", kind: "message", T: Timestamp },
+    { no: 3, name: "tailscale_identity", kind: "message", T: TailscaleIdentity, opt: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): GetVersionResponse {
@@ -81,6 +89,63 @@ export class GetVersionResponse extends Message<GetVersionResponse> {
 
   static equals(a: GetVersionResponse | PlainMessage<GetVersionResponse> | undefined, b: GetVersionResponse | PlainMessage<GetVersionResponse> | undefined): boolean {
     return proto3.util.equals(GetVersionResponse, a, b);
+  }
+}
+
+/**
+ * TailscaleIdentity represents the identity of a Tailscale user.
+ *
+ * @generated from message api.v1.TailscaleIdentity
+ */
+export class TailscaleIdentity extends Message<TailscaleIdentity> {
+  /**
+   * e.g., "user@example.com"
+   *
+   * @generated from field: string login_name = 1;
+   */
+  loginName = "";
+
+  /**
+   * e.g., "John Doe"
+   *
+   * @generated from field: string display_name = 2;
+   */
+  displayName = "";
+
+  /**
+   * e.g., "my-laptop"
+   *
+   * @generated from field: string node_name = 3;
+   */
+  nodeName = "";
+
+  constructor(data?: PartialMessage<TailscaleIdentity>) {
+    super();
+    proto3.util.initPartial(data, this);
+  }
+
+  static readonly runtime: typeof proto3 = proto3;
+  static readonly typeName = "api.v1.TailscaleIdentity";
+  static readonly fields: FieldList = proto3.util.newFieldList(() => [
+    { no: 1, name: "login_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 2, name: "display_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 3, name: "node_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+  ]);
+
+  static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): TailscaleIdentity {
+    return new TailscaleIdentity().fromBinary(bytes, options);
+  }
+
+  static fromJson(jsonValue: JsonValue, options?: Partial<JsonReadOptions>): TailscaleIdentity {
+    return new TailscaleIdentity().fromJson(jsonValue, options);
+  }
+
+  static fromJsonString(jsonString: string, options?: Partial<JsonReadOptions>): TailscaleIdentity {
+    return new TailscaleIdentity().fromJsonString(jsonString, options);
+  }
+
+  static equals(a: TailscaleIdentity | PlainMessage<TailscaleIdentity> | undefined, b: TailscaleIdentity | PlainMessage<TailscaleIdentity> | undefined): boolean {
+    return proto3.util.equals(TailscaleIdentity, a, b);
   }
 }
 

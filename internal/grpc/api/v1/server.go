@@ -14,6 +14,7 @@ import (
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
+	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
@@ -335,11 +336,23 @@ func (s *Server) RegisterWithServer(grpcServer *grpc.Server) {
 }
 
 // GetVersion implements the GetVersion RPC.
-func (s *Server) GetVersion(_ context.Context, _ *apiv1.GetVersionRequest) (*apiv1.GetVersionResponse, error) {
-	return &apiv1.GetVersionResponse{
+func (s *Server) GetVersion(ctx context.Context, _ *apiv1.GetVersionRequest) (*apiv1.GetVersionResponse, error) {
+	response := &apiv1.GetVersionResponse{
 		Commit:    s.Commit,
 		BuildTime: timestamppb.New(s.BuildTime),
-	}, nil
+	}
+
+	// Add Tailscale identity if available
+	identity := tailscale.IdentityFromContext(ctx)
+	if identity != nil && !identity.IsAnonymous() {
+		response.TailscaleIdentity = &apiv1.TailscaleIdentity{
+			LoginName:   identity.LoginName,
+			DisplayName: identity.DisplayName,
+			NodeName:    identity.NodeName,
+		}
+	}
+
+	return response, nil
 }
 
 // GetJobStatus implements the GetJobStatus RPC.
@@ -457,11 +470,19 @@ func (s *Server) LoggingInterceptor() grpc.UnaryServerInterceptor {
 			}
 		}
 
+		// Get identity if available
+		identity := tailscale.IdentityFromContext(ctx)
+		identityStr := "anonymous"
+		if identity != nil && !identity.IsAnonymous() {
+			identityStr = identity.ForLog()
+		}
+
 		if s.Logger != nil {
-			s.Logger.Warn("[GRPC] %s | %s | %v",
+			s.Logger.Warn("[GRPC] %s | %s | %v | %s",
 				statusCode,
 				duration,
 				info.FullMethod,
+				identityStr,
 			)
 		}
 
