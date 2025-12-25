@@ -141,7 +141,7 @@ func setupServer(c *cli.Context) (*serverConfig, error) {
 			if forceRedirectTailnetHTTPS {
 				// Wrap handler with redirect to tailnet HTTPS (port 443 via Tailscale Serve)
 				logger.Info("Tailnet clients will be redirected to HTTPS")
-				finalHandler = tailscale.NewRedirectHandler(tsStatus.DNSName, 443, identityResolver, finalHandler)
+				finalHandler = tailscale.NewRedirectHandler(tsStatus.DNSName, 443, identityResolver, finalHandler, forceRedirectTailnetHTTPS)
 			}
 
 			config = &serverConfig{
@@ -172,7 +172,7 @@ func setupServer(c *cli.Context) (*serverConfig, error) {
 			logger.Info("HTTPS server listening on %s", httpsAddr)
 
 			// Create HTTP redirect server on the configured port
-			redirectHandler := tailscale.NewRedirectHandler(tsStatus.DNSName, tlsPort, identityResolver, h2c.NewHandler(handler, &http2.Server{}))
+			redirectHandler := tailscale.NewRedirectHandler(tsStatus.DNSName, tlsPort, identityResolver, h2c.NewHandler(handler, &http2.Server{}), false)
 			httpListener, err := net.Listen("tcp", httpAddr)
 			if err != nil {
 				tlsListener.Close()

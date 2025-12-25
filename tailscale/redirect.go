@@ -5,22 +5,31 @@ import (
 	"net/http"
 )
 
-// RedirectHandler redirects tailnet clients to HTTPS on the tailnet hostname.
-// - Tailnet clients: always redirect to HTTPS on the tailnet hostname (regardless of hostname used)
-// - Non-tailnet clients: always serve HTTP fallback (regardless of hostname used)
+// RedirectHandler redirects HTTP requests to HTTPS on the tailnet hostname.
+// - If ForceRedirect: redirect ALL HTTP requests to HTTPS
+// - Otherwise: only redirect tailnet clients (detected via WhoIs)
+// - Requests already HTTPS (via X-Forwarded-Proto) are served directly
 type RedirectHandler struct {
 	TSHostname      string           // Tailscale hostname to redirect to (e.g., "my-laptop.tailnet.ts.net")
 	TLSPort         int              // Port the HTTPS server is running on
 	Resolver        IResolveIdentity // Used to detect tailnet requests via WhoIs
 	FallbackHandler http.Handler     // Handler for non-tailnet requests
+	ForceRedirect   bool             // If true, redirect ALL HTTP requests to HTTPS
 }
 
 // ServeHTTP implements http.Handler.
 func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// If Tailscale headers are present, the request came through Tailscale Serve
-	// (already HTTPS) - don't redirect, just serve
-	if r.Header.Get("Tailscale-User-Login") != "" {
+	// Check if request is already HTTPS (via X-Forwarded-Proto from Tailscale Serve)
+	// If already HTTPS, don't redirect - just serve
+	if r.Header.Get("X-Forwarded-Proto") == "https" {
 		h.FallbackHandler.ServeHTTP(w, r)
+		return
+	}
+
+	// Force redirect: redirect ALL HTTP requests to HTTPS
+	if h.ForceRedirect {
+		target := h.buildHTTPSURL(r.URL.RequestURI())
+		http.Redirect(w, r, target, http.StatusMovedPermanently)
 		return
 	}
 
@@ -28,7 +37,7 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h.Resolver != nil {
 		identity, _ := h.Resolver.WhoIs(r.Context(), r.RemoteAddr)
 		if identity != nil {
-			// Tailnet client connecting directly - redirect to HTTPS
+			// Tailnet client connecting directly over HTTP - redirect to HTTPS
 			target := h.buildHTTPSURL(r.URL.RequestURI())
 			http.Redirect(w, r, target, http.StatusMovedPermanently)
 			return
@@ -48,11 +57,12 @@ func (h *RedirectHandler) buildHTTPSURL(requestURI string) string {
 }
 
 // NewRedirectHandler creates a new redirect handler.
-func NewRedirectHandler(tsHostname string, tlsPort int, resolver IResolveIdentity, fallback http.Handler) *RedirectHandler {
+func NewRedirectHandler(tsHostname string, tlsPort int, resolver IResolveIdentity, fallback http.Handler, forceRedirect bool) *RedirectHandler {
 	return &RedirectHandler{
 		TSHostname:      tsHostname,
 		TLSPort:         tlsPort,
 		Resolver:        resolver,
 		FallbackHandler: fallback,
+		ForceRedirect:   forceRedirect,
 	}
 }
