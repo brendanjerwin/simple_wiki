@@ -5,31 +5,41 @@ import (
 
 	"github.com/jcelliott/lumber"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 )
 
 // IdentityInterceptor creates a gRPC unary interceptor that extracts Tailscale identity.
-// If the identity resolver is nil, or if identity cannot be resolved,
-// the request continues without identity (graceful fallback).
+// Identity is extracted from gRPC metadata (headers from Tailscale Serve) or via WhoIs.
+// If identity cannot be resolved, the request continues without identity (graceful fallback).
 func IdentityInterceptor(resolver IResolveIdentity, logger *lumber.ConsoleLogger) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		if resolver == nil {
-			return handler(ctx, req)
-		}
+		var identity *Identity
 
-		// Extract peer address from gRPC context
-		p, ok := peer.FromContext(ctx)
-		if !ok || p.Addr == nil {
-			return handler(ctx, req)
-		}
-
-		identity, err := resolver.WhoIs(ctx, p.Addr.String())
-		if err != nil {
-			if logger != nil {
-				logger.Warn("Failed to resolve Tailscale identity for gRPC: %v", err)
+		// Method 1: Check gRPC metadata for Tailscale headers (set by Tailscale Serve/Funnel)
+		if md, ok := metadata.FromIncomingContext(ctx); ok {
+			if loginNames := md.Get("tailscale-user-login"); len(loginNames) > 0 {
+				var displayName string
+				if names := md.Get("tailscale-user-name"); len(names) > 0 {
+					displayName = names[0]
+				}
+				identity = &Identity{
+					LoginName:   loginNames[0],
+					DisplayName: displayName,
+				}
 			}
-			// Continue without identity - graceful fallback
-			return handler(ctx, req)
+		}
+
+		// Method 2: Try WhoIs lookup (works for direct tailnet connections)
+		if identity == nil && resolver != nil {
+			p, ok := peer.FromContext(ctx)
+			if ok && p.Addr != nil {
+				var err error
+				identity, err = resolver.WhoIs(ctx, p.Addr.String())
+				if err != nil && logger != nil {
+					logger.Debug("WhoIs lookup failed for gRPC: %v", err)
+				}
+			}
 		}
 
 		if identity != nil {

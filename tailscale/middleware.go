@@ -6,24 +6,28 @@ import (
 )
 
 // IdentityMiddleware creates Gin middleware that extracts Tailscale identity.
-// If the identity resolver is nil, or if identity cannot be resolved,
-// the request continues without identity (graceful fallback).
+// Identity is extracted from Tailscale headers (set by Tailscale Serve) or via WhoIs.
+// If identity cannot be resolved, the request continues without identity (graceful fallback).
 func IdentityMiddleware(resolver IResolveIdentity, logger *lumber.ConsoleLogger) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if resolver == nil {
-			c.Next()
-			return
+		ctx := c.Request.Context()
+		var identity *Identity
+
+		// Method 1: Check Tailscale headers (set by Tailscale Serve/Funnel)
+		if loginName := c.Request.Header.Get("Tailscale-User-Login"); loginName != "" {
+			identity = &Identity{
+				LoginName:   loginName,
+				DisplayName: c.Request.Header.Get("Tailscale-User-Name"),
+			}
 		}
 
-		ctx := c.Request.Context()
-		identity, err := resolver.WhoIs(ctx, c.Request.RemoteAddr)
-		if err != nil {
-			if logger != nil {
-				logger.Warn("Failed to resolve Tailscale identity: %v", err)
+		// Method 2: Try WhoIs lookup (works for direct tailnet connections)
+		if identity == nil && resolver != nil {
+			var err error
+			identity, err = resolver.WhoIs(ctx, c.Request.RemoteAddr)
+			if err != nil && logger != nil {
+				logger.Debug("WhoIs lookup failed: %v", err)
 			}
-			// Continue without identity - graceful fallback
-			c.Next()
-			return
 		}
 
 		if identity != nil {

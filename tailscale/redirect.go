@@ -17,15 +17,27 @@ type RedirectHandler struct {
 
 // ServeHTTP implements http.Handler.
 func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Check if request is from tailnet (WhoIs succeeds for tailnet IPs)
-	if h.Resolver != nil {
+	// Check if request is from tailnet client
+	isTailnetClient := false
+
+	// Method 1: Check Tailscale headers (set by Tailscale Serve/Funnel)
+	if r.Header.Get("Tailscale-User-Login") != "" {
+		isTailnetClient = true
+	}
+
+	// Method 2: Try WhoIs lookup (works for direct tailnet connections)
+	if !isTailnetClient && h.Resolver != nil {
 		identity, _ := h.Resolver.WhoIs(r.Context(), r.RemoteAddr)
 		if identity != nil {
-			// Tailnet client - redirect to HTTPS on the tailnet hostname
-			target := h.buildHTTPSURL(r.URL.RequestURI())
-			http.Redirect(w, r, target, http.StatusMovedPermanently)
-			return
+			isTailnetClient = true
 		}
+	}
+
+	if isTailnetClient {
+		// Tailnet client - redirect to HTTPS on the tailnet hostname
+		target := h.buildHTTPSURL(r.URL.RequestURI())
+		http.Redirect(w, r, target, http.StatusMovedPermanently)
+		return
 	}
 
 	// Non-tailnet client - serve HTTP fallback
