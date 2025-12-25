@@ -189,6 +189,7 @@ var _ = Describe("JobQueueCoordinator", func() {
 
 	Describe("GetJobProgress", func() {
 		var blockingJob1, blockingJob2 *jobs.BlockingMockJob
+		var progress jobs.JobProgress
 
 		BeforeEach(func() {
 			// Enqueue multiple jobs in different queues
@@ -197,6 +198,9 @@ var _ = Describe("JobQueueCoordinator", func() {
 			
 			coordinator.EnqueueJob(blockingJob1)
 			coordinator.EnqueueJob(blockingJob2)
+			
+			// Action: Get the job progress
+			progress = coordinator.GetJobProgress()
 		})
 
 		AfterEach(func() {
@@ -206,22 +210,18 @@ var _ = Describe("JobQueueCoordinator", func() {
 		})
 
 		It("should return progress for all queues", func() {
-			progress := coordinator.GetJobProgress()
 			Expect(progress.QueueStats).To(HaveLen(2))
 		})
 
 		It("should report active queues count", func() {
-			progress := coordinator.GetJobProgress()
 			Expect(progress.TotalActive).To(BeNumerically(">", 0))
 		})
 
 		It("should report total queues count", func() {
-			progress := coordinator.GetJobProgress()
 			Expect(progress.TotalQueues).To(Equal(int32(2)))
 		})
 
 		It("should include queue statistics", func() {
-			progress := coordinator.GetJobProgress()
 			queueNames := []string{}
 			for _, q := range progress.QueueStats {
 				queueNames = append(queueNames, q.QueueName)
