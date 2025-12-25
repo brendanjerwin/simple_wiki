@@ -628,39 +628,63 @@ test content to be soft deleted`
 					Expect(err).NotTo(HaveOccurred())
 				})
 
-				It("should move files to __deleted__/<timestamp>/ directory instead of removing them", func() {
-					// Files should no longer exist in the original location
-					_, mdStatErr := os.Stat(pagePath)
-					Expect(os.IsNotExist(mdStatErr)).To(BeTrue())
+				Context("file system changes", func() {
+					var mdStatErr error
+					var entries []os.DirEntry
+					var timestampDir os.DirEntry
+					var timestamp int64
+					var timestampPath string
+					var deletedMdPath string
+					var deletedMdContent []byte
 
-					// Files should exist in the __deleted__ directory structure
-					Expect(deletedDir).To(BeADirectory())
+					BeforeEach(func() {
+						// Check original file is gone
+						_, mdStatErr = os.Stat(pagePath)
 
-					// Find the timestamped subdirectory (should be close to currentTime)
-					entries, err := os.ReadDir(deletedDir)
-					Expect(err).NotTo(HaveOccurred())
-					Expect(entries).To(HaveLen(1))
-					
-					timestampDir := entries[0]
-					Expect(timestampDir.IsDir()).To(BeTrue())
-					
-					// Verify timestamp is reasonable (within 5 seconds of test start)
-					timestamp, parseErr := strconv.ParseInt(timestampDir.Name(), 10, 64)
-					Expect(parseErr).NotTo(HaveOccurred())
-					Expect(timestamp).To(BeNumerically(">=", currentTime))
-					Expect(timestamp).To(BeNumerically("<=", currentTime+5))
+						// Read deleted directory structure
+						entries, err = os.ReadDir(deletedDir)
+						Expect(err).NotTo(HaveOccurred())
+						if len(entries) > 0 {
+							timestampDir = entries[0]
+							var parseErr error
+							timestamp, parseErr = strconv.ParseInt(timestampDir.Name(), 10, 64)
+							Expect(parseErr).NotTo(HaveOccurred())
+							
+							// Read the moved file
+							timestampPath = filepath.Join(deletedDir, timestampDir.Name())
+							deletedMdPath = filepath.Join(timestampPath, base32tools.EncodeToBase32(strings.ToLower(string(pageIdentifier)))+".md")
+							var readErr error
+							deletedMdContent, readErr = os.ReadFile(deletedMdPath)
+							Expect(readErr).NotTo(HaveOccurred())
+						}
+					})
 
-					// Check that .md file exists in the timestamped directory
-					timestampPath := filepath.Join(deletedDir, timestampDir.Name())
-					deletedMdPath := filepath.Join(timestampPath, base32tools.EncodeToBase32(strings.ToLower(string(pageIdentifier)))+".md")
+					It("should remove files from original location", func() {
+						Expect(os.IsNotExist(mdStatErr)).To(BeTrue())
+					})
 
-					_, deletedMdStatErr := os.Stat(deletedMdPath)
-					Expect(deletedMdStatErr).NotTo(HaveOccurred())
+					It("should create deleted directory", func() {
+						Expect(deletedDir).To(BeADirectory())
+					})
 
-					// Verify file contents were preserved
-					deletedMdContent, readErr := os.ReadFile(deletedMdPath)
-					Expect(readErr).NotTo(HaveOccurred())
-					Expect(string(deletedMdContent)).To(ContainSubstring("test content to be soft deleted"))
+					It("should create timestamped subdirectory", func() {
+						Expect(entries).To(HaveLen(1))
+						Expect(timestampDir.IsDir()).To(BeTrue())
+					})
+
+					It("should use reasonable timestamp within 5 seconds", func() {
+						Expect(timestamp).To(BeNumerically(">=", currentTime))
+						Expect(timestamp).To(BeNumerically("<=", currentTime+5))
+					})
+
+					It("should move md file to timestamped directory", func() {
+						_, statErr := os.Stat(deletedMdPath)
+						Expect(statErr).NotTo(HaveOccurred())
+					})
+
+					It("should preserve file contents", func() {
+						Expect(string(deletedMdContent)).To(ContainSubstring("test content to be soft deleted"))
+					})
 				})
 
 				It("should remove the page from the index", func() {

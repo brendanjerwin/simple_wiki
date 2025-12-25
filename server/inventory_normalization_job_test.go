@@ -743,24 +743,6 @@ var _ = Describe("InventoryNormalizationJob", func() {
 		})
 	})
 
-	Describe("GetName", func() {
-		BeforeEach(func() {
-			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
-		})
-
-		When("called", func() {
-			var name string
-
-			BeforeEach(func() {
-				name = job.GetName()
-			})
-
-			It("should return the job name", func() {
-				Expect(name).To(Equal(InventoryNormalizationJobName))
-			})
-		})
-	})
-
 	Describe("generateAuditReport with error anomalies", func() {
 		BeforeEach(func() {
 			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)

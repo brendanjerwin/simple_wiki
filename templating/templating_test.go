@@ -3,6 +3,7 @@ package templating_test
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -569,6 +570,71 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 			Expect(result).To(ContainSubstring("Index Item"))
 		})
 	})
+
+	Describe("when reading frontmatter fails", func() {
+		var (
+			mockSite  *mockPageReader
+			mockIndex *mockFrontmatterIndex
+			result    string
+		)
+
+		BeforeEach(func() {
+			// Create a mock site that returns error for a specific container
+			mockSite = &mockPageReader{
+				pages: map[string]wikipage.FrontMatter{},
+			}
+
+			mockIndex = &mockFrontmatterIndex{
+				index:  map[string]map[string][]string{},
+				values: map[string]map[string]string{},
+			}
+
+			// Act - Try to show inventory for non-existent container
+			showInventoryFunc := templating.BuildShowInventoryContentsOf(mockSite, mockIndex, 0)
+			result = showInventoryFunc("nonexistent_container")
+		})
+
+		It("should return error message", func() {
+			Expect(result).To(ContainSubstring("page not found"))
+		})
+	})
+
+	Describe("when ConstructTemplateContextFromFrontmatter fails", func() {
+		var (
+			mockSite  *mockPageReader
+			mockIndex *mockFrontmatterIndex
+			result    string
+		)
+
+		BeforeEach(func() {
+			// Use a function type which cannot be marshaled to JSON
+			unmarshalableFunc := func() {}
+			
+			// Create container with invalid frontmatter structure
+			mockSite = &mockPageReader{
+				pages: map[string]wikipage.FrontMatter{
+					"bad_container": {
+						identifierKey: unmarshalableFunc, // Function type that can't be marshaled
+						titleKey:      "Bad Container",
+					},
+				},
+			}
+
+			mockIndex = &mockFrontmatterIndex{
+				index:  map[string]map[string][]string{},
+				values: map[string]map[string]string{},
+			}
+
+			// Act
+			showInventoryFunc := templating.BuildShowInventoryContentsOf(mockSite, mockIndex, 0)
+			result = showInventoryFunc("bad_container")
+		})
+
+		It("should return error message containing error details", func() {
+			Expect(result).NotTo(BeEmpty())
+			Expect(result).To(Or(ContainSubstring("error"), ContainSubstring("unsupported")))
+		})
+	})
 })
 
 var _ = Describe("ConstructTemplateContextFromFrontmatterWithVisited", func() {
@@ -617,6 +683,54 @@ var _ = Describe("ConstructTemplateContextFromFrontmatterWithVisited", func() {
 		It("should have non-empty inventory items", func() {
 			Expect(len(templateContext.Inventory.Items)).To(BeNumerically(">", 0))
 		})
+	})
+})
+
+var _ = Describe("ConstructTemplateContextFromFrontmatterWithVisited with circular reference", func() {
+	var (
+		mockIndex       *mockFrontmatterIndex
+		templateContext templating.TemplateContext
+		err            error
+	)
+
+	BeforeEach(func() {
+		mockIndex = &mockFrontmatterIndex{
+			index: map[string]map[string][]string{
+				"inventory.container": {
+					"circular_container": []string{"item1", "item2"},
+				},
+			},
+			values: map[string]map[string]string{
+				"item1": {titleKey: "Item 1"},
+				"item2": {titleKey: "Item 2"},
+			},
+		}
+
+		frontmatter := wikipage.FrontMatter{
+			identifierKey: "circular_container",
+			titleKey:      "Circular Container",
+		}
+
+		// Create a visited map with the container already visited
+		visited := map[string]bool{
+			"circular_container": true,
+		}
+
+		// Act - this should handle circular reference gracefully
+		templateContext, err = templating.ConstructTemplateContextFromFrontmatterWithVisited(
+			frontmatter, mockIndex, visited)
+	})
+
+	It("should not return an error", func() {
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	It("should have empty inventory items to prevent infinite recursion", func() {
+		Expect(templateContext.Inventory.Items).To(BeEmpty())
+	})
+
+	It("should have correct identifier", func() {
+		Expect(templateContext.Identifier).To(Equal("circular_container"))
 	})
 })
 
@@ -751,6 +865,450 @@ var _ = Describe("BuildLinkTo", func() {
 		It("should include container reference", func() {
 			// Should include the container reference
 			Expect(result).To(ContainSubstring("inventory.container=current_page"))
+		})
+	})
+
+	Describe("when linking to empty identifier", func() {
+		BeforeEach(func() {
+			// Act - Link to empty identifier
+			result = linkToFunc("")
+		})
+
+		It("should return N/A", func() {
+			Expect(result).To(Equal("N/A"))
+		})
+	})
+
+	Describe("when circular reference is detected", func() {
+		BeforeEach(func() {
+			// Create a page that would cause circular reference
+			mockSite.pages["circular_page"] = wikipage.FrontMatter{
+				identifierKey: "circular_page",
+				titleKey:      "Circular Page",
+			}
+
+			// Use BuildLinkToWithVisited with a visited map that already contains the page
+			visited := map[string]bool{
+				"circular_page": true,
+			}
+			linkToFunc = templating.BuildLinkToWithVisited(mockSite, currentPageTemplateContext, mockIndex, visited)
+
+			// Act
+			result = linkToFunc("circular_page")
+		})
+
+		It("should return circular reference link", func() {
+			Expect(result).To(ContainSubstring("(circular reference)"))
+		})
+
+		It("should use munged identifier", func() {
+			Expect(result).To(ContainSubstring("/circular_page"))
+		})
+	})
+
+	Describe("when linking to non-existent page from non-container", func() {
+		BeforeEach(func() {
+			// Ensure current page is not a container
+			currentPageTemplateContext = templating.TemplateContext{
+				Identifier: "regular_page",
+				Title:      "Regular Page",
+			}
+			linkToFunc = templating.BuildLinkTo(mockSite, currentPageTemplateContext, mockIndex)
+
+			// Act - link to non-existent page
+			result = linkToFunc("new_page")
+		})
+
+		It("should create a link to create the page", func() {
+			Expect(result).To(ContainSubstring("/new_page?title="))
+		})
+
+		It("should not include inventory container parameter", func() {
+			Expect(result).NotTo(ContainSubstring("inventory.container"))
+		})
+	})
+})
+
+var _ = Describe("BuildIsContainer edge cases", func() {
+	var (
+		mockIndex      *mockFrontmatterIndex
+		isContainerFunc func(string) bool
+	)
+
+	BeforeEach(func() {
+		mockIndex = &mockFrontmatterIndex{
+			index:  map[string]map[string][]string{},
+			values: map[string]map[string]string{},
+		}
+		isContainerFunc = templating.BuildIsContainer(mockIndex)
+	})
+
+	Context("with empty identifier", func() {
+		It("should return false", func() {
+			Expect(isContainerFunc("")).To(BeFalse())
+		})
+	})
+
+	Context("with container marked by is_container field", func() {
+		BeforeEach(func() {
+			mockIndex.values["explicit_container"] = map[string]string{
+				"inventory.is_container": "true",
+			}
+		})
+
+		It("should return true", func() {
+			Expect(isContainerFunc("explicit_container")).To(BeTrue())
+		})
+	})
+
+	Context("with legacy container (items reference it)", func() {
+		BeforeEach(func() {
+			mockIndex.index["inventory.container"] = map[string][]string{
+				"legacy_container": []string{"item1", "item2"},
+			}
+		})
+
+		It("should return true", func() {
+			Expect(isContainerFunc("legacy_container")).To(BeTrue())
+		})
+	})
+
+	Context("with non-container identifier", func() {
+		It("should return false", func() {
+			Expect(isContainerFunc("regular_page")).To(BeFalse())
+		})
+	})
+})
+
+var _ = Describe("ExecuteTemplate", func() {
+	var (
+		mockSite  *mockPageReader
+		mockIndex *mockFrontmatterIndex
+	)
+
+	BeforeEach(func() {
+		mockSite = &mockPageReader{
+			pages: map[string]wikipage.FrontMatter{
+				"test_page": {
+					identifierKey: "test_page",
+					titleKey:      "Test Page",
+					"description": "Test Description",
+				},
+			},
+		}
+
+		mockIndex = &mockFrontmatterIndex{
+			index:  map[string]map[string][]string{},
+			values: map[string]map[string]string{},
+		}
+	})
+
+	Context("with simple template", func() {
+		var result []byte
+		var err error
+
+		BeforeEach(func() {
+			templateString := "Title: {{ .Title }}, Description: {{ .Description }}"
+			frontmatter := wikipage.FrontMatter{
+				identifierKey: "test_page",
+				titleKey:      "My Page",
+				"description": "My Description",
+			}
+
+			result, err = templating.ExecuteTemplate(templateString, frontmatter, mockSite, mockIndex)
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should include the title", func() {
+			Expect(string(result)).To(ContainSubstring("Title: My Page"))
+		})
+
+		It("should include the description", func() {
+			Expect(string(result)).To(ContainSubstring("Description: My Description"))
+		})
+	})
+
+	Context("with LinkTo function", func() {
+		It("should execute template with LinkTo function", func() {
+			mockSite.pages["linked_page"] = wikipage.FrontMatter{
+				identifierKey: "linked_page",
+				titleKey:      "Linked Page",
+			}
+
+			templateString := "Link: {{ LinkTo \"linked_page\" }}"
+			frontmatter := wikipage.FrontMatter{
+				identifierKey: "test_page",
+				titleKey:      "Test Page",
+			}
+
+			result, err := templating.ExecuteTemplate(templateString, frontmatter, mockSite, mockIndex)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(result)).To(ContainSubstring("Linked Page"))
+		})
+	})
+
+	Context("with ShowInventoryContentsOf function", func() {
+		It("should execute template with ShowInventoryContentsOf function", func() {
+			mockSite.pages["container"] = wikipage.FrontMatter{
+				identifierKey: "container",
+				titleKey:      "Container",
+				inventoryKey: map[string]any{
+					itemsKey: []string{"item1"},
+				},
+			}
+			mockSite.pages["item1"] = wikipage.FrontMatter{
+				identifierKey: "item1",
+				titleKey:      "Item 1",
+			}
+			mockIndex.values["item1"] = map[string]string{
+				titleKey: "Item 1",
+			}
+
+			templateString := "{{ ShowInventoryContentsOf \"container\" }}"
+			frontmatter := wikipage.FrontMatter{
+				identifierKey: "test_page",
+				titleKey:      "Test Page",
+			}
+
+			result, err := templating.ExecuteTemplate(templateString, frontmatter, mockSite, mockIndex)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(result)).To(ContainSubstring("Item 1"))
+		})
+	})
+
+	Context("with IsContainer function", func() {
+		It("should execute template with IsContainer function", func() {
+			mockIndex.values["test_container"] = map[string]string{
+				"inventory.is_container": "true",
+			}
+
+			templateString := "{{ if IsContainer \"test_container\" }}Is Container{{ else }}Not Container{{ end }}"
+			frontmatter := wikipage.FrontMatter{
+				identifierKey: "test_page",
+				titleKey:      "Test Page",
+			}
+
+			result, err := templating.ExecuteTemplate(templateString, frontmatter, mockSite, mockIndex)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(result)).To(ContainSubstring("Is Container"))
+		})
+	})
+
+	Context("with FindBy function", func() {
+		It("should execute template with FindBy function", func() {
+			mockIndex.index["tag"] = map[string][]string{
+				"electronics": []string{"item1", "item2"},
+			}
+
+			templateString := "{{ $items := FindBy \"tag\" \"electronics\" }}Count: {{ len $items }}"
+			frontmatter := wikipage.FrontMatter{
+				identifierKey: "test_page",
+				titleKey:      "Test Page",
+			}
+
+			result, err := templating.ExecuteTemplate(templateString, frontmatter, mockSite, mockIndex)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(result)).To(ContainSubstring("Count: 2"))
+		})
+	})
+
+	Context("with invalid template", func() {
+		It("should return error for invalid template syntax", func() {
+			templateString := "{{ .Title"
+			frontmatter := wikipage.FrontMatter{
+				identifierKey: "test_page",
+				titleKey:      "Test Page",
+			}
+
+			_, err := templating.ExecuteTemplate(templateString, frontmatter, mockSite, mockIndex)
+			Expect(err).To(HaveOccurred())
+		})
+	})
+
+	Context("with circular reference in template", func() {
+		It("should handle circular references gracefully", func() {
+			mockSite.pages["container_a"] = wikipage.FrontMatter{
+				identifierKey: "container_a",
+				titleKey:      "Container A",
+				inventoryKey: map[string]any{
+					itemsKey: []string{"container_b"},
+				},
+			}
+			mockSite.pages["container_b"] = wikipage.FrontMatter{
+				identifierKey: "container_b",
+				titleKey:      "Container B",
+				inventoryKey: map[string]any{
+					itemsKey: []string{"container_a"},
+				},
+			}
+			mockIndex.values["container_a"] = map[string]string{
+				"inventory.is_container": "true",
+			}
+			mockIndex.values["container_b"] = map[string]string{
+				"inventory.is_container": "true",
+			}
+
+			templateString := "{{ ShowInventoryContentsOf \"container_a\" }}"
+			frontmatter := wikipage.FrontMatter{
+				identifierKey: "test_page",
+				titleKey:      "Test Page",
+			}
+
+			// Use context with timeout to ensure proper cleanup
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				_, _ = templating.ExecuteTemplate(templateString, frontmatter, mockSite, mockIndex)
+			}()
+
+			select {
+			case <-done:
+				// Success - function completed
+			case <-ctx.Done():
+				Fail("ExecuteTemplate timed out with circular reference")
+			}
+		})
+	})
+
+	Context("with template parsing error", func() {
+		It("should return error with context", func() {
+			templateString := "{{ .Title }"  // Missing closing brace
+			frontmatter := wikipage.FrontMatter{
+				identifierKey: "test_page",
+				titleKey:      "Test Page",
+			}
+
+			_, err := templating.ExecuteTemplate(templateString, frontmatter, mockSite, mockIndex)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("failed to build template"))
+		})
+	})
+
+	Context("with template execution error", func() {
+		It("should return error with context", func() {
+			templateString := "{{ .NonExistentField.SubField }}"  // Will cause nil pointer during execution
+			frontmatter := wikipage.FrontMatter{
+				identifierKey: "test_page",
+				titleKey:      "Test Page",
+			}
+
+			_, err := templating.ExecuteTemplate(templateString, frontmatter, mockSite, mockIndex)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("template execution failed"))
+		})
+	})
+
+	Context("with FindByPrefix function", func() {
+		It("should execute template with FindByPrefix function", func() {
+			mockIndex.index["tag"] = map[string][]string{
+				"electronics": []string{"item1", "item2"},
+			}
+
+			templateString := "{{ $items := FindByPrefix \"tag\" \"elect\" }}Count: {{ len $items }}"
+			frontmatter := wikipage.FrontMatter{
+				identifierKey: "test_page",
+				titleKey:      "Test Page",
+			}
+
+			result, err := templating.ExecuteTemplate(templateString, frontmatter, mockSite, mockIndex)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(result)).To(ContainSubstring("Count:"))
+		})
+	})
+
+	Context("with FindByKeyExistence function", func() {
+		It("should execute template with FindByKeyExistence function", func() {
+			mockIndex.index["has_serial"] = map[string][]string{
+				"": []string{"item1", "item2"},
+			}
+
+			templateString := "{{ $items := FindByKeyExistence \"has_serial\" }}Count: {{ len $items }}"
+			frontmatter := wikipage.FrontMatter{
+				identifierKey: "test_page",
+				titleKey:      "Test Page",
+			}
+
+			result, err := templating.ExecuteTemplate(templateString, frontmatter, mockSite, mockIndex)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(result)).To(ContainSubstring("Count:"))
+		})
+	})
+
+	Context("with nested template functions", func() {
+		It("should execute nested ShowInventoryContentsOf calls", func() {
+			mockSite.pages["outer_container"] = wikipage.FrontMatter{
+				identifierKey: "outer_container",
+				titleKey:      "Outer Container",
+				inventoryKey: map[string]any{
+					itemsKey: []string{"inner_container"},
+				},
+			}
+			mockSite.pages["inner_container"] = wikipage.FrontMatter{
+				identifierKey: "inner_container",
+				titleKey:      "Inner Container",
+				inventoryKey: map[string]any{
+					itemsKey: []string{"nested_item"},
+				},
+			}
+			mockSite.pages["nested_item"] = wikipage.FrontMatter{
+				identifierKey: "nested_item",
+				titleKey:      "Nested Item",
+			}
+			mockIndex.values["inner_container"] = map[string]string{
+				"inventory.is_container": "true",
+			}
+			mockIndex.values["nested_item"] = map[string]string{
+				titleKey: "Nested Item",
+			}
+
+			templateString := "{{ ShowInventoryContentsOf \"outer_container\" }}"
+			frontmatter := wikipage.FrontMatter{
+				identifierKey: "test_page",
+				titleKey:      "Test Page",
+			}
+
+			result, err := templating.ExecuteTemplate(templateString, frontmatter, mockSite, mockIndex)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(result)).To(ContainSubstring("Inner Container"))
+			Expect(string(result)).To(ContainSubstring("Nested Item"))
+		})
+	})
+
+	Context("with multiple function types in same template", func() {
+		It("should execute all functions correctly", func() {
+			mockSite.pages["page1"] = wikipage.FrontMatter{
+				identifierKey: "page1",
+				titleKey:      "Page 1",
+			}
+			mockIndex.index["tag"] = map[string][]string{
+				"important": []string{"page1"},
+			}
+			mockIndex.values["test_container"] = map[string]string{
+				"inventory.is_container": "true",
+			}
+
+			templateString := `
+{{ LinkTo "page1" }}
+{{ $items := FindBy "tag" "important" }}
+Found {{ len $items }} items
+{{ if IsContainer "test_container" }}Container exists{{ end }}
+`
+			frontmatter := wikipage.FrontMatter{
+				identifierKey: "test_page",
+				titleKey:      "Test Page",
+			}
+
+			result, err := templating.ExecuteTemplate(templateString, frontmatter, mockSite, mockIndex)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(result)).To(ContainSubstring("Page 1"))
+			Expect(string(result)).To(ContainSubstring("Found 1 items"))
+			Expect(string(result)).To(ContainSubstring("Container exists"))
 		})
 	})
 })

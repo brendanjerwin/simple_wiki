@@ -26,12 +26,6 @@ var _ = Describe("CronScheduler", func() {
 		scheduler.Stop()
 	})
 
-	Describe("NewCronScheduler", func() {
-		It("should create a scheduler with the given logger", func() {
-			Expect(scheduler).NotTo(BeNil())
-		})
-	})
-
 	Describe("Schedule", func() {
 		When("given a valid cron schedule and job", func() {
 			var (

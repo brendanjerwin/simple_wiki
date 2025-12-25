@@ -2,6 +2,7 @@
 package bleve
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"sort"
@@ -101,10 +102,17 @@ func (b *Index) AddPageToIndex(requestedIdentifier wikipage.PageIdentifier) erro
 
 // RemovePageFromIndex removes a page from the Bleve index.
 func (b *Index) RemovePageFromIndex(identifier wikipage.PageIdentifier) error {
-	identifier = wikiidentifiers.MungeIdentifier(identifier)
+	mungedIdentifier := wikiidentifiers.MungeIdentifier(identifier)
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.index.Delete(identifier)
+	
+	// Try to delete all possible variations of the identifier to ensure complete removal.
+	// Unlike AddPageToIndex where deletion is background cleanup, RemovePageFromIndex's
+	// primary purpose is deletion, so we return any errors encountered.
+	err1 := b.index.Delete(identifier)
+	err2 := b.index.Delete(mungedIdentifier)
+	
+	return errors.Join(err1, err2)
 }
 
 const (

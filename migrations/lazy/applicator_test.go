@@ -18,10 +18,6 @@ var _ = Describe("DefaultApplicator", func() {
 		applicator = lazy.NewEmptyApplicator()
 	})
 
-	It("should exist", func() {
-		Expect(applicator).NotTo(BeNil())
-	})
-
 	Describe("when applying migrations to content with no frontmatter", func() {
 		var content []byte
 		var result []byte

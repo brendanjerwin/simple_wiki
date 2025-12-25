@@ -593,6 +593,97 @@ Content`
 	})
 })
 
+var _ = Describe("Page.Render", func() {
+	var (
+		page             *wikipage.Page
+		reader           wikipage.PageReader
+		renderer         wikipage.IRenderMarkdownToHTML
+		templateExecutor wikipage.IExecuteTemplate
+		query            wikipage.IQueryFrontmatterIndex
+		err              error
+	)
+
+	BeforeEach(func() {
+		page = &wikipage.Page{
+			Identifier: "test-page",
+			Text: `---
+title: Test Page
+---
+# Test Content`,
+		}
+		reader = &mockPageReader{}
+		renderer = &mockRenderer{}
+		templateExecutor = &mockTemplateExecutor{}
+		query = &mockQueryFrontmatterIndex{}
+	})
+
+	JustBeforeEach(func() {
+		err = page.Render(reader, renderer, templateExecutor, query)
+	})
+
+	When("rendering succeeds", func() {
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should populate RenderedPage field", func() {
+			Expect(page.RenderedPage).NotTo(BeEmpty())
+		})
+
+		It("should populate RenderedMarkdown field", func() {
+			Expect(page.RenderedMarkdown).NotTo(BeEmpty())
+		})
+
+		It("should populate FrontmatterJSON field", func() {
+			Expect(page.FrontmatterJSON).NotTo(BeEmpty())
+		})
+	})
+
+	When("rendering fails", func() {
+		BeforeEach(func() {
+			renderer = &mockRendererError{}
+		})
+
+		It("should return an error", func() {
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should wrap the error", func() {
+			Expect(err.Error()).To(ContainSubstring("error rendering page"))
+		})
+	})
+})
+
+var _ = Describe("Page.IsNew", func() {
+	var page *wikipage.Page
+
+	Context("when page was not loaded from disk", func() {
+		BeforeEach(func() {
+			page = &wikipage.Page{
+				Identifier:         "new-page",
+				WasLoadedFromDisk: false,
+			}
+		})
+
+		It("should return true", func() {
+			Expect(page.IsNew()).To(BeTrue())
+		})
+	})
+
+	Context("when page was loaded from disk", func() {
+		BeforeEach(func() {
+			page = &wikipage.Page{
+				Identifier:         "existing-page",
+				WasLoadedFromDisk: true,
+			}
+		})
+
+		It("should return false", func() {
+			Expect(page.IsNew()).To(BeFalse())
+		})
+	})
+})
+
 // Mock implementations for testing
 
 type mockRenderer struct{}

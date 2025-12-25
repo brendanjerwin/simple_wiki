@@ -46,20 +46,21 @@ var _ = Describe("FrontmatterIndexJob", func() {
 		mockIndex = &MockIndexOperator{}
 	})
 
+	Describe("Job interface compliance", func() {
+		var job *index.FrontmatterIndexJob
+		var jobInterface jobs.Job
 
-	It("should implement the Job interface", func() {
-		job := index.NewFrontmatterIndexJob(mockIndex, "test-page", index.Add)
-		var jobInterface jobs.Job = job
-		
-		// Test that interface methods can be called
-		Expect(jobInterface.GetName()).To(Equal("FrontmatterIndex"))
-		Expect(jobInterface.Execute).NotTo(BeNil())
-	})
+		BeforeEach(func() {
+			job = index.NewFrontmatterIndexJob(mockIndex, "test-page", index.Add)
+			jobInterface = job
+		})
 
-	Describe("when creating a new job", func() {
-		It("should create a job", func() {
-			job := index.NewFrontmatterIndexJob(mockIndex, "test-page", index.Add)
-			Expect(job).NotTo(BeNil())
+		It("should have GetName method", func() {
+			Expect(jobInterface.GetName()).To(Equal("FrontmatterIndex"))
+		})
+
+		It("should have Execute method", func() {
+			Expect(jobInterface.Execute).NotTo(BeNil())
 		})
 	})
 
@@ -179,20 +180,21 @@ var _ = Describe("BleveIndexJob", func() {
 		mockIndex = &MockIndexOperator{}
 	})
 
+	Describe("Job interface compliance", func() {
+		var job *index.BleveIndexJob
+		var jobInterface jobs.Job
 
-	It("should implement the Job interface", func() {
-		job := index.NewBleveIndexJob(mockIndex, "test-page", index.Add)
-		var jobInterface jobs.Job = job
-		
-		// Test that interface methods can be called
-		Expect(jobInterface.GetName()).To(Equal("BleveIndex"))
-		Expect(jobInterface.Execute).NotTo(BeNil())
-	})
+		BeforeEach(func() {
+			job = index.NewBleveIndexJob(mockIndex, "test-page", index.Add)
+			jobInterface = job
+		})
 
-	Describe("when creating a new job", func() {
-		It("should create a job", func() {
-			job := index.NewBleveIndexJob(mockIndex, "test-page", index.Add)
-			Expect(job).NotTo(BeNil())
+		It("should have GetName method", func() {
+			Expect(jobInterface.GetName()).To(Equal("BleveIndex"))
+		})
+
+		It("should have Execute method", func() {
+			Expect(jobInterface.Execute).NotTo(BeNil())
 		})
 	})
 
