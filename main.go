@@ -120,6 +120,7 @@ func setupServer(c *cli.Context) (*serverConfig, error) {
 	var identityResolver tailscale.IResolveIdentity
 	var config *serverConfig
 	tailscaleServe := c.GlobalBool("tailscale-serve")
+	forceRedirectTailnetHTTPS := c.GlobalBool("force-redirect-tailnet-https")
 
 	if tsStatus.Available && tsStatus.DNSName != "" {
 		// Tailscale is available
@@ -136,12 +137,16 @@ func setupServer(c *cli.Context) (*serverConfig, error) {
 				return nil, fmt.Errorf("failed to create HTTP listener: %w", err)
 			}
 
-			// Wrap handler with redirect to tailnet HTTPS (port 443 via Tailscale Serve)
-			redirectHandler := tailscale.NewRedirectHandler(tsStatus.DNSName, 443, identityResolver, h2c.NewHandler(handler, &http2.Server{}))
+			var finalHandler http.Handler = h2c.NewHandler(handler, &http2.Server{})
+			if forceRedirectTailnetHTTPS {
+				// Wrap handler with redirect to tailnet HTTPS (port 443 via Tailscale Serve)
+				logger.Info("Tailnet clients will be redirected to HTTPS")
+				finalHandler = tailscale.NewRedirectHandler(tsStatus.DNSName, 443, identityResolver, finalHandler)
+			}
 
 			config = &serverConfig{
 				mainServer: &http.Server{
-					Handler: redirectHandler,
+					Handler: finalHandler,
 				},
 				mainListener: httpListener,
 			}
@@ -324,6 +329,10 @@ func getFlags() []cli.Flag {
 		cli.BoolFlag{
 			Name:  "tailscale-serve",
 			Usage: "Let Tailscale Serve handle HTTPS (no local TLS listener)",
+		},
+		cli.BoolFlag{
+			Name:  "force-redirect-tailnet-https",
+			Usage: "Force redirect tailnet clients to HTTPS on the tailnet hostname",
 		},
 		cli.StringFlag{
 			Name:  "css",
