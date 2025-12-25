@@ -184,8 +184,8 @@ var _ = Describe("Index", func() {
 			Expect(index.AddPageToIndex("test-page")).To(Succeed())
 
 			// Verify it's there first
-			results, err := index.Query("Test Page")
-			Expect(err).NotTo(HaveOccurred())
+			results, queryErr := index.Query("Test Page")
+			Expect(queryErr).NotTo(HaveOccurred())
 			Expect(results).NotTo(BeEmpty())
 
 			// Remove it

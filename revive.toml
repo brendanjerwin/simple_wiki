@@ -46,3 +46,7 @@ arguments = [
 
 [rule.unused-parameter]
 exclude = ["**/*_test.go"]
+
+[rule.flag-parameter]
+# The goldmark NodeRendererFunc interface requires an 'entering' bool parameter
+exclude = ["**/wiki_image_renderer.go"]

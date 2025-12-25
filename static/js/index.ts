@@ -9,6 +9,7 @@ import './web-components/inventory-add-item-dialog.js';
 import './web-components/inventory-move-item-dialog.js';
 import './web-components/editor-context-menu.js';
 import './web-components/editor-toolbar.js';
+import './web-components/wiki-image.js';
 import { showStoredToast } from './web-components/toast-message.js';
 import { setupGlobalErrorHandler } from './web-components/global-error-handler.js';
 import { pageDeleteService } from './web-components/page-deletion-service.js';

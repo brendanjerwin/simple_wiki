@@ -43,15 +43,13 @@ export class ToastMessage extends LitElement {
         display: block;
         max-width: 400px;
         min-width: 280px;
-        opacity: 0;
         transform: translateX(100%);
-        transition: all 0.3s ease;
+        transition: transform 0.3s ease;
         font-size: 11px;
         line-height: 1.2;
       }
 
       :host([visible]) {
-        opacity: 1;
         transform: translateX(0);
       }
 
@@ -277,7 +275,7 @@ export class ToastMessage extends LitElement {
 
   override render() {
     return html`
-      <div class="container container-ambient toast ${this.type} gap-sm" @click="${this._handleToastClick}">
+      <div class="container toast ${this.type} gap-sm" @click="${this._handleToastClick}">
         <button 
           class="close-button text-muted" 
           @click="${this._handleCloseClick}"
