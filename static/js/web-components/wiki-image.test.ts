@@ -1,14 +1,19 @@
 import { html, fixture, expect } from '@open-wc/testing';
 import './wiki-image.js';
 import type { WikiImage } from './wiki-image.js';
-import sinon, { SinonStub } from 'sinon';
+import sinon, { SinonStub, SinonSpy } from 'sinon';
 
 describe('WikiImage', () => {
   let el: WikiImage;
 
-  it('should exist', async () => {
-    el = await fixture(html`<wiki-image></wiki-image>`);
-    expect(el).to.exist;
+  describe('when created', () => {
+    beforeEach(async () => {
+      el = await fixture(html`<wiki-image></wiki-image>`);
+    });
+
+    it('should exist', () => {
+      expect(el).to.exist;
+    });
   });
 
   describe('when rendering with src and alt', () => {
@@ -63,11 +68,9 @@ describe('WikiImage', () => {
       expect(toolsPanel).to.exist;
     });
 
-    it('should have tool buttons (2 without HTTPS, 3 with HTTPS)', () => {
+    it('should have at least 2 tool buttons', () => {
       const buttons = el.shadowRoot?.querySelectorAll('.tool-btn');
-      // Copy button only appears in secure context with clipboard.write support
-      const expectedCount = window.isSecureContext && navigator.clipboard && 'write' in navigator.clipboard ? 3 : 2;
-      expect(buttons?.length).to.equal(expectedCount);
+      expect(buttons?.length).to.be.at.least(2);
     });
 
     it('should have open in new tab button with aria-label', () => {
@@ -80,18 +83,81 @@ describe('WikiImage', () => {
       expect(downloadBtn).to.exist;
     });
 
-    it('should have copy image button with aria-label (only in secure context)', () => {
-      const copyBtn = el.shadowRoot?.querySelector('.tool-btn[aria-label="Copy image"]');
-      if (window.isSecureContext && navigator.clipboard && 'write' in navigator.clipboard) {
-        expect(copyBtn).to.exist;
-      } else {
-        expect(copyBtn).to.not.exist;
-      }
-    });
-
     it('should have toolbar role for accessibility', () => {
       const toolsPanel = el.shadowRoot?.querySelector('.tools-panel');
       expect(toolsPanel?.getAttribute('role')).to.equal('toolbar');
+    });
+  });
+
+  describe('copy button visibility', () => {
+    let originalIsSecureContext: PropertyDescriptor | undefined;
+    let originalClipboard: PropertyDescriptor | undefined;
+
+    beforeEach(() => {
+      originalIsSecureContext = Object.getOwnPropertyDescriptor(window, 'isSecureContext');
+      originalClipboard = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+    });
+
+    afterEach(() => {
+      if (originalIsSecureContext) {
+        Object.defineProperty(window, 'isSecureContext', originalIsSecureContext);
+      }
+      if (originalClipboard) {
+        Object.defineProperty(navigator, 'clipboard', originalClipboard);
+      }
+    });
+
+    describe('when in secure context with clipboard.write support', () => {
+      let copyBtn: Element | null | undefined;
+
+      beforeEach(async () => {
+        Object.defineProperty(window, 'isSecureContext', { value: true, configurable: true });
+        Object.defineProperty(navigator, 'clipboard', {
+          value: { write: () => Promise.resolve() },
+          configurable: true
+        });
+
+        el = await fixture(html`<wiki-image src="/uploads/test.jpg" alt="Test"></wiki-image>`);
+        copyBtn = el.shadowRoot?.querySelector('.tool-btn[aria-label="Copy image"]');
+      });
+
+      it('should render the copy button', () => {
+        expect(copyBtn).to.exist;
+      });
+    });
+
+    describe('when not in secure context', () => {
+      let copyBtn: Element | null | undefined;
+
+      beforeEach(async () => {
+        Object.defineProperty(window, 'isSecureContext', { value: false, configurable: true });
+
+        el = await fixture(html`<wiki-image src="/uploads/test.jpg" alt="Test"></wiki-image>`);
+        copyBtn = el.shadowRoot?.querySelector('.tool-btn[aria-label="Copy image"]');
+      });
+
+      it('should not render the copy button', () => {
+        expect(copyBtn).to.not.exist;
+      });
+    });
+
+    describe('when clipboard API is not available', () => {
+      let copyBtn: Element | null | undefined;
+
+      beforeEach(async () => {
+        Object.defineProperty(window, 'isSecureContext', { value: true, configurable: true });
+        Object.defineProperty(navigator, 'clipboard', {
+          value: undefined,
+          configurable: true
+        });
+
+        el = await fixture(html`<wiki-image src="/uploads/test.jpg" alt="Test"></wiki-image>`);
+        copyBtn = el.shadowRoot?.querySelector('.tool-btn[aria-label="Copy image"]');
+      });
+
+      it('should not render the copy button', () => {
+        expect(copyBtn).to.not.exist;
+      });
     });
   });
 
@@ -216,34 +282,6 @@ describe('WikiImage', () => {
         expect(clipboardWriteStub).to.have.been.calledOnce;
       });
     });
-
-    describe('when not in secure context', () => {
-      let originalIsSecureContext: boolean;
-      let toastElement: Element | null;
-
-      beforeEach(async () => {
-        originalIsSecureContext = window.isSecureContext;
-        Object.defineProperty(window, 'isSecureContext', { value: false, writable: true });
-
-        el = await fixture(html`
-          <wiki-image src="/uploads/test.jpg" alt="Test"></wiki-image>
-        `);
-        const copyBtn = el.shadowRoot?.querySelector('.tool-btn[aria-label="Copy image"]') as HTMLButtonElement;
-        copyBtn?.click();
-
-        await new Promise(resolve => setTimeout(resolve, 50));
-        toastElement = document.querySelector('toast-message');
-      });
-
-      afterEach(() => {
-        Object.defineProperty(window, 'isSecureContext', { value: originalIsSecureContext, writable: true });
-        document.querySelectorAll('toast-message').forEach(t => t.remove());
-      });
-
-      it('should show error toast', () => {
-        expect(toastElement).to.exist;
-      });
-    });
   });
 
   describe('click to open behavior', () => {
@@ -282,6 +320,62 @@ describe('WikiImage', () => {
 
       it('should open toolsOpen', () => {
         expect(el.toolsOpen).to.be.true;
+      });
+    });
+  });
+
+  describe('keyboard accessibility', () => {
+    let img: HTMLImageElement | null | undefined;
+
+    beforeEach(async () => {
+      el = await fixture(html`
+        <wiki-image src="/uploads/test.jpg" alt="Test image"></wiki-image>
+      `);
+      img = el.shadowRoot?.querySelector('img');
+    });
+
+    it('should have tabindex on the image', () => {
+      expect(img?.getAttribute('tabindex')).to.equal('0');
+    });
+
+    it('should have role button on the image', () => {
+      expect(img?.getAttribute('role')).to.equal('button');
+    });
+
+    it('should have aria-label on the image', () => {
+      expect(img?.getAttribute('aria-label')).to.equal('Test image - Press Enter to open tools');
+    });
+
+    describe('when pressing Enter on the image', () => {
+      beforeEach(() => {
+        const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true });
+        img?.dispatchEvent(event);
+      });
+
+      it('should open the tools panel', () => {
+        expect(el.toolsOpen).to.be.true;
+      });
+    });
+
+    describe('when pressing Space on the image', () => {
+      beforeEach(() => {
+        const event = new KeyboardEvent('keydown', { key: ' ', bubbles: true });
+        img?.dispatchEvent(event);
+      });
+
+      it('should open the tools panel', () => {
+        expect(el.toolsOpen).to.be.true;
+      });
+    });
+
+    describe('when pressing other keys on the image', () => {
+      beforeEach(() => {
+        const event = new KeyboardEvent('keydown', { key: 'a', bubbles: true });
+        img?.dispatchEvent(event);
+      });
+
+      it('should not open the tools panel', () => {
+        expect(el.toolsOpen).to.be.false;
       });
     });
   });
@@ -338,7 +432,7 @@ describe('WikiImage', () => {
   });
 
   describe('event listener cleanup', () => {
-    let removeEventListenerSpy: SinonStub;
+    let removeEventListenerSpy: SinonSpy;
 
     beforeEach(async () => {
       removeEventListenerSpy = sinon.spy(document, 'removeEventListener');

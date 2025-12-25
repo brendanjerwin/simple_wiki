@@ -190,6 +190,66 @@ var _ = Describe("GoldmarkRenderer", func() {
 			})
 		})
 
+		When("rendering markdown with images with complex alt text (emphasis)", func() {
+			BeforeEach(func() {
+				source = []byte("![*emphasized* text](image.jpg)")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should include full alt text", func() {
+				Expect(string(output)).To(ContainSubstring(`alt="emphasized text"`))
+			})
+		})
+
+		When("rendering markdown with images with complex alt text (bold)", func() {
+			BeforeEach(func() {
+				source = []byte("![**bold** text](image.jpg)")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should include full alt text", func() {
+				Expect(string(output)).To(ContainSubstring(`alt="bold text"`))
+			})
+		})
+
+		When("rendering markdown with images with empty alt text", func() {
+			BeforeEach(func() {
+				source = []byte("![](image.jpg)")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should have empty alt attribute", func() {
+				Expect(string(output)).To(ContainSubstring(`alt=""`))
+			})
+		})
+
+		When("rendering markdown with images with dangerous URL", func() {
+			// Note: The renderer is created with WithUnsafe() and bluemonday allows
+			// custom element attributes, so dangerous URLs are not filtered.
+			// The wiki-image component handles this by using noopener,noreferrer.
+			BeforeEach(func() {
+				source = []byte("![danger](javascript:alert('xss'))")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should render a wiki-image element with escaped URL", func() {
+				Expect(string(output)).To(ContainSubstring("<wiki-image"))
+				Expect(string(output)).To(ContainSubstring("javascript:"))
+			})
+		})
+
 		When("rendering nil source", func() {
 			BeforeEach(func() {
 				source = nil

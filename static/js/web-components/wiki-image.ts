@@ -1,5 +1,6 @@
 import { html, css, LitElement, TemplateResult } from 'lit';
 import { property } from 'lit/decorators.js';
+import { ifDefined } from 'lit/directives/if-defined.js';
 import { showToast, ToastMessage } from './toast-message.js';
 import { AugmentErrorService } from './augment-error-service.js';
 
@@ -234,9 +235,16 @@ export class WikiImage extends LitElement {
     this.toolsOpen = false;
   }
 
+  private _handleKeydown(e: KeyboardEvent): void {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      this.toolsOpen = true;
+    }
+  }
+
   private _handleOpenNewTab(e: Event): void {
     e.stopPropagation();
-    window.open(this.src, '_blank');
+    window.open(this.src, '_blank', 'noopener,noreferrer');
   }
 
   private _handleDownload(e: Event): void {
@@ -321,7 +329,11 @@ export class WikiImage extends LitElement {
         <img
           src="${this.src}"
           alt="${this.alt}"
-          title="${this.title || ''}"
+          title=${ifDefined(this.title)}
+          tabindex="0"
+          role="button"
+          aria-label="${this.alt || 'Image'} - Press Enter to open tools"
+          @keydown="${this._handleKeydown}"
         />
         <div class="tools-panel" role="toolbar" aria-label="Image tools">
           <button

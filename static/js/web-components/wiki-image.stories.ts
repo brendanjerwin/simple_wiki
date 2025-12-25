@@ -158,14 +158,18 @@ export const InteractiveTesting: Story = {
           alt="Interactive test image"
           tools-open
           @click=${(e: Event) => {
-            const target = e.target as HTMLElement;
-            const ariaLabel = target.getAttribute('aria-label');
-            if (ariaLabel === 'Open in new tab') {
-              logOpen({ src: 'https://picsum.photos/800/400' });
-            } else if (ariaLabel === 'Download') {
-              logDownload({ filename: '400' });
-            } else if (ariaLabel === 'Copy image') {
-              logCopy({ src: 'https://picsum.photos/800/400' });
+            // Use composedPath to get the actual target from shadow DOM
+            const path = e.composedPath();
+            const target = path[0] as HTMLElement;
+            if (target instanceof HTMLButtonElement) {
+              const ariaLabel = target.getAttribute('aria-label');
+              if (ariaLabel === 'Open in new tab') {
+                logOpen({ src: 'https://picsum.photos/800/400' });
+              } else if (ariaLabel === 'Download') {
+                logDownload({ filename: '400' });
+              } else if (ariaLabel === 'Copy image') {
+                logCopy({ src: 'https://picsum.photos/800/400' });
+              }
             }
           }}
         ></wiki-image>

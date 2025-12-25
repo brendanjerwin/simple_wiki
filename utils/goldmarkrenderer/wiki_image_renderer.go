@@ -28,13 +28,18 @@ func (r *WikiImageRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegistere
 	reg.Register(ast.KindImage, r.renderImage)
 }
 
-// extractAltText extracts the alt text from an image node's children
-func extractAltText(n *ast.Image, source []byte) []byte {
+// collectText recursively collects plain text from a node and its descendants.
+// This handles complex alt text like ![*emphasized* text](...) by traversing
+// through all child nodes including emphasis, strong, etc.
+func collectText(n ast.Node, source []byte) []byte {
 	var buf bytes.Buffer
-	for child := n.FirstChild(); child != nil; child = child.NextSibling() {
-		if text, ok := child.(*ast.Text); ok {
+	for c := n.FirstChild(); c != nil; c = c.NextSibling() {
+		if text, ok := c.(*ast.Text); ok {
 			// bytes.Buffer.Write never returns an error per Go documentation
 			_, _ = buf.Write(text.Segment.Value(source))
+		} else {
+			// Recursively collect text from child nodes (emphasis, strong, etc.)
+			_, _ = buf.Write(collectText(c, source))
 		}
 	}
 	return buf.Bytes()
@@ -66,7 +71,8 @@ func (r *WikiImageRenderer) renderImage(w util.BufWriter, source []byte, node as
 	if _, err := w.WriteString(`" alt="`); err != nil {
 		return ast.WalkStop, err
 	}
-	altText := extractAltText(n, source)
+	// Use collectText to properly handle complex alt text (emphasis, bold, etc.)
+	altText := collectText(n, source)
 	if _, err := w.Write(util.EscapeHTML(altText)); err != nil {
 		return ast.WalkStop, err
 	}
@@ -79,6 +85,7 @@ func (r *WikiImageRenderer) renderImage(w util.BufWriter, source []byte, node as
 		if _, err := w.WriteString(` title="`); err != nil {
 			return ast.WalkStop, err
 		}
+		// Writer.Write doesn't return an error per goldmark interface
 		r.Writer.Write(w, n.Title)
 		if err := w.WriteByte('"'); err != nil {
 			return ast.WalkStop, err
