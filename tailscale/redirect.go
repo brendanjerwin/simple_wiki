@@ -5,8 +5,9 @@ import (
 	"net/http"
 )
 
-// RedirectHandler redirects tailnet requests to HTTPS, serves fallback for others.
-// This allows non-tailnet clients (localhost, LAN) to continue using HTTP.
+// RedirectHandler redirects tailnet clients to HTTPS on the tailnet hostname.
+// - Tailnet clients: always redirect to HTTPS on the tailnet hostname (regardless of hostname used)
+// - Non-tailnet clients: always serve HTTP fallback (regardless of hostname used)
 type RedirectHandler struct {
 	TSHostname      string           // Tailscale hostname to redirect to (e.g., "my-laptop.tailnet.ts.net")
 	TLSPort         int              // Port the HTTPS server is running on
@@ -15,28 +16,28 @@ type RedirectHandler struct {
 }
 
 // ServeHTTP implements http.Handler.
-// If the request comes from a tailnet IP (WhoIs succeeds), redirect to HTTPS.
-// Otherwise, serve the fallback handler (normal HTTP wiki).
 func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Check if request is from tailnet (WhoIs succeeds for tailnet IPs)
 	if h.Resolver != nil {
 		identity, _ := h.Resolver.WhoIs(r.Context(), r.RemoteAddr)
 		if identity != nil {
-			// Tailnet request - redirect to HTTPS
-			// Include port if not standard HTTPS port (443)
-			var target string
-			if h.TLSPort == 443 {
-				target = fmt.Sprintf("https://%s%s", h.TSHostname, r.URL.RequestURI())
-			} else {
-				target = fmt.Sprintf("https://%s:%d%s", h.TSHostname, h.TLSPort, r.URL.RequestURI())
-			}
+			// Tailnet client - redirect to HTTPS on the tailnet hostname
+			target := h.buildHTTPSURL(r.URL.RequestURI())
 			http.Redirect(w, r, target, http.StatusMovedPermanently)
 			return
 		}
 	}
 
-	// Non-tailnet request - serve normal HTTP
+	// Non-tailnet client - serve HTTP fallback
 	h.FallbackHandler.ServeHTTP(w, r)
+}
+
+// buildHTTPSURL constructs the HTTPS redirect URL.
+func (h *RedirectHandler) buildHTTPSURL(requestURI string) string {
+	if h.TLSPort == 443 {
+		return fmt.Sprintf("https://%s%s", h.TSHostname, requestURI)
+	}
+	return fmt.Sprintf("https://%s:%d%s", h.TSHostname, h.TLSPort, requestURI)
 }
 
 // NewRedirectHandler creates a new redirect handler.
