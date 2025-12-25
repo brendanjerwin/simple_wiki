@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -404,10 +405,25 @@ func (s *Site) handleStatic(c *gin.Context, command string) {
 func (s *Site) handleUploads(c *gin.Context, command string) {
 	if len(command) != 0 && command != rootPath && command != "/edit" {
 		command = command[1:]
+
+		// Reject path traversal and other malicious input
+		if strings.Contains(command, "\x00") || strings.Contains(command, "..") {
+			c.AbortWithStatus(http.StatusBadRequest)
+			return
+		}
+
 		if !strings.HasSuffix(command, ".upload") {
 			command = command + ".upload"
 		}
 		pathname := path.Join(s.PathToData, command)
+
+		// Verify the resolved path is within PathToData (not the directory itself)
+		cleanPath := filepath.Clean(pathname)
+		cleanDataPath := filepath.Clean(s.PathToData)
+		if !strings.HasPrefix(cleanPath, cleanDataPath+string(filepath.Separator)) {
+			c.AbortWithStatus(http.StatusBadRequest)
+			return
+		}
 
 		c.Header(
 			"Content-Disposition",
