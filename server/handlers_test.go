@@ -298,6 +298,82 @@ var _ = Describe("Handlers", func() {
 	})
 })
 
+var _ = Describe("handleUploads Path Injection Prevention", func() {
+	var router *gin.Engine
+	var w *httptest.ResponseRecorder
+	var tmpDir string
+
+	BeforeEach(func() {
+		var err error
+		tmpDir, err = os.MkdirTemp("", "simple_wiki_test")
+		Expect(err).NotTo(HaveOccurred())
+		logger := lumber.NewConsoleLogger(lumber.TRACE)
+		site, err := server.NewSite(tmpDir, "", "testpage", 0, "secret", true, 1024, 1024, logger)
+		Expect(err).NotTo(HaveOccurred())
+		router = site.GinRouter()
+		w = httptest.NewRecorder()
+	})
+
+	AfterEach(func() {
+		_ = os.RemoveAll(tmpDir)
+	})
+
+	When("requesting a path with directory traversal (..) sequence", func() {
+		BeforeEach(func() {
+			req, _ := http.NewRequest(http.MethodGet, "/uploads/../etc/passwd", nil)
+			router.ServeHTTP(w, req)
+		})
+
+		It("should return 400 Bad Request", func() {
+			Expect(w.Code).To(Equal(http.StatusBadRequest))
+		})
+	})
+
+	When("requesting a path with encoded directory traversal", func() {
+		BeforeEach(func() {
+			req, _ := http.NewRequest(http.MethodGet, "/uploads/..%2f..%2fetc/passwd", nil)
+			router.ServeHTTP(w, req)
+		})
+
+		It("should return 400 Bad Request", func() {
+			Expect(w.Code).To(Equal(http.StatusBadRequest))
+		})
+	})
+
+	When("requesting a path with null byte injection", func() {
+		BeforeEach(func() {
+			req, _ := http.NewRequest(http.MethodGet, "/uploads/safe%00.evil", nil)
+			router.ServeHTTP(w, req)
+		})
+
+		It("should return 400 Bad Request", func() {
+			Expect(w.Code).To(Equal(http.StatusBadRequest))
+		})
+	})
+
+	When("requesting a valid upload path", func() {
+		BeforeEach(func() {
+			// Create a test upload file
+			uploadDir := tmpDir
+			err := os.MkdirAll(uploadDir, 0755)
+			Expect(err).NotTo(HaveOccurred())
+			err = os.WriteFile(uploadDir+"/testfile.upload", []byte("test content"), 0644)
+			Expect(err).NotTo(HaveOccurred())
+
+			req, _ := http.NewRequest(http.MethodGet, "/uploads/testfile", nil)
+			router.ServeHTTP(w, req)
+		})
+
+		It("should return 200 OK", func() {
+			Expect(w.Code).To(Equal(http.StatusOK))
+		})
+
+		It("should serve the file content", func() {
+			Expect(w.Body.String()).To(Equal("test content"))
+		})
+	})
+})
+
 var _ = Describe("Session Logging Functions", func() {
 	var logBuffer *bytes.Buffer
 	var logger *lumber.ConsoleLogger
