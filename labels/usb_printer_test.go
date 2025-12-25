@@ -31,9 +31,11 @@ var _ = Describe("USBPrinter", func() {
 					USBProduct:       0x0001,
 				}
 
-				// This will likely fail because no USB device is connected,
-				// but it won't be the vendor error
+				// This will likely fail because no USB device is connected
 				_, err := labels.GetUSBPrinter(config)
+				
+				// If there's an error, it should not be the vendor error
+				// If no error, that's also fine (device found)
 				if err != nil {
 					Expect(err).NotTo(Equal(labels.ErrorVendorNotSpecified))
 				}

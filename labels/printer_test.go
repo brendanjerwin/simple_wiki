@@ -6,7 +6,6 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/brendanjerwin/simple_wiki/labels"
-	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
 var _ = Describe("ParseConnectivityMode", func() {
@@ -46,37 +45,6 @@ var _ = Describe("ParseConnectivityMode", func() {
 		It("should return error for empty string", func() {
 			_, err := labels.ParseConnectivityMode("")
 			Expect(err).To(HaveOccurred())
-		})
-	})
-})
-
-var _ = Describe("configFromFrontmatter", func() {
-	Context("with USB configuration", func() {
-		It("should parse valid USB configuration with hex prefix", func() {
-			frontmatter := wikipage.FrontMatter{
-				"label_printer": map[string]any{
-					"mode":    "usb",
-					"vendor":  "0x0A5F",
-					"product": "0x0001",
-				},
-			}
-
-			// This function is not exported, but we can test PrintLabel which uses it
-			// For now, let's test the exported functions that use this logic
-			Expect(frontmatter).NotTo(BeNil())
-		})
-	})
-
-	Context("with LP configuration", func() {
-		It("should parse valid LP configuration", func() {
-			frontmatter := wikipage.FrontMatter{
-				"label_printer": map[string]any{
-					"mode": "lp",
-					"name": "zebra_printer",
-				},
-			}
-
-			Expect(frontmatter).NotTo(BeNil())
 		})
 	})
 })

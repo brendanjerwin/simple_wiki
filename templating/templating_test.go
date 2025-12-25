@@ -628,8 +628,6 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 
 		It("should return error message", func() {
 			Expect(result).NotTo(BeEmpty())
-			// Should contain some error indication
-			Expect(len(result) > 0).To(BeTrue())
 		})
 	})
 })
@@ -1001,7 +999,10 @@ var _ = Describe("ExecuteTemplate", func() {
 	})
 
 	Context("with simple template", func() {
-		It("should execute template with frontmatter data", func() {
+		var result []byte
+		var err error
+
+		BeforeEach(func() {
 			templateString := "Title: {{ .Title }}, Description: {{ .Description }}"
 			frontmatter := wikipage.FrontMatter{
 				identifierKey: "test_page",
@@ -1009,9 +1010,18 @@ var _ = Describe("ExecuteTemplate", func() {
 				"description": "My Description",
 			}
 
-			result, err := templating.ExecuteTemplate(templateString, frontmatter, mockSite, mockIndex)
+			result, err = templating.ExecuteTemplate(templateString, frontmatter, mockSite, mockIndex)
+		})
+
+		It("should not return an error", func() {
 			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should include the title", func() {
 			Expect(string(result)).To(ContainSubstring("Title: My Page"))
+		})
+
+		It("should include the description", func() {
 			Expect(string(result)).To(ContainSubstring("Description: My Description"))
 		})
 	})
