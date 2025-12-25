@@ -18,6 +18,7 @@ func IdentityMiddleware(resolver IResolveIdentity, logger *lumber.ConsoleLogger)
 			identity = &Identity{
 				LoginName:   loginName,
 				DisplayName: c.Request.Header.Get("Tailscale-User-Name"),
+				NodeName:    c.Request.Header.Get("Tailscale-Node-Name"),
 			}
 		}
 
