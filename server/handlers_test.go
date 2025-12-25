@@ -340,6 +340,17 @@ var _ = Describe("handleUploads Path Injection Prevention", func() {
 		})
 	})
 
+	When("requesting a path with null byte injection", func() {
+		BeforeEach(func() {
+			req, _ := http.NewRequest(http.MethodGet, "/uploads/safe%00.evil", nil)
+			router.ServeHTTP(w, req)
+		})
+
+		It("should return 400 Bad Request", func() {
+			Expect(w.Code).To(Equal(http.StatusBadRequest))
+		})
+	})
+
 	When("requesting a valid upload path", func() {
 		BeforeEach(func() {
 			// Create a test upload file

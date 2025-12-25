@@ -406,8 +406,8 @@ func (s *Site) handleUploads(c *gin.Context, command string) {
 	if len(command) != 0 && command != rootPath && command != "/edit" {
 		command = command[1:]
 
-		// Reject path traversal attempts
-		if strings.Contains(command, "..") {
+		// Reject path traversal and other malicious input
+		if strings.Contains(command, "\x00") || strings.Contains(command, "..") {
 			c.AbortWithStatus(http.StatusBadRequest)
 			return
 		}
