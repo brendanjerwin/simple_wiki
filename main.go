@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"time"
 
@@ -126,10 +127,21 @@ func setupServer(c *cli.Context) (*serverConfig, error) {
 		identityResolver = tailscale.NewIdentityResolver()
 		handler := createMultiplexedHandler(site, identityResolver, logger)
 
-		// Create TLS listener on port 443
+		// Determine TLS port: use 443 for production (port 80), otherwise port+1 for dev
+		portStr := c.GlobalString("port")
+		port, err := strconv.Atoi(portStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid port %q: %w", portStr, err)
+		}
+		var tlsPort int
+		if port == 80 {
+			tlsPort = 443 // Standard HTTPS port for production
+		} else {
+			tlsPort = port + 1 // Adjacent port for development (e.g., 8050 -> 8051)
+		}
 		tlsProvider := tailscale.NewTLSProvider()
 		tlsConfig := tlsProvider.GetTLSConfig()
-		httpsAddr := fmt.Sprintf("%s:443", host)
+		httpsAddr := fmt.Sprintf("%s:%d", host, tlsPort)
 		tlsListener, err := tls.Listen("tcp", httpsAddr, tlsConfig)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create TLS listener: %w", err)
@@ -138,7 +150,7 @@ func setupServer(c *cli.Context) (*serverConfig, error) {
 		logger.Info("HTTPS server listening on %s", httpsAddr)
 
 		// Create HTTP redirect server on the configured port
-		redirectHandler := tailscale.NewRedirectHandler(tsStatus.DNSName, identityResolver, h2c.NewHandler(handler, &http2.Server{}))
+		redirectHandler := tailscale.NewRedirectHandler(tsStatus.DNSName, tlsPort, identityResolver, h2c.NewHandler(handler, &http2.Server{}))
 		httpListener, err := net.Listen("tcp", httpAddr)
 		if err != nil {
 			tlsListener.Close()

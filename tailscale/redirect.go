@@ -1,6 +1,7 @@
 package tailscale
 
 import (
+	"fmt"
 	"net/http"
 )
 
@@ -8,6 +9,7 @@ import (
 // This allows non-tailnet clients (localhost, LAN) to continue using HTTP.
 type RedirectHandler struct {
 	TSHostname      string           // Tailscale hostname to redirect to (e.g., "my-laptop.tailnet.ts.net")
+	TLSPort         int              // Port the HTTPS server is running on
 	Resolver        IResolveIdentity // Used to detect tailnet requests via WhoIs
 	FallbackHandler http.Handler     // Handler for non-tailnet requests
 }
@@ -21,7 +23,13 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		identity, _ := h.Resolver.WhoIs(r.Context(), r.RemoteAddr)
 		if identity != nil {
 			// Tailnet request - redirect to HTTPS
-			target := "https://" + h.TSHostname + r.URL.RequestURI()
+			// Include port if not standard HTTPS port (443)
+			var target string
+			if h.TLSPort == 443 {
+				target = fmt.Sprintf("https://%s%s", h.TSHostname, r.URL.RequestURI())
+			} else {
+				target = fmt.Sprintf("https://%s:%d%s", h.TSHostname, h.TLSPort, r.URL.RequestURI())
+			}
 			http.Redirect(w, r, target, http.StatusMovedPermanently)
 			return
 		}
@@ -32,9 +40,10 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // NewRedirectHandler creates a new redirect handler.
-func NewRedirectHandler(tsHostname string, resolver IResolveIdentity, fallback http.Handler) *RedirectHandler {
+func NewRedirectHandler(tsHostname string, tlsPort int, resolver IResolveIdentity, fallback http.Handler) *RedirectHandler {
 	return &RedirectHandler{
 		TSHostname:      tsHostname,
+		TLSPort:         tlsPort,
 		Resolver:        resolver,
 		FallbackHandler: fallback,
 	}
