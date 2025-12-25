@@ -6,15 +6,15 @@ import (
 )
 
 // RedirectHandler redirects HTTP requests to HTTPS on the tailnet hostname.
-// - If ForceRedirect: redirect ALL HTTP requests to HTTPS
+// - If ForceRedirectToTailnet: redirect ALL HTTP requests to tailnet HTTPS
 // - Otherwise: only redirect tailnet clients (detected via WhoIs)
 // - Requests already HTTPS (via X-Forwarded-Proto) are served directly
 type RedirectHandler struct {
-	TSHostname      string           // Tailscale hostname to redirect to (e.g., "my-laptop.tailnet.ts.net")
-	TLSPort         int              // Port the HTTPS server is running on
-	Resolver        IResolveIdentity // Used to detect tailnet requests via WhoIs
-	FallbackHandler http.Handler     // Handler for non-tailnet requests
-	ForceRedirect   bool             // If true, redirect ALL HTTP requests to HTTPS
+	TSHostname              string           // Tailscale hostname to redirect to (e.g., "my-laptop.tailnet.ts.net")
+	TLSPort                 int              // Port the HTTPS server is running on
+	Resolver                IResolveIdentity // Used to detect tailnet requests via WhoIs
+	FallbackHandler         http.Handler     // Handler for non-tailnet requests
+	ForceRedirectToTailnet  bool             // If true, redirect ALL HTTP requests to tailnet HTTPS
 }
 
 // ServeHTTP implements http.Handler.
@@ -26,8 +26,8 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Force redirect: redirect ALL HTTP requests to HTTPS
-	if h.ForceRedirect {
+	// Force redirect: redirect ALL HTTP requests to tailnet HTTPS
+	if h.ForceRedirectToTailnet {
 		target := h.buildHTTPSURL(r.URL.RequestURI())
 		http.Redirect(w, r, target, http.StatusMovedPermanently)
 		return
@@ -57,12 +57,12 @@ func (h *RedirectHandler) buildHTTPSURL(requestURI string) string {
 }
 
 // NewRedirectHandler creates a new redirect handler.
-func NewRedirectHandler(tsHostname string, tlsPort int, resolver IResolveIdentity, fallback http.Handler, forceRedirect bool) *RedirectHandler {
+func NewRedirectHandler(tsHostname string, tlsPort int, resolver IResolveIdentity, fallback http.Handler, forceRedirectToTailnet bool) *RedirectHandler {
 	return &RedirectHandler{
-		TSHostname:      tsHostname,
-		TLSPort:         tlsPort,
-		Resolver:        resolver,
-		FallbackHandler: fallback,
-		ForceRedirect:   forceRedirect,
+		TSHostname:             tsHostname,
+		TLSPort:                tlsPort,
+		Resolver:               resolver,
+		FallbackHandler:        fallback,
+		ForceRedirectToTailnet: forceRedirectToTailnet,
 	}
 }
