@@ -11,11 +11,17 @@ import (
 	emoji "github.com/yuin/goldmark-emoji"
 	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/parser"
+	"github.com/yuin/goldmark/renderer"
 	"github.com/yuin/goldmark/renderer/html"
+	"github.com/yuin/goldmark/util"
 
 	"go.abhg.dev/goldmark/mermaid"
 	"go.abhg.dev/goldmark/wikilink"
 )
+
+// wikiImageRendererPriority sets the priority for the custom image renderer.
+// Higher priority means it runs before default renderers.
+const wikiImageRendererPriority = 100
 
 type GoldmarkRenderer struct{}
 
@@ -37,6 +43,9 @@ func (GoldmarkRenderer) Render(input []byte) ([]byte, error) {
 			html.WithHardWraps(),
 			html.WithXHTML(),
 			html.WithUnsafe(),
+			renderer.WithNodeRenderers(
+				util.Prioritized(NewWikiImageRenderer(html.WithUnsafe()), wikiImageRendererPriority),
+			),
 		),
 	)
 
@@ -49,6 +58,9 @@ func (GoldmarkRenderer) Render(input []byte) ([]byte, error) {
 	p.AllowElements("input")
 	p.AllowAttrs("type").Matching(regexp.MustCompile(`^checkbox$`)).OnElements("input")
 	p.AllowAttrs("disabled", "checked").OnElements("input")
+	// Allow wiki-image custom element
+	p.AllowElements("wiki-image")
+	p.AllowAttrs("src", "alt", "title").OnElements("wiki-image")
 	return p.SanitizeBytes(buf.Bytes()), nil
 }
 

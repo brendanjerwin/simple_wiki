@@ -170,9 +170,23 @@ var _ = Describe("GoldmarkRenderer", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("should render an img tag", func() {
-				expected := "<p><img src=\"image.jpg\" alt=\"alt text\"/></p>\n"
+			It("should render a wiki-image element", func() {
+				expected := "<p><wiki-image src=\"image.jpg\" alt=\"alt text\"></wiki-image></p>\n"
 				Expect(string(output)).To(Equal(expected))
+			})
+		})
+
+		When("rendering markdown with images with title", func() {
+			BeforeEach(func() {
+				source = []byte("![alt text](image.jpg \"My Title\")")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should include title attribute", func() {
+				Expect(string(output)).To(ContainSubstring(`title="My Title"`))
 			})
 		})
 
