@@ -119,7 +119,7 @@ func setupServer(c *cli.Context) (*serverConfig, error) {
 
 	var identityResolver tailscale.IResolveIdentity
 	var config *serverConfig
-	noTLS := c.GlobalBool("no-tls")
+	tailscaleServe := c.GlobalBool("tailscale-serve")
 
 	if tsStatus.Available && tsStatus.DNSName != "" {
 		// Tailscale is available
@@ -127,9 +127,9 @@ func setupServer(c *cli.Context) (*serverConfig, error) {
 		identityResolver = tailscale.NewIdentityResolver()
 		handler := createMultiplexedHandler(site, identityResolver, logger)
 
-		if noTLS {
-			// --no-tls: HTTP only with identity (e.g., when Tailscale Serve handles HTTPS)
-			logger.Info("TLS disabled (--no-tls). Running HTTP on %s with identity support", httpAddr)
+		if tailscaleServe {
+			// --tailscale-serve: Let Tailscale Serve handle HTTPS
+			logger.Info("Tailscale Serve mode. Running HTTP on %s with identity support", httpAddr)
 
 			httpListener, err := net.Listen("tcp", httpAddr)
 			if err != nil {
@@ -319,8 +319,8 @@ func getFlags() []cli.Flag {
 			Usage: "TLS port for HTTPS when Tailscale is available (0 = auto: port+1)",
 		},
 		cli.BoolFlag{
-			Name:  "no-tls",
-			Usage: "Disable TLS listener (use when Tailscale Serve handles HTTPS)",
+			Name:  "tailscale-serve",
+			Usage: "Let Tailscale Serve handle HTTPS (no local TLS listener)",
 		},
 		cli.StringFlag{
 			Name:  "css",
