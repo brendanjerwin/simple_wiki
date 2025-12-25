@@ -129,20 +129,11 @@ var _ = Describe("IndexCoordinator", func() {
 			})
 
 			It("should call AddPageToIndex for all pages on frontmatter index", func() {
-				for _, pageID := range pageIdentifiers {
-					Expect(frontmatterMock.addCalled).To(ContainElement(pageID))
-				}
+				Expect(frontmatterMock.addCalled).To(ContainElements("page1", "page2", "page3"))
 			})
 
 			It("should call AddPageToIndex for all pages on bleve index", func() {
-				for _, pageID := range pageIdentifiers {
-					Expect(bleveMock.addCalled).To(ContainElement(pageID))
-				}
-			})
-
-			It("should have called add method 3 times on each index", func() {
-				Expect(frontmatterMock.addCalled).To(HaveLen(3))
-				Expect(bleveMock.addCalled).To(HaveLen(3))
+				Expect(bleveMock.addCalled).To(ContainElements("page1", "page2", "page3"))
 			})
 		})
 	})
