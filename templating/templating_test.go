@@ -606,11 +606,14 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 		)
 
 		BeforeEach(func() {
+			// Use a function type which cannot be marshaled to JSON
+			unmarshalableFunc := func() {}
+			
 			// Create container with invalid frontmatter structure
 			mockSite = &mockPageReader{
 				pages: map[string]wikipage.FrontMatter{
 					"bad_container": {
-						identifierKey: make(chan int), // Invalid type that can't be marshaled
+						identifierKey: unmarshalableFunc, // Function type that can't be marshaled
 						titleKey:      "Bad Container",
 					},
 				},
@@ -626,8 +629,9 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 			result = showInventoryFunc("bad_container")
 		})
 
-		It("should return error message", func() {
+		It("should return error message containing error details", func() {
 			Expect(result).NotTo(BeEmpty())
+			Expect(result).To(Or(ContainSubstring("error"), ContainSubstring("unsupported")))
 		})
 	})
 })

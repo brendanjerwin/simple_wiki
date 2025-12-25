@@ -10,30 +10,52 @@ import (
 
 var _ = Describe("LPPrinter", func() {
 	Describe("GetLPPrinter", func() {
-		It("should create LP printer with given name", func() {
-			config := labels.PrinterConfig{
+		var config labels.PrinterConfig
+		var printer labels.Printer
+		var err error
+
+		BeforeEach(func() {
+			config = labels.PrinterConfig{
 				ConnectivityMode: labels.LP,
 				LPPrinterName:    "test_printer",
 			}
+			printer, err = labels.GetLPPrinter(config)
+		})
 
-			printer, err := labels.GetLPPrinter(config)
+		It("should not return an error", func() {
 			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return a printer instance", func() {
 			Expect(printer).NotTo(BeNil())
 		})
 	})
 
 	Describe("Close", func() {
-		It("should close without error", func() {
-			config := labels.PrinterConfig{
+		var config labels.PrinterConfig
+		var printer labels.Printer
+		var setupErr error
+		var closeErr error
+
+		BeforeEach(func() {
+			config = labels.PrinterConfig{
 				ConnectivityMode: labels.LP,
 				LPPrinterName:    "test_printer",
 			}
+			printer, setupErr = labels.GetLPPrinter(config)
+			
+			// Only proceed if setup succeeded
+			if setupErr == nil {
+				closeErr = printer.Close()
+			}
+		})
 
-			printer, err := labels.GetLPPrinter(config)
-			Expect(err).NotTo(HaveOccurred())
+		It("should not error during setup", func() {
+			Expect(setupErr).NotTo(HaveOccurred())
+		})
 
-			err = printer.Close()
-			Expect(err).NotTo(HaveOccurred())
+		It("should close without error", func() {
+			Expect(closeErr).NotTo(HaveOccurred())
 		})
 	})
 })

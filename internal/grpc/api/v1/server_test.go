@@ -315,6 +315,7 @@ var _ = Describe("Server", func() {
 
 		When("the requested page exists", func() {
 			var expectedFm map[string]any
+			var expectedStruct *structpb.Struct
 
 			BeforeEach(func() {
 				expectedFm = map[string]any{
@@ -322,6 +323,10 @@ var _ = Describe("Server", func() {
 					"tags":  []any{"test", "ginkgo"},
 				}
 				mockPageReaderMutator.Frontmatter = expectedFm
+				
+				var structErr error
+				expectedStruct, structErr = structpb.NewStruct(expectedFm)
+				Expect(structErr).NotTo(HaveOccurred())
 			})
 
 			It("should not return an error", func() {
@@ -330,8 +335,6 @@ var _ = Describe("Server", func() {
 
 			It("should return the page's frontmatter", func() {
 				Expect(res).NotTo(BeNil())
-				expectedStruct, err := structpb.NewStruct(expectedFm)
-				Expect(err).NotTo(HaveOccurred())
 				Expect(res.Frontmatter).To(Equal(expectedStruct))
 			})
 		})
@@ -339,6 +342,7 @@ var _ = Describe("Server", func() {
 		When("the requested page has frontmatter with identifier key", func() {
 			var frontmatterWithIdentifier map[string]any
 			var expectedFilteredFm map[string]any
+			var expectedStruct *structpb.Struct
 
 			BeforeEach(func() {
 				frontmatterWithIdentifier = map[string]any{
@@ -351,6 +355,10 @@ var _ = Describe("Server", func() {
 					"tags":  []any{"test", "ginkgo"},
 				}
 				mockPageReaderMutator.Frontmatter = frontmatterWithIdentifier
+				
+				var structErr error
+				expectedStruct, structErr = structpb.NewStruct(expectedFilteredFm)
+				Expect(structErr).NotTo(HaveOccurred())
 			})
 
 			It("should not return an error", func() {
@@ -359,14 +367,13 @@ var _ = Describe("Server", func() {
 
 			It("should return the frontmatter without the identifier key", func() {
 				Expect(res).NotTo(BeNil())
-				expectedStruct, err := structpb.NewStruct(expectedFilteredFm)
-				Expect(err).NotTo(HaveOccurred())
 				Expect(res.Frontmatter).To(Equal(expectedStruct))
 			})
 		})
 
 		When("the requested page has frontmatter with nested identifier keys", func() {
 			var frontmatterWithNestedIdentifier map[string]any
+			var expectedStruct *structpb.Struct
 
 			BeforeEach(func() {
 				frontmatterWithNestedIdentifier = map[string]any{
@@ -383,6 +390,11 @@ var _ = Describe("Server", func() {
 					},
 				}
 				mockPageReaderMutator.Frontmatter = frontmatterWithNestedIdentifier
+				
+				// Nested identifier keys should be preserved, only root-level filtered
+				var structErr error
+				expectedStruct, structErr = structpb.NewStruct(frontmatterWithNestedIdentifier)
+				Expect(structErr).NotTo(HaveOccurred())
 			})
 
 			It("should not return an error", func() {
@@ -391,9 +403,6 @@ var _ = Describe("Server", func() {
 
 			It("should return the frontmatter with nested identifier keys preserved", func() {
 				Expect(res).NotTo(BeNil())
-				// Nested identifier keys should be preserved, only root-level filtered
-				expectedStruct, err := structpb.NewStruct(frontmatterWithNestedIdentifier)
-				Expect(err).NotTo(HaveOccurred())
 				Expect(res.Frontmatter).To(Equal(expectedStruct))
 			})
 		})

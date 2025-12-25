@@ -2,7 +2,6 @@
 package bleve
 
 import (
-	"errors"
 	"fmt"
 	"regexp"
 	"sort"
@@ -106,12 +105,14 @@ func (b *Index) RemovePageFromIndex(identifier wikipage.PageIdentifier) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	
-	// Try to delete all possible variations of the identifier to ensure complete removal
-	err1 := b.index.Delete(identifier)
-	err2 := b.index.Delete(mungedIdentifier)
+	// Try to delete all possible variations of the identifier to ensure complete removal.
+	// Bleve's Delete typically returns nil if the document does not exist, and AddPageToIndex
+	// ignores Delete errors for its cleanup step. To keep behavior consistent and idempotent,
+	// we also ignore any errors here.
+	_ = b.index.Delete(identifier)
+	_ = b.index.Delete(mungedIdentifier)
 	
-	// Combine any errors that occurred
-	return errors.Join(err1, err2)
+	return nil
 }
 
 const (

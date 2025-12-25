@@ -1,11 +1,11 @@
 package bleve
 
 // Export private methods for testing
-// This avoids the capitalization linting error by using a different naming pattern
+// This pattern is acceptable because test-only exports in _test.go files are a common Go practice
 
 var (
-	// CalculateFragmentWindowForTest exports the private calculateFragmentWindow for testing
+	// CalculateFragmentWindowForTest provides test access to the private calculateFragmentWindow method
 	CalculateFragmentWindowForTest = (*Index).calculateFragmentWindow
-	// ExtractFragmentFromLocationsForTest exports the private extractFragmentFromLocations for testing
+	// ExtractFragmentFromLocationsForTest provides test access to the private extractFragmentFromLocations method
 	ExtractFragmentFromLocationsForTest = (*Index).extractFragmentFromLocations
 )
