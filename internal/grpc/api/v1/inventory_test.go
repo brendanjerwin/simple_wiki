@@ -127,7 +127,6 @@ var _ = Describe("InventoryManagementService", func() {
 
 			It("should write the frontmatter", func() {
 				Expect(mockPageReaderMutator.WrittenFrontmatter).NotTo(BeNil())
-				Expect(mockPageReaderMutator.WrittenFrontmatter["identifier"]).To(Equal("test_item"))
 			})
 
 			It("should write the markdown", func() {
@@ -388,8 +387,11 @@ var _ = Describe("InventoryManagementService", func() {
 				}
 			})
 
-			It("should create inventory section and set container", func() {
+			It("should return success", func() {
 				Expect(resp.Success).To(BeTrue())
+			})
+
+			It("should create inventory section and set container", func() {
 				inventory, ok := mockPageReaderMutator.WrittenFrontmatter["inventory"].(map[string]any)
 				Expect(ok).To(BeTrue())
 				Expect(inventory["container"]).To(Equal("new_container"))

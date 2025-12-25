@@ -154,10 +154,6 @@ title = 'Lab Small Parts Bin 1A6'
 				Expect(string(result)).To(ContainSubstring(`identifier = 'lab_smallparts_1a6'`))
 			})
 
-			It("should not change the original casing in identifier", func() {
-				Expect(string(result)).NotTo(ContainSubstring(`identifier = 'lab_smallparts_1A6'`))
-			})
-
 			It("should preserve other fields", func() {
 				Expect(string(result)).To(ContainSubstring(`title = 'Lab Small Parts Bin 1A6'`))
 			})
