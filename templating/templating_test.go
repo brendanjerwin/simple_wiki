@@ -3,6 +3,7 @@ package templating_test
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -1156,7 +1157,10 @@ var _ = Describe("ExecuteTemplate", func() {
 				titleKey:      "Test Page",
 			}
 
-			// Should complete without hanging due to timeout protection
+			// Use context with timeout to ensure proper cleanup
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
 			done := make(chan struct{})
 			go func() {
 				defer close(done)
@@ -1166,7 +1170,7 @@ var _ = Describe("ExecuteTemplate", func() {
 			select {
 			case <-done:
 				// Success - function completed
-			case <-time.After(5 * time.Second):
+			case <-ctx.Done():
 				Fail("ExecuteTemplate timed out with circular reference")
 			}
 		})

@@ -643,14 +643,19 @@ test content to be soft deleted`
 
 						// Read deleted directory structure
 						entries, err = os.ReadDir(deletedDir)
+						Expect(err).NotTo(HaveOccurred())
 						if len(entries) > 0 {
 							timestampDir = entries[0]
-							timestamp, _ = strconv.ParseInt(timestampDir.Name(), 10, 64)
+							var parseErr error
+							timestamp, parseErr = strconv.ParseInt(timestampDir.Name(), 10, 64)
+							Expect(parseErr).NotTo(HaveOccurred())
 							
 							// Read the moved file
 							timestampPath = filepath.Join(deletedDir, timestampDir.Name())
 							deletedMdPath = filepath.Join(timestampPath, base32tools.EncodeToBase32(strings.ToLower(string(pageIdentifier)))+".md")
-							deletedMdContent, _ = os.ReadFile(deletedMdPath)
+							var readErr error
+							deletedMdContent, readErr = os.ReadFile(deletedMdPath)
+							Expect(readErr).NotTo(HaveOccurred())
 						}
 					})
 
