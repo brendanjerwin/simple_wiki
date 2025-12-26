@@ -25,7 +25,7 @@ var _ = Describe("IdentityMiddleware", func() {
 	Describe("extracting identity from headers", func() {
 		When("Tailscale-User-Login header is present from localhost", func() {
 			var (
-				capturedIdentity *tailscale.Identity
+				capturedIdentity tailscale.IdentityValue
 			)
 
 			BeforeEach(func() {
@@ -44,21 +44,21 @@ var _ = Describe("IdentityMiddleware", func() {
 			})
 
 			It("should extract the identity from headers", func() {
-				Expect(capturedIdentity).NotTo(BeNil())
+				Expect(capturedIdentity.IsAnonymous()).To(BeFalse())
 			})
 
 			It("should have the correct login name", func() {
-				Expect(capturedIdentity.LoginName).To(Equal("user@example.com"))
+				Expect(capturedIdentity.LoginName()).To(Equal("user@example.com"))
 			})
 
 			It("should have the correct display name", func() {
-				Expect(capturedIdentity.DisplayName).To(Equal("Test User"))
+				Expect(capturedIdentity.DisplayName()).To(Equal("Test User"))
 			})
 		})
 
 		When("Tailscale-User-Login header is present without display name from localhost", func() {
 			var (
-				capturedIdentity *tailscale.Identity
+				capturedIdentity tailscale.IdentityValue
 			)
 
 			BeforeEach(func() {
@@ -76,15 +76,15 @@ var _ = Describe("IdentityMiddleware", func() {
 			})
 
 			It("should extract the identity", func() {
-				Expect(capturedIdentity).NotTo(BeNil())
+				Expect(capturedIdentity.IsAnonymous()).To(BeFalse())
 			})
 
 			It("should have the correct login name", func() {
-				Expect(capturedIdentity.LoginName).To(Equal("user@example.com"))
+				Expect(capturedIdentity.LoginName()).To(Equal("user@example.com"))
 			})
 
 			It("should have empty display name", func() {
-				Expect(capturedIdentity.DisplayName).To(BeEmpty())
+				Expect(capturedIdentity.DisplayName()).To(BeEmpty())
 			})
 		})
 	})
@@ -92,51 +92,12 @@ var _ = Describe("IdentityMiddleware", func() {
 	Describe("falling back to WhoIs", func() {
 		When("no headers but WhoIs returns identity", func() {
 			var (
-				capturedIdentity *tailscale.Identity
+				capturedIdentity tailscale.IdentityValue
 			)
 
 			BeforeEach(func() {
 				resolver := &mockIdentityResolver{
-					identity: &tailscale.Identity{
-						LoginName:   "whois@example.com",
-						DisplayName: "WhoIs User",
-						NodeName:    "my-laptop",
-					},
-					err: nil,
-				}
-
-				router = gin.New()
-				router.Use(tailscale.IdentityMiddleware(resolver, nil))
-				router.GET("/test", func(c *gin.Context) {
-					capturedIdentity = tailscale.IdentityFromContext(c.Request.Context())
-					c.Status(http.StatusOK)
-				})
-
-				req, _ := http.NewRequest("GET", "/test", nil)
-				router.ServeHTTP(recorder, req)
-			})
-
-			It("should get identity from WhoIs", func() {
-				Expect(capturedIdentity).NotTo(BeNil())
-			})
-
-			It("should have the correct login name from WhoIs", func() {
-				Expect(capturedIdentity.LoginName).To(Equal("whois@example.com"))
-			})
-
-			It("should have the node name from WhoIs", func() {
-				Expect(capturedIdentity.NodeName).To(Equal("my-laptop"))
-			})
-		})
-
-		When("no headers and WhoIs returns nil", func() {
-			var (
-				capturedIdentity *tailscale.Identity
-			)
-
-			BeforeEach(func() {
-				resolver := &mockIdentityResolver{
-					identity: nil,
+					identity: tailscale.NewIdentity("whois@example.com", "WhoIs User", "my-laptop"),
 					err:      nil,
 				}
 
@@ -151,8 +112,43 @@ var _ = Describe("IdentityMiddleware", func() {
 				router.ServeHTTP(recorder, req)
 			})
 
-			It("should have no identity in context", func() {
-				Expect(capturedIdentity).To(BeNil())
+			It("should get identity from WhoIs", func() {
+				Expect(capturedIdentity.IsAnonymous()).To(BeFalse())
+			})
+
+			It("should have the correct login name from WhoIs", func() {
+				Expect(capturedIdentity.LoginName()).To(Equal("whois@example.com"))
+			})
+
+			It("should have the node name from WhoIs", func() {
+				Expect(capturedIdentity.NodeName()).To(Equal("my-laptop"))
+			})
+		})
+
+		When("no headers and WhoIs returns Anonymous", func() {
+			var (
+				capturedIdentity tailscale.IdentityValue
+			)
+
+			BeforeEach(func() {
+				resolver := &mockIdentityResolver{
+					identity: tailscale.Anonymous,
+					err:      nil,
+				}
+
+				router = gin.New()
+				router.Use(tailscale.IdentityMiddleware(resolver, nil))
+				router.GET("/test", func(c *gin.Context) {
+					capturedIdentity = tailscale.IdentityFromContext(c.Request.Context())
+					c.Status(http.StatusOK)
+				})
+
+				req, _ := http.NewRequest("GET", "/test", nil)
+				router.ServeHTTP(recorder, req)
+			})
+
+			It("should have anonymous identity in context", func() {
+				Expect(capturedIdentity.IsAnonymous()).To(BeTrue())
 			})
 		})
 	})
@@ -160,16 +156,13 @@ var _ = Describe("IdentityMiddleware", func() {
 	Describe("header priority over WhoIs", func() {
 		When("headers are present from localhost and WhoIs would return different identity", func() {
 			var (
-				capturedIdentity *tailscale.Identity
+				capturedIdentity tailscale.IdentityValue
 			)
 
 			BeforeEach(func() {
 				resolver := &mockIdentityResolver{
-					identity: &tailscale.Identity{
-						LoginName: "whois@example.com",
-						NodeName:  "my-laptop",
-					},
-					err: nil,
+					identity: tailscale.NewIdentity("whois@example.com", "", "my-laptop"),
+					err:      nil,
 				}
 
 				router = gin.New()
@@ -186,7 +179,7 @@ var _ = Describe("IdentityMiddleware", func() {
 			})
 
 			It("should prefer header identity over WhoIs", func() {
-				Expect(capturedIdentity.LoginName).To(Equal("header@example.com"))
+				Expect(capturedIdentity.LoginName()).To(Equal("header@example.com"))
 			})
 		})
 	})
@@ -194,7 +187,7 @@ var _ = Describe("IdentityMiddleware", func() {
 	Describe("Gin context storage", func() {
 		When("identity is extracted", func() {
 			var (
-				ginIdentity *tailscale.Identity
+				ginIdentity tailscale.IdentityValue
 			)
 
 			BeforeEach(func() {
@@ -202,7 +195,7 @@ var _ = Describe("IdentityMiddleware", func() {
 				router.Use(tailscale.IdentityMiddleware(nil, nil))
 				router.GET("/test", func(c *gin.Context) {
 					if val, exists := c.Get("tailscale-identity"); exists {
-						if identity, ok := val.(*tailscale.Identity); ok {
+						if identity, ok := val.(tailscale.IdentityValue); ok {
 							ginIdentity = identity
 						}
 					}
@@ -217,7 +210,7 @@ var _ = Describe("IdentityMiddleware", func() {
 
 			It("should also store identity in Gin context", func() {
 				Expect(ginIdentity).NotTo(BeNil())
-				Expect(ginIdentity.LoginName).To(Equal("user@example.com"))
+				Expect(ginIdentity.LoginName()).To(Equal("user@example.com"))
 			})
 		})
 	})

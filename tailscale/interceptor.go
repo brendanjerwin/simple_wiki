@@ -11,10 +11,10 @@ import (
 
 // IdentityInterceptor creates a gRPC unary interceptor that extracts Tailscale identity.
 // Identity is extracted from gRPC metadata (headers from Tailscale Serve) or via WhoIs.
-// If identity cannot be resolved, the request continues without identity (graceful fallback).
+// If identity cannot be resolved, the request continues with Anonymous identity (graceful fallback).
 func IdentityInterceptor(resolver IdentityResolver, logger *lumber.ConsoleLogger) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		var identity *Identity
+		var identity IdentityValue = Anonymous
 
 		// Method 1: Check gRPC metadata for Tailscale headers (set by Tailscale Serve/Funnel)
 		//
@@ -27,15 +27,12 @@ func IdentityInterceptor(resolver IdentityResolver, logger *lumber.ConsoleLogger
 				if names := md.Get("tailscale-user-name"); len(names) > 0 {
 					displayName = names[0]
 				}
-				identity = &Identity{
-					LoginName:   loginNames[0],
-					DisplayName: displayName,
-				}
+				identity = NewIdentity(loginNames[0], displayName, "")
 			}
 		}
 
 		// Method 2: Try WhoIs lookup (works for direct tailnet connections)
-		if identity == nil && resolver != nil {
+		if identity.IsAnonymous() && resolver != nil {
 			p, ok := peer.FromContext(ctx)
 			if ok && p.Addr != nil {
 				var err error
@@ -46,9 +43,8 @@ func IdentityInterceptor(resolver IdentityResolver, logger *lumber.ConsoleLogger
 			}
 		}
 
-		if identity != nil {
-			ctx = ContextWithIdentity(ctx, identity)
-		}
+		// Always store identity in context (Anonymous is valid)
+		ctx = ContextWithIdentity(ctx, identity)
 
 		return handler(ctx, req)
 	}

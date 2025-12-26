@@ -11,10 +11,10 @@ var _ tailscale.IdentityResolver = (*mockIdentityResolver)(nil)
 
 // mockIdentityResolver implements tailscale.IdentityResolver for testing.
 type mockIdentityResolver struct {
-	identity *tailscale.Identity
+	identity tailscale.IdentityValue
 	err      error
 }
 
-func (m *mockIdentityResolver) WhoIs(_ context.Context, _ string) (*tailscale.Identity, error) {
+func (m *mockIdentityResolver) WhoIs(_ context.Context, _ string) (tailscale.IdentityValue, error) {
 	return m.identity, m.err
 }

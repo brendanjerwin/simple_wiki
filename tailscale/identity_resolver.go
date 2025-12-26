@@ -13,7 +13,7 @@ var ErrTailscaleUnavailable = errors.New("tailscale daemon unavailable")
 
 // IdentityResolver abstracts identity resolution for testing.
 type IdentityResolver interface {
-	WhoIs(ctx context.Context, remoteAddr string) (*Identity, error)
+	WhoIs(ctx context.Context, remoteAddr string) (IdentityValue, error)
 }
 
 // WhoIsQuerier abstracts the Tailscale WhoIs API for testing.
@@ -44,29 +44,30 @@ func NewIdentityResolverWithClient(client WhoIsQuerier) *LocalIdentityResolver {
 
 // WhoIs resolves the Tailscale identity for a remote address.
 // Returns ErrTailscaleUnavailable if the Tailscale daemon cannot be reached.
-// Returns nil, nil if the address is not from a Tailscale node (anonymous/non-tailnet).
-func (r *LocalIdentityResolver) WhoIs(ctx context.Context, remoteAddr string) (*Identity, error) {
-	whois, err := r.client.WhoIs(ctx, remoteAddr)
+// Returns Anonymous, nil if the address is not from a Tailscale node (anonymous/non-tailnet).
+func (r *LocalIdentityResolver) WhoIs(ctx context.Context, remoteAddr string) (IdentityValue, error) {
+	response, err := r.client.WhoIs(ctx, remoteAddr)
 	if err != nil {
-		// Tailscale daemon not available
-		return nil, ErrTailscaleUnavailable
+		return Anonymous, ErrTailscaleUnavailable
 	}
 
-	// Extract identity from WhoIs response
-	identity := &Identity{}
-
-	if whois.UserProfile != nil {
-		identity.LoginName = whois.UserProfile.LoginName
-		identity.DisplayName = whois.UserProfile.DisplayName
+	if response.UserProfile == nil {
+		return Anonymous, nil
 	}
 
-	if whois.Node != nil {
-		identity.NodeName = whois.Node.ComputedName
+	nodeName := ""
+	if response.Node != nil {
+		nodeName = response.Node.ComputedName
 	}
 
-	// If we couldn't extract any identity info, return nil
+	identity := NewIdentity(
+		response.UserProfile.LoginName,
+		response.UserProfile.DisplayName,
+		nodeName,
+	)
+
 	if identity.IsAnonymous() {
-		return nil, nil
+		return Anonymous, nil
 	}
 
 	return identity, nil

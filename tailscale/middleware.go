@@ -7,11 +7,11 @@ import (
 
 // IdentityMiddleware creates Gin middleware that extracts Tailscale identity.
 // Identity is extracted from Tailscale headers (set by Tailscale Serve) or via WhoIs.
-// If identity cannot be resolved, the request continues without identity (graceful fallback).
+// If identity cannot be resolved, the request continues with Anonymous identity (graceful fallback).
 func IdentityMiddleware(resolver IdentityResolver, logger *lumber.ConsoleLogger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
-		var identity *Identity
+		var identity IdentityValue = Anonymous
 
 		// Method 1: Check Tailscale headers (set by Tailscale Serve/Funnel)
 		// Only trust these headers from localhost (where tailscaled runs)
@@ -21,14 +21,11 @@ func IdentityMiddleware(resolver IdentityResolver, logger *lumber.ConsoleLogger)
 		// The node name is not available when using Tailscale Serve; NodeName will be empty.
 		// To get the node name, the WhoIs fallback must be used (direct tailnet access).
 		if loginName := c.Request.Header.Get("Tailscale-User-Login"); loginName != "" && isFromLocalhost(c.Request.RemoteAddr) {
-			identity = &Identity{
-				LoginName:   loginName,
-				DisplayName: c.Request.Header.Get("Tailscale-User-Name"),
-			}
+			identity = NewIdentity(loginName, c.Request.Header.Get("Tailscale-User-Name"), "")
 		}
 
 		// Method 2: Try WhoIs lookup (works for direct tailnet connections)
-		if identity == nil && resolver != nil {
+		if identity.IsAnonymous() && resolver != nil {
 			var err error
 			identity, err = resolver.WhoIs(ctx, c.Request.RemoteAddr)
 			if err != nil && logger != nil {
@@ -36,14 +33,12 @@ func IdentityMiddleware(resolver IdentityResolver, logger *lumber.ConsoleLogger)
 			}
 		}
 
-		if identity != nil {
-			// Add identity to context
-			ctx = ContextWithIdentity(ctx, identity)
-			c.Request = c.Request.WithContext(ctx)
+		// Always store identity in context (Anonymous is valid)
+		ctx = ContextWithIdentity(ctx, identity)
+		c.Request = c.Request.WithContext(ctx)
 
-			// Also store in Gin context for convenience
-			c.Set("tailscale-identity", identity)
-		}
+		// Also store in Gin context for convenience
+		c.Set("tailscale-identity", identity)
 
 		c.Next()
 	}

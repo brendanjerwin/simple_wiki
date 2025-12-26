@@ -16,16 +16,16 @@ var _ = Describe("Identity", func() {
 				ctx         context.Context
 				identity    *tailscale.Identity
 				resultCtx   context.Context
-				resultIdent *tailscale.Identity
+				resultIdent tailscale.IdentityValue
 			)
 
 			BeforeEach(func() {
 				ctx = context.Background()
-				identity = &tailscale.Identity{
-					LoginName:   "user@example.com",
-					DisplayName: "Test User",
-					NodeName:    "test-node",
-				}
+				identity = tailscale.NewIdentity(
+					"user@example.com",
+					"Test User",
+					"test-node",
+				)
 				resultCtx = tailscale.ContextWithIdentity(ctx, identity)
 				resultIdent = tailscale.IdentityFromContext(resultCtx)
 			})
@@ -35,22 +35,22 @@ var _ = Describe("Identity", func() {
 			})
 
 			It("should preserve the login name", func() {
-				Expect(resultIdent.LoginName).To(Equal("user@example.com"))
+				Expect(resultIdent.LoginName()).To(Equal("user@example.com"))
 			})
 
 			It("should preserve the display name", func() {
-				Expect(resultIdent.DisplayName).To(Equal("Test User"))
+				Expect(resultIdent.DisplayName()).To(Equal("Test User"))
 			})
 
 			It("should preserve the node name", func() {
-				Expect(resultIdent.NodeName).To(Equal("test-node"))
+				Expect(resultIdent.NodeName()).To(Equal("test-node"))
 			})
 		})
 
 		When("identity is not in context", func() {
 			var (
 				ctx    context.Context
-				result *tailscale.Identity
+				result tailscale.IdentityValue
 			)
 
 			BeforeEach(func() {
@@ -58,25 +58,67 @@ var _ = Describe("Identity", func() {
 				result = tailscale.IdentityFromContext(ctx)
 			})
 
-			It("should return nil", func() {
-				Expect(result).To(BeNil())
+			It("should return Anonymous", func() {
+				Expect(result).To(Equal(tailscale.Anonymous))
+			})
+
+			It("should be anonymous", func() {
+				Expect(result.IsAnonymous()).To(BeTrue())
 			})
 		})
 
-		When("nil identity is added to context", func() {
+		When("Anonymous is added to context", func() {
 			var (
 				ctx    context.Context
-				result *tailscale.Identity
+				result tailscale.IdentityValue
 			)
 
 			BeforeEach(func() {
 				ctx = context.Background()
-				ctx = tailscale.ContextWithIdentity(ctx, nil)
+				ctx = tailscale.ContextWithIdentity(ctx, tailscale.Anonymous)
 				result = tailscale.IdentityFromContext(ctx)
 			})
 
-			It("should return nil", func() {
-				Expect(result).To(BeNil())
+			It("should return Anonymous", func() {
+				Expect(result).To(Equal(tailscale.Anonymous))
+			})
+
+			It("should be anonymous", func() {
+				Expect(result.IsAnonymous()).To(BeTrue())
+			})
+		})
+	})
+
+	Describe("Anonymous singleton", func() {
+		When("checking Anonymous properties", func() {
+			var anon tailscale.IdentityValue
+
+			BeforeEach(func() {
+				anon = tailscale.Anonymous
+			})
+
+			It("should be anonymous", func() {
+				Expect(anon.IsAnonymous()).To(BeTrue())
+			})
+
+			It("should have empty login name", func() {
+				Expect(anon.LoginName()).To(BeEmpty())
+			})
+
+			It("should have empty display name", func() {
+				Expect(anon.DisplayName()).To(BeEmpty())
+			})
+
+			It("should have empty node name", func() {
+				Expect(anon.NodeName()).To(BeEmpty())
+			})
+
+			It("should return 'anonymous' from String()", func() {
+				Expect(anon.String()).To(Equal("anonymous"))
+			})
+
+			It("should return 'anonymous' from ForLog()", func() {
+				Expect(anon.ForLog()).To(Equal("anonymous"))
 			})
 		})
 	})
@@ -89,10 +131,11 @@ var _ = Describe("Identity", func() {
 			)
 
 			BeforeEach(func() {
-				identity = &tailscale.Identity{
-					LoginName:   "user@example.com",
-					DisplayName: "Test User",
-				}
+				identity = tailscale.NewIdentity(
+					"user@example.com",
+					"Test User",
+					"",
+				)
 				result = identity.String()
 			})
 
@@ -108,9 +151,11 @@ var _ = Describe("Identity", func() {
 			)
 
 			BeforeEach(func() {
-				identity = &tailscale.Identity{
-					DisplayName: "Test User",
-				}
+				identity = tailscale.NewIdentity(
+					"",
+					"Test User",
+					"",
+				)
 				result = identity.String()
 			})
 
@@ -126,23 +171,7 @@ var _ = Describe("Identity", func() {
 			)
 
 			BeforeEach(func() {
-				identity = &tailscale.Identity{}
-				result = identity.String()
-			})
-
-			It("should return anonymous", func() {
-				Expect(result).To(Equal("anonymous"))
-			})
-		})
-
-		When("identity is nil", func() {
-			var (
-				identity *tailscale.Identity
-				result   string
-			)
-
-			BeforeEach(func() {
-				identity = nil
+				identity = tailscale.NewIdentity("", "", "")
 				result = identity.String()
 			})
 
@@ -153,22 +182,6 @@ var _ = Describe("Identity", func() {
 	})
 
 	Describe("IsAnonymous", func() {
-		When("identity is nil", func() {
-			var (
-				identity *tailscale.Identity
-				result   bool
-			)
-
-			BeforeEach(func() {
-				identity = nil
-				result = identity.IsAnonymous()
-			})
-
-			It("should return true", func() {
-				Expect(result).To(BeTrue())
-			})
-		})
-
 		When("identity has login name", func() {
 			var (
 				identity *tailscale.Identity
@@ -176,7 +189,7 @@ var _ = Describe("Identity", func() {
 			)
 
 			BeforeEach(func() {
-				identity = &tailscale.Identity{LoginName: "user@example.com"}
+				identity = tailscale.NewIdentity("user@example.com", "", "")
 				result = identity.IsAnonymous()
 			})
 
@@ -192,7 +205,7 @@ var _ = Describe("Identity", func() {
 			)
 
 			BeforeEach(func() {
-				identity = &tailscale.Identity{DisplayName: "Test User"}
+				identity = tailscale.NewIdentity("", "Test User", "")
 				result = identity.IsAnonymous()
 			})
 
@@ -208,7 +221,7 @@ var _ = Describe("Identity", func() {
 			)
 
 			BeforeEach(func() {
-				identity = &tailscale.Identity{}
+				identity = tailscale.NewIdentity("", "", "")
 				result = identity.IsAnonymous()
 			})
 
@@ -226,10 +239,11 @@ var _ = Describe("Identity", func() {
 			)
 
 			BeforeEach(func() {
-				identity = &tailscale.Identity{
-					LoginName: "user@example.com",
-					NodeName:  "my-laptop",
-				}
+				identity = tailscale.NewIdentity(
+					"user@example.com",
+					"",
+					"my-laptop",
+				)
 				result = identity.ForLog()
 			})
 
@@ -245,9 +259,11 @@ var _ = Describe("Identity", func() {
 			)
 
 			BeforeEach(func() {
-				identity = &tailscale.Identity{
-					NodeName: "my-laptop",
-				}
+				identity = tailscale.NewIdentity(
+					"",
+					"",
+					"my-laptop",
+				)
 				result = identity.ForLog()
 			})
 
@@ -263,30 +279,16 @@ var _ = Describe("Identity", func() {
 			)
 
 			BeforeEach(func() {
-				identity = &tailscale.Identity{
-					LoginName: "user@example.com",
-				}
+				identity = tailscale.NewIdentity(
+					"user@example.com",
+					"",
+					"",
+				)
 				result = identity.ForLog()
 			})
 
 			It("should return just login name", func() {
 				Expect(result).To(Equal("user@example.com"))
-			})
-		})
-
-		When("identity is nil", func() {
-			var (
-				identity *tailscale.Identity
-				result   string
-			)
-
-			BeforeEach(func() {
-				identity = nil
-				result = identity.ForLog()
-			})
-
-			It("should return anonymous", func() {
-				Expect(result).To(Equal("anonymous"))
 			})
 		})
 	})

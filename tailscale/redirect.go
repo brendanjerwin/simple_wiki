@@ -50,7 +50,7 @@ func (h *TailnetRedirector) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if err != nil && h.logger != nil {
 			h.logger.Debug("WhoIs lookup failed for redirect check: %v", err)
 		}
-		if identity != nil {
+		if !identity.IsAnonymous() {
 			// Tailnet client connecting directly over HTTP - redirect to HTTPS
 			target := h.buildHTTPSURL(r.URL.RequestURI())
 			http.Redirect(w, r, target, http.StatusMovedPermanently)

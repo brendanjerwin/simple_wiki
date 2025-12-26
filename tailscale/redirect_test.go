@@ -224,10 +224,8 @@ var _ = Describe("TailnetRedirector", func() {
 		When("force redirect is disabled and WhoIs returns identity", func() {
 			BeforeEach(func() {
 				resolver := &mockIdentityResolver{
-					identity: &tailscale.Identity{
-						LoginName: "user@example.com",
-					},
-					err: nil,
+					identity: tailscale.NewIdentity("user@example.com", "", ""),
+					err:      nil,
 				}
 
 				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, resolver, fallbackHandler, false, nil)
@@ -247,10 +245,10 @@ var _ = Describe("TailnetRedirector", func() {
 			})
 		})
 
-		When("force redirect is disabled and WhoIs returns nil", func() {
+		When("force redirect is disabled and WhoIs returns Anonymous", func() {
 			BeforeEach(func() {
 				resolver := &mockIdentityResolver{
-					identity: nil,
+					identity: tailscale.Anonymous,
 					err:      nil,
 				}
 

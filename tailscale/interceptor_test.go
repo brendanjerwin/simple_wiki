@@ -19,7 +19,7 @@ var _ = Describe("IdentityInterceptor", func() {
 	Describe("extracting identity from metadata", func() {
 		When("Tailscale-User-Login metadata is present", func() {
 			var (
-				capturedIdentity *tailscale.Identity
+				capturedIdentity tailscale.IdentityValue
 				handlerCalled    bool
 			)
 
@@ -45,22 +45,22 @@ var _ = Describe("IdentityInterceptor", func() {
 				Expect(handlerCalled).To(BeTrue())
 			})
 
-			It("should extract the identity from metadata", func() {
-				Expect(capturedIdentity).NotTo(BeNil())
+			It("should not be anonymous", func() {
+				Expect(capturedIdentity.IsAnonymous()).To(BeFalse())
 			})
 
 			It("should have the correct login name", func() {
-				Expect(capturedIdentity.LoginName).To(Equal("user@example.com"))
+				Expect(capturedIdentity.LoginName()).To(Equal("user@example.com"))
 			})
 
 			It("should have the correct display name", func() {
-				Expect(capturedIdentity.DisplayName).To(Equal("Test User"))
+				Expect(capturedIdentity.DisplayName()).To(Equal("Test User"))
 			})
 		})
 
 		When("only login name metadata is present", func() {
 			var (
-				capturedIdentity *tailscale.Identity
+				capturedIdentity tailscale.IdentityValue
 			)
 
 			BeforeEach(func() {
@@ -79,16 +79,16 @@ var _ = Describe("IdentityInterceptor", func() {
 				_, _ = interceptor(ctx, nil, &grpc.UnaryServerInfo{}, handler)
 			})
 
-			It("should extract the identity", func() {
-				Expect(capturedIdentity).NotTo(BeNil())
+			It("should not be anonymous", func() {
+				Expect(capturedIdentity.IsAnonymous()).To(BeFalse())
 			})
 
 			It("should have the correct login name", func() {
-				Expect(capturedIdentity.LoginName).To(Equal("user@example.com"))
+				Expect(capturedIdentity.LoginName()).To(Equal("user@example.com"))
 			})
 
 			It("should have empty display name", func() {
-				Expect(capturedIdentity.DisplayName).To(BeEmpty())
+				Expect(capturedIdentity.DisplayName()).To(BeEmpty())
 			})
 		})
 	})
@@ -96,7 +96,7 @@ var _ = Describe("IdentityInterceptor", func() {
 	Describe("without metadata", func() {
 		When("no metadata and no resolver", func() {
 			var (
-				capturedIdentity *tailscale.Identity
+				capturedIdentity tailscale.IdentityValue
 				handlerCalled    bool
 			)
 
@@ -116,8 +116,12 @@ var _ = Describe("IdentityInterceptor", func() {
 				Expect(handlerCalled).To(BeTrue())
 			})
 
-			It("should have no identity in context", func() {
-				Expect(capturedIdentity).To(BeNil())
+			It("should have anonymous identity in context", func() {
+				Expect(capturedIdentity.IsAnonymous()).To(BeTrue())
+			})
+
+			It("should equal Anonymous singleton", func() {
+				Expect(capturedIdentity).To(Equal(tailscale.Anonymous))
 			})
 		})
 	})
@@ -125,16 +129,13 @@ var _ = Describe("IdentityInterceptor", func() {
 	Describe("metadata priority over WhoIs", func() {
 		When("metadata is present and resolver would return different identity", func() {
 			var (
-				capturedIdentity *tailscale.Identity
+				capturedIdentity tailscale.IdentityValue
 			)
 
 			BeforeEach(func() {
 				resolver := &mockIdentityResolver{
-					identity: &tailscale.Identity{
-						LoginName: "whois@example.com",
-						NodeName:  "my-laptop",
-					},
-					err: nil,
+					identity: tailscale.NewIdentity("whois@example.com", "", "my-laptop"),
+					err:      nil,
 				}
 
 				interceptor = tailscale.IdentityInterceptor(resolver, nil)
@@ -153,7 +154,7 @@ var _ = Describe("IdentityInterceptor", func() {
 			})
 
 			It("should prefer metadata identity over WhoIs", func() {
-				Expect(capturedIdentity.LoginName).To(Equal("header@example.com"))
+				Expect(capturedIdentity.LoginName()).To(Equal("header@example.com"))
 			})
 		})
 	})

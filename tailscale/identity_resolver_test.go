@@ -56,7 +56,7 @@ var _ = Describe("LocalIdentityResolver", func() {
 		When("client returns an error", func() {
 			var (
 				resolver *tailscale.LocalIdentityResolver
-				identity *tailscale.Identity
+				identity tailscale.IdentityValue
 				err      error
 			)
 
@@ -73,15 +73,15 @@ var _ = Describe("LocalIdentityResolver", func() {
 				Expect(err).To(MatchError(tailscale.ErrTailscaleUnavailable))
 			})
 
-			It("should return nil identity", func() {
-				Expect(identity).To(BeNil())
+			It("should return Anonymous identity", func() {
+				Expect(identity.IsAnonymous()).To(BeTrue())
 			})
 		})
 
 		When("client returns a valid response with user profile", func() {
 			var (
 				resolver *tailscale.LocalIdentityResolver
-				identity *tailscale.Identity
+				identity tailscale.IdentityValue
 				err      error
 			)
 
@@ -106,27 +106,27 @@ var _ = Describe("LocalIdentityResolver", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("should return the identity", func() {
-				Expect(identity).NotTo(BeNil())
+			It("should not be anonymous", func() {
+				Expect(identity.IsAnonymous()).To(BeFalse())
 			})
 
 			It("should have the correct login name", func() {
-				Expect(identity.LoginName).To(Equal("user@example.com"))
+				Expect(identity.LoginName()).To(Equal("user@example.com"))
 			})
 
 			It("should have the correct display name", func() {
-				Expect(identity.DisplayName).To(Equal("Test User"))
+				Expect(identity.DisplayName()).To(Equal("Test User"))
 			})
 
 			It("should have the correct node name", func() {
-				Expect(identity.NodeName).To(Equal("my-laptop"))
+				Expect(identity.NodeName()).To(Equal("my-laptop"))
 			})
 		})
 
 		When("client returns response without user profile", func() {
 			var (
 				resolver *tailscale.LocalIdentityResolver
-				identity *tailscale.Identity
+				identity tailscale.IdentityValue
 				err      error
 			)
 
@@ -148,15 +148,15 @@ var _ = Describe("LocalIdentityResolver", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("should return nil identity (anonymous)", func() {
-				Expect(identity).To(BeNil())
+			It("should return Anonymous identity", func() {
+				Expect(identity.IsAnonymous()).To(BeTrue())
 			})
 		})
 
 		When("client returns response without node", func() {
 			var (
 				resolver *tailscale.LocalIdentityResolver
-				identity *tailscale.Identity
+				identity tailscale.IdentityValue
 				err      error
 			)
 
@@ -179,23 +179,23 @@ var _ = Describe("LocalIdentityResolver", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("should return the identity", func() {
-				Expect(identity).NotTo(BeNil())
+			It("should not be anonymous", func() {
+				Expect(identity.IsAnonymous()).To(BeFalse())
 			})
 
 			It("should have empty node name", func() {
-				Expect(identity.NodeName).To(BeEmpty())
+				Expect(identity.NodeName()).To(BeEmpty())
 			})
 
 			It("should have the correct login name", func() {
-				Expect(identity.LoginName).To(Equal("user@example.com"))
+				Expect(identity.LoginName()).To(Equal("user@example.com"))
 			})
 		})
 
 		When("client returns empty response", func() {
 			var (
 				resolver *tailscale.LocalIdentityResolver
-				identity *tailscale.Identity
+				identity tailscale.IdentityValue
 				err      error
 			)
 
@@ -212,8 +212,8 @@ var _ = Describe("LocalIdentityResolver", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("should return nil identity", func() {
-				Expect(identity).To(BeNil())
+			It("should return Anonymous identity", func() {
+				Expect(identity.IsAnonymous()).To(BeTrue())
 			})
 		})
 	})

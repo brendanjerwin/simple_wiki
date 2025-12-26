@@ -344,11 +344,11 @@ func (s *Server) GetVersion(ctx context.Context, _ *apiv1.GetVersionRequest) (*a
 
 	// Add Tailscale identity if available
 	identity := tailscale.IdentityFromContext(ctx)
-	if identity != nil && !identity.IsAnonymous() {
+	if !identity.IsAnonymous() {
 		response.TailscaleIdentity = &apiv1.TailscaleIdentity{
-			LoginName:   identity.LoginName,
-			DisplayName: identity.DisplayName,
-			NodeName:    identity.NodeName,
+			LoginName:   identity.LoginName(),
+			DisplayName: identity.DisplayName(),
+			NodeName:    identity.NodeName(),
 		}
 	}
 
@@ -473,7 +473,7 @@ func (s *Server) LoggingInterceptor() grpc.UnaryServerInterceptor {
 		// Get identity if available
 		identity := tailscale.IdentityFromContext(ctx)
 		identityStr := "anonymous"
-		if identity != nil && !identity.IsAnonymous() {
+		if !identity.IsAnonymous() {
 			identityStr = identity.ForLog()
 		}
 
