@@ -25,12 +25,12 @@ type TailscaleDetector interface {
 	Detect(ctx context.Context) (*Status, error)
 }
 
-// StatusProvider abstracts the Tailscale client for testing.
-type StatusProvider interface {
+// StatusQuerier abstracts the Tailscale client for testing.
+type StatusQuerier interface {
 	StatusWithoutPeers(ctx context.Context) (*ipnstate.Status, error)
 }
 
-// localClientAdapter wraps *local.Client to implement StatusProvider.
+// localClientAdapter wraps *local.Client to implement StatusQuerier.
 type localClientAdapter struct {
 	client *local.Client
 }
@@ -41,7 +41,7 @@ func (a *localClientAdapter) StatusWithoutPeers(ctx context.Context) (*ipnstate.
 
 // LocalDetector uses the local tailscaled daemon to detect Tailscale status.
 type LocalDetector struct {
-	statusProvider StatusProvider
+	statusProvider StatusQuerier
 }
 
 // NewDetector creates a new Tailscale detector.
@@ -52,7 +52,7 @@ func NewDetector() *LocalDetector {
 }
 
 // NewDetectorWithProvider creates a LocalDetector with a custom status provider (for testing).
-func NewDetectorWithProvider(provider StatusProvider) *LocalDetector {
+func NewDetectorWithProvider(provider StatusQuerier) *LocalDetector {
 	return &LocalDetector{
 		statusProvider: provider,
 	}

@@ -51,8 +51,8 @@ var _ = Describe("TailnetRedirector", func() {
 				_, err = tailscale.NewTailnetRedirector("", 443, nil, fallbackHandler, false, nil)
 			})
 
-			It("should return ErrEmptyHostname", func() {
-				Expect(err).To(MatchError(tailscale.ErrEmptyHostname))
+			It("should return an error about empty hostname", func() {
+				Expect(err).To(MatchError("tsHostname cannot be empty"))
 			})
 		})
 
@@ -63,8 +63,8 @@ var _ = Describe("TailnetRedirector", func() {
 				_, err = tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 0, nil, fallbackHandler, false, nil)
 			})
 
-			It("should return ErrInvalidPort", func() {
-				Expect(err).To(MatchError(tailscale.ErrInvalidPort))
+			It("should return an error about invalid port", func() {
+				Expect(err).To(MatchError("tlsPort 0 is invalid: must be between 1 and 65535"))
 			})
 		})
 
@@ -75,8 +75,8 @@ var _ = Describe("TailnetRedirector", func() {
 				_, err = tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", -1, nil, fallbackHandler, false, nil)
 			})
 
-			It("should return ErrInvalidPort", func() {
-				Expect(err).To(MatchError(tailscale.ErrInvalidPort))
+			It("should return an error about invalid port", func() {
+				Expect(err).To(MatchError("tlsPort -1 is invalid: must be between 1 and 65535"))
 			})
 		})
 
@@ -87,8 +87,8 @@ var _ = Describe("TailnetRedirector", func() {
 				_, err = tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 70000, nil, fallbackHandler, false, nil)
 			})
 
-			It("should return ErrInvalidPort", func() {
-				Expect(err).To(MatchError(tailscale.ErrInvalidPort))
+			It("should return an error about invalid port", func() {
+				Expect(err).To(MatchError("tlsPort 70000 is invalid: must be between 1 and 65535"))
 			})
 		})
 
@@ -99,8 +99,8 @@ var _ = Describe("TailnetRedirector", func() {
 				_, err = tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, nil, false, nil)
 			})
 
-			It("should return ErrNilFallback", func() {
-				Expect(err).To(MatchError(tailscale.ErrNilFallback))
+			It("should return an error about nil fallback", func() {
+				Expect(err).To(MatchError("fallback handler cannot be nil"))
 			})
 		})
 	})

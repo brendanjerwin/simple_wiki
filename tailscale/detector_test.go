@@ -11,13 +11,13 @@ import (
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 )
 
-// mockStatusProvider implements StatusProvider for testing.
-type mockStatusProvider struct {
+// mockStatusQuerier implements StatusProvider for testing.
+type mockStatusQuerier struct {
 	status *ipnstate.Status
 	err    error
 }
 
-func (m *mockStatusProvider) StatusWithoutPeers(_ context.Context) (*ipnstate.Status, error) {
+func (m *mockStatusQuerier) StatusWithoutPeers(_ context.Context) (*ipnstate.Status, error) {
 	return m.status, m.err
 }
 
@@ -45,7 +45,7 @@ var _ = Describe("LocalDetector", func() {
 			)
 
 			BeforeEach(func() {
-				provider := &mockStatusProvider{
+				provider := &mockStatusQuerier{
 					status: nil,
 					err:    errors.New("connection refused"),
 				}
@@ -70,7 +70,7 @@ var _ = Describe("LocalDetector", func() {
 			)
 
 			BeforeEach(func() {
-				provider := &mockStatusProvider{
+				provider := &mockStatusQuerier{
 					status: &ipnstate.Status{
 						BackendState: "Stopped",
 						Self: &ipnstate.PeerStatus{
@@ -104,7 +104,7 @@ var _ = Describe("LocalDetector", func() {
 			)
 
 			BeforeEach(func() {
-				provider := &mockStatusProvider{
+				provider := &mockStatusQuerier{
 					status: &ipnstate.Status{
 						BackendState: "Running",
 						CertDomains:  []string{"my-laptop.tailnet.ts.net"},
@@ -151,7 +151,7 @@ var _ = Describe("LocalDetector", func() {
 			)
 
 			BeforeEach(func() {
-				provider := &mockStatusProvider{
+				provider := &mockStatusQuerier{
 					status: &ipnstate.Status{
 						BackendState: "Running",
 						CertDomains:  []string{},
@@ -190,7 +190,7 @@ var _ = Describe("LocalDetector", func() {
 			)
 
 			BeforeEach(func() {
-				provider := &mockStatusProvider{
+				provider := &mockStatusQuerier{
 					status: &ipnstate.Status{
 						BackendState: "Running",
 						CertDomains:  []string{"my-laptop.tailnet.ts.net"},

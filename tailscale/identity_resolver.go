@@ -2,25 +2,29 @@ package tailscale
 
 import (
 	"context"
+	"errors"
 
 	"tailscale.com/client/local"
 	"tailscale.com/client/tailscale/apitype"
 )
+
+// ErrTailscaleUnavailable indicates the Tailscale daemon could not be reached.
+var ErrTailscaleUnavailable = errors.New("tailscale daemon unavailable")
 
 // IdentityResolver abstracts identity resolution for testing.
 type IdentityResolver interface {
 	WhoIs(ctx context.Context, remoteAddr string) (*Identity, error)
 }
 
-// WhoIser abstracts the Tailscale WhoIs API for testing.
-type WhoIser interface {
+// WhoIsQuerier abstracts the Tailscale WhoIs API for testing.
+type WhoIsQuerier interface {
 	WhoIs(ctx context.Context, remoteAddr string) (*apitype.WhoIsResponse, error)
 }
 
 // LocalIdentityResolver resolves Tailscale identities from remote addresses
 // using the local Tailscale daemon.
 type LocalIdentityResolver struct {
-	client WhoIser
+	client WhoIsQuerier
 }
 
 // NewIdentityResolver creates a new identity resolver.
@@ -32,21 +36,20 @@ func NewIdentityResolver() *LocalIdentityResolver {
 
 // NewIdentityResolverWithClient creates a new identity resolver with a custom client.
 // This is primarily used for testing.
-func NewIdentityResolverWithClient(client WhoIser) *LocalIdentityResolver {
+func NewIdentityResolverWithClient(client WhoIsQuerier) *LocalIdentityResolver {
 	return &LocalIdentityResolver{
 		client: client,
 	}
 }
 
-// WhoIs resolves the identity for a remote address.
-// Returns nil, nil if Tailscale is not available or the address is not from the tailnet.
-// This allows graceful fallback for non-Tailscale requests.
+// WhoIs resolves the Tailscale identity for a remote address.
+// Returns ErrTailscaleUnavailable if the Tailscale daemon cannot be reached.
+// Returns nil, nil if the address is not from a Tailscale node (anonymous/non-tailnet).
 func (r *LocalIdentityResolver) WhoIs(ctx context.Context, remoteAddr string) (*Identity, error) {
 	whois, err := r.client.WhoIs(ctx, remoteAddr)
 	if err != nil {
-		// Not a tailnet request or Tailscale not available
-		// Return nil without error to allow graceful fallback
-		return nil, nil
+		// Tailscale daemon not available
+		return nil, ErrTailscaleUnavailable
 	}
 
 	// Extract identity from WhoIs response

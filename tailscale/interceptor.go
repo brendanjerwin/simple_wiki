@@ -17,7 +17,10 @@ func IdentityInterceptor(resolver IdentityResolver, logger *lumber.ConsoleLogger
 		var identity *Identity
 
 		// Method 1: Check gRPC metadata for Tailscale headers (set by Tailscale Serve/Funnel)
-		// Note: Tailscale Serve only provides user identity, not node name
+		//
+		// Note: Tailscale Serve only provides Tailscale-User-Login and Tailscale-User-Name headers.
+		// The node name is not available when using Tailscale Serve; NodeName will be empty.
+		// To get the node name, the WhoIs fallback must be used (direct tailnet access).
 		if md, ok := metadata.FromIncomingContext(ctx); ok {
 			if loginNames := md.Get("tailscale-user-login"); len(loginNames) > 0 {
 				var displayName string

@@ -62,18 +62,18 @@ func (h *TailnetRedirector) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.fallback.ServeHTTP(w, r)
 }
 
-// isFromLocalhost checks if the remote address is from localhost.
-// This is used to validate that X-Forwarded-Proto header came from a trusted proxy
-// (like tailscaled) rather than being spoofed by an external client.
+// isFromLocalhost checks if remoteAddr is from the loopback interface.
+// Accepts addr:port format (e.g., "127.0.0.1:12345" or "[::1]:12345").
 func isFromLocalhost(remoteAddr string) bool {
 	host, _, err := net.SplitHostPort(remoteAddr)
 	if err != nil {
-		// Try parsing as just an IP (no port)
-		host = remoteAddr
+		// If SplitHostPort fails, remoteAddr is malformed - treat as non-localhost
+		return false
 	}
 
 	ip := net.ParseIP(host)
 	if ip == nil {
+		// Could not parse as valid IP - treat as non-localhost
 		return false
 	}
 
@@ -88,26 +88,17 @@ func (h *TailnetRedirector) buildHTTPSURL(requestURI string) string {
 	return fmt.Sprintf("https://%s:%d%s", h.tsHostname, h.tlsPort, requestURI)
 }
 
-// ErrEmptyHostname indicates the hostname was not provided.
-var ErrEmptyHostname = errors.New("tsHostname cannot be empty")
-
-// ErrInvalidPort indicates the port is outside valid range.
-var ErrInvalidPort = errors.New("tlsPort must be between 1 and 65535")
-
-// ErrNilFallback indicates the fallback handler was not provided.
-var ErrNilFallback = errors.New("fallback handler cannot be nil")
-
 // NewTailnetRedirector creates a new tailnet redirector.
 // Returns an error if tsHostname is empty, tlsPort is invalid, or fallback is nil.
 func NewTailnetRedirector(tsHostname string, tlsPort int, resolver IdentityResolver, fallback http.Handler, forceRedirect bool, logger *lumber.ConsoleLogger) (*TailnetRedirector, error) {
 	if tsHostname == "" {
-		return nil, ErrEmptyHostname
+		return nil, errors.New("tsHostname cannot be empty")
 	}
 	if tlsPort <= 0 || tlsPort > maxValidPort {
-		return nil, ErrInvalidPort
+		return nil, fmt.Errorf("tlsPort %d is invalid: must be between 1 and 65535", tlsPort)
 	}
 	if fallback == nil {
-		return nil, ErrNilFallback
+		return nil, errors.New("fallback handler cannot be nil")
 	}
 
 	return &TailnetRedirector{

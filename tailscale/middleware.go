@@ -16,6 +16,10 @@ func IdentityMiddleware(resolver IdentityResolver, logger *lumber.ConsoleLogger)
 		// Method 1: Check Tailscale headers (set by Tailscale Serve/Funnel)
 		// Only trust these headers from localhost (where tailscaled runs)
 		// This prevents external attackers from spoofing user identity
+		//
+		// Note: Tailscale Serve only provides Tailscale-User-Login and Tailscale-User-Name headers.
+		// The node name is not available when using Tailscale Serve; NodeName will be empty.
+		// To get the node name, the WhoIs fallback must be used (direct tailnet access).
 		if loginName := c.Request.Header.Get("Tailscale-User-Login"); loginName != "" && isFromLocalhost(c.Request.RemoteAddr) {
 			identity = &Identity{
 				LoginName:   loginName,

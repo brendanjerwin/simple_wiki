@@ -12,13 +12,13 @@ import (
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 )
 
-// mockWhoIser implements WhoIser for testing.
-type mockWhoIser struct {
+// mockWhoIsQuerier implements WhoIser for testing.
+type mockWhoIsQuerier struct {
 	response *apitype.WhoIsResponse
 	err      error
 }
 
-func (m *mockWhoIser) WhoIs(_ context.Context, _ string) (*apitype.WhoIsResponse, error) {
+func (m *mockWhoIsQuerier) WhoIs(_ context.Context, _ string) (*apitype.WhoIsResponse, error) {
 	return m.response, m.err
 }
 
@@ -42,7 +42,7 @@ var _ = Describe("LocalIdentityResolver", func() {
 			var resolver *tailscale.LocalIdentityResolver
 
 			BeforeEach(func() {
-				client := &mockWhoIser{}
+				client := &mockWhoIsQuerier{}
 				resolver = tailscale.NewIdentityResolverWithClient(client)
 			})
 
@@ -61,7 +61,7 @@ var _ = Describe("LocalIdentityResolver", func() {
 			)
 
 			BeforeEach(func() {
-				client := &mockWhoIser{
+				client := &mockWhoIsQuerier{
 					response: nil,
 					err:      errors.New("connection refused"),
 				}
@@ -69,11 +69,11 @@ var _ = Describe("LocalIdentityResolver", func() {
 				identity, err = resolver.WhoIs(context.Background(), "100.64.0.1:12345")
 			})
 
-			It("should not return an error", func() {
-				Expect(err).NotTo(HaveOccurred())
+			It("should return ErrTailscaleUnavailable", func() {
+				Expect(err).To(MatchError(tailscale.ErrTailscaleUnavailable))
 			})
 
-			It("should return nil identity for graceful fallback", func() {
+			It("should return nil identity", func() {
 				Expect(identity).To(BeNil())
 			})
 		})
@@ -86,7 +86,7 @@ var _ = Describe("LocalIdentityResolver", func() {
 			)
 
 			BeforeEach(func() {
-				client := &mockWhoIser{
+				client := &mockWhoIsQuerier{
 					response: &apitype.WhoIsResponse{
 						UserProfile: &tailcfg.UserProfile{
 							LoginName:   "user@example.com",
@@ -131,7 +131,7 @@ var _ = Describe("LocalIdentityResolver", func() {
 			)
 
 			BeforeEach(func() {
-				client := &mockWhoIser{
+				client := &mockWhoIsQuerier{
 					response: &apitype.WhoIsResponse{
 						UserProfile: nil,
 						Node: &tailcfg.Node{
@@ -161,7 +161,7 @@ var _ = Describe("LocalIdentityResolver", func() {
 			)
 
 			BeforeEach(func() {
-				client := &mockWhoIser{
+				client := &mockWhoIsQuerier{
 					response: &apitype.WhoIsResponse{
 						UserProfile: &tailcfg.UserProfile{
 							LoginName:   "user@example.com",
@@ -200,7 +200,7 @@ var _ = Describe("LocalIdentityResolver", func() {
 			)
 
 			BeforeEach(func() {
-				client := &mockWhoIser{
+				client := &mockWhoIsQuerier{
 					response: &apitype.WhoIsResponse{},
 					err:      nil,
 				}

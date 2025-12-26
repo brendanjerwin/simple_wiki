@@ -1,7 +1,6 @@
 package tailscale_test
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 
@@ -11,16 +10,6 @@ import (
 
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 )
-
-// mockIdentityResolver implements IdentityResolver for testing.
-type mockIdentityResolver struct {
-	identity *tailscale.Identity
-	err      error
-}
-
-func (m *mockIdentityResolver) WhoIs(_ context.Context, _ string) (*tailscale.Identity, error) {
-	return m.identity, m.err
-}
 
 var _ = Describe("IdentityMiddleware", func() {
 	var (
