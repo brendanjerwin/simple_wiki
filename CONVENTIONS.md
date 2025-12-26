@@ -1059,6 +1059,88 @@ ADRs should document significant architectural decisions that have long-term imp
 **Example of ADR-worthy decision**: "We chose gRPC-Web over REST for frontend-backend communication"  
 **Example of non-ADR decision**: "We implemented a version display component in the bottom-right corner"
 
+## Observability with OpenTelemetry
+
+The application uses OpenTelemetry for metrics and distributed tracing. This section describes how to extend and use the observability infrastructure.
+
+### Enabling OpenTelemetry
+
+Set the `OTEL_ENABLED` environment variable to `true` to enable OpenTelemetry instrumentation:
+
+```bash
+OTEL_ENABLED=true ./simple_wiki
+```
+
+By default, traces and metrics are exported to stdout. For production use with an OTLP-compatible collector (like Jaeger, Zipkin, or Grafana Agent), you may need to replace the stdout exporters with OTLP exporters by adding dependencies:
+
+- `go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp`
+- `go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp`
+
+### Adding New Metrics
+
+When adding new metrics:
+
+1. Create metric instruments using the global meter from `observability.Meter("your/scope")`
+2. Use semantic attribute keys from the `constants.go` file
+3. Follow the histogram bucket patterns defined in `constants.go` for latency measurements
+4. Group related metrics in their own file (e.g., `tailscale_metrics.go`, `http_metrics.go`)
+
+Example:
+
+```go
+meter := otel.Meter("simple_wiki/yourcomponent")
+
+requestCounter, err := meter.Int64Counter(
+    "yourcomponent_requests_total",
+    metric.WithDescription("Total number of requests"),
+    metric.WithUnit("{request}"),
+)
+```
+
+### Adding Traces
+
+When adding tracing to new components:
+
+1. Get a tracer using `observability.Tracer("your/scope")`
+2. Create spans for meaningful operations
+3. Add relevant attributes following OpenTelemetry semantic conventions
+4. Set span status appropriately (OK on success, Error on failure)
+
+Example:
+
+```go
+tracer := observability.Tracer("simple_wiki/yourcomponent")
+
+ctx, span := tracer.Start(ctx, "operation-name",
+    trace.WithSpanKind(trace.SpanKindServer),
+    trace.WithAttributes(
+        attribute.String("key", "value"),
+    ),
+)
+defer span.End()
+
+if err != nil {
+    span.SetStatus(codes.Error, err.Error())
+    span.RecordError(err)
+}
+```
+
+### Tailscale Identity Metrics
+
+The application includes pre-built metrics for Tailscale identity operations:
+
+- `tailscale_identity_lookup_duration_seconds` - Histogram of WhoIs lookup times
+- `tailscale_identity_lookup_total` - Counter with labels: `result={success,failure,not_tailnet}`
+- `tailscale_identity_from_headers_total` - Counter of identity extractions via Tailscale Serve headers
+
+Use the `TailscaleMetrics` struct to record these metrics:
+
+```go
+metrics, err := observability.NewTailscaleMetrics()
+metrics.RecordLookup(ctx, durationSeconds, observability.ResultSuccess)
+metrics.RecordFromHeaders(ctx)
+```
+
 ## README
 
 - When updating the readme, match the tone of voice in the rest of the README. Its the face of the project. Marketing matters.

@@ -1,14 +1,18 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	grpcapi "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
+	"github.com/brendanjerwin/simple_wiki/internal/observability"
 	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"github.com/jcelliott/lumber"
@@ -21,9 +25,11 @@ import (
 )
 
 var (
-	commit    = "n/a"
-	buildTime = ""
-	logger    *lumber.ConsoleLogger
+	commit           = "n/a"
+	buildTime        = ""
+	logger           *lumber.ConsoleLogger
+	telemetry        *observability.TelemetryProvider
+	grpcInstrumentation *observability.GRPCInstrumentation
 )
 
 // getCommitHash retrieves the current git commit hash.
@@ -61,10 +67,10 @@ func getBuildTime() time.Time {
 
 var app *cli.App
 
-func setupServer(c *cli.Context) (*http.Server, error) {
+func setupServer(c *cli.Context) (*http.Server, func(), error) {
 	pathToData := c.GlobalString("data")
 	if err := os.MkdirAll(pathToData, 0755); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if c.GlobalBool("debug") {
@@ -74,6 +80,34 @@ func setupServer(c *cli.Context) (*http.Server, error) {
 	}
 
 	logger.Info("Starting simple_wiki server...")
+
+	// Initialize OpenTelemetry
+	actualCommit := getCommitHash()
+	var err error
+	telemetry, err = observability.Initialize(context.Background(), actualCommit)
+	if err != nil {
+		logger.Warn("Failed to initialize OpenTelemetry: %v", err)
+	} else if telemetry.IsEnabled() {
+		logger.Info("OpenTelemetry instrumentation enabled")
+		
+		// Initialize gRPC metrics and instrumentation
+		grpcMetrics, metricsErr := observability.NewGRPCMetrics()
+		if metricsErr != nil {
+			logger.Warn("Failed to create gRPC metrics: %v", metricsErr)
+		} else {
+			grpcInstrumentation = observability.NewGRPCInstrumentation(grpcMetrics)
+		}
+	}
+
+	// Cleanup function to shutdown telemetry
+	cleanup := func() {
+		if telemetry != nil && telemetry.IsEnabled() {
+			logger.Info("Shutting down OpenTelemetry...")
+			if shutdownErr := telemetry.Shutdown(context.Background()); shutdownErr != nil {
+				logger.Warn("Error shutting down OpenTelemetry: %v", shutdownErr)
+			}
+		}
+	}
 
 	site, err := server.NewSite(
 		pathToData,
@@ -87,7 +121,8 @@ func setupServer(c *cli.Context) (*http.Server, error) {
 		logger,
 	)
 	if err != nil {
-		return nil, err
+		cleanup()
+		return nil, nil, err
 	}
 
 	logger.Info("Setting up HTTP and gRPC servers...")
@@ -98,13 +133,12 @@ func setupServer(c *cli.Context) (*http.Server, error) {
 		host = "0.0.0.0"
 	}
 	addr := fmt.Sprintf("%s:%s", host, c.GlobalString("port"))
-	actualCommit := getCommitHash()
 	logger.Info("Running simple_wiki server (commit %s) at http://%s", actualCommit, addr)
 
 	return &http.Server{
 		Addr:    addr,
 		Handler: h2c.NewHandler(handler, &http2.Server{}),
-	}, nil
+	}, cleanup, nil
 }
 
 func createMultiplexedHandler(site *server.Site) http.Handler {
@@ -122,7 +156,26 @@ func createMultiplexedHandler(site *server.Site) http.Handler {
 		server.TemplateExecutor{},
 		site.FrontmatterIndexQueryer,
 	)
-	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(grpcAPIServer.LoggingInterceptor()))
+	
+	// Build gRPC server options with interceptors
+	var opts []grpc.ServerOption
+	
+	// Add OpenTelemetry instrumentation if enabled
+	if grpcInstrumentation != nil {
+		opts = append(opts,
+			grpc.ChainUnaryInterceptor(
+				grpcInstrumentation.UnaryServerInterceptor(),
+				grpcAPIServer.LoggingInterceptor(),
+			),
+			grpc.ChainStreamInterceptor(
+				grpcInstrumentation.StreamServerInterceptor(),
+			),
+		)
+	} else {
+		opts = append(opts, grpc.UnaryInterceptor(grpcAPIServer.LoggingInterceptor()))
+	}
+	
+	grpcServer := grpc.NewServer(opts...)
 	grpcAPIServer.RegisterWithServer(grpcServer)
 
 	reflection.Register(grpcServer)
@@ -149,11 +202,29 @@ func main() {
 	app.Version = getCommitHash()
 	app.Compiled = time.Now()
 	app.Action = func(c *cli.Context) error {
-		srv, err := setupServer(c)
+		srv, cleanup, err := setupServer(c)
 		if err != nil {
 			return err
 		}
-		return srv.ListenAndServe()
+		defer cleanup()
+
+		// Handle graceful shutdown
+		done := make(chan os.Signal, 1)
+		signal.Notify(done, os.Interrupt, syscall.SIGTERM)
+
+		go func() {
+			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				logger.Error("Server error: %v", err)
+			}
+		}()
+
+		<-done
+		logger.Info("Shutting down server...")
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		return srv.Shutdown(ctx)
 	}
 	app.Flags = getFlags()
 
