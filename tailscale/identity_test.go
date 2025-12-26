@@ -10,9 +10,7 @@ import (
 )
 
 var _ = Describe("Identity", func() {
-
 	Describe("ContextWithIdentity and IdentityFromContext", func() {
-
 		When("identity is added to context", func() {
 			var (
 				ctx         context.Context
@@ -84,7 +82,6 @@ var _ = Describe("Identity", func() {
 	})
 
 	Describe("String", func() {
-
 		When("identity has login name", func() {
 			var (
 				identity *tailscale.Identity
@@ -156,7 +153,6 @@ var _ = Describe("Identity", func() {
 	})
 
 	Describe("IsAnonymous", func() {
-
 		When("identity is nil", func() {
 			var (
 				identity *tailscale.Identity
@@ -223,7 +219,6 @@ var _ = Describe("Identity", func() {
 	})
 
 	Describe("ForLog", func() {
-
 		When("identity has login and node name", func() {
 			var (
 				identity *tailscale.Identity

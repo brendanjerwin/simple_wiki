@@ -13,7 +13,7 @@ import (
 // Identity is extracted from gRPC metadata (headers from Tailscale Serve) or via WhoIs.
 // If identity cannot be resolved, the request continues without identity (graceful fallback).
 func IdentityInterceptor(resolver IResolveIdentity, logger *lumber.ConsoleLogger) grpc.UnaryServerInterceptor {
-	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+	return func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		var identity *Identity
 
 		// Method 1: Check gRPC metadata for Tailscale headers (set by Tailscale Serve/Funnel)

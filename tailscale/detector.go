@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"tailscale.com/client/local"
+	"tailscale.com/ipn/ipnstate"
 )
 
 // Status represents the current Tailscale connection status.
@@ -19,22 +20,43 @@ type IDetectTailscale interface {
 	Detect(ctx context.Context) (*Status, error)
 }
 
+// IStatusProvider abstracts the Tailscale client for testing.
+type IStatusProvider interface {
+	StatusWithoutPeers(ctx context.Context) (*ipnstate.Status, error)
+}
+
+// localClientAdapter wraps *local.Client to implement IStatusProvider.
+type localClientAdapter struct {
+	client *local.Client
+}
+
+func (a *localClientAdapter) StatusWithoutPeers(ctx context.Context) (*ipnstate.Status, error) {
+	return a.client.StatusWithoutPeers(ctx)
+}
+
 // Detector uses the local tailscaled daemon to detect Tailscale status.
 type Detector struct {
-	client *local.Client
+	statusProvider IStatusProvider
 }
 
 // NewDetector creates a new Tailscale detector.
 func NewDetector() *Detector {
 	return &Detector{
-		client: &local.Client{},
+		statusProvider: &localClientAdapter{client: &local.Client{}},
+	}
+}
+
+// NewDetectorWithProvider creates a Detector with a custom status provider (for testing).
+func NewDetectorWithProvider(provider IStatusProvider) *Detector {
+	return &Detector{
+		statusProvider: provider,
 	}
 }
 
 // Detect checks if Tailscale is available and returns status.
 // Returns Status{Available: false} on error (graceful fallback).
 func (d *Detector) Detect(ctx context.Context) (*Status, error) {
-	ipnStatus, err := d.client.StatusWithoutPeers(ctx)
+	ipnStatus, err := d.statusProvider.StatusWithoutPeers(ctx)
 	if err != nil {
 		// Tailscale not available - graceful fallback
 		return &Status{Available: false}, nil

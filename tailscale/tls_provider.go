@@ -21,7 +21,7 @@ func NewTLSProvider() *TLSProvider {
 
 // GetTLSConfig returns a TLS config that uses Tailscale certificates.
 // Uses tscert.GetCertificate for automatic cert provisioning.
-func (p *TLSProvider) GetTLSConfig() *tls.Config {
+func (*TLSProvider) GetTLSConfig() *tls.Config {
 	return &tls.Config{
 		GetCertificate: tscert.GetCertificate,
 		MinVersion:     tls.VersionTLS12,

@@ -2,7 +2,15 @@ package tailscale
 
 import (
 	"fmt"
+	"net"
 	"net/http"
+
+	"github.com/jcelliott/lumber"
+)
+
+const (
+	defaultHTTPSPort = 443
+	maxValidPort     = 65535
 )
 
 // RedirectHandler redirects HTTP requests to HTTPS on the tailnet hostname.
@@ -10,18 +18,20 @@ import (
 // - Otherwise: only redirect tailnet clients (detected via WhoIs)
 // - Requests already HTTPS (via X-Forwarded-Proto) are served directly
 type RedirectHandler struct {
-	TSHostname              string           // Tailscale hostname to redirect to (e.g., "my-laptop.tailnet.ts.net")
-	TLSPort                 int              // Port the HTTPS server is running on
-	Resolver                IResolveIdentity // Used to detect tailnet requests via WhoIs
-	FallbackHandler         http.Handler     // Handler for non-tailnet requests
-	ForceRedirectToTailnet  bool             // If true, redirect ALL HTTP requests to tailnet HTTPS
+	TSHostname             string           // Tailscale hostname to redirect to (e.g., "my-laptop.tailnet.ts.net")
+	TLSPort                int              // Port the HTTPS server is running on
+	Resolver               IResolveIdentity // Used to detect tailnet requests via WhoIs
+	FallbackHandler        http.Handler     // Handler for non-tailnet requests
+	ForceRedirectToTailnet bool             // If true, redirect ALL HTTP requests to tailnet HTTPS
+	Logger                 *lumber.ConsoleLogger
 }
 
 // ServeHTTP implements http.Handler.
 func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Check if request is already HTTPS (via X-Forwarded-Proto from Tailscale Serve)
-	// If already HTTPS, don't redirect - just serve
-	if r.Header.Get("X-Forwarded-Proto") == "https" {
+	// Only trust this header from localhost (where tailscaled runs)
+	// This prevents attackers from bypassing redirect by spoofing the header
+	if r.Header.Get("X-Forwarded-Proto") == "https" && isFromLocalhost(r.RemoteAddr) {
 		h.FallbackHandler.ServeHTTP(w, r)
 		return
 	}
@@ -35,7 +45,10 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Check if request is from tailnet client via WhoIs (direct tailnet connection over HTTP)
 	if h.Resolver != nil {
-		identity, _ := h.Resolver.WhoIs(r.Context(), r.RemoteAddr)
+		identity, err := h.Resolver.WhoIs(r.Context(), r.RemoteAddr)
+		if err != nil && h.Logger != nil {
+			h.Logger.Debug("WhoIs lookup failed for redirect check: %v", err)
+		}
 		if identity != nil {
 			// Tailnet client connecting directly over HTTP - redirect to HTTPS
 			target := h.buildHTTPSURL(r.URL.RequestURI())
@@ -48,21 +61,51 @@ func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.FallbackHandler.ServeHTTP(w, r)
 }
 
+// isFromLocalhost checks if the remote address is from localhost.
+// This is used to validate that X-Forwarded-Proto header came from a trusted proxy
+// (like tailscaled) rather than being spoofed by an external client.
+func isFromLocalhost(remoteAddr string) bool {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		// Try parsing as just an IP (no port)
+		host = remoteAddr
+	}
+
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+
+	return ip.IsLoopback()
+}
+
 // buildHTTPSURL constructs the HTTPS redirect URL.
 func (h *RedirectHandler) buildHTTPSURL(requestURI string) string {
-	if h.TLSPort == 443 {
+	if h.TLSPort == defaultHTTPSPort {
 		return fmt.Sprintf("https://%s%s", h.TSHostname, requestURI)
 	}
 	return fmt.Sprintf("https://%s:%d%s", h.TSHostname, h.TLSPort, requestURI)
 }
 
 // NewRedirectHandler creates a new redirect handler.
-func NewRedirectHandler(tsHostname string, tlsPort int, resolver IResolveIdentity, fallback http.Handler, forceRedirectToTailnet bool) *RedirectHandler {
+// Panics if tsHostname is empty, tlsPort is invalid, or fallback is nil.
+func NewRedirectHandler(tsHostname string, tlsPort int, resolver IResolveIdentity, fallback http.Handler, forceRedirectToTailnet bool, logger *lumber.ConsoleLogger) *RedirectHandler {
+	if tsHostname == "" {
+		panic("tailscale.NewRedirectHandler: tsHostname cannot be empty")
+	}
+	if tlsPort <= 0 || tlsPort > maxValidPort {
+		panic("tailscale.NewRedirectHandler: tlsPort must be between 1 and 65535")
+	}
+	if fallback == nil {
+		panic("tailscale.NewRedirectHandler: fallback handler cannot be nil")
+	}
+
 	return &RedirectHandler{
 		TSHostname:             tsHostname,
 		TLSPort:                tlsPort,
 		Resolver:               resolver,
 		FallbackHandler:        fallback,
 		ForceRedirectToTailnet: forceRedirectToTailnet,
+		Logger:                 logger,
 	}
 }
