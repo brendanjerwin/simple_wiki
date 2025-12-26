@@ -6,6 +6,9 @@ import (
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 )
 
+// Compile-time interface compliance check.
+var _ tailscale.IdentityResolver = (*mockIdentityResolver)(nil)
+
 // mockIdentityResolver implements tailscale.IdentityResolver for testing.
 type mockIdentityResolver struct {
 	identity *tailscale.Identity

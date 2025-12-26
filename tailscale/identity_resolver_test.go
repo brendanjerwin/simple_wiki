@@ -12,7 +12,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 )
 
-// mockWhoIsQuerier implements WhoIser for testing.
+// mockWhoIsQuerier implements WhoIsQuerier for testing.
 type mockWhoIsQuerier struct {
 	response *apitype.WhoIsResponse
 	err      error

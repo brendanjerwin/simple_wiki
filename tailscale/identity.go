@@ -18,6 +18,13 @@ type contextKey string
 
 const identityContextKey contextKey = "tailscale-identity"
 
+// anonymousLabel is a typed string for the anonymous identity representation.
+// Using a distinct type prevents accidental use of raw "anonymous" strings
+// and makes explicit that we're returning the canonical anonymous value.
+type anonymousLabel string
+
+const anonymousIdentity anonymousLabel = "anonymous"
+
 // ContextWithIdentity returns a new context with the identity attached.
 func ContextWithIdentity(ctx context.Context, identity *Identity) context.Context {
 	return context.WithValue(ctx, identityContextKey, identity)
@@ -40,7 +47,7 @@ func IdentityFromContext(ctx context.Context) *Identity {
 // String returns a formatted string for logging.
 func (i *Identity) String() string {
 	if i == nil {
-		return "anonymous"
+		return string(anonymousIdentity)
 	}
 	if i.LoginName != "" {
 		return i.LoginName
@@ -48,7 +55,7 @@ func (i *Identity) String() string {
 	if i.DisplayName != "" {
 		return i.DisplayName
 	}
-	return "anonymous"
+	return string(anonymousIdentity)
 }
 
 // IsAnonymous returns true if no identity is available.
@@ -62,10 +69,16 @@ func (i *Identity) IsAnonymous() bool {
 // ForLog returns a formatted string suitable for log output.
 func (i *Identity) ForLog() string {
 	if i == nil || i.IsAnonymous() {
-		return "anonymous"
+		return string(anonymousIdentity)
+	}
+	if i.LoginName != "" && i.NodeName != "" {
+		return fmt.Sprintf("%s (%s)", i.LoginName, i.NodeName)
+	}
+	if i.LoginName != "" {
+		return i.LoginName
 	}
 	if i.NodeName != "" {
-		return fmt.Sprintf("%s@%s", i.LoginName, i.NodeName)
+		return fmt.Sprintf("(%s)", i.NodeName)
 	}
-	return i.LoginName
+	return string(anonymousIdentity)
 }

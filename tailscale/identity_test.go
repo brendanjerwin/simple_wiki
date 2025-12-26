@@ -233,8 +233,26 @@ var _ = Describe("Identity", func() {
 				result = identity.ForLog()
 			})
 
-			It("should return login@node format", func() {
-				Expect(result).To(Equal("user@example.com@my-laptop"))
+			It("should return login with node in parentheses", func() {
+				Expect(result).To(Equal("user@example.com (my-laptop)"))
+			})
+		})
+
+		When("identity has only node name", func() {
+			var (
+				identity *tailscale.Identity
+				result   string
+			)
+
+			BeforeEach(func() {
+				identity = &tailscale.Identity{
+					NodeName: "my-laptop",
+				}
+				result = identity.ForLog()
+			})
+
+			It("should return anonymous since IsAnonymous is true", func() {
+				Expect(result).To(Equal("anonymous"))
 			})
 		})
 

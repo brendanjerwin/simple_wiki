@@ -145,12 +145,16 @@ func SetupFullTLS(
 	// Create HTTP redirect server
 	redirector, err := tailscale.NewTailnetRedirector(tsDNSName, tlsPort, identityResolver, h2c.NewHandler(handler, &http2.Server{}), false, logger)
 	if err != nil {
-		_ = tlsListener.Close()
+		if closeErr := tlsListener.Close(); closeErr != nil {
+			logger.Error("failed to close TLS listener: %v", closeErr)
+		}
 		return nil, fmt.Errorf("failed to create tailnet redirector: %w", err)
 	}
 	httpListener, err := net.Listen(networkTCP, httpAddr)
 	if err != nil {
-		_ = tlsListener.Close()
+		if closeErr := tlsListener.Close(); closeErr != nil {
+			logger.Error("failed to close TLS listener: %v", closeErr)
+		}
 		return nil, fmt.Errorf("failed to create HTTP listener: %w", err)
 	}
 

@@ -287,4 +287,119 @@ var _ = Describe("TailnetRedirector", func() {
 			})
 		})
 	})
+
+	Describe("isFromLocalhost edge cases via redirector", func() {
+		// isFromLocalhost is unexported, so we test it through the redirector's behavior.
+		// Malformed RemoteAddr values should fail-closed (treated as NOT localhost).
+		// When a request has X-Forwarded-Proto: https but RemoteAddr is malformed,
+		// the header should NOT be trusted, so with forceRedirectToTailnet=true,
+		// the request should be redirected.
+
+		When("RemoteAddr is without port", func() {
+			BeforeEach(func() {
+				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, true, nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				req, _ := http.NewRequest("GET", "/test", nil)
+				req.Header.Set("X-Forwarded-Proto", "https")
+				req.RemoteAddr = "127.0.0.1" // No port
+				handler.ServeHTTP(recorder, req)
+			})
+
+			It("should not trust X-Forwarded-Proto and redirect", func() {
+				Expect(recorder.Code).To(Equal(http.StatusMovedPermanently))
+			})
+
+			It("should redirect to tailnet HTTPS", func() {
+				location := recorder.Header().Get("Location")
+				Expect(location).To(Equal("https://my-laptop.tailnet.ts.net/test"))
+			})
+		})
+
+		When("RemoteAddr has non-numeric port but valid loopback IP", func() {
+			// Note: net.SplitHostPort doesn't validate port format, only splits on colon.
+			// The IP is still a valid loopback address, so this IS treated as localhost.
+			// This is correct behavior - the port format doesn't change the source IP.
+			BeforeEach(func() {
+				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, true, nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				req, _ := http.NewRequest("GET", "/test", nil)
+				req.Header.Set("X-Forwarded-Proto", "https")
+				req.RemoteAddr = "127.0.0.1:abc"
+				handler.ServeHTTP(recorder, req)
+			})
+
+			It("should trust X-Forwarded-Proto since IP is valid loopback", func() {
+				Expect(recorder.Code).To(Equal(http.StatusOK))
+			})
+
+			It("should serve via fallback handler", func() {
+				Expect(recorder.Body.String()).To(Equal("fallback"))
+			})
+		})
+
+		When("RemoteAddr is IPv6 without brackets", func() {
+			BeforeEach(func() {
+				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, true, nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				req, _ := http.NewRequest("GET", "/test", nil)
+				req.Header.Set("X-Forwarded-Proto", "https")
+				req.RemoteAddr = "::1:12345" // Missing brackets
+				handler.ServeHTTP(recorder, req)
+			})
+
+			It("should not trust X-Forwarded-Proto and redirect", func() {
+				Expect(recorder.Code).To(Equal(http.StatusMovedPermanently))
+			})
+
+			It("should redirect to tailnet HTTPS", func() {
+				location := recorder.Header().Get("Location")
+				Expect(location).To(Equal("https://my-laptop.tailnet.ts.net/test"))
+			})
+		})
+
+		When("RemoteAddr is empty", func() {
+			BeforeEach(func() {
+				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, true, nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				req, _ := http.NewRequest("GET", "/test", nil)
+				req.Header.Set("X-Forwarded-Proto", "https")
+				req.RemoteAddr = ""
+				handler.ServeHTTP(recorder, req)
+			})
+
+			It("should not trust X-Forwarded-Proto and redirect", func() {
+				Expect(recorder.Code).To(Equal(http.StatusMovedPermanently))
+			})
+
+			It("should redirect to tailnet HTTPS", func() {
+				location := recorder.Header().Get("Location")
+				Expect(location).To(Equal("https://my-laptop.tailnet.ts.net/test"))
+			})
+		})
+
+		When("RemoteAddr is just a port", func() {
+			BeforeEach(func() {
+				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, true, nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				req, _ := http.NewRequest("GET", "/test", nil)
+				req.Header.Set("X-Forwarded-Proto", "https")
+				req.RemoteAddr = ":12345"
+				handler.ServeHTTP(recorder, req)
+			})
+
+			It("should not trust X-Forwarded-Proto and redirect", func() {
+				Expect(recorder.Code).To(Equal(http.StatusMovedPermanently))
+			})
+
+			It("should redirect to tailnet HTTPS", func() {
+				location := recorder.Header().Get("Location")
+				Expect(location).To(Equal("https://my-laptop.tailnet.ts.net/test"))
+			})
+		})
+	})
 })

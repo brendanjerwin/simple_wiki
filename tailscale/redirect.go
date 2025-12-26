@@ -62,8 +62,11 @@ func (h *TailnetRedirector) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.fallback.ServeHTTP(w, r)
 }
 
-// isFromLocalhost checks if remoteAddr is from the loopback interface.
-// Accepts addr:port format (e.g., "127.0.0.1:12345" or "[::1]:12345").
+// isFromLocalhost checks if remoteAddr originates from the loopback interface.
+// SECURITY: This function is fail-closed - any parse errors return false.
+// This prevents attackers from bypassing localhost checks with malformed addresses.
+// Only properly formatted addr:port strings (e.g., "127.0.0.1:12345" or "[::1]:12345")
+// are considered; malformed input is treated as non-localhost.
 func isFromLocalhost(remoteAddr string) bool {
 	host, _, err := net.SplitHostPort(remoteAddr)
 	if err != nil {
@@ -94,7 +97,7 @@ func NewTailnetRedirector(tsHostname string, tlsPort int, resolver IdentityResol
 	if tsHostname == "" {
 		return nil, errors.New("tsHostname cannot be empty")
 	}
-	if tlsPort <= 0 || tlsPort > maxValidPort {
+	if tlsPort < 1 || tlsPort > maxValidPort {
 		return nil, fmt.Errorf("tlsPort %d is invalid: must be between 1 and 65535", tlsPort)
 	}
 	if fallback == nil {
