@@ -57,7 +57,7 @@ func getBuildTime() time.Time {
 
 var app *cli.App
 
-func setupServer(c *cli.Context) (*bootstrap.ServerConfig, error) {
+func createSite(c *cli.Context) (*server.Site, error) {
 	pathToData := c.GlobalString("data")
 	if err := os.MkdirAll(pathToData, 0755); err != nil {
 		return nil, err
@@ -71,7 +71,7 @@ func setupServer(c *cli.Context) (*bootstrap.ServerConfig, error) {
 
 	logger.Info("Starting simple_wiki server...")
 
-	site, err := server.NewSite(
+	return server.NewSite(
 		pathToData,
 		c.GlobalString("css"),
 		c.GlobalString("default-page"),
@@ -82,6 +82,20 @@ func setupServer(c *cli.Context) (*bootstrap.ServerConfig, error) {
 		c.GlobalUint("max-document-length"),
 		logger,
 	)
+}
+
+func detectTailscale(ctx context.Context) *tailscale.Status {
+	detector := tailscale.NewDetector()
+	tsStatus, err := detector.Detect(ctx)
+	if err != nil {
+		logger.Warn("Error detecting Tailscale: %v", err)
+		return &tailscale.Status{Available: false}
+	}
+	return tsStatus
+}
+
+func setupServer(c *cli.Context) (*bootstrap.ServerResult, error) {
+	site, err := createSite(c)
 	if err != nil {
 		return nil, err
 	}
@@ -97,36 +111,31 @@ func setupServer(c *cli.Context) (*bootstrap.ServerConfig, error) {
 		tlsPort = port + 1 // Default to adjacent port
 	}
 
-	// Detect Tailscale availability
-	ctx := context.Background()
-	detector := tailscale.NewDetector()
-	tsStatus, err := detector.Detect(ctx)
-	if err != nil {
-		logger.Warn("Error detecting Tailscale: %v", err)
-		tsStatus = &tailscale.Status{Available: false}
-	}
-
-	// Determine server mode
-	tailscaleServe := c.GlobalBool("tailscale-serve")
-	mode := bootstrap.DetermineServerMode(tailscaleServe, tsStatus.Available, tsStatus.DNSName)
+	tsStatus := detectTailscale(context.Background())
+	mode := bootstrap.DetermineServerMode(tsStatus, c.GlobalBool("tailscale-serve"))
 
 	actualCommit := getCommitHash()
 	logger.Info("Running simple_wiki server (commit %s)", actualCommit)
 
-	config, err := bootstrap.SetupServer(ctx, bootstrap.Options{
-		Host:                      host,
-		Port:                      port,
-		TLSPort:                   tlsPort,
-		Mode:                      mode,
-		ForceRedirectTailnetHTTPS: c.GlobalBool("force-redirect-tailnet-https"),
-	}, bootstrap.Dependencies{
-		Site:      site,
-		Logger:    logger,
-		Commit:    actualCommit,
-		BuildTime: getBuildTime(),
-	})
+	httpAddr := fmt.Sprintf("%s:%d", host, port)
+	buildTime := getBuildTime()
 
-	return config, err
+	switch mode {
+	case bootstrap.ModePlainHTTP:
+		return bootstrap.SetupPlainHTTP(httpAddr, site, logger, actualCommit, buildTime)
+	case bootstrap.ModeTailscaleServe:
+		return bootstrap.SetupTailscaleServe(
+			httpAddr, tsStatus.DNSName, c.GlobalBool("force-redirect-tailnet-https"),
+			site, logger, actualCommit, buildTime,
+		)
+	case bootstrap.ModeFullTLS:
+		return bootstrap.SetupFullTLS(
+			httpAddr, tlsPort, tsStatus.DNSName,
+			site, logger, actualCommit, buildTime,
+		)
+	default:
+		return nil, fmt.Errorf("unknown server mode: %v", mode)
+	}
 }
 
 func main() {

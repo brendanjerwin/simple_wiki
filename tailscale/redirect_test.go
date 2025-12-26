@@ -10,7 +10,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 )
 
-var _ = Describe("RedirectHandler", func() {
+var _ = Describe("TailnetRedirector", func() {
 	var (
 		fallbackHandler http.Handler
 		recorder        *httptest.ResponseRecorder
@@ -26,10 +26,17 @@ var _ = Describe("RedirectHandler", func() {
 
 	Describe("NewRedirectHandler", func() {
 		When("creating a new redirect handler with valid parameters", func() {
-			var handler *tailscale.RedirectHandler
+			var (
+				handler *tailscale.TailnetRedirector
+				err     error
+			)
 
 			BeforeEach(func() {
-				handler = tailscale.NewRedirectHandler("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, false, nil)
+				handler, err = tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, false, nil)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("should not be nil", func() {
@@ -38,42 +45,62 @@ var _ = Describe("RedirectHandler", func() {
 		})
 
 		When("tsHostname is empty", func() {
-			It("should panic", func() {
-				Expect(func() {
-					tailscale.NewRedirectHandler("", 443, nil, fallbackHandler, false, nil)
-				}).To(Panic())
+			var err error
+
+			BeforeEach(func() {
+				_, err = tailscale.NewTailnetRedirector("", 443, nil, fallbackHandler, false, nil)
+			})
+
+			It("should return ErrEmptyHostname", func() {
+				Expect(err).To(MatchError(tailscale.ErrEmptyHostname))
 			})
 		})
 
 		When("tlsPort is zero", func() {
-			It("should panic", func() {
-				Expect(func() {
-					tailscale.NewRedirectHandler("my-laptop.tailnet.ts.net", 0, nil, fallbackHandler, false, nil)
-				}).To(Panic())
+			var err error
+
+			BeforeEach(func() {
+				_, err = tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 0, nil, fallbackHandler, false, nil)
+			})
+
+			It("should return ErrInvalidPort", func() {
+				Expect(err).To(MatchError(tailscale.ErrInvalidPort))
 			})
 		})
 
 		When("tlsPort is negative", func() {
-			It("should panic", func() {
-				Expect(func() {
-					tailscale.NewRedirectHandler("my-laptop.tailnet.ts.net", -1, nil, fallbackHandler, false, nil)
-				}).To(Panic())
+			var err error
+
+			BeforeEach(func() {
+				_, err = tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", -1, nil, fallbackHandler, false, nil)
+			})
+
+			It("should return ErrInvalidPort", func() {
+				Expect(err).To(MatchError(tailscale.ErrInvalidPort))
 			})
 		})
 
 		When("tlsPort exceeds 65535", func() {
-			It("should panic", func() {
-				Expect(func() {
-					tailscale.NewRedirectHandler("my-laptop.tailnet.ts.net", 70000, nil, fallbackHandler, false, nil)
-				}).To(Panic())
+			var err error
+
+			BeforeEach(func() {
+				_, err = tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 70000, nil, fallbackHandler, false, nil)
+			})
+
+			It("should return ErrInvalidPort", func() {
+				Expect(err).To(MatchError(tailscale.ErrInvalidPort))
 			})
 		})
 
 		When("fallback handler is nil", func() {
-			It("should panic", func() {
-				Expect(func() {
-					tailscale.NewRedirectHandler("my-laptop.tailnet.ts.net", 443, nil, nil, false, nil)
-				}).To(Panic())
+			var err error
+
+			BeforeEach(func() {
+				_, err = tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, nil, false, nil)
+			})
+
+			It("should return ErrNilFallback", func() {
+				Expect(err).To(MatchError(tailscale.ErrNilFallback))
 			})
 		})
 	})
@@ -81,7 +108,8 @@ var _ = Describe("RedirectHandler", func() {
 	Describe("X-Forwarded-Proto handling", func() {
 		When("request has X-Forwarded-Proto: https from localhost", func() {
 			BeforeEach(func() {
-				handler := tailscale.NewRedirectHandler("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, true, nil)
+				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, true, nil)
+				Expect(err).NotTo(HaveOccurred())
 
 				req, _ := http.NewRequest("GET", "/test", nil)
 				req.Header.Set("X-Forwarded-Proto", "https")
@@ -100,7 +128,8 @@ var _ = Describe("RedirectHandler", func() {
 
 		When("request has X-Forwarded-Proto: https from IPv6 localhost", func() {
 			BeforeEach(func() {
-				handler := tailscale.NewRedirectHandler("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, true, nil)
+				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, true, nil)
+				Expect(err).NotTo(HaveOccurred())
 
 				req, _ := http.NewRequest("GET", "/test", nil)
 				req.Header.Set("X-Forwarded-Proto", "https")
@@ -119,7 +148,8 @@ var _ = Describe("RedirectHandler", func() {
 
 		When("request has X-Forwarded-Proto: https from external IP (spoofed header)", func() {
 			BeforeEach(func() {
-				handler := tailscale.NewRedirectHandler("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, true, nil)
+				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, true, nil)
+				Expect(err).NotTo(HaveOccurred())
 
 				req, _ := http.NewRequest("GET", "/test", nil)
 				req.Header.Set("X-Forwarded-Proto", "https")
@@ -139,7 +169,8 @@ var _ = Describe("RedirectHandler", func() {
 
 		When("request has X-Forwarded-Proto: http from localhost", func() {
 			BeforeEach(func() {
-				handler := tailscale.NewRedirectHandler("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, true, nil)
+				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, true, nil)
+				Expect(err).NotTo(HaveOccurred())
 
 				req, _ := http.NewRequest("GET", "/test", nil)
 				req.Header.Set("X-Forwarded-Proto", "http")
@@ -156,7 +187,8 @@ var _ = Describe("RedirectHandler", func() {
 	Describe("ForceRedirectToTailnet mode", func() {
 		When("force redirect is enabled", func() {
 			BeforeEach(func() {
-				handler := tailscale.NewRedirectHandler("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, true, nil)
+				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, true, nil)
+				Expect(err).NotTo(HaveOccurred())
 
 				req, _ := http.NewRequest("GET", "/test?foo=bar", nil)
 				handler.ServeHTTP(recorder, req)
@@ -174,7 +206,8 @@ var _ = Describe("RedirectHandler", func() {
 
 		When("force redirect is enabled with non-standard port", func() {
 			BeforeEach(func() {
-				handler := tailscale.NewRedirectHandler("my-laptop.tailnet.ts.net", 8443, nil, fallbackHandler, true, nil)
+				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 8443, nil, fallbackHandler, true, nil)
+				Expect(err).NotTo(HaveOccurred())
 
 				req, _ := http.NewRequest("GET", "/test", nil)
 				handler.ServeHTTP(recorder, req)
@@ -197,7 +230,8 @@ var _ = Describe("RedirectHandler", func() {
 					err: nil,
 				}
 
-				handler := tailscale.NewRedirectHandler("my-laptop.tailnet.ts.net", 443, resolver, fallbackHandler, false, nil)
+				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, resolver, fallbackHandler, false, nil)
+				Expect(err).NotTo(HaveOccurred())
 
 				req, _ := http.NewRequest("GET", "/test", nil)
 				handler.ServeHTTP(recorder, req)
@@ -220,7 +254,8 @@ var _ = Describe("RedirectHandler", func() {
 					err:      nil,
 				}
 
-				handler := tailscale.NewRedirectHandler("my-laptop.tailnet.ts.net", 443, resolver, fallbackHandler, false, nil)
+				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, resolver, fallbackHandler, false, nil)
+				Expect(err).NotTo(HaveOccurred())
 
 				req, _ := http.NewRequest("GET", "/test", nil)
 				handler.ServeHTTP(recorder, req)
@@ -239,7 +274,8 @@ var _ = Describe("RedirectHandler", func() {
 	Describe("no resolver", func() {
 		When("force redirect is disabled and no resolver is configured", func() {
 			BeforeEach(func() {
-				handler := tailscale.NewRedirectHandler("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, false, nil)
+				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, false, nil)
+				Expect(err).NotTo(HaveOccurred())
 
 				req, _ := http.NewRequest("GET", "/test", nil)
 				handler.ServeHTTP(recorder, req)

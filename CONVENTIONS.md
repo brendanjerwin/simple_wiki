@@ -22,6 +22,30 @@ Use `bd` (beads) for task/issue tracking. See `.beads/README.md` for commands.
 - **Standard Idioms and Tooling**: Prefer standard idioms and approaches for the language in use. Leverage appropriate code generation tools when beneficial (e.g., `go:generate` for Go). For JavaScript, utilize tools like `bun build` for bundling and `web-test-runner` for testing.
 - Generated files **should be committed** to the repository. This ensures that developers can build and test the project without needing to have all code generation tools installed locally. Any files created or modified by `go generate ./...` should be included in commits.
 - prefer IoC approaches. Make \*-er interfaces for all the things!
+- **Avoid Parameter Objects and Config Structs**: Don't bundle unrelated parameters into "Options", "Config", "Settings", or "Dependencies" structs. These become implicit global variables - shared spaces where unrelated concerns accumulate. Instead, pass explicit parameters to functions. This makes dependencies clear, prevents coupling between unrelated features, and avoids the "god object" anti-pattern.
+
+  **Bad:**
+
+  ```go
+  type Options struct {
+      Host     string
+      Port     int
+      Debug    bool
+      Timeout  time.Duration
+      // Grows over time with unrelated fields...
+  }
+
+  func SetupServer(opts Options) { ... }
+  ```
+
+  **Good:**
+
+  ```go
+  func SetupServer(host string, port int) { ... }
+  func SetupServerWithTLS(host string, port int, tlsPort int, tlsConfig *tls.Config) { ... }
+  ```
+
+  When a function needs many parameters, it's often a sign the function is doing too much. Consider breaking it into smaller, focused functions rather than hiding complexity behind a config struct.
 - **Avoid Meaningless Names**: Avoid generic, meaningless names like "Manager", "Handler", "Processor", "Service", "Util", or "Helper" unless they genuinely describe the specific purpose. These names are often cop-outs that don't convey meaningful information about what the type or function actually does. Instead, use descriptive names that clearly indicate the specific responsibility or behavior.
 
   **Bad Examples:**

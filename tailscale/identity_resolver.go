@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"tailscale.com/client/local"
+	"tailscale.com/client/tailscale/apitype"
 )
 
 // IResolveIdentity abstracts identity resolution for testing.
@@ -11,15 +12,28 @@ type IResolveIdentity interface {
 	WhoIs(ctx context.Context, remoteAddr string) (*Identity, error)
 }
 
+// IWhoIsClient abstracts the Tailscale WhoIs API for testing.
+type IWhoIsClient interface {
+	WhoIs(ctx context.Context, remoteAddr string) (*apitype.WhoIsResponse, error)
+}
+
 // IdentityResolver resolves Tailscale identities from remote addresses.
 type IdentityResolver struct {
-	client *local.Client
+	client IWhoIsClient
 }
 
 // NewIdentityResolver creates a new identity resolver.
 func NewIdentityResolver() *IdentityResolver {
 	return &IdentityResolver{
 		client: &local.Client{},
+	}
+}
+
+// NewIdentityResolverWithClient creates a new identity resolver with a custom client.
+// This is primarily used for testing.
+func NewIdentityResolverWithClient(client IWhoIsClient) *IdentityResolver {
+	return &IdentityResolver{
+		client: client,
 	}
 }
 

@@ -1,7 +1,6 @@
 package bootstrap
 
 import (
-	"context"
 	"crypto/tls"
 	"fmt"
 	"net"
@@ -25,80 +24,45 @@ const (
 	defaultHTTPSPort = 443
 )
 
-// ServerConfig holds the configuration for running the server.
-type ServerConfig struct {
+// ServerResult holds the created server and listener.
+type ServerResult struct {
 	MainServer     *http.Server
 	MainListener   net.Listener
 	RedirectServer *http.Server // Optional: HTTP->HTTPS redirect server (ModeFullTLS only)
 }
 
-// Options contains all configuration options for server setup.
-type Options struct {
-	Host                      string
-	Port                      int
-	TLSPort                   int
-	Mode                      ServerMode
-	ForceRedirectTailnetHTTPS bool
-}
-
-// Dependencies contains all external dependencies needed for server setup.
-type Dependencies struct {
-	Site      *server.Site
-	Logger    *lumber.ConsoleLogger
-	Commit    string
-	BuildTime time.Time
-}
-
-// DetermineServerMode determines the appropriate server mode based on options and Tailscale status.
-func DetermineServerMode(tailscaleServe bool, tsAvailable bool, tsDNSName string) ServerMode {
-	if !tsAvailable || tsDNSName == "" {
+// DetermineServerMode determines the appropriate server mode based on Tailscale status.
+//
+//revive:disable-next-line:flag-parameter useTailscaleServe is a CLI configuration flag
+func DetermineServerMode(tsStatus *tailscale.Status, useTailscaleServe bool) ServerMode {
+	if tsStatus == nil || !tsStatus.Available || tsStatus.DNSName == "" {
 		return ModePlainHTTP
 	}
-	if tailscaleServe {
+	if useTailscaleServe {
 		return ModeTailscaleServe
 	}
 	return ModeFullTLS
 }
 
-// SetupServer configures and creates the server based on the provided options.
-func SetupServer(ctx context.Context, opts Options, deps Dependencies) (*ServerConfig, error) {
-	httpAddr := fmt.Sprintf("%s:%d", opts.Host, opts.Port)
+// SetupPlainHTTP creates a plain HTTP server without Tailscale integration.
+func SetupPlainHTTP(
+	httpAddr string,
+	site *server.Site,
+	logger *lumber.ConsoleLogger,
+	commit string,
+	buildTime time.Time,
+) (*ServerResult, error) {
+	logger.Info("Tailscale not available. Running as plain HTTP on %s", httpAddr)
+	logger.Info("For secure access with user identity, install Tailscale: https://tailscale.com/download")
 
-	// Detect Tailscale availability
-	detector := tailscale.NewDetector()
-	tsStatus, err := detector.Detect(ctx)
-	if err != nil {
-		deps.Logger.Warn("Error detecting Tailscale: %v", err)
-		tsStatus = &tailscale.Status{Available: false}
-	}
-
-	switch opts.Mode {
-	case ModePlainHTTP:
-		return setupPlainHTTP(httpAddr, deps)
-
-	case ModeTailscaleServe:
-		return setupTailscaleServe(httpAddr, tsStatus.DNSName, opts.ForceRedirectTailnetHTTPS, deps)
-
-	case ModeFullTLS:
-		return setupFullTLS(httpAddr, opts.TLSPort, tsStatus.DNSName, deps)
-
-	default:
-		return nil, fmt.Errorf("unknown server mode: %v", opts.Mode)
-	}
-}
-
-func setupPlainHTTP(httpAddr string, deps Dependencies) (*ServerConfig, error) {
-	deps.Logger.Info("Tailscale not available. Running as plain HTTP on %s", httpAddr)
-	deps.Logger.Info("For secure access with user identity, install Tailscale: https://tailscale.com/download")
-
-	handler := createMultiplexedHandler(deps, nil)
+	handler := createMultiplexedHandler(site, logger, commit, buildTime, nil)
 
 	httpListener, err := net.Listen(networkTCP, httpAddr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create HTTP listener: %w", err)
 	}
 
-	return &ServerConfig{
+	return &ServerResult{
 		MainServer: &http.Server{
 			Handler: h2c.NewHandler(handler, &http2.Server{}),
 		},
@@ -106,12 +70,24 @@ func setupPlainHTTP(httpAddr string, deps Dependencies) (*ServerConfig, error) {
 	}, nil
 }
 
-func setupTailscaleServe(httpAddr, tsDNSName string, forceRedirect bool, deps Dependencies) (*ServerConfig, error) {
-	deps.Logger.Info("Tailscale detected: %s", tsDNSName)
-	deps.Logger.Info("Tailscale Serve mode. Running HTTP on %s with identity support", httpAddr)
+// SetupTailscaleServe creates an HTTP server with Tailscale identity support.
+// Used when Tailscale Serve handles TLS termination externally.
+//
+//revive:disable-next-line:flag-parameter forceRedirectToHTTPS is a CLI configuration flag
+func SetupTailscaleServe(
+	httpAddr string,
+	tsDNSName string,
+	forceRedirectToHTTPS bool,
+	site *server.Site,
+	logger *lumber.ConsoleLogger,
+	commit string,
+	buildTime time.Time,
+) (*ServerResult, error) {
+	logger.Info("Tailscale detected: %s", tsDNSName)
+	logger.Info("Tailscale Serve mode. Running HTTP on %s with identity support", httpAddr)
 
 	identityResolver := tailscale.NewIdentityResolver()
-	handler := createMultiplexedHandler(deps, identityResolver)
+	handler := createMultiplexedHandler(site, logger, commit, buildTime, identityResolver)
 
 	httpListener, err := net.Listen(networkTCP, httpAddr)
 	if err != nil {
@@ -119,12 +95,16 @@ func setupTailscaleServe(httpAddr, tsDNSName string, forceRedirect bool, deps De
 	}
 
 	var finalHandler http.Handler = h2c.NewHandler(handler, &http2.Server{})
-	if forceRedirect {
-		deps.Logger.Info("Tailnet clients will be redirected to HTTPS")
-		finalHandler = tailscale.NewRedirectHandler(tsDNSName, defaultHTTPSPort, identityResolver, finalHandler, true, deps.Logger)
+	if forceRedirectToHTTPS {
+		logger.Info("Tailnet clients will be redirected to HTTPS")
+		redirector, err := tailscale.NewTailnetRedirector(tsDNSName, defaultHTTPSPort, identityResolver, finalHandler, true, logger)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create tailnet redirector: %w", err)
+		}
+		finalHandler = redirector
 	}
 
-	return &ServerConfig{
+	return &ServerResult{
 		MainServer: &http.Server{
 			Handler: finalHandler,
 		},
@@ -132,11 +112,21 @@ func setupTailscaleServe(httpAddr, tsDNSName string, forceRedirect bool, deps De
 	}, nil
 }
 
-func setupFullTLS(httpAddr string, tlsPort int, tsDNSName string, deps Dependencies) (*ServerConfig, error) {
-	deps.Logger.Info("Tailscale detected: %s", tsDNSName)
+// SetupFullTLS creates both HTTPS and HTTP servers using Tailscale certificates.
+// The HTTP server redirects tailnet clients to HTTPS.
+func SetupFullTLS(
+	httpAddr string,
+	tlsPort int,
+	tsDNSName string,
+	site *server.Site,
+	logger *lumber.ConsoleLogger,
+	commit string,
+	buildTime time.Time,
+) (*ServerResult, error) {
+	logger.Info("Tailscale detected: %s", tsDNSName)
 
 	identityResolver := tailscale.NewIdentityResolver()
-	handler := createMultiplexedHandler(deps, identityResolver)
+	handler := createMultiplexedHandler(site, logger, commit, buildTime, identityResolver)
 
 	// Parse host from httpAddr
 	host := ""
@@ -153,63 +143,73 @@ func setupFullTLS(httpAddr string, tlsPort int, tsDNSName string, deps Dependenc
 		return nil, fmt.Errorf("failed to create TLS listener: %w", err)
 	}
 
-	deps.Logger.Info("HTTPS server listening on %s", httpsAddr)
+	logger.Info("HTTPS server listening on %s", httpsAddr)
 
 	// Create HTTP redirect server
-	redirectHandler := tailscale.NewRedirectHandler(tsDNSName, tlsPort, identityResolver, h2c.NewHandler(handler, &http2.Server{}), false, deps.Logger)
+	redirector, err := tailscale.NewTailnetRedirector(tsDNSName, tlsPort, identityResolver, h2c.NewHandler(handler, &http2.Server{}), false, logger)
+	if err != nil {
+		_ = tlsListener.Close()
+		return nil, fmt.Errorf("failed to create tailnet redirector: %w", err)
+	}
 	httpListener, err := net.Listen(networkTCP, httpAddr)
 	if err != nil {
 		_ = tlsListener.Close()
 		return nil, fmt.Errorf("failed to create HTTP listener: %w", err)
 	}
 
-	deps.Logger.Info("HTTP server listening on %s (redirects tailnet, serves others)", httpAddr)
+	logger.Info("HTTP server listening on %s (redirects tailnet, serves others)", httpAddr)
 
-	config := &ServerConfig{
+	result := &ServerResult{
 		MainServer: &http.Server{
 			Handler: handler,
 		},
 		MainListener: tlsListener,
 		RedirectServer: &http.Server{
 			Addr:    httpAddr,
-			Handler: redirectHandler,
+			Handler: redirector,
 		},
 	}
 
 	// Start redirect server in background
 	go func() {
-		if err := config.RedirectServer.Serve(httpListener); err != nil && err != http.ErrServerClosed {
-			deps.Logger.Error("HTTP redirect server error: %v", err)
+		if err := result.RedirectServer.Serve(httpListener); err != nil && err != http.ErrServerClosed {
+			logger.Error("HTTP redirect server error: %v", err)
 		}
 	}()
 
-	return config, nil
+	return result, nil
 }
 
-func createMultiplexedHandler(deps Dependencies, identityResolver tailscale.IResolveIdentity) http.Handler {
-	ginRouter := deps.Site.GinRouter()
+func createMultiplexedHandler(
+	site *server.Site,
+	logger *lumber.ConsoleLogger,
+	commit string,
+	buildTime time.Time,
+	identityResolver tailscale.IResolveIdentity,
+) http.Handler {
+	ginRouter := site.GinRouter()
 
 	// Add Tailscale identity middleware if resolver is available
 	if identityResolver != nil {
-		ginRouter.Use(tailscale.IdentityMiddleware(identityResolver, deps.Logger))
+		ginRouter.Use(tailscale.IdentityMiddleware(identityResolver, logger))
 	}
 
 	grpcAPIServer := grpcapi.NewServer(
-		deps.Commit,
-		deps.BuildTime,
-		deps.Site,
-		deps.Site.BleveIndexQueryer,
-		deps.Site.GetJobQueueCoordinator(),
-		deps.Logger,
-		deps.Site.MarkdownRenderer,
+		commit,
+		buildTime,
+		site,
+		site.BleveIndexQueryer,
+		site.GetJobQueueCoordinator(),
+		logger,
+		site.MarkdownRenderer,
 		server.TemplateExecutor{},
-		deps.Site.FrontmatterIndexQueryer,
+		site.FrontmatterIndexQueryer,
 	)
 
 	// Build interceptor chain
 	var interceptors []grpc.UnaryServerInterceptor
 	if identityResolver != nil {
-		interceptors = append(interceptors, tailscale.IdentityInterceptor(identityResolver, deps.Logger))
+		interceptors = append(interceptors, tailscale.IdentityInterceptor(identityResolver, logger))
 	}
 	interceptors = append(interceptors, grpcAPIServer.LoggingInterceptor())
 
@@ -224,11 +224,11 @@ func createMultiplexedHandler(deps Dependencies, identityResolver tailscale.IRes
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
-			deps.Logger.Debug("gRPC-ish request: %s %s", r.Method, r.URL.Path)
+			logger.Debug("gRPC-ish request: %s %s", r.Method, r.URL.Path)
 			wrappedGrpc.ServeHTTP(w, r)
 			return
 		}
-		deps.Logger.Debug("Gin request: %s %s", r.Method, r.URL.Path)
+		logger.Debug("Gin request: %s %s", r.Method, r.URL.Path)
 		ginRouter.ServeHTTP(w, r)
 	})
 }

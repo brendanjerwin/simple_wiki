@@ -1,6 +1,7 @@
 package tailscale
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -13,11 +14,11 @@ const (
 	maxValidPort     = 65535
 )
 
-// RedirectHandler redirects HTTP requests to HTTPS on the tailnet hostname.
+// TailnetRedirector redirects HTTP requests to HTTPS on the tailnet hostname.
 // - If ForceRedirectToTailnet: redirect ALL HTTP requests to tailnet HTTPS
 // - Otherwise: only redirect tailnet clients (detected via WhoIs)
 // - Requests already HTTPS (via X-Forwarded-Proto) are served directly
-type RedirectHandler struct {
+type TailnetRedirector struct {
 	TSHostname             string           // Tailscale hostname to redirect to (e.g., "my-laptop.tailnet.ts.net")
 	TLSPort                int              // Port the HTTPS server is running on
 	Resolver               IResolveIdentity // Used to detect tailnet requests via WhoIs
@@ -27,7 +28,7 @@ type RedirectHandler struct {
 }
 
 // ServeHTTP implements http.Handler.
-func (h *RedirectHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *TailnetRedirector) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Check if request is already HTTPS (via X-Forwarded-Proto from Tailscale Serve)
 	// Only trust this header from localhost (where tailscaled runs)
 	// This prevents attackers from bypassing redirect by spoofing the header
@@ -80,32 +81,41 @@ func isFromLocalhost(remoteAddr string) bool {
 }
 
 // buildHTTPSURL constructs the HTTPS redirect URL.
-func (h *RedirectHandler) buildHTTPSURL(requestURI string) string {
+func (h *TailnetRedirector) buildHTTPSURL(requestURI string) string {
 	if h.TLSPort == defaultHTTPSPort {
 		return fmt.Sprintf("https://%s%s", h.TSHostname, requestURI)
 	}
 	return fmt.Sprintf("https://%s:%d%s", h.TSHostname, h.TLSPort, requestURI)
 }
 
-// NewRedirectHandler creates a new redirect handler.
-// Panics if tsHostname is empty, tlsPort is invalid, or fallback is nil.
-func NewRedirectHandler(tsHostname string, tlsPort int, resolver IResolveIdentity, fallback http.Handler, forceRedirectToTailnet bool, logger *lumber.ConsoleLogger) *RedirectHandler {
+// ErrEmptyHostname indicates the hostname was not provided.
+var ErrEmptyHostname = errors.New("tsHostname cannot be empty")
+
+// ErrInvalidPort indicates the port is outside valid range.
+var ErrInvalidPort = errors.New("tlsPort must be between 1 and 65535")
+
+// ErrNilFallback indicates the fallback handler was not provided.
+var ErrNilFallback = errors.New("fallback handler cannot be nil")
+
+// NewTailnetRedirector creates a new tailnet redirector.
+// Returns an error if tsHostname is empty, tlsPort is invalid, or fallback is nil.
+func NewTailnetRedirector(tsHostname string, tlsPort int, resolver IResolveIdentity, fallback http.Handler, forceRedirectToTailnet bool, logger *lumber.ConsoleLogger) (*TailnetRedirector, error) {
 	if tsHostname == "" {
-		panic("tailscale.NewRedirectHandler: tsHostname cannot be empty")
+		return nil, ErrEmptyHostname
 	}
 	if tlsPort <= 0 || tlsPort > maxValidPort {
-		panic("tailscale.NewRedirectHandler: tlsPort must be between 1 and 65535")
+		return nil, ErrInvalidPort
 	}
 	if fallback == nil {
-		panic("tailscale.NewRedirectHandler: fallback handler cannot be nil")
+		return nil, ErrNilFallback
 	}
 
-	return &RedirectHandler{
+	return &TailnetRedirector{
 		TSHostname:             tsHostname,
 		TLSPort:                tlsPort,
 		Resolver:               resolver,
 		FallbackHandler:        fallback,
 		ForceRedirectToTailnet: forceRedirectToTailnet,
 		Logger:                 logger,
-	}
+	}, nil
 }
