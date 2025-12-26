@@ -132,22 +132,23 @@ type WikiMetricsStats struct {
 	HeaderExtractions   int64
 }
 
+// hasPageAccess returns true if page access is configured.
+func (r *WikiMetricsRecorder) hasPageAccess() bool {
+	return r.pageWriter != nil && r.pageReader != nil
+}
+
 // Persist writes the current statistics to the wiki page frontmatter.
 // This method uses direct frontmatter manipulation to avoid amplifying stats through APIs.
 func (r *WikiMetricsRecorder) Persist() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if r.pageWriter == nil || r.pageReader == nil {
+	if !r.hasPageAccess() {
 		return nil // No-op if page access is not configured
 	}
 
-	// Read existing frontmatter
-	_, existingFM, err := r.pageReader.ReadFrontMatter(ObservabilityMetricsPage)
-	if err != nil || existingFM == nil {
-		// Page doesn't exist yet or has no frontmatter, create fresh
-		existingFM = make(map[string]any)
-	}
+	// Read existing frontmatter (silently handle missing pages)
+	existingFM := r.readOrCreateFrontmatter()
 
 	// Build observability section
 	stats := r.GetStats()
@@ -192,13 +193,30 @@ func (r *WikiMetricsRecorder) Persist() error {
 	return nil
 }
 
+// readOrCreateFrontmatter reads existing frontmatter or creates a fresh map.
+// Read errors are logged but do not fail the operation.
+func (r *WikiMetricsRecorder) readOrCreateFrontmatter() map[string]any {
+	_, existingFM, err := r.pageReader.ReadFrontMatter(ObservabilityMetricsPage)
+	if err != nil {
+		// Log read errors (but not "not found" which is expected)
+		if r.logger != nil {
+			r.logger.Warn("Could not read existing metrics page, will create fresh: %v", err)
+		}
+		return make(map[string]any)
+	}
+	if existingFM == nil {
+		return make(map[string]any)
+	}
+	return existingFM
+}
+
 // PersistWithMarkdown writes the current statistics to the wiki page with a markdown report.
 func (r *WikiMetricsRecorder) PersistWithMarkdown() error {
 	if err := r.Persist(); err != nil {
 		return err
 	}
 
-	if r.pageWriter == nil {
+	if !r.hasPageAccess() {
 		return nil
 	}
 
