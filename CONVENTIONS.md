@@ -1141,6 +1141,40 @@ metrics.RecordLookup(ctx, durationSeconds, observability.ResultSuccess)
 metrics.RecordFromHeaders(ctx)
 ```
 
+### Wiki-Based Metrics Persistence
+
+In addition to OpenTelemetry metrics, the application supports lightweight metrics persistence directly to a wiki page. This approach:
+
+- Works even when OTEL is unavailable or disabled
+- Provides an audit trail visible within the wiki itself
+- Uses direct frontmatter manipulation (not APIs) to avoid artificially amplifying statistics
+
+The metrics are stored on the `observability_metrics` page with statistics as frontmatter:
+
+```go
+recorder := observability.NewWikiMetricsRecorder(observability.WikiMetricsRecorderConfig{
+    PageWriter: site,
+    PageReader: site,
+    Logger:     logger,
+})
+
+// Record metrics (thread-safe atomic operations)
+recorder.RecordHTTPRequest()
+recorder.RecordHTTPError()
+recorder.RecordGRPCRequest()
+recorder.RecordTailscaleLookup(observability.ResultSuccess)
+
+// Persist to wiki periodically or on shutdown
+recorder.PersistWithMarkdown()
+```
+
+The wiki page includes both:
+
+1. **Frontmatter**: Structured data in `observability.*` keys for programmatic access
+2. **Markdown body**: Human-readable tables showing the current statistics
+
+This follows the same pattern used by the inventory normalization job for reporting.
+
 ## README
 
 - When updating the readme, match the tone of voice in the rest of the README. Its the face of the project. Marketing matters.
