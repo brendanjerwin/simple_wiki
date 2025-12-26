@@ -12,20 +12,20 @@ import (
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 )
 
-// mockWhoIsClient implements IWhoIsClient for testing.
-type mockWhoIsClient struct {
+// mockWhoIser implements WhoIser for testing.
+type mockWhoIser struct {
 	response *apitype.WhoIsResponse
 	err      error
 }
 
-func (m *mockWhoIsClient) WhoIs(_ context.Context, _ string) (*apitype.WhoIsResponse, error) {
+func (m *mockWhoIser) WhoIs(_ context.Context, _ string) (*apitype.WhoIsResponse, error) {
 	return m.response, m.err
 }
 
-var _ = Describe("IdentityResolver", func() {
+var _ = Describe("LocalIdentityResolver", func() {
 	Describe("NewIdentityResolver", func() {
 		When("creating a new identity resolver", func() {
-			var resolver *tailscale.IdentityResolver
+			var resolver *tailscale.LocalIdentityResolver
 
 			BeforeEach(func() {
 				resolver = tailscale.NewIdentityResolver()
@@ -39,10 +39,10 @@ var _ = Describe("IdentityResolver", func() {
 
 	Describe("NewIdentityResolverWithClient", func() {
 		When("creating with a custom client", func() {
-			var resolver *tailscale.IdentityResolver
+			var resolver *tailscale.LocalIdentityResolver
 
 			BeforeEach(func() {
-				client := &mockWhoIsClient{}
+				client := &mockWhoIser{}
 				resolver = tailscale.NewIdentityResolverWithClient(client)
 			})
 
@@ -55,13 +55,13 @@ var _ = Describe("IdentityResolver", func() {
 	Describe("WhoIs", func() {
 		When("client returns an error", func() {
 			var (
-				resolver *tailscale.IdentityResolver
+				resolver *tailscale.LocalIdentityResolver
 				identity *tailscale.Identity
 				err      error
 			)
 
 			BeforeEach(func() {
-				client := &mockWhoIsClient{
+				client := &mockWhoIser{
 					response: nil,
 					err:      errors.New("connection refused"),
 				}
@@ -80,13 +80,13 @@ var _ = Describe("IdentityResolver", func() {
 
 		When("client returns a valid response with user profile", func() {
 			var (
-				resolver *tailscale.IdentityResolver
+				resolver *tailscale.LocalIdentityResolver
 				identity *tailscale.Identity
 				err      error
 			)
 
 			BeforeEach(func() {
-				client := &mockWhoIsClient{
+				client := &mockWhoIser{
 					response: &apitype.WhoIsResponse{
 						UserProfile: &tailcfg.UserProfile{
 							LoginName:   "user@example.com",
@@ -125,13 +125,13 @@ var _ = Describe("IdentityResolver", func() {
 
 		When("client returns response without user profile", func() {
 			var (
-				resolver *tailscale.IdentityResolver
+				resolver *tailscale.LocalIdentityResolver
 				identity *tailscale.Identity
 				err      error
 			)
 
 			BeforeEach(func() {
-				client := &mockWhoIsClient{
+				client := &mockWhoIser{
 					response: &apitype.WhoIsResponse{
 						UserProfile: nil,
 						Node: &tailcfg.Node{
@@ -155,13 +155,13 @@ var _ = Describe("IdentityResolver", func() {
 
 		When("client returns response without node", func() {
 			var (
-				resolver *tailscale.IdentityResolver
+				resolver *tailscale.LocalIdentityResolver
 				identity *tailscale.Identity
 				err      error
 			)
 
 			BeforeEach(func() {
-				client := &mockWhoIsClient{
+				client := &mockWhoIser{
 					response: &apitype.WhoIsResponse{
 						UserProfile: &tailcfg.UserProfile{
 							LoginName:   "user@example.com",
@@ -194,13 +194,13 @@ var _ = Describe("IdentityResolver", func() {
 
 		When("client returns empty response", func() {
 			var (
-				resolver *tailscale.IdentityResolver
+				resolver *tailscale.LocalIdentityResolver
 				identity *tailscale.Identity
 				err      error
 			)
 
 			BeforeEach(func() {
-				client := &mockWhoIsClient{
+				client := &mockWhoIser{
 					response: &apitype.WhoIsResponse{},
 					err:      nil,
 				}
@@ -219,8 +219,8 @@ var _ = Describe("IdentityResolver", func() {
 	})
 
 	Describe("interface compliance", func() {
-		It("should implement IResolveIdentity", func() {
-			var _ tailscale.IResolveIdentity = (*tailscale.IdentityResolver)(nil)
+		It("should implement IdentityResolver", func() {
+			var _ tailscale.IdentityResolver = (*tailscale.LocalIdentityResolver)(nil)
 		})
 	})
 })

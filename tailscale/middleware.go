@@ -8,14 +8,15 @@ import (
 // IdentityMiddleware creates Gin middleware that extracts Tailscale identity.
 // Identity is extracted from Tailscale headers (set by Tailscale Serve) or via WhoIs.
 // If identity cannot be resolved, the request continues without identity (graceful fallback).
-func IdentityMiddleware(resolver IResolveIdentity, logger *lumber.ConsoleLogger) gin.HandlerFunc {
+func IdentityMiddleware(resolver IdentityResolver, logger *lumber.ConsoleLogger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
 		var identity *Identity
 
 		// Method 1: Check Tailscale headers (set by Tailscale Serve/Funnel)
-		// Note: Tailscale Serve only provides user identity, not node name
-		if loginName := c.Request.Header.Get("Tailscale-User-Login"); loginName != "" {
+		// Only trust these headers from localhost (where tailscaled runs)
+		// This prevents external attackers from spoofing user identity
+		if loginName := c.Request.Header.Get("Tailscale-User-Login"); loginName != "" && isFromLocalhost(c.Request.RemoteAddr) {
 			identity = &Identity{
 				LoginName:   loginName,
 				DisplayName: c.Request.Header.Get("Tailscale-User-Name"),

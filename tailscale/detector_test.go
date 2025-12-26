@@ -11,7 +11,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 )
 
-// mockStatusProvider implements IStatusProvider for testing.
+// mockStatusProvider implements StatusProvider for testing.
 type mockStatusProvider struct {
 	status *ipnstate.Status
 	err    error
@@ -21,10 +21,10 @@ func (m *mockStatusProvider) StatusWithoutPeers(_ context.Context) (*ipnstate.St
 	return m.status, m.err
 }
 
-var _ = Describe("Detector", func() {
+var _ = Describe("LocalDetector", func() {
 	Describe("NewDetector", func() {
 		When("creating a new detector", func() {
-			var detector *tailscale.Detector
+			var detector *tailscale.LocalDetector
 
 			BeforeEach(func() {
 				detector = tailscale.NewDetector()
@@ -39,7 +39,7 @@ var _ = Describe("Detector", func() {
 	Describe("Detect", func() {
 		When("tailscale client returns an error", func() {
 			var (
-				detector *tailscale.Detector
+				detector *tailscale.LocalDetector
 				status   *tailscale.Status
 				err      error
 			)
@@ -64,7 +64,7 @@ var _ = Describe("Detector", func() {
 
 		When("tailscale backend is not running", func() {
 			var (
-				detector *tailscale.Detector
+				detector *tailscale.LocalDetector
 				status   *tailscale.Status
 				err      error
 			)
@@ -98,7 +98,7 @@ var _ = Describe("Detector", func() {
 
 		When("tailscale is running with cert domains", func() {
 			var (
-				detector *tailscale.Detector
+				detector *tailscale.LocalDetector
 				status   *tailscale.Status
 				err      error
 			)
@@ -145,7 +145,7 @@ var _ = Describe("Detector", func() {
 
 		When("tailscale is running without cert domains", func() {
 			var (
-				detector *tailscale.Detector
+				detector *tailscale.LocalDetector
 				status   *tailscale.Status
 				err      error
 			)
@@ -184,7 +184,7 @@ var _ = Describe("Detector", func() {
 
 		When("tailscale is running but Self is nil", func() {
 			var (
-				detector *tailscale.Detector
+				detector *tailscale.LocalDetector
 				status   *tailscale.Status
 				err      error
 			)

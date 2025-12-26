@@ -12,7 +12,7 @@ import (
 // IdentityInterceptor creates a gRPC unary interceptor that extracts Tailscale identity.
 // Identity is extracted from gRPC metadata (headers from Tailscale Serve) or via WhoIs.
 // If identity cannot be resolved, the request continues without identity (graceful fallback).
-func IdentityInterceptor(resolver IResolveIdentity, logger *lumber.ConsoleLogger) grpc.UnaryServerInterceptor {
+func IdentityInterceptor(resolver IdentityResolver, logger *lumber.ConsoleLogger) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		var identity *Identity
 

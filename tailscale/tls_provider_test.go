@@ -9,10 +9,10 @@ import (
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 )
 
-var _ = Describe("TLSProvider", func() {
+var _ = Describe("TailscaleTLSConfigurer", func() {
 	Describe("NewTLSProvider", func() {
 		When("creating a new TLS provider", func() {
-			var provider *tailscale.TLSProvider
+			var provider *tailscale.TailscaleTLSConfigurer
 
 			BeforeEach(func() {
 				provider = tailscale.NewTLSProvider()
@@ -27,7 +27,7 @@ var _ = Describe("TLSProvider", func() {
 	Describe("GetTLSConfig", func() {
 		When("getting TLS config", func() {
 			var (
-				provider  *tailscale.TLSProvider
+				provider  *tailscale.TailscaleTLSConfigurer
 				tlsConfig *tls.Config
 			)
 
@@ -51,8 +51,8 @@ var _ = Describe("TLSProvider", func() {
 	})
 
 	Describe("interface compliance", func() {
-		It("should implement IProvideTLS", func() {
-			var _ tailscale.IProvideTLS = (*tailscale.TLSProvider)(nil)
+		It("should implement TLSConfigurer", func() {
+			var _ tailscale.TLSConfigurer = (*tailscale.TailscaleTLSConfigurer)(nil)
 		})
 	})
 })

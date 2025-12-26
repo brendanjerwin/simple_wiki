@@ -19,10 +19,7 @@ import (
 	"google.golang.org/grpc/reflection"
 )
 
-const (
-	networkTCP       = "tcp"
-	defaultHTTPSPort = 443
-)
+const networkTCP = "tcp"
 
 // ServerResult holds the created server and listener.
 type ServerResult struct {
@@ -97,7 +94,7 @@ func SetupTailscaleServe(
 	var finalHandler http.Handler = h2c.NewHandler(handler, &http2.Server{})
 	if forceRedirectToHTTPS {
 		logger.Info("Tailnet clients will be redirected to HTTPS")
-		redirector, err := tailscale.NewTailnetRedirector(tsDNSName, defaultHTTPSPort, identityResolver, finalHandler, true, logger)
+		redirector, err := tailscale.NewTailnetRedirector(tsDNSName, tailscale.DefaultHTTPSPort, identityResolver, finalHandler, true, logger)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create tailnet redirector: %w", err)
 		}
@@ -185,7 +182,7 @@ func createMultiplexedHandler(
 	logger *lumber.ConsoleLogger,
 	commit string,
 	buildTime time.Time,
-	identityResolver tailscale.IResolveIdentity,
+	identityResolver tailscale.IdentityResolver,
 ) http.Handler {
 	ginRouter := site.GinRouter()
 

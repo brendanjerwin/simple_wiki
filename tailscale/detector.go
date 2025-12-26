@@ -7,6 +7,11 @@ import (
 	"tailscale.com/ipn/ipnstate"
 )
 
+// BackendState constants for Tailscale daemon states.
+const (
+	BackendStateRunning = "Running"
+)
+
 // Status represents the current Tailscale connection status.
 type Status struct {
 	Available   bool
@@ -15,17 +20,17 @@ type Status struct {
 	Hostname    string // Local hostname
 }
 
-// IDetectTailscale provides detection of Tailscale availability.
-type IDetectTailscale interface {
+// TailscaleDetector provides detection of Tailscale availability.
+type TailscaleDetector interface {
 	Detect(ctx context.Context) (*Status, error)
 }
 
-// IStatusProvider abstracts the Tailscale client for testing.
-type IStatusProvider interface {
+// StatusProvider abstracts the Tailscale client for testing.
+type StatusProvider interface {
 	StatusWithoutPeers(ctx context.Context) (*ipnstate.Status, error)
 }
 
-// localClientAdapter wraps *local.Client to implement IStatusProvider.
+// localClientAdapter wraps *local.Client to implement StatusProvider.
 type localClientAdapter struct {
 	client *local.Client
 }
@@ -34,28 +39,28 @@ func (a *localClientAdapter) StatusWithoutPeers(ctx context.Context) (*ipnstate.
 	return a.client.StatusWithoutPeers(ctx)
 }
 
-// Detector uses the local tailscaled daemon to detect Tailscale status.
-type Detector struct {
-	statusProvider IStatusProvider
+// LocalDetector uses the local tailscaled daemon to detect Tailscale status.
+type LocalDetector struct {
+	statusProvider StatusProvider
 }
 
 // NewDetector creates a new Tailscale detector.
-func NewDetector() *Detector {
-	return &Detector{
+func NewDetector() *LocalDetector {
+	return &LocalDetector{
 		statusProvider: &localClientAdapter{client: &local.Client{}},
 	}
 }
 
-// NewDetectorWithProvider creates a Detector with a custom status provider (for testing).
-func NewDetectorWithProvider(provider IStatusProvider) *Detector {
-	return &Detector{
+// NewDetectorWithProvider creates a LocalDetector with a custom status provider (for testing).
+func NewDetectorWithProvider(provider StatusProvider) *LocalDetector {
+	return &LocalDetector{
 		statusProvider: provider,
 	}
 }
 
 // Detect checks if Tailscale is available and returns status.
 // Returns Status{Available: false} on error (graceful fallback).
-func (d *Detector) Detect(ctx context.Context) (*Status, error) {
+func (d *LocalDetector) Detect(ctx context.Context) (*Status, error) {
 	ipnStatus, err := d.statusProvider.StatusWithoutPeers(ctx)
 	if err != nil {
 		// Tailscale not available - graceful fallback
@@ -63,10 +68,14 @@ func (d *Detector) Detect(ctx context.Context) (*Status, error) {
 	}
 
 	// Check if we have a valid state
-	if ipnStatus.BackendState != "Running" {
+	if ipnStatus.BackendState != BackendStateRunning {
+		hostname := ""
+		if ipnStatus.Self != nil {
+			hostname = ipnStatus.Self.HostName
+		}
 		return &Status{
 			Available: false,
-			Hostname:  ipnStatus.Self.HostName,
+			Hostname:  hostname,
 		}, nil
 	}
 
@@ -87,13 +96,18 @@ func (d *Detector) Detect(ctx context.Context) (*Status, error) {
 		hostname = ipnStatus.Self.HostName
 	}
 
+	tailnetName := ""
+	if ipnStatus.CurrentTailnet != nil {
+		tailnetName = ipnStatus.CurrentTailnet.Name
+	}
+
 	return &Status{
 		Available:   true,
 		DNSName:     dnsName,
-		TailnetName: ipnStatus.CurrentTailnet.Name,
+		TailnetName: tailnetName,
 		Hostname:    hostname,
 	}, nil
 }
 
-// Ensure Detector implements IDetectTailscale
-var _ IDetectTailscale = (*Detector)(nil)
+// Ensure LocalDetector implements TailscaleDetector
+var _ TailscaleDetector = (*LocalDetector)(nil)

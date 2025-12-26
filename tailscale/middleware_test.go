@@ -12,7 +12,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 )
 
-// mockIdentityResolver implements IResolveIdentity for testing.
+// mockIdentityResolver implements IdentityResolver for testing.
 type mockIdentityResolver struct {
 	identity *tailscale.Identity
 	err      error
@@ -34,7 +34,7 @@ var _ = Describe("IdentityMiddleware", func() {
 	})
 
 	Describe("extracting identity from headers", func() {
-		When("Tailscale-User-Login header is present", func() {
+		When("Tailscale-User-Login header is present from localhost", func() {
 			var (
 				capturedIdentity *tailscale.Identity
 			)
@@ -50,6 +50,7 @@ var _ = Describe("IdentityMiddleware", func() {
 				req, _ := http.NewRequest("GET", "/test", nil)
 				req.Header.Set("Tailscale-User-Login", "user@example.com")
 				req.Header.Set("Tailscale-User-Name", "Test User")
+				req.RemoteAddr = "127.0.0.1:12345" // Headers only trusted from localhost
 				router.ServeHTTP(recorder, req)
 			})
 
@@ -66,7 +67,7 @@ var _ = Describe("IdentityMiddleware", func() {
 			})
 		})
 
-		When("Tailscale-User-Login header is present without display name", func() {
+		When("Tailscale-User-Login header is present without display name from localhost", func() {
 			var (
 				capturedIdentity *tailscale.Identity
 			)
@@ -81,6 +82,7 @@ var _ = Describe("IdentityMiddleware", func() {
 
 				req, _ := http.NewRequest("GET", "/test", nil)
 				req.Header.Set("Tailscale-User-Login", "user@example.com")
+				req.RemoteAddr = "127.0.0.1:12345" // Headers only trusted from localhost
 				router.ServeHTTP(recorder, req)
 			})
 
@@ -167,7 +169,7 @@ var _ = Describe("IdentityMiddleware", func() {
 	})
 
 	Describe("header priority over WhoIs", func() {
-		When("headers are present and WhoIs would return different identity", func() {
+		When("headers are present from localhost and WhoIs would return different identity", func() {
 			var (
 				capturedIdentity *tailscale.Identity
 			)
@@ -190,6 +192,7 @@ var _ = Describe("IdentityMiddleware", func() {
 
 				req, _ := http.NewRequest("GET", "/test", nil)
 				req.Header.Set("Tailscale-User-Login", "header@example.com")
+				req.RemoteAddr = "127.0.0.1:12345" // Headers only trusted from localhost
 				router.ServeHTTP(recorder, req)
 			})
 
@@ -219,6 +222,7 @@ var _ = Describe("IdentityMiddleware", func() {
 
 				req, _ := http.NewRequest("GET", "/test", nil)
 				req.Header.Set("Tailscale-User-Login", "user@example.com")
+				req.RemoteAddr = "127.0.0.1:12345" // Headers only trusted from localhost
 				router.ServeHTTP(recorder, req)
 			})
 

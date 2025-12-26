@@ -7,32 +7,33 @@ import (
 	"tailscale.com/client/tailscale/apitype"
 )
 
-// IResolveIdentity abstracts identity resolution for testing.
-type IResolveIdentity interface {
+// IdentityResolver abstracts identity resolution for testing.
+type IdentityResolver interface {
 	WhoIs(ctx context.Context, remoteAddr string) (*Identity, error)
 }
 
-// IWhoIsClient abstracts the Tailscale WhoIs API for testing.
-type IWhoIsClient interface {
+// WhoIser abstracts the Tailscale WhoIs API for testing.
+type WhoIser interface {
 	WhoIs(ctx context.Context, remoteAddr string) (*apitype.WhoIsResponse, error)
 }
 
-// IdentityResolver resolves Tailscale identities from remote addresses.
-type IdentityResolver struct {
-	client IWhoIsClient
+// LocalIdentityResolver resolves Tailscale identities from remote addresses
+// using the local Tailscale daemon.
+type LocalIdentityResolver struct {
+	client WhoIser
 }
 
 // NewIdentityResolver creates a new identity resolver.
-func NewIdentityResolver() *IdentityResolver {
-	return &IdentityResolver{
+func NewIdentityResolver() *LocalIdentityResolver {
+	return &LocalIdentityResolver{
 		client: &local.Client{},
 	}
 }
 
 // NewIdentityResolverWithClient creates a new identity resolver with a custom client.
 // This is primarily used for testing.
-func NewIdentityResolverWithClient(client IWhoIsClient) *IdentityResolver {
-	return &IdentityResolver{
+func NewIdentityResolverWithClient(client WhoIser) *LocalIdentityResolver {
+	return &LocalIdentityResolver{
 		client: client,
 	}
 }
@@ -40,7 +41,7 @@ func NewIdentityResolverWithClient(client IWhoIsClient) *IdentityResolver {
 // WhoIs resolves the identity for a remote address.
 // Returns nil, nil if Tailscale is not available or the address is not from the tailnet.
 // This allows graceful fallback for non-Tailscale requests.
-func (r *IdentityResolver) WhoIs(ctx context.Context, remoteAddr string) (*Identity, error) {
+func (r *LocalIdentityResolver) WhoIs(ctx context.Context, remoteAddr string) (*Identity, error) {
 	whois, err := r.client.WhoIs(ctx, remoteAddr)
 	if err != nil {
 		// Not a tailnet request or Tailscale not available
@@ -68,5 +69,5 @@ func (r *IdentityResolver) WhoIs(ctx context.Context, remoteAddr string) (*Ident
 	return identity, nil
 }
 
-// Ensure IdentityResolver implements IResolveIdentity
-var _ IResolveIdentity = (*IdentityResolver)(nil)
+// Ensure LocalIdentityResolver implements IdentityResolver
+var _ IdentityResolver = (*LocalIdentityResolver)(nil)
