@@ -2,15 +2,14 @@ package inventory
 
 import (
 	"bytes"
+	"fmt"
 
 	"github.com/pelletier/go-toml/v2"
 )
 
 const (
-	// TomlDelimiter is the TOML frontmatter delimiter
-	TomlDelimiter = "+++\n"
-	// Newline is the newline character
-	Newline = "\n"
+	tomlDelimiter = "+++\n"
+	newline       = "\n"
 )
 
 // ItemMarkdownTemplate is the markdown template for inventory item pages.
@@ -31,7 +30,7 @@ const ItemMarkdownTemplate = `{{if .Description}}
 func BuildItemMarkdown() string {
 	var builder bytes.Buffer
 	_, _ = builder.WriteString("# {{or .Title .Identifier}}")
-	_, _ = builder.WriteString(Newline)
+	_, _ = builder.WriteString(newline)
 	_, _ = builder.WriteString(ItemMarkdownTemplate)
 	return builder.String()
 }
@@ -40,21 +39,21 @@ func BuildItemMarkdown() string {
 func BuildItemPageText(fm map[string]any) (string, error) {
 	fmBytes, err := toml.Marshal(fm)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to marshal frontmatter to TOML: %w", err)
 	}
 
 	var builder bytes.Buffer
 
 	if len(fmBytes) > 0 {
-		_, _ = builder.WriteString(TomlDelimiter)
+		_, _ = builder.WriteString(tomlDelimiter)
 		_, _ = builder.Write(fmBytes)
-		if !bytes.HasSuffix(fmBytes, []byte(Newline)) {
-			_, _ = builder.WriteString(Newline)
+		if !bytes.HasSuffix(fmBytes, []byte(newline)) {
+			_, _ = builder.WriteString(newline)
 		}
-		_, _ = builder.WriteString(TomlDelimiter)
+		_, _ = builder.WriteString(tomlDelimiter)
 	}
 
-	_, _ = builder.WriteString(Newline)
+	_, _ = builder.WriteString(newline)
 	_, _ = builder.WriteString(BuildItemMarkdown())
 
 	return builder.String(), nil
