@@ -132,6 +132,7 @@ Cron Scheduler (every minute)
 ```
 
 This ensures:
+
 - Non-blocking request processing (cron triggers async job)
 - Proper job queue serialization for wiki writes
 - Markdown template created only once, then preserved
