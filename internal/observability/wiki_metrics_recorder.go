@@ -237,7 +237,8 @@ func (r *WikiMetricsRecorder) readExistingPage() (map[string]any, bool, error) {
 		return nil, false, err
 	}
 	trimmedMD := strings.TrimSpace(string(existingMD))
-	needsTemplate := trimmedMD == "" || trimmedMD == wikipage.DefaultPageTemplate
+	trimmedDefault := strings.TrimSpace(wikipage.DefaultPageTemplate)
+	needsTemplate := trimmedMD == "" || trimmedMD == trimmedDefault
 
 	return existingFM, needsTemplate, nil
 }

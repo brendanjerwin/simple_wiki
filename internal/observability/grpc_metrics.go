@@ -17,7 +17,7 @@ type GRPCMetrics struct {
 	activeRequests         metric.Int64UpDownCounter
 }
 
-// NewGRPCMetrics creates a new GRPCMetrics instance for tracking gRPC request metrics.
+// NewGRPCMetrics initializes OTEL metric instruments for gRPC request tracking.
 func NewGRPCMetrics() (*GRPCMetrics, error) {
 	meter := otel.Meter("simple_wiki/grpc")
 

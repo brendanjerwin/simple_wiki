@@ -169,7 +169,7 @@ func (n *InventoryNormalizer) CreateItemPage(itemID, containerID string) error {
 // buildItemMarkdown creates the markdown content for an inventory item page.
 func (*InventoryNormalizer) buildItemMarkdown() string {
 	var builder bytes.Buffer
-	_, _ = builder.WriteString(wikipage.DefaultPageTemplate + newlineDelim)
+	_, _ = builder.WriteString(InventoryPageHeaderTemplate + newlineDelim)
 	_, _ = builder.WriteString(InventoryItemMarkdownTemplate)
 	return builder.String()
 }

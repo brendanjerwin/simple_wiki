@@ -9,7 +9,6 @@ import (
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
-	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/stoewer/go-strcase"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -476,7 +475,7 @@ func (s *Server) buildContainerHierarchy(containerID string) []string {
 // buildInventoryItemMarkdown creates the markdown content for an inventory item page.
 func buildInventoryItemMarkdown() string {
 	var builder bytes.Buffer
-	_, _ = builder.WriteString(wikipage.DefaultPageTemplate)
+	_, _ = builder.WriteString(server.InventoryPageHeaderTemplate)
 	_, _ = builder.WriteString(newlineConst)
 	_, _ = builder.WriteString(server.InventoryItemMarkdownTemplate)
 	return builder.String()

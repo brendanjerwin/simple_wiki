@@ -19,12 +19,11 @@ We will implement a **dual-layer observability architecture**:
 
 ### 1. OpenTelemetry Integration
 
-Standard OpenTelemetry SDK for metrics and distributed tracing with automatic exporter selection:
+Standard OpenTelemetry SDK for metrics and distributed tracing using OTLP HTTP exporters.
+When `OTEL_ENABLED=true`, traces and metrics are exported via OTLP HTTP to the configured
+endpoint (`OTEL_EXPORTER_OTLP_ENDPOINT`).
 
-- **OTLP HTTP exporter**: Used when `OTEL_EXPORTER_OTLP_ENDPOINT` is configured
-- **Stdout exporter**: Fallback for development and debugging
-
-This follows the OpenTelemetry standard environment variable conventions, allowing zero-configuration deployments with observability infrastructure.
+This follows the OpenTelemetry standard environment variable conventions.
 
 ### 2. Wiki-Based Metrics Persistence
 
@@ -68,10 +67,9 @@ The two systems are complementary and can run simultaneously:
 | **Use case**        | Production monitoring dashboards           | Lightweight auditing and visibility       |
 | **Granularity**     | Per-request with method/path/status labels | Aggregate totals only                     |
 
-**When to use each:**
-
-- Use **OTEL metrics** for production monitoring, alerting, and dashboards
-- Use **Wiki metrics** for simple visibility without infrastructure, auditing, and when you want metrics visible directly in the wiki
+Both systems are wired in automatically and run simultaneously. Wiki metrics provide
+immediate visibility without infrastructure, while OTEL metrics enable full production
+monitoring when configured.
 
 ## Implementation
 
@@ -89,9 +87,7 @@ The two systems are complementary and can run simultaneously:
 ```text
 OTEL_ENABLED=true?
 ├─ No → Return disabled provider (no-op)
-└─ Yes → OTEL_EXPORTER_OTLP_ENDPOINT set?
-         ├─ Yes → Use OTLP HTTP exporters
-         └─ No → Use stdout exporters
+└─ Yes → Initialize OTLP HTTP exporters
 ```
 
 ### Usage Examples
@@ -142,7 +138,7 @@ This ensures:
 
 ## Benefits
 
-1. **Zero Configuration**: Works out of the box with stdout output
+1. **Zero Configuration**: Wiki metrics work out of the box without infrastructure
 2. **Production Ready**: Standard OTLP integration for observability platforms
 3. **Graceful Degradation**: Wiki-based metrics work without OTEL infrastructure
 4. **Audit Trail**: Metrics persisted within wiki for historical visibility
@@ -161,7 +157,6 @@ This ensures:
 
 - Dual-layer approach adds some complexity
 - Wiki-based metrics have limited query capabilities compared to time-series databases
-- Stdout exporter output can be verbose in development
 
 ### Trade-offs
 

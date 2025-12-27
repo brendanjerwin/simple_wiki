@@ -1005,14 +1005,15 @@ ADRs should document significant architectural decisions that have long-term imp
 
 ## Observability
 
-The application uses OpenTelemetry for metrics and distributed tracing. Enable with `OTEL_ENABLED=true`. The exporter is automatically selected based on `OTEL_EXPORTER_OTLP_ENDPOINT` - if set, uses OTLP HTTP; otherwise falls back to stdout.
+The application uses OpenTelemetry for metrics and distributed tracing, plus wiki-based
+metrics for lightweight visibility. See ADR-0007 for the architectural design.
 
 ### Adding Metrics
 
 Use `observability.Meter("your/scope")` to create metric instruments with proper units:
 
 ```go
-meter := otel.Meter("simple_wiki/yourcomponent")
+meter := observability.Meter("simple_wiki/yourcomponent")
 requestCounter, err := meter.Int64Counter(
     "yourcomponent_requests_total",
     metric.WithDescription("Total number of requests"),
@@ -1028,16 +1029,6 @@ Use `observability.Tracer("your/scope")` for distributed tracing:
 tracer := observability.Tracer("simple_wiki/yourcomponent")
 ctx, span := tracer.Start(ctx, "operation-name")
 defer span.End()
-```
-
-### Wiki-Based Metrics
-
-Lightweight metrics can persist to the `observability_metrics` wiki page using `WikiMetricsRecorder`:
-
-```go
-recorder, err := observability.NewWikiMetricsRecorder(site, site, jobQueue, logger)
-recorder.RecordHTTPRequest()
-recorder.PersistAsync() // Uses job queue for async persistence
 ```
 
 See `internal/observability/doc.go` for detailed documentation.
