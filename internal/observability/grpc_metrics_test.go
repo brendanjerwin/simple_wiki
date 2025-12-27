@@ -42,11 +42,8 @@ var _ = Describe("GRPCMetrics", func() {
 				metrics, err = observability.NewGRPCMetrics()
 			})
 
-			It("should not return an error", func() {
+			It("should create metrics successfully", func() {
 				Expect(err).ToNot(HaveOccurred())
-			})
-
-			It("should return a non-nil metrics instance", func() {
 				Expect(metrics).ToNot(BeNil())
 			})
 		})
@@ -62,20 +59,25 @@ var _ = Describe("GRPCMetrics", func() {
 		})
 
 		When("recording request start", func() {
-			var collected metricdata.ResourceMetrics
+			var activeRequestsSum metricdata.Sum[int64]
 
 			BeforeEach(func() {
 				metrics.RequestStarted(context.Background(), "/test.Service/Method")
+
+				var collected metricdata.ResourceMetrics
 				Expect(reader.Collect(context.Background(), &collected)).To(Succeed())
+
+				activeRequestsMetric := findMetricByName(collected, "grpc_active_requests")
+				Expect(activeRequestsMetric).ToNot(BeNil(), "grpc_active_requests metric should exist")
+
+				var ok bool
+				activeRequestsSum, ok = activeRequestsMetric.Data.(metricdata.Sum[int64])
+				Expect(ok).To(BeTrue(), "metric should be Sum[int64]")
 			})
 
-			It("should increment active requests counter", func() {
-				metric := findMetricByName(collected, "grpc_active_requests")
-				Expect(metric).ToNot(BeNil())
-				sum, ok := metric.Data.(metricdata.Sum[int64])
-				Expect(ok).To(BeTrue(), "expected correct metric data type")
-				Expect(sum.DataPoints).To(HaveLen(1))
-				Expect(sum.DataPoints[0].Value).To(Equal(int64(1)))
+			It("should increment active requests counter to 1", func() {
+				Expect(activeRequestsSum.DataPoints).To(HaveLen(1))
+				Expect(activeRequestsSum.DataPoints[0].Value).To(Equal(int64(1)))
 			})
 		})
 	})
@@ -90,105 +92,132 @@ var _ = Describe("GRPCMetrics", func() {
 		})
 
 		When("recording a successful request", func() {
-			var collected metricdata.ResourceMetrics
+			var durationHistogram metricdata.Histogram[float64]
+			var requestsSum metricdata.Sum[int64]
+			var activeSum metricdata.Sum[int64]
+			var hasErrorsMetric bool
+			var errorsSum metricdata.Sum[int64]
 
 			BeforeEach(func() {
 				metrics.RequestStarted(context.Background(), "/test.Service/Method")
 				metrics.RequestFinished(context.Background(), "/test.Service/Method", "OK", 100*time.Millisecond)
+
+				var collected metricdata.ResourceMetrics
 				Expect(reader.Collect(context.Background(), &collected)).To(Succeed())
+
+				// Duration histogram
+				durationMetric := findMetricByName(collected, "grpc_request_duration_seconds")
+				Expect(durationMetric).ToNot(BeNil(), "grpc_request_duration_seconds should exist")
+				var ok bool
+				durationHistogram, ok = durationMetric.Data.(metricdata.Histogram[float64])
+				Expect(ok).To(BeTrue(), "duration metric should be Histogram[float64]")
+
+				// Requests counter
+				requestsMetric := findMetricByName(collected, "grpc_requests_total")
+				Expect(requestsMetric).ToNot(BeNil(), "grpc_requests_total should exist")
+				requestsSum, ok = requestsMetric.Data.(metricdata.Sum[int64])
+				Expect(ok).To(BeTrue(), "requests metric should be Sum[int64]")
+
+				// Errors counter (may not exist if no errors recorded)
+				errorsMetric := findMetricByName(collected, "grpc_errors_total")
+				hasErrorsMetric = errorsMetric != nil
+				if hasErrorsMetric {
+					errorsSum, ok = errorsMetric.Data.(metricdata.Sum[int64])
+					Expect(ok).To(BeTrue(), "errors metric should be Sum[int64]")
+				}
+
+				// Active requests
+				activeMetric := findMetricByName(collected, "grpc_active_requests")
+				Expect(activeMetric).ToNot(BeNil(), "grpc_active_requests should exist")
+				activeSum, ok = activeMetric.Data.(metricdata.Sum[int64])
+				Expect(ok).To(BeTrue(), "active requests metric should be Sum[int64]")
 			})
 
-			It("should record request duration in histogram", func() {
-				metric := findMetricByName(collected, "grpc_request_duration_seconds")
-				Expect(metric).ToNot(BeNil())
-				histogram, ok := metric.Data.(metricdata.Histogram[float64])
-				Expect(ok).To(BeTrue(), "expected correct metric data type")
-				Expect(histogram.DataPoints).To(HaveLen(1))
-				Expect(histogram.DataPoints[0].Count).To(Equal(uint64(1)))
+			It("should record one duration sample", func() {
+				Expect(durationHistogram.DataPoints).To(HaveLen(1))
+				Expect(durationHistogram.DataPoints[0].Count).To(Equal(uint64(1)))
 			})
 
-			It("should increment request counter", func() {
-				metric := findMetricByName(collected, "grpc_requests_total")
-				Expect(metric).ToNot(BeNil())
-				sum, ok := metric.Data.(metricdata.Sum[int64])
-				Expect(ok).To(BeTrue(), "expected correct metric data type")
-				Expect(sum.DataPoints).To(HaveLen(1))
-				Expect(sum.DataPoints[0].Value).To(Equal(int64(1)))
+			It("should increment request counter to 1", func() {
+				Expect(requestsSum.DataPoints).To(HaveLen(1))
+				Expect(requestsSum.DataPoints[0].Value).To(Equal(int64(1)))
 			})
 
 			It("should not record any errors for OK status", func() {
-				metric := findMetricByName(collected, "grpc_errors_total")
-				// Error counter should not have data for OK status
-				if metric == nil {
-					Succeed() // No error metric at all - explicitly acceptable
-				return
+				if hasErrorsMetric {
+					Expect(errorsSum.DataPoints).To(BeEmpty())
 				}
-				sum, ok := metric.Data.(metricdata.Sum[int64])
-				Expect(ok).To(BeTrue(), "expected Sum[int64] but got different type")
-				// Verify no data points exist for OK status
-				Expect(sum.DataPoints).To(BeEmpty())
 			})
 
 			It("should decrement active requests back to zero", func() {
-				metric := findMetricByName(collected, "grpc_active_requests")
-				Expect(metric).ToNot(BeNil())
-				sum, ok := metric.Data.(metricdata.Sum[int64])
-				Expect(ok).To(BeTrue(), "expected correct metric data type")
-				Expect(sum.DataPoints).To(HaveLen(1))
-				Expect(sum.DataPoints[0].Value).To(Equal(int64(0)))
+				Expect(activeSum.DataPoints).To(HaveLen(1))
+				Expect(activeSum.DataPoints[0].Value).To(Equal(int64(0)))
 			})
 		})
 
 		When("recording a failed request", func() {
-			var collected metricdata.ResourceMetrics
+			var errorsSum metricdata.Sum[int64]
+			var requestsSum metricdata.Sum[int64]
 
 			BeforeEach(func() {
 				metrics.RequestStarted(context.Background(), "/test.Service/Method")
 				metrics.RequestFinished(context.Background(), "/test.Service/Method", "INTERNAL", 50*time.Millisecond)
+
+				var collected metricdata.ResourceMetrics
 				Expect(reader.Collect(context.Background(), &collected)).To(Succeed())
+
+				// Errors counter
+				errorsMetric := findMetricByName(collected, "grpc_errors_total")
+				Expect(errorsMetric).ToNot(BeNil(), "grpc_errors_total should exist for failed request")
+				var ok bool
+				errorsSum, ok = errorsMetric.Data.(metricdata.Sum[int64])
+				Expect(ok).To(BeTrue(), "errors metric should be Sum[int64]")
+
+				// Requests counter
+				requestsMetric := findMetricByName(collected, "grpc_requests_total")
+				Expect(requestsMetric).ToNot(BeNil(), "grpc_requests_total should exist")
+				requestsSum, ok = requestsMetric.Data.(metricdata.Sum[int64])
+				Expect(ok).To(BeTrue(), "requests metric should be Sum[int64]")
 			})
 
-			It("should increment error counter for non-OK status", func() {
-				metric := findMetricByName(collected, "grpc_errors_total")
-				Expect(metric).ToNot(BeNil())
-				sum, ok := metric.Data.(metricdata.Sum[int64])
-				Expect(ok).To(BeTrue(), "expected correct metric data type")
-				Expect(sum.DataPoints).To(HaveLen(1))
-				Expect(sum.DataPoints[0].Value).To(Equal(int64(1)))
+			It("should increment error counter to 1", func() {
+				Expect(errorsSum.DataPoints).To(HaveLen(1))
+				Expect(errorsSum.DataPoints[0].Value).To(Equal(int64(1)))
 			})
 
 			It("should still increment request counter", func() {
-				metric := findMetricByName(collected, "grpc_requests_total")
-				Expect(metric).ToNot(BeNil())
-				sum, ok := metric.Data.(metricdata.Sum[int64])
-				Expect(ok).To(BeTrue(), "expected correct metric data type")
-				Expect(sum.DataPoints).To(HaveLen(1))
-				Expect(sum.DataPoints[0].Value).To(Equal(int64(1)))
+				Expect(requestsSum.DataPoints).To(HaveLen(1))
+				Expect(requestsSum.DataPoints[0].Value).To(Equal(int64(1)))
 			})
 		})
 
 		When("recording multiple requests with different statuses", func() {
-			var collected metricdata.ResourceMetrics
+			var totalCount uint64
 
 			BeforeEach(func() {
+				totalCount = 0
+
 				// Two OK requests
 				metrics.RequestFinished(context.Background(), "/test.Service/Method", "OK", 10*time.Millisecond)
 				metrics.RequestFinished(context.Background(), "/test.Service/Method", "OK", 20*time.Millisecond)
 				// One error
 				metrics.RequestFinished(context.Background(), "/test.Service/Method", "UNAVAILABLE", 30*time.Millisecond)
-				Expect(reader.Collect(context.Background(), &collected)).To(Succeed())
-			})
 
-			It("should count all requests in histogram", func() {
-				metric := findMetricByName(collected, "grpc_request_duration_seconds")
-				Expect(metric).ToNot(BeNil())
-				histogram, ok := metric.Data.(metricdata.Histogram[float64])
-				Expect(ok).To(BeTrue(), "expected correct metric data type")
-				// Count total across all data points
-				var totalCount uint64
-				for _, dp := range histogram.DataPoints {
+				var collected metricdata.ResourceMetrics
+				Expect(reader.Collect(context.Background(), &collected)).To(Succeed())
+
+				durationMetric := findMetricByName(collected, "grpc_request_duration_seconds")
+				Expect(durationMetric).ToNot(BeNil(), "grpc_request_duration_seconds should exist")
+
+				durationHistogram, ok := durationMetric.Data.(metricdata.Histogram[float64])
+				Expect(ok).To(BeTrue(), "duration metric should be Histogram[float64]")
+
+				for _, dp := range durationHistogram.DataPoints {
 					totalCount += dp.Count
 				}
+			})
+
+			It("should count all 3 requests in histogram", func() {
 				Expect(totalCount).To(Equal(uint64(3)))
 			})
 		})
