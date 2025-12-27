@@ -4,7 +4,7 @@ package inventory_test
 import (
 	"testing"
 
-	"github.com/brendanjerwin/simple_wiki/pkg/inventory"
+	"github.com/brendanjerwin/simple_wiki/inventory"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )

@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/brendanjerwin/simple_wiki/inventory"
 	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
-	"github.com/brendanjerwin/simple_wiki/pkg/inventory"
 	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"

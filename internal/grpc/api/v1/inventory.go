@@ -6,7 +6,7 @@ import (
 	"os"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
-	"github.com/brendanjerwin/simple_wiki/pkg/inventory"
+	"github.com/brendanjerwin/simple_wiki/inventory"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/stoewer/go-strcase"
 	"golang.org/x/text/cases"
