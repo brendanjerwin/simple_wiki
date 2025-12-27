@@ -1,7 +1,7 @@
-// Package observability provides OpenTelemetry instrumentation for the simple_wiki application.
 package observability
 
 import (
+	"fmt"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -49,21 +49,23 @@ type Logger interface {
 	Error(format string, args ...any)
 }
 
-// WikiMetricsRecorderConfig holds configuration for the wiki metrics recorder.
-type WikiMetricsRecorderConfig struct {
-	PageWriter wikipage.PageWriter
-	PageReader wikipage.PageReader
-	Logger     Logger
-}
-
 // NewWikiMetricsRecorder creates a new WikiMetricsRecorder.
-func NewWikiMetricsRecorder(cfg WikiMetricsRecorderConfig) *WikiMetricsRecorder {
-	return &WikiMetricsRecorder{
-		pageWriter:    cfg.PageWriter,
-		pageReader:    cfg.PageReader,
-		logger:        cfg.Logger,
-		lastPersisted: time.Now(),
+// Both pageWriter and pageReader must be provided together, or neither should be provided.
+// If logger is nil, logging will be disabled.
+func NewWikiMetricsRecorder(pageWriter wikipage.PageWriter, pageReader wikipage.PageReader, logger Logger) (*WikiMetricsRecorder, error) {
+	// Validate that both page access interfaces are provided together or not at all
+	hasWriter := pageWriter != nil
+	hasReader := pageReader != nil
+	if hasWriter != hasReader {
+		return nil, fmt.Errorf("pageWriter and pageReader must both be provided or both be nil")
 	}
+
+	return &WikiMetricsRecorder{
+		pageWriter:    pageWriter,
+		pageReader:    pageReader,
+		logger:        logger,
+		lastPersisted: time.Now(),
+	}, nil
 }
 
 // RecordHTTPRequest increments the HTTP request counter.

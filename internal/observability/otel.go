@@ -1,18 +1,3 @@
-// Package observability provides OpenTelemetry instrumentation for the simple_wiki application.
-//
-// This package initializes and configures OpenTelemetry tracing and metrics. By default, when
-// OTEL_EXPORTER_OTLP_ENDPOINT is set, traces and metrics are exported to stdout. For production
-// use with an OTLP endpoint, replace the stdout exporters with OTLP HTTP/gRPC exporters:
-//
-//	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp
-//	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp
-//
-// Environment variables:
-//   - OTEL_ENABLED: Set to "true" to enable telemetry (default: disabled)
-//   - OTEL_SERVICE_NAME: The service name for telemetry (defaults to "simple_wiki")
-//   - OTEL_RESOURCE_ATTRIBUTES: Additional resource attributes in key=value,key2=value2 format
-//
-// If OTEL_ENABLED is not set to "true", the instrumentation is disabled (no-op).
 package observability
 
 import (
@@ -41,9 +26,6 @@ const (
 
 	// EnvServiceName is the environment variable for the service name.
 	EnvServiceName = "OTEL_SERVICE_NAME"
-
-	// exportTimeoutSeconds is the timeout for exporter operations.
-	exportTimeoutSeconds = 30
 
 	// shutdownTimeoutSeconds is the timeout for graceful shutdown.
 	shutdownTimeoutSeconds = 5
@@ -146,10 +128,7 @@ func Initialize(ctx context.Context, version string) (*TelemetryProvider, error)
 	}, nil
 }
 
-func initTracer(ctx context.Context, res *resource.Resource) (*sdktrace.TracerProvider, error) {
-	_, cancel := context.WithTimeout(ctx, exportTimeoutSeconds*time.Second)
-	defer cancel()
-
+func initTracer(_ context.Context, res *resource.Resource) (*sdktrace.TracerProvider, error) {
 	traceExporter, err := stdouttrace.New(
 		stdouttrace.WithPrettyPrint(),
 	)
@@ -167,10 +146,7 @@ func initTracer(ctx context.Context, res *resource.Resource) (*sdktrace.TracerPr
 	return tracerProvider, nil
 }
 
-func initMeter(ctx context.Context, res *resource.Resource) (*sdkmetric.MeterProvider, error) {
-	_, cancel := context.WithTimeout(ctx, exportTimeoutSeconds*time.Second)
-	defer cancel()
-
+func initMeter(_ context.Context, res *resource.Resource) (*sdkmetric.MeterProvider, error) {
 	metricExporter, err := stdoutmetric.New(
 		stdoutmetric.WithPrettyPrint(),
 	)

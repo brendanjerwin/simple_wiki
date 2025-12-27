@@ -1,4 +1,3 @@
-// Package observability provides OpenTelemetry instrumentation for the simple_wiki application.
 package observability
 
 import (
@@ -26,7 +25,7 @@ func NewHTTPMetrics() (*HTTPMetrics, error) {
 		"http_request_duration_seconds",
 		metric.WithDescription("Histogram of HTTP request durations"),
 		metric.WithUnit("s"),
-		metric.WithExplicitBucketBoundaries(httpLatencyBuckets...),
+		metric.WithExplicitBucketBoundaries(httpHistogramBucketBoundariesSeconds...),
 	)
 	if err != nil {
 		return nil, err

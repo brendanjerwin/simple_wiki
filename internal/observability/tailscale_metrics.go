@@ -1,4 +1,3 @@
-// Package observability provides OpenTelemetry instrumentation for the simple_wiki application.
 package observability
 
 import (
@@ -37,7 +36,7 @@ func NewTailscaleMetrics() (*TailscaleMetrics, error) {
 		"tailscale_identity_lookup_duration_seconds",
 		metric.WithDescription("Histogram of WhoIs lookup times"),
 		metric.WithUnit("s"),
-		metric.WithExplicitBucketBoundaries(defaultLatencyBuckets...),
+		metric.WithExplicitBucketBoundaries(defaultHistogramBucketBoundariesSeconds...),
 	)
 	if err != nil {
 		return nil, err

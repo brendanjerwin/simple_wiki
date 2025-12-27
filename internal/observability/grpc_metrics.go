@@ -1,4 +1,3 @@
-// Package observability provides OpenTelemetry instrumentation for the simple_wiki application.
 package observability
 
 import (
@@ -18,7 +17,6 @@ type GRPCMetrics struct {
 	activeRequests  metric.Int64UpDownCounter
 }
 
-// NewGRPCMetrics creates a new GRPCMetrics instance.
 func NewGRPCMetrics() (*GRPCMetrics, error) {
 	meter := otel.Meter("simple_wiki/grpc")
 
@@ -26,7 +24,7 @@ func NewGRPCMetrics() (*GRPCMetrics, error) {
 		"grpc_request_duration_seconds",
 		metric.WithDescription("Histogram of gRPC request durations"),
 		metric.WithUnit("s"),
-		metric.WithExplicitBucketBoundaries(httpLatencyBuckets...),
+		metric.WithExplicitBucketBoundaries(httpHistogramBucketBoundariesSeconds...),
 	)
 	if err != nil {
 		return nil, err

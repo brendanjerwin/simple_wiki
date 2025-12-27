@@ -1,4 +1,3 @@
-// Package observability provides OpenTelemetry instrumentation for the simple_wiki application.
 package observability
 
 import (
