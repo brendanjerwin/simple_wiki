@@ -2,6 +2,7 @@ package observability
 
 import (
 	"errors"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -25,10 +26,10 @@ const (
 // This allows tracking basic statistics even when OTEL is unavailable, and provides
 // an audit trail directly within the wiki itself.
 type WikiMetricsRecorder struct {
-	pageWriter   wikipage.PageWriter
-	pageReader   FrontMatterReader
-	logger       Logger
-	jobQueue     *jobs.JobQueueCoordinator
+	pageWriter wikipage.PageWriter
+	pageReader PageReader
+	logger     Logger
+	jobQueue   *jobs.JobQueueCoordinator
 
 	// In-memory counters (atomically updated)
 	httpRequestsTotal  atomic.Int64
@@ -53,18 +54,19 @@ type Logger interface {
 	Error(format string, args ...any)
 }
 
-// FrontMatterReader is a narrow interface for reading only frontmatter.
-// This allows WikiMetricsRecorder to accept any type that can read frontmatter,
-// without requiring the full PageReader interface.
-type FrontMatterReader interface {
+// PageReader is a narrow interface for reading page content.
+// This allows WikiMetricsRecorder to accept any type that can read pages,
+// without requiring the full PageReaderMutator interface.
+type PageReader interface {
 	ReadFrontMatter(requestedIdentifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error)
+	ReadMarkdown(requestedIdentifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error)
 }
 
 // NewWikiMetricsRecorder creates a new WikiMetricsRecorder.
 // All dependencies must be provided together: pageWriter, pageReader, and jobQueue.
 // If any are nil, all must be nil (metrics-only mode without persistence).
 // If logger is nil, logging will be disabled.
-func NewWikiMetricsRecorder(pageWriter wikipage.PageWriter, pageReader FrontMatterReader, jobQueue *jobs.JobQueueCoordinator, logger Logger) (*WikiMetricsRecorder, error) {
+func NewWikiMetricsRecorder(pageWriter wikipage.PageWriter, pageReader PageReader, jobQueue *jobs.JobQueueCoordinator, logger Logger) (*WikiMetricsRecorder, error) {
 	// Validate that all persistence dependencies are provided together or not at all
 	hasWriter := pageWriter != nil
 	hasReader := pageReader != nil
@@ -180,13 +182,15 @@ func (r *WikiMetricsRecorder) Persist() error {
 		return nil // No-op if page access is not configured
 	}
 
-	// Check if page exists by reading frontmatter
+	// Read existing frontmatter (may be nil for new page)
 	_, existingFM, _ := r.pageReader.ReadFrontMatter(ObservabilityMetricsPage)
-	pageExists := existingFM != nil
-
 	if existingFM == nil {
 		existingFM = make(map[string]any)
 	}
+
+	// Check if markdown needs to be written (empty or whitespace-only)
+	_, existingMD, _ := r.pageReader.ReadMarkdown(ObservabilityMetricsPage)
+	needsMarkdownTemplate := len(strings.TrimSpace(string(existingMD))) == 0
 
 	// Build observability section
 	stats := r.GetStats()
@@ -214,16 +218,8 @@ func (r *WikiMetricsRecorder) Persist() error {
 	existingFM["title"] = "Observability Metrics"
 	existingFM[observabilityPrefix] = observabilityData
 
-	// Write frontmatter directly (not through API)
-	if err := r.pageWriter.WriteFrontMatter(ObservabilityMetricsPage, existingFM); err != nil {
-		if r.logger != nil {
-			r.logger.Error("Failed to persist wiki metrics: %v", err)
-		}
-		return err
-	}
-
-	// If page didn't exist, also write the markdown template
-	if !pageExists {
+	// If markdown is empty/whitespace, write the template
+	if needsMarkdownTemplate {
 		if err := r.pageWriter.WriteMarkdown(ObservabilityMetricsPage, r.buildMarkdownTemplate()); err != nil {
 			if r.logger != nil {
 				r.logger.Error("Failed to write metrics page template: %v", err)
@@ -233,6 +229,14 @@ func (r *WikiMetricsRecorder) Persist() error {
 		if r.logger != nil {
 			r.logger.Info("Created observability metrics page with template")
 		}
+	}
+
+	// Write frontmatter (creates page if markdown didn't, or updates existing)
+	if err := r.pageWriter.WriteFrontMatter(ObservabilityMetricsPage, existingFM); err != nil {
+		if r.logger != nil {
+			r.logger.Error("Failed to persist wiki metrics: %v", err)
+		}
+		return err
 	}
 
 	r.lastPersisted = time.Now()
