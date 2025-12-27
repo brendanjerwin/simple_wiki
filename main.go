@@ -1,21 +1,19 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
-	grpcapi "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
+	"github.com/brendanjerwin/simple_wiki/internal/bootstrap"
 	"github.com/brendanjerwin/simple_wiki/server"
-	"github.com/improbable-eng/grpc-web/go/grpcweb"
+	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/jcelliott/lumber"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/reflection"
 
 	cli "gopkg.in/urfave/cli.v1"
 )
@@ -33,14 +31,14 @@ func getCommitHash() string {
 		// If commit was set at build time, use that
 		return commit
 	}
-	
+
 	// Try to get commit from git
 	cmd := exec.Command("git", "rev-parse", "HEAD")
 	output, err := cmd.Output()
 	if err != nil {
 		return "dev"
 	}
-	
+
 	return strings.TrimSpace(string(output))
 }
 
@@ -54,14 +52,14 @@ func getBuildTime() time.Time {
 			return t
 		}
 	}
-	
+
 	// Fallback to current time (development mode)
 	return time.Now()
 }
 
 var app *cli.App
 
-func setupServer(c *cli.Context) (*http.Server, error) {
+func createSite(c *cli.Context) (*server.Site, error) {
 	pathToData := c.GlobalString("data")
 	if err := os.MkdirAll(pathToData, 0755); err != nil {
 		return nil, err
@@ -75,7 +73,7 @@ func setupServer(c *cli.Context) (*http.Server, error) {
 
 	logger.Info("Starting simple_wiki server...")
 
-	site, err := server.NewSite(
+	return server.NewSite(
 		pathToData,
 		c.GlobalString("css"),
 		c.GlobalString("default-page"),
@@ -86,60 +84,60 @@ func setupServer(c *cli.Context) (*http.Server, error) {
 		c.GlobalUint("max-document-length"),
 		logger,
 	)
+}
+
+func detectTailscale(ctx context.Context) *tailscale.Status {
+	detector := tailscale.NewDetector()
+	tsStatus, err := detector.Detect(ctx)
+	if err != nil {
+		logger.Warn("Error detecting Tailscale: %v", err)
+		return &tailscale.Status{Available: false}
+	}
+	return tsStatus
+}
+
+func setupServer(c *cli.Context) (*bootstrap.ServerResult, error) {
+	site, err := createSite(c)
 	if err != nil {
 		return nil, err
 	}
-
-	logger.Info("Setting up HTTP and gRPC servers...")
-	handler := createMultiplexedHandler(site)
 
 	host := c.GlobalString("host")
 	if host == "" {
 		host = "0.0.0.0"
 	}
-	addr := fmt.Sprintf("%s:%s", host, c.GlobalString("port"))
-	actualCommit := getCommitHash()
-	logger.Info("Running simple_wiki server (commit %s) at http://%s", actualCommit, addr)
 
-	return &http.Server{
-		Addr:    addr,
-		Handler: h2c.NewHandler(handler, &http2.Server{}),
-	}, nil
-}
+	port := c.GlobalInt("port")
+	tlsPort := c.GlobalInt("tls-port")
+	if tlsPort == 0 {
+		tlsPort = port + 1 // Default to adjacent port
+	}
 
-func createMultiplexedHandler(site *server.Site) http.Handler {
-	ginRouter := site.GinRouter()
+	tsStatus := detectTailscale(context.Background())
+	mode := bootstrap.DetermineServerMode(tsStatus, c.GlobalBool("tailscale-serve"))
+
 	actualCommit := getCommitHash()
+	logger.Info("Running simple_wiki server (commit %s)", actualCommit)
+
+	httpAddr := fmt.Sprintf("%s:%d", host, port)
 	buildTime := getBuildTime()
-	grpcAPIServer := grpcapi.NewServer(
-		actualCommit,
-		buildTime,
-		site,
-		site.BleveIndexQueryer,
-		site.GetJobQueueCoordinator(),
-		logger,
-		site.MarkdownRenderer,
-		server.TemplateExecutor{},
-		site.FrontmatterIndexQueryer,
-	)
-	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(grpcAPIServer.LoggingInterceptor()))
-	grpcAPIServer.RegisterWithServer(grpcServer)
 
-	reflection.Register(grpcServer)
-
-	wrappedGrpc := grpcweb.WrapServer(grpcServer,
-		grpcweb.WithOriginFunc(func(_ string) bool { return true }),
-	)
-
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
-			logger.Debug("gRPC-ish request: %s %s", r.Method, r.URL.Path)
-			wrappedGrpc.ServeHTTP(w, r)
-			return
-		}
-		logger.Debug("Gin request: %s %s", r.Method, r.URL.Path)
-		ginRouter.ServeHTTP(w, r)
-	})
+	switch mode {
+	case bootstrap.ModePlainHTTP:
+		return bootstrap.SetupPlainHTTP(httpAddr, site, logger, actualCommit, buildTime)
+	case bootstrap.ModeTailscaleServe:
+		return bootstrap.SetupTailscaleServe(
+			httpAddr, tsStatus.DNSName, c.GlobalBool("force-redirect-tailnet-https"),
+			site, logger, actualCommit, buildTime,
+		)
+	case bootstrap.ModeFullTLS:
+		return bootstrap.SetupFullTLS(
+			httpAddr, tlsPort, tsStatus.DNSName,
+			site, logger, actualCommit, buildTime,
+		)
+	default:
+		return nil, fmt.Errorf("unknown server mode: %v", mode)
+	}
 }
 
 func main() {
@@ -149,21 +147,62 @@ func main() {
 	app.Version = getCommitHash()
 	app.Compiled = time.Now()
 	app.Action = func(c *cli.Context) error {
-		srv, err := setupServer(c)
+		config, err := setupServer(c)
 		if err != nil {
 			return err
 		}
-		return srv.ListenAndServe()
+
+		// Start the main server in a goroutine
+		serverErr := make(chan error, 1)
+		go func() {
+			serverErr <- config.MainServer.Serve(config.MainListener)
+		}()
+
+		// Wait for shutdown signal or server error
+		quit := make(chan os.Signal, 1)
+		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+		select {
+		case err := <-serverErr:
+			return err
+		case sig := <-quit:
+			logger.Info("Received signal %v, shutting down gracefully...", sig)
+		}
+
+		// Graceful shutdown with timeout
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		// Shutdown redirect server first if it exists
+		if config.RedirectServer != nil {
+			if err := config.RedirectServer.Shutdown(ctx); err != nil {
+				logger.Error("Error shutting down redirect server: %v", err)
+			}
+		}
+
+		// Shutdown main server
+		if err := config.MainServer.Shutdown(ctx); err != nil {
+			logger.Error("Error shutting down main server: %v", err)
+			return err
+		}
+
+		logger.Info("Server shutdown complete")
+		return nil
 	}
 	app.Flags = getFlags()
 
 	if err := app.Run(os.Args); err != nil {
-		logger.Error("Error running app: %v", err)
+		if logger != nil {
+			logger.Error("Error running app: %v", err)
+		} else {
+			_, _ = fmt.Fprintf(os.Stderr, "Error running app: %v\n", err)
+		}
 		os.Exit(1)
 	}
 }
 
 const (
+	defaultHTTPPort          = 8050
 	defaultDebounce          = 500
 	defaultMaxUploadMB       = 100
 	defaultMaxDocumentLength = 100000000
@@ -181,10 +220,23 @@ func getFlags() []cli.Flag {
 			Value: "",
 			Usage: "host to use",
 		},
-		cli.StringFlag{
+		cli.IntFlag{
 			Name:  "port,p",
-			Value: "8050",
-			Usage: "port to use",
+			Value: defaultHTTPPort,
+			Usage: "HTTP port to use",
+		},
+		cli.IntFlag{
+			Name:  "tls-port",
+			Value: 0,
+			Usage: "TLS port for HTTPS when Tailscale is available (0 = auto: port+1)",
+		},
+		cli.BoolFlag{
+			Name:  "tailscale-serve",
+			Usage: "Let Tailscale Serve handle HTTPS (no local TLS listener)",
+		},
+		cli.BoolFlag{
+			Name:  "force-redirect-tailnet-https",
+			Usage: "Force redirect tailnet clients to HTTPS on the tailnet hostname",
 		},
 		cli.StringFlag{
 			Name:  "css",

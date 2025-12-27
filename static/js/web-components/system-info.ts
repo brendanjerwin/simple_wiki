@@ -4,6 +4,7 @@ import { getGrpcWebTransport } from './grpc-transport.js';
 import { SystemInfoService } from '../gen/api/v1/system_info_connect.js';
 import { GetVersionRequest, GetVersionResponse, GetJobStatusRequest, GetJobStatusResponse, StreamJobStatusRequest } from '../gen/api/v1/system_info_pb.js';
 import { foundationCSS } from './shared-styles.js';
+import './system-info-identity.js';
 import './system-info-indexing.js';
 import './system-info-version.js';
 
@@ -240,13 +241,17 @@ export class SystemInfo extends LitElement {
         <div class="hover-overlay"></div>
         <div class="system-content">
           <!-- Version Info (Always Present) -->
-          <system-info-version 
+          <system-info-version
             .version="${this.version}"
             .loading="${this.loading}"
             .error="${this.error}"></system-info-version>
 
+          <!-- Tailscale Identity (if available) -->
+          <system-info-identity
+            .identity="${this.version?.tailscaleIdentity}"></system-info-identity>
+
           <!-- Job Status Component -->
-          <system-info-indexing 
+          <system-info-indexing
             .jobStatus="${this.jobStatus}"
             .loading="${this.loading}"
             .error="${this.error}"></system-info-indexing>
