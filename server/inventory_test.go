@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/brendanjerwin/simple_wiki/inventory"
 	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
 	"github.com/brendanjerwin/simple_wiki/utils/goldmarkrenderer"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
@@ -207,7 +208,7 @@ var _ = Describe("inventory.go", func() {
 		})
 	})
 
-	Describe("buildInventoryItemPageText edge cases", func() {
+	Describe("BuildItemPageText edge cases", func() {
 		When("frontmatter bytes end with a newline already", func() {
 			var (
 				pageText string
@@ -219,7 +220,7 @@ var _ = Describe("inventory.go", func() {
 				fm := map[string]any{
 					"key": "value",
 				}
-				pageText, err = buildInventoryItemPageText(fm)
+				pageText, err = inventory.BuildItemPageText(fm)
 			})
 
 			It("should not return an error", func() {
@@ -232,7 +233,7 @@ var _ = Describe("inventory.go", func() {
 		})
 	})
 
-	Describe("buildInventoryItemPageText", func() {
+	Describe("BuildItemPageText", func() {
 		When("given valid frontmatter", func() {
 			var (
 				pageText string
@@ -248,7 +249,7 @@ var _ = Describe("inventory.go", func() {
 						"items":     []string{},
 					},
 				}
-				pageText, err = buildInventoryItemPageText(fm)
+				pageText, err = inventory.BuildItemPageText(fm)
 			})
 
 			It("should not return an error", func() {
@@ -292,7 +293,7 @@ var _ = Describe("inventory.go", func() {
 
 			BeforeEach(func() {
 				fm := map[string]any{}
-				pageText, err = buildInventoryItemPageText(fm)
+				pageText, err = inventory.BuildItemPageText(fm)
 			})
 
 			It("should not return an error", func() {
