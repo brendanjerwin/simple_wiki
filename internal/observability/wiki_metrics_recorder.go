@@ -2,6 +2,7 @@ package observability
 
 import (
 	"errors"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -32,15 +33,18 @@ type WikiMetricsRecorder struct {
 	jobQueue   *jobs.JobQueueCoordinator
 
 	// In-memory counters (atomically updated)
-	httpRequestsTotal  atomic.Int64
-	httpErrorsTotal    atomic.Int64
-	grpcRequestsTotal  atomic.Int64
-	grpcErrorsTotal    atomic.Int64
-	tailscaleLookups   atomic.Int64
-	tailscaleSuccesses atomic.Int64
-	tailscaleFailures  atomic.Int64
+	httpRequestsTotal   atomic.Int64
+	httpErrorsTotal     atomic.Int64
+	grpcRequestsTotal   atomic.Int64
+	grpcErrorsTotal     atomic.Int64
+	tailscaleLookups    atomic.Int64
+	tailscaleSuccesses  atomic.Int64
+	tailscaleFailures   atomic.Int64
 	tailscaleNotTailnet atomic.Int64
-	headerExtractions  atomic.Int64
+	headerExtractions   atomic.Int64
+
+	// Dirty flag - set when counters change, cleared after successful persist
+	dirty atomic.Bool
 
 	// Synchronization for persistence
 	mu            sync.Mutex
@@ -101,26 +105,31 @@ func NewWikiMetricsRecorder(pageWriter wikipage.PageWriter, pageReader PageReade
 // RecordHTTPRequest increments the HTTP request counter.
 func (r *WikiMetricsRecorder) RecordHTTPRequest() {
 	r.httpRequestsTotal.Add(1)
+	r.dirty.Store(true)
 }
 
 // RecordHTTPError increments the HTTP error counter.
 func (r *WikiMetricsRecorder) RecordHTTPError() {
 	r.httpErrorsTotal.Add(1)
+	r.dirty.Store(true)
 }
 
 // RecordGRPCRequest increments the gRPC request counter.
 func (r *WikiMetricsRecorder) RecordGRPCRequest() {
 	r.grpcRequestsTotal.Add(1)
+	r.dirty.Store(true)
 }
 
 // RecordGRPCError increments the gRPC error counter.
 func (r *WikiMetricsRecorder) RecordGRPCError() {
 	r.grpcErrorsTotal.Add(1)
+	r.dirty.Store(true)
 }
 
 // RecordTailscaleLookup increments the Tailscale lookup counter.
 func (r *WikiMetricsRecorder) RecordTailscaleLookup(result IdentityLookupResult) {
 	r.tailscaleLookups.Add(1)
+	r.dirty.Store(true)
 	switch result {
 	case ResultSuccess:
 		r.tailscaleSuccesses.Add(1)
@@ -136,6 +145,7 @@ func (r *WikiMetricsRecorder) RecordTailscaleLookup(result IdentityLookupResult)
 // RecordHeaderExtraction increments the Tailscale header extraction counter.
 func (r *WikiMetricsRecorder) RecordHeaderExtraction() {
 	r.headerExtractions.Add(1)
+	r.dirty.Store(true)
 }
 
 // GetStats returns a snapshot of the current statistics.
@@ -174,27 +184,66 @@ func (r *WikiMetricsRecorder) hasPageAccess() bool {
 // Persist writes the current statistics to the wiki page frontmatter.
 // If the page doesn't exist, it creates it with a markdown template that displays frontmatter data.
 // If the page exists, it only updates the frontmatter without touching the markdown.
+// Only persists if counters have changed since last persist (dirty flag).
 func (r *WikiMetricsRecorder) Persist() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if !r.hasPageAccess() {
-		return nil // No-op if page access is not configured
+	if !r.hasPageAccess() || !r.dirty.Load() {
+		return nil
 	}
 
-	// Read existing frontmatter (may be nil for new page)
-	_, existingFM, _ := r.pageReader.ReadFrontMatter(ObservabilityMetricsPage)
+	existingFM, needsTemplate, err := r.readExistingPage()
+	if err != nil {
+		return err
+	}
+
+	r.buildFrontmatter(existingFM)
+
+	if needsTemplate {
+		if err := r.writeTemplate(); err != nil {
+			return err
+		}
+	}
+
+	if err := r.writeFrontmatter(existingFM); err != nil {
+		return err
+	}
+
+	r.dirty.Store(false)
+	r.lastPersisted = time.Now()
+	if r.logger != nil {
+		r.logger.Info("Persisted observability metrics to wiki page")
+	}
+	return nil
+}
+
+// readExistingPage reads the existing page content and determines if a template is needed.
+func (r *WikiMetricsRecorder) readExistingPage() (map[string]any, bool, error) {
+	_, existingFM, err := r.pageReader.ReadFrontMatter(ObservabilityMetricsPage)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, false, err
+	}
 	if existingFM == nil {
 		existingFM = make(map[string]any)
 	}
 
-	// Check if markdown needs to be written (empty or whitespace-only)
-	_, existingMD, _ := r.pageReader.ReadMarkdown(ObservabilityMetricsPage)
-	needsMarkdownTemplate := len(strings.TrimSpace(string(existingMD))) == 0
+	_, existingMD, err := r.pageReader.ReadMarkdown(ObservabilityMetricsPage)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, false, err
+	}
+	trimmedMD := strings.TrimSpace(string(existingMD))
+	needsTemplate := trimmedMD == "" || trimmedMD == wikipage.DefaultPageTemplate
 
-	// Build observability section
+	return existingFM, needsTemplate, nil
+}
+
+// buildFrontmatter populates the frontmatter with current metrics data.
+func (r *WikiMetricsRecorder) buildFrontmatter(fm map[string]any) {
 	stats := r.GetStats()
-	observabilityData := map[string]any{
+	fm["identifier"] = ObservabilityMetricsPage
+	fm["title"] = "Observability Metrics"
+	fm[observabilityPrefix] = map[string]any{
 		"http": map[string]any{
 			"requests_total": stats.HTTPRequestsTotal,
 			"errors_total":   stats.HTTPErrorsTotal,
@@ -212,39 +261,30 @@ func (r *WikiMetricsRecorder) Persist() error {
 		},
 		"last_updated": time.Now().Format(time.RFC3339),
 	}
+}
 
-	// Set the identifier and title
-	existingFM["identifier"] = ObservabilityMetricsPage
-	existingFM["title"] = "Observability Metrics"
-	existingFM[observabilityPrefix] = observabilityData
-
-	// If markdown is empty/whitespace, write the template
-	if needsMarkdownTemplate {
-		if err := r.pageWriter.WriteMarkdown(ObservabilityMetricsPage, r.buildMarkdownTemplate()); err != nil {
-			if r.logger != nil {
-				r.logger.Error("Failed to write metrics page template: %v", err)
-			}
-			return err
-		}
+// writeTemplate writes the markdown template for the metrics page.
+func (r *WikiMetricsRecorder) writeTemplate() error {
+	if err := r.pageWriter.WriteMarkdown(ObservabilityMetricsPage, r.buildMarkdownTemplate()); err != nil {
 		if r.logger != nil {
-			r.logger.Info("Created observability metrics page with template")
+			r.logger.Error("Failed to write metrics page template: %v", err)
 		}
+		return err
 	}
+	if r.logger != nil {
+		r.logger.Info("Created observability metrics page with template")
+	}
+	return nil
+}
 
-	// Write frontmatter (creates page if markdown didn't, or updates existing)
-	if err := r.pageWriter.WriteFrontMatter(ObservabilityMetricsPage, existingFM); err != nil {
+// writeFrontmatter writes the frontmatter to the wiki page.
+func (r *WikiMetricsRecorder) writeFrontmatter(fm map[string]any) error {
+	if err := r.pageWriter.WriteFrontMatter(ObservabilityMetricsPage, fm); err != nil {
 		if r.logger != nil {
 			r.logger.Error("Failed to persist wiki metrics: %v", err)
 		}
 		return err
 	}
-
-	r.lastPersisted = time.Now()
-
-	if r.logger != nil {
-		r.logger.Info("Persisted observability metrics to wiki page")
-	}
-
 	return nil
 }
 

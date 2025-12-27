@@ -240,71 +240,18 @@ func createMultiplexedHandler(
 	identityResolver tailscale.IdentityResolver,
 ) (http.Handler, error) {
 	ginRouter := site.GinRouter()
-
-	// Create wiki metrics recorder for lightweight aggregate tracking
-	wikiRecorder, err := observability.NewWikiMetricsRecorder(
-		site, site, site.GetJobQueueCoordinator(), logger,
-	)
-	if err != nil {
-		logger.Warn("Failed to create wiki metrics recorder: %v", err)
-	}
-
-	// Create composite counter (currently just wiki recorder, extensible for future backends)
-	var counters observability.RequestCounter
-	if wikiRecorder != nil {
-		counters = observability.NewCompositeRequestCounter(wikiRecorder)
-
-		// Schedule periodic persistence (every minute)
-		_, schedErr := site.CronScheduler.Schedule("0 * * * * *", &metricsPersistJob{recorder: wikiRecorder})
-		if schedErr != nil {
-			logger.Warn("Failed to schedule metrics persistence: %v", schedErr)
-		} else {
-			logger.Info("Scheduled wiki metrics persistence every minute")
-		}
-	}
+	counters := setupWikiMetrics(site, logger)
 
 	setupHTTPObservability(ginRouter, counters, logger)
 
-	if identityResolver != nil {
-		middleware, err := tailscale.IdentityMiddleware(identityResolver, logger)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create identity middleware: %w", err)
-		}
-		ginRouter.Use(middleware)
-	}
-
-	grpcAPIServer, err := grpcapi.NewServer(
-		commit,
-		buildTime,
-		site,
-		site.BleveIndexQueryer,
-		site.GetJobQueueCoordinator(),
-		logger,
-		site.MarkdownRenderer,
-		server.TemplateExecutor{},
-		site.FrontmatterIndexQueryer,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create gRPC server: %w", err)
-	}
-
-	unaryInterceptors, streamInterceptors, err := buildGRPCInterceptors(
-		identityResolver,
-		grpcAPIServer.LoggingInterceptor(),
-		counters,
-		logger,
-	)
-	if err != nil {
+	if err := setupIdentityMiddleware(ginRouter, identityResolver, logger); err != nil {
 		return nil, err
 	}
 
-	grpcServer := grpc.NewServer(
-		grpc.ChainUnaryInterceptor(unaryInterceptors...),
-		grpc.ChainStreamInterceptor(streamInterceptors...),
-	)
-	grpcAPIServer.RegisterWithServer(grpcServer)
-
-	reflection.Register(grpcServer)
+	grpcServer, err := setupGRPCServer(site, commit, buildTime, identityResolver, counters, logger)
+	if err != nil {
+		return nil, err
+	}
 
 	wrappedGrpc := grpcweb.WrapServer(grpcServer,
 		grpcweb.WithOriginFunc(func(_ string) bool { return true }),
@@ -319,6 +266,76 @@ func createMultiplexedHandler(
 		logger.Debug("Gin request: %s %s", r.Method, r.URL.Path)
 		ginRouter.ServeHTTP(w, r)
 	}), nil
+}
+
+// setupWikiMetrics creates and configures the wiki metrics recorder.
+func setupWikiMetrics(site *server.Site, logger *lumber.ConsoleLogger) observability.RequestCounter {
+	wikiRecorder, err := observability.NewWikiMetricsRecorder(
+		site, site, site.GetJobQueueCoordinator(), logger,
+	)
+	if err != nil {
+		logger.Warn("Failed to create wiki metrics recorder: %v", err)
+		return nil
+	}
+
+	counters := observability.NewCompositeRequestCounter(wikiRecorder)
+
+	// Schedule periodic persistence (every 5 seconds)
+	_, schedErr := site.CronScheduler.Schedule("*/5 * * * * *", &metricsPersistJob{recorder: wikiRecorder})
+	if schedErr != nil {
+		logger.Warn("Failed to schedule metrics persistence: %v", schedErr)
+	} else {
+		logger.Info("Scheduled wiki metrics persistence every 5 seconds")
+	}
+
+	return counters
+}
+
+// setupIdentityMiddleware configures Tailscale identity middleware if available.
+func setupIdentityMiddleware(ginRouter gin.IRouter, identityResolver tailscale.IdentityResolver, logger *lumber.ConsoleLogger) error {
+	if identityResolver == nil {
+		return nil
+	}
+	middleware, err := tailscale.IdentityMiddleware(identityResolver, logger)
+	if err != nil {
+		return fmt.Errorf("failed to create identity middleware: %w", err)
+	}
+	ginRouter.Use(middleware)
+	return nil
+}
+
+// setupGRPCServer creates and configures the gRPC server with interceptors.
+func setupGRPCServer(
+	site *server.Site,
+	commit string,
+	buildTime time.Time,
+	identityResolver tailscale.IdentityResolver,
+	counters observability.RequestCounter,
+	logger *lumber.ConsoleLogger,
+) (*grpc.Server, error) {
+	grpcAPIServer, err := grpcapi.NewServer(
+		commit, buildTime, site, site.BleveIndexQueryer, site.GetJobQueueCoordinator(),
+		logger, site.MarkdownRenderer, server.TemplateExecutor{}, site.FrontmatterIndexQueryer,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create gRPC server: %w", err)
+	}
+
+	unaryInterceptors, streamInterceptors, err := buildGRPCInterceptors(
+		identityResolver, grpcAPIServer.LoggingInterceptor(), counters, logger,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	grpcServer := grpc.NewServer(
+		grpc.ChainUnaryInterceptor(unaryInterceptors...),
+		grpc.ChainStreamInterceptor(streamInterceptors...),
+	)
+	grpcAPIServer.RegisterWithServer(grpcServer)
+	reflection.Register(grpcServer)
+
+	return grpcServer, nil
 }
 
 // metricsPersistJob triggers async metrics persistence via the job queue.

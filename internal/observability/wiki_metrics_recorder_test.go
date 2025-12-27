@@ -326,6 +326,94 @@ var _ = Describe("WikiMetricsRecorder", func() {
 				Expect(fm["observability"]).ToNot(BeNil())
 			})
 		})
+
+		When("page exists with only default template", func() {
+			var mock *mockPageReaderWriter
+			var err error
+
+			BeforeEach(func() {
+				mock = newMockPageReaderWriter()
+				// Use the shared constant for default template
+				mock.markdown[observability.ObservabilityMetricsPage] = wikipage.DefaultPageTemplate
+
+				recorder := createRecorderWithMock(mock)
+				recorder.RecordHTTPRequest()
+
+				err = recorder.Persist()
+			})
+
+			It("should not return an error", func() {
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should replace the default template with observability template", func() {
+				md := mock.markdown[observability.ObservabilityMetricsPage]
+				Expect(md).To(ContainSubstring("# Observability Metrics"))
+				Expect(md).To(ContainSubstring("## HTTP Metrics"))
+			})
+		})
+	})
+
+	Describe("Persist dirty flag", func() {
+		When("persisting without any recorded metrics", func() {
+			var mock *mockPageReaderWriter
+			var err error
+
+			BeforeEach(func() {
+				mock = newMockPageReaderWriter()
+				recorder := createRecorderWithMock(mock)
+				// Don't record anything - dirty flag should be false
+				err = recorder.Persist()
+			})
+
+			It("should not return an error", func() {
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should not write any data", func() {
+				Expect(mock.frontmatter).To(BeEmpty())
+				Expect(mock.markdown).To(BeEmpty())
+			})
+		})
+
+		When("persisting after recording metrics", func() {
+			var mock *mockPageReaderWriter
+			var recorder *observability.WikiMetricsRecorder
+			var err error
+
+			BeforeEach(func() {
+				mock = newMockPageReaderWriter()
+				recorder = createRecorderWithMock(mock)
+				recorder.RecordHTTPRequest()
+				err = recorder.Persist()
+			})
+
+			It("should write data", func() {
+				Expect(err).ToNot(HaveOccurred())
+				Expect(mock.frontmatter[observability.ObservabilityMetricsPage]).ToNot(BeNil())
+			})
+
+			It("should skip subsequent persist without new metrics", func() {
+				// Clear the mock to verify nothing is written
+				mock.frontmatter = make(map[string]map[string]any)
+				mock.markdown = make(map[string]string)
+
+				err := recorder.Persist()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(mock.frontmatter).To(BeEmpty())
+			})
+
+			It("should persist again after new metrics are recorded", func() {
+				// Clear the mock
+				mock.frontmatter = make(map[string]map[string]any)
+				mock.markdown = make(map[string]string)
+
+				recorder.RecordGRPCRequest()
+				err := recorder.Persist()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(mock.frontmatter[observability.ObservabilityMetricsPage]).ToNot(BeNil())
+			})
+		})
 	})
 
 	Describe("GetStats", func() {

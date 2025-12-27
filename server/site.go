@@ -365,7 +365,7 @@ func (s *Site) readOrInitPage(requestedIdentifier string, req *http.Request) (*w
 			initialText += tomlDelimiter
 		}
 
-		initialText += newline + "# {{or .Title .Identifier}}" + newline
+		initialText += newline + wikipage.DefaultPageTemplate + newline
 
 		if tmpl == "inv_item" {
 			initialText += `

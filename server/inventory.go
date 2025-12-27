@@ -113,7 +113,7 @@ func buildInventoryItemPageText(fm map[string]any) (string, error) {
 	}
 
 	_, _ = builder.WriteString(newline)
-	_, _ = builder.WriteString("# {{or .Title .Identifier}}")
+	_, _ = builder.WriteString(wikipage.DefaultPageTemplate)
 	_, _ = builder.WriteString(newline)
 	_, _ = builder.WriteString(InventoryItemMarkdownTemplate)
 
