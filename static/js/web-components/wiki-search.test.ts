@@ -14,7 +14,7 @@ interface WikiSearchElement extends HTMLElement {
   _handleKeydown: (event: KeyboardEvent) => void;
   handleFormSubmit: (event: Event) => Promise<void>;
   handleInventoryFilterChanged: (event: CustomEvent<{ inventoryOnly: boolean }>) => Promise<void>;
-  performSearch: (query: string) => Promise<SearchResult[]>;
+  performSearch: (query: string) => Promise<{ results: SearchResult[], totalUnfilteredCount: number }>;
   updateComplete: Promise<boolean>;
   shadowRoot: ShadowRoot;
 }
@@ -269,7 +269,7 @@ describe('WikiSearch', () => {
 
       // Stub performSearch to return mock results
       stubPerformSearch = sinon.stub(el, 'performSearch');
-      stubPerformSearch.resolves([]);
+      stubPerformSearch.resolves({ results: [], totalUnfilteredCount: 0 });
     });
 
     afterEach(() => {

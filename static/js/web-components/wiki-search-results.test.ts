@@ -10,6 +10,7 @@ interface WikiSearchResultsElement extends HTMLElement {
   }>;
   open: boolean;
   inventoryOnly: boolean;
+  totalUnfilteredCount: number;
   _handleClickOutside: (event: Event) => void;
   close: () => void;
   updateComplete: Promise<boolean>;
@@ -581,6 +582,142 @@ describe('WikiSearchResults', () => {
     it('should not render the Found In section', () => {
       const foundIn = el.shadowRoot?.querySelector('.found-in');
       expect(foundIn).to.not.exist;
+    });
+  });
+
+  describe('inventory filter warning', () => {
+    describe('when inventory filter is not active', () => {
+      beforeEach(async () => {
+        el.inventoryOnly = false;
+        el.totalUnfilteredCount = 10;
+        el.results = [
+          {
+            identifier: 'result-1',
+            title: 'Result 1',
+            fragment: 'Fragment 1',
+            highlights: []
+          }
+        ] as unknown as WikiSearchResultsElement['results'];
+        await el.updateComplete;
+      });
+
+      it('should not display warning message', () => {
+        const warning = el.shadowRoot?.querySelector('.filter-warning');
+        expect(warning).to.not.exist;
+      });
+    });
+
+    describe('when inventory filter is active but no unfiltered count', () => {
+      beforeEach(async () => {
+        el.inventoryOnly = true;
+        el.totalUnfilteredCount = 0;
+        el.results = [
+          {
+            identifier: 'result-1',
+            title: 'Result 1',
+            fragment: 'Fragment 1',
+            highlights: []
+          }
+        ] as unknown as WikiSearchResultsElement['results'];
+        await el.updateComplete;
+      });
+
+      it('should not display warning message', () => {
+        const warning = el.shadowRoot?.querySelector('.filter-warning');
+        expect(warning).to.not.exist;
+      });
+    });
+
+    describe('when inventory filter is active and there are hidden results', () => {
+      beforeEach(async () => {
+        el.inventoryOnly = true;
+        el.totalUnfilteredCount = 10;
+        el.results = [
+          {
+            identifier: 'result-1',
+            title: 'Result 1',
+            fragment: 'Fragment 1',
+            highlights: []
+          },
+          {
+            identifier: 'result-2',
+            title: 'Result 2',
+            fragment: 'Fragment 2',
+            highlights: []
+          }
+        ] as unknown as WikiSearchResultsElement['results'];
+        await el.updateComplete;
+      });
+
+      it('should display warning message', () => {
+        const warning = el.shadowRoot?.querySelector('.filter-warning');
+        expect(warning).to.exist;
+      });
+
+      it('should show correct count of hidden results', () => {
+        const warning = el.shadowRoot?.querySelector('.filter-warning span');
+        expect(warning?.textContent).to.include('8 other results');
+      });
+
+      it('should display warning icon', () => {
+        const icon = el.shadowRoot?.querySelector('.filter-warning i.fa-triangle-exclamation');
+        expect(icon).to.exist;
+      });
+    });
+
+    describe('when there is exactly 1 hidden result', () => {
+      beforeEach(async () => {
+        el.inventoryOnly = true;
+        el.totalUnfilteredCount = 3;
+        el.results = [
+          {
+            identifier: 'result-1',
+            title: 'Result 1',
+            fragment: 'Fragment 1',
+            highlights: []
+          },
+          {
+            identifier: 'result-2',
+            title: 'Result 2',
+            fragment: 'Fragment 2',
+            highlights: []
+          }
+        ] as unknown as WikiSearchResultsElement['results'];
+        await el.updateComplete;
+      });
+
+      it('should use singular form in warning message', () => {
+        const warning = el.shadowRoot?.querySelector('.filter-warning span');
+        expect(warning?.textContent).to.include('1 other result');
+        expect(warning?.textContent).to.not.include('results');
+      });
+    });
+
+    describe('when inventory filter shows all results', () => {
+      beforeEach(async () => {
+        el.inventoryOnly = true;
+        el.totalUnfilteredCount = 2;
+        el.results = [
+          {
+            identifier: 'result-1',
+            title: 'Result 1',
+            fragment: 'Fragment 1',
+            highlights: []
+          },
+          {
+            identifier: 'result-2',
+            title: 'Result 2',
+            fragment: 'Fragment 2',
+            highlights: []
+          }
+        ] as unknown as WikiSearchResultsElement['results'];
+        await el.updateComplete;
+      });
+
+      it('should not display warning when all results are shown', () => {
+        const warning = el.shadowRoot?.querySelector('.filter-warning');
+        expect(warning).to.not.exist;
+      });
     });
   });
 });
