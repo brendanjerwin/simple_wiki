@@ -290,7 +290,7 @@ var _ = Describe("WikiMetricsRecorder", func() {
 
 			It("should use template syntax for values", func() {
 				md := mock.markdown[observability.ObservabilityMetricsPage]
-				Expect(md).To(ContainSubstring("{{ .observability.http.requests_total }}"))
+				Expect(md).To(ContainSubstring("{{ .Map.observability.http.requests_total }}"))
 			})
 		})
 

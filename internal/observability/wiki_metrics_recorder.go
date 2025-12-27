@@ -275,35 +275,36 @@ func (j *metricsPersistJob) Execute() error {
 
 // buildMarkdownTemplate returns a markdown template that displays frontmatter data.
 // This template is only written when creating a new page; existing pages keep their markdown.
+// Frontmatter values are accessed via .Map in the TemplateContext.
 func (*WikiMetricsRecorder) buildMarkdownTemplate() string {
 	return `# Observability Metrics
 
 *This page displays server observability statistics from frontmatter data.*
 
-**Last Updated:** {{ .observability.last_updated }}
+**Last Updated:** {{ .Map.observability.last_updated }}
 
 ## HTTP Metrics
 
 | Metric | Value |
 |--------|-------|
-| Total Requests | {{ .observability.http.requests_total }} |
-| Total Errors | {{ .observability.http.errors_total }} |
+| Total Requests | {{ .Map.observability.http.requests_total }} |
+| Total Errors | {{ .Map.observability.http.errors_total }} |
 
 ## gRPC Metrics
 
 | Metric | Value |
 |--------|-------|
-| Total Requests | {{ .observability.grpc.requests_total }} |
-| Total Errors | {{ .observability.grpc.errors_total }} |
+| Total Requests | {{ .Map.observability.grpc.requests_total }} |
+| Total Errors | {{ .Map.observability.grpc.errors_total }} |
 
 ## Tailscale Identity Metrics
 
 | Metric | Value |
 |--------|-------|
-| Total Lookups | {{ .observability.tailscale.lookups_total }} |
-| Successful | {{ .observability.tailscale.successes_total }} |
-| Failed | {{ .observability.tailscale.failures_total }} |
-| Not Tailnet | {{ .observability.tailscale.not_tailnet_total }} |
-| Header Extractions | {{ .observability.tailscale.header_extractions_total }} |
+| Total Lookups | {{ .Map.observability.tailscale.lookups_total }} |
+| Successful | {{ .Map.observability.tailscale.successes_total }} |
+| Failed | {{ .Map.observability.tailscale.failures_total }} |
+| Not Tailnet | {{ .Map.observability.tailscale.not_tailnet_total }} |
+| Header Extractions | {{ .Map.observability.tailscale.header_extractions_total }} |
 `
 }
