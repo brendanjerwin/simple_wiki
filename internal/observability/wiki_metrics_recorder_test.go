@@ -438,11 +438,17 @@ var _ = Describe("WikiMetricsRecorder", func() {
 				err = recorder.Persist()
 				fm = mock.frontmatter[observability.ObservabilityMetricsPage]
 				if fm != nil {
-					obsData, _ = fm["observability"].(map[string]any)
-					if obsData != nil {
-						httpData, _ = obsData["http"].(map[string]any)
-						grpcData, _ = obsData["grpc"].(map[string]any)
-						tsData, _ = obsData["tailscale"].(map[string]any)
+					if obs, ok := fm["observability"].(map[string]any); ok {
+						obsData = obs
+						if http, ok := obsData["http"].(map[string]any); ok {
+							httpData = http
+						}
+						if grpc, ok := obsData["grpc"].(map[string]any); ok {
+							grpcData = grpc
+						}
+						if ts, ok := obsData["tailscale"].(map[string]any); ok {
+							tsData = ts
+						}
 					}
 				}
 			})
