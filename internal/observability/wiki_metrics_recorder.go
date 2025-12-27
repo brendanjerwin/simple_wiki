@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
@@ -22,9 +23,10 @@ const (
 // This allows tracking basic statistics even when OTEL is unavailable, and provides
 // an audit trail directly within the wiki itself.
 type WikiMetricsRecorder struct {
-	pageWriter wikipage.PageWriter
-	pageReader wikipage.PageReader
-	logger     Logger
+	pageWriter   wikipage.PageWriter
+	pageReader   wikipage.PageReader
+	logger       Logger
+	jobQueue     *jobs.JobQueueCoordinator
 
 	// In-memory counters (atomically updated)
 	httpRequestsTotal  atomic.Int64
@@ -51,8 +53,9 @@ type Logger interface {
 
 // NewWikiMetricsRecorder creates a new WikiMetricsRecorder.
 // Both pageWriter and pageReader must be provided together, or neither should be provided.
+// jobQueue is required for async persistence; if nil, synchronous persistence will be used.
 // If logger is nil, logging will be disabled.
-func NewWikiMetricsRecorder(pageWriter wikipage.PageWriter, pageReader wikipage.PageReader, logger Logger) (*WikiMetricsRecorder, error) {
+func NewWikiMetricsRecorder(pageWriter wikipage.PageWriter, pageReader wikipage.PageReader, jobQueue *jobs.JobQueueCoordinator, logger Logger) (*WikiMetricsRecorder, error) {
 	// Validate that both page access interfaces are provided together or not at all
 	hasWriter := pageWriter != nil
 	hasReader := pageReader != nil
@@ -63,6 +66,7 @@ func NewWikiMetricsRecorder(pageWriter wikipage.PageWriter, pageReader wikipage.
 	return &WikiMetricsRecorder{
 		pageWriter:    pageWriter,
 		pageReader:    pageReader,
+		jobQueue:      jobQueue,
 		logger:        logger,
 		lastPersisted: time.Now(),
 	}, nil
@@ -226,6 +230,49 @@ func (r *WikiMetricsRecorder) PersistWithMarkdown() error {
 	markdown := r.buildMarkdownReport(stats)
 
 	return r.pageWriter.WriteMarkdown(ObservabilityMetricsPage, markdown)
+}
+
+// PersistAsync enqueues a job to persist metrics asynchronously via the job queue.
+// If no job queue is configured, falls back to synchronous persistence.
+func (r *WikiMetricsRecorder) PersistAsync() {
+	if r.jobQueue == nil {
+		// Fall back to sync if no job queue
+		_ = r.Persist()
+		return
+	}
+
+	r.jobQueue.EnqueueJob(&metricsPersistJob{recorder: r, withMarkdown: false})
+}
+
+// PersistWithMarkdownAsync enqueues a job to persist metrics with markdown asynchronously.
+// If no job queue is configured, falls back to synchronous persistence.
+func (r *WikiMetricsRecorder) PersistWithMarkdownAsync() {
+	if r.jobQueue == nil {
+		// Fall back to sync if no job queue
+		_ = r.PersistWithMarkdown()
+		return
+	}
+
+	r.jobQueue.EnqueueJob(&metricsPersistJob{recorder: r, withMarkdown: true})
+}
+
+// metricsPersistJob is a job that persists wiki metrics.
+type metricsPersistJob struct {
+	recorder     *WikiMetricsRecorder
+	withMarkdown bool
+}
+
+// GetName returns the job name for queue routing.
+func (j *metricsPersistJob) GetName() string {
+	return "observability_metrics_persist"
+}
+
+// Execute performs the metrics persistence.
+func (j *metricsPersistJob) Execute() error {
+	if j.withMarkdown {
+		return j.recorder.PersistWithMarkdown()
+	}
+	return j.recorder.Persist()
 }
 
 // buildMarkdownReport builds a markdown report of the current statistics.

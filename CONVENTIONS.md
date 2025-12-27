@@ -1035,9 +1035,9 @@ defer span.End()
 Lightweight metrics can persist to the `observability_metrics` wiki page using `WikiMetricsRecorder`:
 
 ```go
-recorder, err := observability.NewWikiMetricsRecorder(site, site, logger)
+recorder, err := observability.NewWikiMetricsRecorder(site, site, jobQueue, logger)
 recorder.RecordHTTPRequest()
-recorder.PersistWithMarkdown()
+recorder.PersistWithMarkdownAsync() // Uses job queue for async persistence
 ```
 
 See `internal/observability/doc.go` for detailed documentation.

@@ -47,13 +47,13 @@ func (m *mockPageReaderWriter) WriteMarkdown(identifier wikipage.PageIdentifier,
 
 // createRecorder is a helper to create a recorder for tests that don't need page access.
 func createRecorder() *observability.WikiMetricsRecorder {
-	recorder, _ := observability.NewWikiMetricsRecorder(nil, nil, nil)
+	recorder, _ := observability.NewWikiMetricsRecorder(nil, nil, nil, nil)
 	return recorder
 }
 
 // createRecorderWithMock is a helper to create a recorder with mock page access.
 func createRecorderWithMock(mock *mockPageReaderWriter) *observability.WikiMetricsRecorder {
-	recorder, _ := observability.NewWikiMetricsRecorder(mock, mock, nil)
+	recorder, _ := observability.NewWikiMetricsRecorder(mock, mock, nil, nil)
 	return recorder
 }
 
@@ -62,7 +62,7 @@ var _ = Describe("WikiMetricsRecorder", func() {
 		When("creating with valid page access", func() {
 			It("should return a recorder without error", func() {
 				mock := newMockPageReaderWriter()
-				recorder, err := observability.NewWikiMetricsRecorder(mock, mock, nil)
+				recorder, err := observability.NewWikiMetricsRecorder(mock, mock, nil, nil)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(recorder).ToNot(BeNil())
 			})
@@ -70,7 +70,7 @@ var _ = Describe("WikiMetricsRecorder", func() {
 
 		When("creating without page access", func() {
 			It("should return a recorder without error", func() {
-				recorder, err := observability.NewWikiMetricsRecorder(nil, nil, nil)
+				recorder, err := observability.NewWikiMetricsRecorder(nil, nil, nil, nil)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(recorder).ToNot(BeNil())
 			})
@@ -79,7 +79,7 @@ var _ = Describe("WikiMetricsRecorder", func() {
 		When("creating with only pageWriter", func() {
 			It("should return an error", func() {
 				mock := newMockPageReaderWriter()
-				_, err := observability.NewWikiMetricsRecorder(mock, nil, nil)
+				_, err := observability.NewWikiMetricsRecorder(mock, nil, nil, nil)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("both be provided"))
 			})
@@ -88,7 +88,7 @@ var _ = Describe("WikiMetricsRecorder", func() {
 		When("creating with only pageReader", func() {
 			It("should return an error", func() {
 				mock := newMockPageReaderWriter()
-				_, err := observability.NewWikiMetricsRecorder(nil, mock, nil)
+				_, err := observability.NewWikiMetricsRecorder(nil, mock, nil, nil)
 				Expect(err).To(HaveOccurred())
 				Expect(err.Error()).To(ContainSubstring("both be provided"))
 			})

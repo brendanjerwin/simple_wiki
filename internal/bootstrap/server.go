@@ -9,6 +9,7 @@ import (
 	"time"
 
 	grpcapi "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
+	"github.com/brendanjerwin/simple_wiki/internal/observability"
 	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/improbable-eng/grpc-web/go/grpcweb"
@@ -224,17 +225,32 @@ func createMultiplexedHandler(
 	}
 
 	// Build interceptor chain
-	var interceptors []grpc.UnaryServerInterceptor
+	var unaryInterceptors []grpc.UnaryServerInterceptor
+	var streamInterceptors []grpc.StreamServerInterceptor
+
+	// Add observability interceptors (metrics + tracing)
+	grpcMetrics, err := observability.NewGRPCMetrics()
+	if err != nil {
+		logger.Warn("Failed to create gRPC metrics, continuing without: %v", err)
+	} else {
+		grpcInstrumentation := observability.NewGRPCInstrumentation(grpcMetrics)
+		unaryInterceptors = append(unaryInterceptors, grpcInstrumentation.UnaryServerInterceptor())
+		streamInterceptors = append(streamInterceptors, grpcInstrumentation.StreamServerInterceptor())
+	}
+
 	if identityResolver != nil {
 		interceptor, err := tailscale.IdentityInterceptor(identityResolver, logger)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create identity interceptor: %w", err)
 		}
-		interceptors = append(interceptors, interceptor)
+		unaryInterceptors = append(unaryInterceptors, interceptor)
 	}
-	interceptors = append(interceptors, grpcAPIServer.LoggingInterceptor())
+	unaryInterceptors = append(unaryInterceptors, grpcAPIServer.LoggingInterceptor())
 
-	grpcServer := grpc.NewServer(grpc.ChainUnaryInterceptor(interceptors...))
+	grpcServer := grpc.NewServer(
+		grpc.ChainUnaryInterceptor(unaryInterceptors...),
+		grpc.ChainStreamInterceptor(streamInterceptors...),
+	)
 	grpcAPIServer.RegisterWithServer(grpcServer)
 
 	reflection.Register(grpcServer)

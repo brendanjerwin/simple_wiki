@@ -11,16 +11,16 @@ import (
 
 // GRPCMetrics provides metrics for gRPC request handling.
 type GRPCMetrics struct {
-	requestDuration metric.Float64Histogram
-	requestTotal    metric.Int64Counter
-	errorTotal      metric.Int64Counter
-	activeRequests  metric.Int64UpDownCounter
+	requestDurationSeconds metric.Float64Histogram
+	requestTotal           metric.Int64Counter
+	errorTotal             metric.Int64Counter
+	activeRequests         metric.Int64UpDownCounter
 }
 
 func NewGRPCMetrics() (*GRPCMetrics, error) {
 	meter := otel.Meter("simple_wiki/grpc")
 
-	requestDuration, err := meter.Float64Histogram(
+	requestDurationSeconds, err := meter.Float64Histogram(
 		"grpc_request_duration_seconds",
 		metric.WithDescription("Histogram of gRPC request durations"),
 		metric.WithUnit("s"),
@@ -58,10 +58,10 @@ func NewGRPCMetrics() (*GRPCMetrics, error) {
 	}
 
 	return &GRPCMetrics{
-		requestDuration: requestDuration,
-		requestTotal:    requestTotal,
-		errorTotal:      errorTotal,
-		activeRequests:  activeRequests,
+		requestDurationSeconds: requestDurationSeconds,
+		requestTotal:           requestTotal,
+		errorTotal:             errorTotal,
+		activeRequests:         activeRequests,
 	}, nil
 }
 
@@ -81,7 +81,7 @@ func (m *GRPCMetrics) RequestFinished(ctx context.Context, method string, code s
 	}
 
 	m.activeRequests.Add(ctx, -1, metric.WithAttributes(attribute.String(attrRPCMethod, method)))
-	m.requestDuration.Record(ctx, duration.Seconds(), metric.WithAttributes(attrs...))
+	m.requestDurationSeconds.Record(ctx, duration.Seconds(), metric.WithAttributes(attrs...))
 	m.requestTotal.Add(ctx, 1, metric.WithAttributes(attrs...))
 
 	// Record errors (anything other than OK)
@@ -97,7 +97,7 @@ func (m *GRPCMetrics) RecordDuration(ctx context.Context, method, code string, d
 		attribute.String(attrRPCStatusCode, code),
 	}
 
-	m.requestDuration.Record(ctx, durationSeconds, metric.WithAttributes(attrs...))
+	m.requestDurationSeconds.Record(ctx, durationSeconds, metric.WithAttributes(attrs...))
 	m.requestTotal.Add(ctx, 1, metric.WithAttributes(attrs...))
 
 	if code != grpcStatusOK {
