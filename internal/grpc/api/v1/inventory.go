@@ -1,13 +1,12 @@
 package v1
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"os"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
-	"github.com/brendanjerwin/simple_wiki/server"
+	"github.com/brendanjerwin/simple_wiki/pkg/inventory"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/stoewer/go-strcase"
 	"golang.org/x/text/cases"
@@ -75,14 +74,14 @@ func (s *Server) CreateInventoryItem(_ context.Context, req *apiv1.CreateInvento
 	}
 
 	// Set up inventory structure
-	inventory := make(map[string]any)
+	inventoryData := make(map[string]any)
 	container := ""
 	if req.Container != "" {
 		container = wikiidentifiers.MungeIdentifier(req.Container)
-		inventory[containerKey] = container
+		inventoryData[containerKey] = container
 	}
-	inventory[itemsKey] = []string{}
-	fm[inventoryKey] = inventory
+	inventoryData[itemsKey] = []string{}
+	fm[inventoryKey] = inventoryData
 
 	// Write the frontmatter
 	if err := s.pageReaderMutator.WriteFrontMatter(identifier, fm); err != nil {
@@ -90,7 +89,7 @@ func (s *Server) CreateInventoryItem(_ context.Context, req *apiv1.CreateInvento
 	}
 
 	// Build and write the markdown content
-	markdown := buildInventoryItemMarkdown()
+	markdown := inventory.BuildItemMarkdown()
 	if err := s.pageReaderMutator.WriteMarkdown(identifier, markdown); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to write markdown: %v", err)
 	}
@@ -470,15 +469,6 @@ func (s *Server) buildContainerHierarchy(containerID string) []string {
 	}
 
 	return path
-}
-
-// buildInventoryItemMarkdown creates the markdown content for an inventory item page.
-func buildInventoryItemMarkdown() string {
-	var builder bytes.Buffer
-	_, _ = builder.WriteString("# {{or .Title .Identifier}}")
-	_, _ = builder.WriteString(newlineConst)
-	_, _ = builder.WriteString(server.InventoryItemMarkdownTemplate)
-	return builder.String()
 }
 
 // removeItemFromContainerList removes an item from a container's inventory.items list.

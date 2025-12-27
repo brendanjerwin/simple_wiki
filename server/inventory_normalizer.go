@@ -1,10 +1,10 @@
 package server
 
 import (
-	"bytes"
 	"fmt"
 	"strings"
 
+	"github.com/brendanjerwin/simple_wiki/pkg/inventory"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
@@ -68,7 +68,7 @@ func (n *InventoryNormalizer) ensureIsContainerField(pageID wikipage.PageIdentif
 	}
 
 	// Check if page has inventory.items with actual content
-	inventory, ok := fm["inventory"].(map[string]any)
+	inventoryData, ok := fm["inventory"].(map[string]any)
 	if !ok {
 		return nil // No inventory section
 	}
@@ -80,12 +80,12 @@ func (n *InventoryNormalizer) ensureIsContainerField(pageID wikipage.PageIdentif
 	}
 
 	// Check if is_container is already set
-	if isContainer, ok := inventory["is_container"].(bool); ok && isContainer {
+	if isContainer, ok := inventoryData["is_container"].(bool); ok && isContainer {
 		return nil // Already set
 	}
 
 	// Set is_container = true
-	inventory["is_container"] = true
+	inventoryData["is_container"] = true
 
 	// Write back frontmatter
 	if err := n.deps.WriteFrontMatter(pageID, fm); err != nil {
@@ -103,12 +103,12 @@ func (n *InventoryNormalizer) GetContainerItems(containerID wikipage.PageIdentif
 		return nil
 	}
 
-	inventory, ok := fm["inventory"].(map[string]any)
+	inventoryData, ok := fm["inventory"].(map[string]any)
 	if !ok {
 		return nil
 	}
 
-	itemsRaw, ok := inventory["items"]
+	itemsRaw, ok := inventoryData["items"]
 	if !ok {
 		return nil
 	}
@@ -146,11 +146,11 @@ func (n *InventoryNormalizer) CreateItemPage(itemID, containerID string) error {
 
 	// Set up inventory structure - only add container reference, not items array
 	// Items array and is_container are only for actual containers
-	inventory := make(map[string]any)
+	inventoryData := make(map[string]any)
 	if containerID != "" {
-		inventory["container"] = wikiidentifiers.MungeIdentifier(containerID)
+		inventoryData["container"] = wikiidentifiers.MungeIdentifier(containerID)
 	}
-	fm["inventory"] = inventory
+	fm["inventory"] = inventoryData
 
 	// Write frontmatter
 	if err := n.deps.WriteFrontMatter(identifier, fm); err != nil {
@@ -158,18 +158,10 @@ func (n *InventoryNormalizer) CreateItemPage(itemID, containerID string) error {
 	}
 
 	// Build and write markdown
-	markdown := n.buildItemMarkdown()
+	markdown := inventory.BuildItemMarkdown()
 	if err := n.deps.WriteMarkdown(identifier, markdown); err != nil {
 		return fmt.Errorf("failed to write markdown: %w", err)
 	}
 
 	return nil
-}
-
-// buildItemMarkdown creates the markdown content for an inventory item page.
-func (*InventoryNormalizer) buildItemMarkdown() string {
-	var builder bytes.Buffer
-	_, _ = builder.WriteString("# {{or .Title .Identifier}}" + newlineDelim)
-	_, _ = builder.WriteString(InventoryItemMarkdownTemplate)
-	return builder.String()
 }
