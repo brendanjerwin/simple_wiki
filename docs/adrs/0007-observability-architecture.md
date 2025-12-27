@@ -53,6 +53,24 @@ Pre-built instrumentation for:
 - **gRPC**: Server interceptors for tracing and metrics
 - **Tailscale Identity**: Lookup latency, success/failure rates, header extractions
 
+### 5. Relationship Between OTEL and Wiki Metrics
+
+The two systems are complementary and can run simultaneously:
+
+| Aspect              | OpenTelemetry Metrics                      | Wiki-Based Metrics                        |
+| ------------------- | ------------------------------------------ | ----------------------------------------- |
+| **Data model**      | Time-series with rich dimensions/labels    | Simple counters, no time-series           |
+| **Storage**         | External collector (Prometheus, etc.)      | Wiki page frontmatter                     |
+| **Query**           | Full query language (PromQL, etc.)         | Human-readable markdown table             |
+| **Infrastructure**  | Requires collector/backend                 | Zero infrastructure, uses existing wiki   |
+| **Use case**        | Production monitoring dashboards           | Lightweight auditing and visibility       |
+| **Granularity**     | Per-request with method/path/status labels | Aggregate totals only                     |
+
+**When to use each:**
+
+- Use **OTEL metrics** for production monitoring, alerting, and dashboards
+- Use **Wiki metrics** for simple visibility without infrastructure, auditing, and when you want metrics visible directly in the wiki
+
 ## Implementation
 
 ### Core Components

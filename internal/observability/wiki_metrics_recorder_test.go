@@ -11,6 +11,7 @@ import (
 )
 
 // mockPageReaderWriter is a mock implementation for testing wiki metrics persistence.
+// It implements observability.FrontMatterReader and wikipage.PageWriter.
 type mockPageReaderWriter struct {
 	frontmatter map[string]map[string]any
 	markdown    map[string]string
@@ -30,20 +31,13 @@ func (m *mockPageReaderWriter) ReadFrontMatter(identifier wikipage.PageIdentifie
 	return identifier, nil, nil
 }
 
-func (m *mockPageReaderWriter) ReadMarkdown(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
-	if md, ok := m.markdown[identifier]; ok {
-		return identifier, md, nil
-	}
-	return identifier, "", nil
-}
-
 func (m *mockPageReaderWriter) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
 	m.frontmatter[identifier] = fm
 	return nil
 }
 
 func (m *mockPageReaderWriter) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Markdown) error {
-	m.markdown[identifier] = md
+	m.markdown[identifier] = string(md)
 	return nil
 }
 

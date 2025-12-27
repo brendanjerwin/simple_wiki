@@ -12,6 +12,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/internal/observability"
 	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
+	"github.com/gin-gonic/gin"
 	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"github.com/jcelliott/lumber"
 	"golang.org/x/net/http2"
@@ -191,6 +192,47 @@ func SetupFullTLS(
 	return result, nil
 }
 
+// setupHTTPObservability adds HTTP observability middleware to the Gin router.
+func setupHTTPObservability(ginRouter gin.IRouter, logger *lumber.ConsoleLogger) {
+	httpMetrics, err := observability.NewHTTPMetrics()
+	if err != nil {
+		logger.Warn("Failed to create HTTP metrics, continuing without: %v", err)
+		return
+	}
+	httpInstrumentation := observability.NewHTTPInstrumentation(httpMetrics)
+	ginRouter.Use(httpInstrumentation.GinMiddleware())
+}
+
+// buildGRPCInterceptors creates the gRPC interceptor chains for observability and identity.
+func buildGRPCInterceptors(
+	identityResolver tailscale.IdentityResolver,
+	loggingInterceptor grpc.UnaryServerInterceptor,
+	logger *lumber.ConsoleLogger,
+) ([]grpc.UnaryServerInterceptor, []grpc.StreamServerInterceptor, error) {
+	var unaryInterceptors []grpc.UnaryServerInterceptor
+	var streamInterceptors []grpc.StreamServerInterceptor
+
+	grpcMetrics, err := observability.NewGRPCMetrics()
+	if err != nil {
+		logger.Warn("Failed to create gRPC metrics, continuing without: %v", err)
+	} else {
+		grpcInstrumentation := observability.NewGRPCInstrumentation(grpcMetrics)
+		unaryInterceptors = append(unaryInterceptors, grpcInstrumentation.UnaryServerInterceptor())
+		streamInterceptors = append(streamInterceptors, grpcInstrumentation.StreamServerInterceptor())
+	}
+
+	if identityResolver != nil {
+		interceptor, err := tailscale.IdentityInterceptor(identityResolver, logger)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create identity interceptor: %w", err)
+		}
+		unaryInterceptors = append(unaryInterceptors, interceptor)
+	}
+	unaryInterceptors = append(unaryInterceptors, loggingInterceptor)
+
+	return unaryInterceptors, streamInterceptors, nil
+}
+
 func createMultiplexedHandler(
 	site *server.Site,
 	logger *lumber.ConsoleLogger,
@@ -200,7 +242,8 @@ func createMultiplexedHandler(
 ) (http.Handler, error) {
 	ginRouter := site.GinRouter()
 
-	// Add Tailscale identity middleware if resolver is available
+	setupHTTPObservability(ginRouter, logger)
+
 	if identityResolver != nil {
 		middleware, err := tailscale.IdentityMiddleware(identityResolver, logger)
 		if err != nil {
@@ -224,28 +267,14 @@ func createMultiplexedHandler(
 		return nil, fmt.Errorf("failed to create gRPC server: %w", err)
 	}
 
-	// Build interceptor chain
-	var unaryInterceptors []grpc.UnaryServerInterceptor
-	var streamInterceptors []grpc.StreamServerInterceptor
-
-	// Add observability interceptors (metrics + tracing)
-	grpcMetrics, err := observability.NewGRPCMetrics()
+	unaryInterceptors, streamInterceptors, err := buildGRPCInterceptors(
+		identityResolver,
+		grpcAPIServer.LoggingInterceptor(),
+		logger,
+	)
 	if err != nil {
-		logger.Warn("Failed to create gRPC metrics, continuing without: %v", err)
-	} else {
-		grpcInstrumentation := observability.NewGRPCInstrumentation(grpcMetrics)
-		unaryInterceptors = append(unaryInterceptors, grpcInstrumentation.UnaryServerInterceptor())
-		streamInterceptors = append(streamInterceptors, grpcInstrumentation.StreamServerInterceptor())
+		return nil, err
 	}
-
-	if identityResolver != nil {
-		interceptor, err := tailscale.IdentityInterceptor(identityResolver, logger)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create identity interceptor: %w", err)
-		}
-		unaryInterceptors = append(unaryInterceptors, interceptor)
-	}
-	unaryInterceptors = append(unaryInterceptors, grpcAPIServer.LoggingInterceptor())
 
 	grpcServer := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(unaryInterceptors...),

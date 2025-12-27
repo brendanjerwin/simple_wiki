@@ -90,18 +90,3 @@ func (m *GRPCMetrics) RequestFinished(ctx context.Context, method string, code s
 		m.errorTotal.Add(ctx, 1, metric.WithAttributes(attrs...))
 	}
 }
-
-// RecordDuration records the duration of a gRPC request with method and status code.
-func (m *GRPCMetrics) RecordDuration(ctx context.Context, method, code string, durationSeconds float64) {
-	attrs := []attribute.KeyValue{
-		attribute.String(attrRPCMethod, method),
-		attribute.String(attrRPCStatusCode, code),
-	}
-
-	m.requestDurationSeconds.Record(ctx, durationSeconds, metric.WithAttributes(attrs...))
-	m.requestTotal.Add(ctx, 1, metric.WithAttributes(attrs...))
-
-	if code != grpcStatusOK {
-		m.errorTotal.Add(ctx, 1, metric.WithAttributes(attrs...))
-	}
-}

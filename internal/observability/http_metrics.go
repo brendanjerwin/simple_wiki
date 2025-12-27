@@ -100,19 +100,3 @@ func (m *HTTPMetrics) RequestFinished(ctx context.Context, method, path string, 
 		m.errorTotal.Add(ctx, 1, metric.WithAttributes(errorAttrs...))
 	}
 }
-
-// RecordDuration records the duration of an HTTP request with method, path, and status code.
-func (m *HTTPMetrics) RecordDuration(ctx context.Context, method, path string, statusCode int, durationSeconds float64) {
-	attrs := []attribute.KeyValue{
-		attribute.String(attrHTTPMethod, method),
-		attribute.String(attrHTTPRoute, path),
-		attribute.Int(attrHTTPStatusCode, statusCode),
-	}
-
-	m.requestDurationSeconds.Record(ctx, durationSeconds, metric.WithAttributes(attrs...))
-	m.requestTotal.Add(ctx, 1, metric.WithAttributes(attrs...))
-
-	if statusCode >= httpErrorStatusThreshold {
-		m.errorTotal.Add(ctx, 1, metric.WithAttributes(attrs...))
-	}
-}
