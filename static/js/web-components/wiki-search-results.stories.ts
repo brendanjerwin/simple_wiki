@@ -319,3 +319,62 @@ export const WithInventoryContainer: Story = {
     }
   }
 };
+
+export const InventoryFilterWarning: Story = {
+  args: {
+    results: [
+      {
+        identifier: 'screwdriver',
+        title: 'Phillips Head Screwdriver',
+        fragment: 'A versatile screwdriver with a #2 Phillips head, perfect for most household tasks.',
+        highlights: [
+          createHighlight(14, 25), // "screwdriver"
+        ],
+        inventoryContext: {
+          isInventoryRelated: true,
+          path: [
+            { identifier: 'house', title: 'My House', depth: 0 },
+            { identifier: 'garage', title: 'Main Garage', depth: 1 },
+            { identifier: 'toolbox', title: 'My Toolbox', depth: 2 }
+          ]
+        }
+      } as SearchResult,
+      {
+        identifier: 'hammer',
+        title: 'Claw Hammer',
+        fragment: 'Standard 16oz claw hammer for general construction and demolition work.',
+        highlights: [
+          createHighlight(18, 24), // "hammer"
+        ],
+        inventoryContext: {
+          isInventoryRelated: true,
+          path: [
+            { identifier: 'house', title: 'My House', depth: 0 },
+            { identifier: 'garage', title: 'Main Garage', depth: 1 },
+            { identifier: 'toolbox', title: 'My Toolbox', depth: 2 }
+          ]
+        }
+      } as SearchResult
+    ],
+    open: true,
+    inventoryOnly: true,
+    totalUnfilteredCount: 7,
+  },
+  render: (args) => html`
+    <wiki-search-results 
+      .results="${args.results}"
+      .open="${args.open}"
+      .inventoryOnly="${args.inventoryOnly}"
+      .totalUnfilteredCount="${args.totalUnfilteredCount}"
+      @search-results-closed="${action('search-results-closed')}"
+      @inventory-filter-changed="${action('inventory-filter-changed')}">
+    </wiki-search-results>
+  `,
+  parameters: {
+    docs: {
+      description: {
+        story: '**Inventory Filter Warning Feature**: Demonstrates the warning message that appears when the "Inventory Only" checkbox is checked and additional results are hidden. In this example, 2 inventory items are shown out of 7 total results, so a warning displays "5 other results not shown (not Inventory Only)" with an amber/yellow background and exclamation icon. This helps users understand that more results are available when the filter is unchecked. Open browser dev tools to see action logs when toggling the checkbox.'
+      }
+    }
+  }
+};
