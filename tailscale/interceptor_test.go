@@ -16,6 +16,20 @@ var _ = Describe("IdentityInterceptor", func() {
 		interceptor grpc.UnaryServerInterceptor
 	)
 
+	Describe("constructor validation", func() {
+		When("logger is nil", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = tailscale.IdentityInterceptor(nil, nil)
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(MatchError("logger is required"))
+			})
+		})
+	})
+
 	Describe("extracting identity from metadata", func() {
 		When("Tailscale-User-Login metadata is present", func() {
 			var (
@@ -24,7 +38,9 @@ var _ = Describe("IdentityInterceptor", func() {
 			)
 
 			BeforeEach(func() {
-				interceptor = tailscale.IdentityInterceptor(nil, nil)
+				var err error
+				interceptor, err = tailscale.IdentityInterceptor(nil, testLogger())
+				Expect(err).NotTo(HaveOccurred())
 
 				md := metadata.New(map[string]string{
 					"tailscale-user-login": "user@example.com",
@@ -64,7 +80,9 @@ var _ = Describe("IdentityInterceptor", func() {
 			)
 
 			BeforeEach(func() {
-				interceptor = tailscale.IdentityInterceptor(nil, nil)
+				var err error
+				interceptor, err = tailscale.IdentityInterceptor(nil, testLogger())
+				Expect(err).NotTo(HaveOccurred())
 
 				md := metadata.New(map[string]string{
 					"tailscale-user-login": "user@example.com",
@@ -101,7 +119,9 @@ var _ = Describe("IdentityInterceptor", func() {
 			)
 
 			BeforeEach(func() {
-				interceptor = tailscale.IdentityInterceptor(nil, nil)
+				var err error
+				interceptor, err = tailscale.IdentityInterceptor(nil, testLogger())
+				Expect(err).NotTo(HaveOccurred())
 
 				handler := func(ctx context.Context, req any) (any, error) {
 					handlerCalled = true
@@ -138,7 +158,9 @@ var _ = Describe("IdentityInterceptor", func() {
 					err:      nil,
 				}
 
-				interceptor = tailscale.IdentityInterceptor(resolver, nil)
+				var err error
+				interceptor, err = tailscale.IdentityInterceptor(resolver, testLogger())
+				Expect(err).NotTo(HaveOccurred())
 
 				md := metadata.New(map[string]string{
 					"tailscale-user-login": "header@example.com",
@@ -167,7 +189,9 @@ var _ = Describe("IdentityInterceptor", func() {
 			)
 
 			BeforeEach(func() {
-				interceptor = tailscale.IdentityInterceptor(nil, nil)
+				var createErr error
+				interceptor, createErr = tailscale.IdentityInterceptor(nil, testLogger())
+				Expect(createErr).NotTo(HaveOccurred())
 
 				handler := func(ctx context.Context, req any) (any, error) {
 					return "test-response", nil

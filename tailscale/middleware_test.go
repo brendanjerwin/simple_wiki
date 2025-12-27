@@ -22,6 +22,20 @@ var _ = Describe("IdentityMiddleware", func() {
 		recorder = httptest.NewRecorder()
 	})
 
+	Describe("constructor validation", func() {
+		When("logger is nil", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = tailscale.IdentityMiddleware(nil, nil)
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(MatchError("logger is required"))
+			})
+		})
+	})
+
 	Describe("extracting identity from headers", func() {
 		When("Tailscale-User-Login header is present from localhost", func() {
 			var (
@@ -30,7 +44,9 @@ var _ = Describe("IdentityMiddleware", func() {
 
 			BeforeEach(func() {
 				router = gin.New()
-				router.Use(tailscale.IdentityMiddleware(nil, nil))
+				middleware, err := tailscale.IdentityMiddleware(nil, testLogger())
+				Expect(err).NotTo(HaveOccurred())
+				router.Use(middleware)
 				router.GET("/test", func(c *gin.Context) {
 					capturedIdentity = tailscale.IdentityFromContext(c.Request.Context())
 					c.Status(http.StatusOK)
@@ -63,7 +79,9 @@ var _ = Describe("IdentityMiddleware", func() {
 
 			BeforeEach(func() {
 				router = gin.New()
-				router.Use(tailscale.IdentityMiddleware(nil, nil))
+				middleware, err := tailscale.IdentityMiddleware(nil, testLogger())
+				Expect(err).NotTo(HaveOccurred())
+				router.Use(middleware)
 				router.GET("/test", func(c *gin.Context) {
 					capturedIdentity = tailscale.IdentityFromContext(c.Request.Context())
 					c.Status(http.StatusOK)
@@ -102,7 +120,9 @@ var _ = Describe("IdentityMiddleware", func() {
 				}
 
 				router = gin.New()
-				router.Use(tailscale.IdentityMiddleware(resolver, nil))
+				middleware, err := tailscale.IdentityMiddleware(resolver, testLogger())
+				Expect(err).NotTo(HaveOccurred())
+				router.Use(middleware)
 				router.GET("/test", func(c *gin.Context) {
 					capturedIdentity = tailscale.IdentityFromContext(c.Request.Context())
 					c.Status(http.StatusOK)
@@ -137,7 +157,9 @@ var _ = Describe("IdentityMiddleware", func() {
 				}
 
 				router = gin.New()
-				router.Use(tailscale.IdentityMiddleware(resolver, nil))
+				middleware, err := tailscale.IdentityMiddleware(resolver, testLogger())
+				Expect(err).NotTo(HaveOccurred())
+				router.Use(middleware)
 				router.GET("/test", func(c *gin.Context) {
 					capturedIdentity = tailscale.IdentityFromContext(c.Request.Context())
 					c.Status(http.StatusOK)
@@ -166,7 +188,9 @@ var _ = Describe("IdentityMiddleware", func() {
 				}
 
 				router = gin.New()
-				router.Use(tailscale.IdentityMiddleware(resolver, nil))
+				middleware, err := tailscale.IdentityMiddleware(resolver, testLogger())
+				Expect(err).NotTo(HaveOccurred())
+				router.Use(middleware)
 				router.GET("/test", func(c *gin.Context) {
 					capturedIdentity = tailscale.IdentityFromContext(c.Request.Context())
 					c.Status(http.StatusOK)
@@ -180,37 +204,6 @@ var _ = Describe("IdentityMiddleware", func() {
 
 			It("should prefer header identity over WhoIs", func() {
 				Expect(capturedIdentity.LoginName()).To(Equal("header@example.com"))
-			})
-		})
-	})
-
-	Describe("Gin context storage", func() {
-		When("identity is extracted", func() {
-			var (
-				ginIdentity tailscale.IdentityValue
-			)
-
-			BeforeEach(func() {
-				router = gin.New()
-				router.Use(tailscale.IdentityMiddleware(nil, nil))
-				router.GET("/test", func(c *gin.Context) {
-					if val, exists := c.Get("tailscale-identity"); exists {
-						if identity, ok := val.(tailscale.IdentityValue); ok {
-							ginIdentity = identity
-						}
-					}
-					c.Status(http.StatusOK)
-				})
-
-				req, _ := http.NewRequest("GET", "/test", nil)
-				req.Header.Set("Tailscale-User-Login", "user@example.com")
-				req.RemoteAddr = "127.0.0.1:12345" // Headers only trusted from localhost
-				router.ServeHTTP(recorder, req)
-			})
-
-			It("should also store identity in Gin context", func() {
-				Expect(ginIdentity).NotTo(BeNil())
-				Expect(ginIdentity.LoginName()).To(Equal("user@example.com"))
 			})
 		})
 	})

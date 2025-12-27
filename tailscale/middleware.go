@@ -1,6 +1,8 @@
 package tailscale
 
 import (
+	"errors"
+
 	"github.com/gin-gonic/gin"
 	"github.com/jcelliott/lumber"
 )
@@ -8,10 +10,14 @@ import (
 // IdentityMiddleware creates Gin middleware that extracts Tailscale identity.
 // Identity is extracted from Tailscale headers (set by Tailscale Serve) or via WhoIs.
 // If identity cannot be resolved, the request continues with Anonymous identity (graceful fallback).
-func IdentityMiddleware(resolver IdentityResolver, logger *lumber.ConsoleLogger) gin.HandlerFunc {
+func IdentityMiddleware(resolver IdentityResolver, logger *lumber.ConsoleLogger) (gin.HandlerFunc, error) {
+	if logger == nil {
+		return nil, errors.New("logger is required")
+	}
+
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
-		var identity IdentityValue = Anonymous
+		var identity = Anonymous
 
 		// Method 1: Check Tailscale headers (set by Tailscale Serve/Funnel)
 		// Only trust these headers from localhost (where tailscaled runs)
@@ -28,7 +34,7 @@ func IdentityMiddleware(resolver IdentityResolver, logger *lumber.ConsoleLogger)
 		if identity.IsAnonymous() && resolver != nil {
 			var err error
 			identity, err = resolver.WhoIs(ctx, c.Request.RemoteAddr)
-			if err != nil && logger != nil {
+			if err != nil {
 				logger.Debug("WhoIs lookup failed: %v", err)
 			}
 		}
@@ -37,9 +43,6 @@ func IdentityMiddleware(resolver IdentityResolver, logger *lumber.ConsoleLogger)
 		ctx = ContextWithIdentity(ctx, identity)
 		c.Request = c.Request.WithContext(ctx)
 
-		// Also store in Gin context for convenience
-		c.Set("tailscale-identity", identity)
-
 		c.Next()
-	}
+	}, nil
 }

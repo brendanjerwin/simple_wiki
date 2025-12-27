@@ -778,6 +778,36 @@ How to Log:
 - Log the full error chain once at the end.
 - `log.Printf("error: %v", err)` (Use %v for the full chain)
 
+#### 3. No Panics (Except in main.go)
+
+**Never use `panic()` in library code, service functions, or handlers.** Always return errors instead.
+
+- Panics are reserved for truly unrecoverable situations in `main.go` (e.g., essential configuration missing at startup)
+- Functions that can fail must return `(result, error)` - let the caller decide how to handle failures
+- Constructor functions should return `(*T, error)` and validate required dependencies, not panic on nil
+
+**Bad:**
+
+```go
+func NewServer(logger *Logger) *Server {
+    if logger == nil {
+        panic("logger is required")  // Crashes the program
+    }
+    return &Server{logger: logger}
+}
+```
+
+**Good:**
+
+```go
+func NewServer(logger *Logger) (*Server, error) {
+    if logger == nil {
+        return nil, errors.New("logger is required")
+    }
+    return &Server{logger: logger}, nil
+}
+```
+
 ### General Error Guidelines
 
 - Do not obfuscate errors. When a function returns an error, inspect it to return an appropriate error to the caller. Do not wrap it in a generic error that hides the original cause or assumes a specific failure mode that may not be true. For example, if a read operation fails, don't automatically assume the file was "not found" if the underlying error could be something else, like a permissions issue.

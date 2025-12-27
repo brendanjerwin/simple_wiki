@@ -2,6 +2,7 @@ package tailscale
 
 import (
 	"context"
+	"errors"
 
 	"github.com/jcelliott/lumber"
 	"google.golang.org/grpc"
@@ -12,9 +13,13 @@ import (
 // IdentityInterceptor creates a gRPC unary interceptor that extracts Tailscale identity.
 // Identity is extracted from gRPC metadata (headers from Tailscale Serve) or via WhoIs.
 // If identity cannot be resolved, the request continues with Anonymous identity (graceful fallback).
-func IdentityInterceptor(resolver IdentityResolver, logger *lumber.ConsoleLogger) grpc.UnaryServerInterceptor {
+func IdentityInterceptor(resolver IdentityResolver, logger *lumber.ConsoleLogger) (grpc.UnaryServerInterceptor, error) {
+	if logger == nil {
+		return nil, errors.New("logger is required")
+	}
+
 	return func(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		var identity IdentityValue = Anonymous
+		var identity = Anonymous
 
 		// Method 1: Check gRPC metadata for Tailscale headers (set by Tailscale Serve/Funnel)
 		//
@@ -37,7 +42,7 @@ func IdentityInterceptor(resolver IdentityResolver, logger *lumber.ConsoleLogger
 			if ok && p.Addr != nil {
 				var err error
 				identity, err = resolver.WhoIs(ctx, p.Addr.String())
-				if err != nil && logger != nil {
+				if err != nil {
 					logger.Debug("WhoIs lookup failed for gRPC: %v", err)
 				}
 			}
@@ -47,5 +52,5 @@ func IdentityInterceptor(resolver IdentityResolver, logger *lumber.ConsoleLogger
 		ctx = ContextWithIdentity(ctx, identity)
 
 		return handler(ctx, req)
-	}
+	}, nil
 }

@@ -31,6 +31,8 @@ func (anonymousIdentity) NodeName() string    { return "" }
 func (anonymousIdentity) ForLog() string      { return anonymousLabel }
 func (anonymousIdentity) String() string      { return anonymousLabel }
 
+var _ IdentityValue = anonymousIdentity{}
+
 // Identity represents a Tailscale user's identity.
 type Identity struct {
 	loginName   string // private - use LoginName() method
@@ -51,7 +53,7 @@ func NewIdentity(loginName, displayName, nodeName string) *Identity {
 var _ IdentityValue = (*Identity)(nil)
 
 func (i *Identity) IsAnonymous() bool {
-	return i.loginName == "" && i.displayName == ""
+	return i.loginName == "" && i.displayName == "" && i.nodeName == ""
 }
 
 func (i *Identity) LoginName() string   { return i.loginName }
@@ -65,7 +67,10 @@ func (i *Identity) String() string {
 	if i.loginName != "" {
 		return i.loginName
 	}
-	return i.displayName
+	if i.displayName != "" {
+		return i.displayName
+	}
+	return i.nodeName
 }
 
 func (i *Identity) ForLog() string {

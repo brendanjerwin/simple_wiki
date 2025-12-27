@@ -164,7 +164,7 @@ func (m *MockPageReaderMutator) WriteFrontMatter(identifier wikipage.PageIdentif
 	if m.WrittenFrontmatterByID == nil {
 		m.WrittenFrontmatterByID = make(map[string]map[string]any)
 	}
-	// Deep copy the frontmatter to avoid mutation issues
+	// Shallow copy the frontmatter (sufficient for test isolation)
 	fmCopy := make(map[string]any)
 	for k, v := range fm {
 		fmCopy[k] = v
@@ -248,6 +248,75 @@ func (m *MockBleveIndexQueryer) Query(query string) ([]bleve.SearchResult, error
 	return m.Results, nil
 }
 
+// noOpFrontmatterIndexQueryer is a minimal mock for tests that don't need frontmatter indexing.
+type noOpFrontmatterIndexQueryer struct{}
+
+func (noOpFrontmatterIndexQueryer) QueryExactMatch(wikipage.DottedKeyPath, wikipage.Value) []wikipage.PageIdentifier {
+	return nil
+}
+func (noOpFrontmatterIndexQueryer) QueryKeyExistence(wikipage.DottedKeyPath) []wikipage.PageIdentifier {
+	return nil
+}
+func (noOpFrontmatterIndexQueryer) QueryPrefixMatch(wikipage.DottedKeyPath, string) []wikipage.PageIdentifier {
+	return nil
+}
+func (noOpFrontmatterIndexQueryer) GetValue(wikipage.PageIdentifier, wikipage.DottedKeyPath) wikipage.Value {
+	return ""
+}
+
+// noOpBleveIndexQueryer is a minimal mock for tests that don't need search indexing.
+type noOpBleveIndexQueryer struct{}
+
+func (noOpBleveIndexQueryer) Query(string) ([]bleve.SearchResult, error) { return nil, nil }
+
+// noOpPageReaderMutator is a minimal mock for tests that don't need page operations.
+type noOpPageReaderMutator struct{}
+
+func (noOpPageReaderMutator) ReadFrontMatter(wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
+	return "", nil, os.ErrNotExist
+}
+func (noOpPageReaderMutator) WriteFrontMatter(wikipage.PageIdentifier, wikipage.FrontMatter) error {
+	return nil
+}
+func (noOpPageReaderMutator) ReadMarkdown(wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
+	return "", "", os.ErrNotExist
+}
+func (noOpPageReaderMutator) WriteMarkdown(wikipage.PageIdentifier, wikipage.Markdown) error {
+	return nil
+}
+func (noOpPageReaderMutator) DeletePage(wikipage.PageIdentifier) error { return nil }
+
+// mustNewServer creates a server with the given dependencies, failing the test if creation fails.
+// Use this for tests where server creation should not fail.
+func mustNewServer(
+	pageReaderMutator wikipage.PageReaderMutator,
+	bleveIndexQueryer bleve.IQueryBleveIndex,
+	frontmatterIndexQueryer wikipage.IQueryFrontmatterIndex,
+) *v1.Server {
+	if pageReaderMutator == nil {
+		pageReaderMutator = noOpPageReaderMutator{}
+	}
+	if bleveIndexQueryer == nil {
+		bleveIndexQueryer = noOpBleveIndexQueryer{}
+	}
+	if frontmatterIndexQueryer == nil {
+		frontmatterIndexQueryer = noOpFrontmatterIndexQueryer{}
+	}
+	server, err := v1.NewServer(
+		"test-commit",
+		time.Now(),
+		pageReaderMutator,
+		bleveIndexQueryer,
+		nil, // jobProgressProvider is optional
+		lumber.NewConsoleLogger(lumber.WARN),
+		nil, // markdownRenderer is optional
+		nil, // templateExecutor is optional
+		frontmatterIndexQueryer,
+	)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "mustNewServer failed")
+	return server
+}
+
 var _ = Describe("Server", func() {
 	var (
 		server *v1.Server
@@ -260,9 +329,9 @@ var _ = Describe("Server", func() {
 
 	Describe("GetFrontmatter", func() {
 		var (
-			req                *apiv1.GetFrontmatterRequest
-			res                *apiv1.GetFrontmatterResponse
-			err                error
+			req                   *apiv1.GetFrontmatterRequest
+			res                   *apiv1.GetFrontmatterResponse
+			err                   error
 			mockPageReaderMutator *MockPageReaderMutator
 		)
 
@@ -274,19 +343,8 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, nil, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, nil)
+			server = mustNewServer(mockPageReaderMutator, nil, nil)
 			res, err = server.GetFrontmatter(ctx, req)
-		})
-
-		When("the PageReaderMutator is not configured", func() {
-			BeforeEach(func() {
-				mockPageReaderMutator = nil
-			})
-
-			It("should return an internal error and no response", func() {
-				Expect(err).To(HaveGrpcStatus(codes.Internal, "PageReaderMutator not available"))
-				Expect(res).To(BeNil())
-			})
 		})
 
 		When("the requested page does not exist", func() {
@@ -426,19 +484,8 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, nil, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, nil)
+			server = mustNewServer(mockPageReaderMutator, nil, nil)
 			resp, err = server.MergeFrontmatter(ctx, req)
-		})
-
-		When("the PageReaderMutator is not configured", func() {
-			BeforeEach(func() {
-				mockPageReaderMutator = nil
-			})
-
-			It("should return an internal error and no response", func() {
-				Expect(err).To(HaveGrpcStatus(codes.Internal, "PageReaderMutator not available"))
-				Expect(resp).To(BeNil())
-			})
 		})
 
 		When("reading the frontmatter fails with a generic error", func() {
@@ -634,19 +681,8 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, nil, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, nil)
+			server = mustNewServer(mockPageReaderMutator, nil, nil)
 			resp, err = server.ReplaceFrontmatter(ctx, req)
-		})
-
-		When("the PageReaderMutator is not configured", func() {
-			BeforeEach(func() {
-				mockPageReaderMutator = nil
-			})
-
-			It("should return an internal error and no response", func() {
-				Expect(err).To(HaveGrpcStatus(codes.Internal, "PageReaderMutator not available"))
-				Expect(resp).To(BeNil())
-			})
 		})
 
 		When("writing the frontmatter fails", func() {
@@ -833,19 +869,8 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, nil, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, nil)
+			server = mustNewServer(mockPageReaderMutator, nil, nil)
 			resp, err = server.RemoveKeyAtPath(ctx, req)
-		})
-
-		When("the PageReaderMutator is not configured", func() {
-			BeforeEach(func() {
-				mockPageReaderMutator = nil
-			})
-
-			It("should return an internal error and no response", func() {
-				Expect(err).To(HaveGrpcStatus(codes.Internal, "PageReaderMutator not available"))
-				Expect(resp).To(BeNil())
-			})
 		})
 
 		When("the key_path is empty", func() {
@@ -1168,7 +1193,6 @@ var _ = Describe("Server", func() {
 	Describe("LoggingInterceptor", func() {
 		var (
 			server  *v1.Server
-			logger  *lumber.ConsoleLogger
 			ctx     context.Context
 			req     any
 			info    *grpc.UnaryServerInfo
@@ -1182,10 +1206,7 @@ var _ = Describe("Server", func() {
 				FullMethod: "/api.v1.Version/GetVersion",
 			}
 
-			// Create a mock logger
-			logger = lumber.NewConsoleLogger(lumber.INFO)
-
-			server = v1.NewServer("test-commit", time.Now(), nil, nil, nil, logger, nil, nil, nil)
+			server = mustNewServer(nil, nil, nil)
 		})
 
 		When("a successful gRPC call is made", func() {
@@ -1272,7 +1293,21 @@ var _ = Describe("Server", func() {
 			)
 
 			BeforeEach(func() {
-				server = v1.NewServer("test-commit", time.Now(), nil, nil, nil, nil, nil, nil, nil)
+				// Create a server with nil logger - mustNewServer provides default mocks for required deps
+				// but we need to verify nil logger handling, so we create manually with minimal deps
+				var serverErr error
+				server, serverErr = v1.NewServer(
+					"test-commit",
+					time.Now(),
+					noOpPageReaderMutator{},
+					noOpBleveIndexQueryer{},
+					nil, // jobProgressProvider
+					nil, // logger is nil - this is what we're testing
+					nil, // markdownRenderer
+					nil, // templateExecutor
+					noOpFrontmatterIndexQueryer{},
+				)
+				Expect(serverErr).NotTo(HaveOccurred())
 
 				handler = func(ctx context.Context, req any) (any, error) {
 					return &apiv1.GetVersionResponse{Commit: "test"}, nil
@@ -1308,19 +1343,8 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("commit", time.Now(), mockPageReaderMutator, nil, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, nil)
+			server = mustNewServer(mockPageReaderMutator, nil, nil)
 			resp, err = server.DeletePage(ctx, req)
-		})
-
-		When("the PageReaderMutator is not configured", func() {
-			BeforeEach(func() {
-				mockPageReaderMutator = nil
-			})
-
-			It("should return an internal error and no response", func() {
-				Expect(err).To(HaveGrpcStatus(codes.Internal, "PageReaderMutator not available"))
-				Expect(resp).To(BeNil())
-			})
 		})
 
 		When("the page does not exist", func() {
@@ -1372,7 +1396,7 @@ var _ = Describe("Server", func() {
 
 		BeforeEach(func() {
 			req = &apiv1.GetJobStatusRequest{}
-			server = v1.NewServer("commit", time.Now(), nil, nil, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, nil)
+			server = mustNewServer(nil, nil, nil)
 			res, err = server.GetJobStatus(ctx, req)
 		})
 
@@ -1395,7 +1419,7 @@ var _ = Describe("Server", func() {
 		BeforeEach(func() {
 			req = &apiv1.StreamJobStatusRequest{}
 			streamServer = &MockJobStreamServer{}
-			server = v1.NewServer("commit", time.Now(), nil, nil, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, nil)
+			server = mustNewServer(nil, nil, nil)
 		})
 
 		var (
@@ -1444,28 +1468,8 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer("commit", time.Now(), nil, mockBleveIndexQueryer, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, mockFrontmatterIndexQueryer)
+			server = mustNewServer(nil, mockBleveIndexQueryer, mockFrontmatterIndexQueryer)
 			resp, err = server.SearchContent(ctx, req)
-		})
-
-		When("the search index is not available", func() {
-			BeforeEach(func() {
-				mockBleveIndexQueryer = nil
-			})
-
-			It("should return an internal error", func() {
-				Expect(err).To(HaveGrpcStatus(codes.Internal, "Search index is not available"))
-			})
-		})
-
-		When("the frontmatter index is not available", func() {
-			BeforeEach(func() {
-				mockFrontmatterIndexQueryer = nil
-			})
-
-			It("should return an internal error", func() {
-				Expect(err).To(HaveGrpcStatus(codes.Internal, "Frontmatter index is not available"))
-			})
 		})
 
 		When("a valid query is provided", func() {
@@ -1540,7 +1544,7 @@ var _ = Describe("Server", func() {
 			})
 
 			JustBeforeEach(func() {
-				server = v1.NewServer("commit", time.Now(), nil, mockBleveIndexQueryer, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, mockFrontmatterIndexQueryer)
+				server = mustNewServer(nil, mockBleveIndexQueryer, mockFrontmatterIndexQueryer)
 				resp, err = server.SearchContent(ctx, req)
 			})
 
@@ -1560,21 +1564,6 @@ var _ = Describe("Server", func() {
 					identifiers[i] = r.Identifier
 				}
 				Expect(identifiers).NotTo(ContainElement("page-without-inventory"))
-			})
-
-			When("the frontmatter index is not available", func() {
-				BeforeEach(func() {
-					mockFrontmatterIndexQueryer = nil
-				})
-
-				JustBeforeEach(func() {
-					server = v1.NewServer("commit", time.Now(), nil, mockBleveIndexQueryer, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, nil)
-					resp, err = server.SearchContent(ctx, req)
-				})
-
-				It("should return an internal error", func() {
-					Expect(err).To(HaveGrpcStatus(codes.Internal, "Frontmatter index is not available"))
-				})
 			})
 
 			When("no pages match the filter", func() {
@@ -1611,7 +1600,7 @@ var _ = Describe("Server", func() {
 			})
 
 			JustBeforeEach(func() {
-				server = v1.NewServer("commit", time.Now(), nil, mockBleveIndexQueryer, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, mockFrontmatterIndexQueryer)
+				server = mustNewServer(nil, mockBleveIndexQueryer, mockFrontmatterIndexQueryer)
 				resp, err = server.SearchContent(ctx, req)
 			})
 
@@ -1650,7 +1639,7 @@ var _ = Describe("Server", func() {
 			})
 
 			JustBeforeEach(func() {
-				server = v1.NewServer("commit", time.Now(), nil, mockBleveIndexQueryer, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, mockFrontmatterIndexQueryer)
+				server = mustNewServer(nil, mockBleveIndexQueryer, mockFrontmatterIndexQueryer)
 				resp, err = server.SearchContent(ctx, req)
 			})
 
@@ -1707,7 +1696,7 @@ var _ = Describe("Server", func() {
 			})
 
 			JustBeforeEach(func() {
-				server = v1.NewServer("commit", time.Now(), nil, mockBleveIndexQueryer, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, mockFrontmatterIndexQueryer)
+				server = mustNewServer(nil, mockBleveIndexQueryer, mockFrontmatterIndexQueryer)
 				resp, err = server.SearchContent(ctx, req)
 			})
 
@@ -1740,7 +1729,7 @@ var _ = Describe("Server", func() {
 			})
 
 			JustBeforeEach(func() {
-				server = v1.NewServer("commit", time.Now(), nil, mockBleveIndexQueryer, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, mockFrontmatterIndexQueryer)
+				server = mustNewServer(nil, mockBleveIndexQueryer, mockFrontmatterIndexQueryer)
 				resp, err = server.SearchContent(ctx, req)
 			})
 
@@ -1749,21 +1738,6 @@ var _ = Describe("Server", func() {
 				Expect(resp).NotTo(BeNil())
 				Expect(resp.Results).To(HaveLen(1))
 				Expect(resp.Results[0].Identifier).To(Equal("item-one"))
-			})
-
-			When("the frontmatter index is not available", func() {
-				BeforeEach(func() {
-					mockFrontmatterIndexQueryer = nil
-				})
-
-				JustBeforeEach(func() {
-					server = v1.NewServer("commit", time.Now(), nil, mockBleveIndexQueryer, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, nil)
-					resp, err = server.SearchContent(ctx, req)
-				})
-
-				It("should return an internal error", func() {
-					Expect(err).To(HaveGrpcStatus(codes.Internal, "Frontmatter index is not available"))
-				})
 			})
 
 			When("no pages have the excluded key", func() {
@@ -1810,7 +1784,7 @@ var _ = Describe("Server", func() {
 			})
 
 			JustBeforeEach(func() {
-				server = v1.NewServer("commit", time.Now(), nil, mockBleveIndexQueryer, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, mockFrontmatterIndexQueryer)
+				server = mustNewServer(nil, mockBleveIndexQueryer, mockFrontmatterIndexQueryer)
 				resp, err = server.SearchContent(ctx, req)
 			})
 
@@ -1853,7 +1827,7 @@ var _ = Describe("Server", func() {
 			})
 
 			JustBeforeEach(func() {
-				server = v1.NewServer("commit", time.Now(), nil, mockBleveIndexQueryer, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, mockFrontmatterIndexQueryer)
+				server = mustNewServer(nil, mockBleveIndexQueryer, mockFrontmatterIndexQueryer)
 				resp, err = server.SearchContent(ctx, req)
 			})
 
@@ -1899,7 +1873,7 @@ var _ = Describe("Server", func() {
 			})
 
 			JustBeforeEach(func() {
-				server = v1.NewServer("commit", time.Now(), nil, mockBleveIndexQueryer, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, mockFrontmatterIndexQueryer)
+				server = mustNewServer(nil, mockBleveIndexQueryer, mockFrontmatterIndexQueryer)
 				resp, err = server.SearchContent(ctx, req)
 			})
 
@@ -1957,7 +1931,7 @@ var _ = Describe("Server", func() {
 			})
 
 			JustBeforeEach(func() {
-				server = v1.NewServer("commit", time.Now(), nil, mockBleveIndexQueryer, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, mockFrontmatterIndexQueryer)
+				server = mustNewServer(nil, mockBleveIndexQueryer, mockFrontmatterIndexQueryer)
 				resp, err = server.SearchContent(ctx, req)
 			})
 
@@ -2148,7 +2122,7 @@ var _ = Describe("Server", func() {
 			})
 
 			JustBeforeEach(func() {
-				server = v1.NewServer("commit", time.Now(), nil, mockBleveIndexQueryer, nil, lumber.NewConsoleLogger(lumber.WARN), nil, nil, mockFrontmatterIndexQueryer)
+				server = mustNewServer(nil, mockBleveIndexQueryer, mockFrontmatterIndexQueryer)
 				resp, err = server.SearchContent(ctx, req)
 			})
 
@@ -2183,32 +2157,20 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer(
+			var serverErr error
+			server, serverErr = v1.NewServer(
 				"commit",
 				time.Now(),
 				mockPageReaderMutator,
-				nil,
+				noOpBleveIndexQueryer{},
 				nil,
 				lumber.NewConsoleLogger(lumber.WARN),
 				mockMarkdownRenderer,
 				mockTemplateExecutor,
 				mockFrontmatterIndexQueryer,
 			)
+			Expect(serverErr).NotTo(HaveOccurred())
 			resp, err = server.ReadPage(ctx, req)
-		})
-
-		When("the PageReaderMutator is not configured", func() {
-			BeforeEach(func() {
-				mockPageReaderMutator = nil
-			})
-
-			It("should return an internal error", func() {
-				Expect(err).To(HaveGrpcStatus(codes.Internal, "PageReaderMutator not available"))
-			})
-
-			It("should return no response", func() {
-				Expect(resp).To(BeNil())
-			})
 		})
 
 		When("the page does not exist", func() {
@@ -2331,17 +2293,19 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer(
+			var serverErr error
+			server, serverErr = v1.NewServer(
 				"commit",
 				time.Now(),
 				mockPageReaderMutator,
-				nil,
+				noOpBleveIndexQueryer{},
 				nil,
 				lumber.NewConsoleLogger(lumber.WARN),
 				nil,
 				nil,
-				nil,
+				noOpFrontmatterIndexQueryer{},
 			)
+			Expect(serverErr).NotTo(HaveOccurred())
 			resp, err = server.GenerateIdentifier(ctx, req)
 		})
 
@@ -2463,24 +2427,6 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should indicate the identifier is unique", func() {
-				Expect(resp.IsUnique).To(BeTrue())
-			})
-		})
-
-		When("the PageReaderMutator is nil", func() {
-			BeforeEach(func() {
-				mockPageReaderMutator = nil
-			})
-
-			It("should not return an error", func() {
-				Expect(err).NotTo(HaveOccurred())
-			})
-
-			It("should return the munged identifier", func() {
-				Expect(resp.Identifier).To(Equal("phillips_screwdriver"))
-			})
-
-			It("should indicate the identifier is unique (cannot verify)", func() {
 				Expect(resp.IsUnique).To(BeTrue())
 			})
 		})

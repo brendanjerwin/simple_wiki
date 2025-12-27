@@ -164,6 +164,26 @@ var _ = Describe("Identity", func() {
 			})
 		})
 
+		When("identity has only node name", func() {
+			var (
+				identity *tailscale.Identity
+				result   string
+			)
+
+			BeforeEach(func() {
+				identity = tailscale.NewIdentity(
+					"",
+					"",
+					"my-laptop",
+				)
+				result = identity.String()
+			})
+
+			It("should return the node name", func() {
+				Expect(result).To(Equal("my-laptop"))
+			})
+		})
+
 		When("identity is empty", func() {
 			var (
 				identity *tailscale.Identity
@@ -206,6 +226,22 @@ var _ = Describe("Identity", func() {
 
 			BeforeEach(func() {
 				identity = tailscale.NewIdentity("", "Test User", "")
+				result = identity.IsAnonymous()
+			})
+
+			It("should return false", func() {
+				Expect(result).To(BeFalse())
+			})
+		})
+
+		When("identity has only node name", func() {
+			var (
+				identity *tailscale.Identity
+				result   bool
+			)
+
+			BeforeEach(func() {
+				identity = tailscale.NewIdentity("", "", "my-laptop")
 				result = identity.IsAnonymous()
 			})
 
@@ -267,8 +303,8 @@ var _ = Describe("Identity", func() {
 				result = identity.ForLog()
 			})
 
-			It("should return anonymous since IsAnonymous is true", func() {
-				Expect(result).To(Equal("anonymous"))
+			It("should return node name in parentheses", func() {
+				Expect(result).To(Equal("(my-laptop)"))
 			})
 		})
 

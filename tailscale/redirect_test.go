@@ -24,7 +24,7 @@ var _ = Describe("TailnetRedirector", func() {
 		recorder = httptest.NewRecorder()
 	})
 
-	Describe("NewRedirectHandler", func() {
+	Describe("NewTailnetRedirector", func() {
 		When("creating a new redirect handler with valid parameters", func() {
 			var (
 				handler *tailscale.TailnetRedirector
@@ -32,7 +32,7 @@ var _ = Describe("TailnetRedirector", func() {
 			)
 
 			BeforeEach(func() {
-				handler, err = tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, false, nil)
+				handler, err = tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, false, testLogger())
 			})
 
 			It("should not return an error", func() {
@@ -48,7 +48,7 @@ var _ = Describe("TailnetRedirector", func() {
 			var err error
 
 			BeforeEach(func() {
-				_, err = tailscale.NewTailnetRedirector("", 443, nil, fallbackHandler, false, nil)
+				_, err = tailscale.NewTailnetRedirector("", 443, nil, fallbackHandler, false, testLogger())
 			})
 
 			It("should return an error about empty hostname", func() {
@@ -60,7 +60,7 @@ var _ = Describe("TailnetRedirector", func() {
 			var err error
 
 			BeforeEach(func() {
-				_, err = tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 0, nil, fallbackHandler, false, nil)
+				_, err = tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 0, nil, fallbackHandler, false, testLogger())
 			})
 
 			It("should return an error about invalid port", func() {
@@ -72,7 +72,7 @@ var _ = Describe("TailnetRedirector", func() {
 			var err error
 
 			BeforeEach(func() {
-				_, err = tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", -1, nil, fallbackHandler, false, nil)
+				_, err = tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", -1, nil, fallbackHandler, false, testLogger())
 			})
 
 			It("should return an error about invalid port", func() {
@@ -84,7 +84,7 @@ var _ = Describe("TailnetRedirector", func() {
 			var err error
 
 			BeforeEach(func() {
-				_, err = tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 70000, nil, fallbackHandler, false, nil)
+				_, err = tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 70000, nil, fallbackHandler, false, testLogger())
 			})
 
 			It("should return an error about invalid port", func() {
@@ -96,11 +96,23 @@ var _ = Describe("TailnetRedirector", func() {
 			var err error
 
 			BeforeEach(func() {
-				_, err = tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, nil, false, nil)
+				_, err = tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, nil, false, testLogger())
 			})
 
 			It("should return an error about nil fallback", func() {
 				Expect(err).To(MatchError("fallback handler cannot be nil"))
+			})
+		})
+
+		When("logger is nil", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, false, nil)
+			})
+
+			It("should return an error about nil logger", func() {
+				Expect(err).To(MatchError("logger cannot be nil"))
 			})
 		})
 	})
@@ -108,7 +120,7 @@ var _ = Describe("TailnetRedirector", func() {
 	Describe("X-Forwarded-Proto handling", func() {
 		When("request has X-Forwarded-Proto: https from localhost", func() {
 			BeforeEach(func() {
-				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, true, nil)
+				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, true, testLogger())
 				Expect(err).NotTo(HaveOccurred())
 
 				req, _ := http.NewRequest("GET", "/test", nil)
@@ -128,7 +140,7 @@ var _ = Describe("TailnetRedirector", func() {
 
 		When("request has X-Forwarded-Proto: https from IPv6 localhost", func() {
 			BeforeEach(func() {
-				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, true, nil)
+				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, true, testLogger())
 				Expect(err).NotTo(HaveOccurred())
 
 				req, _ := http.NewRequest("GET", "/test", nil)
@@ -148,7 +160,7 @@ var _ = Describe("TailnetRedirector", func() {
 
 		When("request has X-Forwarded-Proto: https from external IP (spoofed header)", func() {
 			BeforeEach(func() {
-				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, true, nil)
+				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, true, testLogger())
 				Expect(err).NotTo(HaveOccurred())
 
 				req, _ := http.NewRequest("GET", "/test", nil)
@@ -169,7 +181,7 @@ var _ = Describe("TailnetRedirector", func() {
 
 		When("request has X-Forwarded-Proto: http from localhost", func() {
 			BeforeEach(func() {
-				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, true, nil)
+				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, true, testLogger())
 				Expect(err).NotTo(HaveOccurred())
 
 				req, _ := http.NewRequest("GET", "/test", nil)
@@ -187,7 +199,7 @@ var _ = Describe("TailnetRedirector", func() {
 	Describe("ForceRedirectToTailnet mode", func() {
 		When("force redirect is enabled", func() {
 			BeforeEach(func() {
-				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, true, nil)
+				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, true, testLogger())
 				Expect(err).NotTo(HaveOccurred())
 
 				req, _ := http.NewRequest("GET", "/test?foo=bar", nil)
@@ -206,7 +218,7 @@ var _ = Describe("TailnetRedirector", func() {
 
 		When("force redirect is enabled with non-standard port", func() {
 			BeforeEach(func() {
-				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 8443, nil, fallbackHandler, true, nil)
+				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 8443, nil, fallbackHandler, true, testLogger())
 				Expect(err).NotTo(HaveOccurred())
 
 				req, _ := http.NewRequest("GET", "/test", nil)
@@ -228,7 +240,7 @@ var _ = Describe("TailnetRedirector", func() {
 					err:      nil,
 				}
 
-				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, resolver, fallbackHandler, false, nil)
+				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, resolver, fallbackHandler, false, testLogger())
 				Expect(err).NotTo(HaveOccurred())
 
 				req, _ := http.NewRequest("GET", "/test", nil)
@@ -252,7 +264,7 @@ var _ = Describe("TailnetRedirector", func() {
 					err:      nil,
 				}
 
-				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, resolver, fallbackHandler, false, nil)
+				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, resolver, fallbackHandler, false, testLogger())
 				Expect(err).NotTo(HaveOccurred())
 
 				req, _ := http.NewRequest("GET", "/test", nil)
@@ -272,7 +284,7 @@ var _ = Describe("TailnetRedirector", func() {
 	Describe("no resolver", func() {
 		When("force redirect is disabled and no resolver is configured", func() {
 			BeforeEach(func() {
-				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, false, nil)
+				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, false, testLogger())
 				Expect(err).NotTo(HaveOccurred())
 
 				req, _ := http.NewRequest("GET", "/test", nil)
@@ -295,7 +307,7 @@ var _ = Describe("TailnetRedirector", func() {
 
 		When("RemoteAddr is without port", func() {
 			BeforeEach(func() {
-				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, true, nil)
+				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, true, testLogger())
 				Expect(err).NotTo(HaveOccurred())
 
 				req, _ := http.NewRequest("GET", "/test", nil)
@@ -319,7 +331,7 @@ var _ = Describe("TailnetRedirector", func() {
 			// The IP is still a valid loopback address, so this IS treated as localhost.
 			// This is correct behavior - the port format doesn't change the source IP.
 			BeforeEach(func() {
-				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, true, nil)
+				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, true, testLogger())
 				Expect(err).NotTo(HaveOccurred())
 
 				req, _ := http.NewRequest("GET", "/test", nil)
@@ -339,7 +351,7 @@ var _ = Describe("TailnetRedirector", func() {
 
 		When("RemoteAddr is IPv6 without brackets", func() {
 			BeforeEach(func() {
-				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, true, nil)
+				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, true, testLogger())
 				Expect(err).NotTo(HaveOccurred())
 
 				req, _ := http.NewRequest("GET", "/test", nil)
@@ -360,7 +372,7 @@ var _ = Describe("TailnetRedirector", func() {
 
 		When("RemoteAddr is empty", func() {
 			BeforeEach(func() {
-				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, true, nil)
+				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, true, testLogger())
 				Expect(err).NotTo(HaveOccurred())
 
 				req, _ := http.NewRequest("GET", "/test", nil)
@@ -381,7 +393,7 @@ var _ = Describe("TailnetRedirector", func() {
 
 		When("RemoteAddr is just a port", func() {
 			BeforeEach(func() {
-				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, true, nil)
+				handler, err := tailscale.NewTailnetRedirector("my-laptop.tailnet.ts.net", 443, nil, fallbackHandler, true, testLogger())
 				Expect(err).NotTo(HaveOccurred())
 
 				req, _ := http.NewRequest("GET", "/test", nil)

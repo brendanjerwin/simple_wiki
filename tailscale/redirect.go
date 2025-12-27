@@ -47,7 +47,7 @@ func (h *TailnetRedirector) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Check if request is from tailnet client via WhoIs (direct tailnet connection over HTTP)
 	if h.resolver != nil {
 		identity, err := h.resolver.WhoIs(r.Context(), r.RemoteAddr)
-		if err != nil && h.logger != nil {
+		if err != nil {
 			h.logger.Debug("WhoIs lookup failed for redirect check: %v", err)
 		}
 		if !identity.IsAnonymous() {
@@ -102,6 +102,9 @@ func NewTailnetRedirector(tsHostname string, tlsPort int, resolver IdentityResol
 	}
 	if fallback == nil {
 		return nil, errors.New("fallback handler cannot be nil")
+	}
+	if logger == nil {
+		return nil, errors.New("logger cannot be nil")
 	}
 
 	return &TailnetRedirector{

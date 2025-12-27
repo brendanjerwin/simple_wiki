@@ -52,7 +52,10 @@ func SetupPlainHTTP(
 	logger.Info("Tailscale not available. Running as plain HTTP on %s", httpAddr)
 	logger.Info("For secure access with user identity, install Tailscale: https://tailscale.com/download")
 
-	handler := createMultiplexedHandler(site, logger, commit, buildTime, nil)
+	handler, err := createMultiplexedHandler(site, logger, commit, buildTime, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create handler: %w", err)
+	}
 
 	httpListener, err := net.Listen(networkTCP, httpAddr)
 	if err != nil {
@@ -84,7 +87,10 @@ func SetupTailscaleServe(
 	logger.Info("Tailscale Serve mode. Running HTTP on %s with identity support", httpAddr)
 
 	identityResolver := tailscale.NewIdentityResolver()
-	handler := createMultiplexedHandler(site, logger, commit, buildTime, identityResolver)
+	handler, err := createMultiplexedHandler(site, logger, commit, buildTime, identityResolver)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create handler: %w", err)
+	}
 
 	httpListener, err := net.Listen(networkTCP, httpAddr)
 	if err != nil {
@@ -123,7 +129,10 @@ func SetupFullTLS(
 	logger.Info("Tailscale detected: %s", tsDNSName)
 
 	identityResolver := tailscale.NewIdentityResolver()
-	handler := createMultiplexedHandler(site, logger, commit, buildTime, identityResolver)
+	handler, err := createMultiplexedHandler(site, logger, commit, buildTime, identityResolver)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create handler: %w", err)
+	}
 
 	// Parse host from httpAddr
 	host := ""
@@ -187,15 +196,19 @@ func createMultiplexedHandler(
 	commit string,
 	buildTime time.Time,
 	identityResolver tailscale.IdentityResolver,
-) http.Handler {
+) (http.Handler, error) {
 	ginRouter := site.GinRouter()
 
 	// Add Tailscale identity middleware if resolver is available
 	if identityResolver != nil {
-		ginRouter.Use(tailscale.IdentityMiddleware(identityResolver, logger))
+		middleware, err := tailscale.IdentityMiddleware(identityResolver, logger)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create identity middleware: %w", err)
+		}
+		ginRouter.Use(middleware)
 	}
 
-	grpcAPIServer := grpcapi.NewServer(
+	grpcAPIServer, err := grpcapi.NewServer(
 		commit,
 		buildTime,
 		site,
@@ -206,11 +219,18 @@ func createMultiplexedHandler(
 		server.TemplateExecutor{},
 		site.FrontmatterIndexQueryer,
 	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create gRPC server: %w", err)
+	}
 
 	// Build interceptor chain
 	var interceptors []grpc.UnaryServerInterceptor
 	if identityResolver != nil {
-		interceptors = append(interceptors, tailscale.IdentityInterceptor(identityResolver, logger))
+		interceptor, err := tailscale.IdentityInterceptor(identityResolver, logger)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create identity interceptor: %w", err)
+		}
+		interceptors = append(interceptors, interceptor)
 	}
 	interceptors = append(interceptors, grpcAPIServer.LoggingInterceptor())
 
@@ -231,5 +251,5 @@ func createMultiplexedHandler(
 		}
 		logger.Debug("Gin request: %s %s", r.Method, r.URL.Path)
 		ginRouter.ServeHTTP(w, r)
-	})
+	}), nil
 }

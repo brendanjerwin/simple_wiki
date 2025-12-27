@@ -43,8 +43,10 @@ func NewIdentityResolverWithClient(client WhoIsQuerier) *LocalIdentityResolver {
 }
 
 // WhoIs resolves the Tailscale identity for a remote address.
-// Returns ErrTailscaleUnavailable if the Tailscale daemon cannot be reached.
-// Returns Anonymous, nil if the address is not from a Tailscale node (anonymous/non-tailnet).
+// Returns:
+//   - (identity, nil) if the address belongs to a Tailscale node with a user profile
+//   - (Anonymous, nil) if the address is from a Tailscale node but has no user profile (shared/tagged node)
+//   - (Anonymous, ErrTailscaleUnavailable) if the Tailscale daemon cannot be reached
 func (r *LocalIdentityResolver) WhoIs(ctx context.Context, remoteAddr string) (IdentityValue, error) {
 	response, err := r.client.WhoIs(ctx, remoteAddr)
 	if err != nil {
