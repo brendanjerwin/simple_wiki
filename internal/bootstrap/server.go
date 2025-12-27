@@ -321,17 +321,18 @@ func createMultiplexedHandler(
 	}), nil
 }
 
-// metricsPersistJob wraps WikiMetricsRecorder.Persist for cron scheduling.
+// metricsPersistJob triggers async metrics persistence via the job queue.
 type metricsPersistJob struct {
 	recorder *observability.WikiMetricsRecorder
 }
 
 // GetName returns the job name for the cron scheduler.
 func (*metricsPersistJob) GetName() string {
-	return "wiki_metrics_persist"
+	return "wiki_metrics_persist_trigger"
 }
 
-// Execute persists the wiki metrics.
+// Execute enqueues the actual persistence job to the job queue.
 func (j *metricsPersistJob) Execute() error {
-	return j.recorder.Persist()
+	j.recorder.PersistAsync()
+	return nil
 }
