@@ -48,11 +48,27 @@ func (m *mockPageReaderWriter) WriteMarkdown(identifier wikipage.PageIdentifier,
 	return nil
 }
 
-// failingPageReaderWriter wraps mockPageReaderWriter and can simulate write failures.
+// failingPageReaderWriter wraps mockPageReaderWriter and can simulate read/write failures.
 type failingPageReaderWriter struct {
 	*mockPageReaderWriter
 	failFrontmatterWrite bool
 	failMarkdownWrite    bool
+	failFrontmatterRead  bool
+	failMarkdownRead     bool
+}
+
+func (f *failingPageReaderWriter) ReadFrontMatter(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
+	if f.failFrontmatterRead {
+		return "", nil, errFrontmatterReadFailed
+	}
+	return f.mockPageReaderWriter.ReadFrontMatter(identifier)
+}
+
+func (f *failingPageReaderWriter) ReadMarkdown(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
+	if f.failMarkdownRead {
+		return "", "", errMarkdownReadFailed
+	}
+	return f.mockPageReaderWriter.ReadMarkdown(identifier)
 }
 
 func (f *failingPageReaderWriter) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
@@ -71,6 +87,8 @@ func (f *failingPageReaderWriter) WriteMarkdown(identifier wikipage.PageIdentifi
 
 var errFrontmatterWriteFailed = &testError{msg: "frontmatter write failed"}
 var errMarkdownWriteFailed = &testError{msg: "markdown write failed"}
+var errFrontmatterReadFailed = &testError{msg: "frontmatter read failed"}
+var errMarkdownReadFailed = &testError{msg: "markdown read failed"}
 
 type testError struct {
 	msg string
@@ -601,6 +619,54 @@ var _ = Describe("WikiMetricsRecorder", func() {
 	})
 
 	Describe("Persist error handling", func() {
+		When("frontmatter read fails", func() {
+			var recorder *observability.WikiMetricsRecorder
+			var err error
+
+			BeforeEach(func() {
+				mock := &failingPageReaderWriter{
+					mockPageReaderWriter: newMockPageReaderWriter(),
+					failFrontmatterRead:  true,
+				}
+				coordinator := jobs.NewJobQueueCoordinator(lumber.NewConsoleLogger(lumber.FATAL))
+				recorder, _ = observability.NewWikiMetricsRecorder(mock, mock, coordinator, nil)
+				recorder.RecordHTTPRequest()
+				err = recorder.Persist()
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should contain the underlying error message", func() {
+				Expect(err.Error()).To(ContainSubstring("frontmatter read failed"))
+			})
+		})
+
+		When("markdown read fails", func() {
+			var recorder *observability.WikiMetricsRecorder
+			var err error
+
+			BeforeEach(func() {
+				mock := &failingPageReaderWriter{
+					mockPageReaderWriter: newMockPageReaderWriter(),
+					failMarkdownRead:     true,
+				}
+				coordinator := jobs.NewJobQueueCoordinator(lumber.NewConsoleLogger(lumber.FATAL))
+				recorder, _ = observability.NewWikiMetricsRecorder(mock, mock, coordinator, nil)
+				recorder.RecordHTTPRequest()
+				err = recorder.Persist()
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should contain the underlying error message", func() {
+				Expect(err.Error()).To(ContainSubstring("markdown read failed"))
+			})
+		})
+
 		When("frontmatter write fails", func() {
 			var recorder *observability.WikiMetricsRecorder
 			var err error
