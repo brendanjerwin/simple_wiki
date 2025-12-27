@@ -94,6 +94,7 @@ export class GetVersionResponse extends Message<GetVersionResponse> {
 
 /**
  * TailscaleIdentity represents the identity of a Tailscale user.
+ * All fields are optional to distinguish between "not available" (nil) and "empty string".
  *
  * @generated from message api.v1.TailscaleIdentity
  */
@@ -101,23 +102,23 @@ export class TailscaleIdentity extends Message<TailscaleIdentity> {
   /**
    * e.g., "user@example.com"
    *
-   * @generated from field: string login_name = 1;
+   * @generated from field: optional string login_name = 1;
    */
-  loginName = "";
+  loginName?: string;
 
   /**
    * e.g., "John Doe"
    *
-   * @generated from field: string display_name = 2;
+   * @generated from field: optional string display_name = 2;
    */
-  displayName = "";
+  displayName?: string;
 
   /**
    * e.g., "my-laptop"
    *
-   * @generated from field: string node_name = 3;
+   * @generated from field: optional string node_name = 3;
    */
-  nodeName = "";
+  nodeName?: string;
 
   constructor(data?: PartialMessage<TailscaleIdentity>) {
     super();
@@ -127,9 +128,9 @@ export class TailscaleIdentity extends Message<TailscaleIdentity> {
   static readonly runtime: typeof proto3 = proto3;
   static readonly typeName = "api.v1.TailscaleIdentity";
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
-    { no: 1, name: "login_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 2, name: "display_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
-    { no: 3, name: "node_name", kind: "scalar", T: 9 /* ScalarType.STRING */ },
+    { no: 1, name: "login_name", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 2, name: "display_name", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
+    { no: 3, name: "node_name", kind: "scalar", T: 9 /* ScalarType.STRING */, opt: true },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): TailscaleIdentity {

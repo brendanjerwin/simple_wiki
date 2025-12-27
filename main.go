@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/internal/bootstrap"
@@ -149,7 +151,43 @@ func main() {
 		if err != nil {
 			return err
 		}
-		return config.MainServer.Serve(config.MainListener)
+
+		// Start the main server in a goroutine
+		serverErr := make(chan error, 1)
+		go func() {
+			serverErr <- config.MainServer.Serve(config.MainListener)
+		}()
+
+		// Wait for shutdown signal or server error
+		quit := make(chan os.Signal, 1)
+		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+		select {
+		case err := <-serverErr:
+			return err
+		case sig := <-quit:
+			logger.Info("Received signal %v, shutting down gracefully...", sig)
+		}
+
+		// Graceful shutdown with timeout
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		// Shutdown redirect server first if it exists
+		if config.RedirectServer != nil {
+			if err := config.RedirectServer.Shutdown(ctx); err != nil {
+				logger.Error("Error shutting down redirect server: %v", err)
+			}
+		}
+
+		// Shutdown main server
+		if err := config.MainServer.Shutdown(ctx); err != nil {
+			logger.Error("Error shutting down main server: %v", err)
+			return err
+		}
+
+		logger.Info("Server shutdown complete")
+		return nil
 	}
 	app.Flags = getFlags()
 
@@ -164,7 +202,7 @@ func main() {
 }
 
 const (
-	defaultPort              = 8050
+	defaultHTTPPort          = 8050
 	defaultDebounce          = 500
 	defaultMaxUploadMB       = 100
 	defaultMaxDocumentLength = 100000000
@@ -184,8 +222,8 @@ func getFlags() []cli.Flag {
 		},
 		cli.IntFlag{
 			Name:  "port,p",
-			Value: defaultPort,
-			Usage: "port to use",
+			Value: defaultHTTPPort,
+			Usage: "HTTP port to use",
 		},
 		cli.IntFlag{
 			Name:  "tls-port",

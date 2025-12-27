@@ -22,6 +22,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -342,9 +343,9 @@ func (s *Server) GetVersion(ctx context.Context, _ *apiv1.GetVersionRequest) (*a
 	identity := tailscale.IdentityFromContext(ctx)
 	if !identity.IsAnonymous() {
 		response.TailscaleIdentity = &apiv1.TailscaleIdentity{
-			LoginName:   identity.LoginName(),
-			DisplayName: identity.DisplayName(),
-			NodeName:    identity.NodeName(),
+			LoginName:   proto.String(identity.LoginName()),
+			DisplayName: proto.String(identity.DisplayName()),
+			NodeName:    proto.String(identity.NodeName()),
 		}
 	}
 

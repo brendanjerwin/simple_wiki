@@ -53,11 +53,11 @@ var _ = Describe("LocalDetector", func() {
 				status, err = detector.Detect(context.Background())
 			})
 
-			It("should not return an error", func() {
-				Expect(err).NotTo(HaveOccurred())
+			It("should return the error for caller to log", func() {
+				Expect(err).To(MatchError("connection refused"))
 			})
 
-			It("should return status with Available=false", func() {
+			It("should return status with Available=false for graceful fallback", func() {
 				Expect(status.Available).To(BeFalse())
 			})
 		})

@@ -59,12 +59,13 @@ func NewDetectorWithProvider(provider StatusQuerier) *LocalDetector {
 }
 
 // Detect checks if Tailscale is available and returns status.
-// Returns Status{Available: false} on error (graceful fallback).
+// Returns Status{Available: false} and the error when tailscaled is unreachable,
+// allowing the caller to log the error while gracefully falling back.
 func (d *LocalDetector) Detect(ctx context.Context) (*Status, error) {
 	ipnStatus, err := d.statusProvider.StatusWithoutPeers(ctx)
 	if err != nil {
-		// Tailscale not available - graceful fallback
-		return &Status{Available: false}, nil
+		// Tailscale not available - return error for caller to log
+		return &Status{Available: false}, err
 	}
 
 	// Check if we have a valid state

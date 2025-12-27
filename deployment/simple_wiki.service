@@ -3,6 +3,9 @@ Description=Simple Home Wiki
 After=network-online.target 
 
 [Service]
+# -port 80: Listen on port 80 (Tailscale Serve proxies HTTPS traffic here)
+# -tailscale-serve: Let Tailscale Serve handle TLS termination (no local HTTPS listener)
+# -force-redirect-tailnet-https: Redirect tailnet clients to HTTPS on the tailnet hostname
 ExecStart=/srv/wiki/bin/simple_wiki -port 80 -tailscale-serve -force-redirect-tailnet-https -data /srv/wiki/data
 Environment=WIKI_TEMPLATE_DEBUG=true
 Restart=always
