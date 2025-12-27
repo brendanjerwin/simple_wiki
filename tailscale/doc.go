@@ -27,7 +27,7 @@
 //   - [LocalDetector]: Detects Tailscale availability and retrieves status
 //   - [LocalIdentityResolver]: Resolves user identity from IP addresses via WhoIs
 //   - [TailscaleTLSConfigurer]: Provides TLS configuration using Tailscale certificates
-//   - [IdentityMiddleware]: Gin middleware for HTTP identity extraction
+//   - [IdentityMiddlewareWithMetrics]: Gin middleware for HTTP identity extraction with metrics
 //   - [IdentityInterceptor]: gRPC interceptor for identity extraction
 //   - [TailnetRedirector]: HTTP handler that redirects tailnet clients to HTTPS
 package tailscale

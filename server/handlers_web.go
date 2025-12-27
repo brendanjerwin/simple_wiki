@@ -48,7 +48,8 @@ var (
 )
 
 // GinRouter returns a new Gin router configured for the site.
-func (s *Site) GinRouter() *gin.Engine {
+// Optional middleware handlers are added before routes are registered.
+func (s *Site) GinRouter(middleware ...gin.HandlerFunc) *gin.Engine {
 	if s.Logger == nil {
 		s.Logger = lumber.NewConsoleLogger(lumber.TRACE)
 	}
@@ -68,6 +69,11 @@ func (s *Site) GinRouter() *gin.Engine {
 		router.LoadHTMLGlob("server/templates/*.tmpl")
 	} else {
 		router.HTMLRender = s.loadTemplate()
+	}
+
+	// Add provided middleware before routes (important for observability)
+	for _, mw := range middleware {
+		router.Use(mw)
 	}
 
 	router.Use(sessions.Sessions("_session", s.SessionStore))

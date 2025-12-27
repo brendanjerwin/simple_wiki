@@ -9,16 +9,20 @@ import (
 
 // mockCounter tracks calls for testing CompositeRequestCounter.
 type mockCounter struct {
-	httpRequests int
-	httpErrors   int
-	grpcRequests int
-	grpcErrors   int
+	httpRequests       int
+	httpErrors         int
+	grpcRequests       int
+	grpcErrors         int
+	tailscaleLookups   int
+	headerExtractions  int
 }
 
-func (m *mockCounter) RecordHTTPRequest() { m.httpRequests++ }
-func (m *mockCounter) RecordHTTPError()   { m.httpErrors++ }
-func (m *mockCounter) RecordGRPCRequest() { m.grpcRequests++ }
-func (m *mockCounter) RecordGRPCError()   { m.grpcErrors++ }
+func (m *mockCounter) RecordHTTPRequest()                                     { m.httpRequests++ }
+func (m *mockCounter) RecordHTTPError()                                       { m.httpErrors++ }
+func (m *mockCounter) RecordGRPCRequest()                                     { m.grpcRequests++ }
+func (m *mockCounter) RecordGRPCError()                                       { m.grpcErrors++ }
+func (m *mockCounter) RecordTailscaleLookup(_ observability.IdentityLookupResult) { m.tailscaleLookups++ }
+func (m *mockCounter) RecordHeaderExtraction()                                { m.headerExtractions++ }
 
 var _ = Describe("CompositeRequestCounter", func() {
 	Describe("NewCompositeRequestCounter", func() {
@@ -121,6 +125,42 @@ var _ = Describe("CompositeRequestCounter", func() {
 			It("should call all registered counters", func() {
 				Expect(counter1.grpcErrors).To(Equal(1))
 				Expect(counter2.grpcErrors).To(Equal(1))
+			})
+		})
+	})
+
+	Describe("RecordTailscaleLookup", func() {
+		When("recording with multiple counters", func() {
+			var counter1, counter2 *mockCounter
+
+			BeforeEach(func() {
+				counter1 = &mockCounter{}
+				counter2 = &mockCounter{}
+				composite := observability.NewCompositeRequestCounter(counter1, counter2)
+				composite.RecordTailscaleLookup(observability.ResultSuccess)
+			})
+
+			It("should call all registered counters", func() {
+				Expect(counter1.tailscaleLookups).To(Equal(1))
+				Expect(counter2.tailscaleLookups).To(Equal(1))
+			})
+		})
+	})
+
+	Describe("RecordHeaderExtraction", func() {
+		When("recording with multiple counters", func() {
+			var counter1, counter2 *mockCounter
+
+			BeforeEach(func() {
+				counter1 = &mockCounter{}
+				counter2 = &mockCounter{}
+				composite := observability.NewCompositeRequestCounter(counter1, counter2)
+				composite.RecordHeaderExtraction()
+			})
+
+			It("should call all registered counters", func() {
+				Expect(counter1.headerExtractions).To(Equal(1))
+				Expect(counter2.headerExtractions).To(Equal(1))
 			})
 		})
 	})

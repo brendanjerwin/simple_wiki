@@ -7,6 +7,8 @@ type RequestCounter interface {
 	RecordHTTPError()
 	RecordGRPCRequest()
 	RecordGRPCError()
+	RecordTailscaleLookup(result IdentityLookupResult)
+	RecordHeaderExtraction()
 }
 
 // CompositeRequestCounter aggregates multiple RequestCounter implementations.
@@ -52,5 +54,19 @@ func (c *CompositeRequestCounter) RecordGRPCRequest() {
 func (c *CompositeRequestCounter) RecordGRPCError() {
 	for _, counter := range c.counters {
 		counter.RecordGRPCError()
+	}
+}
+
+// RecordTailscaleLookup records a Tailscale identity lookup to all registered counters.
+func (c *CompositeRequestCounter) RecordTailscaleLookup(result IdentityLookupResult) {
+	for _, counter := range c.counters {
+		counter.RecordTailscaleLookup(result)
+	}
+}
+
+// RecordHeaderExtraction records a Tailscale header extraction to all registered counters.
+func (c *CompositeRequestCounter) RecordHeaderExtraction() {
+	for _, counter := range c.counters {
+		counter.RecordHeaderExtraction()
 	}
 }

@@ -192,14 +192,14 @@ func SetupFullTLS(
 	return result, nil
 }
 
-// setupHTTPObservability adds HTTP observability middleware to the Gin router.
-func setupHTTPObservability(ginRouter gin.IRouter, counters observability.RequestCounter, logger *lumber.ConsoleLogger) {
+// createHTTPObservabilityMiddleware creates HTTP observability middleware.
+func createHTTPObservabilityMiddleware(counters observability.RequestCounter, logger *lumber.ConsoleLogger) gin.HandlerFunc {
 	httpMetrics, err := observability.NewHTTPMetrics()
 	if err != nil {
 		logger.Warn("Failed to create HTTP metrics, continuing without: %v", err)
 	}
 	httpInstrumentation := observability.NewHTTPInstrumentation(httpMetrics, counters)
-	ginRouter.Use(httpInstrumentation.GinMiddleware())
+	return httpInstrumentation.GinMiddleware()
 }
 
 // buildGRPCInterceptors creates the gRPC interceptor chains for observability and identity.
@@ -239,14 +239,24 @@ func createMultiplexedHandler(
 	buildTime time.Time,
 	identityResolver tailscale.IdentityResolver,
 ) (http.Handler, error) {
-	ginRouter := site.GinRouter()
+	// Create counters first so middleware can use them
 	counters := setupWikiMetrics(site, logger)
 
-	setupHTTPObservability(ginRouter, counters, logger)
+	// Build middleware list to pass to GinRouter (added before routes)
+	var middleware []gin.HandlerFunc
+	middleware = append(middleware, createHTTPObservabilityMiddleware(counters, logger))
 
-	if err := setupIdentityMiddleware(ginRouter, identityResolver, logger); err != nil {
-		return nil, err
+	if identityResolver != nil {
+		// RequestCounter implements tailscale.MetricsRecorder since both now use observability types
+		identityMW, err := tailscale.IdentityMiddlewareWithMetrics(identityResolver, logger, counters)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create identity middleware: %w", err)
+		}
+		middleware = append(middleware, identityMW)
 	}
+
+	// Create router with middleware already attached (before routes)
+	ginRouter := site.GinRouter(middleware...)
 
 	grpcServer, err := setupGRPCServer(site, commit, buildTime, identityResolver, counters, logger)
 	if err != nil {
@@ -269,13 +279,14 @@ func createMultiplexedHandler(
 }
 
 // setupWikiMetrics creates and configures the wiki metrics recorder.
+// Always returns a non-nil RequestCounter; returns empty composite if recorder creation fails.
 func setupWikiMetrics(site *server.Site, logger *lumber.ConsoleLogger) observability.RequestCounter {
 	wikiRecorder, err := observability.NewWikiMetricsRecorder(
 		site, site, site.GetJobQueueCoordinator(), logger,
 	)
 	if err != nil {
-		logger.Warn("Failed to create wiki metrics recorder: %v", err)
-		return nil
+		logger.Warn("Failed to create wiki metrics recorder, metrics disabled: %v", err)
+		return observability.NewCompositeRequestCounter()
 	}
 
 	counters := observability.NewCompositeRequestCounter(wikiRecorder)
@@ -289,19 +300,6 @@ func setupWikiMetrics(site *server.Site, logger *lumber.ConsoleLogger) observabi
 	}
 
 	return counters
-}
-
-// setupIdentityMiddleware configures Tailscale identity middleware if available.
-func setupIdentityMiddleware(ginRouter gin.IRouter, identityResolver tailscale.IdentityResolver, logger *lumber.ConsoleLogger) error {
-	if identityResolver == nil {
-		return nil
-	}
-	middleware, err := tailscale.IdentityMiddleware(identityResolver, logger)
-	if err != nil {
-		return fmt.Errorf("failed to create identity middleware: %w", err)
-	}
-	ginRouter.Use(middleware)
-	return nil
 }
 
 // setupGRPCServer creates and configures the gRPC server with interceptors.
@@ -353,3 +351,4 @@ func (j *metricsPersistJob) Execute() error {
 	j.recorder.PersistAsync()
 	return nil
 }
+
