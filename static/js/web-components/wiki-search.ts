@@ -21,7 +21,7 @@ export class WikiSearch extends LitElement {
   }
 
   // Method that can be stubbed in tests to prevent network calls
-  async performSearch(query: string): Promise<SearchResult[]> {
+  async performSearch(query: string): Promise<{ results: SearchResult[], totalUnfilteredCount: number }> {
     const request: Partial<SearchContentRequest> = {
       query,
       frontmatterKeysToReturnInResults: ['inventory.container'],
@@ -33,7 +33,10 @@ export class WikiSearch extends LitElement {
     }
 
     const response = await this.getClient().searchContent(request);
-    return response.results;
+    return {
+      results: response.results,
+      totalUnfilteredCount: response.totalUnfilteredCount
+    };
   }
   static override styles = css`
     div#container {
@@ -105,6 +108,7 @@ export class WikiSearch extends LitElement {
     loading: { type: Boolean },
     error: { type: String },
     inventoryOnly: { type: Boolean },
+    totalUnfilteredCount: { type: Number },
   };
 
   declare results: SearchResult[];
@@ -112,6 +116,7 @@ export class WikiSearch extends LitElement {
   declare loading: boolean;
   declare error?: string;
   declare inventoryOnly: boolean;
+  declare totalUnfilteredCount: number;
   private lastSearchQuery: string = '';
 
   constructor() {
@@ -120,6 +125,7 @@ export class WikiSearch extends LitElement {
     this.noResults = false;
     this.loading = false;
     this.inventoryOnly = localStorage.getItem(INVENTORY_ONLY_STORAGE_KEY) === 'true';
+    this.totalUnfilteredCount = 0;
     this._handleKeydown = this._handleKeydown.bind(this);
   }
 
@@ -164,10 +170,11 @@ export class WikiSearch extends LitElement {
     this.loading = true;
 
     try {
-      const results = await this.performSearch(searchTerm);
-      this.results = [...results];
+      const response = await this.performSearch(searchTerm);
+      this.results = [...response.results];
+      this.totalUnfilteredCount = response.totalUnfilteredCount;
 
-      if (results.length > 0) {
+      if (response.results.length > 0) {
         this.noResults = false;
       } else {
         this.noResults = true;
@@ -201,9 +208,10 @@ export class WikiSearch extends LitElement {
       this.error = undefined;
 
       try {
-        const results = await this.performSearch(this.lastSearchQuery);
-        this.results = [...results];
-        this.noResults = results.length === 0;
+        const response = await this.performSearch(this.lastSearchQuery);
+        this.results = [...response.results];
+        this.totalUnfilteredCount = response.totalUnfilteredCount;
+        this.noResults = response.results.length === 0;
       } catch (error) {
         this.results = [];
         this.error = error instanceof Error ? error.message : 'Search failed';
@@ -227,6 +235,7 @@ export class WikiSearch extends LitElement {
                 .results="${this.results}"
                 .open="${this.results.length > 0 || this.noResults}"
                 .inventoryOnly="${this.inventoryOnly}"
+                .totalUnfilteredCount="${this.totalUnfilteredCount}"
                 @search-results-closed="${this.handleSearchResultsClosed}"
                 @inventory-filter-changed="${this.handleInventoryFilterChanged}">
             </wiki-search-results>

@@ -144,6 +144,21 @@ class WikiSearchResults extends LitElement {
             color: #666;
             font-style: italic;
         }
+        .filter-warning {
+            background-color: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 5px;
+            padding: 8px 10px;
+            margin: 10px;
+            font-size: 13px;
+            color: #856404;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .filter-warning i {
+            color: #ffc107;
+        }
 
         @media (max-width: 410px) {
             div#results {
@@ -156,12 +171,14 @@ class WikiSearchResults extends LitElement {
   static override properties = {
     results: { type: Array },
     open: { type: Boolean, reflect: true },
-    inventoryOnly: { type: Boolean }
+    inventoryOnly: { type: Boolean },
+    totalUnfilteredCount: { type: Number }
   };
 
   declare results: SearchResult[];
   declare open: boolean;
   declare inventoryOnly: boolean;
+  declare totalUnfilteredCount: number;
 
   private _handleClickOutside: (event: Event) => void;
   private _handleKeydown: (event: KeyboardEvent) => void;
@@ -171,6 +188,7 @@ class WikiSearchResults extends LitElement {
     this.results = [];
     this.open = false;
     this.inventoryOnly = false;
+    this.totalUnfilteredCount = 0;
     this._handleClickOutside = this.handleClickOutside.bind(this);
     this._handleKeydown = this.handleKeydown.bind(this);
   }
@@ -320,6 +338,10 @@ class WikiSearchResults extends LitElement {
   }
 
   override render() {
+    const hiddenResultsCount = this.inventoryOnly && this.totalUnfilteredCount > 0 
+      ? this.totalUnfilteredCount - this.results.length 
+      : 0;
+    
     return html`
             ${sharedStyles}
             <div class="popover border-radius-large box-shadow-light" @click="${this.handlePopoverClick}">
@@ -334,6 +356,12 @@ class WikiSearchResults extends LitElement {
                     </label>
                     <button class="close border-radius-small" @click="${this.close}"><i class="fa-solid fa-xmark"></i></button>
                 </div>
+                ${hiddenResultsCount > 0 ? html`
+                    <div class="filter-warning">
+                        <i class="fa-solid fa-triangle-exclamation"></i>
+                        <span>${hiddenResultsCount} other result${hiddenResultsCount === 1 ? '' : 's'} not shown (not Inventory Only)</span>
+                    </div>
+                ` : ''}
                 <div id="results">
                 ${this.results.length === 0
                   ? html`<div class="no-results">No results found</div>`

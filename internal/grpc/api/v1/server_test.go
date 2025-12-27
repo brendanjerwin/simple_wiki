@@ -1500,6 +1500,12 @@ var _ = Describe("Server", func() {
 				Expect(resp.Results[0].Highlights[0].Start).To(Equal(int32(10)))
 				Expect(resp.Results[0].Highlights[0].End).To(Equal(int32(14)))
 			})
+
+			It("should return zero for total unfiltered count when no filters are applied", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.TotalUnfilteredCount).To(Equal(int32(0))) // No filters, so no warning needed
+			})
 		})
 
 		When("the search index returns an error", func() {
@@ -1566,6 +1572,12 @@ var _ = Describe("Server", func() {
 				Expect(identifiers).NotTo(ContainElement("page-without-inventory"))
 			})
 
+			It("should return the total unfiltered count", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.TotalUnfilteredCount).To(Equal(int32(3))) // 3 total results before filtering
+			})
+
 			When("no pages match the filter", func() {
 				BeforeEach(func() {
 					mockFrontmatterIndexQueryer.KeyExistsResults = []wikipage.PageIdentifier{}
@@ -1575,6 +1587,12 @@ var _ = Describe("Server", func() {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(resp).NotTo(BeNil())
 					Expect(resp.Results).To(BeEmpty())
+				})
+
+				It("should still return the total unfiltered count", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(resp).NotTo(BeNil())
+					Expect(resp.TotalUnfilteredCount).To(Equal(int32(3))) // 3 total results before filtering
 				})
 			})
 		})
