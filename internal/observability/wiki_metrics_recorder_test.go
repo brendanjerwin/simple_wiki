@@ -2,6 +2,8 @@
 package observability_test
 
 import (
+	"time"
+
 	"github.com/brendanjerwin/simple_wiki/internal/observability"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
@@ -140,68 +142,123 @@ func createRecorderWithMockAndLogger(mock *mockPageReaderWriter, logger *mockLog
 var _ = Describe("WikiMetricsRecorder", func() {
 	Describe("NewWikiMetricsRecorder", func() {
 		When("creating with all dependencies", func() {
-			It("should return a recorder without error", func() {
+			var recorder *observability.WikiMetricsRecorder
+			var err error
+
+			BeforeEach(func() {
 				mock := newMockPageReaderWriter()
 				coordinator := jobs.NewJobQueueCoordinator(lumber.NewConsoleLogger(lumber.FATAL))
-				recorder, err := observability.NewWikiMetricsRecorder(mock, mock, coordinator, nil)
+				recorder, err = observability.NewWikiMetricsRecorder(mock, mock, coordinator, nil)
+			})
+
+			It("should not return an error", func() {
 				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should return a non-nil recorder", func() {
 				Expect(recorder).ToNot(BeNil())
 			})
 		})
 
 		When("creating without any dependencies (metrics-only mode)", func() {
-			It("should return a recorder without error", func() {
-				recorder, err := observability.NewWikiMetricsRecorder(nil, nil, nil, nil)
+			var recorder *observability.WikiMetricsRecorder
+			var err error
+
+			BeforeEach(func() {
+				recorder, err = observability.NewWikiMetricsRecorder(nil, nil, nil, nil)
+			})
+
+			It("should not return an error", func() {
 				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should return a non-nil recorder", func() {
 				Expect(recorder).ToNot(BeNil())
 			})
 		})
 
 		When("creating with only pageWriter and pageReader (missing jobQueue)", func() {
-			It("should return an error", func() {
+			var err error
+
+			BeforeEach(func() {
 				mock := newMockPageReaderWriter()
-				_, err := observability.NewWikiMetricsRecorder(mock, mock, nil, nil)
+				_, err = observability.NewWikiMetricsRecorder(mock, mock, nil, nil)
+			})
+
+			It("should return an error", func() {
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("all be provided together"))
+			})
+
+			It("should indicate all dependencies must be provided together", func() {
+				Expect(err).To(MatchError(ContainSubstring("all be provided together")))
 			})
 		})
 
 		When("creating with only pageWriter", func() {
-			It("should return an error", func() {
+			var err error
+
+			BeforeEach(func() {
 				mock := newMockPageReaderWriter()
-				_, err := observability.NewWikiMetricsRecorder(mock, nil, nil, nil)
+				_, err = observability.NewWikiMetricsRecorder(mock, nil, nil, nil)
+			})
+
+			It("should return an error", func() {
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("all be provided together"))
+			})
+
+			It("should indicate all dependencies must be provided together", func() {
+				Expect(err).To(MatchError(ContainSubstring("all be provided together")))
 			})
 		})
 
 		When("creating with only pageReader", func() {
-			It("should return an error", func() {
+			var err error
+
+			BeforeEach(func() {
 				mock := newMockPageReaderWriter()
-				_, err := observability.NewWikiMetricsRecorder(nil, mock, nil, nil)
+				_, err = observability.NewWikiMetricsRecorder(nil, mock, nil, nil)
+			})
+
+			It("should return an error", func() {
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("all be provided together"))
+			})
+
+			It("should indicate all dependencies must be provided together", func() {
+				Expect(err).To(MatchError(ContainSubstring("all be provided together")))
 			})
 		})
 
 		When("creating with only jobQueue", func() {
-			It("should return an error", func() {
+			var err error
+
+			BeforeEach(func() {
 				coordinator := jobs.NewJobQueueCoordinator(lumber.NewConsoleLogger(lumber.FATAL))
-				_, err := observability.NewWikiMetricsRecorder(nil, nil, coordinator, nil)
+				_, err = observability.NewWikiMetricsRecorder(nil, nil, coordinator, nil)
+			})
+
+			It("should return an error", func() {
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("all be provided together"))
+			})
+
+			It("should indicate all dependencies must be provided together", func() {
+				Expect(err).To(MatchError(ContainSubstring("all be provided together")))
 			})
 		})
 	})
 
 	Describe("RecordHTTPRequest", func() {
 		When("recording multiple requests", func() {
-			It("should increment the HTTP requests counter", func() {
+			var stats observability.WikiMetricsStats
+
+			BeforeEach(func() {
 				recorder := createRecorder()
 				recorder.RecordHTTPRequest()
 				recorder.RecordHTTPRequest()
 				recorder.RecordHTTPRequest()
-				stats := recorder.GetStats()
+				stats = recorder.GetStats()
+			})
+
+			It("should increment the HTTP requests counter", func() {
 				Expect(stats.HTTPRequestsTotal).To(Equal(int64(3)))
 			})
 		})
@@ -209,11 +266,16 @@ var _ = Describe("WikiMetricsRecorder", func() {
 
 	Describe("RecordHTTPError", func() {
 		When("recording errors", func() {
-			It("should increment the HTTP errors counter", func() {
+			var stats observability.WikiMetricsStats
+
+			BeforeEach(func() {
 				recorder := createRecorder()
 				recorder.RecordHTTPError()
 				recorder.RecordHTTPError()
-				stats := recorder.GetStats()
+				stats = recorder.GetStats()
+			})
+
+			It("should increment the HTTP errors counter", func() {
 				Expect(stats.HTTPErrorsTotal).To(Equal(int64(2)))
 			})
 		})
@@ -221,11 +283,16 @@ var _ = Describe("WikiMetricsRecorder", func() {
 
 	Describe("RecordGRPCRequest", func() {
 		When("recording multiple requests", func() {
-			It("should increment the gRPC requests counter", func() {
+			var stats observability.WikiMetricsStats
+
+			BeforeEach(func() {
 				recorder := createRecorder()
 				recorder.RecordGRPCRequest()
 				recorder.RecordGRPCRequest()
-				stats := recorder.GetStats()
+				stats = recorder.GetStats()
+			})
+
+			It("should increment the gRPC requests counter", func() {
 				Expect(stats.GRPCRequestsTotal).To(Equal(int64(2)))
 			})
 		})
@@ -233,10 +300,15 @@ var _ = Describe("WikiMetricsRecorder", func() {
 
 	Describe("RecordGRPCError", func() {
 		When("recording errors", func() {
-			It("should increment the gRPC errors counter", func() {
+			var stats observability.WikiMetricsStats
+
+			BeforeEach(func() {
 				recorder := createRecorder()
 				recorder.RecordGRPCError()
-				stats := recorder.GetStats()
+				stats = recorder.GetStats()
+			})
+
+			It("should increment the gRPC errors counter", func() {
 				Expect(stats.GRPCErrorsTotal).To(Equal(int64(1)))
 			})
 		})
@@ -244,32 +316,56 @@ var _ = Describe("WikiMetricsRecorder", func() {
 
 	Describe("RecordTailscaleLookup", func() {
 		When("recording successful lookups", func() {
-			It("should increment the lookups and successes counters", func() {
+			var stats observability.WikiMetricsStats
+
+			BeforeEach(func() {
 				recorder := createRecorder()
 				recorder.RecordTailscaleLookup(observability.ResultSuccess)
 				recorder.RecordTailscaleLookup(observability.ResultSuccess)
-				stats := recorder.GetStats()
+				stats = recorder.GetStats()
+			})
+
+			It("should increment the lookups counter", func() {
 				Expect(stats.TailscaleLookups).To(Equal(int64(2)))
+			})
+
+			It("should increment the successes counter", func() {
 				Expect(stats.TailscaleSuccesses).To(Equal(int64(2)))
 			})
 		})
 
 		When("recording failed lookups", func() {
-			It("should increment the lookups and failures counters", func() {
+			var stats observability.WikiMetricsStats
+
+			BeforeEach(func() {
 				recorder := createRecorder()
 				recorder.RecordTailscaleLookup(observability.ResultFailure)
-				stats := recorder.GetStats()
+				stats = recorder.GetStats()
+			})
+
+			It("should increment the lookups counter", func() {
 				Expect(stats.TailscaleLookups).To(Equal(int64(1)))
+			})
+
+			It("should increment the failures counter", func() {
 				Expect(stats.TailscaleFailures).To(Equal(int64(1)))
 			})
 		})
 
 		When("recording not_tailnet lookups", func() {
-			It("should increment the lookups and not_tailnet counters", func() {
+			var stats observability.WikiMetricsStats
+
+			BeforeEach(func() {
 				recorder := createRecorder()
 				recorder.RecordTailscaleLookup(observability.ResultNotTailnet)
-				stats := recorder.GetStats()
+				stats = recorder.GetStats()
+			})
+
+			It("should increment the lookups counter", func() {
 				Expect(stats.TailscaleLookups).To(Equal(int64(1)))
+			})
+
+			It("should increment the not_tailnet counter", func() {
 				Expect(stats.TailscaleNotTailnet).To(Equal(int64(1)))
 			})
 		})
@@ -304,12 +400,17 @@ var _ = Describe("WikiMetricsRecorder", func() {
 
 	Describe("RecordHeaderExtraction", func() {
 		When("recording extractions", func() {
-			It("should increment the header extractions counter", func() {
+			var stats observability.WikiMetricsStats
+
+			BeforeEach(func() {
 				recorder := createRecorder()
 				recorder.RecordHeaderExtraction()
 				recorder.RecordHeaderExtraction()
 				recorder.RecordHeaderExtraction()
-				stats := recorder.GetStats()
+				stats = recorder.GetStats()
+			})
+
+			It("should increment the header extractions counter", func() {
 				Expect(stats.HeaderExtractions).To(Equal(int64(3)))
 			})
 		})
@@ -317,7 +418,14 @@ var _ = Describe("WikiMetricsRecorder", func() {
 
 	Describe("Persist", func() {
 		When("persisting metrics with data", func() {
-			It("should write frontmatter with correct data", func() {
+			var fm map[string]any
+			var obsData map[string]any
+			var httpData map[string]any
+			var grpcData map[string]any
+			var tsData map[string]any
+			var err error
+
+			BeforeEach(func() {
 				mock := newMockPageReaderWriter()
 				recorder := createRecorderWithMock(mock)
 				recorder.RecordHTTPRequest()
@@ -327,38 +435,72 @@ var _ = Describe("WikiMetricsRecorder", func() {
 				recorder.RecordTailscaleLookup(observability.ResultSuccess)
 				recorder.RecordHeaderExtraction()
 
-				err := recorder.Persist()
+				err = recorder.Persist()
+				fm = mock.frontmatter[observability.ObservabilityMetricsPage]
+				if fm != nil {
+					obsData, _ = fm["observability"].(map[string]any)
+					if obsData != nil {
+						httpData, _ = obsData["http"].(map[string]any)
+						grpcData, _ = obsData["grpc"].(map[string]any)
+						tsData, _ = obsData["tailscale"].(map[string]any)
+					}
+				}
+			})
+
+			It("should not return an error", func() {
 				Expect(err).ToNot(HaveOccurred())
+			})
 
-				fm := mock.frontmatter[observability.ObservabilityMetricsPage]
+			It("should write frontmatter", func() {
 				Expect(fm).ToNot(BeNil())
+			})
+
+			It("should set the correct identifier", func() {
 				Expect(fm["identifier"]).To(Equal(observability.ObservabilityMetricsPage))
+			})
+
+			It("should set the correct title", func() {
 				Expect(fm["title"]).To(Equal("Observability Metrics"))
+			})
 
-				obsData, ok := fm["observability"].(map[string]any)
-				Expect(ok).To(BeTrue())
+			It("should include observability data", func() {
+				Expect(obsData).ToNot(BeNil())
+			})
 
-				httpData, ok := obsData["http"].(map[string]any)
-				Expect(ok).To(BeTrue())
+			It("should record HTTP requests count", func() {
 				Expect(httpData["requests_total"]).To(Equal(int64(2)))
+			})
+
+			It("should record HTTP errors count", func() {
 				Expect(httpData["errors_total"]).To(Equal(int64(1)))
+			})
 
-				grpcData, ok := obsData["grpc"].(map[string]any)
-				Expect(ok).To(BeTrue())
+			It("should record gRPC requests count", func() {
 				Expect(grpcData["requests_total"]).To(Equal(int64(1)))
+			})
 
-				tsData, ok := obsData["tailscale"].(map[string]any)
-				Expect(ok).To(BeTrue())
+			It("should record Tailscale lookups count", func() {
 				Expect(tsData["lookups_total"]).To(Equal(int64(1)))
+			})
+
+			It("should record Tailscale successes count", func() {
 				Expect(tsData["successes_total"]).To(Equal(int64(1)))
+			})
+
+			It("should record header extractions count", func() {
 				Expect(tsData["header_extractions_total"]).To(Equal(int64(1)))
 			})
 		})
 
 		When("persisting without page access configured", func() {
-			It("should not return an error", func() {
+			var err error
+
+			BeforeEach(func() {
 				recorder := createRecorder()
-				err := recorder.Persist()
+				err = recorder.Persist()
+			})
+
+			It("should not return an error", func() {
 				Expect(err).ToNot(HaveOccurred())
 			})
 		})
@@ -473,8 +615,11 @@ var _ = Describe("WikiMetricsRecorder", func() {
 				Expect(err).ToNot(HaveOccurred())
 			})
 
-			It("should not write any data", func() {
+			It("should not write frontmatter", func() {
 				Expect(mock.frontmatter).To(BeEmpty())
+			})
+
+			It("should not write markdown", func() {
 				Expect(mock.markdown).To(BeEmpty())
 			})
 		})
@@ -491,30 +636,47 @@ var _ = Describe("WikiMetricsRecorder", func() {
 				err = recorder.Persist()
 			})
 
-			It("should write data", func() {
+			It("should not return an error", func() {
 				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should write frontmatter", func() {
 				Expect(mock.frontmatter[observability.ObservabilityMetricsPage]).ToNot(BeNil())
 			})
 
-			It("should skip subsequent persist without new metrics", func() {
-				// Clear the mock to verify nothing is written
-				mock.frontmatter = make(map[string]map[string]any)
-				mock.markdown = make(map[string]string)
+			When("persisting again without new metrics", func() {
+				BeforeEach(func() {
+					// Clear the mock to verify nothing is written
+					mock.frontmatter = make(map[string]map[string]any)
+					mock.markdown = make(map[string]string)
+					err = recorder.Persist()
+				})
 
-				err := recorder.Persist()
-				Expect(err).ToNot(HaveOccurred())
-				Expect(mock.frontmatter).To(BeEmpty())
+				It("should not return an error", func() {
+					Expect(err).ToNot(HaveOccurred())
+				})
+
+				It("should skip writing", func() {
+					Expect(mock.frontmatter).To(BeEmpty())
+				})
 			})
 
-			It("should persist again after new metrics are recorded", func() {
-				// Clear the mock
-				mock.frontmatter = make(map[string]map[string]any)
-				mock.markdown = make(map[string]string)
+			When("persisting after new metrics are recorded", func() {
+				BeforeEach(func() {
+					// Clear the mock
+					mock.frontmatter = make(map[string]map[string]any)
+					mock.markdown = make(map[string]string)
+					recorder.RecordGRPCRequest()
+					err = recorder.Persist()
+				})
 
-				recorder.RecordGRPCRequest()
-				err := recorder.Persist()
-				Expect(err).ToNot(HaveOccurred())
-				Expect(mock.frontmatter[observability.ObservabilityMetricsPage]).ToNot(BeNil())
+				It("should not return an error", func() {
+					Expect(err).ToNot(HaveOccurred())
+				})
+
+				It("should write frontmatter again", func() {
+					Expect(mock.frontmatter[observability.ObservabilityMetricsPage]).ToNot(BeNil())
+				})
 			})
 		})
 	})
@@ -522,21 +684,20 @@ var _ = Describe("WikiMetricsRecorder", func() {
 	Describe("PersistAsync", func() {
 		When("jobQueue is configured", func() {
 			var mock *mockPageReaderWriter
-			var recorder *observability.WikiMetricsRecorder
 
 			BeforeEach(func() {
 				mock = newMockPageReaderWriter()
 				coordinator := jobs.NewJobQueueCoordinator(lumber.NewConsoleLogger(lumber.FATAL))
-				recorder, _ = observability.NewWikiMetricsRecorder(mock, mock, coordinator, nil)
+				recorder, _ := observability.NewWikiMetricsRecorder(mock, mock, coordinator, nil)
 				recorder.RecordHTTPRequest()
+				recorder.PersistAsync()
 			})
 
 			It("should enqueue a job that persists metrics", func() {
-				recorder.PersistAsync()
 				// Give the job queue time to process
 				Eventually(func() map[string]any {
 					return mock.frontmatter[observability.ObservabilityMetricsPage]
-				}).ShouldNot(BeNil())
+				}, 5*time.Second, 100*time.Millisecond).ShouldNot(BeNil())
 			})
 		})
 
@@ -559,24 +720,27 @@ var _ = Describe("WikiMetricsRecorder", func() {
 	Describe("Shutdown", func() {
 		When("recorder has dirty metrics", func() {
 			var mock *mockPageReaderWriter
-			var recorder *observability.WikiMetricsRecorder
+			var fm map[string]any
 			var err error
 
 			BeforeEach(func() {
 				mock = newMockPageReaderWriter()
-				recorder = createRecorderWithMock(mock)
+				recorder := createRecorderWithMock(mock)
 				recorder.RecordHTTPRequest()
 				recorder.RecordGRPCRequest()
 				err = recorder.Shutdown()
+				fm = mock.frontmatter[observability.ObservabilityMetricsPage]
 			})
 
 			It("should not return an error", func() {
 				Expect(err).ToNot(HaveOccurred())
 			})
 
-			It("should persist the metrics", func() {
-				fm := mock.frontmatter[observability.ObservabilityMetricsPage]
+			It("should write frontmatter", func() {
 				Expect(fm).ToNot(BeNil())
+			})
+
+			It("should include observability data", func() {
 				Expect(fm["observability"]).ToNot(BeNil())
 			})
 		})
@@ -639,12 +803,11 @@ var _ = Describe("WikiMetricsRecorder", func() {
 			})
 
 			It("should contain the underlying error message", func() {
-				Expect(err.Error()).To(ContainSubstring("frontmatter read failed"))
+				Expect(err).To(MatchError(ContainSubstring("frontmatter read failed")))
 			})
 		})
 
 		When("markdown read fails", func() {
-			var recorder *observability.WikiMetricsRecorder
 			var err error
 
 			BeforeEach(func() {
@@ -653,7 +816,7 @@ var _ = Describe("WikiMetricsRecorder", func() {
 					failMarkdownRead:     true,
 				}
 				coordinator := jobs.NewJobQueueCoordinator(lumber.NewConsoleLogger(lumber.FATAL))
-				recorder, _ = observability.NewWikiMetricsRecorder(mock, mock, coordinator, nil)
+				recorder, _ := observability.NewWikiMetricsRecorder(mock, mock, coordinator, nil)
 				recorder.RecordHTTPRequest()
 				err = recorder.Persist()
 			})
@@ -663,12 +826,11 @@ var _ = Describe("WikiMetricsRecorder", func() {
 			})
 
 			It("should contain the underlying error message", func() {
-				Expect(err.Error()).To(ContainSubstring("markdown read failed"))
+				Expect(err).To(MatchError(ContainSubstring("markdown read failed")))
 			})
 		})
 
 		When("frontmatter write fails", func() {
-			var recorder *observability.WikiMetricsRecorder
 			var err error
 
 			BeforeEach(func() {
@@ -677,19 +839,21 @@ var _ = Describe("WikiMetricsRecorder", func() {
 					failFrontmatterWrite: true,
 				}
 				coordinator := jobs.NewJobQueueCoordinator(lumber.NewConsoleLogger(lumber.FATAL))
-				recorder, _ = observability.NewWikiMetricsRecorder(mock, mock, coordinator, nil)
+				recorder, _ := observability.NewWikiMetricsRecorder(mock, mock, coordinator, nil)
 				recorder.RecordHTTPRequest()
 				err = recorder.Persist()
 			})
 
 			It("should return an error", func() {
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("frontmatter write failed"))
+			})
+
+			It("should contain the underlying error message", func() {
+				Expect(err).To(MatchError(ContainSubstring("frontmatter write failed")))
 			})
 		})
 
 		When("markdown write fails", func() {
-			var recorder *observability.WikiMetricsRecorder
 			var err error
 
 			BeforeEach(func() {
@@ -698,14 +862,17 @@ var _ = Describe("WikiMetricsRecorder", func() {
 					failMarkdownWrite:    true,
 				}
 				coordinator := jobs.NewJobQueueCoordinator(lumber.NewConsoleLogger(lumber.FATAL))
-				recorder, _ = observability.NewWikiMetricsRecorder(mock, mock, coordinator, nil)
+				recorder, _ := observability.NewWikiMetricsRecorder(mock, mock, coordinator, nil)
 				recorder.RecordHTTPRequest()
 				err = recorder.Persist()
 			})
 
 			It("should return an error", func() {
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("markdown write failed"))
+			})
+
+			It("should contain the underlying error message", func() {
+				Expect(err).To(MatchError(ContainSubstring("markdown write failed")))
 			})
 		})
 	})
