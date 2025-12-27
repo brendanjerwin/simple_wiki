@@ -338,8 +338,8 @@ class WikiSearchResults extends LitElement {
   }
 
   override render() {
-    const hiddenResultsCount = this.inventoryOnly && this.totalUnfilteredCount > 0 
-      ? this.totalUnfilteredCount - this.results.length 
+    const hiddenResultsCount = this.inventoryOnly 
+      ? Math.max(0, this.totalUnfilteredCount - this.results.length)
       : 0;
     
     return html`

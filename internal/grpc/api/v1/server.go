@@ -513,11 +513,12 @@ func (s *Server) SearchContent(_ context.Context, req *apiv1.SearchContentReques
 	excludedPages := s.buildExcludedPagesSet(req.FrontmatterKeyExcludeFilters)
 	results := s.filterAndConvertResults(searchResults, includeFilterSets, excludedPages, req.FrontmatterKeysToReturnInResults)
 
-	// Calculate total unfiltered count for inventory filter warning
-	totalUnfilteredCount := int32(len(searchResults))
+	// Return total unfiltered count when filters are applied (for inventory filter warning)
+	// When no filters are applied, return 0 to indicate no filtering occurred
+	totalUnfilteredCount := int32(0)
 	hasFilters := len(req.FrontmatterKeyIncludeFilters) > 0 || len(req.FrontmatterKeyExcludeFilters) > 0
-	if !hasFilters {
-		totalUnfilteredCount = 0 // No filters means no warning needed
+	if hasFilters {
+		totalUnfilteredCount = int32(len(searchResults))
 	}
 
 	return &apiv1.SearchContentResponse{
