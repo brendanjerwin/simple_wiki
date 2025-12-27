@@ -34,6 +34,8 @@ Lightweight metrics persistence directly to a wiki page (`observability_metrics`
 - Uses direct frontmatter manipulation (not APIs) to avoid artificially inflating statistics
 - Provides an audit trail visible within the wiki itself
 - Persists via async job queue to avoid blocking request processing
+- Creates a markdown template (using frontmatter references) when the page is first created
+- Preserves user-customized markdown while updating frontmatter data
 
 ### 3. Environment-Based Configuration
 
@@ -77,8 +79,10 @@ The two systems are complementary and can run simultaneously:
 
 1. **TelemetryProvider**: Initializes and manages OpenTelemetry providers with automatic exporter selection
 2. **WikiMetricsRecorder**: Thread-safe atomic counters with async wiki persistence
-3. **GRPCInstrumentation**: Server interceptors wiring tracing and metrics
-4. **Domain-specific metrics**: HTTPMetrics, GRPCMetrics, TailscaleMetrics
+3. **RequestCounter**: Opaque interface for aggregate metric recording, allowing multiple backends
+4. **CompositeRequestCounter**: Aggregates multiple RequestCounter implementations (e.g., WikiMetricsRecorder + future backends)
+5. **GRPCInstrumentation**: Server interceptors wiring tracing and metrics
+6. **Domain-specific metrics**: HTTPMetrics, GRPCMetrics, TailscaleMetrics
 
 ### Exporter Selection Flow
 
@@ -113,8 +117,28 @@ metrics.RequestFinished(ctx, "GET", "/api/pages", 200, duration)
 ```go
 recorder, _ := observability.NewWikiMetricsRecorder(site, site, jobQueue, logger)
 recorder.RecordHTTPRequest()
-recorder.PersistWithMarkdownAsync()
+recorder.PersistAsync() // Enqueues persistence job to job queue
 ```
+
+### Wiki Metrics Persistence Flow
+
+All wiki writes go through the job queue:
+
+```text
+Cron Scheduler (every minute)
+└─► Triggers wiki_metrics_persist_trigger job
+    └─► Calls WikiMetricsRecorder.PersistAsync()
+        └─► Enqueues observability_metrics_persist job to JobQueueCoordinator
+            └─► Job queue processes job
+                └─► Calls WikiMetricsRecorder.Persist()
+                    ├─► Writes markdown template (if page content is empty)
+                    └─► Updates frontmatter with current metrics
+```
+
+This ensures:
+- Non-blocking request processing (cron triggers async job)
+- Proper job queue serialization for wiki writes
+- Markdown template created only once, then preserved
 
 ## Benefits
 
