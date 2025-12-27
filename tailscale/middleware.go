@@ -3,16 +3,33 @@ package tailscale
 import (
 	"errors"
 
+	"github.com/brendanjerwin/simple_wiki/internal/observability"
 	"github.com/gin-gonic/gin"
 	"github.com/jcelliott/lumber"
 )
 
-// IdentityMiddleware creates Gin middleware that extracts Tailscale identity.
+// MetricsRecorder records Tailscale identity metrics.
+// Uses observability.IdentityLookupResult for consistency across the codebase.
+type MetricsRecorder interface {
+	RecordTailscaleLookup(result observability.IdentityLookupResult)
+	RecordHeaderExtraction()
+}
+
+// IdentityMiddlewareWithMetrics creates Gin middleware that extracts Tailscale identity.
 // Identity is extracted from Tailscale headers (set by Tailscale Serve) or via WhoIs.
 // If identity cannot be resolved, the request continues with Anonymous identity (graceful fallback).
-func IdentityMiddleware(resolver IdentityResolver, logger *lumber.ConsoleLogger) (gin.HandlerFunc, error) {
+//
+// The resolver parameter may be nil. When nil, only header-based identity extraction is attempted.
+// This is useful when Tailscale Serve handles all requests, so WhoIs lookups are unnecessary.
+// When resolver is nil and no headers are present, requests continue as Anonymous.
+//
+// The logger and metrics parameters are required and validated.
+func IdentityMiddlewareWithMetrics(resolver IdentityResolver, logger *lumber.ConsoleLogger, metrics MetricsRecorder) (gin.HandlerFunc, error) {
 	if logger == nil {
 		return nil, errors.New("logger is required")
+	}
+	if metrics == nil {
+		return nil, errors.New("metrics is required")
 	}
 
 	return func(c *gin.Context) {
@@ -28,6 +45,7 @@ func IdentityMiddleware(resolver IdentityResolver, logger *lumber.ConsoleLogger)
 		// To get the node name, the WhoIs fallback must be used (direct tailnet access).
 		if loginName := c.Request.Header.Get("Tailscale-User-Login"); loginName != "" && isFromLocalhost(c.Request.RemoteAddr) {
 			identity = NewIdentity(loginName, c.Request.Header.Get("Tailscale-User-Name"), "")
+			metrics.RecordHeaderExtraction()
 		}
 
 		// Method 2: Try WhoIs lookup (works for direct tailnet connections)
@@ -35,7 +53,12 @@ func IdentityMiddleware(resolver IdentityResolver, logger *lumber.ConsoleLogger)
 			var err error
 			identity, err = resolver.WhoIs(ctx, c.Request.RemoteAddr)
 			if err != nil {
+				metrics.RecordTailscaleLookup(observability.ResultFailure)
 				logger.Debug("WhoIs lookup failed: %v", err)
+			} else if identity.IsAnonymous() {
+				metrics.RecordTailscaleLookup(observability.ResultNotTailnet)
+			} else {
+				metrics.RecordTailscaleLookup(observability.ResultSuccess)
 			}
 		}
 

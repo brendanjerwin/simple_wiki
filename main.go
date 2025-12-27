@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/internal/bootstrap"
+	"github.com/brendanjerwin/simple_wiki/internal/observability"
 	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/jcelliott/lumber"
@@ -22,6 +23,7 @@ var (
 	commit    = "n/a"
 	buildTime = ""
 	logger    *lumber.ConsoleLogger
+	telemetry *observability.TelemetryProvider
 )
 
 // getCommitHash retrieves the current git commit hash.
@@ -96,11 +98,36 @@ func detectTailscale(ctx context.Context) *tailscale.Status {
 	return tsStatus
 }
 
-func setupServer(c *cli.Context) (*bootstrap.ServerResult, error) {
+func initializeTelemetry(actualCommit string) func() {
+	var err error
+	telemetry, err = observability.Initialize(context.Background(), actualCommit)
+	if err != nil {
+		logger.Warn("Failed to initialize OpenTelemetry: %v", err)
+	} else if telemetry.IsEnabled() {
+		logger.Info("OpenTelemetry instrumentation enabled")
+	}
+
+	// Return cleanup function
+	return func() {
+		if telemetry != nil && telemetry.IsEnabled() {
+			logger.Info("Shutting down OpenTelemetry...")
+			if shutdownErr := telemetry.Shutdown(context.Background()); shutdownErr != nil {
+				logger.Warn("Error shutting down OpenTelemetry: %v", shutdownErr)
+			}
+		}
+	}
+}
+
+func setupServer(c *cli.Context) (*bootstrap.ServerResult, func(), error) {
 	site, err := createSite(c)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+
+	actualCommit := getCommitHash()
+
+	// Initialize OpenTelemetry
+	telemetryCleanup := initializeTelemetry(actualCommit)
 
 	host := c.GlobalString("host")
 	if host == "" {
@@ -116,28 +143,35 @@ func setupServer(c *cli.Context) (*bootstrap.ServerResult, error) {
 	tsStatus := detectTailscale(context.Background())
 	mode := bootstrap.DetermineServerMode(tsStatus, c.GlobalBool("tailscale-serve"))
 
-	actualCommit := getCommitHash()
 	logger.Info("Running simple_wiki server (commit %s)", actualCommit)
 
 	httpAddr := fmt.Sprintf("%s:%d", host, port)
 	buildTime := getBuildTime()
 
+	var result *bootstrap.ServerResult
 	switch mode {
 	case bootstrap.ModePlainHTTP:
-		return bootstrap.SetupPlainHTTP(httpAddr, site, logger, actualCommit, buildTime)
+		result, err = bootstrap.SetupPlainHTTP(httpAddr, site, logger, actualCommit, buildTime)
 	case bootstrap.ModeTailscaleServe:
-		return bootstrap.SetupTailscaleServe(
+		result, err = bootstrap.SetupTailscaleServe(
 			httpAddr, tsStatus.DNSName, c.GlobalBool("force-redirect-tailnet-https"),
 			site, logger, actualCommit, buildTime,
 		)
 	case bootstrap.ModeFullTLS:
-		return bootstrap.SetupFullTLS(
+		result, err = bootstrap.SetupFullTLS(
 			httpAddr, tlsPort, tsStatus.DNSName,
 			site, logger, actualCommit, buildTime,
 		)
 	default:
-		return nil, fmt.Errorf("unknown server mode: %v", mode)
+		err = fmt.Errorf("unknown server mode: %v", mode)
 	}
+
+	if err != nil {
+		telemetryCleanup()
+		return nil, nil, err
+	}
+
+	return result, telemetryCleanup, nil
 }
 
 func main() {
@@ -147,10 +181,11 @@ func main() {
 	app.Version = getCommitHash()
 	app.Compiled = time.Now()
 	app.Action = func(c *cli.Context) error {
-		config, err := setupServer(c)
+		config, telemetryCleanup, err := setupServer(c)
 		if err != nil {
 			return err
 		}
+		defer telemetryCleanup()
 
 		// Start the main server in a goroutine
 		serverErr := make(chan error, 1)
@@ -184,6 +219,11 @@ func main() {
 		if err := config.MainServer.Shutdown(ctx); err != nil {
 			logger.Error("Error shutting down main server: %v", err)
 			return err
+		}
+
+		// Run cleanup (e.g., persist final wiki metrics)
+		if config.Cleanup != nil {
+			config.Cleanup()
 		}
 
 		logger.Info("Server shutdown complete")

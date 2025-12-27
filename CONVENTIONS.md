@@ -1003,6 +1003,36 @@ ADRs should document significant architectural decisions that have long-term imp
 **Example of ADR-worthy decision**: "We chose gRPC-Web over REST for frontend-backend communication"  
 **Example of non-ADR decision**: "We implemented a version display component in the bottom-right corner"
 
+## Observability
+
+The application uses OpenTelemetry for metrics and distributed tracing, plus wiki-based
+metrics for lightweight visibility. See ADR-0007 for the architectural design.
+
+### Adding Metrics
+
+Use `observability.Meter("your/scope")` to create metric instruments with proper units:
+
+```go
+meter := observability.Meter("simple_wiki/yourcomponent")
+requestCounter, err := meter.Int64Counter(
+    "yourcomponent_requests_total",
+    metric.WithDescription("Total number of requests"),
+    metric.WithUnit("{request}"),
+)
+```
+
+### Adding Traces
+
+Use `observability.Tracer("your/scope")` for distributed tracing:
+
+```go
+tracer := observability.Tracer("simple_wiki/yourcomponent")
+ctx, span := tracer.Start(ctx, "operation-name")
+defer span.End()
+```
+
+See `internal/observability/doc.go` for detailed documentation.
+
 ## README
 
 - When updating the readme, match the tone of voice in the rest of the README. Its the face of the project. Marketing matters.

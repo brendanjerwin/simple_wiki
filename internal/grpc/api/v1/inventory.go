@@ -475,7 +475,7 @@ func (s *Server) buildContainerHierarchy(containerID string) []string {
 // buildInventoryItemMarkdown creates the markdown content for an inventory item page.
 func buildInventoryItemMarkdown() string {
 	var builder bytes.Buffer
-	_, _ = builder.WriteString("# {{or .Title .Identifier}}")
+	_, _ = builder.WriteString(server.InventoryPageHeaderTemplate)
 	_, _ = builder.WriteString(newlineConst)
 	_, _ = builder.WriteString(server.InventoryItemMarkdownTemplate)
 	return builder.String()

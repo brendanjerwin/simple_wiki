@@ -27,11 +27,23 @@ var _ = Describe("IdentityMiddleware", func() {
 			var err error
 
 			BeforeEach(func() {
-				_, err = tailscale.IdentityMiddleware(nil, nil)
+				_, err = tailscale.IdentityMiddlewareWithMetrics(nil, nil, &mockMetricsRecorder{})
 			})
 
 			It("should return an error", func() {
 				Expect(err).To(MatchError("logger is required"))
+			})
+		})
+
+		When("metrics is nil", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = tailscale.IdentityMiddlewareWithMetrics(nil, testLogger(), nil)
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(MatchError("metrics is required"))
 			})
 		})
 	})
@@ -40,11 +52,13 @@ var _ = Describe("IdentityMiddleware", func() {
 		When("Tailscale-User-Login header is present from localhost", func() {
 			var (
 				capturedIdentity tailscale.IdentityValue
+				metrics          *mockMetricsRecorder
 			)
 
 			BeforeEach(func() {
+				metrics = &mockMetricsRecorder{}
 				router = gin.New()
-				middleware, err := tailscale.IdentityMiddleware(nil, testLogger())
+				middleware, err := tailscale.IdentityMiddlewareWithMetrics(nil, testLogger(), metrics)
 				Expect(err).NotTo(HaveOccurred())
 				router.Use(middleware)
 				router.GET("/test", func(c *gin.Context) {
@@ -70,6 +84,10 @@ var _ = Describe("IdentityMiddleware", func() {
 			It("should have the correct display name", func() {
 				Expect(capturedIdentity.DisplayName()).To(Equal("Test User"))
 			})
+
+			It("should record header extraction metric", func() {
+				Expect(metrics.extractionCalls).To(Equal(1))
+			})
 		})
 
 		When("Tailscale-User-Login header is present without display name from localhost", func() {
@@ -79,7 +97,7 @@ var _ = Describe("IdentityMiddleware", func() {
 
 			BeforeEach(func() {
 				router = gin.New()
-				middleware, err := tailscale.IdentityMiddleware(nil, testLogger())
+				middleware, err := tailscale.IdentityMiddlewareWithMetrics(nil, testLogger(), &mockMetricsRecorder{})
 				Expect(err).NotTo(HaveOccurred())
 				router.Use(middleware)
 				router.GET("/test", func(c *gin.Context) {
@@ -111,6 +129,7 @@ var _ = Describe("IdentityMiddleware", func() {
 		When("no headers but WhoIs returns identity", func() {
 			var (
 				capturedIdentity tailscale.IdentityValue
+				metrics          *mockMetricsRecorder
 			)
 
 			BeforeEach(func() {
@@ -118,9 +137,10 @@ var _ = Describe("IdentityMiddleware", func() {
 					identity: tailscale.NewIdentity("whois@example.com", "WhoIs User", "my-laptop"),
 					err:      nil,
 				}
+				metrics = &mockMetricsRecorder{}
 
 				router = gin.New()
-				middleware, err := tailscale.IdentityMiddleware(resolver, testLogger())
+				middleware, err := tailscale.IdentityMiddlewareWithMetrics(resolver, testLogger(), metrics)
 				Expect(err).NotTo(HaveOccurred())
 				router.Use(middleware)
 				router.GET("/test", func(c *gin.Context) {
@@ -143,11 +163,16 @@ var _ = Describe("IdentityMiddleware", func() {
 			It("should have the node name from WhoIs", func() {
 				Expect(capturedIdentity.NodeName()).To(Equal("my-laptop"))
 			})
+
+			It("should record success lookup metric", func() {
+				Expect(metrics.lookupCalls).To(Equal(1))
+			})
 		})
 
 		When("no headers and WhoIs returns Anonymous", func() {
 			var (
 				capturedIdentity tailscale.IdentityValue
+				metrics          *mockMetricsRecorder
 			)
 
 			BeforeEach(func() {
@@ -155,9 +180,10 @@ var _ = Describe("IdentityMiddleware", func() {
 					identity: tailscale.Anonymous,
 					err:      nil,
 				}
+				metrics = &mockMetricsRecorder{}
 
 				router = gin.New()
-				middleware, err := tailscale.IdentityMiddleware(resolver, testLogger())
+				middleware, err := tailscale.IdentityMiddlewareWithMetrics(resolver, testLogger(), metrics)
 				Expect(err).NotTo(HaveOccurred())
 				router.Use(middleware)
 				router.GET("/test", func(c *gin.Context) {
@@ -172,6 +198,10 @@ var _ = Describe("IdentityMiddleware", func() {
 			It("should have anonymous identity in context", func() {
 				Expect(capturedIdentity.IsAnonymous()).To(BeTrue())
 			})
+
+			It("should record not-tailnet lookup metric", func() {
+				Expect(metrics.lookupCalls).To(Equal(1))
+			})
 		})
 	})
 
@@ -179,6 +209,7 @@ var _ = Describe("IdentityMiddleware", func() {
 		When("headers are present from localhost and WhoIs would return different identity", func() {
 			var (
 				capturedIdentity tailscale.IdentityValue
+				metrics          *mockMetricsRecorder
 			)
 
 			BeforeEach(func() {
@@ -186,9 +217,10 @@ var _ = Describe("IdentityMiddleware", func() {
 					identity: tailscale.NewIdentity("whois@example.com", "", "my-laptop"),
 					err:      nil,
 				}
+				metrics = &mockMetricsRecorder{}
 
 				router = gin.New()
-				middleware, err := tailscale.IdentityMiddleware(resolver, testLogger())
+				middleware, err := tailscale.IdentityMiddlewareWithMetrics(resolver, testLogger(), metrics)
 				Expect(err).NotTo(HaveOccurred())
 				router.Use(middleware)
 				router.GET("/test", func(c *gin.Context) {
@@ -204,6 +236,11 @@ var _ = Describe("IdentityMiddleware", func() {
 
 			It("should prefer header identity over WhoIs", func() {
 				Expect(capturedIdentity.LoginName()).To(Equal("header@example.com"))
+			})
+
+			It("should record header extraction not WhoIs lookup", func() {
+				Expect(metrics.extractionCalls).To(Equal(1))
+				Expect(metrics.lookupCalls).To(Equal(0))
 			})
 		})
 	})

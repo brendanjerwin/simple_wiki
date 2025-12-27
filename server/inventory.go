@@ -23,6 +23,10 @@ type InventoryItemParams struct {
 	Title      string // Optional: human-readable title (auto-generated if empty)
 }
 
+// InventoryPageHeaderTemplate is the header template for inventory item pages.
+// This generates the title heading using frontmatter data.
+const InventoryPageHeaderTemplate = "# {{or .Title .Identifier}}"
+
 // InventoryItemMarkdownTemplate is the markdown template for inventory item pages.
 // It is exported so it can be used by both the server and the gRPC API layer.
 const InventoryItemMarkdownTemplate = `{{if .Description}}
@@ -113,7 +117,7 @@ func buildInventoryItemPageText(fm map[string]any) (string, error) {
 	}
 
 	_, _ = builder.WriteString(newline)
-	_, _ = builder.WriteString("# {{or .Title .Identifier}}")
+	_, _ = builder.WriteString(InventoryPageHeaderTemplate)
 	_, _ = builder.WriteString(newline)
 	_, _ = builder.WriteString(InventoryItemMarkdownTemplate)
 
