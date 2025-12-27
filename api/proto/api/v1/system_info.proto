@@ -25,6 +25,16 @@ message GetVersionRequest {}
 message GetVersionResponse {
   string commit = 1;
   google.protobuf.Timestamp build_time = 2;
+  // The Tailscale identity of the requesting user, if available.
+  optional TailscaleIdentity tailscale_identity = 3;
+}
+
+// TailscaleIdentity represents the identity of a Tailscale user.
+// All fields are optional to distinguish between "not available" (nil) and "empty string".
+message TailscaleIdentity {
+  optional string login_name = 1;    // e.g., "user@example.com"
+  optional string display_name = 2;  // e.g., "John Doe"
+  optional string node_name = 3;     // e.g., "my-laptop"
 }
 
 // The request message for the GetJobStatus RPC.

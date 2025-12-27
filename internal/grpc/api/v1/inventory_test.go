@@ -44,32 +44,20 @@ var _ = Describe("InventoryManagementService", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer(
+			var serverErr error
+			server, serverErr = v1.NewServer(
 				"commit",
 				time.Now(),
 				mockPageReaderMutator,
-				nil,
+				noOpBleveIndexQueryer{},
 				nil,
 				lumber.NewConsoleLogger(lumber.WARN),
 				nil,
 				nil,
 				mockFrontmatterIndexQueryer,
 			)
+			Expect(serverErr).NotTo(HaveOccurred())
 			resp, err = server.CreateInventoryItem(ctx, req)
-		})
-
-		When("the PageReaderMutator is not configured", func() {
-			BeforeEach(func() {
-				mockPageReaderMutator = nil
-			})
-
-			It("should return an internal error", func() {
-				Expect(err).To(HaveGrpcStatus(codes.Internal, "PageReaderMutator not available"))
-			})
-
-			It("should return no response", func() {
-				Expect(resp).To(BeNil())
-			})
 		})
 
 		When("the item_identifier is empty", func() {
@@ -211,17 +199,19 @@ var _ = Describe("InventoryManagementService", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer(
+			var serverErr error
+			server, serverErr = v1.NewServer(
 				"commit",
 				time.Now(),
 				mockPageReaderMutator,
-				nil,
+				noOpBleveIndexQueryer{},
 				nil,
 				lumber.NewConsoleLogger(lumber.WARN),
 				nil,
 				nil,
-				nil,
+				noOpFrontmatterIndexQueryer{},
 			)
+			Expect(serverErr).NotTo(HaveOccurred())
 			resp, err = server.MoveInventoryItem(ctx, req)
 		})
 
@@ -331,16 +321,6 @@ var _ = Describe("InventoryManagementService", func() {
 
 			It("should indicate item is already root-level", func() {
 				Expect(resp.Summary).To(ContainSubstring("root-level"))
-			})
-		})
-
-		When("the PageReaderMutator is not configured", func() {
-			BeforeEach(func() {
-				mockPageReaderMutator = nil
-			})
-
-			It("should return an internal error", func() {
-				Expect(err).To(HaveGrpcStatus(codes.Internal, "PageReaderMutator not available"))
 			})
 		})
 
@@ -620,28 +600,20 @@ var _ = Describe("InventoryManagementService", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer(
+			var serverErr error
+			server, serverErr = v1.NewServer(
 				"commit",
 				time.Now(),
-				nil,
-				nil,
+				noOpPageReaderMutator{},
+				noOpBleveIndexQueryer{},
 				nil,
 				lumber.NewConsoleLogger(lumber.WARN),
 				nil,
 				nil,
 				mockFrontmatterIndexQueryer,
 			)
+			Expect(serverErr).NotTo(HaveOccurred())
 			resp, err = server.ListContainerContents(ctx, req)
-		})
-
-		When("the FrontmatterIndexQueryer is not configured", func() {
-			BeforeEach(func() {
-				mockFrontmatterIndexQueryer = nil
-			})
-
-			It("should return an internal error", func() {
-				Expect(err).To(HaveGrpcStatus(codes.Internal, "FrontmatterIndexQueryer not available"))
-			})
 		})
 
 		When("container_identifier is empty", func() {
@@ -711,17 +683,19 @@ var _ = Describe("InventoryManagementService", func() {
 			})
 
 			JustBeforeEach(func() {
-				server = v1.NewServer(
+				var serverErr error
+				server, serverErr = v1.NewServer(
 					"commit",
 					time.Now(),
 					mockPageReaderMutator,
-					nil,
+					noOpBleveIndexQueryer{},
 					nil,
 					lumber.NewConsoleLogger(lumber.WARN),
 					nil,
 					nil,
 					mockFrontmatterIndexQueryer,
 				)
+				Expect(serverErr).NotTo(HaveOccurred())
 				resp, err = server.ListContainerContents(ctx, req)
 			})
 
@@ -751,17 +725,19 @@ var _ = Describe("InventoryManagementService", func() {
 			})
 
 			JustBeforeEach(func() {
-				server = v1.NewServer(
+				var serverErr error
+				server, serverErr = v1.NewServer(
 					"commit",
 					time.Now(),
 					mockPageReaderMutator,
-					nil,
+					noOpBleveIndexQueryer{},
 					nil,
 					lumber.NewConsoleLogger(lumber.WARN),
 					nil,
 					nil,
 					mockFrontmatterIndexQueryer,
 				)
+				Expect(serverErr).NotTo(HaveOccurred())
 				resp, err = server.ListContainerContents(ctx, req)
 			})
 
@@ -793,17 +769,19 @@ var _ = Describe("InventoryManagementService", func() {
 		})
 
 		JustBeforeEach(func() {
-			server = v1.NewServer(
+			var serverErr error
+			server, serverErr = v1.NewServer(
 				"commit",
 				time.Now(),
 				mockPageReaderMutator,
-				nil,
+				noOpBleveIndexQueryer{},
 				nil,
 				lumber.NewConsoleLogger(lumber.WARN),
 				nil,
 				nil,
-				nil,
+				noOpFrontmatterIndexQueryer{},
 			)
+			Expect(serverErr).NotTo(HaveOccurred())
 			resp, err = server.FindItemLocation(ctx, req)
 		})
 
@@ -901,16 +879,6 @@ var _ = Describe("InventoryManagementService", func() {
 
 			It("should include hierarchy in summary", func() {
 				Expect(resp.Summary).To(ContainSubstring("Full path"))
-			})
-		})
-
-		When("the PageReaderMutator is not configured", func() {
-			BeforeEach(func() {
-				mockPageReaderMutator = nil
-			})
-
-			It("should return an internal error", func() {
-				Expect(err).To(HaveGrpcStatus(codes.Internal, "PageReaderMutator not available"))
 			})
 		})
 

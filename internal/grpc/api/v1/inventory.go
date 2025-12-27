@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"reflect"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/server"
@@ -33,21 +32,8 @@ const (
 	defaultMaxRecursion = 10
 )
 
-// validatePageReaderMutator checks that PageReaderMutator is available and not nil.
-func (s *Server) validatePageReaderMutator() error {
-	v := reflect.ValueOf(s.PageReaderMutator)
-	if s.PageReaderMutator == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
-		return status.Error(codes.Internal, pageReadWriterNotAvailableError)
-	}
-	return nil
-}
-
 // CreateInventoryItem implements the CreateInventoryItem RPC.
 func (s *Server) CreateInventoryItem(_ context.Context, req *apiv1.CreateInventoryItemRequest) (*apiv1.CreateInventoryItemResponse, error) {
-	if err := s.validatePageReaderMutator(); err != nil {
-		return nil, err
-	}
-
 	if req.ItemIdentifier == "" {
 		return nil, status.Error(codes.InvalidArgument, "item_identifier is required")
 	}
@@ -56,7 +42,7 @@ func (s *Server) CreateInventoryItem(_ context.Context, req *apiv1.CreateInvento
 	identifier := wikiidentifiers.MungeIdentifier(req.ItemIdentifier)
 
 	// Check if page already exists
-	_, existingFm, err := s.PageReaderMutator.ReadFrontMatter(identifier)
+	_, existingFm, err := s.pageReaderMutator.ReadFrontMatter(identifier)
 	if err != nil && !os.IsNotExist(err) {
 		return nil, status.Errorf(codes.Internal, "failed to read page: %v", err)
 	}
@@ -99,13 +85,13 @@ func (s *Server) CreateInventoryItem(_ context.Context, req *apiv1.CreateInvento
 	fm[inventoryKey] = inventory
 
 	// Write the frontmatter
-	if err := s.PageReaderMutator.WriteFrontMatter(identifier, fm); err != nil {
+	if err := s.pageReaderMutator.WriteFrontMatter(identifier, fm); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to write frontmatter: %v", err)
 	}
 
 	// Build and write the markdown content
 	markdown := buildInventoryItemMarkdown()
-	if err := s.PageReaderMutator.WriteMarkdown(identifier, markdown); err != nil {
+	if err := s.pageReaderMutator.WriteMarkdown(identifier, markdown); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to write markdown: %v", err)
 	}
 
@@ -125,10 +111,6 @@ func (s *Server) CreateInventoryItem(_ context.Context, req *apiv1.CreateInvento
 //
 //revive:disable:function-length
 func (s *Server) MoveInventoryItem(_ context.Context, req *apiv1.MoveInventoryItemRequest) (*apiv1.MoveInventoryItemResponse, error) {
-	if err := s.validatePageReaderMutator(); err != nil {
-		return nil, err
-	}
-
 	if req.ItemIdentifier == "" {
 		return nil, status.Error(codes.InvalidArgument, "item_identifier is required")
 	}
@@ -137,7 +119,7 @@ func (s *Server) MoveInventoryItem(_ context.Context, req *apiv1.MoveInventoryIt
 	newContainer := mungeOptionalContainer(req.NewContainer)
 
 	// Read the item's current frontmatter
-	_, itemFm, err := s.PageReaderMutator.ReadFrontMatter(identifier)
+	_, itemFm, err := s.pageReaderMutator.ReadFrontMatter(identifier)
 	if err != nil {
 		return handleMoveItemReadError(err, identifier)
 	}
@@ -153,7 +135,7 @@ func (s *Server) MoveInventoryItem(_ context.Context, req *apiv1.MoveInventoryIt
 	updateItemContainer(itemFm, newContainer)
 
 	// Write the updated item frontmatter
-	if err := s.PageReaderMutator.WriteFrontMatter(identifier, itemFm); err != nil {
+	if err := s.pageReaderMutator.WriteFrontMatter(identifier, itemFm); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to update item frontmatter: %v", err)
 	}
 
@@ -242,12 +224,12 @@ func updateItemContainer(fm map[string]any, newContainer string) {
 func (s *Server) updateContainerItemLists(previousContainer, newContainer, identifier string) {
 	if previousContainer != "" {
 		if err := s.removeItemFromContainerList(previousContainer, identifier); err != nil {
-			s.Logger.Warn("failed to remove item from previous container's items list: %v", err)
+			s.logger.Warn("failed to remove item from previous container's items list: %v", err)
 		}
 	}
 	if newContainer != "" {
 		if err := s.addItemToContainerList(newContainer, identifier); err != nil {
-			s.Logger.Warn("failed to add item to new container's items list: %v", err)
+			s.logger.Warn("failed to add item to new container's items list: %v", err)
 		}
 	}
 }
@@ -273,11 +255,6 @@ func buildMoveSummary(title, previousContainer, newContainer string) string {
 
 // ListContainerContents implements the ListContainerContents RPC.
 func (s *Server) ListContainerContents(_ context.Context, req *apiv1.ListContainerContentsRequest) (*apiv1.ListContainerContentsResponse, error) {
-	v := reflect.ValueOf(s.FrontmatterIndexQueryer)
-	if s.FrontmatterIndexQueryer == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
-		return nil, status.Error(codes.Internal, "FrontmatterIndexQueryer not available")
-	}
-
 	if req.ContainerIdentifier == "" {
 		return nil, status.Error(codes.InvalidArgument, "container_identifier is required")
 	}
@@ -342,7 +319,7 @@ func (s *Server) collectContainerItemIDs(containerID string) map[string]bool {
 	itemIDSet := make(map[string]bool)
 
 	// Source 1: Query for items that have this container as their inventory.container
-	itemIDsFromContainer := s.FrontmatterIndexQueryer.QueryExactMatch("inventory.container", containerID)
+	itemIDsFromContainer := s.frontmatterIndexQueryer.QueryExactMatch("inventory.container", containerID)
 	for _, itemID := range itemIDsFromContainer {
 		itemIDSet[itemID] = true
 	}
@@ -355,11 +332,7 @@ func (s *Server) collectContainerItemIDs(containerID string) map[string]bool {
 
 // addItemsFromContainerArray adds items from the container's inventory.items array to the set.
 func (s *Server) addItemsFromContainerArray(containerID string, itemIDSet map[string]bool) {
-	if s.PageReaderMutator == nil {
-		return
-	}
-
-	_, containerFm, err := s.PageReaderMutator.ReadFrontMatter(containerID)
+	_, containerFm, err := s.pageReaderMutator.ReadFrontMatter(containerID)
 	if err != nil {
 		return
 	}
@@ -400,16 +373,16 @@ func (s *Server) buildInventoryItem(itemID, containerID string) *apiv1.Inventory
 		Container:  containerID,
 	}
 
-	if title := s.FrontmatterIndexQueryer.GetValue(itemID, titleKey); title != "" {
+	if title := s.frontmatterIndexQueryer.GetValue(itemID, titleKey); title != "" {
 		item.Title = title
 	}
 
 	// Primary: Check explicit is_container field
-	if s.FrontmatterIndexQueryer.GetValue(itemID, "inventory.is_container") == "true" {
+	if s.frontmatterIndexQueryer.GetValue(itemID, "inventory.is_container") == "true" {
 		item.IsContainer = true
 	} else {
 		// Fallback for legacy: items reference this as their container
-		item.IsContainer = len(s.FrontmatterIndexQueryer.QueryExactMatch("inventory.container", itemID)) > 0
+		item.IsContainer = len(s.frontmatterIndexQueryer.QueryExactMatch("inventory.container", itemID)) > 0
 	}
 
 	return item
@@ -417,10 +390,6 @@ func (s *Server) buildInventoryItem(itemID, containerID string) *apiv1.Inventory
 
 // FindItemLocation implements the FindItemLocation RPC.
 func (s *Server) FindItemLocation(_ context.Context, req *apiv1.FindItemLocationRequest) (*apiv1.FindItemLocationResponse, error) {
-	if err := s.validatePageReaderMutator(); err != nil {
-		return nil, err
-	}
-
 	if req.ItemIdentifier == "" {
 		return nil, status.Error(codes.InvalidArgument, "item_identifier is required")
 	}
@@ -428,7 +397,7 @@ func (s *Server) FindItemLocation(_ context.Context, req *apiv1.FindItemLocation
 	itemID := wikiidentifiers.MungeIdentifier(req.ItemIdentifier)
 
 	// Read the item's frontmatter
-	_, itemFm, err := s.PageReaderMutator.ReadFrontMatter(itemID)
+	_, itemFm, err := s.pageReaderMutator.ReadFrontMatter(itemID)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return &apiv1.FindItemLocationResponse{
@@ -492,7 +461,7 @@ func (s *Server) buildContainerHierarchy(containerID string) []string {
 		path = append([]string{current}, path...) // Prepend
 
 		// Get the container's parent
-		_, fm, err := s.PageReaderMutator.ReadFrontMatter(current)
+		_, fm, err := s.pageReaderMutator.ReadFrontMatter(current)
 		if err != nil {
 			break
 		}
@@ -514,7 +483,7 @@ func buildInventoryItemMarkdown() string {
 
 // removeItemFromContainerList removes an item from a container's inventory.items list.
 func (s *Server) removeItemFromContainerList(containerID, itemID string) error {
-	_, containerFm, err := s.PageReaderMutator.ReadFrontMatter(containerID)
+	_, containerFm, err := s.pageReaderMutator.ReadFrontMatter(containerID)
 	if err != nil {
 		if os.IsNotExist(err) {
 			// Container doesn't exist, nothing to update
@@ -555,12 +524,12 @@ func (s *Server) removeItemFromContainerList(containerID, itemID string) error {
 	}
 
 	inv[itemsKey] = newItems
-	return s.PageReaderMutator.WriteFrontMatter(containerID, containerFm)
+	return s.pageReaderMutator.WriteFrontMatter(containerID, containerFm)
 }
 
 // addItemToContainerList adds an item to a container's inventory.items list if not already present.
 func (s *Server) addItemToContainerList(containerID, itemID string) error {
-	_, containerFm, err := s.PageReaderMutator.ReadFrontMatter(containerID)
+	_, containerFm, err := s.pageReaderMutator.ReadFrontMatter(containerID)
 	if err != nil {
 		if os.IsNotExist(err) {
 			// Container doesn't exist, can't update
@@ -602,5 +571,5 @@ func (s *Server) addItemToContainerList(containerID, itemID string) error {
 	items = append(items, itemID)
 	inv[itemsKey] = items
 
-	return s.PageReaderMutator.WriteFrontMatter(containerID, containerFm)
+	return s.pageReaderMutator.WriteFrontMatter(containerID, containerFm)
 }

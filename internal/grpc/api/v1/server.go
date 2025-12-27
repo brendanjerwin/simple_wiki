@@ -4,16 +4,17 @@ package v1
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
-	"reflect"
 	"strings"
 	"time"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
+	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
@@ -21,17 +22,17 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
-	pageReadWriterNotAvailableError = "PageReaderMutator not available"
-	identifierKey                   = "identifier"
-	pageNotFoundErrFmt              = "page not found: %s"
-	failedToReadFrontmatterErrFmt   = "failed to read frontmatter: %v"
-	failedToBuildPageTextErrFmt     = "failed to build page text: %v"
-	maxUniqueIdentifierAttempts     = 1000
+	identifierKey               = "identifier"
+	pageNotFoundErrFmt          = "page not found: %s"
+	failedToReadFrontmatterErrFmt = "failed to read frontmatter: %v"
+	failedToBuildPageTextErrFmt   = "failed to build page text: %v"
+	maxUniqueIdentifierAttempts   = 1000
 )
 
 // filterIdentifierKey removes the identifier key from a frontmatter map.
@@ -82,24 +83,19 @@ type Server struct {
 	apiv1.UnimplementedPageManagementServiceServer
 	apiv1.UnimplementedSearchServiceServer
 	apiv1.UnimplementedInventoryManagementServiceServer
-	Commit                  string
-	BuildTime               time.Time
-	PageReaderMutator       wikipage.PageReaderMutator
-	BleveIndexQueryer       bleve.IQueryBleveIndex
-	JobProgressProvider     jobs.IProvideJobProgress
-	Logger                  *lumber.ConsoleLogger
-	MarkdownRenderer        wikipage.IRenderMarkdownToHTML
-	TemplateExecutor        wikipage.IExecuteTemplate
-	FrontmatterIndexQueryer wikipage.IQueryFrontmatterIndex
+	commit                  string
+	buildTime               time.Time
+	pageReaderMutator       wikipage.PageReaderMutator
+	bleveIndexQueryer       bleve.IQueryBleveIndex
+	jobProgressProvider     jobs.IProvideJobProgress
+	logger                  *lumber.ConsoleLogger
+	markdownRenderer        wikipage.IRenderMarkdownToHTML
+	templateExecutor        wikipage.IExecuteTemplate
+	frontmatterIndexQueryer wikipage.IQueryFrontmatterIndex
 }
 
 // MergeFrontmatter implements the MergeFrontmatter RPC.
 func (s *Server) MergeFrontmatter(_ context.Context, req *apiv1.MergeFrontmatterRequest) (resp *apiv1.MergeFrontmatterResponse, err error) {
-	v := reflect.ValueOf(s.PageReaderMutator)
-	if s.PageReaderMutator == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
-		return nil, status.Error(codes.Internal, pageReadWriterNotAvailableError)
-	}
-
 	// Validate that the request doesn't contain an identifier key
 	if req.Frontmatter != nil {
 		newFm := req.Frontmatter.AsMap()
@@ -108,7 +104,7 @@ func (s *Server) MergeFrontmatter(_ context.Context, req *apiv1.MergeFrontmatter
 		}
 	}
 
-	_, existingFm, err := s.PageReaderMutator.ReadFrontMatter(req.Page)
+	_, existingFm, err := s.pageReaderMutator.ReadFrontMatter(req.Page)
 	if err != nil && !os.IsNotExist(err) {
 		return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, err)
 	}
@@ -122,7 +118,7 @@ func (s *Server) MergeFrontmatter(_ context.Context, req *apiv1.MergeFrontmatter
 		maps.Copy(existingFm, newFm)
 	}
 
-	err = s.PageReaderMutator.WriteFrontMatter(req.Page, existingFm)
+	err = s.pageReaderMutator.WriteFrontMatter(req.Page, existingFm)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to write frontmatter: %v", err)
 	}
@@ -141,11 +137,6 @@ func (s *Server) MergeFrontmatter(_ context.Context, req *apiv1.MergeFrontmatter
 
 // ReplaceFrontmatter implements the ReplaceFrontmatter RPC.
 func (s *Server) ReplaceFrontmatter(_ context.Context, req *apiv1.ReplaceFrontmatterRequest) (resp *apiv1.ReplaceFrontmatterResponse, err error) {
-	v := reflect.ValueOf(s.PageReaderMutator)
-	if s.PageReaderMutator == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
-		return nil, status.Error(codes.Internal, pageReadWriterNotAvailableError)
-	}
-
 	var fm map[string]any
 	if req.Frontmatter != nil {
 		fm = req.Frontmatter.AsMap()
@@ -154,7 +145,7 @@ func (s *Server) ReplaceFrontmatter(_ context.Context, req *apiv1.ReplaceFrontma
 		fm[identifierKey] = req.Page
 	}
 
-	err = s.PageReaderMutator.WriteFrontMatter(req.Page, fm)
+	err = s.pageReaderMutator.WriteFrontMatter(req.Page, fm)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to write frontmatter: %v", err)
 	}
@@ -180,11 +171,6 @@ func (s *Server) ReplaceFrontmatter(_ context.Context, req *apiv1.ReplaceFrontma
 
 // RemoveKeyAtPath implements the RemoveKeyAtPath RPC.
 func (s *Server) RemoveKeyAtPath(_ context.Context, req *apiv1.RemoveKeyAtPathRequest) (*apiv1.RemoveKeyAtPathResponse, error) {
-	v := reflect.ValueOf(s.PageReaderMutator)
-	if s.PageReaderMutator == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
-		return nil, status.Error(codes.Internal, pageReadWriterNotAvailableError)
-	}
-
 	if len(req.GetKeyPath()) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "key_path cannot be empty")
 	}
@@ -194,7 +180,7 @@ func (s *Server) RemoveKeyAtPath(_ context.Context, req *apiv1.RemoveKeyAtPathRe
 		return nil, status.Error(codes.InvalidArgument, "identifier key cannot be removed")
 	}
 
-	_, fm, err := s.PageReaderMutator.ReadFrontMatter(req.Page)
+	_, fm, err := s.pageReaderMutator.ReadFrontMatter(req.Page)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.Page)
@@ -212,7 +198,7 @@ func (s *Server) RemoveKeyAtPath(_ context.Context, req *apiv1.RemoveKeyAtPathRe
 		return nil, err
 	}
 
-	err = s.PageReaderMutator.WriteFrontMatter(req.Page, updatedFm.(map[string]any))
+	err = s.pageReaderMutator.WriteFrontMatter(req.Page, updatedFm.(map[string]any))
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to write frontmatter: %v", err)
 	}
@@ -300,29 +286,41 @@ func removeAtPath(data any, path []*apiv1.PathComponent) (any, error) {
 	}
 }
 
-// NewServer creates a new debug server
+// NewServer creates a new gRPC server with the given dependencies.
+// Required dependencies: pageReaderMutator, bleveIndexQueryer, frontmatterIndexQueryer.
+// Optional dependencies: jobProgressProvider, logger, markdownRenderer, templateExecutor.
 func NewServer(
 	commit string,
 	buildTime time.Time,
-	pageReadWriter wikipage.PageReaderMutator,
+	pageReaderMutator wikipage.PageReaderMutator,
 	bleveIndexQueryer bleve.IQueryBleveIndex,
 	jobProgressProvider jobs.IProvideJobProgress,
 	logger *lumber.ConsoleLogger,
 	markdownRenderer wikipage.IRenderMarkdownToHTML,
 	templateExecutor wikipage.IExecuteTemplate,
 	frontmatterIndexQueryer wikipage.IQueryFrontmatterIndex,
-) *Server {
-	return &Server{
-		Commit:                  commit,
-		BuildTime:               buildTime,
-		PageReaderMutator:       pageReadWriter,
-		BleveIndexQueryer:       bleveIndexQueryer,
-		JobProgressProvider:     jobProgressProvider,
-		Logger:                  logger,
-		MarkdownRenderer:        markdownRenderer,
-		TemplateExecutor:        templateExecutor,
-		FrontmatterIndexQueryer: frontmatterIndexQueryer,
+) (*Server, error) {
+	if pageReaderMutator == nil {
+		return nil, errors.New("pageReaderMutator is required")
 	}
+	if bleveIndexQueryer == nil {
+		return nil, errors.New("bleveIndexQueryer is required")
+	}
+	if frontmatterIndexQueryer == nil {
+		return nil, errors.New("frontmatterIndexQueryer is required")
+	}
+
+	return &Server{
+		commit:                  commit,
+		buildTime:               buildTime,
+		pageReaderMutator:       pageReaderMutator,
+		bleveIndexQueryer:       bleveIndexQueryer,
+		jobProgressProvider:     jobProgressProvider,
+		logger:                  logger,
+		markdownRenderer:        markdownRenderer,
+		templateExecutor:        templateExecutor,
+		frontmatterIndexQueryer: frontmatterIndexQueryer,
+	}, nil
 }
 
 // RegisterWithServer registers the gRPC services with the given gRPC server.
@@ -335,11 +333,23 @@ func (s *Server) RegisterWithServer(grpcServer *grpc.Server) {
 }
 
 // GetVersion implements the GetVersion RPC.
-func (s *Server) GetVersion(_ context.Context, _ *apiv1.GetVersionRequest) (*apiv1.GetVersionResponse, error) {
-	return &apiv1.GetVersionResponse{
-		Commit:    s.Commit,
-		BuildTime: timestamppb.New(s.BuildTime),
-	}, nil
+func (s *Server) GetVersion(ctx context.Context, _ *apiv1.GetVersionRequest) (*apiv1.GetVersionResponse, error) {
+	response := &apiv1.GetVersionResponse{
+		Commit:    s.commit,
+		BuildTime: timestamppb.New(s.buildTime),
+	}
+
+	// Add Tailscale identity if available
+	identity := tailscale.IdentityFromContext(ctx)
+	if !identity.IsAnonymous() {
+		response.TailscaleIdentity = &apiv1.TailscaleIdentity{
+			LoginName:   proto.String(identity.LoginName()),
+			DisplayName: proto.String(identity.DisplayName()),
+			NodeName:    proto.String(identity.NodeName()),
+		}
+	}
+
+	return response, nil
 }
 
 // GetJobStatus implements the GetJobStatus RPC.
@@ -386,13 +396,13 @@ func (s *Server) StreamJobStatus(req *apiv1.StreamJobStatusRequest, stream apiv1
 
 // buildJobStatusResponse builds a GetJobStatusResponse from the job progress provider.
 func (s *Server) buildJobStatusResponse() *apiv1.GetJobStatusResponse {
-	if s.JobProgressProvider == nil {
+	if s.jobProgressProvider == nil {
 		return &apiv1.GetJobStatusResponse{
 			JobQueues: []*apiv1.JobQueueStatus{},
 		}
 	}
 
-	progress := s.JobProgressProvider.GetJobProgress()
+	progress := s.jobProgressProvider.GetJobProgress()
 	var protoQueues []*apiv1.JobQueueStatus
 
 	for _, queueStats := range progress.QueueStats {
@@ -412,13 +422,8 @@ func (s *Server) buildJobStatusResponse() *apiv1.GetJobStatusResponse {
 
 // GetFrontmatter implements the GetFrontmatter RPC.
 func (s *Server) GetFrontmatter(_ context.Context, req *apiv1.GetFrontmatterRequest) (resp *apiv1.GetFrontmatterResponse, err error) {
-	v := reflect.ValueOf(s.PageReaderMutator)
-	if s.PageReaderMutator == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
-		return nil, status.Error(codes.Internal, pageReadWriterNotAvailableError)
-	}
-
 	var fm map[string]any
-	_, fm, err = s.PageReaderMutator.ReadFrontMatter(req.Page)
+	_, fm, err = s.pageReaderMutator.ReadFrontMatter(req.Page)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.Page)
@@ -457,11 +462,19 @@ func (s *Server) LoggingInterceptor() grpc.UnaryServerInterceptor {
 			}
 		}
 
-		if s.Logger != nil {
-			s.Logger.Warn("[GRPC] %s | %s | %v",
+		// Get identity if available
+		identity := tailscale.IdentityFromContext(ctx)
+		identityStr := "anonymous"
+		if !identity.IsAnonymous() {
+			identityStr = identity.ForLog()
+		}
+
+		if s.logger != nil {
+			s.logger.Warn("[GRPC] %s | %s | %v | %s",
 				statusCode,
 				duration,
 				info.FullMethod,
+				identityStr,
 			)
 		}
 
@@ -471,12 +484,7 @@ func (s *Server) LoggingInterceptor() grpc.UnaryServerInterceptor {
 
 // DeletePage implements the DeletePage RPC.
 func (s *Server) DeletePage(_ context.Context, req *apiv1.DeletePageRequest) (*apiv1.DeletePageResponse, error) {
-	v := reflect.ValueOf(s.PageReaderMutator)
-	if s.PageReaderMutator == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
-		return nil, status.Error(codes.Internal, pageReadWriterNotAvailableError)
-	}
-
-	err := s.PageReaderMutator.DeletePage(req.PageName)
+	err := s.pageReaderMutator.DeletePage(req.PageName)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, status.Errorf(codes.NotFound, "page not found: %s", req.PageName)
@@ -496,39 +504,20 @@ func (s *Server) SearchContent(_ context.Context, req *apiv1.SearchContentReques
 		return nil, err
 	}
 
-	searchResults, err := s.BleveIndexQueryer.Query(req.Query)
+	searchResults, err := s.bleveIndexQueryer.Query(req.Query)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to search: %v", err)
 	}
 
-	includeFilterSets, err := s.buildIncludeFilterSets(req.FrontmatterKeyIncludeFilters)
-	if err != nil {
-		return nil, err
-	}
-
-	excludedPages, err := s.buildExcludedPagesSet(req.FrontmatterKeyExcludeFilters)
-	if err != nil {
-		return nil, err
-	}
-
+	includeFilterSets := s.buildIncludeFilterSets(req.FrontmatterKeyIncludeFilters)
+	excludedPages := s.buildExcludedPagesSet(req.FrontmatterKeyExcludeFilters)
 	results := s.filterAndConvertResults(searchResults, includeFilterSets, excludedPages, req.FrontmatterKeysToReturnInResults)
 
 	return &apiv1.SearchContentResponse{Results: results}, nil
 }
 
-// validateSearchRequest validates the search request and index availability.
-func (s *Server) validateSearchRequest(req *apiv1.SearchContentRequest) error {
-	v := reflect.ValueOf(s.BleveIndexQueryer)
-	if s.BleveIndexQueryer == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
-		return status.Error(codes.Internal, "Search index is not available")
-	}
-	
-	// FrontmatterIndexQueryer is required for search operations
-	v = reflect.ValueOf(s.FrontmatterIndexQueryer)
-	if s.FrontmatterIndexQueryer == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
-		return status.Error(codes.Internal, "Frontmatter index is not available")
-	}
-	
+// validateSearchRequest validates the search request.
+func (*Server) validateSearchRequest(req *apiv1.SearchContentRequest) error {
 	if req.Query == "" {
 		return status.Error(codes.InvalidArgument, "query cannot be empty")
 	}
@@ -536,52 +525,37 @@ func (s *Server) validateSearchRequest(req *apiv1.SearchContentRequest) error {
 }
 
 // buildIncludeFilterSets builds sets of pages for each include filter key.
-func (s *Server) buildIncludeFilterSets(filterKeys []string) ([]map[wikipage.PageIdentifier]bool, error) {
+func (s *Server) buildIncludeFilterSets(filterKeys []string) []map[wikipage.PageIdentifier]bool {
 	if len(filterKeys) == 0 {
-		return nil, nil
-	}
-	if err := s.validateFrontmatterIndexAvailable(); err != nil {
-		return nil, err
+		return nil
 	}
 
 	var filterSets []map[wikipage.PageIdentifier]bool
 	for _, filterKey := range filterKeys {
-		pageIDs := s.FrontmatterIndexQueryer.QueryKeyExistence(wikipage.DottedKeyPath(filterKey))
+		pageIDs := s.frontmatterIndexQueryer.QueryKeyExistence(wikipage.DottedKeyPath(filterKey))
 		pageSet := make(map[wikipage.PageIdentifier]bool, len(pageIDs))
 		for _, id := range pageIDs {
 			pageSet[id] = true
 		}
 		filterSets = append(filterSets, pageSet)
 	}
-	return filterSets, nil
+	return filterSets
 }
 
 // buildExcludedPagesSet builds the set of pages to exclude based on filter keys.
-func (s *Server) buildExcludedPagesSet(filterKeys []string) (map[wikipage.PageIdentifier]bool, error) {
+func (s *Server) buildExcludedPagesSet(filterKeys []string) map[wikipage.PageIdentifier]bool {
 	if len(filterKeys) == 0 {
-		return nil, nil
-	}
-	if err := s.validateFrontmatterIndexAvailable(); err != nil {
-		return nil, err
+		return nil
 	}
 
 	excludedPages := make(map[wikipage.PageIdentifier]bool)
 	for _, filterKey := range filterKeys {
-		pageIDs := s.FrontmatterIndexQueryer.QueryKeyExistence(wikipage.DottedKeyPath(filterKey))
+		pageIDs := s.frontmatterIndexQueryer.QueryKeyExistence(wikipage.DottedKeyPath(filterKey))
 		for _, id := range pageIDs {
 			excludedPages[id] = true
 		}
 	}
-	return excludedPages, nil
-}
-
-// validateFrontmatterIndexAvailable checks if the frontmatter index is available.
-func (s *Server) validateFrontmatterIndexAvailable() error {
-	v := reflect.ValueOf(s.FrontmatterIndexQueryer)
-	if s.FrontmatterIndexQueryer == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
-		return status.Error(codes.Internal, "Frontmatter index not available for filtering")
-	}
-	return nil
+	return excludedPages
 }
 
 // filterAndConvertResults filters search results and converts them to API format.
@@ -636,7 +610,7 @@ func (s *Server) convertSearchResult(result bleve.SearchResult, mungedID wikipag
 		apiResult.Frontmatter = make(map[string]string)
 		
 		for _, key := range fmKeysToReturn {
-			if value := s.FrontmatterIndexQueryer.GetValue(mungedID, key); value != "" {
+			if value := s.frontmatterIndexQueryer.GetValue(mungedID, key); value != "" {
 				apiResult.Frontmatter[key] = value
 			}
 		}
@@ -650,7 +624,7 @@ func (s *Server) convertSearchResult(result bleve.SearchResult, mungedID wikipag
 // buildInventoryContext builds inventory context for a search result if applicable.
 // Returns nil only when the item is not inventory-related (no inventory.container in frontmatter).
 func (s *Server) buildInventoryContext(itemID wikipage.PageIdentifier) *apiv1.InventoryContext {
-	containerID := s.FrontmatterIndexQueryer.GetValue(itemID, "inventory.container")
+	containerID := s.frontmatterIndexQueryer.GetValue(itemID, "inventory.container")
 	if containerID == "" {
 		return nil
 	}
@@ -681,7 +655,7 @@ func (s *Server) buildContainerPath(containerID string) []*apiv1.ContainerPathEl
 		visited[currentID] = true
 		
 		mungedID := wikipage.PageIdentifier(wikiidentifiers.MungeIdentifier(currentID))
-		title := s.FrontmatterIndexQueryer.GetValue(mungedID, "title")
+		title := s.frontmatterIndexQueryer.GetValue(mungedID, "title")
 		
 		element := &apiv1.ContainerPathElement{
 			Identifier: currentID,
@@ -693,7 +667,7 @@ func (s *Server) buildContainerPath(containerID string) []*apiv1.ContainerPathEl
 		path = append([]*apiv1.ContainerPathElement{element}, path...)
 		
 		// Get the parent container
-		currentID = s.FrontmatterIndexQueryer.GetValue(mungedID, "inventory.container")
+		currentID = s.frontmatterIndexQueryer.GetValue(mungedID, "inventory.container")
 	}
 	
 	// Now assign depth values: root=0, each child +1
@@ -706,13 +680,8 @@ func (s *Server) buildContainerPath(containerID string) []*apiv1.ContainerPathEl
 
 // ReadPage implements the ReadPage RPC.
 func (s *Server) ReadPage(_ context.Context, req *apiv1.ReadPageRequest) (*apiv1.ReadPageResponse, error) {
-	v := reflect.ValueOf(s.PageReaderMutator)
-	if s.PageReaderMutator == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
-		return nil, status.Error(codes.Internal, "PageReaderMutator not available")
-	}
-
 	// Read the page markdown and frontmatter
-	_, markdown, err := s.PageReaderMutator.ReadMarkdown(wikipage.PageIdentifier(req.PageName))
+	_, markdown, err := s.pageReaderMutator.ReadMarkdown(wikipage.PageIdentifier(req.PageName))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.PageName)
@@ -720,7 +689,7 @@ func (s *Server) ReadPage(_ context.Context, req *apiv1.ReadPageRequest) (*apiv1
 		return nil, status.Errorf(codes.Internal, "failed to read page: %v", err)
 	}
 
-	_, frontmatter, err := s.PageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.PageName))
+	_, frontmatter, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.PageName))
 	if err != nil && !os.IsNotExist(err) {
 		return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, err)
 	}
@@ -763,8 +732,8 @@ func (s *Server) ReadPage(_ context.Context, req *apiv1.ReadPageRequest) (*apiv1
 	var renderedHTML string
 	var renderedMarkdown string
 
-	if s.MarkdownRenderer != nil && s.TemplateExecutor != nil {
-		renderErr := page.Render(s.PageReaderMutator, s.MarkdownRenderer, s.TemplateExecutor, s.FrontmatterIndexQueryer)
+	if s.markdownRenderer != nil && s.templateExecutor != nil {
+		renderErr := page.Render(s.pageReaderMutator, s.markdownRenderer, s.templateExecutor, s.frontmatterIndexQueryer)
 		if renderErr != nil {
 			return nil, status.Errorf(codes.Internal, "failed to render page: %v", renderErr)
 		}
@@ -809,13 +778,7 @@ func (s *Server) GenerateIdentifier(_ context.Context, req *apiv1.GenerateIdenti
 
 // checkIdentifierAvailability checks if an identifier is available and returns info about existing page if not.
 func (s *Server) checkIdentifierAvailability(identifier string) (bool, *apiv1.ExistingPageInfo) {
-	v := reflect.ValueOf(s.PageReaderMutator)
-	if s.PageReaderMutator == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
-		// If we can't check, assume it's unique
-		return true, nil
-	}
-
-	_, fm, err := s.PageReaderMutator.ReadFrontMatter(identifier)
+	_, fm, err := s.pageReaderMutator.ReadFrontMatter(identifier)
 	if err != nil {
 		// Page doesn't exist
 		return true, nil
@@ -843,16 +806,11 @@ func (s *Server) checkIdentifierAvailability(identifier string) (bool, *apiv1.Ex
 
 // findUniqueIdentifier finds a unique identifier by adding numeric suffixes.
 func (s *Server) findUniqueIdentifier(baseIdentifier string) string {
-	v := reflect.ValueOf(s.PageReaderMutator)
-	if s.PageReaderMutator == nil || (v.Kind() == reflect.Ptr && v.IsNil()) {
-		return baseIdentifier
-	}
-
 	// Try suffixes _1, _2, _3, etc.
 	for i := 1; i < maxUniqueIdentifierAttempts; i++ {
 		candidate := fmt.Sprintf("%s_%d", baseIdentifier, i)
 
-		_, _, err := s.PageReaderMutator.ReadFrontMatter(candidate)
+		_, _, err := s.pageReaderMutator.ReadFrontMatter(candidate)
 		if err != nil {
 			// Page doesn't exist, we found a unique identifier
 			return candidate

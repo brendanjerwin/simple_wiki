@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -11,25 +10,20 @@ import (
 	"syscall"
 	"time"
 
-	grpcapi "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
+	"github.com/brendanjerwin/simple_wiki/internal/bootstrap"
 	"github.com/brendanjerwin/simple_wiki/internal/observability"
 	"github.com/brendanjerwin/simple_wiki/server"
-	"github.com/improbable-eng/grpc-web/go/grpcweb"
+	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/jcelliott/lumber"
-	"golang.org/x/net/http2"
-	"golang.org/x/net/http2/h2c"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/reflection"
 
 	cli "gopkg.in/urfave/cli.v1"
 )
 
 var (
-	commit           = "n/a"
-	buildTime        = ""
-	logger           *lumber.ConsoleLogger
-	telemetry        *observability.TelemetryProvider
-	grpcInstrumentation *observability.GRPCInstrumentation
+	commit    = "n/a"
+	buildTime = ""
+	logger    *lumber.ConsoleLogger
+	telemetry *observability.TelemetryProvider
 )
 
 // getCommitHash retrieves the current git commit hash.
@@ -39,14 +33,14 @@ func getCommitHash() string {
 		// If commit was set at build time, use that
 		return commit
 	}
-	
+
 	// Try to get commit from git
 	cmd := exec.Command("git", "rev-parse", "HEAD")
 	output, err := cmd.Output()
 	if err != nil {
 		return "dev"
 	}
-	
+
 	return strings.TrimSpace(string(output))
 }
 
@@ -60,17 +54,17 @@ func getBuildTime() time.Time {
 			return t
 		}
 	}
-	
+
 	// Fallback to current time (development mode)
 	return time.Now()
 }
 
 var app *cli.App
 
-func setupServer(c *cli.Context) (*http.Server, func(), error) {
+func createSite(c *cli.Context) (*server.Site, error) {
 	pathToData := c.GlobalString("data")
 	if err := os.MkdirAll(pathToData, 0755); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	if c.GlobalBool("debug") {
@@ -81,35 +75,7 @@ func setupServer(c *cli.Context) (*http.Server, func(), error) {
 
 	logger.Info("Starting simple_wiki server...")
 
-	// Initialize OpenTelemetry
-	actualCommit := getCommitHash()
-	var err error
-	telemetry, err = observability.Initialize(context.Background(), actualCommit)
-	if err != nil {
-		logger.Warn("Failed to initialize OpenTelemetry: %v", err)
-	} else if telemetry.IsEnabled() {
-		logger.Info("OpenTelemetry instrumentation enabled")
-		
-		// Initialize gRPC metrics and instrumentation
-		grpcMetrics, metricsErr := observability.NewGRPCMetrics()
-		if metricsErr != nil {
-			logger.Warn("Failed to create gRPC metrics: %v", metricsErr)
-		} else {
-			grpcInstrumentation = observability.NewGRPCInstrumentation(grpcMetrics)
-		}
-	}
-
-	// Cleanup function to shutdown telemetry
-	cleanup := func() {
-		if telemetry != nil && telemetry.IsEnabled() {
-			logger.Info("Shutting down OpenTelemetry...")
-			if shutdownErr := telemetry.Shutdown(context.Background()); shutdownErr != nil {
-				logger.Warn("Error shutting down OpenTelemetry: %v", shutdownErr)
-			}
-		}
-	}
-
-	site, err := server.NewSite(
+	return server.NewSite(
 		pathToData,
 		c.GlobalString("css"),
 		c.GlobalString("default-page"),
@@ -120,79 +86,92 @@ func setupServer(c *cli.Context) (*http.Server, func(), error) {
 		c.GlobalUint("max-document-length"),
 		logger,
 	)
+}
+
+func detectTailscale(ctx context.Context) *tailscale.Status {
+	detector := tailscale.NewDetector()
+	tsStatus, err := detector.Detect(ctx)
 	if err != nil {
-		cleanup()
+		logger.Warn("Error detecting Tailscale: %v", err)
+		return &tailscale.Status{Available: false}
+	}
+	return tsStatus
+}
+
+func initializeTelemetry(actualCommit string) func() {
+	var err error
+	telemetry, err = observability.Initialize(context.Background(), actualCommit)
+	if err != nil {
+		logger.Warn("Failed to initialize OpenTelemetry: %v", err)
+	} else if telemetry.IsEnabled() {
+		logger.Info("OpenTelemetry instrumentation enabled")
+	}
+
+	// Return cleanup function
+	return func() {
+		if telemetry != nil && telemetry.IsEnabled() {
+			logger.Info("Shutting down OpenTelemetry...")
+			if shutdownErr := telemetry.Shutdown(context.Background()); shutdownErr != nil {
+				logger.Warn("Error shutting down OpenTelemetry: %v", shutdownErr)
+			}
+		}
+	}
+}
+
+func setupServer(c *cli.Context) (*bootstrap.ServerResult, func(), error) {
+	site, err := createSite(c)
+	if err != nil {
 		return nil, nil, err
 	}
 
-	logger.Info("Setting up HTTP and gRPC servers...")
-	handler := createMultiplexedHandler(site)
+	actualCommit := getCommitHash()
+
+	// Initialize OpenTelemetry
+	telemetryCleanup := initializeTelemetry(actualCommit)
 
 	host := c.GlobalString("host")
 	if host == "" {
 		host = "0.0.0.0"
 	}
-	addr := fmt.Sprintf("%s:%s", host, c.GlobalString("port"))
-	logger.Info("Running simple_wiki server (commit %s) at http://%s", actualCommit, addr)
 
-	return &http.Server{
-		Addr:    addr,
-		Handler: h2c.NewHandler(handler, &http2.Server{}),
-	}, cleanup, nil
-}
-
-func createMultiplexedHandler(site *server.Site) http.Handler {
-	ginRouter := site.GinRouter()
-	actualCommit := getCommitHash()
-	buildTime := getBuildTime()
-	grpcAPIServer := grpcapi.NewServer(
-		actualCommit,
-		buildTime,
-		site,
-		site.BleveIndexQueryer,
-		site.GetJobQueueCoordinator(),
-		logger,
-		site.MarkdownRenderer,
-		server.TemplateExecutor{},
-		site.FrontmatterIndexQueryer,
-	)
-	
-	// Build gRPC server options with interceptors
-	var opts []grpc.ServerOption
-	
-	// Add OpenTelemetry instrumentation if enabled
-	if grpcInstrumentation != nil {
-		opts = append(opts,
-			grpc.ChainUnaryInterceptor(
-				grpcInstrumentation.UnaryServerInterceptor(),
-				grpcAPIServer.LoggingInterceptor(),
-			),
-			grpc.ChainStreamInterceptor(
-				grpcInstrumentation.StreamServerInterceptor(),
-			),
-		)
-	} else {
-		opts = append(opts, grpc.UnaryInterceptor(grpcAPIServer.LoggingInterceptor()))
+	port := c.GlobalInt("port")
+	tlsPort := c.GlobalInt("tls-port")
+	if tlsPort == 0 {
+		tlsPort = port + 1 // Default to adjacent port
 	}
-	
-	grpcServer := grpc.NewServer(opts...)
-	grpcAPIServer.RegisterWithServer(grpcServer)
 
-	reflection.Register(grpcServer)
+	tsStatus := detectTailscale(context.Background())
+	mode := bootstrap.DetermineServerMode(tsStatus, c.GlobalBool("tailscale-serve"))
 
-	wrappedGrpc := grpcweb.WrapServer(grpcServer,
-		grpcweb.WithOriginFunc(func(_ string) bool { return true }),
-	)
+	logger.Info("Running simple_wiki server (commit %s)", actualCommit)
 
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
-			logger.Debug("gRPC-ish request: %s %s", r.Method, r.URL.Path)
-			wrappedGrpc.ServeHTTP(w, r)
-			return
-		}
-		logger.Debug("Gin request: %s %s", r.Method, r.URL.Path)
-		ginRouter.ServeHTTP(w, r)
-	})
+	httpAddr := fmt.Sprintf("%s:%d", host, port)
+	buildTime := getBuildTime()
+
+	var result *bootstrap.ServerResult
+	switch mode {
+	case bootstrap.ModePlainHTTP:
+		result, err = bootstrap.SetupPlainHTTP(httpAddr, site, logger, actualCommit, buildTime)
+	case bootstrap.ModeTailscaleServe:
+		result, err = bootstrap.SetupTailscaleServe(
+			httpAddr, tsStatus.DNSName, c.GlobalBool("force-redirect-tailnet-https"),
+			site, logger, actualCommit, buildTime,
+		)
+	case bootstrap.ModeFullTLS:
+		result, err = bootstrap.SetupFullTLS(
+			httpAddr, tlsPort, tsStatus.DNSName,
+			site, logger, actualCommit, buildTime,
+		)
+	default:
+		err = fmt.Errorf("unknown server mode: %v", mode)
+	}
+
+	if err != nil {
+		telemetryCleanup()
+		return nil, nil, err
+	}
+
+	return result, telemetryCleanup, nil
 }
 
 func main() {
@@ -202,39 +181,63 @@ func main() {
 	app.Version = getCommitHash()
 	app.Compiled = time.Now()
 	app.Action = func(c *cli.Context) error {
-		srv, cleanup, err := setupServer(c)
+		config, telemetryCleanup, err := setupServer(c)
 		if err != nil {
 			return err
 		}
-		defer cleanup()
+		defer telemetryCleanup()
 
-		// Handle graceful shutdown
-		done := make(chan os.Signal, 1)
-		signal.Notify(done, os.Interrupt, syscall.SIGTERM)
-
+		// Start the main server in a goroutine
+		serverErr := make(chan error, 1)
 		go func() {
-			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				logger.Error("Server error: %v", err)
-			}
+			serverErr <- config.MainServer.Serve(config.MainListener)
 		}()
 
-		<-done
-		logger.Info("Shutting down server...")
+		// Wait for shutdown signal or server error
+		quit := make(chan os.Signal, 1)
+		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
+		select {
+		case err := <-serverErr:
+			return err
+		case sig := <-quit:
+			logger.Info("Received signal %v, shutting down gracefully...", sig)
+		}
+
+		// Graceful shutdown with timeout
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		return srv.Shutdown(ctx)
+		// Shutdown redirect server first if it exists
+		if config.RedirectServer != nil {
+			if err := config.RedirectServer.Shutdown(ctx); err != nil {
+				logger.Error("Error shutting down redirect server: %v", err)
+			}
+		}
+
+		// Shutdown main server
+		if err := config.MainServer.Shutdown(ctx); err != nil {
+			logger.Error("Error shutting down main server: %v", err)
+			return err
+		}
+
+		logger.Info("Server shutdown complete")
+		return nil
 	}
 	app.Flags = getFlags()
 
 	if err := app.Run(os.Args); err != nil {
-		logger.Error("Error running app: %v", err)
+		if logger != nil {
+			logger.Error("Error running app: %v", err)
+		} else {
+			_, _ = fmt.Fprintf(os.Stderr, "Error running app: %v\n", err)
+		}
 		os.Exit(1)
 	}
 }
 
 const (
+	defaultHTTPPort          = 8050
 	defaultDebounce          = 500
 	defaultMaxUploadMB       = 100
 	defaultMaxDocumentLength = 100000000
@@ -252,10 +255,23 @@ func getFlags() []cli.Flag {
 			Value: "",
 			Usage: "host to use",
 		},
-		cli.StringFlag{
+		cli.IntFlag{
 			Name:  "port,p",
-			Value: "8050",
-			Usage: "port to use",
+			Value: defaultHTTPPort,
+			Usage: "HTTP port to use",
+		},
+		cli.IntFlag{
+			Name:  "tls-port",
+			Value: 0,
+			Usage: "TLS port for HTTPS when Tailscale is available (0 = auto: port+1)",
+		},
+		cli.BoolFlag{
+			Name:  "tailscale-serve",
+			Usage: "Let Tailscale Serve handle HTTPS (no local TLS listener)",
+		},
+		cli.BoolFlag{
+			Name:  "force-redirect-tailnet-https",
+			Usage: "Force redirect tailnet clients to HTTPS on the tailnet hostname",
 		},
 		cli.StringFlag{
 			Name:  "css",
