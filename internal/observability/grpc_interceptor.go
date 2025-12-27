@@ -74,7 +74,7 @@ func (g *GRPCInstrumentation) UnaryServerInterceptor() grpc.UnaryServerIntercept
 		// Record to aggregate counters (wiki metrics, etc.)
 		if g.counters != nil {
 			g.counters.RecordGRPCRequest()
-			if statusCode != grpccodes.OK {
+			if err != nil {
 				g.counters.RecordGRPCError()
 			}
 		}
@@ -136,7 +136,7 @@ func (g *GRPCInstrumentation) StreamServerInterceptor() grpc.StreamServerInterce
 		// Record to aggregate counters (wiki metrics, etc.)
 		if g.counters != nil {
 			g.counters.RecordGRPCRequest()
-			if statusCode != grpccodes.OK {
+			if err != nil {
 				g.counters.RecordGRPCError()
 			}
 		}

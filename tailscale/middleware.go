@@ -18,7 +18,12 @@ type MetricsRecorder interface {
 // IdentityMiddlewareWithMetrics creates Gin middleware that extracts Tailscale identity.
 // Identity is extracted from Tailscale headers (set by Tailscale Serve) or via WhoIs.
 // If identity cannot be resolved, the request continues with Anonymous identity (graceful fallback).
-// All parameters are required and validated.
+//
+// The resolver parameter may be nil. When nil, only header-based identity extraction is attempted.
+// This is useful when Tailscale Serve handles all requests, so WhoIs lookups are unnecessary.
+// When resolver is nil and no headers are present, requests continue as Anonymous.
+//
+// The logger and metrics parameters are required and validated.
 func IdentityMiddlewareWithMetrics(resolver IdentityResolver, logger *lumber.ConsoleLogger, metrics MetricsRecorder) (gin.HandlerFunc, error) {
 	if logger == nil {
 		return nil, errors.New("logger is required")

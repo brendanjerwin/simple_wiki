@@ -48,6 +48,38 @@ func (m *mockPageReaderWriter) WriteMarkdown(identifier wikipage.PageIdentifier,
 	return nil
 }
 
+// failingPageReaderWriter wraps mockPageReaderWriter and can simulate write failures.
+type failingPageReaderWriter struct {
+	*mockPageReaderWriter
+	failFrontmatterWrite bool
+	failMarkdownWrite    bool
+}
+
+func (f *failingPageReaderWriter) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
+	if f.failFrontmatterWrite {
+		return errFrontmatterWriteFailed
+	}
+	return f.mockPageReaderWriter.WriteFrontMatter(identifier, fm)
+}
+
+func (f *failingPageReaderWriter) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Markdown) error {
+	if f.failMarkdownWrite {
+		return errMarkdownWriteFailed
+	}
+	return f.mockPageReaderWriter.WriteMarkdown(identifier, md)
+}
+
+var errFrontmatterWriteFailed = &testError{msg: "frontmatter write failed"}
+var errMarkdownWriteFailed = &testError{msg: "markdown write failed"}
+
+type testError struct {
+	msg string
+}
+
+func (e *testError) Error() string {
+	return e.msg
+}
+
 // createRecorder is a helper to create a recorder for tests that don't need page access.
 func createRecorder() *observability.WikiMetricsRecorder {
 	recorder, _ := observability.NewWikiMetricsRecorder(nil, nil, nil, nil)
@@ -412,6 +444,149 @@ var _ = Describe("WikiMetricsRecorder", func() {
 				err := recorder.Persist()
 				Expect(err).ToNot(HaveOccurred())
 				Expect(mock.frontmatter[observability.ObservabilityMetricsPage]).ToNot(BeNil())
+			})
+		})
+	})
+
+	Describe("PersistAsync", func() {
+		When("jobQueue is configured", func() {
+			var mock *mockPageReaderWriter
+			var recorder *observability.WikiMetricsRecorder
+
+			BeforeEach(func() {
+				mock = newMockPageReaderWriter()
+				coordinator := jobs.NewJobQueueCoordinator(lumber.NewConsoleLogger(lumber.FATAL))
+				recorder, _ = observability.NewWikiMetricsRecorder(mock, mock, coordinator, nil)
+				recorder.RecordHTTPRequest()
+			})
+
+			It("should enqueue a job that persists metrics", func() {
+				recorder.PersistAsync()
+				// Give the job queue time to process
+				Eventually(func() map[string]any {
+					return mock.frontmatter[observability.ObservabilityMetricsPage]
+				}).ShouldNot(BeNil())
+			})
+		})
+
+		When("jobQueue is not configured", func() {
+			var recorder *observability.WikiMetricsRecorder
+
+			BeforeEach(func() {
+				recorder, _ = observability.NewWikiMetricsRecorder(nil, nil, nil, nil)
+				recorder.RecordHTTPRequest()
+			})
+
+			It("should not panic", func() {
+				Expect(func() {
+					recorder.PersistAsync()
+				}).ToNot(Panic())
+			})
+		})
+	})
+
+	Describe("Shutdown", func() {
+		When("recorder has dirty metrics", func() {
+			var mock *mockPageReaderWriter
+			var recorder *observability.WikiMetricsRecorder
+			var err error
+
+			BeforeEach(func() {
+				mock = newMockPageReaderWriter()
+				recorder = createRecorderWithMock(mock)
+				recorder.RecordHTTPRequest()
+				recorder.RecordGRPCRequest()
+				err = recorder.Shutdown()
+			})
+
+			It("should not return an error", func() {
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should persist the metrics", func() {
+				fm := mock.frontmatter[observability.ObservabilityMetricsPage]
+				Expect(fm).ToNot(BeNil())
+				Expect(fm["observability"]).ToNot(BeNil())
+			})
+		})
+
+		When("recorder has no dirty metrics", func() {
+			var mock *mockPageReaderWriter
+			var recorder *observability.WikiMetricsRecorder
+			var err error
+
+			BeforeEach(func() {
+				mock = newMockPageReaderWriter()
+				recorder = createRecorderWithMock(mock)
+				// Don't record anything
+				err = recorder.Shutdown()
+			})
+
+			It("should not return an error", func() {
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should not write anything", func() {
+				Expect(mock.frontmatter).To(BeEmpty())
+			})
+		})
+
+		When("recorder has no page access", func() {
+			var recorder *observability.WikiMetricsRecorder
+			var err error
+
+			BeforeEach(func() {
+				recorder, _ = observability.NewWikiMetricsRecorder(nil, nil, nil, nil)
+				recorder.RecordHTTPRequest()
+				err = recorder.Shutdown()
+			})
+
+			It("should not return an error", func() {
+				Expect(err).ToNot(HaveOccurred())
+			})
+		})
+	})
+
+	Describe("Persist error handling", func() {
+		When("frontmatter write fails", func() {
+			var recorder *observability.WikiMetricsRecorder
+			var err error
+
+			BeforeEach(func() {
+				mock := &failingPageReaderWriter{
+					mockPageReaderWriter: newMockPageReaderWriter(),
+					failFrontmatterWrite: true,
+				}
+				coordinator := jobs.NewJobQueueCoordinator(lumber.NewConsoleLogger(lumber.FATAL))
+				recorder, _ = observability.NewWikiMetricsRecorder(mock, mock, coordinator, nil)
+				recorder.RecordHTTPRequest()
+				err = recorder.Persist()
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("frontmatter write failed"))
+			})
+		})
+
+		When("markdown write fails", func() {
+			var recorder *observability.WikiMetricsRecorder
+			var err error
+
+			BeforeEach(func() {
+				mock := &failingPageReaderWriter{
+					mockPageReaderWriter: newMockPageReaderWriter(),
+					failMarkdownWrite:    true,
+				}
+				coordinator := jobs.NewJobQueueCoordinator(lumber.NewConsoleLogger(lumber.FATAL))
+				recorder, _ = observability.NewWikiMetricsRecorder(mock, mock, coordinator, nil)
+				recorder.RecordHTTPRequest()
+				err = recorder.Persist()
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("markdown write failed"))
 			})
 		})
 	})

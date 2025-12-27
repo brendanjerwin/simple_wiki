@@ -221,6 +221,11 @@ func main() {
 			return err
 		}
 
+		// Run cleanup (e.g., persist final wiki metrics)
+		if config.Cleanup != nil {
+			config.Cleanup()
+		}
+
 		logger.Info("Server shutdown complete")
 		return nil
 	}

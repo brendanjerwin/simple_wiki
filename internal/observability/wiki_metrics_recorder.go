@@ -185,6 +185,10 @@ func (r *WikiMetricsRecorder) hasPageAccess() bool {
 // If the page doesn't exist, it creates it with a markdown template that displays frontmatter data.
 // If the page exists, it only updates the frontmatter without touching the markdown.
 // Only persists if counters have changed since last persist (dirty flag).
+//
+// Note: There's a potential race between checking and clearing the dirty flag where new
+// records could arrive. This is acceptable: data is never lost since counters are atomic,
+// and the new data will be persisted on the next cycle when dirty is set again.
 func (r *WikiMetricsRecorder) Persist() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -296,6 +300,16 @@ func (r *WikiMetricsRecorder) PersistAsync() {
 	}
 
 	r.jobQueue.EnqueueJob(&metricsPersistJob{recorder: r})
+}
+
+// Shutdown performs a final synchronous persist of any remaining metrics.
+// Call this during application shutdown to ensure no data is lost.
+// This is a synchronous operation that may block briefly.
+func (r *WikiMetricsRecorder) Shutdown() error {
+	if r.logger != nil {
+		r.logger.Info("Persisting final metrics before shutdown...")
+	}
+	return r.Persist()
 }
 
 // metricsPersistJob is a job that persists wiki metrics.
