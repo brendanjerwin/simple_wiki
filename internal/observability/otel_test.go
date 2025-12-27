@@ -9,12 +9,78 @@ import (
 	"github.com/brendanjerwin/simple_wiki/internal/observability"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func TestObservability(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Observability Suite")
 }
+
+var _ = Describe("Tracer", func() {
+	When("getting a tracer with a name", func() {
+		var tracer trace.Tracer
+
+		BeforeEach(func() {
+			tracer = observability.Tracer("test/tracer")
+		})
+
+		It("should return a non-nil tracer", func() {
+			Expect(tracer).ToNot(BeNil())
+		})
+	})
+
+	When("getting tracers with different names", func() {
+		var tracer1 trace.Tracer
+		var tracer2 trace.Tracer
+
+		BeforeEach(func() {
+			tracer1 = observability.Tracer("test/tracer1")
+			tracer2 = observability.Tracer("test/tracer2")
+		})
+
+		It("should return a non-nil tracer for first name", func() {
+			Expect(tracer1).ToNot(BeNil())
+		})
+
+		It("should return a non-nil tracer for second name", func() {
+			Expect(tracer2).ToNot(BeNil())
+		})
+	})
+})
+
+var _ = Describe("Meter", func() {
+	When("getting a meter with a name", func() {
+		var meter metric.Meter
+
+		BeforeEach(func() {
+			meter = observability.Meter("test/meter")
+		})
+
+		It("should return a non-nil meter", func() {
+			Expect(meter).ToNot(BeNil())
+		})
+	})
+
+	When("getting meters with different names", func() {
+		var meter1 metric.Meter
+		var meter2 metric.Meter
+
+		BeforeEach(func() {
+			meter1 = observability.Meter("test/meter1")
+			meter2 = observability.Meter("test/meter2")
+		})
+
+		It("should return a non-nil meter for first name", func() {
+			Expect(meter1).ToNot(BeNil())
+		})
+
+		It("should return a non-nil meter for second name", func() {
+			Expect(meter2).ToNot(BeNil())
+		})
+	})
+})
 
 var _ = Describe("TelemetryProvider", func() {
 	Describe("Initialize", func() {

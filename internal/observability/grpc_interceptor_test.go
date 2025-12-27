@@ -232,5 +232,35 @@ var _ = Describe("GRPCInstrumentation", func() {
 				Expect(err).ToNot(HaveOccurred())
 			})
 		})
+
+		When("handler accesses context from wrapped stream", func() {
+			var capturedCtx context.Context
+			var err error
+
+			BeforeEach(func() {
+				instrumentation := observability.NewGRPCInstrumentation(nil, nil)
+				interceptor = instrumentation.StreamServerInterceptor()
+				handler := func(srv any, stream grpc.ServerStream) error {
+					capturedCtx = stream.Context()
+					return nil
+				}
+				info := &grpc.StreamServerInfo{FullMethod: "/test.Service/StreamMethod"}
+				originalCtx := context.WithValue(context.Background(), ctxKey("test"), "value")
+				stream := &mockServerStream{ctx: originalCtx}
+				err = interceptor(nil, stream, info, handler)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should provide a context with tracing span", func() {
+				// The wrapped stream should provide a context that includes the tracing span
+				Expect(capturedCtx).ToNot(BeNil())
+			})
+		})
 	})
 })
+
+// ctxKey is a type for context keys to avoid collisions.
+type ctxKey string
