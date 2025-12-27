@@ -52,15 +52,30 @@ type Logger interface {
 }
 
 // NewWikiMetricsRecorder creates a new WikiMetricsRecorder.
-// Both pageWriter and pageReader must be provided together, or neither should be provided.
-// jobQueue is required for async persistence; if nil, synchronous persistence will be used.
+// All dependencies must be provided together: pageWriter, pageReader, and jobQueue.
+// If any are nil, all must be nil (metrics-only mode without persistence).
 // If logger is nil, logging will be disabled.
 func NewWikiMetricsRecorder(pageWriter wikipage.PageWriter, pageReader wikipage.PageReader, jobQueue *jobs.JobQueueCoordinator, logger Logger) (*WikiMetricsRecorder, error) {
-	// Validate that both page access interfaces are provided together or not at all
+	// Validate that all persistence dependencies are provided together or not at all
 	hasWriter := pageWriter != nil
 	hasReader := pageReader != nil
-	if hasWriter != hasReader {
-		return nil, fmt.Errorf("pageWriter and pageReader must both be provided or both be nil")
+	hasQueue := jobQueue != nil
+
+	// Count how many are provided
+	providedCount := 0
+	if hasWriter {
+		providedCount++
+	}
+	if hasReader {
+		providedCount++
+	}
+	if hasQueue {
+		providedCount++
+	}
+
+	// Either all three must be provided, or none
+	if providedCount != 0 && providedCount != 3 {
+		return nil, fmt.Errorf("pageWriter, pageReader, and jobQueue must all be provided together or all be nil")
 	}
 
 	return &WikiMetricsRecorder{
@@ -233,24 +248,20 @@ func (r *WikiMetricsRecorder) PersistWithMarkdown() error {
 }
 
 // PersistAsync enqueues a job to persist metrics asynchronously via the job queue.
-// If no job queue is configured, falls back to synchronous persistence.
+// Requires jobQueue to be configured in the constructor.
 func (r *WikiMetricsRecorder) PersistAsync() {
 	if r.jobQueue == nil {
-		// Fall back to sync if no job queue
-		_ = r.Persist()
-		return
+		return // No persistence configured
 	}
 
 	r.jobQueue.EnqueueJob(&metricsPersistJob{recorder: r, withMarkdown: false})
 }
 
 // PersistWithMarkdownAsync enqueues a job to persist metrics with markdown asynchronously.
-// If no job queue is configured, falls back to synchronous persistence.
+// Requires jobQueue to be configured in the constructor.
 func (r *WikiMetricsRecorder) PersistWithMarkdownAsync() {
 	if r.jobQueue == nil {
-		// Fall back to sync if no job queue
-		_ = r.PersistWithMarkdown()
-		return
+		return // No persistence configured
 	}
 
 	r.jobQueue.EnqueueJob(&metricsPersistJob{recorder: r, withMarkdown: true})

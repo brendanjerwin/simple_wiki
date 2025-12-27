@@ -3,7 +3,9 @@ package observability_test
 
 import (
 	"github.com/brendanjerwin/simple_wiki/internal/observability"
+	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
+	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -51,28 +53,39 @@ func createRecorder() *observability.WikiMetricsRecorder {
 	return recorder
 }
 
-// createRecorderWithMock is a helper to create a recorder with mock page access.
+// createRecorderWithMock is a helper to create a recorder with mock page access and job queue.
 func createRecorderWithMock(mock *mockPageReaderWriter) *observability.WikiMetricsRecorder {
-	recorder, _ := observability.NewWikiMetricsRecorder(mock, mock, nil, nil)
+	coordinator := jobs.NewJobQueueCoordinator(lumber.NewConsoleLogger(lumber.FATAL))
+	recorder, _ := observability.NewWikiMetricsRecorder(mock, mock, coordinator, nil)
 	return recorder
 }
 
 var _ = Describe("WikiMetricsRecorder", func() {
 	Describe("NewWikiMetricsRecorder", func() {
-		When("creating with valid page access", func() {
+		When("creating with all dependencies", func() {
 			It("should return a recorder without error", func() {
 				mock := newMockPageReaderWriter()
-				recorder, err := observability.NewWikiMetricsRecorder(mock, mock, nil, nil)
+				coordinator := jobs.NewJobQueueCoordinator(lumber.NewConsoleLogger(lumber.FATAL))
+				recorder, err := observability.NewWikiMetricsRecorder(mock, mock, coordinator, nil)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(recorder).ToNot(BeNil())
 			})
 		})
 
-		When("creating without page access", func() {
+		When("creating without any dependencies (metrics-only mode)", func() {
 			It("should return a recorder without error", func() {
 				recorder, err := observability.NewWikiMetricsRecorder(nil, nil, nil, nil)
 				Expect(err).ToNot(HaveOccurred())
 				Expect(recorder).ToNot(BeNil())
+			})
+		})
+
+		When("creating with only pageWriter and pageReader (missing jobQueue)", func() {
+			It("should return an error", func() {
+				mock := newMockPageReaderWriter()
+				_, err := observability.NewWikiMetricsRecorder(mock, mock, nil, nil)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("all be provided together"))
 			})
 		})
 
@@ -81,7 +94,7 @@ var _ = Describe("WikiMetricsRecorder", func() {
 				mock := newMockPageReaderWriter()
 				_, err := observability.NewWikiMetricsRecorder(mock, nil, nil, nil)
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("both be provided"))
+				Expect(err.Error()).To(ContainSubstring("all be provided together"))
 			})
 		})
 
@@ -90,7 +103,16 @@ var _ = Describe("WikiMetricsRecorder", func() {
 				mock := newMockPageReaderWriter()
 				_, err := observability.NewWikiMetricsRecorder(nil, mock, nil, nil)
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("both be provided"))
+				Expect(err.Error()).To(ContainSubstring("all be provided together"))
+			})
+		})
+
+		When("creating with only jobQueue", func() {
+			It("should return an error", func() {
+				coordinator := jobs.NewJobQueueCoordinator(lumber.NewConsoleLogger(lumber.FATAL))
+				_, err := observability.NewWikiMetricsRecorder(nil, nil, coordinator, nil)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("all be provided together"))
 			})
 		})
 	})
