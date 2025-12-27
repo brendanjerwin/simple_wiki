@@ -80,6 +80,13 @@ export class SearchContentResponse extends Message<SearchContentResponse> {
    */
   results: SearchResult[] = [];
 
+  /**
+   * Total count of results without filtering (for inventory filter warning)
+   *
+   * @generated from field: int32 total_unfiltered_count = 2;
+   */
+  totalUnfilteredCount = 0;
+
   constructor(data?: PartialMessage<SearchContentResponse>) {
     super();
     proto3.util.initPartial(data, this);
@@ -89,6 +96,7 @@ export class SearchContentResponse extends Message<SearchContentResponse> {
   static readonly typeName = "api.v1.SearchContentResponse";
   static readonly fields: FieldList = proto3.util.newFieldList(() => [
     { no: 1, name: "results", kind: "message", T: SearchResult, repeated: true },
+    { no: 2, name: "total_unfiltered_count", kind: "scalar", T: 5 /* ScalarType.INT32 */ },
   ]);
 
   static fromBinary(bytes: Uint8Array, options?: Partial<BinaryReadOptions>): SearchContentResponse {

@@ -14,7 +14,7 @@ interface WikiSearchElement extends HTMLElement {
   _handleKeydown: (event: KeyboardEvent) => void;
   handleFormSubmit: (event: Event) => Promise<void>;
   handleInventoryFilterChanged: (event: CustomEvent<{ inventoryOnly: boolean }>) => Promise<void>;
-  performSearch: (query: string) => Promise<SearchResult[]>;
+  performSearch: (query: string) => Promise<{ results: SearchResult[], totalUnfilteredCount: number }>;
   updateComplete: Promise<boolean>;
   shadowRoot: ShadowRoot;
 }
@@ -254,6 +254,53 @@ describe('WikiSearch', () => {
         expect(errorDiv).to.exist;
         expect(errorDiv?.textContent).to.equal('Network error');
       });
+
+      it('should reset totalUnfilteredCount to 0', () => {
+        expect(el.totalUnfilteredCount).to.equal(0);
+      });
+    });
+
+    describe('when search fails with stale totalUnfilteredCount', () => {
+      let stubPerformSearch: sinon.SinonStub;
+
+      beforeEach(async () => {
+        stubPerformSearch = sinon.stub(el, 'performSearch');
+
+        // First search succeeds with a totalUnfilteredCount
+        stubPerformSearch.resolves({ results: [{ identifier: 'test', title: 'Test' }], totalUnfilteredCount: 10 });
+        searchInput.value = 'success';
+        let submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+        form.dispatchEvent(submitEvent);
+        await waitUntil(() => !el.loading, 'First search should complete');
+        await el.updateComplete;
+
+        // Verify the totalUnfilteredCount is set
+        expect(el.totalUnfilteredCount).to.equal(10);
+
+        // Second search fails
+        stubPerformSearch.rejects(new Error('Network error'));
+        searchInput.value = 'fail';
+        submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+        form.dispatchEvent(submitEvent);
+        await waitUntil(() => el.error === 'Network error', 'Error should be set');
+        await el.updateComplete;
+      });
+
+      afterEach(() => {
+        stubPerformSearch.restore();
+      });
+
+      it('should reset totalUnfilteredCount to 0 even if it had a previous value', () => {
+        expect(el.totalUnfilteredCount).to.equal(0);
+      });
+
+      it('should clear results', () => {
+        expect(el.results).to.deep.equal([]);
+      });
+
+      it('should set error property', () => {
+        expect(el.error).to.equal('Network error');
+      });
     });
   });
 
@@ -269,7 +316,7 @@ describe('WikiSearch', () => {
 
       // Stub performSearch to return mock results
       stubPerformSearch = sinon.stub(el, 'performSearch');
-      stubPerformSearch.resolves([]);
+      stubPerformSearch.resolves({ results: [], totalUnfilteredCount: 0 });
     });
 
     afterEach(() => {
@@ -324,6 +371,42 @@ describe('WikiSearch', () => {
 
       it('should not perform a search', () => {
         expect(stubPerformSearch).to.not.have.been.called;
+      });
+    });
+
+    describe('when search fails during inventory filter change', () => {
+      beforeEach(async () => {
+        // Perform an initial search with some results
+        stubPerformSearch.resolves({ results: [{ identifier: 'test', title: 'Test' }], totalUnfilteredCount: 5 });
+        searchInput.value = 'test query';
+        const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+        form.dispatchEvent(submitEvent);
+        await waitUntil(() => !el.loading, 'Loading should complete');
+
+        // Set up the stub to fail for the next call
+        stubPerformSearch.rejects(new Error('Network error during filter change'));
+
+        // Trigger the inventory filter change
+        const event = new CustomEvent('inventory-filter-changed', {
+          detail: { inventoryOnly: true },
+          bubbles: true,
+          composed: true
+        });
+        await el.handleInventoryFilterChanged(event);
+        await waitUntil(() => el.error === 'Network error during filter change', 'Error should be set');
+        await el.updateComplete;
+      });
+
+      it('should set error property', () => {
+        expect(el.error).to.equal('Network error during filter change');
+      });
+
+      it('should clear results', () => {
+        expect(el.results).to.deep.equal([]);
+      });
+
+      it('should reset totalUnfilteredCount to 0', () => {
+        expect(el.totalUnfilteredCount).to.equal(0);
       });
     });
   });

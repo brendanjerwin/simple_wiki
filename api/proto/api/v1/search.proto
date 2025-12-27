@@ -24,6 +24,8 @@ message SearchContentRequest {
 // The response message containing search results.
 message SearchContentResponse {
   repeated SearchResult results = 1;
+  // Total count of results without filtering (for inventory filter warning)
+  int32 total_unfiltered_count = 2;
 }
 
 // A search result item.
