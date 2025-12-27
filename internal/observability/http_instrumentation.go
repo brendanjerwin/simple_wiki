@@ -12,15 +12,18 @@ import (
 
 // HTTPInstrumentation provides Gin middleware for tracing and metrics collection.
 type HTTPInstrumentation struct {
-	tracer  trace.Tracer
-	metrics *HTTPMetrics
+	tracer   trace.Tracer
+	metrics  *HTTPMetrics
+	counters RequestCounter
 }
 
 // NewHTTPInstrumentation creates a new HTTPInstrumentation instance.
-func NewHTTPInstrumentation(metrics *HTTPMetrics) *HTTPInstrumentation {
+// The counters parameter accepts any RequestCounter implementation for aggregate counting.
+func NewHTTPInstrumentation(metrics *HTTPMetrics, counters RequestCounter) *HTTPInstrumentation {
 	return &HTTPInstrumentation{
-		tracer:  otel.Tracer("simple_wiki/http"),
-		metrics: metrics,
+		tracer:   otel.Tracer("simple_wiki/http"),
+		metrics:  metrics,
+		counters: counters,
 	}
 }
 
@@ -61,7 +64,8 @@ func (h *HTTPInstrumentation) GinMiddleware() gin.HandlerFunc {
 
 		span.SetAttributes(attribute.Int(attrHTTPStatusCode, statusCode))
 
-		if statusCode >= httpErrorStatusThreshold {
+		isError := statusCode >= httpErrorStatusThreshold
+		if isError {
 			span.SetStatus(codes.Error, "HTTP error")
 		} else {
 			span.SetStatus(codes.Ok, "")
@@ -69,6 +73,14 @@ func (h *HTTPInstrumentation) GinMiddleware() gin.HandlerFunc {
 
 		if h.metrics != nil {
 			h.metrics.RequestFinished(ctx, method, path, statusCode, duration)
+		}
+
+		// Record to aggregate counters (wiki metrics, etc.)
+		if h.counters != nil {
+			h.counters.RecordHTTPRequest()
+			if isError {
+				h.counters.RecordHTTPError()
+			}
 		}
 	}
 }

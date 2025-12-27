@@ -254,23 +254,69 @@ var _ = Describe("WikiMetricsRecorder", func() {
 		})
 	})
 
-	Describe("PersistWithMarkdown", func() {
-		When("persisting with markdown", func() {
-			It("should write markdown with correct sections", func() {
-				mock := newMockPageReaderWriter()
+	Describe("Persist creating new page", func() {
+		When("page does not exist", func() {
+			var mock *mockPageReaderWriter
+			var err error
+
+			BeforeEach(func() {
+				mock = newMockPageReaderWriter()
 				recorder := createRecorderWithMock(mock)
 				recorder.RecordHTTPRequest()
 				recorder.RecordGRPCRequest()
 
-				err := recorder.PersistWithMarkdown()
-				Expect(err).ToNot(HaveOccurred())
+				err = recorder.Persist()
+			})
 
+			It("should not return an error", func() {
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should write markdown template with correct sections", func() {
 				md := mock.markdown[observability.ObservabilityMetricsPage]
 				Expect(md).ToNot(BeEmpty())
 				Expect(md).To(ContainSubstring("# Observability Metrics"))
 				Expect(md).To(ContainSubstring("## HTTP Metrics"))
 				Expect(md).To(ContainSubstring("## gRPC Metrics"))
 				Expect(md).To(ContainSubstring("## Tailscale Identity Metrics"))
+			})
+
+			It("should use template syntax for values", func() {
+				md := mock.markdown[observability.ObservabilityMetricsPage]
+				Expect(md).To(ContainSubstring("{{ .observability.http.requests_total }}"))
+			})
+		})
+
+		When("page already exists", func() {
+			var mock *mockPageReaderWriter
+			var err error
+
+			BeforeEach(func() {
+				mock = newMockPageReaderWriter()
+				// Pre-populate the frontmatter to simulate existing page
+				mock.frontmatter[observability.ObservabilityMetricsPage] = map[string]any{
+					"title": "Existing Page",
+				}
+				mock.markdown[observability.ObservabilityMetricsPage] = "# Custom Content"
+
+				recorder := createRecorderWithMock(mock)
+				recorder.RecordHTTPRequest()
+
+				err = recorder.Persist()
+			})
+
+			It("should not return an error", func() {
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should not overwrite the markdown", func() {
+				md := mock.markdown[observability.ObservabilityMetricsPage]
+				Expect(md).To(Equal("# Custom Content"))
+			})
+
+			It("should update the frontmatter", func() {
+				fm := mock.frontmatter[observability.ObservabilityMetricsPage]
+				Expect(fm["observability"]).ToNot(BeNil())
 			})
 		})
 	})

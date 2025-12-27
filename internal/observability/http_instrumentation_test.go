@@ -19,7 +19,7 @@ var _ = Describe("HTTPInstrumentation", func() {
 			BeforeEach(func() {
 				metrics, err := observability.NewHTTPMetrics()
 				Expect(err).ToNot(HaveOccurred())
-				instrumentation = observability.NewHTTPInstrumentation(metrics)
+				instrumentation = observability.NewHTTPInstrumentation(metrics, nil)
 			})
 
 			It("should return a non-nil instrumentation", func() {
@@ -31,7 +31,7 @@ var _ = Describe("HTTPInstrumentation", func() {
 			var instrumentation *observability.HTTPInstrumentation
 
 			BeforeEach(func() {
-				instrumentation = observability.NewHTTPInstrumentation(nil)
+				instrumentation = observability.NewHTTPInstrumentation(nil, nil)
 			})
 
 			It("should return a non-nil instrumentation", func() {
@@ -50,7 +50,7 @@ var _ = Describe("HTTPInstrumentation", func() {
 			router = gin.New()
 			metrics, err := observability.NewHTTPMetrics()
 			Expect(err).ToNot(HaveOccurred())
-			instrumentation = observability.NewHTTPInstrumentation(metrics)
+			instrumentation = observability.NewHTTPInstrumentation(metrics, nil)
 			router.Use(instrumentation.GinMiddleware())
 			recorder = httptest.NewRecorder()
 		})
@@ -101,7 +101,7 @@ var _ = Describe("HTTPInstrumentation", func() {
 		When("middleware is created without metrics", func() {
 			BeforeEach(func() {
 				router = gin.New()
-				instrumentation = observability.NewHTTPInstrumentation(nil)
+				instrumentation = observability.NewHTTPInstrumentation(nil, nil)
 				router.Use(instrumentation.GinMiddleware())
 				router.GET("/test", func(c *gin.Context) {
 					c.String(http.StatusOK, "success")

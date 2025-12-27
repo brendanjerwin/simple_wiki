@@ -193,13 +193,12 @@ func SetupFullTLS(
 }
 
 // setupHTTPObservability adds HTTP observability middleware to the Gin router.
-func setupHTTPObservability(ginRouter gin.IRouter, logger *lumber.ConsoleLogger) {
+func setupHTTPObservability(ginRouter gin.IRouter, counters observability.RequestCounter, logger *lumber.ConsoleLogger) {
 	httpMetrics, err := observability.NewHTTPMetrics()
 	if err != nil {
 		logger.Warn("Failed to create HTTP metrics, continuing without: %v", err)
-		return
 	}
-	httpInstrumentation := observability.NewHTTPInstrumentation(httpMetrics)
+	httpInstrumentation := observability.NewHTTPInstrumentation(httpMetrics, counters)
 	ginRouter.Use(httpInstrumentation.GinMiddleware())
 }
 
@@ -207,6 +206,7 @@ func setupHTTPObservability(ginRouter gin.IRouter, logger *lumber.ConsoleLogger)
 func buildGRPCInterceptors(
 	identityResolver tailscale.IdentityResolver,
 	loggingInterceptor grpc.UnaryServerInterceptor,
+	counters observability.RequestCounter,
 	logger *lumber.ConsoleLogger,
 ) ([]grpc.UnaryServerInterceptor, []grpc.StreamServerInterceptor, error) {
 	var unaryInterceptors []grpc.UnaryServerInterceptor
@@ -215,11 +215,10 @@ func buildGRPCInterceptors(
 	grpcMetrics, err := observability.NewGRPCMetrics()
 	if err != nil {
 		logger.Warn("Failed to create gRPC metrics, continuing without: %v", err)
-	} else {
-		grpcInstrumentation := observability.NewGRPCInstrumentation(grpcMetrics)
-		unaryInterceptors = append(unaryInterceptors, grpcInstrumentation.UnaryServerInterceptor())
-		streamInterceptors = append(streamInterceptors, grpcInstrumentation.StreamServerInterceptor())
 	}
+	grpcInstrumentation := observability.NewGRPCInstrumentation(grpcMetrics, counters)
+	unaryInterceptors = append(unaryInterceptors, grpcInstrumentation.UnaryServerInterceptor())
+	streamInterceptors = append(streamInterceptors, grpcInstrumentation.StreamServerInterceptor())
 
 	if identityResolver != nil {
 		interceptor, err := tailscale.IdentityInterceptor(identityResolver, logger)
@@ -242,7 +241,29 @@ func createMultiplexedHandler(
 ) (http.Handler, error) {
 	ginRouter := site.GinRouter()
 
-	setupHTTPObservability(ginRouter, logger)
+	// Create wiki metrics recorder for lightweight aggregate tracking
+	wikiRecorder, err := observability.NewWikiMetricsRecorder(
+		site, site, site.GetJobQueueCoordinator(), logger,
+	)
+	if err != nil {
+		logger.Warn("Failed to create wiki metrics recorder: %v", err)
+	}
+
+	// Create composite counter (currently just wiki recorder, extensible for future backends)
+	var counters observability.RequestCounter
+	if wikiRecorder != nil {
+		counters = observability.NewCompositeRequestCounter(wikiRecorder)
+
+		// Schedule periodic persistence (every minute)
+		_, schedErr := site.CronScheduler.Schedule("0 * * * * *", &metricsPersistJob{recorder: wikiRecorder})
+		if schedErr != nil {
+			logger.Warn("Failed to schedule metrics persistence: %v", schedErr)
+		} else {
+			logger.Info("Scheduled wiki metrics persistence every minute")
+		}
+	}
+
+	setupHTTPObservability(ginRouter, counters, logger)
 
 	if identityResolver != nil {
 		middleware, err := tailscale.IdentityMiddleware(identityResolver, logger)
@@ -270,6 +291,7 @@ func createMultiplexedHandler(
 	unaryInterceptors, streamInterceptors, err := buildGRPCInterceptors(
 		identityResolver,
 		grpcAPIServer.LoggingInterceptor(),
+		counters,
 		logger,
 	)
 	if err != nil {
@@ -297,4 +319,19 @@ func createMultiplexedHandler(
 		logger.Debug("Gin request: %s %s", r.Method, r.URL.Path)
 		ginRouter.ServeHTTP(w, r)
 	}), nil
+}
+
+// metricsPersistJob wraps WikiMetricsRecorder.Persist for cron scheduling.
+type metricsPersistJob struct {
+	recorder *observability.WikiMetricsRecorder
+}
+
+// GetName returns the job name for the cron scheduler.
+func (*metricsPersistJob) GetName() string {
+	return "wiki_metrics_persist"
+}
+
+// Execute persists the wiki metrics.
+func (j *metricsPersistJob) Execute() error {
+	return j.recorder.Persist()
 }

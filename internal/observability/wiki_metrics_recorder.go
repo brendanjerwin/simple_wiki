@@ -2,7 +2,6 @@ package observability
 
 import (
 	"errors"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -20,12 +19,6 @@ const (
 
 	// requiredDependencyCount is the number of persistence dependencies required.
 	requiredDependencyCount = 3
-
-	// tableRowSuffix is the markdown table row ending.
-	tableRowSuffix = " |\n"
-
-	// base10 is the decimal base for number formatting.
-	base10 = 10
 )
 
 // WikiMetricsRecorder provides lightweight metrics persistence to a wiki page.
@@ -177,7 +170,8 @@ func (r *WikiMetricsRecorder) hasPageAccess() bool {
 }
 
 // Persist writes the current statistics to the wiki page frontmatter.
-// This method uses direct frontmatter manipulation to avoid amplifying stats through APIs.
+// If the page doesn't exist, it creates it with a markdown template that displays frontmatter data.
+// If the page exists, it only updates the frontmatter without touching the markdown.
 func (r *WikiMetricsRecorder) Persist() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -186,8 +180,13 @@ func (r *WikiMetricsRecorder) Persist() error {
 		return nil // No-op if page access is not configured
 	}
 
-	// Read existing frontmatter (silently handle missing pages)
-	existingFM := r.readOrCreateFrontmatter()
+	// Check if page exists by reading frontmatter
+	_, existingFM, _ := r.pageReader.ReadFrontMatter(ObservabilityMetricsPage)
+	pageExists := existingFM != nil
+
+	if existingFM == nil {
+		existingFM = make(map[string]any)
+	}
 
 	// Build observability section
 	stats := r.GetStats()
@@ -201,10 +200,10 @@ func (r *WikiMetricsRecorder) Persist() error {
 			"errors_total":   stats.GRPCErrorsTotal,
 		},
 		"tailscale": map[string]any{
-			"lookups_total":     stats.TailscaleLookups,
-			"successes_total":   stats.TailscaleSuccesses,
-			"failures_total":    stats.TailscaleFailures,
-			"not_tailnet_total": stats.TailscaleNotTailnet,
+			"lookups_total":            stats.TailscaleLookups,
+			"successes_total":          stats.TailscaleSuccesses,
+			"failures_total":           stats.TailscaleFailures,
+			"not_tailnet_total":        stats.TailscaleNotTailnet,
 			"header_extractions_total": stats.HeaderExtractions,
 		},
 		"last_updated": time.Now().Format(time.RFC3339),
@@ -223,6 +222,19 @@ func (r *WikiMetricsRecorder) Persist() error {
 		return err
 	}
 
+	// If page didn't exist, also write the markdown template
+	if !pageExists {
+		if err := r.pageWriter.WriteMarkdown(ObservabilityMetricsPage, r.buildMarkdownTemplate()); err != nil {
+			if r.logger != nil {
+				r.logger.Error("Failed to write metrics page template: %v", err)
+			}
+			return err
+		}
+		if r.logger != nil {
+			r.logger.Info("Created observability metrics page with template")
+		}
+	}
+
 	r.lastPersisted = time.Now()
 
 	if r.logger != nil {
@@ -232,39 +244,6 @@ func (r *WikiMetricsRecorder) Persist() error {
 	return nil
 }
 
-// readOrCreateFrontmatter reads existing frontmatter or creates a fresh map.
-// Read errors are logged but do not fail the operation.
-func (r *WikiMetricsRecorder) readOrCreateFrontmatter() map[string]any {
-	_, existingFM, err := r.pageReader.ReadFrontMatter(ObservabilityMetricsPage)
-	if err != nil {
-		// Log read errors (but not "not found" which is expected)
-		if r.logger != nil {
-			r.logger.Warn("Could not read existing metrics page, will create fresh: %v", err)
-		}
-		return make(map[string]any)
-	}
-	if existingFM == nil {
-		return make(map[string]any)
-	}
-	return existingFM
-}
-
-// PersistWithMarkdown writes the current statistics to the wiki page with a markdown report.
-func (r *WikiMetricsRecorder) PersistWithMarkdown() error {
-	if err := r.Persist(); err != nil {
-		return err
-	}
-
-	if !r.hasPageAccess() {
-		return nil
-	}
-
-	stats := r.GetStats()
-	markdown := r.buildMarkdownReport(stats)
-
-	return r.pageWriter.WriteMarkdown(ObservabilityMetricsPage, markdown)
-}
-
 // PersistAsync enqueues a job to persist metrics asynchronously via the job queue.
 // Requires jobQueue to be configured in the constructor.
 func (r *WikiMetricsRecorder) PersistAsync() {
@@ -272,23 +251,12 @@ func (r *WikiMetricsRecorder) PersistAsync() {
 		return // No persistence configured
 	}
 
-	r.jobQueue.EnqueueJob(&metricsPersistJob{recorder: r, withMarkdown: false})
-}
-
-// PersistWithMarkdownAsync enqueues a job to persist metrics with markdown asynchronously.
-// Requires jobQueue to be configured in the constructor.
-func (r *WikiMetricsRecorder) PersistWithMarkdownAsync() {
-	if r.jobQueue == nil {
-		return // No persistence configured
-	}
-
-	r.jobQueue.EnqueueJob(&metricsPersistJob{recorder: r, withMarkdown: true})
+	r.jobQueue.EnqueueJob(&metricsPersistJob{recorder: r})
 }
 
 // metricsPersistJob is a job that persists wiki metrics.
 type metricsPersistJob struct {
-	recorder     *WikiMetricsRecorder
-	withMarkdown bool
+	recorder *WikiMetricsRecorder
 }
 
 // GetName returns the job name for queue routing.
@@ -298,42 +266,40 @@ func (*metricsPersistJob) GetName() string {
 
 // Execute performs the metrics persistence.
 func (j *metricsPersistJob) Execute() error {
-	if j.withMarkdown {
-		return j.recorder.PersistWithMarkdown()
-	}
 	return j.recorder.Persist()
 }
 
-// buildMarkdownReport builds a markdown report of the current statistics.
-func (*WikiMetricsRecorder) buildMarkdownReport(stats WikiMetricsStats) string {
-	tableHeader := "| Metric | Value |\n|--------|-------|\n"
+// buildMarkdownTemplate returns a markdown template that displays frontmatter data.
+// This template is only written when creating a new page; existing pages keep their markdown.
+func (*WikiMetricsRecorder) buildMarkdownTemplate() string {
+	return `# Observability Metrics
 
-	report := "# Observability Metrics\n\n"
-	report += "*This page is automatically updated with observability statistics.*\n\n"
-	report += "## HTTP Metrics\n\n"
-	report += tableHeader
-	report += formatTableRow("Total Requests", stats.HTTPRequestsTotal)
-	report += formatTableRow("Total Errors", stats.HTTPErrorsTotal)
-	report += "\n"
+*This page displays server observability statistics from frontmatter data.*
 
-	report += "## gRPC Metrics\n\n"
-	report += tableHeader
-	report += formatTableRow("Total Requests", stats.GRPCRequestsTotal)
-	report += formatTableRow("Total Errors", stats.GRPCErrorsTotal)
-	report += "\n"
+**Last Updated:** {{ .observability.last_updated }}
 
-	report += "## Tailscale Identity Metrics\n\n"
-	report += tableHeader
-	report += formatTableRow("Total Lookups", stats.TailscaleLookups)
-	report += formatTableRow("Successful", stats.TailscaleSuccesses)
-	report += formatTableRow("Failed", stats.TailscaleFailures)
-	report += formatTableRow("Not Tailnet", stats.TailscaleNotTailnet)
-	report += formatTableRow("Header Extractions", stats.HeaderExtractions)
+## HTTP Metrics
 
-	return report
-}
+| Metric | Value |
+|--------|-------|
+| Total Requests | {{ .observability.http.requests_total }} |
+| Total Errors | {{ .observability.http.errors_total }} |
 
-// formatTableRow formats a markdown table row.
-func formatTableRow(label string, value int64) string {
-	return "| " + label + " | " + strconv.FormatInt(value, base10) + tableRowSuffix
+## gRPC Metrics
+
+| Metric | Value |
+|--------|-------|
+| Total Requests | {{ .observability.grpc.requests_total }} |
+| Total Errors | {{ .observability.grpc.errors_total }} |
+
+## Tailscale Identity Metrics
+
+| Metric | Value |
+|--------|-------|
+| Total Lookups | {{ .observability.tailscale.lookups_total }} |
+| Successful | {{ .observability.tailscale.successes_total }} |
+| Failed | {{ .observability.tailscale.failures_total }} |
+| Not Tailnet | {{ .observability.tailscale.not_tailnet_total }} |
+| Header Extractions | {{ .observability.tailscale.header_extractions_total }} |
+`
 }

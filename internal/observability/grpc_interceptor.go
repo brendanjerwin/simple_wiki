@@ -15,15 +15,18 @@ import (
 
 // GRPCInstrumentation provides gRPC interceptors for tracing and metrics collection.
 type GRPCInstrumentation struct {
-	tracer  trace.Tracer
-	metrics *GRPCMetrics
+	tracer   trace.Tracer
+	metrics  *GRPCMetrics
+	counters RequestCounter
 }
 
 // NewGRPCInstrumentation creates a new GRPCInstrumentation instance.
-func NewGRPCInstrumentation(metrics *GRPCMetrics) *GRPCInstrumentation {
+// The counters parameter accepts any RequestCounter implementation for aggregate counting.
+func NewGRPCInstrumentation(metrics *GRPCMetrics, counters RequestCounter) *GRPCInstrumentation {
 	return &GRPCInstrumentation{
-		tracer:  otel.Tracer("simple_wiki/grpc"),
-		metrics: metrics,
+		tracer:   otel.Tracer("simple_wiki/grpc"),
+		metrics:  metrics,
+		counters: counters,
 	}
 }
 
@@ -66,6 +69,14 @@ func (g *GRPCInstrumentation) UnaryServerInterceptor() grpc.UnaryServerIntercept
 
 		if g.metrics != nil {
 			g.metrics.RequestFinished(ctx, info.FullMethod, statusCode.String(), duration)
+		}
+
+		// Record to aggregate counters (wiki metrics, etc.)
+		if g.counters != nil {
+			g.counters.RecordGRPCRequest()
+			if statusCode != grpccodes.OK {
+				g.counters.RecordGRPCError()
+			}
 		}
 
 		return resp, err
@@ -120,6 +131,14 @@ func (g *GRPCInstrumentation) StreamServerInterceptor() grpc.StreamServerInterce
 
 		if g.metrics != nil {
 			g.metrics.RequestFinished(ctx, info.FullMethod, statusCode.String(), duration)
+		}
+
+		// Record to aggregate counters (wiki metrics, etc.)
+		if g.counters != nil {
+			g.counters.RecordGRPCRequest()
+			if statusCode != grpccodes.OK {
+				g.counters.RecordGRPCError()
+			}
 		}
 
 		return err
