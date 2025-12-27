@@ -11,6 +11,10 @@ import (
 	adrgfrontmatter "github.com/adrg/frontmatter"
 )
 
+// DefaultPageTemplate is the default markdown template added to new wiki pages.
+// This displays the page title or identifier as an H1 heading.
+const DefaultPageTemplate = "# {{or .Title .Identifier}}"
+
 // Page represents a wiki page
 type Page struct {
 	Identifier             string
