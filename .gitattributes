@@ -1,5 +1,55 @@
-vendor/** linguist-vendored
-gen/** linguist-generated
+# ==============================================================================
+# .gitattributes - GitHub Linguist & Diff Suppression Configuration
+# ==============================================================================
 
+# ------------------------------------------------------------------------------
+# VENDOR DIRECTORIES
+# Using 'linguist-generated' to force diff collapse in PRs.
+# 'linguist-vendored' is added for semantic correctness and language stats.
+# ------------------------------------------------------------------------------
+vendor/**               linguist-vendored linguist-generated
+static/vendor/**        linguist-vendored linguist-generated
+
+# ------------------------------------------------------------------------------
+# GENERATED CODE DIRECTORIES
+# ------------------------------------------------------------------------------
+gen/**                  linguist-generated
+static/js/gen/**        linguist-generated
+.devbox/gen/**          linguist-generated
+
+# ------------------------------------------------------------------------------
+# PACKAGE MANAGERS & LOCKFILES
+# ------------------------------------------------------------------------------
+go.sum                  linguist-generated
+bun.lock                linguist-generated
+static/js/bun.lock      linguist-generated
+e2e/bun.lock            linguist-generated
+devbox.lock             linguist-generated
+static/js/devbox.lock   linguist-generated
+flake.lock              linguist-generated
+
+# ------------------------------------------------------------------------------
+# GENERATED SOURCE CODE
+# ------------------------------------------------------------------------------
+# Protocol Buffers / gRPC
+*.pb.go                 linguist-generated
+*_grpc.pb.go            linguist-generated
+*.pb.ts                 linguist-generated
+*_connect.ts            linguist-generated
+
+# Minified JavaScript / CSS
+*.min.js                linguist-generated
+*.min.css               linguist-generated
+*.map                   linguist-generated
+*.bundle.js             linguist-generated
+
+# ------------------------------------------------------------------------------
+# DOCUMENTATION
+# ------------------------------------------------------------------------------
+docs/**                 linguist-documentation
+
+# ------------------------------------------------------------------------------
+# BEADS CUSTOM MERGE STRATEGY
+# ------------------------------------------------------------------------------
 # Use bd merge for beads JSONL files
-.beads/issues.jsonl merge=beads
+.beads/issues.jsonl     merge=beads
