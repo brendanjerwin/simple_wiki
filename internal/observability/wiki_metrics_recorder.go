@@ -1,7 +1,7 @@
 package observability
 
 import (
-	"fmt"
+	"errors"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -17,6 +17,15 @@ const (
 
 	// observabilityPrefix is the frontmatter key prefix for observability data.
 	observabilityPrefix = "observability"
+
+	// requiredDependencyCount is the number of persistence dependencies required.
+	requiredDependencyCount = 3
+
+	// tableRowSuffix is the markdown table row ending.
+	tableRowSuffix = " |\n"
+
+	// base10 is the decimal base for number formatting.
+	base10 = 10
 )
 
 // WikiMetricsRecorder provides lightweight metrics persistence to a wiki page.
@@ -74,8 +83,8 @@ func NewWikiMetricsRecorder(pageWriter wikipage.PageWriter, pageReader wikipage.
 	}
 
 	// Either all three must be provided, or none
-	if providedCount != 0 && providedCount != 3 {
-		return nil, fmt.Errorf("pageWriter, pageReader, and jobQueue must all be provided together or all be nil")
+	if providedCount != 0 && providedCount != requiredDependencyCount {
+		return nil, errors.New("pageWriter, pageReader, and jobQueue must all be provided together or all be nil")
 	}
 
 	return &WikiMetricsRecorder{
@@ -117,6 +126,8 @@ func (r *WikiMetricsRecorder) RecordTailscaleLookup(result IdentityLookupResult)
 		r.tailscaleFailures.Add(1)
 	case ResultNotTailnet:
 		r.tailscaleNotTailnet.Add(1)
+	default:
+		// Unknown result type, just count the lookup
 	}
 }
 
@@ -274,7 +285,7 @@ type metricsPersistJob struct {
 }
 
 // GetName returns the job name for queue routing.
-func (j *metricsPersistJob) GetName() string {
+func (*metricsPersistJob) GetName() string {
 	return "observability_metrics_persist"
 }
 
@@ -287,36 +298,35 @@ func (j *metricsPersistJob) Execute() error {
 }
 
 // buildMarkdownReport builds a markdown report of the current statistics.
-func (r *WikiMetricsRecorder) buildMarkdownReport(stats WikiMetricsStats) string {
+func (*WikiMetricsRecorder) buildMarkdownReport(stats WikiMetricsStats) string {
+	tableHeader := "| Metric | Value |\n|--------|-------|\n"
+
 	report := "# Observability Metrics\n\n"
 	report += "*This page is automatically updated with observability statistics.*\n\n"
 	report += "## HTTP Metrics\n\n"
-	report += "| Metric | Value |\n"
-	report += "|--------|-------|\n"
-	report += "| Total Requests | " + formatInt64(stats.HTTPRequestsTotal) + " |\n"
-	report += "| Total Errors | " + formatInt64(stats.HTTPErrorsTotal) + " |\n"
+	report += tableHeader
+	report += formatTableRow("Total Requests", stats.HTTPRequestsTotal)
+	report += formatTableRow("Total Errors", stats.HTTPErrorsTotal)
 	report += "\n"
 
 	report += "## gRPC Metrics\n\n"
-	report += "| Metric | Value |\n"
-	report += "|--------|-------|\n"
-	report += "| Total Requests | " + formatInt64(stats.GRPCRequestsTotal) + " |\n"
-	report += "| Total Errors | " + formatInt64(stats.GRPCErrorsTotal) + " |\n"
+	report += tableHeader
+	report += formatTableRow("Total Requests", stats.GRPCRequestsTotal)
+	report += formatTableRow("Total Errors", stats.GRPCErrorsTotal)
 	report += "\n"
 
 	report += "## Tailscale Identity Metrics\n\n"
-	report += "| Metric | Value |\n"
-	report += "|--------|-------|\n"
-	report += "| Total Lookups | " + formatInt64(stats.TailscaleLookups) + " |\n"
-	report += "| Successful | " + formatInt64(stats.TailscaleSuccesses) + " |\n"
-	report += "| Failed | " + formatInt64(stats.TailscaleFailures) + " |\n"
-	report += "| Not Tailnet | " + formatInt64(stats.TailscaleNotTailnet) + " |\n"
-	report += "| Header Extractions | " + formatInt64(stats.HeaderExtractions) + " |\n"
+	report += tableHeader
+	report += formatTableRow("Total Lookups", stats.TailscaleLookups)
+	report += formatTableRow("Successful", stats.TailscaleSuccesses)
+	report += formatTableRow("Failed", stats.TailscaleFailures)
+	report += formatTableRow("Not Tailnet", stats.TailscaleNotTailnet)
+	report += formatTableRow("Header Extractions", stats.HeaderExtractions)
 
 	return report
 }
 
-// formatInt64 formats an int64 as a string.
-func formatInt64(n int64) string {
-	return strconv.FormatInt(n, 10)
+// formatTableRow formats a markdown table row.
+func formatTableRow(label string, value int64) string {
+	return "| " + label + " | " + strconv.FormatInt(value, base10) + tableRowSuffix
 }

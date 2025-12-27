@@ -47,21 +47,14 @@ var _ = Describe("TelemetryProvider", func() {
 
 var _ = Describe("TailscaleMetrics", func() {
 	Describe("NewTailscaleMetrics", func() {
-		var (
-			metrics   *observability.TailscaleMetrics
-			createErr error
-		)
+		var createErr error
 
 		BeforeEach(func() {
-			metrics, createErr = observability.NewTailscaleMetrics()
+			_, createErr = observability.NewTailscaleMetrics()
 		})
 
 		It("should not return an error", func() {
 			Expect(createErr).ToNot(HaveOccurred())
-		})
-
-		It("should return a valid metrics instance", func() {
-			Expect(metrics).ToNot(BeNil())
 		})
 	})
 
@@ -149,21 +142,14 @@ var _ = Describe("TailscaleMetrics", func() {
 
 var _ = Describe("HTTPMetrics", func() {
 	Describe("NewHTTPMetrics", func() {
-		var (
-			metrics   *observability.HTTPMetrics
-			createErr error
-		)
+		var createErr error
 
 		BeforeEach(func() {
-			metrics, createErr = observability.NewHTTPMetrics()
+			_, createErr = observability.NewHTTPMetrics()
 		})
 
 		It("should not return an error", func() {
 			Expect(createErr).ToNot(HaveOccurred())
-		})
-
-		It("should return a valid metrics instance", func() {
-			Expect(metrics).ToNot(BeNil())
 		})
 	})
 
@@ -220,21 +206,14 @@ var _ = Describe("HTTPMetrics", func() {
 
 var _ = Describe("GRPCMetrics", func() {
 	Describe("NewGRPCMetrics", func() {
-		var (
-			metrics   *observability.GRPCMetrics
-			createErr error
-		)
+		var createErr error
 
 		BeforeEach(func() {
-			metrics, createErr = observability.NewGRPCMetrics()
+			_, createErr = observability.NewGRPCMetrics()
 		})
 
 		It("should not return an error", func() {
 			Expect(createErr).ToNot(HaveOccurred())
-		})
-
-		It("should return a valid metrics instance", func() {
-			Expect(metrics).ToNot(BeNil())
 		})
 	})
 
@@ -289,61 +268,7 @@ var _ = Describe("GRPCMetrics", func() {
 	})
 })
 
-var _ = Describe("GRPCInstrumentation", func() {
-	Describe("NewGRPCInstrumentation", func() {
-		var (
-			metrics *observability.GRPCMetrics
-			instr   *observability.GRPCInstrumentation
-		)
-
-		BeforeEach(func() {
-			var err error
-			metrics, err = observability.NewGRPCMetrics()
-			Expect(err).ToNot(HaveOccurred())
-			instr = observability.NewGRPCInstrumentation(metrics)
-		})
-
-		It("should return a valid instrumentation instance", func() {
-			Expect(instr).ToNot(BeNil())
-		})
-	})
-
-	Describe("UnaryServerInterceptor", func() {
-		var (
-			metrics *observability.GRPCMetrics
-			instr   *observability.GRPCInstrumentation
-		)
-
-		BeforeEach(func() {
-			var err error
-			metrics, err = observability.NewGRPCMetrics()
-			Expect(err).ToNot(HaveOccurred())
-			instr = observability.NewGRPCInstrumentation(metrics)
-		})
-
-		It("should return a non-nil interceptor", func() {
-			interceptor := instr.UnaryServerInterceptor()
-			Expect(interceptor).ToNot(BeNil())
-		})
-	})
-
-	Describe("StreamServerInterceptor", func() {
-		var (
-			metrics *observability.GRPCMetrics
-			instr   *observability.GRPCInstrumentation
-		)
-
-		BeforeEach(func() {
-			var err error
-			metrics, err = observability.NewGRPCMetrics()
-			Expect(err).ToNot(HaveOccurred())
-			instr = observability.NewGRPCInstrumentation(metrics)
-		})
-
-		It("should return a non-nil interceptor", func() {
-			interceptor := instr.StreamServerInterceptor()
-			Expect(interceptor).ToNot(BeNil())
-		})
-	})
-})
+// Note: GRPCInstrumentation tests removed as they were only testing non-nil returns
+// which doesn't verify actual behavior. The interceptors are tested through integration
+// tests when they are wired up to the gRPC server.
 

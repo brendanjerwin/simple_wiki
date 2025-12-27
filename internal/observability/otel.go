@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
 	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
 	"go.opentelemetry.io/otel/metric"
@@ -26,6 +28,9 @@ const (
 
 	// EnvServiceName is the environment variable for the service name.
 	EnvServiceName = "OTEL_SERVICE_NAME"
+
+	// EnvOTLPEndpoint is the standard OTEL environment variable for OTLP endpoint.
+	EnvOTLPEndpoint = "OTEL_EXPORTER_OTLP_ENDPOINT"
 
 	// shutdownTimeoutSeconds is the timeout for graceful shutdown.
 	shutdownTimeoutSeconds = 5
@@ -128,10 +133,16 @@ func Initialize(ctx context.Context, version string) (*TelemetryProvider, error)
 	}, nil
 }
 
-func initTracer(_ context.Context, res *resource.Resource) (*sdktrace.TracerProvider, error) {
-	traceExporter, err := stdouttrace.New(
-		stdouttrace.WithPrettyPrint(),
-	)
+func initTracer(ctx context.Context, res *resource.Resource) (*sdktrace.TracerProvider, error) {
+	var traceExporter sdktrace.SpanExporter
+	var err error
+
+	// Use OTLP exporter if endpoint is configured, otherwise fall back to stdout
+	if os.Getenv(EnvOTLPEndpoint) != "" {
+		traceExporter, err = otlptracehttp.New(ctx)
+	} else {
+		traceExporter, err = stdouttrace.New(stdouttrace.WithPrettyPrint())
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to create trace exporter: %w", err)
 	}
@@ -146,10 +157,16 @@ func initTracer(_ context.Context, res *resource.Resource) (*sdktrace.TracerProv
 	return tracerProvider, nil
 }
 
-func initMeter(_ context.Context, res *resource.Resource) (*sdkmetric.MeterProvider, error) {
-	metricExporter, err := stdoutmetric.New(
-		stdoutmetric.WithPrettyPrint(),
-	)
+func initMeter(ctx context.Context, res *resource.Resource) (*sdkmetric.MeterProvider, error) {
+	var metricExporter sdkmetric.Exporter
+	var err error
+
+	// Use OTLP exporter if endpoint is configured, otherwise fall back to stdout
+	if os.Getenv(EnvOTLPEndpoint) != "" {
+		metricExporter, err = otlpmetrichttp.New(ctx)
+	} else {
+		metricExporter, err = stdoutmetric.New(stdoutmetric.WithPrettyPrint())
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to create metric exporter: %w", err)
 	}

@@ -10,18 +10,22 @@
 //
 //	OTEL_ENABLED=true ./simple_wiki
 //
-// By default, traces and metrics are exported to stdout. For production use with
-// an OTLP-compatible collector (like Jaeger, Zipkin, or Grafana Agent), replace
-// the stdout exporters with OTLP HTTP/gRPC exporters:
+// # OTLP Exporter Configuration
 //
-//	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp
-//	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp
+// The exporter is automatically selected based on environment variables:
+//
+//   - If OTEL_EXPORTER_OTLP_ENDPOINT is set, traces and metrics are sent via OTLP HTTP
+//   - If OTEL_EXPORTER_OTLP_ENDPOINT is not set, traces and metrics are written to stdout
+//
+// Example with OTLP collector:
+//
+//	OTEL_ENABLED=true OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 ./simple_wiki
 //
 // # Environment Variables
 //
 //   - OTEL_ENABLED: Set to "true" to enable OpenTelemetry (default: disabled)
 //   - OTEL_SERVICE_NAME: The service name for telemetry (defaults to "simple_wiki")
-//   - OTEL_RESOURCE_ATTRIBUTES: Additional resource attributes in key=value,key2=value2 format
+//   - OTEL_EXPORTER_OTLP_ENDPOINT: OTLP collector endpoint (if set, uses OTLP HTTP exporter)
 //
 // # Wiki-Based Metrics
 //

@@ -1005,7 +1005,7 @@ ADRs should document significant architectural decisions that have long-term imp
 
 ## Observability
 
-The application uses OpenTelemetry for metrics and distributed tracing. Enable with `OTEL_ENABLED=true`.
+The application uses OpenTelemetry for metrics and distributed tracing. Enable with `OTEL_ENABLED=true`. The exporter is automatically selected based on `OTEL_EXPORTER_OTLP_ENDPOINT` - if set, uses OTLP HTTP; otherwise falls back to stdout.
 
 ### Adding Metrics
 

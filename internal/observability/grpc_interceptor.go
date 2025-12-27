@@ -13,7 +13,7 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-// GRPCInstrumentation provides gRPC interceptors with OpenTelemetry instrumentation.
+// GRPCInstrumentation provides gRPC interceptors for tracing and metrics collection.
 type GRPCInstrumentation struct {
 	tracer  trace.Tracer
 	metrics *GRPCMetrics
