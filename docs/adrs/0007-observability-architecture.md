@@ -39,11 +39,11 @@ Lightweight metrics persistence directly to a wiki page (`observability_metrics`
 
 All configuration via standard environment variables:
 
-| Variable | Purpose |
-|----------|---------|
-| `OTEL_ENABLED` | Enable OpenTelemetry (set to "true") |
-| `OTEL_SERVICE_NAME` | Service name for telemetry (default: "simple_wiki") |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP collector endpoint (auto-selects OTLP exporter) |
+| Variable                       | Purpose                                               |
+| ------------------------------ | ----------------------------------------------------- |
+| `OTEL_ENABLED`                 | Enable OpenTelemetry (set to "true")                  |
+| `OTEL_SERVICE_NAME`            | Service name for telemetry (default: "simple_wiki")   |
+| `OTEL_EXPORTER_OTLP_ENDPOINT`  | OTLP collector endpoint (auto-selects OTLP exporter)  |
 
 ### 4. Instrumentation Scope
 
