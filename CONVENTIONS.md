@@ -465,58 +465,6 @@ beforeEach(async () => {
   });
   ```
 
-- **Keep assertions terse**: Avoid restating the context in `it` block descriptions. The `describe` blocks provide the context, so `it` blocks should focus on the specific behavior being tested.
-
-  **Bad:**
-
-  ```typescript
-  describe("when handling rejection events", () => {
-    it("should handle rejection events without throwing", () => {
-      expect(handlerResult).to.exist;
-    });
-  });
-  ```
-
-  **Good:**
-
-  ```typescript
-  describe("when handling rejection events", () => {
-    it("should not throw", () => {
-      expect(handlerResult).to.exist;
-    });
-  });
-  ```
-
-- **No context in it blocks**: All context setup and actions should be in `describe`/`beforeEach` blocks, never in `it` blocks. If you find yourself setting up context within an `it` block, it should be moved to a `beforeEach` within an appropriately named `describe` block.
-
-  **Bad:**
-
-  ```typescript
-  it("should handle timeout errors", () => {
-    const connectError = new ConnectError("Timeout", Code.DeadlineExceeded);
-    const augmented = AugmentErrorService.augmentError(connectError);
-    expect(augmented.errorKind).to.equal(ErrorKind.TIMEOUT);
-  });
-  ```
-
-  **Good:**
-
-  ```typescript
-  describe("when the error is DEADLINE_EXCEEDED", () => {
-    let connectError: ConnectError;
-    let augmented: AugmentedError;
-
-    beforeEach(() => {
-      connectError = new ConnectError("Timeout", Code.DeadlineExceeded);
-      augmented = AugmentErrorService.augmentError(connectError);
-    });
-
-    it("should set errorKind to TIMEOUT", () => {
-      expect(augmented.errorKind).to.equal(ErrorKind.TIMEOUT);
-    });
-  });
-  ```
-
 - **No Actions in It Blocks**: All setup (**Arrange**) and execution (**Act**) should be in `beforeEach` blocks within `describe` or `when` blocks. `It` blocks should only contain assertions (**Assert**). This allows reusing context for multiple assertions.
 
   **Good Pattern:**
@@ -612,31 +560,7 @@ beforeEach(async () => {
   });
   ```
 
-- **When to Use "when" in Describe Blocks**: Use "when" in `describe` blocks only to establish scenarios or conditions, not to describe features or behaviors. This creates clear test organization by separating scenarios from the behaviors being tested.
-
-  **Bad:** Using "when" for a feature/behavior
-
-  ```typescript
-  describe("when preserving original error stack", () => {
-    // This describes what the code does, not a scenario
-  });
-  ```
-
-  **Good:** Using "when" for a scenario/condition
-
-  ```typescript
-  describe("when the source Error has a stack", () => {
-    // This describes a condition/scenario
-  });
-  ```
-
-  **Good:** Describing a feature without "when"
-
-  ```typescript
-  describe("delegating to original error properties", () => {
-    // This describes a feature/behavior
-  });
-  ```
+- **When to Use "when" in Describe Blocks**: Use "when" only to establish scenarios or conditions (`when the source Error has a stack`), not to describe features (`when preserving original error stack`). For features, omit "when" (`delegating to original error properties`).
 
 - **Event Handler Wiring Tests**: For web components that add/remove event listeners, always test that the event handlers are properly wired up. Use spies to verify that `addEventListener` and `removeEventListener` are called with the correct parameters and function references.
 
@@ -683,58 +607,24 @@ beforeEach(async () => {
   });
   ```
 
-- **Documentation of Testing Principles**: When you discover important testing principles or patterns that ensure comprehensive coverage, document them in this CONVENTIONS.md file. This builds a comprehensive guide for future developers and helps maintain consistent testing practices across the project.
 - Include a blank line between all the various Ginkgo blocks. This makes it easier to read the tests.
-- Prefer Ginkgo/Gomega for testing in Go.
-- Use a Context-Specification style. Nest `describe` blocks to build up context. Don't bother with `context` blocks in frameworks that provide them.
-- Don't do actions in the `It` blocks. The `It` blocks should only contain assertions. All setup (**Arrange**) and execution (**Act**) should be done in `BeforeEach` blocks within the `Describe` or `When` blocks. This allows for reusing context to add additional assertions later.
-
-  **Bad:** Action inside the `It` block.
+- Prefer Ginkgo/Gomega for testing in Go. The "No Actions in It Blocks" rule applies here too:
 
   ```go
   Describe("a component", func() {
     When("in a certain state", func() {
-      It("should do a thing", func() {
-        // Arrange
-        component := setupComponent()
-
-        // Act
-        result, err := component.DoSomething()
-
-        // Assert
-        Expect(err).NotTo(HaveOccurred())
-        Expect(result).To(Equal("expected result"))
-      })
-    })
-  })
-  ```
-
-  **Good:** Action moved to `BeforeEach`.
-
-  ```go
-  Describe("a component", func() {
-    When("in a certain state", func() {
-      var (
-        component *Component
-        result    string
-        err       error
-      )
+      var result string
+      var err error
 
       BeforeEach(func() {
-        // Arrange
-        component = setupComponent()
-
-        // Act
         result, err = component.DoSomething()
       })
 
-      It("should not return an error", func() {
-        // Assert
+      It("should not error", func() {
         Expect(err).NotTo(HaveOccurred())
       })
 
-      It("should return the correct result", func() {
-        // Assert
+      It("should return expected result", func() {
         Expect(result).To(Equal("expected result"))
       })
     })
