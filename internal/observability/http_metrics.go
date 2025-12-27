@@ -11,7 +11,7 @@ import (
 
 // HTTPMetrics provides metrics for HTTP request handling.
 type HTTPMetrics struct {
-	requestDuration metric.Float64Histogram
+	requestDurationSeconds metric.Float64Histogram
 	requestTotal    metric.Int64Counter
 	errorTotal      metric.Int64Counter
 	activeRequests  metric.Int64UpDownCounter
@@ -21,11 +21,11 @@ type HTTPMetrics struct {
 func NewHTTPMetrics() (*HTTPMetrics, error) {
 	meter := otel.Meter("simple_wiki/http")
 
-	requestDuration, err := meter.Float64Histogram(
+	requestDurationSeconds, err := meter.Float64Histogram(
 		"http_request_duration_seconds",
 		metric.WithDescription("Histogram of HTTP request durations"),
 		metric.WithUnit("s"),
-		metric.WithExplicitBucketBoundaries(httpHistogramBucketBoundariesSeconds...),
+		metric.WithExplicitBucketBoundaries(networkRequestHistogramBucketBoundariesSeconds...),
 	)
 	if err != nil {
 		return nil, err
@@ -59,7 +59,7 @@ func NewHTTPMetrics() (*HTTPMetrics, error) {
 	}
 
 	return &HTTPMetrics{
-		requestDuration: requestDuration,
+		requestDurationSeconds: requestDurationSeconds,
 		requestTotal:    requestTotal,
 		errorTotal:      errorTotal,
 		activeRequests:  activeRequests,
@@ -87,7 +87,7 @@ func (m *HTTPMetrics) RequestFinished(ctx context.Context, method, path string, 
 		attribute.String(attrHTTPMethod, method),
 		attribute.String(attrHTTPRoute, path),
 	))
-	m.requestDuration.Record(ctx, duration.Seconds(), metric.WithAttributes(attrs...))
+	m.requestDurationSeconds.Record(ctx, duration.Seconds(), metric.WithAttributes(attrs...))
 	m.requestTotal.Add(ctx, 1, metric.WithAttributes(attrs...))
 
 	// Record errors (4xx and 5xx status codes)
@@ -109,7 +109,7 @@ func (m *HTTPMetrics) RecordDuration(ctx context.Context, method, path string, s
 		attribute.Int(attrHTTPStatusCode, statusCode),
 	}
 
-	m.requestDuration.Record(ctx, durationSeconds, metric.WithAttributes(attrs...))
+	m.requestDurationSeconds.Record(ctx, durationSeconds, metric.WithAttributes(attrs...))
 	m.requestTotal.Add(ctx, 1, metric.WithAttributes(attrs...))
 
 	if statusCode >= httpErrorStatusThreshold {

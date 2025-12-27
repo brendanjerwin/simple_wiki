@@ -36,7 +36,7 @@ func NewTailscaleMetrics() (*TailscaleMetrics, error) {
 		"tailscale_identity_lookup_duration_seconds",
 		metric.WithDescription("Histogram of WhoIs lookup times"),
 		metric.WithUnit("s"),
-		metric.WithExplicitBucketBoundaries(defaultHistogramBucketBoundariesSeconds...),
+		metric.WithExplicitBucketBoundaries(localOperationHistogramBucketBoundariesSeconds...),
 	)
 	if err != nil {
 		return nil, err

@@ -17,6 +17,7 @@ type GRPCMetrics struct {
 	activeRequests         metric.Int64UpDownCounter
 }
 
+// NewGRPCMetrics creates a new GRPCMetrics instance for tracking gRPC request metrics.
 func NewGRPCMetrics() (*GRPCMetrics, error) {
 	meter := otel.Meter("simple_wiki/grpc")
 
@@ -24,7 +25,7 @@ func NewGRPCMetrics() (*GRPCMetrics, error) {
 		"grpc_request_duration_seconds",
 		metric.WithDescription("Histogram of gRPC request durations"),
 		metric.WithUnit("s"),
-		metric.WithExplicitBucketBoundaries(httpHistogramBucketBoundariesSeconds...),
+		metric.WithExplicitBucketBoundaries(networkRequestHistogramBucketBoundariesSeconds...),
 	)
 	if err != nil {
 		return nil, err
