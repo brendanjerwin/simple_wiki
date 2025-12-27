@@ -183,6 +183,7 @@ export class WikiSearch extends LitElement {
       }
     } catch (error) {
       this.results = [];
+      this.totalUnfilteredCount = 0;
       this.error = error instanceof Error ? error.message : 'Search failed';
       console.error('Search error:', error);
     } finally {
@@ -214,6 +215,7 @@ export class WikiSearch extends LitElement {
         this.noResults = response.results.length === 0;
       } catch (error) {
         this.results = [];
+        this.totalUnfilteredCount = 0;
         this.error = error instanceof Error ? error.message : 'Search failed';
         console.error('Search error:', error);
       } finally {
