@@ -132,7 +132,6 @@ Storybook is used for developing and documenting UI components in isolation. Fol
 - Storybook runs as part of the `devbox services` workflow for seamless development
 - Use `devbox run storybook` to run Storybook standalone
 - Use `devbox run storybook:build` to build static Storybook files
-- Stories are automatically deployed to Chromatic for visual regression testing
 
 #### Interactive Testing and Event Logging
 

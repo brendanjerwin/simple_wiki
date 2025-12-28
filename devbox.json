@@ -72,12 +72,6 @@
       "storybook:build": [
         "cd static/js && bun install && bun run build-storybook"
       ],
-      "chromatic": [
-        "cd static/js && bun install && bun run build-storybook && bunx chromatic --project-token=$CHROMATIC_PROJECT_TOKEN --storybook-build-dir=storybook-static --exit-zero-on-changes"
-      ],
-      "chromatic:pr": [
-        "cd static/js && bun install && bun run build-storybook && bunx chromatic --project-token=$CHROMATIC_PROJECT_TOKEN --storybook-build-dir=storybook-static --patch-build=$HEAD_BRANCH...$BASE_BRANCH --exit-zero-on-changes"
-      ],
       "e2e:test": [
         "devbox run build",
         "export CHROMIUM_BIN=$(which chromium)",

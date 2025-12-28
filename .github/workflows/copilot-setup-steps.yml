@@ -3,8 +3,6 @@ name: Copilot Setup Steps
 on:
   workflow_call:
     secrets:
-      CHROMATIC_PROJECT_TOKEN:
-        required: true
       GITHUB_TOKEN:
         required: true
 
