@@ -17,7 +17,6 @@ var _ = Describe("JSONArchiveMigrationScanJob", func() {
 	var (
 		tempDir     string
 		coordinator *jobs.JobQueueCoordinator
-		deps        *MockMigrationDeps
 		scanJob     *JSONArchiveMigrationScanJob
 		err         error
 	)
@@ -28,8 +27,7 @@ var _ = Describe("JSONArchiveMigrationScanJob", func() {
 
 		// Use a silent logger for testing
 		coordinator = jobs.NewJobQueueCoordinator(lumber.NewConsoleLogger(lumber.FATAL))
-		deps = NewMockMigrationDeps(tempDir)
-		scanJob = NewJSONArchiveMigrationScanJob(tempDir, coordinator, deps)
+		scanJob = NewJSONArchiveMigrationScanJob(tempDir, coordinator)
 	})
 
 	AfterEach(func() {

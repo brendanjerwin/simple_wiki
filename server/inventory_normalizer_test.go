@@ -18,7 +18,6 @@ type mockNormalizerDeps struct {
 	readFrontMatterErr  error
 	writeFrontMatterErr error
 	writeMarkdownErr    error
-	readPageErr         error
 }
 
 func newMockNormalizerDeps() *mockNormalizerDeps {
@@ -42,7 +41,7 @@ func (m *mockNormalizerDeps) ReadFrontMatter(page wikipage.PageIdentifier) (wiki
 func (m *mockNormalizerDeps) ReadMarkdown(page wikipage.PageIdentifier) (wikipage.PageIdentifier, string, error) {
 	md, ok := m.markdown[string(page)]
 	if !ok {
-		return "", "", errors.New("page not found")
+		return "", "", os.ErrNotExist
 	}
 	return page, md, nil
 }
@@ -68,12 +67,9 @@ func (*mockNormalizerDeps) DeletePage(_ wikipage.PageIdentifier) error {
 }
 
 func (m *mockNormalizerDeps) ReadPage(page wikipage.PageIdentifier) (*wikipage.Page, error) {
-	if m.readPageErr != nil {
-		return nil, m.readPageErr
-	}
 	_, ok := m.frontmatters[string(page)]
 	if !ok {
-		return nil, errors.New("page not found")
+		return nil, os.ErrNotExist
 	}
 	return &wikipage.Page{
 		Identifier: string(page),
@@ -535,22 +531,18 @@ var _ = Describe("InventoryNormalizer", func() {
 
 		When("reading frontmatter fails with non-NotExist error", func() {
 			var err error
+			var localDeps *mockNormalizerDeps
+			var localNormalizer *InventoryNormalizer
 
 			BeforeEach(func() {
-				deps.readFrontMatterErr = errors.New("permission denied")
-				_, err = normalizer.GetContainerItems("container")
+				localDeps = newMockNormalizerDeps()
+				localDeps.readFrontMatterErr = errors.New("permission denied")
+				localNormalizer = NewInventoryNormalizer(localDeps, lumber.NewConsoleLogger(lumber.WARN))
+				_, err = localNormalizer.GetContainerItems("container")
 			})
 
-			AfterEach(func() {
-				deps.readFrontMatterErr = nil
-			})
-
-			It("should return an error", func() {
-				Expect(err).To(HaveOccurred())
-			})
-
-			It("should include frontmatter read context", func() {
-				Expect(err.Error()).To(ContainSubstring("failed to read frontmatter"))
+			It("should return an error with frontmatter read context", func() {
+				Expect(err).To(MatchError(ContainSubstring("failed to read frontmatter")))
 			})
 		})
 	})

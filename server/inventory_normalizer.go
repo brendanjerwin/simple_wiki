@@ -37,7 +37,7 @@ func (n *InventoryNormalizer) NormalizePage(pageID wikipage.PageIdentifier) ([]s
 
 	// Step 1: Ensure is_container is set if page has items
 	if err := n.ensureIsContainerField(pageID); err != nil {
-		n.logger.Error("Failed to ensure is_container for page %s: %v", pageID, err)
+		return nil, fmt.Errorf("failed to ensure is_container for page %s: %w", pageID, err)
 	}
 
 	// Step 2: Create missing item pages
@@ -197,6 +197,7 @@ func (n *InventoryNormalizer) CreateItemPage(itemID, containerID string) error {
 // buildItemMarkdown creates the markdown content for an inventory item page.
 func (*InventoryNormalizer) buildItemMarkdown() string {
 	var builder bytes.Buffer
+	// WriteString on bytes.Buffer never returns an error
 	_, _ = builder.WriteString(InventoryPageHeaderTemplate + newlineDelim)
 	_, _ = builder.WriteString(InventoryItemMarkdownTemplate)
 	return builder.String()

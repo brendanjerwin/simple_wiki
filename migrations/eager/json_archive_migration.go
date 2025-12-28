@@ -15,15 +15,13 @@ import (
 type JSONArchiveMigrationScanJob struct {
 	dataDir     string
 	coordinator *jobs.JobQueueCoordinator
-	deps        MigrationDependencies
 }
 
 // NewJSONArchiveMigrationScanJob creates a new scan job
-func NewJSONArchiveMigrationScanJob(dataDir string, coordinator *jobs.JobQueueCoordinator, deps MigrationDependencies) *JSONArchiveMigrationScanJob {
+func NewJSONArchiveMigrationScanJob(dataDir string, coordinator *jobs.JobQueueCoordinator) *JSONArchiveMigrationScanJob {
 	return &JSONArchiveMigrationScanJob{
 		dataDir:     dataDir,
 		coordinator: coordinator,
-		deps:        deps,
 	}
 }
 

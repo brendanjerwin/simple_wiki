@@ -49,7 +49,7 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 				Expect(err).NotTo(HaveOccurred())
 				
 				// Create the migration job for the PascalCase identifier
-				job = NewFileShadowingMigrationJob(deps, testDataDir, "LabInventory")
+				job = NewFileShadowingMigrationJob(deps, deps, testDataDir, "LabInventory")
 
 				// Act
 				err = job.Execute()
@@ -87,7 +87,7 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 				// No munged version exists
 				
 				// Create the migration job
-				job = NewFileShadowingMigrationJob(deps, testDataDir, "UserGuide")
+				job = NewFileShadowingMigrationJob(deps, deps, testDataDir, "UserGuide")
 
 				// Act
 				err = job.Execute()
@@ -127,7 +127,7 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 				Expect(err).NotTo(HaveOccurred())
 				
 				// Create the migration job
-				job = NewFileShadowingMigrationJob(deps, testDataDir, "LabInventory")
+				job = NewFileShadowingMigrationJob(deps, deps, testDataDir, "LabInventory")
 
 				// Act
 				err = job.Execute()
@@ -158,7 +158,7 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 				// No PascalCase files created
 				
 				// Create the migration job for a non-existent PascalCase identifier
-				job = NewFileShadowingMigrationJob(deps, testDataDir, "DeviceManual")
+				job = NewFileShadowingMigrationJob(deps, deps, testDataDir, "DeviceManual")
 
 				// Act
 				err = job.Execute()
@@ -187,7 +187,7 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 				Expect(err).NotTo(HaveOccurred())
 				
 				// Create the migration job
-				job = NewFileShadowingMigrationJob(deps, testDataDir, "LabInventory")
+				job = NewFileShadowingMigrationJob(deps, deps, testDataDir, "LabInventory")
 
 				// Act
 				hasShadowing, mungedFiles = job.CheckForShadowing("LabInventory")

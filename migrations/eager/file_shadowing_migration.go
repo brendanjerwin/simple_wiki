@@ -13,26 +13,27 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
-// MigrationDependencies combines interfaces needed for migrations
-type MigrationDependencies interface {
-	wikipage.PageReaderMutator
-	wikipage.PageOpener
-}
-
 // FileShadowingMigrationScanJob scans the data directory for PascalCase files
 // and enqueues migration jobs for each one
 type FileShadowingMigrationScanJob struct {
-	dataDir     string
-	coordinator *jobs.JobQueueCoordinator
-	deps        MigrationDependencies
+	dataDir       string
+	coordinator   *jobs.JobQueueCoordinator
+	readerMutator wikipage.PageReaderMutator
+	opener        wikipage.PageOpener
 }
 
 // NewFileShadowingMigrationScanJob creates a new scan job
-func NewFileShadowingMigrationScanJob(dataDir string, coordinator *jobs.JobQueueCoordinator, deps MigrationDependencies) *FileShadowingMigrationScanJob {
+func NewFileShadowingMigrationScanJob(
+	dataDir string,
+	coordinator *jobs.JobQueueCoordinator,
+	readerMutator wikipage.PageReaderMutator,
+	opener wikipage.PageOpener,
+) *FileShadowingMigrationScanJob {
 	return &FileShadowingMigrationScanJob{
-		dataDir:     dataDir,
-		coordinator: coordinator,
-		deps:        deps,
+		dataDir:       dataDir,
+		coordinator:   coordinator,
+		readerMutator: readerMutator,
+		opener:        opener,
 	}
 }
 
@@ -44,11 +45,14 @@ func (j *FileShadowingMigrationScanJob) Execute() error {
 	}
 
 	// Find all PascalCase identifiers that need migration
-	pascalIdentifiers := j.FindPascalCaseIdentifiers()
+	pascalIdentifiers, err := j.FindPascalCaseIdentifiers()
+	if err != nil {
+		return fmt.Errorf("failed to find PascalCase identifiers: %w", err)
+	}
 
 	// Enqueue a migration job for each PascalCase identifier
 	for _, identifier := range pascalIdentifiers {
-		migrationJob := NewFileShadowingMigrationJob(j.deps, j.dataDir, identifier)
+		migrationJob := NewFileShadowingMigrationJob(j.readerMutator, j.opener, j.dataDir, identifier)
 		j.coordinator.EnqueueJob(migrationJob)
 	}
 
@@ -61,11 +65,12 @@ func (*FileShadowingMigrationScanJob) GetName() string {
 }
 
 // FindPascalCaseIdentifiers returns all identifiers that need migration
-// by reading MD files and checking their stored identifier field
-func (j *FileShadowingMigrationScanJob) FindPascalCaseIdentifiers() []string {
+// by reading MD files and checking their stored identifier field.
+// Returns an error if the data directory cannot be read.
+func (j *FileShadowingMigrationScanJob) FindPascalCaseIdentifiers() ([]string, error) {
 	files, err := os.ReadDir(j.dataDir)
 	if err != nil {
-		return []string{}
+		return nil, fmt.Errorf("failed to read data directory: %w", err)
 	}
 
 	var pascalIdentifiers []string
@@ -77,7 +82,11 @@ func (j *FileShadowingMigrationScanJob) FindPascalCaseIdentifiers() []string {
 			continue
 		}
 
-		identifier := j.extractIdentifierFromMD(file.Name())
+		identifier, err := j.extractIdentifierFromMD(file.Name())
+		if err != nil {
+			// Log but continue - individual file errors shouldn't stop the scan
+			continue
+		}
 		if identifier == "" {
 			continue
 		}
@@ -107,7 +116,7 @@ func (j *FileShadowingMigrationScanJob) FindPascalCaseIdentifiers() []string {
 		}
 	}
 
-	return pascalIdentifiers
+	return pascalIdentifiers, nil
 }
 
 // tomlFrontmatterParts is the expected number of parts when splitting TOML frontmatter by "+++".
@@ -115,11 +124,13 @@ func (j *FileShadowingMigrationScanJob) FindPascalCaseIdentifiers() []string {
 const tomlFrontmatterParts = 3
 
 // extractIdentifierFromMD reads an MD file and extracts the identifier from TOML frontmatter.
-func (j *FileShadowingMigrationScanJob) extractIdentifierFromMD(filename string) string {
+// Returns the identifier and any error encountered.
+// An empty identifier with nil error means the file has no identifier (derived from filename).
+func (j *FileShadowingMigrationScanJob) extractIdentifierFromMD(filename string) (string, error) {
 	filePath := filepath.Join(j.dataDir, filename)
 	mdData, err := os.ReadFile(filePath)
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("failed to read file %s: %w", filename, err)
 	}
 
 	content := string(mdData)
@@ -130,15 +141,15 @@ func (j *FileShadowingMigrationScanJob) extractIdentifierFromMD(filename string)
 		encodedName := strings.TrimSuffix(filename, ".md")
 		logicalID, err := base32tools.DecodeFromBase32(encodedName)
 		if err != nil {
-			return ""
+			return "", fmt.Errorf("failed to decode base32 filename %s: %w", encodedName, err)
 		}
-		return logicalID
+		return logicalID, nil
 	}
 
 	// Parse TOML frontmatter
 	parts := strings.SplitN(content, "+++", tomlFrontmatterParts)
 	if len(parts) < tomlFrontmatterParts {
-		return ""
+		return "", fmt.Errorf("malformed TOML frontmatter in %s: expected %d parts", filename, tomlFrontmatterParts)
 	}
 
 	frontmatter := strings.TrimSpace(parts[1])
@@ -147,30 +158,40 @@ func (j *FileShadowingMigrationScanJob) extractIdentifierFromMD(filename string)
 	var data struct {
 		Identifier string `toml:"identifier"`
 	}
-	if err := toml.Unmarshal([]byte(frontmatter), &data); err == nil && data.Identifier != "" {
-		return data.Identifier
+	if err := toml.Unmarshal([]byte(frontmatter), &data); err != nil {
+		return "", fmt.Errorf("failed to parse TOML frontmatter in %s: %w", filename, err)
+	}
+	if data.Identifier != "" {
+		return data.Identifier, nil
 	}
 
 	// No identifier in frontmatter - derive from filename
 	encodedName := strings.TrimSuffix(filename, ".md")
 	logicalID, err := base32tools.DecodeFromBase32(encodedName)
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("failed to decode base32 filename %s: %w", encodedName, err)
 	}
-	return logicalID
+	return logicalID, nil
 }
 
 // FileShadowingMigrationJob handles migrating a specific PascalCase page to munged_name
 type FileShadowingMigrationJob struct {
-	deps          MigrationDependencies
+	readerMutator wikipage.PageReaderMutator
+	opener        wikipage.PageOpener
 	dataDir       string
 	logicalPageID string
 }
 
 // NewFileShadowingMigrationJob creates a new migration job
-func NewFileShadowingMigrationJob(deps MigrationDependencies, dataDir string, logicalPageID string) *FileShadowingMigrationJob {
+func NewFileShadowingMigrationJob(
+	readerMutator wikipage.PageReaderMutator,
+	opener wikipage.PageOpener,
+	dataDir string,
+	logicalPageID string,
+) *FileShadowingMigrationJob {
 	return &FileShadowingMigrationJob{
-		deps:          deps,
+		readerMutator: readerMutator,
+		opener:        opener,
 		dataDir:       dataDir,
 		logicalPageID: logicalPageID,
 	}
@@ -194,7 +215,7 @@ func (j *FileShadowingMigrationJob) Execute() error {
 
 	// Check for shadowing conflicts using interface methods
 	// We can use ReadPage() for the munged version since we want to read it normally
-	mungedPage, err := j.deps.ReadPage(mungedID)
+	mungedPage, err := j.opener.ReadPage(mungedID)
 	if err != nil {
 		return fmt.Errorf("failed to open munged page %s: %w", mungedID, err)
 	}
@@ -225,27 +246,27 @@ func (j *FileShadowingMigrationJob) Execute() error {
 	// would result in the same base32-encoded filename
 
 	// Use DeletePage for soft delete (moves to __deleted__ directory)
-	if err := j.deps.DeletePage(wikipage.PageIdentifier(j.logicalPageID)); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to soft delete original PascalCase page %s: %v", j.logicalPageID, err)
+	if err := j.readerMutator.DeletePage(wikipage.PageIdentifier(j.logicalPageID)); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to soft delete original PascalCase page %s: %w", j.logicalPageID, err)
 	}
 
 	// Now save the page using WriteFrontMatter and WriteMarkdown
 	fm, err := finalPage.GetFrontMatter()
 	if err != nil {
-		return fmt.Errorf("failed to get frontmatter: %v", err)
+		return fmt.Errorf("failed to get frontmatter: %w", err)
 	}
 	md, err := finalPage.GetMarkdown()
 	if err != nil {
-		return fmt.Errorf("failed to get markdown: %v", err)
+		return fmt.Errorf("failed to get markdown: %w", err)
 	}
 
 	// First write the frontmatter
-	if err := j.deps.WriteFrontMatter(wikipage.PageIdentifier(finalPage.Identifier), fm); err != nil {
-		return fmt.Errorf("failed to write frontmatter: %v", err)
+	if err := j.readerMutator.WriteFrontMatter(wikipage.PageIdentifier(finalPage.Identifier), fm); err != nil {
+		return fmt.Errorf("failed to write frontmatter: %w", err)
 	}
 	// Then write the markdown
-	if err := j.deps.WriteMarkdown(wikipage.PageIdentifier(finalPage.Identifier), md); err != nil {
-		return fmt.Errorf("failed to write markdown: %v", err)
+	if err := j.readerMutator.WriteMarkdown(wikipage.PageIdentifier(finalPage.Identifier), md); err != nil {
+		return fmt.Errorf("failed to write markdown: %w", err)
 	}
 
 	return nil

@@ -174,12 +174,12 @@ func (s *Site) InitializeIndexing() error {
 	}
 
 	// Start file shadowing scan
-	scanJob := eager.NewFileShadowingMigrationScanJob(s.PathToData, s.JobQueueCoordinator, s)
+	scanJob := eager.NewFileShadowingMigrationScanJob(s.PathToData, s.JobQueueCoordinator, s, s)
 	s.JobQueueCoordinator.EnqueueJob(scanJob)
 	s.Logger.Info("File shadowing scan started.")
 
 	// Start JSON archive migration to move .json files to __deleted__
-	jsonArchiveJob := eager.NewJSONArchiveMigrationScanJob(s.PathToData, s.JobQueueCoordinator, s)
+	jsonArchiveJob := eager.NewJSONArchiveMigrationScanJob(s.PathToData, s.JobQueueCoordinator)
 	s.JobQueueCoordinator.EnqueueJob(jsonArchiveJob)
 	s.Logger.Info("JSON archive migration started.")
 
