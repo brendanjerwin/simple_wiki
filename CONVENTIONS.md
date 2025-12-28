@@ -804,6 +804,56 @@ func NewServer(logger *Logger) (*Server, error) {
   - Error handling is explicit and type-safe
   - Error messages can be localized without breaking logic
 
+- **Never Just Log Errors**: Console logging (e.g., `console.error`, `console.warn`) is never sufficient error handling. Errors must always become part of control flow and be communicated to the user through the UX. Logging alone hides problems from users and makes the application appear to work when it's actually broken.
+
+  **Bad:**
+
+  ```typescript
+  try {
+    await saveData();
+  } catch (err) {
+    console.error('Save failed:', err);
+    // User has no idea the save failed
+  }
+  ```
+
+  **Good:**
+
+  ```typescript
+  try {
+    await saveData();
+  } catch (err) {
+    this.error = 'Failed to save. Please try again.';
+    // Error is visible to user in the UI
+  }
+  ```
+
+  For cleanup operations where UI feedback isn't possible (e.g., disconnecting resources), let errors propagate or handle them silently - but never add console logging as a compromise.
+
+- **Never Invent Opaque Error Strings**: Setting `this.error = "Some generic message"` is an antipattern that discards valuable error information. Errors are inherently unknown at catch time - preserve the original error and let it bubble to the UX edge. At the edge, display the actual error or use an error service that preserves context.
+
+  **Bad:**
+
+  ```typescript
+  } catch {
+    this.error = 'Search failed. Please try again.';
+    // Original error is lost - was it network? Permission? Server error?
+  }
+  ```
+
+  **Good:**
+
+  ```typescript
+  } catch (err) {
+    // Preserve the actual error - let error display component handle it
+    this.error = err;
+    // Or use an error service that augments while preserving
+    this.augmentedError = ErrorService.augment(err, 'search');
+  }
+  ```
+
+  The UX component at the edge should handle displaying errors appropriately while preserving the ability to inspect the original error for debugging.
+
 - **Let Unrecoverable Errors Bubble Up**: Don't catch exceptions you can't meaningfully handle. Let them bubble to the global error handler for consistent user experience.
 
   **Bad:** Catching without meaningful recovery

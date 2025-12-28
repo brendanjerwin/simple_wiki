@@ -2,6 +2,7 @@ import { html, fixture, expect } from '@open-wc/testing';
 import sinon from 'sinon';
 import { InventoryMoveItemDialog } from './inventory-move-item-dialog.js';
 import './inventory-move-item-dialog.js';
+import type { QrScannedEventDetail } from './qr-scanner.js';
 
 describe('InventoryMoveItemDialog', () => {
   let el: InventoryMoveItemDialog;
@@ -343,6 +344,232 @@ describe('InventoryMoveItemDialog', () => {
       it('should disable cancel button', () => {
         const cancelBtn = el.shadowRoot?.querySelector('.button-secondary') as HTMLButtonElement;
         expect(cancelBtn?.disabled).to.be.true;
+      });
+    });
+  });
+
+  describe('QR scanner integration', () => {
+    describe('when dialog is open', () => {
+      beforeEach(async () => {
+        el.openDialog('screwdriver', 'drawer_kitchen');
+        await el.updateComplete;
+      });
+
+      it('should render QR scanner component', () => {
+        const scanner = el.shadowRoot?.querySelector('qr-scanner');
+        expect(scanner).to.exist;
+      });
+
+      it('should render scan section with label', () => {
+        const label = el.shadowRoot?.querySelector('.scan-section-label');
+        expect(label?.textContent).to.contain('scan a QR code');
+      });
+    });
+
+    describe('_handleQrScanned', () => {
+      describe('when scanned URL is invalid', () => {
+        beforeEach(async () => {
+          el.openDialog('screwdriver', 'drawer_kitchen');
+          await el.updateComplete;
+
+          const event = new CustomEvent<QrScannedEventDetail>('qr-scanned', {
+            detail: { rawValue: 'not-a-valid-url://bad' },
+          });
+          await el._handleQrScanned(event);
+          await el.updateComplete;
+        });
+
+        it('should set scanError', () => {
+          expect(el.scanError).to.contain('Not a valid wiki URL');
+        });
+
+        it('should not set scannedDestination', () => {
+          expect(el.scannedDestination).to.be.null;
+        });
+
+        it('should not set scannedResult', () => {
+          expect(el.scannedResult).to.be.null;
+        });
+      });
+
+      describe('when scanned URL points to current container', () => {
+        beforeEach(async () => {
+          el.openDialog('screwdriver', 'drawer_kitchen');
+          await el.updateComplete;
+
+          const event = new CustomEvent<QrScannedEventDetail>('qr-scanned', {
+            detail: { rawValue: 'https://wiki.example.com/drawer_kitchen/view' },
+          });
+          await el._handleQrScanned(event);
+          await el.updateComplete;
+        });
+
+        it('should set scanError about current location', () => {
+          expect(el.scanError).to.contain('Cannot move to current location');
+        });
+
+        it('should not set scannedDestination', () => {
+          expect(el.scannedDestination).to.be.null;
+        });
+      });
+    });
+
+    describe('scan error rendering', () => {
+      describe('when scanError is set', () => {
+        beforeEach(async () => {
+          el.openDialog('screwdriver', 'drawer_kitchen');
+          el.scanError = 'Page "xyz" not found. Scan Again?';
+          await el.updateComplete;
+        });
+
+        it('should display scan error message', () => {
+          const errorDiv = el.shadowRoot?.querySelector('.scan-error-message');
+          expect(errorDiv?.textContent).to.contain('Page "xyz" not found');
+        });
+
+        it('should display Scan Again button', () => {
+          const scanAgainBtn = el.shadowRoot?.querySelector('.scan-again-button');
+          expect(scanAgainBtn?.textContent).to.contain('Scan Again');
+        });
+      });
+    });
+
+    describe('scanned result rendering', () => {
+      describe('when scannedResult is set', () => {
+        beforeEach(async () => {
+          el.openDialog('screwdriver', 'drawer_kitchen');
+          el.scannedDestination = 'garage_toolbox';
+          el.scannedResult = {
+            identifier: 'garage_toolbox',
+            title: 'Garage Toolbox',
+            container: 'garage',
+          };
+          await el.updateComplete;
+        });
+
+        it('should display scanned result header', () => {
+          const header = el.shadowRoot?.querySelector('.scanned-result-header');
+          expect(header?.textContent).to.contain('Scanned Destination');
+        });
+
+        it('should display scanned result title', () => {
+          const title = el.shadowRoot?.querySelector('.scanned-result .result-title');
+          expect(title?.textContent).to.equal('Garage Toolbox');
+        });
+
+        it('should display scanned result container', () => {
+          const container = el.shadowRoot?.querySelector('.scanned-result .result-container');
+          expect(container?.textContent).to.contain('garage');
+        });
+
+        it('should display Move To button', () => {
+          const moveBtn = el.shadowRoot?.querySelector('.scanned-result .move-to-button');
+          expect(moveBtn?.textContent).to.contain('Move To');
+        });
+
+        it('should display Clear button', () => {
+          const clearBtn = el.shadowRoot?.querySelector('.scanned-result .clear-button');
+          expect(clearBtn?.textContent).to.contain('Clear');
+        });
+      });
+    });
+
+    describe('_clearScannedResult', () => {
+      beforeEach(async () => {
+        el.openDialog('screwdriver', 'drawer_kitchen');
+        el.scannedDestination = 'garage_toolbox';
+        el.scannedResult = {
+          identifier: 'garage_toolbox',
+          title: 'Garage Toolbox',
+        };
+        el.scanError = 'Previous error';
+
+        el._clearScannedResult();
+        await el.updateComplete;
+      });
+
+      it('should clear scannedDestination', () => {
+        expect(el.scannedDestination).to.be.null;
+      });
+
+      it('should clear scannedResult', () => {
+        expect(el.scannedResult).to.be.null;
+      });
+
+      it('should clear scanError', () => {
+        expect(el.scanError).to.be.null;
+      });
+    });
+
+    describe('scan validating state', () => {
+      describe('when scanValidating is true', () => {
+        beforeEach(async () => {
+          el.openDialog('screwdriver', 'drawer_kitchen');
+          el.scanValidating = true;
+          await el.updateComplete;
+        });
+
+        it('should display validating message', () => {
+          const validating = el.shadowRoot?.querySelector('.scan-validating');
+          expect(validating?.textContent).to.contain('Validating scanned page');
+        });
+      });
+    });
+
+    describe('openDialog reset', () => {
+      beforeEach(() => {
+        // Set some scan state
+        el.scannedDestination = 'old_container';
+        el.scannedResult = { identifier: 'old', title: 'Old' };
+        el.scanError = 'Old error';
+        el.scanValidating = true;
+
+        // Open dialog should reset
+        el.openDialog('new_item', 'new_container');
+      });
+
+      it('should reset scannedDestination', () => {
+        expect(el.scannedDestination).to.be.null;
+      });
+
+      it('should reset scannedResult', () => {
+        expect(el.scannedResult).to.be.null;
+      });
+
+      it('should reset scanError', () => {
+        expect(el.scanError).to.be.null;
+      });
+
+      it('should reset scanValidating', () => {
+        expect(el.scanValidating).to.be.false;
+      });
+    });
+
+    describe('close reset', () => {
+      beforeEach(() => {
+        el.openDialog('item', 'container');
+        el.scannedDestination = 'scanned_container';
+        el.scannedResult = { identifier: 'scanned', title: 'Scanned' };
+        el.scanError = 'Some error';
+        el.scanValidating = true;
+
+        el.close();
+      });
+
+      it('should reset scannedDestination', () => {
+        expect(el.scannedDestination).to.be.null;
+      });
+
+      it('should reset scannedResult', () => {
+        expect(el.scannedResult).to.be.null;
+      });
+
+      it('should reset scanError', () => {
+        expect(el.scanError).to.be.null;
+      });
+
+      it('should reset scanValidating', () => {
+        expect(el.scanValidating).to.be.false;
       });
     });
   });
