@@ -381,6 +381,51 @@ var _ = Describe("InventoryNormalizer", func() {
 			})
 		})
 
+		When("the page has []string items that need munging", func() {
+			var items []string
+			var err error
+
+			BeforeEach(func() {
+				deps.frontmatters["container"] = map[string]any{
+					"inventory": map[string]any{
+						"items": []string{"PascalCaseItem", "another-item"},
+					},
+				}
+				items, err = normalizer.GetContainerItems("container")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should munge the identifiers to snake_case", func() {
+				Expect(items).To(HaveLen(2))
+				Expect(items).To(ContainElement("pascal_case_item"))
+				Expect(items).To(ContainElement("another_item"))
+			})
+		})
+
+		When("the page has []string items with invalid identifier", func() {
+			var err error
+
+			BeforeEach(func() {
+				deps.frontmatters["container"] = map[string]any{
+					"inventory": map[string]any{
+						"items": []string{"///"},
+					},
+				}
+				_, err = normalizer.GetContainerItems("container")
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should include invalid identifier context", func() {
+				Expect(err.Error()).To(ContainSubstring("invalid item identifier"))
+			})
+		})
+
 		When("the page has items as []any", func() {
 			var items []string
 			var err error

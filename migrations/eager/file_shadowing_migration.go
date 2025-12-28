@@ -10,6 +10,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
+	"github.com/pelletier/go-toml/v2"
 )
 
 // MigrationDependencies combines interfaces needed for migrations
@@ -142,22 +143,12 @@ func (j *FileShadowingMigrationScanJob) extractIdentifierFromMD(filename string)
 
 	frontmatter := strings.TrimSpace(parts[1])
 
-	// Simple extraction - look for identifier = 'value' or identifier = "value"
-	for _, line := range strings.Split(frontmatter, "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "identifier") {
-			// Extract value after =
-			eqIdx := strings.Index(line, "=")
-			if eqIdx == -1 {
-				continue
-			}
-			value := strings.TrimSpace(line[eqIdx+1:])
-			// Remove quotes
-			value = strings.Trim(value, "'\"")
-			if value != "" {
-				return value
-			}
-		}
+	// Use proper TOML parsing for robustness
+	var data struct {
+		Identifier string `toml:"identifier"`
+	}
+	if err := toml.Unmarshal([]byte(frontmatter), &data); err == nil && data.Identifier != "" {
+		return data.Identifier
 	}
 
 	// No identifier in frontmatter - derive from filename

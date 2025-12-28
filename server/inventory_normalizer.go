@@ -124,11 +124,17 @@ func (n *InventoryNormalizer) GetContainerItems(containerID wikipage.PageIdentif
 		return nil, nil // No items array
 	}
 
-	// Handle both []string and []any
+	// Handle both []string and []any - munge all identifiers for consistency
 	var items []string
 	switch v := itemsRaw.(type) {
 	case []string:
-		items = v
+		for _, s := range v {
+			munged, err := wikiidentifiers.MungeIdentifier(s)
+			if err != nil {
+				return nil, fmt.Errorf("invalid item identifier %q in container %s: %w", s, containerID, err)
+			}
+			items = append(items, munged)
+		}
 	case []any:
 		for _, item := range v {
 			if s, ok := item.(string); ok {
