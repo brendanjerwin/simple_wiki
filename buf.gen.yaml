@@ -14,7 +14,9 @@ plugins:
     out: static/js/gen
     opt:
       - target=ts
+      - ts_nocheck=false
   - plugin: buf.build/connectrpc/es:v1.4.0
     out: static/js/gen
     opt:
       - target=ts
+      - ts_nocheck=false

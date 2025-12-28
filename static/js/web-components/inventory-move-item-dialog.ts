@@ -102,53 +102,10 @@ export class InventoryMoveItemDialog extends LitElement {
         flex: 1;
       }
 
-      .form-group {
-        margin-bottom: 16px;
-      }
-
-      .form-group:last-child {
-        margin-bottom: 0;
-      }
-
-      .form-group label {
-        display: block;
-        margin-bottom: 6px;
-        font-weight: 500;
-        color: #333;
-      }
-
-      .form-group input {
-        width: 100%;
-        padding: 10px 12px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        font-size: 14px;
-        box-sizing: border-box;
-      }
-
-      .form-group input:focus {
-        outline: none;
-        border-color: #4a90d9;
-        box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.2);
-      }
-
-      .form-group input[readonly] {
-        background: #f5f5f5;
-        color: #666;
-        cursor: not-allowed;
-      }
-
-      .form-group .help-text {
-        margin-top: 4px;
-        font-size: 12px;
-        color: #666;
-      }
-
       .move-arrow {
         display: flex;
         justify-content: center;
         align-items: center;
-        padding: 8px 0;
         color: #666;
         font-size: 24px;
       }
@@ -260,16 +217,86 @@ export class InventoryMoveItemDialog extends LitElement {
         align-items: center;
       }
 
-      .scan-section {
-        margin-top: 12px;
-        padding-top: 12px;
-        border-top: 1px dashed #e5e7eb;
+      .search-row {
+        display: flex;
+        gap: 8px;
+        align-items: stretch;
       }
 
-      .scan-section-label {
+      .search-row input {
+        flex: 1;
+      }
+
+      .qr-scan-button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 12px;
+        background: #f5f5f5;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        cursor: pointer;
+        color: #333;
+        font-size: 16px;
+        transition: background-color 0.15s;
+      }
+
+      .qr-scan-button:hover:not(:disabled) {
+        background: #e8e8e8;
+      }
+
+      .qr-scan-button:disabled {
+        cursor: not-allowed;
+        opacity: 0.6;
+      }
+
+      .scanner-mode-container {
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        overflow: hidden;
+        background: #000;
+      }
+
+      .scanner-mode-container qr-scanner {
+        display: block;
+      }
+
+      /* Hide qr-scanner's own toggle button when in scanner mode container */
+      .scanner-mode-container .scanner-toggle {
+        display: none;
+      }
+
+      /* Force scanner area to be visible when in scanner mode */
+      .scanner-mode-container .scanner-area {
+        display: block !important;
+      }
+
+      .scanner-mode-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 12px;
+        background: #1a1a1a;
+        color: #fff;
+      }
+
+      .scanner-mode-header .title {
+        font-size: 14px;
+        font-weight: 500;
+      }
+
+      .scanner-mode-close {
+        padding: 4px 10px;
+        background: #dc3545;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
         font-size: 12px;
-        color: #6b7280;
-        margin-bottom: 8px;
+      }
+
+      .scanner-mode-close:hover {
+        background: #c82333;
       }
 
       .scanned-result {
@@ -297,28 +324,6 @@ export class InventoryMoveItemDialog extends LitElement {
         justify-content: space-between;
         padding: 10px 12px;
         gap: 12px;
-      }
-
-      .scanned-result-actions {
-        display: flex;
-        gap: 8px;
-        align-items: center;
-      }
-
-      .clear-button {
-        padding: 6px 10px;
-        border: 1px solid #d1d5db;
-        border-radius: 4px;
-        background: white;
-        color: #6b7280;
-        font-size: 13px;
-        cursor: pointer;
-        transition: all 0.15s;
-      }
-
-      .clear-button:hover {
-        background: #f3f4f6;
-        color: #374151;
       }
 
       .scan-error {
@@ -382,6 +387,7 @@ export class InventoryMoveItemDialog extends LitElement {
     movingTo: { state: true },
     error: { state: true },
     // QR scanner state
+    scannerMode: { state: true },
     scannedDestination: { state: true },
     scannedResult: { state: true },
     scanError: { state: true },
@@ -397,6 +403,7 @@ export class InventoryMoveItemDialog extends LitElement {
   declare movingTo: string | null;
   declare error?: string;
   // QR scanner state
+  declare scannerMode: boolean;
   declare scannedDestination: string | null;
   declare scannedResult: { identifier: string; title: string; container?: string } | null;
   declare scanError: string | null;
@@ -419,6 +426,7 @@ export class InventoryMoveItemDialog extends LitElement {
     this.movingTo = null;
     this.error = undefined;
     // QR scanner state
+    this.scannerMode = false;
     this.scannedDestination = null;
     this.scannedResult = null;
     this.scanError = null;
@@ -458,6 +466,7 @@ export class InventoryMoveItemDialog extends LitElement {
     this.movingTo = null;
     this.error = undefined;
     // Reset QR scanner state
+    this.scannerMode = false;
     this.scannedDestination = null;
     this.scannedResult = null;
     this.scanError = null;
@@ -480,6 +489,7 @@ export class InventoryMoveItemDialog extends LitElement {
     this.movingTo = null;
     this.error = undefined;
     // Reset QR scanner state
+    this.scannerMode = false;
     this.scannedDestination = null;
     this.scannedResult = null;
     this.scanError = null;
@@ -500,6 +510,10 @@ export class InventoryMoveItemDialog extends LitElement {
     const input = event.target as HTMLInputElement;
     this.searchQuery = input.value;
     this.error = undefined;
+    // Clear scan state when user starts typing - they're switching to search mode
+    this.scanError = null;
+    this.scannedDestination = null;
+    this.scannedResult = null;
 
     // Clear existing timer
     this._clearDebounceTimer();
@@ -561,7 +575,8 @@ export class InventoryMoveItemDialog extends LitElement {
     // Parse the URL
     const parseResult = WikiUrlParser.parse(rawValue);
     if (!parseResult.success || !parseResult.pageIdentifier) {
-      this.scanError = 'Not a valid wiki URL. Scan Again?';
+      this._exitScannerMode();
+      this.scanError = 'Not a valid wiki URL';
       return;
     }
 
@@ -569,20 +584,26 @@ export class InventoryMoveItemDialog extends LitElement {
 
     // Check if trying to move to current container
     if (identifier === this.currentContainer) {
-      this.scanError = 'Cannot move to current location. Scan Again?';
+      this._exitScannerMode();
+      this.scanError = 'Cannot move to current location';
       return;
     }
 
     // Validate the page exists and is a container
     this.scanValidating = true;
+    this._exitScannerMode();
     try {
-      const request = new GetFrontmatterRequest({ pageName: identifier });
+      const request = new GetFrontmatterRequest({ page: identifier });
       const response = await this.frontmatterClient.getFrontmatter(request);
 
+      // Convert protobuf Struct to plain object for easy access
+      const fm = response.frontmatter?.toJson() as Record<string, unknown> | undefined;
+      const inventory = fm?.['inventory'] as Record<string, unknown> | undefined;
+
       // Check if page is a container
-      const isContainer = response.frontmatter?.['inventory.is_container'];
+      const isContainer = inventory?.['is_container'] === 'true';
       if (!isContainer) {
-        this.scanError = `Page "${identifier}" is not a container. Scan Again?`;
+        this.scanError = `"${identifier}" is not marked as a container`;
         this.scanValidating = false;
         return;
       }
@@ -591,12 +612,12 @@ export class InventoryMoveItemDialog extends LitElement {
       this.scannedDestination = identifier;
       this.scannedResult = {
         identifier,
-        title: response.frontmatter?.['title'] || identifier,
-        container: response.frontmatter?.['inventory.container'],
+        title: (fm?.['title'] as string) || identifier,
+        container: inventory?.['container'] as string | undefined,
       };
-    } catch (err) {
-      // Page not found or other error
-      this.scanError = `Page "${identifier}" not found. Scan Again?`;
+    } catch {
+      // Container not found or other error
+      this.scanError = `Container "${identifier}" not found`;
     } finally {
       this.scanValidating = false;
     }
@@ -612,15 +633,41 @@ export class InventoryMoveItemDialog extends LitElement {
   };
 
   /**
+   * Enter scanner mode - replaces search UI with camera
+   */
+  private _enterScannerMode = (): void => {
+    console.log('[InventoryMoveItemDialog] Entering scanner mode');
+    this.scannerMode = true;
+    this._clearScannedResult();
+    // Wait for DOM update, then expand the scanner
+    this.updateComplete.then(() => {
+      const scanner = this.shadowRoot?.querySelector('qr-scanner') as HTMLElement & { expand: () => void };
+      console.log('[InventoryMoveItemDialog] Scanner element:', scanner);
+      if (scanner) {
+        scanner.expand();
+      }
+    });
+  };
+
+  /**
+   * Exit scanner mode - returns to search UI
+   */
+  private _exitScannerMode = (): void => {
+    console.log('[InventoryMoveItemDialog] Exiting scanner mode');
+    const scanner = this.shadowRoot?.querySelector('qr-scanner') as HTMLElement & { collapse: () => void };
+    if (scanner) {
+      scanner.collapse();
+    }
+    this.scannerMode = false;
+  };
+
+  /**
    * Handle "Scan Again" button click
    */
   public _handleScanAgain = (): void => {
     this.scanError = null;
-    // The scanner component will be ready for the next scan
-    const scanner = this.shadowRoot?.querySelector('qr-scanner') as HTMLElement & { expand: () => void };
-    if (scanner) {
-      scanner.expand();
-    }
+    // Re-enter scanner mode
+    this._enterScannerMode();
   };
 
   public _handleMoveToClick = async (containerIdentifier: string): Promise<void> => {
@@ -715,22 +762,13 @@ export class InventoryMoveItemDialog extends LitElement {
               ? html`<div class="result-container">Found In: ${this.scannedResult.container}</div>`
               : ''}
           </div>
-          <div class="scanned-result-actions">
-            <button
-              class="move-to-button"
-              @click=${() => this._handleMoveToClick(this.scannedResult!.identifier)}
-              ?disabled=${this.movingTo !== null}
-            >
-              ${this.movingTo === this.scannedResult.identifier ? 'Moving...' : 'Move To'}
-            </button>
-            <button
-              class="clear-button"
-              @click=${this._clearScannedResult}
-              ?disabled=${this.movingTo !== null}
-            >
-              Clear
-            </button>
-          </div>
+          <button
+            class="move-to-button"
+            @click=${() => this._handleMoveToClick(this.scannedResult!.identifier)}
+            ?disabled=${this.movingTo !== null}
+          >
+            ${this.movingTo === this.scannedResult.identifier ? 'Moving...' : 'Move To'}
+          </button>
         </div>
       </div>
     `;
@@ -811,29 +849,50 @@ export class InventoryMoveItemDialog extends LitElement {
 
           <div class="form-group">
             <label for="searchQuery">Search for destination</label>
-            <input
-              type="text"
-              id="searchQuery"
-              name="searchQuery"
-              .value=${this.searchQuery}
-              @input=${this._handleSearchInput}
-              placeholder="Type to search for containers..."
-              ?disabled=${this.movingTo !== null || this.scanValidating}
-            />
-            <div class="help-text">Search for a container to move the item to</div>
+            ${this.scannerMode
+              ? html`
+                  <div class="scanner-mode-container">
+                    <div class="scanner-mode-header">
+                      <span class="title">Scan QR Code</span>
+                      <button class="scanner-mode-close" @click=${this._exitScannerMode}>
+                        Cancel
+                      </button>
+                    </div>
+                    <qr-scanner
+                      embedded
+                      @qr-scanned=${this._handleQrScanned}
+                    ></qr-scanner>
+                  </div>
+                `
+              : html`
+                  <div class="search-row">
+                    <input
+                      type="text"
+                      id="searchQuery"
+                      name="searchQuery"
+                      .value=${this.searchQuery}
+                      @input=${this._handleSearchInput}
+                      placeholder="Type to search for containers..."
+                      ?disabled=${this.movingTo !== null || this.scanValidating}
+                    />
+                    <button
+                      class="qr-scan-button"
+                      @click=${this._enterScannerMode}
+                      ?disabled=${this.movingTo !== null || this.scanValidating}
+                      title="Scan QR code"
+                    >
+                      <i class="fa-solid fa-qrcode"></i>
+                    </button>
+                  </div>
+                  ${this._renderScanError()}
+                  ${this._renderScanValidating()}
+                  <div class="help-text">Search or scan a QR code to find a container</div>
+                `
+            }
           </div>
 
-          <div class="scan-section">
-            <div class="scan-section-label">Or scan a QR code:</div>
-            <qr-scanner
-              @qr-scanned=${this._handleQrScanned}
-            ></qr-scanner>
-          </div>
-
-          ${this._renderScanValidating()}
-          ${this._renderScanError()}
           ${this._renderScannedResult()}
-          ${this._renderSearchResults()}
+          ${!this.scannedResult ? this._renderSearchResults() : nothing}
         </div>
 
         <div class="footer">

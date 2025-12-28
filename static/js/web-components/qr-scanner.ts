@@ -112,6 +112,12 @@ class QrScannerCameraProvider implements CameraProvider {
  * ```
  */
 export class QrScanner extends LitElement {
+  // Disable Shadow DOM - qr-scanner library doesn't support it
+  // (checks document.body.contains(video) which fails in Shadow DOM)
+  override createRenderRoot() {
+    return this;
+  }
+
   static override styles = [
     foundationCSS,
     buttonCSS,
@@ -172,9 +178,20 @@ export class QrScanner extends LitElement {
       }
 
       #qr-video {
-        width: 100%;
-        height: 250px;
+        display: block !important;
+        width: 100% !important;
+        min-width: 100% !important;
+        height: 250px !important;
+        min-height: 250px !important;
         object-fit: cover;
+        visibility: visible !important;
+      }
+
+      .viewfinder-container video {
+        display: block !important;
+        width: 100% !important;
+        height: 250px !important;
+        visibility: visible !important;
       }
 
       .scanner-controls {
@@ -244,6 +261,10 @@ export class QrScanner extends LitElement {
   @property({ type: Boolean, reflect: true })
   expanded = false;
 
+  /** When true, hides built-in controls (toggle, camera select, stop button) - parent handles UI */
+  @property({ type: Boolean })
+  embedded = false;
+
   @state()
   private scanning = false;
 
@@ -272,12 +293,15 @@ export class QrScanner extends LitElement {
    * Expand the scanner UI and start camera
    */
   async expand(): Promise<void> {
+    console.log('[QrScanner] expand() called');
     this.expanded = true;
     this.error = undefined;
     this.loading = true;
 
     try {
+      console.log('[QrScanner] Getting cameras...');
       this.cameras = await this.cameraProvider.getCameras();
+      console.log('[QrScanner] Found cameras:', this.cameras);
       if (this.cameras.length === 0) {
         throw new NoCameraError();
       }
@@ -289,11 +313,14 @@ export class QrScanner extends LitElement {
         c.label.toLowerCase().includes('environment')
       );
       this.selectedCameraId = backCamera?.id || this.cameras[0].id;
+      console.log('[QrScanner] Selected camera:', this.selectedCameraId);
 
       // Wait for DOM update before starting scanner
       await this.updateComplete;
+      console.log('[QrScanner] DOM updated, starting scanner...');
       await this._startScanning();
     } catch (err) {
+      console.error('[QrScanner] Error in expand():', err);
       this._handleError(err);
     } finally {
       this.loading = false;
@@ -328,19 +355,47 @@ export class QrScanner extends LitElement {
   }
 
   private async _startScanning(): Promise<void> {
-    if (!this.selectedCameraId) return;
+    console.log('[QrScanner] _startScanning() called');
+    if (!this.selectedCameraId) {
+      console.warn('[QrScanner] No camera selected, aborting');
+      return;
+    }
 
-    const videoElement = this.shadowRoot?.querySelector('#qr-video') as HTMLVideoElement;
-    if (!videoElement) return;
+    const videoElement = this.querySelector('#qr-video') as HTMLVideoElement;
+    console.log('[QrScanner] Video element:', videoElement);
+    if (!videoElement) {
+      console.error('[QrScanner] Video element not found in DOM');
+      return;
+    }
 
     try {
+      console.log('[QrScanner] Starting camera provider...');
+      console.log('[QrScanner] Video element dimensions:', videoElement.offsetWidth, 'x', videoElement.offsetHeight);
+      console.log('[QrScanner] Video element computed style display:', getComputedStyle(videoElement).display);
+      console.log('[QrScanner] Scanner area:', this.querySelector('.scanner-area'));
+      console.log('[QrScanner] Scanner area classes:', this.querySelector('.scanner-area')?.className);
       await this.cameraProvider.start(
         videoElement,
         this.selectedCameraId,
         this._onScanSuccess.bind(this)
       );
       this.scanning = true;
+      console.log('[QrScanner] Camera started successfully');
+      console.log('[QrScanner] Video element dimensions after start:', videoElement.offsetWidth, 'x', videoElement.offsetHeight);
+
+      // The library may have moved the video to document.body
+      // Move it back into our container and style it
+      const container = this.querySelector('.viewfinder-container') as HTMLElement;
+      if (container && videoElement.parentElement !== container) {
+        console.log('[QrScanner] Video was moved by library, relocating back to container');
+        container.appendChild(videoElement);
+      }
+
+      // Force video to be visible with proper positioning
+      videoElement.style.cssText = 'display: block !important; width: 100% !important; height: 250px !important; visibility: visible !important; position: relative !important; object-fit: cover !important;';
+      console.log('[QrScanner] Forced video styles, new dimensions:', videoElement.offsetWidth, 'x', videoElement.offsetHeight);
     } catch (err) {
+      console.error('[QrScanner] Error starting camera:', err);
       this._handleError(err);
     }
   }
@@ -406,9 +461,19 @@ export class QrScanner extends LitElement {
 
   private async _handleCameraChange(e: Event): Promise<void> {
     const select = e.target as HTMLSelectElement;
-    this.selectedCameraId = select.value;
+    const newCameraId = select.value;
+
+    // Only restart if camera actually changed
+    if (newCameraId === this.selectedCameraId) {
+      console.log('[QrScanner] Camera unchanged, skipping restart');
+      return;
+    }
+
+    console.log('[QrScanner] Camera changed to:', newCameraId);
+    this.selectedCameraId = newCameraId;
 
     await this._stopScanning();
+    await this.updateComplete; // Wait for DOM update
     await this._startScanning();
   }
 
@@ -420,52 +485,62 @@ export class QrScanner extends LitElement {
     return html`
       ${sharedStyles}
       <div class="scanner-container">
-        <button
-          class="scanner-toggle"
-          @click=${this.toggle}
-          ?disabled=${this.loading}
-        >
-          <span class="icon"><i class="fa-solid fa-qrcode"></i></span>
-          ${this.expanded ? 'Close Scanner' : 'Scan QR Code'}
-        </button>
-
-        ${this.error
-          ? html`<div class="error-message">${this.error.message}</div>`
+        ${!this.embedded
+          ? html`
+              <button
+                class="scanner-toggle"
+                part="toggle"
+                @click=${this.toggle}
+                ?disabled=${this.loading}
+              >
+                <span class="icon"><i class="fa-solid fa-qrcode"></i></span>
+                ${this.expanded ? 'Close Scanner' : 'Scan QR Code'}
+              </button>
+            `
           : nothing}
 
-        <div class="scanner-area ${this.expanded ? '' : 'collapsed'}">
+        ${this.error
+          ? html`<div class="error-message" style="padding: 12px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 4px; color: #dc2626; font-size: 14px; margin-top: 8px;">${this.error.message}</div>`
+          : nothing}
+
+        <div class="scanner-area ${this.expanded || this.embedded ? '' : 'collapsed'}" part="scanner-area" style="${this.expanded || this.embedded ? 'display: block;' : 'display: none;'}">
           ${this.loading
-            ? html`<div class="loading">Starting camera...</div>`
+            ? html`<div class="loading" style="display: flex; align-items: center; justify-content: center; padding: 40px; color: #ccc; font-size: 14px; background: #000;">Starting camera...</div>`
             : nothing}
 
-          ${this.cameras.length > 1
-            ? html`
-                <div class="camera-select">
-                  <label for="camera-select">Camera</label>
-                  <select
-                    id="camera-select"
-                    .value=${this.selectedCameraId || ''}
-                    @change=${this._handleCameraChange}
-                  >
-                    ${this.cameras.map(
-                      camera => html`
-                        <option value=${camera.id}>${camera.label}</option>
-                      `
-                    )}
-                  </select>
-                </div>
-              `
-            : nothing}
-
-          <div class="viewfinder-container">
+          <div class="viewfinder-container" style="position: relative; width: 100%; min-height: 250px; background: #000;">
             <video id="qr-video"></video>
           </div>
 
-          <div class="scanner-controls">
-            <button class="stop-button" @click=${this._handleStopClick}>
-              Stop Scanning
-            </button>
-          </div>
+          ${!this.embedded
+            ? html`
+                ${this.cameras.length > 1
+                  ? html`
+                      <div class="camera-select" style="padding: 8px 12px; background: #1a1a1a;">
+                        <label for="camera-select" style="color: #ccc; font-size: 12px; margin-right: 8px;">Camera</label>
+                        <select
+                          id="camera-select"
+                          .value=${this.selectedCameraId || ''}
+                          @change=${this._handleCameraChange}
+                          style="padding: 4px 8px; border-radius: 4px;"
+                        >
+                          ${this.cameras.map(
+                            camera => html`
+                              <option value=${camera.id}>${camera.label}</option>
+                            `
+                          )}
+                        </select>
+                      </div>
+                    `
+                  : nothing}
+
+                <div class="scanner-controls" style="display: flex; justify-content: center; padding: 12px; background: #1a1a1a; gap: 12px;">
+                  <button class="stop-button" @click=${this._handleStopClick} style="padding: 8px 16px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">
+                    Stop Scanning
+                  </button>
+                </div>
+              `
+            : nothing}
         </div>
       </div>
     `;

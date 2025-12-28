@@ -397,6 +397,56 @@ export const dialogCSS = css`
     color: #333;
     margin: 0;
   }
+
+  .form-group {
+    margin-bottom: 12px;
+  }
+
+  .form-group:last-child {
+    margin-bottom: 0;
+  }
+
+  .form-group label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 500;
+    color: #333;
+  }
+
+  .form-group input,
+  .form-group textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    box-sizing: border-box;
+    font-family: inherit;
+  }
+
+  .form-group textarea {
+    min-height: 80px;
+    resize: vertical;
+  }
+
+  .form-group input:focus,
+  .form-group textarea:focus {
+    outline: none;
+    border-color: #4a90d9;
+    box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.2);
+  }
+
+  .form-group input[readonly] {
+    background: #f5f5f5;
+    color: #666;
+    cursor: not-allowed;
+  }
+
+  .form-group .help-text {
+    margin-top: 4px;
+    font-size: 12px;
+    color: #666;
+  }
 `;
 
 /* ==========================================================================

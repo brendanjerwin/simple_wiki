@@ -3,7 +3,7 @@ import { html } from 'lit';
 import { action } from '@storybook/addon-actions';
 import './qr-scanner.js';
 import type { QrScanner, CameraProvider, CameraDevice } from './qr-scanner.js';
-import { CameraPermissionError, NoCameraError } from './qr-scanner.js';
+import { CameraPermissionError } from './qr-scanner.js';
 
 /**
  * Mock camera provider for demonstrating error states
@@ -22,11 +22,8 @@ function createMockCameraProvider(options: {
       }
       return options.cameras ?? [];
     },
-    async start(
-      _videoElement: HTMLVideoElement,
-      _cameraId: string,
-      _onSuccess: (result: string) => void
-    ): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    async start(_v: HTMLVideoElement, _c: string, _s: (r: string) => void): Promise<void> {
       if (options.startError) {
         throw options.startError;
       }
