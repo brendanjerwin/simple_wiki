@@ -534,7 +534,7 @@ func formatAnomalyType(t string) string {
 
 // removeItemFromContainerItemsList removes an item from a container's inventory.items array.
 // This function handles un-munged identifiers by comparing munged versions.
-// itemID should be the munged identifier of the item to remove.
+// itemID can be munged or un-munged - it will be munged for comparison.
 func (j *InventoryNormalizationJob) removeItemFromContainerItemsList(containerID, itemID string) error {
 	_, fm, err := j.deps.ReadFrontMatter(containerID)
 	if err != nil {
@@ -659,8 +659,12 @@ func (j *InventoryNormalizationJob) removeItemsFromParentContainers(containers [
 		}
 
 		// Build a set of munged item IDs that have this container reference
+		// Note: itemsWithContainer already contains munged identifiers from the index
 		itemsWithContainerSet := make(map[string]bool)
 		for _, itemID := range itemsWithContainer {
+			// The identifiers from the index are already munged, but we munge again
+			// for consistency and to handle any edge cases where the index might
+			// return non-munged identifiers
 			mungedID := wikiidentifiers.MungeIdentifier(itemID)
 			itemsWithContainerSet[mungedID] = true
 		}
