@@ -6,6 +6,11 @@ import { Timestamp } from '@bufbuild/protobuf';
 import { stub, useFakeTimers } from 'sinon';
 import './system-info.js';
 
+// Extend SystemInfo type for testing private methods
+interface SystemInfoTest extends SystemInfo {
+  _handleClickOutside: (event: MouseEvent) => void;
+}
+
 describe('SystemInfo', () => {
   let el: SystemInfo;
   let clock: any;
@@ -354,6 +359,200 @@ describe('SystemInfo', () => {
       expect(connectStub).to.not.have.been.called;
       expect(disconnectStub).to.not.have.been.called;
       // We can't easily test the timer management without more complex mocking
+    });
+  });
+
+  describe('drawer tab functionality', () => {
+    beforeEach(async () => {
+      const mockTimestamp = new Timestamp({
+        seconds: BigInt(Math.floor(new Date('2023-01-01T12:00:00Z').getTime() / 1000)),
+        nanos: 0
+      });
+
+      el.loading = false;
+      el.version = new GetVersionResponse({
+        commit: 'abc123def456',
+        buildTime: mockTimestamp
+      });
+      el.jobStatus = new GetJobStatusResponse({
+        jobQueues: []
+      });
+      await el.updateComplete;
+    });
+
+    it('should start with expanded state as false', () => {
+      expect(el.expanded).to.be.false;
+    });
+
+    it('should render drawer tab element', () => {
+      const tab = el.shadowRoot!.querySelector('.drawer-tab');
+      expect(tab).to.exist;
+    });
+
+    it('should render INFO text in drawer tab', () => {
+      const tab = el.shadowRoot!.querySelector('.drawer-tab');
+      expect(tab).to.exist;
+      expect(tab!.textContent).to.equal('INFO');
+    });
+
+    it('should not have expanded class when collapsed', () => {
+      const panel = el.shadowRoot!.querySelector('.system-panel');
+      expect(panel!.classList.contains('expanded')).to.be.false;
+    });
+
+    it('should have expanded class when expanded', async () => {
+      el.expanded = true;
+      await el.updateComplete;
+      
+      const panel = el.shadowRoot!.querySelector('.system-panel');
+      expect(panel!.classList.contains('expanded')).to.be.true;
+    });
+
+    it('should toggle expanded state on click', async () => {
+      const panel = el.shadowRoot!.querySelector('.system-panel') as HTMLElement;
+      expect(el.expanded).to.be.false;
+      
+      panel.click();
+      await el.updateComplete;
+      
+      expect(el.expanded).to.be.true;
+    });
+
+    it('should toggle expanded state on Enter key', async () => {
+      const panel = el.shadowRoot!.querySelector('.system-panel') as HTMLElement;
+      expect(el.expanded).to.be.false;
+      
+      const event = new KeyboardEvent('keydown', { key: 'Enter' });
+      panel.dispatchEvent(event);
+      await el.updateComplete;
+      
+      expect(el.expanded).to.be.true;
+    });
+
+    it('should toggle expanded state on Space key', async () => {
+      const panel = el.shadowRoot!.querySelector('.system-panel') as HTMLElement;
+      expect(el.expanded).to.be.false;
+      
+      const event = new KeyboardEvent('keydown', { key: ' ' });
+      panel.dispatchEvent(event);
+      await el.updateComplete;
+      
+      expect(el.expanded).to.be.true;
+    });
+
+    it('should not toggle on other keys', async () => {
+      const panel = el.shadowRoot!.querySelector('.system-panel') as HTMLElement;
+      expect(el.expanded).to.be.false;
+      
+      const event = new KeyboardEvent('keydown', { key: 'a' });
+      panel.dispatchEvent(event);
+      await el.updateComplete;
+      
+      expect(el.expanded).to.be.false;
+    });
+
+    it('should have role="button"', () => {
+      const panel = el.shadowRoot!.querySelector('.system-panel');
+      expect(panel!.getAttribute('role')).to.equal('button');
+    });
+
+    it('should have tabindex="0"', () => {
+      const panel = el.shadowRoot!.querySelector('.system-panel');
+      expect(panel!.getAttribute('tabindex')).to.equal('0');
+    });
+
+    it('should have aria-label', () => {
+      const panel = el.shadowRoot!.querySelector('.system-panel');
+      expect(panel!.getAttribute('aria-label')).to.equal('System information panel');
+    });
+
+    it('should update aria-expanded when state changes', async () => {
+      const panel = el.shadowRoot!.querySelector('.system-panel');
+      expect(panel!.getAttribute('aria-expanded')).to.equal('false');
+      
+      el.expanded = true;
+      await el.updateComplete;
+      
+      expect(panel!.getAttribute('aria-expanded')).to.equal('true');
+    });
+
+    it('should render panel-content wrapper', () => {
+      const panelContent = el.shadowRoot!.querySelector('.panel-content');
+      expect(panelContent).to.exist;
+    });
+
+    it('should render system-content inside panel-content', () => {
+      const panelContent = el.shadowRoot!.querySelector('.panel-content');
+      const systemContent = panelContent!.querySelector('.system-content');
+      expect(systemContent).to.exist;
+    });
+  });
+
+  describe('click-outside behavior', () => {
+    beforeEach(async () => {
+      const mockTimestamp = new Timestamp({
+        seconds: BigInt(Math.floor(new Date('2023-01-01T12:00:00Z').getTime() / 1000)),
+        nanos: 0
+      });
+
+      el.loading = false;
+      el.version = new GetVersionResponse({
+        commit: 'abc123def456',
+        buildTime: mockTimestamp
+      });
+      el.jobStatus = new GetJobStatusResponse({
+        jobQueues: []
+      });
+      await el.updateComplete;
+    });
+
+    it('should collapse when clicking outside and expanded', async () => {
+      el.expanded = true;
+      await el.updateComplete;
+
+      // Simulate click outside
+      const outsideEvent = new MouseEvent('click', { bubbles: true });
+      document.dispatchEvent(outsideEvent);
+      
+      expect(el.expanded).to.be.false;
+    });
+
+    it('should not collapse when clicking inside the panel', async () => {
+      el.expanded = true;
+      await el.updateComplete;
+
+      // Click on the panel itself (which stops propagation)
+      const panel = el.shadowRoot!.querySelector('.system-panel') as HTMLElement;
+      panel.click();
+      await el.updateComplete;
+      
+      // Should toggle to collapsed then back to expanded
+      expect(el.expanded).to.be.false;
+    });
+
+    it('should not change state when clicking outside while collapsed', async () => {
+      el.expanded = false;
+      await el.updateComplete;
+
+      // Simulate click outside
+      const outsideEvent = new MouseEvent('click', { bubbles: true });
+      document.dispatchEvent(outsideEvent);
+      
+      expect(el.expanded).to.be.false;
+    });
+
+    it('should handle click events with composed path correctly', async () => {
+      el.expanded = true;
+      await el.updateComplete;
+
+      // Create a mock event that doesn't include this element in composed path
+      const mockEvent = {
+        composedPath: () => []
+      } as unknown as MouseEvent;
+      
+      (el as SystemInfoTest)._handleClickOutside(mockEvent);
+      
+      expect(el.expanded).to.be.false;
     });
   });
 });
