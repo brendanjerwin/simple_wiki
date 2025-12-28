@@ -39,6 +39,15 @@ export interface ItemScannedEventDetail {
  * @fires cancelled - Fired when user clicks Cancel button
  */
 export class InventoryQrScanner extends LitElement {
+  // Disable Shadow DOM - qr-scanner library doesn't support it
+  // (checks document.body.contains(video) which fails in Shadow DOM)
+  override createRenderRoot() {
+    return this;
+  }
+
+  // Note: With Shadow DOM disabled, these styles are NOT applied via Lit's
+  // static styles mechanism. They're kept here for documentation and IDE support.
+  // Actual styling comes from ${sharedStyles} rendered into the light DOM.
   static override styles = [
     foundationCSS,
     buttonCSS,
@@ -146,7 +155,7 @@ export class InventoryQrScanner extends LitElement {
   async expand(): Promise<void> {
     this.error = null;
     await this.updateComplete;
-    const scanner = this.shadowRoot?.querySelector('qr-scanner') as QrScanner | null;
+    const scanner = this.querySelector('qr-scanner') as QrScanner | null;
     if (!scanner) {
       throw new Error('InventoryQrScanner: qr-scanner element not found');
     }
@@ -161,7 +170,7 @@ export class InventoryQrScanner extends LitElement {
     if (this.error) {
       return;
     }
-    const scanner = this.shadowRoot?.querySelector('qr-scanner') as QrScanner | null;
+    const scanner = this.querySelector('qr-scanner') as QrScanner | null;
     if (!scanner) {
       throw new Error('InventoryQrScanner: qr-scanner element not found');
     }
