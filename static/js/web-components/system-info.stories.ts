@@ -602,7 +602,7 @@ export const DrawerTabCollapsed: Story = {
         <div style="padding: 20px;">
           <h1>Drawer Tab - Collapsed State</h1>
           <p>The system info component appears as a small drawer tab in the bottom-right corner.</p>
-          <p>Most of the panel is hidden off-screen, with only a small tab visible at 20% opacity.</p>
+          <p>Most of the panel is hidden off-screen, with only a small tab visible at 30% opacity.</p>
           <p><strong>Click the tab</strong> to expand it and see the full system information.</p>
         </div>
         ${el}

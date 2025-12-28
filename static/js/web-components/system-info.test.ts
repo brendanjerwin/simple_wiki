@@ -6,6 +6,11 @@ import { Timestamp } from '@bufbuild/protobuf';
 import { stub, useFakeTimers } from 'sinon';
 import './system-info.js';
 
+// Extend SystemInfo type for testing private methods
+interface SystemInfoTest extends SystemInfo {
+  _handleClickOutside: (event: MouseEvent) => void;
+}
+
 describe('SystemInfo', () => {
   let el: SystemInfo;
   let clock: any;
@@ -480,6 +485,74 @@ describe('SystemInfo', () => {
       const panelContent = el.shadowRoot!.querySelector('.panel-content');
       const systemContent = panelContent!.querySelector('.system-content');
       expect(systemContent).to.exist;
+    });
+  });
+
+  describe('click-outside behavior', () => {
+    beforeEach(async () => {
+      const mockTimestamp = new Timestamp({
+        seconds: BigInt(Math.floor(new Date('2023-01-01T12:00:00Z').getTime() / 1000)),
+        nanos: 0
+      });
+
+      el.loading = false;
+      el.version = new GetVersionResponse({
+        commit: 'abc123def456',
+        buildTime: mockTimestamp
+      });
+      el.jobStatus = new GetJobStatusResponse({
+        jobQueues: []
+      });
+      await el.updateComplete;
+    });
+
+    it('should collapse when clicking outside and expanded', async () => {
+      el.expanded = true;
+      await el.updateComplete;
+
+      // Simulate click outside
+      const outsideEvent = new MouseEvent('click', { bubbles: true });
+      document.dispatchEvent(outsideEvent);
+      
+      expect(el.expanded).to.be.false;
+    });
+
+    it('should not collapse when clicking inside the panel', async () => {
+      el.expanded = true;
+      await el.updateComplete;
+
+      // Click on the panel itself (which stops propagation)
+      const panel = el.shadowRoot!.querySelector('.system-panel') as HTMLElement;
+      panel.click();
+      await el.updateComplete;
+      
+      // Should toggle to collapsed then back to expanded
+      expect(el.expanded).to.be.false;
+    });
+
+    it('should not change state when clicking outside while collapsed', async () => {
+      el.expanded = false;
+      await el.updateComplete;
+
+      // Simulate click outside
+      const outsideEvent = new MouseEvent('click', { bubbles: true });
+      document.dispatchEvent(outsideEvent);
+      
+      expect(el.expanded).to.be.false;
+    });
+
+    it('should handle click events with composed path correctly', async () => {
+      el.expanded = true;
+      await el.updateComplete;
+
+      // Create a mock event that doesn't include this element in composed path
+      const mockEvent = {
+        composedPath: () => []
+      } as unknown as MouseEvent;
+      
+      (el as SystemInfoTest)._handleClickOutside(mockEvent);
+      
+      expect(el.expanded).to.be.false;
     });
   });
 });

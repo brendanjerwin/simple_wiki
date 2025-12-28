@@ -31,7 +31,7 @@ export class SystemInfo extends LitElement {
         position: relative;
         max-width: 400px;
         transform: translateX(calc(100% - 24px));
-        transition: transform 0.3s ease, opacity 0.3s ease;
+        transition: transform 0.3s ease;
         cursor: pointer;
         outline: none;
       }
@@ -138,8 +138,7 @@ export class SystemInfo extends LitElement {
   private debounceTimer?: ReturnType<typeof setTimeout>;
   private refreshTimer?: ReturnType<typeof setInterval>;
   private streamSubscription?: AbortController;
-  private boundHandleMouseEnter?: () => void;
-  private clickOutsideListenerAttached = false;
+  private _handleClickOutside: (event: MouseEvent) => void;
 
   private client = createClient(SystemInfoService, getGrpcWebTransport());
 
@@ -147,26 +146,20 @@ export class SystemInfo extends LitElement {
     super();
     this.loading = true;
     this.expanded = false;
+    this._handleClickOutside = this.handleClickOutside.bind(this);
   }
 
   override connectedCallback(): void {
     super.connectedCallback();
     this.loadSystemInfo();
-    // Add click-outside listener to document (only once)
-    if (!this.clickOutsideListenerAttached) {
-      document.addEventListener('click', this.handleClickOutside);
-      this.clickOutsideListenerAttached = true;
-    }
+    document.addEventListener('click', this._handleClickOutside);
   }
 
   override firstUpdated(): void {
-    // Bind and store the handler so we can remove it later
-    this.boundHandleMouseEnter = this.handleMouseEnter.bind(this);
-    
     // Add hover event listener to the overlay after the component is first rendered
     const overlay = this.shadowRoot?.querySelector('.hover-overlay');
     if (overlay) {
-      overlay.addEventListener('mouseenter', this.boundHandleMouseEnter);
+      overlay.addEventListener('mouseenter', this.handleMouseEnter);
     }
   }
 
@@ -180,17 +173,12 @@ export class SystemInfo extends LitElement {
       this.debounceTimer = undefined;
     }
     // Remove click-outside listener
-    if (this.clickOutsideListenerAttached) {
-      document.removeEventListener('click', this.handleClickOutside);
-      this.clickOutsideListenerAttached = false;
-    }
+    document.removeEventListener('click', this._handleClickOutside);
     
     // Remove hover event listener
-    if (this.boundHandleMouseEnter) {
-      const overlay = this.shadowRoot?.querySelector('.hover-overlay');
-      if (overlay) {
-        overlay.removeEventListener('mouseenter', this.boundHandleMouseEnter);
-      }
+    const overlay = this.shadowRoot?.querySelector('.hover-overlay');
+    if (overlay) {
+      overlay.removeEventListener('mouseenter', this.handleMouseEnter);
     }
   }
 
@@ -210,19 +198,15 @@ export class SystemInfo extends LitElement {
     }
   };
 
-  private handleClickOutside = (event: MouseEvent): void => {
-    // Panel clicks stop propagation, so this only fires for clicks outside the component
-    // Double-check that the click is not within our shadow DOM
-    if (this.expanded && event.target !== this && !this.contains(event.target as Node)) {
-      const composedPath = event.composedPath();
-      // Also check if the click is not within the shadow root
-      if (!composedPath.includes(this)) {
-        this.expanded = false;
-      }
+  private handleClickOutside(event: MouseEvent): void {
+    // Close when an expanded panel receives a click outside this component
+    const path = event.composedPath();
+    if (this.expanded && !path.includes(this)) {
+      this.expanded = false;
     }
-  };
+  }
 
-  private handleMouseEnter(): void {
+  private handleMouseEnter = (): void => {
     // Clear any existing debounce timer
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
@@ -349,7 +333,7 @@ export class SystemInfo extends LitElement {
         aria-label="System information panel"
         @click="${this.handlePanelClick}"
         @keydown="${this.handlePanelKeydown}">
-        <div class="hover-overlay"></div>
+        ${this.expanded ? html`<div class="hover-overlay"></div>` : ''}
         <div class="drawer-tab">INFO</div>
         <div class="panel-content system-font">
           <div class="system-content">
