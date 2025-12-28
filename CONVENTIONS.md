@@ -853,6 +853,29 @@ func NewServer(logger *Logger) (*Server, error) {
 
   The UX component at the edge should handle displaying errors appropriately while preserving the ability to inspect the original error for debugging.
 
+- **Keep Errors as Objects Until the UI Edge**: Error properties in components should be typed as `Error | null`, not `string`. The Error object preserves stack traces, cause chains, and type information for debugging. Convert to string only at render time in templates.
+
+  **Property declaration:**
+  ```typescript
+  declare error: Error | null;  // Not string!
+  ```
+
+  **Assignment (preserve the full Error object):**
+  ```typescript
+  try {
+    await someAsyncOperation();
+  } catch (err) {
+    this.error = err instanceof Error ? err : new Error(String(err));
+  }
+  ```
+
+  **Template (extract message at UI edge):**
+  ```typescript
+  ${this.error ? html`<div class="error-message">${this.error.message}</div>` : ''}
+  ```
+
+  This pattern ensures error context is available throughout the data layer for logging and debugging, while presenting a clean message to users at the point of display.
+
 - **Let Unrecoverable Errors Bubble Up**: Don't catch exceptions you can't meaningfully handle. Let them bubble to the global error handler for consistent user experience.
 
   **Bad:** Catching without meaningful recovery

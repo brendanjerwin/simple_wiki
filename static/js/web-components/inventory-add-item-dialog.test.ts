@@ -69,7 +69,7 @@ describe('InventoryAddItemDialog', () => {
     });
 
     it('should have no error by default', () => {
-      expect(el.error).to.be.undefined;
+      expect(el.error).to.be.null;
     });
 
     it('should have isUnique true by default', () => {
@@ -116,7 +116,7 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should clear error', () => {
-        expect(el.error).to.be.undefined;
+        expect(el.error).to.be.null;
       });
 
       it('should reset isUnique to true', () => {
@@ -160,7 +160,7 @@ describe('InventoryAddItemDialog', () => {
     });
 
     it('should clear error', () => {
-      expect(el.error).to.be.undefined;
+      expect(el.error).to.be.null;
     });
 
     it('should reset isUnique to true', () => {
@@ -274,11 +274,19 @@ describe('InventoryAddItemDialog', () => {
     describe('when error is present', () => {
       beforeEach(async () => {
         el.openDialog('drawer_kitchen');
-        el.error = 'Item already exists';
+        el.error = new Error('Item already exists');
         await el.updateComplete;
       });
 
-      it('should display error message', () => {
+      it('should store error as Error object', () => {
+        expect(el.error).to.be.instanceOf(Error);
+      });
+
+      it('should preserve error message', () => {
+        expect(el.error?.message).to.equal('Item already exists');
+      });
+
+      it('should display error message in UI', () => {
         const errorDiv = el.shadowRoot?.querySelector('.error-message');
         expect(errorDiv?.textContent).to.contain('Item already exists');
       });

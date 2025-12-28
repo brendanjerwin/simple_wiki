@@ -29,8 +29,9 @@ describe('InventoryActionService', () => {
         expect(result.success).to.be.false;
       });
 
-      it('should return validation error', () => {
-        expect(result.error).to.equal('Container and item identifier are required');
+      it('should return validation error as Error object', () => {
+        expect(result.error).to.be.instanceOf(Error);
+        expect(result.error?.message).to.equal('Container and item identifier are required');
       });
     });
 
@@ -45,8 +46,9 @@ describe('InventoryActionService', () => {
         expect(result.success).to.be.false;
       });
 
-      it('should return validation error', () => {
-        expect(result.error).to.equal('Container and item identifier are required');
+      it('should return validation error as Error object', () => {
+        expect(result.error).to.be.instanceOf(Error);
+        expect(result.error?.message).to.equal('Container and item identifier are required');
       });
     });
 
@@ -124,8 +126,9 @@ describe('InventoryActionService', () => {
         expect(result.success).to.be.false;
       });
 
-      it('should return the error message', () => {
-        expect(result.error).to.equal('Item already exists');
+      it('should return the error as Error object', () => {
+        expect(result.error).to.be.instanceOf(Error);
+        expect(result.error?.message).to.equal('Item already exists');
       });
     });
 
@@ -296,8 +299,9 @@ describe('InventoryActionService', () => {
         expect(result.success).to.be.false;
       });
 
-      it('should return validation error', () => {
-        expect(result.error).to.equal('Item identifier is required');
+      it('should return validation error as Error object', () => {
+        expect(result.error).to.be.instanceOf(Error);
+        expect(result.error?.message).to.equal('Item identifier is required');
       });
     });
 
@@ -358,8 +362,9 @@ describe('InventoryActionService', () => {
         expect(result.success).to.be.false;
       });
 
-      it('should return the error message', () => {
-        expect(result.error).to.equal('Container not found');
+      it('should return the error as Error object', () => {
+        expect(result.error).to.be.instanceOf(Error);
+        expect(result.error?.message).to.equal('Container not found');
       });
     });
 

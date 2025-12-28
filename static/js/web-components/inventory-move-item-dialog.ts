@@ -565,7 +565,7 @@ export class InventoryMoveItemDialog extends LitElement {
       );
       this.close();
     } else {
-      this.error = result.error ? new Error(result.error) : null;
+      this.error = result.error ?? null;
       this.movingTo = null;
     }
   };

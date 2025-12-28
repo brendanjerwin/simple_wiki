@@ -227,7 +227,7 @@ export class InventoryAddItemDialog extends LitElement {
   declare description: string;
   declare automagicMode: boolean;
   declare loading: boolean;
-  declare error?: string;
+  declare error: Error | null;
   declare isUnique: boolean;
   declare existingPage?: ExistingPageInfo;
   declare searchResults: SearchResult[];
@@ -248,7 +248,7 @@ export class InventoryAddItemDialog extends LitElement {
     this.description = '';
     this.automagicMode = true;
     this.loading = false;
-    this.error = undefined;
+    this.error = null;
     this.isUnique = true;
     this.existingPage = undefined;
     this.searchResults = [];
@@ -289,7 +289,7 @@ export class InventoryAddItemDialog extends LitElement {
     this.itemIdentifier = '';
     this.description = '';
     this.automagicMode = true;
-    this.error = undefined;
+    this.error = null;
     this.loading = false;
     this.isUnique = true;
     this.existingPage = undefined;
@@ -310,7 +310,7 @@ export class InventoryAddItemDialog extends LitElement {
     this.itemTitle = '';
     this.itemIdentifier = '';
     this.description = '';
-    this.error = undefined;
+    this.error = null;
     this.loading = false;
     this.isUnique = true;
     this.existingPage = undefined;
@@ -353,6 +353,8 @@ export class InventoryAddItemDialog extends LitElement {
     }
 
     // Generate identifier if in automagic mode
+    // Note: Errors from generateIdentifier are intentionally not shown to the user.
+    // If automagic fails, user can switch to manual mode and enter identifier directly.
     if (this.automagicMode) {
       const result = await this.inventoryActionService.generateIdentifier(title);
       if (!result.error) {
@@ -458,7 +460,7 @@ export class InventoryAddItemDialog extends LitElement {
     if (!this.canSubmit) return;
 
     this.loading = true;
-    this.error = undefined;
+    this.error = null;
 
     const result = await this.inventoryActionService.addItem(
       this.container,
@@ -476,6 +478,9 @@ export class InventoryAddItemDialog extends LitElement {
       );
       this.close();
     } else {
+      if (!result.error) {
+        throw new Error('InventoryActionService.addItem returned success=false without an error');
+      }
       this.error = result.error;
     }
   };
@@ -533,7 +538,7 @@ export class InventoryAddItemDialog extends LitElement {
 
         <div class="content">
           ${this.error
-            ? html`<div class="error-message">${this.error}</div>`
+            ? html`<div class="error-message">${this.error.message}</div>`
             : ''}
 
           <div class="form-group">
