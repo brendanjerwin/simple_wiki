@@ -26,15 +26,11 @@ export class SystemInfo extends LitElement {
       }
 
       .system-panel {
-        background: #2d2d2d;
-        border: 1px solid #404040;
-        border-radius: 4px;
-        padding: 4px 8px;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+        display: flex;
+        flex-direction: row;
         position: relative;
         max-width: 400px;
-        transform: translateX(calc(100% - 20px));
-        opacity: 0.2;
+        transform: translateX(calc(100% - 32px));
         transition: transform 0.3s ease, opacity 0.3s ease;
         cursor: pointer;
         outline: none;
@@ -47,6 +43,52 @@ export class SystemInfo extends LitElement {
 
       .system-panel.expanded {
         transform: translateX(0);
+      }
+
+      .drawer-tab {
+        width: 32px;
+        background: #2d2d2d;
+        border: 1px solid #404040;
+        border-right: none;
+        border-radius: 4px 0 0 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        writing-mode: vertical-rl;
+        text-orientation: mixed;
+        padding: 8px 4px;
+        font-size: 10px;
+        font-weight: 600;
+        color: #888;
+        letter-spacing: 1px;
+        box-shadow: -2px 0 3px rgba(0, 0, 0, 0.2);
+        flex-shrink: 0;
+        opacity: 0.3;
+        transition: opacity 0.3s ease, color 0.3s ease;
+      }
+
+      .system-panel:hover .drawer-tab,
+      .system-panel:focus-visible .drawer-tab {
+        opacity: 0.6;
+        color: #aaa;
+      }
+
+      .system-panel.expanded .drawer-tab {
+        opacity: 0.9;
+        color: #ccc;
+      }
+
+      .panel-content {
+        background: #2d2d2d;
+        border: 1px solid #404040;
+        border-radius: 0 4px 4px 0;
+        padding: 4px 8px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+        opacity: 0.2;
+        transition: opacity 0.3s ease;
+      }
+
+      .system-panel.expanded .panel-content {
         opacity: 0.9;
       }
 
@@ -300,7 +342,7 @@ export class SystemInfo extends LitElement {
   override render() {
     return html`
       <div 
-        class="system-panel ${this.expanded ? 'expanded' : ''} system-font" 
+        class="system-panel ${this.expanded ? 'expanded' : ''}" 
         role="button"
         tabindex="0"
         aria-expanded="${this.expanded}"
@@ -308,22 +350,25 @@ export class SystemInfo extends LitElement {
         @click="${this.handlePanelClick}"
         @keydown="${this.handlePanelKeydown}">
         <div class="hover-overlay"></div>
-        <div class="system-content">
-          <!-- Version Info (Always Present) -->
-          <system-info-version
-            .version="${this.version}"
-            .loading="${this.loading}"
-            .error="${this.error}"></system-info-version>
+        <div class="drawer-tab">INFO</div>
+        <div class="panel-content system-font">
+          <div class="system-content">
+            <!-- Version Info (Always Present) -->
+            <system-info-version
+              .version="${this.version}"
+              .loading="${this.loading}"
+              .error="${this.error}"></system-info-version>
 
-          <!-- Tailscale Identity (if available) -->
-          <system-info-identity
-            .identity="${this.version?.tailscaleIdentity}"></system-info-identity>
+            <!-- Tailscale Identity (if available) -->
+            <system-info-identity
+              .identity="${this.version?.tailscaleIdentity}"></system-info-identity>
 
-          <!-- Job Status Component -->
-          <system-info-indexing
-            .jobStatus="${this.jobStatus}"
-            .loading="${this.loading}"
-            .error="${this.error}"></system-info-indexing>
+            <!-- Job Status Component -->
+            <system-info-indexing
+              .jobStatus="${this.jobStatus}"
+              .loading="${this.loading}"
+              .error="${this.error}"></system-info-indexing>
+          </div>
         </div>
       </div>
     `;
