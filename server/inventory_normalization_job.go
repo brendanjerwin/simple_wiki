@@ -320,15 +320,15 @@ func (j *InventoryNormalizationJob) migrateContainersToIsContainerField() int {
 
 	// For each identified container, check if it needs migration
 	for containerID := range containerSet {
-		// Check if already has is_container = true
-		if j.fmIndex.GetValue(containerID, inventoryIsContainerKeyPath) == "true" {
-			continue
-		}
-
-		// Read frontmatter and add is_container
+		// Read frontmatter to check current state
 		_, fm, err := j.deps.ReadFrontMatter(containerID)
 		if err != nil {
 			j.logger.Error("Failed to read frontmatter for container %s during migration: %v", containerID, err)
+			continue
+		}
+
+		// Check if is_container is already set to true
+		if isContainerAlreadySet(fm) {
 			continue
 		}
 
@@ -352,6 +352,32 @@ func (j *InventoryNormalizationJob) migrateContainersToIsContainerField() int {
 	}
 
 	return migratedCount
+}
+
+// isContainerAlreadySet checks if is_container is already set to true.
+// Handles both boolean true and string "true" values.
+func isContainerAlreadySet(fm map[string]any) bool {
+	inventory, ok := fm["inventory"].(map[string]any)
+	if !ok {
+		return false
+	}
+
+	isContainer := inventory["is_container"]
+	if isContainer == nil {
+		return false
+	}
+
+	// Check for boolean true
+	if b, ok := isContainer.(bool); ok {
+		return b
+	}
+
+	// Check for string "true"
+	if s, ok := isContainer.(string); ok {
+		return s == "true"
+	}
+
+	return false
 }
 
 // getItemsWithContainerReference gets items that have inventory.container set to this container.

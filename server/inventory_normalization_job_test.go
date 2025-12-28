@@ -953,6 +953,235 @@ var _ = Describe("InventoryNormalizationJob", func() {
 		})
 	})
 
+	Describe("isContainerAlreadySet", func() {
+		When("is_container is boolean true", func() {
+			var fm map[string]any
+
+			BeforeEach(func() {
+				fm = map[string]any{
+					"inventory": map[string]any{
+						"is_container": true,
+					},
+				}
+			})
+
+			It("should return true", func() {
+				Expect(isContainerAlreadySet(fm)).To(BeTrue())
+			})
+		})
+
+		When("is_container is boolean false", func() {
+			var fm map[string]any
+
+			BeforeEach(func() {
+				fm = map[string]any{
+					"inventory": map[string]any{
+						"is_container": false,
+					},
+				}
+			})
+
+			It("should return false", func() {
+				Expect(isContainerAlreadySet(fm)).To(BeFalse())
+			})
+		})
+
+		When("is_container is string 'true'", func() {
+			var fm map[string]any
+
+			BeforeEach(func() {
+				fm = map[string]any{
+					"inventory": map[string]any{
+						"is_container": "true",
+					},
+				}
+			})
+
+			It("should return true", func() {
+				Expect(isContainerAlreadySet(fm)).To(BeTrue())
+			})
+		})
+
+		When("is_container is string 'false'", func() {
+			var fm map[string]any
+
+			BeforeEach(func() {
+				fm = map[string]any{
+					"inventory": map[string]any{
+						"is_container": "false",
+					},
+				}
+			})
+
+			It("should return false", func() {
+				Expect(isContainerAlreadySet(fm)).To(BeFalse())
+			})
+		})
+
+		When("is_container is not set", func() {
+			var fm map[string]any
+
+			BeforeEach(func() {
+				fm = map[string]any{
+					"inventory": map[string]any{},
+				}
+			})
+
+			It("should return false", func() {
+				Expect(isContainerAlreadySet(fm)).To(BeFalse())
+			})
+		})
+
+		When("inventory section does not exist", func() {
+			var fm map[string]any
+
+			BeforeEach(func() {
+				fm = map[string]any{
+					"title": "Some Page",
+				}
+			})
+
+			It("should return false", func() {
+				Expect(isContainerAlreadySet(fm)).To(BeFalse())
+			})
+		})
+
+		When("is_container is an unexpected type", func() {
+			var fm map[string]any
+
+			BeforeEach(func() {
+				fm = map[string]any{
+					"inventory": map[string]any{
+						"is_container": 123, // integer instead of bool/string
+					},
+				}
+			})
+
+			It("should return false", func() {
+				Expect(isContainerAlreadySet(fm)).To(BeFalse())
+			})
+		})
+	})
+
+	Describe("migrateContainersToIsContainerField with boolean handling", func() {
+		BeforeEach(func() {
+			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
+		})
+
+		When("container has is_container as boolean true", func() {
+			var migratedCount int
+
+			BeforeEach(func() {
+				// Set up a container that is referenced by items
+				mockDeps.pages["tool_box"] = &mockPageData{
+					frontmatter: map[string]any{
+						"title": "Tool Box",
+						"inventory": map[string]any{
+							"is_container": true, // Already set as boolean
+						},
+					},
+				}
+
+				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
+					if key == "inventory.container" {
+						return []string{"hammer"}
+					}
+					return []string{}
+				}
+				mockFmIndex.data["hammer"] = map[string]string{
+					"inventory.container": "tool_box",
+				}
+
+				migratedCount = job.migrateContainersToIsContainerField()
+			})
+
+			It("should not migrate the container", func() {
+				Expect(migratedCount).To(Equal(0))
+			})
+
+			It("should not write to the page", func() {
+				_, written := mockDeps.writtenPages["tool_box"]
+				Expect(written).To(BeFalse())
+			})
+		})
+
+		When("container has is_container as string 'true'", func() {
+			var migratedCount int
+
+			BeforeEach(func() {
+				// Set up a container that is referenced by items
+				mockDeps.pages["tool_box"] = &mockPageData{
+					frontmatter: map[string]any{
+						"title": "Tool Box",
+						"inventory": map[string]any{
+							"is_container": "true", // Already set as string
+						},
+					},
+				}
+
+				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
+					if key == "inventory.container" {
+						return []string{"hammer"}
+					}
+					return []string{}
+				}
+				mockFmIndex.data["hammer"] = map[string]string{
+					"inventory.container": "tool_box",
+				}
+
+				migratedCount = job.migrateContainersToIsContainerField()
+			})
+
+			It("should not migrate the container", func() {
+				Expect(migratedCount).To(Equal(0))
+			})
+
+			It("should not write to the page", func() {
+				_, written := mockDeps.writtenPages["tool_box"]
+				Expect(written).To(BeFalse())
+			})
+		})
+
+		When("container has is_container as boolean false", func() {
+			var migratedCount int
+
+			BeforeEach(func() {
+				// Set up a container that is referenced by items but has is_container = false
+				mockDeps.pages["tool_box"] = &mockPageData{
+					frontmatter: map[string]any{
+						"title": "Tool Box",
+						"inventory": map[string]any{
+							"is_container": false, // Explicitly set to false
+						},
+					},
+				}
+
+				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
+					if key == "inventory.container" {
+						return []string{"hammer"}
+					}
+					return []string{}
+				}
+				mockFmIndex.data["hammer"] = map[string]string{
+					"inventory.container": "tool_box",
+				}
+
+				migratedCount = job.migrateContainersToIsContainerField()
+			})
+
+			It("should migrate the container to true", func() {
+				Expect(migratedCount).To(Equal(1))
+			})
+
+			It("should set is_container to true", func() {
+				written := mockDeps.writtenPages["tool_box"]
+				Expect(written).NotTo(BeNil())
+				inventory := written.frontmatter["inventory"].(map[string]any)
+				Expect(inventory["is_container"]).To(Equal(true))
+			})
+		})
+	})
+
 	Describe("removeItemFromContainerItemsList", func() {
 		BeforeEach(func() {
 			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
