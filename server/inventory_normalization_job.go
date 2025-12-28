@@ -37,6 +37,7 @@ const (
 	inventoryContainerKeyPath   = "inventory.container"
 	inventoryItemsKeyPath       = "inventory.items"
 	inventoryIsContainerKeyPath = "inventory.is_container"
+	inventoryKey                = "inventory"
 	newlineDelim                = "\n"
 )
 
@@ -333,10 +334,10 @@ func (j *InventoryNormalizationJob) migrateContainersToIsContainerField() int {
 		}
 
 		// Ensure inventory map exists
-		inventory, ok := fm["inventory"].(map[string]any)
+		inventory, ok := fm[inventoryKey].(map[string]any)
 		if !ok {
 			inventory = make(map[string]any)
-			fm["inventory"] = inventory
+			fm[inventoryKey] = inventory
 		}
 
 		// Set is_container = true
@@ -357,7 +358,7 @@ func (j *InventoryNormalizationJob) migrateContainersToIsContainerField() int {
 // isContainerAlreadySet checks if is_container is already set to true.
 // Handles both boolean true and string "true" values.
 func isContainerAlreadySet(fm map[string]any) bool {
-	inventory, ok := fm["inventory"].(map[string]any)
+	inventory, ok := fm[inventoryKey].(map[string]any)
 	if !ok {
 		return false
 	}
@@ -542,113 +543,138 @@ func (j *InventoryNormalizationJob) removeItemsFromParentContainers(containers [
 	removedCount := 0
 
 	for _, containerID := range containers {
-		// Read the container's frontmatter
-		_, containerFm, err := j.deps.ReadFrontMatter(containerID)
-		if err != nil {
-			// Container doesn't exist, skip
-			continue
-		}
+		removed := j.processContainerForItemRemoval(containerID)
+		removedCount += removed
+	}
 
-		inventory, ok := containerFm["inventory"].(map[string]any)
+	return removedCount
+}
+
+// processContainerForItemRemoval processes a single container and removes items that have explicit container references.
+func (j *InventoryNormalizationJob) processContainerForItemRemoval(containerID string) int {
+	// Read the container's frontmatter
+	_, containerFm, err := j.deps.ReadFrontMatter(containerID)
+	if err != nil {
+		return 0
+	}
+
+	inventory, ok := containerFm[inventoryKey].(map[string]any)
+	if !ok {
+		return 0
+	}
+
+	items, ok := j.extractItemsArray(inventory)
+	if !ok || len(items) == 0 {
+		return 0
+	}
+
+	// Build a set of items that should be removed
+	itemsToRemove := j.findItemsWithContainerReference(containerID, items)
+	if len(itemsToRemove) == 0 {
+		return 0
+	}
+
+	// Filter out items and write back
+	return j.removeAndWriteItems(containerID, containerFm, inventory, items, itemsToRemove)
+}
+
+// extractItemsArray extracts and normalizes the items array from inventory frontmatter.
+func (*InventoryNormalizationJob) extractItemsArray(inventory map[string]any) ([]any, bool) {
+	itemsRaw, ok := inventory["items"]
+	if !ok {
+		return nil, false
+	}
+
+	// Handle both []string and []any
+	switch v := itemsRaw.(type) {
+	case []string:
+		items := make([]any, len(v))
+		for i, item := range v {
+			items[i] = item
+		}
+		return items, true
+	case []any:
+		return v, true
+	default:
+		return nil, false
+	}
+}
+
+// findItemsWithContainerReference builds a set of munged item IDs that reference this container.
+// Note: This creates an N+1 read pattern, but it's necessary for correctness
+// since the index may not yet include newly created items. This tradeoff is
+// acceptable because: (1) the job runs periodically, not per-request, and
+// (2) containers typically have a manageable number of items.
+func (j *InventoryNormalizationJob) findItemsWithContainerReference(containerID string, items []any) map[string]bool {
+	itemsWithContainerSet := make(map[string]bool)
+	mungedContainerID := wikiidentifiers.MungeIdentifier(containerID)
+
+	for _, item := range items {
+		s, ok := item.(string)
 		if !ok {
-			// No inventory section, skip
 			continue
 		}
 
-		itemsRaw, ok := inventory["items"]
+		mungedItemID := wikiidentifiers.MungeIdentifier(s)
+		if j.itemReferencesContainer(mungedItemID, mungedContainerID) {
+			itemsWithContainerSet[mungedItemID] = true
+		}
+	}
+
+	return itemsWithContainerSet
+}
+
+// itemReferencesContainer checks if an item's frontmatter references the given container.
+func (j *InventoryNormalizationJob) itemReferencesContainer(itemID, containerID string) bool {
+	_, itemFm, err := j.deps.ReadFrontMatter(itemID)
+	if err != nil {
+		return false
+	}
+
+	itemInventory, ok := itemFm[inventoryKey].(map[string]any)
+	if !ok {
+		return false
+	}
+
+	containerRef, ok := itemInventory["container"].(string)
+	if !ok {
+		return false
+	}
+
+	mungedContainerRef := wikiidentifiers.MungeIdentifier(containerRef)
+	return mungedContainerRef == containerID
+}
+
+// removeAndWriteItems removes items from the list and writes back the updated frontmatter.
+func (j *InventoryNormalizationJob) removeAndWriteItems(containerID string, containerFm map[string]any, inventory map[string]any, items []any, itemsToRemove map[string]bool) int {
+	removedCount := 0
+	var newItems []any
+
+	for _, item := range items {
+		s, ok := item.(string)
 		if !ok {
-			// No items array, skip
-			continue
-		}
-
-		// Handle both []string and []any
-		var items []any
-		switch v := itemsRaw.(type) {
-		case []string:
-			for _, item := range v {
-				items = append(items, item)
-			}
-		case []any:
-			items = v
-		default:
-			// Unknown type, skip
-			continue
-		}
-
-		if len(items) == 0 {
-			// Empty items array, skip
-			continue
-		}
-
-		// Build a set of munged item IDs that have this container reference
-		// by checking each item's frontmatter directly (avoids index race conditions).
-		// Note: This creates an N+1 read pattern, but it's necessary for correctness
-		// since the index may not yet include newly created items. This tradeoff is
-		// acceptable because: (1) the job runs periodically, not per-request, and
-		// (2) containers typically have a manageable number of items.
-		itemsWithContainerSet := make(map[string]bool)
-		for _, item := range items {
-			if s, ok := item.(string); ok {
-				mungedItemID := wikiidentifiers.MungeIdentifier(s)
-				
-				// Read the item's frontmatter to check if it has this container reference
-				_, itemFm, err := j.deps.ReadFrontMatter(mungedItemID)
-				if err != nil {
-					// Item doesn't exist yet, skip
-					continue
-				}
-
-				itemInventory, ok := itemFm["inventory"].(map[string]any)
-				if !ok {
-					continue
-				}
-
-				containerRef, ok := itemInventory["container"].(string)
-				if !ok {
-					continue
-				}
-
-				// Check if this item's container reference matches this container
-				mungedContainerRef := wikiidentifiers.MungeIdentifier(containerRef)
-				mungedContainerID := wikiidentifiers.MungeIdentifier(containerID)
-				if mungedContainerRef == mungedContainerID {
-					itemsWithContainerSet[mungedItemID] = true
-				}
-			}
-		}
-
-		if len(itemsWithContainerSet) == 0 {
-			// No items to remove
-			continue
-		}
-
-		// Filter out items that have the container reference
-		var newItems []any
-		for _, item := range items {
-			if s, ok := item.(string); ok {
-				mungedItem := wikiidentifiers.MungeIdentifier(s)
-				if itemsWithContainerSet[mungedItem] {
-					// Skip this item (remove it)
-					removedCount++
-					j.logger.Info("Removed item '%s' from container '%s' items list", s, containerID)
-					continue
-				}
-			}
 			newItems = append(newItems, item)
-		}
-
-		// If nothing changed, don't write
-		if len(newItems) == len(items) {
 			continue
 		}
 
-		// Update the items array
-		inventory["items"] = newItems
-
-		// Write back the frontmatter
-		if err := j.deps.WriteFrontMatter(containerID, containerFm); err != nil {
-			j.logger.Error("Failed to write frontmatter for container %s: %v", containerID, err)
+		mungedItem := wikiidentifiers.MungeIdentifier(s)
+		if itemsToRemove[mungedItem] {
+			removedCount++
+			j.logger.Info("Removed item '%s' from container '%s' items list", s, containerID)
+			continue
 		}
+		newItems = append(newItems, item)
+	}
+
+	if removedCount == 0 {
+		return 0
+	}
+
+	// Update and write back
+	inventory["items"] = newItems
+	if err := j.deps.WriteFrontMatter(containerID, containerFm); err != nil {
+		j.logger.Error("Failed to write frontmatter for container %s: %v", containerID, err)
+		return 0
 	}
 
 	return removedCount

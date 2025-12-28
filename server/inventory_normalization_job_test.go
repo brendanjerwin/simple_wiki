@@ -1176,7 +1176,8 @@ var _ = Describe("InventoryNormalizationJob", func() {
 			It("should set is_container to true", func() {
 				written := mockDeps.writtenPages["tool_box"]
 				Expect(written).NotTo(BeNil())
-				inventory := written.frontmatter["inventory"].(map[string]any)
+				inventory, ok := written.frontmatter["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue())
 				Expect(inventory["is_container"]).To(Equal(true))
 			})
 		})
@@ -1244,8 +1245,10 @@ var _ = Describe("InventoryNormalizationJob", func() {
 				// Verify hammer was removed from tool_box's items
 				written := mockDeps.writtenPages["tool_box"]
 				Expect(written).NotTo(BeNil())
-				inventory := written.frontmatter["inventory"].(map[string]any)
-				items := inventory["items"].([]any)
+				inventory, ok := written.frontmatter["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue())
+				items, ok := inventory["items"].([]any)
+				Expect(ok).To(BeTrue())
 				Expect(items).To(HaveLen(1))
 				Expect(items).To(ContainElement("screwdriver"))
 				Expect(items).NotTo(ContainElement("hammer"))
@@ -1309,8 +1312,10 @@ var _ = Describe("InventoryNormalizationJob", func() {
 				// Verify "Big Hammer" was removed from tool_box's items
 				written := mockDeps.writtenPages["tool_box"]
 				Expect(written).NotTo(BeNil())
-				inventory := written.frontmatter["inventory"].(map[string]any)
-				items := inventory["items"].([]any)
+				inventory, ok := written.frontmatter["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue())
+				items, ok := inventory["items"].([]any)
+				Expect(ok).To(BeTrue())
 				Expect(items).To(HaveLen(1))
 				Expect(items).To(ContainElement("Small Screwdriver"))
 				Expect(items).NotTo(ContainElement("Big Hammer"))
