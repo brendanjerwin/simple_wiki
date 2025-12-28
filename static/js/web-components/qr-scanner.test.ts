@@ -236,15 +236,22 @@ describe('QrScanner', () => {
     });
   });
 
-  describe('_onScanSuccess', () => {
-    describe('when QR code is scanned', () => {
+  describe('scan success', () => {
+    describe('when QR code is scanned via CameraProvider callback', () => {
       let el: QrScanner;
       let mockProvider: ReturnType<typeof createMockCameraProvider>;
       let scannedSpy: SinonSpy;
+      let onSuccessCallback: (result: string) => void;
 
       beforeEach(async () => {
         mockProvider = createMockCameraProvider();
         mockProvider.getCameras.resolves([{ id: 'cam1', label: 'Camera 1' }]);
+        // Capture the onSuccess callback passed to start()
+        mockProvider.start.callsFake(
+          async (_video: HTMLVideoElement, _cameraId: string, onSuccess: (result: string) => void) => {
+            onSuccessCallback = onSuccess;
+          }
+        );
 
         el = await fixture(html`<qr-scanner></qr-scanner>`);
         el.setCameraProvider(mockProvider);
@@ -255,7 +262,8 @@ describe('QrScanner', () => {
         scannedSpy = sinon.spy();
         el.addEventListener('qr-scanned', scannedSpy);
 
-        el._onScanSuccess('https://wiki.example.com/toolbox/view');
+        // Trigger scan success via the captured callback
+        onSuccessCallback('https://wiki.example.com/toolbox/view');
         await el.updateComplete;
       });
 

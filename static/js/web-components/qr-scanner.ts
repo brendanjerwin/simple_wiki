@@ -125,6 +125,9 @@ export class QrScanner extends LitElement {
     return this;
   }
 
+  // Note: With Shadow DOM disabled, these styles are NOT applied via Lit's
+  // static styles mechanism. They're kept here for documentation and IDE support.
+  // Actual styling comes from ${sharedStyles} rendered into the light DOM.
   static override styles = [
     foundationCSS,
     buttonCSS,
@@ -378,7 +381,12 @@ export class QrScanner extends LitElement {
       }
 
       // Force video to be visible with proper positioning
-      videoElement.style.cssText = 'display: block !important; width: 100% !important; height: 250px !important; visibility: visible !important; position: relative !important; object-fit: cover !important;';
+      videoElement.style.setProperty('display', 'block', 'important');
+      videoElement.style.setProperty('width', '100%', 'important');
+      videoElement.style.setProperty('height', '250px', 'important');
+      videoElement.style.setProperty('visibility', 'visible', 'important');
+      videoElement.style.setProperty('position', 'relative', 'important');
+      videoElement.style.setProperty('object-fit', 'cover', 'important');
     } catch (err) {
       this._handleError(err);
     }
@@ -396,10 +404,9 @@ export class QrScanner extends LitElement {
   }
 
   /**
-   * Called when QR code is successfully scanned
-   * Public for testing purposes
+   * Called when QR code is successfully scanned via the CameraProvider callback.
    */
-  public _onScanSuccess(decodedText: string): void {
+  private _onScanSuccess(decodedText: string): void {
     // Emit custom event
     const event = new CustomEvent<QrScannedEventDetail>('qr-scanned', {
       detail: { rawValue: decodedText },
@@ -421,14 +428,24 @@ export class QrScanner extends LitElement {
     } else if (err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError')) {
       // Browser permission denied - use DOMException.name (stable API)
       error = new CameraPermissionError(err);
-    } else if (typeof err === 'string' && err.toLowerCase().includes('no camera')) {
-      // qr-scanner library can throw string errors for missing cameras
-      error = new NoCameraError(new Error(err));
+    } else if (typeof err === 'string') {
+      // Normalize string errors from external libraries into standard Error instances
+      error = new Error(err);
     } else if (err instanceof Error) {
       // Preserve other Error types
       error = err;
     } else {
-      error = new Error('An unknown error occurred');
+      // Preserve information from unknown error values
+      let message: string;
+      if (err === null || err === undefined) {
+        message = 'Unknown error (null or undefined)';
+      } else if (typeof err === 'object') {
+        message = `Unknown error: ${Object.prototype.toString.call(err)}`;
+      } else {
+        message = `Unknown error: ${String(err)}`;
+      }
+      error = new Error(message);
+      error.cause = err;
     }
 
     this.error = error;
