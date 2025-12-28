@@ -31,7 +31,7 @@ function createMockFrontmatterClient(): MockFrontmatterClient {
  * Helper to get the inner qr-scanner element
  */
 function getInnerScanner(el: InventoryQrScanner): QrScanner | null {
-  return el.querySelector('qr-scanner') as QrScanner | null;
+  return el.shadowRoot?.querySelector('qr-scanner') as QrScanner | null;
 }
 
 /**
@@ -56,17 +56,17 @@ describe('InventoryQrScanner', () => {
     });
 
     it('should render scanner header', () => {
-      const header = el.querySelector('.scanner-header');
+      const header = el.shadowRoot?.querySelector('.scanner-header');
       expect(header).to.exist;
     });
 
     it('should show "Scan QR Code" title', () => {
-      const title = el.querySelector('.scanner-header .title');
+      const title = el.shadowRoot?.querySelector('.scanner-header .title');
       expect(title?.textContent).to.include('Scan QR Code');
     });
 
     it('should show Cancel button', () => {
-      const cancelBtn = el.querySelector('.cancel-button');
+      const cancelBtn = el.shadowRoot?.querySelector('.cancel-button');
       expect(cancelBtn).to.exist;
       expect(cancelBtn?.textContent).to.include('Cancel');
     });
@@ -78,12 +78,12 @@ describe('InventoryQrScanner', () => {
     });
 
     it('should not show error container', () => {
-      const errorContainer = el.querySelector('.error-container');
+      const errorContainer = el.shadowRoot?.querySelector('.error-container');
       expect(errorContainer).to.not.exist;
     });
 
     it('should not show validating spinner', () => {
-      const validating = el.querySelector('.validating');
+      const validating = el.shadowRoot?.querySelector('.validating');
       expect(validating).to.not.exist;
     });
   });
@@ -98,7 +98,7 @@ describe('InventoryQrScanner', () => {
         cancelledSpy = sinon.spy();
         el.addEventListener('cancelled', cancelledSpy);
 
-        const cancelBtn = el.querySelector('.cancel-button') as HTMLButtonElement;
+        const cancelBtn = el.shadowRoot?.querySelector('.cancel-button') as HTMLButtonElement;
         cancelBtn?.click();
         await el.updateComplete;
       });
@@ -241,17 +241,17 @@ describe('InventoryQrScanner', () => {
       });
 
       it('should show error container', () => {
-        const errorContainer = el.querySelector('.error-container');
+        const errorContainer = el.shadowRoot?.querySelector('.error-container');
         expect(errorContainer).to.exist;
       });
 
       it('should show error message about invalid URL', () => {
-        const errorMessage = el.querySelector('.error-message');
+        const errorMessage = el.shadowRoot?.querySelector('.error-message');
         expect(errorMessage?.textContent).to.include('Not a valid wiki URL');
       });
 
       it('should show Scan Again button', () => {
-        const scanAgainBtn = el.querySelector('.scan-again-button');
+        const scanAgainBtn = el.shadowRoot?.querySelector('.scan-again-button');
         expect(scanAgainBtn).to.exist;
         expect(scanAgainBtn?.textContent).to.include('Scan Again');
       });
@@ -283,12 +283,12 @@ describe('InventoryQrScanner', () => {
       });
 
       it('should show error container', () => {
-        const errorContainer = el.querySelector('.error-container');
+        const errorContainer = el.shadowRoot?.querySelector('.error-container');
         expect(errorContainer).to.exist;
       });
 
       it('should show error message', () => {
-        const errorMessage = el.querySelector('.error-message');
+        const errorMessage = el.shadowRoot?.querySelector('.error-message');
         expect(errorMessage?.textContent).to.include('Page not found');
       });
     });
@@ -310,7 +310,7 @@ describe('InventoryQrScanner', () => {
         await el.updateComplete;
 
         // Click Scan Again (which will clear error and show scanner again)
-        const scanAgainBtn = el.querySelector('.scan-again-button') as HTMLButtonElement;
+        const scanAgainBtn = el.shadowRoot?.querySelector('.scan-again-button') as HTMLButtonElement;
         scanAgainBtn?.click();
         await el.updateComplete;
       });
@@ -320,7 +320,7 @@ describe('InventoryQrScanner', () => {
       });
 
       it('should clear the error', () => {
-        const errorContainer = el.querySelector('.error-container');
+        const errorContainer = el.shadowRoot?.querySelector('.error-container');
         expect(errorContainer).to.not.exist;
       });
 
@@ -339,7 +339,7 @@ describe('InventoryQrScanner', () => {
       });
 
       it('should disable Cancel button', () => {
-        const cancelBtn = el.querySelector('.cancel-button') as HTMLButtonElement;
+        const cancelBtn = el.shadowRoot?.querySelector('.cancel-button') as HTMLButtonElement;
         expect(cancelBtn?.disabled).to.be.true;
       });
     });

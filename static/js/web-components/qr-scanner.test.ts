@@ -33,17 +33,17 @@ describe('QrScanner', () => {
     });
 
     it('should show the toggle button', () => {
-      const button = el.querySelector('.scanner-toggle');
+      const button = el.shadowRoot?.querySelector('.scanner-toggle');
       expect(button).to.exist;
     });
 
     it('should have scanner area hidden', () => {
-      const area = el.querySelector('.scanner-area');
+      const area = el.shadowRoot?.querySelector('.scanner-area');
       expect(area?.classList.contains('collapsed')).to.be.true;
     });
 
     it('should show "Scan QR Code" text', () => {
-      const button = el.querySelector('.scanner-toggle');
+      const button = el.shadowRoot?.querySelector('.scanner-toggle');
       expect(button?.textContent).to.include('Scan QR Code');
     });
   });
@@ -86,12 +86,12 @@ describe('QrScanner', () => {
       });
 
       it('should show scanner area', () => {
-        const area = el.querySelector('.scanner-area');
+        const area = el.shadowRoot?.querySelector('.scanner-area');
         expect(area?.classList.contains('collapsed')).to.be.false;
       });
 
       it('should show "Close Scanner" text', () => {
-        const button = el.querySelector('.scanner-toggle');
+        const button = el.shadowRoot?.querySelector('.scanner-toggle');
         expect(button?.textContent).to.include('Close Scanner');
       });
     });
@@ -112,7 +112,7 @@ describe('QrScanner', () => {
       });
 
       it('should show error message', () => {
-        const error = el.querySelector('.error-message');
+        const error = el.shadowRoot?.querySelector('.error-message');
         expect(error).to.exist;
         expect(error?.textContent).to.include('No camera');
       });
@@ -141,7 +141,7 @@ describe('QrScanner', () => {
       });
 
       it('should show permission error message', () => {
-        const error = el.querySelector('.error-message');
+        const error = el.shadowRoot?.querySelector('.error-message');
         expect(error).to.exist;
         expect(error?.textContent).to.include('denied');
       });
@@ -185,7 +185,7 @@ describe('QrScanner', () => {
       });
 
       it('should hide scanner area', () => {
-        const area = el.querySelector('.scanner-area');
+        const area = el.shadowRoot?.querySelector('.scanner-area');
         expect(area?.classList.contains('collapsed')).to.be.true;
       });
     });
@@ -297,7 +297,7 @@ describe('QrScanner', () => {
         await el.expand();
         await el.updateComplete;
 
-        const stopButton = el.querySelector('.stop-button') as HTMLButtonElement;
+        const stopButton = el.shadowRoot?.querySelector('.stop-button') as HTMLButtonElement;
         stopButton?.click();
         await el.updateComplete;
       });
@@ -329,12 +329,12 @@ describe('QrScanner', () => {
       });
 
       it('should show camera select dropdown', () => {
-        const select = el.querySelector('#camera-select');
+        const select = el.shadowRoot?.querySelector('#camera-select');
         expect(select).to.exist;
       });
 
       it('should have options for each camera', () => {
-        const options = el.querySelectorAll('#camera-select option');
+        const options = el.shadowRoot?.querySelectorAll('#camera-select option');
         expect(options?.length).to.equal(2);
       });
     });
@@ -355,7 +355,7 @@ describe('QrScanner', () => {
       });
 
       it('should not show camera select dropdown', () => {
-        const select = el.querySelector('#camera-select');
+        const select = el.shadowRoot?.querySelector('#camera-select');
         expect(select).to.not.exist;
       });
     });
