@@ -37,6 +37,12 @@ export class SystemInfo extends LitElement {
         opacity: 0.2;
         transition: transform 0.3s ease, opacity 0.3s ease;
         cursor: pointer;
+        outline: none;
+      }
+
+      .system-panel:focus-visible {
+        outline: 2px solid #4a9eff;
+        outline-offset: 2px;
       }
 
       .system-panel.expanded {
@@ -90,6 +96,8 @@ export class SystemInfo extends LitElement {
   private debounceTimer?: ReturnType<typeof setTimeout>;
   private refreshTimer?: ReturnType<typeof setInterval>;
   private streamSubscription?: AbortController;
+  private boundHandleMouseEnter?: () => void;
+  private clickOutsideListenerAttached = false;
 
   private client = createClient(SystemInfoService, getGrpcWebTransport());
 
@@ -102,21 +110,21 @@ export class SystemInfo extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.loadSystemInfo();
-    // Add click-outside listener to document
-    document.addEventListener('click', this.handleClickOutside);
+    // Add click-outside listener to document (only once)
+    if (!this.clickOutsideListenerAttached) {
+      document.addEventListener('click', this.handleClickOutside);
+      this.clickOutsideListenerAttached = true;
+    }
   }
 
   override firstUpdated(): void {
-    // Add click event listener to the panel to toggle expansion and stop propagation
-    const panel = this.shadowRoot?.querySelector('.system-panel');
-    if (panel) {
-      panel.addEventListener('click', this.handlePanelClick.bind(this));
-    }
+    // Bind and store the handler so we can remove it later
+    this.boundHandleMouseEnter = this.handleMouseEnter.bind(this);
     
     // Add hover event listener to the overlay after the component is first rendered
     const overlay = this.shadowRoot?.querySelector('.hover-overlay');
     if (overlay) {
-      overlay.addEventListener('mouseenter', this.handleMouseEnter.bind(this));
+      overlay.addEventListener('mouseenter', this.boundHandleMouseEnter);
     }
   }
 
@@ -130,7 +138,18 @@ export class SystemInfo extends LitElement {
       this.debounceTimer = undefined;
     }
     // Remove click-outside listener
-    document.removeEventListener('click', this.handleClickOutside);
+    if (this.clickOutsideListenerAttached) {
+      document.removeEventListener('click', this.handleClickOutside);
+      this.clickOutsideListenerAttached = false;
+    }
+    
+    // Remove hover event listener
+    if (this.boundHandleMouseEnter) {
+      const overlay = this.shadowRoot?.querySelector('.hover-overlay');
+      if (overlay) {
+        overlay.removeEventListener('mouseenter', this.boundHandleMouseEnter);
+      }
+    }
   }
 
   private handlePanelClick = (event: Event): void => {
@@ -140,10 +159,24 @@ export class SystemInfo extends LitElement {
     this.expanded = !this.expanded;
   };
 
-  private handleClickOutside = (): void => {
-    // Collapse the panel if it's expanded and click is outside
-    if (this.expanded) {
-      this.expanded = false;
+  private handlePanelKeydown = (event: KeyboardEvent): void => {
+    // Support keyboard activation with Enter or Space
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      event.stopPropagation();
+      this.expanded = !this.expanded;
+    }
+  };
+
+  private handleClickOutside = (event: MouseEvent): void => {
+    // Panel clicks stop propagation, so this only fires for clicks outside the component
+    // Double-check that the click is not within our shadow DOM
+    if (this.expanded && event.target !== this && !this.contains(event.target as Node)) {
+      const composedPath = event.composedPath();
+      // Also check if the click is not within the shadow root
+      if (!composedPath.includes(this)) {
+        this.expanded = false;
+      }
     }
   };
 
@@ -266,7 +299,14 @@ export class SystemInfo extends LitElement {
 
   override render() {
     return html`
-      <div class="system-panel ${this.expanded ? 'expanded' : ''} system-font">
+      <div 
+        class="system-panel ${this.expanded ? 'expanded' : ''} system-font" 
+        role="button"
+        tabindex="0"
+        aria-expanded="${this.expanded}"
+        aria-label="System information panel"
+        @click="${this.handlePanelClick}"
+        @keydown="${this.handlePanelKeydown}">
         <div class="hover-overlay"></div>
         <div class="system-content">
           <!-- Version Info (Always Present) -->
