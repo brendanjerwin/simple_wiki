@@ -180,9 +180,9 @@ export class InventoryQrScanner extends LitElement {
   };
 
   /**
-   * Handle QR code scanned from inner qr-scanner
+   * Handle QR code scanned from inner qr-scanner.
    */
-  public _handleQrScanned = async (event: CustomEvent<QrScannedEventDetail>): Promise<void> => {
+  private _handleQrScanned = async (event: CustomEvent<QrScannedEventDetail>): Promise<void> => {
     const rawValue = event.detail.rawValue;
 
     // Clear previous error

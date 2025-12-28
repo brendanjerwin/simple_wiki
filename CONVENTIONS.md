@@ -822,8 +822,8 @@ func NewServer(logger *Logger) (*Server, error) {
   try {
     await saveData();
   } catch (err) {
-    this.error = 'Failed to save. Please try again.';
-    // Error is visible to user in the UI
+    this.error = err instanceof Error ? err : new Error(String(err));
+    // Error is visible to user in the UI via this.error.message in template
   }
   ```
 

@@ -215,10 +215,10 @@ export const SimulatedScan: Story = {
     const simulateScan = () => {
       const scanner = document.querySelector('qr-scanner') as QrScanner | null;
       if (scanner) {
-        // Use the public _onScanSuccess method to simulate a scan
+        // Demo-only: access private _onScanSuccess to simulate a scan
         scanner.expand();
         setTimeout(() => {
-          scanner._onScanSuccess('https://wiki.example.com/garage_toolbox/view');
+          (scanner as unknown as { _onScanSuccess: (text: string) => void })._onScanSuccess('https://wiki.example.com/garage_toolbox/view');
         }, 1000);
       }
     };
@@ -288,7 +288,7 @@ export const InteractiveTesting: Story = {
                 const scanner = document.querySelector('qr-scanner') as QrScanner | null;
                 if (scanner) {
                   scanner.expand();
-                  setTimeout(() => scanner._onScanSuccess(url), 500);
+                  setTimeout(() => (scanner as unknown as { _onScanSuccess: (text: string) => void })._onScanSuccess(url), 500);
                 }
               }} style="text-align: left; padding: 8px 12px;">
                 <code>${url}</code>

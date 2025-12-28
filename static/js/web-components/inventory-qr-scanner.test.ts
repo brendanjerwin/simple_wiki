@@ -35,7 +35,8 @@ function getInnerScanner(el: InventoryQrScanner): QrScanner | null {
 }
 
 /**
- * Helper to simulate a QR scan on the component
+ * Helper to simulate a QR scan on the component.
+ * Uses type assertion to access private handler for testing.
  */
 async function simulateQrScan(el: InventoryQrScanner, rawValue: string): Promise<void> {
   const event = new CustomEvent<QrScannedEventDetail>('qr-scanned', {
@@ -43,7 +44,7 @@ async function simulateQrScan(el: InventoryQrScanner, rawValue: string): Promise
     bubbles: true,
     composed: true,
   });
-  await el._handleQrScanned(event);
+  await (el as unknown as { _handleQrScanned: (e: CustomEvent<QrScannedEventDetail>) => Promise<void> })._handleQrScanned(event);
 }
 
 describe('InventoryQrScanner', () => {

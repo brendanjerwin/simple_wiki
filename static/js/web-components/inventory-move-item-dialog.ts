@@ -358,7 +358,7 @@ export class InventoryMoveItemDialog extends LitElement {
     }
   }
 
-  public _handleKeydown = (event: KeyboardEvent): void => {
+  private _handleKeydown = (event: KeyboardEvent): void => {
     if (event.key === 'Escape' && this.open) {
       this.close();
     }
@@ -469,7 +469,7 @@ export class InventoryMoveItemDialog extends LitElement {
   /**
    * Handle item scanned from inventory-qr-scanner
    */
-  public _handleItemScanned = (event: CustomEvent<ItemScannedEventDetail>): void => {
+  private _handleItemScanned = (event: CustomEvent<ItemScannedEventDetail>): void => {
     const { item } = event.detail;
 
     // Clear any previous scan state
@@ -500,14 +500,14 @@ export class InventoryMoveItemDialog extends LitElement {
   /**
    * Handle cancelled event from inventory-qr-scanner
    */
-  public _handleScannerCancelled = (): void => {
+  private _handleScannerCancelled = (): void => {
     this._exitScannerMode();
   };
 
   /**
    * Clear the scanned result
    */
-  public _clearScannedResult = (): void => {
+  private _clearScannedResult = (): void => {
     this.scannedDestination = null;
     this.scannedResult = null;
     this.scanError = null;
@@ -541,13 +541,13 @@ export class InventoryMoveItemDialog extends LitElement {
   /**
    * Handle "Scan Again" button click
    */
-  public _handleScanAgain = (): void => {
+  private _handleScanAgain = (): void => {
     this.scanError = null;
     // Re-enter scanner mode
     this._enterScannerMode();
   };
 
-  public _handleMoveToClick = async (containerIdentifier: string): Promise<void> => {
+  private _handleMoveToClick = async (containerIdentifier: string): Promise<void> => {
     if (this.movingTo) return;
 
     this.movingTo = containerIdentifier;
@@ -641,7 +641,7 @@ export class InventoryMoveItemDialog extends LitElement {
           </div>
           <button
             class="move-to-button"
-            @click=${() => { if (this.scannedResult) this._handleMoveToClick(this.scannedResult.identifier); }}
+            @click=${() => this._handleMoveToClick(this.scannedResult!.identifier)}
             ?disabled=${this.movingTo !== null}
           >
             ${this.movingTo === this.scannedResult.identifier ? 'Moving...' : 'Move To'}

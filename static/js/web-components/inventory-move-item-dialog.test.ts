@@ -13,6 +13,30 @@ describe('InventoryMoveItemDialog', () => {
     );
   }
 
+  /**
+   * Helper to call the private _handleItemScanned method.
+   * Uses type assertion to access private handler for testing.
+   */
+  function callHandleItemScanned(dialog: InventoryMoveItemDialog, event: CustomEvent<ItemScannedEventDetail>): void {
+    (dialog as unknown as { _handleItemScanned: (e: CustomEvent<ItemScannedEventDetail>) => void })._handleItemScanned(event);
+  }
+
+  /**
+   * Helper to call the private _handleKeydown method.
+   * Uses type assertion to access private handler for testing.
+   */
+  function callHandleKeydown(dialog: InventoryMoveItemDialog, event: KeyboardEvent): void {
+    (dialog as unknown as { _handleKeydown: (e: KeyboardEvent) => void })._handleKeydown(event);
+  }
+
+  /**
+   * Helper to call the private _clearScannedResult method.
+   * Uses type assertion to access private handler for testing.
+   */
+  function callClearScannedResult(dialog: InventoryMoveItemDialog): void {
+    (dialog as unknown as { _clearScannedResult: () => void })._clearScannedResult();
+  }
+
   beforeEach(async () => {
     el = await Promise.race([
       fixture(html`<inventory-move-item-dialog></inventory-move-item-dialog>`),
@@ -145,7 +169,7 @@ describe('InventoryMoveItemDialog', () => {
       beforeEach(() => {
         closeSpy = sinon.spy(el, 'close');
         el.openDialog('screwdriver', 'drawer_kitchen');
-        el._handleKeydown(new KeyboardEvent('keydown', { key: 'Escape' }));
+        callHandleKeydown(el, new KeyboardEvent('keydown', { key: 'Escape' }));
       });
 
       it('should close the dialog', () => {
@@ -158,7 +182,7 @@ describe('InventoryMoveItemDialog', () => {
 
       beforeEach(() => {
         closeSpy = sinon.spy(el, 'close');
-        el._handleKeydown(new KeyboardEvent('keydown', { key: 'Escape' }));
+        callHandleKeydown(el, new KeyboardEvent('keydown', { key: 'Escape' }));
       });
 
       it('should not close the dialog', () => {
@@ -381,7 +405,7 @@ describe('InventoryMoveItemDialog', () => {
           const event = new CustomEvent<ItemScannedEventDetail>('item-scanned', {
             detail: { item: scannedItem },
           });
-          el._handleItemScanned(event);
+          callHandleItemScanned(el, event);
           await el.updateComplete;
         });
 
@@ -419,7 +443,7 @@ describe('InventoryMoveItemDialog', () => {
           const event = new CustomEvent<ItemScannedEventDetail>('item-scanned', {
             detail: { item: scannedItem },
           });
-          el._handleItemScanned(event);
+          callHandleItemScanned(el, event);
           await el.updateComplete;
         });
 
@@ -454,7 +478,7 @@ describe('InventoryMoveItemDialog', () => {
           const event = new CustomEvent<ItemScannedEventDetail>('item-scanned', {
             detail: { item: scannedItem },
           });
-          el._handleItemScanned(event);
+          callHandleItemScanned(el, event);
           await el.updateComplete;
         });
 
@@ -541,7 +565,7 @@ describe('InventoryMoveItemDialog', () => {
         };
         el.scanError = new Error('Previous error');
 
-        el._clearScannedResult();
+        callClearScannedResult(el);
         await el.updateComplete;
       });
 
