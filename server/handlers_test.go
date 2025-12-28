@@ -52,6 +52,59 @@ var _ = Describe("Handlers", func() {
 		_ = os.RemoveAll(tmpDir)
 	})
 
+	Describe("GinRouter", func() {
+		When("middleware is provided", func() {
+			var middlewareCalled bool
+			var customRouter *gin.Engine
+			var recorder *httptest.ResponseRecorder
+
+			BeforeEach(func() {
+				middlewareCalled = false
+				testMiddleware := func(c *gin.Context) {
+					middlewareCalled = true
+					c.Next()
+				}
+				customRouter = site.GinRouter(testMiddleware)
+				recorder = httptest.NewRecorder()
+				req, err := http.NewRequest(http.MethodGet, "/", nil)
+				Expect(err).NotTo(HaveOccurred())
+				customRouter.ServeHTTP(recorder, req)
+			})
+
+			It("should call the middleware", func() {
+				Expect(middlewareCalled).To(BeTrue())
+			})
+		})
+
+		When("multiple middleware are provided", func() {
+			var callOrder []string
+			var customRouter *gin.Engine
+			var recorder *httptest.ResponseRecorder
+
+			BeforeEach(func() {
+				callOrder = []string{}
+
+				first := func(c *gin.Context) {
+					callOrder = append(callOrder, "first")
+					c.Next()
+				}
+				second := func(c *gin.Context) {
+					callOrder = append(callOrder, "second")
+					c.Next()
+				}
+
+				customRouter = site.GinRouter(first, second)
+				recorder = httptest.NewRecorder()
+				req, err := http.NewRequest(http.MethodGet, "/", nil)
+				Expect(err).NotTo(HaveOccurred())
+				customRouter.ServeHTTP(recorder, req)
+			})
+
+			It("should call all middleware in order", func() {
+				Expect(callOrder).To(Equal([]string{"first", "second"}))
+			})
+		})
+	})
 
 	Describe("handlePageUpdate", func() {
 		When("the request has bad json", func() {

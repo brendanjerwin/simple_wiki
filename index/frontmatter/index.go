@@ -121,6 +121,10 @@ func (f *Index) recursiveAddFrontmatter(identifier wikipage.PageIdentifier, keyP
 		if v {
 			f.saveToIndex(identifier, keyPath, "true")
 		}
+	case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+		f.saveToIndex(identifier, keyPath, fmt.Sprintf("%d", v))
+	case float32, float64:
+		f.saveToIndex(identifier, keyPath, fmt.Sprintf("%v", v))
 	default:
 		return fmt.Errorf("frontmatter indexer: invalid value type for page %q key %q (type: %T)", identifier, keyPath, v)
 	}

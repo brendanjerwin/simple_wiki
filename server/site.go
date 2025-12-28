@@ -365,8 +365,9 @@ func (s *Site) readOrInitPage(requestedIdentifier string, req *http.Request) (*w
 			initialText += tomlDelimiter
 		}
 
-		initialText += newline + "# {{or .Title .Identifier}}" + newline
-
+		initialText += `
+# {{or .Title .Identifier}}
+`
 		if tmpl == "inv_item" {
 			initialText += `
 {{if IsContainer .Identifier }}

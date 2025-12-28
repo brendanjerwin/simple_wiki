@@ -265,4 +265,50 @@ var _ = Describe("BuildFrontmatterFromURLParams", func() {
 			Expect(result).To(HaveKeyWithValue("identifier", "test_page"))
 		})
 	})
+
+	Describe("when simple key conflicts with existing nested structure", func() {
+		// Tests the error path where nested keys are processed first,
+		// then a simple value is attempted on the parent key.
+		BeforeEach(func() {
+			params.Set("cfg.sub1", "value1")
+			params.Set("cfg.sub2", "value2")
+			params.Set("cfg", "simple_value")
+		})
+
+		It("should return an error", func() {
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should indicate the key conflict in error message", func() {
+			Expect(err.Error()).To(ContainSubstring("cfg"))
+			Expect(err.Error()).To(ContainSubstring("cannot be both"))
+		})
+
+		It("should return nil result", func() {
+			Expect(result).To(BeNil())
+		})
+	})
+
+	Describe("when nested structure exists before simple value assignment", func() {
+		// Another variation to increase coverage of conflict detection paths.
+		BeforeEach(func() {
+			params.Set("meta.author", "John")
+			params.Set("meta.date", "2024-01-01")
+			params.Set("meta.version", "1.0")
+			params.Set("meta", "overwrite_attempt")
+		})
+
+		It("should return an error", func() {
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should indicate the key conflict in error message", func() {
+			Expect(err.Error()).To(ContainSubstring("meta"))
+			Expect(err.Error()).To(ContainSubstring("cannot be both"))
+		})
+
+		It("should return nil result", func() {
+			Expect(result).To(BeNil())
+		})
+	})
 })
