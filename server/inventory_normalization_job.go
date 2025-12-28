@@ -581,7 +581,11 @@ func (j *InventoryNormalizationJob) removeItemsFromParentContainers(containers [
 		}
 
 		// Build a set of munged item IDs that have this container reference
-		// by checking each item's frontmatter directly (avoids index race conditions)
+		// by checking each item's frontmatter directly (avoids index race conditions).
+		// Note: This creates an N+1 read pattern, but it's necessary for correctness
+		// since the index may not yet include newly created items. This tradeoff is
+		// acceptable because: (1) the job runs periodically, not per-request, and
+		// (2) containers typically have a manageable number of items.
 		itemsWithContainerSet := make(map[string]bool)
 		for _, item := range items {
 			if s, ok := item.(string); ok {
