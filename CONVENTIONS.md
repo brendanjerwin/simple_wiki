@@ -803,6 +803,79 @@ func NewServer(logger *Logger) (*Server, error) {
   - Error handling is explicit and type-safe
   - Error messages can be localized without breaking logic
 
+- **Never Just Log Errors**: Console logging (e.g., `console.error`, `console.warn`) is never sufficient error handling. Errors must always become part of control flow and be communicated to the user through the UX. Logging alone hides problems from users and makes the application appear to work when it's actually broken.
+
+  **Bad:**
+
+  ```typescript
+  try {
+    await saveData();
+  } catch (err) {
+    console.error('Save failed:', err);
+    // User has no idea the save failed
+  }
+  ```
+
+  **Good:**
+
+  ```typescript
+  try {
+    await saveData();
+  } catch (err) {
+    this.error = err instanceof Error ? err : new Error(String(err));
+    // Error is visible to user in the UI via this.error.message in template
+  }
+  ```
+
+  For cleanup operations where UI feedback isn't possible (e.g., disconnecting resources), let errors propagate or handle them silently - but never add console logging as a compromise.
+
+- **Never Invent Opaque Error Strings**: Setting `this.error = "Some generic message"` is an antipattern that discards valuable error information. Errors are inherently unknown at catch time - preserve the original error and let it bubble to the UX edge. At the edge, display the actual error or use an error service that preserves context.
+
+  **Bad:**
+
+  ```typescript
+  } catch {
+    this.error = 'Search failed. Please try again.';
+    // Original error is lost - was it network? Permission? Server error?
+  }
+  ```
+
+  **Good:**
+
+  ```typescript
+  } catch (err) {
+    // Preserve the actual error - let error display component handle it
+    this.error = err;
+    // Or use an error service that augments while preserving
+    this.augmentedError = ErrorService.augment(err, 'search');
+  }
+  ```
+
+  The UX component at the edge should handle displaying errors appropriately while preserving the ability to inspect the original error for debugging.
+
+- **Keep Errors as Objects Until the UI Edge**: Error properties in components should be typed as `Error | null`, not `string`. The Error object preserves stack traces, cause chains, and type information for debugging. Convert to string only at render time in templates.
+
+  **Property declaration:**
+  ```typescript
+  declare error: Error | null;  // Not string!
+  ```
+
+  **Assignment (preserve the full Error object):**
+  ```typescript
+  try {
+    await someAsyncOperation();
+  } catch (err) {
+    this.error = err instanceof Error ? err : new Error(String(err));
+  }
+  ```
+
+  **Template (extract message at UI edge):**
+  ```typescript
+  ${this.error ? html`<div class="error-message">${this.error.message}</div>` : ''}
+  ```
+
+  This pattern ensures error context is available throughout the data layer for logging and debugging, while presenting a clean message to users at the point of display.
+
 - **Let Unrecoverable Errors Bubble Up**: Don't catch exceptions you can't meaningfully handle. Let them bubble to the global error handler for consistent user experience.
 
   **Bad:** Catching without meaningful recovery
