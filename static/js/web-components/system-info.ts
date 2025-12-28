@@ -23,22 +23,72 @@ export class SystemInfo extends LitElement {
         z-index: 1000;
         font-size: 11px;
         line-height: 1.2;
-        transition: opacity 0.3s ease;
       }
 
       .system-panel {
-        background: #2d2d2d;
-        border: 1px solid #404040;
-        border-radius: 4px;
-        padding: 4px 8px;
-        opacity: 0.2;
-        transition: opacity 0.3s ease;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+        display: flex;
+        flex-direction: row;
         position: relative;
         max-width: 400px;
+        transform: translateX(calc(100% - 24px));
+        transition: transform 0.3s ease;
+        cursor: pointer;
+        outline: none;
       }
 
-      .system-panel:hover {
+      .system-panel:focus-visible {
+        outline: 2px solid #4a9eff;
+        outline-offset: 2px;
+      }
+
+      .system-panel.expanded {
+        transform: translateX(0);
+      }
+
+      .drawer-tab {
+        width: 24px;
+        background: #2d2d2d;
+        border: 1px solid #404040;
+        border-right: none;
+        border-radius: 4px 0 0 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        writing-mode: vertical-rl;
+        text-orientation: mixed;
+        padding: 6px 2px;
+        font-size: 9px;
+        font-weight: 600;
+        color: #888;
+        letter-spacing: 0.5px;
+        box-shadow: -2px 0 3px rgba(0, 0, 0, 0.2);
+        flex-shrink: 0;
+        opacity: 0.3;
+        transition: opacity 0.3s ease, color 0.3s ease;
+      }
+
+      .system-panel:hover .drawer-tab,
+      .system-panel:focus-visible .drawer-tab {
+        opacity: 0.6;
+        color: #aaa;
+      }
+
+      .system-panel.expanded .drawer-tab {
+        opacity: 0.9;
+        color: #ccc;
+      }
+
+      .panel-content {
+        background: #2d2d2d;
+        border: 1px solid #404040;
+        border-radius: 0 4px 4px 0;
+        padding: 4px 8px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+        opacity: 0.2;
+        transition: opacity 0.3s ease;
+      }
+
+      .system-panel.expanded .panel-content {
         opacity: 0.9;
       }
 
@@ -77,33 +127,39 @@ export class SystemInfo extends LitElement {
     jobStatus: { state: true },
     loading: { state: true },
     error: { state: true },
+    expanded: { state: true },
   };
 
   declare version?: GetVersionResponse;
   declare jobStatus?: GetJobStatusResponse;
   declare loading: boolean;
   declare error?: string;
+  declare expanded: boolean;
   private debounceTimer?: ReturnType<typeof setTimeout>;
   private refreshTimer?: ReturnType<typeof setInterval>;
   private streamSubscription?: AbortController;
+  private _handleClickOutside: (event: MouseEvent) => void;
 
   private client = createClient(SystemInfoService, getGrpcWebTransport());
 
   constructor() {
     super();
     this.loading = true;
+    this.expanded = false;
+    this._handleClickOutside = this.handleClickOutside.bind(this);
   }
 
   override connectedCallback(): void {
     super.connectedCallback();
     this.loadSystemInfo();
+    document.addEventListener('click', this._handleClickOutside);
   }
 
   override firstUpdated(): void {
     // Add hover event listener to the overlay after the component is first rendered
     const overlay = this.shadowRoot?.querySelector('.hover-overlay');
     if (overlay) {
-      overlay.addEventListener('mouseenter', this.handleMouseEnter.bind(this));
+      overlay.addEventListener('mouseenter', this.handleMouseEnter);
     }
   }
 
@@ -116,9 +172,41 @@ export class SystemInfo extends LitElement {
       clearTimeout(this.debounceTimer);
       this.debounceTimer = undefined;
     }
+    // Remove click-outside listener
+    document.removeEventListener('click', this._handleClickOutside);
+    
+    // Remove hover event listener
+    const overlay = this.shadowRoot?.querySelector('.hover-overlay');
+    if (overlay) {
+      overlay.removeEventListener('mouseenter', this.handleMouseEnter);
+    }
   }
 
-  private handleMouseEnter(): void {
+  private handlePanelClick = (event: Event): void => {
+    // Stop propagation to prevent click-outside from firing
+    event.stopPropagation();
+    // Toggle expansion state
+    this.expanded = !this.expanded;
+  };
+
+  private handlePanelKeydown = (event: KeyboardEvent): void => {
+    // Support keyboard activation with Enter or Space
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      event.stopPropagation();
+      this.expanded = !this.expanded;
+    }
+  };
+
+  private handleClickOutside(event: MouseEvent): void {
+    // Close when an expanded panel receives a click outside this component
+    const path = event.composedPath();
+    if (this.expanded && !path.includes(this)) {
+      this.expanded = false;
+    }
+  }
+
+  private handleMouseEnter = (): void => {
     // Clear any existing debounce timer
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
@@ -237,24 +325,34 @@ export class SystemInfo extends LitElement {
 
   override render() {
     return html`
-      <div class="system-panel system-font">
-        <div class="hover-overlay"></div>
-        <div class="system-content">
-          <!-- Version Info (Always Present) -->
-          <system-info-version
-            .version="${this.version}"
-            .loading="${this.loading}"
-            .error="${this.error}"></system-info-version>
+      <div 
+        class="system-panel ${this.expanded ? 'expanded' : ''}" 
+        role="button"
+        tabindex="0"
+        aria-expanded="${this.expanded}"
+        aria-label="System information panel"
+        @click="${this.handlePanelClick}"
+        @keydown="${this.handlePanelKeydown}">
+        ${this.expanded ? html`<div class="hover-overlay"></div>` : ''}
+        <div class="drawer-tab">INFO</div>
+        <div class="panel-content system-font">
+          <div class="system-content">
+            <!-- Version Info (Always Present) -->
+            <system-info-version
+              .version="${this.version}"
+              .loading="${this.loading}"
+              .error="${this.error}"></system-info-version>
 
-          <!-- Tailscale Identity (if available) -->
-          <system-info-identity
-            .identity="${this.version?.tailscaleIdentity}"></system-info-identity>
+            <!-- Tailscale Identity (if available) -->
+            <system-info-identity
+              .identity="${this.version?.tailscaleIdentity}"></system-info-identity>
 
-          <!-- Job Status Component -->
-          <system-info-indexing
-            .jobStatus="${this.jobStatus}"
-            .loading="${this.loading}"
-            .error="${this.error}"></system-info-indexing>
+            <!-- Job Status Component -->
+            <system-info-indexing
+              .jobStatus="${this.jobStatus}"
+              .loading="${this.loading}"
+              .error="${this.error}"></system-info-indexing>
+          </div>
         </div>
       </div>
     `;

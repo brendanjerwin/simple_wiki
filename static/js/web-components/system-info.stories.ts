@@ -558,3 +558,122 @@ export const InteractiveTesting: Story = {
     },
   },
 };
+
+export const DrawerTabCollapsed: Story = {
+  render: () => {
+    const el = document.createElement('system-info') as SystemInfo;
+    
+    // Stub API calls
+    stub(el, 'loadSystemInfo' as any).resolves();
+    stub(el, 'startAutoRefresh' as any);
+    stub(el, 'stopAutoRefresh' as any);
+    
+    const mockTimestamp = new Timestamp({
+      seconds: BigInt(Math.floor(new Date('2023-12-15T14:30:00Z').getTime() / 1000)),
+      nanos: 0
+    });
+
+    const frontmatterQueue = new JobQueueStatus({
+      name: 'Frontmatter',
+      jobsRemaining: 150,
+      highWaterMark: 1000,
+      isActive: true
+    });
+
+    const bleveQueue = new JobQueueStatus({
+      name: 'Bleve',
+      jobsRemaining: 280,
+      highWaterMark: 1000,
+      isActive: true
+    });
+
+    el.loading = false;
+    el.expanded = false; // Explicitly set to collapsed
+    el.version = new GetVersionResponse({
+      commit: 'abc123def456',
+      buildTime: mockTimestamp
+    });
+    el.jobStatus = new GetJobStatusResponse({
+      jobQueues: [frontmatterQueue, bleveQueue]
+    });
+    
+    return html`
+      <div style="height: 100vh; background: #f0f8ff; position: relative;">
+        <div style="padding: 20px;">
+          <h1>Drawer Tab - Collapsed State</h1>
+          <p>The system info component appears as a small drawer tab in the bottom-right corner.</p>
+          <p>Most of the panel is hidden off-screen, with only a small tab visible at 30% opacity.</p>
+          <p><strong>Click the tab</strong> to expand it and see the full system information.</p>
+        </div>
+        ${el}
+      </div>
+    `;
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Shows the collapsed drawer tab state - mostly hidden off-screen with just a small tab visible. Click the tab to expand it.'
+      },
+    },
+  },
+};
+
+export const DrawerTabExpanded: Story = {
+  render: () => {
+    const el = document.createElement('system-info') as SystemInfo;
+    
+    // Stub API calls
+    stub(el, 'loadSystemInfo' as any).resolves();
+    stub(el, 'startAutoRefresh' as any);
+    stub(el, 'stopAutoRefresh' as any);
+    
+    const mockTimestamp = new Timestamp({
+      seconds: BigInt(Math.floor(new Date('2023-12-15T14:30:00Z').getTime() / 1000)),
+      nanos: 0
+    });
+
+    const frontmatterQueue = new JobQueueStatus({
+      name: 'Frontmatter',
+      jobsRemaining: 150,
+      highWaterMark: 1000,
+      isActive: true
+    });
+
+    const bleveQueue = new JobQueueStatus({
+      name: 'Bleve',
+      jobsRemaining: 280,
+      highWaterMark: 1000,
+      isActive: true
+    });
+
+    el.loading = false;
+    el.expanded = true; // Explicitly set to expanded
+    el.version = new GetVersionResponse({
+      commit: 'abc123def456',
+      buildTime: mockTimestamp
+    });
+    el.jobStatus = new GetJobStatusResponse({
+      jobQueues: [frontmatterQueue, bleveQueue]
+    });
+    
+    return html`
+      <div style="height: 100vh; background: #f0f8ff; position: relative;">
+        <div style="padding: 20px;">
+          <h1>Drawer Tab - Expanded State</h1>
+          <p>The system info component is fully expanded and visible at 90% opacity.</p>
+          <p>The panel slides in from the right and fades to full visibility.</p>
+          <p><strong>Click outside the panel</strong> to collapse it back to the tab state.</p>
+          <p><strong>Click the panel itself</strong> to toggle between expanded and collapsed.</p>
+        </div>
+        ${el}
+      </div>
+    `;
+  },
+  parameters: {
+    docs: {
+      description: {
+        story: 'Shows the expanded drawer tab state - fully visible and opaque. Click outside to collapse it or click the panel to toggle.'
+      },
+    },
+  },
+};
