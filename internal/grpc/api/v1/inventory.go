@@ -33,13 +33,18 @@ const (
 )
 
 // CreateInventoryItem implements the CreateInventoryItem RPC.
+//
+//revive:disable:function-length
 func (s *Server) CreateInventoryItem(_ context.Context, req *apiv1.CreateInventoryItemRequest) (*apiv1.CreateInventoryItemResponse, error) {
 	if req.ItemIdentifier == "" {
 		return nil, status.Error(codes.InvalidArgument, "item_identifier is required")
 	}
 
 	// Munge the identifier to ensure consistency
-	identifier := wikiidentifiers.MungeIdentifier(req.ItemIdentifier)
+	identifier, err := wikiidentifiers.MungeIdentifier(req.ItemIdentifier)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid item identifier: %v", err)
+	}
 
 	// Check if page already exists
 	_, existingFm, err := s.pageReaderMutator.ReadFrontMatter(identifier)
@@ -78,7 +83,11 @@ func (s *Server) CreateInventoryItem(_ context.Context, req *apiv1.CreateInvento
 	inventory := make(map[string]any)
 	container := ""
 	if req.Container != "" {
-		container = wikiidentifiers.MungeIdentifier(req.Container)
+		mungedContainer, err := wikiidentifiers.MungeIdentifier(req.Container)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid container identifier: %v", err)
+		}
+		container = mungedContainer
 		inventory[containerKey] = container
 	}
 	inventory[itemsKey] = []string{}
@@ -115,8 +124,14 @@ func (s *Server) MoveInventoryItem(_ context.Context, req *apiv1.MoveInventoryIt
 		return nil, status.Error(codes.InvalidArgument, "item_identifier is required")
 	}
 
-	identifier := wikiidentifiers.MungeIdentifier(req.ItemIdentifier)
-	newContainer := mungeOptionalContainer(req.NewContainer)
+	identifier, err := wikiidentifiers.MungeIdentifier(req.ItemIdentifier)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid item identifier: %v", err)
+	}
+	newContainer, err := mungeOptionalContainer(req.NewContainer)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid container identifier: %v", err)
+	}
 
 	// Read the item's current frontmatter
 	_, itemFm, err := s.pageReaderMutator.ReadFrontMatter(identifier)
@@ -155,9 +170,9 @@ func (s *Server) MoveInventoryItem(_ context.Context, req *apiv1.MoveInventoryIt
 }
 
 // mungeOptionalContainer munges a container identifier if non-empty.
-func mungeOptionalContainer(container string) string {
+func mungeOptionalContainer(container string) (string, error) {
 	if container == "" {
-		return ""
+		return "", nil
 	}
 	return wikiidentifiers.MungeIdentifier(container)
 }
@@ -259,7 +274,10 @@ func (s *Server) ListContainerContents(_ context.Context, req *apiv1.ListContain
 		return nil, status.Error(codes.InvalidArgument, "container_identifier is required")
 	}
 
-	containerID := wikiidentifiers.MungeIdentifier(req.ContainerIdentifier)
+	containerID, err := wikiidentifiers.MungeIdentifier(req.ContainerIdentifier)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid container identifier: %v", err)
+	}
 	maxDepth := int(req.MaxDepth)
 	if maxDepth == 0 {
 		maxDepth = defaultMaxRecursion
@@ -394,7 +412,10 @@ func (s *Server) FindItemLocation(_ context.Context, req *apiv1.FindItemLocation
 		return nil, status.Error(codes.InvalidArgument, "item_identifier is required")
 	}
 
-	itemID := wikiidentifiers.MungeIdentifier(req.ItemIdentifier)
+	itemID, err := wikiidentifiers.MungeIdentifier(req.ItemIdentifier)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid item identifier: %v", err)
+	}
 
 	// Read the item's frontmatter
 	_, itemFm, err := s.pageReaderMutator.ReadFrontMatter(itemID)

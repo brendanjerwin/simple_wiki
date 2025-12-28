@@ -1,7 +1,6 @@
 package eager
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,7 +10,6 @@ import (
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
-	"github.com/schollz/versionedtext"
 )
 
 // MigrationDependencies combines interfaces needed for migrations
@@ -61,8 +59,8 @@ func (*FileShadowingMigrationScanJob) GetName() string {
 	return "FileShadowingMigrationScanJob"
 }
 
-// FindPascalCaseIdentifiers returns all PascalCase identifiers that need migration
-// by reading JSON files directly and checking their stored identifier field
+// FindPascalCaseIdentifiers returns all identifiers that need migration
+// by reading MD files and checking their stored identifier field
 func (j *FileShadowingMigrationScanJob) FindPascalCaseIdentifiers() []string {
 	files, err := os.ReadDir(j.dataDir)
 	if err != nil {
@@ -73,27 +71,12 @@ func (j *FileShadowingMigrationScanJob) FindPascalCaseIdentifiers() []string {
 	identifiersFound := make(map[string]bool)
 
 	for _, file := range files {
-		// Only look at JSON files (pages)
-		if !strings.HasSuffix(file.Name(), ".json") {
+		// Only look at MD files
+		if !strings.HasSuffix(file.Name(), ".md") {
 			continue
 		}
 
-		// Read the JSON file to get the stored identifier
-		filePath := filepath.Join(j.dataDir, file.Name())
-		jsonData, err := os.ReadFile(filePath)
-		if err != nil {
-			continue
-		}
-
-		// Parse the JSON to extract the identifier field
-		var pageData struct {
-			Identifier string `json:"identifier"`
-		}
-		if err := json.Unmarshal(jsonData, &pageData); err != nil {
-			continue
-		}
-
-		identifier := pageData.Identifier
+		identifier := j.extractIdentifierFromMD(file.Name())
 		if identifier == "" {
 			continue
 		}
@@ -104,16 +87,19 @@ func (j *FileShadowingMigrationScanJob) FindPascalCaseIdentifiers() []string {
 		}
 		identifiersFound[identifier] = true
 
-		// Check if this identifier is PascalCase by comparing with its munged version
-		mungedVersion := wikiidentifiers.MungeIdentifier(identifier)
+		// Check if this identifier needs munging by comparing with its munged version
+		mungedVersion, err := wikiidentifiers.MungeIdentifier(identifier)
+		if err != nil || mungedVersion == "" {
+			continue // Skip invalid identifiers
+		}
 		if identifier != mungedVersion {
 			// Additional check: ensure that migration wouldn't cause file conflicts
 			// by checking if the base32 encodings would be different
 			originalBase32 := base32tools.EncodeToBase32(strings.ToLower(identifier))
 			mungedBase32 := base32tools.EncodeToBase32(strings.ToLower(mungedVersion))
-			
+
 			if originalBase32 != mungedBase32 {
-				// This is a safe PascalCase identifier that needs migration
+				// This identifier needs migration
 				pascalIdentifiers = append(pascalIdentifiers, identifier)
 			}
 			// If base32 encodings are the same, skip this identifier to avoid file conflicts
@@ -121,6 +107,66 @@ func (j *FileShadowingMigrationScanJob) FindPascalCaseIdentifiers() []string {
 	}
 
 	return pascalIdentifiers
+}
+
+// tomlFrontmatterParts is the expected number of parts when splitting TOML frontmatter by "+++".
+// Format: [before]+++[frontmatter]+++[body] = 3 parts
+const tomlFrontmatterParts = 3
+
+// extractIdentifierFromMD reads an MD file and extracts the identifier from TOML frontmatter.
+func (j *FileShadowingMigrationScanJob) extractIdentifierFromMD(filename string) string {
+	filePath := filepath.Join(j.dataDir, filename)
+	mdData, err := os.ReadFile(filePath)
+	if err != nil {
+		return ""
+	}
+
+	content := string(mdData)
+
+	// Check for TOML frontmatter
+	if !strings.HasPrefix(content, "+++") {
+		// No frontmatter - derive identifier from filename
+		encodedName := strings.TrimSuffix(filename, ".md")
+		logicalID, err := base32tools.DecodeFromBase32(encodedName)
+		if err != nil {
+			return ""
+		}
+		return logicalID
+	}
+
+	// Parse TOML frontmatter
+	parts := strings.SplitN(content, "+++", tomlFrontmatterParts)
+	if len(parts) < tomlFrontmatterParts {
+		return ""
+	}
+
+	frontmatter := strings.TrimSpace(parts[1])
+
+	// Simple extraction - look for identifier = 'value' or identifier = "value"
+	for _, line := range strings.Split(frontmatter, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "identifier") {
+			// Extract value after =
+			eqIdx := strings.Index(line, "=")
+			if eqIdx == -1 {
+				continue
+			}
+			value := strings.TrimSpace(line[eqIdx+1:])
+			// Remove quotes
+			value = strings.Trim(value, "'\"")
+			if value != "" {
+				return value
+			}
+		}
+	}
+
+	// No identifier in frontmatter - derive from filename
+	encodedName := strings.TrimSuffix(filename, ".md")
+	logicalID, err := base32tools.DecodeFromBase32(encodedName)
+	if err != nil {
+		return ""
+	}
+	return logicalID
 }
 
 // FileShadowingMigrationJob handles migrating a specific PascalCase page to munged_name
@@ -150,7 +196,10 @@ func (j *FileShadowingMigrationJob) Execute() error {
 	}
 
 	// Get munged identifier
-	mungedID := wikiidentifiers.MungeIdentifier(j.logicalPageID)
+	mungedID, err := wikiidentifiers.MungeIdentifier(j.logicalPageID)
+	if err != nil {
+		return fmt.Errorf("invalid page identifier %q: %w", j.logicalPageID, err)
+	}
 
 	// Check for shadowing conflicts using interface methods
 	// We can use ReadPage() for the munged version since we want to read it normally
@@ -211,54 +260,24 @@ func (j *FileShadowingMigrationJob) Execute() error {
 	return nil
 }
 
-// readPascalPageDirectly reads a PascalCase page by directly accessing the base32-encoded files
-// for the PascalCase identifier (not the munged version)
+// readPascalPageDirectly reads a page by directly accessing the base32-encoded MD file
+// for the identifier (not the munged version)
 func (j *FileShadowingMigrationJob) readPascalPageDirectly(pascalID string) *wikipage.Page {
 	page := &wikipage.Page{
 		Identifier: pascalID,
 	}
 
-	// Calculate the base32-encoded filenames for the PascalCase identifier
-	// Note: we use the lowercase PascalCase identifier, not the munged version
-	jsonPath := filepath.Join(j.dataDir, base32tools.EncodeToBase32(strings.ToLower(pascalID))+".json")
+	// Calculate the base32-encoded filename for the identifier
+	// Note: we use the lowercase identifier, not the munged version
 	mdPath := filepath.Join(j.dataDir, base32tools.EncodeToBase32(strings.ToLower(pascalID))+".md")
 
-	// Read JSON file if it exists
-	if jsonData, err := os.ReadFile(jsonPath); err == nil {
-		// Parse the JSON to get the versioned text
-		var pageData struct {
-			Text json.RawMessage `json:"text"`
-		}
-		if json.Unmarshal(jsonData, &pageData) == nil {
-			// First try to parse as full versioned text
-			var vText versionedtext.VersionedText
-			if err := json.Unmarshal(pageData.Text, &vText); err == nil {
-				// Use the current text from the parsed versionedtext
-				currentText := vText.GetCurrent()
-				if currentText != "" {
-					page.Text = currentText
-					return page
-				}
-			}
-
-			// If that fails, try to parse as simple {current: "text"} format
-			var simpleText struct {
-				Current string `json:"current"`
-			}
-			if json.Unmarshal(pageData.Text, &simpleText) == nil && simpleText.Current != "" {
-				page.Text = simpleText.Current
-				return page
-			}
-		}
-	}
-
-	// Read MD file if JSON didn't work or doesn't exist
+	// Read MD file
 	if mdData, err := os.ReadFile(mdPath); err == nil {
 		page.Text = string(mdData)
 		return page
 	}
 
-	// Return empty page if neither file could be read
+	// Return empty page if file could not be read
 	page.Text = ""
 	return page
 }
@@ -271,18 +290,15 @@ func (j *FileShadowingMigrationJob) GetName() string {
 // CheckForShadowing checks if munged versions already exist for this logical page
 func (j *FileShadowingMigrationJob) CheckForShadowing(logicalPageID string) (bool, []string) {
 	// Get the munged version of the identifier
-	mungedID := wikiidentifiers.MungeIdentifier(logicalPageID)
-
-	// Check if base32-encoded versions exist on disk (for the munged identifier)
-	var mungedFiles []string
-
-	// Check for .json file
-	jsonPath := filepath.Join(j.dataDir, base32tools.EncodeToBase32(strings.ToLower(mungedID))+".json")
-	if _, err := os.Stat(jsonPath); err == nil {
-		mungedFiles = append(mungedFiles, jsonPath)
+	mungedID, err := wikiidentifiers.MungeIdentifier(logicalPageID)
+	if err != nil {
+		// Invalid identifier cannot have shadowing conflicts
+		return false, nil
 	}
 
-	// Check for .md file
+	// Check if base32-encoded MD file exists on disk (for the munged identifier)
+	var mungedFiles []string
+
 	mdPath := filepath.Join(j.dataDir, base32tools.EncodeToBase32(strings.ToLower(mungedID))+".md")
 	if _, err := os.Stat(mdPath); err == nil {
 		mungedFiles = append(mungedFiles, mdPath)

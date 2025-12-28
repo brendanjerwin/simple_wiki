@@ -67,14 +67,17 @@ export class WikiUrlParser {
 
   /**
    * Validates that a string looks like a valid page identifier
-   * Page identifiers can contain letters, numbers, underscores, and hyphens
-   * Must start with a letter or underscore
+   * Page identifiers can contain Unicode letters (any language), numbers, underscores, and hyphens
+   * Must start with a Unicode letter or underscore
    * @param identifier - The identifier to validate
    * @returns true if valid page identifier format
    */
   static isValidPageIdentifier(identifier: string): boolean {
-    // Regex enforces: first character is a letter or underscore; remaining characters are letters, numbers, underscores, or hyphens
-    const validPattern = /^[a-zA-Z_][a-zA-Z0-9_-]*$/;
+    // Uses Unicode property escapes (ES2018+)
+    // \p{L} = Unicode Letter category (any language: Latin, Japanese, Chinese, Arabic, etc.)
+    // \p{N} = Unicode Number category (any numeral system)
+    // 'u' flag required for Unicode property escapes
+    const validPattern = /^[\p{L}_][\p{L}\p{N}_-]*$/u;
     return validPattern.test(identifier);
   }
 }

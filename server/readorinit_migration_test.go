@@ -89,10 +89,10 @@ title = 'Test Page'
 # Test content that needs migration`
 
 			// Create the file exactly as it would exist on disk
-			mungedIdentifier := wikiidentifiers.MungeIdentifier(identifier)
-			encodedFilename := base32tools.EncodeToBase32(mungedIdentifier) + ".md"  
+			mungedIdentifier, mungeErr := wikiidentifiers.MungeIdentifier(identifier)
+			Expect(mungeErr).NotTo(HaveOccurred())
+			encodedFilename := base32tools.EncodeToBase32(mungedIdentifier) + ".md"
 			filePath = filepath.Join(testDataDir, encodedFilename)
-			
 
 			err = os.WriteFile(filePath, []byte(fileContent), 0644)
 			Expect(err).NotTo(HaveOccurred())
@@ -197,10 +197,11 @@ identifier = 'migration_test_page'
 			}
 
 			// Create the file
-			mungedIdentifier := wikiidentifiers.MungeIdentifier(identifier)
-			encodedFilename := base32tools.EncodeToBase32(mungedIdentifier) + ".md"  
+			mungedIdentifier, mungeErr := wikiidentifiers.MungeIdentifier(identifier)
+			Expect(mungeErr).NotTo(HaveOccurred())
+			encodedFilename := base32tools.EncodeToBase32(mungedIdentifier) + ".md"
 			filePath = filepath.Join(testDataDir, encodedFilename)
-			
+
 			err = os.WriteFile(filePath, []byte(fileContent), 0644)
 			Expect(err).NotTo(HaveOccurred())
 

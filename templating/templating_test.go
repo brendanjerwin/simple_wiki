@@ -35,6 +35,10 @@ type mockPageReader struct {
 
 func (m *mockPageReader) ReadFrontMatter(identifier string) (string, wikipage.FrontMatter, error) {
 	if fm, exists := m.pages[identifier]; exists {
+		// Return the identifier from frontmatter if present, otherwise use the lookup key
+		if fmID, ok := fm[identifierKey].(string); ok {
+			return fmID, fm, nil
+		}
 		return identifier, fm, nil
 	}
 	return identifier, nil, errors.New("page not found")
@@ -638,6 +642,45 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 })
 
 var _ = Describe("ConstructTemplateContextFromFrontmatterWithVisited", func() {
+	When("inventory item has invalid identifier", func() {
+		var (
+			err       error
+			mockIndex *mockFrontmatterIndex
+		)
+
+		BeforeEach(func() {
+			// Use an identifier that will fail MungeIdentifier (only symbols -> empty after sanitization)
+			frontmatter := wikipage.FrontMatter{
+				identifierKey: "test_container",
+				titleKey:      "Test Container",
+				inventoryKey: map[string]any{
+					itemsKey: []string{"///"},  // This will fail MungeIdentifier
+				},
+			}
+
+			mockIndex = &mockFrontmatterIndex{
+				index:  map[string]map[string][]string{},
+				values: map[string]map[string]string{},
+			}
+
+			// Act
+			_, err = templating.ConstructTemplateContextFromFrontmatterWithVisited(
+				frontmatter, mockIndex, make(map[string]bool))
+		})
+
+		It("should return an error", func() {
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should include munging context in error", func() {
+			Expect(err.Error()).To(ContainSubstring("munging inventory item"))
+		})
+
+		It("should include the invalid identifier in error", func() {
+			Expect(err.Error()).To(ContainSubstring("///"))
+		})
+	})
+
 	Describe("when frontmatter index contains items for container", func() {
 		var (
 			templateContext templating.TemplateContext
@@ -925,6 +968,90 @@ var _ = Describe("BuildLinkTo", func() {
 
 		It("should not include inventory container parameter", func() {
 			Expect(result).NotTo(ContainSubstring("inventory.container"))
+		})
+	})
+
+	When("linking to invalid identifier (circular reference path)", func() {
+		BeforeEach(func() {
+			// Use BuildLinkToWithVisited with the identifier already visited
+			visited := map[string]bool{
+				"///": true,  // Invalid identifier that's already visited
+			}
+			linkToFunc = templating.BuildLinkToWithVisited(mockSite, currentPageTemplateContext, mockIndex, visited)
+
+			// Act - try to link to invalid identifier (triggers circular reference path)
+			result = linkToFunc("///")
+		})
+
+		It("should return error message", func() {
+			Expect(result).To(ContainSubstring("[ERROR: LinkTo circular reference"))
+		})
+
+		It("should include the invalid identifier", func() {
+			Expect(result).To(ContainSubstring("///"))
+		})
+	})
+
+	When("linking to invalid identifier from container (new inventory item path)", func() {
+		BeforeEach(func() {
+			// Set up current page as container
+			mockIndex.values["current_page"] = map[string]string{
+				"inventory.is_container": "true",
+			}
+			linkToFunc = templating.BuildLinkTo(mockSite, currentPageTemplateContext, mockIndex)
+
+			// Act - try to link to invalid identifier (non-existent page, from container)
+			result = linkToFunc("???")
+		})
+
+		It("should return error message", func() {
+			Expect(result).To(ContainSubstring("[ERROR: LinkTo new inventory item"))
+		})
+
+		It("should include the invalid identifier", func() {
+			Expect(result).To(ContainSubstring("???"))
+		})
+	})
+
+	When("linking to invalid identifier from non-container (new page path)", func() {
+		BeforeEach(func() {
+			// Ensure current page is NOT a container
+			currentPageTemplateContext = templating.TemplateContext{
+				Identifier: "regular_page",
+				Title:      "Regular Page",
+			}
+			linkToFunc = templating.BuildLinkTo(mockSite, currentPageTemplateContext, mockIndex)
+
+			// Act - try to link to invalid identifier (non-existent page, from non-container)
+			result = linkToFunc("@@@")
+		})
+
+		It("should return error message", func() {
+			Expect(result).To(ContainSubstring("[ERROR: LinkTo new page"))
+		})
+
+		It("should include the invalid identifier", func() {
+			Expect(result).To(ContainSubstring("@@@"))
+		})
+	})
+
+	When("linking to existing page with invalid identifier after read", func() {
+		BeforeEach(func() {
+			// Set up a page that exists but has an identifier that fails munging
+			// We need to use a real identifier for lookup, but the returned identifier
+			// from ReadFrontMatter will be the one we control
+			mockSite.pages["valid_lookup"] = wikipage.FrontMatter{
+				identifierKey: "###",  // This will fail munging after successful read
+				titleKey:      "Test Page",
+			}
+			linkToFunc = templating.BuildLinkTo(mockSite, currentPageTemplateContext, mockIndex)
+
+			// Act - link to a page that exists but has invalid identifier
+			result = linkToFunc("valid_lookup")
+		})
+
+		It("should return error message", func() {
+			Expect(result).To(ContainSubstring("[ERROR: LinkTo existing page"))
 		})
 	})
 })

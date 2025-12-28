@@ -511,7 +511,10 @@ func (s *Server) SearchContent(_ context.Context, req *apiv1.SearchContentReques
 
 	includeFilterSets := s.buildIncludeFilterSets(req.FrontmatterKeyIncludeFilters)
 	excludedPages := s.buildExcludedPagesSet(req.FrontmatterKeyExcludeFilters)
-	results := s.filterAndConvertResults(searchResults, includeFilterSets, excludedPages, req.FrontmatterKeysToReturnInResults)
+	results, err := s.filterAndConvertResults(searchResults, includeFilterSets, excludedPages, req.FrontmatterKeysToReturnInResults)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to filter search results: %v", err)
+	}
 
 	// Return total unfiltered count when filters are applied (for inventory filter warning)
 	// When no filters are applied, return 0 to indicate no filtering occurred
@@ -575,10 +578,14 @@ func (s *Server) filterAndConvertResults(
 	includeFilterSets []map[wikipage.PageIdentifier]bool,
 	excludedPages map[wikipage.PageIdentifier]bool,
 	fmKeysToReturn []string,
-) []*apiv1.SearchResult {
+) ([]*apiv1.SearchResult, error) {
 	var results []*apiv1.SearchResult
 	for _, result := range searchResults {
-		mungedID := wikipage.PageIdentifier(wikiidentifiers.MungeIdentifier(string(result.Identifier)))
+		mungedIDStr, err := wikiidentifiers.MungeIdentifier(string(result.Identifier))
+		if err != nil {
+			return nil, fmt.Errorf("invalid identifier %q in search index: %w", result.Identifier, err)
+		}
+		mungedID := wikipage.PageIdentifier(mungedIDStr)
 
 		if !matchesAllIncludeFilters(mungedID, includeFilterSets) {
 			continue
@@ -587,10 +594,13 @@ func (s *Server) filterAndConvertResults(
 			continue
 		}
 
-		apiResult := s.convertSearchResult(result, mungedID, fmKeysToReturn)
+		apiResult, err := s.convertSearchResult(result, mungedID, fmKeysToReturn)
+		if err != nil {
+			return nil, err
+		}
 		results = append(results, apiResult)
 	}
-	return results
+	return results, nil
 }
 
 // matchesAllIncludeFilters checks if a page matches all include filter sets.
@@ -604,7 +614,7 @@ func matchesAllIncludeFilters(pageID wikipage.PageIdentifier, filterSets []map[w
 }
 
 // convertSearchResult converts a bleve search result to an API search result.
-func (s *Server) convertSearchResult(result bleve.SearchResult, mungedID wikipage.PageIdentifier, fmKeysToReturn []string) *apiv1.SearchResult {
+func (s *Server) convertSearchResult(result bleve.SearchResult, mungedID wikipage.PageIdentifier, fmKeysToReturn []string) (*apiv1.SearchResult, error) {
 	var highlights []*apiv1.HighlightSpan
 	for _, hl := range result.Highlights {
 		highlights = append(highlights, &apiv1.HighlightSpan{Start: hl.Start, End: hl.End})
@@ -619,44 +629,51 @@ func (s *Server) convertSearchResult(result bleve.SearchResult, mungedID wikipag
 
 	if len(fmKeysToReturn) > 0 {
 		apiResult.Frontmatter = make(map[string]string)
-		
+
 		for _, key := range fmKeysToReturn {
 			if value := s.frontmatterIndexQueryer.GetValue(mungedID, key); value != "" {
 				apiResult.Frontmatter[key] = value
 			}
 		}
 	}
-	
-	apiResult.InventoryContext = s.buildInventoryContext(mungedID)
-	
-	return apiResult
+
+	inventoryContext, err := s.buildInventoryContext(mungedID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build inventory context for %s: %w", mungedID, err)
+	}
+	apiResult.InventoryContext = inventoryContext
+
+	return apiResult, nil
 }
 
 // buildInventoryContext builds inventory context for a search result if applicable.
 // Returns nil only when the item is not inventory-related (no inventory.container in frontmatter).
-func (s *Server) buildInventoryContext(itemID wikipage.PageIdentifier) *apiv1.InventoryContext {
+func (s *Server) buildInventoryContext(itemID wikipage.PageIdentifier) (*apiv1.InventoryContext, error) {
 	containerID := s.frontmatterIndexQueryer.GetValue(itemID, "inventory.container")
 	if containerID == "" {
-		return nil
+		return nil, nil
 	}
-	
+
 	// Build the full path from root to immediate container
-	path := s.buildContainerPath(containerID)
-	
+	path, err := s.buildContainerPath(containerID)
+	if err != nil {
+		return nil, err
+	}
+
 	return &apiv1.InventoryContext{
 		IsInventoryRelated: true,
 		Path:               path,
-	}
+	}, nil
 }
 
 // buildContainerPath recursively builds the full container path from root to the given container.
-func (s *Server) buildContainerPath(containerID string) []*apiv1.ContainerPathElement {
+func (s *Server) buildContainerPath(containerID string) ([]*apiv1.ContainerPathElement, error) {
 	const maxDepth = 20 // Prevent infinite loops
 	var path []*apiv1.ContainerPathElement
 	visited := make(map[string]bool)
-	
+
 	currentID := containerID
-	
+
 	// Build path from immediate container up to root
 	for currentID != "" && len(path) < maxDepth {
 		if visited[currentID] {
@@ -664,29 +681,33 @@ func (s *Server) buildContainerPath(containerID string) []*apiv1.ContainerPathEl
 			break
 		}
 		visited[currentID] = true
-		
-		mungedID := wikipage.PageIdentifier(wikiidentifiers.MungeIdentifier(currentID))
+
+		mungedIDStr, err := wikiidentifiers.MungeIdentifier(currentID)
+		if err != nil {
+			return nil, fmt.Errorf("invalid container identifier %q in path: %w", currentID, err)
+		}
+		mungedID := wikipage.PageIdentifier(mungedIDStr)
 		title := s.frontmatterIndexQueryer.GetValue(mungedID, "title")
-		
+
 		element := &apiv1.ContainerPathElement{
 			Identifier: currentID,
 			Title:      title,
 			// Depth will be set after we know the total path length
 		}
-		
+
 		// Prepend to path (we're going from immediate container to root)
 		path = append([]*apiv1.ContainerPathElement{element}, path...)
-		
+
 		// Get the parent container
 		currentID = s.frontmatterIndexQueryer.GetValue(mungedID, "inventory.container")
 	}
-	
+
 	// Now assign depth values: root=0, each child +1
 	for i := range path {
 		path[i].Depth = int32(i)
 	}
-	
-	return path
+
+	return path, nil
 }
 
 // ReadPage implements the ReadPage RPC.
@@ -768,7 +789,10 @@ func (s *Server) GenerateIdentifier(_ context.Context, req *apiv1.GenerateIdenti
 	}
 
 	// Generate the base identifier
-	identifier := wikiidentifiers.MungeIdentifier(req.Text)
+	identifier, err := wikiidentifiers.MungeIdentifier(req.Text)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "cannot generate identifier from text: %v", err)
+	}
 
 	// Check if page exists
 	isUnique, existingPage := s.checkIdentifierAvailability(identifier)

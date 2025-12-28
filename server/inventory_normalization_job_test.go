@@ -167,6 +167,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 		When("container has items in inventory.items array", func() {
 			var items []string
+			var err error
 
 			BeforeEach(func() {
 				mockDeps.pages["drawer"] = &mockPageData{
@@ -178,7 +179,11 @@ var _ = Describe("InventoryNormalizationJob", func() {
 					},
 				}
 
-				items = job.GetNormalizer().GetContainerItems("drawer")
+				items, err = job.GetNormalizer().GetContainerItems("drawer")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("should return all items", func() {
@@ -189,9 +194,14 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 		When("container does not exist", func() {
 			var items []string
+			var err error
 
 			BeforeEach(func() {
-				items = job.GetNormalizer().GetContainerItems("nonexistent")
+				items, err = job.GetNormalizer().GetContainerItems("nonexistent")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("should return nil", func() {
@@ -201,6 +211,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 		When("container has no inventory section", func() {
 			var items []string
+			var err error
 
 			BeforeEach(func() {
 				mockDeps.pages["page"] = &mockPageData{
@@ -209,7 +220,11 @@ var _ = Describe("InventoryNormalizationJob", func() {
 					},
 				}
 
-				items = job.GetNormalizer().GetContainerItems("page")
+				items, err = job.GetNormalizer().GetContainerItems("page")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("should return nil", func() {
@@ -645,6 +660,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 		When("container has items as []string type", func() {
 			var items []string
+			var err error
 
 			BeforeEach(func() {
 				mockDeps.pages["drawer"] = &mockPageData{
@@ -656,7 +672,11 @@ var _ = Describe("InventoryNormalizationJob", func() {
 					},
 				}
 
-				items = job.GetNormalizer().GetContainerItems("drawer")
+				items, err = job.GetNormalizer().GetContainerItems("drawer")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("should return all items", func() {
@@ -667,6 +687,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 		When("container has no items key", func() {
 			var items []string
+			var err error
 
 			BeforeEach(func() {
 				mockDeps.pages["drawer"] = &mockPageData{
@@ -678,7 +699,11 @@ var _ = Describe("InventoryNormalizationJob", func() {
 					},
 				}
 
-				items = job.GetNormalizer().GetContainerItems("drawer")
+				items, err = job.GetNormalizer().GetContainerItems("drawer")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("should return nil", func() {

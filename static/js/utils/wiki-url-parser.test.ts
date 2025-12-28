@@ -328,5 +328,48 @@ describe('WikiUrlParser', () => {
         expect(WikiUrlParser.isValidPageIdentifier('MyPage')).to.be.true;
       });
     });
+
+    describe('when given Unicode identifiers', () => {
+      it('should return true for Japanese hiragana', () => {
+        expect(WikiUrlParser.isValidPageIdentifier('こんにちは')).to.be.true;
+      });
+
+      it('should return true for Chinese characters', () => {
+        expect(WikiUrlParser.isValidPageIdentifier('北京市')).to.be.true;
+      });
+
+      it('should return true for Arabic text', () => {
+        expect(WikiUrlParser.isValidPageIdentifier('مرحبا')).to.be.true;
+      });
+
+      it('should return true for Greek letters', () => {
+        expect(WikiUrlParser.isValidPageIdentifier('αβγδ')).to.be.true;
+      });
+
+      it('should return true for Cyrillic text', () => {
+        expect(WikiUrlParser.isValidPageIdentifier('москва')).to.be.true;
+      });
+
+      it('should return true for mixed scripts', () => {
+        expect(WikiUrlParser.isValidPageIdentifier('hello世界')).to.be.true;
+      });
+
+      it('should return true for Unicode with underscores', () => {
+        expect(WikiUrlParser.isValidPageIdentifier('東京_駅')).to.be.true;
+      });
+
+      it('should return true for Arabic-Indic digits after letter', () => {
+        expect(WikiUrlParser.isValidPageIdentifier('عربي٠١٢٣')).to.be.true;
+      });
+
+      it('should return true for accented characters', () => {
+        expect(WikiUrlParser.isValidPageIdentifier('café')).to.be.true;
+      });
+
+      it('should return false for identifier starting with number (any numeral system)', () => {
+        // Arabic-Indic digits are numbers, so shouldn't start an identifier
+        expect(WikiUrlParser.isValidPageIdentifier('٠١٢٣')).to.be.false;
+      });
+    });
   });
 });

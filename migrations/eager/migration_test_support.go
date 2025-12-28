@@ -1,7 +1,6 @@
 package eager
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -98,39 +97,27 @@ func (m *MockMigrationDeps) UpdatePageContent(identifier wikipage.PageIdentifier
 func (m *MockMigrationDeps) DeletePage(identifier wikipage.PageIdentifier) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	// Remove from memory
 	delete(m.pages, string(identifier))
-	
-	// Try to remove files from disk if they exist
+
+	// Try to remove MD file from disk if it exists
 	base32Name := base32tools.EncodeToBase32(string(identifier))
-	jsonPath := filepath.Join(m.dataDir, base32Name+".json")
 	mdPath := filepath.Join(m.dataDir, base32Name+".md")
-	
-	_ = os.Remove(jsonPath) // Ignore errors
-	_ = os.Remove(mdPath)   // Ignore errors
-	
+	_ = os.Remove(mdPath) // Ignore errors
+
 	return nil
 }
 
 // CreatePascalCasePage creates PascalCase pages directly on filesystem for testing
+// It creates an MD file with TOML frontmatter containing the identifier
 func CreatePascalCasePage(dir, identifier, content string) {
-	// Create JSON file with versioned text structure
-	jsonPath := filepath.Join(dir, base32tools.EncodeToBase32(strings.ToLower(identifier))+".json")
-	
-	pageData := map[string]any{
-		"Identifier": identifier,
-		"Text": map[string]any{
-			"CurrentText": content,
-		},
-	}
-	
-	jsonData, _ := json.Marshal(pageData)
-	_ = os.WriteFile(jsonPath, jsonData, 0644)
-	
-	// Also create MD file for completeness
+	// Create MD file with TOML frontmatter
 	mdPath := filepath.Join(dir, base32tools.EncodeToBase32(strings.ToLower(identifier))+".md")
-	_ = os.WriteFile(mdPath, []byte(content), 0644)
+
+	// Build page with frontmatter containing the identifier
+	fullContent := "+++\nidentifier = '" + identifier + "'\n+++\n\n" + content
+	_ = os.WriteFile(mdPath, []byte(fullContent), 0644)
 }
 
 // CreateTestFile creates test files with consistent timestamps for migration testing

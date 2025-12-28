@@ -335,7 +335,6 @@ container = 'LabTub_61c0030e-00e3-47b5-a797-1ac01f8d05b1'
 
 			When("container value is empty", func() {
 				var content []byte
-				var result []byte
 				var err error
 
 				BeforeEach(func() {
@@ -344,15 +343,15 @@ container = 'LabTub_61c0030e-00e3-47b5-a797-1ac01f8d05b1'
 container = ''
 +++
 `)
-					result, err = migration.Apply(content)
+					_, err = migration.Apply(content)
 				})
 
-				It("should not return an error", func() {
-					Expect(err).NotTo(HaveOccurred())
+				It("should return an error", func() {
+					Expect(err).To(HaveOccurred())
 				})
 
-				It("should return unchanged content", func() {
-					Expect(result).To(Equal(content))
+				It("should include context about the empty container", func() {
+					Expect(err.Error()).To(ContainSubstring("cannot munge container"))
 				})
 			})
 

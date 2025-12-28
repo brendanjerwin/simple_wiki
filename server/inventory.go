@@ -45,7 +45,10 @@ const InventoryItemMarkdownTemplate = `{{if .Description}}
 // If the page already exists, it returns an error.
 func (s *Site) CreateInventoryItemPage(params InventoryItemParams) (*wikipage.Page, error) {
 	// Munge the identifier to ensure consistency
-	identifier := wikiidentifiers.MungeIdentifier(params.Identifier)
+	identifier, err := wikiidentifiers.MungeIdentifier(params.Identifier)
+	if err != nil {
+		return nil, fmt.Errorf("invalid identifier %q: %w", params.Identifier, err)
+	}
 
 	// Check if page already exists
 	p, err := s.ReadPage(identifier)
@@ -73,7 +76,11 @@ func (s *Site) CreateInventoryItemPage(params InventoryItemParams) (*wikipage.Pa
 	// Items array and is_container are only for actual containers
 	inventory := make(map[string]any)
 	if params.Container != "" {
-		inventory["container"] = wikiidentifiers.MungeIdentifier(params.Container)
+		mungedContainer, err := wikiidentifiers.MungeIdentifier(params.Container)
+		if err != nil {
+			return nil, fmt.Errorf("invalid container identifier %q: %w", params.Container, err)
+		}
+		inventory["container"] = mungedContainer
 	}
 	fm[inventoryKeyPath] = inventory
 

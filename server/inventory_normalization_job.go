@@ -116,7 +116,18 @@ func (j *InventoryNormalizationJob) createMissingItemPages(containers []string) 
 	var anomalies []InventoryAnomaly
 
 	for _, containerID := range containers {
-		items := j.normalizer.GetContainerItems(containerID)
+		items, err := j.normalizer.GetContainerItems(containerID)
+		if err != nil {
+			j.logger.Error("Failed to get container items for %s: %v", containerID, err)
+			anomalies = append(anomalies, InventoryAnomaly{
+				Type:        "invalid_item_identifier",
+				ItemID:      containerID,
+				Description: fmt.Sprintf("Container '%s' has invalid item identifier: %v", containerID, err),
+				Containers:  []string{containerID},
+				Severity:    "error",
+			})
+			continue
+		}
 		for _, itemID := range items {
 			_, _, err := j.deps.ReadFrontMatter(itemID)
 			if err == nil {
@@ -177,7 +188,12 @@ func (j *InventoryNormalizationJob) buildItemContainerMap(containers []string) m
 		}
 
 		// Source 2: Items listed in this container's inventory.items array
-		for _, itemID := range j.normalizer.GetContainerItems(containerID) {
+		containerItems, err := j.normalizer.GetContainerItems(containerID)
+		if err != nil {
+			j.logger.Error("Failed to get container items for %s: %v", containerID, err)
+			continue
+		}
+		for _, itemID := range containerItems {
 			if itemContainers[itemID] == nil {
 				itemContainers[itemID] = make(map[string]bool)
 			}
@@ -304,7 +320,11 @@ func (j *InventoryNormalizationJob) migrateContainersToIsContainerField() int {
 	pagesWithItems := j.fmIndex.QueryKeyExistence(inventoryItemsKeyPath)
 	for _, pageID := range pagesWithItems {
 		// Check if the page has actual items in its inventory.items array
-		items := j.normalizer.GetContainerItems(pageID)
+		items, err := j.normalizer.GetContainerItems(pageID)
+		if err != nil {
+			j.logger.Error("Failed to get container items for %s: %v", pageID, err)
+			continue
+		}
 		if len(items) > 0 {
 			containerSet[pageID] = true
 		}

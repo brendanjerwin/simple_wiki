@@ -856,11 +856,13 @@ func NewServer(logger *Logger) (*Server, error) {
 - **Keep Errors as Objects Until the UI Edge**: Error properties in components should be typed as `Error | null`, not `string`. The Error object preserves stack traces, cause chains, and type information for debugging. Convert to string only at render time in templates.
 
   **Property declaration:**
+
   ```typescript
   declare error: Error | null;  // Not string!
   ```
 
   **Assignment (preserve the full Error object):**
+
   ```typescript
   try {
     await someAsyncOperation();
@@ -870,6 +872,7 @@ func NewServer(logger *Logger) (*Server, error) {
   ```
 
   **Template (extract message at UI edge):**
+
   ```typescript
   ${this.error ? html`<div class="error-message">${this.error.message}</div>` : ''}
   ```

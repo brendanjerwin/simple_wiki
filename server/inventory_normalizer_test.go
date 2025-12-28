@@ -3,6 +3,7 @@ package server
 
 import (
 	"errors"
+	"os"
 
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
@@ -33,7 +34,7 @@ func (m *mockNormalizerDeps) ReadFrontMatter(page wikipage.PageIdentifier) (wiki
 	}
 	fm, ok := m.frontmatters[string(page)]
 	if !ok {
-		return "", nil, errors.New("page not found")
+		return "", nil, os.ErrNotExist
 	}
 	return page, fm, nil
 }
@@ -359,6 +360,7 @@ var _ = Describe("InventoryNormalizer", func() {
 	Describe("GetContainerItems", func() {
 		When("the page has items as []string", func() {
 			var items []string
+			var err error
 
 			BeforeEach(func() {
 				deps.frontmatters["container"] = map[string]any{
@@ -366,7 +368,11 @@ var _ = Describe("InventoryNormalizer", func() {
 						"items": []string{"item1", "item2"},
 					},
 				}
-				items = normalizer.GetContainerItems("container")
+				items, err = normalizer.GetContainerItems("container")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("should return the items", func() {
@@ -377,6 +383,7 @@ var _ = Describe("InventoryNormalizer", func() {
 
 		When("the page has items as []any", func() {
 			var items []string
+			var err error
 
 			BeforeEach(func() {
 				deps.frontmatters["container"] = map[string]any{
@@ -384,7 +391,11 @@ var _ = Describe("InventoryNormalizer", func() {
 						"items": []any{"item1", "item2"},
 					},
 				}
-				items = normalizer.GetContainerItems("container")
+				items, err = normalizer.GetContainerItems("container")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("should return the items", func() {
@@ -395,9 +406,14 @@ var _ = Describe("InventoryNormalizer", func() {
 
 		When("the page does not exist", func() {
 			var items []string
+			var err error
 
 			BeforeEach(func() {
-				items = normalizer.GetContainerItems("nonexistent")
+				items, err = normalizer.GetContainerItems("nonexistent")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("should return nil", func() {
@@ -407,12 +423,17 @@ var _ = Describe("InventoryNormalizer", func() {
 
 		When("the page has no inventory section", func() {
 			var items []string
+			var err error
 
 			BeforeEach(func() {
 				deps.frontmatters["container"] = map[string]any{
 					"identifier": "container",
 				}
-				items = normalizer.GetContainerItems("container")
+				items, err = normalizer.GetContainerItems("container")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("should return nil", func() {
@@ -422,6 +443,7 @@ var _ = Describe("InventoryNormalizer", func() {
 
 		When("the page has no items key", func() {
 			var items []string
+			var err error
 
 			BeforeEach(func() {
 				deps.frontmatters["container"] = map[string]any{
@@ -429,11 +451,61 @@ var _ = Describe("InventoryNormalizer", func() {
 						"is_container": true,
 					},
 				}
-				items = normalizer.GetContainerItems("container")
+				items, err = normalizer.GetContainerItems("container")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("should return nil", func() {
 				Expect(items).To(BeNil())
+			})
+		})
+
+		When("an item has invalid identifier", func() {
+			var err error
+
+			BeforeEach(func() {
+				deps.frontmatters["container"] = map[string]any{
+					"inventory": map[string]any{
+						"items": []any{"///"},  // This will fail MungeIdentifier
+					},
+				}
+				_, err = normalizer.GetContainerItems("container")
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should include invalid identifier context", func() {
+				Expect(err.Error()).To(ContainSubstring("invalid item identifier"))
+			})
+
+			It("should include the identifier value", func() {
+				Expect(err.Error()).To(ContainSubstring("///"))
+			})
+		})
+
+		When("reading frontmatter fails with non-NotExist error", func() {
+			var err error
+
+			BeforeEach(func() {
+				deps.readFrontMatterErr = errors.New("permission denied")
+				_, err = normalizer.GetContainerItems("container")
+			})
+
+			AfterEach(func() {
+				deps.readFrontMatterErr = nil
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should include frontmatter read context", func() {
+				Expect(err.Error()).To(ContainSubstring("failed to read frontmatter"))
 			})
 		})
 	})

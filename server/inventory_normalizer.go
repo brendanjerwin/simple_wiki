@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
@@ -40,7 +41,10 @@ func (n *InventoryNormalizer) NormalizePage(pageID wikipage.PageIdentifier) ([]s
 	}
 
 	// Step 2: Create missing item pages
-	items := n.GetContainerItems(pageID)
+	items, err := n.GetContainerItems(pageID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get container items for %s: %w", pageID, err)
+	}
 	for _, itemID := range items {
 		// Check if page exists
 		_, _, err := n.deps.ReadFrontMatter(itemID)
@@ -74,7 +78,10 @@ func (n *InventoryNormalizer) ensureIsContainerField(pageID wikipage.PageIdentif
 	}
 
 	// Check if items array exists and is non-empty
-	items := n.GetContainerItems(pageID)
+	items, err := n.GetContainerItems(pageID)
+	if err != nil {
+		return fmt.Errorf("failed to get container items: %w", err)
+	}
 	if len(items) == 0 {
 		return nil // No items or empty items array
 	}
@@ -97,20 +104,24 @@ func (n *InventoryNormalizer) ensureIsContainerField(pageID wikipage.PageIdentif
 }
 
 // GetContainerItems gets items listed in a container's inventory.items array.
-func (n *InventoryNormalizer) GetContainerItems(containerID wikipage.PageIdentifier) []string {
+// Returns an error if any item identifier is invalid.
+func (n *InventoryNormalizer) GetContainerItems(containerID wikipage.PageIdentifier) ([]string, error) {
 	_, fm, err := n.deps.ReadFrontMatter(containerID)
 	if err != nil {
-		return nil
+		if os.IsNotExist(err) {
+			return nil, nil // Container doesn't exist, no items
+		}
+		return nil, fmt.Errorf("failed to read frontmatter for container %s: %w", containerID, err)
 	}
 
 	inventory, ok := fm["inventory"].(map[string]any)
 	if !ok {
-		return nil
+		return nil, nil // No inventory section
 	}
 
 	itemsRaw, ok := inventory["items"]
 	if !ok {
-		return nil
+		return nil, nil // No items array
 	}
 
 	// Handle both []string and []any
@@ -121,17 +132,24 @@ func (n *InventoryNormalizer) GetContainerItems(containerID wikipage.PageIdentif
 	case []any:
 		for _, item := range v {
 			if s, ok := item.(string); ok {
-				items = append(items, wikiidentifiers.MungeIdentifier(s))
+				munged, err := wikiidentifiers.MungeIdentifier(s)
+				if err != nil {
+					return nil, fmt.Errorf("invalid item identifier %q in container %s: %w", s, containerID, err)
+				}
+				items = append(items, munged)
 			}
 		}
 	}
 
-	return items
+	return items, nil
 }
 
 // CreateItemPage creates a new inventory item page.
 func (n *InventoryNormalizer) CreateItemPage(itemID, containerID string) error {
-	identifier := wikiidentifiers.MungeIdentifier(itemID)
+	identifier, err := wikiidentifiers.MungeIdentifier(itemID)
+	if err != nil {
+		return fmt.Errorf("invalid item identifier %q: %w", itemID, err)
+	}
 
 	// Build frontmatter
 	fm := make(map[string]any)
@@ -148,7 +166,11 @@ func (n *InventoryNormalizer) CreateItemPage(itemID, containerID string) error {
 	// Items array and is_container are only for actual containers
 	inventory := make(map[string]any)
 	if containerID != "" {
-		inventory["container"] = wikiidentifiers.MungeIdentifier(containerID)
+		mungedContainer, err := wikiidentifiers.MungeIdentifier(containerID)
+		if err != nil {
+			return fmt.Errorf("invalid container identifier %q: %w", containerID, err)
+		}
+		inventory["container"] = mungedContainer
 	}
 	fm["inventory"] = inventory
 
