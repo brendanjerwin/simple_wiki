@@ -952,6 +952,283 @@ var _ = Describe("InventoryNormalizationJob", func() {
 			})
 		})
 	})
+
+	Describe("removeItemFromContainerItemsList", func() {
+		BeforeEach(func() {
+			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
+		})
+
+		When("item is in container's items list with exact match", func() {
+			BeforeEach(func() {
+				mockDeps.pages["drawer"] = &mockPageData{
+					frontmatter: map[string]any{
+						"title": "Tool Drawer",
+						"inventory": map[string]any{
+							"items": []any{"hammer", "screwdriver", "wrench"},
+						},
+					},
+				}
+			})
+
+			It("should remove the item from the list", func() {
+				err := job.removeItemFromContainerItemsList("drawer", "screwdriver")
+				Expect(err).NotTo(HaveOccurred())
+
+				// Verify the item was removed
+				written := mockDeps.writtenPages["drawer"]
+				Expect(written).NotTo(BeNil())
+				inventory := written.frontmatter["inventory"].(map[string]any)
+				items := inventory["items"].([]any)
+				Expect(items).To(HaveLen(2))
+				Expect(items).To(ContainElements("hammer", "wrench"))
+				Expect(items).NotTo(ContainElement("screwdriver"))
+			})
+		})
+
+		When("item is in container's items list with un-munged identifier", func() {
+			BeforeEach(func() {
+				mockDeps.pages["drawer"] = &mockPageData{
+					frontmatter: map[string]any{
+						"title": "Tool Drawer",
+						"inventory": map[string]any{
+							"items": []any{"My Hammer", "Big Screwdriver", "wrench"},
+						},
+					},
+				}
+			})
+
+			It("should remove the item using munged comparison", func() {
+				// Item identifier is "my_hammer" (munged), but in list as "My Hammer"
+				err := job.removeItemFromContainerItemsList("drawer", "my_hammer")
+				Expect(err).NotTo(HaveOccurred())
+
+				// Verify the item was removed
+				written := mockDeps.writtenPages["drawer"]
+				Expect(written).NotTo(BeNil())
+				inventory := written.frontmatter["inventory"].(map[string]any)
+				items := inventory["items"].([]any)
+				Expect(items).To(HaveLen(2))
+				Expect(items).To(ContainElements("Big Screwdriver", "wrench"))
+				Expect(items).NotTo(ContainElement("My Hammer"))
+			})
+		})
+
+		When("item is not in container's items list", func() {
+			BeforeEach(func() {
+				mockDeps.pages["drawer"] = &mockPageData{
+					frontmatter: map[string]any{
+						"title": "Tool Drawer",
+						"inventory": map[string]any{
+							"items": []any{"hammer", "wrench"},
+						},
+					},
+				}
+			})
+
+			It("should not modify the list", func() {
+				err := job.removeItemFromContainerItemsList("drawer", "screwdriver")
+				Expect(err).NotTo(HaveOccurred())
+
+				// Verify nothing was written (no changes)
+				_, written := mockDeps.writtenPages["drawer"]
+				Expect(written).To(BeFalse())
+			})
+		})
+
+		When("container has no inventory section", func() {
+			BeforeEach(func() {
+				mockDeps.pages["drawer"] = &mockPageData{
+					frontmatter: map[string]any{
+						"title": "Just a page",
+					},
+				}
+			})
+
+			It("should not error", func() {
+				err := job.removeItemFromContainerItemsList("drawer", "hammer")
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		When("container has no items array", func() {
+			BeforeEach(func() {
+				mockDeps.pages["drawer"] = &mockPageData{
+					frontmatter: map[string]any{
+						"title": "Tool Drawer",
+						"inventory": map[string]any{
+							"container": "parent",
+						},
+					},
+				}
+			})
+
+			It("should not error", func() {
+				err := job.removeItemFromContainerItemsList("drawer", "hammer")
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		When("container has empty items array", func() {
+			BeforeEach(func() {
+				mockDeps.pages["drawer"] = &mockPageData{
+					frontmatter: map[string]any{
+						"title": "Tool Drawer",
+						"inventory": map[string]any{
+							"items": []any{},
+						},
+					},
+				}
+			})
+
+			It("should not error", func() {
+				err := job.removeItemFromContainerItemsList("drawer", "hammer")
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		When("container does not exist", func() {
+			It("should not error", func() {
+				err := job.removeItemFromContainerItemsList("nonexistent", "hammer")
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+	})
+
+	Describe("Execute with item removal from parent containers", func() {
+		BeforeEach(func() {
+			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
+		})
+
+		When("item has container set and is in parent's items list", func() {
+			BeforeEach(func() {
+				// Set up container with items
+				mockDeps.pages["tool_box"] = &mockPageData{
+					frontmatter: map[string]any{
+						"title": "Tool Box",
+						"inventory": map[string]any{
+							"items":        []any{"hammer", "screwdriver"},
+							"is_container": true,
+						},
+					},
+				}
+
+				// Set up item with container reference
+				mockDeps.pages["hammer"] = &mockPageData{
+					frontmatter: map[string]any{
+						"title": "Hammer",
+						"inventory": map[string]any{
+							"container": "tool_box",
+						},
+					},
+				}
+
+				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
+					if key == "inventory.items" {
+						return []string{"tool_box"}
+					}
+					if key == "inventory.is_container" {
+						return []string{"tool_box"}
+					}
+					if key == "inventory.container" {
+						return []string{"hammer"}
+					}
+					return []string{}
+				}
+
+				mockFmIndex.data["tool_box"] = map[string]string{
+					"inventory.is_container": "true",
+				}
+				mockFmIndex.data["hammer"] = map[string]string{
+					"inventory.container": "tool_box",
+				}
+
+				mockFmIndex.QueryExactMatchFunc = func(key, value string) []string {
+					if key == "inventory.container" && value == "tool_box" {
+						return []string{"hammer"}
+					}
+					return nil
+				}
+
+				_ = job.Execute()
+			})
+
+			It("should remove hammer from tool_box items list", func() {
+				// Verify hammer was removed from tool_box's items
+				written := mockDeps.writtenPages["tool_box"]
+				Expect(written).NotTo(BeNil())
+				inventory := written.frontmatter["inventory"].(map[string]any)
+				items := inventory["items"].([]any)
+				Expect(items).To(HaveLen(1))
+				Expect(items).To(ContainElement("screwdriver"))
+				Expect(items).NotTo(ContainElement("hammer"))
+			})
+		})
+
+		When("item with un-munged name is in parent's items list", func() {
+			BeforeEach(func() {
+				// Set up container with un-munged item names
+				mockDeps.pages["tool_box"] = &mockPageData{
+					frontmatter: map[string]any{
+						"title": "Tool Box",
+						"inventory": map[string]any{
+							"items":        []any{"Big Hammer", "Small Screwdriver"},
+							"is_container": true,
+						},
+					},
+				}
+
+				// Set up item with container reference (munged identifier)
+				mockDeps.pages["big_hammer"] = &mockPageData{
+					frontmatter: map[string]any{
+						"title": "Big Hammer",
+						"inventory": map[string]any{
+							"container": "tool_box",
+						},
+					},
+				}
+
+				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
+					if key == "inventory.items" {
+						return []string{"tool_box"}
+					}
+					if key == "inventory.is_container" {
+						return []string{"tool_box"}
+					}
+					if key == "inventory.container" {
+						return []string{"big_hammer"}
+					}
+					return []string{}
+				}
+
+				mockFmIndex.data["tool_box"] = map[string]string{
+					"inventory.is_container": "true",
+				}
+				mockFmIndex.data["big_hammer"] = map[string]string{
+					"inventory.container": "tool_box",
+				}
+
+				mockFmIndex.QueryExactMatchFunc = func(key, value string) []string {
+					if key == "inventory.container" && value == "tool_box" {
+						return []string{"big_hammer"}
+					}
+					return nil
+				}
+
+				_ = job.Execute()
+			})
+
+			It("should remove item using munged comparison", func() {
+				// Verify "Big Hammer" was removed from tool_box's items
+				written := mockDeps.writtenPages["tool_box"]
+				Expect(written).NotTo(BeNil())
+				inventory := written.frontmatter["inventory"].(map[string]any)
+				items := inventory["items"].([]any)
+				Expect(items).To(HaveLen(1))
+				Expect(items).To(ContainElement("Small Screwdriver"))
+				Expect(items).NotTo(ContainElement("Big Hammer"))
+			})
+		})
+	})
 })
 
 // mockNormalizationDepsWithFailure is a mock that can simulate write failures.

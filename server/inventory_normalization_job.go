@@ -9,6 +9,7 @@ import (
 
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
+	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
 	"github.com/pelletier/go-toml/v2"
@@ -95,13 +96,20 @@ func (j *InventoryNormalizationJob) Execute() error {
 	// Step 3: Create missing pages and collect anomalies
 	createdPages, creationAnomalies := j.createMissingItemPages(containers)
 
-	// Step 4: Detect all anomalies
+	// Step 4: Remove items from parent containers' items lists
+	// When an item has inventory.container set, remove it from the parent's inventory.items array
+	removedCount := j.removeItemsFromParentContainers(containers)
+	if removedCount > 0 {
+		j.logger.Info("Removed %d items from parent container items lists", removedCount)
+	}
+
+	// Step 5: Detect all anomalies
 	anomalies := creationAnomalies
 	anomalies = append(anomalies, j.detectMultipleContainerAnomalies(containers)...)
 	anomalies = append(anomalies, j.detectCircularReferenceAnomalies(containers)...)
 	anomalies = append(anomalies, j.detectOrphanedItems()...)
 
-	// Step 5: Generate audit report page
+	// Step 6: Generate audit report page
 	if err := j.generateAuditReport(anomalies, createdPages); err != nil {
 		j.logger.Error("Failed to generate audit report: %v", err)
 	}
@@ -496,6 +504,171 @@ func formatAnomalyType(t string) string {
 		titleCaser := cases.Title(language.AmericanEnglish)
 		return titleCaser.String(strings.ReplaceAll(t, "_", " "))
 	}
+}
+
+// removeItemFromContainerItemsList removes an item from a container's inventory.items array.
+// This function handles un-munged identifiers by comparing munged versions.
+// itemID should be the munged identifier of the item to remove.
+func (j *InventoryNormalizationJob) removeItemFromContainerItemsList(containerID, itemID string) error {
+	_, fm, err := j.deps.ReadFrontMatter(containerID)
+	if err != nil {
+		// Container doesn't exist, nothing to do
+		return nil
+	}
+
+	inventory, ok := fm["inventory"].(map[string]any)
+	if !ok {
+		// No inventory section, nothing to do
+		return nil
+	}
+
+	itemsRaw, ok := inventory["items"]
+	if !ok {
+		// No items array, nothing to do
+		return nil
+	}
+
+	// Handle both []string and []any
+	var items []any
+	switch v := itemsRaw.(type) {
+	case []string:
+		for _, item := range v {
+			items = append(items, item)
+		}
+	case []any:
+		items = v
+	default:
+		// Unknown type, nothing to do
+		return nil
+	}
+
+	if len(items) == 0 {
+		// Empty items array, nothing to do
+		return nil
+	}
+
+	// Find and remove the item (comparing munged identifiers)
+	mungedItemID := wikiidentifiers.MungeIdentifier(itemID)
+	var newItems []any
+	removed := false
+	for _, item := range items {
+		if s, ok := item.(string); ok {
+			mungedItem := wikiidentifiers.MungeIdentifier(s)
+			if mungedItem == mungedItemID {
+				// Skip this item (remove it)
+				removed = true
+				continue
+			}
+		}
+		newItems = append(newItems, item)
+	}
+
+	// If nothing was removed, don't write anything
+	if !removed {
+		return nil
+	}
+
+	// Update the items array
+	inventory["items"] = newItems
+
+	// Write back the frontmatter
+	if err := j.deps.WriteFrontMatter(containerID, fm); err != nil {
+		return fmt.Errorf("failed to write frontmatter for container %s: %w", containerID, err)
+	}
+
+	j.logger.Info("Removed item '%s' from container '%s' items list", itemID, containerID)
+	return nil
+}
+
+// removeItemsFromParentContainers removes items from their parent containers' items lists.
+// This is called after items have been created/updated to ensure the items list is consistent
+// with the canonical container references on the items.
+func (j *InventoryNormalizationJob) removeItemsFromParentContainers(containers []string) int {
+	removedCount := 0
+
+	for _, containerID := range containers {
+		// Get items that have this container set in inventory.container
+		itemsWithContainer := j.getItemsWithContainerReference(containerID)
+
+		if len(itemsWithContainer) == 0 {
+			continue
+		}
+
+		// Read the container's frontmatter once
+		_, fm, err := j.deps.ReadFrontMatter(containerID)
+		if err != nil {
+			// Container doesn't exist, skip
+			continue
+		}
+
+		inventory, ok := fm["inventory"].(map[string]any)
+		if !ok {
+			// No inventory section, skip
+			continue
+		}
+
+		itemsRaw, ok := inventory["items"]
+		if !ok {
+			// No items array, skip
+			continue
+		}
+
+		// Handle both []string and []any
+		var items []any
+		switch v := itemsRaw.(type) {
+		case []string:
+			for _, item := range v {
+				items = append(items, item)
+			}
+		case []any:
+			items = v
+		default:
+			// Unknown type, skip
+			continue
+		}
+
+		if len(items) == 0 {
+			// Empty items array, skip
+			continue
+		}
+
+		// Build a set of munged item IDs that have this container reference
+		itemsWithContainerSet := make(map[string]bool)
+		for _, itemID := range itemsWithContainer {
+			mungedID := wikiidentifiers.MungeIdentifier(itemID)
+			itemsWithContainerSet[mungedID] = true
+		}
+
+		// Filter out items that have the container reference
+		var newItems []any
+		for _, item := range items {
+			if s, ok := item.(string); ok {
+				mungedItem := wikiidentifiers.MungeIdentifier(s)
+				if itemsWithContainerSet[mungedItem] {
+					// Skip this item (remove it)
+					removedCount++
+					j.logger.Info("Removed item '%s' from container '%s' items list", s, containerID)
+					continue
+				}
+			}
+			newItems = append(newItems, item)
+		}
+
+		// If nothing changed, don't write
+		if len(newItems) == len(items) {
+			continue
+		}
+
+		// Update the items array
+		inventory["items"] = newItems
+
+		// Write back the frontmatter
+		if err := j.deps.WriteFrontMatter(containerID, fm); err != nil {
+			j.logger.Error("Failed to write frontmatter for container %s: %v", containerID, err)
+		}
+	}
+
+	return removedCount
 }
 
 // ScheduleInventoryNormalization schedules the inventory normalization job on the cron scheduler.
