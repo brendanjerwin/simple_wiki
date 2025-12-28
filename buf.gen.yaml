@@ -9,12 +9,8 @@ plugins:
     out: gen/go
     opt: paths=source_relative
 
-  # Connect-ES plugins for browser clients
-  - plugin: buf.build/bufbuild/es:v1.10.0
-    out: static/js/gen
-    opt:
-      - target=ts
-  - plugin: buf.build/connectrpc/es:v1.4.0
+  # Connect-ES plugins for browser clients (v2 uses only bufbuild/es plugin)
+  - plugin: buf.build/bufbuild/es:v2.10.2
     out: static/js/gen
     opt:
       - target=ts

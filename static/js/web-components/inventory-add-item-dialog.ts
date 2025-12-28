@@ -2,10 +2,9 @@ import { html, css, LitElement, nothing } from 'lit';
 import { sharedStyles, foundationCSS, dialogCSS, responsiveCSS, buttonCSS } from './shared-styles.js';
 import { InventoryActionService } from './inventory-action-service.js';
 import { createClient } from '@connectrpc/connect';
+import { create } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
-import { SearchService } from '../gen/api/v1/search_connect.js';
-import type { SearchResult } from '../gen/api/v1/search_pb.js';
-import { SearchContentRequest } from '../gen/api/v1/search_pb.js';
+import { SearchService, SearchContentRequestSchema, type SearchResult } from '../gen/api/v1/search_pb.js';
 import type { ExistingPageInfo } from '../gen/api/v1/page_management_pb.js';
 
 /**
@@ -492,7 +491,7 @@ export class InventoryAddItemDialog extends LitElement {
     this.searchLoading = true;
 
     try {
-      const request = new SearchContentRequest({
+      const request = create(SearchContentRequestSchema, {
         query,
         frontmatterKeyIncludeFilters: ['inventory.container'],
         frontmatterKeyExcludeFilters: ['inventory.is_container'],

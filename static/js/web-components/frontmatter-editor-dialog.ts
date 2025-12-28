@@ -1,9 +1,8 @@
 import { html, css, LitElement } from 'lit';
 import { createClient } from '@connectrpc/connect';
-import { Struct } from '@bufbuild/protobuf';
+import { create, type JsonObject } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
-import { Frontmatter } from '../gen/api/v1/frontmatter_connect.js';
-import { GetFrontmatterRequest, GetFrontmatterResponse, ReplaceFrontmatterRequest } from '../gen/api/v1/frontmatter_pb.js';
+import { Frontmatter, GetFrontmatterRequestSchema, GetFrontmatterResponseSchema, ReplaceFrontmatterRequestSchema, type GetFrontmatterResponse } from '../gen/api/v1/frontmatter_pb.js';
 import { sharedStyles, foundationCSS, dialogCSS, responsiveCSS, buttonCSS } from './shared-styles.js';
 import './frontmatter-value-section.js';
 import { showToastAfter } from './toast-message.js';
@@ -204,14 +203,13 @@ export class FrontmatterEditorDialog extends LitElement {
     this.workingFrontmatter = {};
   }
 
-  private convertStructToPlainObject(struct?: Struct): Record<string, unknown> {
+  private convertStructToPlainObject(struct?: JsonObject): Record<string, unknown> {
     if (!struct) return {};
-
-    return struct.toJson() as Record<string, unknown>;
+    return struct as Record<string, unknown>;
   }
 
-  private convertPlainObjectToStruct(obj: Record<string, unknown>): Struct {
-    return Struct.fromJson(obj);
+  private convertPlainObjectToStruct(obj: Record<string, unknown>): JsonObject {
+    return obj as JsonObject;
   }
 
   private updateWorkingFrontmatter(): void {
@@ -269,7 +267,7 @@ export class FrontmatterEditorDialog extends LitElement {
       this.workingFrontmatter = {};
       this.requestUpdate();
 
-      const request = new GetFrontmatterRequest({ page: this.page });
+      const request = create(GetFrontmatterRequestSchema, { page: this.page });
       const response = await this.client.getFrontmatter(request);
       this.frontmatter = response;
       this.updateWorkingFrontmatter();
@@ -298,7 +296,7 @@ export class FrontmatterEditorDialog extends LitElement {
       this.requestUpdate();
 
       const frontmatterStruct = this.convertPlainObjectToStruct(this.workingFrontmatter);
-      const request = new ReplaceFrontmatterRequest({
+      const request = create(ReplaceFrontmatterRequestSchema, {
         page: this.page,
         frontmatter: frontmatterStruct
       });
@@ -307,7 +305,7 @@ export class FrontmatterEditorDialog extends LitElement {
 
       // Update the stored frontmatter with the response to reflect any server-side changes
       if (response.frontmatter) {
-        this.frontmatter = new GetFrontmatterResponse({ frontmatter: response.frontmatter });
+        this.frontmatter = create(GetFrontmatterResponseSchema, { frontmatter: response.frontmatter });
         this.updateWorkingFrontmatter();
       }
 

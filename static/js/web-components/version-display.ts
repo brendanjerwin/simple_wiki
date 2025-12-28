@@ -1,9 +1,8 @@
 import { html, css, LitElement } from 'lit';
 import { createClient } from '@connectrpc/connect';
+import { create, Timestamp } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
-import { SystemInfoService } from '../gen/api/v1/system_info_connect.js';
-import { GetVersionRequest, GetVersionResponse } from '../gen/api/v1/system_info_pb.js';
-import { Timestamp } from '@bufbuild/protobuf';
+import { SystemInfoService, GetVersionRequestSchema, type GetVersionResponse } from '../gen/api/v1/system_info_pb.js';
 import { foundationCSS } from './shared-styles.js';
 
 export class VersionDisplay extends LitElement {
@@ -148,7 +147,7 @@ export class VersionDisplay extends LitElement {
       this.error = undefined;
       this.requestUpdate();
 
-      const response = await this.client.getVersion(new GetVersionRequest());
+      const response = await this.client.getVersion(create(GetVersionRequestSchema, {}));
       this.version = response;
     } catch (err) {
       this.error = err instanceof Error ? err.message : 'Failed to load version';

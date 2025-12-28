@@ -1,7 +1,7 @@
 import { html, fixture, expect } from '@open-wc/testing';
 import { FrontmatterEditorDialog } from './frontmatter-editor-dialog.js';
-import { Struct } from '@bufbuild/protobuf';
-import { GetFrontmatterResponse, ReplaceFrontmatterRequest, ReplaceFrontmatterResponse } from '../gen/api/v1/frontmatter_pb.js';
+import { create, type JsonObject } from '@bufbuild/protobuf';
+import { GetFrontmatterResponseSchema, ReplaceFrontmatterResponseSchema } from '../gen/api/v1/frontmatter_pb.js';
 import sinon from 'sinon';
 import './frontmatter-editor-dialog.js';
 
@@ -46,26 +46,23 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
   });
 
   describe('when convertPlainObjectToStruct is called', () => {
-    it('should convert plain object to Struct', () => {
+    it('should convert plain object to JsonObject', () => {
       const plainObject = {
         title: 'Test Page',
         identifier: 'home',
         tags: ['test', 'example']
       };
       
-      const struct = el['convertPlainObjectToStruct'](plainObject);
-      expect(struct).to.be.instanceOf(Struct);
+      const jsonObject = el['convertPlainObjectToStruct'](plainObject);
       
-      // Convert back to verify the conversion worked
-      const converted = struct.toJson();
-      expect(converted).to.deep.equal(plainObject);
+      // In v2, this just returns the same object as JsonObject
+      expect(jsonObject).to.deep.equal(plainObject);
     });
 
     it('should handle empty object', () => {
       const emptyObject = {};
-      const struct = el['convertPlainObjectToStruct'](emptyObject);
-      expect(struct).to.be.instanceOf(Struct);
-      expect(struct.toJson()).to.deep.equal({});
+      const jsonObject = el['convertPlainObjectToStruct'](emptyObject);
+      expect(jsonObject).to.deep.equal({});
     });
 
     it('should handle nested objects', () => {
@@ -79,8 +76,8 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
         }
       };
       
-      const struct = el['convertPlainObjectToStruct'](nestedObject);
-      expect(struct.toJson()).to.deep.equal(nestedObject);
+      const jsonObject = el['convertPlainObjectToStruct'](nestedObject);
+      expect(jsonObject).to.deep.equal(nestedObject);
     });
   });
 
@@ -97,29 +94,17 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
     });
 
     describe('when save is successful', () => {
-      let mockResponse: ReplaceFrontmatterResponse;
+      let mockResponse: ReturnType<typeof create<typeof ReplaceFrontmatterResponseSchema>>;
 
       beforeEach(async () => {
-        // Create a successful response
-        const responseStruct = new Struct({
-          fields: {
-            title: { kind: { case: 'stringValue', value: 'Modified Page' } },
-            identifier: { kind: { case: 'stringValue', value: 'test-page' } },
-            tags: { 
-              kind: { 
-                case: 'listValue', 
-                value: { 
-                  values: [
-                    { kind: { case: 'stringValue', value: 'modified' } },
-                    { kind: { case: 'stringValue', value: 'test' } }
-                  ]
-                }
-              }
-            }
-          }
-        });
+        // Create a successful response with JsonObject
+        const responseJson: JsonObject = {
+          title: 'Modified Page',
+          identifier: 'test-page',
+          tags: ['modified', 'test']
+        };
         
-        mockResponse = new ReplaceFrontmatterResponse({ frontmatter: responseStruct });
+        mockResponse = create(ReplaceFrontmatterResponseSchema, { frontmatter: responseJson });
         clientStub.resolves(mockResponse);
         
         // Execute the save action
@@ -128,12 +113,12 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
 
       it('should call replaceFrontmatter with correct parameters', () => {
         expect(clientStub).to.have.been.calledOnce;
-        const callArgs = clientStub.getCall(0).args[0] as ReplaceFrontmatterRequest;
+        const callArgs = clientStub.getCall(0).args[0];
         expect(callArgs.page).to.equal('test-page');
-        expect(callArgs.frontmatter).to.be.instanceOf(Struct);
+        expect(callArgs.frontmatter).to.be.an('object');
         
-        // Verify the frontmatter content
-        const frontmatterData = callArgs.frontmatter!.toJson();
+        // Verify the frontmatter content - it's already a JsonObject in v2
+        const frontmatterData = callArgs.frontmatter;
         expect(frontmatterData).to.deep.equal({
           title: 'Modified Page',
           identifier: 'test-page',
@@ -219,7 +204,7 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
       });
 
       describe('when testing frontmatter update behavior', () => {
-        let frontmatterBeforeClose: GetFrontmatterResponse | undefined;
+        let frontmatterBeforeClose: ReturnType<typeof create<typeof GetFrontmatterResponseSchema>> | undefined;
 
         beforeEach(async () => {
           // Reset and setup for testing frontmatter update
@@ -237,7 +222,7 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
         });
 
         it('should update frontmatter data with server response', () => {
-          expect(frontmatterBeforeClose).to.be.instanceOf(GetFrontmatterResponse);
+          expect(frontmatterBeforeClose).to.exist;
           expect(frontmatterBeforeClose!.frontmatter).to.equal(mockResponse.frontmatter);
         });
       });

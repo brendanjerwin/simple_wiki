@@ -1,7 +1,7 @@
 import { html, fixture, expect } from '@open-wc/testing';
 import { FrontmatterEditorDialog } from './frontmatter-editor-dialog.js';
-import { GetFrontmatterResponse } from '../gen/api/v1/frontmatter_pb.js';
-import { Struct } from '@bufbuild/protobuf';
+import { GetFrontmatterResponseSchema } from '../gen/api/v1/frontmatter_pb.js';
+import { create, type JsonObject } from '@bufbuild/protobuf';
 import './frontmatter-editor-dialog.js';
 
 describe('FrontmatterEditorDialog - Basic Tests', () => {
@@ -26,14 +26,12 @@ describe('FrontmatterEditorDialog - Basic Tests', () => {
 
   describe('when convertStructToPlainObject is called', () => {
     it('should convert struct to plain object', () => {
-      const mockStruct = new Struct({
-        fields: {
-          title: { kind: { case: 'stringValue', value: 'Test Page' } },
-          identifier: { kind: { case: 'stringValue', value: 'home' } }
-        }
-      });
+      const mockJson: JsonObject = {
+        title: 'Test Page',
+        identifier: 'home'
+      };
       
-      const result = el['convertStructToPlainObject'](mockStruct);
+      const result = el['convertStructToPlainObject'](mockJson);
       expect(result).to.deep.equal({
         title: 'Test Page',
         identifier: 'home'
@@ -50,14 +48,12 @@ describe('FrontmatterEditorDialog - Basic Tests', () => {
 
   describe('when updating working frontmatter', () => {
     it('should update working frontmatter from frontmatter response', () => {
-      const mockStruct = new Struct({
-        fields: {
-          title: { kind: { case: 'stringValue', value: 'Test Page' } },
-          identifier: { kind: { case: 'stringValue', value: 'home' } }
-        }
-      });
+      const mockJson: JsonObject = {
+        title: 'Test Page',
+        identifier: 'home'
+      };
       
-      el.frontmatter = new GetFrontmatterResponse({ frontmatter: mockStruct });
+      el.frontmatter = create(GetFrontmatterResponseSchema, { frontmatter: mockJson });
       el['updateWorkingFrontmatter']();
       
       expect(el.workingFrontmatter).to.deep.equal({

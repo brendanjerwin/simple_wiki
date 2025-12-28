@@ -1,7 +1,7 @@
 import { html, fixture, expect } from '@open-wc/testing';
 import { VersionDisplay } from './version-display.js';
-import { GetVersionResponse } from '../gen/api/v1/system_info_pb.js';
-import { Timestamp } from '@bufbuild/protobuf';
+import { GetVersionResponseSchema } from '../gen/api/v1/system_info_pb.js';
+import { create, Timestamp } from '@bufbuild/protobuf';
 import './version-display.js';
 
 describe('VersionDisplay', () => {
@@ -14,12 +14,12 @@ describe('VersionDisplay', () => {
     el.error = undefined;
     
     // Create a proper mock timestamp
-    const mockTimestamp = new Timestamp({
+    const mockTimestamp = create(Timestamp, {
       seconds: BigInt(Math.floor(new Date('2023-01-01T12:00:00Z').getTime() / 1000)),
       nanos: 0
     });
     
-    el.version = new GetVersionResponse({
+    el.version = create(GetVersionResponseSchema, {
       commit: 'abc123def456',
       buildTime: mockTimestamp
     });
@@ -156,7 +156,7 @@ describe('VersionDisplay', () => {
 
   describe('when formatting timestamp', () => {
     it('should format valid timestamp', () => {
-      const mockTimestamp = new Timestamp({
+      const mockTimestamp = create(Timestamp, {
         seconds: BigInt(Math.floor(new Date('2023-01-01T12:00:00Z').getTime() / 1000)),
         nanos: 0
       });

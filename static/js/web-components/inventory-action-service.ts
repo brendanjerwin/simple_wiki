@@ -1,15 +1,8 @@
 import { createClient } from '@connectrpc/connect';
+import { create } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
-import { InventoryManagementService } from '../gen/api/v1/inventory_connect.js';
-import { PageManagementService } from '../gen/api/v1/page_management_connect.js';
-import {
-  CreateInventoryItemRequest,
-  MoveInventoryItemRequest,
-} from '../gen/api/v1/inventory_pb.js';
-import {
-  GenerateIdentifierRequest,
-  ExistingPageInfo,
-} from '../gen/api/v1/page_management_pb.js';
+import { InventoryManagementService, CreateInventoryItemRequestSchema, MoveInventoryItemRequestSchema, type ExistingPageInfo } from '../gen/api/v1/inventory_pb.js';
+import { PageManagementService, GenerateIdentifierRequestSchema } from '../gen/api/v1/page_management_pb.js';
 import { AugmentErrorService } from './augment-error-service.js';
 import { showToastAfter } from './toast-message.js';
 
@@ -52,7 +45,7 @@ export class InventoryActionService {
     }
 
     try {
-      const request = new CreateInventoryItemRequest({
+      const request = create(CreateInventoryItemRequestSchema, {
         itemIdentifier,
         container: containerIdentifier,
         title: title || '',
@@ -102,7 +95,7 @@ export class InventoryActionService {
     }
 
     try {
-      const request = new GenerateIdentifierRequest({
+      const request = create(GenerateIdentifierRequestSchema, {
         text,
         ensureUnique,
       });
@@ -144,7 +137,7 @@ export class InventoryActionService {
     }
 
     try {
-      const request = new MoveInventoryItemRequest({
+      const request = create(MoveInventoryItemRequestSchema, {
         itemIdentifier,
         newContainer,
       });

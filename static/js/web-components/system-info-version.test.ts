@@ -1,8 +1,8 @@
 import { html, fixture, expect, assert } from '@open-wc/testing';
 import { stub } from 'sinon';
 import { SystemInfoVersion } from './system-info-version.js';
-import { GetVersionResponse } from '../gen/api/v1/system_info_pb.js';
-import { Timestamp } from '@bufbuild/protobuf';
+import { GetVersionResponseSchema } from '../gen/api/v1/system_info_pb.js';
+import { create, Timestamp } from '@bufbuild/protobuf';
 import './system-info-version.js';
 
 function timeout(ms: number, message: string) {
@@ -116,14 +116,14 @@ describe('SystemInfoVersion', () => {
     describe('when version has complete data', () => {
       beforeEach(async () => {
   
-        const mockTimestamp = new Timestamp({
+        const mockTimestamp = create(Timestamp, {
           seconds: BigInt(Math.floor(new Date('2023-06-15T14:30:00Z').getTime() / 1000)),
           nanos: 0
         });
 
         el.loading = false;
         el.error = undefined;
-        el.version = new GetVersionResponse({
+        el.version = create(GetVersionResponseSchema, {
           commit: 'abcdef1234567890',
           buildTime: mockTimestamp
         });
@@ -159,14 +159,14 @@ describe('SystemInfoVersion', () => {
     describe('when version has tagged commit', () => {
       beforeEach(async () => {
   
-        const mockTimestamp = new Timestamp({
+        const mockTimestamp = create(Timestamp, {
           seconds: BigInt(Math.floor(new Date('2023-06-15T14:30:00Z').getTime() / 1000)),
           nanos: 0
         });
 
         el.loading = false;
         el.error = undefined;
-        el.version = new GetVersionResponse({
+        el.version = create(GetVersionResponseSchema, {
           commit: 'v1.2.3 (abcdef1)',
           buildTime: mockTimestamp
         });
@@ -187,14 +187,14 @@ describe('SystemInfoVersion', () => {
     describe('when version has empty commit', () => {
       beforeEach(async () => {
   
-        const mockTimestamp = new Timestamp({
+        const mockTimestamp = create(Timestamp, {
           seconds: BigInt(Math.floor(new Date('2023-06-15T14:30:00Z').getTime() / 1000)),
           nanos: 0
         });
 
         el.loading = false;
         el.error = undefined;
-        el.version = new GetVersionResponse({
+        el.version = create(GetVersionResponseSchema, {
           commit: '',
           buildTime: mockTimestamp
         });
@@ -217,7 +217,7 @@ describe('SystemInfoVersion', () => {
   
         el.loading = false;
         el.error = undefined;
-        el.version = new GetVersionResponse({
+        el.version = create(GetVersionResponseSchema, {
           commit: 'abcdef1234567890',
           buildTime: undefined
         });
@@ -374,7 +374,7 @@ describe('SystemInfoVersion', () => {
 
       beforeEach(() => {
   
-        const timestamp = new Timestamp({
+        const timestamp = create(Timestamp, {
           seconds: BigInt(Math.floor(new Date('2023-12-25T15:45:30Z').getTime() / 1000)),
           nanos: 0
         });
@@ -398,7 +398,7 @@ describe('SystemInfoVersion', () => {
 
       beforeEach(() => {
   
-        const timestamp = new Timestamp({
+        const timestamp = create(Timestamp, {
           seconds: BigInt(0),
           nanos: 0
         });
@@ -418,7 +418,7 @@ describe('SystemInfoVersion', () => {
 
       beforeEach(() => {
   
-        const timestamp = new Timestamp({
+        const timestamp = create(Timestamp, {
           seconds: BigInt(Math.floor(new Date('2023-06-15T14:30:00Z').getTime() / 1000)),
           nanos: 500000000 // 0.5 seconds
         });
@@ -438,14 +438,14 @@ describe('SystemInfoVersion', () => {
   describe('component structure', () => {
     beforeEach(async () => {
 
-      const mockTimestamp = new Timestamp({
+      const mockTimestamp = create(Timestamp, {
         seconds: BigInt(Math.floor(new Date('2023-06-15T14:30:00Z').getTime() / 1000)),
         nanos: 0
       });
 
       el.loading = false;
       el.error = undefined;
-      el.version = new GetVersionResponse({
+      el.version = create(GetVersionResponseSchema, {
         commit: 'abcdef1234567890',
         buildTime: mockTimestamp
       });
@@ -491,14 +491,14 @@ describe('SystemInfoVersion', () => {
     describe('when loading is true but version exists', () => {
       beforeEach(async () => {
   
-        const mockTimestamp = new Timestamp({
+        const mockTimestamp = create(Timestamp, {
           seconds: BigInt(Math.floor(new Date('2023-06-15T14:30:00Z').getTime() / 1000)),
           nanos: 0
         });
 
         el.loading = true;
         el.error = undefined;
-        el.version = new GetVersionResponse({
+        el.version = create(GetVersionResponseSchema, {
           commit: 'abcdef1234567890',
           buildTime: mockTimestamp
         });
@@ -522,14 +522,14 @@ describe('SystemInfoVersion', () => {
     describe('when error exists but version also exists', () => {
       beforeEach(async () => {
   
-        const mockTimestamp = new Timestamp({
+        const mockTimestamp = create(Timestamp, {
           seconds: BigInt(Math.floor(new Date('2023-06-15T14:30:00Z').getTime() / 1000)),
           nanos: 0
         });
 
         el.loading = false;
         el.error = 'Some error';
-        el.version = new GetVersionResponse({
+        el.version = create(GetVersionResponseSchema, {
           commit: 'abcdef1234567890',
           buildTime: mockTimestamp
         });
