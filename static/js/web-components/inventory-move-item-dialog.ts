@@ -4,22 +4,15 @@ import { InventoryActionService } from './inventory-action-service.js';
 import { createClient } from '@connectrpc/connect';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import { SearchService } from '../gen/api/v1/search_connect.js';
-import { Frontmatter } from '../gen/api/v1/frontmatter_connect.js';
 import type { SearchResult } from '../gen/api/v1/search_pb.js';
 import { SearchContentRequest } from '../gen/api/v1/search_pb.js';
-import { GetFrontmatterRequest } from '../gen/api/v1/frontmatter_pb.js';
-import { WikiUrlParser } from '../utils/wiki-url-parser.js';
-import './qr-scanner.js';
-import type { QrScannedEventDetail, QrScanner } from './qr-scanner.js';
+import './inventory-qr-scanner.js';
+import type { ItemScannedEventDetail, ScannedItemInfo, InventoryQrScanner } from './inventory-qr-scanner.js';
 
 /**
- * Information about a scanned container result
+ * Information about a scanned container result (alias for ScannedItemInfo)
  */
-export interface ScannedResultInfo {
-  identifier: string;
-  title: string;
-  container?: string;
-}
+export type ScannedResultInfo = ScannedItemInfo;
 
 /**
  * InventoryMoveItemDialog - Modal dialog for moving inventory items between containers
@@ -230,55 +223,6 @@ export class InventoryMoveItemDialog extends LitElement {
         opacity: 0.6;
       }
 
-      .scanner-mode-container {
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        overflow: hidden;
-        background: #000;
-      }
-
-      .scanner-mode-container qr-scanner {
-        display: block;
-      }
-
-      /* Hide qr-scanner's own toggle button when in scanner mode container */
-      .scanner-mode-container .scanner-toggle {
-        display: none;
-      }
-
-      /* Force scanner area to be visible when in scanner mode */
-      .scanner-mode-container .scanner-area {
-        display: block !important;
-      }
-
-      .scanner-mode-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 8px 12px;
-        background: #1a1a1a;
-        color: #fff;
-      }
-
-      .scanner-mode-header .title {
-        font-size: 14px;
-        font-weight: 500;
-      }
-
-      .scanner-mode-close {
-        padding: 4px 10px;
-        background: #dc3545;
-        color: white;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 12px;
-      }
-
-      .scanner-mode-close:hover {
-        background: #c82333;
-      }
-
       .scanned-result {
         margin-top: 12px;
         border: 2px solid #10b981;
@@ -341,19 +285,6 @@ export class InventoryMoveItemDialog extends LitElement {
       .scan-again-button:hover {
         background: #fef2f2;
       }
-
-      .scan-validating {
-        margin-top: 12px;
-        padding: 12px;
-        background: #f3f4f6;
-        border: 1px solid #e5e7eb;
-        border-radius: 4px;
-        color: #6b7280;
-        font-size: 14px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
     `
   );
 
@@ -371,7 +302,6 @@ export class InventoryMoveItemDialog extends LitElement {
     scannedDestination: { state: true },
     scannedResult: { state: true },
     scanError: { state: true },
-    scanValidating: { state: true },
   };
 
   declare open: boolean;
@@ -381,18 +311,16 @@ export class InventoryMoveItemDialog extends LitElement {
   declare searchResults: SearchResult[];
   declare searchLoading: boolean;
   declare movingTo: string | null;
-  declare error?: string;
+  declare error: Error | null;
   // QR scanner state
   declare scannerMode: boolean;
   declare scannedDestination: string | null;
   declare scannedResult: ScannedResultInfo | null;
   declare scanError: Error | null;
-  declare scanValidating: boolean;
 
   private _searchDebounceTimeoutMs = 300;
   private _searchDebounceTimer?: ReturnType<typeof setTimeout>;
   private searchClient = createClient(SearchService, getGrpcWebTransport());
-  private frontmatterClient = createClient(Frontmatter, getGrpcWebTransport());
   private inventoryActionService = new InventoryActionService();
 
   constructor() {
@@ -404,13 +332,12 @@ export class InventoryMoveItemDialog extends LitElement {
     this.searchResults = [];
     this.searchLoading = false;
     this.movingTo = null;
-    this.error = undefined;
+    this.error = null;
     // QR scanner state
     this.scannerMode = false;
     this.scannedDestination = null;
     this.scannedResult = null;
     this.scanError = null;
-    this.scanValidating = false;
   }
 
   override connectedCallback(): void {
@@ -444,13 +371,12 @@ export class InventoryMoveItemDialog extends LitElement {
     this.searchResults = [];
     this.searchLoading = false;
     this.movingTo = null;
-    this.error = undefined;
+    this.error = null;
     // Reset QR scanner state
     this.scannerMode = false;
     this.scannedDestination = null;
     this.scannedResult = null;
     this.scanError = null;
-    this.scanValidating = false;
     this.open = true;
 
     // Focus search field after render
@@ -467,13 +393,12 @@ export class InventoryMoveItemDialog extends LitElement {
     this.searchResults = [];
     this.searchLoading = false;
     this.movingTo = null;
-    this.error = undefined;
+    this.error = null;
     // Reset QR scanner state
     this.scannerMode = false;
     this.scannedDestination = null;
     this.scannedResult = null;
     this.scanError = null;
-    this.scanValidating = false;
   }
 
   private _handleBackdropClick = (): void => {
@@ -489,7 +414,7 @@ export class InventoryMoveItemDialog extends LitElement {
   private _handleSearchInput = (event: Event): void => {
     const input = event.target as HTMLInputElement;
     this.searchQuery = input.value;
-    this.error = undefined;
+    this.error = null;
     // Clear scan state when user starts typing - they're switching to search mode
     this.scanError = null;
     this.scannedDestination = null;
@@ -542,66 +467,41 @@ export class InventoryMoveItemDialog extends LitElement {
   };
 
   /**
-   * Handle QR code scanned event
+   * Handle item scanned from inventory-qr-scanner
    */
-  public _handleQrScanned = async (event: CustomEvent<QrScannedEventDetail>): Promise<void> => {
-    const rawValue = event.detail.rawValue;
+  public _handleItemScanned = (event: CustomEvent<ItemScannedEventDetail>): void => {
+    const { item } = event.detail;
 
     // Clear any previous scan state
+    this.scanError = null;
     this.scannedDestination = null;
     this.scannedResult = null;
-    this.scanError = null;
 
-    // Parse the URL
-    const parseResult = WikiUrlParser.parse(rawValue);
-    if (!parseResult.success || !parseResult.pageIdentifier) {
-      this._exitScannerMode();
-      this.scanError = new Error(`Not a valid wiki URL: "${rawValue}"`);
+    // Exit scanner mode first
+    this._exitScannerMode();
+
+    // Validate: is it a container?
+    if (!item.isContainer) {
+      this.scanError = new Error(`"${item.identifier}" is not marked as a container`);
       return;
     }
 
-    const identifier = parseResult.pageIdentifier;
-
-    // Check if trying to move to current container
-    if (identifier === this.currentContainer) {
-      this._exitScannerMode();
+    // Validate: not the current container?
+    if (item.identifier === this.currentContainer) {
       this.scanError = new Error('Cannot move to current location');
       return;
     }
 
-    // Validate the page exists and is a container
-    this.scanValidating = true;
+    // Success! Set the scanned result
+    this.scannedDestination = item.identifier;
+    this.scannedResult = item;
+  };
+
+  /**
+   * Handle cancelled event from inventory-qr-scanner
+   */
+  public _handleScannerCancelled = (): void => {
     this._exitScannerMode();
-    try {
-      const request = new GetFrontmatterRequest({ page: identifier });
-      const response = await this.frontmatterClient.getFrontmatter(request);
-
-      // Convert protobuf Struct to plain object for easy access
-      const fm = response.frontmatter?.toJson() as Record<string, unknown> | undefined;
-      const inventory = fm?.['inventory'] as Record<string, unknown> | undefined;
-
-      // Check if page is a container (can be boolean true or string 'true')
-      const isContainerValue = inventory?.['is_container'];
-      const isContainer = isContainerValue === true || isContainerValue === 'true';
-      if (!isContainer) {
-        this.scanError = new Error(`"${identifier}" is not marked as a container`);
-        this.scanValidating = false;
-        return;
-      }
-
-      // Success! Set the scanned result
-      this.scannedDestination = identifier;
-      this.scannedResult = {
-        identifier,
-        title: (fm?.['title'] as string) || identifier,
-        container: inventory?.['container'] as string | undefined,
-      };
-    } catch (err) {
-      // Preserve original error for debugging
-      this.scanError = err instanceof Error ? err : new Error(`Container "${identifier}" not found`);
-    } finally {
-      this.scanValidating = false;
-    }
   };
 
   /**
@@ -614,7 +514,7 @@ export class InventoryMoveItemDialog extends LitElement {
   };
 
   /**
-   * Enter scanner mode - replaces search UI with camera
+   * Enter scanner mode - replaces search UI with scanner component
    */
   private _enterScannerMode = (): void => {
     this.scannerMode = true;
@@ -624,7 +524,7 @@ export class InventoryMoveItemDialog extends LitElement {
     this.searchResults = [];
     // Wait for DOM update, then expand the scanner
     this.updateComplete.then(() => {
-      const scanner = this.shadowRoot?.querySelector('qr-scanner') as QrScanner | null;
+      const scanner = this.shadowRoot?.querySelector('inventory-qr-scanner') as InventoryQrScanner | null;
       if (scanner) {
         scanner.expand();
       }
@@ -635,10 +535,6 @@ export class InventoryMoveItemDialog extends LitElement {
    * Exit scanner mode - returns to search UI
    */
   private _exitScannerMode = (): void => {
-    const scanner = this.shadowRoot?.querySelector('qr-scanner') as QrScanner | null;
-    if (scanner) {
-      scanner.collapse();
-    }
     this.scannerMode = false;
   };
 
@@ -655,7 +551,7 @@ export class InventoryMoveItemDialog extends LitElement {
     if (this.movingTo) return;
 
     this.movingTo = containerIdentifier;
-    this.error = undefined;
+    this.error = null;
 
     const result = await this.inventoryActionService.moveItem(
       this.itemIdentifier,
@@ -669,7 +565,7 @@ export class InventoryMoveItemDialog extends LitElement {
       );
       this.close();
     } else {
-      this.error = result.error;
+      this.error = result.error ? new Error(result.error) : null;
       this.movingTo = null;
     }
   };
@@ -745,7 +641,7 @@ export class InventoryMoveItemDialog extends LitElement {
           </div>
           <button
             class="move-to-button"
-            @click=${() => this._handleMoveToClick(this.scannedResult!.identifier)}
+            @click=${() => { if (this.scannedResult) this._handleMoveToClick(this.scannedResult.identifier); }}
             ?disabled=${this.movingTo !== null}
           >
             ${this.movingTo === this.scannedResult.identifier ? 'Moving...' : 'Move To'}
@@ -773,49 +669,28 @@ export class InventoryMoveItemDialog extends LitElement {
     `;
   }
 
-  private _renderScanValidating() {
-    if (!this.scanValidating) {
-      return nothing;
-    }
-
-    return html`
-      <div class="scan-validating">
-        <i class="fa-solid fa-spinner fa-spin"></i>
-        Validating scanned page...
-      </div>
-    `;
-  }
-
   override render() {
     return html`
       ${sharedStyles}
       <div class="backdrop" @click=${this._handleBackdropClick}></div>
       <div class="dialog system-font border-radius box-shadow" @click=${this._handleDialogClick}>
         <div class="dialog-header">
-          <h2 class="dialog-title">Move: ${this.itemIdentifier}</h2>
+          <h2 class="dialog-title">Move Item: ${this.itemIdentifier}</h2>
         </div>
 
         <div class="content">
           ${this.error
-            ? html`<div class="error-message">${this.error}</div>`
+            ? html`<div class="error-message">${this.error.message}</div>`
             : ''}
 
           <div class="form-group">
             <label for="searchQuery">Destination</label>
             ${this.scannerMode
               ? html`
-                  <div class="scanner-mode-container">
-                    <div class="scanner-mode-header">
-                      <span class="title">Scan QR Code</span>
-                      <button class="scanner-mode-close" @click=${this._exitScannerMode}>
-                        Cancel
-                      </button>
-                    </div>
-                    <qr-scanner
-                      embedded
-                      @qr-scanned=${this._handleQrScanned}
-                    ></qr-scanner>
-                  </div>
+                  <inventory-qr-scanner
+                    @item-scanned=${this._handleItemScanned}
+                    @cancelled=${this._handleScannerCancelled}
+                  ></inventory-qr-scanner>
                 `
               : html`
                   <div class="search-row">
@@ -826,19 +701,19 @@ export class InventoryMoveItemDialog extends LitElement {
                       .value=${this.searchQuery}
                       @input=${this._handleSearchInput}
                       placeholder="Type to search for containers..."
-                      ?disabled=${this.movingTo !== null || this.scanValidating}
+                      ?disabled=${this.movingTo !== null}
                     />
                     <button
                       class="qr-scan-button"
                       @click=${this._enterScannerMode}
-                      ?disabled=${this.movingTo !== null || this.scanValidating}
+                      ?disabled=${this.movingTo !== null}
                       title="Scan QR code"
+                      aria-label="Scan QR code to select destination"
                     >
                       <i class="fa-solid fa-qrcode"></i>
                     </button>
                   </div>
                   ${this._renderScanError()}
-                  ${this._renderScanValidating()}
                   <div class="help-text">Search or scan a QR code to find a container</div>
                 `
             }

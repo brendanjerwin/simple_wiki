@@ -2,7 +2,7 @@ import { html, fixture, expect } from '@open-wc/testing';
 import sinon from 'sinon';
 import { InventoryMoveItemDialog } from './inventory-move-item-dialog.js';
 import './inventory-move-item-dialog.js';
-import type { QrScannedEventDetail } from './qr-scanner.js';
+import type { ItemScannedEventDetail, ScannedItemInfo } from './inventory-qr-scanner.js';
 
 describe('InventoryMoveItemDialog', () => {
   let el: InventoryMoveItemDialog;
@@ -70,7 +70,7 @@ describe('InventoryMoveItemDialog', () => {
     });
 
     it('should have no error by default', () => {
-      expect(el.error).to.be.undefined;
+      expect(el.error).to.be.null;
     });
   });
 
@@ -105,7 +105,7 @@ describe('InventoryMoveItemDialog', () => {
       });
 
       it('should clear error', () => {
-        expect(el.error).to.be.undefined;
+        expect(el.error).to.be.null;
       });
     });
   });
@@ -134,7 +134,7 @@ describe('InventoryMoveItemDialog', () => {
     });
 
     it('should clear error', () => {
-      expect(el.error).to.be.undefined;
+      expect(el.error).to.be.null;
     });
   });
 
@@ -180,7 +180,7 @@ describe('InventoryMoveItemDialog', () => {
 
       it('should render dialog title with item identifier', () => {
         const title = el.shadowRoot?.querySelector('.dialog-title');
-        expect(title?.textContent).to.contain('Move: screwdriver');
+        expect(title?.textContent).to.contain('Move Item: screwdriver');
       });
 
       it('should render search query field', () => {
@@ -208,7 +208,7 @@ describe('InventoryMoveItemDialog', () => {
     describe('when error is present', () => {
       beforeEach(async () => {
         el.openDialog('screwdriver', 'drawer_kitchen');
-        el.error = 'Container not found';
+        el.error = new Error('Container not found');
         await el.updateComplete;
       });
 
@@ -356,27 +356,37 @@ describe('InventoryMoveItemDialog', () => {
         await el.updateComplete;
       });
 
-      it('should render QR scanner component', () => {
-        const scanner = el.shadowRoot?.querySelector('qr-scanner');
+      it('should render inventory QR scanner component', () => {
+        const scanner = el.shadowRoot?.querySelector('inventory-qr-scanner');
         expect(scanner).to.exist;
       });
     });
 
-    describe('_handleQrScanned', () => {
-      describe('when scanned URL is invalid', () => {
+    describe('_handleItemScanned', () => {
+      describe('when scanned item is not a container', () => {
+        let scannedItem: ScannedItemInfo;
+
         beforeEach(async () => {
           el.openDialog('screwdriver', 'drawer_kitchen');
+          el.scannerMode = true;
           await el.updateComplete;
 
-          const event = new CustomEvent<QrScannedEventDetail>('qr-scanned', {
-            detail: { rawValue: 'not-a-valid-url://bad' },
+          scannedItem = {
+            identifier: 'hammer',
+            title: 'Hammer',
+            container: 'toolbox',
+            isContainer: false,
+          };
+
+          const event = new CustomEvent<ItemScannedEventDetail>('item-scanned', {
+            detail: { item: scannedItem },
           });
-          await el._handleQrScanned(event);
+          el._handleItemScanned(event);
           await el.updateComplete;
         });
 
-        it('should set scanError', () => {
-          expect(el.scanError?.message).to.contain('Not a valid wiki URL');
+        it('should set scanError about not being a container', () => {
+          expect(el.scanError?.message).to.contain('not marked as a container');
         });
 
         it('should not set scannedDestination', () => {
@@ -386,17 +396,30 @@ describe('InventoryMoveItemDialog', () => {
         it('should not set scannedResult', () => {
           expect(el.scannedResult).to.be.null;
         });
+
+        it('should exit scanner mode', () => {
+          expect(el.scannerMode).to.be.false;
+        });
       });
 
-      describe('when scanned URL points to current container', () => {
+      describe('when scanned item is the current container', () => {
+        let scannedItem: ScannedItemInfo;
+
         beforeEach(async () => {
           el.openDialog('screwdriver', 'drawer_kitchen');
+          el.scannerMode = true;
           await el.updateComplete;
 
-          const event = new CustomEvent<QrScannedEventDetail>('qr-scanned', {
-            detail: { rawValue: 'https://wiki.example.com/drawer_kitchen/view' },
+          scannedItem = {
+            identifier: 'drawer_kitchen',
+            title: 'Kitchen Drawer',
+            isContainer: true,
+          };
+
+          const event = new CustomEvent<ItemScannedEventDetail>('item-scanned', {
+            detail: { item: scannedItem },
           });
-          await el._handleQrScanned(event);
+          el._handleItemScanned(event);
           await el.updateComplete;
         });
 
@@ -406,6 +429,49 @@ describe('InventoryMoveItemDialog', () => {
 
         it('should not set scannedDestination', () => {
           expect(el.scannedDestination).to.be.null;
+        });
+
+        it('should exit scanner mode', () => {
+          expect(el.scannerMode).to.be.false;
+        });
+      });
+
+      describe('when scanned item is a valid container', () => {
+        let scannedItem: ScannedItemInfo;
+
+        beforeEach(async () => {
+          el.openDialog('screwdriver', 'drawer_kitchen');
+          el.scannerMode = true;
+          await el.updateComplete;
+
+          scannedItem = {
+            identifier: 'garage_toolbox',
+            title: 'Garage Toolbox',
+            container: 'garage',
+            isContainer: true,
+          };
+
+          const event = new CustomEvent<ItemScannedEventDetail>('item-scanned', {
+            detail: { item: scannedItem },
+          });
+          el._handleItemScanned(event);
+          await el.updateComplete;
+        });
+
+        it('should set scannedDestination', () => {
+          expect(el.scannedDestination).to.equal('garage_toolbox');
+        });
+
+        it('should set scannedResult', () => {
+          expect(el.scannedResult).to.deep.equal(scannedItem);
+        });
+
+        it('should not set scanError', () => {
+          expect(el.scanError).to.be.null;
+        });
+
+        it('should exit scanner mode', () => {
+          expect(el.scannerMode).to.be.false;
         });
       });
     });
@@ -473,7 +539,7 @@ describe('InventoryMoveItemDialog', () => {
           identifier: 'garage_toolbox',
           title: 'Garage Toolbox',
         };
-        el.scanError = 'Previous error';
+        el.scanError = new Error('Previous error');
 
         el._clearScannedResult();
         await el.updateComplete;
@@ -492,28 +558,12 @@ describe('InventoryMoveItemDialog', () => {
       });
     });
 
-    describe('scan validating state', () => {
-      describe('when scanValidating is true', () => {
-        beforeEach(async () => {
-          el.openDialog('screwdriver', 'drawer_kitchen');
-          el.scanValidating = true;
-          await el.updateComplete;
-        });
-
-        it('should display validating message', () => {
-          const validating = el.shadowRoot?.querySelector('.scan-validating');
-          expect(validating?.textContent).to.contain('Validating scanned page');
-        });
-      });
-    });
-
     describe('openDialog reset', () => {
       beforeEach(() => {
         // Set some scan state
         el.scannedDestination = 'old_container';
         el.scannedResult = { identifier: 'old', title: 'Old' };
-        el.scanError = 'Old error';
-        el.scanValidating = true;
+        el.scanError = new Error('Old error');
 
         // Open dialog should reset
         el.openDialog('new_item', 'new_container');
@@ -530,10 +580,6 @@ describe('InventoryMoveItemDialog', () => {
       it('should reset scanError', () => {
         expect(el.scanError).to.be.null;
       });
-
-      it('should reset scanValidating', () => {
-        expect(el.scanValidating).to.be.false;
-      });
     });
 
     describe('close reset', () => {
@@ -541,8 +587,7 @@ describe('InventoryMoveItemDialog', () => {
         el.openDialog('item', 'container');
         el.scannedDestination = 'scanned_container';
         el.scannedResult = { identifier: 'scanned', title: 'Scanned' };
-        el.scanError = 'Some error';
-        el.scanValidating = true;
+        el.scanError = new Error('Some error');
 
         el.close();
       });
@@ -557,10 +602,6 @@ describe('InventoryMoveItemDialog', () => {
 
       it('should reset scanError', () => {
         expect(el.scanError).to.be.null;
-      });
-
-      it('should reset scanValidating', () => {
-        expect(el.scanValidating).to.be.false;
       });
     });
   });

@@ -182,6 +182,7 @@ export class QrScanner extends LitElement {
         position: relative;
         width: 100%;
         min-height: 250px;
+        background: #000;
       }
 
       #qr-video {
@@ -240,27 +241,23 @@ export class QrScanner extends LitElement {
         padding: 40px;
         color: #ccc;
         font-size: 14px;
+        background: #000;
       }
 
       .camera-select {
-        padding: 12px;
-        background: #f0f0f0;
-        border-bottom: 1px solid #ddd;
+        padding: 8px 12px;
+        background: #1a1a1a;
       }
 
       .camera-select label {
-        display: block;
-        margin-bottom: 6px;
+        color: #ccc;
         font-size: 12px;
-        color: #666;
+        margin-right: 8px;
       }
 
       .camera-select select {
-        width: 100%;
-        padding: 8px;
-        border: 1px solid #ccc;
+        padding: 4px 8px;
         border-radius: 4px;
-        font-size: 14px;
       }
     `,
   ];
@@ -322,7 +319,6 @@ export class QrScanner extends LitElement {
       await this.updateComplete;
       await this._startScanning();
     } catch (err) {
-      console.error('[QrScanner] Error in expand():', err);
       this._handleError(err);
     } finally {
       this.loading = false;
@@ -358,14 +354,12 @@ export class QrScanner extends LitElement {
 
   private async _startScanning(): Promise<void> {
     if (!this.selectedCameraId) {
-      console.warn('[QrScanner] No camera selected, aborting');
       return;
     }
 
     const videoElement = this.querySelector('#qr-video') as HTMLVideoElement;
     if (!videoElement) {
-      console.error('[QrScanner] Video element not found in DOM');
-      return;
+      throw new Error('QrScanner: Video element not found in DOM');
     }
 
     try {
@@ -386,7 +380,6 @@ export class QrScanner extends LitElement {
       // Force video to be visible with proper positioning
       videoElement.style.cssText = 'display: block !important; width: 100% !important; height: 250px !important; visibility: visible !important; position: relative !important; object-fit: cover !important;';
     } catch (err) {
-      console.error('[QrScanner] Error starting camera:', err);
       this._handleError(err);
     }
   }
@@ -481,6 +474,7 @@ export class QrScanner extends LitElement {
                 part="toggle"
                 @click=${this.toggle}
                 ?disabled=${this.loading}
+                aria-label=${this.expanded ? 'Close QR code scanner' : 'Open QR code scanner'}
               >
                 <span class="icon"><i class="fa-solid fa-qrcode"></i></span>
                 ${this.expanded ? 'Close Scanner' : 'Scan QR Code'}
@@ -489,15 +483,15 @@ export class QrScanner extends LitElement {
           : nothing}
 
         ${this.error
-          ? html`<div class="error-message" style="padding: 12px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 4px; color: #dc2626; font-size: 14px; margin-top: 8px;">${this.error.message}</div>`
+          ? html`<div class="error-message">${this.error.message}</div>`
           : nothing}
 
-        <div class="scanner-area ${this.expanded || this.embedded ? '' : 'collapsed'}" part="scanner-area" style="${this.expanded || this.embedded ? 'display: block;' : 'display: none;'}">
+        <div class="scanner-area ${this.expanded || this.embedded ? '' : 'collapsed'}" part="scanner-area">
           ${this.loading
-            ? html`<div class="loading" style="display: flex; align-items: center; justify-content: center; padding: 40px; color: #ccc; font-size: 14px; background: #000;">Starting camera...</div>`
+            ? html`<div class="loading">Starting camera...</div>`
             : nothing}
 
-          <div class="viewfinder-container" style="position: relative; width: 100%; min-height: 250px; background: #000;">
+          <div class="viewfinder-container">
             <video id="qr-video"></video>
           </div>
 
@@ -505,13 +499,12 @@ export class QrScanner extends LitElement {
             ? html`
                 ${this.cameras.length > 1
                   ? html`
-                      <div class="camera-select" style="padding: 8px 12px; background: #1a1a1a;">
-                        <label for="camera-select" style="color: #ccc; font-size: 12px; margin-right: 8px;">Camera</label>
+                      <div class="camera-select">
+                        <label for="camera-select">Camera</label>
                         <select
                           id="camera-select"
                           .value=${this.selectedCameraId || ''}
                           @change=${this._handleCameraChange}
-                          style="padding: 4px 8px; border-radius: 4px;"
                         >
                           ${this.cameras.map(
                             camera => html`
@@ -523,8 +516,8 @@ export class QrScanner extends LitElement {
                     `
                   : nothing}
 
-                <div class="scanner-controls" style="display: flex; justify-content: center; padding: 12px; background: #1a1a1a; gap: 12px;">
-                  <button class="stop-button" @click=${this._handleStopClick} style="padding: 8px 16px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">
+                <div class="scanner-controls">
+                  <button class="stop-button" @click=${this._handleStopClick}>
                     Stop Scanning
                   </button>
                 </div>

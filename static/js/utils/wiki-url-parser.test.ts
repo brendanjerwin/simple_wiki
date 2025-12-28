@@ -169,6 +169,56 @@ describe('WikiUrlParser', () => {
       });
     });
 
+    describe('when given a URL with a port number', () => {
+      describe('with localhost and port', () => {
+        let result: WikiUrlParseResult;
+
+        beforeEach(() => {
+          result = WikiUrlParser.parse('http://localhost:8050/my_page/view');
+        });
+
+        it('should return success true', () => {
+          expect(result.success).to.be.true;
+        });
+
+        it('should extract the page identifier', () => {
+          expect(result.pageIdentifier).to.equal('my_page');
+        });
+      });
+
+      describe('with domain and non-standard port', () => {
+        let result: WikiUrlParseResult;
+
+        beforeEach(() => {
+          result = WikiUrlParser.parse('https://wiki.example.com:8443/toolbox/edit');
+        });
+
+        it('should return success true', () => {
+          expect(result.success).to.be.true;
+        });
+
+        it('should extract the page identifier', () => {
+          expect(result.pageIdentifier).to.equal('toolbox');
+        });
+      });
+
+      describe('with IP address and port', () => {
+        let result: WikiUrlParseResult;
+
+        beforeEach(() => {
+          result = WikiUrlParser.parse('http://192.168.1.100:8080/garage_shelf');
+        });
+
+        it('should return success true', () => {
+          expect(result.success).to.be.true;
+        });
+
+        it('should extract the page identifier', () => {
+          expect(result.pageIdentifier).to.equal('garage_shelf');
+        });
+      });
+    });
+
     describe('when given a complex identifier with underscores and numbers', () => {
       let result: WikiUrlParseResult;
 
