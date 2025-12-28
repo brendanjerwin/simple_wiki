@@ -23,7 +23,6 @@ export class SystemInfo extends LitElement {
         z-index: 1000;
         font-size: 11px;
         line-height: 1.2;
-        transition: opacity 0.3s ease;
       }
 
       .system-panel {
@@ -31,14 +30,17 @@ export class SystemInfo extends LitElement {
         border: 1px solid #404040;
         border-radius: 4px;
         padding: 4px 8px;
-        opacity: 0.2;
-        transition: opacity 0.3s ease;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
         position: relative;
         max-width: 400px;
+        transform: translateX(calc(100% - 20px));
+        opacity: 0.2;
+        transition: transform 0.3s ease, opacity 0.3s ease;
+        cursor: pointer;
       }
 
-      .system-panel:hover {
+      .system-panel.expanded {
+        transform: translateX(0);
         opacity: 0.9;
       }
 
@@ -77,12 +79,14 @@ export class SystemInfo extends LitElement {
     jobStatus: { state: true },
     loading: { state: true },
     error: { state: true },
+    expanded: { state: true },
   };
 
   declare version?: GetVersionResponse;
   declare jobStatus?: GetJobStatusResponse;
   declare loading: boolean;
   declare error?: string;
+  declare expanded: boolean;
   private debounceTimer?: ReturnType<typeof setTimeout>;
   private refreshTimer?: ReturnType<typeof setInterval>;
   private streamSubscription?: AbortController;
@@ -92,14 +96,23 @@ export class SystemInfo extends LitElement {
   constructor() {
     super();
     this.loading = true;
+    this.expanded = false;
   }
 
   override connectedCallback(): void {
     super.connectedCallback();
     this.loadSystemInfo();
+    // Add click-outside listener to document
+    document.addEventListener('click', this.handleClickOutside);
   }
 
   override firstUpdated(): void {
+    // Add click event listener to the panel to toggle expansion and stop propagation
+    const panel = this.shadowRoot?.querySelector('.system-panel');
+    if (panel) {
+      panel.addEventListener('click', this.handlePanelClick.bind(this));
+    }
+    
     // Add hover event listener to the overlay after the component is first rendered
     const overlay = this.shadowRoot?.querySelector('.hover-overlay');
     if (overlay) {
@@ -116,7 +129,23 @@ export class SystemInfo extends LitElement {
       clearTimeout(this.debounceTimer);
       this.debounceTimer = undefined;
     }
+    // Remove click-outside listener
+    document.removeEventListener('click', this.handleClickOutside);
   }
+
+  private handlePanelClick = (event: Event): void => {
+    // Stop propagation to prevent click-outside from firing
+    event.stopPropagation();
+    // Toggle expansion state
+    this.expanded = !this.expanded;
+  };
+
+  private handleClickOutside = (): void => {
+    // Collapse the panel if it's expanded and click is outside
+    if (this.expanded) {
+      this.expanded = false;
+    }
+  };
 
   private handleMouseEnter(): void {
     // Clear any existing debounce timer
@@ -237,7 +266,7 @@ export class SystemInfo extends LitElement {
 
   override render() {
     return html`
-      <div class="system-panel system-font">
+      <div class="system-panel ${this.expanded ? 'expanded' : ''} system-font">
         <div class="hover-overlay"></div>
         <div class="system-content">
           <!-- Version Info (Always Present) -->
