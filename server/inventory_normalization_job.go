@@ -532,103 +532,24 @@ func formatAnomalyType(t string) string {
 	}
 }
 
-// removeItemFromContainerItemsList removes an item from a container's inventory.items array.
-// This function handles un-munged identifiers by comparing munged versions.
-// itemID can be munged or un-munged - it will be munged for comparison.
-// Note: MungeIdentifier is idempotent, so munging an already-munged ID is safe.
-func (j *InventoryNormalizationJob) removeItemFromContainerItemsList(containerID, itemID string) error {
-	_, fm, err := j.deps.ReadFrontMatter(containerID)
-	if err != nil {
-		// Container doesn't exist, nothing to do
-		return nil
-	}
-
-	inventory, ok := fm["inventory"].(map[string]any)
-	if !ok {
-		// No inventory section, nothing to do
-		return nil
-	}
-
-	itemsRaw, ok := inventory["items"]
-	if !ok {
-		// No items array, nothing to do
-		return nil
-	}
-
-	// Handle both []string and []any
-	var items []any
-	switch v := itemsRaw.(type) {
-	case []string:
-		for _, item := range v {
-			items = append(items, item)
-		}
-	case []any:
-		items = v
-	default:
-		// Unknown type, nothing to do
-		return nil
-	}
-
-	if len(items) == 0 {
-		// Empty items array, nothing to do
-		return nil
-	}
-
-	// Find and remove the item (comparing munged identifiers)
-	mungedItemID := wikiidentifiers.MungeIdentifier(itemID)
-	var newItems []any
-	removed := false
-	for _, item := range items {
-		if s, ok := item.(string); ok {
-			mungedItem := wikiidentifiers.MungeIdentifier(s)
-			if mungedItem == mungedItemID {
-				// Skip this item (remove it)
-				removed = true
-				continue
-			}
-		}
-		newItems = append(newItems, item)
-	}
-
-	// If nothing was removed, don't write anything
-	if !removed {
-		return nil
-	}
-
-	// Update the items array
-	inventory["items"] = newItems
-
-	// Write back the frontmatter
-	if err := j.deps.WriteFrontMatter(containerID, fm); err != nil {
-		return fmt.Errorf("failed to write frontmatter for container %s: %w", containerID, err)
-	}
-
-	j.logger.Info("Removed item '%s' from container '%s' items list", itemID, containerID)
-	return nil
-}
-
 // removeItemsFromParentContainers removes items from their parent containers' items lists.
 // This is called after items have been created/updated to ensure the items list is consistent
 // with the canonical container references on the items.
+//
+// This function reads frontmatter directly rather than using the index to avoid race conditions
+// where newly created items haven't been indexed yet.
 func (j *InventoryNormalizationJob) removeItemsFromParentContainers(containers []string) int {
 	removedCount := 0
 
 	for _, containerID := range containers {
-		// Get items that have this container set in inventory.container
-		itemsWithContainer := j.getItemsWithContainerReference(containerID)
-
-		if len(itemsWithContainer) == 0 {
-			continue
-		}
-
-		// Read the container's frontmatter once
-		_, fm, err := j.deps.ReadFrontMatter(containerID)
+		// Read the container's frontmatter
+		_, containerFm, err := j.deps.ReadFrontMatter(containerID)
 		if err != nil {
 			// Container doesn't exist, skip
 			continue
 		}
 
-		inventory, ok := fm["inventory"].(map[string]any)
+		inventory, ok := containerFm["inventory"].(map[string]any)
 		if !ok {
 			// No inventory section, skip
 			continue
@@ -660,14 +581,41 @@ func (j *InventoryNormalizationJob) removeItemsFromParentContainers(containers [
 		}
 
 		// Build a set of munged item IDs that have this container reference
-		// Note: itemsWithContainer already contains munged identifiers from the index.
-		// We apply defensive munging here as well since MungeIdentifier is idempotent
-		// (munging an already-munged identifier returns the same value), ensuring
-		// consistency even if the index behavior changes in the future.
+		// by checking each item's frontmatter directly (avoids index race conditions)
 		itemsWithContainerSet := make(map[string]bool)
-		for _, itemID := range itemsWithContainer {
-			mungedID := wikiidentifiers.MungeIdentifier(itemID)
-			itemsWithContainerSet[mungedID] = true
+		for _, item := range items {
+			if s, ok := item.(string); ok {
+				mungedItemID := wikiidentifiers.MungeIdentifier(s)
+				
+				// Read the item's frontmatter to check if it has this container reference
+				_, itemFm, err := j.deps.ReadFrontMatter(mungedItemID)
+				if err != nil {
+					// Item doesn't exist yet, skip
+					continue
+				}
+
+				itemInventory, ok := itemFm["inventory"].(map[string]any)
+				if !ok {
+					continue
+				}
+
+				containerRef, ok := itemInventory["container"].(string)
+				if !ok {
+					continue
+				}
+
+				// Check if this item's container reference matches this container
+				mungedContainerRef := wikiidentifiers.MungeIdentifier(containerRef)
+				mungedContainerID := wikiidentifiers.MungeIdentifier(containerID)
+				if mungedContainerRef == mungedContainerID {
+					itemsWithContainerSet[mungedItemID] = true
+				}
+			}
+		}
+
+		if len(itemsWithContainerSet) == 0 {
+			// No items to remove
+			continue
 		}
 
 		// Filter out items that have the container reference
@@ -694,7 +642,7 @@ func (j *InventoryNormalizationJob) removeItemsFromParentContainers(containers [
 		inventory["items"] = newItems
 
 		// Write back the frontmatter
-		if err := j.deps.WriteFrontMatter(containerID, fm); err != nil {
+		if err := j.deps.WriteFrontMatter(containerID, containerFm); err != nil {
 			j.logger.Error("Failed to write frontmatter for container %s: %v", containerID, err)
 		}
 	}
