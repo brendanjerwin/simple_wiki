@@ -30,7 +30,7 @@ export class SystemInfo extends LitElement {
         flex-direction: row;
         position: relative;
         max-width: 400px;
-        transform: translateX(calc(100% - 32px));
+        transform: translateX(calc(100% - 24px));
         transition: transform 0.3s ease, opacity 0.3s ease;
         cursor: pointer;
         outline: none;
@@ -46,7 +46,7 @@ export class SystemInfo extends LitElement {
       }
 
       .drawer-tab {
-        width: 32px;
+        width: 24px;
         background: #2d2d2d;
         border: 1px solid #404040;
         border-right: none;
@@ -56,11 +56,11 @@ export class SystemInfo extends LitElement {
         justify-content: center;
         writing-mode: vertical-rl;
         text-orientation: mixed;
-        padding: 8px 4px;
-        font-size: 10px;
+        padding: 6px 2px;
+        font-size: 9px;
         font-weight: 600;
         color: #888;
-        letter-spacing: 1px;
+        letter-spacing: 0.5px;
         box-shadow: -2px 0 3px rgba(0, 0, 0, 0.2);
         flex-shrink: 0;
         opacity: 0.3;
