@@ -23,11 +23,11 @@ import { AugmentErrorService, type AugmentedError } from './augment-error-servic
  * 
  * DATA FLOW:
  * 1. When opened, the dialog fetches current frontmatter via gRPC and stores it in `frontmatter`
- * 2. `convertStructToPlainObject()` converts the protobuf Struct to a plain JavaScript object
- * 3. This converted data is copied to `workingFrontmatter` for editing
+ * 2. The frontmatter field (already a JsonObject in protobuf-es v2) is directly cast to a plain object
+ * 3. This data is copied to `workingFrontmatter` for editing
  * 4. The frontmatter-value-section component renders and manages all field editing operations
  * 5. All user modifications update `workingFrontmatter` while preserving the original `frontmatter`
- * 6. On save, `workingFrontmatter` is sent back to the server; on cancel, changes are discarded
+ * 6. On save, `workingFrontmatter` is cast back to JsonObject and sent to the server; on cancel, changes are discarded
  * 
  * COMPONENT ARCHITECTURE:
  * The dialog uses a hierarchical component structure:
