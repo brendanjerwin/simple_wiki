@@ -1,5 +1,5 @@
 import { html, css, LitElement, nothing } from 'lit';
-import { sharedStyles, foundationCSS, dialogCSS, responsiveCSS, buttonCSS } from './shared-styles.js';
+import { sharedStyles, dialogStyles } from './shared-styles.js';
 import { InventoryActionService } from './inventory-action-service.js';
 import { createClient } from '@connectrpc/connect';
 import { getGrpcWebTransport } from './grpc-transport.js';
@@ -10,7 +10,16 @@ import { SearchContentRequest } from '../gen/api/v1/search_pb.js';
 import { GetFrontmatterRequest } from '../gen/api/v1/frontmatter_pb.js';
 import { WikiUrlParser } from '../utils/wiki-url-parser.js';
 import './qr-scanner.js';
-import type { QrScannedEventDetail } from './qr-scanner.js';
+import type { QrScannedEventDetail, QrScanner } from './qr-scanner.js';
+
+/**
+ * Information about a scanned container result
+ */
+export interface ScannedResultInfo {
+  identifier: string;
+  title: string;
+  container?: string;
+}
 
 /**
  * InventoryMoveItemDialog - Modal dialog for moving inventory items between containers
@@ -19,12 +28,7 @@ import type { QrScannedEventDetail } from './qr-scanner.js';
  * results appear as "Move To" buttons that execute the move on click.
  */
 export class InventoryMoveItemDialog extends LitElement {
-  static override styles = [
-    foundationCSS,
-    dialogCSS,
-    responsiveCSS,
-    buttonCSS,
-    css`
+  static override styles = dialogStyles(css`
       :host {
         position: fixed;
         top: 0;
@@ -80,34 +84,10 @@ export class InventoryMoveItemDialog extends LitElement {
         }
       }
 
-      @media (max-width: 768px) {
-        :host([open]) {
-          align-items: stretch;
-          justify-content: stretch;
-        }
-
-        .dialog {
-          width: 100%;
-          height: 100%;
-          max-width: none;
-          max-height: none;
-          border-radius: 0;
-          margin: 0;
-        }
-      }
-
       .content {
         padding: 20px;
         overflow-y: auto;
         flex: 1;
-      }
-
-      .move-arrow {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        color: #666;
-        font-size: 24px;
       }
 
       .error-message {
@@ -374,8 +354,8 @@ export class InventoryMoveItemDialog extends LitElement {
         align-items: center;
         gap: 8px;
       }
-    `,
-  ];
+    `
+  );
 
   static override properties = {
     open: { type: Boolean, reflect: true },
@@ -405,8 +385,8 @@ export class InventoryMoveItemDialog extends LitElement {
   // QR scanner state
   declare scannerMode: boolean;
   declare scannedDestination: string | null;
-  declare scannedResult: { identifier: string; title: string; container?: string } | null;
-  declare scanError: string | null;
+  declare scannedResult: ScannedResultInfo | null;
+  declare scanError: Error | null;
   declare scanValidating: boolean;
 
   private _searchDebounceTimeoutMs = 300;
@@ -547,9 +527,9 @@ export class InventoryMoveItemDialog extends LitElement {
       this.searchResults = response.results.filter(
         result => result.identifier !== this.currentContainer
       );
-    } catch {
+    } catch (err) {
       this.searchResults = [];
-      this.error = 'Search failed. Please try again.';
+      this.error = err instanceof Error ? err : new Error(String(err));
     } finally {
       this.searchLoading = false;
     }
@@ -576,7 +556,7 @@ export class InventoryMoveItemDialog extends LitElement {
     const parseResult = WikiUrlParser.parse(rawValue);
     if (!parseResult.success || !parseResult.pageIdentifier) {
       this._exitScannerMode();
-      this.scanError = 'Not a valid wiki URL';
+      this.scanError = new Error(`Not a valid wiki URL: "${rawValue}"`);
       return;
     }
 
@@ -585,7 +565,7 @@ export class InventoryMoveItemDialog extends LitElement {
     // Check if trying to move to current container
     if (identifier === this.currentContainer) {
       this._exitScannerMode();
-      this.scanError = 'Cannot move to current location';
+      this.scanError = new Error('Cannot move to current location');
       return;
     }
 
@@ -600,10 +580,11 @@ export class InventoryMoveItemDialog extends LitElement {
       const fm = response.frontmatter?.toJson() as Record<string, unknown> | undefined;
       const inventory = fm?.['inventory'] as Record<string, unknown> | undefined;
 
-      // Check if page is a container
-      const isContainer = inventory?.['is_container'] === 'true';
+      // Check if page is a container (can be boolean true or string 'true')
+      const isContainerValue = inventory?.['is_container'];
+      const isContainer = isContainerValue === true || isContainerValue === 'true';
       if (!isContainer) {
-        this.scanError = `"${identifier}" is not marked as a container`;
+        this.scanError = new Error(`"${identifier}" is not marked as a container`);
         this.scanValidating = false;
         return;
       }
@@ -615,9 +596,9 @@ export class InventoryMoveItemDialog extends LitElement {
         title: (fm?.['title'] as string) || identifier,
         container: inventory?.['container'] as string | undefined,
       };
-    } catch {
-      // Container not found or other error
-      this.scanError = `Container "${identifier}" not found`;
+    } catch (err) {
+      // Preserve original error for debugging
+      this.scanError = err instanceof Error ? err : new Error(`Container "${identifier}" not found`);
     } finally {
       this.scanValidating = false;
     }
@@ -636,13 +617,14 @@ export class InventoryMoveItemDialog extends LitElement {
    * Enter scanner mode - replaces search UI with camera
    */
   private _enterScannerMode = (): void => {
-    console.log('[InventoryMoveItemDialog] Entering scanner mode');
     this.scannerMode = true;
     this._clearScannedResult();
+    // Clear search state when switching to scanner mode
+    this.searchQuery = '';
+    this.searchResults = [];
     // Wait for DOM update, then expand the scanner
     this.updateComplete.then(() => {
-      const scanner = this.shadowRoot?.querySelector('qr-scanner') as HTMLElement & { expand: () => void };
-      console.log('[InventoryMoveItemDialog] Scanner element:', scanner);
+      const scanner = this.shadowRoot?.querySelector('qr-scanner') as QrScanner | null;
       if (scanner) {
         scanner.expand();
       }
@@ -653,8 +635,7 @@ export class InventoryMoveItemDialog extends LitElement {
    * Exit scanner mode - returns to search UI
    */
   private _exitScannerMode = (): void => {
-    console.log('[InventoryMoveItemDialog] Exiting scanner mode');
-    const scanner = this.shadowRoot?.querySelector('qr-scanner') as HTMLElement & { collapse: () => void };
+    const scanner = this.shadowRoot?.querySelector('qr-scanner') as QrScanner | null;
     if (scanner) {
       scanner.collapse();
     }
@@ -783,7 +764,7 @@ export class InventoryMoveItemDialog extends LitElement {
       <div class="scan-error">
         <div class="scan-error-message">
           <span class="icon"><i class="fa-solid fa-triangle-exclamation"></i></span>
-          ${this.scanError}
+          ${this.scanError.message}
         </div>
         <button class="scan-again-button" @click=${this._handleScanAgain}>
           <i class="fa-solid fa-qrcode"></i> Scan Again
@@ -811,7 +792,7 @@ export class InventoryMoveItemDialog extends LitElement {
       <div class="backdrop" @click=${this._handleBackdropClick}></div>
       <div class="dialog system-font border-radius box-shadow" @click=${this._handleDialogClick}>
         <div class="dialog-header">
-          <h2 class="dialog-title">Move Item</h2>
+          <h2 class="dialog-title">Move: ${this.itemIdentifier}</h2>
         </div>
 
         <div class="content">
@@ -820,35 +801,7 @@ export class InventoryMoveItemDialog extends LitElement {
             : ''}
 
           <div class="form-group">
-            <label for="itemIdentifier">Item</label>
-            <input
-              type="text"
-              id="itemIdentifier"
-              name="itemIdentifier"
-              .value=${this.itemIdentifier}
-              readonly
-            />
-            <div class="help-text">The item being moved</div>
-          </div>
-
-          <div class="form-group">
-            <label for="currentContainer">Current Location</label>
-            <input
-              type="text"
-              id="currentContainer"
-              name="currentContainer"
-              .value=${this.currentContainer}
-              readonly
-            />
-            <div class="help-text">Where the item is currently stored</div>
-          </div>
-
-          <div class="move-arrow">
-            <i class="fa-solid fa-arrow-down"></i>
-          </div>
-
-          <div class="form-group">
-            <label for="searchQuery">Search for destination</label>
+            <label for="searchQuery">Destination</label>
             ${this.scannerMode
               ? html`
                   <div class="scanner-mode-container">

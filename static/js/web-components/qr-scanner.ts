@@ -79,6 +79,13 @@ class QrScannerCameraProvider implements CameraProvider {
         preferredCamera: cameraId,
         highlightScanRegion: true,
         highlightCodeOutline: true,
+        // Scan the entire video frame for better detection on low-res webcams
+        calculateScanRegion: (video) => ({
+          x: 0,
+          y: 0,
+          width: video.videoWidth,
+          height: video.videoHeight,
+        }),
       }
     );
     await this.scanner.start();
@@ -104,7 +111,7 @@ class QrScannerCameraProvider implements CameraProvider {
  * Emits 'qr-scanned' event when a QR code is successfully decoded.
  *
  * @fires qr-scanned - Fired when QR code is scanned, detail: { rawValue: string }
- * @fires scanner-error - Fired when scanner encounters an error, detail: { message: string }
+ * @fires scanner-error - Fired when scanner encounters an error, detail: ScannerErrorEventDetail
  *
  * Usage:
  * ```html
@@ -293,15 +300,12 @@ export class QrScanner extends LitElement {
    * Expand the scanner UI and start camera
    */
   async expand(): Promise<void> {
-    console.log('[QrScanner] expand() called');
     this.expanded = true;
     this.error = undefined;
     this.loading = true;
 
     try {
-      console.log('[QrScanner] Getting cameras...');
       this.cameras = await this.cameraProvider.getCameras();
-      console.log('[QrScanner] Found cameras:', this.cameras);
       if (this.cameras.length === 0) {
         throw new NoCameraError();
       }
@@ -313,11 +317,9 @@ export class QrScanner extends LitElement {
         c.label.toLowerCase().includes('environment')
       );
       this.selectedCameraId = backCamera?.id || this.cameras[0].id;
-      console.log('[QrScanner] Selected camera:', this.selectedCameraId);
 
       // Wait for DOM update before starting scanner
       await this.updateComplete;
-      console.log('[QrScanner] DOM updated, starting scanner...');
       await this._startScanning();
     } catch (err) {
       console.error('[QrScanner] Error in expand():', err);
@@ -355,45 +357,34 @@ export class QrScanner extends LitElement {
   }
 
   private async _startScanning(): Promise<void> {
-    console.log('[QrScanner] _startScanning() called');
     if (!this.selectedCameraId) {
       console.warn('[QrScanner] No camera selected, aborting');
       return;
     }
 
     const videoElement = this.querySelector('#qr-video') as HTMLVideoElement;
-    console.log('[QrScanner] Video element:', videoElement);
     if (!videoElement) {
       console.error('[QrScanner] Video element not found in DOM');
       return;
     }
 
     try {
-      console.log('[QrScanner] Starting camera provider...');
-      console.log('[QrScanner] Video element dimensions:', videoElement.offsetWidth, 'x', videoElement.offsetHeight);
-      console.log('[QrScanner] Video element computed style display:', getComputedStyle(videoElement).display);
-      console.log('[QrScanner] Scanner area:', this.querySelector('.scanner-area'));
-      console.log('[QrScanner] Scanner area classes:', this.querySelector('.scanner-area')?.className);
       await this.cameraProvider.start(
         videoElement,
         this.selectedCameraId,
         this._onScanSuccess.bind(this)
       );
       this.scanning = true;
-      console.log('[QrScanner] Camera started successfully');
-      console.log('[QrScanner] Video element dimensions after start:', videoElement.offsetWidth, 'x', videoElement.offsetHeight);
 
       // The library may have moved the video to document.body
       // Move it back into our container and style it
       const container = this.querySelector('.viewfinder-container') as HTMLElement;
       if (container && videoElement.parentElement !== container) {
-        console.log('[QrScanner] Video was moved by library, relocating back to container');
         container.appendChild(videoElement);
       }
 
       // Force video to be visible with proper positioning
       videoElement.style.cssText = 'display: block !important; width: 100% !important; height: 250px !important; visibility: visible !important; position: relative !important; object-fit: cover !important;';
-      console.log('[QrScanner] Forced video styles, new dimensions:', videoElement.offsetWidth, 'x', videoElement.offsetHeight);
     } catch (err) {
       console.error('[QrScanner] Error starting camera:', err);
       this._handleError(err);
@@ -434,15 +425,15 @@ export class QrScanner extends LitElement {
     if (err instanceof CameraPermissionError || err instanceof NoCameraError) {
       // Already a custom error type
       error = err;
+    } else if (err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError')) {
+      // Browser permission denied - use DOMException.name (stable API)
+      error = new CameraPermissionError(err);
+    } else if (typeof err === 'string' && err.toLowerCase().includes('no camera')) {
+      // qr-scanner library can throw string errors for missing cameras
+      error = new NoCameraError(new Error(err));
     } else if (err instanceof Error) {
-      // Wrap browser errors in appropriate custom type
-      if (err.message.includes('Permission') || err.message.includes('NotAllowed') || err.message.includes('denied')) {
-        error = new CameraPermissionError(err);
-      } else if (err.message.includes('No camera')) {
-        error = new NoCameraError(err);
-      } else {
-        error = err;
-      }
+      // Preserve other Error types
+      error = err;
     } else {
       error = new Error('An unknown error occurred');
     }
@@ -465,11 +456,9 @@ export class QrScanner extends LitElement {
 
     // Only restart if camera actually changed
     if (newCameraId === this.selectedCameraId) {
-      console.log('[QrScanner] Camera unchanged, skipping restart');
       return;
     }
 
-    console.log('[QrScanner] Camera changed to:', newCameraId);
     this.selectedCameraId = newCameraId;
 
     await this._stopScanning();

@@ -73,8 +73,7 @@ export class WikiUrlParser {
    * @returns true if valid page identifier format
    */
   static isValidPageIdentifier(identifier: string): boolean {
-    // Must start with a letter or underscore, can contain letters, numbers, underscores, hyphens
-    // Regex already handles empty strings (returns false)
+    // Regex enforces: first character is a letter or underscore; remaining characters are letters, numbers, underscores, or hyphens
     const validPattern = /^[a-zA-Z_][a-zA-Z0-9_-]*$/;
     return validPattern.test(identifier);
   }

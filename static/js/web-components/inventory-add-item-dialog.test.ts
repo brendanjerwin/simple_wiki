@@ -216,15 +216,9 @@ describe('InventoryAddItemDialog', () => {
         expect(el.hasAttribute('open')).to.be.true;
       });
 
-      it('should render dialog title', () => {
+      it('should render dialog title with container', () => {
         const title = el.shadowRoot?.querySelector('.dialog-title');
-        expect(title?.textContent).to.contain('Add Item');
-      });
-
-      it('should render container field as readonly', () => {
-        const containerInput = el.shadowRoot?.querySelector('input[name="container"]') as HTMLInputElement;
-        expect(containerInput?.readOnly).to.be.true;
-        expect(containerInput?.value).to.equal('drawer_kitchen');
+        expect(title?.textContent).to.contain('Add Item to: drawer_kitchen');
       });
 
       it('should render title field', () => {

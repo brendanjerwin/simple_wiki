@@ -178,21 +178,9 @@ describe('InventoryMoveItemDialog', () => {
         expect(el.hasAttribute('open')).to.be.true;
       });
 
-      it('should render dialog title', () => {
+      it('should render dialog title with item identifier', () => {
         const title = el.shadowRoot?.querySelector('.dialog-title');
-        expect(title?.textContent).to.contain('Move Item');
-      });
-
-      it('should render item identifier as readonly', () => {
-        const itemInput = el.shadowRoot?.querySelector('input[name="itemIdentifier"]') as HTMLInputElement;
-        expect(itemInput?.readOnly).to.be.true;
-        expect(itemInput?.value).to.equal('screwdriver');
-      });
-
-      it('should render current container as readonly', () => {
-        const containerInput = el.shadowRoot?.querySelector('input[name="currentContainer"]') as HTMLInputElement;
-        expect(containerInput?.readOnly).to.be.true;
-        expect(containerInput?.value).to.equal('drawer_kitchen');
+        expect(title?.textContent).to.contain('Move: screwdriver');
       });
 
       it('should render search query field', () => {
@@ -355,14 +343,22 @@ describe('InventoryMoveItemDialog', () => {
         await el.updateComplete;
       });
 
+      it('should render help text with scan instructions', () => {
+        const helpText = el.shadowRoot?.querySelector('.help-text');
+        expect(helpText?.textContent).to.contain('scan a QR code');
+      });
+    });
+
+    describe('when in scanner mode', () => {
+      beforeEach(async () => {
+        el.openDialog('screwdriver', 'drawer_kitchen');
+        el.scannerMode = true;
+        await el.updateComplete;
+      });
+
       it('should render QR scanner component', () => {
         const scanner = el.shadowRoot?.querySelector('qr-scanner');
         expect(scanner).to.exist;
-      });
-
-      it('should render scan section with label', () => {
-        const label = el.shadowRoot?.querySelector('.scan-section-label');
-        expect(label?.textContent).to.contain('scan a QR code');
       });
     });
 
@@ -380,7 +376,7 @@ describe('InventoryMoveItemDialog', () => {
         });
 
         it('should set scanError', () => {
-          expect(el.scanError).to.contain('Not a valid wiki URL');
+          expect(el.scanError?.message).to.contain('Not a valid wiki URL');
         });
 
         it('should not set scannedDestination', () => {
@@ -405,7 +401,7 @@ describe('InventoryMoveItemDialog', () => {
         });
 
         it('should set scanError about current location', () => {
-          expect(el.scanError).to.contain('Cannot move to current location');
+          expect(el.scanError?.message).to.contain('Cannot move to current location');
         });
 
         it('should not set scannedDestination', () => {
@@ -418,7 +414,7 @@ describe('InventoryMoveItemDialog', () => {
       describe('when scanError is set', () => {
         beforeEach(async () => {
           el.openDialog('screwdriver', 'drawer_kitchen');
-          el.scanError = 'Page "xyz" not found. Scan Again?';
+          el.scanError = new Error('Page "xyz" not found');
           await el.updateComplete;
         });
 
@@ -465,11 +461,6 @@ describe('InventoryMoveItemDialog', () => {
         it('should display Move To button', () => {
           const moveBtn = el.shadowRoot?.querySelector('.scanned-result .move-to-button');
           expect(moveBtn?.textContent).to.contain('Move To');
-        });
-
-        it('should display Clear button', () => {
-          const clearBtn = el.shadowRoot?.querySelector('.scanned-result .clear-button');
-          expect(clearBtn?.textContent).to.contain('Clear');
         });
       });
     });

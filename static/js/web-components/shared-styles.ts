@@ -1,4 +1,4 @@
-import { html, css } from 'lit';
+import { html, css, type CSSResult } from 'lit';
 
 export const sharedStyles = html`
   <link href="/static/vendor/css/fontawesome.min.css" rel="stylesheet">
@@ -564,30 +564,77 @@ export const inputCSS = css`
 export const responsiveCSS = css`
   /* Mobile responsive styles for dialogs */
   @media (max-width: 768px) {
+    :host {
+      /* Don't pin to bottom - let height determine size for keyboard handling */
+      bottom: auto;
+    }
+
+    :host([open]) {
+      align-items: flex-start;
+      justify-content: stretch;
+      /* Respect visual viewport when keyboard is open */
+      height: 100vh;
+      height: -webkit-fill-available;
+      height: 100dvh;
+    }
+
+    .backdrop {
+      height: 100vh;
+      height: -webkit-fill-available;
+      height: 100dvh;
+    }
+
     .dialog {
       width: 100%;
-      height: 100%;
       max-width: none;
-      max-height: none;
+      max-height: 100%;
       border-radius: 0;
       margin: 0;
+      display: flex;
+      flex-direction: column;
     }
 
-    .header {
+    .header,
+    .dialog-header {
       padding: 12px 16px;
+      flex-shrink: 0;
     }
 
-    .title {
+    .title,
+    .dialog-title {
       font-size: 16px;
     }
 
     .content {
       padding: 16px;
+      overflow-y: auto;
+      flex: 1;
+      min-height: 0; /* Allow content to shrink */
     }
 
     .footer {
       padding: 12px 16px;
+      flex-shrink: 0;
     }
   }
 `;
+
+/* ==========================================================================
+   Dialog Styles Builder
+   ========================================================================== */
+
+/**
+ * Builds a styles array for dialog components with all common styles included.
+ * Ensures responsiveCSS is always last to properly override desktop styles on mobile.
+ *
+ * Includes: foundationCSS, dialogCSS, buttonCSS, ...componentStyles, responsiveCSS
+ *
+ * Usage:
+ * ```
+ * static override styles = dialogStyles(css`...component styles...`);
+ * ```
+ */
+export function dialogStyles(...componentStyles: CSSResult[]): CSSResult[] {
+  return [foundationCSS, dialogCSS, buttonCSS, ...componentStyles, responsiveCSS];
+}
 

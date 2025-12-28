@@ -1,5 +1,5 @@
 import { html, css, LitElement, nothing } from 'lit';
-import { sharedStyles, foundationCSS, dialogCSS, responsiveCSS, buttonCSS } from './shared-styles.js';
+import { sharedStyles, dialogStyles } from './shared-styles.js';
 import { InventoryActionService } from './inventory-action-service.js';
 import { createClient } from '@connectrpc/connect';
 import { getGrpcWebTransport } from './grpc-transport.js';
@@ -17,211 +17,193 @@ import type { ExistingPageInfo } from '../gen/api/v1/page_management_pb.js';
  * field and inline search results to help find existing items.
  */
 export class InventoryAddItemDialog extends LitElement {
-  static override styles = [
-    foundationCSS,
-    dialogCSS,
-    responsiveCSS,
-    buttonCSS,
-    css`
-      :host {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        z-index: 9999;
-        display: none;
-      }
+  static override styles = dialogStyles(css`
+    :host {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 9999;
+      display: none;
+    }
 
-      :host([open]) {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        animation: fadeIn 0.2s ease-out;
-      }
+    :host([open]) {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: fadeIn 0.2s ease-out;
+    }
 
-      @keyframes fadeIn {
-        from { opacity: 0; }
-        to { opacity: 1; }
-      }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
 
-      .backdrop {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.5);
-      }
+    .backdrop {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+    }
 
-      .dialog {
-        background: white;
-        max-width: 500px;
-        width: 90%;
-        max-height: 90vh;
-        display: flex;
-        flex-direction: column;
-        position: relative;
-        z-index: 1;
-        animation: slideIn 0.2s ease-out;
-        border-radius: 8px;
-      }
+    .dialog {
+      background: white;
+      max-width: 500px;
+      width: 90%;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      z-index: 1;
+      animation: slideIn 0.2s ease-out;
+      border-radius: 8px;
+    }
 
-      @keyframes slideIn {
-        from {
-          transform: translateY(-20px);
-          opacity: 0;
-        }
-        to {
-          transform: translateY(0);
-          opacity: 1;
-        }
+    @keyframes slideIn {
+      from {
+        transform: translateY(-20px);
+        opacity: 0;
       }
-
-      @media (max-width: 768px) {
-        :host([open]) {
-          align-items: stretch;
-          justify-content: stretch;
-        }
-
-        .dialog {
-          width: 100%;
-          height: 100%;
-          max-width: none;
-          max-height: none;
-          border-radius: 0;
-          margin: 0;
-        }
+      to {
+        transform: translateY(0);
+        opacity: 1;
       }
+    }
 
-      .content {
-        padding: 20px;
-        overflow-y: auto;
-        flex: 1;
-      }
+    .content {
+      padding: 20px;
+      overflow-y: auto;
+      flex: 1;
+    }
 
-      .identifier-field {
-        display: flex;
-        gap: 8px;
-        align-items: center;
-      }
+    .identifier-field {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
 
-      .identifier-field input {
-        flex: 1;
-      }
+    .identifier-field input {
+      flex: 1;
+    }
 
-      .automagic-button {
-        padding: 10px 12px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        background: #f5f5f5;
-        cursor: pointer;
-        font-size: 14px;
-        color: #666;
-        transition: all 0.2s;
-      }
+    .automagic-button {
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background: #f5f5f5;
+      cursor: pointer;
+      font-size: 14px;
+      color: #666;
+      transition: all 0.2s;
+    }
 
-      .automagic-button:hover {
-        background: #e8e8e8;
-        border-color: #ccc;
-      }
+    .automagic-button:hover {
+      background: #e8e8e8;
+      border-color: #ccc;
+    }
 
-      .automagic-button.automagic {
-        background: #e0f2fe;
-        border-color: #7dd3fc;
-        color: #0369a1;
-      }
+    .automagic-button.automagic {
+      background: #e0f2fe;
+      border-color: #7dd3fc;
+      color: #0369a1;
+    }
 
-      .automagic-button.manual {
-        background: #fff3cd;
-        border-color: #ffc107;
-        color: #856404;
-      }
+    .automagic-button.manual {
+      background: #fff3cd;
+      border-color: #ffc107;
+      color: #856404;
+    }
 
-      .error-message {
-        background: #fef2f2;
-        border: 1px solid #fecaca;
-        color: #dc2626;
-        padding: 12px;
-        border-radius: 4px;
-        margin-bottom: 16px;
-        font-size: 14px;
-      }
+    .error-message {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #dc2626;
+      padding: 12px;
+      border-radius: 4px;
+      margin-bottom: 16px;
+      font-size: 14px;
+    }
 
-      .conflict-warning {
-        background: #fffbeb;
-        border: 1px solid #fcd34d;
-        color: #92400e;
-        padding: 12px;
-        border-radius: 4px;
-        margin-top: 8px;
-        font-size: 13px;
-      }
+    .conflict-warning {
+      background: #fffbeb;
+      border: 1px solid #fcd34d;
+      color: #92400e;
+      padding: 12px;
+      border-radius: 4px;
+      margin-top: 8px;
+      font-size: 13px;
+    }
 
-      .conflict-warning a {
-        color: #92400e;
-        font-weight: 500;
-      }
+    .conflict-warning a {
+      color: #92400e;
+      font-weight: 500;
+    }
 
-      .search-results {
-        margin-top: 16px;
-        border: 1px solid #e5e7eb;
-        border-radius: 4px;
-        max-height: 200px;
-        overflow-y: auto;
-      }
+    .search-results {
+      margin-top: 16px;
+      border: 1px solid #e5e7eb;
+      border-radius: 4px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
 
-      .search-results-header {
-        padding: 8px 12px;
-        background: #f9fafb;
-        border-bottom: 1px solid #e5e7eb;
-        font-size: 12px;
-        font-weight: 500;
-        color: #6b7280;
-      }
+    .search-results-header {
+      padding: 8px 12px;
+      background: #f9fafb;
+      border-bottom: 1px solid #e5e7eb;
+      font-size: 12px;
+      font-weight: 500;
+      color: #6b7280;
+    }
 
-      .search-result-item {
-        display: block;
-        padding: 10px 12px;
-        border-bottom: 1px solid #e5e7eb;
-        text-decoration: none;
-        color: inherit;
-        cursor: pointer;
-        transition: background-color 0.15s;
-      }
+    .search-result-item {
+      display: block;
+      padding: 10px 12px;
+      border-bottom: 1px solid #e5e7eb;
+      text-decoration: none;
+      color: inherit;
+      cursor: pointer;
+      transition: background-color 0.15s;
+    }
 
-      .search-result-item:last-child {
-        border-bottom: none;
-      }
+    .search-result-item:last-child {
+      border-bottom: none;
+    }
 
-      .search-result-item:hover {
-        background: #f3f4f6;
-      }
+    .search-result-item:hover {
+      background: #f3f4f6;
+    }
 
-      .search-result-title {
-        font-weight: 500;
-        color: #1f2937;
-        margin-bottom: 2px;
-      }
+    .search-result-title {
+      font-weight: 500;
+      color: #1f2937;
+      margin-bottom: 2px;
+    }
 
-      .search-result-container {
-        font-size: 12px;
-        color: #6b7280;
-      }
+    .search-result-container {
+      font-size: 12px;
+      color: #6b7280;
+    }
 
-      .search-result-container a {
-        color: #4a90d9;
-      }
+    .search-result-container a {
+      color: #4a90d9;
+    }
 
-      .footer {
-        display: flex;
-        gap: 12px;
-        padding: 16px 20px;
-        border-top: 1px solid #e0e0e0;
-        justify-content: flex-end;
-      }
-    `,
-  ];
+    .form-group textarea {
+      min-height: 50px;
+    }
+
+    .footer {
+      display: flex;
+      gap: 12px;
+      padding: 16px 20px;
+      border-top: 1px solid #e0e0e0;
+      justify-content: flex-end;
+    }
+  `);
 
   static override properties = {
     open: { type: Boolean, reflect: true },
@@ -251,7 +233,7 @@ export class InventoryAddItemDialog extends LitElement {
   declare searchResults: SearchResult[];
   declare searchLoading: boolean;
 
-  private _titleDebounceTimeoutMs = 300;
+  private _debounceTimeoutMs = 300;
   private _titleDebounceTimer?: ReturnType<typeof setTimeout>;
   private _identifierDebounceTimer?: ReturnType<typeof setTimeout>;
   private searchClient = createClient(SearchService, getGrpcWebTransport());
@@ -356,7 +338,7 @@ export class InventoryAddItemDialog extends LitElement {
     // Debounce the API calls
     this._titleDebounceTimer = setTimeout(() => {
       this._onTitleChanged();
-    }, this._titleDebounceTimeoutMs);
+    }, this._debounceTimeoutMs);
   };
 
   private async _onTitleChanged(): Promise<void> {
@@ -399,7 +381,7 @@ export class InventoryAddItemDialog extends LitElement {
     // Debounce the API call to check availability
     this._identifierDebounceTimer = setTimeout(() => {
       this._checkIdentifierAvailability();
-    }, this._titleDebounceTimeoutMs);
+    }, this._debounceTimeoutMs);
   };
 
   private async _checkIdentifierAvailability(): Promise<void> {
@@ -451,9 +433,9 @@ export class InventoryAddItemDialog extends LitElement {
 
       const response = await this.searchClient.searchContent(request);
       this.searchResults = response.results;
-    } catch {
-      // Silently fail - search is a nice-to-have
+    } catch (err) {
       this.searchResults = [];
+      this.error = err instanceof Error ? err : new Error(String(err));
     } finally {
       this.searchLoading = false;
     }
@@ -546,25 +528,13 @@ export class InventoryAddItemDialog extends LitElement {
       <div class="backdrop" @click=${this._handleBackdropClick}></div>
       <div class="dialog system-font border-radius box-shadow" @click=${this._handleDialogClick}>
         <div class="dialog-header">
-          <h2 class="dialog-title">Add Item to Container</h2>
+          <h2 class="dialog-title">Add Item to: ${this.container}</h2>
         </div>
 
         <div class="content">
           ${this.error
             ? html`<div class="error-message">${this.error}</div>`
             : ''}
-
-          <div class="form-group">
-            <label for="container">Container</label>
-            <input
-              type="text"
-              id="container"
-              name="container"
-              .value=${this.container}
-              readonly
-            />
-            <div class="help-text">The container this item will be added to</div>
-          </div>
 
           <div class="form-group">
             <label for="title">Title *</label>
@@ -604,11 +574,6 @@ export class InventoryAddItemDialog extends LitElement {
                 <i class="fa-solid ${this.automagicMode ? 'fa-wand-magic-sparkles' : 'fa-pen'}"></i>
               </button>
             </div>
-            <div class="help-text">
-              ${this.automagicMode
-                ? 'Auto-generated from title. Click sparkle to edit manually.'
-                : 'Manual mode. Click pen to auto-generate from title.'}
-            </div>
             ${this._renderConflictWarning()}
           </div>
 
@@ -622,7 +587,6 @@ export class InventoryAddItemDialog extends LitElement {
               placeholder="Optional description of the item"
               ?disabled=${this.loading}
             ></textarea>
-            <div class="help-text">Additional details about the item</div>
           </div>
 
           ${this._renderSearchResults()}
