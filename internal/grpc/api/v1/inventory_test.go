@@ -180,6 +180,75 @@ var _ = Describe("InventoryManagementService", func() {
 				Expect(hasDescription).To(BeFalse())
 			})
 		})
+
+		When("the item_identifier fails munging", func() {
+			BeforeEach(func() {
+				req.ItemIdentifier = "///"
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "invalid item identifier"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("the container identifier fails munging", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = os.ErrNotExist
+				req.Container = "///"
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "invalid container identifier"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("reading frontmatter fails with unexpected error", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = errors.New("database connection failed")
+			})
+
+			It("should return an internal error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "database connection failed"))
+			})
+		})
+
+		When("WriteFrontMatter fails", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = os.ErrNotExist
+				mockPageReaderMutator.WriteErr = errors.New("disk full")
+			})
+
+			It("should return an internal error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should include context in error message", func() {
+				Expect(err.Error()).To(ContainSubstring("frontmatter"))
+			})
+		})
+
+		When("WriteMarkdown fails", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = os.ErrNotExist
+				mockPageReaderMutator.MarkdownWriteErr = errors.New("disk full")
+			})
+
+			It("should return an internal error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should include context in error message", func() {
+				Expect(err.Error()).To(ContainSubstring("markdown"))
+			})
+		})
 	})
 
 	Describe("MoveInventoryItem", func() {
@@ -334,13 +403,42 @@ var _ = Describe("InventoryManagementService", func() {
 			})
 		})
 
+		When("the item_identifier fails munging", func() {
+			BeforeEach(func() {
+				req.ItemIdentifier = "///"
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "invalid item identifier"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("the new_container fails munging", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Frontmatter = map[string]any{"title": "Test Item"}
+				req.NewContainer = "///"
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "invalid container identifier"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
 		When("reading frontmatter fails with unexpected error", func() {
 			BeforeEach(func() {
 				mockPageReaderMutator.Err = errors.New("database connection failed")
 			})
 
 			It("should return an internal error", func() {
-				Expect(err).To(HaveOccurred())
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "database connection failed"))
 			})
 		})
 
@@ -356,7 +454,7 @@ var _ = Describe("InventoryManagementService", func() {
 			})
 
 			It("should return an internal error", func() {
-				Expect(err).To(HaveOccurred())
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "write failed"))
 			})
 		})
 
@@ -626,6 +724,20 @@ var _ = Describe("InventoryManagementService", func() {
 			})
 		})
 
+		When("the container_identifier fails munging", func() {
+			BeforeEach(func() {
+				req.ContainerIdentifier = "///"
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "invalid container identifier"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
 		When("container has items", func() {
 			BeforeEach(func() {
 				mockFrontmatterIndexQueryer.ExactMatchResults["inventory.container:test_container"] = []string{
@@ -892,13 +1004,27 @@ var _ = Describe("InventoryManagementService", func() {
 			})
 		})
 
+		When("the item_identifier fails munging", func() {
+			BeforeEach(func() {
+				req.ItemIdentifier = "///"
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "invalid item identifier"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
 		When("reading frontmatter fails with unexpected error", func() {
 			BeforeEach(func() {
 				mockPageReaderMutator.Err = errors.New("database connection failed")
 			})
 
 			It("should return an internal error", func() {
-				Expect(err).To(HaveOccurred())
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "database connection failed"))
 			})
 		})
 	})

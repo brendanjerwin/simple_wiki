@@ -144,13 +144,13 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 			BeforeEach(func() {
 				// Create PascalCase pages directly on filesystem to simulate legacy state
 				CreatePascalCasePage(testDataDir, "LabInventory", "# Lab Inventory")
-				CreatePascalCasePage(testDataDir, "UserGuide", "# User Guide") 
+				CreatePascalCasePage(testDataDir, "UserGuide", "# User Guide")
 				CreatePascalCasePage(testDataDir, "DeviceList", "# Device List")
-				
+
 				// Create already-munged page using mock deps (creates base32-encoded files)
 				existingErr := deps.UpdatePageContent("existing_page", "# Existing Page")
 				Expect(existingErr).NotTo(HaveOccurred())
-				
+
 				// Non-page files (should be ignored)
 				CreateTestFile(testDataDir, "sha256_abcdef", "binary")
 				CreateTestFile(testDataDir, "config.txt", "config")
@@ -165,6 +165,62 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 
 			It("should identify only PascalCase identifiers", func() {
 				Expect(pascalIdentifiers).To(ContainElements("LabInventory", "UserGuide", "DeviceList"))
+			})
+		})
+
+		When("MD file has no frontmatter", func() {
+			var pascalIdentifiers []string
+
+			BeforeEach(func() {
+				// Create an MD file without frontmatter - identifier derived from filename
+				// Note: filename-derived identifiers are lowercase, so won't need migration
+				CreateMDFileWithoutFrontmatter(testDataDir, "nofrontmatter", "# Just Content")
+
+				// Act
+				pascalIdentifiers = job.FindPascalCaseIdentifiers()
+			})
+
+			It("should not flag lowercase identifiers for migration", func() {
+				// When derived from filename, identifier is lowercase and doesn't need migration
+				Expect(pascalIdentifiers).To(BeEmpty())
+			})
+		})
+
+		When("MD file has TOML frontmatter without identifier", func() {
+			var pascalIdentifiers []string
+
+			BeforeEach(func() {
+				// Create an MD file with frontmatter but no identifier field
+				// Note: filename-derived identifiers are lowercase, so won't need migration
+				CreateMDFileWithFrontmatterNoIdentifier(testDataDir, "missingid", "title = 'Test'", "# Content")
+
+				// Act
+				pascalIdentifiers = job.FindPascalCaseIdentifiers()
+			})
+
+			It("should not flag lowercase identifiers for migration", func() {
+				// When derived from filename, identifier is lowercase and doesn't need migration
+				Expect(pascalIdentifiers).To(BeEmpty())
+			})
+		})
+
+		When("MD file has invalid identifier that fails munging", func() {
+			var pascalIdentifiers []string
+
+			BeforeEach(func() {
+				// Create an MD file with identifier that would fail MungeIdentifier
+				CreateMDFileWithInvalidIdentifier(testDataDir, "testfile", "///")
+
+				// Act
+				pascalIdentifiers = job.FindPascalCaseIdentifiers()
+			})
+
+			It("should skip the invalid identifier", func() {
+				Expect(pascalIdentifiers).NotTo(ContainElement("///"))
+			})
+
+			It("should return empty list", func() {
+				Expect(pascalIdentifiers).To(BeEmpty())
 			})
 		})
 

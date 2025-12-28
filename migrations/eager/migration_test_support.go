@@ -133,3 +133,33 @@ func CreateTestFile(dir, filename, content string) {
 		panic(err)
 	}
 }
+
+// CreateMDFileWithoutFrontmatter creates an MD file without any frontmatter
+// The identifier should be derived from the filename
+func CreateMDFileWithoutFrontmatter(dir, identifier, content string) {
+	mdPath := filepath.Join(dir, base32tools.EncodeToBase32(strings.ToLower(identifier))+".md")
+	// Write content without frontmatter
+	if err := os.WriteFile(mdPath, []byte(content), 0644); err != nil {
+		panic(err)
+	}
+}
+
+// CreateMDFileWithFrontmatterNoIdentifier creates an MD file with TOML frontmatter but no identifier field
+func CreateMDFileWithFrontmatterNoIdentifier(dir, identifier, frontmatter, content string) {
+	mdPath := filepath.Join(dir, base32tools.EncodeToBase32(strings.ToLower(identifier))+".md")
+	// Build page with frontmatter but no identifier field
+	fullContent := "+++\n" + frontmatter + "\n+++\n\n" + content
+	if err := os.WriteFile(mdPath, []byte(fullContent), 0644); err != nil {
+		panic(err)
+	}
+}
+
+// CreateMDFileWithInvalidIdentifier creates an MD file with a specific identifier that may be invalid
+func CreateMDFileWithInvalidIdentifier(dir, filename, identifier string) {
+	mdPath := filepath.Join(dir, base32tools.EncodeToBase32(strings.ToLower(filename))+".md")
+	// Build page with frontmatter containing the invalid identifier
+	fullContent := "+++\nidentifier = '" + identifier + "'\n+++\n\n# Content"
+	if err := os.WriteFile(mdPath, []byte(fullContent), 0644); err != nil {
+		panic(err)
+	}
+}

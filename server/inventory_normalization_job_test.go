@@ -977,12 +977,208 @@ var _ = Describe("InventoryNormalizationJob", func() {
 			})
 		})
 	})
+
+	Describe("generateAuditReport error paths", func() {
+		When("WriteFrontMatter fails", func() {
+			var err error
+
+			BeforeEach(func() {
+				failingDeps := &mockNormalizationDepsWithFailure{
+					mockNormalizationDeps: newMockNormalizationDeps(),
+					writeError:            os.ErrPermission,
+				}
+				job = NewInventoryNormalizationJob(failingDeps, mockFmIndex, logger)
+
+				err = job.generateAuditReport([]InventoryAnomaly{}, []string{})
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should include frontmatter context in error", func() {
+				Expect(err.Error()).To(ContainSubstring("failed to write audit report frontmatter"))
+			})
+		})
+
+		When("WriteMarkdown fails", func() {
+			var err error
+
+			BeforeEach(func() {
+				failingDeps := &mockNormalizationDepsWithFailure{
+					mockNormalizationDeps: newMockNormalizationDeps(),
+					markdownError:         os.ErrPermission,
+				}
+				job = NewInventoryNormalizationJob(failingDeps, mockFmIndex, logger)
+
+				err = job.generateAuditReport([]InventoryAnomaly{}, []string{})
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should include markdown context in error", func() {
+				Expect(err.Error()).To(ContainSubstring("failed to write audit report markdown"))
+			})
+		})
+	})
+
+	Describe("createMissingItemPages error paths", func() {
+		When("container has item with invalid identifier that fails munging", func() {
+			var (
+				createdPages []string
+				anomalies    []InventoryAnomaly
+			)
+
+			BeforeEach(func() {
+				mockDeps = newMockNormalizationDeps()
+				mockFmIndex = &mockFrontmatterIndexQueryer{
+					data: make(map[string]map[string]string),
+				}
+				// Set up a container with an invalid item identifier
+				mockDeps.pages["tool_box"] = &mockPageData{
+					frontmatter: map[string]any{
+						"title": "Tool Box",
+						"inventory": map[string]any{
+							"items": []any{"///"},  // This will fail MungeIdentifier
+						},
+					},
+				}
+				job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
+
+				createdPages, anomalies = job.createMissingItemPages([]string{"tool_box"})
+			})
+
+			It("should return no created pages", func() {
+				Expect(createdPages).To(BeEmpty())
+			})
+
+			It("should return an anomaly", func() {
+				Expect(anomalies).To(HaveLen(1))
+			})
+
+			It("should have invalid_item_identifier type", func() {
+				Expect(anomalies[0].Type).To(Equal("invalid_item_identifier"))
+			})
+		})
+	})
+
+	Describe("buildItemContainerMap error paths", func() {
+		When("container has item with invalid identifier", func() {
+			var itemContainers map[string]map[string]bool
+
+			BeforeEach(func() {
+				mockDeps = newMockNormalizationDeps()
+				mockFmIndex = &mockFrontmatterIndexQueryer{
+					data: make(map[string]map[string]string),
+				}
+				// Set up a container with an invalid item identifier
+				mockDeps.pages["drawer"] = &mockPageData{
+					frontmatter: map[string]any{
+						"inventory": map[string]any{
+							"items": []any{"///"},  // This will fail MungeIdentifier
+						},
+					},
+				}
+				mockFmIndex.QueryExactMatchFunc = func(key, value string) []string {
+					return nil
+				}
+				job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
+
+				itemContainers = job.buildItemContainerMap([]string{"drawer"})
+			})
+
+			It("should return empty map on error", func() {
+				// buildItemContainerMap logs error and continues
+				Expect(itemContainers).To(BeEmpty())
+			})
+		})
+	})
+
+	Describe("migrateContainersToIsContainerField error paths", func() {
+		When("GetContainerItems fails for a container", func() {
+			var migratedCount int
+
+			BeforeEach(func() {
+				mockDeps = newMockNormalizationDeps()
+				mockFmIndex = &mockFrontmatterIndexQueryer{
+					data: make(map[string]map[string]string),
+				}
+				// Set up a container with an invalid item identifier
+				mockDeps.pages["drawer"] = &mockPageData{
+					frontmatter: map[string]any{
+						"inventory": map[string]any{
+							"items": []any{"///"},  // This will fail MungeIdentifier
+						},
+					},
+				}
+				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
+					if key == "inventory.items" {
+						return []string{"drawer"}
+					}
+					if key == "inventory.container" {
+						return []string{}
+					}
+					return []string{}
+				}
+				job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
+
+				migratedCount = job.migrateContainersToIsContainerField()
+			})
+
+			It("should return zero migrated count on error", func() {
+				Expect(migratedCount).To(Equal(0))
+			})
+		})
+
+		When("WriteFrontMatter fails during migration", func() {
+			var migratedCount int
+
+			BeforeEach(func() {
+				mockDeps = newMockNormalizationDeps()
+				mockFmIndex = &mockFrontmatterIndexQueryer{
+					data: make(map[string]map[string]string),
+				}
+				// Set up a container that needs migration
+				mockDeps.pages["drawer"] = &mockPageData{
+					frontmatter: map[string]any{
+						"inventory": map[string]any{
+							"items": []any{"item1"},
+						},
+					},
+				}
+				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
+					if key == "inventory.items" {
+						return []string{"drawer"}
+					}
+					if key == "inventory.container" {
+						return []string{}
+					}
+					return []string{}
+				}
+
+				failingDeps := &mockNormalizationDepsWithFailure{
+					mockNormalizationDeps: mockDeps,
+					writeError:            os.ErrPermission,
+				}
+				job = NewInventoryNormalizationJob(failingDeps, mockFmIndex, logger)
+
+				migratedCount = job.migrateContainersToIsContainerField()
+			})
+
+			It("should return zero migrated count on write failure", func() {
+				Expect(migratedCount).To(Equal(0))
+			})
+		})
+	})
 })
 
 // mockNormalizationDepsWithFailure is a mock that can simulate write failures.
 type mockNormalizationDepsWithFailure struct {
 	*mockNormalizationDeps
-	writeError error
+	writeError    error
+	markdownError error
 }
 
 func (m *mockNormalizationDepsWithFailure) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
@@ -990,4 +1186,11 @@ func (m *mockNormalizationDepsWithFailure) WriteFrontMatter(id wikipage.PageIden
 		return m.writeError
 	}
 	return m.mockNormalizationDeps.WriteFrontMatter(id, fm)
+}
+
+func (m *mockNormalizationDepsWithFailure) WriteMarkdown(id wikipage.PageIdentifier, md wikipage.Markdown) error {
+	if m.markdownError != nil {
+		return m.markdownError
+	}
+	return m.mockNormalizationDeps.WriteMarkdown(id, md)
 }
