@@ -1,8 +1,8 @@
 import { createClient } from '@connectrpc/connect';
 import { create } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
-import { InventoryManagementService, CreateInventoryItemRequestSchema, MoveInventoryItemRequestSchema, type ExistingPageInfo } from '../gen/api/v1/inventory_pb.js';
-import { PageManagementService, GenerateIdentifierRequestSchema } from '../gen/api/v1/page_management_pb.js';
+import { InventoryManagementService, CreateInventoryItemRequestSchema, MoveInventoryItemRequestSchema } from '../gen/api/v1/inventory_pb.js';
+import { PageManagementService, GenerateIdentifierRequestSchema, type ExistingPageInfo } from '../gen/api/v1/page_management_pb.js';
 import { AugmentErrorService } from './augment-error-service.js';
 import { showToastAfter } from './toast-message.js';
 

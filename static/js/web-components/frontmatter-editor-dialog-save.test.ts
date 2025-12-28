@@ -45,42 +45,6 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
     }
   });
 
-  describe('when convertPlainObjectToStruct is called', () => {
-    it('should convert plain object to JsonObject', () => {
-      const plainObject = {
-        title: 'Test Page',
-        identifier: 'home',
-        tags: ['test', 'example']
-      };
-      
-      const jsonObject = el['convertPlainObjectToStruct'](plainObject);
-      
-      // In v2, this just returns the same object as JsonObject
-      expect(jsonObject).to.deep.equal(plainObject);
-    });
-
-    it('should handle empty object', () => {
-      const emptyObject = {};
-      const jsonObject = el['convertPlainObjectToStruct'](emptyObject);
-      expect(jsonObject).to.deep.equal({});
-    });
-
-    it('should handle nested objects', () => {
-      const nestedObject = {
-        config: {
-          debug: true,
-          port: 8080
-        },
-        metadata: {
-          author: 'Test Author'
-        }
-      };
-      
-      const jsonObject = el['convertPlainObjectToStruct'](nestedObject);
-      expect(jsonObject).to.deep.equal(nestedObject);
-    });
-  });
-
   describe('when save button is clicked', () => {
     beforeEach(async () => {
       // Set up the component with test data

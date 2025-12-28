@@ -203,18 +203,9 @@ export class FrontmatterEditorDialog extends LitElement {
     this.workingFrontmatter = {};
   }
 
-  private convertStructToPlainObject(struct?: JsonObject): Record<string, unknown> {
-    if (!struct) return {};
-    return struct as Record<string, unknown>;
-  }
-
-  private convertPlainObjectToStruct(obj: Record<string, unknown>): JsonObject {
-    return obj as JsonObject;
-  }
-
   private updateWorkingFrontmatter(): void {
     if (this.frontmatter?.frontmatter) {
-      this.workingFrontmatter = this.convertStructToPlainObject(this.frontmatter.frontmatter);
+      this.workingFrontmatter = this.frontmatter.frontmatter as Record<string, unknown>;
     } else {
       this.workingFrontmatter = {};
     }
@@ -295,10 +286,9 @@ export class FrontmatterEditorDialog extends LitElement {
       this.augmentedError = undefined;
       this.requestUpdate();
 
-      const frontmatterStruct = this.convertPlainObjectToStruct(this.workingFrontmatter);
       const request = create(ReplaceFrontmatterRequestSchema, {
         page: this.page,
-        frontmatter: frontmatterStruct
+        frontmatter: this.workingFrontmatter as JsonObject
       });
 
       const response = await this.client.replaceFrontmatter(request);
