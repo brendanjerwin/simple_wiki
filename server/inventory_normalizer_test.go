@@ -579,6 +579,38 @@ var _ = Describe("InventoryNormalizer", func() {
 				Expect(err.Error()).To(ContainSubstring("failed to write markdown"))
 			})
 		})
+
+		When("item identifier is invalid", func() {
+			var err error
+
+			BeforeEach(func() {
+				err = normalizer.CreateItemPage("///", "container")
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should include invalid item identifier context", func() {
+				Expect(err.Error()).To(ContainSubstring("invalid item identifier"))
+			})
+		})
+
+		When("container identifier is invalid", func() {
+			var err error
+
+			BeforeEach(func() {
+				err = normalizer.CreateItemPage("valid_item", "///")
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should include invalid container identifier context", func() {
+				Expect(err.Error()).To(ContainSubstring("invalid container identifier"))
+			})
+		})
 	})
 })
 

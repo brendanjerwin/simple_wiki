@@ -13,10 +13,9 @@ import (
 
 // mockNormalizationDeps implements InventoryNormalizationDependencies for testing.
 type mockNormalizationDeps struct {
-	pages             map[string]*mockPageData
-	writtenPages      map[string]*mockPageData
-	deletedPages      []string
-	readFrontmatterCalls []string
+	pages        map[string]*mockPageData
+	writtenPages map[string]*mockPageData
+	deletedPages []string
 }
 
 type mockPageData struct {
@@ -33,7 +32,6 @@ func newMockNormalizationDeps() *mockNormalizationDeps {
 }
 
 func (m *mockNormalizationDeps) ReadFrontMatter(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
-	m.readFrontmatterCalls = append(m.readFrontmatterCalls, id)
 	if page, ok := m.pages[id]; ok {
 		if page.err != nil {
 			return "", nil, page.err
@@ -1698,6 +1696,570 @@ var _ = Describe("InventoryNormalizationJob", func() {
 				Expect(items).To(HaveLen(1))
 				Expect(items).To(ContainElement("Small Screwdriver"))
 				Expect(items).NotTo(ContainElement("Big Hammer"))
+			})
+		})
+	})
+
+	Describe("extractItemsArray edge cases", func() {
+		BeforeEach(func() {
+			job, _ = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
+		})
+
+		When("inventory has items as []string", func() {
+			var items []any
+			var ok bool
+
+			BeforeEach(func() {
+				inventory := map[string]any{
+					"items": []string{"item1", "item2"},
+				}
+				items, ok = job.extractItemsArray(inventory)
+			})
+
+			It("should return true", func() {
+				Expect(ok).To(BeTrue())
+			})
+
+			It("should return items as []any", func() {
+				Expect(items).To(HaveLen(2))
+				Expect(items[0]).To(Equal("item1"))
+				Expect(items[1]).To(Equal("item2"))
+			})
+		})
+
+		When("inventory has items as unsupported type", func() {
+			var items []any
+			var ok bool
+
+			BeforeEach(func() {
+				inventory := map[string]any{
+					"items": "not-an-array",
+				}
+				items, ok = job.extractItemsArray(inventory)
+			})
+
+			It("should return false", func() {
+				Expect(ok).To(BeFalse())
+			})
+
+			It("should return nil", func() {
+				Expect(items).To(BeNil())
+			})
+		})
+	})
+
+	Describe("findItemsWithContainerReference error paths", func() {
+		BeforeEach(func() {
+			job, _ = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
+		})
+
+		When("container identifier is invalid", func() {
+			var result map[string]bool
+
+			BeforeEach(func() {
+				items := []any{"item1", "item2"}
+				result = job.findItemsWithContainerReference("///", items)
+			})
+
+			It("should return empty map", func() {
+				Expect(result).To(BeEmpty())
+			})
+		})
+
+		When("item identifier is invalid", func() {
+			var result map[string]bool
+
+			BeforeEach(func() {
+				items := []any{"///", "valid_item"}
+				mockDeps.pages["valid_item"] = &mockPageData{
+					frontmatter: map[string]any{
+						"inventory": map[string]any{
+							"container": "drawer",
+						},
+					},
+				}
+				result = job.findItemsWithContainerReference("drawer", items)
+			})
+
+			It("should skip invalid items", func() {
+				Expect(result).To(HaveKey("valid_item"))
+			})
+		})
+
+		When("item is not a string", func() {
+			var result map[string]bool
+
+			BeforeEach(func() {
+				items := []any{123, "valid_item"}
+				mockDeps.pages["valid_item"] = &mockPageData{
+					frontmatter: map[string]any{
+						"inventory": map[string]any{
+							"container": "drawer",
+						},
+					},
+				}
+				result = job.findItemsWithContainerReference("drawer", items)
+			})
+
+			It("should skip non-string items", func() {
+				Expect(result).To(HaveKey("valid_item"))
+			})
+		})
+	})
+
+	Describe("itemReferencesContainer edge cases", func() {
+		BeforeEach(func() {
+			job, _ = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
+		})
+
+		When("item has container with invalid identifier", func() {
+			var references bool
+
+			BeforeEach(func() {
+				mockDeps.pages["item"] = &mockPageData{
+					frontmatter: map[string]any{
+						"inventory": map[string]any{
+							"container": "///", // Invalid identifier
+						},
+					},
+				}
+				references = job.itemReferencesContainer("item", "drawer")
+			})
+
+			It("should return false", func() {
+				Expect(references).To(BeFalse())
+			})
+		})
+
+		When("item has no inventory section", func() {
+			var references bool
+
+			BeforeEach(func() {
+				mockDeps.pages["item"] = &mockPageData{
+					frontmatter: map[string]any{
+						"title": "Just a page",
+					},
+				}
+				references = job.itemReferencesContainer("item", "drawer")
+			})
+
+			It("should return false", func() {
+				Expect(references).To(BeFalse())
+			})
+		})
+
+		When("item has container as non-string", func() {
+			var references bool
+
+			BeforeEach(func() {
+				mockDeps.pages["item"] = &mockPageData{
+					frontmatter: map[string]any{
+						"inventory": map[string]any{
+							"container": 123, // Not a string
+						},
+					},
+				}
+				references = job.itemReferencesContainer("item", "drawer")
+			})
+
+			It("should return false", func() {
+				Expect(references).To(BeFalse())
+			})
+		})
+	})
+
+	Describe("removeAndWriteItems edge cases", func() {
+		BeforeEach(func() {
+			job, _ = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
+		})
+
+		When("item in list is not a string", func() {
+			var (
+				removed int
+				err     error
+			)
+
+			BeforeEach(func() {
+				containerFm := map[string]any{
+					"inventory": map[string]any{
+						"items": []any{123, "valid_item"},
+					},
+				}
+				inventory := containerFm["inventory"].(map[string]any)
+				items := []any{123, "valid_item"}
+				itemsToRemove := map[string]bool{"valid_item": true}
+
+				removed, err = job.removeAndWriteItems("container", containerFm, inventory, items, itemsToRemove)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should remove only string items that match", func() {
+				Expect(removed).To(Equal(1))
+			})
+
+			It("should keep non-string items", func() {
+				written := mockDeps.writtenPages["container"]
+				Expect(written).NotTo(BeNil())
+				inventory, ok := written.frontmatter["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue())
+				items, ok := inventory["items"].([]any)
+				Expect(ok).To(BeTrue())
+				Expect(items).To(ContainElement(123))
+			})
+		})
+
+		When("item has invalid identifier", func() {
+			var err error
+
+			BeforeEach(func() {
+				containerFm := map[string]any{
+					"inventory": map[string]any{
+						"items": []any{"///", "valid_item"},
+					},
+				}
+				inventory := containerFm["inventory"].(map[string]any)
+				items := []any{"///", "valid_item"}
+				itemsToRemove := map[string]bool{"valid_item": true}
+
+				_, err = job.removeAndWriteItems("container", containerFm, inventory, items, itemsToRemove)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should keep items with invalid identifiers", func() {
+				written := mockDeps.writtenPages["container"]
+				Expect(written).NotTo(BeNil())
+				inventory, ok := written.frontmatter["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue())
+				items, ok := inventory["items"].([]any)
+				Expect(ok).To(BeTrue())
+				Expect(items).To(ContainElement("///"))
+			})
+		})
+
+		When("WriteFrontMatter fails", func() {
+			var (
+				removed int
+				err     error
+			)
+
+			BeforeEach(func() {
+				failingDeps := &mockNormalizationDepsWithFailure{
+					mockNormalizationDeps: newMockNormalizationDeps(),
+					writeError:            os.ErrPermission,
+				}
+				job, _ = NewInventoryNormalizationJob(failingDeps, mockFmIndex, logger)
+
+				containerFm := map[string]any{
+					"inventory": map[string]any{
+						"items": []any{"valid_item"},
+					},
+				}
+				inventory := containerFm["inventory"].(map[string]any)
+				items := []any{"valid_item"}
+				itemsToRemove := map[string]bool{"valid_item": true}
+
+				removed, err = job.removeAndWriteItems("container", containerFm, inventory, items, itemsToRemove)
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should include frontmatter context in error", func() {
+				Expect(err.Error()).To(ContainSubstring("failed to write frontmatter"))
+			})
+
+			It("should return zero removed count", func() {
+				Expect(removed).To(Equal(0))
+			})
+		})
+
+		When("no items are removed", func() {
+			var (
+				removed int
+				err     error
+			)
+
+			BeforeEach(func() {
+				containerFm := map[string]any{
+					"inventory": map[string]any{
+						"items": []any{"item1", "item2"},
+					},
+				}
+				inventory := containerFm["inventory"].(map[string]any)
+				items := []any{"item1", "item2"}
+				itemsToRemove := map[string]bool{} // Empty set - nothing to remove
+
+				removed, err = job.removeAndWriteItems("container", containerFm, inventory, items, itemsToRemove)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return zero removed count", func() {
+				Expect(removed).To(Equal(0))
+			})
+
+			It("should not write to the page", func() {
+				_, written := mockDeps.writtenPages["container"]
+				Expect(written).To(BeFalse())
+			})
+		})
+	})
+
+	Describe("processContainerForItemRemoval edge cases", func() {
+		BeforeEach(func() {
+			job, _ = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
+		})
+
+		When("container does not exist", func() {
+			var (
+				removed int
+				err     error
+			)
+
+			BeforeEach(func() {
+				removed, err = job.processContainerForItemRemoval("nonexistent")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return zero", func() {
+				Expect(removed).To(Equal(0))
+			})
+		})
+
+		When("container has no inventory section", func() {
+			var (
+				removed int
+				err     error
+			)
+
+			BeforeEach(func() {
+				mockDeps.pages["container"] = &mockPageData{
+					frontmatter: map[string]any{
+						"title": "Just a page",
+					},
+				}
+				removed, err = job.processContainerForItemRemoval("container")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return zero", func() {
+				Expect(removed).To(Equal(0))
+			})
+		})
+
+		When("container has empty items array", func() {
+			var (
+				removed int
+				err     error
+			)
+
+			BeforeEach(func() {
+				mockDeps.pages["container"] = &mockPageData{
+					frontmatter: map[string]any{
+						"inventory": map[string]any{
+							"items": []any{},
+						},
+					},
+				}
+				removed, err = job.processContainerForItemRemoval("container")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return zero", func() {
+				Expect(removed).To(Equal(0))
+			})
+		})
+
+		When("no items reference the container", func() {
+			var (
+				removed int
+				err     error
+			)
+
+			BeforeEach(func() {
+				mockDeps.pages["container"] = &mockPageData{
+					frontmatter: map[string]any{
+						"inventory": map[string]any{
+							"items": []any{"item1", "item2"},
+						},
+					},
+				}
+				// Items don't have container reference
+				mockDeps.pages["item1"] = &mockPageData{
+					frontmatter: map[string]any{
+						"title": "Item 1",
+					},
+				}
+				mockDeps.pages["item2"] = &mockPageData{
+					frontmatter: map[string]any{
+						"title": "Item 2",
+					},
+				}
+				removed, err = job.processContainerForItemRemoval("container")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return zero", func() {
+				Expect(removed).To(Equal(0))
+			})
+		})
+	})
+
+	Describe("migrateContainersToIsContainerField with inventory map creation", func() {
+		When("container has no inventory section", func() {
+			var migratedCount int
+
+			BeforeEach(func() {
+				mockDeps = newMockNormalizationDeps()
+				mockFmIndex = &mockFrontmatterIndexQueryer{
+					data: make(map[string]map[string]string),
+				}
+				// Set up a container that is referenced by items but has no inventory section
+				mockDeps.pages["tool_box"] = &mockPageData{
+					frontmatter: map[string]any{
+						"title": "Tool Box",
+					},
+				}
+
+				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
+					if key == "inventory.container" {
+						return []string{"hammer"}
+					}
+					return []string{}
+				}
+				mockFmIndex.data["hammer"] = map[string]string{
+					"inventory.container": "tool_box",
+				}
+
+				job, _ = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
+				migratedCount = job.migrateContainersToIsContainerField()
+			})
+
+			It("should migrate the container", func() {
+				Expect(migratedCount).To(Equal(1))
+			})
+
+			It("should create inventory section with is_container", func() {
+				written := mockDeps.writtenPages["tool_box"]
+				Expect(written).NotTo(BeNil())
+				inventory, ok := written.frontmatter["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue())
+				Expect(inventory["is_container"]).To(Equal(true))
+			})
+		})
+	})
+
+	Describe("removeItemsFromParentContainers error handling", func() {
+		When("processContainerForItemRemoval fails", func() {
+			var removedCount int
+
+			BeforeEach(func() {
+				failingDeps := &mockNormalizationDepsWithFailure{
+					mockNormalizationDeps: newMockNormalizationDeps(),
+					writeError:            os.ErrPermission,
+				}
+				// Set up a container with items that reference it
+				failingDeps.mockNormalizationDeps.pages["container"] = &mockPageData{
+					frontmatter: map[string]any{
+						"inventory": map[string]any{
+							"items": []any{"item1"},
+						},
+					},
+				}
+				failingDeps.mockNormalizationDeps.pages["item1"] = &mockPageData{
+					frontmatter: map[string]any{
+						"inventory": map[string]any{
+							"container": "container",
+						},
+					},
+				}
+
+				job, _ = NewInventoryNormalizationJob(failingDeps, mockFmIndex, logger)
+				removedCount = job.removeItemsFromParentContainers([]string{"container"})
+			})
+
+			It("should continue processing and return zero on failure", func() {
+				Expect(removedCount).To(Equal(0))
+			})
+		})
+	})
+
+	Describe("findAllContainers with is_container field", func() {
+		BeforeEach(func() {
+			job, _ = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
+		})
+
+		When("pages have is_container = true", func() {
+			var containers []string
+
+			BeforeEach(func() {
+				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
+					if key == "inventory.is_container" {
+						return []string{"drawer", "box"}
+					}
+					if key == "inventory.items" {
+						return []string{}
+					}
+					if key == "inventory.container" {
+						return []string{}
+					}
+					return nil
+				}
+				mockFmIndex.data["drawer"] = map[string]string{"inventory.is_container": "true"}
+				mockFmIndex.data["box"] = map[string]string{"inventory.is_container": "true"}
+
+				containers = job.findAllContainers()
+			})
+
+			It("should return those pages as containers", func() {
+				Expect(containers).To(ContainElements("drawer", "box"))
+			})
+		})
+
+		When("pages have is_container = false", func() {
+			var containers []string
+
+			BeforeEach(func() {
+				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
+					if key == "inventory.is_container" {
+						return []string{"drawer"}
+					}
+					if key == "inventory.items" {
+						return []string{}
+					}
+					if key == "inventory.container" {
+						return []string{}
+					}
+					return nil
+				}
+				mockFmIndex.data["drawer"] = map[string]string{"inventory.is_container": "false"}
+
+				containers = job.findAllContainers()
+			})
+
+			It("should not include pages with is_container = false", func() {
+				Expect(containers).NotTo(ContainElement("drawer"))
 			})
 		})
 	})

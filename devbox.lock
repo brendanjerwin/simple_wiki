@@ -49,54 +49,6 @@
         }
       }
     },
-    "beads@latest": {
-      "last_modified": "2025-12-21T10:48:17Z",
-      "resolved": "github:NixOS/nixpkgs/306ea70f9eb0fb4e040f8540e2deab32ed7e2055#beads",
-      "source": "devbox-search",
-      "version": "0.27.2",
-      "systems": {
-        "aarch64-darwin": {
-          "outputs": [
-            {
-              "name": "out",
-              "path": "/nix/store/hyrwnc73kbjick714vnwlj08flya55lx-beads-0.27.2",
-              "default": true
-            }
-          ],
-          "store_path": "/nix/store/hyrwnc73kbjick714vnwlj08flya55lx-beads-0.27.2"
-        },
-        "aarch64-linux": {
-          "outputs": [
-            {
-              "name": "out",
-              "path": "/nix/store/7ylbk30da47vssds24m9cnr3g6s24mn0-beads-0.27.2",
-              "default": true
-            }
-          ],
-          "store_path": "/nix/store/7ylbk30da47vssds24m9cnr3g6s24mn0-beads-0.27.2"
-        },
-        "x86_64-darwin": {
-          "outputs": [
-            {
-              "name": "out",
-              "path": "/nix/store/n8qs0l40v3swbj2kh125nrpfnnddc4q8-beads-0.27.2",
-              "default": true
-            }
-          ],
-          "store_path": "/nix/store/n8qs0l40v3swbj2kh125nrpfnnddc4q8-beads-0.27.2"
-        },
-        "x86_64-linux": {
-          "outputs": [
-            {
-              "name": "out",
-              "path": "/nix/store/891cn9g5jniv9h3c1ndnzfvx969bjqry-beads-0.27.2",
-              "default": true
-            }
-          ],
-          "store_path": "/nix/store/891cn9g5jniv9h3c1ndnzfvx969bjqry-beads-0.27.2"
-        }
-      }
-    },
     "buf@latest": {
       "last_modified": "2025-11-25T14:41:04Z",
       "resolved": "github:NixOS/nixpkgs/dc205f7b4fdb04c8b7877b43edb7b73be7730081#buf",

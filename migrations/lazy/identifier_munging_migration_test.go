@@ -36,7 +36,7 @@ var _ = Describe("IdentifierMungingMigration", func() {
 	})
 
 	Describe("AppliesTo", func() {
-		Describe("when TOML has identifier with unmunged value", func() {
+		When("TOML has identifier with unmunged value", func() {
 			var content []byte
 			var applies bool
 
@@ -55,7 +55,7 @@ title = 'Lab Small Parts Bin 1A6'
 			})
 		})
 
-		Describe("when TOML has identifier with already munged value", func() {
+		When("TOML has identifier with already munged value", func() {
 			var content []byte
 			var applies bool
 
@@ -74,7 +74,7 @@ title = 'Lab Small Parts Bin 1A6'
 			})
 		})
 
-		Describe("when TOML has no identifier field", func() {
+		When("TOML has no identifier field", func() {
 			var content []byte
 			var applies bool
 
@@ -93,7 +93,7 @@ author = 'John Doe'
 			})
 		})
 
-		Describe("when content is not TOML", func() {
+		When("content is not TOML", func() {
 			var content []byte
 			var applies bool
 
@@ -112,7 +112,7 @@ title: Lab Small Parts Bin 1A6
 			})
 		})
 
-		Describe("when content has malformed TOML", func() {
+		When("content has malformed TOML", func() {
 			var content []byte
 			var applies bool
 
@@ -128,10 +128,27 @@ title = 'Test'
 				Expect(applies).To(BeFalse())
 			})
 		})
+
+		When("identifier produces empty result after munging", func() {
+			var content []byte
+			var applies bool
+
+			BeforeEach(func() {
+				content = []byte(`+++
+identifier = '///'
+title = 'Test'
++++`)
+				applies = migration.AppliesTo(content)
+			})
+
+			It("should not apply because MungeIdentifier fails", func() {
+				Expect(applies).To(BeFalse())
+			})
+		})
 	})
 
 	Describe("Apply", func() {
-		Describe("when identifier needs munging (primary test case)", func() {
+		When("identifier needs munging (primary test case)", func() {
 			var content []byte
 			var result []byte
 			var err error
@@ -163,119 +180,22 @@ title = 'Lab Small Parts Bin 1A6'
 			})
 		})
 
-		Describe("when testing various casing patterns", func() {
-			Describe("when identifier is lab_smallparts_1A6", func() {
-				var content []byte
-				var result []byte
-				var err error
+		DescribeTable("munging various casing patterns",
+			func(input, expected string) {
+				content := []byte("+++\nidentifier = '" + input + "'\n+++\n")
+				result, err := migration.Apply(content)
 
-				BeforeEach(func() {
-					content = []byte(`+++
-identifier = 'lab_smallparts_1A6'
-+++
-`)
-					result, err = migration.Apply(content)
-				})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(string(result)).To(ContainSubstring("identifier = '" + expected + "'"))
+			},
+			Entry("lab_smallparts_1A6 -> lab_smallparts_1a6", "lab_smallparts_1A6", "lab_smallparts_1a6"),
+			Entry("KitchenCabinet -> kitchen_cabinet", "KitchenCabinet", "kitchen_cabinet"),
+			Entry("MixedCASEExample -> mixed_case_example", "MixedCASEExample", "mixed_case_example"),
+			Entry("SimpleTest -> simple_test", "SimpleTest", "simple_test"),
+			Entry("ALLCAPS -> allcaps", "ALLCAPS", "allcaps"),
+		)
 
-				It("should not return an error", func() {
-					Expect(err).NotTo(HaveOccurred())
-				})
-
-				It("should munge to lab_smallparts_1a6", func() {
-					Expect(string(result)).To(ContainSubstring(`identifier = 'lab_smallparts_1a6'`))
-				})
-			})
-
-			Describe("when identifier is KitchenCabinet", func() {
-				var content []byte
-				var result []byte
-				var err error
-
-				BeforeEach(func() {
-					content = []byte(`+++
-identifier = 'KitchenCabinet'
-+++
-`)
-					result, err = migration.Apply(content)
-				})
-
-				It("should not return an error", func() {
-					Expect(err).NotTo(HaveOccurred())
-				})
-
-				It("should munge to kitchen_cabinet", func() {
-					Expect(string(result)).To(ContainSubstring(`identifier = 'kitchen_cabinet'`))
-				})
-			})
-
-			Describe("when identifier is MixedCASEExample", func() {
-				var content []byte
-				var result []byte
-				var err error
-
-				BeforeEach(func() {
-					content = []byte(`+++
-identifier = 'MixedCASEExample'
-+++
-`)
-					result, err = migration.Apply(content)
-				})
-
-				It("should not return an error", func() {
-					Expect(err).NotTo(HaveOccurred())
-				})
-
-				It("should munge to mixed_case_example", func() {
-					Expect(string(result)).To(ContainSubstring(`identifier = 'mixed_case_example'`))
-				})
-			})
-
-			Describe("when identifier is SimpleTest", func() {
-				var content []byte
-				var result []byte
-				var err error
-
-				BeforeEach(func() {
-					content = []byte(`+++
-identifier = 'SimpleTest'
-+++
-`)
-					result, err = migration.Apply(content)
-				})
-
-				It("should not return an error", func() {
-					Expect(err).NotTo(HaveOccurred())
-				})
-
-				It("should munge to simple_test", func() {
-					Expect(string(result)).To(ContainSubstring(`identifier = 'simple_test'`))
-				})
-			})
-
-			Describe("when identifier is ALLCAPS", func() {
-				var content []byte
-				var result []byte
-				var err error
-
-				BeforeEach(func() {
-					content = []byte(`+++
-identifier = 'ALLCAPS'
-+++
-`)
-					result, err = migration.Apply(content)
-				})
-
-				It("should not return an error", func() {
-					Expect(err).NotTo(HaveOccurred())
-				})
-
-				It("should munge to allcaps", func() {
-					Expect(string(result)).To(ContainSubstring(`identifier = 'allcaps'`))
-				})
-			})
-		})
-
-		Describe("when identifier is already munged", func() {
+		When("identifier is already munged", func() {
 			var content []byte
 			var result []byte
 			var err error
@@ -299,8 +219,8 @@ title = 'Lab Small Parts Bin 1A6'
 			})
 		})
 
-		Describe("when handling edge cases", func() {
-			Describe("when identifier value contains UUID", func() {
+		When("handling edge cases", func() {
+			When("identifier value contains UUID", func() {
 				var content []byte
 				var result []byte
 				var err error
@@ -322,7 +242,7 @@ identifier = 'LabTub_61c0030e-00e3-47b5-a797-1ac01f8d05b1'
 				})
 			})
 
-			Describe("when identifier value is empty", func() {
+			When("identifier value is empty", func() {
 				var content []byte
 				var err error
 
@@ -343,7 +263,7 @@ identifier = ''
 				})
 			})
 
-			Describe("when frontmatter has multiple sections", func() {
+			When("frontmatter has multiple sections", func() {
 				var content []byte
 				var result []byte
 				var err error
@@ -393,7 +313,7 @@ primary = ['tools', 'hardware']
 				})
 			})
 
-			Describe("when no identifier field exists", func() {
+			When("no identifier field exists", func() {
 				var content []byte
 				var result []byte
 				var err error
@@ -417,7 +337,7 @@ author = 'John Doe'
 				})
 			})
 
-			Describe("when content has malformed TOML", func() {
+			When("content has malformed TOML", func() {
 				var content []byte
 				var result []byte
 				var err error
@@ -439,7 +359,7 @@ title = 'Test'
 				})
 			})
 
-			Describe("when content has invalid format", func() {
+			When("content has invalid format", func() {
 				var content []byte
 				var result []byte
 				var err error
