@@ -3,6 +3,7 @@ import sinon, { type SinonStub } from 'sinon';
 import { InventoryAddItemDialog } from './inventory-add-item-dialog.js';
 import type { InventoryItemCreatorMover } from './inventory-item-creator-mover.js';
 import type { ExistingPageInfo } from '../gen/api/v1/page_management_pb.js';
+import { AugmentedError, ErrorKind } from './augment-error-service.js';
 import './inventory-add-item-dialog.js';
 
 describe('InventoryAddItemDialog', () => {
@@ -1609,15 +1610,12 @@ describe('InventoryAddItemDialog', () => {
       beforeEach(async () => {
         el.openDialog('drawer_kitchen');
         el.automagicMode = true;
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
-        el.automagicError = {
-          original: new Error('Test'),
-          context: 'testing',
-          errorKind: 'SERVER',
-          message: 'Test error',
-          icon: 'server',
-          details: '',
-        } as import('./augment-error-service.js').AugmentedError;
+        el.automagicError = new AugmentedError(
+          new Error('Test error'),
+          ErrorKind.SERVER,
+          'server',
+          'testing'
+        );
         el.itemIdentifier = 'auto_generated';
         await el.updateComplete;
 

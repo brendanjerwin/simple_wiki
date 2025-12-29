@@ -355,7 +355,7 @@ describe('WikiSearch', () => {
 
       it('should populate results', () => {
         expect(el.results.length).to.equal(1);
-        expect(el.results[0].identifier).to.equal('test');
+        expect(el.results[0]?.identifier).to.equal('test');
       });
 
       it('should set totalUnfilteredCount', () => {

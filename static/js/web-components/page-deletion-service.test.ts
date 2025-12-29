@@ -156,15 +156,12 @@ describe('PageDeleter', () => {
   });
 
   describe('event handling', () => {
-    let confirmHandler: (event: Event) => void;
     let cancelHandler: (event: Event) => void;
 
     beforeEach(() => {
       // Extract the event handlers that were registered
-      const confirmCall = mockDialog.addEventListener.getCalls().find(call => call.args[0] === 'confirm');
       const cancelCall = mockDialog.addEventListener.getCalls().find(call => call.args[0] === 'cancel');
-      
-      confirmHandler = confirmCall?.args[1] || (() => {});
+
       cancelHandler = cancelCall?.args[1] || (() => {});
     });
 
