@@ -49,7 +49,7 @@ export class InventoryQrScanner extends LitElement {
 
       .scanner-container {
         border: 1px solid #ddd;
-        border-radius: 4px;
+        border-radius: 8px;
         overflow: hidden;
         background: #000;
       }

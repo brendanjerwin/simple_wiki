@@ -73,19 +73,6 @@ func (m *mockNormalizationDeps) DeletePage(id wikipage.PageIdentifier) error {
 	return nil
 }
 
-func (m *mockNormalizationDeps) ReadPage(id wikipage.PageIdentifier) (*wikipage.Page, error) {
-	if page, ok := m.pages[id]; ok {
-		if page.err != nil {
-			return nil, page.err
-		}
-		return &wikipage.Page{
-			Identifier: id,
-			Text:       page.markdown,
-		}, nil
-	}
-	return nil, os.ErrNotExist
-}
-
 var _ = Describe("InventoryNormalizationJob", func() {
 	var (
 		job      *InventoryNormalizationJob
@@ -102,9 +89,67 @@ var _ = Describe("InventoryNormalizationJob", func() {
 		logger = lumber.NewConsoleLogger(lumber.WARN)
 	})
 
+	Describe("NewInventoryNormalizationJob", func() {
+		When("deps is nil", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = NewInventoryNormalizationJob(nil, mockFmIndex, logger)
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("deps is required"))
+			})
+		})
+
+		When("fmIndex is nil", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = NewInventoryNormalizationJob(mockDeps, nil, logger)
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("fmIndex is required"))
+			})
+		})
+
+		When("logger is nil", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = NewInventoryNormalizationJob(mockDeps, mockFmIndex, nil)
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("logger is required"))
+			})
+		})
+
+		When("all dependencies are provided", func() {
+			var job *InventoryNormalizationJob
+			var err error
+
+			BeforeEach(func() {
+				job, err = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a valid job", func() {
+				Expect(job).NotTo(BeNil())
+			})
+		})
+	})
+
 	Describe("findAllContainers", func() {
 		BeforeEach(func() {
-			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
+			job, _ = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
 		})
 
 		When("there are pages with inventory.items", func() {
@@ -162,7 +207,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 	Describe("getContainerItems", func() {
 		BeforeEach(func() {
-			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
+			job, _ = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
 		})
 
 		When("container has items in inventory.items array", func() {
@@ -220,7 +265,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 	Describe("createItemPage", func() {
 		BeforeEach(func() {
-			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
+			job, _ = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
 		})
 
 		When("creating a new item page", func() {
@@ -288,7 +333,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 	Describe("detectCircularReferences", func() {
 		BeforeEach(func() {
-			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
+			job, _ = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
 		})
 
 		When("there are no circular references", func() {
@@ -334,7 +379,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 	Describe("Execute", func() {
 		BeforeEach(func() {
-			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
+			job, _ = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
 		})
 
 		When("container has items without pages", func() {
@@ -552,7 +597,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 	Describe("generateAuditReport", func() {
 		BeforeEach(func() {
-			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
+			job, _ = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
 		})
 
 		When("there are anomalies and created pages", func() {
@@ -640,7 +685,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 	Describe("getContainerItems edge cases", func() {
 		BeforeEach(func() {
-			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
+			job, _ = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
 		})
 
 		When("container has items as []string type", func() {
@@ -689,7 +734,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 	Describe("getItemsWithContainerReference", func() {
 		BeforeEach(func() {
-			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
+			job, _ = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
 		})
 
 		When("items reference a container", func() {
@@ -745,7 +790,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 	Describe("generateAuditReport with error anomalies", func() {
 		BeforeEach(func() {
-			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
+			job, _ = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
 		})
 
 		When("there is an error severity anomaly", func() {
@@ -777,7 +822,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 	Describe("findCycle edge cases", func() {
 		BeforeEach(func() {
-			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
+			job, _ = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
 		})
 
 		When("there is no parent container", func() {
@@ -818,7 +863,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 	Describe("createMissingItemPages", func() {
 		BeforeEach(func() {
-			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
+			job, _ = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
 		})
 
 		When("page creation fails", func() {
@@ -843,7 +888,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 					mockNormalizationDeps: mockDeps,
 					writeError:            os.ErrPermission,
 				}
-				job = NewInventoryNormalizationJob(failingDeps, mockFmIndex, logger)
+				job, _ = NewInventoryNormalizationJob(failingDeps, mockFmIndex, logger)
 
 				createdPages, anomalies = job.createMissingItemPages([]string{"tool_box"})
 			})
@@ -861,7 +906,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 	Describe("detectCircularReferenceAnomalies", func() {
 		BeforeEach(func() {
-			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
+			job, _ = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
 		})
 
 		When("there are circular references", func() {
@@ -891,7 +936,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 	Describe("buildItemContainerMap", func() {
 		BeforeEach(func() {
-			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
+			job, _ = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
 		})
 
 		When("items are in containers from both sources", func() {
@@ -927,7 +972,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 	Describe("detectOrphanedItems", func() {
 		BeforeEach(func() {
-			job = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
+			job, _ = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
 		})
 
 		When("item has empty container reference", func() {
@@ -949,6 +994,376 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 			It("should not detect orphan for empty container", func() {
 				Expect(anomalies).To(BeEmpty())
+			})
+		})
+	})
+
+	Describe("isContainerAlreadySet", func() {
+		When("is_container is boolean true", func() {
+			var fm map[string]any
+
+			BeforeEach(func() {
+				fm = map[string]any{
+					"inventory": map[string]any{
+						"is_container": true,
+					},
+				}
+			})
+
+			It("should return true", func() {
+				Expect(isContainerAlreadySet(fm)).To(BeTrue())
+			})
+		})
+
+		When("is_container is boolean false", func() {
+			var fm map[string]any
+
+			BeforeEach(func() {
+				fm = map[string]any{
+					"inventory": map[string]any{
+						"is_container": false,
+					},
+				}
+			})
+
+			It("should return false", func() {
+				Expect(isContainerAlreadySet(fm)).To(BeFalse())
+			})
+		})
+
+		When("is_container is string 'true'", func() {
+			var fm map[string]any
+
+			BeforeEach(func() {
+				fm = map[string]any{
+					"inventory": map[string]any{
+						"is_container": "true",
+					},
+				}
+			})
+
+			It("should return true", func() {
+				Expect(isContainerAlreadySet(fm)).To(BeTrue())
+			})
+		})
+
+		When("is_container is string 'false'", func() {
+			var fm map[string]any
+
+			BeforeEach(func() {
+				fm = map[string]any{
+					"inventory": map[string]any{
+						"is_container": "false",
+					},
+				}
+			})
+
+			It("should return false", func() {
+				Expect(isContainerAlreadySet(fm)).To(BeFalse())
+			})
+		})
+
+		When("is_container is not set", func() {
+			var fm map[string]any
+
+			BeforeEach(func() {
+				fm = map[string]any{
+					"inventory": map[string]any{},
+				}
+			})
+
+			It("should return false", func() {
+				Expect(isContainerAlreadySet(fm)).To(BeFalse())
+			})
+		})
+
+		When("inventory section does not exist", func() {
+			var fm map[string]any
+
+			BeforeEach(func() {
+				fm = map[string]any{
+					"title": "Some Page",
+				}
+			})
+
+			It("should return false", func() {
+				Expect(isContainerAlreadySet(fm)).To(BeFalse())
+			})
+		})
+
+		When("is_container is an unexpected type", func() {
+			var fm map[string]any
+
+			BeforeEach(func() {
+				fm = map[string]any{
+					"inventory": map[string]any{
+						"is_container": 123, // integer instead of bool/string
+					},
+				}
+			})
+
+			It("should return false", func() {
+				Expect(isContainerAlreadySet(fm)).To(BeFalse())
+			})
+		})
+	})
+
+	Describe("migrateContainersToIsContainerField with boolean handling", func() {
+		BeforeEach(func() {
+			job, _ = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
+		})
+
+		When("container has is_container as boolean true", func() {
+			var migratedCount int
+
+			BeforeEach(func() {
+				// Set up a container that is referenced by items
+				mockDeps.pages["tool_box"] = &mockPageData{
+					frontmatter: map[string]any{
+						"title": "Tool Box",
+						"inventory": map[string]any{
+							"is_container": true, // Already set as boolean
+						},
+					},
+				}
+
+				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
+					if key == "inventory.container" {
+						return []string{"hammer"}
+					}
+					return []string{}
+				}
+				mockFmIndex.data["hammer"] = map[string]string{
+					"inventory.container": "tool_box",
+				}
+
+				migratedCount = job.migrateContainersToIsContainerField()
+			})
+
+			It("should not migrate the container", func() {
+				Expect(migratedCount).To(Equal(0))
+			})
+
+			It("should not write to the page", func() {
+				_, written := mockDeps.writtenPages["tool_box"]
+				Expect(written).To(BeFalse())
+			})
+		})
+
+		When("container has is_container as string 'true'", func() {
+			var migratedCount int
+
+			BeforeEach(func() {
+				// Set up a container that is referenced by items
+				mockDeps.pages["tool_box"] = &mockPageData{
+					frontmatter: map[string]any{
+						"title": "Tool Box",
+						"inventory": map[string]any{
+							"is_container": "true", // Already set as string
+						},
+					},
+				}
+
+				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
+					if key == "inventory.container" {
+						return []string{"hammer"}
+					}
+					return []string{}
+				}
+				mockFmIndex.data["hammer"] = map[string]string{
+					"inventory.container": "tool_box",
+				}
+
+				migratedCount = job.migrateContainersToIsContainerField()
+			})
+
+			It("should not migrate the container", func() {
+				Expect(migratedCount).To(Equal(0))
+			})
+
+			It("should not write to the page", func() {
+				_, written := mockDeps.writtenPages["tool_box"]
+				Expect(written).To(BeFalse())
+			})
+		})
+
+		When("container has is_container as boolean false", func() {
+			var migratedCount int
+
+			BeforeEach(func() {
+				// Set up a container that is referenced by items but has is_container = false
+				mockDeps.pages["tool_box"] = &mockPageData{
+					frontmatter: map[string]any{
+						"title": "Tool Box",
+						"inventory": map[string]any{
+							"is_container": false, // Explicitly set to false
+						},
+					},
+				}
+
+				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
+					if key == "inventory.container" {
+						return []string{"hammer"}
+					}
+					return []string{}
+				}
+				mockFmIndex.data["hammer"] = map[string]string{
+					"inventory.container": "tool_box",
+				}
+
+				migratedCount = job.migrateContainersToIsContainerField()
+			})
+
+			It("should migrate the container to true", func() {
+				Expect(migratedCount).To(Equal(1))
+			})
+
+			It("should set is_container to true", func() {
+				written := mockDeps.writtenPages["tool_box"]
+				Expect(written).NotTo(BeNil())
+				inventory, ok := written.frontmatter["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue())
+				Expect(inventory["is_container"]).To(Equal(true))
+			})
+		})
+	})
+
+	Describe("Execute with item removal from parent containers", func() {
+		BeforeEach(func() {
+			job, _ = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
+		})
+
+		When("item has container set and is in parent's items list", func() {
+			BeforeEach(func() {
+				// Set up container with items
+				mockDeps.pages["tool_box"] = &mockPageData{
+					frontmatter: map[string]any{
+						"title": "Tool Box",
+						"inventory": map[string]any{
+							"items":        []any{"hammer", "screwdriver"},
+							"is_container": true,
+						},
+					},
+				}
+
+				// Set up item with container reference
+				mockDeps.pages["hammer"] = &mockPageData{
+					frontmatter: map[string]any{
+						"title": "Hammer",
+						"inventory": map[string]any{
+							"container": "tool_box",
+						},
+					},
+				}
+
+				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
+					if key == "inventory.items" {
+						return []string{"tool_box"}
+					}
+					if key == "inventory.is_container" {
+						return []string{"tool_box"}
+					}
+					if key == "inventory.container" {
+						return []string{"hammer"}
+					}
+					return []string{}
+				}
+
+				mockFmIndex.data["tool_box"] = map[string]string{
+					"inventory.is_container": "true",
+				}
+				mockFmIndex.data["hammer"] = map[string]string{
+					"inventory.container": "tool_box",
+				}
+
+				mockFmIndex.QueryExactMatchFunc = func(key, value string) []string {
+					if key == "inventory.container" && value == "tool_box" {
+						return []string{"hammer"}
+					}
+					return nil
+				}
+
+				_ = job.Execute()
+			})
+
+			It("should remove hammer from tool_box items list", func() {
+				// Verify hammer was removed from tool_box's items
+				written := mockDeps.writtenPages["tool_box"]
+				Expect(written).NotTo(BeNil())
+				inventory, ok := written.frontmatter["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue())
+				items, ok := inventory["items"].([]any)
+				Expect(ok).To(BeTrue())
+				Expect(items).To(HaveLen(1))
+				Expect(items).To(ContainElement("screwdriver"))
+				Expect(items).NotTo(ContainElement("hammer"))
+			})
+		})
+
+		When("item with un-munged name is in parent's items list", func() {
+			BeforeEach(func() {
+				// Set up container with un-munged item names
+				mockDeps.pages["tool_box"] = &mockPageData{
+					frontmatter: map[string]any{
+						"title": "Tool Box",
+						"inventory": map[string]any{
+							"items":        []any{"Big Hammer", "Small Screwdriver"},
+							"is_container": true,
+						},
+					},
+				}
+
+				// Set up item with container reference (munged identifier)
+				mockDeps.pages["big_hammer"] = &mockPageData{
+					frontmatter: map[string]any{
+						"title": "Big Hammer",
+						"inventory": map[string]any{
+							"container": "tool_box",
+						},
+					},
+				}
+
+				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
+					if key == "inventory.items" {
+						return []string{"tool_box"}
+					}
+					if key == "inventory.is_container" {
+						return []string{"tool_box"}
+					}
+					if key == "inventory.container" {
+						return []string{"big_hammer"}
+					}
+					return []string{}
+				}
+
+				mockFmIndex.data["tool_box"] = map[string]string{
+					"inventory.is_container": "true",
+				}
+				mockFmIndex.data["big_hammer"] = map[string]string{
+					"inventory.container": "tool_box",
+				}
+
+				mockFmIndex.QueryExactMatchFunc = func(key, value string) []string {
+					if key == "inventory.container" && value == "tool_box" {
+						return []string{"big_hammer"}
+					}
+					return nil
+				}
+
+				_ = job.Execute()
+			})
+
+			It("should remove item using munged comparison", func() {
+				// Verify "Big Hammer" was removed from tool_box's items
+				written := mockDeps.writtenPages["tool_box"]
+				Expect(written).NotTo(BeNil())
+				inventory, ok := written.frontmatter["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue())
+				items, ok := inventory["items"].([]any)
+				Expect(ok).To(BeTrue())
+				Expect(items).To(HaveLen(1))
+				Expect(items).To(ContainElement("Small Screwdriver"))
+				Expect(items).NotTo(ContainElement("Big Hammer"))
 			})
 		})
 	})
