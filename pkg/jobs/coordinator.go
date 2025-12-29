@@ -1,6 +1,7 @@
 package jobs
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/jcelliott/lumber"
@@ -26,12 +27,13 @@ func NewJobQueueCoordinator(logger lumber.Logger) *JobQueueCoordinator {
 
 
 // EnqueueJob adds a job to its appropriate queue based on the job's name.
-func (c *JobQueueCoordinator) EnqueueJob(job Job) {
+// Returns an error if the job could not be dispatched (e.g., queue is full).
+func (c *JobQueueCoordinator) EnqueueJob(job Job) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	queueName := job.GetName()
-	
+
 	// Auto-register queue if it doesn't exist
 	dispatcher, exists := c.queues[queueName]
 	if !exists {
@@ -39,7 +41,7 @@ func (c *JobQueueCoordinator) EnqueueJob(job Job) {
 		const defaultQueueCapacity = 10
 		dispatcher = artifex.NewDispatcher(1, defaultQueueCapacity)
 		dispatcher.Start()
-		
+
 		c.queues[queueName] = dispatcher
 		c.stats[queueName] = &QueueStats{
 			QueueName:     queueName,
@@ -50,7 +52,7 @@ func (c *JobQueueCoordinator) EnqueueJob(job Job) {
 	}
 
 	stats := c.stats[queueName]
-	
+
 	// Increment jobs remaining and update high water mark
 	stats.JobsRemaining++
 	if stats.JobsRemaining > stats.HighWaterMark {
@@ -59,7 +61,7 @@ func (c *JobQueueCoordinator) EnqueueJob(job Job) {
 	stats.IsActive = true
 
 	// Submit job to Artifex dispatcher
-	dispatcher.Dispatch(func() {
+	err := dispatcher.Dispatch(func() {
 		defer func() {
 			c.mu.Lock()
 			defer c.mu.Unlock()
@@ -71,11 +73,20 @@ func (c *JobQueueCoordinator) EnqueueJob(job Job) {
 			}
 		}()
 
-		err := job.Execute()
-		if err != nil {
-			c.logger.Error("Job execution failed: queue=%s job=%s error=%v", queueName, job.GetName(), err)
+		execErr := job.Execute()
+		if execErr != nil {
+			c.logger.Error("Job execution failed: queue=%s job=%s error=%v", queueName, job.GetName(), execErr)
 		}
 	})
+	if err != nil {
+		// Rollback stats since job wasn't dispatched
+		stats.JobsRemaining--
+		if stats.JobsRemaining == 0 {
+			stats.IsActive = false
+		}
+		return fmt.Errorf("dispatch job %s: %w", queueName, err)
+	}
+	return nil
 }
 
 // CompletionCallback is called when a job completes, with the error (if any).
@@ -83,7 +94,8 @@ type CompletionCallback func(err error)
 
 // EnqueueJobWithCompletion adds a job to its queue and calls the callback when it completes.
 // This allows job chaining - the callback can enqueue dependent jobs.
-func (c *JobQueueCoordinator) EnqueueJobWithCompletion(job Job, onComplete CompletionCallback) {
+// Returns an error if the job could not be dispatched (e.g., queue is full).
+func (c *JobQueueCoordinator) EnqueueJobWithCompletion(job Job, onComplete CompletionCallback) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -116,7 +128,7 @@ func (c *JobQueueCoordinator) EnqueueJobWithCompletion(job Job, onComplete Compl
 	stats.IsActive = true
 
 	// Submit job to Artifex dispatcher
-	dispatcher.Dispatch(func() {
+	err := dispatcher.Dispatch(func() {
 		defer func() {
 			c.mu.Lock()
 			defer c.mu.Unlock()
@@ -128,16 +140,25 @@ func (c *JobQueueCoordinator) EnqueueJobWithCompletion(job Job, onComplete Compl
 			}
 		}()
 
-		err := job.Execute()
-		if err != nil {
-			c.logger.Error("Job execution failed: queue=%s job=%s error=%v", queueName, job.GetName(), err)
+		execErr := job.Execute()
+		if execErr != nil {
+			c.logger.Error("Job execution failed: queue=%s job=%s error=%v", queueName, job.GetName(), execErr)
 		}
 
 		// Call completion callback after job execution
 		if onComplete != nil {
-			onComplete(err)
+			onComplete(execErr)
 		}
 	})
+	if err != nil {
+		// Rollback stats since job wasn't dispatched
+		stats.JobsRemaining--
+		if stats.JobsRemaining == 0 {
+			stats.IsActive = false
+		}
+		return fmt.Errorf("dispatch job with completion %s: %w", queueName, err)
+	}
+	return nil
 }
 
 // GetQueueStats returns the current statistics for the specified queue.

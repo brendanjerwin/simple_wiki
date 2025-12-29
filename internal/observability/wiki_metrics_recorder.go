@@ -300,7 +300,11 @@ func (r *WikiMetricsRecorder) PersistAsync() {
 		return // No persistence configured
 	}
 
-	r.jobQueue.EnqueueJob(&metricsPersistJob{recorder: r})
+	if err := r.jobQueue.EnqueueJob(&metricsPersistJob{recorder: r}); err != nil {
+		if r.logger != nil {
+			r.logger.Error("Failed to enqueue metrics persist job: %v", err)
+		}
+	}
 }
 
 // Shutdown performs a final synchronous persist of any remaining metrics.

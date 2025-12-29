@@ -54,7 +54,7 @@ var _ = Describe("Site.ReadOrInit with URL parameters", func() {
 	})
 
 	AfterEach(func() {
-		os.RemoveAll(tmpDir)
+		_ = os.RemoveAll(tmpDir)
 	})
 
 	Describe("when creating a new page with dotted URL parameters", func() {

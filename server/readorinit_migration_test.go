@@ -66,7 +66,7 @@ var _ = Describe("Migration Coordination in ReadOrInit", func() {
 
 	AfterEach(func() {
 		if testDataDir != "" {
-			os.RemoveAll(testDataDir)
+			_ = os.RemoveAll(testDataDir)
 		}
 	})
 

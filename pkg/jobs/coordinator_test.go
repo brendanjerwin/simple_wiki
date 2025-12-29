@@ -30,15 +30,20 @@ var _ = Describe("JobQueueCoordinator", func() {
 
 	Describe("when enqueueing a job", func() {
 		var blockingJob *jobs.BlockingMockJob
+		var enqueueErr error
 
 		BeforeEach(func() {
 			blockingJob = jobs.NewBlockingMockJob("TestQueue")
-			coordinator.EnqueueJob(blockingJob)
+			enqueueErr = coordinator.EnqueueJob(blockingJob)
 		})
 
 		AfterEach(func() {
 			// Always release the job to prevent goroutine leaks
 			blockingJob.Release()
+		})
+
+		It("should not return an error", func() {
+			Expect(enqueueErr).NotTo(HaveOccurred())
 		})
 
 		It("should increase jobs remaining", func() {
@@ -87,8 +92,8 @@ var _ = Describe("JobQueueCoordinator", func() {
 	Describe("when getting all active queues", func() {
 		It("should return correct number of active queues", func() {
 			// Enqueue jobs - queues are auto-registered
-			coordinator.EnqueueJob(&jobs.MockJob{Name: "Queue1"})
-			coordinator.EnqueueJob(&jobs.MockJob{Name: "Queue3"})
+			Expect(coordinator.EnqueueJob(&jobs.MockJob{Name: "Queue1"})).To(Succeed())
+			Expect(coordinator.EnqueueJob(&jobs.MockJob{Name: "Queue3"})).To(Succeed())
 
 			// Check immediately after enqueueing, before jobs complete
 			activeQueues := coordinator.GetActiveQueues()
@@ -97,8 +102,8 @@ var _ = Describe("JobQueueCoordinator", func() {
 
 		It("should return only active queues", func() {
 			// Enqueue jobs - queues are auto-registered
-			coordinator.EnqueueJob(&jobs.MockJob{Name: "Queue1"})
-			coordinator.EnqueueJob(&jobs.MockJob{Name: "Queue3"})
+			Expect(coordinator.EnqueueJob(&jobs.MockJob{Name: "Queue1"})).To(Succeed())
+			Expect(coordinator.EnqueueJob(&jobs.MockJob{Name: "Queue3"})).To(Succeed())
 
 			// Check immediately after enqueueing, before jobs complete
 			activeQueues := coordinator.GetActiveQueues()
@@ -114,13 +119,14 @@ var _ = Describe("JobQueueCoordinator", func() {
 		Describe("when job completes successfully", func() {
 			var callbackCalled bool
 			var callbackError error
+			var enqueueErr error
 
 			BeforeEach(func() {
 				callbackCalled = false
 				callbackError = nil
 
 				job := &jobs.MockJob{Name: "CompletionTestQueue", Err: nil}
-				coordinator.EnqueueJobWithCompletion(job, func(err error) {
+				enqueueErr = coordinator.EnqueueJobWithCompletion(job, func(err error) {
 					callbackCalled = true
 					callbackError = err
 				})
@@ -129,6 +135,10 @@ var _ = Describe("JobQueueCoordinator", func() {
 				Eventually(func() bool {
 					return callbackCalled
 				}).Should(BeTrue())
+			})
+
+			It("should not return an error", func() {
+				Expect(enqueueErr).NotTo(HaveOccurred())
 			})
 
 			It("should call the completion callback", func() {
@@ -144,6 +154,7 @@ var _ = Describe("JobQueueCoordinator", func() {
 			var callbackCalled bool
 			var callbackError error
 			var expectedErr error
+			var enqueueErr error
 
 			BeforeEach(func() {
 				callbackCalled = false
@@ -151,7 +162,7 @@ var _ = Describe("JobQueueCoordinator", func() {
 				expectedErr = &testError{msg: "job failed"}
 
 				job := &jobs.MockJob{Name: "ErrorTestQueue", Err: expectedErr}
-				coordinator.EnqueueJobWithCompletion(job, func(err error) {
+				enqueueErr = coordinator.EnqueueJobWithCompletion(job, func(err error) {
 					callbackCalled = true
 					callbackError = err
 				})
@@ -160,6 +171,10 @@ var _ = Describe("JobQueueCoordinator", func() {
 				Eventually(func() bool {
 					return callbackCalled
 				}).Should(BeTrue())
+			})
+
+			It("should not return an error from enqueue", func() {
+				Expect(enqueueErr).NotTo(HaveOccurred())
 			})
 
 			It("should call the completion callback", func() {
@@ -175,7 +190,7 @@ var _ = Describe("JobQueueCoordinator", func() {
 			It("should not panic", func() {
 				job := &jobs.MockJob{Name: "NilCallbackQueue", Err: nil}
 				Expect(func() {
-					coordinator.EnqueueJobWithCompletion(job, nil)
+					_ = coordinator.EnqueueJobWithCompletion(job, nil)
 				}).NotTo(Panic())
 
 				// Wait for job to complete
@@ -195,10 +210,10 @@ var _ = Describe("JobQueueCoordinator", func() {
 			// Enqueue multiple jobs in different queues
 			blockingJob1 = jobs.NewBlockingMockJob("Queue1")
 			blockingJob2 = jobs.NewBlockingMockJob("Queue2")
-			
-			coordinator.EnqueueJob(blockingJob1)
-			coordinator.EnqueueJob(blockingJob2)
-			
+
+			Expect(coordinator.EnqueueJob(blockingJob1)).To(Succeed())
+			Expect(coordinator.EnqueueJob(blockingJob2)).To(Succeed())
+
 			// Action: Get the job progress
 			progress = coordinator.GetJobProgress()
 		})

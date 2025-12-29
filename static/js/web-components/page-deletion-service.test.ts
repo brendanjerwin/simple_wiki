@@ -1,10 +1,10 @@
 import { expect } from '@open-wc/testing';
-import { PageDeletionService } from './page-deletion-service.js';
+import { PageDeleter } from './page-deletion-service.js';
 import './confirmation-dialog.js'; // Ensure custom element is defined
 import sinon from 'sinon';
 
-describe.skip('PageDeletionService', () => {
-  let service: PageDeletionService;
+describe.skip('PageDeleter', () => {
+  let service: PageDeleter;
   let mockDialog: {
     openDialog: sinon.SinonSpy;
     setLoading: sinon.SinonSpy;
@@ -41,7 +41,7 @@ describe.skip('PageDeletionService', () => {
     appendChildStub = sinon.stub(document.body, 'appendChild');
     sinon.stub(document, 'querySelector').returns(null); // Force creation of new dialog
 
-    service = new PageDeletionService();
+    service = new PageDeleter();
   });
 
   afterEach(() => {
@@ -95,7 +95,7 @@ describe.skip('PageDeletionService', () => {
       
       // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock dialog for testing
       sinon.stub(document, 'querySelector').returns(existingDialog as unknown as Element);
-      service = new PageDeletionService();
+      service = new PageDeleter();
     });
 
     it('should use existing dialog element', () => {
@@ -140,7 +140,7 @@ describe.skip('PageDeletionService', () => {
       });
 
       it('should log error and not open dialog', () => {
-        expect(consoleErrorStub).to.have.been.calledWith('PageDeletionService: pageName is required');
+        expect(consoleErrorStub).to.have.been.calledWith('PageDeleter: pageName is required');
         expect(mockDialog.openDialog).to.not.have.been.called;
       });
     });
@@ -188,7 +188,7 @@ describe.skip('PageDeletionService', () => {
         });
 
         it('should log error and return early', () => {
-          expect(consoleErrorStub).to.have.been.calledWith('PageDeletionService: No page name found for deletion');
+          expect(consoleErrorStub).to.have.been.calledWith('PageDeleter: No page name found for deletion');
         });
       });
 
@@ -219,7 +219,7 @@ describe.skip('PageDeletionService', () => {
   describe('singleton export', () => {
     it('should export a singleton instance', async () => {
       const { pageDeleteService } = await import('./page-deletion-service.js');
-      expect(pageDeleteService).to.be.instanceof(PageDeletionService);
+      expect(pageDeleteService).to.be.instanceof(PageDeleter);
     });
   });
 });

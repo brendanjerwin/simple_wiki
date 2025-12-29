@@ -12,7 +12,11 @@ ln -sf "$LOG_FILE" "$LOG_DIR/current_task.log"
 echo "Logging to: $LOG_FILE"
 
 {
+  echo "Running revive..."
   revive -config revive.toml -set_exit_status ./...
+  echo ""
+  echo "Running golangci-lint (godox for TODO detection)..."
+  golangci-lint run
 } 2>&1 | tee "$LOG_FILE"
 
 exit_code=${PIPESTATUS[0]}

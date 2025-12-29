@@ -200,7 +200,7 @@ export class InventoryQrScanner extends LitElement {
         identifier,
         title,
         ...(container !== undefined && { container }),
-        ...(isContainer !== undefined && { isContainer }),
+        ...(isContainerValue !== undefined && { isContainer }),
       };
 
       // Collapse scanner and emit success event

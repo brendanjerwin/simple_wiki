@@ -12,7 +12,7 @@ import './web-components/editor-toolbar.js';
 import './web-components/wiki-image.js';
 import { showStoredToast } from './web-components/toast-message.js';
 import { setupGlobalErrorHandler } from './web-components/global-error-handler.js';
-import { pageDeleteService, type PageDeletionService } from './web-components/page-deletion-service.js';
+import { pageDeleteService, type PageDeleter } from './web-components/page-deletion-service.js';
 import { EditorContextMenuCoordinator } from './services/editor-context-menu-coordinator.js';
 import type { EditorContextMenu } from './web-components/editor-context-menu.js';
 import type { EditorToolbar } from './web-components/editor-toolbar.js';
@@ -23,7 +23,7 @@ setupGlobalErrorHandler();
 // Make services available globally for simple_wiki.js
 declare global {
   interface Window {
-    pageDeleteService: PageDeletionService;
+    pageDeleteService: PageDeleter;
     simple_wiki?: {
       pageName?: string;
       debounceMS?: number;

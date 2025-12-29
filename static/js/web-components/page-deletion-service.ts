@@ -8,7 +8,7 @@ import './confirmation-dialog.js';
 import { type ConfirmationConfig } from './confirmation-dialog.js';
 
 /**
- * PageDeletionService - Handles page deletion workflow using the generic confirmation dialog
+ * PageDeleter - Handles page deletion workflow using the generic confirmation dialog
  * 
  * This service manages the complete page deletion flow:
  * 1. Shows confirmation dialog with page-specific messaging
@@ -18,11 +18,11 @@ import { type ConfirmationConfig } from './confirmation-dialog.js';
  * 
  * Usage:
  * ```typescript
- * const service = new PageDeletionService();
+ * const service = new PageDeleter();
  * service.confirmAndDeletePage('home');
  * ```
  */
-export class PageDeletionService {
+export class PageDeleter {
   private client = createClient(PageManagementService, getGrpcWebTransport());
   // Definite assignment assertion: ensureDialogExists() called in constructor guarantees initialization
   private dialog!: HTMLElement & {
@@ -57,8 +57,7 @@ export class PageDeletionService {
    */
   confirmAndDeletePage(pageName: string) {
     if (!pageName) {
-      console.error('PageDeletionService: pageName is required');
-      return;
+      throw new Error('PageDeleter: pageName is required');
     }
 
     this.dialog.openDialog({
@@ -107,10 +106,9 @@ export class PageDeletionService {
    */
   private async handleConfirm() {
     const pageName = this.dialog.dataset.pageName;
-    
+
     if (!pageName) {
-      console.error('PageDeletionService: No page name found for deletion');
-      return;
+      throw new Error('PageDeleter: No page name found for deletion');
     }
 
     // Set loading state
@@ -175,4 +173,4 @@ export class PageDeletionService {
 }
 
 // Create a singleton instance for global use
-export const pageDeleteService = new PageDeletionService();
+export const pageDeleteService = new PageDeleter();

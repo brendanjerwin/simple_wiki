@@ -376,7 +376,7 @@ export const ErrorState: Story = {
     stub(el, 'stopAutoRefresh' as any);
     
     el.loading = false;
-    el.error = 'Failed to connect to system info service';
+    el.error = new Error('Failed to connect to system info service');
     delete el.version;
     delete el.jobStatus;
     

@@ -133,7 +133,7 @@ export class SystemInfo extends LitElement {
   declare version?: GetVersionResponse;
   declare jobStatus?: GetJobStatusResponse;
   declare loading: boolean;
-  declare error?: string;
+  declare error: Error | null;
   declare expanded: boolean;
   private debounceTimer?: ReturnType<typeof setTimeout>;
   private refreshTimer?: ReturnType<typeof setInterval>;
@@ -145,6 +145,7 @@ export class SystemInfo extends LitElement {
   constructor() {
     super();
     this.loading = true;
+    this.error = null;
     this.expanded = false;
     this._handleClickOutside = this.handleClickOutside.bind(this);
   }
@@ -228,7 +229,7 @@ export class SystemInfo extends LitElement {
       this.version = await this.client.getVersion(create(GetVersionRequestSchema, {}));
       this.requestUpdate();
     } catch (err) {
-      console.error('Failed to reload version:', err);
+      this.error = err instanceof Error ? err : new Error('Failed to reload version');
     }
   }
 
@@ -255,7 +256,7 @@ export class SystemInfo extends LitElement {
 
   private async loadSystemInfo(): Promise<void> {
     try {
-      delete this.error;
+      this.error = null;
       
       // Load version (always use unary call for this)
       this.version = await this.client.getVersion(create(GetVersionRequestSchema, {}));
@@ -271,7 +272,7 @@ export class SystemInfo extends LitElement {
         this.startAutoRefresh();
       }
     } catch (err) {
-      this.error = err instanceof Error ? err.message : 'Failed to load system info';
+      this.error = err instanceof Error ? err : new Error('Failed to load system info');
       // Fallback to polling on error
       this.startAutoRefresh();
     } finally {
@@ -308,7 +309,7 @@ export class SystemInfo extends LitElement {
     } catch (err) {
       const isAbortError = err instanceof Error && err.name === 'AbortError';
       if (!isAbortError) {
-        console.error('Streaming error:', err);
+        this.error = err instanceof Error ? err : new Error('Streaming error');
         // Fallback to polling
         this.startAutoRefresh();
       }

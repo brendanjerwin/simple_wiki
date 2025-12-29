@@ -48,6 +48,7 @@ func (m *mockPageReaderMutator) setPage(id string, fm map[string]any, md string)
 }
 
 // setPageWithError adds a page that returns an error when read.
+// nolint:unused // Available for future tests that need to simulate read errors on specific pages
 func (m *mockPageReaderMutator) setPageWithError(id string, err error) {
 	m.pages[id] = &mockPage{
 		readErr: err,
@@ -135,6 +136,7 @@ func (m *mockPageReaderMutator) getFrontmatter(id string) map[string]any {
 }
 
 // getMarkdown returns the markdown for a page (for test assertions).
+// nolint:unused // Available for future tests that need to verify markdown content
 func (m *mockPageReaderMutator) getMarkdown(id string) string {
 	if page, ok := m.pages[id]; ok {
 		return page.markdown

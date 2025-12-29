@@ -564,9 +564,7 @@ export class QrScanner extends LitElement {
       } else {
         message = `Unknown error: ${String(err)}`;
       }
-      error = new Error(message);
-      // Error.cause is ES2022+, use type assertion for ES2020 compatibility
-      (error as Error & { cause?: unknown }).cause = err;
+      error = new Error(message, { cause: err });
     }
 
     this.error = error;

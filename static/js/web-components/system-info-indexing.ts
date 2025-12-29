@@ -187,11 +187,12 @@ export class SystemInfoIndexing extends LitElement {
 
   declare jobStatus?: GetJobStatusResponse;
   declare loading: boolean;
-  declare error?: string;
+  declare error: Error | null;
 
   constructor() {
     super();
     this.loading = false;
+    this.error = null;
   }
 
   // Keep formatRate and calculateProgress available for tests and future use
@@ -212,7 +213,7 @@ export class SystemInfoIndexing extends LitElement {
     }
 
     if (this.error) {
-      return html`<div class="error">${this.error}</div>`;
+      return html`<div class="error">${this.error.message}</div>`;
     }
 
     if (!this.jobStatus) {

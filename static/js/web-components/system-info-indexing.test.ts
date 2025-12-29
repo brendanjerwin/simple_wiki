@@ -51,7 +51,7 @@ describe('SystemInfoIndexing', () => {
   it('should have default property values', () => {
     expect(el.jobStatus).to.be.undefined;
     expect(el.loading).to.be.false;
-    expect(el.error).to.be.undefined;
+    expect(el.error).to.be.null;
   });
 
   describe('when loading is true and no jobStatus', () => {
@@ -75,7 +75,7 @@ describe('SystemInfoIndexing', () => {
 
   describe('when error is set', () => {
     beforeEach(async () => {
-      el.error = 'Test error message';
+      el.error = new Error('Test error message');
       await el.updateComplete;
     });
 
@@ -99,7 +99,7 @@ describe('SystemInfoIndexing', () => {
   describe('when no jobStatus is provided', () => {
     beforeEach(async () => {
       el.loading = false;
-      delete el.error;
+      el.error = null;
       delete el.jobStatus;
       await el.updateComplete;
     });
@@ -139,7 +139,7 @@ describe('SystemInfoIndexing', () => {
       
       el.jobStatus = jobStatus;
       el.loading = false;
-      delete el.error;
+      el.error = null;
       await el.updateComplete;
     });
 
@@ -186,7 +186,7 @@ describe('SystemInfoIndexing', () => {
 
       el.jobStatus = jobStatus;
       el.loading = false;
-      delete el.error;
+      el.error = null;
       await el.updateComplete;
     });
 
@@ -255,7 +255,7 @@ describe('SystemInfoIndexing', () => {
 
       el.jobStatus = jobStatus;
       el.loading = false;
-      delete el.error;
+      el.error = null;
       await el.updateComplete;
     });
 
@@ -300,7 +300,7 @@ describe('SystemInfoIndexing', () => {
 
       el.jobStatus = jobStatus;
       el.loading = false;
-      delete el.error;
+      el.error = null;
       await el.updateComplete;
     });
 
@@ -326,7 +326,7 @@ describe('SystemInfoIndexing', () => {
 
       el.jobStatus = jobStatus;
       el.loading = false;
-      delete el.error;
+      el.error = null;
       await el.updateComplete;
     });
 
@@ -352,7 +352,7 @@ describe('SystemInfoIndexing', () => {
 
       el.jobStatus = jobStatus;
       el.loading = true;
-      delete el.error;
+      el.error = null;
       await el.updateComplete;
     });
 
@@ -373,7 +373,7 @@ describe('SystemInfoIndexing', () => {
 
   describe('when error state is present', () => {
     beforeEach(async () => {
-      el.error = 'Connection failed';
+      el.error = new Error('Connection failed');
       await el.updateComplete;
     });
 
@@ -511,7 +511,7 @@ describe('SystemInfoIndexing', () => {
   describe('accessibility', () => {
     describe('when error is present', () => {
       beforeEach(async () => {
-        el.error = 'Accessibility test error';
+        el.error = new Error('Accessibility test error');
         await el.updateComplete;
       });
 
@@ -546,7 +546,7 @@ describe('SystemInfoIndexing', () => {
 
         el.jobStatus = jobStatus;
         el.loading = false;
-        delete el.error;
+        el.error = null;
         await el.updateComplete;
       });
 

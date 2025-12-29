@@ -112,7 +112,7 @@ export class WikiSearch extends LitElement {
   declare results: SearchResult[];
   declare noResults: boolean;
   declare loading: boolean;
-  declare error?: string;
+  declare error: Error | null;
   declare inventoryOnly: boolean;
   declare totalUnfilteredCount: number;
   private lastSearchQuery: string = '';
@@ -122,6 +122,7 @@ export class WikiSearch extends LitElement {
     this.results = [];
     this.noResults = false;
     this.loading = false;
+    this.error = null;
     this.inventoryOnly = localStorage.getItem(INVENTORY_ONLY_STORAGE_KEY) === 'true';
     this.totalUnfilteredCount = 0;
     this._handleKeydown = this._handleKeydown.bind(this);
@@ -156,7 +157,7 @@ export class WikiSearch extends LitElement {
   async handleFormSubmit(e: Event) {
     e.preventDefault();
     this.noResults = false;
-    delete this.error;
+    this.error = null;
 
     if (!(e.target instanceof HTMLFormElement)) {
       return;
@@ -188,8 +189,7 @@ export class WikiSearch extends LitElement {
     } catch (error) {
       this.results = [];
       this.totalUnfilteredCount = 0;
-      this.error = error instanceof Error ? error.message : 'Search failed';
-      console.error('Search error:', error);
+      this.error = error instanceof Error ? error : new Error('Search failed');
     } finally {
       this.loading = false;
     }
@@ -210,7 +210,7 @@ export class WikiSearch extends LitElement {
     // Re-run the search with the new filter if we have a previous query
     if (this.lastSearchQuery) {
       this.loading = true;
-      delete this.error;
+      this.error = null;
 
       try {
         const response = await this.performSearch(this.lastSearchQuery);
@@ -220,8 +220,7 @@ export class WikiSearch extends LitElement {
       } catch (error) {
         this.results = [];
         this.totalUnfilteredCount = 0;
-        this.error = error instanceof Error ? error.message : 'Search failed';
-        console.error('Search error:', error);
+        this.error = error instanceof Error ? error : new Error('Search failed');
       } finally {
         this.loading = false;
       }
@@ -236,7 +235,7 @@ export class WikiSearch extends LitElement {
                 <input type="search" name="search" placeholder="Search..." required @focus="${this.handleSearchInputFocused}">
                 <button type="submit"><i class="fa-solid fa-search"></i></button>
             </form>
-            ${this.error ? html`<div class="error">${this.error}</div>` : ''}
+            ${this.error ? html`<div class="error">${this.error.message}</div>` : ''}
             <wiki-search-results
                 .results="${this.results}"
                 .open="${this.results.length > 0 || this.noResults}"

@@ -9,7 +9,7 @@ interface WikiSearchElement extends HTMLElement {
   results: SearchResult[];
   noResults: boolean;
   loading: boolean;
-  error?: string;
+  error: Error | null;
   inventoryOnly: boolean;
   totalUnfilteredCount: number;
   _handleKeydown: (event: KeyboardEvent) => void;
@@ -47,7 +47,7 @@ describe('WikiSearch', () => {
       expect(el.results).to.deep.equal([]);
       expect(el.noResults).to.equal(false);
       expect(el.loading).to.equal(false);
-      expect(el.error).to.be.undefined;
+      expect(el.error).to.be.null;
       expect(el.inventoryOnly).to.equal(false);
     });
 
@@ -247,7 +247,7 @@ describe('WikiSearch', () => {
         const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
         form?.dispatchEvent(submitEvent);
 
-        await waitUntil(() => el.error === 'Network error', 'Error should be set');
+        await waitUntil(() => el.error?.message === 'Network error', 'Error should be set');
         await el.updateComplete;
       });
 
@@ -256,7 +256,7 @@ describe('WikiSearch', () => {
       });
 
       it('should set error property', () => {
-        expect(el.error).to.equal('Network error');
+        expect(el.error?.message).to.equal('Network error');
       });
 
       it('should display error message', () => {
@@ -292,7 +292,7 @@ describe('WikiSearch', () => {
         if (searchInput) searchInput.value = 'fail';
         submitEvent = new Event('submit', { bubbles: true, cancelable: true });
         form?.dispatchEvent(submitEvent);
-        await waitUntil(() => el.error === 'Network error', 'Error should be set');
+        await waitUntil(() => el.error?.message === 'Network error', 'Error should be set');
         await el.updateComplete;
       });
 
@@ -309,7 +309,7 @@ describe('WikiSearch', () => {
       });
 
       it('should set error property', () => {
-        expect(el.error).to.equal('Network error');
+        expect(el.error?.message).to.equal('Network error');
       });
     });
   });
@@ -403,12 +403,12 @@ describe('WikiSearch', () => {
           composed: true
         });
         await el.handleInventoryFilterChanged(event);
-        await waitUntil(() => el.error === 'Network error during filter change', 'Error should be set');
+        await waitUntil(() => el.error?.message === 'Network error during filter change', 'Error should be set');
         await el.updateComplete;
       });
 
       it('should set error property', () => {
-        expect(el.error).to.equal('Network error during filter change');
+        expect(el.error?.message).to.equal('Network error during filter change');
       });
 
       it('should clear results', () => {

@@ -53,7 +53,9 @@ func (j *FileShadowingMigrationScanJob) Execute() error {
 	// Enqueue a migration job for each PascalCase identifier
 	for _, identifier := range pascalIdentifiers {
 		migrationJob := NewFileShadowingMigrationJob(j.scanner, j.readerMutator, j.opener, identifier)
-		j.coordinator.EnqueueJob(migrationJob)
+		if err := j.coordinator.EnqueueJob(migrationJob); err != nil {
+			return fmt.Errorf("failed to enqueue migration job for %s: %w", identifier, err)
+		}
 	}
 
 	return nil

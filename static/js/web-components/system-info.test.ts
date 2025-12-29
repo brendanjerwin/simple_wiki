@@ -72,7 +72,7 @@ describe('SystemInfo', () => {
   describe('when there is an error', () => {
     beforeEach(async () => {
       el.loading = false;
-      el.error = 'Connection failed';
+      el.error = new Error('Connection failed');
       delete el.version;
       await el.updateComplete;
     });
@@ -80,7 +80,7 @@ describe('SystemInfo', () => {
     it('should display error message', () => {
       const versionComponent = el.shadowRoot!.querySelector('system-info-version');
       expect(versionComponent).to.exist;
-      expect(versionComponent!.error).to.equal('Connection failed');
+      expect(versionComponent!.error?.message).to.equal('Connection failed');
     });
   });
 

@@ -144,6 +144,26 @@ func (s *Site) sniffContentType(name string) (string, error) {
 	return mtype.String(), nil
 }
 
+// startMigrationJobs starts background migration jobs for file shadowing and JSON archive migration.
+func (s *Site) startMigrationJobs() {
+	// Start file shadowing scan
+	dataDirScanner := eager.NewFileSystemDataDirScanner(s.PathToData)
+	scanJob := eager.NewFileShadowingMigrationScanJob(dataDirScanner, s.JobQueueCoordinator, s, s)
+	if err := s.JobQueueCoordinator.EnqueueJob(scanJob); err != nil {
+		s.Logger.Error("Failed to enqueue file shadowing scan job: %v", err)
+	} else {
+		s.Logger.Info("File shadowing scan started.")
+	}
+
+	// Start JSON archive migration to move .json files to __deleted__
+	jsonArchiveJob := eager.NewJSONArchiveMigrationScanJob(s.PathToData, s.JobQueueCoordinator)
+	if err := s.JobQueueCoordinator.EnqueueJob(jsonArchiveJob); err != nil {
+		s.Logger.Error("Failed to enqueue JSON archive migration job: %v", err)
+	} else {
+		s.Logger.Info("JSON archive migration started.")
+	}
+}
+
 // InitializeIndexing initializes the site's indexes.
 func (s *Site) InitializeIndexing() error {
 	frontmatterIndex := frontmatter.NewIndex(s)
@@ -173,16 +193,7 @@ func (s *Site) InitializeIndexing() error {
 		s.Logger.Info("Inventory normalization job scheduled to run hourly")
 	}
 
-	// Start file shadowing scan
-	dataDirScanner := eager.NewFileSystemDataDirScanner(s.PathToData)
-	scanJob := eager.NewFileShadowingMigrationScanJob(dataDirScanner, s.JobQueueCoordinator, s, s)
-	s.JobQueueCoordinator.EnqueueJob(scanJob)
-	s.Logger.Info("File shadowing scan started.")
-
-	// Start JSON archive migration to move .json files to __deleted__
-	jsonArchiveJob := eager.NewJSONArchiveMigrationScanJob(s.PathToData, s.JobQueueCoordinator)
-	s.JobQueueCoordinator.EnqueueJob(jsonArchiveJob)
-	s.Logger.Info("JSON archive migration started.")
+	s.startMigrationJobs()
 
 	// Get all files that need to be indexed
 	files := s.DirectoryList()
@@ -198,7 +209,7 @@ func (s *Site) InitializeIndexing() error {
 	}
 
 	// Start background indexing with completion callback to chain the normalization job
-	s.IndexCoordinator.BulkEnqueuePagesWithCompletion(pageIdentifiers, index.Add, func() {
+	if err := s.IndexCoordinator.BulkEnqueuePagesWithCompletion(pageIdentifiers, index.Add, func() {
 		// Run inventory normalization after frontmatter indexing completes
 		// This ensures the frontmatter index is fully populated before migration runs
 		normJob, err := NewInventoryNormalizationJob(s, s.FrontmatterIndexQueryer, s.Logger)
@@ -206,9 +217,14 @@ func (s *Site) InitializeIndexing() error {
 			s.Logger.Error("Failed to create inventory normalization job: %v", err)
 			return
 		}
-		s.JobQueueCoordinator.EnqueueJob(normJob)
-		s.Logger.Info("Inventory normalization job queued after indexing completed")
-	})
+		if err := s.JobQueueCoordinator.EnqueueJob(normJob); err != nil {
+			s.Logger.Error("Failed to enqueue inventory normalization job: %v", err)
+		} else {
+			s.Logger.Info("Inventory normalization job queued after indexing completed")
+		}
+	}); err != nil {
+		s.Logger.Error("Failed to enqueue bulk indexing jobs: %v", err)
+	}
 	s.Logger.Info("Background indexing started for %d pages. Application is ready.", len(files))
 
 	return nil
@@ -612,7 +628,9 @@ func (s *Site) DeletePage(identifier wikipage.PageIdentifier) error {
 
 	// Enqueue removal jobs for both frontmatter and bleve indexes
 	if s.IndexCoordinator != nil {
-		s.IndexCoordinator.EnqueueIndexJob(string(identifier), index.Remove)
+		if err := s.IndexCoordinator.EnqueueIndexJob(string(identifier), index.Remove); err != nil {
+			s.Logger.Error("Failed to enqueue index removal job for %s: %v", identifier, err)
+		}
 	}
 
 	// Soft delete: move files to __deleted__/<timestamp>/ directory
@@ -681,13 +699,17 @@ func (s *Site) savePageAndIndex(p *wikipage.Page) error {
 
 	// Enqueue indexing jobs for both frontmatter and bleve indexes
 	if s.IndexCoordinator != nil {
-		s.IndexCoordinator.EnqueueIndexJob(p.Identifier, index.Add)
+		if err := s.IndexCoordinator.EnqueueIndexJob(p.Identifier, index.Add); err != nil {
+			s.Logger.Error("Failed to enqueue index job for %s: %v", p.Identifier, err)
+		}
 	}
 
 	// Enqueue per-page inventory normalization job
 	if s.JobQueueCoordinator != nil {
 		normJob := NewPageInventoryNormalizationJob(p.Identifier, s, s.Logger)
-		s.JobQueueCoordinator.EnqueueJob(normJob)
+		if err := s.JobQueueCoordinator.EnqueueJob(normJob); err != nil {
+			s.Logger.Error("Failed to enqueue per-page inventory normalization job for %s: %v", p.Identifier, err)
+		}
 	}
 
 	return nil

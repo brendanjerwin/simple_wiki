@@ -12,6 +12,7 @@ module.exports = {
     '@typescript-eslint/no-unused-vars': 'error',
     '@typescript-eslint/no-unsafe-type-assertion': 'error',
     'no-extra-semi': 'off',
+    'no-warning-comments': ['error', { terms: ['todo', 'fixme', 'xxx', 'hack'], location: 'anywhere' }],
   },
   overrides: [
     {

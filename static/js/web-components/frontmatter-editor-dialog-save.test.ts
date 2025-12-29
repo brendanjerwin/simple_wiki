@@ -5,7 +5,7 @@ import { GetFrontmatterResponseSchema, ReplaceFrontmatterResponseSchema } from '
 import sinon from 'sinon';
 import './frontmatter-editor-dialog.js';
 
-// TODO: This test is causing browser hangs - needs investigation
+// Skipped: Browser hangs - see https://github.com/brendanjerwin/simple_wiki/issues/229
 describe.skip('FrontmatterEditorDialog - Save Functionality', () => {
   let el: FrontmatterEditorDialog;
   let clientStub: sinon.SinonStub;

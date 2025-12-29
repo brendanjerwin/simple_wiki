@@ -9,7 +9,7 @@ import (
 
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
-	. "github.com/onsi/gomega"
+	. "github.com/onsi/gomega" //nolint:staticcheck // ST1001: dot imports allowed per revive.toml for test helpers
 )
 
 const testFileTimestamp = 1609459200 // 2021-01-01 Unix timestamp
