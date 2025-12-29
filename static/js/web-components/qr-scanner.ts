@@ -298,13 +298,13 @@ export class QrScanner extends LitElement {
   private portalVideo: HTMLVideoElement | null = null;
 
   /** Unique ID for this component instance (for portal video element) */
-  private readonly instanceId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  private readonly instanceId = crypto.randomUUID();
 
   /** Bound handler for scroll/resize repositioning */
   private readonly _repositionHandler = () => this._scheduleReposition();
 
-  /** Timeout ID for delayed repositioning (for cleanup) */
-  private repositionTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  /** ResizeObserver for container size changes */
+  private resizeObserver: ResizeObserver | null = null;
 
   /**
    * Set a custom camera provider (for testing)
@@ -369,15 +369,10 @@ export class QrScanner extends LitElement {
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
-    // Cleanup repositioning resources
-    this._removeRepositionListeners();
-    if (this.repositionTimeoutId) {
-      clearTimeout(this.repositionTimeoutId);
-      this.repositionTimeoutId = null;
-    }
+    this._cleanupRepositioning();
     // Fire-and-forget: disconnectedCallback cannot be async
+    // _stopScanning handles video removal after camera stops
     void this._stopScanning();
-    this._removePortalVideo();
   }
 
   private async _startScanning(): Promise<void> {
@@ -412,15 +407,14 @@ export class QrScanner extends LitElement {
       // Add scroll/resize listeners to keep portal video positioned correctly
       this._addRepositionListeners();
 
-      // Re-position after camera starts and layout settles
+      // Use ResizeObserver to reposition when container size changes (more reliable than timeout)
+      this.resizeObserver = new ResizeObserver(() => this._scheduleReposition());
+      this.resizeObserver.observe(container);
+
+      // Initial positioning after camera starts
       this._scheduleReposition();
-      // And again after a short delay for any CSS transitions/animations
-      this.repositionTimeoutId = setTimeout(() => {
-        this.repositionTimeoutId = null;
-        this._scheduleReposition();
-      }, 100);
     } catch (err) {
-      this._removeRepositionListeners();
+      this._cleanupRepositioning();
       this._removePortalVideo();
       this._handleError(err);
     }
@@ -468,20 +462,37 @@ export class QrScanner extends LitElement {
     }
   }
 
+  /** Listener options for scroll events */
+  private static readonly SCROLL_LISTENER_OPTIONS: AddEventListenerOptions = { capture: true, passive: true };
+
+  /** Listener options for resize events */
+  private static readonly RESIZE_LISTENER_OPTIONS: AddEventListenerOptions = { passive: true };
+
   /**
    * Add event listeners for scroll/resize to keep portal video positioned
    */
   private _addRepositionListeners(): void {
-    window.addEventListener('scroll', this._repositionHandler, { capture: true, passive: true });
-    window.addEventListener('resize', this._repositionHandler, { passive: true });
+    window.addEventListener('scroll', this._repositionHandler, QrScanner.SCROLL_LISTENER_OPTIONS);
+    window.addEventListener('resize', this._repositionHandler, QrScanner.RESIZE_LISTENER_OPTIONS);
   }
 
   /**
    * Remove scroll/resize event listeners
    */
   private _removeRepositionListeners(): void {
-    window.removeEventListener('scroll', this._repositionHandler, { capture: true });
-    window.removeEventListener('resize', this._repositionHandler);
+    window.removeEventListener('scroll', this._repositionHandler, QrScanner.SCROLL_LISTENER_OPTIONS);
+    window.removeEventListener('resize', this._repositionHandler, QrScanner.RESIZE_LISTENER_OPTIONS);
+  }
+
+  /**
+   * Clean up all repositioning resources (listeners and observer)
+   */
+  private _cleanupRepositioning(): void {
+    this._removeRepositionListeners();
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+      this.resizeObserver = null;
+    }
   }
 
   /**
@@ -495,12 +506,7 @@ export class QrScanner extends LitElement {
   }
 
   private async _stopScanning(): Promise<void> {
-    // Clean up repositioning resources
-    this._removeRepositionListeners();
-    if (this.repositionTimeoutId) {
-      clearTimeout(this.repositionTimeoutId);
-      this.repositionTimeoutId = null;
-    }
+    this._cleanupRepositioning();
 
     if (this.cameraProvider.isScanning()) {
       try {

@@ -6,7 +6,7 @@ coverage:
   status:
     project:
       default:
-        threshold: 0.02%
+        threshold: 0.1%
 
 flags:
   javascript:

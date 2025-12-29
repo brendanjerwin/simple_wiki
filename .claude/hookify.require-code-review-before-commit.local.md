@@ -39,14 +39,13 @@ This push is **blocked** because it doesn't include a review summary marker.
    Be thorough but practical. Small fixes should be actionable immediately.
    Ensure all code follows the established conventions in CLAUDE.md."
 
-2. **Fix issues discovered:**
-   - **Small fixes**: Apply them immediately without asking
-   - **Medium/Large issues**: Present to user with AskUserQuestion:
-     - Include enough context for the user to judge the issue
-     - Show the problematic code snippet
-     - Explain why it's an issue
-     - Always include an "Explain this issue more" option for when user needs more context
-     - Let user decide: Fix it, Skip it, or Explain more
+2. **Review ALL issues with the user:**
+   - Present EVERY issue to the user with AskUserQuestion (no automatic fixes)
+   - Include enough context for the user to judge the issue
+   - Show the problematic code snippet
+   - Explain why it's an issue
+   - Always include an "Explain this issue more" option for when user needs more context
+   - Let user decide: Fix it, Skip it, or Explain more
 
 3. **Append review marker as bash comment:**
    After completing the review, append a bash comment with the review summary to your push command:

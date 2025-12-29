@@ -96,7 +96,9 @@ describe('InventoryQrScanner', () => {
 
       beforeEach(async () => {
         el = await fixture(html`<inventory-qr-scanner></inventory-qr-scanner>`);
-        // Stub collapse to prevent camera access that crashes headless browser
+        // Stub collapse to prevent camera access that crashes headless browser.
+        // Trade-off: We verify 'collapse' is called, but not its actual behavior.
+        // The collapse method's behavior is tested separately in qr-scanner.test.ts.
         collapseStub = sinon.stub(el, 'collapse').resolves();
         cancelledSpy = sinon.spy();
         el.addEventListener('cancelled', cancelledSpy);
@@ -313,7 +315,9 @@ describe('InventoryQrScanner', () => {
       beforeEach(async () => {
         el = await fixture(html`<inventory-qr-scanner></inventory-qr-scanner>`);
 
-        // Stub expand method to prevent real camera access
+        // Stub expand method to prevent real camera access in headless browser.
+        // Trade-off: We verify 'expand' is called, but not its actual behavior.
+        // The expand method's behavior is tested separately in qr-scanner.test.ts.
         expandStub = sinon.stub(el, 'expand').resolves();
 
         // First trigger an error
