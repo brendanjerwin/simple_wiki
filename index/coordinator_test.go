@@ -60,10 +60,16 @@ var _ = Describe("IndexCoordinator", func() {
 
 	Describe("EnqueueIndexJob", func() {
 		Describe("when enqueuing add job", func() {
+			var enqueueErr error
+
 			BeforeEach(func() {
-				indexCoordinator.EnqueueIndexJob("test-page", index.Add)
+				enqueueErr = indexCoordinator.EnqueueIndexJob("test-page", index.Add)
 				// Allow time for job execution
 				time.Sleep(100 * time.Millisecond)
+			})
+
+			It("should not return an error", func() {
+				Expect(enqueueErr).NotTo(HaveOccurred())
 			})
 
 			It("should call AddPageToIndex on frontmatter index", func() {
@@ -81,10 +87,16 @@ var _ = Describe("IndexCoordinator", func() {
 		})
 
 		Describe("when enqueuing remove job", func() {
+			var enqueueErr error
+
 			BeforeEach(func() {
-				indexCoordinator.EnqueueIndexJob("test-page", index.Remove)
+				enqueueErr = indexCoordinator.EnqueueIndexJob("test-page", index.Remove)
 				// Allow time for job execution
 				time.Sleep(100 * time.Millisecond)
+			})
+
+			It("should not return an error", func() {
+				Expect(enqueueErr).NotTo(HaveOccurred())
 			})
 
 			It("should call RemovePageFromIndex on frontmatter index", func() {
@@ -122,10 +134,16 @@ var _ = Describe("IndexCoordinator", func() {
 		})
 
 		Describe("when enqueuing add jobs", func() {
+			var enqueueErr error
+
 			BeforeEach(func() {
-				indexCoordinator.BulkEnqueuePages(pageIdentifiers, index.Add)
+				enqueueErr = indexCoordinator.BulkEnqueuePages(pageIdentifiers, index.Add)
 				// Allow time for job execution
 				time.Sleep(200 * time.Millisecond)
+			})
+
+			It("should not return an error", func() {
+				Expect(enqueueErr).NotTo(HaveOccurred())
 			})
 
 			It("should call AddPageToIndex for all pages on frontmatter index", func() {
@@ -145,8 +163,8 @@ var _ = Describe("IndexCoordinator", func() {
 
 			BeforeEach(func() {
 				// Enqueue jobs that will complete quickly
-				indexCoordinator.EnqueueIndexJob("fast-page", index.Add)
-				
+				Expect(indexCoordinator.EnqueueIndexJob("fast-page", index.Add)).To(Succeed())
+
 				completed, timedOut = indexCoordinator.WaitForCompletionWithTimeout(context.Background(), 1*time.Second)
 			})
 
@@ -166,8 +184,8 @@ var _ = Describe("IndexCoordinator", func() {
 				// Create context that will be cancelled immediately
 				ctx, cancel = context.WithCancel(context.Background())
 				cancel() // Cancel immediately
-				
-				indexCoordinator.EnqueueIndexJob("slow-page", index.Add)
+
+				Expect(indexCoordinator.EnqueueIndexJob("slow-page", index.Add)).To(Succeed())
 				completed, timedOut = indexCoordinator.WaitForCompletionWithTimeout(ctx, 1*time.Second)
 			})
 
@@ -191,8 +209,8 @@ var _ = Describe("IndexCoordinator", func() {
 					time.Sleep(200 * time.Millisecond)
 					return nil
 				}
-				
-				indexCoordinator.EnqueueIndexJob("slow-page", index.Add)
+
+				Expect(indexCoordinator.EnqueueIndexJob("slow-page", index.Add)).To(Succeed())
 				completed, timedOut = indexCoordinator.WaitForCompletionWithTimeout(context.Background(), 50*time.Millisecond)
 			})
 

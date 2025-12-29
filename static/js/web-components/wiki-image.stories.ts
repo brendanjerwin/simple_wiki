@@ -160,7 +160,7 @@ export const InteractiveTesting: Story = {
           @click=${(e: Event) => {
             // Use composedPath to get the actual target from shadow DOM
             const path = e.composedPath();
-            const target = path[0] as HTMLElement;
+            const target = path[0];
             if (target instanceof HTMLButtonElement) {
               const ariaLabel = target.getAttribute('aria-label');
               if (ariaLabel === 'Open in new tab') {

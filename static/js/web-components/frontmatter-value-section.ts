@@ -5,6 +5,7 @@ import './frontmatter-value.js';
 import './frontmatter-add-field-button.js';
 import './kernel-panic.js';
 import { showKernelPanic } from './kernel-panic.js';
+import { AugmentErrorService } from './augment-error-service.js';
 
 export class FrontmatterValueSection extends LitElement {
   static override styles = [
@@ -68,7 +69,8 @@ export class FrontmatterValueSection extends LitElement {
       if (counter > maxIterations) {
         // Unrecoverable error - infinite loop protection
         const error = new Error(`Attempted to generate unique key for "${baseKey}" but exceeded ${maxIterations} iterations`);
-        showKernelPanic('Maximum iteration limit exceeded while generating unique key', error);
+        const augmentedError = AugmentErrorService.augmentError(error, 'generating unique key');
+        showKernelPanic(augmentedError);
         throw new Error(`Maximum iteration limit exceeded for key generation: ${baseKey}`);
       }
     }
@@ -223,8 +225,10 @@ export class FrontmatterValueSection extends LitElement {
 
   private _typePriorityCompare(typeA: string, typeB: string): number {
     // First sort by type priority: string < array < object
-    const typePriority = { string: 0, array: 1, object: 2 };
-    return typePriority[typeA as keyof typeof typePriority] - typePriority[typeB as keyof typeof typePriority];
+    const typePriority: Record<string, number> = { string: 0, array: 1, object: 2 };
+    const priorityA = typePriority[typeA] ?? 0;
+    const priorityB = typePriority[typeB] ?? 0;
+    return priorityA - priorityB;
   }
 
   private _sortFieldEntries(entries: [string, unknown][]): [string, unknown][] {

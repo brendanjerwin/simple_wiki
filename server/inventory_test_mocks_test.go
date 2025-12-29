@@ -54,6 +54,14 @@ func (m *mockPageReaderMutator) setPageWithError(id string, err error) {
 	}
 }
 
+// getMarkdown returns the markdown for a page (for test assertions).
+func (m *mockPageReaderMutator) getMarkdown(id string) string {
+	if page, ok := m.pages[id]; ok {
+		return page.markdown
+	}
+	return ""
+}
+
 func (m *mockPageReaderMutator) ReadFrontMatter(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
 	m.readFrontMatterCalls = append(m.readFrontMatterCalls, id)
 
@@ -134,13 +142,6 @@ func (m *mockPageReaderMutator) getFrontmatter(id string) map[string]any {
 	return nil
 }
 
-// getMarkdown returns the markdown for a page (for test assertions).
-func (m *mockPageReaderMutator) getMarkdown(id string) string {
-	if page, ok := m.pages[id]; ok {
-		return page.markdown
-	}
-	return ""
-}
 
 // hasPage returns true if a page exists in the mock.
 func (m *mockPageReaderMutator) hasPage(id string) bool {

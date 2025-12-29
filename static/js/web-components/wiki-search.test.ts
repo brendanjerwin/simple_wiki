@@ -9,11 +9,14 @@ interface WikiSearchElement extends HTMLElement {
   results: SearchResult[];
   noResults: boolean;
   loading: boolean;
-  error?: string;
+  error: Error | null;
   inventoryOnly: boolean;
+  totalUnfilteredCount: number;
   _handleKeydown: (event: KeyboardEvent) => void;
   handleFormSubmit: (event: Event) => Promise<void>;
   handleInventoryFilterChanged: (event: CustomEvent<{ inventoryOnly: boolean }>) => Promise<void>;
+  handleSearchInputFocused: (event: Event) => void;
+  handleSearchResultsClosed: () => void;
   performSearch: (query: string) => Promise<{ results: SearchResult[], totalUnfilteredCount: number }>;
   updateComplete: Promise<boolean>;
   shadowRoot: ShadowRoot;
@@ -23,6 +26,7 @@ describe('WikiSearch', () => {
   let el: WikiSearchElement;
 
   beforeEach(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- custom element matches interface
     el = document.createElement('wiki-search') as WikiSearchElement;
     document.body.appendChild(el);
     await el.updateComplete;
@@ -45,7 +49,7 @@ describe('WikiSearch', () => {
       expect(el.results).to.deep.equal([]);
       expect(el.noResults).to.equal(false);
       expect(el.loading).to.equal(false);
-      expect(el.error).to.be.undefined;
+      expect(el.error).to.be.null;
       expect(el.inventoryOnly).to.equal(false);
     });
 
@@ -65,21 +69,23 @@ describe('WikiSearch', () => {
   });
 
   describe('when Ctrl+K is pressed', () => {
-    let searchInput: HTMLInputElement;
+    let searchInput: HTMLInputElement | null;
     let focusSpy: sinon.SinonSpy;
     let mockEvent: KeyboardEvent;
 
     beforeEach(async () => {
       await el.updateComplete;
-      searchInput = el.shadowRoot?.querySelector('input[type="search"]') as HTMLInputElement;
-      focusSpy = sinon.spy(searchInput, 'focus');
+      searchInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[type="search"]') ?? null;
+      if (searchInput) {
+        focusSpy = sinon.spy(searchInput, 'focus');
+      }
       mockEvent = new KeyboardEvent('keydown', {
         ctrlKey: true,
         key: 'k',
         bubbles: true,
         cancelable: true,
       });
-      
+
       el._handleKeydown(mockEvent);
     });
 
@@ -93,21 +99,23 @@ describe('WikiSearch', () => {
   });
 
   describe('when Cmd+K is pressed (Mac)', () => {
-    let searchInput: HTMLInputElement;
+    let searchInput: HTMLInputElement | null;
     let focusSpy: sinon.SinonSpy;
     let mockEvent: KeyboardEvent;
 
     beforeEach(async () => {
       await el.updateComplete;
-      searchInput = el.shadowRoot?.querySelector('input[type="search"]') as HTMLInputElement;
-      focusSpy = sinon.spy(searchInput, 'focus');
+      searchInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[type="search"]') ?? null;
+      if (searchInput) {
+        focusSpy = sinon.spy(searchInput, 'focus');
+      }
       mockEvent = new KeyboardEvent('keydown', {
         metaKey: true,
         key: 'k',
         bubbles: true,
         cancelable: true,
       });
-      
+
       el._handleKeydown(mockEvent);
     });
 
@@ -121,21 +129,23 @@ describe('WikiSearch', () => {
   });
 
   describe('when wrong key combination is pressed', () => {
-    let searchInput: HTMLInputElement;
+    let searchInput: HTMLInputElement | null;
     let focusSpy: sinon.SinonSpy;
     let mockEvent: KeyboardEvent;
 
     beforeEach(async () => {
       await el.updateComplete;
-      searchInput = el.shadowRoot?.querySelector('input[type="search"]') as HTMLInputElement;
-      focusSpy = sinon.spy(searchInput, 'focus');
+      searchInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[type="search"]') ?? null;
+      if (searchInput) {
+        focusSpy = sinon.spy(searchInput, 'focus');
+      }
       mockEvent = new KeyboardEvent('keydown', {
         ctrlKey: true,
         key: 'j',
         bubbles: true,
         cancelable: true,
       });
-      
+
       el._handleKeydown(mockEvent);
     });
 
@@ -154,6 +164,7 @@ describe('WikiSearch', () => {
     beforeEach(async () => {
       addEventListenerSpy = sinon.spy(window, 'addEventListener');
       // Re-create the element to trigger connectedCallback
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- custom element matches interface
       el = document.createElement('wiki-search') as WikiSearchElement;
       document.body.appendChild(el);
       await el.updateComplete;
@@ -170,6 +181,7 @@ describe('WikiSearch', () => {
     beforeEach(async () => {
       removeEventListenerSpy = sinon.spy(window, 'removeEventListener');
       // Re-create and then remove the element to trigger disconnectedCallback
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- custom element matches interface
       el = document.createElement('wiki-search') as WikiSearchElement;
       document.body.appendChild(el);
       await el.updateComplete;
@@ -183,29 +195,76 @@ describe('WikiSearch', () => {
     });
   });
 
+  describe('when handleSearchInputFocused is called', () => {
+    describe('when target is an HTMLInputElement', () => {
+      let inputElement: HTMLInputElement;
+      let selectSpy: sinon.SinonSpy;
+
+      beforeEach(() => {
+        inputElement = document.createElement('input');
+        inputElement.value = 'test value';
+        document.body.appendChild(inputElement);
+        selectSpy = sinon.spy(inputElement, 'select');
+
+        const focusEvent = new FocusEvent('focus', { bubbles: true });
+        Object.defineProperty(focusEvent, 'target', { value: inputElement, writable: false });
+        el.handleSearchInputFocused(focusEvent);
+      });
+
+      afterEach(() => {
+        inputElement.remove();
+      });
+
+      it('should select the input text', () => {
+        expect(selectSpy).to.have.been.calledOnce;
+      });
+    });
+
+    describe('when target is not an HTMLInputElement', () => {
+      let divElement: HTMLDivElement;
+
+      beforeEach(() => {
+        divElement = document.createElement('div');
+        document.body.appendChild(divElement);
+
+        const focusEvent = new FocusEvent('focus', { bubbles: true });
+        Object.defineProperty(focusEvent, 'target', { value: divElement, writable: false });
+        el.handleSearchInputFocused(focusEvent);
+      });
+
+      afterEach(() => {
+        divElement.remove();
+      });
+
+      it('should not throw', () => {
+        expect(true).to.be.true;
+      });
+    });
+  });
+
   describe('when searching', () => {
-    let form: HTMLFormElement;
-    let searchInput: HTMLInputElement;
+    let form: HTMLFormElement | null;
+    let searchInput: HTMLInputElement | null;
 
     beforeEach(async () => {
       await el.updateComplete;
-      form = el.shadowRoot?.querySelector('form') as HTMLFormElement;
-      searchInput = el.shadowRoot?.querySelector('input[type="search"]') as HTMLInputElement;
+      form = el.shadowRoot?.querySelector<HTMLFormElement>('form') ?? null;
+      searchInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[type="search"]') ?? null;
     });
 
     describe('when form is submitted', () => {
       beforeEach(() => {
-        searchInput.value = 'test query';
-        
+        if (searchInput) searchInput.value = 'test query';
+
         const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
-        form.dispatchEvent(submitEvent);
+        form?.dispatchEvent(submitEvent);
       });
 
       it('should prevent default form submission', () => {
         const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
         const preventDefaultSpy = sinon.spy(submitEvent, 'preventDefault');
-        
-        form.dispatchEvent(submitEvent);
+
+        form?.dispatchEvent(submitEvent);
         expect(preventDefaultSpy).to.have.been.calledOnce;
       });
 
@@ -216,13 +275,107 @@ describe('WikiSearch', () => {
 
     describe('when search input is empty', () => {
       beforeEach(() => {
-        searchInput.value = '';
+        if (searchInput) searchInput.value = '';
         const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
-        form.dispatchEvent(submitEvent);
+        form?.dispatchEvent(submitEvent);
       });
 
       it('should not perform search', () => {
         expect(el.loading).to.be.false;
+      });
+    });
+
+    describe('when event target is not an HTMLFormElement', () => {
+      let performSearchStub: sinon.SinonStub;
+      let divElement: HTMLDivElement;
+
+      beforeEach(() => {
+        performSearchStub = sinon.stub(el, 'performSearch');
+        performSearchStub.resolves({ results: [], totalUnfilteredCount: 0 });
+
+        // Create a real event with a non-form target
+        divElement = document.createElement('div');
+        document.body.appendChild(divElement);
+        const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+        Object.defineProperty(submitEvent, 'target', { value: divElement, writable: false });
+
+        // This returns early before any async code due to the type guard
+        void el.handleFormSubmit(submitEvent);
+      });
+
+      afterEach(() => {
+        performSearchStub.restore();
+        divElement.remove();
+      });
+
+      it('should not perform search', () => {
+        expect(performSearchStub).to.not.have.been.called;
+      });
+
+      it('should not set loading state', () => {
+        expect(el.loading).to.be.false;
+      });
+    });
+
+    describe('when search returns no results', () => {
+      let stubPerformSearch: sinon.SinonStub;
+
+      beforeEach(async () => {
+        stubPerformSearch = sinon.stub(el, 'performSearch');
+        stubPerformSearch.resolves({ results: [], totalUnfilteredCount: 0 });
+
+        if (searchInput) searchInput.value = 'no results query';
+        const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+        form?.dispatchEvent(submitEvent);
+
+        await waitUntil(() => !el.loading, 'Search should complete');
+        await el.updateComplete;
+      });
+
+      afterEach(() => {
+        stubPerformSearch.restore();
+      });
+
+      it('should set noResults to true', () => {
+        expect(el.noResults).to.be.true;
+      });
+
+      it('should have empty results', () => {
+        expect(el.results).to.deep.equal([]);
+      });
+    });
+
+    describe('when search returns results', () => {
+      let stubPerformSearch: sinon.SinonStub;
+      const mockResults = [{ identifier: 'test', title: 'Test Result' }];
+
+      beforeEach(async () => {
+        stubPerformSearch = sinon.stub(el, 'performSearch');
+        stubPerformSearch.resolves({ results: mockResults, totalUnfilteredCount: 1 });
+
+        if (searchInput) searchInput.value = 'test query';
+        const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+        form?.dispatchEvent(submitEvent);
+
+        await waitUntil(() => !el.loading, 'Search should complete');
+        await el.updateComplete;
+      });
+
+      afterEach(() => {
+        stubPerformSearch.restore();
+      });
+
+      it('should set noResults to false', () => {
+        expect(el.noResults).to.be.false;
+      });
+
+      it('should populate results', () => {
+        expect(el.results.length).to.equal(1);
+        expect(el.results[0]?.identifier).to.equal('test');
+      });
+
+      it('should set totalUnfilteredCount', () => {
+        expect(el.totalUnfilteredCount).to.equal(1);
       });
     });
 
@@ -233,11 +386,11 @@ describe('WikiSearch', () => {
         stubPerformSearch = sinon.stub(el, 'performSearch');
         stubPerformSearch.rejects(new Error('Network error'));
 
-        searchInput.value = 'fail';
+        if (searchInput) searchInput.value = 'fail';
         const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
-        form.dispatchEvent(submitEvent);
+        form?.dispatchEvent(submitEvent);
 
-        await waitUntil(() => el.error === 'Network error', 'Error should be set');
+        await waitUntil(() => el.error?.message === 'Network error', 'Error should be set');
         await el.updateComplete;
       });
 
@@ -246,7 +399,7 @@ describe('WikiSearch', () => {
       });
 
       it('should set error property', () => {
-        expect(el.error).to.equal('Network error');
+        expect(el.error?.message).to.equal('Network error');
       });
 
       it('should display error message', () => {
@@ -268,9 +421,9 @@ describe('WikiSearch', () => {
 
         // First search succeeds with a totalUnfilteredCount
         stubPerformSearch.resolves({ results: [{ identifier: 'test', title: 'Test' }], totalUnfilteredCount: 10 });
-        searchInput.value = 'success';
+        if (searchInput) searchInput.value = 'success';
         let submitEvent = new Event('submit', { bubbles: true, cancelable: true });
-        form.dispatchEvent(submitEvent);
+        form?.dispatchEvent(submitEvent);
         await waitUntil(() => !el.loading, 'First search should complete');
         await el.updateComplete;
 
@@ -279,10 +432,10 @@ describe('WikiSearch', () => {
 
         // Second search fails
         stubPerformSearch.rejects(new Error('Network error'));
-        searchInput.value = 'fail';
+        if (searchInput) searchInput.value = 'fail';
         submitEvent = new Event('submit', { bubbles: true, cancelable: true });
-        form.dispatchEvent(submitEvent);
-        await waitUntil(() => el.error === 'Network error', 'Error should be set');
+        form?.dispatchEvent(submitEvent);
+        await waitUntil(() => el.error?.message === 'Network error', 'Error should be set');
         await el.updateComplete;
       });
 
@@ -299,20 +452,71 @@ describe('WikiSearch', () => {
       });
 
       it('should set error property', () => {
-        expect(el.error).to.equal('Network error');
+        expect(el.error?.message).to.equal('Network error');
       });
+    });
+  });
+
+  describe('when handleSearchResultsClosed is called', () => {
+    let stubPerformSearch: sinon.SinonStub;
+    let form: HTMLFormElement | null;
+    let searchInput: HTMLInputElement | null;
+    let focusSpy: sinon.SinonSpy;
+
+    beforeEach(async () => {
+      await el.updateComplete;
+      form = el.shadowRoot?.querySelector<HTMLFormElement>('form') ?? null;
+      searchInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[type="search"]') ?? null;
+
+      // Set up stub first before any search is triggered
+      stubPerformSearch = sinon.stub(el, 'performSearch');
+      stubPerformSearch.resolves({ results: [{ identifier: 'test', title: 'Test' }], totalUnfilteredCount: 1 });
+
+      if (searchInput) {
+        focusSpy = sinon.spy(searchInput, 'focus');
+        searchInput.value = 'test';
+      }
+
+      // Perform a search to populate results
+      const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+      form?.dispatchEvent(submitEvent);
+      await waitUntil(() => !el.loading, 'Search should complete');
+      await el.updateComplete;
+
+      // Reset focus spy to only track the close action
+      focusSpy?.resetHistory();
+
+      // Now trigger the close event
+      el.handleSearchResultsClosed();
+      await el.updateComplete;
+    });
+
+    afterEach(() => {
+      stubPerformSearch.restore();
+    });
+
+    it('should clear results', () => {
+      expect(el.results).to.deep.equal([]);
+    });
+
+    it('should set noResults to false', () => {
+      expect(el.noResults).to.be.false;
+    });
+
+    it('should focus the search input', () => {
+      expect(focusSpy).to.have.been.calledOnce;
     });
   });
 
   describe('when inventory-filter-changed event is received', () => {
     let stubPerformSearch: sinon.SinonStub;
-    let form: HTMLFormElement;
-    let searchInput: HTMLInputElement;
+    let form: HTMLFormElement | null;
+    let searchInput: HTMLInputElement | null;
 
     beforeEach(async () => {
       await el.updateComplete;
-      form = el.shadowRoot?.querySelector('form') as HTMLFormElement;
-      searchInput = el.shadowRoot?.querySelector('input[type="search"]') as HTMLInputElement;
+      form = el.shadowRoot?.querySelector<HTMLFormElement>('form') ?? null;
+      searchInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[type="search"]') ?? null;
 
       // Stub performSearch to return mock results
       stubPerformSearch = sinon.stub(el, 'performSearch');
@@ -326,9 +530,9 @@ describe('WikiSearch', () => {
     describe('when there is a previous search query', () => {
       beforeEach(async () => {
         // Perform an initial search
-        searchInput.value = 'test query';
+        if (searchInput) searchInput.value = 'test query';
         const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
-        form.dispatchEvent(submitEvent);
+        form?.dispatchEvent(submitEvent);
         await waitUntil(() => !el.loading, 'Loading should complete');
 
         // Reset the stub to track the re-search
@@ -378,9 +582,9 @@ describe('WikiSearch', () => {
       beforeEach(async () => {
         // Perform an initial search with some results
         stubPerformSearch.resolves({ results: [{ identifier: 'test', title: 'Test' }], totalUnfilteredCount: 5 });
-        searchInput.value = 'test query';
+        if (searchInput) searchInput.value = 'test query';
         const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
-        form.dispatchEvent(submitEvent);
+        form?.dispatchEvent(submitEvent);
         await waitUntil(() => !el.loading, 'Loading should complete');
 
         // Set up the stub to fail for the next call
@@ -393,12 +597,12 @@ describe('WikiSearch', () => {
           composed: true
         });
         await el.handleInventoryFilterChanged(event);
-        await waitUntil(() => el.error === 'Network error during filter change', 'Error should be set');
+        await waitUntil(() => el.error?.message === 'Network error during filter change', 'Error should be set');
         await el.updateComplete;
       });
 
       it('should set error property', () => {
-        expect(el.error).to.equal('Network error during filter change');
+        expect(el.error?.message).to.equal('Network error during filter change');
       });
 
       it('should clear results', () => {
@@ -417,6 +621,7 @@ describe('WikiSearch', () => {
 
       beforeEach(async () => {
         localStorage.setItem(INVENTORY_ONLY_STORAGE_KEY, 'true');
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- custom element matches interface
         newEl = document.createElement('wiki-search') as WikiSearchElement;
         document.body.appendChild(newEl);
         await newEl.updateComplete;
@@ -438,6 +643,7 @@ describe('WikiSearch', () => {
 
       beforeEach(async () => {
         localStorage.setItem(INVENTORY_ONLY_STORAGE_KEY, 'false');
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- custom element matches interface
         newEl = document.createElement('wiki-search') as WikiSearchElement;
         document.body.appendChild(newEl);
         await newEl.updateComplete;
@@ -459,6 +665,7 @@ describe('WikiSearch', () => {
 
       beforeEach(async () => {
         localStorage.removeItem(INVENTORY_ONLY_STORAGE_KEY);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- custom element matches interface
         newEl = document.createElement('wiki-search') as WikiSearchElement;
         document.body.appendChild(newEl);
         await newEl.updateComplete;

@@ -9,6 +9,7 @@ import (
 
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
+	//lint:ignore ST1001 dot imports allowed per revive.toml for test helpers
 	. "github.com/onsi/gomega"
 )
 

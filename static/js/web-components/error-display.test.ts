@@ -3,7 +3,7 @@ import { stub, type SinonStub } from 'sinon';
 import { ErrorDisplay, type ErrorAction } from './error-display.js';
 import { AugmentedError, ErrorKind } from './augment-error-service.js';
 
-function timeout(ms: number, message: string) {
+function timeout(ms: number, message: string): Promise<never> {
   return new Promise((_, reject) =>
     setTimeout(() => reject(new Error(message)), ms),
   );
@@ -19,7 +19,7 @@ describe('ErrorDisplay', () => {
     fetchStub.resolves(new Response('{}'));
     
     el = await Promise.race([
-      fixture(html`<error-display></error-display>`),
+      fixture<ErrorDisplay>(html`<error-display></error-display>`),
       timeout(5000, "ErrorDisplay fixture timed out"),
     ]);
   });
@@ -104,8 +104,8 @@ describe('ErrorDisplay', () => {
       timeout(5000, "Component update timed out"),
     ]);
 
-    const expandButton = el.shadowRoot?.querySelector('.expand-button') as HTMLButtonElement;
-    expandButton.click();
+    const expandButton = el.shadowRoot?.querySelector<HTMLButtonElement>('.expand-button');
+    expandButton?.click();
     await Promise.race([
       el.updateComplete,
       timeout(5000, "Component update after click timed out"),
@@ -141,7 +141,7 @@ describe('ErrorDisplay', () => {
       beforeEach(async () => {
         const originalError = new Error('Test error');
         el.augmentedError = new AugmentedError(originalError, ErrorKind.ERROR, 'error');
-        el.action = undefined;
+        delete el.action;
         await Promise.race([
           el.updateComplete,
           timeout(5000, "Component update timed out"),
@@ -196,8 +196,8 @@ describe('ErrorDisplay', () => {
 
       describe('when action button is clicked', () => {
         beforeEach(async () => {
-          const actionButton = el.shadowRoot?.querySelector('.action-button') as HTMLButtonElement;
-          actionButton.click();
+          const actionButton = el.shadowRoot?.querySelector<HTMLButtonElement>('.action-button');
+          actionButton?.click();
           await Promise.race([
             el.updateComplete,
             timeout(5000, "Component update timed out"),

@@ -2,6 +2,11 @@ import { html, fixture, expect } from '@open-wc/testing';
 import { KernelPanic, showKernelPanic } from './kernel-panic.js';
 import { AugmentErrorService, AugmentedError, ErrorKind } from './augment-error-service.js';
 
+// Interface for testable private methods
+interface KernelPanicTestable {
+  _handleRefresh: () => void;
+}
+
 describe('KernelPanic', () => {
   let el: KernelPanic;
 
@@ -61,16 +66,17 @@ describe('KernelPanic', () => {
 
     it('should have a refresh handler method', () => {
       // Verify the component has the _handleRefresh method
-      expect(typeof (el as KernelPanic & { _handleRefresh: () => void })._handleRefresh).to.equal('function');
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+      expect(typeof (el as unknown as KernelPanicTestable)._handleRefresh).to.equal('function');
     });
 
     it('should render button with click handler', () => {
-      const button = el.shadowRoot?.querySelector('.refresh-button') as HTMLButtonElement;
+      const button = el.shadowRoot?.querySelector<HTMLButtonElement>('.refresh-button');
       expect(button).to.exist;
-      expect(button.textContent?.trim()).to.equal('Refresh Page');
-      
+      expect(button!.textContent?.trim()).to.equal('Refresh Page');
+
       // Verify button is clickable
-      expect(button.disabled).to.be.false;
+      expect(button!.disabled).to.be.false;
     });
   });
 
@@ -92,7 +98,8 @@ describe('KernelPanic', () => {
     });
 
     it('should display the error using error-display component', () => {
-      const errorDisplay = el.shadowRoot?.querySelector('error-display');
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing custom element property for testing
+      const errorDisplay = el.shadowRoot?.querySelector('error-display') as (Element & { augmentedError: AugmentedError }) | null;
       expect(errorDisplay).to.exist;
       expect(errorDisplay?.augmentedError).to.equal(el.augmentedError);
     });
@@ -134,9 +141,9 @@ describe('showKernelPanic function', () => {
     });
 
     it('should set augmentedError on the created element', () => {
-      const kernelPanicElement = document.querySelector('kernel-panic') as HTMLElement & { augmentedError: AugmentedError };
-      expect(kernelPanicElement.augmentedError).to.exist;
-      expect(kernelPanicElement.augmentedError.message).to.equal('Test system error');
+      const kernelPanicElement = document.querySelector<HTMLElement & { augmentedError: AugmentedError }>('kernel-panic');
+      expect(kernelPanicElement!.augmentedError).to.exist;
+      expect(kernelPanicElement!.augmentedError.message).to.equal('Test system error');
     });
   });
 });

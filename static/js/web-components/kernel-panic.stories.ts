@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-type-assertion -- Storybook stories use type assertions for args */
 import type { Meta, StoryObj } from '@storybook/web-components-vite';
 import { html } from 'lit';
 import './kernel-panic.js';
@@ -37,7 +38,7 @@ export const Basic: Story = {
     })(),
   },
   render: (args) => html`
-    <kernel-panic .augmentedError="${args['augmentedError']}"></kernel-panic>
+    <kernel-panic .augmentedError="${args['augmentedError'] as AugmentedError}"></kernel-panic>
   `,
 };
 
@@ -71,7 +72,7 @@ export const NetworkError: Story = {
     })(),
   },
   render: (args) => html`
-    <kernel-panic .augmentedError="${args['augmentedError']}"></kernel-panic>
+    <kernel-panic .augmentedError="${args['augmentedError'] as AugmentedError}"></kernel-panic>
   `,
 };
 
@@ -92,7 +93,7 @@ export const PermissionError: Story = {
     })(),
   },
   render: (args) => html`
-    <kernel-panic .augmentedError="${args['augmentedError']}"></kernel-panic>
+    <kernel-panic .augmentedError="${args['augmentedError'] as AugmentedError}"></kernel-panic>
   `,
 };
 
@@ -113,7 +114,7 @@ export const ValidationError: Story = {
     })(),
   },
   render: (args) => html`
-    <kernel-panic .augmentedError="${args['augmentedError']}"></kernel-panic>
+    <kernel-panic .augmentedError="${args['augmentedError'] as AugmentedError}"></kernel-panic>
   `,
 };
 
@@ -134,6 +135,6 @@ export const TimeoutError: Story = {
     })(),
   },
   render: (args) => html`
-    <kernel-panic .augmentedError="${args['augmentedError']}"></kernel-panic>
+    <kernel-panic .augmentedError="${args['augmentedError'] as AugmentedError}"></kernel-panic>
   `,
 };

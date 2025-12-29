@@ -31,9 +31,9 @@ export const ReadOnly: Story = {
     editable: false,
   },
   render: (args) => html`
-    <frontmatter-key 
-      .key="${args.key}"
-      .editable="${args.editable}">
+    <frontmatter-key
+      .key="${args['key']}"
+      .editable="${args['editable']}">
     </frontmatter-key>
   `,
 };
@@ -45,10 +45,10 @@ export const Editable: Story = {
     placeholder: 'Enter key name...',
   },
   render: (args) => html`
-    <frontmatter-key 
-      .key="${args.key}"
-      .editable="${args.editable}"
-      .placeholder="${args.placeholder}">
+    <frontmatter-key
+      .key="${args['key']}"
+      .editable="${args['editable']}"
+      .placeholder="${args['placeholder']}">
     </frontmatter-key>
   `,
 };
@@ -60,10 +60,10 @@ export const Empty: Story = {
     placeholder: 'Enter key name...',
   },
   render: (args) => html`
-    <frontmatter-key 
-      .key="${args.key}"
-      .editable="${args.editable}"
-      .placeholder="${args.placeholder}">
+    <frontmatter-key
+      .key="${args['key']}"
+      .editable="${args['editable']}"
+      .placeholder="${args['placeholder']}">
     </frontmatter-key>
   `,
 };

@@ -2176,14 +2176,14 @@ var _ = Describe("InventoryNormalizationJob", func() {
 					writeError:            os.ErrPermission,
 				}
 				// Set up a container with items that reference it
-				failingDeps.mockNormalizationDeps.pages["container"] = &mockPageData{
+				failingDeps.pages["container"] = &mockPageData{
 					frontmatter: map[string]any{
 						"inventory": map[string]any{
 							"items": []any{"item1"},
 						},
 					},
 				}
-				failingDeps.mockNormalizationDeps.pages["item1"] = &mockPageData{
+				failingDeps.pages["item1"] = &mockPageData{
 					frontmatter: map[string]any{
 						"inventory": map[string]any{
 							"container": "container",

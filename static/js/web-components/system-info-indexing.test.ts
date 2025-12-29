@@ -24,10 +24,11 @@ describe('SystemInfoIndexing', () => {
     writeTextStub = stub(navigator.clipboard, 'writeText');
     writeTextStub.resolves();
     
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- fixture returns unknown when using Promise.race
     el = await Promise.race([
-      fixture(html`<system-info-indexing></system-info-indexing>`),
+      fixture<SystemInfoIndexing>(html`<system-info-indexing></system-info-indexing>`),
       timeout(5000, "SystemInfoIndexing fixture timed out"),
-    ]);
+    ]) as SystemInfoIndexing;
   });
 
   afterEach(() => {
@@ -50,13 +51,13 @@ describe('SystemInfoIndexing', () => {
   it('should have default property values', () => {
     expect(el.jobStatus).to.be.undefined;
     expect(el.loading).to.be.false;
-    expect(el.error).to.be.undefined;
+    expect(el.error).to.be.null;
   });
 
   describe('when loading is true and no jobStatus', () => {
     beforeEach(async () => {
       el.loading = true;
-      el.jobStatus = undefined;
+      delete el.jobStatus;
       await el.updateComplete;
     });
 
@@ -74,7 +75,7 @@ describe('SystemInfoIndexing', () => {
 
   describe('when error is set', () => {
     beforeEach(async () => {
-      el.error = 'Test error message';
+      el.error = new Error('Test error message');
       await el.updateComplete;
     });
 
@@ -98,8 +99,8 @@ describe('SystemInfoIndexing', () => {
   describe('when no jobStatus is provided', () => {
     beforeEach(async () => {
       el.loading = false;
-      el.error = undefined;
-      el.jobStatus = undefined;
+      el.error = null;
+      delete el.jobStatus;
       await el.updateComplete;
     });
 
@@ -138,7 +139,7 @@ describe('SystemInfoIndexing', () => {
       
       el.jobStatus = jobStatus;
       el.loading = false;
-      el.error = undefined;
+      el.error = null;
       await el.updateComplete;
     });
 
@@ -182,10 +183,10 @@ describe('SystemInfoIndexing', () => {
       });
 
       jobStatus.jobQueues = [activeQueue1, activeQueue2];
-      
+
       el.jobStatus = jobStatus;
       el.loading = false;
-      el.error = undefined;
+      el.error = null;
       await el.updateComplete;
     });
 
@@ -251,10 +252,10 @@ describe('SystemInfoIndexing', () => {
       });
 
       jobStatus.jobQueues = [activeQueue, inactiveQueue1, inactiveQueue2];
-      
+
       el.jobStatus = jobStatus;
       el.loading = false;
-      el.error = undefined;
+      el.error = null;
       await el.updateComplete;
     });
 
@@ -296,10 +297,10 @@ describe('SystemInfoIndexing', () => {
       });
 
       jobStatus.jobQueues = [queue1, queue2, queue3];
-      
+
       el.jobStatus = jobStatus;
       el.loading = false;
-      el.error = undefined;
+      el.error = null;
       await el.updateComplete;
     });
 
@@ -322,10 +323,10 @@ describe('SystemInfoIndexing', () => {
       });
 
       jobStatus.jobQueues = [singleQueue];
-      
+
       el.jobStatus = jobStatus;
       el.loading = false;
-      el.error = undefined;
+      el.error = null;
       await el.updateComplete;
     });
 
@@ -348,10 +349,10 @@ describe('SystemInfoIndexing', () => {
       });
 
       jobStatus.jobQueues = [activeQueue];
-      
+
       el.jobStatus = jobStatus;
       el.loading = true;
-      el.error = undefined;
+      el.error = null;
       await el.updateComplete;
     });
 
@@ -372,7 +373,7 @@ describe('SystemInfoIndexing', () => {
 
   describe('when error state is present', () => {
     beforeEach(async () => {
-      el.error = 'Connection failed';
+      el.error = new Error('Connection failed');
       await el.updateComplete;
     });
 
@@ -400,8 +401,7 @@ describe('SystemInfoIndexing', () => {
       let result: string;
 
       beforeEach(() => {
-        const component = el as SystemInfoIndexing & { formatRate(rate: number): string };
-        result = component.formatRate(0.05);
+        result = el.formatRate(0.05);
       });
 
       it('should return < 0.1/s format', () => {
@@ -413,8 +413,7 @@ describe('SystemInfoIndexing', () => {
       let result: string;
 
       beforeEach(() => {
-        const component = el as SystemInfoIndexing & { formatRate(rate: number): string };
-        result = component.formatRate(0.7);
+        result = el.formatRate(0.7);
       });
 
       it('should return decimal format', () => {
@@ -426,8 +425,7 @@ describe('SystemInfoIndexing', () => {
       let result: string;
 
       beforeEach(() => {
-        const component = el as SystemInfoIndexing & { formatRate(rate: number): string };
-        result = component.formatRate(2.8);
+        result = el.formatRate(2.8);
       });
 
       it('should return rounded integer format', () => {
@@ -439,8 +437,7 @@ describe('SystemInfoIndexing', () => {
       let result: string;
 
       beforeEach(() => {
-        const component = el as SystemInfoIndexing & { formatRate(rate: number): string };
-        result = component.formatRate(0.1);
+        result = el.formatRate(0.1);
       });
 
       it('should return decimal format', () => {
@@ -452,8 +449,7 @@ describe('SystemInfoIndexing', () => {
       let result: string;
 
       beforeEach(() => {
-        const component = el as SystemInfoIndexing & { formatRate(rate: number): string };
-        result = component.formatRate(1.0);
+        result = el.formatRate(1.0);
       });
 
       it('should return integer format', () => {
@@ -467,8 +463,7 @@ describe('SystemInfoIndexing', () => {
       let result: number;
 
       beforeEach(() => {
-        const component = el as SystemInfoIndexing & { calculateProgress(completed: number, total: number): number };
-        result = component.calculateProgress(50, 100);
+        result = el.calculateProgress(50, 100);
       });
 
       it('should return correct percentage', () => {
@@ -480,8 +475,7 @@ describe('SystemInfoIndexing', () => {
       let result: number;
 
       beforeEach(() => {
-        const component = el as SystemInfoIndexing & { calculateProgress(completed: number, total: number): number };
-        result = component.calculateProgress(10, 0);
+        result = el.calculateProgress(10, 0);
       });
 
       it('should return zero to avoid division by zero', () => {
@@ -493,8 +487,7 @@ describe('SystemInfoIndexing', () => {
       let result: number;
 
       beforeEach(() => {
-        const component = el as SystemInfoIndexing & { calculateProgress(completed: number, total: number): number };
-        result = component.calculateProgress(100, 100);
+        result = el.calculateProgress(100, 100);
       });
 
       it('should return 100 percent', () => {
@@ -506,8 +499,7 @@ describe('SystemInfoIndexing', () => {
       let result: number;
 
       beforeEach(() => {
-        const component = el as SystemInfoIndexing & { calculateProgress(completed: number, total: number): number };
-        result = component.calculateProgress(0, 100);
+        result = el.calculateProgress(0, 100);
       });
 
       it('should return zero percent', () => {
@@ -519,23 +511,23 @@ describe('SystemInfoIndexing', () => {
   describe('accessibility', () => {
     describe('when error is present', () => {
       beforeEach(async () => {
-        el.error = 'Accessibility test error';
+        el.error = new Error('Accessibility test error');
         await el.updateComplete;
       });
 
       it('should display error message in accessible format', () => {
-        const errorElement = el.shadowRoot?.querySelector('.error') as HTMLElement;
+        const errorElement = el.shadowRoot?.querySelector<HTMLElement>('.error');
         expect(errorElement).to.exist;
-        expect(errorElement.textContent?.trim()).to.equal('Accessibility test error');
+        expect(errorElement!.textContent?.trim()).to.equal('Accessibility test error');
       });
 
       it('should have basic error element without interactive features', () => {
-        const errorElement = el.shadowRoot?.querySelector('.error') as HTMLElement;
+        const errorElement = el.shadowRoot?.querySelector<HTMLElement>('.error');
         expect(errorElement).to.exist;
-        
+
         // Should not have interactive attributes since error clicking is not implemented
-        expect(errorElement.tabIndex).to.not.equal(0);
-        expect(errorElement.classList.contains('clickable')).to.be.false;
+        expect(errorElement!.tabIndex).to.not.equal(0);
+        expect(errorElement!.classList.contains('clickable')).to.be.false;
       });
     });
 
@@ -551,10 +543,10 @@ describe('SystemInfoIndexing', () => {
         });
 
         jobStatus.jobQueues = [activeQueue];
-        
+
         el.jobStatus = jobStatus;
         el.loading = false;
-        el.error = undefined;
+        el.error = null;
         await el.updateComplete;
       });
 

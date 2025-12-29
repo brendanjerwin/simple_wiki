@@ -40,9 +40,9 @@ describe('ConfirmationDialog', () => {
 
     it('should display custom button text', async () => {
       await el.updateComplete;
-      const confirmBtn = el.shadowRoot?.querySelector('.button-danger') as HTMLButtonElement;
-      const cancelBtn = el.shadowRoot?.querySelector('.button-cancel') as HTMLButtonElement;
-      
+      const confirmBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-danger');
+      const cancelBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-cancel');
+
       expect(confirmBtn?.textContent?.trim()).to.equal('Test Confirm');
       expect(cancelBtn?.textContent?.trim()).to.equal('Test Cancel');
     });
@@ -164,8 +164,8 @@ describe('ConfirmationDialog', () => {
     describe('when clicking confirm button', () => {
       beforeEach(async () => {
         await el.updateComplete;
-        const confirmBtn = el.shadowRoot?.querySelector('.button-danger') as HTMLButtonElement;
-        confirmBtn.click();
+        const confirmBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-danger');
+        confirmBtn?.click();
       });
 
       it('should dispatch confirm event', () => {
@@ -180,8 +180,8 @@ describe('ConfirmationDialog', () => {
     describe('when clicking cancel button', () => {
       beforeEach(async () => {
         await el.updateComplete;
-        const cancelBtn = el.shadowRoot?.querySelector('.button-cancel') as HTMLButtonElement;
-        cancelBtn.click();
+        const cancelBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-cancel');
+        cancelBtn?.click();
       });
 
       it('should dispatch cancel event', () => {
@@ -196,8 +196,8 @@ describe('ConfirmationDialog', () => {
     describe('when clicking overlay', () => {
       beforeEach(async () => {
         await el.updateComplete;
-        const overlay = el.shadowRoot?.querySelector('.overlay') as HTMLElement;
-        overlay.click();
+        const overlay = el.shadowRoot?.querySelector<HTMLElement>('.overlay');
+        overlay?.click();
       });
 
       it('should dispatch cancel event', () => {
@@ -225,18 +225,18 @@ describe('ConfirmationDialog', () => {
       });
 
       it('should disable confirm button', () => {
-        const confirmBtn = el.shadowRoot?.querySelector('.button-danger') as HTMLButtonElement;
-        expect(confirmBtn.disabled).to.be.true;
+        const confirmBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-danger');
+        expect(confirmBtn?.disabled).to.be.true;
       });
 
       it('should disable cancel button', () => {
-        const cancelBtn = el.shadowRoot?.querySelector('.button-cancel') as HTMLButtonElement;
-        expect(cancelBtn.disabled).to.be.true;
+        const cancelBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-cancel');
+        expect(cancelBtn?.disabled).to.be.true;
       });
 
       it('should show loading text', () => {
-        const confirmBtn = el.shadowRoot?.querySelector('.button-danger') as HTMLButtonElement;
-        expect(confirmBtn.textContent?.trim()).to.equal('Processing...');
+        const confirmBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-danger');
+        expect(confirmBtn?.textContent?.trim()).to.equal('Processing...');
       });
     });
   });
@@ -262,8 +262,8 @@ describe('ConfirmationDialog', () => {
     });
 
     it('should not be in loading state', () => {
-      const confirmBtn = el.shadowRoot?.querySelector('.button-danger') as HTMLButtonElement;
-      expect(confirmBtn.disabled).to.be.false;
+      const confirmBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-danger');
+      expect(confirmBtn?.disabled).to.be.false;
     });
   });
 
@@ -314,8 +314,8 @@ describe('ConfirmationDialog', () => {
 
     describe('when trying to click confirm button while loading', () => {
       beforeEach(() => {
-        const confirmBtn = el.shadowRoot?.querySelector('.button-danger') as HTMLButtonElement;
-        confirmBtn.click();
+        const confirmBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-danger');
+        confirmBtn?.click();
       });
 
       it('should not dispatch confirm event', () => {
@@ -325,8 +325,8 @@ describe('ConfirmationDialog', () => {
 
     describe('when trying to click cancel button while loading', () => {
       beforeEach(() => {
-        const cancelBtn = el.shadowRoot?.querySelector('.button-cancel') as HTMLButtonElement;
-        cancelBtn.click();
+        const cancelBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-cancel');
+        cancelBtn?.click();
       });
 
       it('should not dispatch cancel event', () => {

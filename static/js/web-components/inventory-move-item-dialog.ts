@@ -7,6 +7,7 @@ import { getGrpcWebTransport } from './grpc-transport.js';
 import { SearchService, SearchContentRequestSchema, type SearchResult } from '../gen/api/v1/search_pb.js';
 import './inventory-qr-scanner.js';
 import type { ItemScannedEventDetail, ScannedItemInfo, InventoryQrScanner } from './inventory-qr-scanner.js';
+import { coerceThirdPartyError } from './augment-error-service.js';
 
 /**
  * Information about a scanned container result (alias for ScannedItemInfo)
@@ -353,7 +354,7 @@ export class InventoryMoveItemDialog extends LitElement {
   private _clearDebounceTimer(): void {
     if (this._searchDebounceTimer) {
       clearTimeout(this._searchDebounceTimer);
-      this._searchDebounceTimer = undefined;
+      delete this._searchDebounceTimer;
     }
   }
 
@@ -380,7 +381,7 @@ export class InventoryMoveItemDialog extends LitElement {
 
     // Focus search field after render
     this.updateComplete.then(() => {
-      const searchField = this.shadowRoot?.querySelector('input[name="searchQuery"]') as HTMLInputElement;
+      const searchField = this.shadowRoot?.querySelector<HTMLInputElement>('input[name="searchQuery"]');
       searchField?.focus();
     });
   }
@@ -411,7 +412,10 @@ export class InventoryMoveItemDialog extends LitElement {
   };
 
   private _handleSearchInput = (event: Event): void => {
-    const input = event.target as HTMLInputElement;
+    if (!(event.target instanceof HTMLInputElement)) {
+      return;
+    }
+    const input = event.target;
     this.searchQuery = input.value;
     this.error = null;
     // Clear scan state when user starts typing - they're switching to search mode
@@ -453,7 +457,7 @@ export class InventoryMoveItemDialog extends LitElement {
       );
     } catch (err) {
       this.searchResults = [];
-      this.error = err instanceof Error ? err : new Error(String(err));
+      this.error = coerceThirdPartyError(err, 'Container search failed');
     } finally {
       this.searchLoading = false;
     }
@@ -523,7 +527,7 @@ export class InventoryMoveItemDialog extends LitElement {
     this.searchResults = [];
     // Wait for DOM update, then expand the scanner
     this.updateComplete.then(() => {
-      const scanner = this.shadowRoot?.querySelector('inventory-qr-scanner') as InventoryQrScanner | null;
+      const scanner = this.shadowRoot?.querySelector<InventoryQrScanner>('inventory-qr-scanner');
       if (scanner) {
         scanner.expand();
       }

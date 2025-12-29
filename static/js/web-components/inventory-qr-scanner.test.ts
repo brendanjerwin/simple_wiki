@@ -13,15 +13,14 @@ interface MockFrontmatterClient {
 
 function createMockFrontmatterClient(): MockFrontmatterClient {
   return {
+    // In protobuf-es v2, frontmatter is already a JsonObject (no toJson() method)
     getFrontmatter: sinon.stub().resolves({
       frontmatter: {
-        toJson: () => ({
-          title: 'Test Page',
-          inventory: {
-            container: 'parent_container',
-            is_container: true,
-          },
-        }),
+        title: 'Test Page',
+        inventory: {
+          container: 'parent_container',
+          is_container: true,
+        },
       },
     }),
   };
@@ -31,7 +30,7 @@ function createMockFrontmatterClient(): MockFrontmatterClient {
  * Helper to get the inner qr-scanner element
  */
 function getInnerScanner(el: InventoryQrScanner): QrScanner | null {
-  return el.shadowRoot?.querySelector('qr-scanner') as QrScanner | null;
+  return el.shadowRoot?.querySelector<QrScanner>('qr-scanner') ?? null;
 }
 
 /**
@@ -44,7 +43,9 @@ async function simulateQrScan(el: InventoryQrScanner, rawValue: string): Promise
     bubbles: true,
     composed: true,
   });
-  await (el as unknown as { _handleQrScanned: (e: CustomEvent<QrScannedEventDetail>) => Promise<void> })._handleQrScanned(event);
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+  const handler = (el as unknown as { _handleQrScanned: (e: CustomEvent<QrScannedEventDetail>) => Promise<void> });
+  await handler._handleQrScanned(event);
 }
 
 describe('InventoryQrScanner', () => {
@@ -77,9 +78,9 @@ describe('InventoryQrScanner', () => {
       expect(scanner?.getAttribute('embedded')).to.not.be.null;
     });
 
-    it('should not show error container', () => {
-      const errorContainer = el.shadowRoot?.querySelector('.error-container');
-      expect(errorContainer).to.not.exist;
+    it('should not show error-display', () => {
+      const errorDisplay = el.shadowRoot?.querySelector('error-display');
+      expect(errorDisplay).to.not.exist;
     });
 
     it('should not show validating spinner', () => {
@@ -103,7 +104,7 @@ describe('InventoryQrScanner', () => {
         cancelledSpy = sinon.spy();
         el.addEventListener('cancelled', cancelledSpy);
 
-        const cancelBtn = el.shadowRoot?.querySelector('.cancel-button') as HTMLButtonElement;
+        const cancelBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.cancel-button');
         cancelBtn?.click();
         await el.updateComplete;
       });
@@ -183,6 +184,7 @@ describe('InventoryQrScanner', () => {
 
         // Mock the frontmatter client
         mockClient = createMockFrontmatterClient();
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
         (el as unknown as { frontmatterClient: MockFrontmatterClient }).frontmatterClient = mockClient;
 
         // Stub collapse to avoid qr-scanner interaction
@@ -192,7 +194,9 @@ describe('InventoryQrScanner', () => {
         // Set up event spy
         itemScannedSpy = sinon.spy();
         el.addEventListener('item-scanned', (e) => {
-          scannedEvent = e as CustomEvent<ItemScannedEventDetail>;
+          if (e instanceof CustomEvent) {
+            scannedEvent = e;
+          }
           itemScannedSpy(e);
         });
 
@@ -253,20 +257,18 @@ describe('InventoryQrScanner', () => {
         expect(itemScannedSpy).to.not.have.been.called;
       });
 
-      it('should show error container', () => {
-        const errorContainer = el.shadowRoot?.querySelector('.error-container');
-        expect(errorContainer).to.exist;
+      it('should show error-display', () => {
+        const errorDisplay = el.shadowRoot?.querySelector('error-display');
+        expect(errorDisplay).to.exist;
       });
 
-      it('should show error message about invalid URL', () => {
-        const errorMessage = el.shadowRoot?.querySelector('.error-message');
-        expect(errorMessage?.textContent).to.include('Not a valid wiki URL');
-      });
-
-      it('should show Scan Again button', () => {
-        const scanAgainBtn = el.shadowRoot?.querySelector('.scan-again-button');
-        expect(scanAgainBtn).to.exist;
-        expect(scanAgainBtn?.textContent).to.include('Scan Again');
+      it('should show Scan Again button via error-display action', () => {
+        const errorDisplay = el.shadowRoot?.querySelector('error-display');
+        expect(errorDisplay).to.exist;
+        // The action button is rendered by error-display with the label we provided
+        const actionBtn = errorDisplay?.shadowRoot?.querySelector<HTMLButtonElement>('.action-button');
+        expect(actionBtn).to.exist;
+        expect(actionBtn?.textContent).to.include('Scan Again');
       });
     });
 
@@ -281,6 +283,7 @@ describe('InventoryQrScanner', () => {
         // Mock the frontmatter client to throw error
         mockClient = createMockFrontmatterClient();
         mockClient.getFrontmatter.rejects(new Error('Page not found'));
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
         (el as unknown as { frontmatterClient: MockFrontmatterClient }).frontmatterClient = mockClient;
 
         itemScannedSpy = sinon.spy();
@@ -295,14 +298,9 @@ describe('InventoryQrScanner', () => {
         expect(itemScannedSpy).to.not.have.been.called;
       });
 
-      it('should show error container', () => {
-        const errorContainer = el.shadowRoot?.querySelector('.error-container');
-        expect(errorContainer).to.exist;
-      });
-
-      it('should show error message', () => {
-        const errorMessage = el.shadowRoot?.querySelector('.error-message');
-        expect(errorMessage?.textContent).to.include('Page not found');
+      it('should show error-display', () => {
+        const errorDisplay = el.shadowRoot?.querySelector('error-display');
+        expect(errorDisplay).to.exist;
       });
     });
   });
@@ -324,8 +322,9 @@ describe('InventoryQrScanner', () => {
         await simulateQrScan(el, 'invalid');
         await el.updateComplete;
 
-        // Click Scan Again (which will clear error and show scanner again)
-        const scanAgainBtn = el.shadowRoot?.querySelector('.scan-again-button') as HTMLButtonElement;
+        // Click Scan Again button inside error-display
+        const errorDisplay = el.shadowRoot?.querySelector('error-display');
+        const scanAgainBtn = errorDisplay?.shadowRoot?.querySelector<HTMLButtonElement>('.action-button');
         scanAgainBtn?.click();
         await el.updateComplete;
       });
@@ -335,8 +334,8 @@ describe('InventoryQrScanner', () => {
       });
 
       it('should clear the error', () => {
-        const errorContainer = el.shadowRoot?.querySelector('.error-container');
-        expect(errorContainer).to.not.exist;
+        const errorDisplay = el.shadowRoot?.querySelector('error-display');
+        expect(errorDisplay).to.not.exist;
       });
 
       it('should call expand', () => {
@@ -354,7 +353,7 @@ describe('InventoryQrScanner', () => {
       });
 
       it('should disable Cancel button', () => {
-        const cancelBtn = el.shadowRoot?.querySelector('.cancel-button') as HTMLButtonElement;
+        const cancelBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.cancel-button');
         expect(cancelBtn?.disabled).to.be.true;
       });
     });

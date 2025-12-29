@@ -1,10 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unsafe-type-assertion -- Storybook stories use sinon stubs with method name assertions */
 import type { Meta, StoryObj } from '@storybook/web-components-vite';
 import { html } from 'lit';
 import './system-info.js';
 import { SystemInfo } from './system-info.js';
 import { GetVersionResponseSchema, GetJobStatusResponseSchema, JobQueueStatusSchema } from '../gen/api/v1/system_info_pb.js';
-import { create, Timestamp } from '@bufbuild/protobuf';
+import { create } from '@bufbuild/protobuf';
+import { TimestampSchema } from '@bufbuild/protobuf/wkt';
 import { stub } from 'sinon';
 
 const meta: Meta = {
@@ -34,7 +36,7 @@ export const Default: Story = {
     stub(el, 'stopAutoRefresh' as any);
     
     // Set up default demo data
-    const mockTimestamp = create(Timestamp, {
+    const mockTimestamp = create(TimestampSchema, {
       seconds: BigInt(Math.floor(new Date('2023-12-15T14:30:00Z').getTime() / 1000)),
       nanos: 0
     });
@@ -92,8 +94,8 @@ export const Loading: Story = {
     stub(el, 'stopAutoRefresh' as any);
     
     el.loading = true;
-    el.version = undefined;
-    el.jobStatus = undefined;
+    delete el.version;
+    delete el.jobStatus;
     
     return html`
       <div style="height: 100vh; background: #f0f8ff; position: relative;">
@@ -123,7 +125,7 @@ export const VersionOnly: Story = {
     stub(el, 'startAutoRefresh' as any);
     stub(el, 'stopAutoRefresh' as any);
     
-    const mockTimestamp = create(Timestamp, {
+    const mockTimestamp = create(TimestampSchema, {
       seconds: BigInt(Math.floor(new Date('2023-12-15T14:30:00Z').getTime() / 1000)),
       nanos: 0
     });
@@ -166,7 +168,7 @@ export const TaggedVersion: Story = {
     stub(el, 'startAutoRefresh' as any);
     stub(el, 'stopAutoRefresh' as any);
     
-    const mockTimestamp = create(Timestamp, {
+    const mockTimestamp = create(TimestampSchema, {
       seconds: BigInt(Math.floor(new Date('2023-12-15T14:30:00Z').getTime() / 1000)),
       nanos: 0
     });
@@ -208,7 +210,7 @@ export const ActiveIndexing: Story = {
     stub(el, 'startAutoRefresh' as any);
     stub(el, 'stopAutoRefresh' as any);
     
-    const mockTimestamp = create(Timestamp, {
+    const mockTimestamp = create(TimestampSchema, {
       seconds: BigInt(Math.floor(new Date('2023-12-15T14:30:00Z').getTime() / 1000)),
       nanos: 0
     });
@@ -266,7 +268,7 @@ export const SlowIndexing: Story = {
     stub(el, 'startAutoRefresh' as any);
     stub(el, 'stopAutoRefresh' as any);
     
-    const mockTimestamp = create(Timestamp, {
+    const mockTimestamp = create(TimestampSchema, {
       seconds: BigInt(Math.floor(new Date('2023-12-15T14:30:00Z').getTime() / 1000)),
       nanos: 0
     });
@@ -324,7 +326,7 @@ export const NearCompletion: Story = {
     stub(el, 'startAutoRefresh' as any);
     stub(el, 'stopAutoRefresh' as any);
     
-    const mockTimestamp = create(Timestamp, {
+    const mockTimestamp = create(TimestampSchema, {
       seconds: BigInt(Math.floor(new Date('2023-12-15T14:30:00Z').getTime() / 1000)),
       nanos: 0
     });
@@ -374,9 +376,9 @@ export const ErrorState: Story = {
     stub(el, 'stopAutoRefresh' as any);
     
     el.loading = false;
-    el.error = 'Failed to connect to system info service';
-    el.version = undefined;
-    el.jobStatus = undefined;
+    el.error = new Error('Failed to connect to system info service');
+    delete el.version;
+    delete el.jobStatus;
     
     return html`
       <div style="height: 100vh; background: #fed7d7; position: relative;">
@@ -406,7 +408,7 @@ export const ResponsiveDemo: Story = {
     stub(el, 'startAutoRefresh' as any);
     stub(el, 'stopAutoRefresh' as any);
     
-    const mockTimestamp = create(Timestamp, {
+    const mockTimestamp = create(TimestampSchema, {
       seconds: BigInt(Math.floor(new Date('2023-12-15T14:30:00Z').getTime() / 1000)),
       nanos: 0
     });
@@ -459,7 +461,7 @@ export const InteractiveTesting: Story = {
       // Simulate loading time
       await new Promise(resolve => setTimeout(resolve, 300));
       
-      const mockTimestamp = create(Timestamp, {
+      const mockTimestamp = create(TimestampSchema, {
         seconds: BigInt(Math.floor(new Date('2023-12-15T14:30:00Z').getTime() / 1000)),
         nanos: 0
       });
@@ -568,7 +570,7 @@ export const DrawerTabCollapsed: Story = {
     stub(el, 'startAutoRefresh' as any);
     stub(el, 'stopAutoRefresh' as any);
     
-    const mockTimestamp = create(Timestamp, {
+    const mockTimestamp = create(TimestampSchema, {
       seconds: BigInt(Math.floor(new Date('2023-12-15T14:30:00Z').getTime() / 1000)),
       nanos: 0
     });
@@ -627,7 +629,7 @@ export const DrawerTabExpanded: Story = {
     stub(el, 'startAutoRefresh' as any);
     stub(el, 'stopAutoRefresh' as any);
     
-    const mockTimestamp = create(Timestamp, {
+    const mockTimestamp = create(TimestampSchema, {
       seconds: BigInt(Math.floor(new Date('2023-12-15T14:30:00Z').getTime() / 1000)),
       nanos: 0
     });

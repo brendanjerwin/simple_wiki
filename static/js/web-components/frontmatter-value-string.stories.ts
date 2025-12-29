@@ -32,10 +32,10 @@ export const WithValue: Story = {
     placeholder: 'Enter value...',
   },
   render: (args) => html`
-    <frontmatter-value-string 
-      .value="${args.value}"
-      .disabled="${args.disabled}"
-      .placeholder="${args.placeholder}">
+    <frontmatter-value-string
+      .value="${args['value']}"
+      .disabled="${args['disabled']}"
+      .placeholder="${args['placeholder']}">
     </frontmatter-value-string>
   `,
 };
@@ -47,10 +47,10 @@ export const Empty: Story = {
     placeholder: 'Enter a value here...',
   },
   render: (args) => html`
-    <frontmatter-value-string 
-      .value="${args.value}"
-      .disabled="${args.disabled}"
-      .placeholder="${args.placeholder}">
+    <frontmatter-value-string
+      .value="${args['value']}"
+      .disabled="${args['disabled']}"
+      .placeholder="${args['placeholder']}">
     </frontmatter-value-string>
   `,
 };
@@ -62,10 +62,10 @@ export const Disabled: Story = {
     placeholder: 'Enter value...',
   },
   render: (args) => html`
-    <frontmatter-value-string 
-      .value="${args.value}"
-      .disabled="${args.disabled}"
-      .placeholder="${args.placeholder}">
+    <frontmatter-value-string
+      .value="${args['value']}"
+      .disabled="${args['disabled']}"
+      .placeholder="${args['placeholder']}">
     </frontmatter-value-string>
   `,
 };

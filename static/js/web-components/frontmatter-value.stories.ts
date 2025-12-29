@@ -32,10 +32,10 @@ export const StringValue: Story = {
     placeholder: 'Enter a value...',
   },
   render: (args) => html`
-    <frontmatter-value 
-      .value="${args.value}"
-      .disabled="${args.disabled}"
-      .placeholder="${args.placeholder}">
+    <frontmatter-value
+      .value="${args['value']}"
+      .disabled="${args['disabled']}"
+      .placeholder="${args['placeholder']}">
     </frontmatter-value>
   `,
 };
@@ -47,10 +47,10 @@ export const ArrayValue: Story = {
     placeholder: 'Add item...',
   },
   render: (args) => html`
-    <frontmatter-value 
-      .value="${args.value}"
-      .disabled="${args.disabled}"
-      .placeholder="${args.placeholder}">
+    <frontmatter-value
+      .value="${args['value']}"
+      .disabled="${args['disabled']}"
+      .placeholder="${args['placeholder']}">
     </frontmatter-value>
   `,
 };
@@ -65,9 +65,9 @@ export const ObjectValue: Story = {
     disabled: false,
   },
   render: (args) => html`
-    <frontmatter-value 
-      .value="${args.value}"
-      .disabled="${args.disabled}">
+    <frontmatter-value
+      .value="${args['value']}"
+      .disabled="${args['disabled']}">
     </frontmatter-value>
   `,
 };
@@ -79,10 +79,10 @@ export const EmptyValue: Story = {
     placeholder: 'No value set',
   },
   render: (args) => html`
-    <frontmatter-value 
-      .value="${args.value}"
-      .disabled="${args.disabled}"
-      .placeholder="${args.placeholder}">
+    <frontmatter-value
+      .value="${args['value']}"
+      .disabled="${args['disabled']}"
+      .placeholder="${args['placeholder']}">
     </frontmatter-value>
   `,
 };
@@ -93,9 +93,9 @@ export const DisabledString: Story = {
     disabled: true,
   },
   render: (args) => html`
-    <frontmatter-value 
-      .value="${args.value}"
-      .disabled="${args.disabled}">
+    <frontmatter-value
+      .value="${args['value']}"
+      .disabled="${args['disabled']}">
     </frontmatter-value>
   `,
 };
@@ -106,9 +106,9 @@ export const NumberValue: Story = {
     disabled: false,
   },
   render: (args) => html`
-    <frontmatter-value 
-      .value="${args.value}"
-      .disabled="${args.disabled}">
+    <frontmatter-value
+      .value="${args['value']}"
+      .disabled="${args['disabled']}">
     </frontmatter-value>
   `,
 };
@@ -119,9 +119,9 @@ export const BooleanValue: Story = {
     disabled: false,
   },
   render: (args) => html`
-    <frontmatter-value 
-      .value="${args.value}"
-      .disabled="${args.disabled}">
+    <frontmatter-value
+      .value="${args['value']}"
+      .disabled="${args['disabled']}">
     </frontmatter-value>
   `,
 };

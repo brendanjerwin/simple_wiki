@@ -15,7 +15,7 @@ describe('FrontmatterEditorDialog', () => {
   beforeEach(async () => {
     // Use Promise.race to add explicit timeout for fixture creation
     el = await Promise.race([
-      fixture(html`<frontmatter-editor-dialog></frontmatter-editor-dialog>`),
+      fixture<FrontmatterEditorDialog>(html`<frontmatter-editor-dialog></frontmatter-editor-dialog>`),
       timeout(5000, 'Component fixture timed out')
     ]);
     

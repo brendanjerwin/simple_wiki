@@ -27,36 +27,44 @@ func NewIndexCoordinator(coordinator *jobs.JobQueueCoordinator, frontmatterIndex
 }
 
 // EnqueueIndexJob enqueues indexing jobs to all relevant indexes for the given page and operation.
-func (c *IndexCoordinator) EnqueueIndexJob(pageIdentifier wikipage.PageIdentifier, operation Operation) {
+// Returns an error if any job could not be enqueued.
+func (c *IndexCoordinator) EnqueueIndexJob(pageIdentifier wikipage.PageIdentifier, operation Operation) error {
 	// Create and enqueue frontmatter index job
 	frontmatterJob := NewFrontmatterIndexJob(c.frontmatterIndex, pageIdentifier, operation)
-	c.coordinator.EnqueueJob(frontmatterJob)
+	if err := c.coordinator.EnqueueJob(frontmatterJob); err != nil {
+		return err
+	}
 
 	// Create and enqueue bleve index job
 	bleveJob := NewBleveIndexJob(c.bleveIndex, pageIdentifier, operation)
-	c.coordinator.EnqueueJob(bleveJob)
+	return c.coordinator.EnqueueJob(bleveJob)
 }
 
 // BulkEnqueuePages enqueues multiple pages for indexing across all indexes.
-func (c *IndexCoordinator) BulkEnqueuePages(pageIdentifiers []wikipage.PageIdentifier, operation Operation) {
+// Returns an error if any job could not be enqueued.
+func (c *IndexCoordinator) BulkEnqueuePages(pageIdentifiers []wikipage.PageIdentifier, operation Operation) error {
 	for _, pageID := range pageIdentifiers {
-		c.EnqueueIndexJob(pageID, operation)
+		if err := c.EnqueueIndexJob(pageID, operation); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // BulkEnqueuePagesWithCompletion enqueues multiple pages for indexing and calls the callback
 // when all frontmatter indexing jobs complete. This allows dependent jobs to be scheduled
 // after the frontmatter index is fully populated.
+// Returns an error if any job could not be enqueued.
 func (c *IndexCoordinator) BulkEnqueuePagesWithCompletion(
 	pageIdentifiers []wikipage.PageIdentifier,
 	operation Operation,
 	onAllComplete func(),
-) {
+) error {
 	if len(pageIdentifiers) == 0 {
 		if onAllComplete != nil {
 			onAllComplete()
 		}
-		return
+		return nil
 	}
 
 	// Track completion of frontmatter jobs (the ones normalization depends on)
@@ -68,18 +76,23 @@ func (c *IndexCoordinator) BulkEnqueuePagesWithCompletion(
 
 		// Enqueue frontmatter job with completion tracking
 		frontmatterJob := NewFrontmatterIndexJob(c.frontmatterIndex, pageID, operation)
-		c.coordinator.EnqueueJobWithCompletion(frontmatterJob, func(_ error) {
+		if err := c.coordinator.EnqueueJobWithCompletion(frontmatterJob, func(_ error) {
 			if atomic.AddInt32(&remaining, -1) == 0 {
 				if onAllComplete != nil {
 					onAllComplete()
 				}
 			}
-		})
+		}); err != nil {
+			return err
+		}
 
 		// Enqueue bleve job normally (normalization doesn't depend on it)
 		bleveJob := NewBleveIndexJob(c.bleveIndex, pageID, operation)
-		c.coordinator.EnqueueJob(bleveJob)
+		if err := c.coordinator.EnqueueJob(bleveJob); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // GetJobQueueCoordinator returns the underlying job queue coordinator for status monitoring.

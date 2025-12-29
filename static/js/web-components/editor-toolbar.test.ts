@@ -56,8 +56,8 @@ describe('EditorToolbar', () => {
     beforeEach(async () => {
       eventSpy = spy();
       toolbar.addEventListener('format-bold-requested', eventSpy);
-      const boldBtn = toolbar.shadowRoot?.querySelector('[data-action="bold"]') as HTMLButtonElement;
-      boldBtn.click();
+      const boldBtn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="bold"]');
+      boldBtn?.click();
     });
 
     it('should dispatch format-bold-requested event', () => {
@@ -71,8 +71,8 @@ describe('EditorToolbar', () => {
     beforeEach(async () => {
       eventSpy = spy();
       toolbar.addEventListener('format-italic-requested', eventSpy);
-      const italicBtn = toolbar.shadowRoot?.querySelector('[data-action="italic"]') as HTMLButtonElement;
-      italicBtn.click();
+      const italicBtn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="italic"]');
+      italicBtn?.click();
     });
 
     it('should dispatch format-italic-requested event', () => {
@@ -86,8 +86,8 @@ describe('EditorToolbar', () => {
     beforeEach(async () => {
       eventSpy = spy();
       toolbar.addEventListener('insert-link-requested', eventSpy);
-      const linkBtn = toolbar.shadowRoot?.querySelector('[data-action="link"]') as HTMLButtonElement;
-      linkBtn.click();
+      const linkBtn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="link"]');
+      linkBtn?.click();
     });
 
     it('should dispatch insert-link-requested event', () => {
@@ -101,8 +101,8 @@ describe('EditorToolbar', () => {
     beforeEach(async () => {
       eventSpy = spy();
       toolbar.addEventListener('upload-image-requested', eventSpy);
-      const uploadBtn = toolbar.shadowRoot?.querySelector('[data-action="upload-image"]') as HTMLButtonElement;
-      uploadBtn.click();
+      const uploadBtn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="upload-image"]');
+      uploadBtn?.click();
     });
 
     it('should dispatch upload-image-requested event', () => {
@@ -116,8 +116,8 @@ describe('EditorToolbar', () => {
     beforeEach(async () => {
       eventSpy = spy();
       toolbar.addEventListener('upload-file-requested', eventSpy);
-      const fileBtn = toolbar.shadowRoot?.querySelector('[data-action="upload-file"]') as HTMLButtonElement;
-      fileBtn.click();
+      const fileBtn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="upload-file"]');
+      fileBtn?.click();
     });
 
     it('should dispatch upload-file-requested event', () => {
@@ -131,8 +131,8 @@ describe('EditorToolbar', () => {
     beforeEach(async () => {
       eventSpy = spy();
       toolbar.addEventListener('exit-requested', eventSpy);
-      const exitBtn = toolbar.shadowRoot?.querySelector('[data-action="exit"]') as HTMLButtonElement;
-      exitBtn.click();
+      const exitBtn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="exit"]');
+      exitBtn?.click();
     });
 
     it('should dispatch exit-requested event', () => {

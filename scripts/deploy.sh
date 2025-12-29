@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -e
 
+LOG_DIR="/tmp/simple_wiki_logs"
+mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/deploy_$(date +%Y%m%d_%H%M%S).log"
+ln -sf "$LOG_FILE" "$LOG_DIR/current_task.log"
+
+echo "Logging to: $LOG_FILE"
+
 # Deploy script
 # Usage: devbox run deploy [tag_or_branch] [server_host] [username]
 # If tag_or_branch starts with 'v', treats it as a tag, otherwise as a branch
@@ -9,6 +16,7 @@ TAG_OR_BRANCH=${1}
 SERVER_HOST=${2:-wiki}
 USERNAME=${3:-brendanjerwin}
 
+{
 # Determine if we're deploying a tag or branch
 if [[ -z "$TAG_OR_BRANCH" ]]; then
     # No parameter provided, use current branch
@@ -87,3 +95,9 @@ else
     echo "⚠️  Could not find recent deployment run. Check manually:"
     echo "   gh run list --workflow=deploy.yml"
 fi
+} 2>&1 | tee "$LOG_FILE"
+
+exit_code=${PIPESTATUS[0]}
+echo ""
+echo "Log saved to: $LOG_FILE"
+exit $exit_code

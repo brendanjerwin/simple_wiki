@@ -31,13 +31,13 @@ var _ = Describe("JSONArchiveMigrationScanJob", func() {
 	})
 
 	AfterEach(func() {
-		os.RemoveAll(tempDir)
+		_ = os.RemoveAll(tempDir)
 	})
 
 	Describe("Execute", func() {
 		When("the data directory does not exist", func() {
 			BeforeEach(func() {
-				os.RemoveAll(tempDir)
+				_ = os.RemoveAll(tempDir)
 				err = scanJob.Execute()
 			})
 
@@ -162,7 +162,7 @@ var _ = Describe("JSONArchiveMigrationJob", func() {
 	})
 
 	AfterEach(func() {
-		os.RemoveAll(tempDir)
+		_ = os.RemoveAll(tempDir)
 	})
 
 	Describe("Execute", func() {
@@ -252,7 +252,7 @@ var _ = Describe("JSONArchiveMigrationJob", func() {
 
 				// Ensure __deleted__ doesn't exist
 				deletedDir := filepath.Join(tempDir, "__deleted__")
-				os.RemoveAll(deletedDir)
+				_ = os.RemoveAll(deletedDir)
 
 				job = NewJSONArchiveMigrationJob(tempDir, jsonFilename)
 				executeErr = job.Execute()

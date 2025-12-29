@@ -1,7 +1,8 @@
 import { createClient, type Client } from '@connectrpc/connect';
 import { createGrpcWebTransport } from '@connectrpc/connect-web';
-import { SearchService } from '../gen/api/v1/search_pb.js';
-import type { SearchContentRequest, SearchResult } from '../gen/api/v1/search_pb.js';
+import { create } from '@bufbuild/protobuf';
+import { SearchService, SearchContentRequestSchema } from '../gen/api/v1/search_pb.js';
+import type { SearchResult } from '../gen/api/v1/search_pb.js';
 
 /**
  * SearchClient provides methods for searching wiki content via gRPC-Web.
@@ -31,9 +32,9 @@ export class SearchClient {
    * @returns Promise resolving to search results
    */
   async search(query: string): Promise<SearchResult[]> {
-    const request: Partial<SearchContentRequest> = { query };
+    const request = create(SearchContentRequestSchema, { query });
     const response = await this.getClient().searchContent(request);
-    
+
     // Return results directly - no HTML generation needed
     return response.results;
   }

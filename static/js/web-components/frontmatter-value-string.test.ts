@@ -51,7 +51,7 @@ describe('FrontmatterValueString', () => {
     });
 
     it('should display the value in input field', () => {
-      const inputElement = el.shadowRoot?.querySelector('.value-input') as HTMLInputElement;
+      const inputElement = el.shadowRoot?.querySelector<HTMLInputElement>('.value-input');
       expect(inputElement?.value).to.equal('test value');
     });
   });
@@ -62,14 +62,16 @@ describe('FrontmatterValueString', () => {
     beforeEach(async () => {
       valueChangeEvent = null;
       el = await fixture(html`<frontmatter-value-string value="initial"></frontmatter-value-string>`);
-      
+
       el.addEventListener('value-change', (event) => {
-        valueChangeEvent = event as CustomEvent;
+        if (event instanceof CustomEvent) {
+          valueChangeEvent = event;
+        }
       });
 
-      const inputElement = el.shadowRoot?.querySelector('.value-input') as HTMLInputElement;
-      inputElement.value = 'updated';
-      inputElement.dispatchEvent(new Event('blur', { bubbles: true }));
+      const inputElement = el.shadowRoot?.querySelector<HTMLInputElement>('.value-input');
+      inputElement!.value = 'updated';
+      inputElement!.dispatchEvent(new Event('blur', { bubbles: true }));
     });
 
     it('should dispatch value-change event', () => {

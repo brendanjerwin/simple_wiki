@@ -85,7 +85,9 @@ describe('EditorUploadService', () => {
         try {
           await service.uploadFile(new File([''], 'test.txt', { type: 'text/plain' }));
         } catch (e) {
-          error = e as Error;
+          if (e instanceof Error) {
+            error = e;
+          }
         }
       });
 
@@ -104,7 +106,9 @@ describe('EditorUploadService', () => {
         try {
           await service.uploadFile(new File([''], 'test.txt', { type: 'text/plain' }));
         } catch (e) {
-          error = e as Error;
+          if (e instanceof Error) {
+            error = e;
+          }
         }
       });
 
@@ -185,9 +189,15 @@ describe('EditorUploadService', () => {
   });
 
   describe('extractFilename', () => {
+    // Type interface for accessing private method in tests
+    interface ServiceWithPrivateMethods {
+      extractFilename: (s: string) => string;
+    }
+
     describe('when location has filename parameter', () => {
       it('should extract filename from URL', () => {
-        const result = (service as { extractFilename: (s: string) => string }).extractFilename(
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+        const result = (service as unknown as ServiceWithPrivateMethods).extractFilename(
           '/uploads/sha256-abc?filename=my-image.png'
         );
         expect(result).to.equal('my-image.png');
@@ -196,7 +206,8 @@ describe('EditorUploadService', () => {
 
     describe('when location has encoded filename', () => {
       it('should decode the filename', () => {
-        const result = (service as { extractFilename: (s: string) => string }).extractFilename(
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+        const result = (service as unknown as ServiceWithPrivateMethods).extractFilename(
           '/uploads/sha256-abc?filename=my%20image.png'
         );
         expect(result).to.equal('my image.png');
@@ -205,7 +216,8 @@ describe('EditorUploadService', () => {
 
     describe('when location has no filename parameter', () => {
       it('should return default upload', () => {
-        const result = (service as { extractFilename: (s: string) => string }).extractFilename(
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+        const result = (service as unknown as ServiceWithPrivateMethods).extractFilename(
           '/uploads/sha256-abc'
         );
         expect(result).to.equal('upload');
