@@ -44,21 +44,24 @@ This push is **blocked** because it doesn't include a review summary marker.
    - Include enough context for the user to judge the issue
    - Show the problematic code snippet
    - Explain why it's an issue
-   - Always include an "Explain this issue more" option for when user needs more context
-   - Let user decide: Fix it, Skip it, or Explain more
+   - Let user decide:
+     - **Fix it** - Apply the recommended fix now
+     - **Skip it** - Ignore this issue
+     - **Defer to GitHub issue** - Create a GitHub issue to track this for later (use `gh issue create`)
+     - **Explain more** - Provide additional context about why this is an issue
 
 3. **Append review marker as bash comment:**
    After completing the review, append a bash comment with the review summary to your push command:
 
    ```bash
-   git push origin main # [REVIEWED: X issues found, Y fixed, Z skipped (reason)]
+   git push origin main # [REVIEWED: X issues found, Y fixed, Z skipped, W deferred]
    ```
 
    Examples:
    ```bash
-   git push origin main # [REVIEWED: 3 issues found, 3 fixed, 0 skipped]
+   git push origin main # [REVIEWED: 3 issues found, 3 fixed, 0 skipped, 0 deferred]
    git push # [REVIEWED: 0 issues found]
-   git push origin feature-branch # [REVIEWED: 2 issues found, 1 fixed, 1 skipped (style preference)]
+   git push origin feature-branch # [REVIEWED: 3 issues found, 1 fixed, 1 skipped, 1 deferred (#123)]
    ```
 
    The `# [REVIEWED: ...]` comment keeps the command clean while proving the review was done.
