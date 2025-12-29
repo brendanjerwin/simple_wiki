@@ -1,13 +1,13 @@
-import { createPromiseClient, PromiseClient } from '@connectrpc/connect';
+import { createClient, type Client } from '@connectrpc/connect';
 import { createGrpcWebTransport } from '@connectrpc/connect-web';
-import { SearchService } from '../gen/api/v1/search_connect.js';
+import { SearchService } from '../gen/api/v1/search_pb.js';
 import type { SearchContentRequest, SearchResult } from '../gen/api/v1/search_pb.js';
 
 /**
  * SearchClient provides methods for searching wiki content via gRPC-Web.
  */
 export class SearchClient {
-  private client: PromiseClient<typeof SearchService> | null = null;
+  private client: Client<typeof SearchService> | null = null;
   private baseUrl: string;
 
   constructor(baseUrl: string = '') {
@@ -15,12 +15,12 @@ export class SearchClient {
     // Delay client creation until first use to allow for testing
   }
 
-  private getClient(): PromiseClient<typeof SearchService> {
+  private getClient(): Client<typeof SearchService> {
     if (!this.client) {
       const transport = createGrpcWebTransport({
         baseUrl: this.baseUrl || window.location.origin,
       });
-      this.client = createPromiseClient(SearchService, transport);
+      this.client = createClient(SearchService, transport);
     }
     return this.client;
   }

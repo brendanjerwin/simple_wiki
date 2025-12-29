@@ -1,9 +1,8 @@
 import { html, css, LitElement } from 'lit';
 import { createClient } from '@connectrpc/connect';
-import { Struct } from '@bufbuild/protobuf';
+import { create, type JsonObject } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
-import { Frontmatter } from '../gen/api/v1/frontmatter_connect.js';
-import { GetFrontmatterRequest, GetFrontmatterResponse, ReplaceFrontmatterRequest } from '../gen/api/v1/frontmatter_pb.js';
+import { Frontmatter, GetFrontmatterRequestSchema, GetFrontmatterResponseSchema, ReplaceFrontmatterRequestSchema, type GetFrontmatterResponse } from '../gen/api/v1/frontmatter_pb.js';
 import { sharedStyles, foundationCSS, dialogCSS, responsiveCSS, buttonCSS } from './shared-styles.js';
 import './frontmatter-value-section.js';
 import { showToastAfter } from './toast-message.js';
@@ -24,11 +23,11 @@ import { AugmentErrorService, type AugmentedError } from './augment-error-servic
  * 
  * DATA FLOW:
  * 1. When opened, the dialog fetches current frontmatter via gRPC and stores it in `frontmatter`
- * 2. `convertStructToPlainObject()` converts the protobuf Struct to a plain JavaScript object
- * 3. This converted data is copied to `workingFrontmatter` for editing
+ * 2. The frontmatter field (already a JsonObject in protobuf-es v2) is directly cast to a plain object
+ * 3. This data is copied to `workingFrontmatter` for editing
  * 4. The frontmatter-value-section component renders and manages all field editing operations
  * 5. All user modifications update `workingFrontmatter` while preserving the original `frontmatter`
- * 6. On save, `workingFrontmatter` is sent back to the server; on cancel, changes are discarded
+ * 6. On save, `workingFrontmatter` is cast back to JsonObject and sent to the server; on cancel, changes are discarded
  * 
  * COMPONENT ARCHITECTURE:
  * The dialog uses a hierarchical component structure:
@@ -204,19 +203,9 @@ export class FrontmatterEditorDialog extends LitElement {
     this.workingFrontmatter = {};
   }
 
-  private convertStructToPlainObject(struct?: Struct): Record<string, unknown> {
-    if (!struct) return {};
-
-    return struct.toJson() as Record<string, unknown>;
-  }
-
-  private convertPlainObjectToStruct(obj: Record<string, unknown>): Struct {
-    return Struct.fromJson(obj);
-  }
-
   private updateWorkingFrontmatter(): void {
     if (this.frontmatter?.frontmatter) {
-      this.workingFrontmatter = this.convertStructToPlainObject(this.frontmatter.frontmatter);
+      this.workingFrontmatter = this.frontmatter.frontmatter as Record<string, unknown>;
     } else {
       this.workingFrontmatter = {};
     }
@@ -269,7 +258,7 @@ export class FrontmatterEditorDialog extends LitElement {
       this.workingFrontmatter = {};
       this.requestUpdate();
 
-      const request = new GetFrontmatterRequest({ page: this.page });
+      const request = create(GetFrontmatterRequestSchema, { page: this.page });
       const response = await this.client.getFrontmatter(request);
       this.frontmatter = response;
       this.updateWorkingFrontmatter();
@@ -297,17 +286,16 @@ export class FrontmatterEditorDialog extends LitElement {
       this.augmentedError = undefined;
       this.requestUpdate();
 
-      const frontmatterStruct = this.convertPlainObjectToStruct(this.workingFrontmatter);
-      const request = new ReplaceFrontmatterRequest({
+      const request = create(ReplaceFrontmatterRequestSchema, {
         page: this.page,
-        frontmatter: frontmatterStruct
+        frontmatter: this.workingFrontmatter as JsonObject
       });
 
       const response = await this.client.replaceFrontmatter(request);
 
       // Update the stored frontmatter with the response to reflect any server-side changes
       if (response.frontmatter) {
-        this.frontmatter = new GetFrontmatterResponse({ frontmatter: response.frontmatter });
+        this.frontmatter = create(GetFrontmatterResponseSchema, { frontmatter: response.frontmatter });
         this.updateWorkingFrontmatter();
       }
 

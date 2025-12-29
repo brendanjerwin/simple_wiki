@@ -1,7 +1,8 @@
 import { html, fixture, expect, assert } from '@open-wc/testing';
 import { stub } from 'sinon';
+import { create } from '@bufbuild/protobuf';
 import { SystemInfoIdentity } from './system-info-identity.js';
-import { TailscaleIdentity } from '../gen/api/v1/system_info_pb.js';
+import { TailscaleIdentitySchema } from '../gen/api/v1/system_info_pb.js';
 import './system-info-identity.js';
 
 function timeout(ms: number, message: string) {
@@ -61,7 +62,7 @@ describe('SystemInfoIdentity', () => {
 
   describe('when identity has empty loginName', () => {
     beforeEach(async () => {
-      el.identity = new TailscaleIdentity({
+      el.identity = create(TailscaleIdentitySchema, {
         loginName: '',
         displayName: '',
         nodeName: ''
@@ -80,7 +81,7 @@ describe('SystemInfoIdentity', () => {
 
   describe('when identity has login name only', () => {
     beforeEach(async () => {
-      el.identity = new TailscaleIdentity({
+      el.identity = create(TailscaleIdentitySchema, {
         loginName: 'user@example.com',
         displayName: '',
         nodeName: ''
@@ -114,7 +115,7 @@ describe('SystemInfoIdentity', () => {
 
   describe('when identity has display name', () => {
     beforeEach(async () => {
-      el.identity = new TailscaleIdentity({
+      el.identity = create(TailscaleIdentitySchema, {
         loginName: 'user@example.com',
         displayName: 'Test User',
         nodeName: ''
@@ -133,7 +134,7 @@ describe('SystemInfoIdentity', () => {
 
   describe('when identity has node name', () => {
     beforeEach(async () => {
-      el.identity = new TailscaleIdentity({
+      el.identity = create(TailscaleIdentitySchema, {
         loginName: 'user@example.com',
         displayName: 'Test User',
         nodeName: 'my-laptop'
@@ -162,7 +163,7 @@ describe('SystemInfoIdentity', () => {
 
   describe('when identity has all fields', () => {
     beforeEach(async () => {
-      el.identity = new TailscaleIdentity({
+      el.identity = create(TailscaleIdentitySchema, {
         loginName: 'user@example.com',
         displayName: 'Test User',
         nodeName: 'my-laptop'
@@ -186,7 +187,7 @@ describe('SystemInfoIdentity', () => {
 
   describe('component structure', () => {
     beforeEach(async () => {
-      el.identity = new TailscaleIdentity({
+      el.identity = create(TailscaleIdentitySchema, {
         loginName: 'user@example.com',
         displayName: 'Test User',
         nodeName: 'my-laptop'

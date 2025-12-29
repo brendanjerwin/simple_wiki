@@ -77,8 +77,8 @@ class QrScannerCameraProvider implements CameraProvider {
       },
       {
         preferredCamera: cameraId,
-        highlightScanRegion: true,
-        highlightCodeOutline: true,
+        highlightScanRegion: false,
+        highlightCodeOutline: false,
         // Scan the entire video frame for better detection on low-res webcams
         calculateScanRegion: (video) => ({
           x: 0,
@@ -119,15 +119,6 @@ class QrScannerCameraProvider implements CameraProvider {
  * ```
  */
 export class QrScanner extends LitElement {
-  // Disable Shadow DOM - qr-scanner library doesn't support it
-  // (checks document.body.contains(video) which fails in Shadow DOM)
-  override createRenderRoot() {
-    return this;
-  }
-
-  // Note: With Shadow DOM disabled, these styles are NOT applied via Lit's
-  // static styles mechanism. They're kept here for documentation and IDE support.
-  // Actual styling comes from ${sharedStyles} rendered into the light DOM.
   static override styles = [
     foundationCSS,
     buttonCSS,
@@ -170,11 +161,25 @@ export class QrScanner extends LitElement {
       }
 
       .scanner-area {
-        margin-top: 12px;
         border: 1px solid #ddd;
         border-radius: 4px;
         overflow: hidden;
         background: #000;
+      }
+
+      /* Only add margin when not in embedded mode (toggle button is present) */
+      :host(:not([embedded])) .scanner-area {
+        margin-top: 12px;
+      }
+
+      /* Remove margins and border in embedded mode - parent provides container styling */
+      :host([embedded]) .scanner-container {
+        margin-top: 0;
+      }
+
+      :host([embedded]) .scanner-area {
+        border: none;
+        border-radius: 0;
       }
 
       .scanner-area.collapsed {
@@ -269,7 +274,7 @@ export class QrScanner extends LitElement {
   expanded = false;
 
   /** When true, hides built-in controls (toggle, camera select, stop button) - parent handles UI */
-  @property({ type: Boolean })
+  @property({ type: Boolean, reflect: true })
   embedded = false;
 
   @state()
@@ -288,6 +293,18 @@ export class QrScanner extends LitElement {
   private selectedCameraId?: string;
 
   private cameraProvider: CameraProvider = new QrScannerCameraProvider();
+
+  /** Portal video element - lives on document.body to avoid Shadow DOM issues */
+  private portalVideo: HTMLVideoElement | null = null;
+
+  /** Unique ID for this component instance (for portal video element) */
+  private readonly instanceId = crypto.randomUUID();
+
+  /** Bound handler for scroll/resize repositioning */
+  private readonly _repositionHandler = () => this._scheduleReposition();
+
+  /** ResizeObserver for container size changes */
+  private resizeObserver: ResizeObserver | null = null;
 
   /**
    * Set a custom camera provider (for testing)
@@ -352,7 +369,10 @@ export class QrScanner extends LitElement {
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
-    this._stopScanning();
+    this._cleanupRepositioning();
+    // Fire-and-forget: disconnectedCallback cannot be async
+    // _stopScanning handles video removal after camera stops
+    void this._stopScanning();
   }
 
   private async _startScanning(): Promise<void> {
@@ -360,39 +380,134 @@ export class QrScanner extends LitElement {
       return;
     }
 
-    const videoElement = this.querySelector('#qr-video') as HTMLVideoElement;
-    if (!videoElement) {
-      throw new Error('QrScanner: Video element not found in DOM');
+    // Get the container to position the video over
+    const container = this.shadowRoot?.querySelector('.viewfinder-container') as HTMLElement;
+    if (!container) {
+      throw new Error('QrScanner: Viewfinder container not found in DOM');
     }
+
+    // Create portal video on document.body (avoids Shadow DOM issues with qr-scanner library)
+    this.portalVideo = document.createElement('video');
+    this.portalVideo.id = `qr-video-portal-${this.instanceId}`;
+    this.portalVideo.setAttribute('playsinline', ''); // Required for iOS
+    this.portalVideo.setAttribute('aria-label', 'QR code scanner video feed');
+    document.body.appendChild(this.portalVideo);
+
+    // Position the video over the container
+    this._positionPortalVideo(container);
 
     try {
       await this.cameraProvider.start(
-        videoElement,
+        this.portalVideo,
         this.selectedCameraId,
         this._onScanSuccess.bind(this)
       );
       this.scanning = true;
 
-      // The library may have moved the video to document.body
-      // Move it back into our container and style it
-      const container = this.querySelector('.viewfinder-container') as HTMLElement;
-      if (container && videoElement.parentElement !== container) {
-        container.appendChild(videoElement);
-      }
+      // Add scroll/resize listeners to keep portal video positioned correctly
+      this._addRepositionListeners();
 
-      // Force video to be visible with proper positioning
-      videoElement.style.setProperty('display', 'block', 'important');
-      videoElement.style.setProperty('width', '100%', 'important');
-      videoElement.style.setProperty('height', '250px', 'important');
-      videoElement.style.setProperty('visibility', 'visible', 'important');
-      videoElement.style.setProperty('position', 'relative', 'important');
-      videoElement.style.setProperty('object-fit', 'cover', 'important');
+      // Use ResizeObserver to reposition when container size changes (more reliable than timeout)
+      this.resizeObserver = new ResizeObserver(() => this._scheduleReposition());
+      this.resizeObserver.observe(container);
+
+      // Initial positioning after camera starts
+      this._scheduleReposition();
     } catch (err) {
+      this._cleanupRepositioning();
+      this._removePortalVideo();
       this._handleError(err);
     }
   }
 
+  /**
+   * Position the portal video element over the viewfinder container
+   */
+  private _positionPortalVideo(container: HTMLElement): void {
+    if (!this.portalVideo) return;
+
+    const rect = container.getBoundingClientRect();
+    const video = this.portalVideo;
+
+    // Use container dimensions, with fallback minimums
+    const width = Math.max(rect.width, 200);
+    const height = Math.max(rect.height, 250);
+
+    video.style.cssText = `
+      position: fixed !important;
+      top: ${rect.top}px !important;
+      left: ${rect.left}px !important;
+      width: ${width}px !important;
+      height: ${height}px !important;
+      object-fit: cover !important;
+      z-index: 10000 !important;
+      display: block !important;
+      visibility: visible !important;
+      background: #000 !important;
+      border-radius: 0 0 8px 8px !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    `;
+  }
+
+  /**
+   * Schedule repositioning after layout settles
+   */
+  private _scheduleReposition(): void {
+    const container = this.shadowRoot?.querySelector('.viewfinder-container') as HTMLElement;
+    if (container) {
+      requestAnimationFrame(() => {
+        this._positionPortalVideo(container);
+      });
+    }
+  }
+
+  /** Listener options for scroll events */
+  private static readonly SCROLL_LISTENER_OPTIONS: AddEventListenerOptions = { capture: true, passive: true };
+
+  /** Listener options for resize events */
+  private static readonly RESIZE_LISTENER_OPTIONS: AddEventListenerOptions = { passive: true };
+
+  /**
+   * Add event listeners for scroll/resize to keep portal video positioned
+   */
+  private _addRepositionListeners(): void {
+    window.addEventListener('scroll', this._repositionHandler, QrScanner.SCROLL_LISTENER_OPTIONS);
+    window.addEventListener('resize', this._repositionHandler, QrScanner.RESIZE_LISTENER_OPTIONS);
+  }
+
+  /**
+   * Remove scroll/resize event listeners
+   */
+  private _removeRepositionListeners(): void {
+    window.removeEventListener('scroll', this._repositionHandler, QrScanner.SCROLL_LISTENER_OPTIONS);
+    window.removeEventListener('resize', this._repositionHandler, QrScanner.RESIZE_LISTENER_OPTIONS);
+  }
+
+  /**
+   * Clean up all repositioning resources (listeners and observer)
+   */
+  private _cleanupRepositioning(): void {
+    this._removeRepositionListeners();
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+      this.resizeObserver = null;
+    }
+  }
+
+  /**
+   * Remove the portal video from document.body
+   */
+  private _removePortalVideo(): void {
+    if (this.portalVideo) {
+      this.portalVideo.remove();
+      this.portalVideo = null;
+    }
+  }
+
   private async _stopScanning(): Promise<void> {
+    this._cleanupRepositioning();
+
     if (this.cameraProvider.isScanning()) {
       try {
         await this.cameraProvider.stop();
@@ -400,6 +515,7 @@ export class QrScanner extends LitElement {
         // Silently ignore stop errors - cleanup operation with no UI feedback path
       }
     }
+    this._removePortalVideo();
     this.scanning = false;
   }
 
@@ -509,7 +625,7 @@ export class QrScanner extends LitElement {
             : nothing}
 
           <div class="viewfinder-container">
-            <video id="qr-video"></video>
+            <!-- Video element is portaled to document.body to avoid Shadow DOM issues -->
           </div>
 
           ${!this.embedded

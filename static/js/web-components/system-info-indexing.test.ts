@@ -1,7 +1,8 @@
 import { html, fixture, expect, assert } from '@open-wc/testing';
 import { stub } from 'sinon';
+import { create } from '@bufbuild/protobuf';
 import { SystemInfoIndexing } from './system-info-indexing.js';
-import { GetJobStatusResponse, JobQueueStatus } from '../gen/api/v1/system_info_pb.js';
+import { GetJobStatusResponseSchema, JobQueueStatusSchema, type JobQueueStatus } from '../gen/api/v1/system_info_pb.js';
 
 function timeout(ms: number, message: string) {
   return new Promise((_, reject) =>
@@ -116,17 +117,17 @@ describe('SystemInfoIndexing', () => {
 
   describe('when jobStatus has no active queues', () => {
     beforeEach(async () => {
-      const jobStatus = new GetJobStatusResponse();
+      const jobStatus = create(GetJobStatusResponseSchema, {});
       
       // Create inactive queues
-      const inactiveQueue1 = new JobQueueStatus({
+      const inactiveQueue1 = create(JobQueueStatusSchema, {
         name: 'Frontmatter',
         jobsRemaining: 0,
         highWaterMark: 5,
         isActive: false
       });
       
-      const inactiveQueue2 = new JobQueueStatus({
+      const inactiveQueue2 = create(JobQueueStatusSchema, {
         name: 'Bleve',
         jobsRemaining: 0,
         highWaterMark: 10,
@@ -164,16 +165,16 @@ describe('SystemInfoIndexing', () => {
     let activeQueue2: JobQueueStatus;
 
     beforeEach(async () => {
-      const jobStatus = new GetJobStatusResponse();
+      const jobStatus = create(GetJobStatusResponseSchema, {});
       
-      activeQueue1 = new JobQueueStatus({
+      activeQueue1 = create(JobQueueStatusSchema, {
         name: 'Frontmatter',
         jobsRemaining: 5,
         highWaterMark: 10,
         isActive: true
       });
       
-      activeQueue2 = new JobQueueStatus({
+      activeQueue2 = create(JobQueueStatusSchema, {
         name: 'Bleve',
         jobsRemaining: 3,
         highWaterMark: 8,
@@ -226,23 +227,23 @@ describe('SystemInfoIndexing', () => {
 
   describe('when jobStatus has mixed active and inactive queues', () => {
     beforeEach(async () => {
-      const jobStatus = new GetJobStatusResponse();
+      const jobStatus = create(GetJobStatusResponseSchema, {});
       
-      const activeQueue = new JobQueueStatus({
+      const activeQueue = create(JobQueueStatusSchema, {
         name: 'Frontmatter',
         jobsRemaining: 7,
         highWaterMark: 15,
         isActive: true
       });
       
-      const inactiveQueue1 = new JobQueueStatus({
+      const inactiveQueue1 = create(JobQueueStatusSchema, {
         name: 'Bleve',
         jobsRemaining: 0,
         highWaterMark: 5,
         isActive: false
       });
       
-      const inactiveQueue2 = new JobQueueStatus({
+      const inactiveQueue2 = create(JobQueueStatusSchema, {
         name: 'File Scan',
         jobsRemaining: 0,
         highWaterMark: 3,
@@ -271,23 +272,23 @@ describe('SystemInfoIndexing', () => {
 
   describe('when jobStatus has multiple active queues', () => {
     beforeEach(async () => {
-      const jobStatus = new GetJobStatusResponse();
+      const jobStatus = create(GetJobStatusResponseSchema, {});
       
-      const queue1 = new JobQueueStatus({
+      const queue1 = create(JobQueueStatusSchema, {
         name: 'Frontmatter',
         jobsRemaining: 12,
         highWaterMark: 20,
         isActive: true
       });
       
-      const queue2 = new JobQueueStatus({
+      const queue2 = create(JobQueueStatusSchema, {
         name: 'Bleve',
         jobsRemaining: 8,
         highWaterMark: 15,
         isActive: true
       });
       
-      const queue3 = new JobQueueStatus({
+      const queue3 = create(JobQueueStatusSchema, {
         name: 'File Scan',
         jobsRemaining: 3,
         highWaterMark: 10,
@@ -311,9 +312,9 @@ describe('SystemInfoIndexing', () => {
 
   describe('when jobStatus has a single active queue', () => {
     beforeEach(async () => {
-      const jobStatus = new GetJobStatusResponse();
+      const jobStatus = create(GetJobStatusResponseSchema, {});
       
-      const singleQueue = new JobQueueStatus({
+      const singleQueue = create(JobQueueStatusSchema, {
         name: 'Bleve',
         jobsRemaining: 25,
         highWaterMark: 30,
@@ -337,9 +338,9 @@ describe('SystemInfoIndexing', () => {
 
   describe('when loading is true but jobStatus exists', () => {
     beforeEach(async () => {
-      const jobStatus = new GetJobStatusResponse();
+      const jobStatus = create(GetJobStatusResponseSchema, {});
       
-      const activeQueue = new JobQueueStatus({
+      const activeQueue = create(JobQueueStatusSchema, {
         name: 'Frontmatter',
         jobsRemaining: 5,
         highWaterMark: 10,
@@ -540,9 +541,9 @@ describe('SystemInfoIndexing', () => {
 
     describe('when indexing info is displayed', () => {
       beforeEach(async () => {
-        const jobStatus = new GetJobStatusResponse();
+        const jobStatus = create(GetJobStatusResponseSchema, {});
         
-        const activeQueue = new JobQueueStatus({
+        const activeQueue = create(JobQueueStatusSchema, {
           name: 'Frontmatter',
           jobsRemaining: 5,
           highWaterMark: 10,

@@ -1,36 +1,29 @@
 import { createClient } from '@connectrpc/connect';
+import { create } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
-import { InventoryManagementService } from '../gen/api/v1/inventory_connect.js';
-import { PageManagementService } from '../gen/api/v1/page_management_connect.js';
-import {
-  CreateInventoryItemRequest,
-  MoveInventoryItemRequest,
-} from '../gen/api/v1/inventory_pb.js';
-import {
-  GenerateIdentifierRequest,
-  ExistingPageInfo,
-} from '../gen/api/v1/page_management_pb.js';
+import { InventoryManagementService, CreateInventoryItemRequestSchema, MoveInventoryItemRequestSchema } from '../gen/api/v1/inventory_pb.js';
+import { PageManagementService, GenerateIdentifierRequestSchema, type ExistingPageInfo } from '../gen/api/v1/page_management_pb.js';
 import { AugmentErrorService } from './augment-error-service.js';
-import { showToastAfter } from './toast-message.js';
+import { showToast, showToastAfter } from './toast-message.js';
 
 const SUCCESS_TOAST_DURATION_SECONDS = 5;
 const ERROR_TOAST_DURATION_SECONDS = 8;
 
 /**
- * InventoryActionService - Handles inventory management workflows via modal dialogs
+ * InventoryItemCreatorMover - Creates and moves inventory items via gRPC APIs
  *
- * This service manages inventory operations:
+ * This class manages inventory operations:
  * 1. Add Item Here - Creates a new item in a container
  * 2. Move This Item - Moves an item to a different container
  *
  * Usage:
  * ```typescript
- * const service = new InventoryActionService();
- * service.addItem('drawer_kitchen', 'screwdriver');
- * service.moveItem('screwdriver', 'toolbox');
+ * const creatorMover = new InventoryItemCreatorMover();
+ * creatorMover.addItem('drawer_kitchen', 'screwdriver');
+ * creatorMover.moveItem('screwdriver', 'toolbox');
  * ```
  */
-export class InventoryActionService {
+export class InventoryItemCreatorMover {
   private inventoryClient = createClient(InventoryManagementService, getGrpcWebTransport());
   private pageManagementClient = createClient(PageManagementService, getGrpcWebTransport());
 
@@ -52,7 +45,7 @@ export class InventoryActionService {
     }
 
     try {
-      const request = new CreateInventoryItemRequest({
+      const request = create(CreateInventoryItemRequestSchema, {
         itemIdentifier,
         container: containerIdentifier,
         title: title || '',
@@ -102,7 +95,7 @@ export class InventoryActionService {
     }
 
     try {
-      const request = new GenerateIdentifierRequest({
+      const request = create(GenerateIdentifierRequestSchema, {
         text,
         ensureUnique,
       });
@@ -144,7 +137,7 @@ export class InventoryActionService {
     }
 
     try {
-      const request = new MoveInventoryItemRequest({
+      const request = create(MoveInventoryItemRequestSchema, {
         itemIdentifier,
         newContainer,
       });
@@ -177,13 +170,17 @@ export class InventoryActionService {
    * Shows a success toast message
    */
   showSuccess(message: string, callback?: () => void) {
-    showToastAfter(message, 'success', SUCCESS_TOAST_DURATION_SECONDS, callback);
+    if (callback) {
+      showToastAfter(message, 'success', SUCCESS_TOAST_DURATION_SECONDS, callback);
+    } else {
+      showToast(message, 'success', SUCCESS_TOAST_DURATION_SECONDS);
+    }
   }
 
   /**
    * Shows an error toast message
    */
   showError(message: string) {
-    showToastAfter(message, 'error', ERROR_TOAST_DURATION_SECONDS);
+    showToast(message, 'error', ERROR_TOAST_DURATION_SECONDS);
   }
 }
