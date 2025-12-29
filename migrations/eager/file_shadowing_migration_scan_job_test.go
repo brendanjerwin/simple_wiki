@@ -297,6 +297,50 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 				Expect(err.Error()).To(ContainSubstring("failed to read data directory"))
 			})
 		})
+
+		When("MD file has malformed TOML frontmatter", func() {
+			var pascalIdentifiers []string
+			var err error
+
+			BeforeEach(func() {
+				// Create an MD file with malformed frontmatter (has +++ but not properly closed)
+				CreateMDFileWithMalformedFrontmatter(testDataDir, "malformed")
+
+				// Act
+				pascalIdentifiers, err = job.FindPascalCaseIdentifiers()
+			})
+
+			It("should not return an error", func() {
+				// Individual file errors are logged but don't fail the scan
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should skip the malformed file", func() {
+				Expect(pascalIdentifiers).To(BeEmpty())
+			})
+		})
+
+		When("MD file has unparseable TOML", func() {
+			var pascalIdentifiers []string
+			var err error
+
+			BeforeEach(func() {
+				// Create an MD file with invalid TOML syntax
+				CreateMDFileWithUnparseableTOML(testDataDir, "badtoml")
+
+				// Act
+				pascalIdentifiers, err = job.FindPascalCaseIdentifiers()
+			})
+
+			It("should not return an error", func() {
+				// Individual file errors are logged but don't fail the scan
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should skip the file with bad TOML", func() {
+				Expect(pascalIdentifiers).To(BeEmpty())
+			})
+		})
 	})
 })
 

@@ -185,7 +185,7 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 				// Create munged page
 				err := deps.UpdatePageContent("lab_inventory", "# Munged Version")
 				Expect(err).NotTo(HaveOccurred())
-				
+
 				// Create the migration job
 				job = NewFileShadowingMigrationJob(deps, deps, testDataDir, "LabInventory")
 
@@ -199,6 +199,24 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 
 			It("should return empty munged files list for mock", func() {
 				Expect(mungedFiles).To(BeEmpty()) // Mock doesn't create actual files
+			})
+		})
+
+		When("identifier fails to munge", func() {
+			BeforeEach(func() {
+				// Create the migration job
+				job = NewFileShadowingMigrationJob(deps, deps, testDataDir, "SomeIdentifier")
+
+				// Act - use an invalid identifier that can't be munged
+				hasShadowing, mungedFiles = job.CheckForShadowing("///")
+			})
+
+			It("should not detect shadowing", func() {
+				Expect(hasShadowing).To(BeFalse())
+			})
+
+			It("should return nil munged files", func() {
+				Expect(mungedFiles).To(BeNil())
 			})
 		})
 	})

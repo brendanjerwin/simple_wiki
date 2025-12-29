@@ -163,3 +163,24 @@ func CreateMDFileWithInvalidIdentifier(dir, filename, identifier string) {
 		panic(err)
 	}
 }
+
+// CreateMDFileWithMalformedFrontmatter creates an MD file with malformed TOML frontmatter
+// (has opening +++ but not properly closed)
+func CreateMDFileWithMalformedFrontmatter(dir, filename string) {
+	mdPath := filepath.Join(dir, base32tools.EncodeToBase32(strings.ToLower(filename))+".md")
+	// Malformed: has +++ but not properly closed (only 2 parts when split)
+	fullContent := "+++\nidentifier = 'test'\n# Content without closing +++"
+	if err := os.WriteFile(mdPath, []byte(fullContent), 0644); err != nil {
+		panic(err)
+	}
+}
+
+// CreateMDFileWithUnparseableTOML creates an MD file with invalid TOML syntax
+func CreateMDFileWithUnparseableTOML(dir, filename string) {
+	mdPath := filepath.Join(dir, base32tools.EncodeToBase32(strings.ToLower(filename))+".md")
+	// Invalid TOML: unclosed string
+	fullContent := "+++\nidentifier = 'unclosed\n+++\n\n# Content"
+	if err := os.WriteFile(mdPath, []byte(fullContent), 0644); err != nil {
+		panic(err)
+	}
+}
