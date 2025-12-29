@@ -4,7 +4,7 @@ import { getGrpcWebTransport } from './grpc-transport.js';
 import { InventoryManagementService, CreateInventoryItemRequestSchema, MoveInventoryItemRequestSchema } from '../gen/api/v1/inventory_pb.js';
 import { PageManagementService, GenerateIdentifierRequestSchema, type ExistingPageInfo } from '../gen/api/v1/page_management_pb.js';
 import { AugmentErrorService } from './augment-error-service.js';
-import { showToastAfter } from './toast-message.js';
+import { showToast, showToastAfter } from './toast-message.js';
 
 const SUCCESS_TOAST_DURATION_SECONDS = 5;
 const ERROR_TOAST_DURATION_SECONDS = 8;
@@ -170,13 +170,17 @@ export class InventoryItemCreatorMover {
    * Shows a success toast message
    */
   showSuccess(message: string, callback?: () => void) {
-    showToastAfter(message, 'success', SUCCESS_TOAST_DURATION_SECONDS, callback);
+    if (callback) {
+      showToastAfter(message, 'success', SUCCESS_TOAST_DURATION_SECONDS, callback);
+    } else {
+      showToast(message, 'success', SUCCESS_TOAST_DURATION_SECONDS);
+    }
   }
 
   /**
    * Shows an error toast message
    */
   showError(message: string) {
-    showToastAfter(message, 'error', ERROR_TOAST_DURATION_SECONDS);
+    showToast(message, 'error', ERROR_TOAST_DURATION_SECONDS);
   }
 }

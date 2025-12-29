@@ -56,7 +56,7 @@ export class SystemInfoVersion extends LitElement {
   static override properties = {
     version: { type: Object },
     loading: { type: Boolean },
-    error: { type: String },
+    error: { type: Object },
   };
 
   declare version?: GetVersionResponse;

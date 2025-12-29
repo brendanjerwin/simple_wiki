@@ -529,7 +529,7 @@ describe('SystemInfoVersion', () => {
         });
 
         el.loading = false;
-        el.error = 'Some error';
+        el.error = new Error('Some error');
         el.version = create(GetVersionResponseSchema, {
           commit: 'abcdef1234567890',
           buildTime: mockTimestamp

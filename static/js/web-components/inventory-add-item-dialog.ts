@@ -6,6 +6,9 @@ import { create } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import { SearchService, SearchContentRequestSchema, type SearchResult } from '../gen/api/v1/search_pb.js';
 import type { ExistingPageInfo } from '../gen/api/v1/page_management_pb.js';
+import { AugmentedError, AugmentErrorService, ErrorKind } from './augment-error-service.js';
+import type { ErrorAction } from './error-display.js';
+import './error-display.js';
 
 /**
  * InventoryAddItemDialog - Modal dialog for adding new inventory items
@@ -217,6 +220,7 @@ export class InventoryAddItemDialog extends LitElement {
     existingPage: { state: true },
     searchResults: { state: true },
     searchLoading: { state: true },
+    automagicError: { state: true },
   };
 
   declare open: boolean;
@@ -231,6 +235,7 @@ export class InventoryAddItemDialog extends LitElement {
   declare existingPage?: ExistingPageInfo;
   declare searchResults: SearchResult[];
   declare searchLoading: boolean;
+  declare automagicError: AugmentedError | null;
 
   private _debounceTimeoutMs = 300;
   private _titleDebounceTimer?: ReturnType<typeof setTimeout>;
@@ -252,6 +257,7 @@ export class InventoryAddItemDialog extends LitElement {
     this.existingPage = undefined;
     this.searchResults = [];
     this.searchLoading = false;
+    this.automagicError = null;
   }
 
   override connectedCallback(): void {
@@ -352,11 +358,16 @@ export class InventoryAddItemDialog extends LitElement {
     }
 
     // Generate identifier if in automagic mode
-    // Note: Errors from generateIdentifier are intentionally not shown to the user.
-    // If automagic fails, user can switch to manual mode and enter identifier directly.
     if (this.automagicMode) {
       const result = await this.inventoryItemCreatorMover.generateIdentifier(title);
-      if (!result.error) {
+      if (result.error) {
+        this.automagicError = AugmentErrorService.augment(
+          result.error,
+          ErrorKind.SERVER,
+          'generating identifier'
+        );
+      } else {
+        this.automagicError = null;
         this.itemIdentifier = result.identifier;
         this.isUnique = result.isUnique;
         this.existingPage = result.existingPage;
@@ -484,6 +495,30 @@ export class InventoryAddItemDialog extends LitElement {
     }
   };
 
+  private _handleSwitchToManual = (): void => {
+    this.automagicMode = false;
+    this.automagicError = null;
+    this.itemIdentifier = '';
+  };
+
+  private _renderAutomagicError() {
+    if (!this.automagicError || !this.automagicMode) {
+      return nothing;
+    }
+
+    const action: ErrorAction = {
+      label: 'Switch to Manual',
+      onClick: this._handleSwitchToManual
+    };
+
+    return html`
+      <error-display
+        .augmentedError=${this.automagicError}
+        .action=${action}
+      ></error-display>
+    `;
+  }
+
   private _renderConflictWarning() {
     if (this.isUnique || !this.existingPage) {
       return nothing;
@@ -578,6 +613,7 @@ export class InventoryAddItemDialog extends LitElement {
                 <i class="fa-solid ${this.automagicMode ? 'fa-wand-magic-sparkles' : 'fa-pen'}"></i>
               </button>
             </div>
+            ${this._renderAutomagicError()}
             ${this._renderConflictWarning()}
           </div>
 

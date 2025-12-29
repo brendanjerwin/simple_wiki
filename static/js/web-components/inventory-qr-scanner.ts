@@ -236,9 +236,9 @@ export class InventoryQrScanner extends LitElement {
   /**
    * Handle "Scan Again" button click
    */
-  private _handleScanAgain = (): void => {
+  private _handleScanAgain = async (): Promise<void> => {
     this.error = null;
-    this.expand();
+    await this.expand();
   };
 
   override render() {

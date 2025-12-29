@@ -1,5 +1,6 @@
 import { expect } from '@open-wc/testing';
 import { SystemInfo } from './system-info.js';
+import { SystemInfoVersion } from './system-info-version.js';
 import { GetVersionResponseSchema, GetJobStatusResponseSchema, JobQueueStatusSchema } from '../gen/api/v1/system_info_pb.js';
 import { create } from '@bufbuild/protobuf';
 import { TimestampSchema } from '@bufbuild/protobuf/wkt';
@@ -21,9 +22,9 @@ describe('SystemInfo', () => {
     el = document.createElement('system-info') as SystemInfo;
     
     // Stub methods that make network requests before connecting
-    stub(el, 'loadSystemInfo' as any).resolves();
-    stub(el, 'startAutoRefresh' as any);
-    stub(el, 'stopAutoRefresh' as any);
+    stub(el, 'loadSystemInfo' as SystemInfoVersion).resolves();
+    stub(el, 'startAutoRefresh' as SystemInfoVersion);
+    stub(el, 'stopAutoRefresh' as SystemInfoVersion);
     
     // Now add to DOM
     document.body.appendChild(el);
@@ -105,13 +106,13 @@ describe('SystemInfo', () => {
     });
 
     it('should show commit hash', () => {
-      const versionComponent = el.shadowRoot!.querySelector('system-info-version') as any;
+      const versionComponent = el.shadowRoot!.querySelector('system-info-version') as SystemInfoVersion;
       expect(versionComponent).to.exist;
       expect(versionComponent.version.commit).to.equal('abc123def456'); // From beforeEach setup
     });
 
     it('should show build time', () => {
-      const versionComponent = el.shadowRoot!.querySelector('system-info-version') as any;
+      const versionComponent = el.shadowRoot!.querySelector('system-info-version') as SystemInfoVersion;
       expect(versionComponent).to.exist;
       expect(versionComponent.version.buildTime).to.exist;
     });
@@ -153,14 +154,14 @@ describe('SystemInfo', () => {
     });
 
     it('should pass correct data to job status component', () => {
-      const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as any;
+      const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as SystemInfoVersion;
       expect(indexingStatus).to.exist;
       expect(indexingStatus.jobStatus).to.exist;
       expect(indexingStatus.jobStatus.jobQueues).to.have.lengthOf(1);
     });
 
     it('should pass correct job queue data', () => {
-      const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as any;
+      const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as SystemInfoVersion;
       const queue = indexingStatus.jobStatus.jobQueues[0];
       expect(queue.name).to.equal('Frontmatter');
       expect(queue.jobsRemaining).to.equal(25);
@@ -169,7 +170,7 @@ describe('SystemInfo', () => {
 
 
     it('should pass high water mark data', () => {
-      const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as any;
+      const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as SystemInfoVersion;
       const queue = indexingStatus.jobStatus.jobQueues[0];
       expect(queue.highWaterMark).to.equal(100);
     });
@@ -222,7 +223,7 @@ describe('SystemInfo', () => {
       });
 
       it('should pass full commit hash to version component', () => {
-        const versionComponent = el.shadowRoot!.querySelector('system-info-version') as any;
+        const versionComponent = el.shadowRoot!.querySelector('system-info-version') as SystemInfoVersion;
         expect(versionComponent).to.exist;
         expect(versionComponent.version.commit).to.equal('abc123def456789');
       });
@@ -243,7 +244,7 @@ describe('SystemInfo', () => {
       });
 
       it('should pass tagged version to component unchanged', () => {
-        const versionComponent = el.shadowRoot!.querySelector('system-info-version') as any;
+        const versionComponent = el.shadowRoot!.querySelector('system-info-version') as SystemInfoVersion;
         expect(versionComponent).to.exist;
         expect(versionComponent.version.commit).to.equal('v1.2.3 (abc123d)');
       });
@@ -266,7 +267,7 @@ describe('SystemInfo', () => {
       });
 
       it('should pass correct job count to indexing component', () => {
-        const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as any;
+        const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as SystemInfoVersion;
         expect(indexingStatus.jobStatus.jobQueues[0].jobsRemaining).to.equal(1);
       });
     });
@@ -322,19 +323,19 @@ describe('SystemInfo', () => {
       });
 
       it('should pass correct job remaining count', () => {
-        const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as any;
+        const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as SystemInfoVersion;
         const queue = indexingStatus.jobStatus.jobQueues[0];
         expect(queue.jobsRemaining).to.equal(75);
       });
 
       it('should pass correct high water mark', () => {
-        const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as any;
+        const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as SystemInfoVersion;
         const queue = indexingStatus.jobStatus.jobQueues[0];
         expect(queue.highWaterMark).to.equal(200);
       });
 
       it('should pass correct queue name', () => {
-        const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as any;
+        const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as SystemInfoVersion;
         const queue = indexingStatus.jobStatus.jobQueues[0];
         expect(queue.name).to.equal('TestQueue');
       });
