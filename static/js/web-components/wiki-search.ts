@@ -6,6 +6,7 @@ import { sharedStyles } from './shared-styles.js';
 import './wiki-search-results.js';
 import { SearchService, SearchContentRequestSchema } from '../gen/api/v1/search_pb.js';
 import type { SearchResult } from '../gen/api/v1/search_pb.js';
+import { coerceThirdPartyError } from './augment-error-service.js';
 
 const INVENTORY_ONLY_STORAGE_KEY = 'wiki-search-inventory-only';
 
@@ -189,7 +190,7 @@ export class WikiSearch extends LitElement {
     } catch (error) {
       this.results = [];
       this.totalUnfilteredCount = 0;
-      this.error = error instanceof Error ? error : new Error('Search failed');
+      this.error = coerceThirdPartyError(error, 'Search failed');
     } finally {
       this.loading = false;
     }
@@ -220,7 +221,7 @@ export class WikiSearch extends LitElement {
       } catch (error) {
         this.results = [];
         this.totalUnfilteredCount = 0;
-        this.error = error instanceof Error ? error : new Error('Search failed');
+        this.error = coerceThirdPartyError(error, 'Search failed');
       } finally {
         this.loading = false;
       }

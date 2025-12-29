@@ -6,7 +6,7 @@ import { create } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import { SearchService, SearchContentRequestSchema, type SearchResult } from '../gen/api/v1/search_pb.js';
 import type { ExistingPageInfo } from '../gen/api/v1/page_management_pb.js';
-import { AugmentedError, AugmentErrorService } from './augment-error-service.js';
+import { AugmentedError, AugmentErrorService, coerceThirdPartyError } from './augment-error-service.js';
 import type { ErrorAction } from './error-display.js';
 import './error-display.js';
 
@@ -463,7 +463,7 @@ export class InventoryAddItemDialog extends LitElement {
       this.searchResults = response.results;
     } catch (err) {
       this.searchResults = [];
-      this.error = err instanceof Error ? err : new Error(String(err));
+      this.error = coerceThirdPartyError(err, 'Container search failed');
     } finally {
       this.searchLoading = false;
     }

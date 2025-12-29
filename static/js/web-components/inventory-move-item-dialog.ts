@@ -7,6 +7,7 @@ import { getGrpcWebTransport } from './grpc-transport.js';
 import { SearchService, SearchContentRequestSchema, type SearchResult } from '../gen/api/v1/search_pb.js';
 import './inventory-qr-scanner.js';
 import type { ItemScannedEventDetail, ScannedItemInfo, InventoryQrScanner } from './inventory-qr-scanner.js';
+import { coerceThirdPartyError } from './augment-error-service.js';
 
 /**
  * Information about a scanned container result (alias for ScannedItemInfo)
@@ -456,7 +457,7 @@ export class InventoryMoveItemDialog extends LitElement {
       );
     } catch (err) {
       this.searchResults = [];
-      this.error = err instanceof Error ? err : new Error(String(err));
+      this.error = coerceThirdPartyError(err, 'Container search failed');
     } finally {
       this.searchLoading = false;
     }

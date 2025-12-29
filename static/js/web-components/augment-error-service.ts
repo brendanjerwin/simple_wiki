@@ -1,6 +1,31 @@
 import { ConnectError, Code } from '@connectrpc/connect';
 
 /**
+ * Coerces an unknown value from a third-party library boundary into an Error object.
+ *
+ * Use this at catch boundaries where the error source is external code (gRPC clients,
+ * fetch, external libraries) that may not always throw proper Error objects.
+ *
+ * For internal code, prefer throwing Error objects directly rather than relying on coercion.
+ *
+ * @param err - The caught value (may be Error, string, or any other type)
+ * @param errorContext - Description of where/what failed (e.g., "Search failed", "fetching page")
+ * @returns An Error object
+ */
+export function coerceThirdPartyError(err: unknown, errorContext: string): Error {
+  if (err instanceof Error) {
+    return err;
+  }
+  if (typeof err === 'string') {
+    return new Error(err);
+  }
+  if (err !== null && err !== undefined) {
+    return new Error(String(err));
+  }
+  return new Error(errorContext);
+}
+
+/**
  * Standard error kinds for categorizing different types of errors
  */
 export enum ErrorKind {
