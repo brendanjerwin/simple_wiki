@@ -635,4 +635,39 @@ describe('InventoryMoveItemDialog', () => {
       });
     });
   });
+
+  describe('search input handling', () => {
+    describe('when search query is typed', () => {
+      beforeEach(async () => {
+        el.openDialog('screwdriver', 'drawer_kitchen');
+        await el.updateComplete;
+        const searchInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[name="searchQuery"]');
+        if (searchInput) {
+          searchInput.value = 'toolbox';
+          searchInput.dispatchEvent(new Event('input'));
+        }
+      });
+
+      it('should update searchQuery property', () => {
+        expect(el.searchQuery).to.equal('toolbox');
+      });
+    });
+
+    describe('when input event target is not an HTMLInputElement', () => {
+      beforeEach(async () => {
+        el.openDialog('screwdriver', 'drawer_kitchen');
+        el.searchQuery = 'original';
+        await el.updateComplete;
+        // Create an event with a non-input target
+        const event = new Event('input');
+        Object.defineProperty(event, 'target', { value: document.createElement('div') });
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+        (el as unknown as { _handleSearchInput: (e: Event) => void })._handleSearchInput(event);
+      });
+
+      it('should not update searchQuery property', () => {
+        expect(el.searchQuery).to.equal('original');
+      });
+    });
+  });
 });

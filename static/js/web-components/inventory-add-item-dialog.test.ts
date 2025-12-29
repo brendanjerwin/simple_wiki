@@ -489,6 +489,23 @@ describe('InventoryAddItemDialog', () => {
         expect(el.itemTitle).to.equal('Test Item');
       });
     });
+
+    describe('when input event target is not an HTMLInputElement', () => {
+      beforeEach(async () => {
+        el.openDialog('drawer_kitchen');
+        el.itemTitle = 'original';
+        await el.updateComplete;
+        // Create an event with a non-input target
+        const event = new Event('input');
+        Object.defineProperty(event, 'target', { value: document.createElement('div') });
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+        (el as unknown as { _handleTitleInput: (e: Event) => void })._handleTitleInput(event);
+      });
+
+      it('should not update itemTitle property', () => {
+        expect(el.itemTitle).to.equal('original');
+      });
+    });
   });
 
   describe('description input handling', () => {
@@ -505,6 +522,23 @@ describe('InventoryAddItemDialog', () => {
 
       it('should update description property', () => {
         expect(el.description).to.equal('Test description');
+      });
+    });
+
+    describe('when input event target is not an HTMLTextAreaElement', () => {
+      beforeEach(async () => {
+        el.openDialog('drawer_kitchen');
+        el.description = 'original';
+        await el.updateComplete;
+        // Create an event with a non-textarea target
+        const event = new Event('input');
+        Object.defineProperty(event, 'target', { value: document.createElement('div') });
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+        (el as unknown as { _handleDescriptionInput: (e: Event) => void })._handleDescriptionInput(event);
+      });
+
+      it('should not update description property', () => {
+        expect(el.description).to.equal('original');
       });
     });
   });
@@ -542,6 +576,24 @@ describe('InventoryAddItemDialog', () => {
 
       it('should not update itemIdentifier property', () => {
         expect(el.itemIdentifier).to.equal('original_value');
+      });
+    });
+
+    describe('when input event target is not an HTMLInputElement', () => {
+      beforeEach(async () => {
+        el.openDialog('drawer_kitchen');
+        el.automagicMode = false;
+        el.itemIdentifier = 'original';
+        await el.updateComplete;
+        // Create an event with a non-input target
+        const event = new Event('input');
+        Object.defineProperty(event, 'target', { value: document.createElement('div') });
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+        (el as unknown as { _handleIdentifierInput: (e: Event) => void })._handleIdentifierInput(event);
+      });
+
+      it('should not update itemIdentifier property', () => {
+        expect(el.itemIdentifier).to.equal('original');
       });
     });
   });
