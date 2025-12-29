@@ -32,10 +32,10 @@
         "./scripts/run_fe_lint.sh"
       ],
       "fe:typecheck": [
-        "cd static/js && bun install && bun run typecheck"
+        "./scripts/run_fe_typecheck.sh"
       ],
       "lint:md": [
-        "markdownlint --fix '**/*.md' --ignore vendor"
+        "./scripts/run_lint_md.sh"
       ],
       "go:test": [
         "./scripts/run_go_test.sh"
@@ -44,14 +44,13 @@
         "./scripts/run_go_lint.sh"
       ],
       "go:coverage": [
-        "go list ./... | grep -v \"/gen/\" | xargs go test -coverprofile=coverage.out",
-        "go tool cover -func=coverage.out | tail -1"
+        "./scripts/run_go_coverage.sh"
       ],
       "go:generate": [
-        "go generate ./..."
+        "./scripts/run_go_generate.sh"
       ],
       "go:deadcode": [
-        "go run golang.org/x/tools/cmd/deadcode@latest ."
+        "./scripts/run_go_deadcode.sh"
       ],
       "lint:everything": [
         "./scripts/run_lint_everything.sh"
@@ -63,17 +62,13 @@
         "cd static/js && bun install && bun run storybook"
       ],
       "storybook:build": [
-        "cd static/js && bun install && bun run build-storybook"
+        "./scripts/run_storybook_build.sh"
       ],
       "e2e:test": [
-        "devbox run build",
-        "export CHROMIUM_BIN=$(which chromium)",
-        "cd e2e && bun install && bunx playwright test"
+        "./scripts/run_e2e_test.sh"
       ],
       "e2e:test:headed": [
-        "devbox run build",
-        "export CHROMIUM_BIN=$(which chromium)",
-        "cd e2e && bun install && bun run test:headed"
+        "./scripts/run_e2e_test_headed.sh"
       ],
       "e2e:codegen": [
         "cd e2e & playwright codegen --browser=chromium http://localhost:8050/home"
