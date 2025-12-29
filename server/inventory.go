@@ -83,8 +83,6 @@ func (s *Site) CreateInventoryItemPage(params InventoryItemParams) (*wikipage.Pa
 	return p, nil
 }
 
-
-
 // EnsureInventoryFrontmatterStructure ensures the frontmatter has the proper inventory structure.
 // This is used when creating inventory items from URL params.
 // Note: This only ensures the inventory map exists, not the items array.
