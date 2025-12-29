@@ -92,9 +92,12 @@ describe('InventoryQrScanner', () => {
     describe('when clicked', () => {
       let el: InventoryQrScanner;
       let cancelledSpy: SinonSpy;
+      let collapseStub: SinonStub;
 
       beforeEach(async () => {
         el = await fixture(html`<inventory-qr-scanner></inventory-qr-scanner>`);
+        // Stub collapse to prevent camera access that crashes headless browser
+        collapseStub = sinon.stub(el, 'collapse').resolves();
         cancelledSpy = sinon.spy();
         el.addEventListener('cancelled', cancelledSpy);
 
@@ -103,8 +106,16 @@ describe('InventoryQrScanner', () => {
         await el.updateComplete;
       });
 
+      afterEach(() => {
+        collapseStub.restore();
+      });
+
       it('should emit cancelled event', () => {
         expect(cancelledSpy).to.have.been.calledOnce;
+      });
+
+      it('should call collapse', () => {
+        expect(collapseStub).to.have.been.calledOnce;
       });
     });
   });
@@ -297,13 +308,13 @@ describe('InventoryQrScanner', () => {
   describe('Scan Again button', () => {
     describe('when clicked after error', () => {
       let el: InventoryQrScanner;
-      let expandSpy: SinonSpy;
+      let expandStub: SinonStub;
 
       beforeEach(async () => {
         el = await fixture(html`<inventory-qr-scanner></inventory-qr-scanner>`);
 
-        // Spy on expand method before triggering error
-        expandSpy = sinon.spy(el, 'expand');
+        // Stub expand method to prevent real camera access
+        expandStub = sinon.stub(el, 'expand').resolves();
 
         // First trigger an error
         await simulateQrScan(el, 'invalid');
@@ -316,7 +327,7 @@ describe('InventoryQrScanner', () => {
       });
 
       afterEach(() => {
-        expandSpy.restore();
+        expandStub.restore();
       });
 
       it('should clear the error', () => {
@@ -325,7 +336,7 @@ describe('InventoryQrScanner', () => {
       });
 
       it('should call expand', () => {
-        expect(expandSpy).to.have.been.calledOnce;
+        expect(expandStub).to.have.been.calledOnce;
       });
     });
   });

@@ -297,6 +297,15 @@ export class QrScanner extends LitElement {
   /** Portal video element - lives on document.body to avoid Shadow DOM issues */
   private portalVideo: HTMLVideoElement | null = null;
 
+  /** Unique ID for this component instance (for portal video element) */
+  private readonly instanceId = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+  /** Bound handler for scroll/resize repositioning */
+  private readonly _repositionHandler = () => this._scheduleReposition();
+
+  /** Timeout ID for delayed repositioning (for cleanup) */
+  private repositionTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
   /**
    * Set a custom camera provider (for testing)
    */
@@ -360,7 +369,14 @@ export class QrScanner extends LitElement {
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
-    this._stopScanning();
+    // Cleanup repositioning resources
+    this._removeRepositionListeners();
+    if (this.repositionTimeoutId) {
+      clearTimeout(this.repositionTimeoutId);
+      this.repositionTimeoutId = null;
+    }
+    // Fire-and-forget: disconnectedCallback cannot be async
+    void this._stopScanning();
     this._removePortalVideo();
   }
 
@@ -377,8 +393,9 @@ export class QrScanner extends LitElement {
 
     // Create portal video on document.body (avoids Shadow DOM issues with qr-scanner library)
     this.portalVideo = document.createElement('video');
-    this.portalVideo.id = 'qr-video-portal';
+    this.portalVideo.id = `qr-video-portal-${this.instanceId}`;
     this.portalVideo.setAttribute('playsinline', ''); // Required for iOS
+    this.portalVideo.setAttribute('aria-label', 'QR code scanner video feed');
     document.body.appendChild(this.portalVideo);
 
     // Position the video over the container
@@ -392,11 +409,18 @@ export class QrScanner extends LitElement {
       );
       this.scanning = true;
 
+      // Add scroll/resize listeners to keep portal video positioned correctly
+      this._addRepositionListeners();
+
       // Re-position after camera starts and layout settles
       this._scheduleReposition();
-      // And again after a short delay for any animations
-      setTimeout(() => this._scheduleReposition(), 100);
+      // And again after a short delay for any CSS transitions/animations
+      this.repositionTimeoutId = setTimeout(() => {
+        this.repositionTimeoutId = null;
+        this._scheduleReposition();
+      }, 100);
     } catch (err) {
+      this._removeRepositionListeners();
       this._removePortalVideo();
       this._handleError(err);
     }
@@ -445,6 +469,22 @@ export class QrScanner extends LitElement {
   }
 
   /**
+   * Add event listeners for scroll/resize to keep portal video positioned
+   */
+  private _addRepositionListeners(): void {
+    window.addEventListener('scroll', this._repositionHandler, { capture: true, passive: true });
+    window.addEventListener('resize', this._repositionHandler, { passive: true });
+  }
+
+  /**
+   * Remove scroll/resize event listeners
+   */
+  private _removeRepositionListeners(): void {
+    window.removeEventListener('scroll', this._repositionHandler, { capture: true });
+    window.removeEventListener('resize', this._repositionHandler);
+  }
+
+  /**
    * Remove the portal video from document.body
    */
   private _removePortalVideo(): void {
@@ -455,6 +495,13 @@ export class QrScanner extends LitElement {
   }
 
   private async _stopScanning(): Promise<void> {
+    // Clean up repositioning resources
+    this._removeRepositionListeners();
+    if (this.repositionTimeoutId) {
+      clearTimeout(this.repositionTimeoutId);
+      this.repositionTimeoutId = null;
+    }
+
     if (this.cameraProvider.isScanning()) {
       try {
         await this.cameraProvider.stop();
