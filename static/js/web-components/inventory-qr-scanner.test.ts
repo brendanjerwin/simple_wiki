@@ -92,9 +92,14 @@ describe('InventoryQrScanner', () => {
     describe('when clicked', () => {
       let el: InventoryQrScanner;
       let cancelledSpy: SinonSpy;
+      let collapseStub: SinonStub;
 
       beforeEach(async () => {
         el = await fixture(html`<inventory-qr-scanner></inventory-qr-scanner>`);
+        // Stub collapse to prevent camera access that crashes headless browser.
+        // Trade-off: We verify 'collapse' is called, but not its actual behavior.
+        // The collapse method's behavior is tested separately in qr-scanner.test.ts.
+        collapseStub = sinon.stub(el, 'collapse').resolves();
         cancelledSpy = sinon.spy();
         el.addEventListener('cancelled', cancelledSpy);
 
@@ -103,8 +108,16 @@ describe('InventoryQrScanner', () => {
         await el.updateComplete;
       });
 
+      afterEach(() => {
+        collapseStub.restore();
+      });
+
       it('should emit cancelled event', () => {
         expect(cancelledSpy).to.have.been.calledOnce;
+      });
+
+      it('should call collapse', () => {
+        expect(collapseStub).to.have.been.calledOnce;
       });
     });
   });
@@ -297,13 +310,15 @@ describe('InventoryQrScanner', () => {
   describe('Scan Again button', () => {
     describe('when clicked after error', () => {
       let el: InventoryQrScanner;
-      let expandSpy: SinonSpy;
+      let expandStub: SinonStub;
 
       beforeEach(async () => {
         el = await fixture(html`<inventory-qr-scanner></inventory-qr-scanner>`);
 
-        // Spy on expand method before triggering error
-        expandSpy = sinon.spy(el, 'expand');
+        // Stub expand method to prevent real camera access in headless browser.
+        // Trade-off: We verify 'expand' is called, but not its actual behavior.
+        // The expand method's behavior is tested separately in qr-scanner.test.ts.
+        expandStub = sinon.stub(el, 'expand').resolves();
 
         // First trigger an error
         await simulateQrScan(el, 'invalid');
@@ -316,7 +331,7 @@ describe('InventoryQrScanner', () => {
       });
 
       afterEach(() => {
-        expandSpy.restore();
+        expandStub.restore();
       });
 
       it('should clear the error', () => {
@@ -325,7 +340,7 @@ describe('InventoryQrScanner', () => {
       });
 
       it('should call expand', () => {
-        expect(expandSpy).to.have.been.calledOnce;
+        expect(expandStub).to.have.been.calledOnce;
       });
     });
   });

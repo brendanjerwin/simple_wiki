@@ -49,7 +49,7 @@ export class InventoryQrScanner extends LitElement {
 
       .scanner-container {
         border: 1px solid #ddd;
-        border-radius: 4px;
+        border-radius: 8px;
         overflow: hidden;
         background: #000;
       }
@@ -171,8 +171,8 @@ export class InventoryQrScanner extends LitElement {
   /**
    * Handle Cancel button click
    */
-  private _handleCancel = (): void => {
-    this.collapse();
+  private _handleCancel = async (): Promise<void> => {
+    await this.collapse();
     this.dispatchEvent(new CustomEvent('cancelled', {
       bubbles: true,
       composed: true,
@@ -236,9 +236,9 @@ export class InventoryQrScanner extends LitElement {
   /**
    * Handle "Scan Again" button click
    */
-  private _handleScanAgain = (): void => {
+  private _handleScanAgain = async (): Promise<void> => {
     this.error = null;
-    this.expand();
+    await this.expand();
   };
 
   override render() {
