@@ -2,6 +2,15 @@ codecov:
   ci:
     - "github"
 
+coverage:
+  status:
+    project:
+      default:
+        threshold: 0.1%
+    patch:
+      default:
+        target: 90%
+
 flags:
   javascript:
     paths:

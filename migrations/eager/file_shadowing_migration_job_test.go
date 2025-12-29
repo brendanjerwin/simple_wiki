@@ -159,7 +159,7 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 
 			BeforeEach(func() {
 				// No PascalCase files created
-				
+
 				// Create the migration job for a non-existent PascalCase identifier
 				job = NewFileShadowingMigrationJob(scanner, deps, deps, "DeviceManual")
 
@@ -173,6 +173,113 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 
 			It("should indicate no page found", func() {
 				Expect(err.Error()).To(ContainSubstring("no page found"))
+			})
+		})
+
+		When("ReadPage fails for munged page", func() {
+			var err error
+
+			BeforeEach(func() {
+				// Create PascalCase page on filesystem
+				CreatePascalCasePage(testDataDir, "LabInventory", "# Lab Content")
+
+				// Set up mock to fail on ReadPage
+				deps.SetReadPageError(os.ErrPermission)
+
+				// Create the migration job
+				job = NewFileShadowingMigrationJob(scanner, deps, deps, "LabInventory")
+
+				// Act
+				err = job.Execute()
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should indicate failed to open munged page", func() {
+				Expect(err.Error()).To(ContainSubstring("failed to open munged page"))
+			})
+		})
+
+		When("DeletePage fails", func() {
+			var err error
+
+			BeforeEach(func() {
+				// Create PascalCase page on filesystem
+				CreatePascalCasePage(testDataDir, "LabInventory", "# Lab Content")
+
+				// Use fresh deps for this test
+				deps = NewMockMigrationDeps(testDataDir)
+				deps.SetDeletePageError(os.ErrPermission)
+
+				// Create the migration job
+				job = NewFileShadowingMigrationJob(scanner, deps, deps, "LabInventory")
+
+				// Act
+				err = job.Execute()
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should indicate failed to delete", func() {
+				Expect(err.Error()).To(ContainSubstring("failed to soft delete"))
+			})
+		})
+
+		When("WriteFrontMatter fails", func() {
+			var err error
+
+			BeforeEach(func() {
+				// Create PascalCase page on filesystem
+				CreatePascalCasePage(testDataDir, "LabInventory", "# Lab Content")
+
+				// Use fresh deps for this test
+				deps = NewMockMigrationDeps(testDataDir)
+				deps.SetWriteFrontMatterError(os.ErrPermission)
+
+				// Create the migration job
+				job = NewFileShadowingMigrationJob(scanner, deps, deps, "LabInventory")
+
+				// Act
+				err = job.Execute()
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should indicate failed to write frontmatter", func() {
+				Expect(err.Error()).To(ContainSubstring("failed to write frontmatter"))
+			})
+		})
+
+		When("WriteMarkdown fails", func() {
+			var err error
+
+			BeforeEach(func() {
+				// Create PascalCase page on filesystem
+				CreatePascalCasePage(testDataDir, "LabInventory", "# Lab Content")
+
+				// Use fresh deps for this test
+				deps = NewMockMigrationDeps(testDataDir)
+				deps.SetWriteMarkdownError(os.ErrPermission)
+
+				// Create the migration job
+				job = NewFileShadowingMigrationJob(scanner, deps, deps, "LabInventory")
+
+				// Act
+				err = job.Execute()
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should indicate failed to write markdown", func() {
+				Expect(err.Error()).To(ContainSubstring("failed to write markdown"))
 			})
 		})
 	})

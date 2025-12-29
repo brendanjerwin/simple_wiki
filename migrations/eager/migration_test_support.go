@@ -15,9 +15,13 @@ const testFileTimestamp = 1609459200 // 2021-01-01 Unix timestamp
 
 // MockMigrationDeps provides a simple mock implementation for testing migrations
 type MockMigrationDeps struct {
-	dataDir string
-	pages   map[string]*wikipage.Page
-	mu      sync.RWMutex
+	dataDir              string
+	pages                map[string]*wikipage.Page
+	mu                   sync.RWMutex
+	readPageErr          error // injectable error for ReadPage
+	deletePageErr        error // injectable error for DeletePage
+	writeFrontMatterErr  error // injectable error for WriteFrontMatter
+	writeMarkdownErr     error // injectable error for WriteMarkdown
 }
 
 func NewMockMigrationDeps(dataDir string) *MockMigrationDeps {
@@ -27,14 +31,38 @@ func NewMockMigrationDeps(dataDir string) *MockMigrationDeps {
 	}
 }
 
+// SetReadPageError sets an error to return from ReadPage
+func (m *MockMigrationDeps) SetReadPageError(err error) {
+	m.readPageErr = err
+}
+
+// SetDeletePageError sets an error to return from DeletePage
+func (m *MockMigrationDeps) SetDeletePageError(err error) {
+	m.deletePageErr = err
+}
+
+// SetWriteFrontMatterError sets an error to return from WriteFrontMatter
+func (m *MockMigrationDeps) SetWriteFrontMatterError(err error) {
+	m.writeFrontMatterErr = err
+}
+
+// SetWriteMarkdownError sets an error to return from WriteMarkdown
+func (m *MockMigrationDeps) SetWriteMarkdownError(err error) {
+	m.writeMarkdownErr = err
+}
+
 func (m *MockMigrationDeps) ReadPage(identifier wikipage.PageIdentifier) (*wikipage.Page, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	
+
+	if m.readPageErr != nil {
+		return nil, m.readPageErr
+	}
+
 	if page, exists := m.pages[string(identifier)]; exists {
 		return page, nil
 	}
-	
+
 	// Return empty page for non-existing pages
 	return &wikipage.Page{
 		Identifier:        string(identifier),
@@ -72,11 +100,17 @@ func (m *MockMigrationDeps) ReadMarkdown(identifier wikipage.PageIdentifier) (wi
 }
 
 func (m *MockMigrationDeps) WriteFrontMatter(identifier wikipage.PageIdentifier, _ wikipage.FrontMatter) error {
+	if m.writeFrontMatterErr != nil {
+		return m.writeFrontMatterErr
+	}
 	// Simple implementation for testing
 	return m.UpdatePageContent(identifier, "# Mock content")
 }
 
 func (m *MockMigrationDeps) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Markdown) error {
+	if m.writeMarkdownErr != nil {
+		return m.writeMarkdownErr
+	}
 	return m.UpdatePageContent(identifier, string(md))
 }
 
@@ -95,6 +129,10 @@ func (m *MockMigrationDeps) UpdatePageContent(identifier wikipage.PageIdentifier
 }
 
 func (m *MockMigrationDeps) DeletePage(identifier wikipage.PageIdentifier) error {
+	if m.deletePageErr != nil {
+		return m.deletePageErr
+	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
