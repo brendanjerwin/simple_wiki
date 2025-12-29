@@ -17,7 +17,6 @@ type mockNormalizerDeps struct {
 	readFrontMatterErr  error
 	writeFrontMatterErr error
 	writeMarkdownErr    error
-	readPageErr         error
 }
 
 func newMockNormalizerDeps() *mockNormalizerDeps {
@@ -64,19 +63,6 @@ func (m *mockNormalizerDeps) WriteMarkdown(page wikipage.PageIdentifier, md stri
 
 func (*mockNormalizerDeps) DeletePage(_ wikipage.PageIdentifier) error {
 	return nil
-}
-
-func (m *mockNormalizerDeps) ReadPage(page wikipage.PageIdentifier) (*wikipage.Page, error) {
-	if m.readPageErr != nil {
-		return nil, m.readPageErr
-	}
-	_, ok := m.frontmatters[string(page)]
-	if !ok {
-		return nil, errors.New("page not found")
-	}
-	return &wikipage.Page{
-		Identifier: string(page),
-	}, nil
 }
 
 var _ = Describe("InventoryNormalizer", func() {

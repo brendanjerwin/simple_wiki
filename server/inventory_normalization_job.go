@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -9,9 +10,9 @@ import (
 
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
+	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
-	"github.com/pelletier/go-toml/v2"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -36,13 +37,14 @@ const (
 	inventoryContainerKeyPath   = "inventory.container"
 	inventoryItemsKeyPath       = "inventory.items"
 	inventoryIsContainerKeyPath = "inventory.is_container"
+	inventoryKey                = "inventory"
 	newlineDelim                = "\n"
 )
 
 // InventoryNormalizationDependencies defines the interfaces needed for the normalization job.
+// Uses only PageReaderMutator since ReadPage is not required for normalization operations.
 type InventoryNormalizationDependencies interface {
 	wikipage.PageReaderMutator
-	wikipage.PageOpener
 }
 
 // InventoryNormalizationJob scans for inventory anomalies and creates missing item pages.
@@ -54,17 +56,27 @@ type InventoryNormalizationJob struct {
 }
 
 // NewInventoryNormalizationJob creates a new inventory normalization job.
+// Returns an error if any required dependency is nil.
 func NewInventoryNormalizationJob(
 	deps InventoryNormalizationDependencies,
 	fmIndex frontmatter.IQueryFrontmatterIndex,
 	logger lumber.Logger,
-) *InventoryNormalizationJob {
+) (*InventoryNormalizationJob, error) {
+	if deps == nil {
+		return nil, errors.New("deps is required")
+	}
+	if fmIndex == nil {
+		return nil, errors.New("fmIndex is required")
+	}
+	if logger == nil {
+		return nil, errors.New("logger is required")
+	}
 	return &InventoryNormalizationJob{
 		normalizer: NewInventoryNormalizer(deps, logger),
 		deps:       deps,
 		fmIndex:    fmIndex,
 		logger:     logger,
-	}
+	}, nil
 }
 
 // InventoryAnomaly represents a detected anomaly in the inventory system.
@@ -95,15 +107,22 @@ func (j *InventoryNormalizationJob) Execute() error {
 	// Step 3: Create missing pages and collect anomalies
 	createdPages, creationAnomalies := j.createMissingItemPages(containers)
 
-	// Step 4: Detect all anomalies
+	// Step 4: Remove items from parent containers' items lists
+	// When an item has inventory.container set, remove it from the parent's inventory.items array
+	removedCount := j.removeItemsFromParentContainers(containers)
+	if removedCount > 0 {
+		j.logger.Info("Removed %d items from parent container items lists", removedCount)
+	}
+
+	// Step 5: Detect all anomalies
 	anomalies := creationAnomalies
 	anomalies = append(anomalies, j.detectMultipleContainerAnomalies(containers)...)
 	anomalies = append(anomalies, j.detectCircularReferenceAnomalies(containers)...)
 	anomalies = append(anomalies, j.detectOrphanedItems()...)
 
-	// Step 5: Generate audit report page
+	// Step 6: Generate audit report page
 	if err := j.generateAuditReport(anomalies, createdPages); err != nil {
-		j.logger.Error("Failed to generate audit report: %v", err)
+		return fmt.Errorf("failed to generate audit report: %w", err)
 	}
 
 	j.logger.Info("Inventory normalization complete: %d pages created, %d anomalies detected", len(createdPages), len(anomalies))
@@ -312,23 +331,23 @@ func (j *InventoryNormalizationJob) migrateContainersToIsContainerField() int {
 
 	// For each identified container, check if it needs migration
 	for containerID := range containerSet {
-		// Check if already has is_container = true
-		if j.fmIndex.GetValue(containerID, inventoryIsContainerKeyPath) == "true" {
-			continue
-		}
-
-		// Read frontmatter and add is_container
+		// Read frontmatter to check current state
 		_, fm, err := j.deps.ReadFrontMatter(containerID)
 		if err != nil {
 			j.logger.Error("Failed to read frontmatter for container %s during migration: %v", containerID, err)
 			continue
 		}
 
+		// Check if is_container is already set to true
+		if isContainerAlreadySet(fm) {
+			continue
+		}
+
 		// Ensure inventory map exists
-		inventory, ok := fm["inventory"].(map[string]any)
+		inventory, ok := fm[inventoryKey].(map[string]any)
 		if !ok {
 			inventory = make(map[string]any)
-			fm["inventory"] = inventory
+			fm[inventoryKey] = inventory
 		}
 
 		// Set is_container = true
@@ -344,6 +363,32 @@ func (j *InventoryNormalizationJob) migrateContainersToIsContainerField() int {
 	}
 
 	return migratedCount
+}
+
+// isContainerAlreadySet checks if is_container is already set to true.
+// Handles both boolean true and string "true" values.
+func isContainerAlreadySet(fm map[string]any) bool {
+	inventory, ok := fm[inventoryKey].(map[string]any)
+	if !ok {
+		return false
+	}
+
+	isContainer := inventory["is_container"]
+	if isContainer == nil {
+		return false
+	}
+
+	// Check for boolean true
+	if b, ok := isContainer.(bool); ok {
+		return b
+	}
+
+	// Check for string "true"
+	if s, ok := isContainer.(string); ok {
+		return s == "true"
+	}
+
+	return false
 }
 
 // getItemsWithContainerReference gets items that have inventory.container set to this container.
@@ -376,12 +421,16 @@ func (j *InventoryNormalizationJob) detectCircularReferences(containers []string
 }
 
 // findCycle finds a cycle starting from the given container.
+// Note: Creates explicit copies of slices to avoid shared backing array issues with append.
 func (j *InventoryNormalizationJob) findCycle(containerID string, visited map[string]bool, path []string) []string {
 	if visited[containerID] {
 		// Found a cycle - find where the cycle starts
 		for i, id := range path {
 			if id == containerID {
-				cycle := append(path[i:], containerID)
+				// Create explicit copy to avoid shared backing array
+				cycle := make([]string, len(path[i:])+1)
+				copy(cycle, path[i:])
+				cycle[len(cycle)-1] = containerID
 				return cycle
 			}
 		}
@@ -389,12 +438,16 @@ func (j *InventoryNormalizationJob) findCycle(containerID string, visited map[st
 	}
 
 	visited[containerID] = true
-	path = append(path, containerID)
+
+	// Create explicit copy of path to avoid shared backing array issues
+	newPath := make([]string, len(path)+1)
+	copy(newPath, path)
+	newPath[len(newPath)-1] = containerID
 
 	// Get the container's parent
 	parentContainer := j.fmIndex.GetValue(containerID, inventoryContainerKeyPath)
 	if parentContainer != "" {
-		return j.findCycle(parentContainer, visited, path)
+		return j.findCycle(parentContainer, visited, newPath)
 	}
 
 	return nil
@@ -452,22 +505,6 @@ func (j *InventoryNormalizationJob) generateAuditReport(anomalies []InventoryAno
 		"title":      "Inventory Audit Report",
 	}
 
-	// Build full page content with frontmatter
-	fmBytes, err := toml.Marshal(fm)
-	if err != nil {
-		return fmt.Errorf("failed to marshal frontmatter: %w", err)
-	}
-
-	var fullPage bytes.Buffer
-	_, _ = fullPage.WriteString(tomlDelimiter)
-	_, _ = fullPage.Write(fmBytes)
-	if !bytes.HasSuffix(fmBytes, []byte(newlineDelim)) {
-		_, _ = fullPage.WriteString(newlineDelim)
-	}
-	_, _ = fullPage.WriteString(tomlDelimiter)
-	_, _ = fullPage.WriteString(newlineDelim)
-	_, _ = fullPage.Write(report.Bytes())
-
 	// Write frontmatter and markdown
 	if err := j.deps.WriteFrontMatter(AuditReportPage, fm); err != nil {
 		return fmt.Errorf("failed to write audit report frontmatter: %w", err)
@@ -498,17 +535,174 @@ func formatAnomalyType(t string) string {
 	}
 }
 
+// removeItemsFromParentContainers removes items from their parent containers' items lists.
+// This is called after items have been created/updated to ensure the items list is consistent
+// with the canonical container references on the items.
+//
+// This function reads frontmatter directly rather than using the index to avoid race conditions
+// where newly created items haven't been indexed yet.
+//
+// Errors during individual container processing are logged but don't stop processing of other containers.
+func (j *InventoryNormalizationJob) removeItemsFromParentContainers(containers []string) int {
+	removedCount := 0
+
+	for _, containerID := range containers {
+		removed, err := j.processContainerForItemRemoval(containerID)
+		if err != nil {
+			j.logger.Error("Failed to process container %s for item removal: %v", containerID, err)
+			continue
+		}
+		removedCount += removed
+	}
+
+	return removedCount
+}
+
+// processContainerForItemRemoval processes a single container and removes items that have explicit container references.
+// Returns the count of removed items and any error from the operation.
+func (j *InventoryNormalizationJob) processContainerForItemRemoval(containerID string) (int, error) {
+	// Read the container's frontmatter
+	_, containerFm, err := j.deps.ReadFrontMatter(containerID)
+	if err != nil {
+		return 0, nil // Container doesn't exist, not an error for this operation
+	}
+
+	inventory, ok := containerFm[inventoryKey].(map[string]any)
+	if !ok {
+		return 0, nil // No inventory section, nothing to do
+	}
+
+	items, ok := j.extractItemsArray(inventory)
+	if !ok || len(items) == 0 {
+		return 0, nil // No items array or empty, nothing to do
+	}
+
+	// Build a set of items that should be removed
+	itemsToRemove := j.findItemsWithContainerReference(containerID, items)
+	if len(itemsToRemove) == 0 {
+		return 0, nil // No items to remove
+	}
+
+	// Filter out items and write back
+	return j.removeAndWriteItems(containerID, containerFm, inventory, items, itemsToRemove)
+}
+
+// extractItemsArray extracts and normalizes the items array from inventory frontmatter.
+func (*InventoryNormalizationJob) extractItemsArray(inventory map[string]any) ([]any, bool) {
+	itemsRaw, ok := inventory["items"]
+	if !ok {
+		return nil, false
+	}
+
+	// Handle both []string and []any
+	switch v := itemsRaw.(type) {
+	case []string:
+		items := make([]any, len(v))
+		for i, item := range v {
+			items[i] = item
+		}
+		return items, true
+	case []any:
+		return v, true
+	default:
+		return nil, false
+	}
+}
+
+// findItemsWithContainerReference builds a set of munged item IDs that reference this container.
+// Note: This creates an N+1 read pattern, but it's necessary for correctness
+// since the index may not yet include newly created items. This tradeoff is
+// acceptable because: (1) the job runs periodically, not per-request, and
+// (2) containers typically have a manageable number of items.
+func (j *InventoryNormalizationJob) findItemsWithContainerReference(containerID string, items []any) map[string]bool {
+	itemsWithContainerSet := make(map[string]bool)
+	mungedContainerID := wikiidentifiers.MungeIdentifier(containerID)
+
+	for _, item := range items {
+		s, ok := item.(string)
+		if !ok {
+			continue
+		}
+
+		mungedItemID := wikiidentifiers.MungeIdentifier(s)
+		if j.itemReferencesContainer(mungedItemID, mungedContainerID) {
+			itemsWithContainerSet[mungedItemID] = true
+		}
+	}
+
+	return itemsWithContainerSet
+}
+
+// itemReferencesContainer checks if an item's frontmatter references the given container.
+func (j *InventoryNormalizationJob) itemReferencesContainer(itemID, containerID string) bool {
+	_, itemFm, err := j.deps.ReadFrontMatter(itemID)
+	if err != nil {
+		return false
+	}
+
+	itemInventory, ok := itemFm[inventoryKey].(map[string]any)
+	if !ok {
+		return false
+	}
+
+	containerRef, ok := itemInventory["container"].(string)
+	if !ok {
+		return false
+	}
+
+	mungedContainerRef := wikiidentifiers.MungeIdentifier(containerRef)
+	return mungedContainerRef == containerID
+}
+
+// removeAndWriteItems removes items from the list and writes back the updated frontmatter.
+// Returns the count of removed items and any error from writing frontmatter.
+func (j *InventoryNormalizationJob) removeAndWriteItems(containerID string, containerFm map[string]any, inventory map[string]any, items []any, itemsToRemove map[string]bool) (int, error) {
+	removedCount := 0
+	var newItems []any
+
+	for _, item := range items {
+		s, ok := item.(string)
+		if !ok {
+			newItems = append(newItems, item)
+			continue
+		}
+
+		mungedItem := wikiidentifiers.MungeIdentifier(s)
+		if itemsToRemove[mungedItem] {
+			removedCount++
+			j.logger.Info("Removed item '%s' from container '%s' items list", s, containerID)
+			continue
+		}
+		newItems = append(newItems, item)
+	}
+
+	if removedCount == 0 {
+		return 0, nil
+	}
+
+	// Update and write back
+	inventory["items"] = newItems
+	if err := j.deps.WriteFrontMatter(containerID, containerFm); err != nil {
+		return 0, fmt.Errorf("failed to write frontmatter for container %s: %w", containerID, err)
+	}
+
+	return removedCount, nil
+}
+
 // ScheduleInventoryNormalization schedules the inventory normalization job on the cron scheduler.
 func ScheduleInventoryNormalization(
 	scheduler *jobs.CronScheduler,
 	site *Site,
 	schedule string,
 ) (int, error) {
-	job := NewInventoryNormalizationJob(
+	job, err := NewInventoryNormalizationJob(
 		site,
 		site.FrontmatterIndexQueryer,
 		site.Logger,
 	)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create inventory normalization job: %w", err)
+	}
 
 	return scheduler.Schedule(schedule, job)
 }
