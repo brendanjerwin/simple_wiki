@@ -1,8 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { expect } from '@open-wc/testing';
 import { SystemInfo } from './system-info.js';
-import { GetVersionResponse, GetJobStatusResponse, JobQueueStatus } from '../gen/api/v1/system_info_pb.js';
-import { Timestamp } from '@bufbuild/protobuf';
+import { GetVersionResponseSchema, GetJobStatusResponseSchema, JobQueueStatusSchema } from '../gen/api/v1/system_info_pb.js';
+import { create } from '@bufbuild/protobuf';
+import { TimestampSchema } from '@bufbuild/protobuf/wkt';
 import { stub, useFakeTimers } from 'sinon';
 import './system-info.js';
 
@@ -82,17 +83,17 @@ describe('SystemInfo', () => {
 
   describe('when version is loaded', () => {
     beforeEach(async () => {
-      const mockTimestamp = new Timestamp({
+      const mockTimestamp = create(TimestampSchema, {
         seconds: BigInt(Math.floor(new Date('2023-01-01T12:00:00Z').getTime() / 1000)),
         nanos: 0
       });
 
       el.loading = false;
-      el.version = new GetVersionResponse({
+      el.version = create(GetVersionResponseSchema, {
         commit: 'abc123def456',
         buildTime: mockTimestamp
       });
-      el.jobStatus = new GetJobStatusResponse({
+      el.jobStatus = create(GetJobStatusResponseSchema, {
         jobQueues: []
       });
       await el.updateComplete;
@@ -124,12 +125,12 @@ describe('SystemInfo', () => {
 
   describe('when jobs are active', () => {
     beforeEach(async () => {
-      const mockTimestamp = new Timestamp({
+      const mockTimestamp = create(TimestampSchema, {
         seconds: BigInt(Math.floor(new Date('2023-01-01T12:00:00Z').getTime() / 1000)),
         nanos: 0
       });
 
-      const activeQueue = new JobQueueStatus({
+      const activeQueue = create(JobQueueStatusSchema, {
         name: 'Frontmatter',
         jobsRemaining: 25,
         highWaterMark: 100,
@@ -137,11 +138,11 @@ describe('SystemInfo', () => {
       });
 
       el.loading = false;
-      el.version = new GetVersionResponse({
+      el.version = create(GetVersionResponseSchema, {
         commit: 'abc123def456',
         buildTime: mockTimestamp
       });
-      el.jobStatus = new GetJobStatusResponse({
+      el.jobStatus = create(GetJobStatusResponseSchema, {
         jobQueues: [activeQueue]
       });
       await el.updateComplete;
@@ -177,12 +178,12 @@ describe('SystemInfo', () => {
 
   describe('when jobs are idle', () => {
     beforeEach(async () => {
-      const mockTimestamp = new Timestamp({
+      const mockTimestamp = create(TimestampSchema, {
         seconds: BigInt(Math.floor(new Date('2023-01-01T12:00:00Z').getTime() / 1000)),
         nanos: 0
       });
 
-      const idleQueue = new JobQueueStatus({
+      const idleQueue = create(JobQueueStatusSchema, {
         name: 'Frontmatter',
         jobsRemaining: 0,
         highWaterMark: 0,
@@ -190,11 +191,11 @@ describe('SystemInfo', () => {
       });
 
       el.loading = false;
-      el.version = new GetVersionResponse({
+      el.version = create(GetVersionResponseSchema, {
         commit: 'abc123def456',
         buildTime: mockTimestamp
       });
-      el.jobStatus = new GetJobStatusResponse({
+      el.jobStatus = create(GetJobStatusResponseSchema, {
         jobQueues: [idleQueue]
       });
       await el.updateComplete;
@@ -210,11 +211,11 @@ describe('SystemInfo', () => {
     describe('when displaying long commit hash', () => {
       beforeEach(async () => {
         el.loading = false;
-        el.version = new GetVersionResponse({
+        el.version = create(GetVersionResponseSchema, {
           commit: 'abc123def456789',
-          buildTime: new Timestamp()
+          buildTime: create(TimestampSchema, {})
         });
-        el.jobStatus = new GetJobStatusResponse({
+        el.jobStatus = create(GetJobStatusResponseSchema, {
           jobQueues: []
         });
         
@@ -231,11 +232,11 @@ describe('SystemInfo', () => {
     describe('when displaying tagged version', () => {
       beforeEach(async () => {
         el.loading = false;
-        el.version = new GetVersionResponse({
+        el.version = create(GetVersionResponseSchema, {
           commit: 'v1.2.3 (abc123d)',
-          buildTime: new Timestamp()
+          buildTime: create(TimestampSchema, {})
         });
-        el.jobStatus = new GetJobStatusResponse({
+        el.jobStatus = create(GetJobStatusResponseSchema, {
           jobQueues: []
         });
         
@@ -251,14 +252,14 @@ describe('SystemInfo', () => {
 
     describe('when displaying small job counts', () => {
       beforeEach(async () => {
-        const smallQueue = new JobQueueStatus({
+        const smallQueue = create(JobQueueStatusSchema, {
           name: 'Frontmatter',
           jobsRemaining: 1,
           highWaterMark: 100,
           isActive: true
         });
 
-        el.jobStatus = new GetJobStatusResponse({
+        el.jobStatus = create(GetJobStatusResponseSchema, {
           jobQueues: [smallQueue]
         });
 
@@ -295,7 +296,7 @@ describe('SystemInfo', () => {
   describe('progress calculation', () => {
     describe('when job queues are empty', () => {
       beforeEach(() => {
-        el.jobStatus = new GetJobStatusResponse({
+        el.jobStatus = create(GetJobStatusResponseSchema, {
           jobQueues: []
         });
       });
@@ -307,14 +308,14 @@ describe('SystemInfo', () => {
 
     describe('when displaying test queue data', () => {
       beforeEach(async () => {
-        const testQueue = new JobQueueStatus({
+        const testQueue = create(JobQueueStatusSchema, {
           name: 'TestQueue',
           jobsRemaining: 75,
           highWaterMark: 200,
           isActive: true
         });
 
-        el.jobStatus = new GetJobStatusResponse({
+        el.jobStatus = create(GetJobStatusResponseSchema, {
           jobQueues: [testQueue]
         });
 
@@ -364,17 +365,17 @@ describe('SystemInfo', () => {
 
   describe('drawer tab functionality', () => {
     beforeEach(async () => {
-      const mockTimestamp = new Timestamp({
+      const mockTimestamp = create(TimestampSchema, {
         seconds: BigInt(Math.floor(new Date('2023-01-01T12:00:00Z').getTime() / 1000)),
         nanos: 0
       });
 
       el.loading = false;
-      el.version = new GetVersionResponse({
+      el.version = create(GetVersionResponseSchema, {
         commit: 'abc123def456',
         buildTime: mockTimestamp
       });
-      el.jobStatus = new GetJobStatusResponse({
+      el.jobStatus = create(GetJobStatusResponseSchema, {
         jobQueues: []
       });
       await el.updateComplete;
@@ -490,17 +491,17 @@ describe('SystemInfo', () => {
 
   describe('click-outside behavior', () => {
     beforeEach(async () => {
-      const mockTimestamp = new Timestamp({
+      const mockTimestamp = create(TimestampSchema, {
         seconds: BigInt(Math.floor(new Date('2023-01-01T12:00:00Z').getTime() / 1000)),
         nanos: 0
       });
 
       el.loading = false;
-      el.version = new GetVersionResponse({
+      el.version = create(GetVersionResponseSchema, {
         commit: 'abc123def456',
         buildTime: mockTimestamp
       });
-      el.jobStatus = new GetJobStatusResponse({
+      el.jobStatus = create(GetJobStatusResponseSchema, {
         jobQueues: []
       });
       await el.updateComplete;

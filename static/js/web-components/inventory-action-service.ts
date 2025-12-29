@@ -39,9 +39,9 @@ export class InventoryActionService {
     itemIdentifier: string,
     title?: string,
     description?: string
-  ): Promise<{ success: boolean; itemIdentifier?: string; summary?: string; error?: string }> {
+  ): Promise<{ success: boolean; itemIdentifier?: string; summary?: string; error?: Error }> {
     if (!containerIdentifier || !itemIdentifier) {
-      return { success: false, error: 'Container and item identifier are required' };
+      return { success: false, error: new Error('Container and item identifier are required') };
     }
 
     try {
@@ -63,14 +63,14 @@ export class InventoryActionService {
       } else {
         return {
           success: false,
-          error: response.error || 'Failed to create item',
+          error: new Error(response.error || 'Failed to create item'),
         };
       }
     } catch (err) {
       const augmentedError = AugmentErrorService.augmentError(err, 'create inventory item');
       return {
         success: false,
-        error: augmentedError.message,
+        error: augmentedError,
       };
     }
   }
@@ -88,7 +88,7 @@ export class InventoryActionService {
     identifier: string;
     isUnique: boolean;
     existingPage?: ExistingPageInfo;
-    error?: string;
+    error?: Error;
   }> {
     if (!text) {
       return { identifier: '', isUnique: true };
@@ -112,7 +112,7 @@ export class InventoryActionService {
       return {
         identifier: '',
         isUnique: true,
-        error: augmentedError.message,
+        error: augmentedError,
       };
     }
   }
@@ -130,10 +130,10 @@ export class InventoryActionService {
     previousContainer?: string;
     newContainer?: string;
     summary?: string;
-    error?: string;
+    error?: Error;
   }> {
     if (!itemIdentifier) {
-      return { success: false, error: 'Item identifier is required' };
+      return { success: false, error: new Error('Item identifier is required') };
     }
 
     try {
@@ -154,14 +154,14 @@ export class InventoryActionService {
       } else {
         return {
           success: false,
-          error: response.error || 'Failed to move item',
+          error: new Error(response.error || 'Failed to move item'),
         };
       }
     } catch (err) {
       const augmentedError = AugmentErrorService.augmentError(err, 'move inventory item');
       return {
         success: false,
-        error: augmentedError.message,
+        error: augmentedError,
       };
     }
   }

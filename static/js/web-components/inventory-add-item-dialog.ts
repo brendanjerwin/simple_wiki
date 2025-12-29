@@ -1,5 +1,5 @@
 import { html, css, LitElement, nothing } from 'lit';
-import { sharedStyles, foundationCSS, dialogCSS, responsiveCSS, buttonCSS } from './shared-styles.js';
+import { sharedStyles, dialogStyles } from './shared-styles.js';
 import { InventoryActionService } from './inventory-action-service.js';
 import { createClient } from '@connectrpc/connect';
 import { create } from '@bufbuild/protobuf';
@@ -16,261 +16,193 @@ import type { ExistingPageInfo } from '../gen/api/v1/page_management_pb.js';
  * field and inline search results to help find existing items.
  */
 export class InventoryAddItemDialog extends LitElement {
-  static override styles = [
-    foundationCSS,
-    dialogCSS,
-    responsiveCSS,
-    buttonCSS,
-    css`
-      :host {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        z-index: 9999;
-        display: none;
-      }
+  static override styles = dialogStyles(css`
+    :host {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 9999;
+      display: none;
+    }
 
-      :host([open]) {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        animation: fadeIn 0.2s ease-out;
-      }
+    :host([open]) {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: fadeIn 0.2s ease-out;
+    }
 
-      @keyframes fadeIn {
-        from { opacity: 0; }
-        to { opacity: 1; }
-      }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
 
-      .backdrop {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.5);
-      }
+    .backdrop {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.5);
+    }
 
-      .dialog {
-        background: white;
-        max-width: 500px;
-        width: 90%;
-        max-height: 90vh;
-        display: flex;
-        flex-direction: column;
-        position: relative;
-        z-index: 1;
-        animation: slideIn 0.2s ease-out;
-        border-radius: 8px;
-      }
+    .dialog {
+      background: white;
+      max-width: 500px;
+      width: 90%;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      z-index: 1;
+      animation: slideIn 0.2s ease-out;
+      border-radius: 8px;
+    }
 
-      @keyframes slideIn {
-        from {
-          transform: translateY(-20px);
-          opacity: 0;
-        }
-        to {
-          transform: translateY(0);
-          opacity: 1;
-        }
+    @keyframes slideIn {
+      from {
+        transform: translateY(-20px);
+        opacity: 0;
       }
-
-      @media (max-width: 768px) {
-        :host([open]) {
-          align-items: stretch;
-          justify-content: stretch;
-        }
-
-        .dialog {
-          width: 100%;
-          height: 100%;
-          max-width: none;
-          max-height: none;
-          border-radius: 0;
-          margin: 0;
-        }
+      to {
+        transform: translateY(0);
+        opacity: 1;
       }
+    }
 
-      .content {
-        padding: 20px;
-        overflow-y: auto;
-        flex: 1;
-      }
+    .content {
+      padding: 20px;
+      overflow-y: auto;
+      flex: 1;
+    }
 
-      .form-group {
-        margin-bottom: 16px;
-      }
+    .identifier-field {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
 
-      .form-group:last-child {
-        margin-bottom: 0;
-      }
+    .identifier-field input {
+      flex: 1;
+    }
 
-      .form-group label {
-        display: block;
-        margin-bottom: 6px;
-        font-weight: 500;
-        color: #333;
-      }
+    .automagic-button {
+      padding: 10px 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      background: #f5f5f5;
+      cursor: pointer;
+      font-size: 14px;
+      color: #666;
+      transition: all 0.2s;
+    }
 
-      .form-group input,
-      .form-group textarea {
-        width: 100%;
-        padding: 10px 12px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        font-size: 14px;
-        box-sizing: border-box;
-        font-family: inherit;
-      }
+    .automagic-button:hover {
+      background: #e8e8e8;
+      border-color: #ccc;
+    }
 
-      .form-group textarea {
-        min-height: 80px;
-        resize: vertical;
-      }
+    .automagic-button.automagic {
+      background: #e0f2fe;
+      border-color: #7dd3fc;
+      color: #0369a1;
+    }
 
-      .form-group input:focus,
-      .form-group textarea:focus {
-        outline: none;
-        border-color: #4a90d9;
-        box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.2);
-      }
+    .automagic-button.manual {
+      background: #fff3cd;
+      border-color: #ffc107;
+      color: #856404;
+    }
 
-      .form-group input[readonly] {
-        background: #f5f5f5;
-        color: #666;
-        cursor: not-allowed;
-      }
+    .error-message {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #dc2626;
+      padding: 12px;
+      border-radius: 4px;
+      margin-bottom: 16px;
+      font-size: 14px;
+    }
 
-      .form-group .help-text {
-        margin-top: 4px;
-        font-size: 12px;
-        color: #666;
-      }
+    .conflict-warning {
+      background: #fffbeb;
+      border: 1px solid #fcd34d;
+      color: #92400e;
+      padding: 12px;
+      border-radius: 4px;
+      margin-top: 8px;
+      font-size: 13px;
+    }
 
-      .identifier-field {
-        display: flex;
-        gap: 8px;
-        align-items: center;
-      }
+    .conflict-warning a {
+      color: #92400e;
+      font-weight: 500;
+    }
 
-      .identifier-field input {
-        flex: 1;
-      }
+    .search-results {
+      margin-top: 16px;
+      border: 1px solid #e5e7eb;
+      border-radius: 4px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
 
-      .automagic-button {
-        padding: 10px 12px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        background: #f5f5f5;
-        cursor: pointer;
-        font-size: 14px;
-        color: #666;
-        transition: all 0.2s;
-      }
+    .search-results-header {
+      padding: 8px 12px;
+      background: #f9fafb;
+      border-bottom: 1px solid #e5e7eb;
+      font-size: 12px;
+      font-weight: 500;
+      color: #6b7280;
+    }
 
-      .automagic-button:hover {
-        background: #e8e8e8;
-        border-color: #ccc;
-      }
+    .search-result-item {
+      display: block;
+      padding: 10px 12px;
+      border-bottom: 1px solid #e5e7eb;
+      text-decoration: none;
+      color: inherit;
+      cursor: pointer;
+      transition: background-color 0.15s;
+    }
 
-      .automagic-button.automagic {
-        background: #e0f2fe;
-        border-color: #7dd3fc;
-        color: #0369a1;
-      }
+    .search-result-item:last-child {
+      border-bottom: none;
+    }
 
-      .automagic-button.manual {
-        background: #fff3cd;
-        border-color: #ffc107;
-        color: #856404;
-      }
+    .search-result-item:hover {
+      background: #f3f4f6;
+    }
 
-      .error-message {
-        background: #fef2f2;
-        border: 1px solid #fecaca;
-        color: #dc2626;
-        padding: 12px;
-        border-radius: 4px;
-        margin-bottom: 16px;
-        font-size: 14px;
-      }
+    .search-result-title {
+      font-weight: 500;
+      color: #1f2937;
+      margin-bottom: 2px;
+    }
 
-      .conflict-warning {
-        background: #fffbeb;
-        border: 1px solid #fcd34d;
-        color: #92400e;
-        padding: 12px;
-        border-radius: 4px;
-        margin-top: 8px;
-        font-size: 13px;
-      }
+    .search-result-container {
+      font-size: 12px;
+      color: #6b7280;
+    }
 
-      .conflict-warning a {
-        color: #92400e;
-        font-weight: 500;
-      }
+    .search-result-container a {
+      color: #4a90d9;
+    }
 
-      .search-results {
-        margin-top: 16px;
-        border: 1px solid #e5e7eb;
-        border-radius: 4px;
-        max-height: 200px;
-        overflow-y: auto;
-      }
+    .form-group textarea {
+      min-height: 50px;
+    }
 
-      .search-results-header {
-        padding: 8px 12px;
-        background: #f9fafb;
-        border-bottom: 1px solid #e5e7eb;
-        font-size: 12px;
-        font-weight: 500;
-        color: #6b7280;
-      }
-
-      .search-result-item {
-        display: block;
-        padding: 10px 12px;
-        border-bottom: 1px solid #e5e7eb;
-        text-decoration: none;
-        color: inherit;
-        cursor: pointer;
-        transition: background-color 0.15s;
-      }
-
-      .search-result-item:last-child {
-        border-bottom: none;
-      }
-
-      .search-result-item:hover {
-        background: #f3f4f6;
-      }
-
-      .search-result-title {
-        font-weight: 500;
-        color: #1f2937;
-        margin-bottom: 2px;
-      }
-
-      .search-result-container {
-        font-size: 12px;
-        color: #6b7280;
-      }
-
-      .search-result-container a {
-        color: #4a90d9;
-      }
-
-      .footer {
-        display: flex;
-        gap: 12px;
-        padding: 16px 20px;
-        border-top: 1px solid #e0e0e0;
-        justify-content: flex-end;
-      }
-    `,
-  ];
+    .footer {
+      display: flex;
+      gap: 12px;
+      padding: 16px 20px;
+      border-top: 1px solid #e0e0e0;
+      justify-content: flex-end;
+    }
+  `);
 
   static override properties = {
     open: { type: Boolean, reflect: true },
@@ -294,13 +226,13 @@ export class InventoryAddItemDialog extends LitElement {
   declare description: string;
   declare automagicMode: boolean;
   declare loading: boolean;
-  declare error?: string;
+  declare error: Error | null;
   declare isUnique: boolean;
   declare existingPage?: ExistingPageInfo;
   declare searchResults: SearchResult[];
   declare searchLoading: boolean;
 
-  private _titleDebounceTimeoutMs = 300;
+  private _debounceTimeoutMs = 300;
   private _titleDebounceTimer?: ReturnType<typeof setTimeout>;
   private _identifierDebounceTimer?: ReturnType<typeof setTimeout>;
   private searchClient = createClient(SearchService, getGrpcWebTransport());
@@ -315,7 +247,7 @@ export class InventoryAddItemDialog extends LitElement {
     this.description = '';
     this.automagicMode = true;
     this.loading = false;
-    this.error = undefined;
+    this.error = null;
     this.isUnique = true;
     this.existingPage = undefined;
     this.searchResults = [];
@@ -356,7 +288,7 @@ export class InventoryAddItemDialog extends LitElement {
     this.itemIdentifier = '';
     this.description = '';
     this.automagicMode = true;
-    this.error = undefined;
+    this.error = null;
     this.loading = false;
     this.isUnique = true;
     this.existingPage = undefined;
@@ -377,7 +309,7 @@ export class InventoryAddItemDialog extends LitElement {
     this.itemTitle = '';
     this.itemIdentifier = '';
     this.description = '';
-    this.error = undefined;
+    this.error = null;
     this.loading = false;
     this.isUnique = true;
     this.existingPage = undefined;
@@ -405,7 +337,7 @@ export class InventoryAddItemDialog extends LitElement {
     // Debounce the API calls
     this._titleDebounceTimer = setTimeout(() => {
       this._onTitleChanged();
-    }, this._titleDebounceTimeoutMs);
+    }, this._debounceTimeoutMs);
   };
 
   private async _onTitleChanged(): Promise<void> {
@@ -420,6 +352,8 @@ export class InventoryAddItemDialog extends LitElement {
     }
 
     // Generate identifier if in automagic mode
+    // Note: Errors from generateIdentifier are intentionally not shown to the user.
+    // If automagic fails, user can switch to manual mode and enter identifier directly.
     if (this.automagicMode) {
       const result = await this.inventoryActionService.generateIdentifier(title);
       if (!result.error) {
@@ -448,7 +382,7 @@ export class InventoryAddItemDialog extends LitElement {
     // Debounce the API call to check availability
     this._identifierDebounceTimer = setTimeout(() => {
       this._checkIdentifierAvailability();
-    }, this._titleDebounceTimeoutMs);
+    }, this._debounceTimeoutMs);
   };
 
   private async _checkIdentifierAvailability(): Promise<void> {
@@ -500,9 +434,9 @@ export class InventoryAddItemDialog extends LitElement {
 
       const response = await this.searchClient.searchContent(request);
       this.searchResults = response.results;
-    } catch {
-      // Silently fail - search is a nice-to-have
+    } catch (err) {
       this.searchResults = [];
+      this.error = err instanceof Error ? err : new Error(String(err));
     } finally {
       this.searchLoading = false;
     }
@@ -525,7 +459,7 @@ export class InventoryAddItemDialog extends LitElement {
     if (!this.canSubmit) return;
 
     this.loading = true;
-    this.error = undefined;
+    this.error = null;
 
     const result = await this.inventoryActionService.addItem(
       this.container,
@@ -543,6 +477,9 @@ export class InventoryAddItemDialog extends LitElement {
       );
       this.close();
     } else {
+      if (!result.error) {
+        throw new Error('InventoryActionService.addItem returned success=false without an error');
+      }
       this.error = result.error;
     }
   };
@@ -595,25 +532,13 @@ export class InventoryAddItemDialog extends LitElement {
       <div class="backdrop" @click=${this._handleBackdropClick}></div>
       <div class="dialog system-font border-radius box-shadow" @click=${this._handleDialogClick}>
         <div class="dialog-header">
-          <h2 class="dialog-title">Add Item to Container</h2>
+          <h2 class="dialog-title">Add Item to: ${this.container}</h2>
         </div>
 
         <div class="content">
           ${this.error
-            ? html`<div class="error-message">${this.error}</div>`
+            ? html`<div class="error-message">${this.error.message}</div>`
             : ''}
-
-          <div class="form-group">
-            <label for="container">Container</label>
-            <input
-              type="text"
-              id="container"
-              name="container"
-              .value=${this.container}
-              readonly
-            />
-            <div class="help-text">The container this item will be added to</div>
-          </div>
 
           <div class="form-group">
             <label for="title">Title *</label>
@@ -653,11 +578,6 @@ export class InventoryAddItemDialog extends LitElement {
                 <i class="fa-solid ${this.automagicMode ? 'fa-wand-magic-sparkles' : 'fa-pen'}"></i>
               </button>
             </div>
-            <div class="help-text">
-              ${this.automagicMode
-                ? 'Auto-generated from title. Click sparkle to edit manually.'
-                : 'Manual mode. Click pen to auto-generate from title.'}
-            </div>
             ${this._renderConflictWarning()}
           </div>
 
@@ -671,7 +591,6 @@ export class InventoryAddItemDialog extends LitElement {
               placeholder="Optional description of the item"
               ?disabled=${this.loading}
             ></textarea>
-            <div class="help-text">Additional details about the item</div>
           </div>
 
           ${this._renderSearchResults()}

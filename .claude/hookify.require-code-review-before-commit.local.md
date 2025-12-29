@@ -1,20 +1,20 @@
 ---
-name: require-code-review-before-commit
+name: require-code-review-before-push
 enabled: true
 event: bash
 action: block
 conditions:
   - field: command
     operator: regex_match
-    pattern: git\s+(commit|push)
+    pattern: git\s+push
   - field: command
     operator: not_contains
-    pattern: "[REVIEWED:"
+    pattern: "# [REVIEWED:"
 ---
 
-**BLOCKED: Critical Code Review Required Before Commit/Push**
+**BLOCKED: Critical Code Review Required Before Push**
 
-This commit/push is **blocked** because it doesn't include a review summary marker.
+This push is **blocked** because it doesn't include a review summary marker.
 
 **To proceed, you MUST:**
 
@@ -39,27 +39,28 @@ This commit/push is **blocked** because it doesn't include a review summary mark
    Be thorough but practical. Small fixes should be actionable immediately.
    Ensure all code follows the established conventions in CLAUDE.md."
 
-2. **Fix issues discovered:**
-   - **Small fixes**: Apply them immediately without asking
-   - **Medium/Large issues**: Present to user with AskUserQuestion:
-     - Include enough context for the user to judge the issue
-     - Show the problematic code snippet
-     - Explain why it's an issue
-     - Always include an "Explain this issue more" option for when user needs more context
-     - Let user decide: Fix it, Skip it, or Explain more
+2. **Review ALL issues with the user:**
+   - Present EVERY issue to the user with AskUserQuestion (no automatic fixes)
+   - Include enough context for the user to judge the issue
+   - Show the problematic code snippet
+   - Explain why it's an issue
+   - Always include an "Explain this issue more" option for when user needs more context
+   - Let user decide: Fix it, Skip it, or Explain more
 
-3. **Include review marker in commit message:**
-   After completing the review, add a review summary marker to your commit message:
+3. **Append review marker as bash comment:**
+   After completing the review, append a bash comment with the review summary to your push command:
 
-   ```
-   [REVIEWED: X issues found, Y fixed, Z skipped (reason)]
+   ```bash
+   git push origin main # [REVIEWED: X issues found, Y fixed, Z skipped (reason)]
    ```
 
    Examples:
-   - `[REVIEWED: 3 issues found, 3 fixed, 0 skipped]`
-   - `[REVIEWED: 2 issues found, 1 fixed, 1 skipped (style preference)]`
-   - `[REVIEWED: 0 issues found]`
+   ```bash
+   git push origin main # [REVIEWED: 3 issues found, 3 fixed, 0 skipped]
+   git push # [REVIEWED: 0 issues found]
+   git push origin feature-branch # [REVIEWED: 2 issues found, 1 fixed, 1 skipped (style preference)]
+   ```
 
-   The marker MUST be included in the commit message (via -m flag or HEREDOC) for the commit to proceed.
+   The `# [REVIEWED: ...]` comment keeps the command clean while proving the review was done.
 
 **This block cannot be bypassed without completing the review and including the marker.**

@@ -1,6 +1,6 @@
 import { html, css, LitElement } from 'lit';
 import { GetVersionResponse } from '../gen/api/v1/system_info_pb.js';
-import { Timestamp } from '@bufbuild/protobuf';
+import { type Timestamp, timestampDate } from '@bufbuild/protobuf/wkt';
 import { foundationCSS } from './shared-styles.js';
 
 export class SystemInfoVersion extends LitElement {
@@ -69,7 +69,7 @@ export class SystemInfoVersion extends LitElement {
   }
 
   private formatTimestamp(timestamp: Timestamp): string {
-    const date = timestamp.toDate();
+    const date = timestampDate(timestamp);
     return date.toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',

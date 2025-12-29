@@ -1,6 +1,7 @@
 import { html, css, LitElement } from 'lit';
 import { createClient } from '@connectrpc/connect';
-import { create, Timestamp } from '@bufbuild/protobuf';
+import { create } from '@bufbuild/protobuf';
+import { type Timestamp, timestampDate } from '@bufbuild/protobuf/wkt';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import { SystemInfoService, GetVersionRequestSchema, type GetVersionResponse } from '../gen/api/v1/system_info_pb.js';
 import { foundationCSS } from './shared-styles.js';
@@ -158,7 +159,7 @@ export class VersionDisplay extends LitElement {
   }
 
   private formatTimestamp(timestamp: Timestamp): string {
-    const date = timestamp.toDate();
+    const date = timestampDate(timestamp);
     return date.toLocaleDateString('en-US', {
       year: 'numeric',
       month: 'short',

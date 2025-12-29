@@ -2,7 +2,8 @@ import { html, fixture, expect, assert } from '@open-wc/testing';
 import { stub } from 'sinon';
 import { SystemInfoVersion } from './system-info-version.js';
 import { GetVersionResponseSchema } from '../gen/api/v1/system_info_pb.js';
-import { create, Timestamp } from '@bufbuild/protobuf';
+import { create } from '@bufbuild/protobuf';
+import { TimestampSchema } from '@bufbuild/protobuf/wkt';
 import './system-info-version.js';
 
 function timeout(ms: number, message: string) {
@@ -116,7 +117,7 @@ describe('SystemInfoVersion', () => {
     describe('when version has complete data', () => {
       beforeEach(async () => {
   
-        const mockTimestamp = create(Timestamp, {
+        const mockTimestamp = create(TimestampSchema, {
           seconds: BigInt(Math.floor(new Date('2023-06-15T14:30:00Z').getTime() / 1000)),
           nanos: 0
         });
@@ -159,7 +160,7 @@ describe('SystemInfoVersion', () => {
     describe('when version has tagged commit', () => {
       beforeEach(async () => {
   
-        const mockTimestamp = create(Timestamp, {
+        const mockTimestamp = create(TimestampSchema, {
           seconds: BigInt(Math.floor(new Date('2023-06-15T14:30:00Z').getTime() / 1000)),
           nanos: 0
         });
@@ -187,7 +188,7 @@ describe('SystemInfoVersion', () => {
     describe('when version has empty commit', () => {
       beforeEach(async () => {
   
-        const mockTimestamp = create(Timestamp, {
+        const mockTimestamp = create(TimestampSchema, {
           seconds: BigInt(Math.floor(new Date('2023-06-15T14:30:00Z').getTime() / 1000)),
           nanos: 0
         });
@@ -374,7 +375,7 @@ describe('SystemInfoVersion', () => {
 
       beforeEach(() => {
   
-        const timestamp = create(Timestamp, {
+        const timestamp = create(TimestampSchema, {
           seconds: BigInt(Math.floor(new Date('2023-12-25T15:45:30Z').getTime() / 1000)),
           nanos: 0
         });
@@ -398,7 +399,7 @@ describe('SystemInfoVersion', () => {
 
       beforeEach(() => {
   
-        const timestamp = create(Timestamp, {
+        const timestamp = create(TimestampSchema, {
           seconds: BigInt(0),
           nanos: 0
         });
@@ -418,7 +419,7 @@ describe('SystemInfoVersion', () => {
 
       beforeEach(() => {
   
-        const timestamp = create(Timestamp, {
+        const timestamp = create(TimestampSchema, {
           seconds: BigInt(Math.floor(new Date('2023-06-15T14:30:00Z').getTime() / 1000)),
           nanos: 500000000 // 0.5 seconds
         });
@@ -438,7 +439,7 @@ describe('SystemInfoVersion', () => {
   describe('component structure', () => {
     beforeEach(async () => {
 
-      const mockTimestamp = create(Timestamp, {
+      const mockTimestamp = create(TimestampSchema, {
         seconds: BigInt(Math.floor(new Date('2023-06-15T14:30:00Z').getTime() / 1000)),
         nanos: 0
       });
@@ -491,7 +492,7 @@ describe('SystemInfoVersion', () => {
     describe('when loading is true but version exists', () => {
       beforeEach(async () => {
   
-        const mockTimestamp = create(Timestamp, {
+        const mockTimestamp = create(TimestampSchema, {
           seconds: BigInt(Math.floor(new Date('2023-06-15T14:30:00Z').getTime() / 1000)),
           nanos: 0
         });
@@ -522,7 +523,7 @@ describe('SystemInfoVersion', () => {
     describe('when error exists but version also exists', () => {
       beforeEach(async () => {
   
-        const mockTimestamp = create(Timestamp, {
+        const mockTimestamp = create(TimestampSchema, {
           seconds: BigInt(Math.floor(new Date('2023-06-15T14:30:00Z').getTime() / 1000)),
           nanos: 0
         });
