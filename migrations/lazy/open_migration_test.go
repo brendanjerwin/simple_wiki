@@ -66,10 +66,10 @@ inventory.container = 'GarageInventory'
 {{ ShowInventoryContentsOf .Identifier }}`
 
 			// Create the file with the old format
-			mungedIdentifier := wikiidentifiers.MungeIdentifier(identifier)
-			encodedFilename := base32tools.EncodeToBase32(mungedIdentifier) + ".md"  
+			mungedIdentifier, mungeErr := wikiidentifiers.MungeIdentifier(identifier)
+			Expect(mungeErr).NotTo(HaveOccurred())
+			encodedFilename := base32tools.EncodeToBase32(mungedIdentifier) + ".md"
 			filePath = filepath.Join(testDataDir, encodedFilename)
-			
 
 			err := os.WriteFile(filePath, []byte(fileContent), 0644)
 			Expect(err).NotTo(HaveOccurred())
@@ -176,10 +176,11 @@ container = 'already_migrated'
 # Already migrated content`
 
 			// Create the file
-			mungedIdentifier := wikiidentifiers.MungeIdentifier(identifier)
-			encodedFilename := base32tools.EncodeToBase32(mungedIdentifier) + ".md"  
+			mungedIdentifier, mungeErr := wikiidentifiers.MungeIdentifier(identifier)
+			Expect(mungeErr).NotTo(HaveOccurred())
+			encodedFilename := base32tools.EncodeToBase32(mungedIdentifier) + ".md"
 			filePath := filepath.Join(testDataDir, encodedFilename)
-			
+
 			writeErr := os.WriteFile(filePath, []byte(fileContent), 0644)
 			Expect(writeErr).NotTo(HaveOccurred())
 

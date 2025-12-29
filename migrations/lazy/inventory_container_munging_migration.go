@@ -1,6 +1,7 @@
 package lazy
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/pelletier/go-toml/v2"
@@ -43,7 +44,10 @@ func (*InventoryContainerMungingMigration) AppliesTo(content []byte) bool {
 	}
 
 	// Apply if the container value is different when munged
-	munged := wikiidentifiers.MungeIdentifier(container)
+	munged, err := wikiidentifiers.MungeIdentifier(container)
+	if err != nil {
+		return false // Cannot munge, skip migration
+	}
 	return container != munged
 }
 
@@ -75,7 +79,10 @@ func (*InventoryContainerMungingMigration) Apply(content []byte) ([]byte, error)
 	}
 
 	// Munge the container value
-	munged := wikiidentifiers.MungeIdentifier(container)
+	munged, err := wikiidentifiers.MungeIdentifier(container)
+	if err != nil {
+		return content, fmt.Errorf("cannot munge container %q: %w", container, err)
+	}
 	if container == munged {
 		return content, nil // Already munged
 	}

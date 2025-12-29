@@ -142,6 +142,25 @@ inventory:
 				Expect(applies).To(BeFalse())
 			})
 		})
+
+		When("container produces empty result after munging", func() {
+			var content []byte
+			var applies bool
+
+			BeforeEach(func() {
+				content = []byte(`+++
+identifier = 'test_page'
+
+[inventory]
+container = '///'
++++`)
+				applies = migration.AppliesTo(content)
+			})
+
+			It("should not apply because MungeIdentifier fails", func() {
+				Expect(applies).To(BeFalse())
+			})
+		})
 	})
 
 	Describe("Apply", func() {
@@ -187,99 +206,19 @@ items = ['hammer', 'screwdriver']
 			})
 		})
 
-		Describe("when testing various casing patterns", func() {
-			Describe("when container is KitchenCabinet", func() {
-				var content []byte
-				var result []byte
-				var err error
+		DescribeTable("munging various casing patterns",
+			func(input, expected string) {
+				content := []byte("+++\n[inventory]\ncontainer = '" + input + "'\n+++\n")
+				result, err := migration.Apply(content)
 
-				BeforeEach(func() {
-					content = []byte(`+++
-[inventory]
-container = 'KitchenCabinet'
-+++
-`)
-					result, err = migration.Apply(content)
-				})
-
-				It("should not return an error", func() {
-					Expect(err).NotTo(HaveOccurred())
-				})
-
-				It("should munge to kitchen_cabinet", func() {
-					Expect(string(result)).To(ContainSubstring(`container = 'kitchen_cabinet'`))
-				})
-			})
-
-			Describe("when container is MixedCASEExample", func() {
-				var content []byte
-				var result []byte
-				var err error
-
-				BeforeEach(func() {
-					content = []byte(`+++
-[inventory]
-container = 'MixedCASEExample'
-+++
-`)
-					result, err = migration.Apply(content)
-				})
-
-				It("should not return an error", func() {
-					Expect(err).NotTo(HaveOccurred())
-				})
-
-				It("should munge to mixed_case_example", func() {
-					Expect(string(result)).To(ContainSubstring(`container = 'mixed_case_example'`))
-				})
-			})
-
-			Describe("when container is SimpleTest", func() {
-				var content []byte
-				var result []byte
-				var err error
-
-				BeforeEach(func() {
-					content = []byte(`+++
-[inventory]
-container = 'SimpleTest'
-+++
-`)
-					result, err = migration.Apply(content)
-				})
-
-				It("should not return an error", func() {
-					Expect(err).NotTo(HaveOccurred())
-				})
-
-				It("should munge to simple_test", func() {
-					Expect(string(result)).To(ContainSubstring(`container = 'simple_test'`))
-				})
-			})
-
-			Describe("when container is ALLCAPS", func() {
-				var content []byte
-				var result []byte
-				var err error
-
-				BeforeEach(func() {
-					content = []byte(`+++
-[inventory]
-container = 'ALLCAPS'
-+++
-`)
-					result, err = migration.Apply(content)
-				})
-
-				It("should not return an error", func() {
-					Expect(err).NotTo(HaveOccurred())
-				})
-
-				It("should munge to allcaps", func() {
-					Expect(string(result)).To(ContainSubstring(`container = 'allcaps'`))
-				})
-			})
-		})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(string(result)).To(ContainSubstring("container = '" + expected + "'"))
+			},
+			Entry("KitchenCabinet -> kitchen_cabinet", "KitchenCabinet", "kitchen_cabinet"),
+			Entry("MixedCASEExample -> mixed_case_example", "MixedCASEExample", "mixed_case_example"),
+			Entry("SimpleTest -> simple_test", "SimpleTest", "simple_test"),
+			Entry("ALLCAPS -> allcaps", "ALLCAPS", "allcaps"),
+		)
 
 		When("inventory.container is already munged", func() {
 			var content []byte
@@ -335,7 +274,6 @@ container = 'LabTub_61c0030e-00e3-47b5-a797-1ac01f8d05b1'
 
 			When("container value is empty", func() {
 				var content []byte
-				var result []byte
 				var err error
 
 				BeforeEach(func() {
@@ -344,15 +282,15 @@ container = 'LabTub_61c0030e-00e3-47b5-a797-1ac01f8d05b1'
 container = ''
 +++
 `)
-					result, err = migration.Apply(content)
+					_, err = migration.Apply(content)
 				})
 
-				It("should not return an error", func() {
-					Expect(err).NotTo(HaveOccurred())
+				It("should return an error", func() {
+					Expect(err).To(HaveOccurred())
 				})
 
-				It("should return unchanged content", func() {
-					Expect(result).To(Equal(content))
+				It("should include context about the empty container", func() {
+					Expect(err.Error()).To(ContainSubstring("cannot munge container"))
 				})
 			})
 

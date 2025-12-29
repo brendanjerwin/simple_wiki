@@ -31,14 +31,31 @@ const (
 	defaultMaxRecursion = 10
 )
 
+// InvalidItemTypeError is returned when an item in the items array has an unexpected type.
+type InvalidItemTypeError struct {
+	ContainerID string
+	ActualType  string
+	Value       any
+}
+
+func (e *InvalidItemTypeError) Error() string {
+	return fmt.Sprintf("invalid item type in container %s: expected string, got %s with value %v",
+		e.ContainerID, e.ActualType, e.Value)
+}
+
 // CreateInventoryItem implements the CreateInventoryItem RPC.
+//
+//revive:disable:function-length
 func (s *Server) CreateInventoryItem(_ context.Context, req *apiv1.CreateInventoryItemRequest) (*apiv1.CreateInventoryItemResponse, error) {
 	if req.ItemIdentifier == "" {
 		return nil, status.Error(codes.InvalidArgument, "item_identifier is required")
 	}
 
 	// Munge the identifier to ensure consistency
-	identifier := wikiidentifiers.MungeIdentifier(req.ItemIdentifier)
+	identifier, err := wikiidentifiers.MungeIdentifier(req.ItemIdentifier)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid item identifier: %v", err)
+	}
 
 	// Check if page already exists
 	_, existingFm, err := s.pageReaderMutator.ReadFrontMatter(identifier)
@@ -77,7 +94,11 @@ func (s *Server) CreateInventoryItem(_ context.Context, req *apiv1.CreateInvento
 	inventoryData := make(map[string]any)
 	container := ""
 	if req.Container != "" {
-		container = wikiidentifiers.MungeIdentifier(req.Container)
+		mungedContainer, err := wikiidentifiers.MungeIdentifier(req.Container)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "invalid container identifier: %v", err)
+		}
+		container = mungedContainer
 		inventoryData[containerKey] = container
 	}
 	inventoryData[itemsKey] = []string{}
@@ -114,8 +135,14 @@ func (s *Server) MoveInventoryItem(_ context.Context, req *apiv1.MoveInventoryIt
 		return nil, status.Error(codes.InvalidArgument, "item_identifier is required")
 	}
 
-	identifier := wikiidentifiers.MungeIdentifier(req.ItemIdentifier)
-	newContainer := mungeOptionalContainer(req.NewContainer)
+	identifier, err := wikiidentifiers.MungeIdentifier(req.ItemIdentifier)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid item identifier: %v", err)
+	}
+	newContainer, err := mungeOptionalContainer(req.NewContainer)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid container identifier: %v", err)
+	}
 
 	// Read the item's current frontmatter
 	_, itemFm, err := s.pageReaderMutator.ReadFrontMatter(identifier)
@@ -154,9 +181,9 @@ func (s *Server) MoveInventoryItem(_ context.Context, req *apiv1.MoveInventoryIt
 }
 
 // mungeOptionalContainer munges a container identifier if non-empty.
-func mungeOptionalContainer(container string) string {
+func mungeOptionalContainer(container string) (string, error) {
 	if container == "" {
-		return ""
+		return "", nil
 	}
 	return wikiidentifiers.MungeIdentifier(container)
 }
@@ -258,13 +285,19 @@ func (s *Server) ListContainerContents(_ context.Context, req *apiv1.ListContain
 		return nil, status.Error(codes.InvalidArgument, "container_identifier is required")
 	}
 
-	containerID := wikiidentifiers.MungeIdentifier(req.ContainerIdentifier)
+	containerID, err := wikiidentifiers.MungeIdentifier(req.ContainerIdentifier)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid container identifier: %v", err)
+	}
 	maxDepth := int(req.MaxDepth)
 	if maxDepth == 0 {
 		maxDepth = defaultMaxRecursion
 	}
 
-	items, totalCount := s.listContainerContentsRecursive(containerID, req.Recursive, maxDepth, 0)
+	items, totalCount, err := s.listContainerContentsRecursive(containerID, req.Recursive, maxDepth, 0)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to list container contents: %v", err)
+	}
 
 	// Build summary
 	var summary string
@@ -290,8 +323,11 @@ func (s *Server) ListContainerContents(_ context.Context, req *apiv1.ListContain
 // 2. Items listed in this container's inventory.items array
 //
 //revive:disable:flag-parameter
-func (s *Server) listContainerContentsRecursive(containerID string, recursive bool, maxDepth, currentDepth int) ([]*apiv1.InventoryItem, int) {
-	itemIDSet := s.collectContainerItemIDs(containerID)
+func (s *Server) listContainerContentsRecursive(containerID string, recursive bool, maxDepth, currentDepth int) ([]*apiv1.InventoryItem, int, error) {
+	itemIDSet, err := s.collectContainerItemIDs(containerID)
+	if err != nil {
+		return nil, 0, err
+	}
 
 	var items []*apiv1.InventoryItem
 	totalCount := 0
@@ -301,7 +337,10 @@ func (s *Server) listContainerContentsRecursive(containerID string, recursive bo
 
 		// Recursively get nested items if requested
 		if recursive && item.IsContainer && currentDepth < maxDepth {
-			nestedItems, nestedCount := s.listContainerContentsRecursive(itemID, true, maxDepth, currentDepth+1)
+			nestedItems, nestedCount, nestedErr := s.listContainerContentsRecursive(itemID, true, maxDepth, currentDepth+1)
+			if nestedErr != nil {
+				return nil, 0, nestedErr
+			}
 			item.NestedItems = nestedItems
 			totalCount += nestedCount
 		}
@@ -310,11 +349,12 @@ func (s *Server) listContainerContentsRecursive(containerID string, recursive bo
 		totalCount++
 	}
 
-	return items, totalCount
+	return items, totalCount, nil
 }
 
 // collectContainerItemIDs collects all item IDs associated with a container from both sources.
-func (s *Server) collectContainerItemIDs(containerID string) map[string]bool {
+// Returns an error if the items array contains invalid types.
+func (s *Server) collectContainerItemIDs(containerID string) (map[string]bool, error) {
 	itemIDSet := make(map[string]bool)
 
 	// Source 1: Query for items that have this container as their inventory.container
@@ -324,33 +364,37 @@ func (s *Server) collectContainerItemIDs(containerID string) map[string]bool {
 	}
 
 	// Source 2: Get items from the container's inventory.items array
-	s.addItemsFromContainerArray(containerID, itemIDSet)
+	if err := s.addItemsFromContainerArray(containerID, itemIDSet); err != nil {
+		return nil, err
+	}
 
-	return itemIDSet
+	return itemIDSet, nil
 }
 
 // addItemsFromContainerArray adds items from the container's inventory.items array to the set.
-func (s *Server) addItemsFromContainerArray(containerID string, itemIDSet map[string]bool) {
+// Returns an error if the items array contains invalid types.
+func (s *Server) addItemsFromContainerArray(containerID string, itemIDSet map[string]bool) error {
 	_, containerFm, err := s.pageReaderMutator.ReadFrontMatter(containerID)
 	if err != nil {
-		return
+		return nil // Page doesn't exist or can't be read - not an error for this purpose
 	}
 
 	inv, ok := containerFm[inventoryKey].(map[string]any)
 	if !ok {
-		return
+		return nil // No inventory section
 	}
 
 	itemsRaw, ok := inv[itemsKey]
 	if !ok {
-		return
+		return nil // No items array
 	}
 
-	extractItemIDs(itemsRaw, itemIDSet)
+	return extractItemIDs(itemsRaw, itemIDSet, containerID)
 }
 
 // extractItemIDs extracts item IDs from a raw items value and adds them to the set.
-func extractItemIDs(itemsRaw any, itemIDSet map[string]bool) {
+// Returns an InvalidItemTypeError if any item in the array is not a string.
+func extractItemIDs(itemsRaw any, itemIDSet map[string]bool, containerID string) error {
 	switch items := itemsRaw.(type) {
 	case []string:
 		for _, itemID := range items {
@@ -358,11 +402,18 @@ func extractItemIDs(itemsRaw any, itemIDSet map[string]bool) {
 		}
 	case []any:
 		for _, item := range items {
-			if itemID, ok := item.(string); ok {
-				itemIDSet[itemID] = true
+			itemID, ok := item.(string)
+			if !ok {
+				return &InvalidItemTypeError{
+					ContainerID: containerID,
+					ActualType:  fmt.Sprintf("%T", item),
+					Value:       item,
+				}
 			}
+			itemIDSet[itemID] = true
 		}
 	}
+	return nil
 }
 
 // buildInventoryItem creates an InventoryItem with title and container status.
@@ -393,7 +444,10 @@ func (s *Server) FindItemLocation(_ context.Context, req *apiv1.FindItemLocation
 		return nil, status.Error(codes.InvalidArgument, "item_identifier is required")
 	}
 
-	itemID := wikiidentifiers.MungeIdentifier(req.ItemIdentifier)
+	itemID, err := wikiidentifiers.MungeIdentifier(req.ItemIdentifier)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid item identifier: %v", err)
+	}
 
 	// Read the item's frontmatter
 	_, itemFm, err := s.pageReaderMutator.ReadFrontMatter(itemID)

@@ -305,6 +305,74 @@ var _ = Describe("Index", func() {
 				Expect(end).To(Equal(len(contentText)))
 			})
 		})
+
+		Context("when location data points beyond content (stale index)", func() {
+			var start, end int
+
+			BeforeEach(func() {
+				// Simulate stale index: locations point to position 101 but content is empty
+				contentText := ""
+				locations := []*search.Location{{Start: 101, End: 110}}
+				start, end = bleve.CalculateFragmentWindowForTest(idx, contentText, locations)
+			})
+
+			It("should have start <= end (no panic)", func() {
+				Expect(start).To(BeNumerically("<=", end))
+			})
+
+			It("should have valid boundaries for empty content", func() {
+				Expect(start).To(Equal(0))
+				Expect(end).To(Equal(0))
+			})
+		})
+
+		Context("when location data spans wide and points beyond content (stale index)", func() {
+			var start, end int
+
+			BeforeEach(func() {
+				// This triggers the else branch where span is too wide
+				// firstMatch=500, lastMatch=1000, matchSpan=500, totalNeeded=600 > 200
+				// fragmentStart = max(0, 500-50) = 450
+				// fragmentEnd = min(0, 450+200) = 0
+				// Without fix: [450:0] would panic!
+				contentText := ""
+				locations := []*search.Location{
+					{Start: 500, End: 510},
+					{Start: 990, End: 1000}, // Wide span to trigger else branch
+				}
+				start, end = bleve.CalculateFragmentWindowForTest(idx, contentText, locations)
+			})
+
+			It("should have start <= end (no panic)", func() {
+				Expect(start).To(BeNumerically("<=", end))
+			})
+
+			It("should have valid boundaries for empty content", func() {
+				Expect(start).To(Equal(0))
+				Expect(end).To(Equal(0))
+			})
+		})
+
+		Context("when location data points beyond short content", func() {
+			var start, end int
+			var contentText string
+
+			BeforeEach(func() {
+				// Simulate stale index: locations point to position 500 but content is only 10 chars
+				contentText = "short text"
+				locations := []*search.Location{{Start: 500, End: 510}}
+				start, end = bleve.CalculateFragmentWindowForTest(idx, contentText, locations)
+			})
+
+			It("should have start <= end (no panic)", func() {
+				Expect(start).To(BeNumerically("<=", end))
+			})
+
+			It("should clamp to content boundaries", func() {
+				Expect(start).To(BeNumerically(">=", 0))
+				Expect(end).To(BeNumerically("<=", len(contentText)))
+			})
+		})
 	})
 
 	Describe("extractFragmentFromLocations", func() {
@@ -428,6 +496,25 @@ var _ = Describe("Index", func() {
 			It("should have at least one highlight", func() {
 				// Should have at least one highlight
 				Expect(len(highlights)).To(BeNumerically(">=", 1))
+			})
+		})
+	})
+
+	Describe("AddPageToIndex", func() {
+		When("the identifier fails munging", func() {
+			var err error
+
+			BeforeEach(func() {
+				// "///" will fail MungeIdentifier because it becomes empty after sanitization
+				err = index.AddPageToIndex("///")
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should include invalid identifier context", func() {
+				Expect(err.Error()).To(ContainSubstring("invalid identifier"))
 			})
 		})
 	})

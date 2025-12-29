@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/brendanjerwin/simple_wiki/inventory"
@@ -12,6 +13,19 @@ import (
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
+
+// FailedPageCreation represents a page that failed to be created during normalization.
+type FailedPageCreation struct {
+	ItemID      string
+	ContainerID string
+	Error       error
+}
+
+// NormalizeResult contains the results of a page normalization operation.
+type NormalizeResult struct {
+	CreatedPages []string
+	FailedPages  []FailedPageCreation
+}
 
 // InventoryNormalizer provides shared normalization logic for inventory pages.
 // Both the full InventoryNormalizationJob and the per-page PageInventoryNormalizationJob use this.
@@ -30,17 +44,22 @@ func NewInventoryNormalizer(deps InventoryNormalizationDependencies, logger lumb
 
 // NormalizePage runs normalization for a single page.
 // If the page has inventory.items, it ensures is_container = true and creates missing item pages.
-// Returns the list of pages created.
-func (n *InventoryNormalizer) NormalizePage(pageID wikipage.PageIdentifier) ([]string, error) {
-	var createdPages []string
+// Returns a NormalizeResult containing both created and failed pages.
+func (n *InventoryNormalizer) NormalizePage(pageID wikipage.PageIdentifier) (*NormalizeResult, error) {
+	result := &NormalizeResult{}
 
 	// Step 1: Ensure is_container is set if page has items
 	if err := n.ensureIsContainerField(pageID); err != nil {
-		n.logger.Error("Failed to ensure is_container for page %s: %v", pageID, err)
+		return nil, fmt.Errorf("failed to ensure is_container for page %s: %w", pageID, err)
 	}
 
 	// Step 2: Create missing item pages
-	items := n.GetContainerItems(pageID)
+	items, err := n.GetContainerItems(pageID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get container items for %s: %w", pageID, err)
+	}
+
+	containerIDStr := string(pageID)
 	for _, itemID := range items {
 		// Check if page exists
 		_, _, err := n.deps.ReadFrontMatter(itemID)
@@ -49,15 +68,20 @@ func (n *InventoryNormalizer) NormalizePage(pageID wikipage.PageIdentifier) ([]s
 		}
 
 		// Create the missing page
-		if createErr := n.CreateItemPage(itemID, string(pageID)); createErr != nil {
+		if createErr := n.CreateItemPage(itemID, containerIDStr); createErr != nil {
+			result.FailedPages = append(result.FailedPages, FailedPageCreation{
+				ItemID:      itemID,
+				ContainerID: containerIDStr,
+				Error:       createErr,
+			})
 			n.logger.Error("Failed to create page for item %s: %v", itemID, createErr)
 		} else {
-			createdPages = append(createdPages, itemID)
+			result.CreatedPages = append(result.CreatedPages, itemID)
 			n.logger.Info("Created page for item: %s in container: %s", itemID, pageID)
 		}
 	}
 
-	return createdPages, nil
+	return result, nil
 }
 
 // ensureIsContainerField sets is_container = true if the page has inventory.items.
@@ -74,7 +98,10 @@ func (n *InventoryNormalizer) ensureIsContainerField(pageID wikipage.PageIdentif
 	}
 
 	// Check if items array exists and is non-empty
-	items := n.GetContainerItems(pageID)
+	items, err := n.GetContainerItems(pageID)
+	if err != nil {
+		return fmt.Errorf("failed to get container items: %w", err)
+	}
 	if len(items) == 0 {
 		return nil // No items or empty items array
 	}
@@ -97,41 +124,58 @@ func (n *InventoryNormalizer) ensureIsContainerField(pageID wikipage.PageIdentif
 }
 
 // GetContainerItems gets items listed in a container's inventory.items array.
-func (n *InventoryNormalizer) GetContainerItems(containerID wikipage.PageIdentifier) []string {
+// Returns an error if any item identifier is invalid.
+func (n *InventoryNormalizer) GetContainerItems(containerID wikipage.PageIdentifier) ([]string, error) {
 	_, fm, err := n.deps.ReadFrontMatter(containerID)
 	if err != nil {
-		return nil
+		if os.IsNotExist(err) {
+			return nil, nil // Container doesn't exist, no items
+		}
+		return nil, fmt.Errorf("failed to read frontmatter for container %s: %w", containerID, err)
 	}
 
 	inventoryData, ok := fm["inventory"].(map[string]any)
 	if !ok {
-		return nil
+		return nil, nil // No inventory section
 	}
 
 	itemsRaw, ok := inventoryData["items"]
 	if !ok {
-		return nil
+		return nil, nil // No items array
 	}
 
-	// Handle both []string and []any
+	// Handle both []string and []any - munge all identifiers for consistency
 	var items []string
 	switch v := itemsRaw.(type) {
 	case []string:
-		items = v
+		for _, s := range v {
+			munged, err := wikiidentifiers.MungeIdentifier(s)
+			if err != nil {
+				return nil, fmt.Errorf("invalid item identifier %q in container %s: %w", s, containerID, err)
+			}
+			items = append(items, munged)
+		}
 	case []any:
 		for _, item := range v {
 			if s, ok := item.(string); ok {
-				items = append(items, wikiidentifiers.MungeIdentifier(s))
+				munged, err := wikiidentifiers.MungeIdentifier(s)
+				if err != nil {
+					return nil, fmt.Errorf("invalid item identifier %q in container %s: %w", s, containerID, err)
+				}
+				items = append(items, munged)
 			}
 		}
 	}
 
-	return items
+	return items, nil
 }
 
 // CreateItemPage creates a new inventory item page.
 func (n *InventoryNormalizer) CreateItemPage(itemID, containerID string) error {
-	identifier := wikiidentifiers.MungeIdentifier(itemID)
+	identifier, err := wikiidentifiers.MungeIdentifier(itemID)
+	if err != nil {
+		return fmt.Errorf("invalid item identifier %q: %w", itemID, err)
+	}
 
 	// Build frontmatter
 	fm := make(map[string]any)
@@ -148,7 +192,11 @@ func (n *InventoryNormalizer) CreateItemPage(itemID, containerID string) error {
 	// Items array and is_container are only for actual containers
 	inventoryData := make(map[string]any)
 	if containerID != "" {
-		inventoryData["container"] = wikiidentifiers.MungeIdentifier(containerID)
+		mungedContainer, err := wikiidentifiers.MungeIdentifier(containerID)
+		if err != nil {
+			return fmt.Errorf("invalid container identifier %q: %w", containerID, err)
+		}
+		inventoryData["container"] = mungedContainer
 	}
 	fm["inventory"] = inventoryData
 

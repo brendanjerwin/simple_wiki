@@ -68,7 +68,11 @@ type wikilinkResolver struct{}
 
 func (wikilinkResolver) ResolveWikilink(n *wikilink.Node) ([]byte, error) {
 	sourceTarget := string(n.Target)
-	mungedTarget := wikiidentifiers.MungeIdentifier(sourceTarget)
+	mungedTarget, err := wikiidentifiers.MungeIdentifier(sourceTarget)
+	if err != nil {
+		// Invalid identifier - use URL-escaped original as fallback
+		mungedTarget = url.PathEscape(sourceTarget)
+	}
 	urlTarget := url.QueryEscape(sourceTarget)
 	relativeTarget := "/" + mungedTarget + "?title=" + urlTarget
 

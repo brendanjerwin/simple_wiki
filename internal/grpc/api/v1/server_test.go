@@ -131,6 +131,7 @@ type MockPageReaderMutator struct {
 	WrittenMarkdown    wikipage.Markdown
 	WrittenIdentifier  wikipage.PageIdentifier
 	WriteErr           error
+	MarkdownWriteErr   error // Separate error for WriteMarkdown
 	DeletedIdentifier  wikipage.PageIdentifier
 	DeleteErr          error
 	// WrittenFrontmatterByID tracks all writes per identifier for multi-page scenarios
@@ -176,7 +177,10 @@ func (m *MockPageReaderMutator) WriteFrontMatter(identifier wikipage.PageIdentif
 func (m *MockPageReaderMutator) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Markdown) error {
 	m.WrittenIdentifier = identifier
 	m.WrittenMarkdown = md
-	return m.WriteErr
+	if m.MarkdownWriteErr != nil {
+		return m.MarkdownWriteErr
+	}
+	return nil
 }
 
 func (m *MockPageReaderMutator) ReadMarkdown(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {

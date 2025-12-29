@@ -174,12 +174,13 @@ func (s *Site) InitializeIndexing() error {
 	}
 
 	// Start file shadowing scan
-	scanJob := eager.NewFileShadowingMigrationScanJob(s.PathToData, s.JobQueueCoordinator, s)
+	dataDirScanner := eager.NewFileSystemDataDirScanner(s.PathToData)
+	scanJob := eager.NewFileShadowingMigrationScanJob(dataDirScanner, s.JobQueueCoordinator, s, s)
 	s.JobQueueCoordinator.EnqueueJob(scanJob)
 	s.Logger.Info("File shadowing scan started.")
 
 	// Start JSON archive migration to move .json files to __deleted__
-	jsonArchiveJob := eager.NewJSONArchiveMigrationScanJob(s.PathToData, s.JobQueueCoordinator, s)
+	jsonArchiveJob := eager.NewJSONArchiveMigrationScanJob(s.PathToData, s.JobQueueCoordinator)
 	s.JobQueueCoordinator.EnqueueJob(jsonArchiveJob)
 	s.Logger.Info("JSON archive migration started.")
 
@@ -237,7 +238,11 @@ func (s *Site) InitializeIndexingAndWait(timeout time.Duration) error {
 
 // getFilePathsForIdentifier returns the munged and original file paths for an identifier
 func (s *Site) getFilePathsForIdentifier(identifier, extension string) (mungedPath, originalPath, actualIdentifier string) {
-	mungedIdentifier := wikiidentifiers.MungeIdentifier(identifier)
+	mungedIdentifier, err := wikiidentifiers.MungeIdentifier(identifier)
+	if err != nil {
+		// Fall back to using the original identifier if munging fails
+		mungedIdentifier = identifier
+	}
 	mungedPath = path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(mungedIdentifier))+"."+extension)
 	originalPath = path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(identifier))+"."+extension)
 	actualIdentifier = mungedIdentifier

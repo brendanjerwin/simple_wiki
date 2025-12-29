@@ -2,6 +2,7 @@
 package eager
 
 import (
+	"errors"
 	"os"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -17,6 +18,7 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 		testDataDir string
 		coordinator *jobs.JobQueueCoordinator
 		deps        *MockMigrationDeps
+		scanner     *FileSystemDataDirScanner
 	)
 
 	BeforeEach(func() {
@@ -24,13 +26,15 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 		var err error
 		testDataDir, err = os.MkdirTemp("", "file-shadowing-scan-test")
 		Expect(err).NotTo(HaveOccurred())
-		
+
 		logger := lumber.NewConsoleLogger(lumber.WARN) // Quiet logger for tests
 		coordinator = jobs.NewJobQueueCoordinator(logger)
-		
-		// Initialize mock deps for testing
+
+		// Initialize mock deps for testing page read/write
 		deps = NewMockMigrationDeps(testDataDir)
-		job = NewFileShadowingMigrationScanJob(testDataDir, coordinator, deps)
+		// Use real filesystem scanner for tests that create real files
+		scanner = NewFileSystemDataDirScanner(testDataDir)
+		job = NewFileShadowingMigrationScanJob(scanner, coordinator, deps, deps)
 	})
 
 	AfterEach(func() {
@@ -115,7 +119,10 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 			var err error
 
 			BeforeEach(func() {
-				os.RemoveAll(testDataDir)
+				// Use mock scanner to simulate non-existent directory
+				mockScanner := NewMockDataDirScanner()
+				mockScanner.SetDirExists(false)
+				job = NewFileShadowingMigrationScanJob(mockScanner, coordinator, deps, deps)
 
 				// Act
 				err = job.Execute()
@@ -140,23 +147,28 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 	Describe("FindPascalCaseIdentifiers", func() {
 		When("directory contains mixed page types", func() {
 			var pascalIdentifiers []string
+			var err error
 
 			BeforeEach(func() {
 				// Create PascalCase pages directly on filesystem to simulate legacy state
 				CreatePascalCasePage(testDataDir, "LabInventory", "# Lab Inventory")
-				CreatePascalCasePage(testDataDir, "UserGuide", "# User Guide") 
+				CreatePascalCasePage(testDataDir, "UserGuide", "# User Guide")
 				CreatePascalCasePage(testDataDir, "DeviceList", "# Device List")
-				
+
 				// Create already-munged page using mock deps (creates base32-encoded files)
 				existingErr := deps.UpdatePageContent("existing_page", "# Existing Page")
 				Expect(existingErr).NotTo(HaveOccurred())
-				
+
 				// Non-page files (should be ignored)
 				CreateTestFile(testDataDir, "sha256_abcdef", "binary")
 				CreateTestFile(testDataDir, "config.txt", "config")
 
 				// Act
-				pascalIdentifiers = job.FindPascalCaseIdentifiers()
+				pascalIdentifiers, err = job.FindPascalCaseIdentifiers()
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("should identify the correct number of PascalCase identifiers", func() {
@@ -168,19 +180,95 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 			})
 		})
 
+		When("MD file has no frontmatter", func() {
+			var pascalIdentifiers []string
+			var err error
+
+			BeforeEach(func() {
+				// Create an MD file without frontmatter - identifier derived from filename
+				// Note: filename-derived identifiers are lowercase, so won't need migration
+				CreateMDFileWithoutFrontmatter(testDataDir, "nofrontmatter", "# Just Content")
+
+				// Act
+				pascalIdentifiers, err = job.FindPascalCaseIdentifiers()
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should not flag lowercase identifiers for migration", func() {
+				// When derived from filename, identifier is lowercase and doesn't need migration
+				Expect(pascalIdentifiers).To(BeEmpty())
+			})
+		})
+
+		When("MD file has TOML frontmatter without identifier", func() {
+			var pascalIdentifiers []string
+			var err error
+
+			BeforeEach(func() {
+				// Create an MD file with frontmatter but no identifier field
+				// Note: filename-derived identifiers are lowercase, so won't need migration
+				CreateMDFileWithFrontmatterNoIdentifier(testDataDir, "missingid", "title = 'Test'", "# Content")
+
+				// Act
+				pascalIdentifiers, err = job.FindPascalCaseIdentifiers()
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should not flag lowercase identifiers for migration", func() {
+				// When derived from filename, identifier is lowercase and doesn't need migration
+				Expect(pascalIdentifiers).To(BeEmpty())
+			})
+		})
+
+		When("MD file has invalid identifier that fails munging", func() {
+			var pascalIdentifiers []string
+			var err error
+
+			BeforeEach(func() {
+				// Create an MD file with identifier that would fail MungeIdentifier
+				CreateMDFileWithInvalidIdentifier(testDataDir, "testfile", "///")
+
+				// Act
+				pascalIdentifiers, err = job.FindPascalCaseIdentifiers()
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should skip the invalid identifier", func() {
+				Expect(pascalIdentifiers).NotTo(ContainElement("///"))
+			})
+
+			It("should return empty list", func() {
+				Expect(pascalIdentifiers).To(BeEmpty())
+			})
+		})
+
 		When("directory contains identifiers that would have same base32 encoding when munged", func() {
 			var pascalIdentifiers []string
+			var err error
 
 			BeforeEach(func() {
 				// Create a page that has mixed case but would result in same base32 when munged
 				// This should NOT be detected as PascalCase for migration since it'd cause file conflicts
 				CreatePascalCasePage(testDataDir, "lab_smallparts_2B4", "# Lab Smallparts 2B4")
-				
+
 				// Create a true PascalCase identifier that would have different base32 encoding
 				CreatePascalCasePage(testDataDir, "TruePascalCase", "# True Pascal Case")
 
 				// Act
-				pascalIdentifiers = job.FindPascalCaseIdentifiers()
+				pascalIdentifiers, err = job.FindPascalCaseIdentifiers()
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("should detect only safe PascalCase identifiers", func() {
@@ -194,6 +282,97 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 
 			It("should not detect identifiers that would conflict when munged", func() {
 				Expect(pascalIdentifiers).NotTo(ContainElement("lab_smallparts_2B4"))
+			})
+		})
+
+		When("directory cannot be read", func() {
+			var err error
+
+			BeforeEach(func() {
+				// Use mock scanner to simulate list error
+				mockScanner := NewMockDataDirScanner()
+				mockScanner.SetListError(errors.New("permission denied"))
+				job = NewFileShadowingMigrationScanJob(mockScanner, coordinator, deps, deps)
+
+				// Act
+				_, err = job.FindPascalCaseIdentifiers()
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should indicate failed to read directory", func() {
+				Expect(err.Error()).To(ContainSubstring("failed to read data directory"))
+			})
+		})
+
+		When("MD file has malformed TOML frontmatter", func() {
+			var pascalIdentifiers []string
+			var err error
+
+			BeforeEach(func() {
+				// Create an MD file with malformed frontmatter (has +++ but not properly closed)
+				CreateMDFileWithMalformedFrontmatter(testDataDir, "malformed")
+
+				// Act
+				pascalIdentifiers, err = job.FindPascalCaseIdentifiers()
+			})
+
+			It("should not return an error", func() {
+				// Individual file errors are logged but don't fail the scan
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should skip the malformed file", func() {
+				Expect(pascalIdentifiers).To(BeEmpty())
+			})
+		})
+
+		When("MD file has unparseable TOML", func() {
+			var pascalIdentifiers []string
+			var err error
+
+			BeforeEach(func() {
+				// Create an MD file with invalid TOML syntax
+				CreateMDFileWithUnparseableTOML(testDataDir, "badtoml")
+
+				// Act
+				pascalIdentifiers, err = job.FindPascalCaseIdentifiers()
+			})
+
+			It("should not return an error", func() {
+				// Individual file errors are logged but don't fail the scan
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should skip the file with bad TOML", func() {
+				Expect(pascalIdentifiers).To(BeEmpty())
+			})
+		})
+
+		When("MD file read fails", func() {
+			var pascalIdentifiers []string
+			var err error
+
+			BeforeEach(func() {
+				// Use mock scanner to simulate a file that appears in listing but fails to read
+				mockScanner := NewMockDataDirScanner()
+				mockScanner.AddFile("test.md", nil) // File exists but will fail to read when SetReadError is set
+				mockScanner.SetReadError(errors.New("I/O error"))
+				job = NewFileShadowingMigrationScanJob(mockScanner, coordinator, deps, deps)
+
+				// Act
+				pascalIdentifiers, err = job.FindPascalCaseIdentifiers()
+			})
+
+			It("should not return an error", func() {
+				// Individual file errors are logged but don't fail the scan
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should skip the unreadable file", func() {
+				Expect(pascalIdentifiers).To(BeEmpty())
 			})
 		})
 	})

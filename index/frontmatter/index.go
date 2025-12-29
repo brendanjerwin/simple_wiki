@@ -47,7 +47,10 @@ func NewIndex(pageReader wikipage.PageReader) *Index {
 
 // AddPageToIndex adds a page's frontmatter to the index.
 func (f *Index) AddPageToIndex(requestedIdentifier wikipage.PageIdentifier) error {
-	mungedIdentifier := wikiidentifiers.MungeIdentifier(requestedIdentifier)
+	mungedIdentifier, err := wikiidentifiers.MungeIdentifier(requestedIdentifier)
+	if err != nil {
+		return fmt.Errorf("invalid identifier %q: %w", requestedIdentifier, err)
+	}
 	identifier, frontmatter, err := f.pageReader.ReadFrontMatter(requestedIdentifier)
 	if err != nil {
 		return err
@@ -140,7 +143,11 @@ func (f *Index) RemovePageFromIndex(identifier wikipage.PageIdentifier) error {
 }
 
 func (f *Index) removePageFromIndexInternal(identifier wikipage.PageIdentifier) {
-	identifier = wikiidentifiers.MungeIdentifier(identifier)
+	// Munge identifier for consistent lookup; if munging fails, use original
+	// (identifiers in index should already be valid, error would indicate data corruption)
+	if munged, err := wikiidentifiers.MungeIdentifier(identifier); err == nil {
+		identifier = munged
+	}
 	for dottedKeyPath := range f.PageKeyMap[identifier] {
 		for value := range f.PageKeyMap[identifier][dottedKeyPath] {
 			identifiers := f.InvertedIndex[dottedKeyPath][value]
@@ -186,7 +193,10 @@ func (f *Index) QueryPrefixMatch(dottedKeyPath DottedKeyPath, valuePrefix string
 func (f *Index) GetValue(identifier wikipage.PageIdentifier, dottedKeyPath DottedKeyPath) Value {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	identifier = wikiidentifiers.MungeIdentifier(identifier)
+	// Munge identifier for consistent lookup; if munging fails, use original
+	if munged, err := wikiidentifiers.MungeIdentifier(identifier); err == nil {
+		identifier = munged
+	}
 	for value := range f.PageKeyMap[identifier][dottedKeyPath] {
 		return value
 	}

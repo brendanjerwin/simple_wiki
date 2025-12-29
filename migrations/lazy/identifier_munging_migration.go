@@ -1,6 +1,7 @@
 package lazy
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/pelletier/go-toml/v2"
@@ -38,7 +39,10 @@ func (*IdentifierMungingMigration) AppliesTo(content []byte) bool {
 	}
 
 	// Apply if the identifier value is different when munged
-	munged := wikiidentifiers.MungeIdentifier(identifier)
+	munged, err := wikiidentifiers.MungeIdentifier(identifier)
+	if err != nil {
+		return false // Cannot munge, skip migration
+	}
 	return identifier != munged
 }
 
@@ -65,7 +69,10 @@ func (*IdentifierMungingMigration) Apply(content []byte) ([]byte, error) {
 	}
 
 	// Munge the identifier value
-	munged := wikiidentifiers.MungeIdentifier(identifier)
+	munged, err := wikiidentifiers.MungeIdentifier(identifier)
+	if err != nil {
+		return content, fmt.Errorf("cannot munge identifier %q: %w", identifier, err)
+	}
 	if identifier == munged {
 		return content, nil // Already munged
 	}

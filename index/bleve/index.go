@@ -56,7 +56,10 @@ var (
 
 // AddPageToIndex adds a page to the Bleve index.
 func (b *Index) AddPageToIndex(requestedIdentifier wikipage.PageIdentifier) error {
-	mungedIdentifier := wikiidentifiers.MungeIdentifier(requestedIdentifier)
+	mungedIdentifier, err := wikiidentifiers.MungeIdentifier(requestedIdentifier)
+	if err != nil {
+		return fmt.Errorf("invalid identifier %q: %w", requestedIdentifier, err)
+	}
 	identifier, markdown, err := b.pageReader.ReadMarkdown(requestedIdentifier)
 	if err != nil {
 		return fmt.Errorf("bleve indexer failed to read markdown for page %q: %w", requestedIdentifier, err)
@@ -102,16 +105,20 @@ func (b *Index) AddPageToIndex(requestedIdentifier wikipage.PageIdentifier) erro
 
 // RemovePageFromIndex removes a page from the Bleve index.
 func (b *Index) RemovePageFromIndex(identifier wikipage.PageIdentifier) error {
-	mungedIdentifier := wikiidentifiers.MungeIdentifier(identifier)
+	// Munge identifier for consistent lookup; if munging fails, use original
+	mungedIdentifier := identifier
+	if munged, err := wikiidentifiers.MungeIdentifier(identifier); err == nil {
+		mungedIdentifier = munged
+	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	
+
 	// Try to delete all possible variations of the identifier to ensure complete removal.
 	// Unlike AddPageToIndex where deletion is background cleanup, RemovePageFromIndex's
 	// primary purpose is deletion, so we return any errors encountered.
 	err1 := b.index.Delete(identifier)
 	err2 := b.index.Delete(mungedIdentifier)
-	
+
 	return errors.Join(err1, err2)
 }
 
@@ -200,6 +207,11 @@ func (*Index) calculateFragmentWindow(contentText string, locations []*search.Lo
 		fragmentEnd = min(len(contentText), fragmentStart+maxFragmentLength)
 	}
 
+	// Defensive check: ensure start <= end (can happen with stale index data)
+	if fragmentStart > fragmentEnd {
+		fragmentStart = fragmentEnd
+	}
+
 	return fragmentStart, fragmentEnd
 }
 
@@ -219,9 +231,11 @@ func (b *Index) Query(query string) ([]SearchResult, error) {
 	titlePrefixQuery.SetField("title")
 	titlePrefixQuery.SetBoost(1.5)
 
-	overallQuery := bleve.NewQueryStringQuery(query)
+	// Match query on content (safer than QueryStringQuery which interprets special chars like /)
+	contentQuery := bleve.NewMatchQuery(query)
+	contentQuery.SetField(contentField)
 
-	q := bleve.NewDisjunctionQuery(titleQuery, titlePrefixQuery, overallQuery)
+	q := bleve.NewDisjunctionQuery(titleQuery, titlePrefixQuery, contentQuery)
 
 	searchReq := bleve.NewSearchRequest(q)
 	searchReq.Highlight = bleve.NewHighlight()
@@ -229,7 +243,7 @@ func (b *Index) Query(query string) ([]SearchResult, error) {
 	searchReq.Fields = []string{contentField}  // Include content field to get original text
 	bleveResults, err := b.index.Search(searchReq)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("bleve search for query %q: %w", query, err)
 	}
 
 	var results []SearchResult

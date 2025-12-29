@@ -67,3 +67,4 @@ bun.lockb
 
 # Local binaries and tools (may contain secrets)
 .local/
+coverage.txt

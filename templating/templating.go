@@ -76,7 +76,11 @@ func ConstructTemplateContextFromFrontmatterWithVisited(fm wikipage.FrontMatter,
 
 	// Add existing items to the map
 	for _, item := range templateContext.Inventory.Items {
-		uniqueItems[wikiidentifiers.MungeIdentifier(item)] = true
+		mungedItem, err := wikiidentifiers.MungeIdentifier(item)
+		if err != nil {
+			return TemplateContext{}, fmt.Errorf("munging inventory item %q: %w", item, err)
+		}
+		uniqueItems[mungedItem] = true
 	}
 
 	// Add new items to the map (protected from circular references)
@@ -223,7 +227,10 @@ func BuildLinkToWithVisited(site wikipage.PageReader, currentPageTemplateContext
 			// Return a safe fallback link without triggering template execution - use munged identifier for URL
 			titleCaser := cases.Title(language.AmericanEnglish)
 			titleCasedTitle := titleCaser.String(strings.ReplaceAll(strcase.SnakeCase(identifierToLink), "_", " "))
-			mungedIdentifier := wikiidentifiers.MungeIdentifier(identifierToLink)
+			mungedIdentifier, err := wikiidentifiers.MungeIdentifier(identifierToLink)
+			if err != nil {
+				return fmt.Sprintf("[ERROR: LinkTo circular reference, munging %q: %v]", identifierToLink, err)
+			}
 			return "[" + titleCasedTitle + " (circular reference)](/" + mungedIdentifier + ")"
 		}
 
@@ -242,17 +249,26 @@ func BuildLinkToWithVisited(site wikipage.PageReader, currentPageTemplateContext
 			// It'll render and let the page get created.
 			if isContainer(currentPageTemplateContext.Identifier) {
 				// special inventory item link with attributes - use munged identifier for URL
-				mungedIdentifier := wikiidentifiers.MungeIdentifier(identifierToLink)
+				mungedIdentifier, mungeErr := wikiidentifiers.MungeIdentifier(identifierToLink)
+				if mungeErr != nil {
+					return fmt.Sprintf("[ERROR: LinkTo new inventory item, munging %q: %v]", identifierToLink, mungeErr)
+				}
 				return "[" + titleCasedTitle + "](/" + mungedIdentifier + "?tmpl=inv_item&inventory.container=" + currentPageTemplateContext.Identifier + "&title=" + urlEncodedTitle + ")"
 			}
 
 			// Use munged identifier for URL
-			mungedIdentifier := wikiidentifiers.MungeIdentifier(identifierToLink)
+			mungedIdentifier, mungeErr := wikiidentifiers.MungeIdentifier(identifierToLink)
+			if mungeErr != nil {
+				return fmt.Sprintf("[ERROR: LinkTo new page, munging %q: %v]", identifierToLink, mungeErr)
+			}
 			return "[" + titleCasedTitle + "](/" + mungedIdentifier + "?title=" + urlEncodedTitle + ")"
 		}
 
 		// Linked Page Exists - use munged identifier for URL
-		mungedIdentifier := wikiidentifiers.MungeIdentifier(identifierToLink)
+		mungedIdentifier, mungeErr := wikiidentifiers.MungeIdentifier(identifierToLink)
+		if mungeErr != nil {
+			return fmt.Sprintf("[ERROR: LinkTo existing page, munging %q: %v]", identifierToLink, mungeErr)
+		}
 		tmplString := "{{if index . \"title\"}}[{{ index . \"title\" }}](/" + mungedIdentifier + "){{else}}[{{ index . \"identifier\" }}](/" + mungedIdentifier + "){{end}}"
 		tmpl, err := template.New("content").Parse(tmplString)
 		if err != nil {

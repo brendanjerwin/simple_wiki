@@ -47,6 +47,16 @@ type InventoryNormalizationDependencies interface {
 	wikipage.PageReaderMutator
 }
 
+// UnexpectedIsContainerTypeError is returned when is_container has an unexpected type.
+type UnexpectedIsContainerTypeError struct {
+	ActualType string
+	Value      any
+}
+
+func (e *UnexpectedIsContainerTypeError) Error() string {
+	return fmt.Sprintf("unexpected type for is_container: got %s with value %v", e.ActualType, e.Value)
+}
+
 // InventoryNormalizationJob scans for inventory anomalies and creates missing item pages.
 type InventoryNormalizationJob struct {
 	normalizer *InventoryNormalizer
@@ -135,7 +145,18 @@ func (j *InventoryNormalizationJob) createMissingItemPages(containers []string) 
 	var anomalies []InventoryAnomaly
 
 	for _, containerID := range containers {
-		items := j.normalizer.GetContainerItems(containerID)
+		items, err := j.normalizer.GetContainerItems(containerID)
+		if err != nil {
+			j.logger.Error("Failed to get container items for %s: %v", containerID, err)
+			anomalies = append(anomalies, InventoryAnomaly{
+				Type:        "invalid_item_identifier",
+				ItemID:      containerID,
+				Description: fmt.Sprintf("Container '%s' has invalid item identifier: %v", containerID, err),
+				Containers:  []string{containerID},
+				Severity:    "error",
+			})
+			continue
+		}
 		for _, itemID := range items {
 			_, _, err := j.deps.ReadFrontMatter(itemID)
 			if err == nil {
@@ -196,7 +217,12 @@ func (j *InventoryNormalizationJob) buildItemContainerMap(containers []string) m
 		}
 
 		// Source 2: Items listed in this container's inventory.items array
-		for _, itemID := range j.normalizer.GetContainerItems(containerID) {
+		containerItems, err := j.normalizer.GetContainerItems(containerID)
+		if err != nil {
+			j.logger.Error("Failed to get container items for %s: %v", containerID, err)
+			continue
+		}
+		for _, itemID := range containerItems {
 			if itemContainers[itemID] == nil {
 				itemContainers[itemID] = make(map[string]bool)
 			}
@@ -323,7 +349,11 @@ func (j *InventoryNormalizationJob) migrateContainersToIsContainerField() int {
 	pagesWithItems := j.fmIndex.QueryKeyExistence(inventoryItemsKeyPath)
 	for _, pageID := range pagesWithItems {
 		// Check if the page has actual items in its inventory.items array
-		items := j.normalizer.GetContainerItems(pageID)
+		items, err := j.normalizer.GetContainerItems(pageID)
+		if err != nil {
+			j.logger.Error("Failed to get container items for %s: %v", pageID, err)
+			continue
+		}
 		if len(items) > 0 {
 			containerSet[pageID] = true
 		}
@@ -339,7 +369,12 @@ func (j *InventoryNormalizationJob) migrateContainersToIsContainerField() int {
 		}
 
 		// Check if is_container is already set to true
-		if isContainerAlreadySet(fm) {
+		alreadySet, err := isContainerAlreadySet(fm)
+		if err != nil {
+			j.logger.Warn("Container %s has unexpected is_container type: %v", containerID, err)
+			// Treat unexpected type as not set - will be overwritten with boolean true
+		}
+		if alreadySet {
 			continue
 		}
 
@@ -367,28 +402,33 @@ func (j *InventoryNormalizationJob) migrateContainersToIsContainerField() int {
 
 // isContainerAlreadySet checks if is_container is already set to true.
 // Handles both boolean true and string "true" values.
-func isContainerAlreadySet(fm map[string]any) bool {
+// Returns an UnexpectedIsContainerTypeError if is_container has an unexpected type.
+func isContainerAlreadySet(fm map[string]any) (bool, error) {
 	inventory, ok := fm[inventoryKey].(map[string]any)
 	if !ok {
-		return false
+		return false, nil
 	}
 
 	isContainer := inventory["is_container"]
 	if isContainer == nil {
-		return false
+		return false, nil
 	}
 
-	// Check for boolean true
+	// Check for boolean
 	if b, ok := isContainer.(bool); ok {
-		return b
+		return b, nil
 	}
 
-	// Check for string "true"
+	// Check for string "true" or "false"
 	if s, ok := isContainer.(string); ok {
-		return s == "true"
+		return s == "true", nil
 	}
 
-	return false
+	// Unexpected type - return typed error
+	return false, &UnexpectedIsContainerTypeError{
+		ActualType: fmt.Sprintf("%T", isContainer),
+		Value:      isContainer,
+	}
 }
 
 // getItemsWithContainerReference gets items that have inventory.container set to this container.
@@ -616,7 +656,11 @@ func (*InventoryNormalizationJob) extractItemsArray(inventory map[string]any) ([
 // (2) containers typically have a manageable number of items.
 func (j *InventoryNormalizationJob) findItemsWithContainerReference(containerID string, items []any) map[string]bool {
 	itemsWithContainerSet := make(map[string]bool)
-	mungedContainerID := wikiidentifiers.MungeIdentifier(containerID)
+	mungedContainerID, err := wikiidentifiers.MungeIdentifier(containerID)
+	if err != nil {
+		j.logger.Error("Invalid container identifier %q: %v", containerID, err)
+		return itemsWithContainerSet
+	}
 
 	for _, item := range items {
 		s, ok := item.(string)
@@ -624,7 +668,11 @@ func (j *InventoryNormalizationJob) findItemsWithContainerReference(containerID 
 			continue
 		}
 
-		mungedItemID := wikiidentifiers.MungeIdentifier(s)
+		mungedItemID, err := wikiidentifiers.MungeIdentifier(s)
+		if err != nil {
+			j.logger.Error("Invalid item identifier %q: %v", s, err)
+			continue
+		}
 		if j.itemReferencesContainer(mungedItemID, mungedContainerID) {
 			itemsWithContainerSet[mungedItemID] = true
 		}
@@ -650,7 +698,10 @@ func (j *InventoryNormalizationJob) itemReferencesContainer(itemID, containerID 
 		return false
 	}
 
-	mungedContainerRef := wikiidentifiers.MungeIdentifier(containerRef)
+	mungedContainerRef, err := wikiidentifiers.MungeIdentifier(containerRef)
+	if err != nil {
+		return false
+	}
 	return mungedContainerRef == containerID
 }
 
@@ -667,7 +718,12 @@ func (j *InventoryNormalizationJob) removeAndWriteItems(containerID string, cont
 			continue
 		}
 
-		mungedItem := wikiidentifiers.MungeIdentifier(s)
+		mungedItem, err := wikiidentifiers.MungeIdentifier(s)
+		if err != nil {
+			// Invalid identifier, keep it as-is
+			newItems = append(newItems, item)
+			continue
+		}
 		if itemsToRemove[mungedItem] {
 			removedCount++
 			j.logger.Info("Removed item '%s' from container '%s' items list", s, containerID)
