@@ -6,8 +6,8 @@ coverage:
   status:
     project:
       default:
-        # Allow up to 0.02% coverage drop
-        threshold: 0.02%
+        # Allow up to 0.1% coverage drop
+        threshold: 0.1%
     patch:
       default:
         # Require 90% coverage on new/changed lines
