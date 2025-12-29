@@ -21,7 +21,7 @@
   ],
   "shell": {
     "init_hook": [
-      "source ./scripts/ensure_staticcheck.sh",
+      ". ./scripts/ensure_staticcheck.sh",
       "export PATH=\"${DEVBOX_PROJECT_ROOT:-.}/.devbox/gobin:$PATH\""
     ],
     "scripts": {

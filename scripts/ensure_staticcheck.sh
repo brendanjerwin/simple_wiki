@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 
 # Build staticcheck from source to match the project's Go version.
 # This avoids version mismatch errors when staticcheck was pre-built with an older Go.
@@ -37,6 +37,8 @@ if [ "$NEED_REBUILD" = true ]; then
 fi
 
 # Ensure GOBIN_DIR is in PATH (for use in current script context)
-if [[ ":$PATH:" != *":$GOBIN_DIR:"* ]]; then
-    export PATH="$GOBIN_DIR:$PATH"
-fi
+# Use POSIX-compatible case statement instead of bash [[ ]] pattern matching
+case ":$PATH:" in
+    *":$GOBIN_DIR:"*) ;;
+    *) export PATH="$GOBIN_DIR:$PATH" ;;
+esac

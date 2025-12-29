@@ -12,7 +12,7 @@ ln -sf "$LOG_FILE" "$LOG_DIR/current_task.log"
 echo "Logging to: $LOG_FILE"
 
 # Ensure staticcheck is built from source and available
-source ./scripts/ensure_staticcheck.sh
+. ./scripts/ensure_staticcheck.sh
 
 {
   echo "Running staticcheck..."
