@@ -1,8 +1,8 @@
 import { html, css, LitElement } from 'lit';
 import { createClient } from '@connectrpc/connect';
+import { create } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
-import { SystemInfoService } from '../gen/api/v1/system_info_connect.js';
-import { GetVersionRequest, GetVersionResponse, GetJobStatusRequest, GetJobStatusResponse, StreamJobStatusRequest } from '../gen/api/v1/system_info_pb.js';
+import { SystemInfoService, GetVersionRequestSchema, GetJobStatusRequestSchema, StreamJobStatusRequestSchema, type GetVersionResponse, type GetJobStatusResponse } from '../gen/api/v1/system_info_pb.js';
 import { foundationCSS } from './shared-styles.js';
 import './system-info-identity.js';
 import './system-info-indexing.js';
@@ -225,7 +225,7 @@ export class SystemInfo extends LitElement {
 
   private async reloadVersionOnly(): Promise<void> {
     try {
-      this.version = await this.client.getVersion(new GetVersionRequest());
+      this.version = await this.client.getVersion(create(GetVersionRequestSchema, {}));
       this.requestUpdate();
     } catch (err) {
       console.error('Failed to reload version:', err);
@@ -258,10 +258,10 @@ export class SystemInfo extends LitElement {
       this.error = undefined;
       
       // Load version (always use unary call for this)
-      this.version = await this.client.getVersion(new GetVersionRequest());
+      this.version = await this.client.getVersion(create(GetVersionRequestSchema, {}));
       
       // Load initial job status
-      this.jobStatus = await this.client.getJobStatus(new GetJobStatusRequest());
+      this.jobStatus = await this.client.getJobStatus(create(GetJobStatusRequestSchema, {}));
       
       // Use streaming if any jobs are active, otherwise use polling
       const hasActiveJobs = this.jobStatus.jobQueues.some(queue => queue.isActive);
@@ -287,7 +287,7 @@ export class SystemInfo extends LitElement {
     this.streamSubscription = new AbortController();
     
     try {
-      const request = new StreamJobStatusRequest({
+      const request = create(StreamJobStatusRequestSchema, {
         updateIntervalMs: 1000 // 1 second updates
       });
       

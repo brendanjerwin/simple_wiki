@@ -1,7 +1,7 @@
 import { createClient } from '@connectrpc/connect';
+import { create } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
-import { PageManagementService } from '../gen/api/v1/page_management_connect.js';
-import { DeletePageRequest } from '../gen/api/v1/page_management_pb.js';
+import { PageManagementService, DeletePageRequestSchema } from '../gen/api/v1/page_management_pb.js';
 import { AugmentErrorService } from './augment-error-service.js';
 import { showToastAfter } from './toast-message.js';
 import './confirmation-dialog.js';
@@ -111,7 +111,7 @@ export class PageDeletionService {
     this.dialog.setLoading(true);
 
     try {
-      const request = new DeletePageRequest({
+      const request = create(DeletePageRequestSchema, {
         pageName: pageName,
       });
 

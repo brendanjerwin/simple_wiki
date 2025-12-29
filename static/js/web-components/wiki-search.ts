@@ -1,19 +1,19 @@
 import { html, css, LitElement } from 'lit';
-import { createPromiseClient, PromiseClient } from '@connectrpc/connect';
+import { createClient, type Client } from '@connectrpc/connect';
 import { createGrpcWebTransport } from '@connectrpc/connect-web';
 import { sharedStyles } from './shared-styles.js';
 import './wiki-search-results.js';
-import { SearchService } from '../gen/api/v1/search_connect.js';
+import { SearchService } from '../gen/api/v1/search_pb.js';
 import type { SearchContentRequest, SearchResult } from '../gen/api/v1/search_pb.js';
 
 const INVENTORY_ONLY_STORAGE_KEY = 'wiki-search-inventory-only';
 
 export class WikiSearch extends LitElement {
-  private client: PromiseClient<typeof SearchService> | null = null;
+  private client: Client<typeof SearchService> | null = null;
 
-  private getClient(): PromiseClient<typeof SearchService> {
+  private getClient(): Client<typeof SearchService> {
     if (!this.client) {
-      this.client = createPromiseClient(SearchService, createGrpcWebTransport({
+      this.client = createClient(SearchService, createGrpcWebTransport({
         baseUrl: window.location.origin,
       }));
     }

@@ -2,9 +2,9 @@ import { html, css, LitElement, nothing } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import { sharedStyles, foundationCSS, buttonCSS } from './shared-styles.js';
 import { createClient } from '@connectrpc/connect';
+import { create } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
-import { Frontmatter } from '../gen/api/v1/frontmatter_connect.js';
-import { GetFrontmatterRequest } from '../gen/api/v1/frontmatter_pb.js';
+import { Frontmatter, GetFrontmatterRequestSchema } from '../gen/api/v1/frontmatter_pb.js';
 import { WikiUrlParser } from '../utils/wiki-url-parser.js';
 import './qr-scanner.js';
 import type { QrScannedEventDetail, QrScanner } from './qr-scanner.js';
@@ -200,7 +200,7 @@ export class InventoryQrScanner extends LitElement {
     // Fetch page info
     this.validating = true;
     try {
-      const request = new GetFrontmatterRequest({ page: identifier });
+      const request = create(GetFrontmatterRequestSchema, { page: identifier });
       const response = await this.frontmatterClient.getFrontmatter(request);
 
       // Convert protobuf Struct to plain object for easy access

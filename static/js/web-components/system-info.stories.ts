@@ -3,8 +3,8 @@ import type { Meta, StoryObj } from '@storybook/web-components-vite';
 import { html } from 'lit';
 import './system-info.js';
 import { SystemInfo } from './system-info.js';
-import { GetVersionResponse, GetJobStatusResponse, JobQueueStatus } from '../gen/api/v1/system_info_pb.js';
-import { Timestamp } from '@bufbuild/protobuf';
+import { GetVersionResponseSchema, GetJobStatusResponseSchema, JobQueueStatusSchema } from '../gen/api/v1/system_info_pb.js';
+import { create, Timestamp } from '@bufbuild/protobuf';
 import { stub } from 'sinon';
 
 const meta: Meta = {
@@ -34,19 +34,19 @@ export const Default: Story = {
     stub(el, 'stopAutoRefresh' as any);
     
     // Set up default demo data
-    const mockTimestamp = new Timestamp({
+    const mockTimestamp = create(Timestamp, {
       seconds: BigInt(Math.floor(new Date('2023-12-15T14:30:00Z').getTime() / 1000)),
       nanos: 0
     });
 
-    const frontmatterQueue = new JobQueueStatus({
+    const frontmatterQueue = create(JobQueueStatusSchema, {
       name: 'Frontmatter',
       jobsRemaining: 150,
       highWaterMark: 1000,
       isActive: true
     });
 
-    const bleveQueue = new JobQueueStatus({
+    const bleveQueue = create(JobQueueStatusSchema, {
       name: 'Bleve',
       jobsRemaining: 280,
       highWaterMark: 1000,
@@ -54,11 +54,11 @@ export const Default: Story = {
     });
 
     el.loading = false;
-    el.version = new GetVersionResponse({
+    el.version = create(GetVersionResponseSchema, {
       commit: 'abc123def456',
       buildTime: mockTimestamp
     });
-    el.jobStatus = new GetJobStatusResponse({
+    el.jobStatus = create(GetJobStatusResponseSchema, {
       jobQueues: [frontmatterQueue, bleveQueue]
     });
     
@@ -123,17 +123,17 @@ export const VersionOnly: Story = {
     stub(el, 'startAutoRefresh' as any);
     stub(el, 'stopAutoRefresh' as any);
     
-    const mockTimestamp = new Timestamp({
+    const mockTimestamp = create(Timestamp, {
       seconds: BigInt(Math.floor(new Date('2023-12-15T14:30:00Z').getTime() / 1000)),
       nanos: 0
     });
 
     el.loading = false;
-    el.version = new GetVersionResponse({
+    el.version = create(GetVersionResponseSchema, {
       commit: 'abc123def456789',
       buildTime: mockTimestamp
     });
-    el.jobStatus = new GetJobStatusResponse({
+    el.jobStatus = create(GetJobStatusResponseSchema, {
       jobQueues: []
     });
     
@@ -166,17 +166,17 @@ export const TaggedVersion: Story = {
     stub(el, 'startAutoRefresh' as any);
     stub(el, 'stopAutoRefresh' as any);
     
-    const mockTimestamp = new Timestamp({
+    const mockTimestamp = create(Timestamp, {
       seconds: BigInt(Math.floor(new Date('2023-12-15T14:30:00Z').getTime() / 1000)),
       nanos: 0
     });
 
     el.loading = false;
-    el.version = new GetVersionResponse({
+    el.version = create(GetVersionResponseSchema, {
       commit: 'v1.2.3 (abc123d)',
       buildTime: mockTimestamp
     });
-    el.jobStatus = new GetJobStatusResponse({
+    el.jobStatus = create(GetJobStatusResponseSchema, {
       jobQueues: []
     });
     
@@ -208,20 +208,20 @@ export const ActiveIndexing: Story = {
     stub(el, 'startAutoRefresh' as any);
     stub(el, 'stopAutoRefresh' as any);
     
-    const mockTimestamp = new Timestamp({
+    const mockTimestamp = create(Timestamp, {
       seconds: BigInt(Math.floor(new Date('2023-12-15T14:30:00Z').getTime() / 1000)),
       nanos: 0
     });
 
     // Add job queues to show capability
-    const frontmatterQueue = new JobQueueStatus({
+    const frontmatterQueue = create(JobQueueStatusSchema, {
       name: 'Frontmatter',
       jobsRemaining: 300,
       highWaterMark: 1500,
       isActive: true
     });
 
-    const bleveQueue = new JobQueueStatus({
+    const bleveQueue = create(JobQueueStatusSchema, {
       name: 'Bleve',
       jobsRemaining: 655,
       highWaterMark: 1500,
@@ -229,11 +229,11 @@ export const ActiveIndexing: Story = {
     });
 
     el.loading = false;
-    el.version = new GetVersionResponse({
+    el.version = create(GetVersionResponseSchema, {
       commit: 'abc123def456',
       buildTime: mockTimestamp
     });
-    el.jobStatus = new GetJobStatusResponse({
+    el.jobStatus = create(GetJobStatusResponseSchema, {
       jobQueues: [frontmatterQueue, bleveQueue]
     });
     
@@ -266,20 +266,20 @@ export const SlowIndexing: Story = {
     stub(el, 'startAutoRefresh' as any);
     stub(el, 'stopAutoRefresh' as any);
     
-    const mockTimestamp = new Timestamp({
+    const mockTimestamp = create(Timestamp, {
       seconds: BigInt(Math.floor(new Date('2023-12-15T14:30:00Z').getTime() / 1000)),
       nanos: 0
     });
 
     // Show how different queue types process at different speeds
-    const frontmatterQueue = new JobQueueStatus({
+    const frontmatterQueue = create(JobQueueStatusSchema, {
       name: 'Frontmatter',
       jobsRemaining: 200,
       highWaterMark: 5000,
       isActive: true
     });
 
-    const aiEmbeddingsQueue = new JobQueueStatus({
+    const aiEmbeddingsQueue = create(JobQueueStatusSchema, {
       name: 'AI-Embeddings',
       jobsRemaining: 4875,
       highWaterMark: 5000,
@@ -287,11 +287,11 @@ export const SlowIndexing: Story = {
     });
 
     el.loading = false;
-    el.version = new GetVersionResponse({
+    el.version = create(GetVersionResponseSchema, {
       commit: 'v2.1.0-beta (def789a)',
       buildTime: mockTimestamp
     });
-    el.jobStatus = new GetJobStatusResponse({
+    el.jobStatus = create(GetJobStatusResponseSchema, {
       jobQueues: [frontmatterQueue, aiEmbeddingsQueue]
     });
     
@@ -324,19 +324,19 @@ export const NearCompletion: Story = {
     stub(el, 'startAutoRefresh' as any);
     stub(el, 'stopAutoRefresh' as any);
     
-    const mockTimestamp = new Timestamp({
+    const mockTimestamp = create(Timestamp, {
       seconds: BigInt(Math.floor(new Date('2023-12-15T14:30:00Z').getTime() / 1000)),
       nanos: 0
     });
 
     el.loading = false;
-    el.version = new GetVersionResponse({
+    el.version = create(GetVersionResponseSchema, {
       commit: 'main-branch-abc123d',
       buildTime: mockTimestamp
     });
-    el.jobStatus = new GetJobStatusResponse({
+    el.jobStatus = create(GetJobStatusResponseSchema, {
       jobQueues: [
-        new JobQueueStatus({
+        create(JobQueueStatusSchema, {
           name: 'Final-Cleanup',
           jobsRemaining: 13,
           highWaterMark: 1000,
@@ -406,17 +406,17 @@ export const ResponsiveDemo: Story = {
     stub(el, 'startAutoRefresh' as any);
     stub(el, 'stopAutoRefresh' as any);
     
-    const mockTimestamp = new Timestamp({
+    const mockTimestamp = create(Timestamp, {
       seconds: BigInt(Math.floor(new Date('2023-12-15T14:30:00Z').getTime() / 1000)),
       nanos: 0
     });
 
     el.loading = false;
-    el.version = new GetVersionResponse({
+    el.version = create(GetVersionResponseSchema, {
       commit: 'responsive-demo-123',
       buildTime: mockTimestamp
     });
-    el.jobStatus = new GetJobStatusResponse({
+    el.jobStatus = create(GetJobStatusResponseSchema, {
       jobQueues: []
     });
     
@@ -459,39 +459,39 @@ export const InteractiveTesting: Story = {
       // Simulate loading time
       await new Promise(resolve => setTimeout(resolve, 300));
       
-      const mockTimestamp = new Timestamp({
+      const mockTimestamp = create(Timestamp, {
         seconds: BigInt(Math.floor(new Date('2023-12-15T14:30:00Z').getTime() / 1000)),
         nanos: 0
       });
 
       // Create dynamic job queue data
-      const frontmatterQueue = new JobQueueStatus({
+      const frontmatterQueue = create(JobQueueStatusSchema, {
         name: 'Frontmatter',
         jobsRemaining: Math.floor(Math.random() * 200) + 50,
         highWaterMark: 1000,
         isActive: Math.random() > 0.1
       });
 
-      const bleveQueue = new JobQueueStatus({
+      const bleveQueue = create(JobQueueStatusSchema, {
         name: 'Bleve',
         jobsRemaining: Math.floor(Math.random() * 300) + 100,
         highWaterMark: 1000,
         isActive: Math.random() > 0.2
       });
 
-      const embeddingQueue = new JobQueueStatus({
+      const embeddingQueue = create(JobQueueStatusSchema, {
         name: 'AI-Embeddings',
         jobsRemaining: Math.floor(Math.random() * 500) + 200,
         highWaterMark: 1000,
         isActive: Math.random() > 0.3
       });
 
-      el.version = new GetVersionResponse({
+      el.version = create(GetVersionResponseSchema, {
         commit: 'interactive-demo-abc123',
         buildTime: mockTimestamp
       });
       
-      el.jobStatus = new GetJobStatusResponse({
+      el.jobStatus = create(GetJobStatusResponseSchema, {
         jobQueues: [frontmatterQueue, bleveQueue, embeddingQueue]
       });
       
@@ -568,19 +568,19 @@ export const DrawerTabCollapsed: Story = {
     stub(el, 'startAutoRefresh' as any);
     stub(el, 'stopAutoRefresh' as any);
     
-    const mockTimestamp = new Timestamp({
+    const mockTimestamp = create(Timestamp, {
       seconds: BigInt(Math.floor(new Date('2023-12-15T14:30:00Z').getTime() / 1000)),
       nanos: 0
     });
 
-    const frontmatterQueue = new JobQueueStatus({
+    const frontmatterQueue = create(JobQueueStatusSchema, {
       name: 'Frontmatter',
       jobsRemaining: 150,
       highWaterMark: 1000,
       isActive: true
     });
 
-    const bleveQueue = new JobQueueStatus({
+    const bleveQueue = create(JobQueueStatusSchema, {
       name: 'Bleve',
       jobsRemaining: 280,
       highWaterMark: 1000,
@@ -589,11 +589,11 @@ export const DrawerTabCollapsed: Story = {
 
     el.loading = false;
     el.expanded = false; // Explicitly set to collapsed
-    el.version = new GetVersionResponse({
+    el.version = create(GetVersionResponseSchema, {
       commit: 'abc123def456',
       buildTime: mockTimestamp
     });
-    el.jobStatus = new GetJobStatusResponse({
+    el.jobStatus = create(GetJobStatusResponseSchema, {
       jobQueues: [frontmatterQueue, bleveQueue]
     });
     
@@ -627,19 +627,19 @@ export const DrawerTabExpanded: Story = {
     stub(el, 'startAutoRefresh' as any);
     stub(el, 'stopAutoRefresh' as any);
     
-    const mockTimestamp = new Timestamp({
+    const mockTimestamp = create(Timestamp, {
       seconds: BigInt(Math.floor(new Date('2023-12-15T14:30:00Z').getTime() / 1000)),
       nanos: 0
     });
 
-    const frontmatterQueue = new JobQueueStatus({
+    const frontmatterQueue = create(JobQueueStatusSchema, {
       name: 'Frontmatter',
       jobsRemaining: 150,
       highWaterMark: 1000,
       isActive: true
     });
 
-    const bleveQueue = new JobQueueStatus({
+    const bleveQueue = create(JobQueueStatusSchema, {
       name: 'Bleve',
       jobsRemaining: 280,
       highWaterMark: 1000,
@@ -648,11 +648,11 @@ export const DrawerTabExpanded: Story = {
 
     el.loading = false;
     el.expanded = true; // Explicitly set to expanded
-    el.version = new GetVersionResponse({
+    el.version = create(GetVersionResponseSchema, {
       commit: 'abc123def456',
       buildTime: mockTimestamp
     });
-    el.jobStatus = new GetJobStatusResponse({
+    el.jobStatus = create(GetJobStatusResponseSchema, {
       jobQueues: [frontmatterQueue, bleveQueue]
     });
     

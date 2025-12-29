@@ -1,6 +1,6 @@
 import { html, fixture, expect, assert } from '@open-wc/testing';
-import { stub } from 'sinon';
-import { ErrorDisplay } from './error-display.js';
+import { stub, type SinonStub } from 'sinon';
+import { ErrorDisplay, type ErrorAction } from './error-display.js';
 import { AugmentedError, ErrorKind } from './augment-error-service.js';
 
 function timeout(ms: number, message: string) {
@@ -134,5 +134,80 @@ describe('ErrorDisplay', () => {
     
     expect(goalElement?.textContent?.trim()).to.equal('Error while saving document:');
     expect(detailElement?.textContent?.trim()).to.equal('Connection refused');
+  });
+
+  describe('action button', () => {
+    describe('when action is not provided', () => {
+      beforeEach(async () => {
+        const originalError = new Error('Test error');
+        el.augmentedError = new AugmentedError(originalError, ErrorKind.ERROR, 'error');
+        el.action = undefined;
+        await Promise.race([
+          el.updateComplete,
+          timeout(5000, "Component update timed out"),
+        ]);
+      });
+
+      it('should not display action button', () => {
+        const actionButton = el.shadowRoot?.querySelector('.action-button');
+        expect(actionButton).to.not.exist;
+      });
+
+      it('should not display actions container', () => {
+        const actionsContainer = el.shadowRoot?.querySelector('.error-actions');
+        expect(actionsContainer).to.not.exist;
+      });
+    });
+
+    describe('when action is provided', () => {
+      let onClickStub: SinonStub;
+      let action: ErrorAction;
+
+      beforeEach(async () => {
+        onClickStub = stub();
+        action = {
+          label: 'Try Again',
+          onClick: onClickStub
+        };
+
+        const originalError = new Error('Test error');
+        el.augmentedError = new AugmentedError(originalError, ErrorKind.ERROR, 'error');
+        el.action = action;
+        await Promise.race([
+          el.updateComplete,
+          timeout(5000, "Component update timed out"),
+        ]);
+      });
+
+      it('should display action button', () => {
+        const actionButton = el.shadowRoot?.querySelector('.action-button');
+        expect(actionButton).to.exist;
+      });
+
+      it('should display action label', () => {
+        const actionButton = el.shadowRoot?.querySelector('.action-button');
+        expect(actionButton?.textContent?.trim()).to.equal('Try Again');
+      });
+
+      it('should display actions container', () => {
+        const actionsContainer = el.shadowRoot?.querySelector('.error-actions');
+        expect(actionsContainer).to.exist;
+      });
+
+      describe('when action button is clicked', () => {
+        beforeEach(async () => {
+          const actionButton = el.shadowRoot?.querySelector('.action-button') as HTMLButtonElement;
+          actionButton.click();
+          await Promise.race([
+            el.updateComplete,
+            timeout(5000, "Component update timed out"),
+          ]);
+        });
+
+        it('should call onClick callback', () => {
+          expect(onClickStub).to.have.been.calledOnce;
+        });
+      });
+    });
   });
 });

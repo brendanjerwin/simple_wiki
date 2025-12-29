@@ -1,12 +1,12 @@
 import { expect } from '@open-wc/testing';
 import sinon from 'sinon';
-import { InventoryActionService } from './inventory-action-service.js';
+import { InventoryItemCreatorMover } from './inventory-item-creator-mover.js';
 
-describe('InventoryActionService', () => {
-  let service: InventoryActionService;
+describe('InventoryItemCreatorMover', () => {
+  let service: InventoryItemCreatorMover;
 
   beforeEach(() => {
-    service = new InventoryActionService();
+    service = new InventoryItemCreatorMover();
   });
 
   afterEach(() => {
@@ -389,14 +389,31 @@ describe('InventoryActionService', () => {
   });
 
   describe('showSuccess', () => {
-    it('should have showSuccess method', () => {
-      expect(service.showSuccess).to.be.a('function');
+    // Note: showSuccess delegates to showToastAfter from toast-message.js
+    // ES Modules cannot be stubbed directly with sinon, so we test the interface contract
+
+    describe('when called with message only', () => {
+      it('should not throw', () => {
+        expect(() => service.showSuccess('Item created')).to.not.throw();
+      });
+    });
+
+    describe('when called with message and callback', () => {
+      it('should not throw', () => {
+        const callback = sinon.stub();
+        expect(() => service.showSuccess('Item created', callback)).to.not.throw();
+      });
     });
   });
 
   describe('showError', () => {
-    it('should have showError method', () => {
-      expect(service.showError).to.be.a('function');
+    // Note: showError delegates to showToastAfter from toast-message.js
+    // ES Modules cannot be stubbed directly with sinon, so we test the interface contract
+
+    describe('when called with message', () => {
+      it('should not throw', () => {
+        expect(() => service.showError('Something went wrong')).to.not.throw();
+      });
     });
   });
 

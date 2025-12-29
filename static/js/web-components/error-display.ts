@@ -1,10 +1,22 @@
-import { html, css, LitElement } from 'lit';
+import { html, css, LitElement, nothing } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import { colorCSS, typographyCSS, themeCSS, foundationCSS, buttonCSS } from './shared-styles.js';
 import { AugmentedError, AugmentErrorService } from './augment-error-service.js';
 
 /**
+ * Action button configuration for error recovery
+ */
+export interface ErrorAction {
+  /** Button label text */
+  label: string;
+  /** Callback function when button is clicked */
+  onClick: () => void;
+}
+
+/**
  * ErrorDisplay - A reusable component for displaying AugmentedError instances
+ *
+ * Supports optional CTA button for error recovery actions.
  */
 export class ErrorDisplay extends LitElement {
   static override styles = [
@@ -115,6 +127,33 @@ export class ErrorDisplay extends LitElement {
       transform: rotate(180deg);
     }
 
+    .error-actions {
+      margin-top: 12px;
+      display: flex;
+      gap: 8px;
+    }
+
+    .action-button {
+      background: var(--color-error);
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+    }
+
+    .action-button:hover {
+      background: var(--color-hover-error);
+    }
+
+    .action-button:focus {
+      outline: 2px solid var(--color-error);
+      outline-offset: 2px;
+    }
+
     @media (prefers-contrast: high) {
       :host {
         border-width: 2px;
@@ -132,6 +171,9 @@ export class ErrorDisplay extends LitElement {
   @property({ type: Object })
   augmentedError?: AugmentedError;
 
+  @property({ type: Object })
+  action?: ErrorAction;
+
   @state()
   private expanded = false;
 
@@ -148,6 +190,30 @@ export class ErrorDisplay extends LitElement {
       event.preventDefault();
       this._handleExpandToggle();
     }
+  }
+
+  private _handleActionClick(): void {
+    if (this.action?.onClick) {
+      this.action.onClick();
+    }
+  }
+
+  private _renderAction() {
+    if (!this.action) {
+      return nothing;
+    }
+
+    return html`
+      <div class="error-actions">
+        <button
+          type="button"
+          class="action-button"
+          @click="${this._handleActionClick}"
+        >
+          ${this.action.label}
+        </button>
+      </div>
+    `;
   }
 
   override render() {
@@ -192,6 +258,8 @@ export class ErrorDisplay extends LitElement {
                 <div class="error-details-content text-muted font-mono text-xs">${this.augmentedError.stack}</div>
               </div>
             ` : ''}
+
+            ${this._renderAction()}
           </div>
         </div>
       </div>

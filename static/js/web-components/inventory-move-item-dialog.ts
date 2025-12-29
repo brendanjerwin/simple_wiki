@@ -1,11 +1,10 @@
 import { html, css, LitElement, nothing } from 'lit';
 import { sharedStyles, dialogStyles } from './shared-styles.js';
-import { InventoryActionService } from './inventory-action-service.js';
+import { InventoryItemCreatorMover } from './inventory-item-creator-mover.js';
 import { createClient } from '@connectrpc/connect';
+import { create } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
-import { SearchService } from '../gen/api/v1/search_connect.js';
-import type { SearchResult } from '../gen/api/v1/search_pb.js';
-import { SearchContentRequest } from '../gen/api/v1/search_pb.js';
+import { SearchService, SearchContentRequestSchema, type SearchResult } from '../gen/api/v1/search_pb.js';
 import './inventory-qr-scanner.js';
 import type { ItemScannedEventDetail, ScannedItemInfo, InventoryQrScanner } from './inventory-qr-scanner.js';
 
@@ -321,7 +320,7 @@ export class InventoryMoveItemDialog extends LitElement {
   private _searchDebounceTimeoutMs = 300;
   private _searchDebounceTimer?: ReturnType<typeof setTimeout>;
   private searchClient = createClient(SearchService, getGrpcWebTransport());
-  private inventoryActionService = new InventoryActionService();
+  private inventoryItemCreatorMover = new InventoryItemCreatorMover();
 
   constructor() {
     super();
@@ -440,7 +439,7 @@ export class InventoryMoveItemDialog extends LitElement {
     this.searchLoading = true;
 
     try {
-      const request = new SearchContentRequest({
+      const request = create(SearchContentRequestSchema, {
         query,
         frontmatterKeyIncludeFilters: ['inventory.is_container'],
         frontmatterKeysToReturnInResults: ['inventory.container', 'title'],
@@ -553,13 +552,13 @@ export class InventoryMoveItemDialog extends LitElement {
     this.movingTo = containerIdentifier;
     this.error = null;
 
-    const result = await this.inventoryActionService.moveItem(
+    const result = await this.inventoryItemCreatorMover.moveItem(
       this.itemIdentifier,
       containerIdentifier
     );
 
     if (result.success) {
-      this.inventoryActionService.showSuccess(
+      this.inventoryItemCreatorMover.showSuccess(
         result.summary || `Moved ${this.itemIdentifier} to ${containerIdentifier}`,
         () => window.location.reload()
       );
