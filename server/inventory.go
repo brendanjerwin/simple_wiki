@@ -1,12 +1,11 @@
 package server
 
 import (
-	"bytes"
 	"fmt"
 
+	"github.com/brendanjerwin/simple_wiki/inventory"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
-	"github.com/pelletier/go-toml/v2"
 	"github.com/stoewer/go-strcase"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -23,23 +22,9 @@ type InventoryItemParams struct {
 	Title      string // Optional: human-readable title (auto-generated if empty)
 }
 
-// InventoryPageHeaderTemplate is the header template for inventory item pages.
-// This generates the title heading using frontmatter data.
-const InventoryPageHeaderTemplate = "# {{or .Title .Identifier}}"
-
-// InventoryItemMarkdownTemplate is the markdown template for inventory item pages.
-// It is exported so it can be used by both the server and the gRPC API layer.
-const InventoryItemMarkdownTemplate = `{{if .Description}}
-{{.Description}}
-{{end}}
-{{if .Inventory.Container }}
-### Goes in: {{LinkTo .Inventory.Container }}
-{{end}}
-{{if IsContainer .Identifier }}
-## Contents
-{{ ShowInventoryContentsOf .Identifier }}
-{{ end }}
-`
+// InventoryItemMarkdownTemplate is deprecated. Use inventory.ItemMarkdownTemplate instead.
+// This is kept for backwards compatibility.
+const InventoryItemMarkdownTemplate = inventory.ItemMarkdownTemplate
 
 // CreateInventoryItemPage creates a new inventory item page with the inv_item template structure.
 // If the page already exists, it returns an error.
@@ -74,18 +59,18 @@ func (s *Site) CreateInventoryItemPage(params InventoryItemParams) (*wikipage.Pa
 
 	// Set up inventory structure - only add container reference, not items array
 	// Items array and is_container are only for actual containers
-	inventory := make(map[string]any)
+	inventoryData := make(map[string]any)
 	if params.Container != "" {
 		mungedContainer, err := wikiidentifiers.MungeIdentifier(params.Container)
 		if err != nil {
 			return nil, fmt.Errorf("invalid container identifier %q: %w", params.Container, err)
 		}
-		inventory["container"] = mungedContainer
+		inventoryData["container"] = mungedContainer
 	}
-	fm[inventoryKeyPath] = inventory
+	fm[inventoryKeyPath] = inventoryData
 
 	// Build page content
-	pageText, err := buildInventoryItemPageText(fm)
+	pageText, err := inventory.BuildItemPageText(fm)
 	if err != nil {
 		return nil, fmt.Errorf("failed to build page text: %w", err)
 	}
@@ -103,32 +88,6 @@ func (s *Site) CreateInventoryItemPage(params InventoryItemParams) (*wikipage.Pa
 	}
 
 	return p, nil
-}
-
-// buildInventoryItemPageText creates the full page text for an inventory item.
-func buildInventoryItemPageText(fm map[string]any) (string, error) {
-	fmBytes, err := toml.Marshal(fm)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal frontmatter to TOML: %w", err)
-	}
-
-	var builder bytes.Buffer
-
-	if len(fmBytes) > 0 {
-		_, _ = builder.WriteString(tomlDelimiter)
-		_, _ = builder.Write(fmBytes)
-		if !bytes.HasSuffix(fmBytes, []byte(newline)) {
-			_, _ = builder.WriteString(newline)
-		}
-		_, _ = builder.WriteString(tomlDelimiter)
-	}
-
-	_, _ = builder.WriteString(newline)
-	_, _ = builder.WriteString(InventoryPageHeaderTemplate)
-	_, _ = builder.WriteString(newline)
-	_, _ = builder.WriteString(InventoryItemMarkdownTemplate)
-
-	return builder.String(), nil
 }
 
 // EnsureInventoryFrontmatterStructure ensures the frontmatter has the proper inventory structure.

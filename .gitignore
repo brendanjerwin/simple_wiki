@@ -65,8 +65,5 @@ CRUSH.md
 node_modules/
 bun.lockb
 
-# bv (beads viewer) local config and caches
-.bv/
-
 # Local binaries and tools (may contain secrets)
 .local/

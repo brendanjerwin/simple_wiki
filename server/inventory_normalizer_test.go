@@ -66,16 +66,6 @@ func (*mockNormalizerDeps) DeletePage(_ wikipage.PageIdentifier) error {
 	return nil
 }
 
-func (m *mockNormalizerDeps) ReadPage(page wikipage.PageIdentifier) (*wikipage.Page, error) {
-	_, ok := m.frontmatters[string(page)]
-	if !ok {
-		return nil, os.ErrNotExist
-	}
-	return &wikipage.Page{
-		Identifier: string(page),
-	}, nil
-}
-
 var _ = Describe("InventoryNormalizer", func() {
 	var (
 		deps       *mockNormalizerDeps

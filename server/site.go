@@ -201,7 +201,11 @@ func (s *Site) InitializeIndexing() error {
 	s.IndexCoordinator.BulkEnqueuePagesWithCompletion(pageIdentifiers, index.Add, func() {
 		// Run inventory normalization after frontmatter indexing completes
 		// This ensures the frontmatter index is fully populated before migration runs
-		normJob := NewInventoryNormalizationJob(s, s.FrontmatterIndexQueryer, s.Logger)
+		normJob, err := NewInventoryNormalizationJob(s, s.FrontmatterIndexQueryer, s.Logger)
+		if err != nil {
+			s.Logger.Error("Failed to create inventory normalization job: %v", err)
+			return
+		}
 		s.JobQueueCoordinator.EnqueueJob(normJob)
 		s.Logger.Info("Inventory normalization job queued after indexing completed")
 	})

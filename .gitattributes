@@ -47,9 +47,3 @@ flake.lock              linguist-generated
 # DOCUMENTATION
 # ------------------------------------------------------------------------------
 docs/**                 linguist-documentation
-
-# ------------------------------------------------------------------------------
-# BEADS CUSTOM MERGE STRATEGY
-# ------------------------------------------------------------------------------
-# Use bd merge for beads JSONL files
-.beads/issues.jsonl     merge=beads

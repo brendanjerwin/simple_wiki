@@ -1,8 +1,4 @@
-# Task Tracking with Beads
-
-Use `bd` (beads) for task/issue tracking. See `.beads/README.md` for commands.
-
-## Code and Structure Conventions
+# Code and Structure Conventions
 
 <!--toc:start-->
 
