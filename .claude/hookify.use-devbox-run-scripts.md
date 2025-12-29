@@ -6,7 +6,7 @@ action: warn
 conditions:
   - field: command
     operator: regex_match
-    pattern: ^(go\s+test|go\s+build|go\s+generate|go\s+vet|bun\s+(run\s+)?test|bun\s+(run\s+)?build|bun\s+(run\s+)?lint|bun\s+run\s+storybook|eslint|revive|staticcheck|markdownlint|playwright\s+test|gh\s+workflow\s+run\s+deploy)
+    pattern: ^(go\s+test|go\s+build|go\s+generate|go\s+vet|bun\s+(run\s+)?(test|build|lint|typecheck)|bun\s+run\s+storybook|eslint|revive|staticcheck|markdownlint|playwright\s+test|gh\s+workflow\s+run\s+deploy)
   - field: command
     operator: not_contains
     pattern: devbox
@@ -28,6 +28,7 @@ This project has devbox scripts configured for common tasks. Using them ensures 
 | `bun run test` | `devbox run fe:test` |
 | `bun run build` | `devbox run lint:everything` |
 | `eslint` / `bun run lint` | `devbox run fe:lint` |
+| `bun run typecheck` | `devbox run fe:typecheck` |
 | `markdownlint` | `devbox run lint:md` |
 | `playwright test` | `devbox run e2e:test` |
 | `bun run storybook` | `devbox run storybook` |

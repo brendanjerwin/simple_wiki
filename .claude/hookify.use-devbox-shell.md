@@ -6,7 +6,7 @@ action: warn
 conditions:
   - field: command
     operator: regex_match
-    pattern: ^(go|ginkgo|buf|bun|bunx|npm|npx|markdownlint|evans|grpcurl|revive|staticcheck|playwright)\s
+    pattern: (^|&&\s*)(go|ginkgo|buf|bun|bunx|npm|npx|markdownlint|evans|grpcurl|revive|staticcheck|playwright)\s
   - field: command
     operator: not_contains
     pattern: devbox
@@ -18,21 +18,23 @@ This project uses **devbox** to manage dependencies. Running tools directly may 
 
 **Instead of:**
 ```bash
-go test ./...
+cd static/js && bun run typecheck
 bun install
+go test ./...
 ```
 
-**Use:**
+**Use devbox scripts (no cd needed):**
+```bash
+devbox run fe:typecheck
+devbox run fe:test
+devbox run go:test
+devbox run lint:everything
+```
+
+**Or use devbox shell for direct commands:**
 ```bash
 devbox shell -- go test ./...
 devbox shell -- bun install
-```
-
-**Or use devbox scripts:**
-```bash
-devbox run go:test
-devbox run fe:test
-devbox run lint:everything
 ```
 
 Run `devbox run` to see all available scripts.
