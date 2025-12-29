@@ -15,6 +15,7 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 		job         *FileShadowingMigrationJob
 		testDataDir string
 		deps        *MockMigrationDeps
+		scanner     *FileSystemDataDirScanner
 	)
 
 	BeforeEach(func() {
@@ -22,9 +23,11 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 		var err error
 		testDataDir, err = os.MkdirTemp("", "file-shadowing-migration-test")
 		Expect(err).NotTo(HaveOccurred())
-		
+
 		// Create mock dependencies for testing
 		deps = NewMockMigrationDeps(testDataDir)
+		// Use real filesystem scanner for tests that create real files
+		scanner = NewFileSystemDataDirScanner(testDataDir)
 	})
 
 	AfterEach(func() {
@@ -49,7 +52,7 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 				Expect(err).NotTo(HaveOccurred())
 				
 				// Create the migration job for the PascalCase identifier
-				job = NewFileShadowingMigrationJob(deps, deps, testDataDir, "LabInventory")
+				job = NewFileShadowingMigrationJob(scanner, deps, deps, "LabInventory")
 
 				// Act
 				err = job.Execute()
@@ -87,7 +90,7 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 				// No munged version exists
 				
 				// Create the migration job
-				job = NewFileShadowingMigrationJob(deps, deps, testDataDir, "UserGuide")
+				job = NewFileShadowingMigrationJob(scanner, deps, deps, "UserGuide")
 
 				// Act
 				err = job.Execute()
@@ -127,7 +130,7 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 				Expect(err).NotTo(HaveOccurred())
 				
 				// Create the migration job
-				job = NewFileShadowingMigrationJob(deps, deps, testDataDir, "LabInventory")
+				job = NewFileShadowingMigrationJob(scanner, deps, deps, "LabInventory")
 
 				// Act
 				err = job.Execute()
@@ -158,7 +161,7 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 				// No PascalCase files created
 				
 				// Create the migration job for a non-existent PascalCase identifier
-				job = NewFileShadowingMigrationJob(deps, deps, testDataDir, "DeviceManual")
+				job = NewFileShadowingMigrationJob(scanner, deps, deps, "DeviceManual")
 
 				// Act
 				err = job.Execute()
@@ -187,7 +190,7 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				// Create the migration job
-				job = NewFileShadowingMigrationJob(deps, deps, testDataDir, "LabInventory")
+				job = NewFileShadowingMigrationJob(scanner, deps, deps, "LabInventory")
 
 				// Act
 				hasShadowing, mungedFiles = job.CheckForShadowing("LabInventory")
@@ -205,7 +208,7 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 		When("identifier fails to munge", func() {
 			BeforeEach(func() {
 				// Create the migration job
-				job = NewFileShadowingMigrationJob(deps, deps, testDataDir, "SomeIdentifier")
+				job = NewFileShadowingMigrationJob(scanner, deps, deps, "SomeIdentifier")
 
 				// Act - use an invalid identifier that can't be munged
 				hasShadowing, mungedFiles = job.CheckForShadowing("///")
@@ -217,6 +220,50 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 
 			It("should return nil munged files", func() {
 				Expect(mungedFiles).To(BeNil())
+			})
+		})
+
+		When("munged file exists on disk", func() {
+			BeforeEach(func() {
+				// Use mock scanner that reports the munged file exists
+				mockScanner := NewMockDataDirScanner()
+				mockScanner.AddPascalCasePage("lab_inventory", "# Munged content")
+				job = NewFileShadowingMigrationJob(mockScanner, deps, deps, "LabInventory")
+
+				// Act
+				hasShadowing, mungedFiles = job.CheckForShadowing("LabInventory")
+			})
+
+			It("should detect shadowing", func() {
+				Expect(hasShadowing).To(BeTrue())
+			})
+
+			It("should return the munged file name", func() {
+				Expect(mungedFiles).To(HaveLen(1))
+			})
+		})
+	})
+
+	Describe("readPascalPageDirectly", func() {
+		When("file cannot be read", func() {
+			var page *wikipage.Page
+
+			BeforeEach(func() {
+				// Use mock scanner that fails to read files
+				mockScanner := NewMockDataDirScanner()
+				mockScanner.SetReadError(os.ErrPermission)
+				job = NewFileShadowingMigrationJob(mockScanner, deps, deps, "TestPage")
+
+				// Act
+				page = job.readPascalPageDirectly("TestPage")
+			})
+
+			It("should return a page with empty text", func() {
+				Expect(page.Text).To(BeEmpty())
+			})
+
+			It("should preserve the identifier", func() {
+				Expect(page.Identifier).To(Equal("TestPage"))
 			})
 		})
 	})

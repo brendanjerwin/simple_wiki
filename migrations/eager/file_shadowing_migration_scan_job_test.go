@@ -2,6 +2,7 @@
 package eager
 
 import (
+	"errors"
 	"os"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -17,6 +18,7 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 		testDataDir string
 		coordinator *jobs.JobQueueCoordinator
 		deps        *MockMigrationDeps
+		scanner     *FileSystemDataDirScanner
 	)
 
 	BeforeEach(func() {
@@ -24,13 +26,15 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 		var err error
 		testDataDir, err = os.MkdirTemp("", "file-shadowing-scan-test")
 		Expect(err).NotTo(HaveOccurred())
-		
+
 		logger := lumber.NewConsoleLogger(lumber.WARN) // Quiet logger for tests
 		coordinator = jobs.NewJobQueueCoordinator(logger)
-		
-		// Initialize mock deps for testing
+
+		// Initialize mock deps for testing page read/write
 		deps = NewMockMigrationDeps(testDataDir)
-		job = NewFileShadowingMigrationScanJob(testDataDir, coordinator, deps, deps)
+		// Use real filesystem scanner for tests that create real files
+		scanner = NewFileSystemDataDirScanner(testDataDir)
+		job = NewFileShadowingMigrationScanJob(scanner, coordinator, deps, deps)
 	})
 
 	AfterEach(func() {
@@ -115,7 +119,10 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 			var err error
 
 			BeforeEach(func() {
-				os.RemoveAll(testDataDir)
+				// Use mock scanner to simulate non-existent directory
+				mockScanner := NewMockDataDirScanner()
+				mockScanner.SetDirExists(false)
+				job = NewFileShadowingMigrationScanJob(mockScanner, coordinator, deps, deps)
 
 				// Act
 				err = job.Execute()
@@ -282,8 +289,10 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 			var err error
 
 			BeforeEach(func() {
-				// Remove the data directory
-				os.RemoveAll(testDataDir)
+				// Use mock scanner to simulate list error
+				mockScanner := NewMockDataDirScanner()
+				mockScanner.SetListError(errors.New("permission denied"))
+				job = NewFileShadowingMigrationScanJob(mockScanner, coordinator, deps, deps)
 
 				// Act
 				_, err = job.FindPascalCaseIdentifiers()
@@ -338,6 +347,31 @@ var _ = Describe("FileShadowingMigrationScanJob", func() {
 			})
 
 			It("should skip the file with bad TOML", func() {
+				Expect(pascalIdentifiers).To(BeEmpty())
+			})
+		})
+
+		When("MD file read fails", func() {
+			var pascalIdentifiers []string
+			var err error
+
+			BeforeEach(func() {
+				// Use mock scanner to simulate a file that appears in listing but fails to read
+				mockScanner := NewMockDataDirScanner()
+				mockScanner.AddFile("test.md", nil) // File exists but will fail to read when SetReadError is set
+				mockScanner.SetReadError(errors.New("I/O error"))
+				job = NewFileShadowingMigrationScanJob(mockScanner, coordinator, deps, deps)
+
+				// Act
+				pascalIdentifiers, err = job.FindPascalCaseIdentifiers()
+			})
+
+			It("should not return an error", func() {
+				// Individual file errors are logged but don't fail the scan
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should skip the unreadable file", func() {
 				Expect(pascalIdentifiers).To(BeEmpty())
 			})
 		})

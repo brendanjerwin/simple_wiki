@@ -174,7 +174,8 @@ func (s *Site) InitializeIndexing() error {
 	}
 
 	// Start file shadowing scan
-	scanJob := eager.NewFileShadowingMigrationScanJob(s.PathToData, s.JobQueueCoordinator, s, s)
+	dataDirScanner := eager.NewFileSystemDataDirScanner(s.PathToData)
+	scanJob := eager.NewFileShadowingMigrationScanJob(dataDirScanner, s.JobQueueCoordinator, s, s)
 	s.JobQueueCoordinator.EnqueueJob(scanJob)
 	s.Logger.Info("File shadowing scan started.")
 

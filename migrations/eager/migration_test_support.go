@@ -184,3 +184,83 @@ func CreateMDFileWithUnparseableTOML(dir, filename string) {
 		panic(err)
 	}
 }
+
+// MockDataDirScanner implements DataDirScanner for testing
+type MockDataDirScanner struct {
+	files     map[string][]byte // filename -> content
+	dirExists bool
+	readError error // optional: inject read errors
+	listError error // optional: inject list errors
+}
+
+// NewMockDataDirScanner creates a new MockDataDirScanner with an empty filesystem
+func NewMockDataDirScanner() *MockDataDirScanner {
+	return &MockDataDirScanner{
+		files:     make(map[string][]byte),
+		dirExists: true,
+	}
+}
+
+// DataDirExists returns whether the mock directory exists
+func (m *MockDataDirScanner) DataDirExists() bool {
+	return m.dirExists
+}
+
+// ListMDFiles returns all .md files in the mock filesystem
+func (m *MockDataDirScanner) ListMDFiles() ([]string, error) {
+	if m.listError != nil {
+		return nil, m.listError
+	}
+	var files []string
+	for name := range m.files {
+		if strings.HasSuffix(name, ".md") {
+			files = append(files, name)
+		}
+	}
+	return files, nil
+}
+
+// ReadMDFile reads a file from the mock filesystem
+func (m *MockDataDirScanner) ReadMDFile(filename string) ([]byte, error) {
+	if m.readError != nil {
+		return nil, m.readError
+	}
+	content, exists := m.files[filename]
+	if !exists {
+		return nil, os.ErrNotExist
+	}
+	return content, nil
+}
+
+// MDFileExistsByBase32Name checks if an MD file exists by base32 name
+func (m *MockDataDirScanner) MDFileExistsByBase32Name(base32Name string) bool {
+	_, exists := m.files[base32Name+".md"]
+	return exists
+}
+
+// AddFile adds a file to the mock filesystem
+func (m *MockDataDirScanner) AddFile(filename string, content []byte) {
+	m.files[filename] = content
+}
+
+// AddPascalCasePage adds a PascalCase page with TOML frontmatter to the mock
+func (m *MockDataDirScanner) AddPascalCasePage(identifier, markdownContent string) {
+	base32Name := base32tools.EncodeToBase32(strings.ToLower(identifier))
+	fullContent := "+++\nidentifier = '" + identifier + "'\n+++\n\n" + markdownContent
+	m.files[base32Name+".md"] = []byte(fullContent)
+}
+
+// SetDirExists sets whether the mock directory exists
+func (m *MockDataDirScanner) SetDirExists(exists bool) {
+	m.dirExists = exists
+}
+
+// SetReadError sets an error to return from ReadMDFile
+func (m *MockDataDirScanner) SetReadError(err error) {
+	m.readError = err
+}
+
+// SetListError sets an error to return from ListMDFiles
+func (m *MockDataDirScanner) SetListError(err error) {
+	m.listError = err
+}

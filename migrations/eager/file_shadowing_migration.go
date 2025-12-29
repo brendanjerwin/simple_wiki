@@ -1,9 +1,9 @@
 package eager
 
 import (
+	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
@@ -16,7 +16,7 @@ import (
 // FileShadowingMigrationScanJob scans the data directory for PascalCase files
 // and enqueues migration jobs for each one
 type FileShadowingMigrationScanJob struct {
-	dataDir       string
+	scanner       DataDirScanner
 	coordinator   *jobs.JobQueueCoordinator
 	readerMutator wikipage.PageReaderMutator
 	opener        wikipage.PageOpener
@@ -24,13 +24,13 @@ type FileShadowingMigrationScanJob struct {
 
 // NewFileShadowingMigrationScanJob creates a new scan job
 func NewFileShadowingMigrationScanJob(
-	dataDir string,
+	scanner DataDirScanner,
 	coordinator *jobs.JobQueueCoordinator,
 	readerMutator wikipage.PageReaderMutator,
 	opener wikipage.PageOpener,
 ) *FileShadowingMigrationScanJob {
 	return &FileShadowingMigrationScanJob{
-		dataDir:       dataDir,
+		scanner:       scanner,
 		coordinator:   coordinator,
 		readerMutator: readerMutator,
 		opener:        opener,
@@ -40,8 +40,8 @@ func NewFileShadowingMigrationScanJob(
 // Execute scans for PascalCase identifiers and enqueues migration jobs
 func (j *FileShadowingMigrationScanJob) Execute() error {
 	// Check if directory exists
-	if _, err := os.Stat(j.dataDir); os.IsNotExist(err) {
-		return fmt.Errorf("data directory does not exist: %s: no such file or directory", j.dataDir)
+	if !j.scanner.DataDirExists() {
+		return errors.New("data directory does not exist: no such file or directory")
 	}
 
 	// Find all PascalCase identifiers that need migration
@@ -52,7 +52,7 @@ func (j *FileShadowingMigrationScanJob) Execute() error {
 
 	// Enqueue a migration job for each PascalCase identifier
 	for _, identifier := range pascalIdentifiers {
-		migrationJob := NewFileShadowingMigrationJob(j.readerMutator, j.opener, j.dataDir, identifier)
+		migrationJob := NewFileShadowingMigrationJob(j.scanner, j.readerMutator, j.opener, identifier)
 		j.coordinator.EnqueueJob(migrationJob)
 	}
 
@@ -68,7 +68,7 @@ func (*FileShadowingMigrationScanJob) GetName() string {
 // by reading MD files and checking their stored identifier field.
 // Returns an error if the data directory cannot be read.
 func (j *FileShadowingMigrationScanJob) FindPascalCaseIdentifiers() ([]string, error) {
-	files, err := os.ReadDir(j.dataDir)
+	files, err := j.scanner.ListMDFiles()
 	if err != nil {
 		return nil, fmt.Errorf("failed to read data directory: %w", err)
 	}
@@ -76,13 +76,8 @@ func (j *FileShadowingMigrationScanJob) FindPascalCaseIdentifiers() ([]string, e
 	var pascalIdentifiers []string
 	identifiersFound := make(map[string]bool)
 
-	for _, file := range files {
-		// Only look at MD files
-		if !strings.HasSuffix(file.Name(), ".md") {
-			continue
-		}
-
-		identifier, err := j.extractIdentifierFromMD(file.Name())
+	for _, filename := range files {
+		identifier, err := j.extractIdentifierFromMD(filename)
 		if err != nil {
 			// Log but continue - individual file errors shouldn't stop the scan
 			continue
@@ -127,8 +122,7 @@ const tomlFrontmatterParts = 3
 // Returns the identifier and any error encountered.
 // An empty identifier with nil error means the file has no identifier (derived from filename).
 func (j *FileShadowingMigrationScanJob) extractIdentifierFromMD(filename string) (string, error) {
-	filePath := filepath.Join(j.dataDir, filename)
-	mdData, err := os.ReadFile(filePath)
+	mdData, err := j.scanner.ReadMDFile(filename)
 	if err != nil {
 		return "", fmt.Errorf("failed to read file %s: %w", filename, err)
 	}
@@ -176,23 +170,23 @@ func (j *FileShadowingMigrationScanJob) extractIdentifierFromMD(filename string)
 
 // FileShadowingMigrationJob handles migrating a specific PascalCase page to munged_name
 type FileShadowingMigrationJob struct {
+	scanner       DataDirScanner
 	readerMutator wikipage.PageReaderMutator
 	opener        wikipage.PageOpener
-	dataDir       string
 	logicalPageID string
 }
 
 // NewFileShadowingMigrationJob creates a new migration job
 func NewFileShadowingMigrationJob(
+	scanner DataDirScanner,
 	readerMutator wikipage.PageReaderMutator,
 	opener wikipage.PageOpener,
-	dataDir string,
 	logicalPageID string,
 ) *FileShadowingMigrationJob {
 	return &FileShadowingMigrationJob{
+		scanner:       scanner,
 		readerMutator: readerMutator,
 		opener:        opener,
-		dataDir:       dataDir,
 		logicalPageID: logicalPageID,
 	}
 }
@@ -281,10 +275,10 @@ func (j *FileShadowingMigrationJob) readPascalPageDirectly(pascalID string) *wik
 
 	// Calculate the base32-encoded filename for the identifier
 	// Note: we use the lowercase identifier, not the munged version
-	mdPath := filepath.Join(j.dataDir, base32tools.EncodeToBase32(strings.ToLower(pascalID))+".md")
+	base32Name := base32tools.EncodeToBase32(strings.ToLower(pascalID))
 
-	// Read MD file
-	if mdData, err := os.ReadFile(mdPath); err == nil {
+	// Read MD file via scanner
+	if mdData, err := j.scanner.ReadMDFile(base32Name + ".md"); err == nil {
 		page.Text = string(mdData)
 		return page
 	}
@@ -311,9 +305,9 @@ func (j *FileShadowingMigrationJob) CheckForShadowing(logicalPageID string) (boo
 	// Check if base32-encoded MD file exists on disk (for the munged identifier)
 	var mungedFiles []string
 
-	mdPath := filepath.Join(j.dataDir, base32tools.EncodeToBase32(strings.ToLower(mungedID))+".md")
-	if _, err := os.Stat(mdPath); err == nil {
-		mungedFiles = append(mungedFiles, mdPath)
+	base32Name := base32tools.EncodeToBase32(strings.ToLower(mungedID))
+	if j.scanner.MDFileExistsByBase32Name(base32Name) {
+		mungedFiles = append(mungedFiles, base32Name+".md")
 	}
 
 	return len(mungedFiles) > 0, mungedFiles
