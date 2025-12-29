@@ -3,12 +3,13 @@ import { TemplateResult } from 'lit';
 import { restore } from 'sinon';
 import { FrontmatterValue } from './frontmatter-value.js';
 
-function createFixtureWithTimeout(template: TemplateResult, timeoutMs = 5000): Promise<FrontmatterValue> {
+async function createFixtureWithTimeout(template: TemplateResult, timeoutMs = 5000): Promise<FrontmatterValue> {
   const timeout = (ms: number, message: string) =>
-    new Promise<never>((_, reject) => 
+    new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error(message)), ms)
     );
-  
+
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- test fixture
   return Promise.race([
     fixture(template),
     timeout(timeoutMs, 'Component fixture timed out')
@@ -76,8 +77,8 @@ describe('FrontmatterValue', () => {
     });
 
     it('should pass the value to string component', () => {
-      const stringComponent = el.shadowRoot?.querySelector('frontmatter-value-string') as HTMLElement & { [key: string]: unknown };
-      expect(stringComponent.value).to.equal('test string');
+      const stringComponent = el.shadowRoot?.querySelector<HTMLElement & { value: unknown }>('frontmatter-value-string');
+      expect(stringComponent!.value).to.equal('test string');
     });
 
     describe('when placeholder is provided', () => {
@@ -86,8 +87,8 @@ describe('FrontmatterValue', () => {
       });
 
       it('should pass placeholder to string component', () => {
-        const stringComponent = el.shadowRoot?.querySelector('frontmatter-value-string') as HTMLElement & { [key: string]: unknown };
-        expect(stringComponent.placeholder).to.equal('Enter text');
+        const stringComponent = el.shadowRoot?.querySelector<HTMLElement & { placeholder: string }>('frontmatter-value-string');
+        expect(stringComponent!.placeholder).to.equal('Enter text');
       });
     });
 
@@ -97,8 +98,8 @@ describe('FrontmatterValue', () => {
       });
 
       it('should pass disabled state to string component', () => {
-        const stringComponent = el.shadowRoot?.querySelector('frontmatter-value-string') as HTMLElement & { [key: string]: unknown };
-        expect(stringComponent.disabled).to.be.true;
+        const stringComponent = el.shadowRoot?.querySelector<HTMLElement & { disabled: boolean }>('frontmatter-value-string');
+        expect(stringComponent!.disabled).to.be.true;
       });
     });
   });
@@ -121,8 +122,8 @@ describe('FrontmatterValue', () => {
     });
 
     it('should pass the array to array component', () => {
-      const arrayComponent = el.shadowRoot?.querySelector('frontmatter-value-array') as HTMLElement & { [key: string]: unknown };
-      expect(arrayComponent.values).to.deep.equal(['item1', 'item2']);
+      const arrayComponent = el.shadowRoot?.querySelector<HTMLElement & { values: unknown }>('frontmatter-value-array');
+      expect(arrayComponent!.values).to.deep.equal(['item1', 'item2']);
     });
 
     describe('when placeholder is provided', () => {
@@ -131,8 +132,8 @@ describe('FrontmatterValue', () => {
       });
 
       it('should pass placeholder to array component', () => {
-        const arrayComponent = el.shadowRoot?.querySelector('frontmatter-value-array') as HTMLElement & { [key: string]: unknown };
-        expect(arrayComponent.placeholder).to.equal('Enter item');
+        const arrayComponent = el.shadowRoot?.querySelector<HTMLElement & { placeholder: string }>('frontmatter-value-array');
+        expect(arrayComponent!.placeholder).to.equal('Enter item');
       });
     });
 
@@ -142,8 +143,8 @@ describe('FrontmatterValue', () => {
       });
 
       it('should pass disabled state to array component', () => {
-        const arrayComponent = el.shadowRoot?.querySelector('frontmatter-value-array') as HTMLElement & { [key: string]: unknown };
-        expect(arrayComponent.disabled).to.be.true;
+        const arrayComponent = el.shadowRoot?.querySelector<HTMLElement & { disabled: boolean }>('frontmatter-value-array');
+        expect(arrayComponent!.disabled).to.be.true;
       });
     });
   });
@@ -166,8 +167,8 @@ describe('FrontmatterValue', () => {
     });
 
     it('should pass the fields to section component', () => {
-      const sectionComponent = el.shadowRoot?.querySelector('frontmatter-value-section') as HTMLElement & { [key: string]: unknown };
-      expect(sectionComponent.fields).to.deep.equal({key1: 'value1', key2: 'value2'});
+      const sectionComponent = el.shadowRoot?.querySelector<HTMLElement & { fields: unknown }>('frontmatter-value-section');
+      expect(sectionComponent!.fields).to.deep.equal({key1: 'value1', key2: 'value2'});
     });
 
     describe('when disabled', () => {
@@ -176,8 +177,8 @@ describe('FrontmatterValue', () => {
       });
 
       it('should pass disabled state to section component', () => {
-        const sectionComponent = el.shadowRoot?.querySelector('frontmatter-value-section') as HTMLElement & { [key: string]: unknown };
-        expect(sectionComponent.disabled).to.be.true;
+        const sectionComponent = el.shadowRoot?.querySelector<HTMLElement & { disabled: boolean }>('frontmatter-value-section');
+        expect(sectionComponent!.disabled).to.be.true;
       });
     });
   });
@@ -214,8 +215,8 @@ describe('FrontmatterValue', () => {
     });
 
     it('should convert number to string for string component', () => {
-      const stringComponent = el.shadowRoot?.querySelector('frontmatter-value-string') as HTMLElement & { [key: string]: unknown };
-      expect(stringComponent.value).to.equal('42');
+      const stringComponent = el.shadowRoot?.querySelector<HTMLElement & { value: unknown }>('frontmatter-value-string');
+      expect(stringComponent!.value).to.equal('42');
     });
   });
 
@@ -230,8 +231,8 @@ describe('FrontmatterValue', () => {
     });
 
     it('should convert boolean to string for string component', () => {
-      const stringComponent = el.shadowRoot?.querySelector('frontmatter-value-string') as HTMLElement & { [key: string]: unknown };
-      expect(stringComponent.value).to.equal('true');
+      const stringComponent = el.shadowRoot?.querySelector<HTMLElement & { value: unknown }>('frontmatter-value-string');
+      expect(stringComponent!.value).to.equal('true');
     });
   });
 
@@ -242,13 +243,15 @@ describe('FrontmatterValue', () => {
       beforeEach(async () => {
         valueChangeEvent = null;
         el = await createFixtureWithTimeout(html`<frontmatter-value .value="${'original'}"></frontmatter-value>`);
-        
+
         el.addEventListener('value-change', (event) => {
-          valueChangeEvent = event as CustomEvent;
+          if (event instanceof CustomEvent) {
+            valueChangeEvent = event;
+          }
         });
 
-        const stringComponent = el.shadowRoot?.querySelector('frontmatter-value-string') as HTMLElement & { [key: string]: unknown };
-        stringComponent.dispatchEvent(new CustomEvent('value-change', {
+        const stringComponent = el.shadowRoot?.querySelector<HTMLElement>('frontmatter-value-string');
+        stringComponent!.dispatchEvent(new CustomEvent('value-change', {
           detail: {
             oldValue: 'original',
             newValue: 'modified'
@@ -280,13 +283,15 @@ describe('FrontmatterValue', () => {
       beforeEach(async () => {
         valueChangeEvent = null;
         el = await createFixtureWithTimeout(html`<frontmatter-value .value="${['item1']}"></frontmatter-value>`);
-        
+
         el.addEventListener('value-change', (event) => {
-          valueChangeEvent = event as CustomEvent;
+          if (event instanceof CustomEvent) {
+            valueChangeEvent = event;
+          }
         });
 
-        const arrayComponent = el.shadowRoot?.querySelector('frontmatter-value-array') as HTMLElement & { [key: string]: unknown };
-        arrayComponent.dispatchEvent(new CustomEvent('array-change', {
+        const arrayComponent = el.shadowRoot?.querySelector<HTMLElement>('frontmatter-value-array');
+        arrayComponent!.dispatchEvent(new CustomEvent('array-change', {
           detail: {
             oldArray: ['item1'],
             newArray: ['item1', 'item2']
@@ -314,13 +319,15 @@ describe('FrontmatterValue', () => {
       beforeEach(async () => {
         valueChangeEvent = null;
         el = await createFixtureWithTimeout(html`<frontmatter-value .value="${{key: 'value'}}"></frontmatter-value>`);
-        
+
         el.addEventListener('value-change', (event) => {
-          valueChangeEvent = event as CustomEvent;
+          if (event instanceof CustomEvent) {
+            valueChangeEvent = event;
+          }
         });
 
-        const sectionComponent = el.shadowRoot?.querySelector('frontmatter-value-section') as HTMLElement & { [key: string]: unknown };
-        sectionComponent.dispatchEvent(new CustomEvent('section-change', {
+        const sectionComponent = el.shadowRoot?.querySelector<HTMLElement>('frontmatter-value-section');
+        sectionComponent!.dispatchEvent(new CustomEvent('section-change', {
           detail: {
             oldFields: {key: 'value'},
             newFields: {key: 'modified', newKey: 'newValue'}

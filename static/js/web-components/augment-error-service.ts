@@ -48,6 +48,13 @@ const STANDARD_ICONS: Record<StandardErrorIcon, string> = {
 };
 
 /**
+ * Type guard to check if a string is a StandardErrorIcon
+ */
+function isStandardErrorIcon(icon: string): icon is StandardErrorIcon {
+  return icon in STANDARD_ICONS;
+}
+
+/**
  * Map error kinds to their corresponding icons
  */
 const ERROR_KIND_TO_ICON: Record<ErrorKind, StandardErrorIcon> = {
@@ -95,7 +102,11 @@ export class AugmentedError extends Error {
 
   // Delegate cause to original error for full transparency
   get cause(): unknown {
-    return (this.originalError as { cause?: unknown }).cause;
+    // Use 'in' operator for type-safe property access on the originalError
+    if ('cause' in this.originalError) {
+      return this.originalError.cause;
+    }
+    return undefined;
   }
 }
 
@@ -131,8 +142,8 @@ export class AugmentErrorService {
    * Get icon string for an ErrorIcon (resolves standard icons to emojis)
    */
   static getIconString(icon: ErrorIcon): string {
-    if (icon in STANDARD_ICONS) {
-      return STANDARD_ICONS[icon as StandardErrorIcon];
+    if (isStandardErrorIcon(icon)) {
+      return STANDARD_ICONS[icon];
     }
     return icon;
   }

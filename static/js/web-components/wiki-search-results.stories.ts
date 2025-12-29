@@ -2,7 +2,9 @@ import type { Meta, StoryObj } from '@storybook/web-components-vite';
 import { html } from 'lit';
 import { action } from 'storybook/actions';
 import './wiki-search-results.js';
-import type { SearchResult, HighlightSpan } from '../gen/api/v1/search_pb.js';
+import { SearchResultSchema, HighlightSpanSchema, InventoryContextSchema, ContainerPathElementSchema } from '../gen/api/v1/search_pb.js';
+import type { SearchResult } from '../gen/api/v1/search_pb.js';
+import { create } from '@bufbuild/protobuf';
 
 const meta: Meta = {
   title: 'Components/WikiSearchResults',
@@ -26,13 +28,59 @@ const meta: Meta = {
 export default meta;
 type Story = StoryObj;
 
-// Create highlight spans for the mock data
-function createHighlight(start: number, end: number): HighlightSpan {
-  return { start, end } as HighlightSpan;
+// Create highlight spans for the mock data using protobuf create function
+function createHighlight(start: number, end: number) {
+  return create(HighlightSpanSchema, { start, end });
+}
+
+// Create a search result using protobuf create function
+function createSearchResult(data: {
+  identifier: string;
+  title: string;
+  fragment: string;
+  highlights: ReturnType<typeof createHighlight>[];
+}): SearchResult {
+  return create(SearchResultSchema, data);
+}
+
+// Create a container path element using protobuf create function
+function createContainerPathElement(data: { identifier: string; title: string; depth: number }) {
+  return create(ContainerPathElementSchema, data);
+}
+
+// Create an inventory context using protobuf create function
+function createInventoryContext(data: {
+  isInventoryRelated: boolean;
+  path: ReturnType<typeof createContainerPathElement>[];
+}) {
+  return create(InventoryContextSchema, data);
+}
+
+// Create a search result with inventory context using protobuf create function
+function createInventorySearchResult(data: {
+  identifier: string;
+  title: string;
+  fragment: string;
+  highlights: ReturnType<typeof createHighlight>[];
+  inventoryContext: {
+    isInventoryRelated: boolean;
+    path: Array<{ identifier: string; title: string; depth: number }>;
+  };
+}): SearchResult {
+  return create(SearchResultSchema, {
+    identifier: data.identifier,
+    title: data.title,
+    fragment: data.fragment,
+    highlights: data.highlights,
+    inventoryContext: createInventoryContext({
+      isInventoryRelated: data.inventoryContext.isInventoryRelated,
+      path: data.inventoryContext.path.map(p => createContainerPathElement(p)),
+    }),
+  });
 }
 
 const mockResults: SearchResult[] = [
-  {
+  createSearchResult({
     identifier: 'getting-started',
     title: 'Getting Started with Simple Wiki',
     fragment: 'Welcome to Simple Wiki! This guide will help you get started with creating and editing pages.',
@@ -40,28 +88,28 @@ const mockResults: SearchResult[] = [
       createHighlight(11, 17), // "Simple"
       createHighlight(18, 22),  // "Wiki"
     ]
-  } as SearchResult,
-  {
-    identifier: 'advanced-features', 
+  }),
+  createSearchResult({
+    identifier: 'advanced-features',
     title: 'Advanced Features',
     fragment: 'Learn about frontmatter, search functionality, and other advanced features.',
     highlights: [
       createHighlight(12, 23), // "frontmatter"
       createHighlight(58, 66),  // "advanced"
     ]
-  } as SearchResult,
-  {
+  }),
+  createSearchResult({
     identifier: 'troubleshooting',
     title: 'Troubleshooting Common Issues',
     fragment: 'Solutions to common problems you might encounter while using the wiki.',
     highlights: [
       createHighlight(13, 19), // "common"
     ]
-  } as SearchResult
+  })
 ];
 
 const longContentResults: SearchResult[] = [
-  {
+  createSearchResult({
     identifier: 'long-article',
     title: 'Very Long Article with Multiple Matches',
     fragment: 'This is a very long fragment that demonstrates how the search results handle longer content with multiple highlighted terms and line breaks.\nIt can span multiple lines and still display properly in the popover.',
@@ -70,15 +118,15 @@ const longContentResults: SearchResult[] = [
       createHighlight(66, 72),  // "search"
       createHighlight(112, 123), // "highlighted"
     ]
-  } as SearchResult,
-  {
+  }),
+  createSearchResult({
     identifier: 'special-chars',
     title: 'Article with Special Characters & HTML',
     fragment: 'Content with <script> tags and & special characters that should be properly escaped.',
     highlights: [
       createHighlight(39, 46), // "special"
     ]
-  } as SearchResult
+  })
 ];
 
 export const Open: Story = {
@@ -166,12 +214,12 @@ export const LongContent: Story = {
 
 export const NoHighlights: Story = {
   args: {
-    results: [{
+    results: [createSearchResult({
       identifier: 'no-highlights',
       title: 'Article Without Highlights',
       fragment: 'This fragment has no highlighted terms and should display as plain text.',
       highlights: []
-    } as SearchResult],
+    })],
     open: true,
   },
   render: (args) => html`
@@ -220,7 +268,7 @@ export const InteractiveTesting: Story = {
 export const WithInventoryContainer: Story = {
   args: {
     results: [
-      {
+      createInventorySearchResult({
         identifier: 'screwdriver',
         title: 'Phillips Head Screwdriver',
         fragment: 'A versatile screwdriver with a #2 Phillips head, perfect for most household tasks.',
@@ -235,8 +283,8 @@ export const WithInventoryContainer: Story = {
             { identifier: 'toolbox', title: 'My Toolbox', depth: 2 }
           ]
         }
-      } as SearchResult,
-      {
+      }),
+      createInventorySearchResult({
         identifier: 'hammer',
         title: 'Claw Hammer',
         fragment: 'Standard 16oz claw hammer for general construction and demolition work.',
@@ -251,8 +299,8 @@ export const WithInventoryContainer: Story = {
             { identifier: 'toolbox', title: 'My Toolbox', depth: 2 }
           ]
         }
-      } as SearchResult,
-      {
+      }),
+      createInventorySearchResult({
         identifier: 'wrench',
         title: 'Adjustable Wrench',
         fragment: '10-inch adjustable wrench for nuts and bolts.',
@@ -265,8 +313,8 @@ export const WithInventoryContainer: Story = {
             { identifier: 'garage_cabinet', title: '', depth: 0 }
           ]
         }
-      } as SearchResult,
-      {
+      }),
+      createInventorySearchResult({
         identifier: 'power_drill',
         title: 'Cordless Power Drill',
         fragment: '18V cordless drill with battery and charger.',
@@ -281,8 +329,8 @@ export const WithInventoryContainer: Story = {
             { identifier: 'red_case', title: 'Red Tool Case', depth: 2 }
           ]
         }
-      } as SearchResult,
-      {
+      }),
+      createInventorySearchResult({
         identifier: 'hex_key',
         title: 'Allen Hex Key Set',
         fragment: 'Metric hex key set in organized case.',
@@ -300,7 +348,7 @@ export const WithInventoryContainer: Story = {
             { identifier: 'small_box', title: 'Small Organizer Box', depth: 5 }
           ]
         }
-      } as SearchResult
+      })
     ],
     open: true,
   },
@@ -323,7 +371,7 @@ export const WithInventoryContainer: Story = {
 export const InventoryFilterWarning: Story = {
   args: {
     results: [
-      {
+      createInventorySearchResult({
         identifier: 'screwdriver',
         title: 'Phillips Head Screwdriver',
         fragment: 'A versatile screwdriver with a #2 Phillips head, perfect for most household tasks.',
@@ -338,8 +386,8 @@ export const InventoryFilterWarning: Story = {
             { identifier: 'toolbox', title: 'My Toolbox', depth: 2 }
           ]
         }
-      } as SearchResult,
-      {
+      }),
+      createInventorySearchResult({
         identifier: 'hammer',
         title: 'Claw Hammer',
         fragment: 'Standard 16oz claw hammer for general construction and demolition work.',
@@ -354,7 +402,7 @@ export const InventoryFilterWarning: Story = {
             { identifier: 'toolbox', title: 'My Toolbox', depth: 2 }
           ]
         }
-      } as SearchResult
+      })
     ],
     open: true,
     inventoryOnly: true,

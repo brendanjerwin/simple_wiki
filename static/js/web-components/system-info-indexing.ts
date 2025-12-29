@@ -210,7 +210,7 @@ export class SystemInfoIndexing extends LitElement {
     try {
       await navigator.clipboard.writeText(errorText);
       showToast('Error copied to clipboard', 'success', 3);
-    } catch (err) {
+    } catch {
       showToast('Failed to copy error to clipboard', 'error', 5);
     }
   };

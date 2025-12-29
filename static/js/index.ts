@@ -32,18 +32,19 @@ declare global {
   }
 }
 
-(window as unknown as { pageDeleteService: typeof pageDeleteService }).pageDeleteService = pageDeleteService;
+// Make pageDeleteService available globally
+window.pageDeleteService = pageDeleteService;
 
 // Show any stored toast messages after page load
 document.addEventListener('DOMContentLoaded', () => {
   showStoredToast();
 
   // Initialize editor context menu and toolbar on edit pages
-  const textarea = document.getElementById('userInput') as HTMLTextAreaElement | null;
-  const menu = document.getElementById('editor-context-menu') as EditorContextMenu | null;
-  const toolbar = document.getElementById('editor-toolbar') as EditorToolbar | null;
-  if (textarea && menu) {
-    new EditorContextMenuCoordinator(textarea, menu, undefined, undefined, toolbar);
+  const textarea = document.getElementById('userInput');
+  const menu = document.querySelector<EditorContextMenu>('editor-context-menu#editor-context-menu');
+  const toolbar = document.querySelector<EditorToolbar>('editor-toolbar#editor-toolbar');
+  if (textarea instanceof HTMLTextAreaElement && menu) {
+    new EditorContextMenuCoordinator(textarea, menu, undefined, undefined, toolbar ?? null);
   }
 
   // Handle toolbar exit button

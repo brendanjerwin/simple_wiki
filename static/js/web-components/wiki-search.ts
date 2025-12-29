@@ -140,17 +140,19 @@ export class WikiSearch extends LitElement {
   }
 
   private _handleKeydown(e: KeyboardEvent) {
-    const searchInput = this.shadowRoot!.querySelector('input[type="search"]') as HTMLInputElement;
+    const searchInput = this.shadowRoot?.querySelector<HTMLInputElement>('input[type="search"]');
     // Check if Ctrl (or Cmd on Macs) and K keys were pressed
     if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
       e.preventDefault();
-      searchInput.focus();
+      searchInput?.focus();
     }
   }
 
   handleSearchInputFocused(e: Event) {
-    const target = e.target as HTMLInputElement;
-    target.select();
+    const target = e.target;
+    if (target instanceof HTMLInputElement) {
+      target.select();
+    }
   }
 
   async handleFormSubmit(e: Event) {
@@ -158,9 +160,13 @@ export class WikiSearch extends LitElement {
     this.noResults = false;
     this.error = undefined;
 
-    const form = e.target as HTMLFormElement;
+    if (!(e.target instanceof HTMLFormElement)) {
+      return;
+    }
+    const form = e.target;
     const formData = new FormData(form);
-    const searchTerm = formData.get('search') as string;
+    const searchTermValue = formData.get('search');
+    const searchTerm = typeof searchTermValue === 'string' ? searchTermValue : '';
 
     if (!searchTerm || searchTerm.trim() === '') {
       return;
@@ -178,8 +184,8 @@ export class WikiSearch extends LitElement {
         this.noResults = false;
       } else {
         this.noResults = true;
-        const searchInput = this.shadowRoot!.querySelector('input[type="search"]') as HTMLInputElement;
-        searchInput.select();
+        const searchInput = this.shadowRoot?.querySelector<HTMLInputElement>('input[type="search"]');
+        searchInput?.select();
       }
     } catch (error) {
       this.results = [];
@@ -195,7 +201,7 @@ export class WikiSearch extends LitElement {
     this.results = [];
     this.noResults = false;
     // Focus back on search input for keyboard workflow
-    const searchInput = this.shadowRoot?.querySelector('input[type="search"]') as HTMLInputElement;
+    const searchInput = this.shadowRoot?.querySelector<HTMLInputElement>('input[type="search"]');
     searchInput?.focus();
   }
 

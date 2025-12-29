@@ -266,7 +266,7 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should disable the add button', () => {
-        const addBtn = el.shadowRoot?.querySelector('.button-primary') as HTMLButtonElement;
+        const addBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-primary');
         expect(addBtn?.disabled).to.be.true;
       });
     });
@@ -298,6 +298,7 @@ describe('InventoryAddItemDialog', () => {
         el.itemTitle = 'Screwdriver';
         el.itemIdentifier = 'screwdriver';
         el.isUnique = false;
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
         el.existingPage = {
           identifier: 'screwdriver',
           title: 'Phillips Screwdriver',
@@ -319,7 +320,7 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should disable add button', () => {
-        const addBtn = el.shadowRoot?.querySelector('.button-primary') as HTMLButtonElement;
+        const addBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-primary');
         expect(addBtn?.disabled).to.be.true;
       });
     });
@@ -328,6 +329,7 @@ describe('InventoryAddItemDialog', () => {
       beforeEach(async () => {
         el.openDialog('drawer_kitchen');
         el.searchResults = [
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
           {
             identifier: 'hammer',
             title: 'Claw Hammer',
@@ -378,12 +380,12 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should make identifier field readonly', () => {
-        const input = el.shadowRoot?.querySelector('input[name="itemIdentifier"]') as HTMLInputElement;
+        const input = el.shadowRoot?.querySelector<HTMLInputElement>('input[name="itemIdentifier"]');
         expect(input?.readOnly).to.be.true;
       });
 
       it('should set identifier tabindex to -1', () => {
-        const input = el.shadowRoot?.querySelector('input[name="itemIdentifier"]') as HTMLInputElement;
+        const input = el.shadowRoot?.querySelector<HTMLInputElement>('input[name="itemIdentifier"]');
         expect(input?.tabIndex).to.equal(-1);
       });
     });
@@ -406,12 +408,12 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should not make identifier field readonly', () => {
-        const input = el.shadowRoot?.querySelector('input[name="itemIdentifier"]') as HTMLInputElement;
+        const input = el.shadowRoot?.querySelector<HTMLInputElement>('input[name="itemIdentifier"]');
         expect(input?.readOnly).to.be.false;
       });
 
       it('should set identifier tabindex to 0', () => {
-        const input = el.shadowRoot?.querySelector('input[name="itemIdentifier"]') as HTMLInputElement;
+        const input = el.shadowRoot?.querySelector<HTMLInputElement>('input[name="itemIdentifier"]');
         expect(input?.tabIndex).to.equal(0);
       });
     });
@@ -425,7 +427,7 @@ describe('InventoryAddItemDialog', () => {
         closeSpy = sinon.spy(el, 'close');
         el.openDialog('drawer_kitchen');
         await el.updateComplete;
-        const backdrop = el.shadowRoot?.querySelector('.backdrop') as HTMLElement;
+        const backdrop = el.shadowRoot?.querySelector<HTMLElement>('.backdrop');
         backdrop?.click();
       });
 
@@ -443,7 +445,7 @@ describe('InventoryAddItemDialog', () => {
         closeSpy = sinon.spy(el, 'close');
         el.openDialog('drawer_kitchen');
         await el.updateComplete;
-        const dialog = el.shadowRoot?.querySelector('.dialog') as HTMLElement;
+        const dialog = el.shadowRoot?.querySelector<HTMLElement>('.dialog');
         dialog?.click();
       });
 
@@ -461,7 +463,7 @@ describe('InventoryAddItemDialog', () => {
         closeSpy = sinon.spy(el, 'close');
         el.openDialog('drawer_kitchen');
         await el.updateComplete;
-        const cancelBtn = el.shadowRoot?.querySelector('.button-secondary') as HTMLButtonElement;
+        const cancelBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-secondary');
         cancelBtn?.click();
       });
 
@@ -476,9 +478,11 @@ describe('InventoryAddItemDialog', () => {
       beforeEach(async () => {
         el.openDialog('drawer_kitchen');
         await el.updateComplete;
-        const titleInput = el.shadowRoot?.querySelector('input[name="title"]') as HTMLInputElement;
-        titleInput.value = 'Test Item';
-        titleInput.dispatchEvent(new Event('input'));
+        const titleInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[name="title"]');
+        if (titleInput) {
+          titleInput.value = 'Test Item';
+          titleInput.dispatchEvent(new Event('input'));
+        }
       });
 
       it('should update itemTitle property', () => {
@@ -492,9 +496,11 @@ describe('InventoryAddItemDialog', () => {
       beforeEach(async () => {
         el.openDialog('drawer_kitchen');
         await el.updateComplete;
-        const descInput = el.shadowRoot?.querySelector('textarea[name="description"]') as HTMLTextAreaElement;
-        descInput.value = 'Test description';
-        descInput.dispatchEvent(new Event('input'));
+        const descInput = el.shadowRoot?.querySelector<HTMLTextAreaElement>('textarea[name="description"]');
+        if (descInput) {
+          descInput.value = 'Test description';
+          descInput.dispatchEvent(new Event('input'));
+        }
       });
 
       it('should update description property', () => {
@@ -509,9 +515,11 @@ describe('InventoryAddItemDialog', () => {
         el.openDialog('drawer_kitchen');
         el.automagicMode = false;
         await el.updateComplete;
-        const identifierInput = el.shadowRoot?.querySelector('input[name="itemIdentifier"]') as HTMLInputElement;
-        identifierInput.value = 'custom_identifier';
-        identifierInput.dispatchEvent(new Event('input'));
+        const identifierInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[name="itemIdentifier"]');
+        if (identifierInput) {
+          identifierInput.value = 'custom_identifier';
+          identifierInput.dispatchEvent(new Event('input'));
+        }
       });
 
       it('should update itemIdentifier property', () => {
@@ -525,9 +533,11 @@ describe('InventoryAddItemDialog', () => {
         el.automagicMode = true;
         el.itemIdentifier = 'original_value';
         await el.updateComplete;
-        const identifierInput = el.shadowRoot?.querySelector('input[name="itemIdentifier"]') as HTMLInputElement;
-        identifierInput.value = 'attempted_change';
-        identifierInput.dispatchEvent(new Event('input'));
+        const identifierInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[name="itemIdentifier"]');
+        if (identifierInput) {
+          identifierInput.value = 'attempted_change';
+          identifierInput.dispatchEvent(new Event('input'));
+        }
       });
 
       it('should not update itemIdentifier property', () => {
@@ -542,7 +552,7 @@ describe('InventoryAddItemDialog', () => {
         el.openDialog('drawer_kitchen');
         el.automagicMode = true;
         await el.updateComplete;
-        const toggleBtn = el.shadowRoot?.querySelector('.automagic-button') as HTMLButtonElement;
+        const toggleBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.automagic-button');
         toggleBtn?.click();
       });
 
@@ -556,7 +566,7 @@ describe('InventoryAddItemDialog', () => {
         el.openDialog('drawer_kitchen');
         el.automagicMode = false;
         await el.updateComplete;
-        const toggleBtn = el.shadowRoot?.querySelector('.automagic-button') as HTMLButtonElement;
+        const toggleBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.automagic-button');
         toggleBtn?.click();
       });
 
@@ -616,6 +626,7 @@ describe('InventoryAddItemDialog', () => {
       beforeEach(async () => {
         el.openDialog('drawer_kitchen');
         el.searchResults = [
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
           {
             identifier: 'item1',
             title: 'Item One',
@@ -638,6 +649,7 @@ describe('InventoryAddItemDialog', () => {
       beforeEach(async () => {
         el.openDialog('drawer_kitchen');
         el.searchResults = [
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
           {
             identifier: 'item1',
             title: 'Item One',
@@ -659,6 +671,7 @@ describe('InventoryAddItemDialog', () => {
       beforeEach(async () => {
         el.openDialog('drawer_kitchen');
         el.searchResults = [
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
           {
             identifier: 'item_identifier',
             title: '',
@@ -682,6 +695,7 @@ describe('InventoryAddItemDialog', () => {
       beforeEach(async () => {
         el.openDialog('drawer_kitchen');
         el.isUnique = false;
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
         el.existingPage = {
           identifier: 'test_item',
           title: '',
@@ -701,6 +715,7 @@ describe('InventoryAddItemDialog', () => {
       beforeEach(async () => {
         el.openDialog('drawer_kitchen');
         el.isUnique = false;
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
         el.existingPage = {
           identifier: 'test_item',
           title: 'Test Item',
@@ -726,7 +741,7 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should disable the add button', () => {
-        const addBtn = el.shadowRoot?.querySelector('.button-primary') as HTMLButtonElement;
+        const addBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-primary');
         expect(addBtn?.disabled).to.be.true;
       });
     });
@@ -740,7 +755,7 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should disable the add button', () => {
-        const addBtn = el.shadowRoot?.querySelector('.button-primary') as HTMLButtonElement;
+        const addBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-primary');
         expect(addBtn?.disabled).to.be.true;
       });
     });
@@ -755,7 +770,7 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should disable the add button', () => {
-        const addBtn = el.shadowRoot?.querySelector('.button-primary') as HTMLButtonElement;
+        const addBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-primary');
         expect(addBtn?.disabled).to.be.true;
       });
     });
@@ -770,7 +785,7 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should enable the add button', () => {
-        const addBtn = el.shadowRoot?.querySelector('.button-primary') as HTMLButtonElement;
+        const addBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-primary');
         expect(addBtn?.disabled).to.be.false;
       });
     });

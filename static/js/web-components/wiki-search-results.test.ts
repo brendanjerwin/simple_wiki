@@ -21,6 +21,7 @@ describe('WikiSearchResults', () => {
   let el: WikiSearchResultsElement;
 
   beforeEach(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- test fixture
     el = await fixture(html`<wiki-search-results></wiki-search-results>`) as WikiSearchResultsElement;
     await el.updateComplete;
   });
@@ -51,6 +52,7 @@ describe('WikiSearchResults', () => {
     beforeEach(async () => {
       addEventListenerSpy = sinon.spy(document, 'addEventListener');
       // Re-create the element to trigger connectedCallback
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- test fixture
       el = await fixture(html`<wiki-search-results></wiki-search-results>`) as WikiSearchResultsElement;
       await el.updateComplete;
     });
@@ -66,6 +68,7 @@ describe('WikiSearchResults', () => {
     beforeEach(async () => {
       removeEventListenerSpy = sinon.spy(document, 'removeEventListener');
       // Re-create and then remove the element to trigger disconnectedCallback
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- test fixture
       el = await fixture(html`<wiki-search-results></wiki-search-results>`) as WikiSearchResultsElement;
       await el.updateComplete;
       el.remove();
@@ -89,6 +92,7 @@ describe('WikiSearchResults', () => {
       closeSpy = sinon.spy(el, 'close');
       
       // Simulate clicking outside (event won't include the popover)
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock event for testing
       mockEvent = {
         ...new Event('click'),
         composedPath: () => []
@@ -113,6 +117,7 @@ describe('WikiSearchResults', () => {
 
       // Simulate clicking inside (event includes the popover)
       const mockPopover = el.shadowRoot.querySelector('.popover');
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock event for testing
       mockEvent = {
         ...new Event('click'),
         composedPath: () => [mockPopover]
@@ -155,7 +160,9 @@ describe('WikiSearchResults', () => {
       eventSpy = sinon.spy();
       el.addEventListener('inventory-filter-changed', eventSpy);
 
-      checkbox = el.shadowRoot?.querySelector('.inventory-filter input[type="checkbox"]') as HTMLInputElement;
+      const checkboxElement = el.shadowRoot?.querySelector<HTMLInputElement>('.inventory-filter input[type="checkbox"]');
+      if (!checkboxElement) throw new Error('Checkbox not found');
+      checkbox = checkboxElement;
       checkbox.checked = true;
       checkbox.dispatchEvent(new Event('change', { bubbles: true }));
       await el.updateComplete;
@@ -170,7 +177,8 @@ describe('WikiSearchResults', () => {
     });
 
     it('should include inventoryOnly in event detail', () => {
-      const event = eventSpy.getCall(0).args[0] as CustomEvent;
+      const event = eventSpy.getCall(0).args[0];
+      if (!(event instanceof CustomEvent)) throw new Error('Expected CustomEvent');
       expect(event.detail.inventoryOnly).to.equal(true);
     });
   });
@@ -188,7 +196,9 @@ describe('WikiSearchResults', () => {
       eventSpy = sinon.spy();
       el.addEventListener('inventory-filter-changed', eventSpy);
 
-      checkbox = el.shadowRoot?.querySelector('.inventory-filter input[type="checkbox"]') as HTMLInputElement;
+      const checkboxElement = el.shadowRoot?.querySelector<HTMLInputElement>('.inventory-filter input[type="checkbox"]');
+      if (!checkboxElement) throw new Error('Checkbox not found');
+      checkbox = checkboxElement;
       checkbox.checked = false;
       checkbox.dispatchEvent(new Event('change', { bubbles: true }));
       await el.updateComplete;
@@ -203,7 +213,8 @@ describe('WikiSearchResults', () => {
     });
 
     it('should include inventoryOnly false in event detail', () => {
-      const event = eventSpy.getCall(0).args[0] as CustomEvent;
+      const event = eventSpy.getCall(0).args[0];
+      if (!(event instanceof CustomEvent)) throw new Error('Expected CustomEvent');
       expect(event.detail.inventoryOnly).to.equal(false);
     });
   });
@@ -211,6 +222,7 @@ describe('WikiSearchResults', () => {
   describe('when result has inventory context without title', () => {
     beforeEach(async () => {
       el.open = true;
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
       el.results = [{
         identifier: 'screwdriver',
         title: 'Screwdriver',
@@ -238,7 +250,7 @@ describe('WikiSearchResults', () => {
     });
 
     it('should link to the container', () => {
-      const link = el.shadowRoot?.querySelector('.found-in a') as HTMLAnchorElement;
+      const link = el.shadowRoot?.querySelector<HTMLAnchorElement>('.found-in a');
       expect(link?.getAttribute('href')).to.equal('/toolbox');
     });
 
@@ -251,6 +263,7 @@ describe('WikiSearchResults', () => {
   describe('when result has inventory context with title', () => {
     beforeEach(async () => {
       el.open = true;
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
       el.results = [{
         identifier: 'screwdriver',
         title: 'Screwdriver',
@@ -278,7 +291,7 @@ describe('WikiSearchResults', () => {
     });
 
     it('should link to the container', () => {
-      const link = el.shadowRoot?.querySelector('.found-in a') as HTMLAnchorElement;
+      const link = el.shadowRoot?.querySelector<HTMLAnchorElement>('.found-in a');
       expect(link?.getAttribute('href')).to.equal('/toolbox');
     });
 
@@ -291,6 +304,7 @@ describe('WikiSearchResults', () => {
   describe('when result has inventory context with nested path', () => {
     beforeEach(async () => {
       el.open = true;
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
       el.results = [{
         identifier: 'screwdriver',
         title: 'Screwdriver',
@@ -326,10 +340,10 @@ describe('WikiSearchResults', () => {
     });
 
     it('should link each path element correctly', () => {
-      const links = el.shadowRoot?.querySelectorAll('.found-in a') as NodeListOf<HTMLAnchorElement>;
-      expect(links[0]?.getAttribute('href')).to.equal('/house');
-      expect(links[1]?.getAttribute('href')).to.equal('/garage');
-      expect(links[2]?.getAttribute('href')).to.equal('/toolbox');
+      const links = el.shadowRoot?.querySelectorAll<HTMLAnchorElement>('.found-in a');
+      expect(links?.[0]?.getAttribute('href')).to.equal('/house');
+      expect(links?.[1]?.getAttribute('href')).to.equal('/garage');
+      expect(links?.[2]?.getAttribute('href')).to.equal('/toolbox');
     });
 
     it('should display separators between path elements', () => {
@@ -341,6 +355,7 @@ describe('WikiSearchResults', () => {
   describe('when result has inventory context with path but no titles', () => {
     beforeEach(async () => {
       el.open = true;
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
       el.results = [{
         identifier: 'screwdriver',
         title: 'Screwdriver',
@@ -367,6 +382,7 @@ describe('WikiSearchResults', () => {
   describe('when result has inventory context with mixed titles and identifiers', () => {
     beforeEach(async () => {
       el.open = true;
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
       el.results = [{
         identifier: 'power_drill',
         title: 'Cordless Power Drill',
@@ -393,10 +409,10 @@ describe('WikiSearchResults', () => {
     });
 
     it('should link all path elements correctly', () => {
-      const links = el.shadowRoot?.querySelectorAll('.found-in a') as NodeListOf<HTMLAnchorElement>;
-      expect(links[0]?.getAttribute('href')).to.equal('/house');
-      expect(links[1]?.getAttribute('href')).to.equal('/workshop_shed');
-      expect(links[2]?.getAttribute('href')).to.equal('/red_case');
+      const links = el.shadowRoot?.querySelectorAll<HTMLAnchorElement>('.found-in a');
+      expect(links?.[0]?.getAttribute('href')).to.equal('/house');
+      expect(links?.[1]?.getAttribute('href')).to.equal('/workshop_shed');
+      expect(links?.[2]?.getAttribute('href')).to.equal('/red_case');
     });
 
     it('should display separators between all elements', () => {
@@ -408,6 +424,7 @@ describe('WikiSearchResults', () => {
   describe('when result has long container path (more than 4 levels)', () => {
     beforeEach(async () => {
       el.open = true;
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
       el.results = [{
         identifier: 'screwdriver',
         title: 'Screwdriver',
@@ -469,6 +486,7 @@ describe('WikiSearchResults', () => {
   describe('when result has exactly 4 container levels', () => {
     beforeEach(async () => {
       el.open = true;
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
       el.results = [{
         identifier: 'item',
         title: 'Item',
@@ -501,6 +519,7 @@ describe('WikiSearchResults', () => {
   describe('when result has unsorted path', () => {
     beforeEach(async () => {
       el.open = true;
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
       el.results = [{
         identifier: 'item',
         title: 'Item',
@@ -529,6 +548,7 @@ describe('WikiSearchResults', () => {
   describe('when result is not inventory related', () => {
     beforeEach(async () => {
       el.open = true;
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
       el.results = [{
         identifier: 'regular_page',
         title: 'Regular Page',
@@ -551,6 +571,7 @@ describe('WikiSearchResults', () => {
   describe('when result has no frontmatter', () => {
     beforeEach(async () => {
       el.open = true;
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
       el.results = [{
         identifier: 'test_page',
         title: 'Test Page',
@@ -569,6 +590,7 @@ describe('WikiSearchResults', () => {
   describe('when result has frontmatter but no container', () => {
     beforeEach(async () => {
       el.open = true;
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
       el.results = [{
         identifier: 'test_page',
         title: 'Test Page',
@@ -590,6 +612,7 @@ describe('WikiSearchResults', () => {
       beforeEach(async () => {
         el.inventoryOnly = false;
         el.totalUnfilteredCount = 10;
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
         el.results = [
           {
             identifier: 'result-1',
@@ -611,6 +634,7 @@ describe('WikiSearchResults', () => {
       beforeEach(async () => {
         el.inventoryOnly = true;
         el.totalUnfilteredCount = 0;
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
         el.results = [
           {
             identifier: 'result-1',
@@ -632,6 +656,7 @@ describe('WikiSearchResults', () => {
       beforeEach(async () => {
         el.inventoryOnly = true;
         el.totalUnfilteredCount = 10;
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
         el.results = [
           {
             identifier: 'result-1',
@@ -669,6 +694,7 @@ describe('WikiSearchResults', () => {
       beforeEach(async () => {
         el.inventoryOnly = true;
         el.totalUnfilteredCount = 3;
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
         el.results = [
           {
             identifier: 'result-1',
@@ -697,6 +723,7 @@ describe('WikiSearchResults', () => {
       beforeEach(async () => {
         el.inventoryOnly = true;
         el.totalUnfilteredCount = 2;
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
         el.results = [
           {
             identifier: 'result-1',

@@ -23,6 +23,7 @@ describe('WikiSearch', () => {
   let el: WikiSearchElement;
 
   beforeEach(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- custom element matches interface
     el = document.createElement('wiki-search') as WikiSearchElement;
     document.body.appendChild(el);
     await el.updateComplete;
@@ -65,21 +66,23 @@ describe('WikiSearch', () => {
   });
 
   describe('when Ctrl+K is pressed', () => {
-    let searchInput: HTMLInputElement;
+    let searchInput: HTMLInputElement | null;
     let focusSpy: sinon.SinonSpy;
     let mockEvent: KeyboardEvent;
 
     beforeEach(async () => {
       await el.updateComplete;
-      searchInput = el.shadowRoot?.querySelector('input[type="search"]') as HTMLInputElement;
-      focusSpy = sinon.spy(searchInput, 'focus');
+      searchInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[type="search"]') ?? null;
+      if (searchInput) {
+        focusSpy = sinon.spy(searchInput, 'focus');
+      }
       mockEvent = new KeyboardEvent('keydown', {
         ctrlKey: true,
         key: 'k',
         bubbles: true,
         cancelable: true,
       });
-      
+
       el._handleKeydown(mockEvent);
     });
 
@@ -93,21 +96,23 @@ describe('WikiSearch', () => {
   });
 
   describe('when Cmd+K is pressed (Mac)', () => {
-    let searchInput: HTMLInputElement;
+    let searchInput: HTMLInputElement | null;
     let focusSpy: sinon.SinonSpy;
     let mockEvent: KeyboardEvent;
 
     beforeEach(async () => {
       await el.updateComplete;
-      searchInput = el.shadowRoot?.querySelector('input[type="search"]') as HTMLInputElement;
-      focusSpy = sinon.spy(searchInput, 'focus');
+      searchInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[type="search"]') ?? null;
+      if (searchInput) {
+        focusSpy = sinon.spy(searchInput, 'focus');
+      }
       mockEvent = new KeyboardEvent('keydown', {
         metaKey: true,
         key: 'k',
         bubbles: true,
         cancelable: true,
       });
-      
+
       el._handleKeydown(mockEvent);
     });
 
@@ -121,21 +126,23 @@ describe('WikiSearch', () => {
   });
 
   describe('when wrong key combination is pressed', () => {
-    let searchInput: HTMLInputElement;
+    let searchInput: HTMLInputElement | null;
     let focusSpy: sinon.SinonSpy;
     let mockEvent: KeyboardEvent;
 
     beforeEach(async () => {
       await el.updateComplete;
-      searchInput = el.shadowRoot?.querySelector('input[type="search"]') as HTMLInputElement;
-      focusSpy = sinon.spy(searchInput, 'focus');
+      searchInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[type="search"]') ?? null;
+      if (searchInput) {
+        focusSpy = sinon.spy(searchInput, 'focus');
+      }
       mockEvent = new KeyboardEvent('keydown', {
         ctrlKey: true,
         key: 'j',
         bubbles: true,
         cancelable: true,
       });
-      
+
       el._handleKeydown(mockEvent);
     });
 
@@ -154,6 +161,7 @@ describe('WikiSearch', () => {
     beforeEach(async () => {
       addEventListenerSpy = sinon.spy(window, 'addEventListener');
       // Re-create the element to trigger connectedCallback
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- custom element matches interface
       el = document.createElement('wiki-search') as WikiSearchElement;
       document.body.appendChild(el);
       await el.updateComplete;
@@ -170,6 +178,7 @@ describe('WikiSearch', () => {
     beforeEach(async () => {
       removeEventListenerSpy = sinon.spy(window, 'removeEventListener');
       // Re-create and then remove the element to trigger disconnectedCallback
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- custom element matches interface
       el = document.createElement('wiki-search') as WikiSearchElement;
       document.body.appendChild(el);
       await el.updateComplete;
@@ -184,28 +193,28 @@ describe('WikiSearch', () => {
   });
 
   describe('when searching', () => {
-    let form: HTMLFormElement;
-    let searchInput: HTMLInputElement;
+    let form: HTMLFormElement | null;
+    let searchInput: HTMLInputElement | null;
 
     beforeEach(async () => {
       await el.updateComplete;
-      form = el.shadowRoot?.querySelector('form') as HTMLFormElement;
-      searchInput = el.shadowRoot?.querySelector('input[type="search"]') as HTMLInputElement;
+      form = el.shadowRoot?.querySelector<HTMLFormElement>('form') ?? null;
+      searchInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[type="search"]') ?? null;
     });
 
     describe('when form is submitted', () => {
       beforeEach(() => {
-        searchInput.value = 'test query';
-        
+        if (searchInput) searchInput.value = 'test query';
+
         const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
-        form.dispatchEvent(submitEvent);
+        form?.dispatchEvent(submitEvent);
       });
 
       it('should prevent default form submission', () => {
         const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
         const preventDefaultSpy = sinon.spy(submitEvent, 'preventDefault');
-        
-        form.dispatchEvent(submitEvent);
+
+        form?.dispatchEvent(submitEvent);
         expect(preventDefaultSpy).to.have.been.calledOnce;
       });
 
@@ -216,9 +225,9 @@ describe('WikiSearch', () => {
 
     describe('when search input is empty', () => {
       beforeEach(() => {
-        searchInput.value = '';
+        if (searchInput) searchInput.value = '';
         const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
-        form.dispatchEvent(submitEvent);
+        form?.dispatchEvent(submitEvent);
       });
 
       it('should not perform search', () => {
@@ -233,9 +242,9 @@ describe('WikiSearch', () => {
         stubPerformSearch = sinon.stub(el, 'performSearch');
         stubPerformSearch.rejects(new Error('Network error'));
 
-        searchInput.value = 'fail';
+        if (searchInput) searchInput.value = 'fail';
         const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
-        form.dispatchEvent(submitEvent);
+        form?.dispatchEvent(submitEvent);
 
         await waitUntil(() => el.error === 'Network error', 'Error should be set');
         await el.updateComplete;
@@ -268,9 +277,9 @@ describe('WikiSearch', () => {
 
         // First search succeeds with a totalUnfilteredCount
         stubPerformSearch.resolves({ results: [{ identifier: 'test', title: 'Test' }], totalUnfilteredCount: 10 });
-        searchInput.value = 'success';
+        if (searchInput) searchInput.value = 'success';
         let submitEvent = new Event('submit', { bubbles: true, cancelable: true });
-        form.dispatchEvent(submitEvent);
+        form?.dispatchEvent(submitEvent);
         await waitUntil(() => !el.loading, 'First search should complete');
         await el.updateComplete;
 
@@ -279,9 +288,9 @@ describe('WikiSearch', () => {
 
         // Second search fails
         stubPerformSearch.rejects(new Error('Network error'));
-        searchInput.value = 'fail';
+        if (searchInput) searchInput.value = 'fail';
         submitEvent = new Event('submit', { bubbles: true, cancelable: true });
-        form.dispatchEvent(submitEvent);
+        form?.dispatchEvent(submitEvent);
         await waitUntil(() => el.error === 'Network error', 'Error should be set');
         await el.updateComplete;
       });
@@ -306,13 +315,13 @@ describe('WikiSearch', () => {
 
   describe('when inventory-filter-changed event is received', () => {
     let stubPerformSearch: sinon.SinonStub;
-    let form: HTMLFormElement;
-    let searchInput: HTMLInputElement;
+    let form: HTMLFormElement | null;
+    let searchInput: HTMLInputElement | null;
 
     beforeEach(async () => {
       await el.updateComplete;
-      form = el.shadowRoot?.querySelector('form') as HTMLFormElement;
-      searchInput = el.shadowRoot?.querySelector('input[type="search"]') as HTMLInputElement;
+      form = el.shadowRoot?.querySelector<HTMLFormElement>('form') ?? null;
+      searchInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[type="search"]') ?? null;
 
       // Stub performSearch to return mock results
       stubPerformSearch = sinon.stub(el, 'performSearch');
@@ -326,9 +335,9 @@ describe('WikiSearch', () => {
     describe('when there is a previous search query', () => {
       beforeEach(async () => {
         // Perform an initial search
-        searchInput.value = 'test query';
+        if (searchInput) searchInput.value = 'test query';
         const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
-        form.dispatchEvent(submitEvent);
+        form?.dispatchEvent(submitEvent);
         await waitUntil(() => !el.loading, 'Loading should complete');
 
         // Reset the stub to track the re-search
@@ -378,9 +387,9 @@ describe('WikiSearch', () => {
       beforeEach(async () => {
         // Perform an initial search with some results
         stubPerformSearch.resolves({ results: [{ identifier: 'test', title: 'Test' }], totalUnfilteredCount: 5 });
-        searchInput.value = 'test query';
+        if (searchInput) searchInput.value = 'test query';
         const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
-        form.dispatchEvent(submitEvent);
+        form?.dispatchEvent(submitEvent);
         await waitUntil(() => !el.loading, 'Loading should complete');
 
         // Set up the stub to fail for the next call
@@ -417,6 +426,7 @@ describe('WikiSearch', () => {
 
       beforeEach(async () => {
         localStorage.setItem(INVENTORY_ONLY_STORAGE_KEY, 'true');
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- custom element matches interface
         newEl = document.createElement('wiki-search') as WikiSearchElement;
         document.body.appendChild(newEl);
         await newEl.updateComplete;
@@ -438,6 +448,7 @@ describe('WikiSearch', () => {
 
       beforeEach(async () => {
         localStorage.setItem(INVENTORY_ONLY_STORAGE_KEY, 'false');
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- custom element matches interface
         newEl = document.createElement('wiki-search') as WikiSearchElement;
         document.body.appendChild(newEl);
         await newEl.updateComplete;
@@ -459,6 +470,7 @@ describe('WikiSearch', () => {
 
       beforeEach(async () => {
         localStorage.removeItem(INVENTORY_ONLY_STORAGE_KEY);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- custom element matches interface
         newEl = document.createElement('wiki-search') as WikiSearchElement;
         document.body.appendChild(newEl);
         await newEl.updateComplete;

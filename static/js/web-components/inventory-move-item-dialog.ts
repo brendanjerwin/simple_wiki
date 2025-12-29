@@ -380,7 +380,7 @@ export class InventoryMoveItemDialog extends LitElement {
 
     // Focus search field after render
     this.updateComplete.then(() => {
-      const searchField = this.shadowRoot?.querySelector('input[name="searchQuery"]') as HTMLInputElement;
+      const searchField = this.shadowRoot?.querySelector<HTMLInputElement>('input[name="searchQuery"]');
       searchField?.focus();
     });
   }
@@ -411,7 +411,10 @@ export class InventoryMoveItemDialog extends LitElement {
   };
 
   private _handleSearchInput = (event: Event): void => {
-    const input = event.target as HTMLInputElement;
+    if (!(event.target instanceof HTMLInputElement)) {
+      return;
+    }
+    const input = event.target;
     this.searchQuery = input.value;
     this.error = null;
     // Clear scan state when user starts typing - they're switching to search mode
@@ -523,7 +526,7 @@ export class InventoryMoveItemDialog extends LitElement {
     this.searchResults = [];
     // Wait for DOM update, then expand the scanner
     this.updateComplete.then(() => {
-      const scanner = this.shadowRoot?.querySelector('inventory-qr-scanner') as InventoryQrScanner | null;
+      const scanner = this.shadowRoot?.querySelector<InventoryQrScanner>('inventory-qr-scanner');
       if (scanner) {
         scanner.expand();
       }

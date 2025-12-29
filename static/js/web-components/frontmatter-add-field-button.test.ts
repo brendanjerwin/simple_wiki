@@ -49,12 +49,12 @@ describe('FrontmatterAddFieldButton', () => {
 
   describe('when dropdown button is clicked', () => {
     let el: FrontmatterAddFieldButton;
-    let button: HTMLElement;
+    let button: HTMLElement | null;
 
     beforeEach(async () => {
       el = await fixture<FrontmatterAddFieldButton>(html`<frontmatter-add-field-button></frontmatter-add-field-button>`);
-      button = el.shadowRoot?.querySelector('button') as HTMLElement;
-      button.click();
+      button = el.shadowRoot?.querySelector<HTMLElement>('button') ?? null;
+      button?.click();
       await el.updateComplete;
     });
 
@@ -89,7 +89,7 @@ describe('FrontmatterAddFieldButton', () => {
 
     describe('when clicking dropdown button again', () => {
       beforeEach(async () => {
-        button.click();
+        button?.click();
         await el.updateComplete;
       });
 
@@ -109,10 +109,10 @@ describe('FrontmatterAddFieldButton', () => {
 
     beforeEach(async () => {
       el = await fixture<FrontmatterAddFieldButton>(html`<frontmatter-add-field-button></frontmatter-add-field-button>`);
-      
+
       // Open dropdown
-      const button = el.shadowRoot?.querySelector('button') as HTMLElement;
-      button.click();
+      const button = el.shadowRoot?.querySelector<HTMLElement>('button');
+      button?.click();
       await el.updateComplete;
       
       // Simulate outside click
@@ -138,14 +138,14 @@ describe('FrontmatterAddFieldButton', () => {
       el = await fixture<FrontmatterAddFieldButton>(html`<frontmatter-add-field-button></frontmatter-add-field-button>`);
       addFieldSpy = sinon.spy();
       el.addEventListener('add-field', addFieldSpy);
-      
+
       // Open dropdown and click Add Field
-      const button = el.shadowRoot?.querySelector('button') as HTMLElement;
-      button.click();
+      const button = el.shadowRoot?.querySelector<HTMLElement>('button');
+      button?.click();
       await el.updateComplete;
-      
-      const addFieldItem = el.shadowRoot?.querySelector('.dropdown-item') as HTMLElement;
-      addFieldItem.click();
+
+      const addFieldItem = el.shadowRoot?.querySelector<HTMLElement>('.dropdown-item');
+      addFieldItem?.click();
       await el.updateComplete;
     });
 
@@ -170,14 +170,16 @@ describe('FrontmatterAddFieldButton', () => {
       el = await fixture<FrontmatterAddFieldButton>(html`<frontmatter-add-field-button></frontmatter-add-field-button>`);
       addFieldSpy = sinon.spy();
       el.addEventListener('add-field', addFieldSpy);
-      
+
       // Open dropdown and click Add Array
-      const button = el.shadowRoot?.querySelector('button') as HTMLElement;
-      button.click();
+      const button = el.shadowRoot?.querySelector<HTMLElement>('button');
+      button?.click();
       await el.updateComplete;
-      
-      const addArrayItem = el.shadowRoot?.querySelectorAll('.dropdown-item')[1] as HTMLElement;
-      addArrayItem.click();
+
+      const addArrayItem = el.shadowRoot?.querySelectorAll('.dropdown-item')[1];
+      if (addArrayItem instanceof HTMLElement) {
+        addArrayItem.click();
+      }
       await el.updateComplete;
     });
 
@@ -202,14 +204,16 @@ describe('FrontmatterAddFieldButton', () => {
       el = await fixture<FrontmatterAddFieldButton>(html`<frontmatter-add-field-button></frontmatter-add-field-button>`);
       addFieldSpy = sinon.spy();
       el.addEventListener('add-field', addFieldSpy);
-      
+
       // Open dropdown and click Add Section
-      const button = el.shadowRoot?.querySelector('button') as HTMLElement;
-      button.click();
+      const button = el.shadowRoot?.querySelector<HTMLElement>('button');
+      button?.click();
       await el.updateComplete;
-      
-      const addSectionItem = el.shadowRoot?.querySelectorAll('.dropdown-item')[2] as HTMLElement;
-      addSectionItem.click();
+
+      const addSectionItem = el.shadowRoot?.querySelectorAll('.dropdown-item')[2];
+      if (addSectionItem instanceof HTMLElement) {
+        addSectionItem.click();
+      }
       await el.updateComplete;
     });
 
@@ -234,14 +238,14 @@ describe('FrontmatterAddFieldButton', () => {
     });
 
     it('should have disabled attribute on button', () => {
-      const button = el.shadowRoot?.querySelector('button') as HTMLButtonElement;
-      expect(button.disabled).to.be.true;
+      const button = el.shadowRoot?.querySelector<HTMLButtonElement>('button');
+      expect(button?.disabled).to.be.true;
     });
 
     describe('when disabled button is clicked', () => {
       beforeEach(async () => {
-        const button = el.shadowRoot?.querySelector('button') as HTMLElement;
-        button.click();
+        const button = el.shadowRoot?.querySelector<HTMLElement>('button');
+        button?.click();
         await el.updateComplete;
       });
 

@@ -304,7 +304,7 @@ export class InventoryAddItemDialog extends LitElement {
 
     // Focus title field after render
     this.updateComplete.then(() => {
-      const titleField = this.shadowRoot?.querySelector('input[name="title"]') as HTMLInputElement;
+      const titleField = this.shadowRoot?.querySelector<HTMLInputElement>('input[name="title"]');
       titleField?.focus();
     });
   }
@@ -332,7 +332,10 @@ export class InventoryAddItemDialog extends LitElement {
   };
 
   private _handleTitleInput = (event: Event): void => {
-    const input = event.target as HTMLInputElement;
+    if (!(event.target instanceof HTMLInputElement)) {
+      return;
+    }
+    const input = event.target;
     this.itemTitle = input.value;
 
     // Clear existing timer
@@ -382,7 +385,10 @@ export class InventoryAddItemDialog extends LitElement {
     // Only allow editing in manual mode (not automagic)
     if (this.automagicMode) return;
 
-    const input = event.target as HTMLInputElement;
+    if (!(event.target instanceof HTMLInputElement)) {
+      return;
+    }
+    const input = event.target;
     this.itemIdentifier = input.value;
 
     // Clear existing timer
@@ -414,7 +420,10 @@ export class InventoryAddItemDialog extends LitElement {
   }
 
   private _handleDescriptionInput = (event: Event): void => {
-    const input = event.target as HTMLTextAreaElement;
+    if (!(event.target instanceof HTMLTextAreaElement)) {
+      return;
+    }
+    const input = event.target;
     this.description = input.value;
   };
 

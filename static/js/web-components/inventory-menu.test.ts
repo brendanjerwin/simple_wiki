@@ -12,7 +12,9 @@ describe('Inventory Menu Logic', () => {
       isItem: boolean;
       currentContainer: string;
     } {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- extracting nested object from unknown frontmatter
       const inventory = (frontmatter && typeof frontmatter === 'object')
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- extracting inventory property
         ? (frontmatter as Record<string, unknown>).inventory as { items?: unknown; container?: string } | null
         : null;
       const isContainer = !!(inventory && (Array.isArray(inventory.items) || inventory.items !== undefined));
@@ -259,6 +261,7 @@ describe('Inventory Menu Logic', () => {
   describe('validateInventoryResponse', () => {
     // Helper that mirrors the validation logic in addInventoryMenu
     function validateInventoryResponse(data: unknown): boolean {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- validating unknown data structure
       return !!(data && typeof data === 'object' && Array.isArray((data as Record<string, unknown>).ids));
     }
 
@@ -311,6 +314,7 @@ describe('Inventory Menu Logic', () => {
     // Helper that mirrors the page finding logic
     function findPageInInventoryList(ids: unknown[], currentPage: string): boolean {
       return ids.some(function(item) {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- checking identifier property on unknown item
         return item && (item as Record<string, unknown>).identifier === currentPage;
       });
     }

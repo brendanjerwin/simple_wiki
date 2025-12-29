@@ -3,6 +3,12 @@ import { stub, SinonStub } from 'sinon';
 import { SearchClient } from './search-client.js';
 import { SearchContentResponse, SearchResult, HighlightSpan } from '../gen/api/v1/search_pb.js';
 
+// Type interface for accessing private members in tests
+interface SearchClientPrivate {
+  getClient: () => { searchContent: unknown };
+  client: { searchContent: unknown };
+}
+
 describe('SearchClient', () => {
   let searchClient: SearchClient;
   let searchContentStub: SinonStub;
@@ -10,9 +16,11 @@ describe('SearchClient', () => {
   beforeEach(() => {
     searchClient = new SearchClient();
     // Ensure the client is initialized before stubbing
-    (searchClient as { getClient: () => object }).getClient();
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+    (searchClient as unknown as SearchClientPrivate).getClient();
     // Stub the gRPC client method
-    searchContentStub = stub((searchClient as { client: object }).client, 'searchContent');
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+    searchContentStub = stub((searchClient as unknown as SearchClientPrivate).client, 'searchContent');
   });
 
   afterEach(() => {
@@ -89,7 +97,9 @@ describe('SearchClient', () => {
         try {
           await searchClient.search('failing query');
         } catch (e) {
-          error = e as Error;
+          if (e instanceof Error) {
+            error = e;
+          }
         }
       });
 

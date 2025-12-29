@@ -400,6 +400,7 @@ describe('SystemInfoIndexing', () => {
       let result: string;
 
       beforeEach(() => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
         const component = el as SystemInfoIndexing & { formatRate(rate: number): string };
         result = component.formatRate(0.05);
       });
@@ -413,6 +414,7 @@ describe('SystemInfoIndexing', () => {
       let result: string;
 
       beforeEach(() => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
         const component = el as SystemInfoIndexing & { formatRate(rate: number): string };
         result = component.formatRate(0.7);
       });
@@ -426,6 +428,7 @@ describe('SystemInfoIndexing', () => {
       let result: string;
 
       beforeEach(() => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
         const component = el as SystemInfoIndexing & { formatRate(rate: number): string };
         result = component.formatRate(2.8);
       });
@@ -439,6 +442,7 @@ describe('SystemInfoIndexing', () => {
       let result: string;
 
       beforeEach(() => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
         const component = el as SystemInfoIndexing & { formatRate(rate: number): string };
         result = component.formatRate(0.1);
       });
@@ -452,6 +456,7 @@ describe('SystemInfoIndexing', () => {
       let result: string;
 
       beforeEach(() => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
         const component = el as SystemInfoIndexing & { formatRate(rate: number): string };
         result = component.formatRate(1.0);
       });
@@ -467,6 +472,7 @@ describe('SystemInfoIndexing', () => {
       let result: number;
 
       beforeEach(() => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
         const component = el as SystemInfoIndexing & { calculateProgress(completed: number, total: number): number };
         result = component.calculateProgress(50, 100);
       });
@@ -480,6 +486,7 @@ describe('SystemInfoIndexing', () => {
       let result: number;
 
       beforeEach(() => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
         const component = el as SystemInfoIndexing & { calculateProgress(completed: number, total: number): number };
         result = component.calculateProgress(10, 0);
       });
@@ -493,6 +500,7 @@ describe('SystemInfoIndexing', () => {
       let result: number;
 
       beforeEach(() => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
         const component = el as SystemInfoIndexing & { calculateProgress(completed: number, total: number): number };
         result = component.calculateProgress(100, 100);
       });
@@ -506,6 +514,7 @@ describe('SystemInfoIndexing', () => {
       let result: number;
 
       beforeEach(() => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
         const component = el as SystemInfoIndexing & { calculateProgress(completed: number, total: number): number };
         result = component.calculateProgress(0, 100);
       });
@@ -524,18 +533,18 @@ describe('SystemInfoIndexing', () => {
       });
 
       it('should display error message in accessible format', () => {
-        const errorElement = el.shadowRoot?.querySelector('.error') as HTMLElement;
+        const errorElement = el.shadowRoot?.querySelector<HTMLElement>('.error');
         expect(errorElement).to.exist;
-        expect(errorElement.textContent?.trim()).to.equal('Accessibility test error');
+        expect(errorElement!.textContent?.trim()).to.equal('Accessibility test error');
       });
 
       it('should have basic error element without interactive features', () => {
-        const errorElement = el.shadowRoot?.querySelector('.error') as HTMLElement;
+        const errorElement = el.shadowRoot?.querySelector<HTMLElement>('.error');
         expect(errorElement).to.exist;
-        
+
         // Should not have interactive attributes since error clicking is not implemented
-        expect(errorElement.tabIndex).to.not.equal(0);
-        expect(errorElement.classList.contains('clickable')).to.be.false;
+        expect(errorElement!.tabIndex).to.not.equal(0);
+        expect(errorElement!.classList.contains('clickable')).to.be.false;
       });
     });
 

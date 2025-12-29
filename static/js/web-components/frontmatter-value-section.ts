@@ -223,8 +223,10 @@ export class FrontmatterValueSection extends LitElement {
 
   private _typePriorityCompare(typeA: string, typeB: string): number {
     // First sort by type priority: string < array < object
-    const typePriority = { string: 0, array: 1, object: 2 };
-    return typePriority[typeA as keyof typeof typePriority] - typePriority[typeB as keyof typeof typePriority];
+    const typePriority: Record<string, number> = { string: 0, array: 1, object: 2 };
+    const priorityA = typePriority[typeA] ?? 0;
+    const priorityB = typePriority[typeB] ?? 0;
+    return priorityA - priorityB;
   }
 
   private _sortFieldEntries(entries: [string, unknown][]): [string, unknown][] {

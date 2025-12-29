@@ -218,6 +218,7 @@ export const SimulatedScan: Story = {
         // Demo-only: access private _onScanSuccess to simulate a scan
         scanner.expand();
         setTimeout(() => {
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Demo-only: accessing private method
           (scanner as unknown as { _onScanSuccess: (text: string) => void })._onScanSuccess('https://wiki.example.com/garage_toolbox/view');
         }, 1000);
       }
@@ -288,7 +289,10 @@ export const InteractiveTesting: Story = {
                 const scanner = document.querySelector('qr-scanner') as QrScanner | null;
                 if (scanner) {
                   scanner.expand();
-                  setTimeout(() => (scanner as unknown as { _onScanSuccess: (text: string) => void })._onScanSuccess(url), 500);
+                  setTimeout(() => {
+                    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- Demo-only: accessing private method
+                    (scanner as unknown as { _onScanSuccess: (text: string) => void })._onScanSuccess(url);
+                  }, 500);
                 }
               }} style="text-align: left; padding: 8px 12px;">
                 <code>${url}</code>

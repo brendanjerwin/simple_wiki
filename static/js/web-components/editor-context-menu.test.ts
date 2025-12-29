@@ -157,8 +157,10 @@ describe('EditorContextMenu', () => {
       const items = el.shadowRoot?.querySelectorAll('.menu-item');
       const uploadImage = Array.from(items || []).find(
         item => item.textContent?.includes('Upload Image')
-      ) as HTMLButtonElement;
-      uploadImage?.click();
+      );
+      if (uploadImage instanceof HTMLButtonElement) {
+        uploadImage.click();
+      }
       await el.updateComplete;
     });
 
@@ -183,8 +185,10 @@ describe('EditorContextMenu', () => {
       const items = el.shadowRoot?.querySelectorAll('.menu-item');
       const uploadFile = Array.from(items || []).find(
         item => item.textContent?.includes('Upload File')
-      ) as HTMLButtonElement;
-      uploadFile?.click();
+      );
+      if (uploadFile instanceof HTMLButtonElement) {
+        uploadFile.click();
+      }
       await el.updateComplete;
     });
 
@@ -210,8 +214,10 @@ describe('EditorContextMenu', () => {
       const items = el.shadowRoot?.querySelectorAll('.menu-item');
       const takePhoto = Array.from(items || []).find(
         item => item.textContent?.includes('Take Photo')
-      ) as HTMLButtonElement;
-      takePhoto?.click();
+      );
+      if (takePhoto instanceof HTMLButtonElement) {
+        takePhoto.click();
+      }
       await el.updateComplete;
     });
 
@@ -236,8 +242,10 @@ describe('EditorContextMenu', () => {
       const items = el.shadowRoot?.querySelectorAll('.menu-item');
       const bold = Array.from(items || []).find(
         item => item.textContent?.includes('Bold')
-      ) as HTMLButtonElement;
-      bold?.click();
+      );
+      if (bold instanceof HTMLButtonElement) {
+        bold.click();
+      }
       await el.updateComplete;
     });
 
@@ -262,8 +270,10 @@ describe('EditorContextMenu', () => {
       const items = el.shadowRoot?.querySelectorAll('.menu-item');
       const italic = Array.from(items || []).find(
         item => item.textContent?.includes('Italic')
-      ) as HTMLButtonElement;
-      italic?.click();
+      );
+      if (italic instanceof HTMLButtonElement) {
+        italic.click();
+      }
       await el.updateComplete;
     });
 
@@ -288,8 +298,10 @@ describe('EditorContextMenu', () => {
       const items = el.shadowRoot?.querySelectorAll('.menu-item');
       const link = Array.from(items || []).find(
         item => item.textContent?.includes('Insert Link')
-      ) as HTMLButtonElement;
-      link?.click();
+      );
+      if (link instanceof HTMLButtonElement) {
+        link.click();
+      }
       await el.updateComplete;
     });
 

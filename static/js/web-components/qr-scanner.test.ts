@@ -272,6 +272,7 @@ describe('QrScanner', () => {
       });
 
       it('should include raw value in event detail', () => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing CustomEvent from spy
         const event = scannedSpy.firstCall.args[0] as CustomEvent;
         expect(event.detail.rawValue).to.equal('https://wiki.example.com/toolbox/view');
       });
@@ -297,7 +298,7 @@ describe('QrScanner', () => {
         await el.expand();
         await el.updateComplete;
 
-        const stopButton = el.shadowRoot?.querySelector('.stop-button') as HTMLButtonElement;
+        const stopButton = el.shadowRoot?.querySelector<HTMLButtonElement>('.stop-button');
         stopButton?.click();
         await el.updateComplete;
       });

@@ -33,6 +33,7 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
     sessionStorageStub = sinon.stub(sessionStorage, 'setItem');
     
     // Stub the refreshPage method to prevent actual page refresh
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
     refreshPageStub = sinon.stub(el, 'refreshPage' as keyof FrontmatterEditorDialog);
     
     await el.updateComplete;
@@ -293,14 +294,14 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
       });
 
       it('should disable save button', () => {
-        const saveButton = el.shadowRoot!.querySelector('.footer button:last-child') as HTMLButtonElement;
-        expect(saveButton.disabled).to.be.true;
-        expect(saveButton.textContent!.trim()).to.equal('Saving...');
+        const saveButton = el.shadowRoot!.querySelector<HTMLButtonElement>('.footer button:last-child');
+        expect(saveButton!.disabled).to.be.true;
+        expect(saveButton!.textContent!.trim()).to.equal('Saving...');
       });
 
       it('should disable cancel button', () => {
-        const cancelButton = el.shadowRoot!.querySelector('.footer button:first-child') as HTMLButtonElement;
-        expect(cancelButton.disabled).to.be.true;
+        const cancelButton = el.shadowRoot!.querySelector<HTMLButtonElement>('.footer button:first-child');
+        expect(cancelButton!.disabled).to.be.true;
       });
     });
 
@@ -311,8 +312,8 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
       });
 
       it('should disable save button', () => {
-        const saveButton = el.shadowRoot!.querySelector('.footer button:last-child') as HTMLButtonElement;
-        expect(saveButton.disabled).to.be.true;
+        const saveButton = el.shadowRoot!.querySelector<HTMLButtonElement>('.footer button:last-child');
+        expect(saveButton!.disabled).to.be.true;
       });
     });
 
@@ -324,9 +325,9 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
       });
 
       it('should enable save button', () => {
-        const saveButton = el.shadowRoot!.querySelector('.footer button:last-child') as HTMLButtonElement;
-        expect(saveButton.disabled).to.be.false;
-        expect(saveButton.textContent!.trim()).to.equal('Save');
+        const saveButton = el.shadowRoot!.querySelector<HTMLButtonElement>('.footer button:last-child');
+        expect(saveButton!.disabled).to.be.false;
+        expect(saveButton!.textContent!.trim()).to.equal('Save');
       });
     });
   });

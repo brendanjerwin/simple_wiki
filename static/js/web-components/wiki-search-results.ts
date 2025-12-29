@@ -228,7 +228,10 @@ class WikiSearchResults extends LitElement {
   }
 
   private _handleInventoryOnlyChange(event: Event) {
-    const target = event.target as HTMLInputElement;
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement)) {
+      return;
+    }
     this.inventoryOnly = target.checked;
     this.dispatchEvent(new CustomEvent('inventory-filter-changed', {
       detail: { inventoryOnly: this.inventoryOnly },

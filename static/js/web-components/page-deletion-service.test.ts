@@ -36,7 +36,8 @@ describe.skip('PageDeletionService', () => {
     };
 
     // Stub document methods
-    createElementStub = sinon.stub(document, 'createElement').returns(mockDialog);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock dialog for testing
+    createElementStub = sinon.stub(document, 'createElement').returns(mockDialog as unknown as HTMLElement);
     appendChildStub = sinon.stub(document.body, 'appendChild');
     sinon.stub(document, 'querySelector').returns(null); // Force creation of new dialog
 
@@ -90,6 +91,7 @@ describe.skip('PageDeletionService', () => {
         parentNode: null
       };
       
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock dialog for testing
       sinon.stub(document, 'querySelector').returns(existingDialog as unknown as Element);
       service = new PageDeletionService();
     });

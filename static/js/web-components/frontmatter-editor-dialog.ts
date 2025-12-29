@@ -190,7 +190,7 @@ export class FrontmatterEditorDialog extends LitElement {
   declare saving: boolean;
   declare augmentedError?: AugmentedError | undefined;
   declare frontmatter?: GetFrontmatterResponse | undefined;
-  declare workingFrontmatter?: Record<string, unknown>;
+  declare workingFrontmatter?: JsonObject;
 
   private client = createClient(Frontmatter, getGrpcWebTransport());
 
@@ -205,7 +205,8 @@ export class FrontmatterEditorDialog extends LitElement {
 
   private updateWorkingFrontmatter(): void {
     if (this.frontmatter?.frontmatter) {
-      this.workingFrontmatter = this.frontmatter.frontmatter as Record<string, unknown>;
+      // frontmatter.frontmatter is already JsonObject from protobuf-es v2
+      this.workingFrontmatter = this.frontmatter.frontmatter;
     } else {
       this.workingFrontmatter = {};
     }
@@ -288,7 +289,7 @@ export class FrontmatterEditorDialog extends LitElement {
 
       const request = create(ReplaceFrontmatterRequestSchema, {
         page: this.page,
-        frontmatter: this.workingFrontmatter as JsonObject
+        frontmatter: this.workingFrontmatter
       });
 
       const response = await this.client.replaceFrontmatter(request);

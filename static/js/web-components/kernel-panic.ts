@@ -186,13 +186,13 @@ customElements.define('kernel-panic', KernelPanic);
 /**
  * Creates and displays a kernel panic overlay for unrecoverable errors.
  * This function handles all the DOM manipulation needed to display the error.
- * 
+ *
  * @param augmentedError - The augmented error to display
  */
 export function showKernelPanic(augmentedError: AugmentedError): void {
-  const kernelPanic = document.createElement('kernel-panic') as HTMLElement & {
-    augmentedError: AugmentedError;
-  };
-  kernelPanic.augmentedError = augmentedError;
-  document.body.appendChild(kernelPanic);
+  const kernelPanic = document.createElement('kernel-panic');
+  if (kernelPanic instanceof KernelPanic) {
+    kernelPanic.augmentedError = augmentedError;
+    document.body.appendChild(kernelPanic);
+  }
 }

@@ -381,7 +381,7 @@ export class QrScanner extends LitElement {
     }
 
     // Get the container to position the video over
-    const container = this.shadowRoot?.querySelector('.viewfinder-container') as HTMLElement;
+    const container = this.shadowRoot?.querySelector<HTMLElement>('.viewfinder-container');
     if (!container) {
       throw new Error('QrScanner: Viewfinder container not found in DOM');
     }
@@ -454,7 +454,7 @@ export class QrScanner extends LitElement {
    * Schedule repositioning after layout settles
    */
   private _scheduleReposition(): void {
-    const container = this.shadowRoot?.querySelector('.viewfinder-container') as HTMLElement;
+    const container = this.shadowRoot?.querySelector<HTMLElement>('.viewfinder-container');
     if (container) {
       requestAnimationFrame(() => {
         this._positionPortalVideo(container);
@@ -577,7 +577,10 @@ export class QrScanner extends LitElement {
   }
 
   private async _handleCameraChange(e: Event): Promise<void> {
-    const select = e.target as HTMLSelectElement;
+    if (!(e.target instanceof HTMLSelectElement)) {
+      return;
+    }
+    const select = e.target;
     const newCameraId = select.value;
 
     // Only restart if camera actually changed

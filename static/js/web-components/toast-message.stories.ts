@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unsafe-type-assertion -- Storybook stories use dynamic element creation with any types */
 import type { Meta, StoryObj } from '@storybook/web-components-vite';
 import { action } from 'storybook/actions';
 import { html } from 'lit';

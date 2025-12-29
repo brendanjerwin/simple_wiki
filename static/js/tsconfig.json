@@ -32,6 +32,8 @@
   "include": [
     "gen/**/*",
     "web-components/**/*",
+    "services/**/*",
+    "utils/**/*",
     "*.ts",
     "*.js"
   ],

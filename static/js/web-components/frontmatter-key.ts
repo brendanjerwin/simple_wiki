@@ -69,7 +69,10 @@ export class FrontmatterKey extends LitElement {
   }
 
   private _handleKeyInput = (event: Event): void => {
-    const target = event.target as HTMLInputElement;
+    if (!(event.target instanceof HTMLInputElement)) {
+      return;
+    }
+    const target = event.target;
     const newKey = target.value.trim();
     const oldKey = this.key;
 

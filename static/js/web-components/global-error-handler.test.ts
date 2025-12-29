@@ -65,6 +65,7 @@ describe('Global Error Handler', () => {
 
       beforeEach(() => {
         mockError = new Error('Test error message');
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock event for testing
         mockErrorEvent = {
           error: mockError,
           message: 'Test error message',
@@ -86,6 +87,7 @@ describe('Global Error Handler', () => {
       let mockErrorEvent: ErrorEvent;
 
       beforeEach(() => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock event for testing
         mockErrorEvent = {
           error: null,
           message: 'Script error',
@@ -126,6 +128,7 @@ describe('Global Error Handler', () => {
     beforeEach(() => {
       mockError = new Error('Promise rejection error');
       preventDefaultStub = stub();
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock event for testing
       mockRejectionEvent = {
         reason: mockError,
         preventDefault: preventDefaultStub
@@ -146,6 +149,7 @@ describe('Global Error Handler', () => {
 
     it('should handle non-Error rejection reasons', () => {
       const preventDefaultStub = stub();
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock event for testing
       const mockRejectionEvent = {
         reason: 'String rejection reason',
         preventDefault: preventDefaultStub

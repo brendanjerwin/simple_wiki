@@ -247,12 +247,12 @@ describe('ToastMessage', () => {
     });
 
     it('should hide the toast', async () => {
-      const toastElement = el.shadowRoot?.querySelector('.toast') as HTMLElement;
+      const toastElement = el.shadowRoot?.querySelector<HTMLElement>('.toast');
       expect(toastElement).to.exist;
-      
-      toastElement.click();
+
+      toastElement!.click();
       await el.updateComplete;
-      
+
       expect(el.visible).to.be.false;
     });
 
@@ -270,12 +270,12 @@ describe('ToastMessage', () => {
       });
 
       it('should not hide the toast', async () => {
-        const errorDisplay = el.shadowRoot?.querySelector('error-display') as HTMLElement;
+        const errorDisplay = el.shadowRoot?.querySelector<HTMLElement>('error-display');
         expect(errorDisplay).to.exist;
-        
-        errorDisplay.click();
+
+        errorDisplay!.click();
         await el.updateComplete;
-        
+
         expect(el.visible).to.be.true;
       });
     });
@@ -288,20 +288,20 @@ describe('ToastMessage', () => {
     });
 
     it('should hide the toast', async () => {
-      const closeButton = el.shadowRoot?.querySelector('.close-button') as HTMLElement;
+      const closeButton = el.shadowRoot?.querySelector<HTMLElement>('.close-button');
       expect(closeButton).to.exist;
-      
-      closeButton.click();
+
+      closeButton!.click();
       await el.updateComplete;
-      
+
       expect(el.visible).to.be.false;
     });
 
     it('should have proper accessibility attributes', () => {
-      const closeButton = el.shadowRoot?.querySelector('.close-button') as HTMLElement;
+      const closeButton = el.shadowRoot?.querySelector<HTMLElement>('.close-button');
       expect(closeButton).to.exist;
-      expect(closeButton.getAttribute('aria-label')).to.equal('Close notification');
-      expect(closeButton.getAttribute('title')).to.equal('Close notification');
+      expect(closeButton!.getAttribute('aria-label')).to.equal('Close notification');
+      expect(closeButton!.getAttribute('title')).to.equal('Close notification');
     });
   });
 });
@@ -321,7 +321,8 @@ describe('showToast utility function', () => {
 
   it('should create and show a toast message', async () => {
     showToast('Test message', 'success', 5);
-    
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- querying for custom element
     const toast = document.querySelector('toast-message') as ToastMessage;
     expect(toast).to.exist;
     expect(toast.message).to.equal('Test message');
@@ -330,7 +331,8 @@ describe('showToast utility function', () => {
 
   it('should use default type if not specified', () => {
     showToast('Test message', 'info', 5);
-    
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- querying for custom element
     const toast = document.querySelector('toast-message') as ToastMessage;
     expect(toast.type).to.equal('info');
   });
@@ -366,6 +368,7 @@ describe('showToastAfter utility function', () => {
     expect(sessionStorage.getItem('toast-type')).to.be.null;
     
     // But the toast should be displayed
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- querying for custom element
     const toast = document.querySelector('toast-message') as ToastMessage;
     expect(toast).to.exist;
     expect(toast.message).to.equal('Test message');
@@ -376,10 +379,11 @@ describe('showToastAfter utility function', () => {
     showToastAfter('Test message', 'warning', 5, () => {
       // No-op function that doesn't refresh page
     });
-    
+
     // Wait for the delayed showStoredToast call
     await new Promise(resolve => setTimeout(resolve, 150));
-    
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- querying for custom element
     const toast = document.querySelector('toast-message') as ToastMessage;
     expect(toast).to.exist;
     expect(toast.message).to.equal('Test message');
@@ -411,6 +415,7 @@ describe('sessionStorage toast functions', () => {
       expect(sessionStorage.getItem('toast-type')).to.be.null;
       
       // Should create toast element
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- querying for custom element
       const toast = document.querySelector('toast-message') as ToastMessage;
       expect(toast).to.exist;
       expect(toast.message).to.equal('Stored message');
@@ -419,7 +424,7 @@ describe('sessionStorage toast functions', () => {
 
     it('should do nothing if no stored message exists', () => {
       showStoredToast();
-      
+
       const toast = document.querySelector('toast-message');
       expect(toast).to.be.null;
     });
@@ -427,9 +432,10 @@ describe('sessionStorage toast functions', () => {
     it('should use default type if stored type is invalid', () => {
       sessionStorage.setItem('toast-message', 'Stored message');
       // Don't set toast-type, should default to 'info'
-      
+
       showStoredToast();
-      
+
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- querying for custom element
       const toast = document.querySelector('toast-message') as ToastMessage;
       expect(toast).to.exist;
       expect(toast.type).to.equal('info');

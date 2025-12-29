@@ -104,8 +104,8 @@ describe('ErrorDisplay', () => {
       timeout(5000, "Component update timed out"),
     ]);
 
-    const expandButton = el.shadowRoot?.querySelector('.expand-button') as HTMLButtonElement;
-    expandButton.click();
+    const expandButton = el.shadowRoot?.querySelector<HTMLButtonElement>('.expand-button');
+    expandButton?.click();
     await Promise.race([
       el.updateComplete,
       timeout(5000, "Component update after click timed out"),
@@ -196,8 +196,8 @@ describe('ErrorDisplay', () => {
 
       describe('when action button is clicked', () => {
         beforeEach(async () => {
-          const actionButton = el.shadowRoot?.querySelector('.action-button') as HTMLButtonElement;
-          actionButton.click();
+          const actionButton = el.shadowRoot?.querySelector<HTMLButtonElement>('.action-button');
+          actionButton?.click();
           await Promise.race([
             el.updateComplete,
             timeout(5000, "Component update timed out"),

@@ -3,12 +3,13 @@ import { TemplateResult } from 'lit';
 import { restore } from 'sinon';
 import { FrontmatterValueSection } from './frontmatter-value-section.js';
 
-function createFixtureWithTimeout(template: TemplateResult, timeoutMs = 5000): Promise<FrontmatterValueSection> {
+async function createFixtureWithTimeout(template: TemplateResult, timeoutMs = 5000): Promise<FrontmatterValueSection> {
   const timeout = (ms: number, message: string) =>
-    new Promise<never>((_, reject) => 
+    new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error(message)), ms)
     );
-  
+
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- test fixture
   return Promise.race([
     fixture(template),
     timeout(timeoutMs, 'Component fixture timed out')
@@ -79,14 +80,14 @@ describe('FrontmatterValueSection', () => {
     });
 
     it('should display the correct keys', () => {
-      const keyComponents = el.shadowRoot?.querySelectorAll('frontmatter-key') as NodeListOf<Element>;
-      const keys = Array.from(keyComponents).map(comp => comp.key);
+      const keyComponents = el.shadowRoot?.querySelectorAll<HTMLElement & { key: string }>('frontmatter-key');
+      const keys = Array.from(keyComponents!).map(comp => comp.key);
       expect(keys).to.include.members(['title', 'description', 'count']);
     });
 
     it('should display the correct values', () => {
-      const valueDispatcherComponents = el.shadowRoot?.querySelectorAll('frontmatter-value') as NodeListOf<HTMLElement & {value: unknown}>;
-      const values = Array.from(valueDispatcherComponents).map(comp => comp.value);
+      const valueDispatcherComponents = el.shadowRoot?.querySelectorAll<HTMLElement & { value: unknown }>('frontmatter-value');
+      const values = Array.from(valueDispatcherComponents!).map(comp => comp.value);
       expect(values).to.include.members(['Test Title', 'Test Description', '42']);
     });
 
@@ -119,18 +120,20 @@ describe('FrontmatterValueSection', () => {
     beforeEach(async () => {
       sectionChangeEvent = null;
       el = await createFixtureWithTimeout(html`<frontmatter-value-section .fields="${{existing: 'value'}}"></frontmatter-value-section>`);
-      
+
       el.addEventListener('section-change', (event) => {
-        sectionChangeEvent = event as CustomEvent;
+        if (event instanceof CustomEvent) {
+          sectionChangeEvent = event;
+        }
       });
 
       // First click to open dropdown
-      const addButton = el.shadowRoot?.querySelector('frontmatter-add-field-button') as HTMLElement & {shadowRoot: ShadowRoot, updateComplete: Promise<unknown>};
-      addButton?.shadowRoot?.querySelector('button')?.click();
+      const addButton = el.shadowRoot?.querySelector<HTMLElement & { shadowRoot: ShadowRoot; updateComplete: Promise<unknown> }>('frontmatter-add-field-button');
+      addButton?.shadowRoot?.querySelector<HTMLButtonElement>('button')?.click();
       await addButton?.updateComplete;
-      
+
       // Then click on "Add Field" option to actually add a field
-      const addFieldOption = addButton?.shadowRoot?.querySelector('.dropdown-item') as HTMLButtonElement;
+      const addFieldOption = addButton?.shadowRoot?.querySelector<HTMLButtonElement>('.dropdown-item');
       addFieldOption?.click();
       await el.updateComplete;
     });
@@ -169,14 +172,16 @@ describe('FrontmatterValueSection', () => {
         field2: 'value2',
         field3: 'value3'
       }}"></frontmatter-value-section>`);
-      
+
       el.addEventListener('section-change', (event) => {
-        sectionChangeEvent = event as CustomEvent;
+        if (event instanceof CustomEvent) {
+          sectionChangeEvent = event;
+        }
       });
 
       // Click remove button for second field
-      const removeButtons = el.shadowRoot?.querySelectorAll('.remove-field-button') as NodeListOf<HTMLButtonElement>;
-      removeButtons[1].click();
+      const removeButtons = el.shadowRoot?.querySelectorAll<HTMLButtonElement>('.remove-field-button');
+      removeButtons![1].click();
     });
 
     it('should dispatch section-change event', () => {
@@ -211,14 +216,16 @@ describe('FrontmatterValueSection', () => {
       el = await createFixtureWithTimeout(html`<frontmatter-value-section .fields="${{
         oldKey: 'test value'
       }}"></frontmatter-value-section>`);
-      
+
       el.addEventListener('section-change', (event) => {
-        sectionChangeEvent = event as CustomEvent;
+        if (event instanceof CustomEvent) {
+          sectionChangeEvent = event;
+        }
       });
 
       // Simulate key change
-      const keyComponent = el.shadowRoot?.querySelector('frontmatter-key') as HTMLElement & { [key: string]: unknown };
-      keyComponent.dispatchEvent(new CustomEvent('key-change', {
+      const keyComponent = el.shadowRoot?.querySelector<HTMLElement>('frontmatter-key');
+      keyComponent!.dispatchEvent(new CustomEvent('key-change', {
         detail: {
           oldKey: 'oldKey',
           newKey: 'newKey'
@@ -250,13 +257,15 @@ describe('FrontmatterValueSection', () => {
       el = await createFixtureWithTimeout(html`<frontmatter-value-section .fields="${{
         testKey: 'original value'
       }}"></frontmatter-value-section>`);
-      
+
       el.addEventListener('section-change', (event) => {
-        sectionChangeEvent = event as CustomEvent;
+        if (event instanceof CustomEvent) {
+          sectionChangeEvent = event;
+        }
       });
 
       // Simulate value change
-      const valueComponent = el.shadowRoot?.querySelector('frontmatter-value') as HTMLElement & { [key: string]: unknown };
+      const valueComponent = el.shadowRoot?.querySelector<HTMLElement>('frontmatter-value');
       valueComponent?.dispatchEvent(new CustomEvent('value-change', {
         detail: {
           oldValue: 'original value',
@@ -293,12 +302,12 @@ describe('FrontmatterValueSection', () => {
     });
 
     it('should render fields sorted by type then alphabetically', () => {
-      const fieldRows = el.shadowRoot?.querySelectorAll('.field-row') as NodeListOf<Element>;
+      const fieldRows = el.shadowRoot?.querySelectorAll<HTMLElement>('.field-row');
       const keys: string[] = [];
-      
-      fieldRows.forEach(row => {
-        const keyComponent = row.querySelector('frontmatter-key') as HTMLElement & { key: string };
-        keys.push(keyComponent.key);
+
+      fieldRows!.forEach(row => {
+        const keyComponent = row.querySelector<HTMLElement & { key: string }>('frontmatter-key');
+        keys.push(keyComponent!.key);
       });
 
       // Expected order: strings first (alphabetical), then arrays (alphabetical), then objects (alphabetical)
@@ -313,19 +322,19 @@ describe('FrontmatterValueSection', () => {
     });
 
     it('should render appropriate components for each type', () => {
-      const fieldRows = el.shadowRoot?.querySelectorAll('.field-row') as NodeListOf<Element>;
-      
+      const fieldRows = el.shadowRoot?.querySelectorAll<HTMLElement>('.field-row');
+
       // Check first field (apple_field - string)
-      const firstValueComponent = fieldRows[0].querySelector('frontmatter-value') as HTMLElement;
-      expect(firstValueComponent.shadowRoot?.querySelector('frontmatter-value-string')).to.exist;
-      
-      // Check third field (delta_array - array)  
-      const thirdValueComponent = fieldRows[2].querySelector('frontmatter-value') as HTMLElement;
-      expect(thirdValueComponent.shadowRoot?.querySelector('frontmatter-value-array')).to.exist;
-      
+      const firstValueComponent = fieldRows![0].querySelector<HTMLElement>('frontmatter-value');
+      expect(firstValueComponent!.shadowRoot?.querySelector('frontmatter-value-string')).to.exist;
+
+      // Check third field (delta_array - array)
+      const thirdValueComponent = fieldRows![2].querySelector<HTMLElement>('frontmatter-value');
+      expect(thirdValueComponent!.shadowRoot?.querySelector('frontmatter-value-array')).to.exist;
+
       // Check last field (zebra_section - object)
-      const lastValueComponent = fieldRows[fieldRows.length - 1].querySelector('frontmatter-value') as HTMLElement;
-      expect(lastValueComponent.shadowRoot?.querySelector('frontmatter-value-section')).to.exist;
+      const lastValueComponent = fieldRows![fieldRows!.length - 1].querySelector<HTMLElement>('frontmatter-value');
+      expect(lastValueComponent!.shadowRoot?.querySelector('frontmatter-value-section')).to.exist;
     });
   });
 
@@ -335,27 +344,27 @@ describe('FrontmatterValueSection', () => {
     });
 
     it('should disable all key components', () => {
-      const keyComponents = el.shadowRoot?.querySelectorAll('frontmatter-key') as NodeListOf<Element>;
-      keyComponents.forEach(component => {
+      const keyComponents = el.shadowRoot?.querySelectorAll<HTMLElement & { editable: boolean }>('frontmatter-key');
+      keyComponents!.forEach(component => {
         expect(component.editable).to.be.false;
       });
     });
 
     it('should disable all value components', () => {
-      const valueComponents = el.shadowRoot?.querySelectorAll('frontmatter-value-string') as NodeListOf<Element>;
-      valueComponents.forEach(component => {
+      const valueComponents = el.shadowRoot?.querySelectorAll<HTMLElement & { disabled: boolean }>('frontmatter-value-string');
+      valueComponents!.forEach(component => {
         expect(component.disabled).to.be.true;
       });
     });
 
     it('should disable the add field button', () => {
-      const addButton = el.shadowRoot?.querySelector('frontmatter-add-field-button') as HTMLElement & {disabled: boolean};
+      const addButton = el.shadowRoot?.querySelector<HTMLElement & { disabled: boolean }>('frontmatter-add-field-button');
       expect(addButton?.disabled).to.be.true;
     });
 
     it('should disable all remove buttons', () => {
-      const removeButtons = el.shadowRoot?.querySelectorAll('.remove-field-button') as NodeListOf<HTMLButtonElement>;
-      removeButtons.forEach(button => {
+      const removeButtons = el.shadowRoot?.querySelectorAll<HTMLButtonElement>('.remove-field-button');
+      removeButtons!.forEach(button => {
         expect(button.disabled).to.be.true;
       });
     });
@@ -381,14 +390,14 @@ describe('FrontmatterValueSection', () => {
       });
 
       it('should update key components', () => {
-        const keyComponents = el.shadowRoot?.querySelectorAll('frontmatter-key') as NodeListOf<Element>;
-        const keys = Array.from(keyComponents).map(comp => comp.key);
+        const keyComponents = el.shadowRoot?.querySelectorAll<HTMLElement & { key: string }>('frontmatter-key');
+        const keys = Array.from(keyComponents!).map(comp => comp.key);
         expect(keys).to.include.members(['updated1', 'updated2']);
       });
 
       it('should update value components', () => {
-        const valueDispatcherComponents = el.shadowRoot?.querySelectorAll('frontmatter-value') as NodeListOf<HTMLElement & {value: unknown}>;
-        const values = Array.from(valueDispatcherComponents).map(comp => comp.value);
+        const valueDispatcherComponents = el.shadowRoot?.querySelectorAll<HTMLElement & { value: unknown }>('frontmatter-value');
+        const values = Array.from(valueDispatcherComponents!).map(comp => comp.value);
         expect(values).to.include.members(['value1', 'value2']);
       });
     });

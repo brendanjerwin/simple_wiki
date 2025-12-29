@@ -40,8 +40,8 @@ export class FrontmatterAddFieldButton extends LitElement {
 
   private _handleClickOutside = (event: Event): void => {
     if (!this.open) return;
-    
-    if (!this.contains(event.target as Node)) {
+
+    if (event.target instanceof Node && !this.contains(event.target)) {
       this.open = false;
     }
   };

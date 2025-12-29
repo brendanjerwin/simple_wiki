@@ -41,15 +41,17 @@ describe('FrontmatterEditorDialog - Component Integration', () => {
     });
 
     it('should render sub-components for fields', () => {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- custom element with shadow root
       const sectionComponent = el.shadowRoot?.querySelector('frontmatter-value-section') as HTMLElement & {shadowRoot: ShadowRoot};
       const keyComponents = sectionComponent?.shadowRoot?.querySelectorAll('frontmatter-key');
       const valueComponents = sectionComponent?.shadowRoot?.querySelectorAll('frontmatter-value');
-      
+
       expect(keyComponents).to.have.length.greaterThan(0);
       expect(valueComponents).to.have.length.greaterThan(0);
     });
 
     it('should render remove buttons for top-level fields', () => {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- custom element with shadow root
       const sectionComponent = el.shadowRoot?.querySelector('frontmatter-value-section') as HTMLElement & {shadowRoot: ShadowRoot};
       const removeButtons = sectionComponent?.shadowRoot?.querySelectorAll('.remove-field-button');
       expect(removeButtons).to.have.length.greaterThan(0);
@@ -68,12 +70,13 @@ describe('FrontmatterEditorDialog - Component Integration', () => {
 
     describe('when a key is renamed via component event', () => {
       beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- custom element with shadow root
         const sectionComponent = el.shadowRoot?.querySelector('frontmatter-value-section') as HTMLElement & {shadowRoot: ShadowRoot};
         const keyChangeEvent = new CustomEvent('key-change', {
           detail: { oldKey: 'identifier', newKey: 'id' },
           bubbles: true
         });
-        
+
         const keyComponent = sectionComponent?.shadowRoot?.querySelector('frontmatter-key');
         keyComponent?.dispatchEvent(keyChangeEvent);
         await el.updateComplete;
@@ -105,12 +108,13 @@ describe('FrontmatterEditorDialog - Component Integration', () => {
 
     describe('when a value is changed via component event', () => {
       beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- custom element with shadow root
         const sectionComponent = el.shadowRoot?.querySelector('frontmatter-value-section') as HTMLElement & {shadowRoot: ShadowRoot};
         const valueChangeEvent = new CustomEvent('value-change', {
           detail: { oldValue: 'Original Title', newValue: 'New Title' },
           bubbles: true
         });
-        
+
         const valueComponent = sectionComponent?.shadowRoot?.querySelector('frontmatter-value');
         valueComponent?.dispatchEvent(valueChangeEvent);
         await el.updateComplete;
@@ -135,7 +139,9 @@ describe('FrontmatterEditorDialog - Component Integration', () => {
 
     describe('when remove button is clicked', () => {
       beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- custom element with shadow root
         const sectionComponent = el.shadowRoot?.querySelector('frontmatter-value-section') as HTMLElement & {shadowRoot: ShadowRoot};
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing button element
         const removeButton = sectionComponent?.shadowRoot?.querySelector('.remove-field-button') as HTMLButtonElement;
         removeButton?.click();
         await el.updateComplete;
@@ -165,13 +171,17 @@ describe('FrontmatterEditorDialog - Component Integration', () => {
     describe('when Add Field dropdown option is selected', () => {
       beforeEach(async () => {
         // Navigate to the add field button through the component hierarchy
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- custom element with shadow root
         const sectionComponent = el.shadowRoot?.querySelector('frontmatter-value-section') as HTMLElement & {shadowRoot: ShadowRoot};
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- custom element with shadow root and updateComplete
         const addFieldButton = sectionComponent?.shadowRoot?.querySelector('frontmatter-add-field-button') as HTMLElement & {shadowRoot: ShadowRoot, updateComplete: Promise<unknown>};
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing button element
         const dropdownButton = addFieldButton?.shadowRoot?.querySelector('button') as HTMLButtonElement;
-        
+
         dropdownButton?.click();
         await addFieldButton?.updateComplete;
 
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing button element
         const addFieldOption = addFieldButton?.shadowRoot?.querySelector('.dropdown-item') as HTMLButtonElement;
         addFieldOption?.click();
         await el.updateComplete;
@@ -187,10 +197,11 @@ describe('FrontmatterEditorDialog - Component Integration', () => {
       });
 
       it('should render the new field with sub-components', () => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- custom element with shadow root
         const sectionComponent = el.shadowRoot?.querySelector('frontmatter-value-section') as HTMLElement & {shadowRoot: ShadowRoot};
         const keyComponents = sectionComponent?.shadowRoot?.querySelectorAll('frontmatter-key');
         const valueComponents = sectionComponent?.shadowRoot?.querySelectorAll('frontmatter-value');
-        
+
         expect(keyComponents).to.have.length(1);
         expect(valueComponents).to.have.length(1);
       });
@@ -211,6 +222,7 @@ describe('FrontmatterEditorDialog - Component Integration', () => {
     });
 
     it('should render appropriate sub-components for different value types', () => {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- custom element with shadow root
       const sectionComponent = el.shadowRoot?.querySelector('frontmatter-value-section') as HTMLElement & {shadowRoot: ShadowRoot};
       const valueComponents = sectionComponent?.shadowRoot?.querySelectorAll('frontmatter-value');
       expect(valueComponents).to.have.length(3); // One for each top-level field

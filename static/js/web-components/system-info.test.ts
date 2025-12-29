@@ -22,9 +22,12 @@ describe('SystemInfo', () => {
     el = document.createElement('system-info') as SystemInfo;
     
     // Stub methods that make network requests before connecting
-    stub(el, 'loadSystemInfo' as SystemInfoVersion).resolves();
-    stub(el, 'startAutoRefresh' as SystemInfoVersion);
-    stub(el, 'stopAutoRefresh' as SystemInfoVersion);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing methods by name for stubbing
+    stub(el, 'loadSystemInfo' as keyof SystemInfo).resolves();
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing methods by name for stubbing
+    stub(el, 'startAutoRefresh' as keyof SystemInfo);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing methods by name for stubbing
+    stub(el, 'stopAutoRefresh' as keyof SystemInfo);
     
     // Now add to DOM
     document.body.appendChild(el);
@@ -106,15 +109,15 @@ describe('SystemInfo', () => {
     });
 
     it('should show commit hash', () => {
-      const versionComponent = el.shadowRoot!.querySelector('system-info-version') as SystemInfoVersion;
+      const versionComponent = el.shadowRoot!.querySelector<SystemInfoVersion>('system-info-version');
       expect(versionComponent).to.exist;
-      expect(versionComponent.version.commit).to.equal('abc123def456'); // From beforeEach setup
+      expect(versionComponent!.version.commit).to.equal('abc123def456'); // From beforeEach setup
     });
 
     it('should show build time', () => {
-      const versionComponent = el.shadowRoot!.querySelector('system-info-version') as SystemInfoVersion;
+      const versionComponent = el.shadowRoot!.querySelector<SystemInfoVersion>('system-info-version');
       expect(versionComponent).to.exist;
-      expect(versionComponent.version.buildTime).to.exist;
+      expect(versionComponent!.version.buildTime).to.exist;
     });
 
     it('should not show job info when no jobs are active', () => {
@@ -154,15 +157,15 @@ describe('SystemInfo', () => {
     });
 
     it('should pass correct data to job status component', () => {
-      const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as SystemInfoVersion;
+      const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus: { jobQueues: unknown[] } }>('system-info-indexing');
       expect(indexingStatus).to.exist;
-      expect(indexingStatus.jobStatus).to.exist;
-      expect(indexingStatus.jobStatus.jobQueues).to.have.lengthOf(1);
+      expect(indexingStatus!.jobStatus).to.exist;
+      expect(indexingStatus!.jobStatus.jobQueues).to.have.lengthOf(1);
     });
 
     it('should pass correct job queue data', () => {
-      const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as SystemInfoVersion;
-      const queue = indexingStatus.jobStatus.jobQueues[0];
+      const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus: { jobQueues: Array<{ name: string; jobsRemaining: number; isActive: boolean; highWaterMark: number }> } }>('system-info-indexing');
+      const queue = indexingStatus!.jobStatus.jobQueues[0];
       expect(queue.name).to.equal('Frontmatter');
       expect(queue.jobsRemaining).to.equal(25);
       expect(queue.isActive).to.be.true;
@@ -170,8 +173,8 @@ describe('SystemInfo', () => {
 
 
     it('should pass high water mark data', () => {
-      const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as SystemInfoVersion;
-      const queue = indexingStatus.jobStatus.jobQueues[0];
+      const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus: { jobQueues: Array<{ highWaterMark: number }> } }>('system-info-indexing');
+      const queue = indexingStatus!.jobStatus.jobQueues[0];
       expect(queue.highWaterMark).to.equal(100);
     });
   });
@@ -223,9 +226,9 @@ describe('SystemInfo', () => {
       });
 
       it('should pass full commit hash to version component', () => {
-        const versionComponent = el.shadowRoot!.querySelector('system-info-version') as SystemInfoVersion;
+        const versionComponent = el.shadowRoot!.querySelector<SystemInfoVersion>('system-info-version');
         expect(versionComponent).to.exist;
-        expect(versionComponent.version.commit).to.equal('abc123def456789');
+        expect(versionComponent!.version.commit).to.equal('abc123def456789');
       });
     });
 
@@ -239,14 +242,14 @@ describe('SystemInfo', () => {
         el.jobStatus = create(GetJobStatusResponseSchema, {
           jobQueues: []
         });
-        
+
         await el.updateComplete;
       });
 
       it('should pass tagged version to component unchanged', () => {
-        const versionComponent = el.shadowRoot!.querySelector('system-info-version') as SystemInfoVersion;
+        const versionComponent = el.shadowRoot!.querySelector<SystemInfoVersion>('system-info-version');
         expect(versionComponent).to.exist;
-        expect(versionComponent.version.commit).to.equal('v1.2.3 (abc123d)');
+        expect(versionComponent!.version.commit).to.equal('v1.2.3 (abc123d)');
       });
     });
 
@@ -267,8 +270,8 @@ describe('SystemInfo', () => {
       });
 
       it('should pass correct job count to indexing component', () => {
-        const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as SystemInfoVersion;
-        expect(indexingStatus.jobStatus.jobQueues[0].jobsRemaining).to.equal(1);
+        const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus: { jobQueues: Array<{ jobsRemaining: number }> } }>('system-info-indexing');
+        expect(indexingStatus!.jobStatus.jobQueues[0].jobsRemaining).to.equal(1);
       });
     });
   });
@@ -323,20 +326,20 @@ describe('SystemInfo', () => {
       });
 
       it('should pass correct job remaining count', () => {
-        const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as SystemInfoVersion;
-        const queue = indexingStatus.jobStatus.jobQueues[0];
+        const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus: { jobQueues: Array<{ jobsRemaining: number }> } }>('system-info-indexing');
+        const queue = indexingStatus!.jobStatus.jobQueues[0];
         expect(queue.jobsRemaining).to.equal(75);
       });
 
       it('should pass correct high water mark', () => {
-        const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as SystemInfoVersion;
-        const queue = indexingStatus.jobStatus.jobQueues[0];
+        const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus: { jobQueues: Array<{ highWaterMark: number }> } }>('system-info-indexing');
+        const queue = indexingStatus!.jobStatus.jobQueues[0];
         expect(queue.highWaterMark).to.equal(200);
       });
 
       it('should pass correct queue name', () => {
-        const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing') as SystemInfoVersion;
-        const queue = indexingStatus.jobStatus.jobQueues[0];
+        const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus: { jobQueues: Array<{ name: string }> } }>('system-info-indexing');
+        const queue = indexingStatus!.jobStatus.jobQueues[0];
         expect(queue.name).to.equal('TestQueue');
       });
     });
@@ -410,45 +413,45 @@ describe('SystemInfo', () => {
     });
 
     it('should toggle expanded state on click', async () => {
-      const panel = el.shadowRoot!.querySelector('.system-panel') as HTMLElement;
+      const panel = el.shadowRoot!.querySelector<HTMLElement>('.system-panel');
       expect(el.expanded).to.be.false;
-      
-      panel.click();
+
+      panel!.click();
       await el.updateComplete;
-      
+
       expect(el.expanded).to.be.true;
     });
 
     it('should toggle expanded state on Enter key', async () => {
-      const panel = el.shadowRoot!.querySelector('.system-panel') as HTMLElement;
+      const panel = el.shadowRoot!.querySelector<HTMLElement>('.system-panel');
       expect(el.expanded).to.be.false;
-      
+
       const event = new KeyboardEvent('keydown', { key: 'Enter' });
-      panel.dispatchEvent(event);
+      panel!.dispatchEvent(event);
       await el.updateComplete;
-      
+
       expect(el.expanded).to.be.true;
     });
 
     it('should toggle expanded state on Space key', async () => {
-      const panel = el.shadowRoot!.querySelector('.system-panel') as HTMLElement;
+      const panel = el.shadowRoot!.querySelector<HTMLElement>('.system-panel');
       expect(el.expanded).to.be.false;
-      
+
       const event = new KeyboardEvent('keydown', { key: ' ' });
-      panel.dispatchEvent(event);
+      panel!.dispatchEvent(event);
       await el.updateComplete;
-      
+
       expect(el.expanded).to.be.true;
     });
 
     it('should not toggle on other keys', async () => {
-      const panel = el.shadowRoot!.querySelector('.system-panel') as HTMLElement;
+      const panel = el.shadowRoot!.querySelector<HTMLElement>('.system-panel');
       expect(el.expanded).to.be.false;
-      
+
       const event = new KeyboardEvent('keydown', { key: 'a' });
-      panel.dispatchEvent(event);
+      panel!.dispatchEvent(event);
       await el.updateComplete;
-      
+
       expect(el.expanded).to.be.false;
     });
 
@@ -523,10 +526,10 @@ describe('SystemInfo', () => {
       await el.updateComplete;
 
       // Click on the panel itself (which stops propagation)
-      const panel = el.shadowRoot!.querySelector('.system-panel') as HTMLElement;
-      panel.click();
+      const panel = el.shadowRoot!.querySelector<HTMLElement>('.system-panel');
+      panel!.click();
       await el.updateComplete;
-      
+
       // Should toggle to collapsed then back to expanded
       expect(el.expanded).to.be.false;
     });
@@ -538,7 +541,7 @@ describe('SystemInfo', () => {
       // Simulate click outside
       const outsideEvent = new MouseEvent('click', { bubbles: true });
       document.dispatchEvent(outsideEvent);
-      
+
       expect(el.expanded).to.be.false;
     });
 
@@ -547,12 +550,14 @@ describe('SystemInfo', () => {
       await el.updateComplete;
 
       // Create a mock event that doesn't include this element in composed path
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock event for testing
       const mockEvent = {
         composedPath: () => []
       } as unknown as MouseEvent;
-      
+
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
       (el as SystemInfoTest)._handleClickOutside(mockEvent);
-      
+
       expect(el.expanded).to.be.false;
     });
   });

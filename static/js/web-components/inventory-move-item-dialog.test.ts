@@ -18,6 +18,7 @@ describe('InventoryMoveItemDialog', () => {
    * Uses type assertion to access private handler for testing.
    */
   function callHandleItemScanned(dialog: InventoryMoveItemDialog, event: CustomEvent<ItemScannedEventDetail>): void {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
     (dialog as unknown as { _handleItemScanned: (e: CustomEvent<ItemScannedEventDetail>) => void })._handleItemScanned(event);
   }
 
@@ -26,6 +27,7 @@ describe('InventoryMoveItemDialog', () => {
    * Uses type assertion to access private handler for testing.
    */
   function callHandleKeydown(dialog: InventoryMoveItemDialog, event: KeyboardEvent): void {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
     (dialog as unknown as { _handleKeydown: (e: KeyboardEvent) => void })._handleKeydown(event);
   }
 
@@ -34,6 +36,7 @@ describe('InventoryMoveItemDialog', () => {
    * Uses type assertion to access private handler for testing.
    */
   function callClearScannedResult(dialog: InventoryMoveItemDialog): void {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
     (dialog as unknown as { _clearScannedResult: () => void })._clearScannedResult();
   }
 
@@ -276,6 +279,7 @@ describe('InventoryMoveItemDialog', () => {
         el.openDialog('screwdriver', 'drawer_kitchen');
         el.searchQuery = 'toolbox';
         el.searchResults = [
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
           {
             identifier: 'toolbox_garage',
             title: 'Garage Toolbox',
@@ -283,6 +287,7 @@ describe('InventoryMoveItemDialog', () => {
             highlights: [],
             frontmatter: { 'inventory.container': 'garage' },
           } as unknown as import('../gen/api/v1/search_pb.js').SearchResult,
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
           {
             identifier: 'toolbox_shed',
             title: 'Shed Toolbox',
@@ -326,6 +331,7 @@ describe('InventoryMoveItemDialog', () => {
         el.openDialog('screwdriver', 'drawer_kitchen');
         el.searchQuery = 'toolbox';
         el.searchResults = [
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
           {
             identifier: 'toolbox_garage',
             title: 'Garage Toolbox',
@@ -344,17 +350,17 @@ describe('InventoryMoveItemDialog', () => {
       });
 
       it('should disable all Move To buttons', () => {
-        const moveButton = el.shadowRoot?.querySelector('.move-to-button') as HTMLButtonElement;
+        const moveButton = el.shadowRoot?.querySelector<HTMLButtonElement>('.move-to-button');
         expect(moveButton?.disabled).to.be.true;
       });
 
       it('should disable search input', () => {
-        const searchInput = el.shadowRoot?.querySelector('input[name="searchQuery"]') as HTMLInputElement;
+        const searchInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[name="searchQuery"]');
         expect(searchInput?.disabled).to.be.true;
       });
 
       it('should disable cancel button', () => {
-        const cancelBtn = el.shadowRoot?.querySelector('.button-secondary') as HTMLButtonElement;
+        const cancelBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-secondary');
         expect(cancelBtn?.disabled).to.be.true;
       });
     });
