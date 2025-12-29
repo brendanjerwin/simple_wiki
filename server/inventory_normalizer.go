@@ -14,6 +14,19 @@ import (
 	"golang.org/x/text/language"
 )
 
+// FailedPageCreation represents a page that failed to be created during normalization.
+type FailedPageCreation struct {
+	ItemID      string
+	ContainerID string
+	Error       error
+}
+
+// NormalizeResult contains the results of a page normalization operation.
+type NormalizeResult struct {
+	CreatedPages []string
+	FailedPages  []FailedPageCreation
+}
+
 // InventoryNormalizer provides shared normalization logic for inventory pages.
 // Both the full InventoryNormalizationJob and the per-page PageInventoryNormalizationJob use this.
 type InventoryNormalizer struct {
@@ -31,9 +44,9 @@ func NewInventoryNormalizer(deps InventoryNormalizationDependencies, logger lumb
 
 // NormalizePage runs normalization for a single page.
 // If the page has inventory.items, it ensures is_container = true and creates missing item pages.
-// Returns the list of pages created.
-func (n *InventoryNormalizer) NormalizePage(pageID wikipage.PageIdentifier) ([]string, error) {
-	var createdPages []string
+// Returns a NormalizeResult containing both created and failed pages.
+func (n *InventoryNormalizer) NormalizePage(pageID wikipage.PageIdentifier) (*NormalizeResult, error) {
+	result := &NormalizeResult{}
 
 	// Step 1: Ensure is_container is set if page has items
 	if err := n.ensureIsContainerField(pageID); err != nil {
@@ -45,6 +58,8 @@ func (n *InventoryNormalizer) NormalizePage(pageID wikipage.PageIdentifier) ([]s
 	if err != nil {
 		return nil, fmt.Errorf("failed to get container items for %s: %w", pageID, err)
 	}
+
+	containerIDStr := string(pageID)
 	for _, itemID := range items {
 		// Check if page exists
 		_, _, err := n.deps.ReadFrontMatter(itemID)
@@ -53,15 +68,20 @@ func (n *InventoryNormalizer) NormalizePage(pageID wikipage.PageIdentifier) ([]s
 		}
 
 		// Create the missing page
-		if createErr := n.CreateItemPage(itemID, string(pageID)); createErr != nil {
+		if createErr := n.CreateItemPage(itemID, containerIDStr); createErr != nil {
+			result.FailedPages = append(result.FailedPages, FailedPageCreation{
+				ItemID:      itemID,
+				ContainerID: containerIDStr,
+				Error:       createErr,
+			})
 			n.logger.Error("Failed to create page for item %s: %v", itemID, createErr)
 		} else {
-			createdPages = append(createdPages, itemID)
+			result.CreatedPages = append(result.CreatedPages, itemID)
 			n.logger.Info("Created page for item: %s in container: %s", itemID, pageID)
 		}
 	}
 
-	return createdPages, nil
+	return result, nil
 }
 
 // ensureIsContainerField sets is_container = true if the page has inventory.items.

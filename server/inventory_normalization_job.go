@@ -47,6 +47,16 @@ type InventoryNormalizationDependencies interface {
 	wikipage.PageReaderMutator
 }
 
+// UnexpectedIsContainerTypeError is returned when is_container has an unexpected type.
+type UnexpectedIsContainerTypeError struct {
+	ActualType string
+	Value      any
+}
+
+func (e *UnexpectedIsContainerTypeError) Error() string {
+	return fmt.Sprintf("unexpected type for is_container: got %s with value %v", e.ActualType, e.Value)
+}
+
 // InventoryNormalizationJob scans for inventory anomalies and creates missing item pages.
 type InventoryNormalizationJob struct {
 	normalizer *InventoryNormalizer
@@ -359,7 +369,12 @@ func (j *InventoryNormalizationJob) migrateContainersToIsContainerField() int {
 		}
 
 		// Check if is_container is already set to true
-		if isContainerAlreadySet(fm) {
+		alreadySet, err := isContainerAlreadySet(fm)
+		if err != nil {
+			j.logger.Warn("Container %s has unexpected is_container type: %v", containerID, err)
+			// Treat unexpected type as not set - will be overwritten with boolean true
+		}
+		if alreadySet {
 			continue
 		}
 
@@ -387,28 +402,33 @@ func (j *InventoryNormalizationJob) migrateContainersToIsContainerField() int {
 
 // isContainerAlreadySet checks if is_container is already set to true.
 // Handles both boolean true and string "true" values.
-func isContainerAlreadySet(fm map[string]any) bool {
+// Returns an UnexpectedIsContainerTypeError if is_container has an unexpected type.
+func isContainerAlreadySet(fm map[string]any) (bool, error) {
 	inventory, ok := fm[inventoryKey].(map[string]any)
 	if !ok {
-		return false
+		return false, nil
 	}
 
 	isContainer := inventory["is_container"]
 	if isContainer == nil {
-		return false
+		return false, nil
 	}
 
-	// Check for boolean true
+	// Check for boolean
 	if b, ok := isContainer.(bool); ok {
-		return b
+		return b, nil
 	}
 
-	// Check for string "true"
+	// Check for string "true" or "false"
 	if s, ok := isContainer.(string); ok {
-		return s == "true"
+		return s == "true", nil
 	}
 
-	return false
+	// Unexpected type - return typed error
+	return false, &UnexpectedIsContainerTypeError{
+		ActualType: fmt.Sprintf("%T", isContainer),
+		Value:      isContainer,
+	}
 }
 
 // getItemsWithContainerReference gets items that have inventory.container set to this container.

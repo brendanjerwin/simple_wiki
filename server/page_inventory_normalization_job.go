@@ -33,13 +33,20 @@ func NewPageInventoryNormalizationJob(
 
 // Execute runs the per-page inventory normalization.
 func (j *PageInventoryNormalizationJob) Execute() error {
-	createdPages, err := j.normalizer.NormalizePage(j.pageID)
+	result, err := j.normalizer.NormalizePage(j.pageID)
 	if err != nil {
 		return err
 	}
 
-	if len(createdPages) > 0 {
-		j.logger.Info("Per-page normalization for %s created %d item pages", j.pageID, len(createdPages))
+	if len(result.CreatedPages) > 0 {
+		j.logger.Info("Per-page normalization for %s created %d item pages", j.pageID, len(result.CreatedPages))
+	}
+
+	if len(result.FailedPages) > 0 {
+		j.logger.Warn("Per-page normalization for %s failed to create %d item pages", j.pageID, len(result.FailedPages))
+		for _, failed := range result.FailedPages {
+			j.logger.Warn("  Failed: item=%s container=%s error=%v", failed.ItemID, failed.ContainerID, failed.Error)
+		}
 	}
 
 	return nil

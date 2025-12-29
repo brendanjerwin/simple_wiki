@@ -2,6 +2,7 @@
 package server
 
 import (
+	"errors"
 	"os"
 
 	"github.com/brendanjerwin/simple_wiki/wikipage"
@@ -672,29 +673,76 @@ var _ = Describe("InventoryNormalizationJob", func() {
 	})
 
 	Describe("formatAnomalyType", func() {
-		It("should format orphan correctly", func() {
-			Expect(formatAnomalyType("orphan")).To(Equal("Orphaned Items"))
+		When("type is orphan", func() {
+			var result string
+
+			BeforeEach(func() {
+				result = formatAnomalyType("orphan")
+			})
+
+			It("should return 'Orphaned Items'", func() {
+				Expect(result).To(Equal("Orphaned Items"))
+			})
 		})
 
-		It("should format multiple_containers correctly", func() {
-			Expect(formatAnomalyType("multiple_containers")).To(Equal("Items in Multiple Containers"))
+		When("type is multiple_containers", func() {
+			var result string
+
+			BeforeEach(func() {
+				result = formatAnomalyType("multiple_containers")
+			})
+
+			It("should return 'Items in Multiple Containers'", func() {
+				Expect(result).To(Equal("Items in Multiple Containers"))
+			})
 		})
 
-		It("should format circular_reference correctly", func() {
-			Expect(formatAnomalyType("circular_reference")).To(Equal("Circular References"))
+		When("type is circular_reference", func() {
+			var result string
+
+			BeforeEach(func() {
+				result = formatAnomalyType("circular_reference")
+			})
+
+			It("should return 'Circular References'", func() {
+				Expect(result).To(Equal("Circular References"))
+			})
 		})
 
-		It("should format missing_page correctly", func() {
-			Expect(formatAnomalyType("missing_page")).To(Equal("Missing Pages"))
+		When("type is missing_page", func() {
+			var result string
+
+			BeforeEach(func() {
+				result = formatAnomalyType("missing_page")
+			})
+
+			It("should return 'Missing Pages'", func() {
+				Expect(result).To(Equal("Missing Pages"))
+			})
 		})
 
-		It("should format page_creation_failed correctly", func() {
-			Expect(formatAnomalyType("page_creation_failed")).To(Equal("Page Creation Failures"))
+		When("type is page_creation_failed", func() {
+			var result string
+
+			BeforeEach(func() {
+				result = formatAnomalyType("page_creation_failed")
+			})
+
+			It("should return 'Page Creation Failures'", func() {
+				Expect(result).To(Equal("Page Creation Failures"))
+			})
 		})
 
-		It("should handle unknown types", func() {
-			result := formatAnomalyType("unknown_type")
-			Expect(result).To(Equal("Unknown Type"))
+		When("type is unknown", func() {
+			var result string
+
+			BeforeEach(func() {
+				result = formatAnomalyType("unknown_type")
+			})
+
+			It("should return 'Unknown Type'", func() {
+				Expect(result).To(Equal("Unknown Type"))
+			})
 		})
 	})
 
@@ -1071,7 +1119,11 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 	Describe("isContainerAlreadySet", func() {
 		When("is_container is boolean true", func() {
-			var fm map[string]any
+			var (
+				fm     map[string]any
+				result bool
+				err    error
+			)
 
 			BeforeEach(func() {
 				fm = map[string]any{
@@ -1079,15 +1131,24 @@ var _ = Describe("InventoryNormalizationJob", func() {
 						"is_container": true,
 					},
 				}
+				result, err = isContainerAlreadySet(fm)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("should return true", func() {
-				Expect(isContainerAlreadySet(fm)).To(BeTrue())
+				Expect(result).To(BeTrue())
 			})
 		})
 
 		When("is_container is boolean false", func() {
-			var fm map[string]any
+			var (
+				fm     map[string]any
+				result bool
+				err    error
+			)
 
 			BeforeEach(func() {
 				fm = map[string]any{
@@ -1095,15 +1156,24 @@ var _ = Describe("InventoryNormalizationJob", func() {
 						"is_container": false,
 					},
 				}
+				result, err = isContainerAlreadySet(fm)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("should return false", func() {
-				Expect(isContainerAlreadySet(fm)).To(BeFalse())
+				Expect(result).To(BeFalse())
 			})
 		})
 
 		When("is_container is string 'true'", func() {
-			var fm map[string]any
+			var (
+				fm     map[string]any
+				result bool
+				err    error
+			)
 
 			BeforeEach(func() {
 				fm = map[string]any{
@@ -1111,15 +1181,24 @@ var _ = Describe("InventoryNormalizationJob", func() {
 						"is_container": "true",
 					},
 				}
+				result, err = isContainerAlreadySet(fm)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("should return true", func() {
-				Expect(isContainerAlreadySet(fm)).To(BeTrue())
+				Expect(result).To(BeTrue())
 			})
 		})
 
 		When("is_container is string 'false'", func() {
-			var fm map[string]any
+			var (
+				fm     map[string]any
+				result bool
+				err    error
+			)
 
 			BeforeEach(func() {
 				fm = map[string]any{
@@ -1127,43 +1206,70 @@ var _ = Describe("InventoryNormalizationJob", func() {
 						"is_container": "false",
 					},
 				}
+				result, err = isContainerAlreadySet(fm)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("should return false", func() {
-				Expect(isContainerAlreadySet(fm)).To(BeFalse())
+				Expect(result).To(BeFalse())
 			})
 		})
 
 		When("is_container is not set", func() {
-			var fm map[string]any
+			var (
+				fm     map[string]any
+				result bool
+				err    error
+			)
 
 			BeforeEach(func() {
 				fm = map[string]any{
 					"inventory": map[string]any{},
 				}
+				result, err = isContainerAlreadySet(fm)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("should return false", func() {
-				Expect(isContainerAlreadySet(fm)).To(BeFalse())
+				Expect(result).To(BeFalse())
 			})
 		})
 
 		When("inventory section does not exist", func() {
-			var fm map[string]any
+			var (
+				fm     map[string]any
+				result bool
+				err    error
+			)
 
 			BeforeEach(func() {
 				fm = map[string]any{
 					"title": "Some Page",
 				}
+				result, err = isContainerAlreadySet(fm)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("should return false", func() {
-				Expect(isContainerAlreadySet(fm)).To(BeFalse())
+				Expect(result).To(BeFalse())
 			})
 		})
 
 		When("is_container is an unexpected type", func() {
-			var fm map[string]any
+			var (
+				fm     map[string]any
+				result bool
+				err    error
+			)
 
 			BeforeEach(func() {
 				fm = map[string]any{
@@ -1171,10 +1277,18 @@ var _ = Describe("InventoryNormalizationJob", func() {
 						"is_container": 123, // integer instead of bool/string
 					},
 				}
+				result, err = isContainerAlreadySet(fm)
+			})
+
+			It("should return an UnexpectedIsContainerTypeError", func() {
+				var typeErr *UnexpectedIsContainerTypeError
+				Expect(errors.As(err, &typeErr)).To(BeTrue())
+				Expect(typeErr.ActualType).To(Equal("int"))
+				Expect(typeErr.Value).To(Equal(123))
 			})
 
 			It("should return false", func() {
-				Expect(isContainerAlreadySet(fm)).To(BeFalse())
+				Expect(result).To(BeFalse())
 			})
 		})
 	})
