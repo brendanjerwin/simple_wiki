@@ -9,6 +9,7 @@ import (
 
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
+	. "github.com/onsi/gomega"
 )
 
 const testFileTimestamp = 1609459200 // 2021-01-01 Unix timestamp
@@ -158,69 +159,65 @@ func CreatePascalCasePage(dir, identifier, content string) {
 	_ = os.WriteFile(mdPath, []byte(fullContent), 0644)
 }
 
-// CreateTestFile creates test files with consistent timestamps for migration testing
+// CreateTestFile creates test files with consistent timestamps for migration testing.
+// Must be called from within a Ginkgo test context.
 func CreateTestFile(dir, filename, content string) {
 	filePath := filepath.Join(dir, filename)
 	err := os.WriteFile(filePath, []byte(content), 0644)
-	if err != nil {
-		panic(err)
-	}
+	Expect(err).NotTo(HaveOccurred(), "failed to create test file: %s", filePath)
+
 	// Set a consistent timestamp for testing
 	timestamp := time.Unix(testFileTimestamp, 0)
-	if err := os.Chtimes(filePath, timestamp, timestamp); err != nil {
-		panic(err)
-	}
+	err = os.Chtimes(filePath, timestamp, timestamp)
+	Expect(err).NotTo(HaveOccurred(), "failed to set timestamp on test file: %s", filePath)
 }
 
-// CreateMDFileWithoutFrontmatter creates an MD file without any frontmatter
-// The identifier should be derived from the filename
+// CreateMDFileWithoutFrontmatter creates an MD file without any frontmatter.
+// The identifier should be derived from the filename.
+// Must be called from within a Ginkgo test context.
 func CreateMDFileWithoutFrontmatter(dir, identifier, content string) {
 	mdPath := filepath.Join(dir, base32tools.EncodeToBase32(strings.ToLower(identifier))+".md")
-	// Write content without frontmatter
-	if err := os.WriteFile(mdPath, []byte(content), 0644); err != nil {
-		panic(err)
-	}
+	err := os.WriteFile(mdPath, []byte(content), 0644)
+	Expect(err).NotTo(HaveOccurred(), "failed to create MD file without frontmatter: %s", mdPath)
 }
 
-// CreateMDFileWithFrontmatterNoIdentifier creates an MD file with TOML frontmatter but no identifier field
+// CreateMDFileWithFrontmatterNoIdentifier creates an MD file with TOML frontmatter but no identifier field.
+// Must be called from within a Ginkgo test context.
 func CreateMDFileWithFrontmatterNoIdentifier(dir, identifier, frontmatter, content string) {
 	mdPath := filepath.Join(dir, base32tools.EncodeToBase32(strings.ToLower(identifier))+".md")
-	// Build page with frontmatter but no identifier field
 	fullContent := "+++\n" + frontmatter + "\n+++\n\n" + content
-	if err := os.WriteFile(mdPath, []byte(fullContent), 0644); err != nil {
-		panic(err)
-	}
+	err := os.WriteFile(mdPath, []byte(fullContent), 0644)
+	Expect(err).NotTo(HaveOccurred(), "failed to create MD file with frontmatter: %s", mdPath)
 }
 
-// CreateMDFileWithInvalidIdentifier creates an MD file with a specific identifier that may be invalid
+// CreateMDFileWithInvalidIdentifier creates an MD file with a specific identifier that may be invalid.
+// Must be called from within a Ginkgo test context.
 func CreateMDFileWithInvalidIdentifier(dir, filename, identifier string) {
 	mdPath := filepath.Join(dir, base32tools.EncodeToBase32(strings.ToLower(filename))+".md")
-	// Build page with frontmatter containing the invalid identifier
 	fullContent := "+++\nidentifier = '" + identifier + "'\n+++\n\n# Content"
-	if err := os.WriteFile(mdPath, []byte(fullContent), 0644); err != nil {
-		panic(err)
-	}
+	err := os.WriteFile(mdPath, []byte(fullContent), 0644)
+	Expect(err).NotTo(HaveOccurred(), "failed to create MD file with invalid identifier: %s", mdPath)
 }
 
 // CreateMDFileWithMalformedFrontmatter creates an MD file with malformed TOML frontmatter
-// (has opening +++ but not properly closed)
+// (has opening +++ but not properly closed).
+// Must be called from within a Ginkgo test context.
 func CreateMDFileWithMalformedFrontmatter(dir, filename string) {
 	mdPath := filepath.Join(dir, base32tools.EncodeToBase32(strings.ToLower(filename))+".md")
 	// Malformed: has +++ but not properly closed (only 2 parts when split)
 	fullContent := "+++\nidentifier = 'test'\n# Content without closing +++"
-	if err := os.WriteFile(mdPath, []byte(fullContent), 0644); err != nil {
-		panic(err)
-	}
+	err := os.WriteFile(mdPath, []byte(fullContent), 0644)
+	Expect(err).NotTo(HaveOccurred(), "failed to create MD file with malformed frontmatter: %s", mdPath)
 }
 
-// CreateMDFileWithUnparseableTOML creates an MD file with invalid TOML syntax
+// CreateMDFileWithUnparseableTOML creates an MD file with invalid TOML syntax.
+// Must be called from within a Ginkgo test context.
 func CreateMDFileWithUnparseableTOML(dir, filename string) {
 	mdPath := filepath.Join(dir, base32tools.EncodeToBase32(strings.ToLower(filename))+".md")
 	// Invalid TOML: unclosed string
 	fullContent := "+++\nidentifier = 'unclosed\n+++\n\n# Content"
-	if err := os.WriteFile(mdPath, []byte(fullContent), 0644); err != nil {
-		panic(err)
-	}
+	err := os.WriteFile(mdPath, []byte(fullContent), 0644)
+	Expect(err).NotTo(HaveOccurred(), "failed to create MD file with unparseable TOML: %s", mdPath)
 }
 
 // MockDataDirScanner implements DataDirScanner for testing

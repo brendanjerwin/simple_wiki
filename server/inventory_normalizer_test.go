@@ -77,8 +77,9 @@ var _ = Describe("InventoryNormalizer", func() {
 
 		When("the page has inventory.items with missing pages", func() {
 			var (
-				result *NormalizeResult
-				err    error
+				result             *NormalizeResult
+				err                error
+				containerInventory map[string]any
 			)
 
 			BeforeEach(func() {
@@ -90,6 +91,11 @@ var _ = Describe("InventoryNormalizer", func() {
 				}, "")
 
 				result, err = normalizer.NormalizePage("test_container")
+
+				fm := deps.getFrontmatter("test_container")
+				var ok bool
+				containerInventory, ok = fm["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue(), "inventory should be a map")
 			})
 
 			It("should not return an error", func() {
@@ -102,10 +108,8 @@ var _ = Describe("InventoryNormalizer", func() {
 			})
 
 			It("should set is_container = true on the container", func() {
-				fm := deps.getFrontmatter("test_container")
-				inventory, ok := fm["inventory"].(map[string]any)
-				Expect(ok).To(BeTrue())
-				Expect(inventory["is_container"]).To(BeTrue())
+				Expect(containerInventory).NotTo(BeNil())
+				Expect(containerInventory["is_container"]).To(BeTrue())
 			})
 		})
 
@@ -206,7 +210,10 @@ var _ = Describe("InventoryNormalizer", func() {
 		})
 
 		When("the page has empty items array", func() {
-			var err error
+			var (
+				err       error
+				inventory map[string]any
+			)
 
 			BeforeEach(func() {
 				deps.setPage("test_page", map[string]any{
@@ -216,6 +223,9 @@ var _ = Describe("InventoryNormalizer", func() {
 					},
 				}, "")
 				err = normalizer.ensureIsContainerField("test_page")
+				var ok bool
+				inventory, ok = deps.getFrontmatter("test_page")["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue(), "inventory should be a map")
 			})
 
 			It("should not return an error", func() {
@@ -223,8 +233,6 @@ var _ = Describe("InventoryNormalizer", func() {
 			})
 
 			It("should not set is_container", func() {
-				inventory, ok := deps.getFrontmatter("test_page")["inventory"].(map[string]any)
-				Expect(ok).To(BeTrue(), "inventory should be a map")
 				Expect(inventory).NotTo(HaveKey("is_container"))
 			})
 		})
@@ -249,7 +257,10 @@ var _ = Describe("InventoryNormalizer", func() {
 		})
 
 		When("is_container needs to be set", func() {
-			var err error
+			var (
+				err       error
+				inventory map[string]any
+			)
 
 			BeforeEach(func() {
 				deps.setPage("test_page", map[string]any{
@@ -259,6 +270,9 @@ var _ = Describe("InventoryNormalizer", func() {
 					},
 				}, "")
 				err = normalizer.ensureIsContainerField("test_page")
+				var ok bool
+				inventory, ok = deps.getFrontmatter("test_page")["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue(), "inventory should be a map")
 			})
 
 			It("should not return an error", func() {
@@ -266,8 +280,6 @@ var _ = Describe("InventoryNormalizer", func() {
 			})
 
 			It("should set is_container to true", func() {
-				inventory, ok := deps.getFrontmatter("test_page")["inventory"].(map[string]any)
-				Expect(ok).To(BeTrue(), "inventory should be a map")
 				Expect(inventory["is_container"]).To(BeTrue())
 			})
 		})
@@ -490,10 +502,18 @@ var _ = Describe("InventoryNormalizer", func() {
 
 	Describe("CreateItemPage", func() {
 		When("creating a new item page", func() {
-			var err error
+			var (
+				err       error
+				fm        map[string]any
+				inventory map[string]any
+			)
 
 			BeforeEach(func() {
 				err = normalizer.CreateItemPage("new_item", "container_id")
+				fm = deps.getFrontmatter("new_item")
+				var ok bool
+				inventory, ok = fm["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue(), "inventory should be a map")
 			})
 
 			It("should not return an error", func() {
@@ -501,23 +521,26 @@ var _ = Describe("InventoryNormalizer", func() {
 			})
 
 			It("should create frontmatter with identifier", func() {
-				fm := deps.getFrontmatter("new_item")
 				Expect(fm["identifier"]).To(Equal("new_item"))
 			})
 
 			It("should create frontmatter with container reference", func() {
-				fm := deps.getFrontmatter("new_item")
-				inventory, ok := fm["inventory"].(map[string]any)
-				Expect(ok).To(BeTrue(), "inventory should be a map")
 				Expect(inventory["container"]).To(Equal("container_id"))
 			})
 		})
 
 		When("creating an item without container", func() {
-			var err error
+			var (
+				err       error
+				inventory map[string]any
+			)
 
 			BeforeEach(func() {
 				err = normalizer.CreateItemPage("standalone_item", "")
+				fm := deps.getFrontmatter("standalone_item")
+				var ok bool
+				inventory, ok = fm["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue(), "inventory should be a map")
 			})
 
 			It("should not return an error", func() {
@@ -525,9 +548,6 @@ var _ = Describe("InventoryNormalizer", func() {
 			})
 
 			It("should not have container in inventory", func() {
-				fm := deps.getFrontmatter("standalone_item")
-				inventory, ok := fm["inventory"].(map[string]any)
-				Expect(ok).To(BeTrue(), "inventory should be a map")
 				Expect(inventory).NotTo(HaveKey("container"))
 			})
 		})
@@ -654,6 +674,56 @@ var _ = Describe("PageInventoryNormalizationJob", func() {
 
 			It("should return the correct name", func() {
 				Expect(name).To(Equal(PageInventoryNormalizationJobName))
+			})
+		})
+	})
+
+	Describe("Execute with failed pages", func() {
+		When("normalization fails to create some pages", func() {
+			var (
+				job *PageInventoryNormalizationJob
+				err error
+			)
+
+			BeforeEach(func() {
+				deps.setPage("container_page", map[string]any{
+					"identifier": "container_page",
+					"inventory": map[string]any{
+						"items": []any{"new_item"},
+					},
+				}, "")
+				deps.writeMarkdownErr = errors.New("write failed")
+
+				job = NewPageInventoryNormalizationJob("container_page", deps, logger)
+				err = job.Execute()
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		When("NormalizePage returns an error", func() {
+			var (
+				job *PageInventoryNormalizationJob
+				err error
+			)
+
+			BeforeEach(func() {
+				// Set up a page with an invalid item identifier that will fail MungeIdentifier
+				deps.setPage("container_page", map[string]any{
+					"identifier": "container_page",
+					"inventory": map[string]any{
+						"items": []any{"///"},
+					},
+				}, "")
+
+				job = NewPageInventoryNormalizationJob("container_page", deps, logger)
+				err = job.Execute()
+			})
+
+			It("should return the error", func() {
+				Expect(err).To(HaveOccurred())
 			})
 		})
 	})

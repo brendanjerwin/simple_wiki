@@ -62,17 +62,10 @@ var _ = Describe("inventory.go", func() {
 			})
 
 			It("should create the page file on disk", func() {
-				// Check that the file exists
-				files, err := os.ReadDir(pathToData)
+				pattern := filepath.Join(pathToData, "*.md")
+				matches, err := filepath.Glob(pattern)
 				Expect(err).NotTo(HaveOccurred())
-				found := false
-				for _, f := range files {
-					if filepath.Ext(f.Name()) == ".md" {
-						found = true
-						break
-					}
-				}
-				Expect(found).To(BeTrue())
+				Expect(matches).NotTo(BeEmpty())
 			})
 
 			It("should have frontmatter with the identifier", func() {
@@ -206,6 +199,43 @@ var _ = Describe("inventory.go", func() {
 				Expect(page.Text).To(ContainSubstring("container = 'some_container'"))
 			})
 		})
+
+		When("creating an item with invalid identifier", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = s.CreateInventoryItemPage(InventoryItemParams{
+					Identifier: "///",
+				})
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should indicate invalid identifier", func() {
+				Expect(err.Error()).To(ContainSubstring("invalid identifier"))
+			})
+		})
+
+		When("creating an item with invalid container identifier", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = s.CreateInventoryItemPage(InventoryItemParams{
+					Identifier: "valid_item",
+					Container:  "///",
+				})
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should indicate invalid container identifier", func() {
+				Expect(err.Error()).To(ContainSubstring("invalid container identifier"))
+			})
+		})
 	})
 
 	Describe("BuildItemPageText edge cases", func() {
@@ -300,9 +330,10 @@ var _ = Describe("inventory.go", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("should still contain TOML delimiters for empty frontmatter", func() {
-				// Empty frontmatter should still produce valid output
+			It("should skip TOML delimiters for empty frontmatter but still produce valid output", func() {
+				// Empty frontmatter produces no TOML section, just the markdown template
 				Expect(pageText).NotTo(BeEmpty())
+				Expect(pageText).NotTo(ContainSubstring("+++"))
 			})
 
 			It("should contain the markdown template", func() {

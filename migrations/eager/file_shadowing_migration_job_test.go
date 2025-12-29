@@ -374,5 +374,29 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 			})
 		})
 	})
+
+	Describe("Execute with invalid identifier", func() {
+		When("logicalPageID fails to munge", func() {
+			var err error
+
+			BeforeEach(func() {
+				// Create a mock scanner with file content for the invalid identifier
+				mockScanner := NewMockDataDirScanner()
+				mockScanner.AddPascalCasePage("///", "# Some content")
+				job = NewFileShadowingMigrationJob(mockScanner, deps, deps, "///")
+
+				// Act
+				err = job.Execute()
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+
+			It("should indicate invalid page identifier", func() {
+				Expect(err.Error()).To(ContainSubstring("invalid page identifier"))
+			})
+		})
+	})
 })
 
