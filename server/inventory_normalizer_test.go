@@ -366,12 +366,8 @@ var _ = Describe("InventoryNormalizer", func() {
 				_, err = normalizer.GetContainerItems("container")
 			})
 
-			It("should return an error", func() {
-				Expect(err).To(HaveOccurred())
-			})
-
-			It("should include invalid identifier context", func() {
-				Expect(err.Error()).To(ContainSubstring("invalid item identifier"))
+			It("should return an error about invalid item identifier", func() {
+				Expect(err).To(MatchError(ContainSubstring("invalid item identifier")))
 			})
 		})
 
@@ -469,15 +465,8 @@ var _ = Describe("InventoryNormalizer", func() {
 				_, err = normalizer.GetContainerItems("container")
 			})
 
-			It("should return an error", func() {
-				Expect(err).To(HaveOccurred())
-			})
-
-			It("should include invalid identifier context", func() {
-				Expect(err.Error()).To(ContainSubstring("invalid item identifier"))
-			})
-
-			It("should include the identifier value", func() {
+			It("should return an error about invalid item identifier", func() {
+				Expect(err).To(MatchError(ContainSubstring("invalid item identifier")))
 				Expect(err.Error()).To(ContainSubstring("///"))
 			})
 		})
@@ -587,12 +576,8 @@ var _ = Describe("InventoryNormalizer", func() {
 				err = normalizer.CreateItemPage("///", "container")
 			})
 
-			It("should return an error", func() {
-				Expect(err).To(HaveOccurred())
-			})
-
-			It("should include invalid item identifier context", func() {
-				Expect(err.Error()).To(ContainSubstring("invalid item identifier"))
+			It("should return an error about invalid item identifier", func() {
+				Expect(err).To(MatchError(ContainSubstring("invalid item identifier")))
 			})
 		})
 
@@ -603,12 +588,8 @@ var _ = Describe("InventoryNormalizer", func() {
 				err = normalizer.CreateItemPage("valid_item", "///")
 			})
 
-			It("should return an error", func() {
-				Expect(err).To(HaveOccurred())
-			})
-
-			It("should include invalid container identifier context", func() {
-				Expect(err.Error()).To(ContainSubstring("invalid container identifier"))
+			It("should return an error about invalid container identifier", func() {
+				Expect(err).To(MatchError(ContainSubstring("invalid container identifier")))
 			})
 		})
 	})

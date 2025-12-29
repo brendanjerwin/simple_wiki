@@ -1083,12 +1083,8 @@ var _ = Describe("InventoryNormalizationJob", func() {
 				err = job.generateAuditReport([]InventoryAnomaly{}, []string{})
 			})
 
-			It("should return an error", func() {
-				Expect(err).To(HaveOccurred())
-			})
-
-			It("should include frontmatter context in error", func() {
-				Expect(err.Error()).To(ContainSubstring("failed to write audit report frontmatter"))
+			It("should return an error about failed frontmatter write", func() {
+				Expect(err).To(MatchError(ContainSubstring("failed to write audit report frontmatter")))
 			})
 		})
 
@@ -1105,12 +1101,8 @@ var _ = Describe("InventoryNormalizationJob", func() {
 				err = job.generateAuditReport([]InventoryAnomaly{}, []string{})
 			})
 
-			It("should return an error", func() {
-				Expect(err).To(HaveOccurred())
-			})
-
-			It("should include markdown context in error", func() {
-				Expect(err.Error()).To(ContainSubstring("failed to write audit report markdown"))
+			It("should return an error about failed markdown write", func() {
+				Expect(err).To(MatchError(ContainSubstring("failed to write audit report markdown")))
 			})
 		})
 	})
@@ -1885,7 +1877,9 @@ var _ = Describe("InventoryNormalizationJob", func() {
 						"items": []any{123, "valid_item"},
 					},
 				}
-				inventory := containerFm["inventory"].(map[string]any)
+				var ok bool
+				inventory, ok := containerFm["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue())
 				items := []any{123, "valid_item"}
 				itemsToRemove := map[string]bool{"valid_item": true}
 
@@ -1920,7 +1914,9 @@ var _ = Describe("InventoryNormalizationJob", func() {
 						"items": []any{"///", "valid_item"},
 					},
 				}
-				inventory := containerFm["inventory"].(map[string]any)
+				var ok bool
+				inventory, ok := containerFm["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue())
 				items := []any{"///", "valid_item"}
 				itemsToRemove := map[string]bool{"valid_item": true}
 
@@ -1960,19 +1956,17 @@ var _ = Describe("InventoryNormalizationJob", func() {
 						"items": []any{"valid_item"},
 					},
 				}
-				inventory := containerFm["inventory"].(map[string]any)
+				var ok bool
+				inventory, ok := containerFm["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue())
 				items := []any{"valid_item"}
 				itemsToRemove := map[string]bool{"valid_item": true}
 
 				removed, err = job.removeAndWriteItems("container", containerFm, inventory, items, itemsToRemove)
 			})
 
-			It("should return an error", func() {
-				Expect(err).To(HaveOccurred())
-			})
-
-			It("should include frontmatter context in error", func() {
-				Expect(err.Error()).To(ContainSubstring("failed to write frontmatter"))
+			It("should return an error about failed frontmatter write", func() {
+				Expect(err).To(MatchError(ContainSubstring("failed to write frontmatter")))
 			})
 
 			It("should return zero removed count", func() {
@@ -1992,7 +1986,9 @@ var _ = Describe("InventoryNormalizationJob", func() {
 						"items": []any{"item1", "item2"},
 					},
 				}
-				inventory := containerFm["inventory"].(map[string]any)
+				var ok bool
+				inventory, ok := containerFm["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue())
 				items := []any{"item1", "item2"}
 				itemsToRemove := map[string]bool{} // Empty set - nothing to remove
 
