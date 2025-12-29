@@ -8,26 +8,57 @@ import (
 	"github.com/mborders/artifex"
 )
 
+// Dispatcher is an interface for job dispatching, allowing for testing.
+type Dispatcher interface {
+	Start()
+	Dispatch(run func()) error
+}
+
+// DispatcherFactory creates new dispatchers.
+type DispatcherFactory func(maxWorkers, maxQueue int) Dispatcher
+
+// artifexDispatcher wraps artifex.Dispatcher to implement our Dispatcher interface.
+type artifexDispatcher struct {
+	*artifex.Dispatcher
+}
+
+// defaultDispatcherFactory creates real Artifex dispatchers.
+func defaultDispatcherFactory(maxWorkers, maxQueue int) Dispatcher {
+	return &artifexDispatcher{artifex.NewDispatcher(maxWorkers, maxQueue)}
+}
+
 // JobQueueCoordinator manages multiple job queues using Artifex.
 type JobQueueCoordinator struct {
-	queues map[string]*artifex.Dispatcher
-	stats  map[string]*QueueStats
-	logger lumber.Logger
-	mu     sync.RWMutex
+	queues            map[string]Dispatcher
+	stats             map[string]*QueueStats
+	logger            lumber.Logger
+	mu                sync.RWMutex
+	dispatcherFactory DispatcherFactory
 }
 
 // NewJobQueueCoordinator creates a new JobQueueCoordinator.
 func NewJobQueueCoordinator(logger lumber.Logger) *JobQueueCoordinator {
 	return &JobQueueCoordinator{
-		queues: make(map[string]*artifex.Dispatcher),
-		stats:  make(map[string]*QueueStats),
-		logger: logger,
+		queues:            make(map[string]Dispatcher),
+		stats:             make(map[string]*QueueStats),
+		logger:            logger,
+		dispatcherFactory: defaultDispatcherFactory,
+	}
+}
+
+// NewJobQueueCoordinatorWithFactory creates a JobQueueCoordinator with a custom dispatcher factory (for testing).
+func NewJobQueueCoordinatorWithFactory(logger lumber.Logger, factory DispatcherFactory) *JobQueueCoordinator {
+	return &JobQueueCoordinator{
+		queues:            make(map[string]Dispatcher),
+		stats:             make(map[string]*QueueStats),
+		logger:            logger,
+		dispatcherFactory: factory,
 	}
 }
 
 
 // EnqueueJob adds a job to its appropriate queue based on the job's name.
-// Returns an error if the job could not be dispatched (e.g., queue is full).
+// Returns an error if the job could not be dispatched.
 func (c *JobQueueCoordinator) EnqueueJob(job Job) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -39,7 +70,7 @@ func (c *JobQueueCoordinator) EnqueueJob(job Job) error {
 	if !exists {
 		// Create new queue for this job type
 		const defaultQueueCapacity = 10
-		dispatcher = artifex.NewDispatcher(1, defaultQueueCapacity)
+		dispatcher = c.dispatcherFactory(1, defaultQueueCapacity)
 		dispatcher.Start()
 
 		c.queues[queueName] = dispatcher
@@ -60,7 +91,7 @@ func (c *JobQueueCoordinator) EnqueueJob(job Job) error {
 	}
 	stats.IsActive = true
 
-	// Submit job to Artifex dispatcher
+	// Submit job to dispatcher
 	err := dispatcher.Dispatch(func() {
 		defer func() {
 			c.mu.Lock()
@@ -94,7 +125,7 @@ type CompletionCallback func(err error)
 
 // EnqueueJobWithCompletion adds a job to its queue and calls the callback when it completes.
 // This allows job chaining - the callback can enqueue dependent jobs.
-// Returns an error if the job could not be dispatched (e.g., queue is full).
+// Returns an error if the job could not be dispatched.
 func (c *JobQueueCoordinator) EnqueueJobWithCompletion(job Job, onComplete CompletionCallback) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -106,7 +137,7 @@ func (c *JobQueueCoordinator) EnqueueJobWithCompletion(job Job, onComplete Compl
 	if !exists {
 		// Create new queue for this job type
 		const defaultQueueCapacity = 10
-		dispatcher = artifex.NewDispatcher(1, defaultQueueCapacity)
+		dispatcher = c.dispatcherFactory(1, defaultQueueCapacity)
 		dispatcher.Start()
 
 		c.queues[queueName] = dispatcher
@@ -127,7 +158,7 @@ func (c *JobQueueCoordinator) EnqueueJobWithCompletion(job Job, onComplete Compl
 	}
 	stats.IsActive = true
 
-	// Submit job to Artifex dispatcher
+	// Submit job to dispatcher
 	err := dispatcher.Dispatch(func() {
 		defer func() {
 			c.mu.Lock()

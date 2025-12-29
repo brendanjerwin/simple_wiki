@@ -245,6 +245,8 @@ Storybook should focus on visual and interactive aspects, while automated functi
 
 This section outlines best practices for testing, applicable across different programming languages used in the project. The core principles emphasize test-driven development (TDD), clear test structure, and meaningful assertions.
 
+**Important**: Never remove or skip tests without asking the user first. If tests are failing or seem problematic, discuss with the user before removing them. Instead of removing tests, prefer to fix the underlying code or abstract it to make it testable.
+
 ### Running the Application
 
 The application can be run locally using `devbox services`, which manages the development environment and builds the frontend code automatically.

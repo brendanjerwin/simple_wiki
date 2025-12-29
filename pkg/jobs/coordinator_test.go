@@ -244,6 +244,82 @@ var _ = Describe("JobQueueCoordinator", func() {
 			Expect(queueNames).To(ContainElements("Queue1", "Queue2"))
 		})
 	})
+
+	Describe("when dispatch fails", func() {
+		var failingCoordinator *jobs.JobQueueCoordinator
+		var dispatchErr error
+
+		BeforeEach(func() {
+			// Create a coordinator with a factory that returns failing dispatchers
+			dispatchErr = &testError{msg: "dispatcher not active"}
+			logger := lumber.NewConsoleLogger(lumber.WARN)
+			failingCoordinator = jobs.NewJobQueueCoordinatorWithFactory(
+				logger,
+				jobs.FailingDispatcherFactory(dispatchErr),
+			)
+		})
+
+		Describe("when EnqueueJob fails", func() {
+			var enqueueErr error
+
+			BeforeEach(func() {
+				job := &jobs.MockJob{Name: "FailingQueue"}
+				enqueueErr = failingCoordinator.EnqueueJob(job)
+			})
+
+			It("should return an error", func() {
+				Expect(enqueueErr).To(HaveOccurred())
+			})
+
+			It("should include dispatch in error message", func() {
+				Expect(enqueueErr.Error()).To(ContainSubstring("dispatch"))
+			})
+
+			It("should wrap the original error", func() {
+				Expect(enqueueErr.Error()).To(ContainSubstring("dispatcher not active"))
+			})
+
+			It("should rollback job count", func() {
+				stats := failingCoordinator.GetQueueStats("FailingQueue")
+				Expect(stats.JobsRemaining).To(Equal(int32(0)))
+			})
+
+			It("should mark queue as inactive", func() {
+				stats := failingCoordinator.GetQueueStats("FailingQueue")
+				Expect(stats.IsActive).To(BeFalse())
+			})
+		})
+
+		Describe("when EnqueueJobWithCompletion fails", func() {
+			var enqueueErr error
+			var callbackCalled bool
+
+			BeforeEach(func() {
+				callbackCalled = false
+				job := &jobs.MockJob{Name: "FailingCompletionQueue"}
+				enqueueErr = failingCoordinator.EnqueueJobWithCompletion(job, func(err error) {
+					callbackCalled = true
+				})
+			})
+
+			It("should return an error", func() {
+				Expect(enqueueErr).To(HaveOccurred())
+			})
+
+			It("should include dispatch in error message", func() {
+				Expect(enqueueErr.Error()).To(ContainSubstring("dispatch"))
+			})
+
+			It("should not call the completion callback", func() {
+				Expect(callbackCalled).To(BeFalse())
+			})
+
+			It("should rollback job count", func() {
+				stats := failingCoordinator.GetQueueStats("FailingCompletionQueue")
+				Expect(stats.JobsRemaining).To(Equal(int32(0)))
+			})
+		})
+	})
 })
 
 // testError is a simple error type for testing.
