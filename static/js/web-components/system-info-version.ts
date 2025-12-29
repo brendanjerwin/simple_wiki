@@ -61,11 +61,12 @@ export class SystemInfoVersion extends LitElement {
 
   declare version?: GetVersionResponse;
   declare loading: boolean;
-  declare error?: string;
+  declare error: Error | null;
 
   constructor() {
     super();
     this.loading = false;
+    this.error = null;
   }
 
   private formatTimestamp(timestamp: Timestamp): string {
@@ -89,32 +90,46 @@ export class SystemInfoVersion extends LitElement {
     return commit.length > 7 ? commit.substring(0, 7) : commit;
   }
 
-  override render() {
+  private renderLoading() {
     return html`
-      <div class="version-info">
-        ${this.loading && !this.version ? html`
-          <div class="version-row">
-            <span class="label">Commit:</span>
-            <span class="value loading">Loading...</span>
-          </div>
-          <div class="version-row">
-            <span class="label">Built:</span>
-            <span class="value loading">Loading...</span>
-          </div>
-        ` : this.error && !this.version ? html`
-          <div class="error">${this.error}</div>
-        ` : html`
-          <div class="version-row">
-            <span class="label">Commit:</span>
-            <span class="value commit">${this.formatCommit(this.version?.commit || '')}</span>
-          </div>
-          <div class="version-row">
-            <span class="label">Built:</span>
-            <span class="value">${this.version?.buildTime ? this.formatTimestamp(this.version.buildTime) : ''}</span>
-          </div>
-        `}
+      <div class="version-row">
+        <span class="label">Commit:</span>
+        <span class="value loading">Loading...</span>
+      </div>
+      <div class="version-row">
+        <span class="label">Built:</span>
+        <span class="value loading">Loading...</span>
       </div>
     `;
+  }
+
+  private renderError() {
+    return html`<div class="error">${this.error?.message}</div>`;
+  }
+
+  private renderVersion() {
+    return html`
+      <div class="version-row">
+        <span class="label">Commit:</span>
+        <span class="value commit">${this.formatCommit(this.version?.commit || '')}</span>
+      </div>
+      <div class="version-row">
+        <span class="label">Built:</span>
+        <span class="value">${this.version?.buildTime ? this.formatTimestamp(this.version.buildTime) : ''}</span>
+      </div>
+    `;
+  }
+
+  override render() {
+    let content;
+    if (this.loading && !this.version) {
+      content = this.renderLoading();
+    } else if (this.error && !this.version) {
+      content = this.renderError();
+    } else {
+      content = this.renderVersion();
+    }
+    return html`<div class="version-info">${content}</div>`;
   }
 }
 

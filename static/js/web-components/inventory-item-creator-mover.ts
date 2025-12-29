@@ -10,20 +10,20 @@ const SUCCESS_TOAST_DURATION_SECONDS = 5;
 const ERROR_TOAST_DURATION_SECONDS = 8;
 
 /**
- * InventoryActionService - Handles inventory management workflows via modal dialogs
+ * InventoryItemCreatorMover - Creates and moves inventory items via gRPC APIs
  *
- * This service manages inventory operations:
+ * This class manages inventory operations:
  * 1. Add Item Here - Creates a new item in a container
  * 2. Move This Item - Moves an item to a different container
  *
  * Usage:
  * ```typescript
- * const service = new InventoryActionService();
- * service.addItem('drawer_kitchen', 'screwdriver');
- * service.moveItem('screwdriver', 'toolbox');
+ * const creatorMover = new InventoryItemCreatorMover();
+ * creatorMover.addItem('drawer_kitchen', 'screwdriver');
+ * creatorMover.moveItem('screwdriver', 'toolbox');
  * ```
  */
-export class InventoryActionService {
+export class InventoryItemCreatorMover {
   private inventoryClient = createClient(InventoryManagementService, getGrpcWebTransport());
   private pageManagementClient = createClient(PageManagementService, getGrpcWebTransport());
 

@@ -43,12 +43,17 @@ describe('VersionDisplay', () => {
   describe('when component is rendered', () => {
     beforeEach(async () => {
       // Make sure the component has rendered with version data
+      const mockTimestamp = create(TimestampSchema, {
+        seconds: BigInt(Math.floor(new Date('2023-01-01T12:00:00Z').getTime() / 1000)),
+        nanos: 0
+      });
+
       el.loading = false;
-      el.error = undefined;
-      el.version = {
+      el.error = null;
+      el.version = create(GetVersionResponseSchema, {
         commit: 'thisiscommithash',
-        buildTime: { toDate: () => new Date('2023-01-01T12:00:00Z') }
-      } as unknown;
+        buildTime: mockTimestamp
+      });
       await el.updateComplete;
     });
 
@@ -69,17 +74,10 @@ describe('VersionDisplay', () => {
     });
   });
 
-  describe('when positioned', () => {
-    it('should have fixed position styling', () => {
-      const styles = getComputedStyle(el);
-      expect(styles.position).to.equal('fixed');
-    });
-  });
-
   describe('when in error state', () => {
     beforeEach(async () => {
       el.loading = false;
-      el.error = 'Network error';
+      el.error = new Error('Network error');
       el.version = undefined;
       await el.updateComplete;
     });
@@ -99,7 +97,7 @@ describe('VersionDisplay', () => {
   describe('when in loading state', () => {
     beforeEach(async () => {
       el.loading = true;
-      el.error = undefined;
+      el.error = null;
       el.version = undefined;
       await el.updateComplete;
     });

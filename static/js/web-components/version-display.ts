@@ -7,7 +7,7 @@ import { SystemInfoService, GetVersionRequestSchema, type GetVersionResponse } f
 import { foundationCSS } from './shared-styles.js';
 
 export class VersionDisplay extends LitElement {
-  static readonly DEBOUNCE_DELAY = 300;
+  static readonly DEBOUNCE_DELAY_MS = 300;
 
   static override styles = [
     foundationCSS,
@@ -23,72 +23,72 @@ export class VersionDisplay extends LitElement {
       }
 
       .version-panel {
-      background: #2d2d2d;
-      border: 1px solid #404040;
-      border-radius: 4px;
-      padding: 4px 8px;
-      opacity: 0.2;
-      transition: opacity 0.3s ease;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-      position: relative;
-    }
+        background: #2d2d2d;
+        border: 1px solid #404040;
+        border-radius: 4px;
+        padding: 4px 8px;
+        opacity: 0.2;
+        transition: opacity 0.3s ease;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+        position: relative;
+      }
 
-    .version-panel:hover {
-      opacity: 0.9;
-    }
+      .version-panel:hover {
+        opacity: 0.9;
+      }
 
-    .hover-overlay {
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      z-index: 1;
-      background: transparent;
-      cursor: pointer;
-    }
+      .hover-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1;
+        background: transparent;
+        cursor: pointer;
+      }
 
-    .version-info {
-      display: flex;
-      flex-direction: row;
-      align-items: center;
-      gap: 12px;
-      color: white;
-      white-space: nowrap;
-    }
+      .version-info {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 12px;
+        color: white;
+        white-space: nowrap;
+      }
 
-    .version-row {
-      display: flex;
-      align-items: center;
-      white-space: nowrap;
-    }
+      .version-row {
+        display: flex;
+        align-items: center;
+        white-space: nowrap;
+      }
 
-    .label {
-      font-weight: bold;
-      color: white;
-      margin-right: 4px;
-    }
+      .label {
+        font-weight: bold;
+        color: white;
+        margin-right: 4px;
+      }
 
-    .value {
-      font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
-      color: #ccc;
-      font-size: 10px;
-    }
+      .value {
+        font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+        color: #ccc;
+        font-size: 10px;
+      }
 
-    .commit {
-      max-width: 120px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
+      .commit {
+        max-width: 120px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
 
-    .error {
-      color: #ff6b6b;
-    }
+      .error {
+        color: #ff6b6b;
+      }
 
-    .loading {
-      color: #ccc;
-    }
-  `];
+      .loading {
+        color: #ccc;
+      }
+    `];
 
   static override properties = {
     version: { state: true },
@@ -98,7 +98,7 @@ export class VersionDisplay extends LitElement {
 
   declare version?: GetVersionResponse;
   declare loading: boolean;
-  declare error?: string;
+  declare error: Error | null;
   private debounceTimer?: ReturnType<typeof setTimeout>;
 
   private client = createClient(SystemInfoService, getGrpcWebTransport());
@@ -106,6 +106,7 @@ export class VersionDisplay extends LitElement {
   constructor() {
     super();
     this.loading = true;
+    this.error = null;
   }
 
   override connectedCallback(): void {
@@ -139,7 +140,7 @@ export class VersionDisplay extends LitElement {
     // Set a new debounce timer
     this.debounceTimer = setTimeout(() => {
       this.loadVersion();
-    }, VersionDisplay.DEBOUNCE_DELAY);
+    }, VersionDisplay.DEBOUNCE_DELAY_MS);
   }
 
   private async loadVersion(): Promise<void> {
@@ -151,7 +152,7 @@ export class VersionDisplay extends LitElement {
       const response = await this.client.getVersion(create(GetVersionRequestSchema, {}));
       this.version = response;
     } catch (err) {
-      this.error = err instanceof Error ? err.message : 'Failed to load version';
+      this.error = err instanceof Error ? err : new Error('Failed to load version');
     } finally {
       this.loading = false;
       this.requestUpdate();
@@ -195,7 +196,7 @@ export class VersionDisplay extends LitElement {
               <span class="value loading">Loading...</span>
             </div>
           ` : this.error ? html`
-            <div class="error">${this.error}</div>
+            <div class="error">${this.error.message}</div>
           ` : html`
             <div class="version-row">
               <span class="label">Commit:</span>

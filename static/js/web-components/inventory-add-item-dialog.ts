@@ -1,6 +1,6 @@
 import { html, css, LitElement, nothing } from 'lit';
 import { sharedStyles, dialogStyles } from './shared-styles.js';
-import { InventoryActionService } from './inventory-action-service.js';
+import { InventoryItemCreatorMover } from './inventory-item-creator-mover.js';
 import { createClient } from '@connectrpc/connect';
 import { create } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
@@ -236,7 +236,7 @@ export class InventoryAddItemDialog extends LitElement {
   private _titleDebounceTimer?: ReturnType<typeof setTimeout>;
   private _identifierDebounceTimer?: ReturnType<typeof setTimeout>;
   private searchClient = createClient(SearchService, getGrpcWebTransport());
-  private inventoryActionService = new InventoryActionService();
+  private inventoryItemCreatorMover = new InventoryItemCreatorMover();
 
   constructor() {
     super();
@@ -355,7 +355,7 @@ export class InventoryAddItemDialog extends LitElement {
     // Note: Errors from generateIdentifier are intentionally not shown to the user.
     // If automagic fails, user can switch to manual mode and enter identifier directly.
     if (this.automagicMode) {
-      const result = await this.inventoryActionService.generateIdentifier(title);
+      const result = await this.inventoryItemCreatorMover.generateIdentifier(title);
       if (!result.error) {
         this.itemIdentifier = result.identifier;
         this.isUnique = result.isUnique;
@@ -395,7 +395,7 @@ export class InventoryAddItemDialog extends LitElement {
     }
 
     // We call generateIdentifier with ensure_unique=false just to check availability
-    const result = await this.inventoryActionService.generateIdentifier(identifier);
+    const result = await this.inventoryItemCreatorMover.generateIdentifier(identifier);
     if (!result.error) {
       this.isUnique = result.isUnique;
       this.existingPage = result.existingPage;
@@ -461,7 +461,7 @@ export class InventoryAddItemDialog extends LitElement {
     this.loading = true;
     this.error = null;
 
-    const result = await this.inventoryActionService.addItem(
+    const result = await this.inventoryItemCreatorMover.addItem(
       this.container,
       this.itemIdentifier.trim(),
       this.itemTitle.trim(),
@@ -471,14 +471,14 @@ export class InventoryAddItemDialog extends LitElement {
     this.loading = false;
 
     if (result.success) {
-      this.inventoryActionService.showSuccess(
+      this.inventoryItemCreatorMover.showSuccess(
         result.summary || `Added ${this.itemTitle} to ${this.container}`,
         () => window.location.reload()
       );
       this.close();
     } else {
       if (!result.error) {
-        throw new Error('InventoryActionService.addItem returned success=false without an error');
+        throw new Error('InventoryItemCreatorMover.addItem returned success=false without an error');
       }
       this.error = result.error;
     }

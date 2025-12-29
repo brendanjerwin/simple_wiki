@@ -1,12 +1,12 @@
 import { expect } from '@open-wc/testing';
 import sinon from 'sinon';
-import { InventoryActionService } from './inventory-action-service.js';
+import { InventoryItemCreatorMover } from './inventory-item-creator-mover.js';
 
-describe('InventoryActionService', () => {
-  let service: InventoryActionService;
+describe('InventoryItemCreatorMover', () => {
+  let service: InventoryItemCreatorMover;
 
   beforeEach(() => {
-    service = new InventoryActionService();
+    service = new InventoryItemCreatorMover();
   });
 
   afterEach(() => {

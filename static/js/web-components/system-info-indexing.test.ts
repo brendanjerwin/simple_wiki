@@ -2,7 +2,7 @@ import { html, fixture, expect, assert } from '@open-wc/testing';
 import { stub } from 'sinon';
 import { create } from '@bufbuild/protobuf';
 import { SystemInfoIndexing } from './system-info-indexing.js';
-import { GetJobStatusResponseSchema, JobQueueStatusSchema } from '../gen/api/v1/system_info_pb.js';
+import { GetJobStatusResponseSchema, JobQueueStatusSchema, type JobQueueStatus } from '../gen/api/v1/system_info_pb.js';
 
 function timeout(ms: number, message: string) {
   return new Promise((_, reject) =>

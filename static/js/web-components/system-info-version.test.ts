@@ -49,15 +49,15 @@ describe('SystemInfoVersion', () => {
     expect(el.version).to.be.undefined;
   });
 
-  it('should have undefined error initially', () => {
-    expect(el.error).to.be.undefined;
+  it('should have null error initially', () => {
+    expect(el.error).to.be.null;
   });
 
   describe('when in loading state without version data', () => {
     beforeEach(async () => {
       el.loading = true;
       el.version = undefined;
-      el.error = undefined;
+      el.error = null;
       await Promise.race([
         el.updateComplete,
         timeout(5000, "Component update timed out"),
@@ -93,7 +93,7 @@ describe('SystemInfoVersion', () => {
   describe('when in error state without version data', () => {
     beforeEach(async () => {
       el.loading = false;
-      el.error = 'Failed to load version info';
+      el.error = new Error('Failed to load version info');
       el.version = undefined;
 
       await Promise.race([

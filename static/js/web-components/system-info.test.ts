@@ -1,10 +1,9 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { expect } from '@open-wc/testing';
 import { SystemInfo } from './system-info.js';
 import { GetVersionResponseSchema, GetJobStatusResponseSchema, JobQueueStatusSchema } from '../gen/api/v1/system_info_pb.js';
 import { create } from '@bufbuild/protobuf';
 import { TimestampSchema } from '@bufbuild/protobuf/wkt';
-import { stub, useFakeTimers } from 'sinon';
+import { stub, useFakeTimers, type SinonFakeTimers, type SinonStub } from 'sinon';
 import './system-info.js';
 
 // Extend SystemInfo type for testing private methods
@@ -14,7 +13,7 @@ interface SystemInfoTest extends SystemInfo {
 
 describe('SystemInfo', () => {
   let el: SystemInfo;
-  let clock: any;
+  let clock: SinonFakeTimers;
 
   beforeEach(async () => {
     clock = useFakeTimers();
@@ -343,8 +342,8 @@ describe('SystemInfo', () => {
   });
 
   describe('component lifecycle', () => {
-    let connectStub: any;
-    let disconnectStub: any;
+    let connectStub: SinonStub;
+    let disconnectStub: SinonStub;
 
     beforeEach(() => {
       connectStub = stub(el, 'connectedCallback');

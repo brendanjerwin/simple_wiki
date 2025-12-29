@@ -171,8 +171,8 @@ export class InventoryQrScanner extends LitElement {
   /**
    * Handle Cancel button click
    */
-  private _handleCancel = (): void => {
-    this.collapse();
+  private _handleCancel = async (): Promise<void> => {
+    await this.collapse();
     this.dispatchEvent(new CustomEvent('cancelled', {
       bubbles: true,
       composed: true,
