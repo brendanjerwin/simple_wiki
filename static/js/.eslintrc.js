@@ -20,6 +20,9 @@ module.exports = {
       rules: {
         // Chai assertion syntax (expect().to.be.true) triggers this rule incorrectly
         '@typescript-eslint/no-unused-expressions': 'off',
+        // Tests need to access private methods via typed interfaces and work with mocks
+        // that require type assertions from unknown. This is expected in test code.
+        '@typescript-eslint/no-unsafe-type-assertion': 'off',
       },
     },
   ],

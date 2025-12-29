@@ -5,6 +5,8 @@ version: "2"
 linters:
   enable:
     - godox  # Detects TODO, FIXME, BUG comments
+  disable:
+    - staticcheck  # We run staticcheck separately (built from source to match Go version)
 
 linters-settings:
   godox:

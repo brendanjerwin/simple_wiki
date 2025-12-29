@@ -4,17 +4,39 @@ import { restore } from 'sinon';
 import { FrontmatterValueSection } from './frontmatter-value-section.js';
 import type { AugmentedError } from './augment-error-service.js';
 
-async function createFixtureWithTimeout(template: TemplateResult, timeoutMs = 5000): Promise<FrontmatterValueSection> {
-  const timeout = (ms: number, message: string) =>
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(message)), ms)
-    );
+/**
+ * Interface for testing private methods of FrontmatterValueSection.
+ * Uses interface (not intersection) to avoid TypeScript reducing to 'never'
+ * when private members are redeclared.
+ */
+interface TestableFrontmatterValueSection {
+  fields: Record<string, unknown>;
+  _typePriorityCompare: (typeA: string, typeB: string) => number;
+  _generateUniqueKey: (baseKey: string) => string;
+}
 
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- test fixture
+async function createFixtureWithTimeout(template: TemplateResult, timeoutMs = 5000): Promise<FrontmatterValueSection> {
+  const timeoutPromise = new Promise<FrontmatterValueSection>((_, reject) =>
+    setTimeout(() => reject(new Error('Component fixture timed out')), timeoutMs)
+  );
+
   return Promise.race([
-    fixture(template),
-    timeout(timeoutMs, 'Component fixture timed out')
-  ]) as Promise<FrontmatterValueSection>;
+    fixture(template) as Promise<FrontmatterValueSection>,
+    timeoutPromise
+  ]);
+}
+
+/**
+ * Creates a fixture with testable access to private methods.
+ * Used for tests that need to call private methods like _typePriorityCompare.
+ */
+async function createTestableFixture(template: TemplateResult, timeoutMs = 5000): Promise<TestableFrontmatterValueSection> {
+  const component = await createFixtureWithTimeout(template, timeoutMs);
+  // Runtime check that private methods exist before casting
+  if (!('_typePriorityCompare' in component) || !('_generateUniqueKey' in component)) {
+    throw new Error('Component does not have expected private methods');
+  }
+  return component as unknown as TestableFrontmatterValueSection;
 }
 
 describe('FrontmatterValueSection', () => {
@@ -393,9 +415,8 @@ describe('FrontmatterValueSection', () => {
       let result: number;
 
       beforeEach(async () => {
-        el = await createFixtureWithTimeout(html`<frontmatter-value-section></frontmatter-value-section>`);
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-explicit-any -- accessing private method for testing nullish coalescing fallback
-        result = (el as any)._typePriorityCompare('unknownType', 'anotherUnknown');
+        const testableComponent = await createTestableFixture(html`<frontmatter-value-section></frontmatter-value-section>`);
+        result = testableComponent._typePriorityCompare('unknownType', 'anotherUnknown');
       });
 
       it('should return 0 when both types are unknown', () => {
@@ -407,9 +428,8 @@ describe('FrontmatterValueSection', () => {
       let result: number;
 
       beforeEach(async () => {
-        el = await createFixtureWithTimeout(html`<frontmatter-value-section></frontmatter-value-section>`);
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-explicit-any -- accessing private method for testing nullish coalescing fallback
-        result = (el as any)._typePriorityCompare('unknownType', 'array');
+        const testableComponent = await createTestableFixture(html`<frontmatter-value-section></frontmatter-value-section>`);
+        result = testableComponent._typePriorityCompare('unknownType', 'array');
       });
 
       it('should treat unknown type as priority 0 (same as string)', () => {
@@ -422,9 +442,8 @@ describe('FrontmatterValueSection', () => {
       let result: number;
 
       beforeEach(async () => {
-        el = await createFixtureWithTimeout(html`<frontmatter-value-section></frontmatter-value-section>`);
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-explicit-any -- accessing private method for testing nullish coalescing fallback
-        result = (el as any)._typePriorityCompare('object', 'unknownType');
+        const testableComponent = await createTestableFixture(html`<frontmatter-value-section></frontmatter-value-section>`);
+        result = testableComponent._typePriorityCompare('object', 'unknownType');
       });
 
       it('should treat unknown type as priority 0', () => {
@@ -444,7 +463,7 @@ describe('FrontmatterValueSection', () => {
 
         thrownError = null;
 
-        el = await createFixtureWithTimeout(html`<frontmatter-value-section></frontmatter-value-section>`);
+        const testableComponent = await createTestableFixture(html`<frontmatter-value-section></frontmatter-value-section>`);
 
         // Create fields object that will cause max iterations to be exceeded
         // by having all possible key variations already exist
@@ -452,11 +471,10 @@ describe('FrontmatterValueSection', () => {
         for (let i = 1; i <= 1001; i++) {
           fields[`test_key_${i}`] = 'value';
         }
-        el.fields = fields;
+        testableComponent.fields = fields;
 
         try {
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-explicit-any -- accessing private method to test max iteration limit
-          (el as any)._generateUniqueKey('test_key');
+          testableComponent._generateUniqueKey('test_key');
         } catch (e) {
           thrownError = e instanceof Error ? e : null;
         }

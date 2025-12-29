@@ -11,6 +11,9 @@ ln -sf "$LOG_FILE" "$LOG_DIR/current_task.log"
 
 echo "Logging to: $LOG_FILE"
 
+# Ensure staticcheck is built from source and available
+source ./scripts/ensure_staticcheck.sh
+
 {
   # Only run buf generate if there are changes in api/proto
   if git status --porcelain api/proto | grep -q '.'; then

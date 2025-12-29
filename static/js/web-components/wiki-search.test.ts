@@ -15,6 +15,8 @@ interface WikiSearchElement extends HTMLElement {
   _handleKeydown: (event: KeyboardEvent) => void;
   handleFormSubmit: (event: Event) => Promise<void>;
   handleInventoryFilterChanged: (event: CustomEvent<{ inventoryOnly: boolean }>) => Promise<void>;
+  handleSearchInputFocused: (event: Event) => void;
+  handleSearchResultsClosed: () => void;
   performSearch: (query: string) => Promise<{ results: SearchResult[], totalUnfilteredCount: number }>;
   updateComplete: Promise<boolean>;
   shadowRoot: ShadowRoot;
@@ -201,11 +203,16 @@ describe('WikiSearch', () => {
       beforeEach(() => {
         inputElement = document.createElement('input');
         inputElement.value = 'test value';
+        document.body.appendChild(inputElement);
         selectSpy = sinon.spy(inputElement, 'select');
 
-        const mockEvent = { target: inputElement } as unknown as Event;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call -- accessing internal method for testing
-        (el as any).handleSearchInputFocused(mockEvent);
+        const focusEvent = new FocusEvent('focus', { bubbles: true });
+        Object.defineProperty(focusEvent, 'target', { value: inputElement, writable: false });
+        el.handleSearchInputFocused(focusEvent);
+      });
+
+      afterEach(() => {
+        inputElement.remove();
       });
 
       it('should select the input text', () => {
@@ -214,12 +221,19 @@ describe('WikiSearch', () => {
     });
 
     describe('when target is not an HTMLInputElement', () => {
-      beforeEach(() => {
-        const divElement = document.createElement('div');
+      let divElement: HTMLDivElement;
 
-        const mockEvent = { target: divElement } as unknown as Event;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call -- accessing internal method for testing
-        (el as any).handleSearchInputFocused(mockEvent);
+      beforeEach(() => {
+        divElement = document.createElement('div');
+        document.body.appendChild(divElement);
+
+        const focusEvent = new FocusEvent('focus', { bubbles: true });
+        Object.defineProperty(focusEvent, 'target', { value: divElement, writable: false });
+        el.handleSearchInputFocused(focusEvent);
+      });
+
+      afterEach(() => {
+        divElement.remove();
       });
 
       it('should not throw', () => {
@@ -273,23 +287,25 @@ describe('WikiSearch', () => {
 
     describe('when event target is not an HTMLFormElement', () => {
       let performSearchStub: sinon.SinonStub;
+      let divElement: HTMLDivElement;
 
       beforeEach(() => {
         performSearchStub = sinon.stub(el, 'performSearch');
         performSearchStub.resolves({ results: [], totalUnfilteredCount: 0 });
 
-        // Create a mock event with a non-form target
-        const mockEvent = {
-          target: document.createElement('div'),
-          preventDefault: sinon.stub()
-        } as unknown as Event;
+        // Create a real event with a non-form target
+        divElement = document.createElement('div');
+        document.body.appendChild(divElement);
+        const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+        Object.defineProperty(submitEvent, 'target', { value: divElement, writable: false });
 
         // This returns early before any async code due to the type guard
-        void el.handleFormSubmit(mockEvent);
+        void el.handleFormSubmit(submitEvent);
       });
 
       afterEach(() => {
         performSearchStub.restore();
+        divElement.remove();
       });
 
       it('should not perform search', () => {
@@ -471,8 +487,7 @@ describe('WikiSearch', () => {
       focusSpy?.resetHistory();
 
       // Now trigger the close event
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call -- accessing internal method for testing
-      (el as any).handleSearchResultsClosed();
+      el.handleSearchResultsClosed();
       await el.updateComplete;
     });
 

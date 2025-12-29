@@ -11,7 +11,6 @@
     "rootlesskit@latest",
     "bun@latest",
     "chromium@latest",
-    "go-tools@latest",
     "revive@latest",
     "ast-grep@latest",
     "playwright@latest",
@@ -22,7 +21,8 @@
   ],
   "shell": {
     "init_hook": [
-      "echo 'Welcome to devbox!' > /dev/null"
+      "source ./scripts/ensure_staticcheck.sh",
+      "export PATH=\"${DEVBOX_PROJECT_ROOT:-.}/.devbox/gobin:$PATH\""
     ],
     "scripts": {
       "fe:test": [

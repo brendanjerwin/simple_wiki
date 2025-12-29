@@ -11,7 +11,13 @@ ln -sf "$LOG_FILE" "$LOG_DIR/current_task.log"
 
 echo "Logging to: $LOG_FILE"
 
+# Ensure staticcheck is built from source and available
+source ./scripts/ensure_staticcheck.sh
+
 {
+  echo "Running staticcheck..."
+  staticcheck $(go list ./... | grep -v /gen/)
+  echo ""
   echo "Running revive..."
   revive -config revive.toml -set_exit_status ./...
   echo ""

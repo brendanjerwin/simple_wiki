@@ -71,3 +71,6 @@ coverage.txt
 
 # Claude Code plan files
 .claude/plans/
+
+# Devbox cached Go binaries (built from source)
+.devbox/gobin/

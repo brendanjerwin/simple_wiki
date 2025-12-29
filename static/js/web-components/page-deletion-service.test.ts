@@ -136,8 +136,10 @@ describe('PageDeleter', () => {
       beforeEach(() => {
         try {
           service.confirmAndDeletePage('');
-        } catch (err) {
-          thrownError = err as Error;
+        } catch (err: unknown) {
+          if (err instanceof Error) {
+            thrownError = err;
+          }
         }
       });
 
@@ -186,10 +188,17 @@ describe('PageDeleter', () => {
 
           try {
             // handleConfirm is async, need to await it
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- accessing private method for testing
-            await (service as unknown as { handleConfirm: () => Promise<void> }).handleConfirm();
-          } catch (err) {
-            thrownError = err as Error;
+            // Extract the confirm handler that was registered and call it
+            const confirmCall = mockDialog.addEventListener.getCalls().find(call => call.args[0] === 'confirm');
+            const handler: unknown = confirmCall?.args[1];
+            const confirmHandler = typeof handler === 'function' ? (handler as (event: Event) => Promise<void>) : undefined;
+            if (confirmHandler) {
+              await confirmHandler(new CustomEvent('confirm'));
+            }
+          } catch (err: unknown) {
+            if (err instanceof Error) {
+              thrownError = err;
+            }
           }
         });
 
