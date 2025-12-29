@@ -208,10 +208,11 @@ func (s *Site) InitializeIndexing() error {
 		pageIdentifiers[i] = file.Name()
 	}
 
-	// Start background indexing with completion callback to chain the normalization job
+	// Start background indexing with completion callback to chain the normalization job.
+	// Note: The callback executes asynchronously when all indexing jobs complete, not when this
+	// function returns. Error handling inside the callback is separate from the outer error check.
 	if err := s.IndexCoordinator.BulkEnqueuePagesWithCompletion(pageIdentifiers, index.Add, func() {
-		// Run inventory normalization after frontmatter indexing completes
-		// This ensures the frontmatter index is fully populated before migration runs
+		// This callback runs after all indexing completes - errors here are handled separately
 		normJob, err := NewInventoryNormalizationJob(s, s.FrontmatterIndexQueryer, s.Logger)
 		if err != nil {
 			s.Logger.Error("Failed to create inventory normalization job: %v", err)
@@ -223,6 +224,7 @@ func (s *Site) InitializeIndexing() error {
 			s.Logger.Info("Inventory normalization job queued after indexing completed")
 		}
 	}); err != nil {
+		// This error means the bulk enqueue failed immediately - the callback won't run
 		s.Logger.Error("Failed to enqueue bulk indexing jobs: %v", err)
 	}
 	s.Logger.Info("Background indexing started for %d pages. Application is ready.", len(files))

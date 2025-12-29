@@ -570,4 +570,42 @@ describe('SystemInfo', () => {
       expect(el.expanded).to.be.false;
     });
   });
+
+  describe('error UX behaviors', () => {
+    describe('when an error occurs', () => {
+      beforeEach(async () => {
+        el.loading = false;
+        el.error = new Error('Test error message');
+        await el.updateComplete;
+      });
+
+      it('should display error in version component', () => {
+        const versionComponent = el.shadowRoot!.querySelector('system-info-version');
+        expect(versionComponent).to.exist;
+        expect(versionComponent!.error?.message).to.equal('Test error message');
+      });
+
+      it('should show error even without version data', () => {
+        delete el.version;
+        const versionComponent = el.shadowRoot!.querySelector('system-info-version');
+        expect(versionComponent).to.exist;
+        expect(versionComponent!.error).to.exist;
+      });
+    });
+
+    describe('when error is cleared', () => {
+      beforeEach(async () => {
+        el.error = new Error('Previous error');
+        await el.updateComplete;
+        el.error = null;
+        await el.updateComplete;
+      });
+
+      it('should no longer show error in version component', () => {
+        const versionComponent = el.shadowRoot!.querySelector('system-info-version');
+        expect(versionComponent).to.exist;
+        expect(versionComponent!.error).to.be.null;
+      });
+    });
+  });
 });

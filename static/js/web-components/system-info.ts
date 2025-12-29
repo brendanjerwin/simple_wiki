@@ -227,9 +227,10 @@ export class SystemInfo extends LitElement {
   private async reloadVersionOnly(): Promise<void> {
     try {
       this.version = await this.client.getVersion(create(GetVersionRequestSchema, {}));
-      this.requestUpdate();
     } catch (err) {
-      this.error = err instanceof Error ? err : new Error('Failed to reload version');
+      this.error = err instanceof Error ? err : new Error(String(err));
+    } finally {
+      this.requestUpdate();
     }
   }
 
@@ -272,7 +273,7 @@ export class SystemInfo extends LitElement {
         this.startAutoRefresh();
       }
     } catch (err) {
-      this.error = err instanceof Error ? err : new Error('Failed to load system info');
+      this.error = err instanceof Error ? err : new Error(String(err));
       // Fallback to polling on error
       this.startAutoRefresh();
     } finally {
@@ -309,7 +310,7 @@ export class SystemInfo extends LitElement {
     } catch (err) {
       const isAbortError = err instanceof Error && err.name === 'AbortError';
       if (!isAbortError) {
-        this.error = err instanceof Error ? err : new Error('Streaming error');
+        this.error = err instanceof Error ? err : new Error(String(err));
         // Fallback to polling
         this.startAutoRefresh();
       }

@@ -21,7 +21,7 @@ echo "Logging to: $LOG_FILE"
 
   go mod tidy
   go vet $(go list ./... | grep -v /gen/)
-  staticcheck $(go list ./... | grep -v /gen/) || echo 'Warning: staticcheck failed (may be go version mismatch)'
+  staticcheck $(go list ./... | grep -v /gen/)
   revive -config revive.toml ./...
   go test ./...
   go run golang.org/x/tools/cmd/deadcode@latest . || true

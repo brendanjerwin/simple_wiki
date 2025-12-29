@@ -36,6 +36,20 @@ type JobQueueCoordinator struct {
 	dispatcherFactory DispatcherFactory
 }
 
+// rollbackStats decrements job count when a dispatch fails.
+// Must be called while holding the coordinator's mu lock.
+func (c *JobQueueCoordinator) rollbackStats(stats *QueueStats) {
+	// Assert that the mutex is held - if TryLock succeeds, we have a bug
+	if c.mu.TryLock() {
+		c.mu.Unlock()
+		panic("rollbackStats called without holding mu lock")
+	}
+	stats.JobsRemaining--
+	if stats.JobsRemaining == 0 {
+		stats.IsActive = false
+	}
+}
+
 // NewJobQueueCoordinator creates a new JobQueueCoordinator.
 func NewJobQueueCoordinator(logger lumber.Logger) *JobQueueCoordinator {
 	return &JobQueueCoordinator{
@@ -110,11 +124,7 @@ func (c *JobQueueCoordinator) EnqueueJob(job Job) error {
 		}
 	})
 	if err != nil {
-		// Rollback stats since job wasn't dispatched
-		stats.JobsRemaining--
-		if stats.JobsRemaining == 0 {
-			stats.IsActive = false
-		}
+		c.rollbackStats(stats)
 		return fmt.Errorf("dispatch job %s: %w", queueName, err)
 	}
 	return nil
@@ -182,11 +192,7 @@ func (c *JobQueueCoordinator) EnqueueJobWithCompletion(job Job, onComplete Compl
 		}
 	})
 	if err != nil {
-		// Rollback stats since job wasn't dispatched
-		stats.JobsRemaining--
-		if stats.JobsRemaining == 0 {
-			stats.IsActive = false
-		}
+		c.rollbackStats(stats)
 		return fmt.Errorf("dispatch job with completion %s: %w", queueName, err)
 	}
 	return nil
