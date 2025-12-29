@@ -1,6 +1,8 @@
 import { html, fixture, expect } from '@open-wc/testing';
-import sinon from 'sinon';
+import sinon, { type SinonStub } from 'sinon';
 import { InventoryAddItemDialog } from './inventory-add-item-dialog.js';
+import type { InventoryItemCreatorMover } from './inventory-item-creator-mover.js';
+import type { ExistingPageInfo } from '../gen/api/v1/page_management_pb.js';
 import './inventory-add-item-dialog.js';
 
 describe('InventoryAddItemDialog', () => {
@@ -839,6 +841,941 @@ describe('InventoryAddItemDialog', () => {
       it('should enable the add button', () => {
         const addBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-primary');
         expect(addBtn?.disabled).to.be.false;
+      });
+    });
+  });
+
+  describe('async title input handling with debounce', () => {
+    let clock: sinon.SinonFakeTimers;
+    let generateIdentifierStub: SinonStub;
+    let searchContentStub: SinonStub;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private property for testing
+    let inventoryItemCreatorMover: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private property for testing
+    let searchClient: any;
+
+    beforeEach(async () => {
+      clock = sinon.useFakeTimers();
+      el = await fixture<InventoryAddItemDialog>(html`<inventory-add-item-dialog></inventory-add-item-dialog>`);
+      await el.updateComplete;
+
+      // Access private properties for stubbing
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+      inventoryItemCreatorMover = (el as any).inventoryItemCreatorMover as InventoryItemCreatorMover;
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+      searchClient = (el as any).searchClient;
+
+      generateIdentifierStub = sinon.stub(inventoryItemCreatorMover, 'generateIdentifier');
+      searchContentStub = sinon.stub(searchClient, 'searchContent');
+    });
+
+    afterEach(() => {
+      clock.restore();
+      sinon.restore();
+    });
+
+    describe('when title is cleared', () => {
+      beforeEach(async () => {
+        el.openDialog('drawer_kitchen');
+        el.itemTitle = 'Some Title';
+        el.itemIdentifier = 'some_title';
+        el.searchResults = [
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
+          { identifier: 'item1', title: 'Item', fragment: '', highlights: [], frontmatter: {} } as unknown as import('../gen/api/v1/search_pb.js').SearchResult,
+        ];
+        await el.updateComplete;
+
+        // Trigger title input with empty value
+        const titleInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[name="title"]');
+        if (titleInput) {
+          titleInput.value = '';
+          titleInput.dispatchEvent(new Event('input'));
+        }
+
+        // Advance past debounce
+        await clock.tickAsync(350);
+        await el.updateComplete;
+      });
+
+      it('should clear itemIdentifier', () => {
+        expect(el.itemIdentifier).to.equal('');
+      });
+
+      it('should set isUnique to true', () => {
+        expect(el.isUnique).to.be.true;
+      });
+
+      it('should clear existingPage', () => {
+        expect(el.existingPage).to.be.undefined;
+      });
+
+      it('should clear searchResults', () => {
+        expect(el.searchResults).to.deep.equal([]);
+      });
+    });
+
+    describe('when title is entered in automagic mode and generateIdentifier succeeds', () => {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
+      const mockExistingPage = {
+        identifier: 'test_item',
+        title: 'Existing Test Item',
+        container: 'drawer_existing',
+      } as ExistingPageInfo;
+
+      beforeEach(async () => {
+        generateIdentifierStub.resolves({
+          identifier: 'test_item',
+          isUnique: false,
+          existingPage: mockExistingPage,
+        });
+        searchContentStub.resolves({ results: [] });
+
+        el.openDialog('drawer_kitchen');
+        el.automagicMode = true;
+        await el.updateComplete;
+
+        // Trigger title input
+        const titleInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[name="title"]');
+        if (titleInput) {
+          titleInput.value = 'Test Item';
+          titleInput.dispatchEvent(new Event('input'));
+        }
+
+        // Advance past debounce
+        await clock.tickAsync(350);
+        await el.updateComplete;
+      });
+
+      it('should call generateIdentifier with the title', () => {
+        expect(generateIdentifierStub).to.have.been.calledWith('Test Item');
+      });
+
+      it('should set itemIdentifier from response', () => {
+        expect(el.itemIdentifier).to.equal('test_item');
+      });
+
+      it('should set isUnique from response', () => {
+        expect(el.isUnique).to.be.false;
+      });
+
+      it('should set existingPage from response', () => {
+        expect(el.existingPage).to.deep.equal(mockExistingPage);
+      });
+
+      it('should clear automagicError', () => {
+        expect(el.automagicError).to.be.null;
+      });
+    });
+
+    describe('when title is entered in automagic mode and result has no existingPage', () => {
+      beforeEach(async () => {
+        generateIdentifierStub.resolves({
+          identifier: 'unique_item',
+          isUnique: true,
+          existingPage: undefined,
+        });
+        searchContentStub.resolves({ results: [] });
+
+        el.openDialog('drawer_kitchen');
+        el.automagicMode = true;
+        await el.updateComplete;
+
+        // Trigger title input
+        const titleInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[name="title"]');
+        if (titleInput) {
+          titleInput.value = 'Unique Item';
+          titleInput.dispatchEvent(new Event('input'));
+        }
+
+        // Advance past debounce
+        await clock.tickAsync(350);
+        await el.updateComplete;
+      });
+
+      it('should not set existingPage', () => {
+        expect(el.existingPage).to.be.undefined;
+      });
+
+      it('should set isUnique to true', () => {
+        expect(el.isUnique).to.be.true;
+      });
+    });
+
+    describe('when title is entered in automagic mode and generateIdentifier fails', () => {
+      let testError: Error;
+
+      beforeEach(async () => {
+        testError = new Error('Server unavailable');
+        generateIdentifierStub.resolves({
+          identifier: '',
+          isUnique: true,
+          error: testError,
+        });
+        searchContentStub.resolves({ results: [] });
+
+        el.openDialog('drawer_kitchen');
+        el.automagicMode = true;
+        await el.updateComplete;
+
+        // Trigger title input
+        const titleInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[name="title"]');
+        if (titleInput) {
+          titleInput.value = 'Test Item';
+          titleInput.dispatchEvent(new Event('input'));
+        }
+
+        // Advance past debounce
+        await clock.tickAsync(350);
+        await el.updateComplete;
+      });
+
+      it('should set automagicError', () => {
+        expect(el.automagicError).to.exist;
+      });
+
+      it('should have correct failedGoalDescription in automagicError', () => {
+        expect(el.automagicError?.failedGoalDescription).to.equal('generating identifier');
+      });
+    });
+
+    describe('when title is entered in manual mode', () => {
+      beforeEach(async () => {
+        searchContentStub.resolves({ results: [] });
+
+        el.openDialog('drawer_kitchen');
+        el.automagicMode = false;
+        el.itemIdentifier = 'manual_id';
+        await el.updateComplete;
+
+        // Trigger title input
+        const titleInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[name="title"]');
+        if (titleInput) {
+          titleInput.value = 'Test Item';
+          titleInput.dispatchEvent(new Event('input'));
+        }
+
+        // Advance past debounce
+        await clock.tickAsync(350);
+        await el.updateComplete;
+      });
+
+      it('should not call generateIdentifier', () => {
+        expect(generateIdentifierStub).to.not.have.been.called;
+      });
+
+      it('should preserve manual identifier', () => {
+        expect(el.itemIdentifier).to.equal('manual_id');
+      });
+    });
+
+    describe('when search succeeds', () => {
+      const mockResults = [
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
+        { identifier: 'item1', title: 'Similar Item', fragment: '', highlights: [], frontmatter: {} } as unknown as import('../gen/api/v1/search_pb.js').SearchResult,
+      ];
+
+      beforeEach(async () => {
+        generateIdentifierStub.resolves({
+          identifier: 'test_item',
+          isUnique: true,
+        });
+        searchContentStub.resolves({ results: mockResults });
+
+        el.openDialog('drawer_kitchen');
+        el.automagicMode = true;
+        await el.updateComplete;
+
+        // Trigger title input
+        const titleInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[name="title"]');
+        if (titleInput) {
+          titleInput.value = 'Test';
+          titleInput.dispatchEvent(new Event('input'));
+        }
+
+        // Advance past debounce
+        await clock.tickAsync(350);
+        await el.updateComplete;
+      });
+
+      it('should populate searchResults', () => {
+        expect(el.searchResults).to.deep.equal(mockResults);
+      });
+
+      it('should set searchLoading to false', () => {
+        expect(el.searchLoading).to.be.false;
+      });
+    });
+
+    describe('when search fails', () => {
+      beforeEach(async () => {
+        generateIdentifierStub.resolves({
+          identifier: 'test_item',
+          isUnique: true,
+        });
+        searchContentStub.rejects(new Error('Search service unavailable'));
+
+        el.openDialog('drawer_kitchen');
+        el.automagicMode = true;
+        await el.updateComplete;
+
+        // Trigger title input
+        const titleInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[name="title"]');
+        if (titleInput) {
+          titleInput.value = 'Test';
+          titleInput.dispatchEvent(new Event('input'));
+        }
+
+        // Advance past debounce
+        await clock.tickAsync(350);
+        await el.updateComplete;
+      });
+
+      it('should clear searchResults', () => {
+        expect(el.searchResults).to.deep.equal([]);
+      });
+
+      it('should set error', () => {
+        expect(el.error).to.be.instanceOf(Error);
+      });
+
+      it('should set searchLoading to false', () => {
+        expect(el.searchLoading).to.be.false;
+      });
+    });
+  });
+
+  describe('async identifier input handling with debounce', () => {
+    let clock: sinon.SinonFakeTimers;
+    let generateIdentifierStub: SinonStub;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private property for testing
+    let inventoryItemCreatorMover: any;
+
+    beforeEach(async () => {
+      clock = sinon.useFakeTimers();
+      el = await fixture<InventoryAddItemDialog>(html`<inventory-add-item-dialog></inventory-add-item-dialog>`);
+      await el.updateComplete;
+
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+      inventoryItemCreatorMover = (el as any).inventoryItemCreatorMover as InventoryItemCreatorMover;
+      generateIdentifierStub = sinon.stub(inventoryItemCreatorMover, 'generateIdentifier');
+    });
+
+    afterEach(() => {
+      clock.restore();
+      sinon.restore();
+    });
+
+    describe('when identifier is cleared in manual mode', () => {
+      beforeEach(async () => {
+        el.openDialog('drawer_kitchen');
+        el.automagicMode = false;
+        el.isUnique = false;
+        el.itemIdentifier = '';  // Set identifier to empty to trigger the clear path
+        await el.updateComplete;
+
+        // Call the method directly to verify the clearing behavior
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+        await (el as unknown as { _checkIdentifierAvailability: () => Promise<void> })._checkIdentifierAvailability();
+        await el.updateComplete;
+      });
+
+      it('should set isUnique to true', () => {
+        expect(el.isUnique).to.be.true;
+      });
+
+      it('should not have existingPage set', () => {
+        expect(el.existingPage).to.be.undefined;
+      });
+    });
+
+    describe('when identifier is entered in manual mode and check succeeds', () => {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
+      const mockExistingPage = {
+        identifier: 'conflict_item',
+        title: 'Conflicting Item',
+        container: 'drawer_other',
+      } as ExistingPageInfo;
+
+      beforeEach(async () => {
+        generateIdentifierStub.resolves({
+          identifier: 'conflict_item',
+          isUnique: false,
+          existingPage: mockExistingPage,
+        });
+
+        el.openDialog('drawer_kitchen');
+        el.automagicMode = false;
+        await el.updateComplete;
+
+        // Trigger identifier input
+        const identifierInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[name="itemIdentifier"]');
+        if (identifierInput) {
+          identifierInput.value = 'conflict_item';
+          identifierInput.dispatchEvent(new Event('input'));
+        }
+
+        // Advance past debounce
+        await clock.tickAsync(350);
+        await el.updateComplete;
+      });
+
+      it('should call generateIdentifier with the identifier', () => {
+        expect(generateIdentifierStub).to.have.been.calledWith('conflict_item');
+      });
+
+      it('should set isUnique from response', () => {
+        expect(el.isUnique).to.be.false;
+      });
+
+      it('should set existingPage from response', () => {
+        expect(el.existingPage).to.deep.equal(mockExistingPage);
+      });
+    });
+
+    describe('when identifier check returns no existingPage', () => {
+      beforeEach(async () => {
+        generateIdentifierStub.resolves({
+          identifier: 'unique_item',
+          isUnique: true,
+          existingPage: undefined,
+        });
+
+        el.openDialog('drawer_kitchen');
+        el.automagicMode = false;
+        await el.updateComplete;
+
+        // Trigger identifier input
+        const identifierInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[name="itemIdentifier"]');
+        if (identifierInput) {
+          identifierInput.value = 'unique_item';
+          identifierInput.dispatchEvent(new Event('input'));
+        }
+
+        // Advance past debounce
+        await clock.tickAsync(350);
+        await el.updateComplete;
+      });
+
+      it('should not set existingPage', () => {
+        expect(el.existingPage).to.be.undefined;
+      });
+    });
+
+    describe('when identifier check fails with error', () => {
+      beforeEach(async () => {
+        generateIdentifierStub.resolves({
+          identifier: '',
+          isUnique: true,
+          error: new Error('Server error'),
+        });
+
+        el.openDialog('drawer_kitchen');
+        el.automagicMode = false;
+        el.isUnique = false;
+        await el.updateComplete;
+
+        // Trigger identifier input
+        const identifierInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[name="itemIdentifier"]');
+        if (identifierInput) {
+          identifierInput.value = 'test_id';
+          identifierInput.dispatchEvent(new Event('input'));
+        }
+
+        // Advance past debounce
+        await clock.tickAsync(350);
+        await el.updateComplete;
+      });
+
+      it('should not update isUnique on error', () => {
+        // When error occurs, the method doesn't update state
+        expect(el.isUnique).to.be.false;
+      });
+    });
+  });
+
+  describe('automagic toggle with regeneration', () => {
+    let clock: sinon.SinonFakeTimers;
+    let generateIdentifierStub: SinonStub;
+    let searchContentStub: SinonStub;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private property for testing
+    let inventoryItemCreatorMover: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private property for testing
+    let searchClient: any;
+
+    beforeEach(async () => {
+      clock = sinon.useFakeTimers();
+      el = await fixture<InventoryAddItemDialog>(html`<inventory-add-item-dialog></inventory-add-item-dialog>`);
+      await el.updateComplete;
+
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+      inventoryItemCreatorMover = (el as any).inventoryItemCreatorMover as InventoryItemCreatorMover;
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+      searchClient = (el as any).searchClient;
+
+      generateIdentifierStub = sinon.stub(inventoryItemCreatorMover, 'generateIdentifier');
+      searchContentStub = sinon.stub(searchClient, 'searchContent');
+    });
+
+    afterEach(() => {
+      clock.restore();
+      sinon.restore();
+    });
+
+    describe('when switching to automagic mode with existing title', () => {
+      beforeEach(async () => {
+        generateIdentifierStub.resolves({
+          identifier: 'regenerated_id',
+          isUnique: true,
+        });
+        searchContentStub.resolves({ results: [] });
+
+        el.openDialog('drawer_kitchen');
+        el.automagicMode = false;
+        el.itemTitle = 'Test Item';
+        el.itemIdentifier = 'manual_id';
+        await el.updateComplete;
+
+        // Toggle back to automagic
+        const toggleBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.automagic-button');
+        toggleBtn?.click();
+
+        // Allow async operations to complete
+        await clock.tickAsync(50);
+        await el.updateComplete;
+      });
+
+      it('should switch to automagic mode', () => {
+        expect(el.automagicMode).to.be.true;
+      });
+
+      it('should call generateIdentifier to regenerate', () => {
+        expect(generateIdentifierStub).to.have.been.calledWith('Test Item');
+      });
+
+      it('should update itemIdentifier from regeneration', () => {
+        expect(el.itemIdentifier).to.equal('regenerated_id');
+      });
+    });
+
+    describe('when switching to automagic mode with empty title', () => {
+      beforeEach(async () => {
+        el.openDialog('drawer_kitchen');
+        el.automagicMode = false;
+        el.itemTitle = '';
+        await el.updateComplete;
+
+        // Toggle back to automagic
+        const toggleBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.automagic-button');
+        toggleBtn?.click();
+
+        await clock.tickAsync(50);
+        await el.updateComplete;
+      });
+
+      it('should switch to automagic mode', () => {
+        expect(el.automagicMode).to.be.true;
+      });
+
+      it('should not call generateIdentifier', () => {
+        expect(generateIdentifierStub).to.not.have.been.called;
+      });
+    });
+  });
+
+  describe('form submission', () => {
+    let addItemStub: SinonStub;
+    let showSuccessStub: SinonStub;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private property for testing
+    let inventoryItemCreatorMover: any;
+
+    beforeEach(async () => {
+      el = await fixture<InventoryAddItemDialog>(html`<inventory-add-item-dialog></inventory-add-item-dialog>`);
+      await el.updateComplete;
+
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+      inventoryItemCreatorMover = (el as any).inventoryItemCreatorMover as InventoryItemCreatorMover;
+      addItemStub = sinon.stub(inventoryItemCreatorMover, 'addItem');
+      showSuccessStub = sinon.stub(inventoryItemCreatorMover, 'showSuccess');
+    });
+
+    afterEach(() => {
+      sinon.restore();
+    });
+
+    describe('when form cannot be submitted', () => {
+      beforeEach(async () => {
+        el.openDialog('drawer_kitchen');
+        el.itemTitle = '';
+        el.itemIdentifier = '';
+        await el.updateComplete;
+
+        // Click submit button (should be disabled, but test the handler)
+        const addBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-primary');
+        addBtn?.click();
+        await el.updateComplete;
+      });
+
+      it('should not call addItem', () => {
+        expect(addItemStub).to.not.have.been.called;
+      });
+    });
+
+    describe('when submission succeeds', () => {
+      let closeSpy: sinon.SinonSpy;
+
+      beforeEach(async () => {
+        addItemStub.resolves({
+          success: true,
+          itemIdentifier: 'screwdriver',
+          summary: 'Added Screwdriver to drawer_kitchen',
+        });
+
+        el.openDialog('drawer_kitchen');
+        el.itemTitle = 'Screwdriver';
+        el.itemIdentifier = 'screwdriver';
+        el.description = 'A handy tool';
+        el.isUnique = true;
+        await el.updateComplete;
+
+        closeSpy = sinon.spy(el, 'close');
+
+        const addBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-primary');
+        addBtn?.click();
+        await el.updateComplete;
+      });
+
+      it('should call addItem with correct parameters', () => {
+        expect(addItemStub).to.have.been.calledWith(
+          'drawer_kitchen',
+          'screwdriver',
+          'Screwdriver',
+          'A handy tool'
+        );
+      });
+
+      it('should show success message', () => {
+        expect(showSuccessStub).to.have.been.called;
+      });
+
+      it('should use response summary in success message', () => {
+        expect(showSuccessStub.firstCall.args[0]).to.equal('Added Screwdriver to drawer_kitchen');
+      });
+
+      it('should close the dialog', () => {
+        expect(closeSpy).to.have.been.calledOnce;
+      });
+
+      it('should set loading to false', () => {
+        expect(el.loading).to.be.false;
+      });
+    });
+
+    describe('when submission succeeds without custom summary', () => {
+      beforeEach(async () => {
+        addItemStub.resolves({
+          success: true,
+          itemIdentifier: 'screwdriver',
+          summary: undefined,
+        });
+
+        el.openDialog('drawer_kitchen');
+        el.itemTitle = 'Screwdriver';
+        el.itemIdentifier = 'screwdriver';
+        el.isUnique = true;
+        await el.updateComplete;
+
+        const addBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-primary');
+        addBtn?.click();
+        await el.updateComplete;
+      });
+
+      it('should use fallback success message', () => {
+        expect(showSuccessStub.firstCall.args[0]).to.equal('Added Screwdriver to drawer_kitchen');
+      });
+    });
+
+    describe('when submission succeeds without description', () => {
+      beforeEach(async () => {
+        addItemStub.resolves({
+          success: true,
+          itemIdentifier: 'screwdriver',
+        });
+
+        el.openDialog('drawer_kitchen');
+        el.itemTitle = 'Screwdriver';
+        el.itemIdentifier = 'screwdriver';
+        el.description = '';
+        el.isUnique = true;
+        await el.updateComplete;
+
+        const addBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-primary');
+        addBtn?.click();
+        await el.updateComplete;
+      });
+
+      it('should call addItem with undefined description', () => {
+        expect(addItemStub).to.have.been.calledWith(
+          'drawer_kitchen',
+          'screwdriver',
+          'Screwdriver',
+          undefined
+        );
+      });
+    });
+
+    describe('when submission fails with error', () => {
+      let testError: Error;
+
+      beforeEach(async () => {
+        testError = new Error('Item creation failed');
+        addItemStub.resolves({
+          success: false,
+          error: testError,
+        });
+
+        el.openDialog('drawer_kitchen');
+        el.itemTitle = 'Screwdriver';
+        el.itemIdentifier = 'screwdriver';
+        el.isUnique = true;
+        await el.updateComplete;
+
+        const addBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-primary');
+        addBtn?.click();
+        await el.updateComplete;
+      });
+
+      it('should set error', () => {
+        expect(el.error).to.equal(testError);
+      });
+
+      it('should set loading to false', () => {
+        expect(el.loading).to.be.false;
+      });
+
+      it('should not close the dialog', () => {
+        expect(el.open).to.be.true;
+      });
+    });
+
+    describe('when submission fails without error object', () => {
+      let thrownError: Error | null;
+
+      beforeEach(async () => {
+        addItemStub.resolves({
+          success: false,
+          error: undefined,
+        });
+
+        el.openDialog('drawer_kitchen');
+        el.itemTitle = 'Screwdriver';
+        el.itemIdentifier = 'screwdriver';
+        el.isUnique = true;
+        await el.updateComplete;
+
+        thrownError = null;
+
+        // Wrap the submit call in a promise that catches the error
+        try {
+          // Access the private method directly to catch the thrown error
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+          await (el as unknown as { _handleSubmit: () => Promise<void> })._handleSubmit();
+        } catch (err) {
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- coercing caught error for testing
+          thrownError = err as Error;
+        }
+      });
+
+      it('should throw an error', () => {
+        expect(thrownError).to.be.instanceOf(Error);
+      });
+
+      it('should include descriptive error message', () => {
+        expect(thrownError?.message).to.contain('success=false without an error');
+      });
+    });
+  });
+
+  describe('switch to manual mode from automagic error', () => {
+    beforeEach(async () => {
+      el = await fixture<InventoryAddItemDialog>(html`<inventory-add-item-dialog></inventory-add-item-dialog>`);
+      await el.updateComplete;
+    });
+
+    afterEach(() => {
+      sinon.restore();
+    });
+
+    describe('when _handleSwitchToManual is called', () => {
+      beforeEach(async () => {
+        el.openDialog('drawer_kitchen');
+        el.automagicMode = true;
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
+        el.automagicError = {
+          original: new Error('Test'),
+          context: 'testing',
+          errorKind: 'SERVER',
+          message: 'Test error',
+          icon: 'server',
+          details: '',
+        } as import('./augment-error-service.js').AugmentedError;
+        el.itemIdentifier = 'auto_generated';
+        await el.updateComplete;
+
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+        (el as unknown as { _handleSwitchToManual: () => void })._handleSwitchToManual();
+        await el.updateComplete;
+      });
+
+      it('should set automagicMode to false', () => {
+        expect(el.automagicMode).to.be.false;
+      });
+
+      it('should clear automagicError', () => {
+        expect(el.automagicError).to.be.null;
+      });
+
+      it('should clear itemIdentifier', () => {
+        expect(el.itemIdentifier).to.equal('');
+      });
+    });
+  });
+
+  describe('debounce timer cleanup', () => {
+    let clock: sinon.SinonFakeTimers;
+    let generateIdentifierStub: SinonStub;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private property for testing
+    let inventoryItemCreatorMover: any;
+
+    beforeEach(async () => {
+      clock = sinon.useFakeTimers();
+      el = await fixture<InventoryAddItemDialog>(html`<inventory-add-item-dialog></inventory-add-item-dialog>`);
+      await el.updateComplete;
+
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+      inventoryItemCreatorMover = (el as any).inventoryItemCreatorMover as InventoryItemCreatorMover;
+      generateIdentifierStub = sinon.stub(inventoryItemCreatorMover, 'generateIdentifier');
+      generateIdentifierStub.resolves({ identifier: 'test', isUnique: true });
+    });
+
+    afterEach(() => {
+      clock.restore();
+      sinon.restore();
+    });
+
+    describe('when component is disconnected with pending timers', () => {
+      beforeEach(async () => {
+        el.openDialog('drawer_kitchen');
+        el.automagicMode = false;
+        await el.updateComplete;
+
+        // Trigger identifier input to start a timer
+        const identifierInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[name="itemIdentifier"]');
+        if (identifierInput) {
+          identifierInput.value = 'test';
+          identifierInput.dispatchEvent(new Event('input'));
+        }
+
+        // Remove component before timer fires
+        el.remove();
+        await clock.tickAsync(350);
+      });
+
+      it('should not call generateIdentifier after disconnect', () => {
+        expect(generateIdentifierStub).to.not.have.been.called;
+      });
+    });
+
+    describe('when close is called with pending timers', () => {
+      beforeEach(async () => {
+        el.openDialog('drawer_kitchen');
+        el.automagicMode = false;
+        await el.updateComplete;
+
+        // Trigger identifier input to start a timer
+        const identifierInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[name="itemIdentifier"]');
+        if (identifierInput) {
+          identifierInput.value = 'test';
+          identifierInput.dispatchEvent(new Event('input'));
+        }
+
+        // Close before timer fires
+        el.close();
+        await clock.tickAsync(350);
+      });
+
+      it('should not call generateIdentifier after close', () => {
+        expect(generateIdentifierStub).to.not.have.been.called;
+      });
+    });
+
+    describe('when rapid title input occurs', () => {
+      beforeEach(async () => {
+        el.openDialog('drawer_kitchen');
+        el.automagicMode = true;
+        await el.updateComplete;
+
+        const titleInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[name="title"]');
+        if (titleInput) {
+          // Rapid input - each should cancel the previous timer
+          titleInput.value = 'a';
+          titleInput.dispatchEvent(new Event('input'));
+          await clock.tickAsync(100);
+
+          titleInput.value = 'ab';
+          titleInput.dispatchEvent(new Event('input'));
+          await clock.tickAsync(100);
+
+          titleInput.value = 'abc';
+          titleInput.dispatchEvent(new Event('input'));
+          await clock.tickAsync(350);
+        }
+      });
+
+      it('should only call generateIdentifier once with final value', () => {
+        expect(generateIdentifierStub).to.have.been.calledOnce;
+        expect(generateIdentifierStub).to.have.been.calledWith('abc');
+      });
+    });
+  });
+
+  describe('search with empty query', () => {
+    let searchContentStub: SinonStub;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private property for testing
+    let searchClient: any;
+
+    beforeEach(async () => {
+      el = await fixture<InventoryAddItemDialog>(html`<inventory-add-item-dialog></inventory-add-item-dialog>`);
+      await el.updateComplete;
+
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+      searchClient = (el as any).searchClient;
+      searchContentStub = sinon.stub(searchClient, 'searchContent');
+    });
+
+    afterEach(() => {
+      sinon.restore();
+    });
+
+    describe('when _performSearch is called with empty query', () => {
+      beforeEach(async () => {
+        el.openDialog('drawer_kitchen');
+        el.searchResults = [
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
+          { identifier: 'item1', title: 'Item', fragment: '', highlights: [], frontmatter: {} } as unknown as import('../gen/api/v1/search_pb.js').SearchResult,
+        ];
+        await el.updateComplete;
+
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+        await (el as unknown as { _performSearch: (query: string) => Promise<void> })._performSearch('');
+        await el.updateComplete;
+      });
+
+      it('should clear searchResults', () => {
+        expect(el.searchResults).to.deep.equal([]);
+      });
+
+      it('should not call searchContent', () => {
+        expect(searchContentStub).to.not.have.been.called;
       });
     });
   });

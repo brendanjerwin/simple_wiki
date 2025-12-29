@@ -3,7 +3,7 @@ import { PageDeleter } from './page-deletion-service.js';
 import './confirmation-dialog.js'; // Ensure custom element is defined
 import sinon from 'sinon';
 
-describe.skip('PageDeleter', () => {
+describe('PageDeleter', () => {
   let service: PageDeleter;
   let mockDialog: {
     openDialog: sinon.SinonSpy;
@@ -58,8 +58,11 @@ describe.skip('PageDeleter', () => {
       expect(createElementStub).to.have.been.calledWith('confirmation-dialog');
     });
 
-    it('should set dialog properties', () => {
+    it('should set dialog id', () => {
       expect(mockDialog.id).to.equal('page-deletion-dialog');
+    });
+
+    it('should set dialog as hidden', () => {
       expect(mockDialog.hidden).to.be.true;
     });
 
@@ -117,7 +120,7 @@ describe.skip('PageDeleter', () => {
           confirmText: 'Delete Page',
           cancelText: 'Cancel',
           confirmVariant: 'danger',
-          icon: '⚠️',
+          icon: 'warning',
           irreversible: true
         });
       });
@@ -128,19 +131,25 @@ describe.skip('PageDeleter', () => {
     });
 
     describe('when called with empty page name', () => {
-      let consoleErrorStub: sinon.SinonStub;
+      let thrownError: Error | undefined;
 
       beforeEach(() => {
-        consoleErrorStub = sinon.stub(console, 'error');
-        service.confirmAndDeletePage('');
+        try {
+          service.confirmAndDeletePage('');
+        } catch (err) {
+          thrownError = err as Error;
+        }
       });
 
-      afterEach(() => {
-        consoleErrorStub.restore();
+      it('should throw an error', () => {
+        expect(thrownError).to.exist;
       });
 
-      it('should log error and not open dialog', () => {
-        expect(consoleErrorStub).to.have.been.calledWith('PageDeleter: pageName is required');
+      it('should throw with correct message', () => {
+        expect(thrownError?.message).to.equal('PageDeleter: pageName is required');
+      });
+
+      it('should not open dialog', () => {
         expect(mockDialog.openDialog).to.not.have.been.called;
       });
     });
@@ -173,22 +182,26 @@ describe.skip('PageDeleter', () => {
 
     describe('when confirm event is dispatched', () => {
       describe('when no page name is stored', () => {
-        let consoleErrorStub: sinon.SinonStub;
+        let thrownError: Error | undefined;
 
-        beforeEach(() => {
+        beforeEach(async () => {
           delete mockDialog.dataset.pageName;
-          consoleErrorStub = sinon.stub(console, 'error');
-          
-          const confirmEvent = new CustomEvent('confirm');
-          confirmHandler(confirmEvent);
+
+          try {
+            // handleConfirm is async, need to await it
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access -- accessing private method for testing
+            await (service as unknown as { handleConfirm: () => Promise<void> }).handleConfirm();
+          } catch (err) {
+            thrownError = err as Error;
+          }
         });
 
-        afterEach(() => {
-          consoleErrorStub.restore();
+        it('should throw an error', () => {
+          expect(thrownError).to.exist;
         });
 
-        it('should log error and return early', () => {
-          expect(consoleErrorStub).to.have.been.calledWith('PageDeleter: No page name found for deletion');
+        it('should throw with correct message', () => {
+          expect(thrownError?.message).to.equal('PageDeleter: No page name found for deletion');
         });
       });
 
@@ -198,21 +211,41 @@ describe.skip('PageDeleter', () => {
   });
 
   describe('destroy method', () => {
-    beforeEach(() => {
-      // Set up a parent node for the dialog
-      mockDialog.parentNode = { removeChild: sinon.spy() };
-      
-      service.destroy();
+    describe('when dialog has parent node', () => {
+      beforeEach(() => {
+        // Set up a parent node for the dialog
+        mockDialog.parentNode = { removeChild: sinon.spy() };
+
+        service.destroy();
+      });
+
+      it('should remove event listeners', () => {
+        expect(mockDialog.removeEventListener).to.have.been.calledWith('confirm', sinon.match.func);
+        expect(mockDialog.removeEventListener).to.have.been.calledWith('cancel', sinon.match.func);
+      });
+
+      it('should remove dialog from DOM', () => {
+        // parentNode is set in beforeEach, non-null assertion is safe here
+        expect(mockDialog.parentNode!.removeChild).to.have.been.calledWith(mockDialog);
+      });
     });
 
-    it('should remove event listeners', () => {
-      expect(mockDialog.removeEventListener).to.have.been.calledWith('confirm', sinon.match.func);
-      expect(mockDialog.removeEventListener).to.have.been.calledWith('cancel', sinon.match.func);
-    });
+    describe('when dialog has no parent node', () => {
+      beforeEach(() => {
+        mockDialog.parentNode = null;
 
-    it('should remove dialog from DOM', () => {
-      // parentNode is set in beforeEach, non-null assertion is safe here
-      expect(mockDialog.parentNode!.removeChild).to.have.been.calledWith(mockDialog);
+        service.destroy();
+      });
+
+      it('should remove event listeners', () => {
+        expect(mockDialog.removeEventListener).to.have.been.calledWith('confirm', sinon.match.func);
+        expect(mockDialog.removeEventListener).to.have.been.calledWith('cancel', sinon.match.func);
+      });
+
+      it('should not attempt to remove dialog from DOM', () => {
+        // No error should occur when parentNode is null
+        expect(service).to.exist;
+      });
     });
   });
 

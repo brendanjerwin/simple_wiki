@@ -193,6 +193,41 @@ describe('WikiSearch', () => {
     });
   });
 
+  describe('when handleSearchInputFocused is called', () => {
+    describe('when target is an HTMLInputElement', () => {
+      let inputElement: HTMLInputElement;
+      let selectSpy: sinon.SinonSpy;
+
+      beforeEach(() => {
+        inputElement = document.createElement('input');
+        inputElement.value = 'test value';
+        selectSpy = sinon.spy(inputElement, 'select');
+
+        const mockEvent = { target: inputElement } as unknown as Event;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call -- accessing internal method for testing
+        (el as any).handleSearchInputFocused(mockEvent);
+      });
+
+      it('should select the input text', () => {
+        expect(selectSpy).to.have.been.calledOnce;
+      });
+    });
+
+    describe('when target is not an HTMLInputElement', () => {
+      beforeEach(() => {
+        const divElement = document.createElement('div');
+
+        const mockEvent = { target: divElement } as unknown as Event;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call -- accessing internal method for testing
+        (el as any).handleSearchInputFocused(mockEvent);
+      });
+
+      it('should not throw', () => {
+        expect(true).to.be.true;
+      });
+    });
+  });
+
   describe('when searching', () => {
     let form: HTMLFormElement | null;
     let searchInput: HTMLInputElement | null;
@@ -233,6 +268,98 @@ describe('WikiSearch', () => {
 
       it('should not perform search', () => {
         expect(el.loading).to.be.false;
+      });
+    });
+
+    describe('when event target is not an HTMLFormElement', () => {
+      let performSearchStub: sinon.SinonStub;
+
+      beforeEach(() => {
+        performSearchStub = sinon.stub(el, 'performSearch');
+        performSearchStub.resolves({ results: [], totalUnfilteredCount: 0 });
+
+        // Create a mock event with a non-form target
+        const mockEvent = {
+          target: document.createElement('div'),
+          preventDefault: sinon.stub()
+        } as unknown as Event;
+
+        // This returns early before any async code due to the type guard
+        void el.handleFormSubmit(mockEvent);
+      });
+
+      afterEach(() => {
+        performSearchStub.restore();
+      });
+
+      it('should not perform search', () => {
+        expect(performSearchStub).to.not.have.been.called;
+      });
+
+      it('should not set loading state', () => {
+        expect(el.loading).to.be.false;
+      });
+    });
+
+    describe('when search returns no results', () => {
+      let stubPerformSearch: sinon.SinonStub;
+
+      beforeEach(async () => {
+        stubPerformSearch = sinon.stub(el, 'performSearch');
+        stubPerformSearch.resolves({ results: [], totalUnfilteredCount: 0 });
+
+        if (searchInput) searchInput.value = 'no results query';
+        const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+        form?.dispatchEvent(submitEvent);
+
+        await waitUntil(() => !el.loading, 'Search should complete');
+        await el.updateComplete;
+      });
+
+      afterEach(() => {
+        stubPerformSearch.restore();
+      });
+
+      it('should set noResults to true', () => {
+        expect(el.noResults).to.be.true;
+      });
+
+      it('should have empty results', () => {
+        expect(el.results).to.deep.equal([]);
+      });
+    });
+
+    describe('when search returns results', () => {
+      let stubPerformSearch: sinon.SinonStub;
+      const mockResults = [{ identifier: 'test', title: 'Test Result' }];
+
+      beforeEach(async () => {
+        stubPerformSearch = sinon.stub(el, 'performSearch');
+        stubPerformSearch.resolves({ results: mockResults, totalUnfilteredCount: 1 });
+
+        if (searchInput) searchInput.value = 'test query';
+        const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+        form?.dispatchEvent(submitEvent);
+
+        await waitUntil(() => !el.loading, 'Search should complete');
+        await el.updateComplete;
+      });
+
+      afterEach(() => {
+        stubPerformSearch.restore();
+      });
+
+      it('should set noResults to false', () => {
+        expect(el.noResults).to.be.false;
+      });
+
+      it('should populate results', () => {
+        expect(el.results.length).to.equal(1);
+        expect(el.results[0].identifier).to.equal('test');
+      });
+
+      it('should set totalUnfilteredCount', () => {
+        expect(el.totalUnfilteredCount).to.equal(1);
       });
     });
 
@@ -311,6 +438,58 @@ describe('WikiSearch', () => {
       it('should set error property', () => {
         expect(el.error?.message).to.equal('Network error');
       });
+    });
+  });
+
+  describe('when handleSearchResultsClosed is called', () => {
+    let stubPerformSearch: sinon.SinonStub;
+    let form: HTMLFormElement | null;
+    let searchInput: HTMLInputElement | null;
+    let focusSpy: sinon.SinonSpy;
+
+    beforeEach(async () => {
+      await el.updateComplete;
+      form = el.shadowRoot?.querySelector<HTMLFormElement>('form') ?? null;
+      searchInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[type="search"]') ?? null;
+
+      // Set up stub first before any search is triggered
+      stubPerformSearch = sinon.stub(el, 'performSearch');
+      stubPerformSearch.resolves({ results: [{ identifier: 'test', title: 'Test' }], totalUnfilteredCount: 1 });
+
+      if (searchInput) {
+        focusSpy = sinon.spy(searchInput, 'focus');
+        searchInput.value = 'test';
+      }
+
+      // Perform a search to populate results
+      const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+      form?.dispatchEvent(submitEvent);
+      await waitUntil(() => !el.loading, 'Search should complete');
+      await el.updateComplete;
+
+      // Reset focus spy to only track the close action
+      focusSpy?.resetHistory();
+
+      // Now trigger the close event
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call -- accessing internal method for testing
+      (el as any).handleSearchResultsClosed();
+      await el.updateComplete;
+    });
+
+    afterEach(() => {
+      stubPerformSearch.restore();
+    });
+
+    it('should clear results', () => {
+      expect(el.results).to.deep.equal([]);
+    });
+
+    it('should set noResults to false', () => {
+      expect(el.noResults).to.be.false;
+    });
+
+    it('should focus the search input', () => {
+      expect(focusSpy).to.have.been.calledOnce;
     });
   });
 

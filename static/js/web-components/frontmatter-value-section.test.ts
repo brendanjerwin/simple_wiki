@@ -2,6 +2,7 @@ import { fixture, html, expect } from '@open-wc/testing';
 import { TemplateResult } from 'lit';
 import { restore } from 'sinon';
 import { FrontmatterValueSection } from './frontmatter-value-section.js';
+import type { AugmentedError } from './augment-error-service.js';
 
 async function createFixtureWithTimeout(template: TemplateResult, timeoutMs = 5000): Promise<FrontmatterValueSection> {
   const timeout = (ms: number, message: string) =>
@@ -383,6 +384,100 @@ describe('FrontmatterValueSection', () => {
       const removeButtons = el.shadowRoot?.querySelectorAll<HTMLButtonElement>('.remove-field-button');
       removeButtons!.forEach(button => {
         expect(button.disabled).to.be.true;
+      });
+    });
+  });
+
+  describe('_typePriorityCompare', () => {
+    describe('when comparing unknown types', () => {
+      let result: number;
+
+      beforeEach(async () => {
+        el = await createFixtureWithTimeout(html`<frontmatter-value-section></frontmatter-value-section>`);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-explicit-any -- accessing private method for testing nullish coalescing fallback
+        result = (el as any)._typePriorityCompare('unknownType', 'anotherUnknown');
+      });
+
+      it('should return 0 when both types are unknown', () => {
+        expect(result).to.equal(0);
+      });
+    });
+
+    describe('when comparing unknown type with known type', () => {
+      let result: number;
+
+      beforeEach(async () => {
+        el = await createFixtureWithTimeout(html`<frontmatter-value-section></frontmatter-value-section>`);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-explicit-any -- accessing private method for testing nullish coalescing fallback
+        result = (el as any)._typePriorityCompare('unknownType', 'array');
+      });
+
+      it('should treat unknown type as priority 0 (same as string)', () => {
+        // unknown (0) - array (1) = -1
+        expect(result).to.equal(-1);
+      });
+    });
+
+    describe('when comparing known type with unknown type', () => {
+      let result: number;
+
+      beforeEach(async () => {
+        el = await createFixtureWithTimeout(html`<frontmatter-value-section></frontmatter-value-section>`);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-explicit-any -- accessing private method for testing nullish coalescing fallback
+        result = (el as any)._typePriorityCompare('object', 'unknownType');
+      });
+
+      it('should treat unknown type as priority 0', () => {
+        // object (2) - unknown (0) = 2
+        expect(result).to.equal(2);
+      });
+    });
+  });
+
+  describe('_generateUniqueKey', () => {
+    describe('when max iterations is exceeded', () => {
+      let thrownError: Error | null;
+
+      beforeEach(async () => {
+        // Clean up any existing kernel-panic elements
+        document.querySelectorAll('kernel-panic').forEach(el => el.remove());
+
+        thrownError = null;
+
+        el = await createFixtureWithTimeout(html`<frontmatter-value-section></frontmatter-value-section>`);
+
+        // Create fields object that will cause max iterations to be exceeded
+        // by having all possible key variations already exist
+        const fields: Record<string, string> = { 'test_key': 'value' };
+        for (let i = 1; i <= 1001; i++) {
+          fields[`test_key_${i}`] = 'value';
+        }
+        el.fields = fields;
+
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-explicit-any -- accessing private method to test max iteration limit
+          (el as any)._generateUniqueKey('test_key');
+        } catch (e) {
+          thrownError = e instanceof Error ? e : null;
+        }
+      });
+
+      afterEach(() => {
+        // Clean up created kernel-panic elements
+        document.querySelectorAll('kernel-panic').forEach(el => el.remove());
+      });
+
+      it('should create kernel-panic element with augmented error', () => {
+        const kernelPanicElement = document.querySelector<HTMLElement & { augmentedError: AugmentedError }>('kernel-panic');
+        expect(kernelPanicElement).to.exist;
+        expect(kernelPanicElement!.augmentedError).to.exist;
+        expect(kernelPanicElement!.augmentedError.failedGoalDescription).to.equal('generating unique key');
+      });
+
+      it('should throw an error with descriptive message', () => {
+        expect(thrownError).to.exist;
+        expect(thrownError?.message).to.include('Maximum iteration limit exceeded');
+        expect(thrownError?.message).to.include('test_key');
       });
     });
   });

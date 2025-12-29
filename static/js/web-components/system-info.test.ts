@@ -609,3 +609,826 @@ describe('SystemInfo', () => {
     });
   });
 });
+
+/**
+ * Mock SystemInfo client for error handling tests
+ */
+interface MockSystemInfoClient {
+  getVersion: SinonStub;
+  getJobStatus: SinonStub;
+  streamJobStatus: SinonStub;
+}
+
+function createMockClient(): MockSystemInfoClient {
+  return {
+    getVersion: stub(),
+    getJobStatus: stub(),
+    streamJobStatus: stub(),
+  };
+}
+
+/**
+ * Interface for accessing private properties for testing
+ */
+interface SystemInfoPrivateAccess {
+  client: MockSystemInfoClient;
+  reloadVersionOnly: () => Promise<void>;
+  loadSystemInfo: () => Promise<void>;
+  startJobStream: () => Promise<void>;
+  startAutoRefresh: () => void;
+  stopAutoRefresh: () => void;
+  stopJobStream: () => void;
+  streamSubscription?: AbortController;
+}
+
+describe('SystemInfo error handling', () => {
+  let el: SystemInfo;
+  let mockClient: MockSystemInfoClient;
+  let clock: SinonFakeTimers;
+  let startAutoRefreshStub: SinonStub;
+  let stopAutoRefreshStub: SinonStub;
+  let stopJobStreamStub: SinonStub;
+
+  beforeEach(() => {
+    clock = useFakeTimers();
+  });
+
+  afterEach(() => {
+    clock.restore();
+    if (startAutoRefreshStub) startAutoRefreshStub.restore();
+    if (stopAutoRefreshStub) stopAutoRefreshStub.restore();
+    if (stopJobStreamStub) stopJobStreamStub.restore();
+    if (el && el.parentNode) {
+      el.parentNode.removeChild(el);
+    }
+  });
+
+  describe('loadSystemInfo', () => {
+    describe('when getVersion throws an error', () => {
+      let testError: Error;
+
+      beforeEach(async () => {
+        testError = new Error('Connection refused');
+
+        // Create element without connecting it to DOM
+        el = document.createElement('system-info') as SystemInfo;
+
+        // Create mock client with error response
+        mockClient = createMockClient();
+        mockClient.getVersion.rejects(testError);
+
+        // Stub lifecycle methods before connection
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private methods for stubbing
+        startAutoRefreshStub = stub(el, 'startAutoRefresh' as keyof SystemInfo);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private methods for stubbing
+        stopAutoRefreshStub = stub(el, 'stopAutoRefresh' as keyof SystemInfo);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private methods for stubbing
+        stopJobStreamStub = stub(el, 'stopJobStream' as keyof SystemInfo);
+
+        // Replace the client before loadSystemInfo is called
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+        (el as unknown as SystemInfoPrivateAccess).client = mockClient;
+
+        // Add to DOM (this triggers connectedCallback -> loadSystemInfo)
+        document.body.appendChild(el);
+
+        // Wait for connectedCallback's loadSystemInfo to complete
+        await clock.tickAsync(0);
+        await el.updateComplete;
+      });
+
+      it('should set the error property', () => {
+        expect(el.error).to.exist;
+        expect(el.error?.message).to.equal('Connection refused');
+      });
+
+      it('should set loading to false', () => {
+        expect(el.loading).to.be.false;
+      });
+
+      it('should start auto refresh as fallback', () => {
+        expect(startAutoRefreshStub).to.have.been.called;
+      });
+
+      it('should display error in version component', () => {
+        const versionComponent = el.shadowRoot!.querySelector('system-info-version');
+        expect(versionComponent).to.exist;
+        expect(versionComponent!.error?.message).to.equal('Connection refused');
+      });
+    });
+
+    describe('when getJobStatus throws an error', () => {
+      let testError: Error;
+
+      beforeEach(async () => {
+        testError = new Error('Server unavailable');
+
+        // Create element without connecting it to DOM
+        el = document.createElement('system-info') as SystemInfo;
+
+        // Create mock client
+        mockClient = createMockClient();
+        // getVersion succeeds
+        mockClient.getVersion.resolves(create(GetVersionResponseSchema, {
+          commit: 'abc123',
+          buildTime: create(TimestampSchema, {})
+        }));
+        // getJobStatus fails
+        mockClient.getJobStatus.rejects(testError);
+
+        // Stub lifecycle methods before connection
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private methods for stubbing
+        startAutoRefreshStub = stub(el, 'startAutoRefresh' as keyof SystemInfo);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private methods for stubbing
+        stopAutoRefreshStub = stub(el, 'stopAutoRefresh' as keyof SystemInfo);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private methods for stubbing
+        stopJobStreamStub = stub(el, 'stopJobStream' as keyof SystemInfo);
+
+        // Replace the client before loadSystemInfo is called
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+        (el as unknown as SystemInfoPrivateAccess).client = mockClient;
+
+        // Add to DOM (this triggers connectedCallback -> loadSystemInfo)
+        document.body.appendChild(el);
+
+        // Wait for connectedCallback's loadSystemInfo to complete
+        await clock.tickAsync(0);
+        await el.updateComplete;
+      });
+
+      it('should set the error property', () => {
+        expect(el.error).to.exist;
+        expect(el.error?.message).to.equal('Server unavailable');
+      });
+
+      it('should set loading to false', () => {
+        expect(el.loading).to.be.false;
+      });
+
+      it('should start auto refresh as fallback', () => {
+        expect(startAutoRefreshStub).to.have.been.called;
+      });
+    });
+
+    describe('when error is a non-Error object', () => {
+      beforeEach(async () => {
+        // Create element without connecting it to DOM
+        el = document.createElement('system-info') as SystemInfo;
+
+        // Create mock client
+        mockClient = createMockClient();
+        // Use callsFake to reject with a non-Error object directly
+        mockClient.getVersion.callsFake(() => Promise.reject({ code: 'UNAVAILABLE' }));
+
+        // Stub lifecycle methods before connection
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private methods for stubbing
+        startAutoRefreshStub = stub(el, 'startAutoRefresh' as keyof SystemInfo);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private methods for stubbing
+        stopAutoRefreshStub = stub(el, 'stopAutoRefresh' as keyof SystemInfo);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private methods for stubbing
+        stopJobStreamStub = stub(el, 'stopJobStream' as keyof SystemInfo);
+
+        // Replace the client before loadSystemInfo is called
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+        (el as unknown as SystemInfoPrivateAccess).client = mockClient;
+
+        // Add to DOM (this triggers connectedCallback -> loadSystemInfo)
+        document.body.appendChild(el);
+
+        await clock.tickAsync(0);
+        await el.updateComplete;
+      });
+
+      it('should convert to Error object', () => {
+        expect(el.error).to.be.instanceOf(Error);
+        // The error message will be the stringified version of the object
+        expect(el.error?.message).to.equal('[object Object]');
+      });
+    });
+  });
+
+  describe('reloadVersionOnly', () => {
+    describe('when getVersion throws an error', () => {
+      let testError: Error;
+      let privateAccess: SystemInfoPrivateAccess;
+
+      beforeEach(async () => {
+        // Create element without connecting it to DOM
+        el = document.createElement('system-info') as SystemInfo;
+
+        // Create mock client - initial load succeeds
+        mockClient = createMockClient();
+        mockClient.getVersion.resolves(create(GetVersionResponseSchema, {
+          commit: 'abc123',
+          buildTime: create(TimestampSchema, {})
+        }));
+        mockClient.getJobStatus.resolves(create(GetJobStatusResponseSchema, {
+          jobQueues: []
+        }));
+
+        // Stub lifecycle methods before connection
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private methods for stubbing
+        startAutoRefreshStub = stub(el, 'startAutoRefresh' as keyof SystemInfo);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private methods for stubbing
+        stopAutoRefreshStub = stub(el, 'stopAutoRefresh' as keyof SystemInfo);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private methods for stubbing
+        stopJobStreamStub = stub(el, 'stopJobStream' as keyof SystemInfo);
+
+        // Replace the client before loadSystemInfo is called
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+        (el as unknown as SystemInfoPrivateAccess).client = mockClient;
+
+        // Add to DOM (this triggers connectedCallback -> loadSystemInfo)
+        document.body.appendChild(el);
+
+        await clock.tickAsync(0);
+        await el.updateComplete;
+
+        // Clear error from any previous calls
+        el.error = null;
+        await el.updateComplete;
+
+        // Now make getVersion fail for reload
+        testError = new Error('Network timeout');
+        mockClient.getVersion.rejects(testError);
+
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+        privateAccess = el as unknown as SystemInfoPrivateAccess;
+        await privateAccess.reloadVersionOnly();
+        await el.updateComplete;
+      });
+
+      it('should set the error property', () => {
+        expect(el.error).to.exist;
+        expect(el.error?.message).to.equal('Network timeout');
+      });
+
+      it('should display error in version component', () => {
+        const versionComponent = el.shadowRoot!.querySelector('system-info-version');
+        expect(versionComponent).to.exist;
+        expect(versionComponent!.error?.message).to.equal('Network timeout');
+      });
+    });
+
+    describe('when error is a non-Error object', () => {
+      let privateAccess: SystemInfoPrivateAccess;
+
+      beforeEach(async () => {
+        // Create element without connecting it to DOM
+        el = document.createElement('system-info') as SystemInfo;
+
+        // Create mock client - initial load succeeds
+        mockClient = createMockClient();
+        mockClient.getVersion.resolves(create(GetVersionResponseSchema, {
+          commit: 'abc123',
+          buildTime: create(TimestampSchema, {})
+        }));
+        mockClient.getJobStatus.resolves(create(GetJobStatusResponseSchema, {
+          jobQueues: []
+        }));
+
+        // Stub lifecycle methods before connection
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private methods for stubbing
+        startAutoRefreshStub = stub(el, 'startAutoRefresh' as keyof SystemInfo);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private methods for stubbing
+        stopAutoRefreshStub = stub(el, 'stopAutoRefresh' as keyof SystemInfo);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private methods for stubbing
+        stopJobStreamStub = stub(el, 'stopJobStream' as keyof SystemInfo);
+
+        // Replace the client before loadSystemInfo is called
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+        (el as unknown as SystemInfoPrivateAccess).client = mockClient;
+
+        // Add to DOM (this triggers connectedCallback -> loadSystemInfo)
+        document.body.appendChild(el);
+
+        await clock.tickAsync(0);
+        await el.updateComplete;
+
+        // Now make getVersion fail with non-Error
+        mockClient.getVersion.rejects({ code: 'UNAVAILABLE' });
+
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+        privateAccess = el as unknown as SystemInfoPrivateAccess;
+        await privateAccess.reloadVersionOnly();
+        await el.updateComplete;
+      });
+
+      it('should convert to Error object', () => {
+        expect(el.error).to.be.instanceOf(Error);
+      });
+    });
+  });
+
+  describe('stopAutoRefresh', () => {
+    describe('when refresh timer exists', () => {
+      let privateAccess: SystemInfoPrivateAccess;
+
+      beforeEach(async () => {
+        // Create element without connecting it to DOM
+        el = document.createElement('system-info') as SystemInfo;
+
+        // Create mock client - initial load succeeds
+        mockClient = createMockClient();
+        mockClient.getVersion.resolves(create(GetVersionResponseSchema, {
+          commit: 'abc123',
+          buildTime: create(TimestampSchema, {})
+        }));
+        mockClient.getJobStatus.resolves(create(GetJobStatusResponseSchema, {
+          jobQueues: []
+        }));
+
+        // Stub lifecycle methods before connection except stopAutoRefresh
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private methods for stubbing
+        startAutoRefreshStub = stub(el, 'startAutoRefresh' as keyof SystemInfo);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private methods for stubbing
+        stopJobStreamStub = stub(el, 'stopJobStream' as keyof SystemInfo);
+
+        // Replace the client before loadSystemInfo is called
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+        (el as unknown as SystemInfoPrivateAccess).client = mockClient;
+
+        // Add to DOM (this triggers connectedCallback -> loadSystemInfo)
+        document.body.appendChild(el);
+
+        await clock.tickAsync(0);
+        await el.updateComplete;
+
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+        privateAccess = el as unknown as SystemInfoPrivateAccess;
+
+        // Manually set a refresh timer to test cleanup
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-type-assertion -- setting private property for testing
+        (el as any).refreshTimer = setInterval(() => {}, 1000);
+
+        // Call stopAutoRefresh
+        privateAccess.stopAutoRefresh();
+      });
+
+      it('should clear the refresh timer', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+        expect((el as any).refreshTimer).to.be.undefined;
+      });
+    });
+
+    describe('when refresh timer does not exist', () => {
+      let privateAccess: SystemInfoPrivateAccess;
+
+      beforeEach(async () => {
+        // Create element without connecting it to DOM
+        el = document.createElement('system-info') as SystemInfo;
+
+        // Create mock client - initial load succeeds
+        mockClient = createMockClient();
+        mockClient.getVersion.resolves(create(GetVersionResponseSchema, {
+          commit: 'abc123',
+          buildTime: create(TimestampSchema, {})
+        }));
+        mockClient.getJobStatus.resolves(create(GetJobStatusResponseSchema, {
+          jobQueues: []
+        }));
+
+        // Stub lifecycle methods before connection except stopAutoRefresh
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private methods for stubbing
+        startAutoRefreshStub = stub(el, 'startAutoRefresh' as keyof SystemInfo);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private methods for stubbing
+        stopJobStreamStub = stub(el, 'stopJobStream' as keyof SystemInfo);
+
+        // Replace the client before loadSystemInfo is called
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+        (el as unknown as SystemInfoPrivateAccess).client = mockClient;
+
+        // Add to DOM (this triggers connectedCallback -> loadSystemInfo)
+        document.body.appendChild(el);
+
+        await clock.tickAsync(0);
+        await el.updateComplete;
+
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+        privateAccess = el as unknown as SystemInfoPrivateAccess;
+
+        // Ensure no refresh timer exists
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-type-assertion -- setting private property for testing
+        delete (el as any).refreshTimer;
+
+        // Call stopAutoRefresh - should not throw
+        privateAccess.stopAutoRefresh();
+      });
+
+      it('should not throw', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+        expect((el as any).refreshTimer).to.be.undefined;
+      });
+    });
+  });
+
+  describe('stopJobStream', () => {
+    describe('when stream subscription exists', () => {
+      let privateAccess: SystemInfoPrivateAccess;
+      let abortSpy: SinonStub;
+
+      beforeEach(async () => {
+        // Create element without connecting it to DOM
+        el = document.createElement('system-info') as SystemInfo;
+
+        // Create mock client - initial load succeeds
+        mockClient = createMockClient();
+        mockClient.getVersion.resolves(create(GetVersionResponseSchema, {
+          commit: 'abc123',
+          buildTime: create(TimestampSchema, {})
+        }));
+        mockClient.getJobStatus.resolves(create(GetJobStatusResponseSchema, {
+          jobQueues: []
+        }));
+
+        // Stub lifecycle methods before connection except stopJobStream
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private methods for stubbing
+        startAutoRefreshStub = stub(el, 'startAutoRefresh' as keyof SystemInfo);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private methods for stubbing
+        stopAutoRefreshStub = stub(el, 'stopAutoRefresh' as keyof SystemInfo);
+
+        // Replace the client before loadSystemInfo is called
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+        (el as unknown as SystemInfoPrivateAccess).client = mockClient;
+
+        // Add to DOM (this triggers connectedCallback -> loadSystemInfo)
+        document.body.appendChild(el);
+
+        await clock.tickAsync(0);
+        await el.updateComplete;
+
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+        privateAccess = el as unknown as SystemInfoPrivateAccess;
+
+        // Manually set a stream subscription to test cleanup
+        const mockAbortController = new AbortController();
+        abortSpy = stub(mockAbortController, 'abort');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-type-assertion -- setting private property for testing
+        (el as any).streamSubscription = mockAbortController;
+
+        // Call stopJobStream
+        privateAccess.stopJobStream();
+      });
+
+      it('should abort the stream subscription', () => {
+        expect(abortSpy).to.have.been.calledOnce;
+      });
+
+      it('should delete the stream subscription', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+        expect((el as any).streamSubscription).to.be.undefined;
+      });
+    });
+
+    describe('when stream subscription does not exist', () => {
+      let privateAccess: SystemInfoPrivateAccess;
+
+      beforeEach(async () => {
+        // Create element without connecting it to DOM
+        el = document.createElement('system-info') as SystemInfo;
+
+        // Create mock client - initial load succeeds
+        mockClient = createMockClient();
+        mockClient.getVersion.resolves(create(GetVersionResponseSchema, {
+          commit: 'abc123',
+          buildTime: create(TimestampSchema, {})
+        }));
+        mockClient.getJobStatus.resolves(create(GetJobStatusResponseSchema, {
+          jobQueues: []
+        }));
+
+        // Stub lifecycle methods before connection except stopJobStream
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private methods for stubbing
+        startAutoRefreshStub = stub(el, 'startAutoRefresh' as keyof SystemInfo);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private methods for stubbing
+        stopAutoRefreshStub = stub(el, 'stopAutoRefresh' as keyof SystemInfo);
+
+        // Replace the client before loadSystemInfo is called
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+        (el as unknown as SystemInfoPrivateAccess).client = mockClient;
+
+        // Add to DOM (this triggers connectedCallback -> loadSystemInfo)
+        document.body.appendChild(el);
+
+        await clock.tickAsync(0);
+        await el.updateComplete;
+
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+        privateAccess = el as unknown as SystemInfoPrivateAccess;
+
+        // Ensure no stream subscription exists
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-type-assertion -- setting private property for testing
+        delete (el as any).streamSubscription;
+
+        // Call stopJobStream - should not throw
+        privateAccess.stopJobStream();
+      });
+
+      it('should not throw', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+        expect((el as any).streamSubscription).to.be.undefined;
+      });
+    });
+  });
+
+  describe('disconnectedCallback cleanup', () => {
+    describe('when debounce timer exists', () => {
+      beforeEach(async () => {
+        // Create element without connecting it to DOM
+        el = document.createElement('system-info') as SystemInfo;
+
+        // Create mock client - initial load succeeds
+        mockClient = createMockClient();
+        mockClient.getVersion.resolves(create(GetVersionResponseSchema, {
+          commit: 'abc123',
+          buildTime: create(TimestampSchema, {})
+        }));
+        mockClient.getJobStatus.resolves(create(GetJobStatusResponseSchema, {
+          jobQueues: []
+        }));
+
+        // Stub lifecycle methods before connection
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private methods for stubbing
+        startAutoRefreshStub = stub(el, 'startAutoRefresh' as keyof SystemInfo);
+
+        // Replace the client before loadSystemInfo is called
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+        (el as unknown as SystemInfoPrivateAccess).client = mockClient;
+
+        // Add to DOM (this triggers connectedCallback -> loadSystemInfo)
+        document.body.appendChild(el);
+
+        await clock.tickAsync(0);
+        await el.updateComplete;
+
+        // Manually set a debounce timer to test cleanup
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-type-assertion -- setting private property for testing
+        (el as any).debounceTimer = setTimeout(() => {}, 1000);
+
+        // Remove from DOM (this triggers disconnectedCallback)
+        el.parentNode?.removeChild(el);
+      });
+
+      it('should clear the debounce timer', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+        expect((el as any).debounceTimer).to.be.undefined;
+      });
+    });
+
+    describe('when debounce timer does not exist', () => {
+      beforeEach(async () => {
+        // Create element without connecting it to DOM
+        el = document.createElement('system-info') as SystemInfo;
+
+        // Create mock client - initial load succeeds
+        mockClient = createMockClient();
+        mockClient.getVersion.resolves(create(GetVersionResponseSchema, {
+          commit: 'abc123',
+          buildTime: create(TimestampSchema, {})
+        }));
+        mockClient.getJobStatus.resolves(create(GetJobStatusResponseSchema, {
+          jobQueues: []
+        }));
+
+        // Stub lifecycle methods before connection
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private methods for stubbing
+        startAutoRefreshStub = stub(el, 'startAutoRefresh' as keyof SystemInfo);
+
+        // Replace the client before loadSystemInfo is called
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+        (el as unknown as SystemInfoPrivateAccess).client = mockClient;
+
+        // Add to DOM (this triggers connectedCallback -> loadSystemInfo)
+        document.body.appendChild(el);
+
+        await clock.tickAsync(0);
+        await el.updateComplete;
+
+        // Ensure no debounce timer exists
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-type-assertion -- setting private property for testing
+        delete (el as any).debounceTimer;
+
+        // Remove from DOM (this triggers disconnectedCallback)
+        el.parentNode?.removeChild(el);
+      });
+
+      it('should not throw when no debounce timer exists', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+        expect((el as any).debounceTimer).to.be.undefined;
+      });
+    });
+  });
+
+  describe('startJobStream', () => {
+    describe('when stream throws a non-abort error', () => {
+      let privateAccess: SystemInfoPrivateAccess;
+
+      beforeEach(async () => {
+        // Create element without connecting it to DOM
+        el = document.createElement('system-info') as SystemInfo;
+
+        // Create mock client - initial load succeeds with active jobs
+        mockClient = createMockClient();
+        mockClient.getVersion.resolves(create(GetVersionResponseSchema, {
+          commit: 'abc123',
+          buildTime: create(TimestampSchema, {})
+        }));
+        mockClient.getJobStatus.resolves(create(GetJobStatusResponseSchema, {
+          jobQueues: [create(JobQueueStatusSchema, {
+            name: 'Test',
+            jobsRemaining: 10,
+            highWaterMark: 100,
+            isActive: true
+          })]
+        }));
+
+        // Stub lifecycle methods before connection
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private methods for stubbing
+        startAutoRefreshStub = stub(el, 'startAutoRefresh' as keyof SystemInfo);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private methods for stubbing
+        stopAutoRefreshStub = stub(el, 'stopAutoRefresh' as keyof SystemInfo);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private methods for stubbing
+        stopJobStreamStub = stub(el, 'stopJobStream' as keyof SystemInfo);
+
+        // Replace the client before loadSystemInfo is called
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+        (el as unknown as SystemInfoPrivateAccess).client = mockClient;
+
+        // Add to DOM (this triggers connectedCallback -> loadSystemInfo)
+        document.body.appendChild(el);
+
+        await clock.tickAsync(0);
+        await el.updateComplete;
+
+        // Clear the error and reset stubs for next call
+        el.error = null;
+        startAutoRefreshStub.resetHistory();
+        stopJobStreamStub.restore();
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for stubbing
+        stopJobStreamStub = stub(el, 'stopJobStream' as keyof SystemInfo);
+
+        // Make stream throw an error
+        const streamError = new Error('Stream connection failed');
+        // eslint-disable-next-line @typescript-eslint/require-await, require-yield -- async generator for mocking streaming errors
+        mockClient.streamJobStatus.callsFake(async function* () {
+          throw streamError;
+        });
+
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+        privateAccess = el as unknown as SystemInfoPrivateAccess;
+        await privateAccess.startJobStream();
+        await el.updateComplete;
+      });
+
+      it('should set the error property', () => {
+        expect(el.error).to.exist;
+        expect(el.error?.message).to.equal('Stream connection failed');
+      });
+
+      it('should start auto refresh as fallback', () => {
+        expect(startAutoRefreshStub).to.have.been.called;
+      });
+
+      it('should display error in version component', () => {
+        const versionComponent = el.shadowRoot!.querySelector('system-info-version');
+        expect(versionComponent).to.exist;
+        expect(versionComponent!.error?.message).to.equal('Stream connection failed');
+      });
+    });
+
+    describe('when stream throws an AbortError', () => {
+      let privateAccess: SystemInfoPrivateAccess;
+
+      beforeEach(async () => {
+        // Create element without connecting it to DOM
+        el = document.createElement('system-info') as SystemInfo;
+
+        // Create mock client - initial load succeeds
+        mockClient = createMockClient();
+        mockClient.getVersion.resolves(create(GetVersionResponseSchema, {
+          commit: 'abc123',
+          buildTime: create(TimestampSchema, {})
+        }));
+        mockClient.getJobStatus.resolves(create(GetJobStatusResponseSchema, {
+          jobQueues: [create(JobQueueStatusSchema, {
+            name: 'Test',
+            jobsRemaining: 10,
+            highWaterMark: 100,
+            isActive: true
+          })]
+        }));
+
+        // Stub lifecycle methods before connection
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private methods for stubbing
+        startAutoRefreshStub = stub(el, 'startAutoRefresh' as keyof SystemInfo);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private methods for stubbing
+        stopAutoRefreshStub = stub(el, 'stopAutoRefresh' as keyof SystemInfo);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private methods for stubbing
+        stopJobStreamStub = stub(el, 'stopJobStream' as keyof SystemInfo);
+
+        // Replace the client before loadSystemInfo is called
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+        (el as unknown as SystemInfoPrivateAccess).client = mockClient;
+
+        // Add to DOM (this triggers connectedCallback -> loadSystemInfo)
+        document.body.appendChild(el);
+
+        await clock.tickAsync(0);
+        await el.updateComplete;
+
+        // Clear the error and reset stubs
+        el.error = null;
+        startAutoRefreshStub.resetHistory();
+        stopJobStreamStub.restore();
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for stubbing
+        stopJobStreamStub = stub(el, 'stopJobStream' as keyof SystemInfo);
+
+        // Make stream throw an AbortError
+        const abortError = new Error('Aborted');
+        abortError.name = 'AbortError';
+        // eslint-disable-next-line @typescript-eslint/require-await, require-yield -- async generator for mocking streaming errors
+        mockClient.streamJobStatus.callsFake(async function* () {
+          throw abortError;
+        });
+
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+        privateAccess = el as unknown as SystemInfoPrivateAccess;
+        await privateAccess.startJobStream();
+        await el.updateComplete;
+      });
+
+      it('should not set the error property', () => {
+        expect(el.error).to.be.null;
+      });
+
+      it('should not start auto refresh', () => {
+        expect(startAutoRefreshStub).to.not.have.been.called;
+      });
+    });
+
+    describe('when stream error is a non-Error object', () => {
+      let privateAccess: SystemInfoPrivateAccess;
+
+      beforeEach(async () => {
+        // Create element without connecting it to DOM
+        el = document.createElement('system-info') as SystemInfo;
+
+        // Create mock client - initial load succeeds
+        mockClient = createMockClient();
+        mockClient.getVersion.resolves(create(GetVersionResponseSchema, {
+          commit: 'abc123',
+          buildTime: create(TimestampSchema, {})
+        }));
+        mockClient.getJobStatus.resolves(create(GetJobStatusResponseSchema, {
+          jobQueues: [create(JobQueueStatusSchema, {
+            name: 'Test',
+            jobsRemaining: 10,
+            highWaterMark: 100,
+            isActive: true
+          })]
+        }));
+
+        // Stub lifecycle methods before connection
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private methods for stubbing
+        startAutoRefreshStub = stub(el, 'startAutoRefresh' as keyof SystemInfo);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private methods for stubbing
+        stopAutoRefreshStub = stub(el, 'stopAutoRefresh' as keyof SystemInfo);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private methods for stubbing
+        stopJobStreamStub = stub(el, 'stopJobStream' as keyof SystemInfo);
+
+        // Replace the client before loadSystemInfo is called
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+        (el as unknown as SystemInfoPrivateAccess).client = mockClient;
+
+        // Add to DOM (this triggers connectedCallback -> loadSystemInfo)
+        document.body.appendChild(el);
+
+        await clock.tickAsync(0);
+        await el.updateComplete;
+
+        // Clear the error and reset stubs
+        el.error = null;
+        startAutoRefreshStub.resetHistory();
+        stopJobStreamStub.restore();
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for stubbing
+        stopJobStreamStub = stub(el, 'stopJobStream' as keyof SystemInfo);
+
+        // Make stream throw a non-Error object
+        // eslint-disable-next-line @typescript-eslint/require-await, require-yield -- async generator for mocking streaming errors
+        mockClient.streamJobStatus.callsFake(async function* () {
+          throw 'string error from stream';
+        });
+
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+        privateAccess = el as unknown as SystemInfoPrivateAccess;
+        await privateAccess.startJobStream();
+        await el.updateComplete;
+      });
+
+      it('should convert to Error object', () => {
+        expect(el.error).to.be.instanceOf(Error);
+        expect(el.error?.message).to.equal('string error from stream');
+      });
+    });
+  });
+});

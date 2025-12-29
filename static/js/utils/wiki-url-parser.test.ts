@@ -321,6 +321,42 @@ describe('WikiUrlParser', () => {
         expect(result.error).to.exist;
       });
     });
+
+    describe('when given a malformed URL', () => {
+      let result: FailureResult;
+
+      beforeEach(() => {
+        const parsed = WikiUrlParser.parse('https://[invalid-url');
+        if (parsed.success) throw new Error('Expected failure');
+        result = parsed;
+      });
+
+      it('should return success false', () => {
+        expect(result.success).to.be.false;
+      });
+
+      it('should include invalid URL format error', () => {
+        expect(result.error).to.equal('Invalid URL format');
+      });
+    });
+
+    describe('when given a path with invalid page identifier', () => {
+      let result: FailureResult;
+
+      beforeEach(() => {
+        const parsed = WikiUrlParser.parse('/123_starts_with_number');
+        if (parsed.success) throw new Error('Expected failure');
+        result = parsed;
+      });
+
+      it('should return success false', () => {
+        expect(result.success).to.be.false;
+      });
+
+      it('should include invalid page identifier error', () => {
+        expect(result.error).to.equal('Invalid page identifier: 123_starts_with_number');
+      });
+    });
   });
 
   describe('isValidPageIdentifier', () => {
