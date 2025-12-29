@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -12,7 +13,6 @@ import (
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
-	"github.com/pelletier/go-toml/v2"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -42,9 +42,9 @@ const (
 )
 
 // InventoryNormalizationDependencies defines the interfaces needed for the normalization job.
+// Uses only PageReaderMutator since ReadPage is not required for normalization operations.
 type InventoryNormalizationDependencies interface {
 	wikipage.PageReaderMutator
-	wikipage.PageOpener
 }
 
 // InventoryNormalizationJob scans for inventory anomalies and creates missing item pages.
@@ -56,17 +56,27 @@ type InventoryNormalizationJob struct {
 }
 
 // NewInventoryNormalizationJob creates a new inventory normalization job.
+// Returns an error if any required dependency is nil.
 func NewInventoryNormalizationJob(
 	deps InventoryNormalizationDependencies,
 	fmIndex frontmatter.IQueryFrontmatterIndex,
 	logger lumber.Logger,
-) *InventoryNormalizationJob {
+) (*InventoryNormalizationJob, error) {
+	if deps == nil {
+		return nil, errors.New("deps is required")
+	}
+	if fmIndex == nil {
+		return nil, errors.New("fmIndex is required")
+	}
+	if logger == nil {
+		return nil, errors.New("logger is required")
+	}
 	return &InventoryNormalizationJob{
 		normalizer: NewInventoryNormalizer(deps, logger),
 		deps:       deps,
 		fmIndex:    fmIndex,
 		logger:     logger,
-	}
+	}, nil
 }
 
 // InventoryAnomaly represents a detected anomaly in the inventory system.
@@ -112,7 +122,7 @@ func (j *InventoryNormalizationJob) Execute() error {
 
 	// Step 6: Generate audit report page
 	if err := j.generateAuditReport(anomalies, createdPages); err != nil {
-		j.logger.Error("Failed to generate audit report: %v", err)
+		return fmt.Errorf("failed to generate audit report: %w", err)
 	}
 
 	j.logger.Info("Inventory normalization complete: %d pages created, %d anomalies detected", len(createdPages), len(anomalies))
@@ -411,12 +421,16 @@ func (j *InventoryNormalizationJob) detectCircularReferences(containers []string
 }
 
 // findCycle finds a cycle starting from the given container.
+// Note: Creates explicit copies of slices to avoid shared backing array issues with append.
 func (j *InventoryNormalizationJob) findCycle(containerID string, visited map[string]bool, path []string) []string {
 	if visited[containerID] {
 		// Found a cycle - find where the cycle starts
 		for i, id := range path {
 			if id == containerID {
-				cycle := append(path[i:], containerID)
+				// Create explicit copy to avoid shared backing array
+				cycle := make([]string, len(path[i:])+1)
+				copy(cycle, path[i:])
+				cycle[len(cycle)-1] = containerID
 				return cycle
 			}
 		}
@@ -424,12 +438,16 @@ func (j *InventoryNormalizationJob) findCycle(containerID string, visited map[st
 	}
 
 	visited[containerID] = true
-	path = append(path, containerID)
+
+	// Create explicit copy of path to avoid shared backing array issues
+	newPath := make([]string, len(path)+1)
+	copy(newPath, path)
+	newPath[len(newPath)-1] = containerID
 
 	// Get the container's parent
 	parentContainer := j.fmIndex.GetValue(containerID, inventoryContainerKeyPath)
 	if parentContainer != "" {
-		return j.findCycle(parentContainer, visited, path)
+		return j.findCycle(parentContainer, visited, newPath)
 	}
 
 	return nil
@@ -487,22 +505,6 @@ func (j *InventoryNormalizationJob) generateAuditReport(anomalies []InventoryAno
 		"title":      "Inventory Audit Report",
 	}
 
-	// Build full page content with frontmatter
-	fmBytes, err := toml.Marshal(fm)
-	if err != nil {
-		return fmt.Errorf("failed to marshal frontmatter: %w", err)
-	}
-
-	var fullPage bytes.Buffer
-	_, _ = fullPage.WriteString(tomlDelimiter)
-	_, _ = fullPage.Write(fmBytes)
-	if !bytes.HasSuffix(fmBytes, []byte(newlineDelim)) {
-		_, _ = fullPage.WriteString(newlineDelim)
-	}
-	_, _ = fullPage.WriteString(tomlDelimiter)
-	_, _ = fullPage.WriteString(newlineDelim)
-	_, _ = fullPage.Write(report.Bytes())
-
 	// Write frontmatter and markdown
 	if err := j.deps.WriteFrontMatter(AuditReportPage, fm); err != nil {
 		return fmt.Errorf("failed to write audit report frontmatter: %w", err)
@@ -539,11 +541,17 @@ func formatAnomalyType(t string) string {
 //
 // This function reads frontmatter directly rather than using the index to avoid race conditions
 // where newly created items haven't been indexed yet.
+//
+// Errors during individual container processing are logged but don't stop processing of other containers.
 func (j *InventoryNormalizationJob) removeItemsFromParentContainers(containers []string) int {
 	removedCount := 0
 
 	for _, containerID := range containers {
-		removed := j.processContainerForItemRemoval(containerID)
+		removed, err := j.processContainerForItemRemoval(containerID)
+		if err != nil {
+			j.logger.Error("Failed to process container %s for item removal: %v", containerID, err)
+			continue
+		}
 		removedCount += removed
 	}
 
@@ -551,27 +559,28 @@ func (j *InventoryNormalizationJob) removeItemsFromParentContainers(containers [
 }
 
 // processContainerForItemRemoval processes a single container and removes items that have explicit container references.
-func (j *InventoryNormalizationJob) processContainerForItemRemoval(containerID string) int {
+// Returns the count of removed items and any error from the operation.
+func (j *InventoryNormalizationJob) processContainerForItemRemoval(containerID string) (int, error) {
 	// Read the container's frontmatter
 	_, containerFm, err := j.deps.ReadFrontMatter(containerID)
 	if err != nil {
-		return 0
+		return 0, nil // Container doesn't exist, not an error for this operation
 	}
 
 	inventory, ok := containerFm[inventoryKey].(map[string]any)
 	if !ok {
-		return 0
+		return 0, nil // No inventory section, nothing to do
 	}
 
 	items, ok := j.extractItemsArray(inventory)
 	if !ok || len(items) == 0 {
-		return 0
+		return 0, nil // No items array or empty, nothing to do
 	}
 
 	// Build a set of items that should be removed
 	itemsToRemove := j.findItemsWithContainerReference(containerID, items)
 	if len(itemsToRemove) == 0 {
-		return 0
+		return 0, nil // No items to remove
 	}
 
 	// Filter out items and write back
@@ -646,7 +655,8 @@ func (j *InventoryNormalizationJob) itemReferencesContainer(itemID, containerID 
 }
 
 // removeAndWriteItems removes items from the list and writes back the updated frontmatter.
-func (j *InventoryNormalizationJob) removeAndWriteItems(containerID string, containerFm map[string]any, inventory map[string]any, items []any, itemsToRemove map[string]bool) int {
+// Returns the count of removed items and any error from writing frontmatter.
+func (j *InventoryNormalizationJob) removeAndWriteItems(containerID string, containerFm map[string]any, inventory map[string]any, items []any, itemsToRemove map[string]bool) (int, error) {
 	removedCount := 0
 	var newItems []any
 
@@ -667,17 +677,16 @@ func (j *InventoryNormalizationJob) removeAndWriteItems(containerID string, cont
 	}
 
 	if removedCount == 0 {
-		return 0
+		return 0, nil
 	}
 
 	// Update and write back
 	inventory["items"] = newItems
 	if err := j.deps.WriteFrontMatter(containerID, containerFm); err != nil {
-		j.logger.Error("Failed to write frontmatter for container %s: %v", containerID, err)
-		return 0
+		return 0, fmt.Errorf("failed to write frontmatter for container %s: %w", containerID, err)
 	}
 
-	return removedCount
+	return removedCount, nil
 }
 
 // ScheduleInventoryNormalization schedules the inventory normalization job on the cron scheduler.
@@ -686,11 +695,14 @@ func ScheduleInventoryNormalization(
 	site *Site,
 	schedule string,
 ) (int, error) {
-	job := NewInventoryNormalizationJob(
+	job, err := NewInventoryNormalizationJob(
 		site,
 		site.FrontmatterIndexQueryer,
 		site.Logger,
 	)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create inventory normalization job: %w", err)
+	}
 
 	return scheduler.Schedule(schedule, job)
 }
