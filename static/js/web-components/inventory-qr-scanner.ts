@@ -195,12 +195,12 @@ export class InventoryQrScanner extends LitElement {
       const containerRaw = inventory?.['container'];
       const container = typeof containerRaw === 'string' ? containerRaw : undefined;
 
-      // Build scanned item info
+      // Build scanned item info - use conditional spread for optional properties
       const item: ScannedItemInfo = {
         identifier,
         title,
-        container,
-        isContainer,
+        ...(container !== undefined && { container }),
+        ...(isContainer !== undefined && { isContainer }),
       };
 
       // Collapse scanner and emit success event

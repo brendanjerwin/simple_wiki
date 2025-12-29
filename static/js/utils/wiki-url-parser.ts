@@ -51,12 +51,12 @@ export class WikiUrlParser {
     // Split path by slashes and filter empty segments
     const segments = pathPart.split('/').filter(s => s.length > 0);
 
-    if (segments.length === 0) {
-      return { success: false, error: 'No page identifier found in path' };
-    }
-
     // First non-empty segment is the page identifier
     const pageIdentifier = segments[0];
+
+    if (!pageIdentifier) {
+      return { success: false, error: 'No page identifier found in path' };
+    }
 
     if (!this.isValidPageIdentifier(pageIdentifier)) {
       return { success: false, error: `Invalid page identifier: ${pageIdentifier}` };

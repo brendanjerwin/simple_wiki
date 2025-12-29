@@ -12,7 +12,7 @@ import './web-components/editor-toolbar.js';
 import './web-components/wiki-image.js';
 import { showStoredToast } from './web-components/toast-message.js';
 import { setupGlobalErrorHandler } from './web-components/global-error-handler.js';
-import { pageDeleteService } from './web-components/page-deletion-service.js';
+import { pageDeleteService, type PageDeletionService } from './web-components/page-deletion-service.js';
 import { EditorContextMenuCoordinator } from './services/editor-context-menu-coordinator.js';
 import type { EditorContextMenu } from './web-components/editor-context-menu.js';
 import type { EditorToolbar } from './web-components/editor-toolbar.js';

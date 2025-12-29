@@ -101,7 +101,7 @@ export class AugmentedError extends Error {
   }
 
   // Delegate cause to original error for full transparency
-  get cause(): unknown {
+  override get cause(): unknown {
     // Use 'in' operator for type-safe property access on the originalError
     if ('cause' in this.originalError) {
       return this.originalError.cause;

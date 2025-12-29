@@ -84,7 +84,8 @@ describe('ToastMessage', () => {
     });
 
     it('should pass augmentedError to error-display component', () => {
-      const errorDisplayElement = el.shadowRoot?.querySelector('error-display');
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing custom element property for testing
+      const errorDisplayElement = el.shadowRoot?.querySelector('error-display') as HTMLElement & { augmentedError?: AugmentedError };
       expect(errorDisplayElement?.augmentedError).to.equal(augmentedError);
     });
 
@@ -174,17 +175,16 @@ describe('ToastMessage', () => {
       beforeEach(() => {
         el.type = 'error';
         el.timeoutSeconds = 1;
-        // Don't set autoClose explicitly
-        el.autoClose = undefined;
       });
 
-      describe('when autoClose is not set', () => {
+      describe('when autoClose is false', () => {
         beforeEach(() => {
+          el.autoClose = false;
           el.show();
           clock.tick(1000);
         });
 
-        it('should not auto-hide by default', () => {
+        it('should not auto-hide', () => {
           expect(el.visible).to.be.true;
         });
       });

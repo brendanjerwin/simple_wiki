@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/web-components-vite';
 import { html } from 'lit';
-import { action } from '@storybook/addon-actions';
+import { action } from 'storybook/actions';
 import './qr-scanner.js';
 import type { QrScanner, CameraProvider, CameraDevice } from './qr-scanner.js';
 import { CameraPermissionError } from './qr-scanner.js';

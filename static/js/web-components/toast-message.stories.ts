@@ -175,8 +175,8 @@ export const SystemInfoErrorDisplay: Story = {
 
     const augmentedError = new AugmentedError(
       originalError,
-      ErrorKind.SYSTEM,
-      'system',
+      ErrorKind.SERVER,
+      'server',
       'rebuilding search index'
     );
 

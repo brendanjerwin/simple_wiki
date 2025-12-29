@@ -1,10 +1,10 @@
 import { expect } from '@open-wc/testing';
-import { stub, restore, match } from 'sinon';
+import { stub, restore, match, type SinonStub } from 'sinon';
 import { setupGlobalErrorHandler, teardownGlobalErrorHandler } from './global-error-handler.js';
 
 describe('Global Error Handler', () => {
-  let addEventListenerStub: sinon.SinonStub;
-  let removeEventListenerStub: sinon.SinonStub;
+  let addEventListenerStub: SinonStub;
+  let removeEventListenerStub: SinonStub;
 
   beforeEach(() => {
     // Stub window event listeners

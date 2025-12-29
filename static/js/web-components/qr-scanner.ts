@@ -39,6 +39,8 @@ export interface ScannerErrorEventDetail {
  * Custom error types for camera operations
  */
 export class CameraPermissionError extends Error {
+  declare cause?: unknown;
+
   constructor(cause?: Error) {
     super('Camera access denied. Check browser settings.');
     this.name = 'CameraPermissionError';
@@ -47,6 +49,8 @@ export class CameraPermissionError extends Error {
 }
 
 export class NoCameraError extends Error {
+  declare cause?: unknown;
+
   constructor(cause?: Error) {
     super('No camera found on this device.');
     this.name = 'NoCameraError';
@@ -278,9 +282,6 @@ export class QrScanner extends LitElement {
   embedded = false;
 
   @state()
-  private scanning = false;
-
-  @state()
   private loading = false;
 
   @state()
@@ -318,7 +319,7 @@ export class QrScanner extends LitElement {
    */
   async expand(): Promise<void> {
     this.expanded = true;
-    this.error = undefined;
+    delete this.error;
     this.loading = true;
 
     try {
@@ -333,7 +334,12 @@ export class QrScanner extends LitElement {
         c.label.toLowerCase().includes('rear') ||
         c.label.toLowerCase().includes('environment')
       );
-      this.selectedCameraId = backCamera?.id || this.cameras[0].id;
+      // cameras[0] guaranteed to exist since we checked length > 0 above
+      const firstCamera = this.cameras[0];
+      if (!firstCamera) {
+        throw new NoCameraError();
+      }
+      this.selectedCameraId = backCamera?.id ?? firstCamera.id;
 
       // Wait for DOM update before starting scanner
       await this.updateComplete;
@@ -351,9 +357,9 @@ export class QrScanner extends LitElement {
   async collapse(): Promise<void> {
     await this._stopScanning();
     this.expanded = false;
-    this.error = undefined;
+    delete this.error;
     this.cameras = [];
-    this.selectedCameraId = undefined;
+    delete this.selectedCameraId;
   }
 
   /**
@@ -402,7 +408,6 @@ export class QrScanner extends LitElement {
         this.selectedCameraId,
         this._onScanSuccess.bind(this)
       );
-      this.scanning = true;
 
       // Add scroll/resize listeners to keep portal video positioned correctly
       this._addRepositionListeners();
@@ -516,7 +521,6 @@ export class QrScanner extends LitElement {
       }
     }
     this._removePortalVideo();
-    this.scanning = false;
   }
 
   /**
@@ -561,11 +565,11 @@ export class QrScanner extends LitElement {
         message = `Unknown error: ${String(err)}`;
       }
       error = new Error(message);
-      error.cause = err;
+      // Error.cause is ES2022+, use type assertion for ES2020 compatibility
+      (error as Error & { cause?: unknown }).cause = err;
     }
 
     this.error = error;
-    this.scanning = false;
 
     // Emit error event with full error object
     const event = new CustomEvent<ScannerErrorEventDetail>('scanner-error', {

@@ -1,10 +1,11 @@
 import { html, css, LitElement } from 'lit';
 import { createClient, type Client } from '@connectrpc/connect';
 import { createGrpcWebTransport } from '@connectrpc/connect-web';
+import { create } from '@bufbuild/protobuf';
 import { sharedStyles } from './shared-styles.js';
 import './wiki-search-results.js';
-import { SearchService } from '../gen/api/v1/search_pb.js';
-import type { SearchContentRequest, SearchResult } from '../gen/api/v1/search_pb.js';
+import { SearchService, SearchContentRequestSchema } from '../gen/api/v1/search_pb.js';
+import type { SearchResult } from '../gen/api/v1/search_pb.js';
 
 const INVENTORY_ONLY_STORAGE_KEY = 'wiki-search-inventory-only';
 
@@ -22,15 +23,12 @@ export class WikiSearch extends LitElement {
 
   // Method that can be stubbed in tests to prevent network calls
   async performSearch(query: string): Promise<{ results: SearchResult[], totalUnfilteredCount: number }> {
-    const request: Partial<SearchContentRequest> = {
+    const request = create(SearchContentRequestSchema, {
       query,
       frontmatterKeysToReturnInResults: ['inventory.container'],
-    };
-
-    if (this.inventoryOnly) {
-      request.frontmatterKeyIncludeFilters = ['inventory.container'];
-      request.frontmatterKeyExcludeFilters = ['inventory.is_container'];
-    }
+      frontmatterKeyIncludeFilters: this.inventoryOnly ? ['inventory.container'] : [],
+      frontmatterKeyExcludeFilters: this.inventoryOnly ? ['inventory.is_container'] : [],
+    });
 
     const response = await this.getClient().searchContent(request);
     return {
@@ -158,7 +156,7 @@ export class WikiSearch extends LitElement {
   async handleFormSubmit(e: Event) {
     e.preventDefault();
     this.noResults = false;
-    this.error = undefined;
+    delete this.error;
 
     if (!(e.target instanceof HTMLFormElement)) {
       return;
@@ -212,7 +210,7 @@ export class WikiSearch extends LitElement {
     // Re-run the search with the new filter if we have a previous query
     if (this.lastSearchQuery) {
       this.loading = true;
-      this.error = undefined;
+      delete this.error;
 
       try {
         const response = await this.performSearch(this.lastSearchQuery);

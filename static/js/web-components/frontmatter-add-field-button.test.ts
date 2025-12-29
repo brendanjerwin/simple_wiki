@@ -2,6 +2,11 @@ import { expect, fixture, html } from '@open-wc/testing';
 import { FrontmatterAddFieldButton } from './frontmatter-add-field-button.js';
 import sinon from 'sinon';
 
+// Test interface to access private methods for testing event listener wiring
+interface FrontmatterAddFieldButtonTestable {
+  _handleClickOutside: (event: Event) => void;
+}
+
 describe('FrontmatterAddFieldButton', () => {
   describe('should exist', () => {
     it('should exist', () => {
@@ -270,7 +275,9 @@ describe('FrontmatterAddFieldButton', () => {
     });
 
     it('should remove click event listener', () => {
-      expect(removeEventListenerSpy).to.have.been.calledWith('click', el._handleClickOutside);
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+      const testableEl = el as unknown as FrontmatterAddFieldButtonTestable;
+      expect(removeEventListenerSpy).to.have.been.calledWith('click', testableEl._handleClickOutside);
     });
   });
 });

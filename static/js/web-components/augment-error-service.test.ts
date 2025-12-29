@@ -228,7 +228,7 @@ describe('AugmentErrorService', () => {
         let result: AugmentedError;
 
         beforeEach(() => {
-          augmented = new AugmentedError('Test', ErrorKind.WARNING, 'warning');
+          augmented = new AugmentedError(new Error('Test'), ErrorKind.WARNING, 'warning');
           result = AugmentErrorService.augmentError(augmented);
         });
 
@@ -279,7 +279,7 @@ describe('AugmentErrorService', () => {
 
         beforeEach(() => {
           circularObj = { name: 'CircularError' };
-          circularObj.self = circularObj;  // Create circular reference
+          circularObj['self'] = circularObj;  // Create circular reference
           augmented = AugmentErrorService.augmentError(circularObj);
         });
 

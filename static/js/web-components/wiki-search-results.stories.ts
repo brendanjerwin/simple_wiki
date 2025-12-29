@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-type-assertion -- Storybook stories use type assertions for args */
 import type { Meta, StoryObj } from '@storybook/web-components-vite';
 import { html } from 'lit';
 import { action } from 'storybook/actions';
@@ -135,9 +136,9 @@ export const Open: Story = {
     open: true,
   },
   render: (args) => html`
-    <wiki-search-results 
-      .results="${args.results}"
-      .open="${args.open}"
+    <wiki-search-results
+      .results="${args['results'] as SearchResult[]}"
+      .open="${args['open'] as boolean}"
       @search-results-closed="${action('search-results-closed')}">
     </wiki-search-results>
   `,
@@ -156,9 +157,9 @@ export const Closed: Story = {
     open: false,
   },
   render: (args) => html`
-    <wiki-search-results 
-      .results="${args.results}"
-      .open="${args.open}">
+    <wiki-search-results
+      .results="${args['results'] as SearchResult[]}"
+      .open="${args['open'] as boolean}">
     </wiki-search-results>
   `,
   parameters: {
@@ -176,9 +177,9 @@ export const Empty: Story = {
     open: true,
   },
   render: (args) => html`
-    <wiki-search-results 
-      .results="${args.results}"
-      .open="${args.open}"
+    <wiki-search-results
+      .results="${args['results'] as SearchResult[]}"
+      .open="${args['open'] as boolean}"
       @search-results-closed="${action('search-results-closed')}">
     </wiki-search-results>
   `,
@@ -197,9 +198,9 @@ export const LongContent: Story = {
     open: true,
   },
   render: (args) => html`
-    <wiki-search-results 
-      .results="${args.results}"
-      .open="${args.open}"
+    <wiki-search-results
+      .results="${args['results'] as SearchResult[]}"
+      .open="${args['open'] as boolean}"
       @search-results-closed="${action('search-results-closed')}">
     </wiki-search-results>
   `,
@@ -223,9 +224,9 @@ export const NoHighlights: Story = {
     open: true,
   },
   render: (args) => html`
-    <wiki-search-results 
-      .results="${args.results}"
-      .open="${args.open}"
+    <wiki-search-results
+      .results="${args['results'] as SearchResult[]}"
+      .open="${args['open'] as boolean}"
       @search-results-closed="${action('search-results-closed')}">
     </wiki-search-results>
   `,
@@ -245,9 +246,9 @@ export const InteractiveTesting: Story = {
   },
   render: (args) => html`
     <div style="height: 400px; display: flex; flex-direction: column; align-items: center; justify-content: center;">
-      <wiki-search-results 
-        .results="${args.results}"
-        .open="${args.open}"
+      <wiki-search-results
+        .results="${args['results'] as SearchResult[]}"
+        .open="${args['open'] as boolean}"
         @search-results-closed="${action('search-results-closed')}">
       </wiki-search-results>
       <p style="margin-top: 20px; text-align: center; color: #666;">
@@ -353,9 +354,9 @@ export const WithInventoryContainer: Story = {
     open: true,
   },
   render: (args) => html`
-    <wiki-search-results 
-      .results="${args.results}"
-      .open="${args.open}"
+    <wiki-search-results
+      .results="${args['results'] as SearchResult[]}"
+      .open="${args['open'] as boolean}"
       @search-results-closed="${action('search-results-closed')}">
     </wiki-search-results>
   `,
@@ -409,11 +410,11 @@ export const InventoryFilterWarning: Story = {
     totalUnfilteredCount: 7,
   },
   render: (args) => html`
-    <wiki-search-results 
-      .results="${args.results}"
-      .open="${args.open}"
-      .inventoryOnly="${args.inventoryOnly}"
-      .totalUnfilteredCount="${args.totalUnfilteredCount}"
+    <wiki-search-results
+      .results="${args['results'] as SearchResult[]}"
+      .open="${args['open'] as boolean}"
+      .inventoryOnly="${args['inventoryOnly'] as boolean}"
+      .totalUnfilteredCount="${args['totalUnfilteredCount'] as number}"
       @search-results-closed="${action('search-results-closed')}"
       @inventory-filter-changed="${action('inventory-filter-changed')}">
     </wiki-search-results>

@@ -1,13 +1,18 @@
 import { expect } from '@open-wc/testing';
 import { WikiUrlParser, WikiUrlParseResult } from './wiki-url-parser.js';
 
+type SuccessResult = Extract<WikiUrlParseResult, { success: true }>;
+type FailureResult = Extract<WikiUrlParseResult, { success: false }>;
+
 describe('WikiUrlParser', () => {
   describe('parse', () => {
     describe('when given a full URL with command', () => {
-      let result: WikiUrlParseResult;
+      let result: SuccessResult;
 
       beforeEach(() => {
-        result = WikiUrlParser.parse('https://wiki.example.com/my_page/view');
+        const parsed = WikiUrlParser.parse('https://wiki.example.com/my_page/view');
+        if (!parsed.success) throw new Error('Expected success');
+        result = parsed;
       });
 
       it('should return success true', () => {
@@ -20,10 +25,12 @@ describe('WikiUrlParser', () => {
     });
 
     describe('when given a full URL without command', () => {
-      let result: WikiUrlParseResult;
+      let result: SuccessResult;
 
       beforeEach(() => {
-        result = WikiUrlParser.parse('https://wiki.example.com/my_page');
+        const parsed = WikiUrlParser.parse('https://wiki.example.com/my_page');
+        if (!parsed.success) throw new Error('Expected success');
+        result = parsed;
       });
 
       it('should return success true', () => {
@@ -36,10 +43,12 @@ describe('WikiUrlParser', () => {
     });
 
     describe('when given an absolute path with command', () => {
-      let result: WikiUrlParseResult;
+      let result: SuccessResult;
 
       beforeEach(() => {
-        result = WikiUrlParser.parse('/my_page/view');
+        const parsed = WikiUrlParser.parse('/my_page/view');
+        if (!parsed.success) throw new Error('Expected success');
+        result = parsed;
       });
 
       it('should return success true', () => {
@@ -52,10 +61,12 @@ describe('WikiUrlParser', () => {
     });
 
     describe('when given an absolute path without command', () => {
-      let result: WikiUrlParseResult;
+      let result: SuccessResult;
 
       beforeEach(() => {
-        result = WikiUrlParser.parse('/my_page');
+        const parsed = WikiUrlParser.parse('/my_page');
+        if (!parsed.success) throw new Error('Expected success');
+        result = parsed;
       });
 
       it('should return success true', () => {
@@ -68,10 +79,12 @@ describe('WikiUrlParser', () => {
     });
 
     describe('when given just an identifier', () => {
-      let result: WikiUrlParseResult;
+      let result: SuccessResult;
 
       beforeEach(() => {
-        result = WikiUrlParser.parse('my_page');
+        const parsed = WikiUrlParser.parse('my_page');
+        if (!parsed.success) throw new Error('Expected success');
+        result = parsed;
       });
 
       it('should return success true', () => {
@@ -85,10 +98,12 @@ describe('WikiUrlParser', () => {
 
     describe('when given a URL with different commands', () => {
       describe('with /edit command', () => {
-        let result: WikiUrlParseResult;
+        let result: SuccessResult;
 
         beforeEach(() => {
-          result = WikiUrlParser.parse('/toolbox/edit');
+          const parsed = WikiUrlParser.parse('/toolbox/edit');
+          if (!parsed.success) throw new Error('Expected success');
+          result = parsed;
         });
 
         it('should extract the page identifier', () => {
@@ -97,10 +112,12 @@ describe('WikiUrlParser', () => {
       });
 
       describe('with /raw command', () => {
-        let result: WikiUrlParseResult;
+        let result: SuccessResult;
 
         beforeEach(() => {
-          result = WikiUrlParser.parse('/toolbox/raw');
+          const parsed = WikiUrlParser.parse('/toolbox/raw');
+          if (!parsed.success) throw new Error('Expected success');
+          result = parsed;
         });
 
         it('should extract the page identifier', () => {
@@ -109,10 +126,12 @@ describe('WikiUrlParser', () => {
       });
 
       describe('with /frontmatter command', () => {
-        let result: WikiUrlParseResult;
+        let result: SuccessResult;
 
         beforeEach(() => {
-          result = WikiUrlParser.parse('/toolbox/frontmatter');
+          const parsed = WikiUrlParser.parse('/toolbox/frontmatter');
+          if (!parsed.success) throw new Error('Expected success');
+          result = parsed;
         });
 
         it('should extract the page identifier', () => {
@@ -122,10 +141,12 @@ describe('WikiUrlParser', () => {
     });
 
     describe('when given an empty string', () => {
-      let result: WikiUrlParseResult;
+      let result: FailureResult;
 
       beforeEach(() => {
-        result = WikiUrlParser.parse('');
+        const parsed = WikiUrlParser.parse('');
+        if (parsed.success) throw new Error('Expected failure');
+        result = parsed;
       });
 
       it('should return success false', () => {
@@ -138,10 +159,12 @@ describe('WikiUrlParser', () => {
     });
 
     describe('when given only whitespace', () => {
-      let result: WikiUrlParseResult;
+      let result: FailureResult;
 
       beforeEach(() => {
-        result = WikiUrlParser.parse('   ');
+        const parsed = WikiUrlParser.parse('   ');
+        if (parsed.success) throw new Error('Expected failure');
+        result = parsed;
       });
 
       it('should return success false', () => {
@@ -154,10 +177,12 @@ describe('WikiUrlParser', () => {
     });
 
     describe('when given a URL from a different domain', () => {
-      let result: WikiUrlParseResult;
+      let result: SuccessResult;
 
       beforeEach(() => {
-        result = WikiUrlParser.parse('https://other-wiki.com/garage_shelf/view');
+        const parsed = WikiUrlParser.parse('https://other-wiki.com/garage_shelf/view');
+        if (!parsed.success) throw new Error('Expected success');
+        result = parsed;
       });
 
       it('should return success true', () => {
@@ -171,10 +196,12 @@ describe('WikiUrlParser', () => {
 
     describe('when given a URL with a port number', () => {
       describe('with localhost and port', () => {
-        let result: WikiUrlParseResult;
+        let result: SuccessResult;
 
         beforeEach(() => {
-          result = WikiUrlParser.parse('http://localhost:8050/my_page/view');
+          const parsed = WikiUrlParser.parse('http://localhost:8050/my_page/view');
+          if (!parsed.success) throw new Error('Expected success');
+          result = parsed;
         });
 
         it('should return success true', () => {
@@ -187,10 +214,12 @@ describe('WikiUrlParser', () => {
       });
 
       describe('with domain and non-standard port', () => {
-        let result: WikiUrlParseResult;
+        let result: SuccessResult;
 
         beforeEach(() => {
-          result = WikiUrlParser.parse('https://wiki.example.com:8443/toolbox/edit');
+          const parsed = WikiUrlParser.parse('https://wiki.example.com:8443/toolbox/edit');
+          if (!parsed.success) throw new Error('Expected success');
+          result = parsed;
         });
 
         it('should return success true', () => {
@@ -203,10 +232,12 @@ describe('WikiUrlParser', () => {
       });
 
       describe('with IP address and port', () => {
-        let result: WikiUrlParseResult;
+        let result: SuccessResult;
 
         beforeEach(() => {
-          result = WikiUrlParser.parse('http://192.168.1.100:8080/garage_shelf');
+          const parsed = WikiUrlParser.parse('http://192.168.1.100:8080/garage_shelf');
+          if (!parsed.success) throw new Error('Expected success');
+          result = parsed;
         });
 
         it('should return success true', () => {
@@ -220,10 +251,12 @@ describe('WikiUrlParser', () => {
     });
 
     describe('when given a complex identifier with underscores and numbers', () => {
-      let result: WikiUrlParseResult;
+      let result: SuccessResult;
 
       beforeEach(() => {
-        result = WikiUrlParser.parse('/lab_shelf_42/view');
+        const parsed = WikiUrlParser.parse('/lab_shelf_42/view');
+        if (!parsed.success) throw new Error('Expected success');
+        result = parsed;
       });
 
       it('should return success true', () => {
@@ -236,10 +269,12 @@ describe('WikiUrlParser', () => {
     });
 
     describe('when given a URL with query parameters', () => {
-      let result: WikiUrlParseResult;
+      let result: SuccessResult;
 
       beforeEach(() => {
-        result = WikiUrlParser.parse('https://wiki.example.com/my_page/view?foo=bar');
+        const parsed = WikiUrlParser.parse('https://wiki.example.com/my_page/view?foo=bar');
+        if (!parsed.success) throw new Error('Expected success');
+        result = parsed;
       });
 
       it('should return success true', () => {
@@ -252,10 +287,12 @@ describe('WikiUrlParser', () => {
     });
 
     describe('when given a URL with trailing slash', () => {
-      let result: WikiUrlParseResult;
+      let result: SuccessResult;
 
       beforeEach(() => {
-        result = WikiUrlParser.parse('/my_page/');
+        const parsed = WikiUrlParser.parse('/my_page/');
+        if (!parsed.success) throw new Error('Expected success');
+        result = parsed;
       });
 
       it('should return success true', () => {
@@ -268,10 +305,12 @@ describe('WikiUrlParser', () => {
     });
 
     describe('when given just a slash', () => {
-      let result: WikiUrlParseResult;
+      let result: FailureResult;
 
       beforeEach(() => {
-        result = WikiUrlParser.parse('/');
+        const parsed = WikiUrlParser.parse('/');
+        if (parsed.success) throw new Error('Expected failure');
+        result = parsed;
       });
 
       it('should return success false', () => {

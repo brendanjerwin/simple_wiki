@@ -45,7 +45,7 @@ describe('WikiImage', () => {
         <wiki-image
           src="/uploads/test.jpg"
           alt="Test image"
-          title="Click to view"
+          image-title="Click to view"
         ></wiki-image>
       `);
     });

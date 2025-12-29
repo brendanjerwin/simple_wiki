@@ -1,7 +1,13 @@
 import { expect } from '@open-wc/testing';
-import { stub, SinonStub } from 'sinon';
+import { stub, type SinonStub } from 'sinon';
+import { create } from '@bufbuild/protobuf';
 import { SearchClient } from './search-client.js';
-import { SearchContentResponse, SearchResult, HighlightSpan } from '../gen/api/v1/search_pb.js';
+import {
+  SearchContentResponseSchema,
+  SearchResultSchema,
+  HighlightSpanSchema,
+} from '../gen/api/v1/search_pb.js';
+import type { SearchResult } from '../gen/api/v1/search_pb.js';
 
 // Type interface for accessing private members in tests
 interface SearchClientPrivate {
@@ -30,18 +36,18 @@ describe('SearchClient', () => {
   describe('search', () => {
     describe('when searching with a valid query', () => {
       let results: SearchResult[];
-      const mockResponse = new SearchContentResponse({
+      const mockResponse = create(SearchContentResponseSchema, {
         results: [
-          new SearchResult({
+          create(SearchResultSchema, {
             identifier: 'test-page',
             title: 'Test Page',
             fragment: 'This is a test fragment with highlighted text.',
             highlights: [
-              new HighlightSpan({ start: 10, end: 14 }), // "test"
-              new HighlightSpan({ start: 29, end: 40 }), // "highlighted"
+              create(HighlightSpanSchema, { start: 10, end: 14 }), // "test"
+              create(HighlightSpanSchema, { start: 29, end: 40 }), // "highlighted"
             ],
           }),
-          new SearchResult({
+          create(SearchResultSchema, {
             identifier: 'another-page',
             title: 'Another Page',
             fragment: 'No highlights here.',
@@ -65,14 +71,18 @@ describe('SearchClient', () => {
       });
 
       it('should preserve identifier, title, fragment, and highlights', () => {
-        expect(results[0].identifier).to.equal('test-page');
-        expect(results[0].title).to.equal('Test Page');
-        expect(results[0].fragment).to.equal('This is a test fragment with highlighted text.');
-        expect(results[0].highlights).to.have.lengthOf(2);
-        expect(results[1].identifier).to.equal('another-page');
-        expect(results[1].title).to.equal('Another Page');
-        expect(results[1].fragment).to.equal('No highlights here.');
-        expect(results[1].highlights).to.have.lengthOf(0);
+        const firstResult = results[0];
+        const secondResult = results[1];
+        expect(firstResult).to.exist;
+        expect(secondResult).to.exist;
+        expect(firstResult!.identifier).to.equal('test-page');
+        expect(firstResult!.title).to.equal('Test Page');
+        expect(firstResult!.fragment).to.equal('This is a test fragment with highlighted text.');
+        expect(firstResult!.highlights).to.have.lengthOf(2);
+        expect(secondResult!.identifier).to.equal('another-page');
+        expect(secondResult!.title).to.equal('Another Page');
+        expect(secondResult!.fragment).to.equal('No highlights here.');
+        expect(secondResult!.highlights).to.have.lengthOf(0);
       });
     });
 
@@ -80,7 +90,7 @@ describe('SearchClient', () => {
       let results: SearchResult[];
 
       beforeEach(async () => {
-        searchContentStub.resolves(new SearchContentResponse({ results: [] }));
+        searchContentStub.resolves(create(SearchContentResponseSchema, { results: [] }));
         results = await searchClient.search('empty query');
       });
 
@@ -111,33 +121,52 @@ describe('SearchClient', () => {
   });
 
   describe('simplified data structure', () => {
-    it('should return structured data without HTML generation', () => {
-      const mockResponse = new SearchContentResponse({
-        results: [
-          new SearchResult({
-            identifier: 'structured-data-test',
-            title: 'Structured Data Test',
-            fragment: 'This fragment contains <script>dangerous</script> content & symbols.',
-            highlights: [
-              new HighlightSpan({ start: 21, end: 29 }), // "<script>"
-              new HighlightSpan({ start: 54, end: 61 }), // "content"
-            ],
-          }),
-        ],
+    describe('when returning structured data', () => {
+      let results: SearchResult[];
+
+      beforeEach(async () => {
+        const mockResponse = create(SearchContentResponseSchema, {
+          results: [
+            create(SearchResultSchema, {
+              identifier: 'structured-data-test',
+              title: 'Structured Data Test',
+              fragment: 'This fragment contains <script>dangerous</script> content & symbols.',
+              highlights: [
+                create(HighlightSpanSchema, { start: 21, end: 29 }), // "<script>"
+                create(HighlightSpanSchema, { start: 54, end: 61 }), // "content"
+              ],
+            }),
+          ],
+        });
+
+        searchContentStub.resolves(mockResponse);
+        results = await searchClient.search('test');
       });
 
-      searchContentStub.resolves(mockResponse);
-      
-      return searchClient.search('test').then(results => {
-        // Should return the raw data without HTML processing
-        expect(results[0].fragment).to.equal('This fragment contains <script>dangerous</script> content & symbols.');
-        expect(results[0].highlights).to.have.lengthOf(2);
-        expect(results[0].highlights[0].start).to.equal(21);
-        expect(results[0].highlights[0].end).to.equal(29);
-        expect(results[0].highlights[1].start).to.equal(54);
-        expect(results[0].highlights[1].end).to.equal(61);
-        // Should NOT have fragmentHTML property
-        expect('fragmentHTML' in results[0]).to.be.false;
+      it('should return the raw fragment without HTML processing', () => {
+        const firstResult = results[0];
+        expect(firstResult).to.exist;
+        expect(firstResult!.fragment).to.equal('This fragment contains <script>dangerous</script> content & symbols.');
+      });
+
+      it('should return highlights with correct positions', () => {
+        const firstResult = results[0];
+        expect(firstResult).to.exist;
+        expect(firstResult!.highlights).to.have.lengthOf(2);
+        const firstHighlight = firstResult!.highlights[0];
+        const secondHighlight = firstResult!.highlights[1];
+        expect(firstHighlight).to.exist;
+        expect(secondHighlight).to.exist;
+        expect(firstHighlight!.start).to.equal(21);
+        expect(firstHighlight!.end).to.equal(29);
+        expect(secondHighlight!.start).to.equal(54);
+        expect(secondHighlight!.end).to.equal(61);
+      });
+
+      it('should NOT have fragmentHTML property', () => {
+        const firstResult = results[0];
+        expect(firstResult).to.exist;
+        expect('fragmentHTML' in firstResult!).to.be.false;
       });
     });
   });

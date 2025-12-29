@@ -42,7 +42,7 @@ describe('InventoryMoveItemDialog', () => {
 
   beforeEach(async () => {
     el = await Promise.race([
-      fixture(html`<inventory-move-item-dialog></inventory-move-item-dialog>`),
+      fixture<InventoryMoveItemDialog>(html`<inventory-move-item-dialog></inventory-move-item-dialog>`),
       timeout(5000, 'Component fixture timed out'),
     ]);
     await el.updateComplete;

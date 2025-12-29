@@ -181,7 +181,14 @@ describe('FrontmatterValueSection', () => {
 
       // Click remove button for second field
       const removeButtons = el.shadowRoot?.querySelectorAll<HTMLButtonElement>('.remove-field-button');
-      removeButtons![1].click();
+      if (!removeButtons || removeButtons.length < 2) {
+        throw new Error('Expected at least 2 remove buttons');
+      }
+      const secondButton = removeButtons[1];
+      if (!secondButton) {
+        throw new Error('Expected second remove button to be defined');
+      }
+      secondButton.click();
     });
 
     it('should dispatch section-change event', () => {
@@ -323,17 +330,27 @@ describe('FrontmatterValueSection', () => {
 
     it('should render appropriate components for each type', () => {
       const fieldRows = el.shadowRoot?.querySelectorAll<HTMLElement>('.field-row');
+      if (!fieldRows || fieldRows.length < 6) {
+        throw new Error('Expected at least 6 field rows');
+      }
+
+      const firstRow = fieldRows[0];
+      const thirdRow = fieldRows[2];
+      const lastRow = fieldRows[fieldRows.length - 1];
+      if (!firstRow || !thirdRow || !lastRow) {
+        throw new Error('Expected field rows to be defined');
+      }
 
       // Check first field (apple_field - string)
-      const firstValueComponent = fieldRows![0].querySelector<HTMLElement>('frontmatter-value');
+      const firstValueComponent = firstRow.querySelector<HTMLElement>('frontmatter-value');
       expect(firstValueComponent!.shadowRoot?.querySelector('frontmatter-value-string')).to.exist;
 
       // Check third field (delta_array - array)
-      const thirdValueComponent = fieldRows![2].querySelector<HTMLElement>('frontmatter-value');
+      const thirdValueComponent = thirdRow.querySelector<HTMLElement>('frontmatter-value');
       expect(thirdValueComponent!.shadowRoot?.querySelector('frontmatter-value-array')).to.exist;
 
       // Check last field (zebra_section - object)
-      const lastValueComponent = fieldRows![fieldRows!.length - 1].querySelector<HTMLElement>('frontmatter-value');
+      const lastValueComponent = lastRow.querySelector<HTMLElement>('frontmatter-value');
       expect(lastValueComponent!.shadowRoot?.querySelector('frontmatter-value-section')).to.exist;
     });
   });

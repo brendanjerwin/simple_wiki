@@ -2,7 +2,7 @@ import { createClient } from '@connectrpc/connect';
 import { create } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import { PageManagementService, DeletePageRequestSchema } from '../gen/api/v1/page_management_pb.js';
-import { AugmentErrorService } from './augment-error-service.js';
+import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
 import { showToastAfter } from './toast-message.js';
 import './confirmation-dialog.js';
 import { type ConfirmationConfig } from './confirmation-dialog.js';
@@ -24,7 +24,8 @@ import { type ConfirmationConfig } from './confirmation-dialog.js';
  */
 export class PageDeletionService {
   private client = createClient(PageManagementService, getGrpcWebTransport());
-  private dialog: HTMLElement & {
+  // Definite assignment assertion: ensureDialogExists() called in constructor guarantees initialization
+  private dialog!: HTMLElement & {
     openDialog: (config: ConfirmationConfig) => void;
     setLoading: (loading: boolean) => void;
     showError: (error: AugmentedError) => void;
@@ -78,13 +79,18 @@ export class PageDeletionService {
    * Ensures the confirmation dialog element exists in the DOM
    */
   private ensureDialogExists() {
-    this.dialog = document.querySelector('confirmation-dialog');
-    
-    if (!this.dialog) {
-      this.dialog = document.createElement('confirmation-dialog');
-      this.dialog.id = 'page-deletion-dialog';
-      this.dialog.hidden = true;
-      document.body.appendChild(this.dialog);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- custom element has known interface
+    const existing = document.querySelector('confirmation-dialog') as typeof this.dialog | null;
+
+    if (existing) {
+      this.dialog = existing;
+    } else {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- custom element has known interface
+      const newDialog = document.createElement('confirmation-dialog') as typeof this.dialog;
+      newDialog.id = 'page-deletion-dialog';
+      newDialog.hidden = true;
+      document.body.appendChild(newDialog);
+      this.dialog = newDialog;
     }
   }
 

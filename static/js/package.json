@@ -12,6 +12,7 @@
     "build": "bun build ./index.ts --outfile ./dist/web-components.js --target browser",
     "test": "web-test-runner",
     "test:wtr": "web-test-runner",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint . --ext .ts",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build"

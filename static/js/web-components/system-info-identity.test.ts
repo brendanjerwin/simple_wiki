@@ -20,10 +20,11 @@ describe('SystemInfoIdentity', () => {
     fetchStub = stub(window, 'fetch');
     fetchStub.resolves(new Response('{}'));
 
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- fixture returns unknown when using Promise.race
     el = await Promise.race([
-      fixture(html`<system-info-identity></system-info-identity>`),
+      fixture<SystemInfoIdentity>(html`<system-info-identity></system-info-identity>`),
       timeout(5000, "SystemInfoIdentity fixture timed out"),
-    ]);
+    ]) as SystemInfoIdentity;
   });
 
   afterEach(() => {
@@ -46,7 +47,7 @@ describe('SystemInfoIdentity', () => {
 
   describe('when no identity is provided', () => {
     beforeEach(async () => {
-      el.identity = undefined;
+      delete el.identity;
       await Promise.race([
         el.updateComplete,
         timeout(5000, "Component update timed out"),

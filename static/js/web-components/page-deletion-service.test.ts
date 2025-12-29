@@ -77,12 +77,14 @@ describe.skip('PageDeletionService', () => {
     let existingDialog: {
       openDialog: sinon.SinonSpy;
       addEventListener: sinon.SinonSpy;
+      removeEventListener: sinon.SinonSpy;
       dataset: Record<string, string>;
+      parentNode: null;
     };
 
     beforeEach(() => {
       sinon.restore(); // Clear previous stubs
-      
+
       existingDialog = {
         openDialog: sinon.spy(),
         addEventListener: sinon.spy(),
@@ -209,7 +211,8 @@ describe.skip('PageDeletionService', () => {
     });
 
     it('should remove dialog from DOM', () => {
-      expect(mockDialog.parentNode.removeChild).to.have.been.calledWith(mockDialog);
+      // parentNode is set in beforeEach, non-null assertion is safe here
+      expect(mockDialog.parentNode!.removeChild).to.have.been.calledWith(mockDialog);
     });
   });
 

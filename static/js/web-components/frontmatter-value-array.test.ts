@@ -76,9 +76,18 @@ describe('FrontmatterValueArray', () => {
 
     it('should display the values in string components', () => {
       const stringComponents = el.shadowRoot?.querySelectorAll<HTMLElement & { value: unknown }>('frontmatter-value-string');
-      expect(stringComponents![0].value).to.equal('item1');
-      expect(stringComponents![1].value).to.equal('item2');
-      expect(stringComponents![2].value).to.equal('item3');
+      if (!stringComponents || stringComponents.length < 3) {
+        throw new Error('Expected at least 3 string components');
+      }
+      const first = stringComponents[0];
+      const second = stringComponents[1];
+      const third = stringComponents[2];
+      if (!first || !second || !third) {
+        throw new Error('Expected string components to be defined');
+      }
+      expect(first.value).to.equal('item1');
+      expect(second.value).to.equal('item2');
+      expect(third.value).to.equal('item3');
     });
 
     it('should render remove buttons for each item', () => {
@@ -158,7 +167,14 @@ describe('FrontmatterValueArray', () => {
 
       // Click remove button for second item (index 1)
       const removeButtons = el.shadowRoot?.querySelectorAll<HTMLButtonElement>('.remove-item-button');
-      removeButtons![1].click();
+      if (!removeButtons || removeButtons.length < 2) {
+        throw new Error('Expected at least 2 remove buttons');
+      }
+      const secondButton = removeButtons[1];
+      if (!secondButton) {
+        throw new Error('Expected second remove button to be defined');
+      }
+      secondButton.click();
     });
 
     it('should dispatch array-change event', () => {
@@ -198,7 +214,14 @@ describe('FrontmatterValueArray', () => {
 
       // Simulate value change in first string component
       const stringComponents = el.shadowRoot?.querySelectorAll<HTMLElement>('frontmatter-value-string');
-      stringComponents![0].dispatchEvent(new CustomEvent('value-change', {
+      if (!stringComponents || stringComponents.length < 1) {
+        throw new Error('Expected at least 1 string component');
+      }
+      const firstComponent = stringComponents[0];
+      if (!firstComponent) {
+        throw new Error('Expected first string component to be defined');
+      }
+      firstComponent.dispatchEvent(new CustomEvent('value-change', {
         detail: {
           oldValue: 'original1',
           newValue: 'modified1'
@@ -326,8 +349,16 @@ describe('FrontmatterValueArray', () => {
 
       it('should update string component values', () => {
         const stringComponents = el.shadowRoot?.querySelectorAll<HTMLElement & { value: unknown }>('frontmatter-value-string');
-        expect(stringComponents![0].value).to.equal('updated1');
-        expect(stringComponents![1].value).to.equal('updated2');
+        if (!stringComponents || stringComponents.length < 2) {
+          throw new Error('Expected at least 2 string components');
+        }
+        const first = stringComponents[0];
+        const second = stringComponents[1];
+        if (!first || !second) {
+          throw new Error('Expected string components to be defined');
+        }
+        expect(first.value).to.equal('updated1');
+        expect(second.value).to.equal('updated2');
       });
     });
   });

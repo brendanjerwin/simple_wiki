@@ -11,6 +11,7 @@ interface WikiSearchElement extends HTMLElement {
   loading: boolean;
   error?: string;
   inventoryOnly: boolean;
+  totalUnfilteredCount: number;
   _handleKeydown: (event: KeyboardEvent) => void;
   handleFormSubmit: (event: Event) => Promise<void>;
   handleInventoryFilterChanged: (event: CustomEvent<{ inventoryOnly: boolean }>) => Promise<void>;

@@ -28,7 +28,7 @@
         "./scripts/run_fe_tests.sh $@"
       ],
       "fe:lint": [
-        "cd static/js && bun install && bun run -- eslint . --ext .ts --max-warnings 0"
+        "./scripts/run_fe_lint.sh"
       ],
       "fe:typecheck": [
         "cd static/js && bun install && bun run typecheck"
@@ -37,10 +37,10 @@
         "markdownlint --fix '**/*.md' --ignore vendor"
       ],
       "go:test": [
-        "go test ./..."
+        "./scripts/run_go_test.sh"
       ],
       "go:lint": [
-        "revive -config revive.toml -set_exit_status ./..."
+        "./scripts/run_go_lint.sh"
       ],
       "go:coverage": [
         "go list ./... | grep -v \"/gen/\" | xargs go test -coverprofile=coverage.out",
@@ -53,16 +53,7 @@
         "go run golang.org/x/tools/cmd/deadcode@latest ."
       ],
       "lint:everything": [
-        "if git status --porcelain api/proto | grep -q '.'; then buf generate; else echo 'No changes in api/proto, skipping buf generate.'; fi",
-        "go mod tidy",
-        "go vet $(go list ./... | grep -v /gen/)",
-        "staticcheck $(go list ./... | grep -v /gen/) || echo 'Warning: staticcheck failed (may be go version mismatch, see devbox.json)'",
-        "revive -config revive.toml ./...",
-        "go test ./...",
-        "go run golang.org/x/tools/cmd/deadcode@latest . || true",
-        "markdownlint --fix '**/*.md' --ignore vendor",
-        "export CHROMIUM_BIN=$(which chromium)",
-        "cd static/js && bun install && bun run build && bun run test && bun run lint"
+        "./scripts/run_lint_everything.sh"
       ],
       "build": [
         "./scripts/build.sh $@"

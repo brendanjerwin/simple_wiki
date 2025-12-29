@@ -1,6 +1,13 @@
 import { html, css, LitElement } from 'lit';
 import { sharedStyles, foundationCSS } from './shared-styles.js';
-import type { SearchResult, HighlightSpan } from '../gen/api/v1/search_pb.js';
+import type { SearchResult, HighlightSpan, ContainerPathElement } from '../gen/api/v1/search_pb.js';
+
+/**
+ * Extended path element that may include an ellipsis marker for truncated paths
+ */
+interface DisplayPathElement extends Partial<ContainerPathElement> {
+  isEllipsis?: boolean;
+}
 
 class WikiSearchResults extends LitElement {
   static override styles = [
@@ -260,21 +267,21 @@ class WikiSearchResults extends LitElement {
    * @param path - Array of container path elements
    * @returns Processed path ready for rendering
    */
-  private processContainerPath(path: ContainerPathElement[]) {
+  private processContainerPath(path: ContainerPathElement[]): DisplayPathElement[] {
     if (!path || path.length === 0) return [];
-    
+
     // Sort by depth to ensure correct ordering
     const sorted = [...path].sort((a, b) => (a.depth || 0) - (b.depth || 0));
-    
+
     const maxVisible = 4;
     if (sorted.length <= maxVisible) {
       return sorted;
     }
-    
+
     // Too many items - keep the last (deepest) ones and add ellipsis
     const numToShow = maxVisible - 1; // Reserve one slot for "..."
     const visibleItems = sorted.slice(-numToShow);
-    
+
     // Add ellipsis marker at the beginning
     return [{ isEllipsis: true }, ...visibleItems];
   }

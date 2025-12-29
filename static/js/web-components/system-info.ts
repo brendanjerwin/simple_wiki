@@ -170,7 +170,7 @@ export class SystemInfo extends LitElement {
     // Clean up debounce timer
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);
-      this.debounceTimer = undefined;
+      delete this.debounceTimer;
     }
     // Remove click-outside listener
     document.removeEventListener('click', this._handleClickOutside);
@@ -249,13 +249,13 @@ export class SystemInfo extends LitElement {
   private stopAutoRefresh(): void {
     if (this.refreshTimer) {
       clearInterval(this.refreshTimer);
-      this.refreshTimer = undefined;
+      delete this.refreshTimer;
     }
   }
 
   private async loadSystemInfo(): Promise<void> {
     try {
-      this.error = undefined;
+      delete this.error;
       
       // Load version (always use unary call for this)
       this.version = await this.client.getVersion(create(GetVersionRequestSchema, {}));
@@ -306,7 +306,8 @@ export class SystemInfo extends LitElement {
         }
       }
     } catch (err) {
-      if (err.name !== 'AbortError') {
+      const isAbortError = err instanceof Error && err.name === 'AbortError';
+      if (!isAbortError) {
         console.error('Streaming error:', err);
         // Fallback to polling
         this.startAutoRefresh();
@@ -317,7 +318,7 @@ export class SystemInfo extends LitElement {
   private stopJobStream(): void {
     if (this.streamSubscription) {
       this.streamSubscription.abort();
-      this.streamSubscription = undefined;
+      delete this.streamSubscription;
     }
   }
 

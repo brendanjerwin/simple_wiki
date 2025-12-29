@@ -353,7 +353,7 @@ export class InventoryMoveItemDialog extends LitElement {
   private _clearDebounceTimer(): void {
     if (this._searchDebounceTimer) {
       clearTimeout(this._searchDebounceTimer);
-      this._searchDebounceTimer = undefined;
+      delete this._searchDebounceTimer;
     }
   }
 

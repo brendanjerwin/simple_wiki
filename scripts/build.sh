@@ -3,7 +3,7 @@
 # Cross-compilation build script for simple_wiki
 # This script should be run through devbox to ensure proper environment setup.
 # Usage: devbox run build [GOOS] [GOARCH] [SKIP_GENERATE]
-# 
+#
 # Arguments:
 #   GOOS: Target operating system (default: current OS)
 #   GOARCH: Target architecture (default: current arch)
@@ -16,6 +16,14 @@
 
 set -e
 
+LOG_DIR="/tmp/simple_wiki_logs"
+mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/build_$(date +%Y%m%d_%H%M%S).log"
+ln -sf "$LOG_FILE" "$LOG_DIR/current_task.log"
+
+echo "Logging to: $LOG_FILE"
+
+{
 # Parse arguments
 TARGET_OS=${1:-$(go env GOOS)}
 TARGET_ARCH=${2:-$(go env GOARCH)}
@@ -30,20 +38,20 @@ BUILD_TIME=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 compare_semver() {
     local tag1="$1"
     local tag2="$2"
-    
+
     # Remove 'v' prefix if present
     local ver1="${tag1#v}"
     local ver2="${tag2#v}"
-    
+
     # Split on dots and dashes to get major.minor.patch and prerelease
     local v1_base=$(echo "$ver1" | cut -d'-' -f1)
     local v1_pre=$(echo "$ver1" | cut -d'-' -f2- -s)
     local v2_base=$(echo "$ver2" | cut -d'-' -f1)
     local v2_pre=$(echo "$ver2" | cut -d'-' -f2- -s)
-    
+
     # Compare base versions (major.minor.patch) using version sort
     local base_cmp=$(printf '%s\n%s\n' "$v1_base" "$v2_base" | sort -V | head -1)
-    
+
     if [ "$v1_base" != "$v2_base" ]; then
         # Different base versions, use version sort result
         if [ "$base_cmp" = "$v1_base" ]; then
@@ -75,12 +83,12 @@ compare_semver() {
 # Get the highest semver tag pointing to current commit
 get_highest_tag() {
     local tags=$(git tag --points-at HEAD 2>/dev/null)
-    
+
     if [ -z "$tags" ]; then
         echo ""
         return
     fi
-    
+
     local highest=""
     while IFS= read -r tag; do
         if [ -z "$highest" ]; then
@@ -89,7 +97,7 @@ get_highest_tag() {
             highest=$(compare_semver "$highest" "$tag")
         fi
     done <<< "$tags"
-    
+
     echo "$highest"
 }
 
@@ -123,3 +131,9 @@ GOOS=$TARGET_OS GOARCH=$TARGET_ARCH CGO_ENABLED=0 go build \
     -o "$BINARY_NAME" .
 
 echo "Build complete: $BINARY_NAME"
+} 2>&1 | tee "$LOG_FILE"
+
+exit_code=${PIPESTATUS[0]}
+echo ""
+echo "Log saved to: $LOG_FILE"
+exit $exit_code

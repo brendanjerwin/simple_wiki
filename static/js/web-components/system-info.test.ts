@@ -7,8 +7,8 @@ import { TimestampSchema } from '@bufbuild/protobuf/wkt';
 import { stub, useFakeTimers, type SinonFakeTimers, type SinonStub } from 'sinon';
 import './system-info.js';
 
-// Extend SystemInfo type for testing private methods
-interface SystemInfoTest extends SystemInfo {
+// Interface for testing private methods - accessed via unknown cast
+interface SystemInfoTestInterface {
   _handleClickOutside: (event: MouseEvent) => void;
 }
 
@@ -57,8 +57,8 @@ describe('SystemInfo', () => {
   describe('when loading', () => {
     beforeEach(async () => {
       el.loading = true;
-      el.version = undefined;
-      el.jobStatus = undefined;
+      delete el.version;
+      delete el.jobStatus;
       await el.updateComplete;
     });
 
@@ -73,7 +73,7 @@ describe('SystemInfo', () => {
     beforeEach(async () => {
       el.loading = false;
       el.error = 'Connection failed';
-      el.version = undefined;
+      delete el.version;
       await el.updateComplete;
     });
 
@@ -111,13 +111,13 @@ describe('SystemInfo', () => {
     it('should show commit hash', () => {
       const versionComponent = el.shadowRoot!.querySelector<SystemInfoVersion>('system-info-version');
       expect(versionComponent).to.exist;
-      expect(versionComponent!.version.commit).to.equal('abc123def456'); // From beforeEach setup
+      expect(versionComponent!.version!.commit).to.equal('abc123def456'); // From beforeEach setup
     });
 
     it('should show build time', () => {
       const versionComponent = el.shadowRoot!.querySelector<SystemInfoVersion>('system-info-version');
       expect(versionComponent).to.exist;
-      expect(versionComponent!.version.buildTime).to.exist;
+      expect(versionComponent!.version!.buildTime).to.exist;
     });
 
     it('should not show job info when no jobs are active', () => {
@@ -164,18 +164,20 @@ describe('SystemInfo', () => {
     });
 
     it('should pass correct job queue data', () => {
-      const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus: { jobQueues: Array<{ name: string; jobsRemaining: number; isActive: boolean; highWaterMark: number }> } }>('system-info-indexing');
-      const queue = indexingStatus!.jobStatus.jobQueues[0];
-      expect(queue.name).to.equal('Frontmatter');
-      expect(queue.jobsRemaining).to.equal(25);
-      expect(queue.isActive).to.be.true;
+      const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus?: { jobQueues: Array<{ name: string; jobsRemaining: number; isActive: boolean; highWaterMark: number }> } }>('system-info-indexing');
+      const queue = indexingStatus?.jobStatus?.jobQueues[0];
+      expect(queue).to.exist;
+      expect(queue!.name).to.equal('Frontmatter');
+      expect(queue!.jobsRemaining).to.equal(25);
+      expect(queue!.isActive).to.be.true;
     });
 
 
     it('should pass high water mark data', () => {
-      const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus: { jobQueues: Array<{ highWaterMark: number }> } }>('system-info-indexing');
-      const queue = indexingStatus!.jobStatus.jobQueues[0];
-      expect(queue.highWaterMark).to.equal(100);
+      const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus?: { jobQueues: Array<{ highWaterMark: number }> } }>('system-info-indexing');
+      const queue = indexingStatus?.jobStatus?.jobQueues[0];
+      expect(queue).to.exist;
+      expect(queue!.highWaterMark).to.equal(100);
     });
   });
 
@@ -228,7 +230,7 @@ describe('SystemInfo', () => {
       it('should pass full commit hash to version component', () => {
         const versionComponent = el.shadowRoot!.querySelector<SystemInfoVersion>('system-info-version');
         expect(versionComponent).to.exist;
-        expect(versionComponent!.version.commit).to.equal('abc123def456789');
+        expect(versionComponent!.version!.commit).to.equal('abc123def456789');
       });
     });
 
@@ -249,7 +251,7 @@ describe('SystemInfo', () => {
       it('should pass tagged version to component unchanged', () => {
         const versionComponent = el.shadowRoot!.querySelector<SystemInfoVersion>('system-info-version');
         expect(versionComponent).to.exist;
-        expect(versionComponent!.version.commit).to.equal('v1.2.3 (abc123d)');
+        expect(versionComponent!.version!.commit).to.equal('v1.2.3 (abc123d)');
       });
     });
 
@@ -270,8 +272,10 @@ describe('SystemInfo', () => {
       });
 
       it('should pass correct job count to indexing component', () => {
-        const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus: { jobQueues: Array<{ jobsRemaining: number }> } }>('system-info-indexing');
-        expect(indexingStatus!.jobStatus.jobQueues[0].jobsRemaining).to.equal(1);
+        const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus?: { jobQueues: Array<{ jobsRemaining: number }> } }>('system-info-indexing');
+        const queue = indexingStatus?.jobStatus?.jobQueues[0];
+        expect(queue).to.exist;
+        expect(queue!.jobsRemaining).to.equal(1);
       });
     });
   });
@@ -283,14 +287,16 @@ describe('SystemInfo', () => {
     });
 
     it('should be positioned in bottom right', () => {
-      const styles = el.constructor.styles;
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing static styles property for testing
+      const styles = (el.constructor as typeof SystemInfo).styles as Array<{ cssText: string }>;
       const cssText = styles.map(s => s.cssText).join('');
       expect(cssText).to.include('bottom: 2px');
       expect(cssText).to.include('right: 2px');
     });
 
     it('should have high z-index', () => {
-      const styles = el.constructor.styles;
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing static styles property for testing
+      const styles = (el.constructor as typeof SystemInfo).styles as Array<{ cssText: string }>;
       const cssText = styles.map(s => s.cssText).join('');
       expect(cssText).to.include('z-index: 1000');
     });
@@ -326,21 +332,24 @@ describe('SystemInfo', () => {
       });
 
       it('should pass correct job remaining count', () => {
-        const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus: { jobQueues: Array<{ jobsRemaining: number }> } }>('system-info-indexing');
-        const queue = indexingStatus!.jobStatus.jobQueues[0];
-        expect(queue.jobsRemaining).to.equal(75);
+        const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus?: { jobQueues: Array<{ jobsRemaining: number }> } }>('system-info-indexing');
+        const queue = indexingStatus?.jobStatus?.jobQueues[0];
+        expect(queue).to.exist;
+        expect(queue!.jobsRemaining).to.equal(75);
       });
 
       it('should pass correct high water mark', () => {
-        const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus: { jobQueues: Array<{ highWaterMark: number }> } }>('system-info-indexing');
-        const queue = indexingStatus!.jobStatus.jobQueues[0];
-        expect(queue.highWaterMark).to.equal(200);
+        const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus?: { jobQueues: Array<{ highWaterMark: number }> } }>('system-info-indexing');
+        const queue = indexingStatus?.jobStatus?.jobQueues[0];
+        expect(queue).to.exist;
+        expect(queue!.highWaterMark).to.equal(200);
       });
 
       it('should pass correct queue name', () => {
-        const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus: { jobQueues: Array<{ name: string }> } }>('system-info-indexing');
-        const queue = indexingStatus!.jobStatus.jobQueues[0];
-        expect(queue.name).to.equal('TestQueue');
+        const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus?: { jobQueues: Array<{ name: string }> } }>('system-info-indexing');
+        const queue = indexingStatus?.jobStatus?.jobQueues[0];
+        expect(queue).to.exist;
+        expect(queue!.name).to.equal('TestQueue');
       });
     });
   });
@@ -556,7 +565,7 @@ describe('SystemInfo', () => {
       } as unknown as MouseEvent;
 
       // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
-      (el as SystemInfoTest)._handleClickOutside(mockEvent);
+      (el as unknown as SystemInfoTestInterface)._handleClickOutside(mockEvent);
 
       expect(el.expanded).to.be.false;
     });

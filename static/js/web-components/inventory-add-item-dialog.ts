@@ -6,7 +6,7 @@ import { create } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import { SearchService, SearchContentRequestSchema, type SearchResult } from '../gen/api/v1/search_pb.js';
 import type { ExistingPageInfo } from '../gen/api/v1/page_management_pb.js';
-import { AugmentedError, AugmentErrorService, ErrorKind } from './augment-error-service.js';
+import { AugmentedError, AugmentErrorService } from './augment-error-service.js';
 import type { ErrorAction } from './error-display.js';
 import './error-display.js';
 
@@ -254,7 +254,7 @@ export class InventoryAddItemDialog extends LitElement {
     this.loading = false;
     this.error = null;
     this.isUnique = true;
-    this.existingPage = undefined;
+    delete this.existingPage;
     this.searchResults = [];
     this.searchLoading = false;
     this.automagicError = null;
@@ -274,11 +274,11 @@ export class InventoryAddItemDialog extends LitElement {
   private _clearDebounceTimers(): void {
     if (this._titleDebounceTimer) {
       clearTimeout(this._titleDebounceTimer);
-      this._titleDebounceTimer = undefined;
+      delete this._titleDebounceTimer;
     }
     if (this._identifierDebounceTimer) {
       clearTimeout(this._identifierDebounceTimer);
-      this._identifierDebounceTimer = undefined;
+      delete this._identifierDebounceTimer;
     }
   }
 
@@ -297,7 +297,7 @@ export class InventoryAddItemDialog extends LitElement {
     this.error = null;
     this.loading = false;
     this.isUnique = true;
-    this.existingPage = undefined;
+    delete this.existingPage;
     this.searchResults = [];
     this.searchLoading = false;
     this.open = true;
@@ -318,7 +318,7 @@ export class InventoryAddItemDialog extends LitElement {
     this.error = null;
     this.loading = false;
     this.isUnique = true;
-    this.existingPage = undefined;
+    delete this.existingPage;
     this.searchResults = [];
     this.searchLoading = false;
   }
@@ -355,7 +355,7 @@ export class InventoryAddItemDialog extends LitElement {
     if (!title) {
       this.itemIdentifier = '';
       this.isUnique = true;
-      this.existingPage = undefined;
+      delete this.existingPage;
       this.searchResults = [];
       return;
     }
@@ -364,16 +364,19 @@ export class InventoryAddItemDialog extends LitElement {
     if (this.automagicMode) {
       const result = await this.inventoryItemCreatorMover.generateIdentifier(title);
       if (result.error) {
-        this.automagicError = AugmentErrorService.augment(
+        this.automagicError = AugmentErrorService.augmentError(
           result.error,
-          ErrorKind.SERVER,
           'generating identifier'
         );
       } else {
         this.automagicError = null;
         this.itemIdentifier = result.identifier;
         this.isUnique = result.isUnique;
-        this.existingPage = result.existingPage;
+        if (result.existingPage) {
+          this.existingPage = result.existingPage;
+        } else {
+          delete this.existingPage;
+        }
       }
     }
 
@@ -407,7 +410,7 @@ export class InventoryAddItemDialog extends LitElement {
 
     if (!identifier) {
       this.isUnique = true;
-      this.existingPage = undefined;
+      delete this.existingPage;
       return;
     }
 
@@ -415,7 +418,11 @@ export class InventoryAddItemDialog extends LitElement {
     const result = await this.inventoryItemCreatorMover.generateIdentifier(identifier);
     if (!result.error) {
       this.isUnique = result.isUnique;
-      this.existingPage = result.existingPage;
+      if (result.existingPage) {
+        this.existingPage = result.existingPage;
+      } else {
+        delete this.existingPage;
+      }
     }
   }
 

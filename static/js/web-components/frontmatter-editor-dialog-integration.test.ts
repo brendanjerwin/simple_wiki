@@ -14,7 +14,7 @@ describe('FrontmatterEditorDialog - Component Integration', () => {
 
   beforeEach(async () => {
     el = await Promise.race([
-      fixture(html`<frontmatter-editor-dialog></frontmatter-editor-dialog>`),
+      fixture<FrontmatterEditorDialog>(html`<frontmatter-editor-dialog></frontmatter-editor-dialog>`),
       timeout(5000, 'Component fixture timed out')
     ]);
     
@@ -88,11 +88,11 @@ describe('FrontmatterEditorDialog - Component Integration', () => {
       });
 
       it('should preserve the value for the renamed key', () => {
-        expect(el.workingFrontmatter.id).to.equal('test_item');
+        expect(el.workingFrontmatter?.['id']).to.equal('test_item');
       });
 
       it('should preserve other fields unchanged', () => {
-        expect(el.workingFrontmatter.title).to.equal('Test Title');
+        expect(el.workingFrontmatter?.['title']).to.equal('Test Title');
       });
     });
   });
@@ -121,7 +121,7 @@ describe('FrontmatterEditorDialog - Component Integration', () => {
       });
 
       it('should update the data model with new value', () => {
-        expect(el.workingFrontmatter.title).to.equal('New Title');
+        expect(el.workingFrontmatter?.['title']).to.equal('New Title');
       });
     });
   });
@@ -148,11 +148,11 @@ describe('FrontmatterEditorDialog - Component Integration', () => {
       });
 
       it('should remove a field from the data model', () => {
-        expect(Object.keys(el.workingFrontmatter)).to.have.length(2);
+        expect(Object.keys(el.workingFrontmatter ?? {})).to.have.length(2);
       });
 
       it('should preserve remaining fields', () => {
-        const keys = Object.keys(el.workingFrontmatter);
+        const keys = Object.keys(el.workingFrontmatter ?? {});
         expect(keys.length).to.equal(2);
         keys.forEach(key => {
           expect(['field1', 'field2', 'field3']).to.include(key);
@@ -188,12 +188,14 @@ describe('FrontmatterEditorDialog - Component Integration', () => {
       });
 
       it('should add a new field to the data model', () => {
-        expect(Object.keys(el.workingFrontmatter)).to.have.length(1);
+        expect(Object.keys(el.workingFrontmatter ?? {})).to.have.length(1);
       });
 
       it('should create a string field by default', () => {
-        const keys = Object.keys(el.workingFrontmatter);
-        expect(typeof el.workingFrontmatter[keys[0]]).to.equal('string');
+        const keys = Object.keys(el.workingFrontmatter ?? {});
+        const firstKey = keys[0];
+        expect(firstKey).to.exist;
+        expect(typeof el.workingFrontmatter?.[firstKey!]).to.equal('string');
       });
 
       it('should render the new field with sub-components', () => {
@@ -230,9 +232,9 @@ describe('FrontmatterEditorDialog - Component Integration', () => {
 
     describe('when components change', () => {
       it('should maintain data integrity', () => {
-        expect(el.workingFrontmatter.simple_field).to.equal('value');
-        expect(el.workingFrontmatter.array_field).to.deep.equal(['item1', 'item2']);
-        expect(el.workingFrontmatter.section_field).to.deep.equal({ nested_key: 'nested_value' });
+        expect(el.workingFrontmatter?.['simple_field']).to.equal('value');
+        expect(el.workingFrontmatter?.['array_field']).to.deep.equal(['item1', 'item2']);
+        expect(el.workingFrontmatter?.['section_field']).to.deep.equal({ nested_key: 'nested_value' });
       });
     });
   });

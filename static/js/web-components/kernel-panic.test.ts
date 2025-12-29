@@ -2,6 +2,11 @@ import { html, fixture, expect } from '@open-wc/testing';
 import { KernelPanic, showKernelPanic } from './kernel-panic.js';
 import { AugmentErrorService, AugmentedError, ErrorKind } from './augment-error-service.js';
 
+// Interface for testable private methods
+interface KernelPanicTestable {
+  _handleRefresh: () => void;
+}
+
 describe('KernelPanic', () => {
   let el: KernelPanic;
 
@@ -62,7 +67,7 @@ describe('KernelPanic', () => {
     it('should have a refresh handler method', () => {
       // Verify the component has the _handleRefresh method
       // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
-      expect(typeof (el as KernelPanic & { _handleRefresh: () => void })._handleRefresh).to.equal('function');
+      expect(typeof (el as unknown as KernelPanicTestable)._handleRefresh).to.equal('function');
     });
 
     it('should render button with click handler', () => {
@@ -93,7 +98,8 @@ describe('KernelPanic', () => {
     });
 
     it('should display the error using error-display component', () => {
-      const errorDisplay = el.shadowRoot?.querySelector('error-display');
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing custom element property for testing
+      const errorDisplay = el.shadowRoot?.querySelector('error-display') as (Element & { augmentedError: AugmentedError }) | null;
       expect(errorDisplay).to.exist;
       expect(errorDisplay?.augmentedError).to.equal(el.augmentedError);
     });
