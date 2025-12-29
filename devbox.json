@@ -17,9 +17,7 @@
     "playwright@latest",
     "playwright-driver@latest",
     "playwright-test@latest",
-    "gh@latest",
-    "beads@latest",
-    "path:.#bv"
+    "gh@latest"
   ],
   "shell": {
     "init_hook": [
