@@ -156,7 +156,7 @@ class WikiSearchResults extends LitElement {
             border: 1px solid #ffc107;
             border-radius: 5px;
             padding: 8px 10px;
-            margin: 10px;
+            margin: 5px;
             font-size: 13px;
             color: #856404;
             display: flex;
