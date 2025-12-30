@@ -684,6 +684,11 @@ describe('WikiSearchResults', () => {
         expect(warning?.textContent).to.include('8 other results');
       });
 
+      it('should display complete warning text with punctuation', () => {
+        const warning = el.shadowRoot?.querySelector('.filter-warning span');
+        expect(warning?.textContent).to.equal('8 other results not shown.');
+      });
+
       it('should display warning icon', () => {
         const icon = el.shadowRoot?.querySelector('.filter-warning i.fa-triangle-exclamation');
         expect(icon).to.exist;
@@ -716,6 +721,11 @@ describe('WikiSearchResults', () => {
         const warning = el.shadowRoot?.querySelector('.filter-warning span');
         expect(warning?.textContent).to.include('1 other result');
         expect(warning?.textContent).to.not.include('results');
+      });
+
+      it('should display complete singular warning text with punctuation', () => {
+        const warning = el.shadowRoot?.querySelector('.filter-warning span');
+        expect(warning?.textContent).to.equal('1 other result not shown.');
       });
     });
 
