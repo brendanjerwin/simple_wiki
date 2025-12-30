@@ -894,8 +894,8 @@ func (s *Server) ParseCSVPreview(_ context.Context, req *apiv1.ParseCSVPreviewRe
 		pageExists := readErr == nil
 		record.PageExists = pageExists
 
-		// Validate template if specified
-		if parsed.Template != "" && !parsed.HasErrors() {
+		// Validate template if specified (skip built-in templates like inv_item)
+		if parsed.Template != "" && !parsed.HasErrors() && parsed.Template != "inv_item" {
 			_, _, templateErr := s.pageReaderMutator.ReadFrontMatter(parsed.Template)
 			if templateErr != nil && os.IsNotExist(templateErr) {
 				record.ValidationErrors = append(record.ValidationErrors,

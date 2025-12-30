@@ -9,7 +9,7 @@ function timeout(ms: number, message: string): Promise<never> {
   );
 }
 
-// TODO: Fix browser hang issue - see https://github.com/brendanjerwin/simple_wiki/issues/229
+// DEFERRED: Fix browser hang issue - see https://github.com/brendanjerwin/simple_wiki/issues/229
 // Tests hang during component instantiation, likely due to protobuf module imports
 // The lazy client initialization was added as a mitigation but didn't resolve the hang
 describe.skip('PageImportDialog', () => {
