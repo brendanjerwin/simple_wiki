@@ -422,7 +422,7 @@ export const InventoryFilterWarning: Story = {
   parameters: {
     docs: {
       description: {
-        story: '**Inventory Filter Warning Feature**: Demonstrates the warning message that appears when the "Inventory Only" checkbox is checked and additional results are hidden. In this example, 2 inventory items are shown out of 7 total results, so a warning displays "5 other results not shown (not Inventory Only)" with an amber/yellow background and exclamation icon. This helps users understand that more results are available when the filter is unchecked. Open browser dev tools to see action logs when toggling the checkbox.'
+        story: '**Inventory Filter Warning Feature**: Demonstrates the warning message that appears when the "Inventory Only" checkbox is checked and additional results are hidden. In this example, 2 inventory items are shown out of 7 total results, so a warning displays "5 other results not shown" with an amber/yellow background and exclamation icon. This helps users understand that more results are available when the filter is unchecked. Open browser dev tools to see action logs when toggling the checkbox.'
       }
     }
   }

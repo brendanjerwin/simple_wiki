@@ -369,7 +369,7 @@ class WikiSearchResults extends LitElement {
                 ${hiddenResultsCount > 0 ? html`
                     <div class="filter-warning">
                         <i class="fa-solid fa-triangle-exclamation"></i>
-                        <span>${hiddenResultsCount} other result${hiddenResultsCount === 1 ? '' : 's'} not shown (not Inventory Only)</span>
+                        <span>${hiddenResultsCount} other result${hiddenResultsCount === 1 ? '' : 's'} not shown</span>
                     </div>
                 ` : ''}
                 <div id="results">
