@@ -3,12 +3,13 @@ import { TemplateResult } from 'lit';
 import { restore } from 'sinon';
 import { FrontmatterValueArray } from './frontmatter-value-array.js';
 
-function createFixtureWithTimeout(template: TemplateResult, timeoutMs = 5000): Promise<FrontmatterValueArray> {
+async function createFixtureWithTimeout(template: TemplateResult, timeoutMs = 5000): Promise<FrontmatterValueArray> {
   const timeout = (ms: number, message: string) =>
-    new Promise<never>((_, reject) => 
+    new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error(message)), ms)
     );
-  
+
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- test fixture
   return Promise.race([
     fixture(template),
     timeout(timeoutMs, 'Component fixture timed out')
@@ -74,10 +75,19 @@ describe('FrontmatterValueArray', () => {
     });
 
     it('should display the values in string components', () => {
-      const stringComponents = el.shadowRoot?.querySelectorAll('frontmatter-value-string') as NodeListOf<Element>;
-      expect(stringComponents[0].value).to.equal('item1');
-      expect(stringComponents[1].value).to.equal('item2');
-      expect(stringComponents[2].value).to.equal('item3');
+      const stringComponents = el.shadowRoot?.querySelectorAll<HTMLElement & { value: unknown }>('frontmatter-value-string');
+      if (!stringComponents || stringComponents.length < 3) {
+        throw new Error('Expected at least 3 string components');
+      }
+      const first = stringComponents[0];
+      const second = stringComponents[1];
+      const third = stringComponents[2];
+      if (!first || !second || !third) {
+        throw new Error('Expected string components to be defined');
+      }
+      expect(first.value).to.equal('item1');
+      expect(second.value).to.equal('item2');
+      expect(third.value).to.equal('item3');
     });
 
     it('should render remove buttons for each item', () => {
@@ -109,13 +119,15 @@ describe('FrontmatterValueArray', () => {
     beforeEach(async () => {
       arrayChangeEvent = null;
       el = await createFixtureWithTimeout(html`<frontmatter-value-array .values="${['existing']}"></frontmatter-value-array>`);
-      
+
       el.addEventListener('array-change', (event) => {
-        arrayChangeEvent = event as CustomEvent;
+        if (event instanceof CustomEvent) {
+          arrayChangeEvent = event;
+        }
       });
 
-      const addButton = el.shadowRoot?.querySelector('.add-item-button') as HTMLButtonElement;
-      addButton.click();
+      const addButton = el.shadowRoot?.querySelector<HTMLButtonElement>('.add-item-button');
+      addButton!.click();
     });
 
     it('should dispatch array-change event', () => {
@@ -146,14 +158,23 @@ describe('FrontmatterValueArray', () => {
     beforeEach(async () => {
       arrayChangeEvent = null;
       el = await createFixtureWithTimeout(html`<frontmatter-value-array .values="${['item1', 'item2', 'item3']}"></frontmatter-value-array>`);
-      
+
       el.addEventListener('array-change', (event) => {
-        arrayChangeEvent = event as CustomEvent;
+        if (event instanceof CustomEvent) {
+          arrayChangeEvent = event;
+        }
       });
 
       // Click remove button for second item (index 1)
-      const removeButtons = el.shadowRoot?.querySelectorAll('.remove-item-button') as NodeListOf<HTMLButtonElement>;
-      removeButtons[1].click();
+      const removeButtons = el.shadowRoot?.querySelectorAll<HTMLButtonElement>('.remove-item-button');
+      if (!removeButtons || removeButtons.length < 2) {
+        throw new Error('Expected at least 2 remove buttons');
+      }
+      const secondButton = removeButtons[1];
+      if (!secondButton) {
+        throw new Error('Expected second remove button to be defined');
+      }
+      secondButton.click();
     });
 
     it('should dispatch array-change event', () => {
@@ -184,14 +205,23 @@ describe('FrontmatterValueArray', () => {
     beforeEach(async () => {
       arrayChangeEvent = null;
       el = await createFixtureWithTimeout(html`<frontmatter-value-array .values="${['original1', 'original2']}"></frontmatter-value-array>`);
-      
+
       el.addEventListener('array-change', (event) => {
-        arrayChangeEvent = event as CustomEvent;
+        if (event instanceof CustomEvent) {
+          arrayChangeEvent = event;
+        }
       });
 
       // Simulate value change in first string component
-      const stringComponents = el.shadowRoot?.querySelectorAll('frontmatter-value-string') as NodeListOf<Element>;
-      stringComponents[0].dispatchEvent(new CustomEvent('value-change', {
+      const stringComponents = el.shadowRoot?.querySelectorAll<HTMLElement>('frontmatter-value-string');
+      if (!stringComponents || stringComponents.length < 1) {
+        throw new Error('Expected at least 1 string component');
+      }
+      const firstComponent = stringComponents[0];
+      if (!firstComponent) {
+        throw new Error('Expected first string component to be defined');
+      }
+      firstComponent.dispatchEvent(new CustomEvent('value-change', {
         detail: {
           oldValue: 'original1',
           newValue: 'modified1'
@@ -223,20 +253,20 @@ describe('FrontmatterValueArray', () => {
     });
 
     it('should disable all string components', () => {
-      const stringComponents = el.shadowRoot?.querySelectorAll('frontmatter-value-string') as NodeListOf<Element>;
-      stringComponents.forEach(component => {
+      const stringComponents = el.shadowRoot?.querySelectorAll<HTMLElement & { disabled: boolean }>('frontmatter-value-string');
+      stringComponents!.forEach(component => {
         expect(component.disabled).to.be.true;
       });
     });
 
     it('should disable the add button', () => {
-      const addButton = el.shadowRoot?.querySelector('.add-item-button') as HTMLButtonElement;
-      expect(addButton.disabled).to.be.true;
+      const addButton = el.shadowRoot?.querySelector<HTMLButtonElement>('.add-item-button');
+      expect(addButton!.disabled).to.be.true;
     });
 
     it('should disable all remove buttons', () => {
-      const removeButtons = el.shadowRoot?.querySelectorAll('.remove-item-button') as NodeListOf<HTMLButtonElement>;
-      removeButtons.forEach(button => {
+      const removeButtons = el.shadowRoot?.querySelectorAll<HTMLButtonElement>('.remove-item-button');
+      removeButtons!.forEach(button => {
         expect(button.disabled).to.be.true;
       });
     });
@@ -248,8 +278,8 @@ describe('FrontmatterValueArray', () => {
     });
 
     it('should set placeholder on all string components', () => {
-      const stringComponents = el.shadowRoot?.querySelectorAll('frontmatter-value-string') as NodeListOf<Element>;
-      stringComponents.forEach(component => {
+      const stringComponents = el.shadowRoot?.querySelectorAll<HTMLElement & { placeholder: string }>('frontmatter-value-string');
+      stringComponents!.forEach(component => {
         expect(component.placeholder).to.equal('Enter item');
       });
     });
@@ -276,11 +306,13 @@ describe('FrontmatterValueArray', () => {
       beforeEach(async () => {
         arrayChangeEvent = null;
         el.addEventListener('array-change', (event) => {
-          arrayChangeEvent = event as CustomEvent;
+          if (event instanceof CustomEvent) {
+            arrayChangeEvent = event;
+          }
         });
 
-        const removeButton = el.shadowRoot?.querySelector('.remove-item-button') as HTMLButtonElement;
-        removeButton.click();
+        const removeButton = el.shadowRoot?.querySelector<HTMLButtonElement>('.remove-item-button');
+        removeButton!.click();
         await el.updateComplete;
       });
 
@@ -316,9 +348,17 @@ describe('FrontmatterValueArray', () => {
       });
 
       it('should update string component values', () => {
-        const stringComponents = el.shadowRoot?.querySelectorAll('frontmatter-value-string') as NodeListOf<Element>;
-        expect(stringComponents[0].value).to.equal('updated1');
-        expect(stringComponents[1].value).to.equal('updated2');
+        const stringComponents = el.shadowRoot?.querySelectorAll<HTMLElement & { value: unknown }>('frontmatter-value-string');
+        if (!stringComponents || stringComponents.length < 2) {
+          throw new Error('Expected at least 2 string components');
+        }
+        const first = stringComponents[0];
+        const second = stringComponents[1];
+        if (!first || !second) {
+          throw new Error('Expected string components to be defined');
+        }
+        expect(first.value).to.equal('updated1');
+        expect(second.value).to.equal('updated2');
       });
     });
   });
@@ -329,17 +369,17 @@ describe('FrontmatterValueArray', () => {
     });
 
     it('should have proper array item styling', () => {
-      const arrayItem = el.shadowRoot?.querySelector('.array-item') as HTMLElement;
-      const computedStyle = getComputedStyle(arrayItem);
-      
+      const arrayItem = el.shadowRoot?.querySelector<HTMLElement>('.array-item');
+      const computedStyle = getComputedStyle(arrayItem!);
+
       expect(computedStyle.display).to.equal('flex');
       expect(computedStyle.gap).to.contain('4px');
     });
 
     it('should have proper button styling', () => {
-      const addButton = el.shadowRoot?.querySelector('.add-item-button') as HTMLElement;
-      const computedStyle = getComputedStyle(addButton);
-      
+      const addButton = el.shadowRoot?.querySelector<HTMLElement>('.add-item-button');
+      const computedStyle = getComputedStyle(addButton!);
+
       expect(computedStyle.padding).to.contain('4px');
       expect(computedStyle.borderRadius).to.equal('4px');
     });

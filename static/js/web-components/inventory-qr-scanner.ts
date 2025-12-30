@@ -8,6 +8,9 @@ import { Frontmatter, GetFrontmatterRequestSchema } from '../gen/api/v1/frontmat
 import { WikiUrlParser } from '../utils/wiki-url-parser.js';
 import './qr-scanner.js';
 import type { QrScannedEventDetail, QrScanner } from './qr-scanner.js';
+import './error-display.js';
+import { AugmentErrorService, AugmentedError } from './augment-error-service.js';
+import type { ErrorAction } from './error-display.js';
 
 /**
  * Information about a scanned inventory item
@@ -82,40 +85,6 @@ export class InventoryQrScanner extends LitElement {
         background: #c82333;
       }
 
-      .error-container {
-        padding: 12px;
-        background: #fef2f2;
-        border-top: 1px solid #fecaca;
-      }
-
-      .error-message {
-        color: #dc2626;
-        font-size: 14px;
-        margin-bottom: 10px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-
-      .error-message .icon {
-        font-size: 16px;
-      }
-
-      .scan-again-button {
-        padding: 6px 12px;
-        border: 1px solid #fca5a5;
-        border-radius: 4px;
-        background: white;
-        color: #dc2626;
-        font-size: 13px;
-        cursor: pointer;
-        transition: all 0.15s;
-      }
-
-      .scan-again-button:hover {
-        background: #fef2f2;
-      }
-
       .validating {
         padding: 12px;
         background: #f3f4f6;
@@ -133,7 +102,7 @@ export class InventoryQrScanner extends LitElement {
   disabled = false;
 
   @state()
-  private error: Error | null = null;
+  private augmentedError: AugmentedError | null = null;
 
   @state()
   private validating = false;
@@ -144,9 +113,9 @@ export class InventoryQrScanner extends LitElement {
    * Expand the scanner and start camera
    */
   async expand(): Promise<void> {
-    this.error = null;
+    this.augmentedError = null;
     await this.updateComplete;
-    const scanner = this.shadowRoot?.querySelector('qr-scanner') as QrScanner | null;
+    const scanner = this.shadowRoot?.querySelector<QrScanner>('qr-scanner');
     if (!scanner) {
       throw new Error('InventoryQrScanner: qr-scanner element not found');
     }
@@ -158,10 +127,10 @@ export class InventoryQrScanner extends LitElement {
    */
   async collapse(): Promise<void> {
     // If error is showing, qr-scanner is not in DOM - nothing to collapse
-    if (this.error) {
+    if (this.augmentedError) {
       return;
     }
-    const scanner = this.shadowRoot?.querySelector('qr-scanner') as QrScanner | null;
+    const scanner = this.shadowRoot?.querySelector<QrScanner>('qr-scanner');
     if (!scanner) {
       throw new Error('InventoryQrScanner: qr-scanner element not found');
     }
@@ -186,12 +155,15 @@ export class InventoryQrScanner extends LitElement {
     const rawValue = event.detail.rawValue;
 
     // Clear previous error
-    this.error = null;
+    this.augmentedError = null;
 
     // Parse the URL
     const parseResult = WikiUrlParser.parse(rawValue);
     if (!parseResult.success || !parseResult.pageIdentifier) {
-      this.error = new Error(`Not a valid wiki URL: "${rawValue}"`);
+      this.augmentedError = AugmentErrorService.augmentError(
+        new Error(`Not a valid wiki URL: "${rawValue}"`),
+        'validating scanned QR code'
+      );
       return;
     }
 
@@ -203,20 +175,32 @@ export class InventoryQrScanner extends LitElement {
       const request = create(GetFrontmatterRequestSchema, { page: identifier });
       const response = await this.frontmatterClient.getFrontmatter(request);
 
-      // Convert protobuf Struct to plain object for easy access
-      const fm = response.frontmatter?.toJson() as Record<string, unknown> | undefined;
-      const inventory = fm?.['inventory'] as Record<string, unknown> | undefined;
+      // frontmatter is already JsonObject in protobuf-es v2 (no toJson() needed)
+      const fm = response.frontmatter;
+
+      // Safely access nested inventory object
+      const inventoryRaw = fm?.['inventory'];
+      const inventory = typeof inventoryRaw === 'object' && inventoryRaw !== null && !Array.isArray(inventoryRaw)
+        ? inventoryRaw
+        : undefined;
 
       // Check if page is a container
       const isContainerValue = inventory?.['is_container'];
       const isContainer = isContainerValue === true || isContainerValue === 'true';
 
-      // Build scanned item info
+      // Safely extract string values
+      const titleRaw = fm?.['title'];
+      const title = typeof titleRaw === 'string' ? titleRaw : identifier;
+
+      const containerRaw = inventory?.['container'];
+      const container = typeof containerRaw === 'string' ? containerRaw : undefined;
+
+      // Build scanned item info - use conditional spread for optional properties
       const item: ScannedItemInfo = {
         identifier,
-        title: (fm?.['title'] as string) || identifier,
-        container: inventory?.['container'] as string | undefined,
-        isContainer,
+        title,
+        ...(container !== undefined && { container }),
+        ...(isContainerValue !== undefined && { isContainer }),
       };
 
       // Collapse scanner and emit success event
@@ -227,7 +211,8 @@ export class InventoryQrScanner extends LitElement {
         composed: true,
       }));
     } catch (err) {
-      this.error = err instanceof Error ? err : new Error(`Page "${identifier}" not found`);
+      const errorObj = err instanceof Error ? err : new Error(`Page "${identifier}" not found`);
+      this.augmentedError = AugmentErrorService.augmentError(errorObj, 'fetching page info');
     } finally {
       this.validating = false;
     }
@@ -237,7 +222,7 @@ export class InventoryQrScanner extends LitElement {
    * Handle "Scan Again" button click
    */
   private _handleScanAgain = async (): Promise<void> => {
-    this.error = null;
+    this.augmentedError = null;
     await this.expand();
   };
 
@@ -252,16 +237,11 @@ export class InventoryQrScanner extends LitElement {
           </button>
         </div>
 
-        ${this.error ? html`
-          <div class="error-container">
-            <div class="error-message">
-              <span class="icon"><i class="fa-solid fa-triangle-exclamation"></i></span>
-              ${this.error.message}
-            </div>
-            <button class="scan-again-button" @click=${this._handleScanAgain} ?disabled=${this.disabled}>
-              <i class="fa-solid fa-qrcode"></i> Scan Again
-            </button>
-          </div>
+        ${this.augmentedError ? html`
+          <error-display
+            .augmentedError=${this.augmentedError}
+            .action=${{ label: 'Scan Again', onClick: this._handleScanAgain } satisfies ErrorAction}
+          ></error-display>
         ` : html`
           <qr-scanner
             embedded

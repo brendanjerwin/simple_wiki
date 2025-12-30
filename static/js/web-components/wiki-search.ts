@@ -1,10 +1,12 @@
 import { html, css, LitElement } from 'lit';
 import { createClient, type Client } from '@connectrpc/connect';
 import { createGrpcWebTransport } from '@connectrpc/connect-web';
+import { create } from '@bufbuild/protobuf';
 import { sharedStyles } from './shared-styles.js';
 import './wiki-search-results.js';
-import { SearchService } from '../gen/api/v1/search_pb.js';
-import type { SearchContentRequest, SearchResult } from '../gen/api/v1/search_pb.js';
+import { SearchService, SearchContentRequestSchema } from '../gen/api/v1/search_pb.js';
+import type { SearchResult } from '../gen/api/v1/search_pb.js';
+import { coerceThirdPartyError } from './augment-error-service.js';
 
 const INVENTORY_ONLY_STORAGE_KEY = 'wiki-search-inventory-only';
 
@@ -22,15 +24,12 @@ export class WikiSearch extends LitElement {
 
   // Method that can be stubbed in tests to prevent network calls
   async performSearch(query: string): Promise<{ results: SearchResult[], totalUnfilteredCount: number }> {
-    const request: Partial<SearchContentRequest> = {
+    const request = create(SearchContentRequestSchema, {
       query,
       frontmatterKeysToReturnInResults: ['inventory.container'],
-    };
-
-    if (this.inventoryOnly) {
-      request.frontmatterKeyIncludeFilters = ['inventory.container'];
-      request.frontmatterKeyExcludeFilters = ['inventory.is_container'];
-    }
+      frontmatterKeyIncludeFilters: this.inventoryOnly ? ['inventory.container'] : [],
+      frontmatterKeyExcludeFilters: this.inventoryOnly ? ['inventory.is_container'] : [],
+    });
 
     const response = await this.getClient().searchContent(request);
     return {
@@ -114,7 +113,7 @@ export class WikiSearch extends LitElement {
   declare results: SearchResult[];
   declare noResults: boolean;
   declare loading: boolean;
-  declare error?: string;
+  declare error: Error | null;
   declare inventoryOnly: boolean;
   declare totalUnfilteredCount: number;
   private lastSearchQuery: string = '';
@@ -124,6 +123,7 @@ export class WikiSearch extends LitElement {
     this.results = [];
     this.noResults = false;
     this.loading = false;
+    this.error = null;
     this.inventoryOnly = localStorage.getItem(INVENTORY_ONLY_STORAGE_KEY) === 'true';
     this.totalUnfilteredCount = 0;
     this._handleKeydown = this._handleKeydown.bind(this);
@@ -140,27 +140,33 @@ export class WikiSearch extends LitElement {
   }
 
   private _handleKeydown(e: KeyboardEvent) {
-    const searchInput = this.shadowRoot!.querySelector('input[type="search"]') as HTMLInputElement;
+    const searchInput = this.shadowRoot?.querySelector<HTMLInputElement>('input[type="search"]');
     // Check if Ctrl (or Cmd on Macs) and K keys were pressed
     if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
       e.preventDefault();
-      searchInput.focus();
+      searchInput?.focus();
     }
   }
 
   handleSearchInputFocused(e: Event) {
-    const target = e.target as HTMLInputElement;
-    target.select();
+    const target = e.target;
+    if (target instanceof HTMLInputElement) {
+      target.select();
+    }
   }
 
   async handleFormSubmit(e: Event) {
     e.preventDefault();
     this.noResults = false;
-    this.error = undefined;
+    this.error = null;
 
-    const form = e.target as HTMLFormElement;
+    if (!(e.target instanceof HTMLFormElement)) {
+      return;
+    }
+    const form = e.target;
     const formData = new FormData(form);
-    const searchTerm = formData.get('search') as string;
+    const searchTermValue = formData.get('search');
+    const searchTerm = typeof searchTermValue === 'string' ? searchTermValue : '';
 
     if (!searchTerm || searchTerm.trim() === '') {
       return;
@@ -178,14 +184,13 @@ export class WikiSearch extends LitElement {
         this.noResults = false;
       } else {
         this.noResults = true;
-        const searchInput = this.shadowRoot!.querySelector('input[type="search"]') as HTMLInputElement;
-        searchInput.select();
+        const searchInput = this.shadowRoot?.querySelector<HTMLInputElement>('input[type="search"]');
+        searchInput?.select();
       }
     } catch (error) {
       this.results = [];
       this.totalUnfilteredCount = 0;
-      this.error = error instanceof Error ? error.message : 'Search failed';
-      console.error('Search error:', error);
+      this.error = coerceThirdPartyError(error, 'Search failed');
     } finally {
       this.loading = false;
     }
@@ -195,7 +200,7 @@ export class WikiSearch extends LitElement {
     this.results = [];
     this.noResults = false;
     // Focus back on search input for keyboard workflow
-    const searchInput = this.shadowRoot?.querySelector('input[type="search"]') as HTMLInputElement;
+    const searchInput = this.shadowRoot?.querySelector<HTMLInputElement>('input[type="search"]');
     searchInput?.focus();
   }
 
@@ -206,7 +211,7 @@ export class WikiSearch extends LitElement {
     // Re-run the search with the new filter if we have a previous query
     if (this.lastSearchQuery) {
       this.loading = true;
-      this.error = undefined;
+      this.error = null;
 
       try {
         const response = await this.performSearch(this.lastSearchQuery);
@@ -216,8 +221,7 @@ export class WikiSearch extends LitElement {
       } catch (error) {
         this.results = [];
         this.totalUnfilteredCount = 0;
-        this.error = error instanceof Error ? error.message : 'Search failed';
-        console.error('Search error:', error);
+        this.error = coerceThirdPartyError(error, 'Search failed');
       } finally {
         this.loading = false;
       }
@@ -232,7 +236,7 @@ export class WikiSearch extends LitElement {
                 <input type="search" name="search" placeholder="Search..." required @focus="${this.handleSearchInputFocused}">
                 <button type="submit"><i class="fa-solid fa-search"></i></button>
             </form>
-            ${this.error ? html`<div class="error">${this.error}</div>` : ''}
+            ${this.error ? html`<div class="error">${this.error.message}</div>` : ''}
             <wiki-search-results
                 .results="${this.results}"
                 .open="${this.results.length > 0 || this.noResults}"

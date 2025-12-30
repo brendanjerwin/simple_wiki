@@ -21,10 +21,11 @@ describe('SystemInfoVersion', () => {
     fetchStub = stub(window, 'fetch');
     fetchStub.resolves(new Response('{}'));
     
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- fixture returns unknown when using Promise.race
     el = await Promise.race([
-      fixture(html`<system-info-version></system-info-version>`),
+      fixture<SystemInfoVersion>(html`<system-info-version></system-info-version>`),
       timeout(5000, "SystemInfoVersion fixture timed out"),
-    ]);
+    ]) as SystemInfoVersion;
   });
 
   afterEach(() => {
@@ -56,7 +57,7 @@ describe('SystemInfoVersion', () => {
   describe('when in loading state without version data', () => {
     beforeEach(async () => {
       el.loading = true;
-      el.version = undefined;
+      delete el.version;
       el.error = null;
       await Promise.race([
         el.updateComplete,
@@ -94,7 +95,7 @@ describe('SystemInfoVersion', () => {
     beforeEach(async () => {
       el.loading = false;
       el.error = new Error('Failed to load version info');
-      el.version = undefined;
+      delete el.version;
 
       await Promise.race([
         el.updateComplete,
@@ -116,20 +117,20 @@ describe('SystemInfoVersion', () => {
   describe('when displaying version information', () => {
     describe('when version has complete data', () => {
       beforeEach(async () => {
-  
+
         const mockTimestamp = create(TimestampSchema, {
           seconds: BigInt(Math.floor(new Date('2023-06-15T14:30:00Z').getTime() / 1000)),
           nanos: 0
         });
 
         el.loading = false;
-        el.error = undefined;
+        el.error = null;
         el.version = create(GetVersionResponseSchema, {
           commit: 'abcdef1234567890',
           buildTime: mockTimestamp
         });
 
-  
+
         await Promise.race([
           el.updateComplete,
           timeout(5000, "Component update timed out"),
@@ -159,20 +160,20 @@ describe('SystemInfoVersion', () => {
 
     describe('when version has tagged commit', () => {
       beforeEach(async () => {
-  
+
         const mockTimestamp = create(TimestampSchema, {
           seconds: BigInt(Math.floor(new Date('2023-06-15T14:30:00Z').getTime() / 1000)),
           nanos: 0
         });
 
         el.loading = false;
-        el.error = undefined;
+        el.error = null;
         el.version = create(GetVersionResponseSchema, {
           commit: 'v1.2.3 (abcdef1)',
           buildTime: mockTimestamp
         });
 
-  
+
         await Promise.race([
           el.updateComplete,
           timeout(5000, "Component update timed out"),
@@ -187,20 +188,20 @@ describe('SystemInfoVersion', () => {
 
     describe('when version has empty commit', () => {
       beforeEach(async () => {
-  
+
         const mockTimestamp = create(TimestampSchema, {
           seconds: BigInt(Math.floor(new Date('2023-06-15T14:30:00Z').getTime() / 1000)),
           nanos: 0
         });
 
         el.loading = false;
-        el.error = undefined;
+        el.error = null;
         el.version = create(GetVersionResponseSchema, {
           commit: '',
           buildTime: mockTimestamp
         });
 
-  
+
         await Promise.race([
           el.updateComplete,
           timeout(5000, "Component update timed out"),
@@ -215,15 +216,14 @@ describe('SystemInfoVersion', () => {
 
     describe('when version has no buildTime', () => {
       beforeEach(async () => {
-  
+
         el.loading = false;
-        el.error = undefined;
+        el.error = null;
         el.version = create(GetVersionResponseSchema, {
-          commit: 'abcdef1234567890',
-          buildTime: undefined
+          commit: 'abcdef1234567890'
         });
 
-  
+
         await Promise.race([
           el.updateComplete,
           timeout(5000, "Component update timed out"),
@@ -445,7 +445,7 @@ describe('SystemInfoVersion', () => {
       });
 
       el.loading = false;
-      el.error = undefined;
+      el.error = null;
       el.version = create(GetVersionResponseSchema, {
         commit: 'abcdef1234567890',
         buildTime: mockTimestamp
@@ -491,20 +491,20 @@ describe('SystemInfoVersion', () => {
   describe('error handling edge cases', () => {
     describe('when loading is true but version exists', () => {
       beforeEach(async () => {
-  
+
         const mockTimestamp = create(TimestampSchema, {
           seconds: BigInt(Math.floor(new Date('2023-06-15T14:30:00Z').getTime() / 1000)),
           nanos: 0
         });
 
         el.loading = true;
-        el.error = undefined;
+        el.error = null;
         el.version = create(GetVersionResponseSchema, {
           commit: 'abcdef1234567890',
           buildTime: mockTimestamp
         });
 
-  
+
         await Promise.race([
           el.updateComplete,
           timeout(5000, "Component update timed out"),

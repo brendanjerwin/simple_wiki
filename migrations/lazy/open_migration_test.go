@@ -39,7 +39,7 @@ var _ = Describe("Rolling Migrations during Open()", func() {
 
 	AfterEach(func() {
 		if testDataDir != "" {
-			os.RemoveAll(testDataDir)
+			_ = os.RemoveAll(testDataDir)
 		}
 	})
 

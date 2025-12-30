@@ -42,11 +42,11 @@ export const NestedSection: Story = {
     title: 'Page Metadata',
   },
   render: (args) => html`
-    <frontmatter-value-section 
-      .fields="${args.fields}"
-      .disabled="${args.disabled}"
-      .isRoot="${args.isRoot}"
-      .title="${args.title}">
+    <frontmatter-value-section
+      .fields="${args['fields']}"
+      .disabled="${args['disabled']}"
+      .isRoot="${args['isRoot']}"
+      .title="${args['title']}">
     </frontmatter-value-section>
   `,
 };
@@ -64,11 +64,11 @@ export const RootSection: Story = {
     title: 'Frontmatter',
   },
   render: (args) => html`
-    <frontmatter-value-section 
-      .fields="${args.fields}"
-      .disabled="${args.disabled}"
-      .isRoot="${args.isRoot}"
-      .title="${args.title}">
+    <frontmatter-value-section
+      .fields="${args['fields']}"
+      .disabled="${args['disabled']}"
+      .isRoot="${args['isRoot']}"
+      .title="${args['title']}">
     </frontmatter-value-section>
   `,
 };
@@ -81,11 +81,11 @@ export const Empty: Story = {
     title: 'Empty Section',
   },
   render: (args) => html`
-    <frontmatter-value-section 
-      .fields="${args.fields}"
-      .disabled="${args.disabled}"
-      .isRoot="${args.isRoot}"
-      .title="${args.title}">
+    <frontmatter-value-section
+      .fields="${args['fields']}"
+      .disabled="${args['disabled']}"
+      .isRoot="${args['isRoot']}"
+      .title="${args['title']}">
     </frontmatter-value-section>
   `,
 };
@@ -102,11 +102,11 @@ export const Disabled: Story = {
     title: 'Read-only Section',
   },
   render: (args) => html`
-    <frontmatter-value-section 
-      .fields="${args.fields}"
-      .disabled="${args.disabled}"
-      .isRoot="${args.isRoot}"
-      .title="${args.title}">
+    <frontmatter-value-section
+      .fields="${args['fields']}"
+      .disabled="${args['disabled']}"
+      .isRoot="${args['isRoot']}"
+      .title="${args['title']}">
     </frontmatter-value-section>
   `,
 };

@@ -45,7 +45,7 @@ describe('WikiImage', () => {
         <wiki-image
           src="/uploads/test.jpg"
           alt="Test image"
-          title="Click to view"
+          image-title="Click to view"
         ></wiki-image>
       `);
     });
@@ -192,7 +192,7 @@ describe('WikiImage', () => {
       el = await fixture(html`
         <wiki-image src="/uploads/test.jpg" alt="Test"></wiki-image>
       `);
-      const openBtn = el.shadowRoot?.querySelector('.tool-btn[aria-label="Open in new tab"]') as HTMLButtonElement;
+      const openBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.tool-btn[aria-label="Open in new tab"]');
       openBtn?.click();
     });
 
@@ -215,6 +215,7 @@ describe('WikiImage', () => {
       sinon.stub(document, 'createElement').callsFake((tagName: string) => {
         const element = originalCreateElement(tagName);
         if (tagName === 'a') {
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- element is HTMLAnchorElement when tagName is 'a'
           createdLink = element as HTMLAnchorElement;
           sinon.stub(createdLink, 'click');
         }
@@ -224,11 +225,12 @@ describe('WikiImage', () => {
       el = await fixture(html`
         <wiki-image src="/uploads/test-image.jpg" alt="Test"></wiki-image>
       `);
-      const downloadBtn = el.shadowRoot?.querySelector('.tool-btn[aria-label="Download"]') as HTMLButtonElement;
+      const downloadBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.tool-btn[aria-label="Download"]');
       downloadBtn?.click();
     });
 
     afterEach(() => {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- restoring sinon stub
       (document.createElement as SinonStub).restore();
     });
 
@@ -262,7 +264,7 @@ describe('WikiImage', () => {
         el = await fixture(html`
           <wiki-image src="/uploads/test.jpg" alt="Test"></wiki-image>
         `);
-        const copyBtn = el.shadowRoot?.querySelector('.tool-btn[aria-label="Copy image"]') as HTMLButtonElement;
+        const copyBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.tool-btn[aria-label="Copy image"]');
         copyBtn?.click();
 
         // Wait for async operation
@@ -314,7 +316,7 @@ describe('WikiImage', () => {
 
     describe('when clicking the image inside shadow DOM', () => {
       beforeEach(() => {
-        const img = el.shadowRoot?.querySelector('img') as HTMLImageElement;
+        const img = el.shadowRoot?.querySelector<HTMLImageElement>('img');
         img?.click();
       });
 
@@ -401,7 +403,7 @@ describe('WikiImage', () => {
 
     describe('when clicking close button', () => {
       beforeEach(() => {
-        const closeBtn = el.shadowRoot?.querySelector('.close-btn') as HTMLButtonElement;
+        const closeBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.close-btn');
         closeBtn?.click();
       });
 
@@ -465,6 +467,7 @@ describe('WikiImage', () => {
       });
 
       it('should extract the filename', () => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
         expect((el as unknown as { _getFilename: () => string })._getFilename()).to.equal('my-image.jpg');
       });
     });
@@ -477,6 +480,7 @@ describe('WikiImage', () => {
       });
 
       it('should return default filename', () => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
         expect((el as unknown as { _getFilename: () => string })._getFilename()).to.equal('image');
       });
     });

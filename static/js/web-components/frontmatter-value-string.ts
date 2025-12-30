@@ -33,7 +33,10 @@ export class FrontmatterValueString extends LitElement {
   }
 
   private _handleValueInput = (event: Event): void => {
-    const target = event.target as HTMLInputElement;
+    if (!(event.target instanceof HTMLInputElement)) {
+      return;
+    }
+    const target = event.target;
     const newValue = target.value;
     const oldValue = this.value;
 

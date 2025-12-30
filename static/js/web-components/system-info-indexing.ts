@@ -1,7 +1,6 @@
 import { html, css, LitElement } from 'lit';
 import { GetJobStatusResponse } from '../gen/api/v1/system_info_pb.js';
 import { foundationCSS } from './shared-styles.js';
-import { showToast } from './toast-message.js';
 
 export class SystemInfoIndexing extends LitElement {
 
@@ -188,39 +187,24 @@ export class SystemInfoIndexing extends LitElement {
 
   declare jobStatus?: GetJobStatusResponse;
   declare loading: boolean;
-  declare error?: string;
+  declare error: Error | null;
 
   constructor() {
     super();
     this.loading = false;
+    this.error = null;
   }
 
-  private formatRate(rate: number): string {
+  // Keep formatRate and calculateProgress available for tests and future use
+  formatRate(rate: number): string {
     if (rate < 0.1) return '< 0.1/s';
     if (rate < 1) return `${rate.toFixed(1)}/s`;
     return `${Math.round(rate)}/s`;
   }
 
-  private calculateProgress(completed: number, total: number): number {
+  calculateProgress(completed: number, total: number): number {
     return total > 0 ? (completed / total) * 100 : 0;
   }
-
-  private _handleErrorClick = async (event: Event, errorText: string): Promise<void> => {
-    event.stopPropagation();
-    try {
-      await navigator.clipboard.writeText(errorText);
-      showToast('Error copied to clipboard', 'success', 3);
-    } catch (err) {
-      showToast('Failed to copy error to clipboard', 'error', 5);
-    }
-  };
-
-  private _handleErrorKeydown = async (event: KeyboardEvent, errorText: string): Promise<void> => {
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      await this._handleErrorClick(event, errorText);
-    }
-  };
 
   override render() {
     // Handle loading and error states
@@ -229,7 +213,7 @@ export class SystemInfoIndexing extends LitElement {
     }
 
     if (this.error) {
-      return html`<div class="error">${this.error}</div>`;
+      return html`<div class="error">${this.error.message}</div>`;
     }
 
     if (!this.jobStatus) {

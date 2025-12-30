@@ -31,7 +31,7 @@ var _ = Describe("FileShadowingMigrationJob", func() {
 	})
 
 	AfterEach(func() {
-		os.RemoveAll(testDataDir)
+		_ = os.RemoveAll(testDataDir)
 	})
 
 	Describe("Execute", func() {

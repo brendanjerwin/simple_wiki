@@ -23,7 +23,7 @@ var _ = Describe("FileSystemDataDirScanner", func() {
 	})
 
 	AfterEach(func() {
-		os.RemoveAll(testDataDir)
+		_ = os.RemoveAll(testDataDir)
 	})
 
 	Describe("DataDirExists", func() {

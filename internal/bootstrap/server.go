@@ -108,7 +108,7 @@ func SetupTailscaleServe(
 		return nil, fmt.Errorf("failed to create HTTP listener: %w", err)
 	}
 
-	var finalHandler http.Handler = h2c.NewHandler(handler, &http2.Server{})
+	finalHandler := h2c.NewHandler(handler, &http2.Server{})
 	if forceRedirectToHTTPS {
 		logger.Info("Tailnet clients will be redirected to HTTPS")
 		redirector, err := tailscale.NewTailnetRedirector(tsDNSName, tailscale.DefaultHTTPSPort, identityResolver, finalHandler, true, logger)

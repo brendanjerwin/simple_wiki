@@ -120,7 +120,7 @@ var _ = Describe("Site Page Operations", func() {
 				// Re-fetch the page to get the updated content
 				p, err = s.ReadPage(p.Identifier)
 				Expect(err).ToNot(HaveOccurred())
-				p.Render(s, s.MarkdownRenderer, TemplateExecutor{}, s.FrontmatterIndexQueryer)
+				Expect(p.Render(s, s.MarkdownRenderer, TemplateExecutor{}, s.FrontmatterIndexQueryer)).To(Succeed())
 			})
 
 			It("should render correctly", func() {
@@ -135,7 +135,7 @@ var _ = Describe("Site Page Operations", func() {
 					// Re-fetch the page to get the updated content
 					p, err = s.ReadPage(p.Identifier)
 					Expect(err).ToNot(HaveOccurred())
-					p.Render(s, s.MarkdownRenderer, TemplateExecutor{}, s.FrontmatterIndexQueryer)
+					Expect(p.Render(s, s.MarkdownRenderer, TemplateExecutor{}, s.FrontmatterIndexQueryer)).To(Succeed())
 				})
 
 				It("should render the new content", func() {
@@ -159,7 +159,7 @@ var _ = Describe("Site Page Operations", func() {
 
 					When("the retrieved page is rendered", func() {
 						BeforeEach(func() {
-							p2.Render(s, s.MarkdownRenderer, TemplateExecutor{}, s.FrontmatterIndexQueryer)
+							Expect(p2.Render(s, s.MarkdownRenderer, TemplateExecutor{}, s.FrontmatterIndexQueryer)).To(Succeed())
 						})
 
 						It("should render correctly", func() {

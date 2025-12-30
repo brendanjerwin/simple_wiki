@@ -1,10 +1,10 @@
 import { expect } from '@open-wc/testing';
-import { stub, restore, match } from 'sinon';
+import { stub, restore, match, type SinonStub } from 'sinon';
 import { setupGlobalErrorHandler, teardownGlobalErrorHandler } from './global-error-handler.js';
 
 describe('Global Error Handler', () => {
-  let addEventListenerStub: sinon.SinonStub;
-  let removeEventListenerStub: sinon.SinonStub;
+  let addEventListenerStub: SinonStub;
+  let removeEventListenerStub: SinonStub;
 
   beforeEach(() => {
     // Stub window event listeners
@@ -65,6 +65,7 @@ describe('Global Error Handler', () => {
 
       beforeEach(() => {
         mockError = new Error('Test error message');
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock event for testing
         mockErrorEvent = {
           error: mockError,
           message: 'Test error message',
@@ -86,6 +87,7 @@ describe('Global Error Handler', () => {
       let mockErrorEvent: ErrorEvent;
 
       beforeEach(() => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock event for testing
         mockErrorEvent = {
           error: null,
           message: 'Script error',
@@ -126,6 +128,7 @@ describe('Global Error Handler', () => {
     beforeEach(() => {
       mockError = new Error('Promise rejection error');
       preventDefaultStub = stub();
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock event for testing
       mockRejectionEvent = {
         reason: mockError,
         preventDefault: preventDefaultStub
@@ -146,6 +149,7 @@ describe('Global Error Handler', () => {
 
     it('should handle non-Error rejection reasons', () => {
       const preventDefaultStub = stub();
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock event for testing
       const mockRejectionEvent = {
         reason: 'String rejection reason',
         preventDefault: preventDefaultStub

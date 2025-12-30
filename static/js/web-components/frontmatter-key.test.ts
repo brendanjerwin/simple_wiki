@@ -77,8 +77,8 @@ describe('FrontmatterKey', () => {
     });
 
     it('should set the input value to the key', () => {
-      const inputElement = el.shadowRoot?.querySelector('.key-input') as HTMLInputElement;
-      expect(inputElement.value).to.equal('title');
+      const inputElement = el.shadowRoot?.querySelector<HTMLInputElement>('.key-input');
+      expect(inputElement?.value).to.equal('title');
     });
 
     describe('when placeholder is provided', () => {
@@ -87,8 +87,8 @@ describe('FrontmatterKey', () => {
       });
 
       it('should set the input placeholder', () => {
-        const inputElement = el.shadowRoot?.querySelector('.key-input') as HTMLInputElement;
-        expect(inputElement.placeholder).to.equal('Enter key name');
+        const inputElement = el.shadowRoot?.querySelector<HTMLInputElement>('.key-input');
+        expect(inputElement!.placeholder).to.equal('Enter key name');
       });
     });
   });
@@ -99,14 +99,16 @@ describe('FrontmatterKey', () => {
     beforeEach(async () => {
       keyChangeEvent = null;
       el = await fixture(html`<frontmatter-key key="original" editable></frontmatter-key>`);
-      
+
       el.addEventListener('key-change', (event) => {
-        keyChangeEvent = event as CustomEvent;
+        if (event instanceof CustomEvent) {
+          keyChangeEvent = event;
+        }
       });
 
-      const inputElement = el.shadowRoot?.querySelector('.key-input') as HTMLInputElement;
-      inputElement.value = 'modified';
-      inputElement.dispatchEvent(new Event('blur', { bubbles: true }));
+      const inputElement = el.shadowRoot?.querySelector<HTMLInputElement>('.key-input');
+      inputElement!.value = 'modified';
+      inputElement!.dispatchEvent(new Event('blur', { bubbles: true }));
     });
 
     it('should dispatch key-change event', () => {
@@ -132,14 +134,16 @@ describe('FrontmatterKey', () => {
     beforeEach(async () => {
       keyChangeEvent = null;
       el = await fixture(html`<frontmatter-key key="original" editable></frontmatter-key>`);
-      
+
       el.addEventListener('key-change', (event) => {
-        keyChangeEvent = event as CustomEvent;
+        if (event instanceof CustomEvent) {
+          keyChangeEvent = event;
+        }
       });
 
-      const inputElement = el.shadowRoot?.querySelector('.key-input') as HTMLInputElement;
-      inputElement.value = '';
-      inputElement.dispatchEvent(new Event('blur', { bubbles: true }));
+      const inputElement = el.shadowRoot?.querySelector<HTMLInputElement>('.key-input');
+      inputElement!.value = '';
+      inputElement!.dispatchEvent(new Event('blur', { bubbles: true }));
     });
 
     it('should not dispatch key-change event', () => {
@@ -147,8 +151,8 @@ describe('FrontmatterKey', () => {
     });
 
     it('should revert the input value to original key', () => {
-      const inputElement = el.shadowRoot?.querySelector('.key-input') as HTMLInputElement;
-      expect(inputElement.value).to.equal('original');
+      const inputElement = el.shadowRoot?.querySelector<HTMLInputElement>('.key-input');
+      expect(inputElement!.value).to.equal('original');
     });
 
     it('should not update the key property', () => {
@@ -162,14 +166,16 @@ describe('FrontmatterKey', () => {
     beforeEach(async () => {
       keyChangeEvent = null;
       el = await fixture(html`<frontmatter-key key="original" editable></frontmatter-key>`);
-      
+
       el.addEventListener('key-change', (event) => {
-        keyChangeEvent = event as CustomEvent;
+        if (event instanceof CustomEvent) {
+          keyChangeEvent = event;
+        }
       });
 
-      const inputElement = el.shadowRoot?.querySelector('.key-input') as HTMLInputElement;
-      inputElement.value = '   ';
-      inputElement.dispatchEvent(new Event('blur', { bubbles: true }));
+      const inputElement = el.shadowRoot?.querySelector<HTMLInputElement>('.key-input');
+      inputElement!.value = '   ';
+      inputElement!.dispatchEvent(new Event('blur', { bubbles: true }));
     });
 
     it('should not dispatch key-change event', () => {
@@ -177,8 +183,8 @@ describe('FrontmatterKey', () => {
     });
 
     it('should revert the input value to original key', () => {
-      const inputElement = el.shadowRoot?.querySelector('.key-input') as HTMLInputElement;
-      expect(inputElement.value).to.equal('original');
+      const inputElement = el.shadowRoot?.querySelector<HTMLInputElement>('.key-input');
+      expect(inputElement!.value).to.equal('original');
     });
 
     it('should not update the key property', () => {
@@ -192,14 +198,16 @@ describe('FrontmatterKey', () => {
     beforeEach(async () => {
       keyChangeEvent = null;
       el = await fixture(html`<frontmatter-key key="unchanged" editable></frontmatter-key>`);
-      
+
       el.addEventListener('key-change', (event) => {
-        keyChangeEvent = event as CustomEvent;
+        if (event instanceof CustomEvent) {
+          keyChangeEvent = event;
+        }
       });
 
-      const inputElement = el.shadowRoot?.querySelector('.key-input') as HTMLInputElement;
-      inputElement.value = 'unchanged';
-      inputElement.dispatchEvent(new Event('blur', { bubbles: true }));
+      const inputElement = el.shadowRoot?.querySelector<HTMLInputElement>('.key-input');
+      inputElement!.value = 'unchanged';
+      inputElement!.dispatchEvent(new Event('blur', { bubbles: true }));
     });
 
     it('should not dispatch key-change event', () => {

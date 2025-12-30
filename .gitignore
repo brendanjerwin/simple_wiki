@@ -68,3 +68,9 @@ bun.lockb
 # Local binaries and tools (may contain secrets)
 .local/
 coverage.txt
+
+# Claude Code plan files
+.claude/plans/
+
+# Devbox cached Go binaries (built from source)
+.devbox/gobin/

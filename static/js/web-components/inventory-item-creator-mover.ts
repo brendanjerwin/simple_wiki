@@ -105,7 +105,7 @@ export class InventoryItemCreatorMover {
       return {
         identifier: response.identifier,
         isUnique: response.isUnique,
-        existingPage: response.existingPage,
+        ...(response.existingPage !== undefined && { existingPage: response.existingPage }),
       };
     } catch (err) {
       const augmentedError = AugmentErrorService.augmentError(err, 'generate identifier');

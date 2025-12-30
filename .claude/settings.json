@@ -1,3 +1,17 @@
 {
-  "enabledPlugins": {}
+  "enabledPlugins": {},
+  "permissions": {
+    "allow": [
+      "Bash(devbox run:*)",
+      "Bash(devbox services:*)",
+      "Bash(devbox search:*)",
+      "Bash(devbox update:*)",
+      "Bash(devbox info:*)",
+      "Bash(devbox list:*)",
+      "Bash(devbox shell -- go:*)",
+      "Bash(go doc:*)",
+      "Bash(go list:*)",
+      "Bash(go version:*)"
+    ]
+  }
 }

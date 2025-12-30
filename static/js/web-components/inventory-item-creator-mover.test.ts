@@ -58,6 +58,7 @@ describe('InventoryItemCreatorMover', () => {
 
       beforeEach(async () => {
         // Access private client via type assertion and stub its method
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private client for testing
         const serviceWithClient = service as unknown as { inventoryClient: { createInventoryItem: () => Promise<unknown> } };
         clientStub = sinon.stub(serviceWithClient.inventoryClient, 'createInventoryItem').resolves({
           success: true,
@@ -93,6 +94,7 @@ describe('InventoryItemCreatorMover', () => {
       let clientStub: sinon.SinonStub;
 
       beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private client for testing
         const serviceWithClient = service as unknown as { inventoryClient: { createInventoryItem: () => Promise<unknown> } };
         clientStub = sinon.stub(serviceWithClient.inventoryClient, 'createInventoryItem').resolves({
           success: true,
@@ -113,6 +115,7 @@ describe('InventoryItemCreatorMover', () => {
       let result: Awaited<ReturnType<typeof service.addItem>>;
 
       beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private client for testing
         const serviceWithClient = service as unknown as { inventoryClient: { createInventoryItem: () => Promise<unknown> } };
         sinon.stub(serviceWithClient.inventoryClient, 'createInventoryItem').resolves({
           success: false,
@@ -136,6 +139,7 @@ describe('InventoryItemCreatorMover', () => {
       let result: Awaited<ReturnType<typeof service.addItem>>;
 
       beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private client for testing
         const serviceWithClient = service as unknown as { inventoryClient: { createInventoryItem: () => Promise<unknown> } };
         sinon.stub(serviceWithClient.inventoryClient, 'createInventoryItem').rejects(new Error('Network error'));
 
@@ -174,6 +178,7 @@ describe('InventoryItemCreatorMover', () => {
       let clientStub: sinon.SinonStub;
 
       beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private client for testing
         const serviceWithClient = service as unknown as { pageManagementClient: { generateIdentifier: () => Promise<unknown> } };
         clientStub = sinon.stub(serviceWithClient.pageManagementClient, 'generateIdentifier').resolves({
           identifier: 'phillips_screwdriver',
@@ -208,6 +213,7 @@ describe('InventoryItemCreatorMover', () => {
       let result: Awaited<ReturnType<typeof service.generateIdentifier>>;
 
       beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private client for testing
         const serviceWithClient = service as unknown as { pageManagementClient: { generateIdentifier: () => Promise<unknown> } };
         sinon.stub(serviceWithClient.pageManagementClient, 'generateIdentifier').resolves({
           identifier: 'screwdriver',
@@ -247,6 +253,7 @@ describe('InventoryItemCreatorMover', () => {
       let clientStub: sinon.SinonStub;
 
       beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private client for testing
         const serviceWithClient = service as unknown as { pageManagementClient: { generateIdentifier: () => Promise<unknown> } };
         clientStub = sinon.stub(serviceWithClient.pageManagementClient, 'generateIdentifier').resolves({
           identifier: 'screwdriver_1',
@@ -267,6 +274,7 @@ describe('InventoryItemCreatorMover', () => {
       let result: Awaited<ReturnType<typeof service.generateIdentifier>>;
 
       beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private client for testing
         const serviceWithClient = service as unknown as { pageManagementClient: { generateIdentifier: () => Promise<unknown> } };
         sinon.stub(serviceWithClient.pageManagementClient, 'generateIdentifier').rejects(new Error('Network error'));
 
@@ -310,6 +318,7 @@ describe('InventoryItemCreatorMover', () => {
       let clientStub: sinon.SinonStub;
 
       beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private client for testing
         const serviceWithClient = service as unknown as { inventoryClient: { moveInventoryItem: () => Promise<unknown> } };
         clientStub = sinon.stub(serviceWithClient.inventoryClient, 'moveInventoryItem').resolves({
           success: true,
@@ -349,6 +358,7 @@ describe('InventoryItemCreatorMover', () => {
       let result: Awaited<ReturnType<typeof service.moveItem>>;
 
       beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private client for testing
         const serviceWithClient = service as unknown as { inventoryClient: { moveInventoryItem: () => Promise<unknown> } };
         sinon.stub(serviceWithClient.inventoryClient, 'moveInventoryItem').resolves({
           success: false,
@@ -372,6 +382,7 @@ describe('InventoryItemCreatorMover', () => {
       let result: Awaited<ReturnType<typeof service.moveItem>>;
 
       beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private client for testing
         const serviceWithClient = service as unknown as { inventoryClient: { moveInventoryItem: () => Promise<unknown> } };
         sinon.stub(serviceWithClient.inventoryClient, 'moveInventoryItem').rejects(new Error('Network error'));
 

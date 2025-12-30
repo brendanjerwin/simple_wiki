@@ -1,9 +1,10 @@
 import { expect } from '@open-wc/testing';
 import { ConnectError, Code } from '@connectrpc/connect';
-import { 
-  AugmentErrorService, 
-  AugmentedError, 
-  ErrorKind
+import {
+  AugmentErrorService,
+  AugmentedError,
+  ErrorKind,
+  coerceThirdPartyError
 } from './augment-error-service.js';
 
 describe('AugmentErrorService', () => {
@@ -228,7 +229,7 @@ describe('AugmentErrorService', () => {
         let result: AugmentedError;
 
         beforeEach(() => {
-          augmented = new AugmentedError('Test', ErrorKind.WARNING, 'warning');
+          augmented = new AugmentedError(new Error('Test'), ErrorKind.WARNING, 'warning');
           result = AugmentErrorService.augmentError(augmented);
         });
 
@@ -279,7 +280,7 @@ describe('AugmentErrorService', () => {
 
         beforeEach(() => {
           circularObj = { name: 'CircularError' };
-          circularObj.self = circularObj;  // Create circular reference
+          circularObj['self'] = circularObj;  // Create circular reference
           augmented = AugmentErrorService.augmentError(circularObj);
         });
 
@@ -433,6 +434,87 @@ describe('AugmentedError', () => {
       it('should return undefined for cause', () => {
         expect(augmented.cause).to.be.undefined;
       });
+    });
+  });
+});
+
+describe('coerceThirdPartyError', () => {
+  describe('when error is an Error instance', () => {
+    let originalError: Error;
+    let result: Error;
+
+    beforeEach(() => {
+      originalError = new Error('Original error');
+      result = coerceThirdPartyError(originalError, 'operation failed');
+    });
+
+    it('should return the same Error instance', () => {
+      expect(result).to.equal(originalError);
+    });
+  });
+
+  describe('when error is a string', () => {
+    let result: Error;
+
+    beforeEach(() => {
+      result = coerceThirdPartyError('string error message', 'operation failed');
+    });
+
+    it('should return Error with string as message', () => {
+      expect(result).to.be.instanceof(Error);
+      expect(result.message).to.equal('string error message');
+    });
+  });
+
+  describe('when error is a non-null object', () => {
+    let result: Error;
+
+    beforeEach(() => {
+      result = coerceThirdPartyError({ code: 500 }, 'operation failed');
+    });
+
+    it('should return Error with stringified object', () => {
+      expect(result).to.be.instanceof(Error);
+      expect(result.message).to.equal('[object Object]');
+    });
+  });
+
+  describe('when error is a number', () => {
+    let result: Error;
+
+    beforeEach(() => {
+      result = coerceThirdPartyError(42, 'operation failed');
+    });
+
+    it('should return Error with number stringified', () => {
+      expect(result).to.be.instanceof(Error);
+      expect(result.message).to.equal('42');
+    });
+  });
+
+  describe('when error is null', () => {
+    let result: Error;
+
+    beforeEach(() => {
+      result = coerceThirdPartyError(null, 'operation failed');
+    });
+
+    it('should return Error with context message', () => {
+      expect(result).to.be.instanceof(Error);
+      expect(result.message).to.equal('operation failed');
+    });
+  });
+
+  describe('when error is undefined', () => {
+    let result: Error;
+
+    beforeEach(() => {
+      result = coerceThirdPartyError(undefined, 'operation failed');
+    });
+
+    it('should return Error with context message', () => {
+      expect(result).to.be.instanceof(Error);
+      expect(result.message).to.equal('operation failed');
     });
   });
 });

@@ -11,7 +11,7 @@ import { AugmentErrorService } from './augment-error-service.js';
  *
  * @property {string} src - The image source URL
  * @property {string} alt - Alternative text for the image
- * @property {string} title - Optional title/tooltip for the image
+ * @property {string} imageTitle - Optional title/tooltip for the image
  * @property {boolean} toolsOpen - Whether the tools panel is open (for mobile tap)
  */
 export class WikiImage extends LitElement {
@@ -189,8 +189,8 @@ export class WikiImage extends LitElement {
   @property({ type: String })
   alt = '';
 
-  @property({ type: String })
-  title?: string;
+  @property({ type: String, attribute: 'image-title' })
+  imageTitle?: string;
 
   @property({ type: Boolean, reflect: true, attribute: 'tools-open' })
   toolsOpen = false;
@@ -329,7 +329,7 @@ export class WikiImage extends LitElement {
         <img
           src="${this.src}"
           alt="${this.alt}"
-          title=${ifDefined(this.title)}
+          title=${ifDefined(this.imageTitle)}
           tabindex="0"
           role="button"
           aria-label="${this.alt || 'Image'} - Press Enter to open tools"

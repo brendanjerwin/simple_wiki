@@ -4,7 +4,7 @@
     "module": "ESNext",
     "moduleResolution": "node",
     "lib": [
-      "ES2020",
+      "ES2022",
       "DOM",
       "DOM.Iterable"
     ],
@@ -32,6 +32,8 @@
   "include": [
     "gen/**/*",
     "web-components/**/*",
+    "services/**/*",
+    "utils/**/*",
     "*.ts",
     "*.js"
   ],

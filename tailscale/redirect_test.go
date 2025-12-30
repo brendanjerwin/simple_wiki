@@ -19,7 +19,7 @@ var _ = Describe("TailnetRedirector", func() {
 	BeforeEach(func() {
 		fallbackHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("fallback"))
+			_, _ = w.Write([]byte("fallback"))
 		})
 		recorder = httptest.NewRecorder()
 	})

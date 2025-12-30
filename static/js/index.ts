@@ -12,7 +12,7 @@ import './web-components/editor-toolbar.js';
 import './web-components/wiki-image.js';
 import { showStoredToast } from './web-components/toast-message.js';
 import { setupGlobalErrorHandler } from './web-components/global-error-handler.js';
-import { pageDeleteService } from './web-components/page-deletion-service.js';
+import { pageDeleteService, type PageDeleter } from './web-components/page-deletion-service.js';
 import { EditorContextMenuCoordinator } from './services/editor-context-menu-coordinator.js';
 import type { EditorContextMenu } from './web-components/editor-context-menu.js';
 import type { EditorToolbar } from './web-components/editor-toolbar.js';
@@ -23,7 +23,7 @@ setupGlobalErrorHandler();
 // Make services available globally for simple_wiki.js
 declare global {
   interface Window {
-    pageDeleteService: PageDeletionService;
+    pageDeleteService: PageDeleter;
     simple_wiki?: {
       pageName?: string;
       debounceMS?: number;
@@ -32,18 +32,19 @@ declare global {
   }
 }
 
-(window as unknown as { pageDeleteService: typeof pageDeleteService }).pageDeleteService = pageDeleteService;
+// Make pageDeleteService available globally
+window.pageDeleteService = pageDeleteService;
 
 // Show any stored toast messages after page load
 document.addEventListener('DOMContentLoaded', () => {
   showStoredToast();
 
   // Initialize editor context menu and toolbar on edit pages
-  const textarea = document.getElementById('userInput') as HTMLTextAreaElement | null;
-  const menu = document.getElementById('editor-context-menu') as EditorContextMenu | null;
-  const toolbar = document.getElementById('editor-toolbar') as EditorToolbar | null;
-  if (textarea && menu) {
-    new EditorContextMenuCoordinator(textarea, menu, undefined, undefined, toolbar);
+  const textarea = document.getElementById('userInput');
+  const menu = document.querySelector<EditorContextMenu>('editor-context-menu#editor-context-menu');
+  const toolbar = document.querySelector<EditorToolbar>('editor-toolbar#editor-toolbar');
+  if (textarea instanceof HTMLTextAreaElement && menu) {
+    new EditorContextMenuCoordinator(textarea, menu, undefined, undefined, toolbar ?? null);
   }
 
   // Handle toolbar exit button

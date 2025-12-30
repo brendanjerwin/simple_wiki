@@ -7,6 +7,13 @@ import './error-display.js';
 const TOAST_TYPES = ['success', 'error', 'warning', 'info'] as const;
 type ToastType = typeof TOAST_TYPES[number];
 
+/**
+ * Type guard to check if a string is a valid ToastType
+ */
+function isToastType(value: string | null): value is ToastType {
+  return value !== null && (TOAST_TYPES as readonly string[]).includes(value);
+}
+
 // Storage keys for sessionStorage persistence
 const STORAGE_KEYS = {
   MESSAGE: 'toast-message',
@@ -242,7 +249,7 @@ export class ToastMessage extends LitElement {
   private clearTimeout(): void {
     if (this.timeoutId) {
       window.clearTimeout(this.timeoutId);
-      this.timeoutId = undefined;
+      delete this.timeoutId;
     }
   }
 
@@ -253,16 +260,19 @@ export class ToastMessage extends LitElement {
 
   private _handleToastClick = (event: Event): void => {
     // Don't dismiss if clicking on error-display component or its children
-    const target = event.target as Element;
-    if (target && target.closest('error-display')) {
+    const target = event.target;
+    if (!(target instanceof Element)) {
       return;
     }
-    
+    if (target.closest('error-display')) {
+      return;
+    }
+
     // Don't dismiss if clicking on the close button (handled separately)
-    if (target && target.closest('.close-button')) {
+    if (target.closest('.close-button')) {
       return;
     }
-    
+
     // For backward compatibility, still allow clicking elsewhere to dismiss
     // This maintains existing behavior for simple message toasts
     this.hide();
@@ -358,8 +368,8 @@ export function showStoredToast(): void {
   const storedTimeoutRaw = sessionStorage.getItem(STORAGE_KEYS.TIMEOUT);
   
   if (storedMessage) {
-    // Validate the stored type against valid types
-    const storedType = TOAST_TYPES.includes(storedTypeRaw as ToastType) ? storedTypeRaw as ToastType : 'info';
+    // Validate the stored type against valid types using type guard
+    const storedType: ToastType = isToastType(storedTypeRaw) ? storedTypeRaw : 'info';
     const storedTimeout = storedTimeoutRaw ? parseInt(storedTimeoutRaw, 10) : 5;
     
     sessionStorage.removeItem(STORAGE_KEYS.MESSAGE);

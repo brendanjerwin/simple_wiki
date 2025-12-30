@@ -51,7 +51,9 @@ func (j *JSONArchiveMigrationScanJob) Execute() error {
 
 		// Enqueue migration job for this JSON file
 		job := NewJSONArchiveMigrationJob(j.dataDir, filename)
-		j.coordinator.EnqueueJob(job)
+		if err := j.coordinator.EnqueueJob(job); err != nil {
+			return fmt.Errorf("failed to enqueue archive job for %s: %w", filename, err)
+		}
 	}
 
 	return nil

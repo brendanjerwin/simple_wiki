@@ -740,4 +740,60 @@ var _ = Describe("PageInventoryNormalizationJob", func() {
 			})
 		})
 	})
+
+	Describe("handling page read errors", func() {
+		When("a page returns an error during read", func() {
+			var (
+				job *PageInventoryNormalizationJob
+				err error
+			)
+
+			BeforeEach(func() {
+				// Set up a container that references an item that will error on read
+				deps.setPage("container_page", map[string]any{
+					"identifier": "container_page",
+					"inventory": map[string]any{
+						"items": []any{"error_item"},
+					},
+				}, "")
+				// error_item exists but returns error when read
+				deps.setPageWithError("error_item", errors.New("simulated read error"))
+
+				job = NewPageInventoryNormalizationJob("container_page", deps, logger)
+				err = job.Execute()
+			})
+
+			It("should not return an error", func() {
+				// Errors during item processing are logged, not returned
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+	})
+
+	Describe("verifying markdown content", func() {
+		When("a page is created with markdown", func() {
+			var markdown string
+
+			BeforeEach(func() {
+				deps.setPage("container_page", map[string]any{
+					"identifier": "container_page",
+					"inventory": map[string]any{
+						"items": []any{"new_item"},
+					},
+				}, "")
+
+				job := NewPageInventoryNormalizationJob("container_page", deps, logger)
+				_ = job.Execute()
+				markdown = deps.getMarkdown("new_item")
+			})
+
+			It("should write markdown with title template", func() {
+				Expect(markdown).To(ContainSubstring("# {{or .Title .Identifier}}"))
+			})
+
+			It("should write markdown with inventory template", func() {
+				Expect(markdown).To(ContainSubstring("IsContainer"))
+			})
+		})
+	})
 })

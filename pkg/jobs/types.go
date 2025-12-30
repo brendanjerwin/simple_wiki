@@ -79,3 +79,52 @@ func (m *BlockingMockJob) Release() {
 		close(m.release)
 	})
 }
+
+// MockDispatcher is a test implementation of the Dispatcher interface.
+type MockDispatcher struct {
+	started       bool
+	dispatchErr   error
+	dispatchCount int
+	lastFunc      func()
+}
+
+// NewMockDispatcher creates a new MockDispatcher.
+func NewMockDispatcher() *MockDispatcher {
+	return &MockDispatcher{}
+}
+
+// Start implements the Dispatcher interface.
+func (m *MockDispatcher) Start() {
+	m.started = true
+}
+
+// Dispatch implements the Dispatcher interface.
+func (m *MockDispatcher) Dispatch(run func()) error {
+	m.dispatchCount++
+	m.lastFunc = run
+	if m.dispatchErr != nil {
+		return m.dispatchErr
+	}
+	// Execute the function immediately in a goroutine (like real dispatcher)
+	go run()
+	return nil
+}
+
+// SetDispatchError configures the dispatcher to return an error on Dispatch.
+func (m *MockDispatcher) SetDispatchError(err error) {
+	m.dispatchErr = err
+}
+
+// DispatchCount returns the number of times Dispatch was called.
+func (m *MockDispatcher) DispatchCount() int {
+	return m.dispatchCount
+}
+
+// FailingDispatcherFactory creates a factory that returns dispatchers that fail on Dispatch.
+func FailingDispatcherFactory(err error) DispatcherFactory {
+	return func(_, _ int) Dispatcher {
+		d := NewMockDispatcher()
+		d.SetDispatchError(err)
+		return d
+	}
+}

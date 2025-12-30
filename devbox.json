@@ -11,55 +11,49 @@
     "rootlesskit@latest",
     "bun@latest",
     "chromium@latest",
-    "go-tools@latest",
     "revive@latest",
     "ast-grep@latest",
     "playwright@latest",
     "playwright-driver@latest",
     "playwright-test@latest",
-    "gh@latest"
+    "gh@latest",
+    "golangci-lint@latest"
   ],
   "shell": {
     "init_hook": [
-      "echo 'Welcome to devbox!' > /dev/null"
+      ". ./scripts/ensure_staticcheck.sh",
+      "export PATH=\"${DEVBOX_PROJECT_ROOT:-.}/.devbox/gobin:$PATH\""
     ],
     "scripts": {
       "fe:test": [
         "./scripts/run_fe_tests.sh $@"
       ],
       "fe:lint": [
-        "cd static/js && bun install && bun run -- eslint . --ext .ts --max-warnings 0"
+        "./scripts/run_fe_lint.sh"
+      ],
+      "fe:typecheck": [
+        "./scripts/run_fe_typecheck.sh"
       ],
       "lint:md": [
-        "markdownlint --fix '**/*.md' --ignore vendor"
+        "./scripts/run_lint_md.sh"
       ],
       "go:test": [
-        "go test ./..."
+        "./scripts/run_go_test.sh"
       ],
       "go:lint": [
-        "revive -config revive.toml -set_exit_status ./..."
+        "./scripts/run_go_lint.sh"
       ],
       "go:coverage": [
-        "go list ./... | grep -v \"/gen/\" | xargs go test -coverprofile=coverage.out",
-        "go tool cover -func=coverage.out | tail -1"
+        "./scripts/run_go_coverage.sh"
       ],
       "go:generate": [
-        "go generate ./..."
+        "./scripts/run_go_generate.sh"
       ],
       "go:deadcode": [
-        "go run golang.org/x/tools/cmd/deadcode@latest ."
+        "./scripts/run_go_deadcode.sh"
       ],
       "lint:everything": [
-        "if git status --porcelain api/proto | grep -q '.'; then buf generate; else echo 'No changes in api/proto, skipping buf generate.'; fi",
-        "go mod tidy",
-        "go vet $(go list ./... | grep -v /gen/)",
-        "staticcheck $(go list ./... | grep -v /gen/) || echo 'Warning: staticcheck failed (may be go version mismatch, see devbox.json)'",
-        "revive -config revive.toml ./...",
-        "go test ./...",
-        "go run golang.org/x/tools/cmd/deadcode@latest . || true",
-        "markdownlint --fix '**/*.md' --ignore vendor",
-        "export CHROMIUM_BIN=$(which chromium)",
-        "cd static/js && bun install && bun run build && bun run test && bun run lint"
+        "./scripts/run_lint_everything.sh"
       ],
       "build": [
         "./scripts/build.sh $@"
@@ -68,17 +62,13 @@
         "cd static/js && bun install && bun run storybook"
       ],
       "storybook:build": [
-        "cd static/js && bun install && bun run build-storybook"
+        "./scripts/run_storybook_build.sh"
       ],
       "e2e:test": [
-        "devbox run build",
-        "export CHROMIUM_BIN=$(which chromium)",
-        "cd e2e && bun install && bunx playwright test"
+        "./scripts/run_e2e_test.sh"
       ],
       "e2e:test:headed": [
-        "devbox run build",
-        "export CHROMIUM_BIN=$(which chromium)",
-        "cd e2e && bun install && bun run test:headed"
+        "./scripts/run_e2e_test_headed.sh"
       ],
       "e2e:codegen": [
         "cd e2e & playwright codegen --browser=chromium http://localhost:8050/home"
