@@ -13,7 +13,9 @@ import (
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
+	"github.com/brendanjerwin/simple_wiki/pageimport"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
+	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
@@ -83,11 +85,12 @@ type Server struct {
 	apiv1.UnimplementedPageManagementServiceServer
 	apiv1.UnimplementedSearchServiceServer
 	apiv1.UnimplementedInventoryManagementServiceServer
+	apiv1.UnimplementedPageImportServiceServer
 	commit                  string
 	buildTime               time.Time
 	pageReaderMutator       wikipage.PageReaderMutator
 	bleveIndexQueryer       bleve.IQueryBleveIndex
-	jobProgressProvider     jobs.IProvideJobProgress
+	jobQueueCoordinator     *jobs.JobQueueCoordinator
 	logger                  *lumber.ConsoleLogger
 	markdownRenderer        wikipage.IRenderMarkdownToHTML
 	templateExecutor        wikipage.IExecuteTemplate
@@ -288,13 +291,13 @@ func removeAtPath(data any, path []*apiv1.PathComponent) (any, error) {
 
 // NewServer creates a new gRPC server with the given dependencies.
 // Required dependencies: pageReaderMutator, bleveIndexQueryer, frontmatterIndexQueryer.
-// Optional dependencies: jobProgressProvider, logger, markdownRenderer, templateExecutor.
+// Optional dependencies: jobQueueCoordinator, logger, markdownRenderer, templateExecutor.
 func NewServer(
 	commit string,
 	buildTime time.Time,
 	pageReaderMutator wikipage.PageReaderMutator,
 	bleveIndexQueryer bleve.IQueryBleveIndex,
-	jobProgressProvider jobs.IProvideJobProgress,
+	jobQueueCoordinator *jobs.JobQueueCoordinator,
 	logger *lumber.ConsoleLogger,
 	markdownRenderer wikipage.IRenderMarkdownToHTML,
 	templateExecutor wikipage.IExecuteTemplate,
@@ -315,7 +318,7 @@ func NewServer(
 		buildTime:               buildTime,
 		pageReaderMutator:       pageReaderMutator,
 		bleveIndexQueryer:       bleveIndexQueryer,
-		jobProgressProvider:     jobProgressProvider,
+		jobQueueCoordinator:     jobQueueCoordinator,
 		logger:                  logger,
 		markdownRenderer:        markdownRenderer,
 		templateExecutor:        templateExecutor,
@@ -330,6 +333,7 @@ func (s *Server) RegisterWithServer(grpcServer *grpc.Server) {
 	apiv1.RegisterPageManagementServiceServer(grpcServer, s)
 	apiv1.RegisterSearchServiceServer(grpcServer, s)
 	apiv1.RegisterInventoryManagementServiceServer(grpcServer, s)
+	apiv1.RegisterPageImportServiceServer(grpcServer, s)
 }
 
 // GetVersion implements the GetVersion RPC.
@@ -394,15 +398,15 @@ func (s *Server) StreamJobStatus(req *apiv1.StreamJobStatusRequest, stream apiv1
 	}
 }
 
-// buildJobStatusResponse builds a GetJobStatusResponse from the job progress provider.
+// buildJobStatusResponse builds a GetJobStatusResponse from the job queue coordinator.
 func (s *Server) buildJobStatusResponse() *apiv1.GetJobStatusResponse {
-	if s.jobProgressProvider == nil {
+	if s.jobQueueCoordinator == nil {
 		return &apiv1.GetJobStatusResponse{
 			JobQueues: []*apiv1.JobQueueStatus{},
 		}
 	}
 
-	progress := s.jobProgressProvider.GetJobProgress()
+	progress := s.jobQueueCoordinator.GetJobProgress()
 	var protoQueues []*apiv1.JobQueueStatus
 
 	for _, queueStats := range progress.QueueStats {
@@ -854,4 +858,153 @@ func (s *Server) findUniqueIdentifier(baseIdentifier string) string {
 
 	// Fallback: return with a high number
 	return baseIdentifier + "_999"
+}
+
+// ParseCSVPreview implements the ParseCSVPreview RPC for the PageImportService.
+// It parses CSV content and returns a preview of what would be imported.
+func (s *Server) ParseCSVPreview(_ context.Context, req *apiv1.ParseCSVPreviewRequest) (*apiv1.ParseCSVPreviewResponse, error) {
+	if req.CsvContent == "" {
+		return nil, status.Error(codes.InvalidArgument, "csv_content cannot be empty")
+	}
+
+	parseResult, err := pageimport.ParseCSV(req.CsvContent)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "failed to parse CSV: %v", err)
+	}
+
+	// If there are global parsing errors, return them
+	if parseResult.HasErrors() {
+		return &apiv1.ParseCSVPreviewResponse{
+			ParsingErrors: parseResult.ParsingErrors,
+		}, nil
+	}
+
+	// Convert parsed records to protobuf and check page existence
+	var records []*apiv1.PageImportRecord
+	var errorCount, updateCount, createCount int32
+
+	for _, parsed := range parseResult.Records {
+		record, err := s.convertParsedRecordToProto(parsed)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to convert record: %v", err)
+		}
+
+		// Check if the page exists
+		_, _, readErr := s.pageReaderMutator.ReadFrontMatter(parsed.Identifier)
+		pageExists := readErr == nil
+		record.PageExists = pageExists
+
+		// Validate template if specified
+		if parsed.Template != "" && !parsed.HasErrors() {
+			_, _, templateErr := s.pageReaderMutator.ReadFrontMatter(parsed.Template)
+			if templateErr != nil && os.IsNotExist(templateErr) {
+				record.ValidationErrors = append(record.ValidationErrors,
+					fmt.Sprintf("template '%s' does not exist", parsed.Template))
+			}
+		}
+
+		// Count errors, updates, and creates
+		if len(record.ValidationErrors) > 0 {
+			errorCount++
+		} else if pageExists {
+			updateCount++
+		} else {
+			createCount++
+		}
+
+		records = append(records, record)
+	}
+
+	return &apiv1.ParseCSVPreviewResponse{
+		Records:      records,
+		TotalRecords: int32(len(records)),
+		ErrorCount:   errorCount,
+		UpdateCount:  updateCount,
+		CreateCount:  createCount,
+	}, nil
+}
+
+// convertParsedRecordToProto converts a pageimport.ParsedRecord to apiv1.PageImportRecord.
+func (*Server) convertParsedRecordToProto(parsed pageimport.ParsedRecord) (*apiv1.PageImportRecord, error) {
+	record := &apiv1.PageImportRecord{
+		RowNumber:        int32(parsed.RowNumber),
+		Identifier:       parsed.Identifier,
+		Template:         parsed.Template,
+		FieldsToDelete:   parsed.FieldsToDelete,
+		ValidationErrors: parsed.ValidationErrors,
+		Warnings:         parsed.Warnings,
+	}
+
+	// Convert frontmatter to protobuf Struct
+	if len(parsed.Frontmatter) > 0 {
+		fmStruct, err := structpb.NewStruct(parsed.Frontmatter)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert frontmatter for row %d: %w", parsed.RowNumber, err)
+		}
+		record.Frontmatter = fmStruct
+	}
+
+	// Convert array operations
+	for _, op := range parsed.ArrayOps {
+		protoOp := &apiv1.ArrayOperation{
+			FieldPath: op.FieldPath,
+			Value:     op.Value,
+		}
+		switch op.Operation {
+		case pageimport.EnsureExists:
+			protoOp.Operation = apiv1.ArrayOpType_ARRAY_OP_TYPE_ENSURE_EXISTS
+		case pageimport.DeleteValue:
+			protoOp.Operation = apiv1.ArrayOpType_ARRAY_OP_TYPE_DELETE_VALUE
+		default:
+			protoOp.Operation = apiv1.ArrayOpType_ARRAY_OP_TYPE_UNSPECIFIED
+		}
+		record.ArrayOps = append(record.ArrayOps, protoOp)
+	}
+
+	return record, nil
+}
+
+// StartPageImportJob implements the StartPageImportJob RPC for the PageImportService.
+// It starts a background job to import pages from the CSV content.
+func (s *Server) StartPageImportJob(_ context.Context, req *apiv1.StartPageImportJobRequest) (*apiv1.StartPageImportJobResponse, error) {
+	if req.CsvContent == "" {
+		return nil, status.Error(codes.InvalidArgument, "csv_content cannot be empty")
+	}
+
+	if s.jobQueueCoordinator == nil {
+		return nil, status.Error(codes.Unavailable, "job queue coordinator not available")
+	}
+
+	parseResult, err := pageimport.ParseCSV(req.CsvContent)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "failed to parse CSV: %v", err)
+	}
+
+	// Check for global parsing errors
+	if parseResult.HasErrors() {
+		return nil, status.Errorf(codes.InvalidArgument, "CSV has parsing errors: %s", strings.Join(parseResult.ParsingErrors, "; "))
+	}
+
+	// Get valid records only
+	validRecords := parseResult.ValidRecords()
+	if len(validRecords) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "no valid records to import")
+	}
+
+	// Create the page import job
+	job, err := server.NewPageImportJob(validRecords, s.pageReaderMutator, s.logger)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to create import job: %v", err)
+	}
+
+	// Enqueue the job
+	if err := s.jobQueueCoordinator.EnqueueJob(job); err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to enqueue import job: %v", err)
+	}
+
+	return &apiv1.StartPageImportJobResponse{
+		Success:     true,
+		JobId:       server.PageImportJobName,
+		RecordCount: int32(len(validRecords)),
+	}, nil
 }

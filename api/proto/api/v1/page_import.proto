@@ -1,0 +1,60 @@
+syntax = "proto3";
+
+package api.v1;
+
+import "google/protobuf/struct.proto";
+
+option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
+
+service PageImportService {
+  rpc ParseCSVPreview(ParseCSVPreviewRequest) returns (ParseCSVPreviewResponse);
+  rpc StartPageImportJob(StartPageImportJobRequest) returns (StartPageImportJobResponse);
+}
+
+message PageImportRecord {
+  int32 row_number = 1;
+  string identifier = 2;
+  string template = 3;
+  google.protobuf.Struct frontmatter = 4;      // Scalar fields to set
+  repeated ArrayOperation array_ops = 5;       // Array field operations
+  repeated string fields_to_delete = 6;        // Fields marked with [[DELETE]]
+  bool page_exists = 7;
+  repeated string validation_errors = 8;
+  repeated string warnings = 9;                // Type coercion warnings, etc.
+}
+
+message ArrayOperation {
+  string field_path = 1;                       // e.g., "tags" or "inventory.items"
+  ArrayOpType operation = 2;
+  string value = 3;                            // Value to add or remove
+}
+
+enum ArrayOpType {
+  ARRAY_OP_TYPE_UNSPECIFIED = 0;
+  ARRAY_OP_TYPE_ENSURE_EXISTS = 1;             // Add to array if not present
+  ARRAY_OP_TYPE_DELETE_VALUE = 2;              // Remove specific value from array
+}
+
+message ParseCSVPreviewRequest {
+  string csv_content = 1;
+}
+
+message ParseCSVPreviewResponse {
+  repeated PageImportRecord records = 1;
+  int32 total_records = 2;
+  int32 error_count = 3;
+  int32 update_count = 4;
+  int32 create_count = 5;
+  repeated string parsing_errors = 6;          // Global parsing errors
+}
+
+message StartPageImportJobRequest {
+  string csv_content = 1;
+}
+
+message StartPageImportJobResponse {
+  bool success = 1;
+  string job_id = 2;
+  int32 record_count = 3;
+  string error = 4;
+}

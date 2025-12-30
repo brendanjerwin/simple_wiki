@@ -127,6 +127,9 @@ $(window).load(function () {
 
     //add inventory menu
     addInventoryMenu();
+
+    //add page import menu
+    addPageImportMenu();
 });
 
 function addPrintMenu() {
@@ -282,6 +285,29 @@ function buildInventoryMenu(currentPage, frontmatter) {
             }
         });
     }
+}
+
+function addPageImportMenu() {
+    if ($('article.content').length == 0) {
+        return;
+    }
+
+    // Add menu item after utility menu section
+    $("#utilityMenuSection").after(`
+        <li class="pure-menu-item">
+            <a href="#" class="pure-menu-link" id="page-import-trigger">
+                <i class="fa-solid fa-file-import"></i> Import Pages
+            </a>
+        </li>
+    `);
+
+    $('#page-import-trigger').on('click', function(e) {
+        e.preventDefault();
+        var dialog = document.getElementById('page-import-dialog');
+        if (dialog && typeof dialog.openDialog === 'function') {
+            dialog.openDialog();
+        }
+    });
 }
 
 function printLabel(template_identifier) {
