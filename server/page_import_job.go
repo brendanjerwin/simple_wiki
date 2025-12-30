@@ -20,9 +20,6 @@ const (
 
 	// PageImportReportPage is the identifier for the page import report page.
 	PageImportReportPage = "page_import_report"
-
-	// invItemTemplate is the template identifier for inventory items.
-	invItemTemplate = "inv_item"
 )
 
 // PageImportResult contains the result of a page import job execution.
@@ -135,7 +132,7 @@ func (j *PageImportJob) processRecord(record pageimport.ParsedRecord) error {
 	}
 
 	// Apply template logic for inv_item
-	if record.Template == invItemTemplate {
+	if record.Template == pageimport.InvItemTemplate {
 		EnsureInventoryFrontmatterStructure(fm)
 	}
 
@@ -162,7 +159,7 @@ func (j *PageImportJob) processRecord(record pageimport.ParsedRecord) error {
 	}
 
 	// For new pages with inv_item template, also write the inventory markdown
-	if isNewPage && record.Template == invItemTemplate {
+	if isNewPage && record.Template == pageimport.InvItemTemplate {
 		markdown := inventory.BuildItemMarkdown()
 		if err := j.pageReaderMutator.WriteMarkdown(identifier, markdown); err != nil {
 			return fmt.Errorf("failed to write markdown: %w", err)

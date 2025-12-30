@@ -14,6 +14,10 @@ import (
 // MaxRows is the maximum number of data rows allowed in a CSV import.
 const MaxRows = 200
 
+// InvItemTemplate is the built-in template for inventory items.
+// This template has special handling and doesn't require a wiki page to exist.
+const InvItemTemplate = "inv_item"
+
 // DeleteSentinel is the marker for deleting a scalar field entirely.
 const DeleteSentinel = "[[DELETE]]"
 

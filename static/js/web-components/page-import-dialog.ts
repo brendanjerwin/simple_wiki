@@ -20,6 +20,7 @@ import {
 } from './shared-styles.js';
 import './error-display.js';
 import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
+import { flattenFrontmatter } from '../page-import/flatten-frontmatter.js';
 
 type DialogState = 'upload' | 'validating' | 'preview' | 'importing' | 'complete';
 
@@ -835,29 +836,9 @@ export class PageImportDialog extends LitElement {
     `;
   }
 
-  /**
-   * Flattens a nested object into dot-notation key-value pairs.
-   * e.g., {inventory: {container: "drawer"}} -> [["inventory.container", "drawer"]]
-   */
-  private _flattenObject(obj: Record<string, unknown>, prefix = ''): [string, string][] {
-    const result: [string, string][] = [];
-    for (const [key, value] of Object.entries(obj)) {
-      const fullKey = prefix ? `${prefix}.${key}` : key;
-      if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
-        // Safe to recurse - we've verified it's a non-null, non-array object
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- type narrowed by runtime checks above
-        const nestedObj = value as Record<string, unknown>;
-        result.push(...this._flattenObject(nestedObj, fullKey));
-      } else {
-        result.push([fullKey, String(value)]);
-      }
-    }
-    return result;
-  }
-
   private _renderRecordDetail(record: PageImportRecord) {
     const frontmatterEntries = record.frontmatter
-      ? this._flattenObject(record.frontmatter).sort(([a], [b]) => a.localeCompare(b))
+      ? flattenFrontmatter(record.frontmatter).sort(([a], [b]) => a.localeCompare(b))
       : [];
 
     return html`
