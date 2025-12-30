@@ -40,7 +40,7 @@ class WikiSearchResults extends LitElement {
 
       a {
         display: block;
-        margin: 5px;
+        margin: 10px;
         text-decoration: none;
         font-weight: bold;
         transition: background-color 0.3s ease;
@@ -95,7 +95,7 @@ class WikiSearchResults extends LitElement {
         .item_content {
             background-color: #e8e8e8;
             font-size: 12px;
-            margin: 5px;
+            margin: 10px;
             margin-bottom: 10px;
             padding: 5px;
             width: auto;
@@ -156,7 +156,7 @@ class WikiSearchResults extends LitElement {
             border: 1px solid #ffc107;
             border-radius: 5px;
             padding: 8px 10px;
-            margin: 5px;
+            margin: 10px;
             font-size: 13px;
             color: #856404;
             display: flex;
