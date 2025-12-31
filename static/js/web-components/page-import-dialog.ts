@@ -13,7 +13,6 @@ import {
 import {
   SystemInfoService,
   StreamJobStatusRequestSchema,
-  type GetJobStatusResponse,
 } from '../gen/api/v1/system_info_pb.js';
 import {
   sharedStyles,
@@ -26,7 +25,13 @@ import './error-display.js';
 import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
 import { flattenFrontmatter } from '../page-import/flatten-frontmatter.js';
 
-type DialogState = 'upload' | 'validating' | 'preview' | 'importing' | 'complete';
+type DialogState = 'upload' | 'validating' | 'preview' | 'importing';
+
+interface JobQueueStatus {
+  jobsRemaining: number;
+  highWaterMark: number;
+  isActive: boolean;
+}
 
 interface ImportStats {
   total: number;
@@ -42,8 +47,7 @@ interface ImportStats {
  * 1. Upload: File upload via drag-drop or file picker
  * 2. Validating: Loading state while parsing CSV
  * 3. Preview: Review records with navigation and error filtering
- * 4. Importing: Loading state while import job runs
- * 5. Complete: Summary with link to report page
+ * 4. Importing: Shows job queue status while import runs in background
  */
 export class PageImportDialog extends LitElement {
   private static readonly PAGE_IMPORT_QUEUE_NAME = 'PageImportJob';
@@ -414,29 +418,32 @@ export class PageImportDialog extends LitElement {
         margin-bottom: 0;
       }
 
-      /* Complete State Styles */
-      .complete-container {
-        text-align: center;
-        padding: 40px 20px;
+      /* Importing State Styles */
+      .importing-container {
+        padding: 20px;
       }
 
-      .complete-icon {
-        font-size: 64px;
-        color: #28a745;
-        margin-bottom: 16px;
+      .importing-explainer {
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 4px;
+        padding: 16px;
+        margin-bottom: 20px;
       }
 
-      .complete-title {
-        font-size: 24px;
-        font-weight: 600;
+      .importing-explainer p {
+        margin: 0 0 12px 0;
         color: #333;
-        margin-bottom: 8px;
+        font-size: 14px;
+        line-height: 1.5;
       }
 
-      .complete-message {
-        font-size: 16px;
-        color: #666;
-        margin-bottom: 24px;
+      .importing-explainer p:last-child {
+        margin-bottom: 0;
+      }
+
+      .report-link-section {
+        margin-bottom: 20px;
       }
 
       .report-link {
@@ -450,6 +457,72 @@ export class PageImportDialog extends LitElement {
 
       .report-link:hover {
         text-decoration: underline;
+      }
+
+      .job-status-section {
+        background: #fff;
+        border: 1px solid #e9ecef;
+        border-radius: 4px;
+        padding: 16px;
+      }
+
+      .job-status-title {
+        font-size: 12px;
+        font-weight: 600;
+        color: #666;
+        text-transform: uppercase;
+        margin-bottom: 12px;
+      }
+
+      .job-status-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 0;
+        border-bottom: 1px solid #f0f0f0;
+      }
+
+      .job-status-row:last-child {
+        border-bottom: none;
+      }
+
+      .job-status-label {
+        color: #666;
+        font-size: 14px;
+      }
+
+      .job-status-value {
+        font-weight: 500;
+        color: #333;
+        font-size: 14px;
+      }
+
+      .job-status-value.active {
+        color: #28a745;
+      }
+
+      .job-status-value.inactive {
+        color: #6c757d;
+      }
+
+      .job-status-waiting {
+        text-align: center;
+        padding: 20px;
+        color: #666;
+        font-size: 14px;
+      }
+
+      .job-status-waiting i {
+        margin-right: 8px;
+      }
+
+      .job-status-disconnected {
+        text-align: center;
+        padding: 16px;
+        color: #6c757d;
+        font-size: 14px;
+        background: #f8f9fa;
+        border-radius: 4px;
       }
 
       /* Parsing Errors */
@@ -499,7 +572,10 @@ export class PageImportDialog extends LitElement {
   private parsingErrors: string[] = [];
 
   @state()
-  private importProgressMessage = '';
+  private jobQueueStatus: JobQueueStatus | null = null;
+
+  @state()
+  private streamingDisconnected = false;
 
   private _pageImportClient: ReturnType<typeof createClient<typeof PageImportService>> | null =
     null;
@@ -560,7 +636,8 @@ export class PageImportDialog extends LitElement {
     this.importedCount = 0;
     this.dragOver = false;
     this.parsingErrors = [];
-    this.importProgressMessage = '';
+    this.jobQueueStatus = null;
+    this.streamingDisconnected = false;
     this._streamAbortController = null;
   }
 
@@ -667,7 +744,7 @@ export class PageImportDialog extends LitElement {
 
     this.dialogState = 'importing';
     this.error = null;
-    this.importProgressMessage = 'Starting import...';
+    this.jobQueueStatus = null;
 
     try {
       const csvContent = await this.file.text();
@@ -679,20 +756,9 @@ export class PageImportDialog extends LitElement {
       }
 
       this.importedCount = response.recordCount;
-      this.importProgressMessage = `Importing ${this.importedCount} page${this.importedCount !== 1 ? 's' : ''}...`;
 
-      // Wait for the job to complete by streaming job status
-      await this._waitForJobCompletion();
-
-      this.dialogState = 'complete';
-
-      this.dispatchEvent(
-        new CustomEvent('import-complete', {
-          detail: { count: this.importedCount },
-          bubbles: true,
-          composed: true,
-        })
-      );
+      // Start streaming job status for the UI - fire and forget
+      this._streamJobStatus();
     } catch (err) {
       this.error = AugmentErrorService.augmentError(err, 'importing pages');
       this.dialogState = 'preview';
@@ -700,19 +766,15 @@ export class PageImportDialog extends LitElement {
   }
 
   /**
-   * Waits for the import job to complete by streaming job status updates.
-   * Monitors the PageImportJob queue and returns when all jobs complete.
-   * Stream errors are non-fatal.
+   * Streams job status updates for display in the UI.
+   * Non-blocking - updates jobQueueStatus state as updates arrive.
    */
-  private async _waitForJobCompletion(): Promise<void> {
+  private async _streamJobStatus(): Promise<void> {
     this._streamAbortController = new AbortController();
 
     const request = create(StreamJobStatusRequestSchema, {
-      updateIntervalMs: 500, // Poll every 500ms for responsive updates
+      updateIntervalMs: 500,
     });
-
-    // Track if we've ever seen jobs in the queue (highWaterMark > 0)
-    let sawJobs = false;
 
     try {
       for await (const status of this.systemInfoClient.streamJobStatus(request, {
@@ -722,87 +784,24 @@ export class PageImportDialog extends LitElement {
           (q) => q.name === PageImportDialog.PAGE_IMPORT_QUEUE_NAME
         );
 
-        // Track if we've ever seen jobs registered
-        if (importQueue && importQueue.highWaterMark > 0) {
-          sawJobs = true;
-        }
-
-        const isComplete = this._checkImportComplete(importQueue, sawJobs);
-
-        // Update progress message if not complete
-        if (!isComplete && importQueue) {
-          this._updateProgressMessage(importQueue);
-        }
-
-        // Import complete - stop streaming
-        if (isComplete) {
-          this._streamAbortController.abort();
-          return;
+        if (importQueue) {
+          this.jobQueueStatus = {
+            jobsRemaining: importQueue.jobsRemaining,
+            highWaterMark: importQueue.highWaterMark,
+            isActive: importQueue.isActive,
+          };
+        } else {
+          // Queue not found - either not started or already finished
+          this.jobQueueStatus = null;
         }
       }
     } catch (err) {
-      // AbortError is expected when we detect completion or dialog is closed
+      // AbortError is expected when dialog is closed
       if (err instanceof Error && err.name === 'AbortError') {
         return;
       }
-      // Other stream errors are non-fatal - import still completes in background
-      this.importProgressMessage = 'Import running in background...';
-    }
-  }
-
-  /**
-   * Checks if the import is complete based on queue status.
-   * Complete when: we've seen jobs AND (queue is gone OR queue is inactive).
-   */
-  private _checkImportComplete(
-    importQueue: { isActive: boolean; highWaterMark: number } | undefined,
-    sawJobs: boolean
-  ): boolean {
-    // Haven't seen any jobs yet - not complete
-    if (!sawJobs) {
-      return false;
-    }
-
-    // Queue is gone after we saw jobs - complete
-    if (!importQueue) {
-      return true;
-    }
-
-    // Queue is inactive after we saw jobs - complete
-    if (!importQueue.isActive) {
-      return true;
-    }
-
-    return false;
-  }
-
-  /**
-   * Updates the progress message based on the current job queue status.
-   */
-  private _updateProgressMessage(importQueue: {
-    highWaterMark: number;
-    jobsRemaining: number;
-  }): void {
-    const total = importQueue.highWaterMark;
-    const remaining = importQueue.jobsRemaining;
-    const completed = total - remaining;
-
-    // Zero highWaterMark means queue just started, show generic message
-    if (total === 0) {
-      this.importProgressMessage = 'Starting import...';
-      return;
-    }
-
-    // Account for the report job at the end (total includes it)
-    // Show "X of Y pages" where Y is total - 1 (excluding report job)
-    const pageTotal = total - 1;
-    const pagesCompleted = Math.min(completed, pageTotal);
-
-    if (pagesCompleted >= pageTotal && remaining > 0) {
-      // All page jobs done, report job running
-      this.importProgressMessage = 'Generating import report...';
-    } else {
-      this.importProgressMessage = `Importing page ${pagesCompleted + 1} of ${pageTotal}...`;
+      // Other errors - show indicator that live status is unavailable
+      this.streamingDisconnected = true;
     }
   }
 
@@ -1106,19 +1105,59 @@ export class PageImportDialog extends LitElement {
     `;
   }
 
-  private _renderCompleteState() {
+  private _renderImportingState() {
+    const status = this.jobQueueStatus;
+
     return html`
-      <div class="complete-container">
-        <div class="complete-icon">
-          <i class="fas fa-check-circle"></i>
+      <div class="importing-container">
+        <div class="importing-explainer">
+          <p>
+            Your import of ${this.importedCount} page${this.importedCount !== 1 ? 's' : ''} has been
+            started. The pages are being created or updated in the background.
+          </p>
+          <p>
+            When complete, a report will be written to the page import report. You can close this
+            dialog at any time - the import will continue running.
+          </p>
         </div>
-        <div class="complete-title">Import Complete</div>
-        <div class="complete-message">
-          Successfully imported ${this.importedCount} page${this.importedCount !== 1 ? 's' : ''}.
+
+        <div class="report-link-section">
+          <a href="/page_import_report" class="report-link">
+            <i class="fas fa-file-alt"></i> View Import Report
+          </a>
         </div>
-        <a href="/page_import_report" class="report-link">
-          <i class="fas fa-file-alt"></i> View Import Report
-        </a>
+
+        <div class="job-status-section">
+          <div class="job-status-title">Job Queue Status</div>
+          ${this.streamingDisconnected
+            ? html`
+                <div class="job-status-disconnected">
+                  Live status unavailable. Import continues in background.
+                </div>
+              `
+            : status
+              ? html`
+                  <div class="job-status-row">
+                    <span class="job-status-label">Status</span>
+                    <span class="job-status-value ${status.isActive ? 'active' : 'inactive'}">
+                      ${status.isActive ? 'Active' : 'Idle'}
+                    </span>
+                  </div>
+                  <div class="job-status-row">
+                    <span class="job-status-label">Jobs Remaining</span>
+                    <span class="job-status-value">${status.jobsRemaining}</span>
+                  </div>
+                  <div class="job-status-row">
+                    <span class="job-status-label">Total Jobs</span>
+                    <span class="job-status-value">${status.highWaterMark}</span>
+                  </div>
+                `
+              : html`
+                  <div class="job-status-waiting">
+                    <i class="fas fa-spinner fa-spin"></i> Waiting for job status...
+                  </div>
+                `}
+        </div>
       </div>
     `;
   }
@@ -1132,9 +1171,7 @@ export class PageImportDialog extends LitElement {
       case 'preview':
         return this._renderPreviewState();
       case 'importing':
-        return this._renderLoadingState(this.importProgressMessage || 'Importing pages...');
-      case 'complete':
-        return this._renderCompleteState();
+        return this._renderImportingState();
     }
   }
 
@@ -1183,15 +1220,6 @@ export class PageImportDialog extends LitElement {
             Import ${this.validRecordCount} page${this.validRecordCount !== 1 ? 's' : ''}
           </button>
         `;
-      case 'complete':
-        return html`
-          <button
-            class="button-base button-primary button-large border-radius-small"
-            @click=${this.closeDialog}
-          >
-            Done
-          </button>
-        `;
     }
   }
 
@@ -1205,8 +1233,6 @@ export class PageImportDialog extends LitElement {
         return 'Preview Import';
       case 'importing':
         return 'Importing Pages';
-      case 'complete':
-        return 'Import Complete';
     }
   }
 

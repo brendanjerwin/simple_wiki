@@ -287,17 +287,17 @@ describe('PageImportDialog', () => {
       });
     });
 
-    describe('when in complete state', () => {
+    describe('when in importing state', () => {
       beforeEach(async () => {
         el.openDialog();
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (el as any).dialogState = 'complete';
+        (el as any).dialogState = 'importing';
         await el.updateComplete;
       });
 
-      it('should show complete title', () => {
+      it('should show importing title', () => {
         const title = el.shadowRoot?.querySelector('.dialog-title');
-        expect(title?.textContent).to.equal('Import Complete');
+        expect(title?.textContent).to.equal('Importing Pages');
       });
     });
   });
@@ -331,23 +331,95 @@ describe('PageImportDialog', () => {
       el.openDialog();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (el as any).dialogState = 'importing';
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (el as any).importedCount = 5;
       await el.updateComplete;
     });
 
-    it('should show loading spinner', () => {
-      const spinner = el.shadowRoot?.querySelector('.loading-spinner');
-      expect(spinner).to.exist;
+    it('should show importing container', () => {
+      const container = el.shadowRoot?.querySelector('.importing-container');
+      expect(container).to.exist;
     });
 
-    it('should show importing message', () => {
-      const loadingText = el.shadowRoot?.querySelector('.loading-text');
-      expect(loadingText?.textContent).to.contain('Importing pages');
+    it('should show explainer text', () => {
+      const explainer = el.shadowRoot?.querySelector('.importing-explainer');
+      expect(explainer).to.exist;
+      expect(explainer?.textContent).to.contain('import');
+    });
+
+    it('should show link to report page', () => {
+      const reportLink = el.shadowRoot?.querySelector<HTMLAnchorElement>('.report-link');
+      expect(reportLink).to.exist;
+      expect(reportLink?.href).to.contain('page_import_report');
+    });
+
+    it('should show job status section', () => {
+      const statusSection = el.shadowRoot?.querySelector('.job-status-section');
+      expect(statusSection).to.exist;
     });
 
     it('should show Close button that is enabled', () => {
       const closeBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.footer .button-secondary');
       expect(closeBtn?.textContent?.trim()).to.equal('Close');
       expect(closeBtn?.disabled).to.be.false;
+    });
+
+    describe('when job queue status is available', () => {
+      beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (el as any).jobQueueStatus = {
+          jobsRemaining: 3,
+          highWaterMark: 6,
+          isActive: true,
+        };
+        await el.updateComplete;
+      });
+
+      it('should show jobs remaining', () => {
+        const content = el.shadowRoot?.querySelector('.job-status-section')?.textContent;
+        expect(content).to.contain('3');
+      });
+
+      it('should show total jobs', () => {
+        const content = el.shadowRoot?.querySelector('.job-status-section')?.textContent;
+        expect(content).to.contain('6');
+      });
+
+      it('should show active status', () => {
+        const statusValue = el.shadowRoot?.querySelector('.job-status-value.active');
+        expect(statusValue?.textContent?.trim()).to.equal('Active');
+      });
+    });
+
+    describe('when job queue status is not yet available', () => {
+      beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (el as any).jobQueueStatus = null;
+        await el.updateComplete;
+      });
+
+      it('should show waiting message', () => {
+        const waiting = el.shadowRoot?.querySelector('.job-status-waiting');
+        expect(waiting).to.exist;
+      });
+    });
+
+    describe('when streaming is disconnected', () => {
+      beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (el as any).streamingDisconnected = true;
+        await el.updateComplete;
+      });
+
+      it('should show disconnected message', () => {
+        const disconnected = el.shadowRoot?.querySelector('.job-status-disconnected');
+        expect(disconnected).to.exist;
+      });
+
+      it('should indicate import continues in background', () => {
+        const disconnected = el.shadowRoot?.querySelector('.job-status-disconnected');
+        expect(disconnected?.textContent).to.contain('continues in background');
+      });
     });
   });
 

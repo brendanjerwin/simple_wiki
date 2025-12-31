@@ -1,6 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Meta, StoryObj } from '@storybook/web-components-vite';
-import { action } from 'storybook/actions';
 import { html } from 'lit';
 import './page-import-dialog.js';
 import { AugmentErrorService } from './augment-error-service.js';
@@ -220,7 +219,6 @@ export const Default: Story = {
       }}>Open Dialog</button>
       <page-import-dialog
         ?open=${args['open']}
-        @import-complete=${action('import-complete')}
       ></page-import-dialog>
     </div>
   `,
@@ -248,7 +246,6 @@ export const UploadState: Story = {
         <p>Initial state with file picker and drag-drop zone.</p>
         <button @click=${openDialog}>Open Dialog</button>
         <page-import-dialog
-          @import-complete=${action('import-complete')}
         ></page-import-dialog>
       </div>
     `;
@@ -284,7 +281,6 @@ export const UploadWithFileSelected: Story = {
         <p>File selected and ready to parse. Parse button is enabled.</p>
         <button @click=${openWithFile}>Open Dialog</button>
         <page-import-dialog
-          @import-complete=${action('import-complete')}
         ></page-import-dialog>
       </div>
     `;
@@ -317,7 +313,6 @@ export const ValidatingState: Story = {
         <p>Loading spinner during CSV parsing.</p>
         <button @click=${openWithValidating}>Show Validating State</button>
         <page-import-dialog
-          @import-complete=${action('import-complete')}
         ></page-import-dialog>
       </div>
     `;
@@ -354,7 +349,6 @@ export const PreviewNoErrors: Story = {
         <p>Records preview with navigation. All records are valid.</p>
         <button @click=${openWithPreview}>Show Preview</button>
         <page-import-dialog
-          @import-complete=${action('import-complete')}
         ></page-import-dialog>
         <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
           Use the navigation buttons to browse through records. Note the NEW and UPDATE badges.
@@ -394,7 +388,6 @@ export const PreviewWithErrorsFiltered: Story = {
         <p>Shows only error records when "Show errors only" is checked.</p>
         <button @click=${openWithErrors}>Show Errors Only</button>
         <page-import-dialog
-          @import-complete=${action('import-complete')}
         ></page-import-dialog>
         <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
           Navigation shows "Error X of Y" counter. Validation errors displayed in red.
@@ -434,7 +427,6 @@ export const PreviewWithErrorsAllRecords: Story = {
         <p>All records shown, including both valid and invalid ones.</p>
         <button @click=${openWithAllRecords}>Show All Records</button>
         <page-import-dialog
-          @import-complete=${action('import-complete')}
         ></page-import-dialog>
         <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
           Uncheck "Show errors only" to see all records. Import button shows valid record count.
@@ -474,7 +466,6 @@ export const PreviewAllErrors: Story = {
         <p>Every record has validation errors. Import is disabled.</p>
         <button @click=${openWithAllErrors}>Show All Errors</button>
         <page-import-dialog
-          @import-complete=${action('import-complete')}
         ></page-import-dialog>
         <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
           Import button should be disabled because there are no valid records to import.
@@ -514,7 +505,6 @@ export const PreviewWithDeleteOperations: Story = {
         <p>Records showing DELETE badges for scalar fields and ENSURE/REMOVE for array items.</p>
         <button @click=${openWithDeletes}>Show Delete Operations</button>
         <page-import-dialog
-          @import-complete=${action('import-complete')}
         ></page-import-dialog>
         <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
           Navigate between records to see field deletions and array operations (ENSURE/REMOVE).
@@ -554,7 +544,6 @@ export const PreviewWithWarnings: Story = {
         <p>Records with non-blocking warnings (type coercions, deprecations).</p>
         <button @click=${openWithWarnings}>Show Warnings</button>
         <page-import-dialog
-          @import-complete=${action('import-complete')}
         ></page-import-dialog>
         <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
           Warnings are informational and don't prevent import. Shown in yellow.
@@ -598,7 +587,6 @@ export const PreviewWithParsingErrors: Story = {
         <p>CSV parsing encountered some rows that couldn't be processed.</p>
         <button @click=${openWithParsingErrors}>Show Parsing Errors</button>
         <page-import-dialog
-          @import-complete=${action('import-complete')}
         ></page-import-dialog>
         <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
           Parsing errors are shown at the top of the preview. Valid records can still be imported.
@@ -634,7 +622,6 @@ export const ImportingState: Story = {
         <p>Loading spinner during import job execution.</p>
         <button @click=${openWithImporting}>Show Importing State</button>
         <page-import-dialog
-          @import-complete=${action('import-complete')}
         ></page-import-dialog>
       </div>
     `;
@@ -668,7 +655,6 @@ export const CompleteState: Story = {
         <p>Success summary with imported count and link to report page.</p>
         <button @click=${openWithComplete}>Show Complete State</button>
         <page-import-dialog
-          @import-complete=${action('import-complete')}
         ></page-import-dialog>
         <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
           Shows success message with count and provides link to view the import report.
@@ -710,7 +696,6 @@ export const ErrorState: Story = {
         <p>Shows error display when parsing or import fails.</p>
         <button @click=${openWithError}>Show Error State</button>
         <page-import-dialog
-          @import-complete=${action('import-complete')}
         ></page-import-dialog>
         <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
           Error messages are displayed using the error-display component.
@@ -772,7 +757,6 @@ export const InteractiveTesting: Story = {
         </div>
 
         <page-import-dialog
-          @import-complete=${action('import-complete')}
         ></page-import-dialog>
 
         <div style="margin-top: 20px; padding: 15px; background: #fff3cd; border-radius: 4px;">
