@@ -344,9 +344,10 @@ describe('PageImportDialog', () => {
       expect(loadingText?.textContent).to.contain('Importing pages');
     });
 
-    it('should disable cancel button', () => {
-      const cancelBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.footer .button-secondary');
-      expect(cancelBtn?.disabled).to.be.true;
+    it('should show Close button that is enabled', () => {
+      const closeBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.footer .button-secondary');
+      expect(closeBtn?.textContent?.trim()).to.equal('Close');
+      expect(closeBtn?.disabled).to.be.false;
     });
   });
 

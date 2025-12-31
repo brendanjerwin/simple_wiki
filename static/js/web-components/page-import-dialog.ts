@@ -1117,13 +1117,21 @@ export class PageImportDialog extends LitElement {
           </button>
         `;
       case 'validating':
-      case 'importing':
         return html`
           <button
             class="button-base button-secondary button-large border-radius-small"
             disabled
           >
             Cancel
+          </button>
+        `;
+      case 'importing':
+        return html`
+          <button
+            class="button-base button-secondary button-large border-radius-small"
+            @click=${this.closeDialog}
+          >
+            Close
           </button>
         `;
       case 'preview':
