@@ -74,6 +74,22 @@ describe('flattenFrontmatter', () => {
     });
   });
 
+  describe('when given an object with undefined values', () => {
+    let result: [string, string][];
+
+    beforeEach(() => {
+      const frontmatter = { a: 'keep', b: undefined, c: 'also keep' } as JsonObject;
+      result = flattenFrontmatter(frontmatter);
+    });
+
+    it('should skip undefined values', () => {
+      expect(result).to.deep.equal([
+        ['a', 'keep'],
+        ['c', 'also keep'],
+      ]);
+    });
+  });
+
   describe('when given an object with array values', () => {
     let result: [string, string][];
 

@@ -85,7 +85,9 @@ var _ = Describe("SinglePageImportJob", func() {
 		var job *SinglePageImportJob
 
 		BeforeEach(func() {
-			job, _ = NewSinglePageImportJob(pageimport.ParsedRecord{}, mockDeps, logger, resultAccumulator)
+			var err error
+			job, err = NewSinglePageImportJob(pageimport.ParsedRecord{}, mockDeps, logger, resultAccumulator)
+			Expect(err).NotTo(HaveOccurred())
 		})
 
 		When("called", func() {
@@ -114,7 +116,8 @@ var _ = Describe("SinglePageImportJob", func() {
 						"description": "A new page",
 					},
 				}
-				job, _ := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				job, constructErr := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				Expect(constructErr).NotTo(HaveOccurred())
 				err = job.Execute()
 			})
 
@@ -165,7 +168,8 @@ var _ = Describe("SinglePageImportJob", func() {
 						"new_key": "new_value",
 					},
 				}
-				job, _ := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				job, constructErr := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				Expect(constructErr).NotTo(HaveOccurred())
 				err = job.Execute()
 			})
 
@@ -206,7 +210,8 @@ var _ = Describe("SinglePageImportJob", func() {
 						"title": "New Inventory Item",
 					},
 				}
-				job, _ := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				job, constructErr := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				Expect(constructErr).NotTo(HaveOccurred())
 				err = job.Execute()
 			})
 
@@ -243,7 +248,8 @@ var _ = Describe("SinglePageImportJob", func() {
 						"title": "Updated Item",
 					},
 				}
-				job, _ := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				job, constructErr := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				Expect(constructErr).NotTo(HaveOccurred())
 				err = job.Execute()
 			})
 
@@ -283,7 +289,8 @@ var _ = Describe("SinglePageImportJob", func() {
 					Identifier:     "page_with_fields",
 					FieldsToDelete: []string{"field_to_delete", "nested.delete_this"},
 				}
-				job, _ := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				job, constructErr := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				Expect(constructErr).NotTo(HaveOccurred())
 				err = job.Execute()
 			})
 
@@ -343,7 +350,8 @@ var _ = Describe("SinglePageImportJob", func() {
 						},
 					},
 				}
-				job, _ := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				job, constructErr := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				Expect(constructErr).NotTo(HaveOccurred())
 				err = job.Execute()
 			})
 
@@ -392,7 +400,8 @@ var _ = Describe("SinglePageImportJob", func() {
 						},
 					},
 				}
-				job, _ := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				job, constructErr := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				Expect(constructErr).NotTo(HaveOccurred())
 				err = job.Execute()
 			})
 
@@ -436,7 +445,8 @@ var _ = Describe("SinglePageImportJob", func() {
 						},
 					},
 				}
-				job, _ := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				job, constructErr := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				Expect(constructErr).NotTo(HaveOccurred())
 				err = job.Execute()
 			})
 
@@ -467,7 +477,8 @@ var _ = Describe("SinglePageImportJob", func() {
 						},
 					},
 				}
-				job, _ := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				job, constructErr := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				Expect(constructErr).NotTo(HaveOccurred())
 				err = job.Execute()
 			})
 
@@ -494,7 +505,8 @@ var _ = Describe("SinglePageImportJob", func() {
 					Identifier:       "valid_page",
 					ValidationErrors: []string{"some validation error"},
 				}
-				job, _ := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				job, constructErr := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				Expect(constructErr).NotTo(HaveOccurred())
 				err = job.Execute()
 			})
 
@@ -535,7 +547,8 @@ var _ = Describe("SinglePageImportJob", func() {
 						},
 					},
 				}
-				job, _ := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				job, constructErr := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				Expect(constructErr).NotTo(HaveOccurred())
 				err = job.Execute()
 			})
 
@@ -585,7 +598,8 @@ var _ = Describe("SinglePageImportJob", func() {
 						},
 					},
 				}
-				job, _ := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				job, constructErr := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				Expect(constructErr).NotTo(HaveOccurred())
 				err = job.Execute()
 			})
 
@@ -620,7 +634,8 @@ var _ = Describe("SinglePageImportJob", func() {
 						},
 					},
 				}
-				job, _ := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				job, constructErr := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				Expect(constructErr).NotTo(HaveOccurred())
 				err = job.Execute()
 			})
 
@@ -648,7 +663,8 @@ var _ = Describe("SinglePageImportJob", func() {
 						"title": "Test",
 					},
 				}
-				job, _ := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				job, constructErr := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				Expect(constructErr).NotTo(HaveOccurred())
 				err = job.Execute()
 			})
 
@@ -674,7 +690,8 @@ var _ = Describe("SinglePageImportJob", func() {
 					Identifier: "new_item",
 					Template:   "inv_item",
 				}
-				job, _ := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				job, constructErr := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				Expect(constructErr).NotTo(HaveOccurred())
 				err = job.Execute()
 			})
 
@@ -703,7 +720,8 @@ var _ = Describe("SinglePageImportJob", func() {
 					Identifier:     "page",
 					FieldsToDelete: []string{"nonexistent.nested.field"},
 				}
-				job, _ := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				job, constructErr := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				Expect(constructErr).NotTo(HaveOccurred())
 				err = job.Execute()
 			})
 
@@ -716,13 +734,74 @@ var _ = Describe("SinglePageImportJob", func() {
 				Expect(fm["title"]).To(Equal("Test"))
 			})
 		})
+
+		When("ReadFrontMatter fails with a non-NotExist error", func() {
+			var err error
+
+			BeforeEach(func() {
+				mockDeps.readFrontMatterErr = errors.New("permission denied")
+
+				record := pageimport.ParsedRecord{
+					RowNumber:  1,
+					Identifier: "existing_page",
+					Frontmatter: map[string]any{
+						"title": "Test",
+					},
+				}
+				job, constructErr := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				Expect(constructErr).NotTo(HaveOccurred())
+				err = job.Execute()
+			})
+
+			It("should not return an error from Execute", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should track the failure in the accumulator", func() {
+				result := resultAccumulator.GetResult()
+				Expect(result.FailedRecords).To(HaveLen(1))
+				Expect(result.FailedRecords[0].Error).To(ContainSubstring("failed to read existing frontmatter"))
+			})
+		})
+
+		When("array operation has unknown operation type", func() {
+			var err error
+
+			BeforeEach(func() {
+				record := pageimport.ParsedRecord{
+					RowNumber:  1,
+					Identifier: "page_with_unknown_op",
+					ArrayOps: []pageimport.ArrayOperation{
+						{
+							FieldPath: "tags",
+							Operation: pageimport.ArrayOpType(99), // Unknown operation type
+							Value:     "value",
+						},
+					},
+				}
+				job, constructErr := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				Expect(constructErr).NotTo(HaveOccurred())
+				err = job.Execute()
+			})
+
+			It("should not return an error from Execute", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should track the failure in the accumulator", func() {
+				result := resultAccumulator.GetResult()
+				Expect(result.FailedRecords).To(HaveLen(1))
+				Expect(result.FailedRecords[0].Error).To(ContainSubstring("unknown array operation type"))
+			})
+		})
 	})
 
 	Describe("GetRecord", func() {
 		When("called", func() {
 			var (
-				job    *SinglePageImportJob
-				record pageimport.ParsedRecord
+				job      *SinglePageImportJob
+				record   pageimport.ParsedRecord
+				returned pageimport.ParsedRecord
 			)
 
 			BeforeEach(func() {
@@ -730,12 +809,17 @@ var _ = Describe("SinglePageImportJob", func() {
 					RowNumber:  1,
 					Identifier: "test_page",
 				}
-				job, _ = NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				var err error
+				job, err = NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				Expect(err).NotTo(HaveOccurred())
+				returned = job.GetRecord()
 			})
 
-			It("should return the record with correct fields", func() {
-				returned := job.GetRecord()
+			It("should return the correct row number", func() {
 				Expect(returned.RowNumber).To(Equal(1))
+			})
+
+			It("should return the correct identifier", func() {
 				Expect(returned.Identifier).To(Equal("test_page"))
 			})
 		})
@@ -914,7 +998,8 @@ var _ = Describe("PageImportReportJob", func() {
 			var name string
 
 			BeforeEach(func() {
-				job, _ := NewPageImportReportJob(mockDeps, logger, resultAccumulator)
+				job, err := NewPageImportReportJob(mockDeps, logger, resultAccumulator)
+				Expect(err).NotTo(HaveOccurred())
 				name = job.GetName()
 			})
 
@@ -930,7 +1015,8 @@ var _ = Describe("PageImportReportJob", func() {
 
 			BeforeEach(func() {
 				resultAccumulator.RecordCreated("new_page")
-				job, _ := NewPageImportReportJob(mockDeps, logger, resultAccumulator)
+				job, constructErr := NewPageImportReportJob(mockDeps, logger, resultAccumulator)
+				Expect(constructErr).NotTo(HaveOccurred())
 				err = job.Execute()
 			})
 
@@ -963,7 +1049,8 @@ var _ = Describe("PageImportReportJob", func() {
 
 			BeforeEach(func() {
 				resultAccumulator.RecordUpdated("existing_page")
-				job, _ := NewPageImportReportJob(mockDeps, logger, resultAccumulator)
+				job, constructErr := NewPageImportReportJob(mockDeps, logger, resultAccumulator)
+				Expect(constructErr).NotTo(HaveOccurred())
 				err = job.Execute()
 			})
 
@@ -987,7 +1074,8 @@ var _ = Describe("PageImportReportJob", func() {
 					Identifier: "invalid_page",
 					Error:      "validation error 1; validation error 2",
 				})
-				job, _ := NewPageImportReportJob(mockDeps, logger, resultAccumulator)
+				job, constructErr := NewPageImportReportJob(mockDeps, logger, resultAccumulator)
+				Expect(constructErr).NotTo(HaveOccurred())
 				err = job.Execute()
 			})
 
@@ -1012,7 +1100,8 @@ var _ = Describe("PageImportReportJob", func() {
 
 			BeforeEach(func() {
 				resultAccumulator.RecordCreated("success_page")
-				job, _ := NewPageImportReportJob(mockDeps, logger, resultAccumulator)
+				job, constructErr := NewPageImportReportJob(mockDeps, logger, resultAccumulator)
+				Expect(constructErr).NotTo(HaveOccurred())
 				err = job.Execute()
 			})
 
@@ -1035,7 +1124,8 @@ var _ = Describe("PageImportReportJob", func() {
 					Identifier: "",
 					Error:      "identifier is required",
 				})
-				job, _ := NewPageImportReportJob(mockDeps, logger, resultAccumulator)
+				job, constructErr := NewPageImportReportJob(mockDeps, logger, resultAccumulator)
+				Expect(constructErr).NotTo(HaveOccurred())
 				err = job.Execute()
 			})
 
@@ -1054,7 +1144,8 @@ var _ = Describe("PageImportReportJob", func() {
 
 			BeforeEach(func() {
 				mockDeps.writeFrontMatterErr = errors.New("write error")
-				job, _ := NewPageImportReportJob(mockDeps, logger, resultAccumulator)
+				job, constructErr := NewPageImportReportJob(mockDeps, logger, resultAccumulator)
+				Expect(constructErr).NotTo(HaveOccurred())
 				err = job.Execute()
 			})
 
@@ -1064,12 +1155,29 @@ var _ = Describe("PageImportReportJob", func() {
 			})
 		})
 
+		When("report generation fails due to WriteMarkdown error", func() {
+			var err error
+
+			BeforeEach(func() {
+				mockDeps.writeMarkdownErr = errors.New("write markdown error")
+				job, constructErr := NewPageImportReportJob(mockDeps, logger, resultAccumulator)
+				Expect(constructErr).NotTo(HaveOccurred())
+				err = job.Execute()
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("failed to write import report markdown"))
+			})
+		})
+
 		When("no records are provided", func() {
 			var err error
 
 			BeforeEach(func() {
 				// Empty accumulator
-				job, _ := NewPageImportReportJob(mockDeps, logger, resultAccumulator)
+				job, constructErr := NewPageImportReportJob(mockDeps, logger, resultAccumulator)
+				Expect(constructErr).NotTo(HaveOccurred())
 				err = job.Execute()
 			})
 
