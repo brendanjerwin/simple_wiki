@@ -9,8 +9,12 @@ import {
   StartPageImportJobRequestSchema,
   ArrayOpType,
   type PageImportRecord,
-  type ArrayOperation,
 } from '../gen/api/v1/page_import_pb.js';
+import {
+  SystemInfoService,
+  StreamJobStatusRequestSchema,
+  type GetJobStatusResponse,
+} from '../gen/api/v1/system_info_pb.js';
 import {
   sharedStyles,
   foundationCSS,
@@ -42,6 +46,8 @@ interface ImportStats {
  * 5. Complete: Summary with link to report page
  */
 export class PageImportDialog extends LitElement {
+  private static readonly PAGE_IMPORT_QUEUE_NAME = 'Frontmatter';
+
   static override styles = [
     foundationCSS,
     dialogCSS,
@@ -492,13 +498,29 @@ export class PageImportDialog extends LitElement {
   @state()
   private parsingErrors: string[] = [];
 
-  private _client: ReturnType<typeof createClient<typeof PageImportService>> | null = null;
+  @state()
+  private importProgressMessage = '';
 
-  private get client(): ReturnType<typeof createClient<typeof PageImportService>> {
-    if (!this._client) {
-      this._client = createClient(PageImportService, getGrpcWebTransport());
+  private _pageImportClient: ReturnType<typeof createClient<typeof PageImportService>> | null =
+    null;
+
+  private _systemInfoClient: ReturnType<typeof createClient<typeof SystemInfoService>> | null =
+    null;
+
+  private _streamAbortController: AbortController | null = null;
+
+  private get pageImportClient(): ReturnType<typeof createClient<typeof PageImportService>> {
+    if (!this._pageImportClient) {
+      this._pageImportClient = createClient(PageImportService, getGrpcWebTransport());
     }
-    return this._client;
+    return this._pageImportClient;
+  }
+
+  private get systemInfoClient(): ReturnType<typeof createClient<typeof SystemInfoService>> {
+    if (!this._systemInfoClient) {
+      this._systemInfoClient = createClient(SystemInfoService, getGrpcWebTransport());
+    }
+    return this._systemInfoClient;
   }
 
   override connectedCallback(): void {
@@ -523,6 +545,7 @@ export class PageImportDialog extends LitElement {
   }
 
   public closeDialog(): void {
+    this._streamAbortController?.abort();
     this.open = false;
   }
 
@@ -537,6 +560,8 @@ export class PageImportDialog extends LitElement {
     this.importedCount = 0;
     this.dragOver = false;
     this.parsingErrors = [];
+    this.importProgressMessage = '';
+    this._streamAbortController = null;
   }
 
   private _handleBackdropClick = (): void => {
@@ -614,7 +639,7 @@ export class PageImportDialog extends LitElement {
     try {
       const csvContent = await this.file.text();
       const request = create(ParseCSVPreviewRequestSchema, { csvContent });
-      const response = await this.client.parseCSVPreview(request);
+      const response = await this.pageImportClient.parseCSVPreview(request);
 
       this.records = response.records;
       this.parsingErrors = response.parsingErrors;
@@ -642,17 +667,23 @@ export class PageImportDialog extends LitElement {
 
     this.dialogState = 'importing';
     this.error = null;
+    this.importProgressMessage = 'Starting import...';
 
     try {
       const csvContent = await this.file.text();
       const request = create(StartPageImportJobRequestSchema, { csvContent });
-      const response = await this.client.startPageImportJob(request);
+      const response = await this.pageImportClient.startPageImportJob(request);
 
       if (!response.success) {
         throw new Error(response.error || 'Import failed');
       }
 
       this.importedCount = response.recordCount;
+      this.importProgressMessage = `Importing ${this.importedCount} page${this.importedCount !== 1 ? 's' : ''}...`;
+
+      // Wait for the job to complete by streaming job status
+      await this._waitForJobCompletion();
+
       this.dialogState = 'complete';
 
       this.dispatchEvent(
@@ -666,6 +697,69 @@ export class PageImportDialog extends LitElement {
       this.error = AugmentErrorService.augmentError(err, 'importing pages');
       this.dialogState = 'preview';
     }
+  }
+
+  /**
+   * Waits for the import job to complete by streaming job status updates.
+   * The stream automatically terminates when all queues are idle.
+   * Stream errors are non-fatal - if progress tracking fails, the import still completes.
+   */
+  private async _waitForJobCompletion(): Promise<void> {
+    this._streamAbortController = new AbortController();
+
+    const request = create(StreamJobStatusRequestSchema, {
+      updateIntervalMs: 500, // Poll every 500ms for responsive updates
+    });
+
+    try {
+      // Stream job status until all queues are idle (stream auto-terminates)
+      for await (const status of this.systemInfoClient.streamJobStatus(request, {
+        signal: this._streamAbortController.signal,
+      })) {
+        this._updateProgressFromJobStatus(status);
+      }
+    } catch (err) {
+      // AbortError is expected when dialog is closed - handle gracefully
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
+      // Other stream errors are non-fatal - log warning but let import complete
+      console.warn('Progress stream error (import will still complete):', err);
+      this.importProgressMessage = 'Completing import...';
+    }
+  }
+
+  /**
+   * Updates the progress message based on the current job queue status.
+   */
+  private _updateProgressFromJobStatus(status: GetJobStatusResponse): void {
+    // Find the Frontmatter queue (where page import jobs run)
+    const frontmatterQueue = status.jobQueues.find(
+      (q) => q.name === PageImportDialog.PAGE_IMPORT_QUEUE_NAME
+    );
+
+    // Queue not found - just return, stream will terminate when done
+    if (!frontmatterQueue) {
+      return;
+    }
+
+    // Queue is inactive - we're in the finalization phase
+    if (!frontmatterQueue.isActive) {
+      this.importProgressMessage = 'Finalizing import...';
+      return;
+    }
+
+    const total = frontmatterQueue.highWaterMark;
+    const remaining = frontmatterQueue.jobsRemaining;
+    const completed = total - remaining;
+
+    // Zero highWaterMark means queue just started, show generic message
+    if (total === 0) {
+      this.importProgressMessage = 'Processing import...';
+      return;
+    }
+
+    this.importProgressMessage = `Importing... ${completed} of ${total} operations complete`;
   }
 
   private get filteredRecords(): PageImportRecord[] {
@@ -994,7 +1088,7 @@ export class PageImportDialog extends LitElement {
       case 'preview':
         return this._renderPreviewState();
       case 'importing':
-        return this._renderLoadingState('Importing pages...');
+        return this._renderLoadingState(this.importProgressMessage || 'Importing pages...');
       case 'complete':
         return this._renderCompleteState();
     }
