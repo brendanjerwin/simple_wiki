@@ -14,6 +14,7 @@ import (
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
 	"github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
+	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
@@ -297,6 +298,17 @@ func mustNewServer(
 	bleveIndexQueryer bleve.IQueryBleveIndex,
 	frontmatterIndexQueryer wikipage.IQueryFrontmatterIndex,
 ) *v1.Server {
+	return mustNewServerWithJobCoordinator(pageReaderMutator, bleveIndexQueryer, frontmatterIndexQueryer, nil)
+}
+
+// mustNewServerWithJobCoordinator creates a server with the given dependencies including job coordinator.
+// Use this for tests that need to interact with the job queue.
+func mustNewServerWithJobCoordinator(
+	pageReaderMutator wikipage.PageReaderMutator,
+	bleveIndexQueryer bleve.IQueryBleveIndex,
+	frontmatterIndexQueryer wikipage.IQueryFrontmatterIndex,
+	jobCoordinator *jobs.JobQueueCoordinator,
+) *v1.Server {
 	if pageReaderMutator == nil {
 		pageReaderMutator = noOpPageReaderMutator{}
 	}
@@ -311,13 +323,13 @@ func mustNewServer(
 		time.Now(),
 		pageReaderMutator,
 		bleveIndexQueryer,
-		nil, // jobProgressProvider is optional
+		jobCoordinator,
 		lumber.NewConsoleLogger(lumber.WARN),
 		nil, // markdownRenderer is optional
 		nil, // templateExecutor is optional
 		frontmatterIndexQueryer,
 	)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "mustNewServer failed")
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "mustNewServerWithJobCoordinator failed")
 	return server
 }
 
@@ -2297,6 +2309,434 @@ var _ = Describe("Server", func() {
 		})
 	})
 
+	Describe("ParseCSVPreview", func() {
+		var (
+			req                   *apiv1.ParseCSVPreviewRequest
+			resp                  *apiv1.ParseCSVPreviewResponse
+			err                   error
+			mockPageReaderMutator *MockPageReaderMutator
+		)
+
+		BeforeEach(func() {
+			mockPageReaderMutator = &MockPageReaderMutator{
+				Err: os.ErrNotExist, // By default, pages don't exist
+			}
+			req = &apiv1.ParseCSVPreviewRequest{}
+		})
+
+		JustBeforeEach(func() {
+			server = mustNewServer(mockPageReaderMutator, nil, nil)
+			resp, err = server.ParseCSVPreview(ctx, req)
+		})
+
+		When("csv_content is empty", func() {
+			BeforeEach(func() {
+				req.CsvContent = ""
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "csv_content cannot be empty"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("csv_content is invalid CSV", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier\n\"unclosed quote"
+			})
+
+			It("should return an invalid argument error with parsing details", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "failed to parse CSV"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("csv_content has no identifier column", func() {
+			BeforeEach(func() {
+				req.CsvContent = "title,description\nTest,A test page"
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return parsing errors in the response", func() {
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.ParsingErrors).To(ContainElement("CSV must have 'identifier' column"))
+			})
+		})
+
+		When("csv_content has no data rows", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,title"
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return parsing errors in the response", func() {
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.ParsingErrors).To(ContainElement("CSV has no data rows"))
+			})
+		})
+
+		When("csv_content has valid rows for new pages", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,title,description\ntest_page,Test Page,A test description\nanother_page,Another Page,Another description"
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return the correct total record count", func() {
+				Expect(resp.TotalRecords).To(Equal(int32(2)))
+			})
+
+			It("should return the correct create count", func() {
+				Expect(resp.CreateCount).To(Equal(int32(2)))
+			})
+
+			It("should return zero update count", func() {
+				Expect(resp.UpdateCount).To(Equal(int32(0)))
+			})
+
+			It("should return zero error count", func() {
+				Expect(resp.ErrorCount).To(Equal(int32(0)))
+			})
+
+			It("should indicate pages do not exist", func() {
+				Expect(resp.Records).To(HaveLen(2))
+				Expect(resp.Records[0].PageExists).To(BeFalse())
+				Expect(resp.Records[1].PageExists).To(BeFalse())
+			})
+
+			It("should have correct identifiers", func() {
+				Expect(resp.Records[0].Identifier).To(Equal("test_page"))
+				Expect(resp.Records[1].Identifier).To(Equal("another_page"))
+			})
+
+			It("should have correct row numbers", func() {
+				Expect(resp.Records[0].RowNumber).To(Equal(int32(1)))
+				Expect(resp.Records[1].RowNumber).To(Equal(int32(2)))
+			})
+
+			It("should have parsed frontmatter", func() {
+				Expect(resp.Records[0].Frontmatter).NotTo(BeNil())
+				Expect(resp.Records[0].Frontmatter.AsMap()["title"]).To(Equal("Test Page"))
+			})
+		})
+
+		When("csv_content has rows for existing pages", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,title\nexisting_page,Updated Title"
+				mockPageReaderMutator = &MockPageReaderMutator{
+					FrontmatterByID: map[string]map[string]any{
+						"existing_page": {"title": "Old Title"},
+					},
+				}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should indicate page exists", func() {
+				Expect(resp.Records).To(HaveLen(1))
+				Expect(resp.Records[0].PageExists).To(BeTrue())
+			})
+
+			It("should return correct update count", func() {
+				Expect(resp.UpdateCount).To(Equal(int32(1)))
+			})
+
+			It("should return zero create count", func() {
+				Expect(resp.CreateCount).To(Equal(int32(0)))
+			})
+		})
+
+		When("csv_content has rows with validation errors", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,title\n,Missing Identifier\nvalid_page,Valid Title"
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return correct error count", func() {
+				Expect(resp.ErrorCount).To(Equal(int32(1)))
+			})
+
+			It("should have validation errors on the invalid record", func() {
+				Expect(resp.Records[0].ValidationErrors).NotTo(BeEmpty())
+			})
+
+			It("should still process valid records", func() {
+				Expect(resp.Records[1].ValidationErrors).To(BeEmpty())
+				Expect(resp.Records[1].Identifier).To(Equal("valid_page"))
+			})
+		})
+
+		When("csv_content has template column", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,template,title\ntest_page,inv_item,Test Item"
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should parse the template correctly", func() {
+				Expect(resp.Records[0].Template).To(Equal("inv_item"))
+			})
+
+			It("should not have validation errors for built-in templates", func() {
+				Expect(resp.Records[0].ValidationErrors).To(BeEmpty())
+			})
+		})
+
+		When("csv_content references a non-existent template", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,template,title\ntest_page,nonexistent_template,Test Item"
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should add a validation error for the missing template", func() {
+				Expect(resp.Records[0].ValidationErrors).To(ContainElement(ContainSubstring("template 'nonexistent_template' does not exist")))
+			})
+		})
+
+		When("csv_content has array column notation", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,tags[],tags[]\ntest_page,tag1,tag2"
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should parse array operations", func() {
+				Expect(resp.Records[0].ArrayOps).To(HaveLen(2))
+			})
+		})
+
+		When("csv_content has DELETE sentinel for scalar field", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,description\ntest_page,[[DELETE]]"
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should track fields to delete", func() {
+				Expect(resp.Records[0].FieldsToDelete).To(ContainElement("description"))
+			})
+		})
+
+		When("csv_content has nested field paths", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,inventory.container\ntest_page,toolbox"
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should create nested frontmatter structure", func() {
+				fm := resp.Records[0].Frontmatter.AsMap()
+				inventory, ok := fm["inventory"].(map[string]any)
+				Expect(ok).To(BeTrue())
+				Expect(inventory["container"]).To(Equal("toolbox"))
+			})
+		})
+
+		When("csv_content has mixed existing and new pages", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,title\nexisting_page,Updated Title\nnew_page,New Page"
+				mockPageReaderMutator = &MockPageReaderMutator{
+					FrontmatterByID: map[string]map[string]any{
+						"existing_page": {"title": "Old Title"},
+					},
+				}
+			})
+
+			It("should return correct counts", func() {
+				Expect(resp.TotalRecords).To(Equal(int32(2)))
+				Expect(resp.UpdateCount).To(Equal(int32(1)))
+				Expect(resp.CreateCount).To(Equal(int32(1)))
+				Expect(resp.ErrorCount).To(Equal(int32(0)))
+			})
+		})
+
+		When("csv_content has duplicate identifiers", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,title\ntest_page,First Title\ntest_page,Second Title"
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should flag duplicate identifiers as validation errors", func() {
+				Expect(resp.Records[1].ValidationErrors).To(ContainElement(ContainSubstring("duplicate identifier")))
+			})
+
+			It("should count the duplicate as an error", func() {
+				Expect(resp.ErrorCount).To(Equal(int32(1)))
+			})
+		})
+
+		When("csv_content has invalid identifier format", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,title\nInvalid-Identifier,Test"
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should flag invalid identifiers", func() {
+				Expect(resp.Records[0].ValidationErrors).NotTo(BeEmpty())
+			})
+		})
+	})
+
+	Describe("StartPageImportJob", func() {
+		var (
+			req                   *apiv1.StartPageImportJobRequest
+			resp                  *apiv1.StartPageImportJobResponse
+			err                   error
+			mockPageReaderMutator *MockPageReaderMutator
+			mockJobCoordinator    *MockJobQueueCoordinator
+		)
+
+		BeforeEach(func() {
+			mockPageReaderMutator = &MockPageReaderMutator{
+				Err: os.ErrNotExist, // By default, pages don't exist
+			}
+			mockJobCoordinator = &MockJobQueueCoordinator{}
+			req = &apiv1.StartPageImportJobRequest{}
+		})
+
+		JustBeforeEach(func() {
+			var coordinator *jobs.JobQueueCoordinator
+			if mockJobCoordinator != nil {
+				coordinator = mockJobCoordinator.AsCoordinator()
+			}
+			server = mustNewServerWithJobCoordinator(mockPageReaderMutator, nil, nil, coordinator)
+			resp, err = server.StartPageImportJob(ctx, req)
+		})
+
+		When("csv_content is empty", func() {
+			BeforeEach(func() {
+				req.CsvContent = ""
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "csv_content cannot be empty"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("job queue coordinator is nil", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,title\ntest_page,Test"
+				mockJobCoordinator = nil
+			})
+
+			It("should return an unavailable error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.Unavailable, "job queue coordinator not available"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("csv_content has parsing errors", func() {
+			BeforeEach(func() {
+				req.CsvContent = "title,description\nTest,A test page"
+			})
+
+			It("should return an invalid argument error with parsing error details", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "CSV has parsing errors"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("csv_content has no valid records", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,title\n,Missing Identifier\n,Also Missing"
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "no valid records to import"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("csv_content has valid records", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,title\ntest_page,Test Page\nanother_page,Another Page"
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return success", func() {
+				Expect(resp.Success).To(BeTrue())
+			})
+
+			It("should return the correct record count", func() {
+				Expect(resp.RecordCount).To(Equal(int32(2)))
+			})
+
+			It("should return a job ID", func() {
+				Expect(resp.JobId).NotTo(BeEmpty())
+			})
+		})
+
+		When("csv_content has mixed valid and invalid records", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,title\nvalid_page,Valid Page\n,Invalid Page\nanother_valid,Another Valid"
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return success", func() {
+				Expect(resp.Success).To(BeTrue())
+			})
+
+			It("should only count valid records", func() {
+				Expect(resp.RecordCount).To(Equal(int32(2)))
+			})
+		})
+	})
+
 	Describe("GenerateIdentifier", func() {
 		var (
 			req                   *apiv1.GenerateIdentifierRequest
@@ -2514,4 +2954,29 @@ func (m *MockFrontmatterIndexQueryer) QueryPrefixMatch(dottedKeyPath wikipage.Do
 
 func (m *MockFrontmatterIndexQueryer) GetValue(identifier wikipage.PageIdentifier, dottedKeyPath wikipage.DottedKeyPath) wikipage.Value {
 	return m.GetValueResult
+}
+
+// MockJobQueueCoordinator is a mock implementation for testing job queue interactions.
+type MockJobQueueCoordinator struct{}
+
+// AsCoordinator returns a real JobQueueCoordinator for testing.
+// This is needed because the server expects a *jobs.JobQueueCoordinator, not an interface.
+func (m *MockJobQueueCoordinator) AsCoordinator() *jobs.JobQueueCoordinator {
+	if m == nil {
+		return nil
+	}
+	// Create a coordinator with a no-op dispatcher for testing
+	mockDispatcherFactory := func(maxWorkers, maxQueue int) jobs.Dispatcher {
+		return &noOpDispatcher{}
+	}
+	return jobs.NewJobQueueCoordinatorWithFactory(lumber.NewConsoleLogger(lumber.WARN), mockDispatcherFactory)
+}
+
+// noOpDispatcher is a dispatcher that does nothing for testing purposes.
+type noOpDispatcher struct{}
+
+func (d *noOpDispatcher) Start() {}
+
+func (d *noOpDispatcher) Dispatch(run func()) error {
+	return nil
 }
