@@ -511,13 +511,13 @@ export const PreviewWithDeleteOperations: Story = {
     return html`
       <div style="padding: 20px; background: #f5f5f5; min-height: 400px;">
         <h3>Preview With Delete Operations</h3>
-        <p>Records showing DELETE badges for scalar fields and ADD/REMOVE for array items.</p>
+        <p>Records showing DELETE badges for scalar fields and ENSURE/REMOVE for array items.</p>
         <button @click=${openWithDeletes}>Show Delete Operations</button>
         <page-import-dialog
           @import-complete=${action('import-complete')}
         ></page-import-dialog>
         <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
-          Navigate between records to see field deletions and array operations (ADD/REMOVE).
+          Navigate between records to see field deletions and array operations (ENSURE/REMOVE).
         </p>
       </div>
     `;
@@ -525,7 +525,7 @@ export const PreviewWithDeleteOperations: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Records showing DELETE badges for scalar fields to be removed and ADD/REMOVE for array item operations.',
+        story: 'Records showing DELETE badges for scalar fields to be removed and ENSURE/REMOVE for array item operations.',
       },
     },
   },

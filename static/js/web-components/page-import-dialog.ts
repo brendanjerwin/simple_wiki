@@ -830,7 +830,7 @@ export class PageImportDialog extends LitElement {
       <div class="field-item">
         <span class="field-key">${op.fieldPath}:</span>
         <span class="field-value ${isAdd ? 'field-add' : 'field-remove'}">
-          ${isAdd ? '+ ADD' : '- REMOVE'} "${op.value}"
+          ${isAdd ? '+ ENSURE' : '- REMOVE'} "${op.value}"
         </span>
       </div>
     `;
