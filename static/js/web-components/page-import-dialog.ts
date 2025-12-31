@@ -831,22 +831,63 @@ export class PageImportDialog extends LitElement {
     `;
   }
 
-  private _renderArrayOperation(op: ArrayOperation) {
-    const isAdd = op.operation === ArrayOpType.ENSURE_EXISTS;
-    return html`
-      <div class="field-item">
-        <span class="field-key">${op.fieldPath}:</span>
-        <span class="field-value ${isAdd ? 'field-add' : 'field-remove'}">
-          ${isAdd ? '+ ENSURE' : '- REMOVE'} "${op.value}"
-        </span>
-      </div>
-    `;
-  }
-
   private _renderRecordDetail(record: PageImportRecord) {
-    const frontmatterEntries = record.frontmatter
-      ? flattenFrontmatter(record.frontmatter).sort(([a], [b]) => a.localeCompare(b))
-      : [];
+    // Build unified field entries for sorting
+    type FieldEntry = {
+      key: string;
+      render: () => ReturnType<typeof html>;
+    };
+
+    const fieldEntries: FieldEntry[] = [];
+
+    // Add scalar fields from frontmatter
+    if (record.frontmatter) {
+      const flattened = flattenFrontmatter(record.frontmatter);
+      for (const [key, value] of flattened) {
+        fieldEntries.push({
+          key,
+          render: () => html`
+            <div class="field-item">
+              <span class="field-key">${key}:</span>
+              <span class="field-value">${value}</span>
+            </div>
+          `,
+        });
+      }
+    }
+
+    // Add fields to delete (with DELETE badge)
+    for (const field of record.fieldsToDelete) {
+      fieldEntries.push({
+        key: field,
+        render: () => html`
+          <div class="field-item">
+            <span class="field-key">${field}:</span>
+            <span class="field-value field-delete">DELETE</span>
+          </div>
+        `,
+      });
+    }
+
+    // Add array operations (with [] suffix in display)
+    for (const op of record.arrayOps) {
+      const isAdd = op.operation === ArrayOpType.ENSURE_EXISTS;
+      const displayKey = `${op.fieldPath}[]`;
+      fieldEntries.push({
+        key: displayKey,
+        render: () => html`
+          <div class="field-item">
+            <span class="field-key">${displayKey}:</span>
+            <span class="field-value ${isAdd ? 'field-add' : 'field-remove'}">
+              ${isAdd ? '+ENSURE' : '-REMOVE'} "${op.value}"
+            </span>
+          </div>
+        `,
+      });
+    }
+
+    // Sort all fields alphabetically by key
+    fieldEntries.sort((a, b) => a.key.localeCompare(b.key));
 
     return html`
       <div class="record-panel">
@@ -869,46 +910,12 @@ export class PageImportDialog extends LitElement {
                 </div>
               `
             : nothing}
-          ${frontmatterEntries.length > 0
+          ${fieldEntries.length > 0
             ? html`
                 <div class="record-section">
-                  <div class="section-title">Scalar Fields</div>
+                  <div class="section-title">Fields</div>
                   <div class="field-list">
-                    ${frontmatterEntries.map(
-                      ([key, value]) => html`
-                        <div class="field-item">
-                          <span class="field-key">${key}:</span>
-                          <span class="field-value">${value}</span>
-                        </div>
-                      `
-                    )}
-                  </div>
-                </div>
-              `
-            : nothing}
-          ${record.fieldsToDelete.length > 0
-            ? html`
-                <div class="record-section">
-                  <div class="section-title">Fields to Delete</div>
-                  <div class="field-list">
-                    ${record.fieldsToDelete.map(
-                      (field) => html`
-                        <div class="field-item">
-                          <span class="field-key">${field}:</span>
-                          <span class="field-value field-delete">DELETE</span>
-                        </div>
-                      `
-                    )}
-                  </div>
-                </div>
-              `
-            : nothing}
-          ${record.arrayOps.length > 0
-            ? html`
-                <div class="record-section">
-                  <div class="section-title">Array Operations</div>
-                  <div class="field-list">
-                    ${record.arrayOps.map((op) => this._renderArrayOperation(op))}
+                    ${fieldEntries.map((entry) => entry.render())}
                   </div>
                 </div>
               `
