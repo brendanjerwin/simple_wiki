@@ -181,6 +181,13 @@ export class PageImportDialog extends LitElement {
         margin-top: 16px;
       }
 
+      /* Hide the separate button on desktop (when drop zone is visible) */
+      @media (pointer: fine) {
+        .file-input-wrapper .button-base {
+          display: none;
+        }
+      }
+
       .file-input {
         display: none;
       }
