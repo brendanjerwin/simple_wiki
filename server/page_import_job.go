@@ -145,9 +145,6 @@ func (j *SinglePageImportJob) Execute() error {
 		return nil // Don't return the error - we've recorded it
 	}
 
-	// TODO: TEMPORARY - Remove this delay after testing job status visibility
-	time.Sleep(10 * time.Second)
-
 	return nil
 }
 
