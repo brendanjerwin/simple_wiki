@@ -1303,42 +1303,25 @@ var _ = Describe("Server", func() {
 		})
 
 		When("logger is nil", func() {
-			var (
-				resp any
-				err  error
-			)
+			var serverErr error
 
 			BeforeEach(func() {
-				// Create a server with nil logger - mustNewServer provides default mocks for required deps
-				// but we need to verify nil logger handling, so we create manually with minimal deps
-				var serverErr error
-				server, serverErr = v1.NewServer(
+				// Create a server with nil logger - should fail since logger is required
+				_, serverErr = v1.NewServer(
 					"test-commit",
 					time.Now(),
 					noOpPageReaderMutator{},
 					noOpBleveIndexQueryer{},
 					nil, // jobProgressProvider
-					nil, // logger is nil - this is what we're testing
+					nil, // logger is nil - this should cause an error
 					nil, // markdownRenderer
 					nil, // templateExecutor
 					noOpFrontmatterIndexQueryer{},
 				)
-				Expect(serverErr).NotTo(HaveOccurred())
-
-				handler = func(ctx context.Context, req any) (any, error) {
-					return &apiv1.GetVersionResponse{Commit: "test"}, nil
-				}
-
-				interceptor := server.LoggingInterceptor()
-				resp, err = interceptor(ctx, req, info, handler)
 			})
 
-			It("should not panic", func() {
-				Expect(err).NotTo(HaveOccurred())
-			})
-
-			It("should return the response", func() {
-				Expect(resp).NotTo(BeNil())
+			It("should return an error", func() {
+				Expect(serverErr).To(MatchError("logger is required"))
 			})
 		})
 	})

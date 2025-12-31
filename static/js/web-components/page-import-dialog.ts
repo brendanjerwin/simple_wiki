@@ -50,6 +50,7 @@ interface ImportStats {
  * 4. Importing: Shows job queue status while import runs in background
  */
 export class PageImportDialog extends LitElement {
+  // Must match server.PageImportJobName in server/page_import_job.go
   private static readonly PAGE_IMPORT_QUEUE_NAME = 'PageImportJob';
 
   static override styles = [

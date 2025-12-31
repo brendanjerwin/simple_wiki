@@ -290,8 +290,8 @@ func removeAtPath(data any, path []*apiv1.PathComponent) (any, error) {
 }
 
 // NewServer creates a new gRPC server with the given dependencies.
-// Required dependencies: pageReaderMutator, bleveIndexQueryer, frontmatterIndexQueryer.
-// Optional dependencies: jobQueueCoordinator, logger, markdownRenderer, templateExecutor.
+// Required dependencies: pageReaderMutator, bleveIndexQueryer, frontmatterIndexQueryer, logger.
+// Optional dependencies: jobQueueCoordinator, markdownRenderer, templateExecutor.
 func NewServer(
 	commit string,
 	buildTime time.Time,
@@ -311,6 +311,9 @@ func NewServer(
 	}
 	if frontmatterIndexQueryer == nil {
 		return nil, errors.New("frontmatterIndexQueryer is required")
+	}
+	if logger == nil {
+		return nil, errors.New("logger is required")
 	}
 
 	return &Server{
