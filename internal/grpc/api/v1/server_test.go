@@ -2975,8 +2975,8 @@ func (m *MockJobQueueCoordinator) AsCoordinator() *jobs.JobQueueCoordinator {
 // noOpDispatcher is a dispatcher that does nothing for testing purposes.
 type noOpDispatcher struct{}
 
-func (d *noOpDispatcher) Start() {}
+func (*noOpDispatcher) Start() {}
 
-func (d *noOpDispatcher) Dispatch(run func()) error {
+func (*noOpDispatcher) Dispatch(_ func()) error {
 	return nil
 }
