@@ -812,7 +812,7 @@ export class PageImportDialog extends LitElement {
   }
 
   private get canImport(): boolean {
-    return this.validRecordCount > 0;
+    return this.stats.errors === 0 && this.stats.total > 0;
   }
 
   private _handlePrevRecord = (): void => {

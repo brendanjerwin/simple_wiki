@@ -351,6 +351,40 @@ describe('PageImportDialog', () => {
     });
   });
 
+  describe('import button in preview state', () => {
+    describe('when there are validation errors', () => {
+      beforeEach(async () => {
+        el.openDialog();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (el as any).dialogState = 'preview';
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (el as any).stats = { total: 5, errors: 2, updates: 2, creates: 1 };
+        await el.updateComplete;
+      });
+
+      it('should disable the import button', () => {
+        const importBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.footer .button-primary');
+        expect(importBtn?.disabled).to.be.true;
+      });
+    });
+
+    describe('when there are no validation errors', () => {
+      beforeEach(async () => {
+        el.openDialog();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (el as any).dialogState = 'preview';
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (el as any).stats = { total: 5, errors: 0, updates: 2, creates: 3 };
+        await el.updateComplete;
+      });
+
+      it('should enable the import button', () => {
+        const importBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.footer .button-primary');
+        expect(importBtn?.disabled).to.be.false;
+      });
+    });
+  });
+
   describe('cancel button in upload state', () => {
     describe('when cancel button is clicked', () => {
       let closeDialogSpy: sinon.SinonSpy;

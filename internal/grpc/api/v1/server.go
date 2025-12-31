@@ -994,9 +994,6 @@ func (s *Server) StartPageImportJob(_ context.Context, req *apiv1.StartPageImpor
 	// Create a shared result accumulator for all jobs
 	resultAccumulator := server.NewPageImportResultAccumulator()
 
-	// Track how many jobs we need to complete before generating the report
-	remainingJobs := len(allRecords)
-
 	// Create and enqueue a job for each record
 	for i, record := range allRecords {
 		job, err := server.NewSinglePageImportJob(record, s.pageReaderMutator, s.logger, resultAccumulator)
@@ -1029,6 +1026,6 @@ func (s *Server) StartPageImportJob(_ context.Context, req *apiv1.StartPageImpor
 	return &apiv1.StartPageImportJobResponse{
 		Success:     true,
 		JobId:       server.PageImportJobName,
-		RecordCount: int32(remainingJobs),
+		RecordCount: int32(len(allRecords)),
 	}, nil
 }

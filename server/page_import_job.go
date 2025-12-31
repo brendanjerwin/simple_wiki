@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	// PageImportJobName is the name of the page import job queue.
+	// PageImportJobName is the name used for page import jobs and their queue.
 	PageImportJobName = "PageImportJob"
 
 	// PageImportReportPage is the identifier for the page import report page.
@@ -186,18 +186,18 @@ func (j *SinglePageImportJob) processRecord(record pageimport.ParsedRecord) erro
 	}
 
 	// Merge frontmatter from record (upsert semantics)
-	if err := mergeFrontmatter(fm, record.Frontmatter); err != nil {
+	if err := j.mergeFrontmatter(fm, record.Frontmatter); err != nil {
 		return fmt.Errorf("failed to merge frontmatter: %w", err)
 	}
 
 	// Handle fields to delete
 	for _, fieldPath := range record.FieldsToDelete {
-		deleteField(fm, fieldPath)
+		j.deleteField(fm, fieldPath)
 	}
 
 	// Handle array operations
 	for _, op := range record.ArrayOps {
-		if err := applyArrayOperation(fm, op); err != nil {
+		if err := j.applyArrayOperation(fm, op); err != nil {
 			return fmt.Errorf("failed to apply array operation on %s: %w", op.FieldPath, err)
 		}
 	}
@@ -228,14 +228,14 @@ func (j *SinglePageImportJob) processRecord(record pageimport.ParsedRecord) erro
 }
 
 // mergeFrontmatter merges source frontmatter into target (upsert semantics).
-func mergeFrontmatter(target, source map[string]any) error {
+func (j *SinglePageImportJob) mergeFrontmatter(target, source map[string]any) error {
 	for key, value := range source {
 		if nestedSource, ok := value.(map[string]any); ok {
 			// Handle nested maps
 			if existing, exists := target[key]; exists {
 				if nestedTarget, ok := existing.(map[string]any); ok {
 					// Recursively merge nested maps
-					if err := mergeFrontmatter(nestedTarget, nestedSource); err != nil {
+					if err := j.mergeFrontmatter(nestedTarget, nestedSource); err != nil {
 						return err
 					}
 					continue
@@ -243,7 +243,7 @@ func mergeFrontmatter(target, source map[string]any) error {
 			}
 			// Create new nested map
 			newNested := make(map[string]any)
-			if err := mergeFrontmatter(newNested, nestedSource); err != nil {
+			if err := j.mergeFrontmatter(newNested, nestedSource); err != nil {
 				return err
 			}
 			target[key] = newNested
@@ -256,7 +256,7 @@ func mergeFrontmatter(target, source map[string]any) error {
 }
 
 // deleteField removes a field from frontmatter using dotted path notation.
-func deleteField(fm map[string]any, fieldPath string) {
+func (*SinglePageImportJob) deleteField(fm map[string]any, fieldPath string) {
 	parts := strings.Split(fieldPath, ".")
 	current := fm
 
@@ -274,7 +274,7 @@ func deleteField(fm map[string]any, fieldPath string) {
 }
 
 // applyArrayOperation applies an array operation to frontmatter.
-func applyArrayOperation(fm map[string]any, op pageimport.ArrayOperation) error {
+func (*SinglePageImportJob) applyArrayOperation(fm map[string]any, op pageimport.ArrayOperation) error {
 	parts := strings.Split(op.FieldPath, ".")
 	current := fm
 

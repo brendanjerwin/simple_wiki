@@ -98,10 +98,6 @@ var _ = Describe("SinglePageImportJob", func() {
 			It("should return the correct job name", func() {
 				Expect(name).To(Equal(PageImportJobName))
 			})
-
-			It("should return 'PageImportJob'", func() {
-				Expect(name).To(Equal("PageImportJob"))
-			})
 		})
 	})
 
@@ -262,8 +258,8 @@ var _ = Describe("SinglePageImportJob", func() {
 			})
 
 			It("should not overwrite markdown for existing pages", func() {
-				// For existing pages with inv_item template, markdown is NOT rewritten
-				// This is implicit from the code - only new pages get markdown written
+				md := mockDeps.getMarkdown("existing_item")
+				Expect(md).To(Equal("# Existing Content"))
 			})
 		})
 
@@ -737,8 +733,10 @@ var _ = Describe("SinglePageImportJob", func() {
 				job, _ = NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
 			})
 
-			It("should return the record", func() {
-				Expect(job.GetRecord().Identifier).To(Equal("test_page"))
+			It("should return the record with correct fields", func() {
+				returned := job.GetRecord()
+				Expect(returned.RowNumber).To(Equal(1))
+				Expect(returned.Identifier).To(Equal("test_page"))
 			})
 		})
 	})
