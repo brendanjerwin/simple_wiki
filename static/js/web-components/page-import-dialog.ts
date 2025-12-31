@@ -701,8 +701,8 @@ export class PageImportDialog extends LitElement {
 
   /**
    * Waits for the import job to complete by streaming job status updates.
-   * The stream automatically terminates when all queues are idle.
-   * Stream errors are non-fatal - if progress tracking fails, the import still completes.
+   * Monitors the PageImportJob queue and returns when the queue becomes inactive
+   * (all jobs complete). Stream errors are non-fatal.
    */
   private async _waitForJobCompletion(): Promise<void> {
     this._streamAbortController = new AbortController();
@@ -711,45 +711,62 @@ export class PageImportDialog extends LitElement {
       updateIntervalMs: 500, // Poll every 500ms for responsive updates
     });
 
+    let sawQueueActive = false;
+
     try {
-      // Stream job status until all queues are idle (stream auto-terminates)
       for await (const status of this.systemInfoClient.streamJobStatus(request, {
         signal: this._streamAbortController.signal,
       })) {
-        this._updateProgressFromJobStatus(status);
+        const isComplete = this._updateProgressFromJobStatus(status, sawQueueActive);
+
+        // Track if we've ever seen the queue as active
+        const importQueue = status.jobQueues.find(
+          (q) => q.name === PageImportDialog.PAGE_IMPORT_QUEUE_NAME
+        );
+        if (importQueue?.isActive) {
+          sawQueueActive = true;
+        }
+
+        // Import complete - stop streaming
+        if (isComplete) {
+          this._streamAbortController.abort();
+          return;
+        }
       }
     } catch (err) {
-      // AbortError is expected when dialog is closed - handle gracefully
+      // AbortError is expected when we detect completion or dialog is closed
       if (err instanceof Error && err.name === 'AbortError') {
         return;
       }
-      // Other stream errors are non-fatal - log warning but let import complete
-      console.warn('Progress stream error (import will still complete):', err);
-      this.importProgressMessage = 'Completing import...';
+      // Other stream errors are non-fatal - import still completes in background
+      this.importProgressMessage = 'Import running in background...';
     }
   }
 
   /**
    * Updates the progress message based on the current job queue status.
-   * Each page import is now a separate job, so jobsRemaining represents pages remaining.
+   * Returns true when the import is complete (queue inactive after being active,
+   * or queue no longer exists).
    */
-  private _updateProgressFromJobStatus(status: GetJobStatusResponse): void {
-    // Find the PageImportJob queue
+  private _updateProgressFromJobStatus(
+    status: GetJobStatusResponse,
+    sawQueueActive: boolean
+  ): boolean {
     const importQueue = status.jobQueues.find(
       (q) => q.name === PageImportDialog.PAGE_IMPORT_QUEUE_NAME
     );
 
-    // Queue not found - just return, stream will terminate when done
+    // Queue not found - if we saw it active before, it's now complete
     if (!importQueue) {
-      return;
+      return sawQueueActive;
     }
 
-    // Queue is inactive - import is complete
+    // Queue is inactive - complete if we saw it active before
     if (!importQueue.isActive) {
-      this.importProgressMessage = 'Finalizing import...';
-      return;
+      return sawQueueActive;
     }
 
+    // Queue is active - update progress message
     const total = importQueue.highWaterMark;
     const remaining = importQueue.jobsRemaining;
     const completed = total - remaining;
@@ -757,7 +774,7 @@ export class PageImportDialog extends LitElement {
     // Zero highWaterMark means queue just started, show generic message
     if (total === 0) {
       this.importProgressMessage = 'Starting import...';
-      return;
+      return false;
     }
 
     // Account for the report job at the end (total includes it)
@@ -771,6 +788,8 @@ export class PageImportDialog extends LitElement {
     } else {
       this.importProgressMessage = `Importing page ${pagesCompleted + 1} of ${pageTotal}...`;
     }
+
+    return false;
   }
 
   private get filteredRecords(): PageImportRecord[] {
