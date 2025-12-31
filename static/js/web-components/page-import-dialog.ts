@@ -701,8 +701,8 @@ export class PageImportDialog extends LitElement {
 
   /**
    * Waits for the import job to complete by streaming job status updates.
-   * Monitors the PageImportJob queue and returns when the queue becomes inactive
-   * (all jobs complete). Stream errors are non-fatal.
+   * Monitors the PageImportJob queue and returns when all jobs complete.
+   * Stream errors are non-fatal.
    */
   private async _waitForJobCompletion(): Promise<void> {
     this._streamAbortController = new AbortController();
@@ -711,20 +711,27 @@ export class PageImportDialog extends LitElement {
       updateIntervalMs: 500, // Poll every 500ms for responsive updates
     });
 
-    let sawQueueActive = false;
+    // Track if we've ever seen jobs in the queue (highWaterMark > 0)
+    let sawJobs = false;
 
     try {
       for await (const status of this.systemInfoClient.streamJobStatus(request, {
         signal: this._streamAbortController.signal,
       })) {
-        const isComplete = this._updateProgressFromJobStatus(status, sawQueueActive);
-
-        // Track if we've ever seen the queue as active
         const importQueue = status.jobQueues.find(
           (q) => q.name === PageImportDialog.PAGE_IMPORT_QUEUE_NAME
         );
-        if (importQueue?.isActive) {
-          sawQueueActive = true;
+
+        // Track if we've ever seen jobs registered
+        if (importQueue && importQueue.highWaterMark > 0) {
+          sawJobs = true;
+        }
+
+        const isComplete = this._checkImportComplete(importQueue, sawJobs);
+
+        // Update progress message if not complete
+        if (!isComplete && importQueue) {
+          this._updateProgressMessage(importQueue);
         }
 
         // Import complete - stop streaming
@@ -744,29 +751,38 @@ export class PageImportDialog extends LitElement {
   }
 
   /**
-   * Updates the progress message based on the current job queue status.
-   * Returns true when the import is complete (queue inactive after being active,
-   * or queue no longer exists).
+   * Checks if the import is complete based on queue status.
+   * Complete when: we've seen jobs AND (queue is gone OR queue is inactive).
    */
-  private _updateProgressFromJobStatus(
-    status: GetJobStatusResponse,
-    sawQueueActive: boolean
+  private _checkImportComplete(
+    importQueue: { isActive: boolean; highWaterMark: number } | undefined,
+    sawJobs: boolean
   ): boolean {
-    const importQueue = status.jobQueues.find(
-      (q) => q.name === PageImportDialog.PAGE_IMPORT_QUEUE_NAME
-    );
+    // Haven't seen any jobs yet - not complete
+    if (!sawJobs) {
+      return false;
+    }
 
-    // Queue not found - if we saw it active before, it's now complete
+    // Queue is gone after we saw jobs - complete
     if (!importQueue) {
-      return sawQueueActive;
+      return true;
     }
 
-    // Queue is inactive - complete if we saw it active before
+    // Queue is inactive after we saw jobs - complete
     if (!importQueue.isActive) {
-      return sawQueueActive;
+      return true;
     }
 
-    // Queue is active - update progress message
+    return false;
+  }
+
+  /**
+   * Updates the progress message based on the current job queue status.
+   */
+  private _updateProgressMessage(importQueue: {
+    highWaterMark: number;
+    jobsRemaining: number;
+  }): void {
     const total = importQueue.highWaterMark;
     const remaining = importQueue.jobsRemaining;
     const completed = total - remaining;
@@ -774,7 +790,7 @@ export class PageImportDialog extends LitElement {
     // Zero highWaterMark means queue just started, show generic message
     if (total === 0) {
       this.importProgressMessage = 'Starting import...';
-      return false;
+      return;
     }
 
     // Account for the report job at the end (total includes it)
@@ -788,8 +804,6 @@ export class PageImportDialog extends LitElement {
     } else {
       this.importProgressMessage = `Importing page ${pagesCompleted + 1} of ${pageTotal}...`;
     }
-
-    return false;
   }
 
   private get filteredRecords(): PageImportRecord[] {
