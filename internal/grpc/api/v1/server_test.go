@@ -2505,6 +2505,10 @@ var _ = Describe("Server", func() {
 			It("should add a validation error for the missing template", func() {
 				Expect(resp.Records[0].ValidationErrors).To(ContainElement(ContainSubstring("template 'nonexistent_template' does not exist")))
 			})
+
+			It("should count the missing template as an error", func() {
+				Expect(resp.ErrorCount).To(Equal(int32(1)))
+			})
 		})
 
 		When("csv_content references a template that fails to read", func() {
@@ -2525,6 +2529,10 @@ var _ = Describe("Server", func() {
 			It("should add a validation error with the read failure details", func() {
 				Expect(resp.Records[0].ValidationErrors).To(ContainElement(ContainSubstring("failed to read template 'broken_template'")))
 				Expect(resp.Records[0].ValidationErrors).To(ContainElement(ContainSubstring("permission denied")))
+			})
+
+			It("should count the template read failure as an error", func() {
+				Expect(resp.ErrorCount).To(Equal(int32(1)))
 			})
 		})
 
