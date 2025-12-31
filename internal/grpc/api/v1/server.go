@@ -965,7 +965,7 @@ func (*Server) convertParsedRecordToProto(parsed pageimport.ParsedRecord) (*apiv
 }
 
 // StartPageImportJob implements the StartPageImportJob RPC for the PageImportService.
-// It starts a background job to import pages from the CSV content.
+// It starts background jobs to import pages from the CSV content - one job per page.
 func (s *Server) StartPageImportJob(_ context.Context, req *apiv1.StartPageImportJobRequest) (*apiv1.StartPageImportJobResponse, error) {
 	if req.CsvContent == "" {
 		return nil, status.Error(codes.InvalidArgument, "csv_content cannot be empty")
@@ -985,26 +985,50 @@ func (s *Server) StartPageImportJob(_ context.Context, req *apiv1.StartPageImpor
 		return nil, status.Errorf(codes.InvalidArgument, "CSV has parsing errors: %s", strings.Join(parseResult.ParsingErrors, "; "))
 	}
 
-	// Get valid records only
-	validRecords := parseResult.ValidRecords()
-	if len(validRecords) == 0 {
-		return nil, status.Error(codes.InvalidArgument, "no valid records to import")
+	// Get all records (we'll handle validation errors in individual jobs)
+	allRecords := parseResult.Records
+	if len(allRecords) == 0 {
+		return nil, status.Error(codes.InvalidArgument, "no records to import")
 	}
 
-	// Create the page import job
-	job, err := server.NewPageImportJob(validRecords, s.pageReaderMutator, s.logger)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to create import job: %v", err)
-	}
+	// Create a shared result accumulator for all jobs
+	resultAccumulator := server.NewPageImportResultAccumulator()
 
-	// Enqueue the job
-	if err := s.jobQueueCoordinator.EnqueueJob(job); err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to enqueue import job: %v", err)
+	// Track how many jobs we need to complete before generating the report
+	remainingJobs := len(allRecords)
+
+	// Create and enqueue a job for each record
+	for i, record := range allRecords {
+		job, err := server.NewSinglePageImportJob(record, s.pageReaderMutator, s.logger, resultAccumulator)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to create import job for record %d: %v", i+1, err)
+		}
+
+		// For the last job, use completion callback to trigger report generation
+		if i == len(allRecords)-1 {
+			err = s.jobQueueCoordinator.EnqueueJobWithCompletion(job, func(_ error) {
+				// All jobs complete when this runs (queue processes in order)
+				reportJob, createErr := server.NewPageImportReportJob(s.pageReaderMutator, s.logger, resultAccumulator)
+				if createErr != nil {
+					s.logger.Error("Failed to create report job: %v", createErr)
+					return
+				}
+				if enqueueErr := s.jobQueueCoordinator.EnqueueJob(reportJob); enqueueErr != nil {
+					s.logger.Error("Failed to enqueue report job: %v", enqueueErr)
+				}
+			})
+		} else {
+			err = s.jobQueueCoordinator.EnqueueJob(job)
+		}
+
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to enqueue import job for record %d: %v", i+1, err)
+		}
 	}
 
 	return &apiv1.StartPageImportJobResponse{
 		Success:     true,
 		JobId:       server.PageImportJobName,
-		RecordCount: int32(len(validRecords)),
+		RecordCount: int32(remainingJobs),
 	}, nil
 }

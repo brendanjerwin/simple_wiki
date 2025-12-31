@@ -11,23 +11,25 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("PageImportJob", func() {
+var _ = Describe("SinglePageImportJob", func() {
 	var (
-		mockDeps *mockPageReaderMutator
-		logger   lumber.Logger
+		mockDeps          *mockPageReaderMutator
+		logger            lumber.Logger
+		resultAccumulator *PageImportResultAccumulator
 	)
 
 	BeforeEach(func() {
 		mockDeps = newMockPageReaderMutator()
 		logger = lumber.NewConsoleLogger(lumber.WARN)
+		resultAccumulator = NewPageImportResultAccumulator()
 	})
 
-	Describe("NewPageImportJob", func() {
+	Describe("NewSinglePageImportJob", func() {
 		When("pageReaderMutator is nil", func() {
 			var err error
 
 			BeforeEach(func() {
-				_, err = NewPageImportJob(nil, nil, logger)
+				_, err = NewSinglePageImportJob(pageimport.ParsedRecord{}, nil, logger, resultAccumulator)
 			})
 
 			It("should return an error", func() {
@@ -39,7 +41,7 @@ var _ = Describe("PageImportJob", func() {
 			var err error
 
 			BeforeEach(func() {
-				_, err = NewPageImportJob(nil, mockDeps, nil)
+				_, err = NewSinglePageImportJob(pageimport.ParsedRecord{}, mockDeps, nil, resultAccumulator)
 			})
 
 			It("should return an error", func() {
@@ -47,14 +49,26 @@ var _ = Describe("PageImportJob", func() {
 			})
 		})
 
+		When("resultAccumulator is nil", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = NewSinglePageImportJob(pageimport.ParsedRecord{}, mockDeps, logger, nil)
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(MatchError("resultAccumulator is required"))
+			})
+		})
+
 		When("all dependencies are provided", func() {
 			var (
-				job *PageImportJob
+				job *SinglePageImportJob
 				err error
 			)
 
 			BeforeEach(func() {
-				job, err = NewPageImportJob(nil, mockDeps, logger)
+				job, err = NewSinglePageImportJob(pageimport.ParsedRecord{}, mockDeps, logger, resultAccumulator)
 			})
 
 			It("should not return an error", func() {
@@ -68,10 +82,10 @@ var _ = Describe("PageImportJob", func() {
 	})
 
 	Describe("GetName", func() {
-		var job *PageImportJob
+		var job *SinglePageImportJob
 
 		BeforeEach(func() {
-			job, _ = NewPageImportJob(nil, mockDeps, logger)
+			job, _ = NewSinglePageImportJob(pageimport.ParsedRecord{}, mockDeps, logger, resultAccumulator)
 		})
 
 		When("called", func() {
@@ -92,23 +106,19 @@ var _ = Describe("PageImportJob", func() {
 	})
 
 	Describe("Execute", func() {
-		var job *PageImportJob
-
 		When("processing a record for a new page", func() {
 			var err error
 
 			BeforeEach(func() {
-				records := []pageimport.ParsedRecord{
-					{
-						RowNumber:  1,
-						Identifier: "new_page",
-						Frontmatter: map[string]any{
-							"title":       "New Page Title",
-							"description": "A new page",
-						},
+				record := pageimport.ParsedRecord{
+					RowNumber:  1,
+					Identifier: "new_page",
+					Frontmatter: map[string]any{
+						"title":       "New Page Title",
+						"description": "A new page",
 					},
 				}
-				job, _ = NewPageImportJob(records, mockDeps, logger)
+				job, _ := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
 				err = job.Execute()
 			})
 
@@ -135,8 +145,8 @@ var _ = Describe("PageImportJob", func() {
 				Expect(fm["description"]).To(Equal("A new page"))
 			})
 
-			It("should track the page as created", func() {
-				result := job.GetResult()
+			It("should track the page as created in the accumulator", func() {
+				result := resultAccumulator.GetResult()
 				Expect(result.CreatedPages).To(ContainElement("new_page"))
 			})
 		})
@@ -151,17 +161,15 @@ var _ = Describe("PageImportJob", func() {
 					"existing_key": "existing_value",
 				}, "# Existing Content")
 
-				records := []pageimport.ParsedRecord{
-					{
-						RowNumber:  1,
-						Identifier: "existing_page",
-						Frontmatter: map[string]any{
-							"title":   "Updated Title",
-							"new_key": "new_value",
-						},
+				record := pageimport.ParsedRecord{
+					RowNumber:  1,
+					Identifier: "existing_page",
+					Frontmatter: map[string]any{
+						"title":   "Updated Title",
+						"new_key": "new_value",
 					},
 				}
-				job, _ = NewPageImportJob(records, mockDeps, logger)
+				job, _ := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
 				err = job.Execute()
 			})
 
@@ -184,8 +192,8 @@ var _ = Describe("PageImportJob", func() {
 				Expect(fm["new_key"]).To(Equal("new_value"))
 			})
 
-			It("should track the page as updated", func() {
-				result := job.GetResult()
+			It("should track the page as updated in the accumulator", func() {
+				result := resultAccumulator.GetResult()
 				Expect(result.UpdatedPages).To(ContainElement("existing_page"))
 			})
 		})
@@ -194,17 +202,15 @@ var _ = Describe("PageImportJob", func() {
 			var err error
 
 			BeforeEach(func() {
-				records := []pageimport.ParsedRecord{
-					{
-						RowNumber:  1,
-						Identifier: "new_item",
-						Template:   "inv_item",
-						Frontmatter: map[string]any{
-							"title": "New Inventory Item",
-						},
+				record := pageimport.ParsedRecord{
+					RowNumber:  1,
+					Identifier: "new_item",
+					Template:   "inv_item",
+					Frontmatter: map[string]any{
+						"title": "New Inventory Item",
 					},
 				}
-				job, _ = NewPageImportJob(records, mockDeps, logger)
+				job, _ := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
 				err = job.Execute()
 			})
 
@@ -233,17 +239,15 @@ var _ = Describe("PageImportJob", func() {
 					"title":      "Existing Item",
 				}, "# Existing Content")
 
-				records := []pageimport.ParsedRecord{
-					{
-						RowNumber:  1,
-						Identifier: "existing_item",
-						Template:   "inv_item",
-						Frontmatter: map[string]any{
-							"title": "Updated Item",
-						},
+				record := pageimport.ParsedRecord{
+					RowNumber:  1,
+					Identifier: "existing_item",
+					Template:   "inv_item",
+					Frontmatter: map[string]any{
+						"title": "Updated Item",
 					},
 				}
-				job, _ = NewPageImportJob(records, mockDeps, logger)
+				job, _ := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
 				err = job.Execute()
 			})
 
@@ -268,9 +272,9 @@ var _ = Describe("PageImportJob", func() {
 
 			BeforeEach(func() {
 				mockDeps.setPage("page_with_fields", map[string]any{
-					"identifier":     "page_with_fields",
-					"title":          "Page With Fields",
-					"field_to_keep":  "kept",
+					"identifier":      "page_with_fields",
+					"title":           "Page With Fields",
+					"field_to_keep":   "kept",
 					"field_to_delete": "to be deleted",
 					"nested": map[string]any{
 						"keep_this":   "kept",
@@ -278,14 +282,12 @@ var _ = Describe("PageImportJob", func() {
 					},
 				}, "# Content")
 
-				records := []pageimport.ParsedRecord{
-					{
-						RowNumber:      1,
-						Identifier:     "page_with_fields",
-						FieldsToDelete: []string{"field_to_delete", "nested.delete_this"},
-					},
+				record := pageimport.ParsedRecord{
+					RowNumber:      1,
+					Identifier:     "page_with_fields",
+					FieldsToDelete: []string{"field_to_delete", "nested.delete_this"},
 				}
-				job, _ = NewPageImportJob(records, mockDeps, logger)
+				job, _ := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
 				err = job.Execute()
 			})
 
@@ -329,25 +331,23 @@ var _ = Describe("PageImportJob", func() {
 					"tags":       []any{"existing_tag"},
 				}, "# Content")
 
-				records := []pageimport.ParsedRecord{
-					{
-						RowNumber:  1,
-						Identifier: "page_with_array",
-						ArrayOps: []pageimport.ArrayOperation{
-							{
-								FieldPath: "tags",
-								Operation: pageimport.EnsureExists,
-								Value:     "new_tag",
-							},
-							{
-								FieldPath: "tags",
-								Operation: pageimport.EnsureExists,
-								Value:     "existing_tag", // Already exists
-							},
+				record := pageimport.ParsedRecord{
+					RowNumber:  1,
+					Identifier: "page_with_array",
+					ArrayOps: []pageimport.ArrayOperation{
+						{
+							FieldPath: "tags",
+							Operation: pageimport.EnsureExists,
+							Value:     "new_tag",
+						},
+						{
+							FieldPath: "tags",
+							Operation: pageimport.EnsureExists,
+							Value:     "existing_tag", // Already exists
 						},
 					},
 				}
-				job, _ = NewPageImportJob(records, mockDeps, logger)
+				job, _ := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
 				err = job.Execute()
 			})
 
@@ -385,20 +385,18 @@ var _ = Describe("PageImportJob", func() {
 					"tags":       []any{"keep_me", "delete_me", "also_keep"},
 				}, "# Content")
 
-				records := []pageimport.ParsedRecord{
-					{
-						RowNumber:  1,
-						Identifier: "page_with_array",
-						ArrayOps: []pageimport.ArrayOperation{
-							{
-								FieldPath: "tags",
-								Operation: pageimport.DeleteValue,
-								Value:     "delete_me",
-							},
+				record := pageimport.ParsedRecord{
+					RowNumber:  1,
+					Identifier: "page_with_array",
+					ArrayOps: []pageimport.ArrayOperation{
+						{
+							FieldPath: "tags",
+							Operation: pageimport.DeleteValue,
+							Value:     "delete_me",
 						},
 					},
 				}
-				job, _ = NewPageImportJob(records, mockDeps, logger)
+				job, _ := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
 				err = job.Execute()
 			})
 
@@ -431,20 +429,18 @@ var _ = Describe("PageImportJob", func() {
 					"tags":       []string{"tag1", "tag2"},
 				}, "# Content")
 
-				records := []pageimport.ParsedRecord{
-					{
-						RowNumber:  1,
-						Identifier: "page_with_string_array",
-						ArrayOps: []pageimport.ArrayOperation{
-							{
-								FieldPath: "tags",
-								Operation: pageimport.EnsureExists,
-								Value:     "tag3",
-							},
+				record := pageimport.ParsedRecord{
+					RowNumber:  1,
+					Identifier: "page_with_string_array",
+					ArrayOps: []pageimport.ArrayOperation{
+						{
+							FieldPath: "tags",
+							Operation: pageimport.EnsureExists,
+							Value:     "tag3",
 						},
 					},
 				}
-				job, _ = NewPageImportJob(records, mockDeps, logger)
+				job, _ := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
 				err = job.Execute()
 			})
 
@@ -464,20 +460,18 @@ var _ = Describe("PageImportJob", func() {
 			var err error
 
 			BeforeEach(func() {
-				records := []pageimport.ParsedRecord{
-					{
-						RowNumber:  1,
-						Identifier: "new_page_with_nested_array",
-						ArrayOps: []pageimport.ArrayOperation{
-							{
-								FieldPath: "inventory.items",
-								Operation: pageimport.EnsureExists,
-								Value:     "item1",
-							},
+				record := pageimport.ParsedRecord{
+					RowNumber:  1,
+					Identifier: "new_page_with_nested_array",
+					ArrayOps: []pageimport.ArrayOperation{
+						{
+							FieldPath: "inventory.items",
+							Operation: pageimport.EnsureExists,
+							Value:     "item1",
 						},
 					},
 				}
-				job, _ = NewPageImportJob(records, mockDeps, logger)
+				job, _ := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
 				err = job.Execute()
 			})
 
@@ -499,14 +493,12 @@ var _ = Describe("PageImportJob", func() {
 			var err error
 
 			BeforeEach(func() {
-				records := []pageimport.ParsedRecord{
-					{
-						RowNumber:        1,
-						Identifier:       "valid_page",
-						ValidationErrors: []string{"some validation error"},
-					},
+				record := pageimport.ParsedRecord{
+					RowNumber:        1,
+					Identifier:       "valid_page",
+					ValidationErrors: []string{"some validation error"},
 				}
-				job, _ = NewPageImportJob(records, mockDeps, logger)
+				job, _ := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
 				err = job.Execute()
 			})
 
@@ -518,106 +510,10 @@ var _ = Describe("PageImportJob", func() {
 				Expect(mockDeps.hasPage("valid_page")).To(BeFalse())
 			})
 
-			It("should track the failure", func() {
-				result := job.GetResult()
+			It("should track the failure in the accumulator", func() {
+				result := resultAccumulator.GetResult()
 				Expect(result.FailedRecords).To(HaveLen(1))
 				Expect(result.FailedRecords[0].Identifier).To(Equal("valid_page"))
-			})
-		})
-
-		When("processing continues after a record validation error", func() {
-			var err error
-
-			BeforeEach(func() {
-				records := []pageimport.ParsedRecord{
-					{
-						RowNumber:        1,
-						Identifier:       "error_page",
-						ValidationErrors: []string{"validation failed"},
-					},
-					{
-						RowNumber:  2,
-						Identifier: "success_page",
-						Frontmatter: map[string]any{
-							"title": "Will Succeed",
-						},
-					},
-				}
-				job, _ = NewPageImportJob(records, mockDeps, logger)
-				err = job.Execute()
-			})
-
-			It("should not return an error", func() {
-				Expect(err).NotTo(HaveOccurred())
-			})
-
-			It("should process the successful page", func() {
-				Expect(mockDeps.hasPage("success_page")).To(BeTrue())
-			})
-
-			It("should track the failed record", func() {
-				result := job.GetResult()
-				Expect(result.FailedRecords).To(HaveLen(1))
-				Expect(result.FailedRecords[0].Identifier).To(Equal("error_page"))
-			})
-
-			It("should track the successful page", func() {
-				result := job.GetResult()
-				Expect(result.CreatedPages).To(ContainElement("success_page"))
-			})
-		})
-
-		When("processing continues after a record processing error", func() {
-			var err error
-
-			BeforeEach(func() {
-				// Set up a page where array operation will fail
-				mockDeps.setPage("error_page", map[string]any{
-					"identifier": "error_page",
-					"tags":       "not an array", // This will cause array operation to fail
-				}, "")
-
-				records := []pageimport.ParsedRecord{
-					{
-						RowNumber:  1,
-						Identifier: "error_page",
-						ArrayOps: []pageimport.ArrayOperation{
-							{
-								FieldPath: "tags",
-								Operation: pageimport.EnsureExists,
-								Value:     "new_tag",
-							},
-						},
-					},
-					{
-						RowNumber:  2,
-						Identifier: "success_page",
-						Frontmatter: map[string]any{
-							"title": "Will Succeed",
-						},
-					},
-				}
-				job, _ = NewPageImportJob(records, mockDeps, logger)
-				err = job.Execute()
-			})
-
-			It("should not return an error", func() {
-				Expect(err).NotTo(HaveOccurred())
-			})
-
-			It("should process the successful page", func() {
-				Expect(mockDeps.hasPage("success_page")).To(BeTrue())
-			})
-
-			It("should track the failed record", func() {
-				result := job.GetResult()
-				Expect(result.FailedRecords).To(HaveLen(1))
-				Expect(result.FailedRecords[0].Identifier).To(Equal("error_page"))
-			})
-
-			It("should track the successful page", func() {
-				result := job.GetResult()
-				Expect(result.CreatedPages).To(ContainElement("success_page"))
 			})
 		})
 
@@ -633,19 +529,17 @@ var _ = Describe("PageImportJob", func() {
 					},
 				}, "# Content")
 
-				records := []pageimport.ParsedRecord{
-					{
-						RowNumber:  1,
-						Identifier: "page_with_nested",
-						Frontmatter: map[string]any{
-							"inventory": map[string]any{
-								"container": "new_container",
-								"new_key":   "new_value",
-							},
+				record := pageimport.ParsedRecord{
+					RowNumber:  1,
+					Identifier: "page_with_nested",
+					Frontmatter: map[string]any{
+						"inventory": map[string]any{
+							"container": "new_container",
+							"new_key":   "new_value",
 						},
 					},
 				}
-				job, _ = NewPageImportJob(records, mockDeps, logger)
+				job, _ := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
 				err = job.Execute()
 			})
 
@@ -675,34 +569,145 @@ var _ = Describe("PageImportJob", func() {
 			})
 		})
 
-		When("processing multiple records", func() {
+		When("array operation targets a non-map intermediate value", func() {
 			var err error
 
 			BeforeEach(func() {
-				records := []pageimport.ParsedRecord{
-					{
-						RowNumber:  1,
-						Identifier: "page_one",
-						Frontmatter: map[string]any{
-							"title": "Page One",
-						},
-					},
-					{
-						RowNumber:  2,
-						Identifier: "page_two",
-						Frontmatter: map[string]any{
-							"title": "Page Two",
-						},
-					},
-					{
-						RowNumber:  3,
-						Identifier: "page_three",
-						Frontmatter: map[string]any{
-							"title": "Page Three",
+				mockDeps.setPage("page", map[string]any{
+					"identifier": "page",
+					"inventory":  "not a map",
+				}, "")
+
+				record := pageimport.ParsedRecord{
+					RowNumber:  1,
+					Identifier: "page",
+					ArrayOps: []pageimport.ArrayOperation{
+						{
+							FieldPath: "inventory.items",
+							Operation: pageimport.EnsureExists,
+							Value:     "item1",
 						},
 					},
 				}
-				job, _ = NewPageImportJob(records, mockDeps, logger)
+				job, _ := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				err = job.Execute()
+			})
+
+			It("should not return an error from Execute", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should track the failure in the accumulator", func() {
+				result := resultAccumulator.GetResult()
+				Expect(result.FailedRecords).To(HaveLen(1))
+				Expect(result.FailedRecords[0].Error).To(ContainSubstring("cannot navigate through non-map value"))
+			})
+		})
+
+		When("array operation targets a non-array field", func() {
+			var err error
+
+			BeforeEach(func() {
+				mockDeps.setPage("page", map[string]any{
+					"identifier": "page",
+					"tags":       "not an array",
+				}, "")
+
+				record := pageimport.ParsedRecord{
+					RowNumber:  1,
+					Identifier: "page",
+					ArrayOps: []pageimport.ArrayOperation{
+						{
+							FieldPath: "tags",
+							Operation: pageimport.EnsureExists,
+							Value:     "new_tag",
+						},
+					},
+				}
+				job, _ := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				err = job.Execute()
+			})
+
+			It("should not return an error from Execute", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should track the failure in the accumulator", func() {
+				result := resultAccumulator.GetResult()
+				Expect(result.FailedRecords).To(HaveLen(1))
+				Expect(result.FailedRecords[0].Error).To(ContainSubstring("is not an array"))
+			})
+		})
+
+		When("WriteFrontMatter fails for a record", func() {
+			var err error
+
+			BeforeEach(func() {
+				mockDeps.writeFrontMatterErr = errors.New("permission denied")
+
+				record := pageimport.ParsedRecord{
+					RowNumber:  1,
+					Identifier: "new_page",
+					Frontmatter: map[string]any{
+						"title": "Test",
+					},
+				}
+				job, _ := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				err = job.Execute()
+			})
+
+			It("should not return an error from Execute", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should include the error in failed records", func() {
+				result := resultAccumulator.GetResult()
+				Expect(result.FailedRecords).To(HaveLen(1))
+				Expect(result.FailedRecords[0].Error).To(ContainSubstring("failed to write frontmatter"))
+			})
+		})
+
+		When("WriteMarkdown fails for a new inv_item page", func() {
+			var err error
+
+			BeforeEach(func() {
+				mockDeps.writeMarkdownErr = os.ErrPermission
+
+				record := pageimport.ParsedRecord{
+					RowNumber:  1,
+					Identifier: "new_item",
+					Template:   "inv_item",
+				}
+				job, _ := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+				err = job.Execute()
+			})
+
+			It("should not return an error from Execute", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should include the error in failed records", func() {
+				result := resultAccumulator.GetResult()
+				Expect(result.FailedRecords).To(HaveLen(1))
+				Expect(result.FailedRecords[0].Error).To(ContainSubstring("failed to write markdown"))
+			})
+		})
+
+		When("deleting a non-existent path", func() {
+			var err error
+
+			BeforeEach(func() {
+				mockDeps.setPage("page", map[string]any{
+					"identifier": "page",
+					"title":      "Test",
+				}, "")
+
+				record := pageimport.ParsedRecord{
+					RowNumber:      1,
+					Identifier:     "page",
+					FieldsToDelete: []string{"nonexistent.nested.field"},
+				}
+				job, _ := NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
 				err = job.Execute()
 			})
 
@@ -710,36 +715,224 @@ var _ = Describe("PageImportJob", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("should create all pages", func() {
-				Expect(mockDeps.hasPage("page_one")).To(BeTrue())
-				Expect(mockDeps.hasPage("page_two")).To(BeTrue())
-				Expect(mockDeps.hasPage("page_three")).To(BeTrue())
-			})
-
-			It("should track all created pages", func() {
-				result := job.GetResult()
-				Expect(result.CreatedPages).To(HaveLen(3))
+			It("should not affect existing fields", func() {
+				fm := mockDeps.getFrontmatter("page")
+				Expect(fm["title"]).To(Equal("Test"))
 			})
 		})
 	})
 
-	Describe("generateReport", func() {
-		var job *PageImportJob
+	Describe("GetRecord", func() {
+		When("called", func() {
+			var (
+				job    *SinglePageImportJob
+				record pageimport.ParsedRecord
+			)
 
+			BeforeEach(func() {
+				record = pageimport.ParsedRecord{
+					RowNumber:  1,
+					Identifier: "test_page",
+				}
+				job, _ = NewSinglePageImportJob(record, mockDeps, logger, resultAccumulator)
+			})
+
+			It("should return the record", func() {
+				Expect(job.GetRecord().Identifier).To(Equal("test_page"))
+			})
+		})
+	})
+})
+
+var _ = Describe("PageImportResultAccumulator", func() {
+	var accumulator *PageImportResultAccumulator
+
+	BeforeEach(func() {
+		accumulator = NewPageImportResultAccumulator()
+	})
+
+	Describe("NewPageImportResultAccumulator", func() {
+		It("should create an accumulator with empty slices", func() {
+			result := accumulator.GetResult()
+			Expect(result.CreatedPages).To(BeEmpty())
+			Expect(result.UpdatedPages).To(BeEmpty())
+			Expect(result.FailedRecords).To(BeEmpty())
+		})
+	})
+
+	Describe("RecordCreated", func() {
+		When("recording created pages", func() {
+			BeforeEach(func() {
+				accumulator.RecordCreated("page1")
+				accumulator.RecordCreated("page2")
+			})
+
+			It("should track created pages", func() {
+				result := accumulator.GetResult()
+				Expect(result.CreatedPages).To(HaveLen(2))
+				Expect(result.CreatedPages).To(ContainElement("page1"))
+				Expect(result.CreatedPages).To(ContainElement("page2"))
+			})
+		})
+	})
+
+	Describe("RecordUpdated", func() {
+		When("recording updated pages", func() {
+			BeforeEach(func() {
+				accumulator.RecordUpdated("page1")
+				accumulator.RecordUpdated("page2")
+			})
+
+			It("should track updated pages", func() {
+				result := accumulator.GetResult()
+				Expect(result.UpdatedPages).To(HaveLen(2))
+				Expect(result.UpdatedPages).To(ContainElement("page1"))
+				Expect(result.UpdatedPages).To(ContainElement("page2"))
+			})
+		})
+	})
+
+	Describe("RecordFailed", func() {
+		When("recording failed records", func() {
+			BeforeEach(func() {
+				accumulator.RecordFailed(FailedPageImport{
+					RowNumber:  1,
+					Identifier: "failed1",
+					Error:      "error1",
+				})
+				accumulator.RecordFailed(FailedPageImport{
+					RowNumber:  2,
+					Identifier: "failed2",
+					Error:      "error2",
+				})
+			})
+
+			It("should track failed records", func() {
+				result := accumulator.GetResult()
+				Expect(result.FailedRecords).To(HaveLen(2))
+				Expect(result.FailedRecords[0].Identifier).To(Equal("failed1"))
+				Expect(result.FailedRecords[1].Identifier).To(Equal("failed2"))
+			})
+		})
+	})
+
+	Describe("GetResult", func() {
+		When("getting result with mixed data", func() {
+			var result PageImportResult
+
+			BeforeEach(func() {
+				accumulator.RecordCreated("new_page")
+				accumulator.RecordUpdated("existing_page")
+				accumulator.RecordFailed(FailedPageImport{
+					RowNumber:  3,
+					Identifier: "failed_page",
+					Error:      "error",
+				})
+				result = accumulator.GetResult()
+			})
+
+			It("should return a copy with all data", func() {
+				Expect(result.CreatedPages).To(ContainElement("new_page"))
+				Expect(result.UpdatedPages).To(ContainElement("existing_page"))
+				Expect(result.FailedRecords).To(HaveLen(1))
+				Expect(result.FailedRecords[0].Identifier).To(Equal("failed_page"))
+			})
+		})
+	})
+})
+
+var _ = Describe("PageImportReportJob", func() {
+	var (
+		mockDeps          *mockPageReaderMutator
+		logger            lumber.Logger
+		resultAccumulator *PageImportResultAccumulator
+	)
+
+	BeforeEach(func() {
+		mockDeps = newMockPageReaderMutator()
+		logger = lumber.NewConsoleLogger(lumber.WARN)
+		resultAccumulator = NewPageImportResultAccumulator()
+	})
+
+	Describe("NewPageImportReportJob", func() {
+		When("pageReaderMutator is nil", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = NewPageImportReportJob(nil, logger, resultAccumulator)
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(MatchError("pageReaderMutator is required"))
+			})
+		})
+
+		When("logger is nil", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = NewPageImportReportJob(mockDeps, nil, resultAccumulator)
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(MatchError("logger is required"))
+			})
+		})
+
+		When("resultAccumulator is nil", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = NewPageImportReportJob(mockDeps, logger, nil)
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(MatchError("resultAccumulator is required"))
+			})
+		})
+
+		When("all dependencies are provided", func() {
+			var (
+				job *PageImportReportJob
+				err error
+			)
+
+			BeforeEach(func() {
+				job, err = NewPageImportReportJob(mockDeps, logger, resultAccumulator)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a valid job", func() {
+				Expect(job).NotTo(BeNil())
+			})
+		})
+	})
+
+	Describe("GetName", func() {
+		When("called", func() {
+			var name string
+
+			BeforeEach(func() {
+				job, _ := NewPageImportReportJob(mockDeps, logger, resultAccumulator)
+				name = job.GetName()
+			})
+
+			It("should return PageImportJob", func() {
+				Expect(name).To(Equal(PageImportJobName))
+			})
+		})
+	})
+
+	Describe("Execute", func() {
 		When("job completes successfully with created pages", func() {
 			var err error
 
 			BeforeEach(func() {
-				records := []pageimport.ParsedRecord{
-					{
-						RowNumber:  1,
-						Identifier: "new_page",
-						Frontmatter: map[string]any{
-							"title": "New Page",
-						},
-					},
-				}
-				job, _ = NewPageImportJob(records, mockDeps, logger)
+				resultAccumulator.RecordCreated("new_page")
+				job, _ := NewPageImportReportJob(mockDeps, logger, resultAccumulator)
 				err = job.Execute()
 			})
 
@@ -771,20 +964,8 @@ var _ = Describe("PageImportJob", func() {
 			var err error
 
 			BeforeEach(func() {
-				mockDeps.setPage("existing_page", map[string]any{
-					"identifier": "existing_page",
-				}, "")
-
-				records := []pageimport.ParsedRecord{
-					{
-						RowNumber:  1,
-						Identifier: "existing_page",
-						Frontmatter: map[string]any{
-							"title": "Updated",
-						},
-					},
-				}
-				job, _ = NewPageImportJob(records, mockDeps, logger)
+				resultAccumulator.RecordUpdated("existing_page")
+				job, _ := NewPageImportReportJob(mockDeps, logger, resultAccumulator)
 				err = job.Execute()
 			})
 
@@ -803,14 +984,12 @@ var _ = Describe("PageImportJob", func() {
 			var err error
 
 			BeforeEach(func() {
-				records := []pageimport.ParsedRecord{
-					{
-						RowNumber:        1,
-						Identifier:       "invalid_page",
-						ValidationErrors: []string{"validation error 1", "validation error 2"},
-					},
-				}
-				job, _ = NewPageImportJob(records, mockDeps, logger)
+				resultAccumulator.RecordFailed(FailedPageImport{
+					RowNumber:  1,
+					Identifier: "invalid_page",
+					Error:      "validation error 1; validation error 2",
+				})
+				job, _ := NewPageImportReportJob(mockDeps, logger, resultAccumulator)
 				err = job.Execute()
 			})
 
@@ -834,13 +1013,8 @@ var _ = Describe("PageImportJob", func() {
 			var err error
 
 			BeforeEach(func() {
-				records := []pageimport.ParsedRecord{
-					{
-						RowNumber:  1,
-						Identifier: "success_page",
-					},
-				}
-				job, _ = NewPageImportJob(records, mockDeps, logger)
+				resultAccumulator.RecordCreated("success_page")
+				job, _ := NewPageImportReportJob(mockDeps, logger, resultAccumulator)
 				err = job.Execute()
 			})
 
@@ -858,14 +1032,12 @@ var _ = Describe("PageImportJob", func() {
 			var err error
 
 			BeforeEach(func() {
-				records := []pageimport.ParsedRecord{
-					{
-						RowNumber:        1,
-						Identifier:       "",
-						ValidationErrors: []string{"identifier is required"},
-					},
-				}
-				job, _ = NewPageImportJob(records, mockDeps, logger)
+				resultAccumulator.RecordFailed(FailedPageImport{
+					RowNumber:  1,
+					Identifier: "",
+					Error:      "identifier is required",
+				})
+				job, _ := NewPageImportReportJob(mockDeps, logger, resultAccumulator)
 				err = job.Execute()
 			})
 
@@ -883,278 +1055,23 @@ var _ = Describe("PageImportJob", func() {
 			var err error
 
 			BeforeEach(func() {
-				records := []pageimport.ParsedRecord{
-					{
-						RowNumber:  1,
-						Identifier: "new_page",
-					},
-				}
-
-				// Process the page first, then cause report to fail
-				mockDeps.setPage("new_page", nil, "")
-				job, _ = NewPageImportJob(records, mockDeps, logger)
-
-				// Set up to fail on report page write
 				mockDeps.writeFrontMatterErr = errors.New("write error")
+				job, _ := NewPageImportReportJob(mockDeps, logger, resultAccumulator)
 				err = job.Execute()
 			})
 
 			It("should return an error", func() {
 				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("failed to generate import report"))
+				Expect(err.Error()).To(ContainSubstring("failed to write import report frontmatter"))
 			})
 		})
-	})
-
-	Describe("deleteField", func() {
-		var job *PageImportJob
-
-		When("deleting a non-existent path", func() {
-			var err error
-
-			BeforeEach(func() {
-				mockDeps.setPage("page", map[string]any{
-					"identifier": "page",
-					"title":      "Test",
-				}, "")
-
-				records := []pageimport.ParsedRecord{
-					{
-						RowNumber:      1,
-						Identifier:     "page",
-						FieldsToDelete: []string{"nonexistent.nested.field"},
-					},
-				}
-				job, _ = NewPageImportJob(records, mockDeps, logger)
-				err = job.Execute()
-			})
-
-			It("should not return an error", func() {
-				Expect(err).NotTo(HaveOccurred())
-			})
-
-			It("should not affect existing fields", func() {
-				fm := mockDeps.getFrontmatter("page")
-				Expect(fm["title"]).To(Equal("Test"))
-			})
-		})
-	})
-
-	Describe("applyArrayOperation error handling", func() {
-		var job *PageImportJob
-
-		When("array operation targets a non-map intermediate value", func() {
-			var err error
-
-			BeforeEach(func() {
-				mockDeps.setPage("page", map[string]any{
-					"identifier": "page",
-					"inventory":  "not a map",
-				}, "")
-
-				records := []pageimport.ParsedRecord{
-					{
-						RowNumber:  1,
-						Identifier: "page",
-						ArrayOps: []pageimport.ArrayOperation{
-							{
-								FieldPath: "inventory.items",
-								Operation: pageimport.EnsureExists,
-								Value:     "item1",
-							},
-						},
-					},
-				}
-				job, _ = NewPageImportJob(records, mockDeps, logger)
-				err = job.Execute()
-			})
-
-			It("should not return an error from Execute", func() {
-				Expect(err).NotTo(HaveOccurred())
-			})
-
-			It("should track the failure", func() {
-				result := job.GetResult()
-				Expect(result.FailedRecords).To(HaveLen(1))
-				Expect(result.FailedRecords[0].Error).To(ContainSubstring("cannot navigate through non-map value"))
-			})
-		})
-
-		When("array operation targets a non-array field", func() {
-			var err error
-
-			BeforeEach(func() {
-				mockDeps.setPage("page", map[string]any{
-					"identifier": "page",
-					"tags":       "not an array",
-				}, "")
-
-				records := []pageimport.ParsedRecord{
-					{
-						RowNumber:  1,
-						Identifier: "page",
-						ArrayOps: []pageimport.ArrayOperation{
-							{
-								FieldPath: "tags",
-								Operation: pageimport.EnsureExists,
-								Value:     "new_tag",
-							},
-						},
-					},
-				}
-				job, _ = NewPageImportJob(records, mockDeps, logger)
-				err = job.Execute()
-			})
-
-			It("should not return an error from Execute", func() {
-				Expect(err).NotTo(HaveOccurred())
-			})
-
-			It("should track the failure", func() {
-				result := job.GetResult()
-				Expect(result.FailedRecords).To(HaveLen(1))
-				Expect(result.FailedRecords[0].Error).To(ContainSubstring("is not an array"))
-			})
-		})
-	})
-
-	Describe("GetResult", func() {
-		var job *PageImportJob
-
-		When("job has not been executed", func() {
-			var result PageImportResult
-
-			BeforeEach(func() {
-				job, _ = NewPageImportJob(nil, mockDeps, logger)
-				result = job.GetResult()
-			})
-
-			It("should return empty result", func() {
-				Expect(result.CreatedPages).To(BeEmpty())
-				Expect(result.UpdatedPages).To(BeEmpty())
-				Expect(result.FailedRecords).To(BeEmpty())
-			})
-		})
-
-		When("job has been executed with mixed results", func() {
-			var result PageImportResult
-
-			BeforeEach(func() {
-				mockDeps.setPage("existing_page", map[string]any{"identifier": "existing_page"}, "")
-
-				records := []pageimport.ParsedRecord{
-					{
-						RowNumber:  1,
-						Identifier: "new_page",
-					},
-					{
-						RowNumber:  2,
-						Identifier: "existing_page",
-					},
-					{
-						RowNumber:        3,
-						Identifier:       "failed_page",
-						ValidationErrors: []string{"error"},
-					},
-				}
-				job, _ = NewPageImportJob(records, mockDeps, logger)
-				_ = job.Execute()
-				result = job.GetResult()
-			})
-
-			It("should track created pages", func() {
-				Expect(result.CreatedPages).To(ContainElement("new_page"))
-			})
-
-			It("should track updated pages", func() {
-				Expect(result.UpdatedPages).To(ContainElement("existing_page"))
-			})
-
-			It("should track failed records", func() {
-				Expect(result.FailedRecords).To(HaveLen(1))
-				Expect(result.FailedRecords[0].Identifier).To(Equal("failed_page"))
-			})
-		})
-	})
-
-	Describe("Execute with WriteFrontMatter failure", func() {
-		var job *PageImportJob
-
-		When("WriteFrontMatter fails for a record", func() {
-			var err error
-
-			BeforeEach(func() {
-				// Create a mock that fails on specific page
-				mockDeps.writeFrontMatterErr = errors.New("permission denied")
-
-				records := []pageimport.ParsedRecord{
-					{
-						RowNumber:  1,
-						Identifier: "new_page",
-						Frontmatter: map[string]any{
-							"title": "Test",
-						},
-					},
-				}
-				job, _ = NewPageImportJob(records, mockDeps, logger)
-				err = job.Execute()
-			})
-
-			It("should not return an error from Execute", func() {
-				// The record processing error should be caught, but report generation also fails
-				Expect(err).To(HaveOccurred())
-			})
-
-			It("should include the error in failed records", func() {
-				result := job.GetResult()
-				Expect(result.FailedRecords).To(HaveLen(1))
-				Expect(result.FailedRecords[0].Error).To(ContainSubstring("failed to write frontmatter"))
-			})
-		})
-	})
-
-	Describe("Execute with WriteMarkdown failure for inv_item template", func() {
-		var job *PageImportJob
-
-		When("WriteMarkdown fails for a new inv_item page", func() {
-			var err error
-
-			BeforeEach(func() {
-				mockDeps.writeMarkdownErr = os.ErrPermission
-
-				records := []pageimport.ParsedRecord{
-					{
-						RowNumber:  1,
-						Identifier: "new_item",
-						Template:   "inv_item",
-					},
-				}
-				job, _ = NewPageImportJob(records, mockDeps, logger)
-				err = job.Execute()
-			})
-
-			It("should not return an error from Execute", func() {
-				// The record processing error should be caught, but report generation also fails
-				Expect(err).To(HaveOccurred())
-			})
-
-			It("should include the error in failed records", func() {
-				result := job.GetResult()
-				Expect(result.FailedRecords).To(HaveLen(1))
-				Expect(result.FailedRecords[0].Error).To(ContainSubstring("failed to write markdown"))
-			})
-		})
-	})
-
-	Describe("Execute with empty records", func() {
-		var job *PageImportJob
 
 		When("no records are provided", func() {
 			var err error
 
 			BeforeEach(func() {
-				records := []pageimport.ParsedRecord{}
-				job, _ = NewPageImportJob(records, mockDeps, logger)
+				// Empty accumulator
+				job, _ := NewPageImportReportJob(mockDeps, logger, resultAccumulator)
 				err = job.Execute()
 			})
 

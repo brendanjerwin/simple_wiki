@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/inventory"
@@ -15,14 +16,14 @@ import (
 )
 
 const (
-	// PageImportJobName is the name of the page import job.
+	// PageImportJobName is the name of the page import job queue.
 	PageImportJobName = "PageImportJob"
 
 	// PageImportReportPage is the identifier for the page import report page.
 	PageImportReportPage = "page_import_report"
 )
 
-// PageImportResult contains the result of a page import job execution.
+// PageImportResult contains the result of page import job(s) execution.
 type PageImportResult struct {
 	CreatedPages  []string
 	UpdatedPages  []string
@@ -36,84 +37,132 @@ type FailedPageImport struct {
 	Error      string
 }
 
-// PageImportJob imports pages from parsed CSV records.
-type PageImportJob struct {
-	records          []pageimport.ParsedRecord
-	pageReaderMutator wikipage.PageReaderMutator
-	logger           lumber.Logger
-	result           PageImportResult
+// PageImportResultAccumulator accumulates results from multiple SinglePageImportJobs.
+// It is thread-safe and can be shared across multiple jobs.
+type PageImportResultAccumulator struct {
+	mu            sync.Mutex
+	CreatedPages  []string
+	UpdatedPages  []string
+	FailedRecords []FailedPageImport
 }
 
-// NewPageImportJob creates a new page import job.
+// NewPageImportResultAccumulator creates a new result accumulator.
+func NewPageImportResultAccumulator() *PageImportResultAccumulator {
+	return &PageImportResultAccumulator{
+		CreatedPages:  []string{},
+		UpdatedPages:  []string{},
+		FailedRecords: []FailedPageImport{},
+	}
+}
+
+// RecordCreated records a successfully created page.
+func (a *PageImportResultAccumulator) RecordCreated(identifier string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.CreatedPages = append(a.CreatedPages, identifier)
+}
+
+// RecordUpdated records a successfully updated page.
+func (a *PageImportResultAccumulator) RecordUpdated(identifier string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.UpdatedPages = append(a.UpdatedPages, identifier)
+}
+
+// RecordFailed records a failed import.
+func (a *PageImportResultAccumulator) RecordFailed(failure FailedPageImport) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.FailedRecords = append(a.FailedRecords, failure)
+}
+
+// GetResult returns a snapshot of the accumulated results.
+func (a *PageImportResultAccumulator) GetResult() PageImportResult {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return PageImportResult{
+		CreatedPages:  append([]string{}, a.CreatedPages...),
+		UpdatedPages:  append([]string{}, a.UpdatedPages...),
+		FailedRecords: append([]FailedPageImport{}, a.FailedRecords...),
+	}
+}
+
+// SinglePageImportJob imports a single page from a parsed CSV record.
+type SinglePageImportJob struct {
+	record            pageimport.ParsedRecord
+	pageReaderMutator wikipage.PageReaderMutator
+	logger            lumber.Logger
+	resultAccumulator *PageImportResultAccumulator
+}
+
+// NewSinglePageImportJob creates a new single page import job.
 // Returns an error if any required dependency is nil.
-func NewPageImportJob(
-	records []pageimport.ParsedRecord,
+func NewSinglePageImportJob(
+	record pageimport.ParsedRecord,
 	pageReaderMutator wikipage.PageReaderMutator,
 	logger lumber.Logger,
-) (*PageImportJob, error) {
+	resultAccumulator *PageImportResultAccumulator,
+) (*SinglePageImportJob, error) {
 	if pageReaderMutator == nil {
 		return nil, errors.New("pageReaderMutator is required")
 	}
 	if logger == nil {
 		return nil, errors.New("logger is required")
 	}
-	return &PageImportJob{
-		records:          records,
+	if resultAccumulator == nil {
+		return nil, errors.New("resultAccumulator is required")
+	}
+	return &SinglePageImportJob{
+		record:            record,
 		pageReaderMutator: pageReaderMutator,
-		logger:           logger,
+		logger:            logger,
+		resultAccumulator: resultAccumulator,
 	}, nil
 }
 
-// Execute runs the page import job.
-func (j *PageImportJob) Execute() error {
-	j.logger.Info("Starting page import job with %d records", len(j.records))
+// Execute runs the single page import job.
+func (j *SinglePageImportJob) Execute() error {
+	record := j.record
 
-	j.result = PageImportResult{}
-
-	for _, record := range j.records {
-		if record.HasErrors() {
-			j.result.FailedRecords = append(j.result.FailedRecords, FailedPageImport{
-				RowNumber:  record.RowNumber,
-				Identifier: record.Identifier,
-				Error:      strings.Join(record.ValidationErrors, "; "),
-			})
-			continue
-		}
-
-		if err := j.processRecord(record); err != nil {
-			j.logger.Error("Failed to process record row %d (%s): %v", record.RowNumber, record.Identifier, err)
-			j.result.FailedRecords = append(j.result.FailedRecords, FailedPageImport{
-				RowNumber:  record.RowNumber,
-				Identifier: record.Identifier,
-				Error:      err.Error(),
-			})
-		}
-
-		// TODO: TEMPORARY - Remove this delay after testing job status visibility
-		time.Sleep(10 * time.Second)
+	// Handle records with validation errors
+	if record.HasErrors() {
+		j.resultAccumulator.RecordFailed(FailedPageImport{
+			RowNumber:  record.RowNumber,
+			Identifier: record.Identifier,
+			Error:      strings.Join(record.ValidationErrors, "; "),
+		})
+		return nil
 	}
 
-	if err := j.generateReport(); err != nil {
-		return fmt.Errorf("failed to generate import report: %w", err)
+	// Process the single record
+	if err := j.processRecord(record); err != nil {
+		j.logger.Error("Failed to process record row %d (%s): %v", record.RowNumber, record.Identifier, err)
+		j.resultAccumulator.RecordFailed(FailedPageImport{
+			RowNumber:  record.RowNumber,
+			Identifier: record.Identifier,
+			Error:      err.Error(),
+		})
+		return nil // Don't return the error - we've recorded it
 	}
 
-	j.logger.Info("Page import complete: %d created, %d updated, %d failed",
-		len(j.result.CreatedPages), len(j.result.UpdatedPages), len(j.result.FailedRecords))
+	// TODO: TEMPORARY - Remove this delay after testing job status visibility
+	time.Sleep(10 * time.Second)
+
 	return nil
 }
 
 // GetName returns the job name.
-func (*PageImportJob) GetName() string {
+func (*SinglePageImportJob) GetName() string {
 	return PageImportJobName
 }
 
-// GetResult returns the result of the job execution.
-func (j *PageImportJob) GetResult() PageImportResult {
-	return j.result
+// GetRecord returns the record being imported.
+func (j *SinglePageImportJob) GetRecord() pageimport.ParsedRecord {
+	return j.record
 }
 
 // processRecord processes a single parsed record.
-func (j *PageImportJob) processRecord(record pageimport.ParsedRecord) error {
+func (j *SinglePageImportJob) processRecord(record pageimport.ParsedRecord) error {
 	identifier := record.Identifier
 
 	// Check if page exists
@@ -140,18 +189,18 @@ func (j *PageImportJob) processRecord(record pageimport.ParsedRecord) error {
 	}
 
 	// Merge frontmatter from record (upsert semantics)
-	if err := j.mergeFrontmatter(fm, record.Frontmatter); err != nil {
+	if err := mergeFrontmatter(fm, record.Frontmatter); err != nil {
 		return fmt.Errorf("failed to merge frontmatter: %w", err)
 	}
 
 	// Handle fields to delete
 	for _, fieldPath := range record.FieldsToDelete {
-		j.deleteField(fm, fieldPath)
+		deleteField(fm, fieldPath)
 	}
 
 	// Handle array operations
 	for _, op := range record.ArrayOps {
-		if err := j.applyArrayOperation(fm, op); err != nil {
+		if err := applyArrayOperation(fm, op); err != nil {
 			return fmt.Errorf("failed to apply array operation on %s: %w", op.FieldPath, err)
 		}
 	}
@@ -171,10 +220,10 @@ func (j *PageImportJob) processRecord(record pageimport.ParsedRecord) error {
 
 	// Track result
 	if isNewPage {
-		j.result.CreatedPages = append(j.result.CreatedPages, identifier)
+		j.resultAccumulator.RecordCreated(identifier)
 		j.logger.Info("Created page: %s", identifier)
 	} else {
-		j.result.UpdatedPages = append(j.result.UpdatedPages, identifier)
+		j.resultAccumulator.RecordUpdated(identifier)
 		j.logger.Info("Updated page: %s", identifier)
 	}
 
@@ -182,14 +231,14 @@ func (j *PageImportJob) processRecord(record pageimport.ParsedRecord) error {
 }
 
 // mergeFrontmatter merges source frontmatter into target (upsert semantics).
-func (j *PageImportJob) mergeFrontmatter(target, source map[string]any) error {
+func mergeFrontmatter(target, source map[string]any) error {
 	for key, value := range source {
 		if nestedSource, ok := value.(map[string]any); ok {
 			// Handle nested maps
 			if existing, exists := target[key]; exists {
 				if nestedTarget, ok := existing.(map[string]any); ok {
 					// Recursively merge nested maps
-					if err := j.mergeFrontmatter(nestedTarget, nestedSource); err != nil {
+					if err := mergeFrontmatter(nestedTarget, nestedSource); err != nil {
 						return err
 					}
 					continue
@@ -197,7 +246,7 @@ func (j *PageImportJob) mergeFrontmatter(target, source map[string]any) error {
 			}
 			// Create new nested map
 			newNested := make(map[string]any)
-			if err := j.mergeFrontmatter(newNested, nestedSource); err != nil {
+			if err := mergeFrontmatter(newNested, nestedSource); err != nil {
 				return err
 			}
 			target[key] = newNested
@@ -210,7 +259,7 @@ func (j *PageImportJob) mergeFrontmatter(target, source map[string]any) error {
 }
 
 // deleteField removes a field from frontmatter using dotted path notation.
-func (*PageImportJob) deleteField(fm map[string]any, fieldPath string) {
+func deleteField(fm map[string]any, fieldPath string) {
 	parts := strings.Split(fieldPath, ".")
 	current := fm
 
@@ -228,7 +277,7 @@ func (*PageImportJob) deleteField(fm map[string]any, fieldPath string) {
 }
 
 // applyArrayOperation applies an array operation to frontmatter.
-func (*PageImportJob) applyArrayOperation(fm map[string]any, op pageimport.ArrayOperation) error {
+func applyArrayOperation(fm map[string]any, op pageimport.ArrayOperation) error {
 	parts := strings.Split(op.FieldPath, ".")
 	current := fm
 
@@ -300,8 +349,53 @@ func (*PageImportJob) applyArrayOperation(fm map[string]any, op pageimport.Array
 	return nil
 }
 
+// PageImportReportJob generates the import report after all page imports complete.
+type PageImportReportJob struct {
+	pageReaderMutator wikipage.PageReaderMutator
+	logger            lumber.Logger
+	resultAccumulator *PageImportResultAccumulator
+}
+
+// NewPageImportReportJob creates a new report generation job.
+// Returns an error if any required dependency is nil.
+func NewPageImportReportJob(
+	pageReaderMutator wikipage.PageReaderMutator,
+	logger lumber.Logger,
+	resultAccumulator *PageImportResultAccumulator,
+) (*PageImportReportJob, error) {
+	if pageReaderMutator == nil {
+		return nil, errors.New("pageReaderMutator is required")
+	}
+	if logger == nil {
+		return nil, errors.New("logger is required")
+	}
+	if resultAccumulator == nil {
+		return nil, errors.New("resultAccumulator is required")
+	}
+	return &PageImportReportJob{
+		pageReaderMutator: pageReaderMutator,
+		logger:            logger,
+		resultAccumulator: resultAccumulator,
+	}, nil
+}
+
+// Execute generates the import report.
+func (j *PageImportReportJob) Execute() error {
+	result := j.resultAccumulator.GetResult()
+
+	j.logger.Info("Generating page import report: %d created, %d updated, %d failed",
+		len(result.CreatedPages), len(result.UpdatedPages), len(result.FailedRecords))
+
+	return j.generateReport(result)
+}
+
+// GetName returns the job name.
+func (*PageImportReportJob) GetName() string {
+	return PageImportJobName
+}
+
 // generateReport creates the import report page.
-func (j *PageImportJob) generateReport() error {
+func (j *PageImportReportJob) generateReport(result PageImportResult) error {
 	var report bytes.Buffer
 
 	_, _ = report.WriteString("# Page Import Report\n\n")
@@ -309,32 +403,32 @@ func (j *PageImportJob) generateReport() error {
 
 	// Summary
 	_, _ = report.WriteString("## Summary\n\n")
-	_, _ = fmt.Fprintf(&report, "- **Pages created:** %d\n", len(j.result.CreatedPages))
-	_, _ = fmt.Fprintf(&report, "- **Pages updated:** %d\n", len(j.result.UpdatedPages))
-	_, _ = fmt.Fprintf(&report, "- **Failed records:** %d\n\n", len(j.result.FailedRecords))
+	_, _ = fmt.Fprintf(&report, "- **Pages created:** %d\n", len(result.CreatedPages))
+	_, _ = fmt.Fprintf(&report, "- **Pages updated:** %d\n", len(result.UpdatedPages))
+	_, _ = fmt.Fprintf(&report, "- **Failed records:** %d\n\n", len(result.FailedRecords))
 
 	// Created Pages
-	if len(j.result.CreatedPages) > 0 {
+	if len(result.CreatedPages) > 0 {
 		_, _ = report.WriteString("## Pages Created\n\n")
-		for _, pageID := range j.result.CreatedPages {
+		for _, pageID := range result.CreatedPages {
 			_, _ = fmt.Fprintf(&report, "- [[%s]]\n", pageID)
 		}
 		_, _ = report.WriteString("\n")
 	}
 
 	// Updated Pages
-	if len(j.result.UpdatedPages) > 0 {
+	if len(result.UpdatedPages) > 0 {
 		_, _ = report.WriteString("## Pages Updated\n\n")
-		for _, pageID := range j.result.UpdatedPages {
+		for _, pageID := range result.UpdatedPages {
 			_, _ = fmt.Fprintf(&report, "- [[%s]]\n", pageID)
 		}
 		_, _ = report.WriteString("\n")
 	}
 
 	// Failed Records
-	if len(j.result.FailedRecords) > 0 {
+	if len(result.FailedRecords) > 0 {
 		_, _ = report.WriteString("## Failed Records\n\n")
-		for _, failure := range j.result.FailedRecords {
+		for _, failure := range result.FailedRecords {
 			identifier := failure.Identifier
 			if identifier == "" {
 				identifier = "(no identifier)"

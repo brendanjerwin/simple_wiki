@@ -2687,12 +2687,17 @@ var _ = Describe("Server", func() {
 				req.CsvContent = "identifier,title\n,Missing Identifier\n,Also Missing"
 			})
 
-			It("should return an invalid argument error", func() {
-				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "no valid records to import"))
+			It("should not return an error", func() {
+				// Invalid records are now processed individually and will fail,
+				// rather than rejecting the entire batch upfront
+				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("should return no response", func() {
-				Expect(resp).To(BeNil())
+			It("should return success with total record count", func() {
+				// All records are counted, including invalid ones
+				// Invalid records will be processed and recorded as failures
+				Expect(resp.Success).To(BeTrue())
+				Expect(resp.RecordCount).To(Equal(int32(2)))
 			})
 		})
 
@@ -2731,8 +2736,10 @@ var _ = Describe("Server", func() {
 				Expect(resp.Success).To(BeTrue())
 			})
 
-			It("should only count valid records", func() {
-				Expect(resp.RecordCount).To(Equal(int32(2)))
+			It("should count all records including invalid ones", func() {
+				// All records are now processed as individual jobs
+				// Invalid records will fail individually and be reported
+				Expect(resp.RecordCount).To(Equal(int32(3)))
 			})
 		})
 	})

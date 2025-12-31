@@ -731,35 +731,46 @@ export class PageImportDialog extends LitElement {
 
   /**
    * Updates the progress message based on the current job queue status.
+   * Each page import is now a separate job, so jobsRemaining represents pages remaining.
    */
   private _updateProgressFromJobStatus(status: GetJobStatusResponse): void {
-    // Find the Frontmatter queue (where page import jobs run)
-    const frontmatterQueue = status.jobQueues.find(
+    // Find the PageImportJob queue
+    const importQueue = status.jobQueues.find(
       (q) => q.name === PageImportDialog.PAGE_IMPORT_QUEUE_NAME
     );
 
     // Queue not found - just return, stream will terminate when done
-    if (!frontmatterQueue) {
+    if (!importQueue) {
       return;
     }
 
-    // Queue is inactive - we're in the finalization phase
-    if (!frontmatterQueue.isActive) {
+    // Queue is inactive - import is complete
+    if (!importQueue.isActive) {
       this.importProgressMessage = 'Finalizing import...';
       return;
     }
 
-    const total = frontmatterQueue.highWaterMark;
-    const remaining = frontmatterQueue.jobsRemaining;
+    const total = importQueue.highWaterMark;
+    const remaining = importQueue.jobsRemaining;
     const completed = total - remaining;
 
     // Zero highWaterMark means queue just started, show generic message
     if (total === 0) {
-      this.importProgressMessage = 'Processing import...';
+      this.importProgressMessage = 'Starting import...';
       return;
     }
 
-    this.importProgressMessage = `Importing... ${completed} of ${total} operations complete`;
+    // Account for the report job at the end (total includes it)
+    // Show "X of Y pages" where Y is total - 1 (excluding report job)
+    const pageTotal = total - 1;
+    const pagesCompleted = Math.min(completed, pageTotal);
+
+    if (pagesCompleted >= pageTotal && remaining > 0) {
+      // All page jobs done, report job running
+      this.importProgressMessage = 'Generating import report...';
+    } else {
+      this.importProgressMessage = `Importing page ${pagesCompleted + 1} of ${pageTotal}...`;
+    }
   }
 
   private get filteredRecords(): PageImportRecord[] {
