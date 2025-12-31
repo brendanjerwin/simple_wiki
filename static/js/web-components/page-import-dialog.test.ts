@@ -214,19 +214,9 @@ describe('PageImportDialog', () => {
         expect((el as any).file).to.equal(csvFile);
       });
 
-      it('should display file name', () => {
-        const fileName = el.shadowRoot?.querySelector('.file-info-name');
-        expect(fileName?.textContent).to.equal('import.csv');
-      });
-
-      it('should enable Parse button', () => {
-        const parseBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-primary');
-        expect(parseBtn?.disabled).to.be.false;
-      });
-
-      it('should clear any previous error', () => {
+      it('should automatically transition to validating state', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        expect((el as any).error).to.be.null;
+        expect((el as any).dialogState).to.equal('validating');
       });
     });
 
@@ -262,48 +252,12 @@ describe('PageImportDialog', () => {
         expect((el as any).error?.message).to.contain('CSV');
       });
 
-      it('should disable Parse button', () => {
-        const parseBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-primary');
-        expect(parseBtn?.disabled).to.be.true;
-      });
-    });
-
-    describe('when file is removed', () => {
-      beforeEach(async () => {
-        el.openDialog();
-        await el.updateComplete;
-
-        const csvFile = new File(['test'], 'import.csv', { type: 'text/csv' });
-        const fileInput = el.shadowRoot?.querySelector<HTMLInputElement>('.file-input');
-        if (fileInput) {
-          const dt = new DataTransfer();
-          dt.items.add(csvFile);
-          fileInput.files = dt.files;
-          fileInput.dispatchEvent(new Event('change'));
-        }
-        await el.updateComplete;
-
-        const removeBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.file-info-remove');
-        expect(removeBtn).to.exist;
-        removeBtn!.click();
-        await el.updateComplete;
-      });
-
-      it('should clear the file', () => {
+      it('should remain in upload state', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        expect((el as any).file).to.be.null;
-      });
-
-      it('should not display file info', () => {
-        const fileInfo = el.shadowRoot?.querySelector('.file-info');
-        expect(fileInfo).to.not.exist;
-      });
-
-      it('should disable Parse button', () => {
-        const parseBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-primary');
-        expect(parseBtn?.disabled).to.be.true;
+        expect((el as any).dialogState).to.equal('upload');
       });
     });
+
   });
 
   describe('dialog title', () => {

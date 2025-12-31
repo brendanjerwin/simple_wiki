@@ -192,49 +192,6 @@ export class PageImportDialog extends LitElement {
         display: none;
       }
 
-      .file-info {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 12px;
-        background: #f8f9fa;
-        border: 1px solid #e9ecef;
-        border-radius: 4px;
-        margin-top: 16px;
-      }
-
-      .file-info-icon {
-        font-size: 24px;
-        color: #28a745;
-      }
-
-      .file-info-details {
-        flex: 1;
-      }
-
-      .file-info-name {
-        font-weight: 500;
-        color: #333;
-      }
-
-      .file-info-size {
-        font-size: 12px;
-        color: #666;
-      }
-
-      .file-info-remove {
-        background: none;
-        border: none;
-        color: #dc3545;
-        cursor: pointer;
-        font-size: 18px;
-        padding: 4px;
-      }
-
-      .file-info-remove:hover {
-        color: #b02a37;
-      }
-
       /* Loading State Styles */
       .loading-container {
         display: flex;
@@ -635,12 +592,10 @@ export class PageImportDialog extends LitElement {
 
     this.file = file;
     this.error = null;
-  }
 
-  private _handleRemoveFile = (): void => {
-    this.file = null;
-    this.error = null;
-  };
+    // Automatically trigger parsing
+    this._handleParse();
+  }
 
   private _handleSelectFileClick = (): void => {
     const input = this.shadowRoot?.querySelector<HTMLInputElement>('.file-input');
@@ -756,16 +711,6 @@ export class PageImportDialog extends LitElement {
     this.currentRecordIndex = 0;
   };
 
-  private _formatFileSize(bytes: number): string {
-    if (bytes < 1024) {
-      return `${bytes} B`;
-    }
-    if (bytes < 1024 * 1024) {
-      return `${(bytes / 1024).toFixed(1)} KB`;
-    }
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  }
-
   private _renderUploadState() {
     return html`
       <div
@@ -796,23 +741,6 @@ export class PageImportDialog extends LitElement {
           <i class="fas fa-folder-open"></i> Select CSV File
         </button>
       </div>
-
-      ${this.file
-        ? html`
-            <div class="file-info">
-              <span class="file-info-icon">
-                <i class="fas fa-file-check"></i>
-              </span>
-              <div class="file-info-details">
-                <div class="file-info-name">${this.file.name}</div>
-                <div class="file-info-size">${this._formatFileSize(this.file.size)}</div>
-              </div>
-              <button class="file-info-remove" @click=${this._handleRemoveFile}>
-                <i class="fas fa-times"></i>
-              </button>
-            </div>
-          `
-        : nothing}
 
       ${this.error
         ? html`<error-display .augmentedError=${this.error}></error-display>`
@@ -1081,13 +1009,6 @@ export class PageImportDialog extends LitElement {
             @click=${this.closeDialog}
           >
             Cancel
-          </button>
-          <button
-            class="button-base button-primary button-large border-radius-small"
-            @click=${this._handleParse}
-            ?disabled=${!this.file}
-          >
-            Parse
           </button>
         `;
       case 'validating':
