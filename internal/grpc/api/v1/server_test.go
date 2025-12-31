@@ -126,6 +126,7 @@ func TestServer(t *testing.T) {
 type MockPageReaderMutator struct {
 	Frontmatter        wikipage.FrontMatter
 	FrontmatterByID    map[string]map[string]any // For multi-page scenarios
+	ErrByID            map[string]error          // For returning different errors per identifier
 	Markdown           wikipage.Markdown
 	Err                error
 	WrittenFrontmatter wikipage.FrontMatter
@@ -140,6 +141,12 @@ type MockPageReaderMutator struct {
 }
 
 func (m *MockPageReaderMutator) ReadFrontMatter(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
+	// Check for identifier-specific errors first
+	if m.ErrByID != nil {
+		if err, ok := m.ErrByID[string(identifier)]; ok {
+			return "", nil, err
+		}
+	}
 	if m.Err != nil {
 		return "", nil, m.Err
 	}
@@ -2497,6 +2504,27 @@ var _ = Describe("Server", func() {
 
 			It("should add a validation error for the missing template", func() {
 				Expect(resp.Records[0].ValidationErrors).To(ContainElement(ContainSubstring("template 'nonexistent_template' does not exist")))
+			})
+		})
+
+		When("csv_content references a template that fails to read", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,template,title\ntest_page,broken_template,Test Item"
+				mockPageReaderMutator = &MockPageReaderMutator{
+					Err: os.ErrNotExist, // Default error for pages that don't exist
+					ErrByID: map[string]error{
+						"broken_template": errors.New("permission denied"),
+					},
+				}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should add a validation error with the read failure details", func() {
+				Expect(resp.Records[0].ValidationErrors).To(ContainElement(ContainSubstring("failed to read template 'broken_template'")))
+				Expect(resp.Records[0].ValidationErrors).To(ContainElement(ContainSubstring("permission denied")))
 			})
 		})
 
