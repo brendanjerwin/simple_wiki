@@ -665,13 +665,26 @@ How to Log:
 - Log the full error chain once at the end.
 - `log.Printf("error: %v", err)` (Use %v for the full chain)
 
-#### 3. No Panics (Except in main.go)
+#### 3. No Panics (Except in main.go and Invariant Assertions)
 
 **Never use `panic()` in library code, service functions, or handlers.** Always return errors instead.
 
 - Panics are reserved for truly unrecoverable situations in `main.go` (e.g., essential configuration missing at startup)
 - Functions that can fail must return `(result, error)` - let the caller decide how to handle failures
 - Constructor functions should return `(*T, error)` and validate required dependencies, not panic on nil
+
+##### Exception: Invariant Assertions
+
+Panics are acceptable for asserting internal invariants that should never be violated during normal operation. These indicate programming bugs, not runtime errors. Use clear comments to document the invariant:
+
+```go
+// INVARIANT ASSERTION: This function must be called while holding mu lock.
+// Panic is intentional here to catch programming bugs during development.
+if c.mu.TryLock() {
+    c.mu.Unlock()
+    panic("function called without holding mu lock - this is a programming bug")
+}
+```
 
 **Bad:**
 
