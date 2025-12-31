@@ -863,6 +863,55 @@ func (s *Server) findUniqueIdentifier(baseIdentifier string) string {
 	return baseIdentifier + "_999"
 }
 
+// serverPageExistenceChecker implements pageimport.PageExistenceChecker.
+type serverPageExistenceChecker struct {
+	reader wikipage.PageReader
+}
+
+func (c *serverPageExistenceChecker) PageExists(identifier string) bool {
+	_, _, err := c.reader.ReadFrontMatter(identifier)
+	return err == nil
+}
+
+// serverContainerReferenceGetter implements pageimport.ContainerReferenceGetter.
+type serverContainerReferenceGetter struct {
+	reader wikipage.PageReader
+}
+
+func (c *serverContainerReferenceGetter) GetContainerReference(identifier string) string {
+	_, fm, err := c.reader.ReadFrontMatter(identifier)
+	if err != nil {
+		return ""
+	}
+	inventory, ok := fm["inventory"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	container, ok := inventory["container"].(string)
+	if !ok {
+		return ""
+	}
+	return container
+}
+
+// runInventoryValidations runs all inventory-specific validations on parsed records.
+func (s *Server) runInventoryValidations(records []pageimport.ParsedRecord) {
+	validator := pageimport.NewInventoryValidator(
+		&serverPageExistenceChecker{reader: s.pageReaderMutator},
+		&serverContainerReferenceGetter{reader: s.pageReaderMutator},
+	)
+
+	// Phase 1: Per-record validations
+	for i := range records {
+		validator.ValidateContainerIdentifier(&records[i])
+		validator.ValidateInventoryItemsIdentifiers(&records[i])
+	}
+
+	// Phase 2: Cross-record validations
+	validator.ValidateContainerExistence(records)
+	validator.DetectCircularReferences(records)
+}
+
 // ParseCSVPreview implements the ParseCSVPreview RPC for the PageImportService.
 // It parses CSV content and returns a preview of what would be imported.
 func (s *Server) ParseCSVPreview(_ context.Context, req *apiv1.ParseCSVPreviewRequest) (*apiv1.ParseCSVPreviewResponse, error) {
@@ -881,6 +930,9 @@ func (s *Server) ParseCSVPreview(_ context.Context, req *apiv1.ParseCSVPreviewRe
 			ParsingErrors: parseResult.ParsingErrors,
 		}, nil
 	}
+
+	// Run inventory-specific validations
+	s.runInventoryValidations(parseResult.Records)
 
 	// Convert parsed records to protobuf and check page existence
 	var records []*apiv1.PageImportRecord
@@ -992,6 +1044,9 @@ func (s *Server) StartPageImportJob(_ context.Context, req *apiv1.StartPageImpor
 	if parseResult.HasErrors() {
 		return nil, status.Errorf(codes.InvalidArgument, "CSV has parsing errors: %s", strings.Join(parseResult.ParsingErrors, "; "))
 	}
+
+	// Run inventory-specific validations
+	s.runInventoryValidations(parseResult.Records)
 
 	// Get all records (we'll handle validation errors in individual jobs)
 	allRecords := parseResult.Records
