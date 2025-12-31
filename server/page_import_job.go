@@ -88,6 +88,9 @@ func (j *PageImportJob) Execute() error {
 				Error:      err.Error(),
 			})
 		}
+
+		// TODO: TEMPORARY - Remove this delay after testing job status visibility
+		time.Sleep(10 * time.Second)
 	}
 
 	if err := j.generateReport(); err != nil {

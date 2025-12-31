@@ -46,7 +46,7 @@ interface ImportStats {
  * 5. Complete: Summary with link to report page
  */
 export class PageImportDialog extends LitElement {
-  private static readonly PAGE_IMPORT_QUEUE_NAME = 'Frontmatter';
+  private static readonly PAGE_IMPORT_QUEUE_NAME = 'PageImportJob';
 
   static override styles = [
     foundationCSS,
