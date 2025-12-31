@@ -29,6 +29,16 @@ type IProvideJobProgress interface {
 	GetJobProgress() JobProgress
 }
 
+// CompletionCallback is called when a job completes, with the error (if any).
+type CompletionCallback func(err error)
+
+// JobCoordinator defines the interface for components that can enqueue jobs and provide progress.
+type JobCoordinator interface {
+	GetJobProgress() JobProgress
+	EnqueueJob(job Job) error
+	EnqueueJobWithCompletion(job Job, onComplete CompletionCallback) error
+}
+
 // MockJob is a test implementation of the Job interface.
 type MockJob struct {
 	Name string

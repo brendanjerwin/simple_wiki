@@ -802,6 +802,9 @@ export class PageImportDialog extends LitElement {
       }
       // Other errors - show indicator that live status is unavailable
       this.streamingDisconnected = true;
+    } finally {
+      // Clean up AbortController after stream completes
+      this._streamAbortController = null;
     }
   }
 

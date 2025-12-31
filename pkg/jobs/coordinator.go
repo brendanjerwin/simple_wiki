@@ -130,9 +130,6 @@ func (c *JobQueueCoordinator) EnqueueJob(job Job) error {
 	return nil
 }
 
-// CompletionCallback is called when a job completes, with the error (if any).
-type CompletionCallback func(err error)
-
 // EnqueueJobWithCompletion adds a job to its queue and calls the callback when it completes.
 // This allows job chaining - the callback can enqueue dependent jobs.
 // Returns an error if the job could not be dispatched.

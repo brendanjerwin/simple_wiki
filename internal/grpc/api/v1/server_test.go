@@ -307,7 +307,7 @@ func mustNewServerWithJobCoordinator(
 	pageReaderMutator wikipage.PageReaderMutator,
 	bleveIndexQueryer bleve.IQueryBleveIndex,
 	frontmatterIndexQueryer wikipage.IQueryFrontmatterIndex,
-	jobCoordinator *jobs.JobQueueCoordinator,
+	jobCoordinator jobs.JobCoordinator,
 ) *v1.Server {
 	if pageReaderMutator == nil {
 		pageReaderMutator = noOpPageReaderMutator{}
@@ -2631,7 +2631,7 @@ var _ = Describe("Server", func() {
 		})
 
 		JustBeforeEach(func() {
-			var coordinator *jobs.JobQueueCoordinator
+			var coordinator jobs.JobCoordinator
 			if mockJobCoordinator != nil {
 				coordinator = mockJobCoordinator.AsCoordinator()
 			}

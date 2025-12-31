@@ -90,7 +90,7 @@ type Server struct {
 	buildTime               time.Time
 	pageReaderMutator       wikipage.PageReaderMutator
 	bleveIndexQueryer       bleve.IQueryBleveIndex
-	jobQueueCoordinator     *jobs.JobQueueCoordinator
+	jobQueueCoordinator     jobs.JobCoordinator
 	logger                  *lumber.ConsoleLogger
 	markdownRenderer        wikipage.IRenderMarkdownToHTML
 	templateExecutor        wikipage.IExecuteTemplate
@@ -297,7 +297,7 @@ func NewServer(
 	buildTime time.Time,
 	pageReaderMutator wikipage.PageReaderMutator,
 	bleveIndexQueryer bleve.IQueryBleveIndex,
-	jobQueueCoordinator *jobs.JobQueueCoordinator,
+	jobQueueCoordinator jobs.JobCoordinator,
 	logger *lumber.ConsoleLogger,
 	markdownRenderer wikipage.IRenderMarkdownToHTML,
 	templateExecutor wikipage.IExecuteTemplate,
@@ -884,7 +884,7 @@ func (s *Server) ParseCSVPreview(_ context.Context, req *apiv1.ParseCSVPreviewRe
 	var errorCount, updateCount, createCount int32
 
 	for _, parsed := range parseResult.Records {
-		record, err := s.convertParsedRecordToProto(parsed)
+		record, err := convertParsedRecordToProto(parsed)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to convert record: %v", err)
 		}
@@ -897,9 +897,14 @@ func (s *Server) ParseCSVPreview(_ context.Context, req *apiv1.ParseCSVPreviewRe
 		// Validate template if specified (skip the built-in inv_item template)
 		if parsed.Template != "" && !parsed.HasErrors() && parsed.Template != pageimport.InvItemTemplate {
 			_, _, templateErr := s.pageReaderMutator.ReadFrontMatter(parsed.Template)
-			if templateErr != nil && os.IsNotExist(templateErr) {
-				record.ValidationErrors = append(record.ValidationErrors,
-					fmt.Sprintf("template '%s' does not exist", parsed.Template))
+			if templateErr != nil {
+				if os.IsNotExist(templateErr) {
+					record.ValidationErrors = append(record.ValidationErrors,
+						fmt.Sprintf("template '%s' does not exist", parsed.Template))
+				} else {
+					record.ValidationErrors = append(record.ValidationErrors,
+						fmt.Sprintf("failed to read template '%s': %v", parsed.Template, templateErr))
+				}
 			}
 		}
 
@@ -925,7 +930,7 @@ func (s *Server) ParseCSVPreview(_ context.Context, req *apiv1.ParseCSVPreviewRe
 }
 
 // convertParsedRecordToProto converts a pageimport.ParsedRecord to apiv1.PageImportRecord.
-func (*Server) convertParsedRecordToProto(parsed pageimport.ParsedRecord) (*apiv1.PageImportRecord, error) {
+func convertParsedRecordToProto(parsed pageimport.ParsedRecord) (*apiv1.PageImportRecord, error) {
 	record := &apiv1.PageImportRecord{
 		RowNumber:        int32(parsed.RowNumber),
 		Identifier:       parsed.Identifier,
