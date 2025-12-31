@@ -78,7 +78,7 @@ describe('flattenFrontmatter', () => {
     let result: [string, string][];
 
     beforeEach(() => {
-      const frontmatter = { a: 'keep', b: undefined, c: 'also keep' } as JsonObject;
+      const frontmatter = { a: 'keep', b: undefined, c: 'also keep' } as unknown as JsonObject;
       result = flattenFrontmatter(frontmatter);
     });
 
