@@ -40,7 +40,7 @@ class WikiSearchResults extends LitElement {
 
       a {
         display: block;
-        margin: 5px;
+        margin: 10px;
         text-decoration: none;
         font-weight: bold;
         transition: background-color 0.3s ease;
@@ -95,7 +95,7 @@ class WikiSearchResults extends LitElement {
         .item_content {
             background-color: #e8e8e8;
             font-size: 12px;
-            margin: 5px;
+            margin: 10px;
             margin-bottom: 10px;
             padding: 5px;
             width: auto;
@@ -369,7 +369,7 @@ class WikiSearchResults extends LitElement {
                 ${hiddenResultsCount > 0 ? html`
                     <div class="filter-warning">
                         <i class="fa-solid fa-triangle-exclamation"></i>
-                        <span>${hiddenResultsCount} other result${hiddenResultsCount === 1 ? '' : 's'} not shown (not Inventory Only)</span>
+                        <span>${hiddenResultsCount} other result${hiddenResultsCount === 1 ? '' : 's'} not shown.</span>
                     </div>
                 ` : ''}
                 <div id="results">
