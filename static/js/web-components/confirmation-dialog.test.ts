@@ -1,6 +1,6 @@
 import { html, fixture, expect } from '@open-wc/testing';
 import './confirmation-dialog.js';
-import { ConfirmationDialog } from './confirmation-dialog.js';
+import type { ConfirmationDialog } from './confirmation-dialog.js';
 import { AugmentErrorService } from './augment-error-service.js';
 import sinon from 'sinon';
 

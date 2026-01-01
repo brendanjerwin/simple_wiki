@@ -1,5 +1,6 @@
 import { expect } from '@open-wc/testing';
-import { WikiUrlParser, WikiUrlParseResult } from './wiki-url-parser.js';
+import type { WikiUrlParseResult } from './wiki-url-parser.js';
+import { WikiUrlParser } from './wiki-url-parser.js';
 
 type SuccessResult = Extract<WikiUrlParseResult, { success: true }>;
 type FailureResult = Extract<WikiUrlParseResult, { success: false }>;

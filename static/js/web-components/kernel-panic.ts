@@ -183,6 +183,12 @@ export class KernelPanic extends LitElement {
 
 customElements.define('kernel-panic', KernelPanic);
 
+declare global {
+  interface HTMLElementTagNameMap {
+    'kernel-panic': KernelPanic;
+  }
+}
+
 /**
  * Creates and displays a kernel panic overlay for unrecoverable errors.
  * This function handles all the DOM manipulation needed to display the error.

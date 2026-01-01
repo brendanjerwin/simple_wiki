@@ -1,7 +1,9 @@
-import { html, css, LitElement, TemplateResult } from 'lit';
+import type { TemplateResult } from 'lit';
+import { html, css, LitElement } from 'lit';
 import { property } from 'lit/decorators.js';
 import { ifDefined } from 'lit/directives/if-defined.js';
-import { showToast, ToastMessage } from './toast-message.js';
+import type { ToastMessage } from './toast-message.js';
+import { showToast } from './toast-message.js';
 import { AugmentErrorService } from './augment-error-service.js';
 
 /**

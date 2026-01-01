@@ -1,6 +1,6 @@
 import { expect } from '@open-wc/testing';
 import { SystemInfo } from './system-info.js';
-import { SystemInfoVersion } from './system-info-version.js';
+import type { SystemInfoVersion } from './system-info-version.js';
 import { GetVersionResponseSchema, GetJobStatusResponseSchema, JobQueueStatusSchema } from '../gen/api/v1/system_info_pb.js';
 import { create } from '@bufbuild/protobuf';
 import { TimestampSchema } from '@bufbuild/protobuf/wkt';

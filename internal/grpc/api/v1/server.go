@@ -30,11 +30,12 @@ import (
 )
 
 const (
-	identifierKey               = "identifier"
-	pageNotFoundErrFmt          = "page not found: %s"
-	failedToReadFrontmatterErrFmt = "failed to read frontmatter: %v"
-	failedToBuildPageTextErrFmt   = "failed to build page text: %v"
-	maxUniqueIdentifierAttempts   = 1000
+	identifierKey                  = "identifier"
+	pageNotFoundErrFmt             = "page not found: %s"
+	failedToReadFrontmatterErrFmt  = "failed to read frontmatter: %v"
+	failedToWriteFrontmatterErrFmt = "failed to write frontmatter: %v"
+	failedToBuildPageTextErrFmt    = "failed to build page text: %v"
+	maxUniqueIdentifierAttempts    = 1000
 )
 
 // filterIdentifierKey removes the identifier key from a frontmatter map.
@@ -123,7 +124,7 @@ func (s *Server) MergeFrontmatter(_ context.Context, req *apiv1.MergeFrontmatter
 
 	err = s.pageReaderMutator.WriteFrontMatter(req.Page, existingFm)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to write frontmatter: %v", err)
+		return nil, status.Errorf(codes.Internal, failedToWriteFrontmatterErrFmt, err)
 	}
 
 	// Filter out the identifier key from the response
@@ -150,7 +151,7 @@ func (s *Server) ReplaceFrontmatter(_ context.Context, req *apiv1.ReplaceFrontma
 
 	err = s.pageReaderMutator.WriteFrontMatter(req.Page, fm)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to write frontmatter: %v", err)
+		return nil, status.Errorf(codes.Internal, failedToWriteFrontmatterErrFmt, err)
 	}
 
 	// Return the frontmatter without the identifier key
@@ -203,7 +204,7 @@ func (s *Server) RemoveKeyAtPath(_ context.Context, req *apiv1.RemoveKeyAtPathRe
 
 	err = s.pageReaderMutator.WriteFrontMatter(req.Page, updatedFm.(map[string]any))
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to write frontmatter: %v", err)
+		return nil, status.Errorf(codes.Internal, failedToWriteFrontmatterErrFmt, err)
 	}
 
 	// Filter out the identifier key from the response
@@ -863,6 +864,171 @@ func (s *Server) findUniqueIdentifier(baseIdentifier string) string {
 	return baseIdentifier + "_999"
 }
 
+// CreatePage implements the CreatePage RPC.
+// Creates a new wiki page with optional template support.
+func (s *Server) CreatePage(_ context.Context, req *apiv1.CreatePageRequest) (*apiv1.CreatePageResponse, error) {
+	if req.PageName == "" {
+		return nil, status.Error(codes.InvalidArgument, "page_name is required")
+	}
+
+	// Munge the identifier
+	identifier, err := wikiidentifiers.MungeIdentifier(req.PageName)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid page name: %v", err)
+	}
+
+	// Check if page already exists
+	_, existingFm, err := s.pageReaderMutator.ReadFrontMatter(identifier)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, status.Errorf(codes.Internal, "failed to check page existence: %v", err)
+	}
+
+	if existingFm != nil {
+		return &apiv1.CreatePageResponse{
+			Success: false,
+			Error:   fmt.Sprintf("page already exists: %s", identifier),
+		}, nil
+	}
+
+	// Build frontmatter starting with template if provided
+	fm := make(map[string]any)
+	fm[identifierKey] = identifier
+
+	if req.Template != nil && *req.Template != "" {
+		templateFm, err := s.loadTemplateFrontmatter(*req.Template)
+		if err != nil {
+			return &apiv1.CreatePageResponse{
+				Success: false,
+				Error:   err.Error(),
+			}, nil
+		}
+		// Copy template frontmatter (excluding identifier and template flag)
+		for k, v := range templateFm {
+			if k != identifierKey && k != "template" {
+				fm[k] = v
+			}
+		}
+	}
+
+	// Merge provided structured frontmatter (overrides template values)
+	if req.Frontmatter != nil {
+		providedFm := req.Frontmatter.AsMap()
+		// Merge provided frontmatter, but don't allow overriding identifier
+		for k, v := range providedFm {
+			if k != identifierKey {
+				fm[k] = v
+			}
+		}
+	}
+
+	// Write frontmatter
+	if err := s.pageReaderMutator.WriteFrontMatter(identifier, fm); err != nil {
+		return nil, status.Errorf(codes.Internal, failedToWriteFrontmatterErrFmt, err)
+	}
+
+	// Write markdown content (use provided content or default template)
+	markdown := req.ContentMarkdown
+	if markdown == "" {
+		markdown = wikipage.DefaultPageTemplate
+	}
+	if err := s.pageReaderMutator.WriteMarkdown(identifier, markdown); err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to write markdown: %v", err)
+	}
+
+	return &apiv1.CreatePageResponse{
+		Success: true,
+	}, nil
+}
+
+// loadTemplateFrontmatter loads and validates a template page's frontmatter.
+func (s *Server) loadTemplateFrontmatter(templateIdentifier string) (map[string]any, error) {
+	_, fm, err := s.pageReaderMutator.ReadFrontMatter(templateIdentifier)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("template '%s' does not exist", templateIdentifier)
+		}
+		return nil, fmt.Errorf("failed to read template '%s': %v", templateIdentifier, err)
+	}
+
+	// Validate that the page is marked as a template
+	if !isTemplatePage(fm) {
+		return nil, fmt.Errorf("page '%s' is not a template (missing template: true)", templateIdentifier)
+	}
+
+	return fm, nil
+}
+
+// isTemplatePage checks if a frontmatter map indicates a template page.
+func isTemplatePage(fm map[string]any) bool {
+	templateVal, ok := fm["template"]
+	if !ok {
+		return false
+	}
+
+	switch v := templateVal.(type) {
+	case bool:
+		return v
+	case string:
+		return strings.EqualFold(v, "true")
+	case int64:
+		// TOML parses integers as int64
+		return v != 0
+	case float64:
+		// Handle floats for robustness
+		return v != 0
+	default:
+		return false
+	}
+}
+
+// ListTemplates implements the ListTemplates RPC.
+// Returns all pages marked as templates (with template: true frontmatter).
+func (s *Server) ListTemplates(_ context.Context, req *apiv1.ListTemplatesRequest) (*apiv1.ListTemplatesResponse, error) {
+	// Build exclusion set
+	excludeSet := make(map[string]bool)
+	for _, id := range req.ExcludeIdentifiers {
+		excludeSet[id] = true
+	}
+
+	// Query pages with template: true
+	templatePages := s.frontmatterIndexQueryer.QueryExactMatch("template", "true")
+
+	templates := make([]*apiv1.TemplateInfo, 0, len(templatePages))
+	for _, pageID := range templatePages {
+		// Skip excluded identifiers
+		if excludeSet[pageID] {
+			continue
+		}
+
+		// Read frontmatter to get title and description
+		_, fm, err := s.pageReaderMutator.ReadFrontMatter(pageID)
+		if err != nil {
+			// Skip pages that can't be read
+			continue
+		}
+
+		template := &apiv1.TemplateInfo{
+			Identifier: pageID,
+		}
+
+		// Get title
+		if title, ok := fm["title"].(string); ok {
+			template.Title = title
+		}
+
+		// Get description
+		if desc, ok := fm["description"].(string); ok {
+			template.Description = desc
+		}
+
+		templates = append(templates, template)
+	}
+
+	return &apiv1.ListTemplatesResponse{
+		Templates: templates,
+	}, nil
+}
+
 // serverPageExistenceChecker implements pageimport.PageExistenceChecker.
 type serverPageExistenceChecker struct {
 	reader wikipage.PageReader
@@ -951,7 +1117,7 @@ func (s *Server) ParseCSVPreview(_ context.Context, req *apiv1.ParseCSVPreviewRe
 
 		// Validate template if specified (skip the built-in inv_item template)
 		if parsed.Template != "" && !parsed.HasErrors() && parsed.Template != pageimport.InvItemTemplate {
-			_, _, templateErr := s.pageReaderMutator.ReadFrontMatter(parsed.Template)
+			_, templateFm, templateErr := s.pageReaderMutator.ReadFrontMatter(parsed.Template)
 			if templateErr != nil {
 				if os.IsNotExist(templateErr) {
 					record.ValidationErrors = append(record.ValidationErrors,
@@ -960,6 +1126,9 @@ func (s *Server) ParseCSVPreview(_ context.Context, req *apiv1.ParseCSVPreviewRe
 					record.ValidationErrors = append(record.ValidationErrors,
 						fmt.Sprintf("failed to read template '%s': %v", parsed.Template, templateErr))
 				}
+			} else if !isTemplatePage(templateFm) {
+				record.ValidationErrors = append(record.ValidationErrors,
+					fmt.Sprintf("page '%s' is not a template (missing template: true)", parsed.Template))
 			}
 		}
 

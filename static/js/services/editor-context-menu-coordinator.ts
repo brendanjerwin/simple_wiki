@@ -1,5 +1,9 @@
-import { EditorContextMenu } from '../web-components/editor-context-menu.js';
-import { EditorToolbar } from '../web-components/editor-toolbar.js';
+import type { EditorContextMenu } from '../web-components/editor-context-menu.js';
+import type { EditorToolbar } from '../web-components/editor-toolbar.js';
+// Side-effect import required to register the custom element before createElement
+import '../web-components/insert-new-page-dialog.js';
+import type { InsertNewPageDialog } from '../web-components/insert-new-page-dialog.js';
+import type { PageCreatedEventDetail } from '../web-components/event-types.js';
 import { EditorUploadService } from './editor-upload-service.js';
 import { TextFormattingService } from './text-formatting-service.js';
 
@@ -14,6 +18,7 @@ export class EditorContextMenuCoordinator {
   private toolbar: EditorToolbar | null;
   private uploadService: EditorUploadService;
   private formattingService: TextFormattingService;
+  private insertNewPageDialog: InsertNewPageDialog | null = null;
   private isMobile: boolean;
 
   // Selection state for restoration
@@ -55,6 +60,7 @@ export class EditorContextMenuCoordinator {
     this.menu.addEventListener('format-bold-requested', this._handleBold);
     this.menu.addEventListener('format-italic-requested', this._handleItalic);
     this.menu.addEventListener('insert-link-requested', this._handleInsertLink);
+    this.menu.addEventListener('insert-new-page-requested', this._handleInsertNewPage);
 
     // Mobile: toolbar action handlers (same events, different source)
     if (this.toolbar) {
@@ -67,6 +73,7 @@ export class EditorContextMenuCoordinator {
       this.toolbar.addEventListener('format-bold-requested', this._handleBold);
       this.toolbar.addEventListener('format-italic-requested', this._handleItalic);
       this.toolbar.addEventListener('insert-link-requested', this._handleInsertLink);
+      this.toolbar.addEventListener('insert-new-page-requested', this._handleInsertNewPage);
     }
   }
 
@@ -84,6 +91,7 @@ export class EditorContextMenuCoordinator {
     this.menu.removeEventListener('format-bold-requested', this._handleBold);
     this.menu.removeEventListener('format-italic-requested', this._handleItalic);
     this.menu.removeEventListener('insert-link-requested', this._handleInsertLink);
+    this.menu.removeEventListener('insert-new-page-requested', this._handleInsertNewPage);
 
     if (this.toolbar) {
       this.toolbar.removeEventListener('mousedown', this._handleToolbarInteractionStart);
@@ -93,6 +101,13 @@ export class EditorContextMenuCoordinator {
       this.toolbar.removeEventListener('format-bold-requested', this._handleBold);
       this.toolbar.removeEventListener('format-italic-requested', this._handleItalic);
       this.toolbar.removeEventListener('insert-link-requested', this._handleInsertLink);
+      this.toolbar.removeEventListener('insert-new-page-requested', this._handleInsertNewPage);
+    }
+
+    // Clean up dialog if it exists
+    if (this.insertNewPageDialog) {
+      this.insertNewPageDialog.remove();
+      this.insertNewPageDialog = null;
     }
   }
 
@@ -204,4 +219,29 @@ export class EditorContextMenuCoordinator {
     // Trigger keyup for auto-save
     this.textarea.dispatchEvent(new Event('keyup', { bubbles: true }));
   }
+
+  private _handleInsertNewPage = async (): Promise<void> => {
+    this.captureCurrentSelection();
+
+    // Create or get the dialog
+    if (!this.insertNewPageDialog) {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+      this.insertNewPageDialog = document.createElement('insert-new-page-dialog') as InsertNewPageDialog;
+      document.body.appendChild(this.insertNewPageDialog);
+
+      // Listen for page-created events
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+      this.insertNewPageDialog.addEventListener('page-created', this._handlePageCreated as EventListener);
+    }
+
+    await this.insertNewPageDialog.openDialog();
+  };
+
+  private _handlePageCreated = (event: CustomEvent<PageCreatedEventDetail>): void => {
+    const { markdownLink } = event.detail;
+
+    // Restore selection and insert the markdown link
+    this.restoreSelection();
+    this.uploadService.insertMarkdownAtCursor(this.textarea, markdownLink);
+  };
 }

@@ -1,6 +1,6 @@
 import { html, fixture, expect } from '@open-wc/testing';
 import sinon from 'sinon';
-import { PageImportDialog } from './page-import-dialog.js';
+import type { PageImportDialog } from './page-import-dialog.js';
 import './page-import-dialog.js';
 
 function timeout(ms: number, message: string): Promise<never> {

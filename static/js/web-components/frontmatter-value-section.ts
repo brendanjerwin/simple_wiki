@@ -1,4 +1,5 @@
 import { html, css, LitElement } from 'lit';
+import type { JsonObject } from '@bufbuild/protobuf';
 import { buttonCSS, foundationCSS, layoutCSS } from './shared-styles.js';
 import './frontmatter-key.js';
 import './frontmatter-value.js';
@@ -6,6 +7,7 @@ import './frontmatter-add-field-button.js';
 import './kernel-panic.js';
 import { showKernelPanic } from './kernel-panic.js';
 import { AugmentErrorService } from './augment-error-service.js';
+import type { SectionChangeEventDetail } from './event-types.js';
 
 export class FrontmatterValueSection extends LitElement {
   static override styles = [
@@ -41,7 +43,7 @@ export class FrontmatterValueSection extends LitElement {
     title: { type: String },
   };
 
-  declare fields: Record<string, unknown>;
+  declare fields: JsonObject;
   declare disabled: boolean;
   declare isRoot: boolean;
   declare title: string;
@@ -80,7 +82,8 @@ export class FrontmatterValueSection extends LitElement {
 
   private _handleAddField = (event: CustomEvent): void => {
     const { type } = event.detail;
-    const oldFields = { ...this.fields };
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- spread preserves JsonObject structure
+    const oldFields = { ...this.fields } as JsonObject;
     const newKey = this._generateUniqueKey(
       type === 'field' ? 'new_field' :
         type === 'array' ? 'new_array' :
@@ -102,7 +105,8 @@ export class FrontmatterValueSection extends LitElement {
         return;
     }
 
-    const newFields = { ...this.fields, [newKey]: newValue };
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- spread preserves JsonObject structure
+    const newFields = { ...this.fields, [newKey]: newValue } as JsonObject;
     this.fields = newFields;
     this._clearSortingCache();
     this._dispatchSectionChange(oldFields, newFields);
@@ -110,8 +114,10 @@ export class FrontmatterValueSection extends LitElement {
   };
 
   private _handleRemoveField = (key: string): void => {
-    const oldFields = { ...this.fields };
-    const newFields = { ...this.fields };
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- spread preserves JsonObject structure
+    const oldFields = { ...this.fields } as JsonObject;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- spread preserves JsonObject structure
+    const newFields = { ...this.fields } as JsonObject;
     delete newFields[key];
 
     this.fields = newFields;
@@ -125,11 +131,16 @@ export class FrontmatterValueSection extends LitElement {
 
     if (oldKey === newKey || !newKey.trim()) return;
 
-    const oldFields = { ...this.fields };
-    const newFields = { ...this.fields };
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- spread preserves JsonObject structure
+    const oldFields = { ...this.fields } as JsonObject;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- spread preserves JsonObject structure
+    const newFields = { ...this.fields } as JsonObject;
 
     // Move the value from old key to new key
-    newFields[newKey] = newFields[oldKey];
+    const value = newFields[oldKey];
+    if (value !== undefined) {
+      newFields[newKey] = value;
+    }
     delete newFields[oldKey];
 
     this.fields = newFields;
@@ -145,20 +156,22 @@ export class FrontmatterValueSection extends LitElement {
   private _handleValueChange = (event: CustomEvent, key: string): void => {
     const { newValue } = event.detail;
 
-    const oldFields = { ...this.fields };
-    const newFields = { ...this.fields, [key]: newValue };
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- spread preserves JsonObject structure
+    const oldFields = { ...this.fields } as JsonObject;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- spread preserves JsonObject structure
+    const newFields = { ...this.fields, [key]: newValue } as JsonObject;
 
     this.fields = newFields;
     this._clearSortingCache();
     this._dispatchSectionChange(oldFields, newFields);
   };
 
-  private _dispatchSectionChange(oldFields: Record<string, unknown>, newFields: Record<string, unknown>): void {
-    this.dispatchEvent(new CustomEvent('section-change', {
+  private _dispatchSectionChange(oldFields: JsonObject, newFields: JsonObject): void {
+    this.dispatchEvent(new CustomEvent<SectionChangeEventDetail>('section-change', {
       detail: {
         oldFields,
         newFields,
-      },
+      } satisfies SectionChangeEventDetail,
       bubbles: true,
     }));
   }

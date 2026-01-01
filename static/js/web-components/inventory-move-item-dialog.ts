@@ -742,3 +742,9 @@ export class InventoryMoveItemDialog extends LitElement {
 }
 
 customElements.define('inventory-move-item-dialog', InventoryMoveItemDialog);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'inventory-move-item-dialog': InventoryMoveItemDialog;
+  }
+}

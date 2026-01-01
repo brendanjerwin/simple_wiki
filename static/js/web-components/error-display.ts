@@ -1,7 +1,8 @@
 import { html, css, LitElement, nothing } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import { colorCSS, typographyCSS, themeCSS, foundationCSS, buttonCSS } from './shared-styles.js';
-import { AugmentedError, AugmentErrorService } from './augment-error-service.js';
+import type { AugmentedError } from './augment-error-service.js';
+import { AugmentErrorService } from './augment-error-service.js';
 
 /**
  * Action button configuration for error recovery
@@ -268,3 +269,9 @@ export class ErrorDisplay extends LitElement {
 }
 
 customElements.define('error-display', ErrorDisplay);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'error-display': ErrorDisplay;
+  }
+}

@@ -1,7 +1,8 @@
 import { html, fixture, expect } from '@open-wc/testing';
-import sinon, { SinonStub, SinonSpy } from 'sinon';
+import type { SinonStub, SinonSpy } from 'sinon';
+import sinon from 'sinon';
 import './qr-scanner.js';
-import { QrScanner, CameraProvider, CameraDevice } from './qr-scanner.js';
+import type { QrScanner, CameraProvider, CameraDevice, ScannerErrorEventDetail } from './qr-scanner.js';
 
 /**
  * Mock camera provider for testing
@@ -394,7 +395,7 @@ describe('QrScanner', () => {
 
       it('should wrap string in Error object', () => {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing CustomEvent from spy
-        const event = errorSpy.firstCall.args[0] as CustomEvent<{ error: Error }>;
+        const event = errorSpy.firstCall.args[0] as CustomEvent<ScannerErrorEventDetail>;
         expect(event.detail.error).to.be.instanceOf(Error);
         expect(event.detail.error.message).to.equal('String error from library');
       });
@@ -428,7 +429,7 @@ describe('QrScanner', () => {
       it('should emit scanner-error event with Error object', () => {
         expect(errorSpy).to.have.been.calledOnce;
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing CustomEvent from spy
-        const event = errorSpy.firstCall.args[0] as CustomEvent<{ error: Error }>;
+        const event = errorSpy.firstCall.args[0] as CustomEvent<ScannerErrorEventDetail>;
         expect(event.detail.error).to.be.instanceOf(Error);
       });
     });
@@ -461,7 +462,7 @@ describe('QrScanner', () => {
       it('should emit scanner-error event with Error object', () => {
         expect(errorSpy).to.have.been.calledOnce;
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing CustomEvent from spy
-        const event = errorSpy.firstCall.args[0] as CustomEvent<{ error: Error }>;
+        const event = errorSpy.firstCall.args[0] as CustomEvent<ScannerErrorEventDetail>;
         expect(event.detail.error).to.be.instanceOf(Error);
       });
     });
@@ -495,13 +496,13 @@ describe('QrScanner', () => {
       it('should emit scanner-error event with Error object', () => {
         expect(errorSpy).to.have.been.calledOnce;
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing CustomEvent from spy
-        const event = errorSpy.firstCall.args[0] as CustomEvent<{ error: Error }>;
+        const event = errorSpy.firstCall.args[0] as CustomEvent<ScannerErrorEventDetail>;
         expect(event.detail.error).to.be.instanceOf(Error);
       });
 
       it('should preserve original error as cause', () => {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing CustomEvent from spy
-        const event = errorSpy.firstCall.args[0] as CustomEvent<{ error: Error }>;
+        const event = errorSpy.firstCall.args[0] as CustomEvent<ScannerErrorEventDetail>;
         expect(event.detail.error.cause).to.deep.equal({ code: 123, reason: 'custom object' });
       });
     });
@@ -534,7 +535,7 @@ describe('QrScanner', () => {
       it('should emit scanner-error event with Error object', () => {
         expect(errorSpy).to.have.been.calledOnce;
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing CustomEvent from spy
-        const event = errorSpy.firstCall.args[0] as CustomEvent<{ error: Error }>;
+        const event = errorSpy.firstCall.args[0] as CustomEvent<ScannerErrorEventDetail>;
         expect(event.detail.error).to.be.instanceOf(Error);
       });
     });

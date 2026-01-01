@@ -1,5 +1,5 @@
 import { fixture, html, expect } from '@open-wc/testing';
-import { TemplateResult } from 'lit';
+import type { TemplateResult } from 'lit';
 import { restore } from 'sinon';
 import { FrontmatterValueSection } from './frontmatter-value-section.js';
 import type { AugmentedError } from './augment-error-service.js';

@@ -9,7 +9,8 @@ import { WikiUrlParser } from '../utils/wiki-url-parser.js';
 import './qr-scanner.js';
 import type { QrScannedEventDetail, QrScanner } from './qr-scanner.js';
 import './error-display.js';
-import { AugmentErrorService, AugmentedError } from './augment-error-service.js';
+import type { AugmentedError } from './augment-error-service.js';
+import { AugmentErrorService } from './augment-error-service.js';
 import type { ErrorAction } from './error-display.js';
 
 /**

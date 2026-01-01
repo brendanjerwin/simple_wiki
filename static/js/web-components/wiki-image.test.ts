@@ -1,7 +1,8 @@
 import { html, fixture, expect } from '@open-wc/testing';
 import './wiki-image.js';
 import type { WikiImage } from './wiki-image.js';
-import sinon, { SinonStub, SinonSpy } from 'sinon';
+import type { SinonStub, SinonSpy } from 'sinon';
+import sinon from 'sinon';
 
 describe('WikiImage', () => {
   let el: WikiImage;

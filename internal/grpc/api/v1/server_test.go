@@ -2536,6 +2536,65 @@ var _ = Describe("Server", func() {
 			})
 		})
 
+		When("csv_content references a page that is not a template", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,template,title\ntest_page,regular_page,Test Item"
+				mockPageReaderMutator = &MockPageReaderMutator{
+					FrontmatterByID: map[string]map[string]any{
+						"regular_page": {
+							"title": "Just a Regular Page",
+							// No "template: true" field
+						},
+					},
+					ErrByID: map[string]error{
+						"test_page": os.ErrNotExist, // The new page doesn't exist
+					},
+				}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should add a validation error for the non-template page", func() {
+				Expect(resp.Records[0].ValidationErrors).To(ContainElement(ContainSubstring("not a template")))
+				Expect(resp.Records[0].ValidationErrors).To(ContainElement(ContainSubstring("regular_page")))
+			})
+
+			It("should count the non-template error", func() {
+				Expect(resp.ErrorCount).To(Equal(int32(1)))
+			})
+		})
+
+		When("csv_content references a valid template with template: true", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,template,title\ntest_page,article_template,Test Item"
+				mockPageReaderMutator = &MockPageReaderMutator{
+					FrontmatterByID: map[string]map[string]any{
+						"article_template": {
+							"title":    "Article Template",
+							"template": true,
+						},
+					},
+					ErrByID: map[string]error{
+						"test_page": os.ErrNotExist, // The new page doesn't exist
+					},
+				}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should not add validation errors", func() {
+				Expect(resp.Records[0].ValidationErrors).To(BeEmpty())
+			})
+
+			It("should not count errors", func() {
+				Expect(resp.ErrorCount).To(Equal(int32(0)))
+			})
+		})
+
 		When("csv_content has array column notation", func() {
 			BeforeEach(func() {
 				req.CsvContent = "identifier,tags[],tags[]\ntest_page,tag1,tag2"
@@ -2916,6 +2975,413 @@ var _ = Describe("Server", func() {
 
 			It("should indicate the identifier is unique", func() {
 				Expect(resp.IsUnique).To(BeTrue())
+			})
+		})
+	})
+
+	Describe("CreatePage", func() {
+		var (
+			req                         *apiv1.CreatePageRequest
+			resp                        *apiv1.CreatePageResponse
+			err                         error
+			mockPageReaderMutator       *MockPageReaderMutator
+			mockFrontmatterIndexQueryer *MockFrontmatterIndexQueryer
+		)
+
+		BeforeEach(func() {
+			req = &apiv1.CreatePageRequest{
+				PageName: "My New Page",
+			}
+			mockPageReaderMutator = &MockPageReaderMutator{
+				Err: os.ErrNotExist, // Page doesn't exist by default
+			}
+			mockFrontmatterIndexQueryer = &MockFrontmatterIndexQueryer{}
+		})
+
+		JustBeforeEach(func() {
+			server, err = v1.NewServer(
+				"commit",
+				time.Now(),
+				mockPageReaderMutator,
+				noOpBleveIndexQueryer{},
+				nil,
+				lumber.NewConsoleLogger(lumber.WARN),
+				nil,
+				nil,
+				mockFrontmatterIndexQueryer,
+			)
+			Expect(err).NotTo(HaveOccurred())
+			resp, err = server.CreatePage(ctx, req)
+		})
+
+		When("the page_name is empty", func() {
+			BeforeEach(func() {
+				req.PageName = ""
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "page_name is required"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("the page already exists", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = nil
+				mockPageReaderMutator.Frontmatter = map[string]any{"title": "Existing Page"}
+			})
+
+			It("should not return a gRPC error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return success=false", func() {
+				Expect(resp.Success).To(BeFalse())
+			})
+
+			It("should return an error message about existing page", func() {
+				Expect(resp.Error).To(ContainSubstring("already exists"))
+			})
+		})
+
+		When("creating a new page without template", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = os.ErrNotExist
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return success", func() {
+				Expect(resp.Success).To(BeTrue())
+			})
+
+			It("should write the frontmatter with identifier", func() {
+				Expect(mockPageReaderMutator.WrittenFrontmatter).NotTo(BeNil())
+				Expect(mockPageReaderMutator.WrittenFrontmatter["identifier"]).To(Equal("my_new_page"))
+			})
+
+			It("should write default markdown", func() {
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(ContainSubstring("{{or .Title .Identifier}}"))
+			})
+		})
+
+		When("creating a page with custom markdown content", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = os.ErrNotExist
+				req.ContentMarkdown = "# Custom Content\n\nThis is my page."
+			})
+
+			It("should write the custom markdown", func() {
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(Equal("# Custom Content\n\nThis is my page."))
+			})
+		})
+
+		When("creating a page with structured frontmatter", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = os.ErrNotExist
+				var structErr error
+				req.Frontmatter, structErr = structpb.NewStruct(map[string]any{
+					"title": "My Page Title",
+					"tags":  []any{"one", "two"},
+				})
+				Expect(structErr).NotTo(HaveOccurred())
+			})
+
+			It("should merge the frontmatter", func() {
+				Expect(mockPageReaderMutator.WrittenFrontmatter["title"]).To(Equal("My Page Title"))
+				Expect(mockPageReaderMutator.WrittenFrontmatter["tags"]).To(Equal([]any{"one", "two"}))
+			})
+
+			It("should preserve the identifier", func() {
+				Expect(mockPageReaderMutator.WrittenFrontmatter["identifier"]).To(Equal("my_new_page"))
+			})
+		})
+
+		When("creating a page with a valid template", func() {
+			var templateID string
+
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = nil // Needed for template lookup
+				mockPageReaderMutator.ErrByID = map[string]error{
+					"my_new_page": os.ErrNotExist, // New page doesn't exist
+				}
+				mockPageReaderMutator.FrontmatterByID = map[string]map[string]any{
+					"article_template": {
+						"template":    true,
+						"author":      "Default Author",
+						"category":    "articles",
+						"description": "Template description",
+					},
+				}
+				templateID = "article_template"
+				req.Template = &templateID
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return success", func() {
+				Expect(resp.Success).To(BeTrue())
+			})
+
+			It("should copy template frontmatter fields", func() {
+				Expect(mockPageReaderMutator.WrittenFrontmatter["author"]).To(Equal("Default Author"))
+				Expect(mockPageReaderMutator.WrittenFrontmatter["category"]).To(Equal("articles"))
+			})
+
+			It("should not copy the template flag", func() {
+				_, hasTemplate := mockPageReaderMutator.WrittenFrontmatter["template"]
+				Expect(hasTemplate).To(BeFalse())
+			})
+
+			It("should set the correct identifier", func() {
+				Expect(mockPageReaderMutator.WrittenFrontmatter["identifier"]).To(Equal("my_new_page"))
+			})
+		})
+
+		When("creating a page with template and custom frontmatter", func() {
+			var templateID string
+
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = nil
+				mockPageReaderMutator.ErrByID = map[string]error{
+					"my_new_page": os.ErrNotExist,
+				}
+				mockPageReaderMutator.FrontmatterByID = map[string]map[string]any{
+					"article_template": {
+						"template": true,
+						"author":   "Default Author",
+						"category": "articles",
+					},
+				}
+				templateID = "article_template"
+				req.Template = &templateID
+				var structErr error
+				req.Frontmatter, structErr = structpb.NewStruct(map[string]any{
+					"author": "Custom Author",
+				})
+				Expect(structErr).NotTo(HaveOccurred())
+			})
+
+			It("should override template values with provided frontmatter", func() {
+				Expect(mockPageReaderMutator.WrittenFrontmatter["author"]).To(Equal("Custom Author"))
+			})
+
+			It("should preserve template values not overridden", func() {
+				Expect(mockPageReaderMutator.WrittenFrontmatter["category"]).To(Equal("articles"))
+			})
+		})
+
+		When("creating a page with a non-existent template", func() {
+			var templateID string
+
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = os.ErrNotExist
+				templateID = "non_existent_template"
+				req.Template = &templateID
+			})
+
+			It("should not return a gRPC error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return success=false", func() {
+				Expect(resp.Success).To(BeFalse())
+			})
+
+			It("should return an error about template not existing", func() {
+				Expect(resp.Error).To(ContainSubstring("does not exist"))
+			})
+		})
+
+		When("creating a page with a non-template page as template", func() {
+			var templateID string
+
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = nil
+				mockPageReaderMutator.ErrByID = map[string]error{
+					"my_new_page": os.ErrNotExist,
+				}
+				mockPageReaderMutator.FrontmatterByID = map[string]map[string]any{
+					"regular_page": {
+						"title": "Just a Regular Page",
+						// Note: no "template: true"
+					},
+				}
+				templateID = "regular_page"
+				req.Template = &templateID
+			})
+
+			It("should not return a gRPC error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return success=false", func() {
+				Expect(resp.Success).To(BeFalse())
+			})
+
+			It("should return an error about not being a template", func() {
+				Expect(resp.Error).To(ContainSubstring("not a template"))
+			})
+		})
+	})
+
+	Describe("ListTemplates", func() {
+		var (
+			req                         *apiv1.ListTemplatesRequest
+			resp                        *apiv1.ListTemplatesResponse
+			err                         error
+			mockPageReaderMutator       *MockPageReaderMutator
+			mockFrontmatterIndexQueryer *MockFrontmatterIndexQueryer
+		)
+
+		BeforeEach(func() {
+			req = &apiv1.ListTemplatesRequest{}
+			mockPageReaderMutator = &MockPageReaderMutator{}
+			mockFrontmatterIndexQueryer = &MockFrontmatterIndexQueryer{}
+		})
+
+		JustBeforeEach(func() {
+			server, err = v1.NewServer(
+				"commit",
+				time.Now(),
+				mockPageReaderMutator,
+				noOpBleveIndexQueryer{},
+				nil,
+				lumber.NewConsoleLogger(lumber.WARN),
+				nil,
+				nil,
+				mockFrontmatterIndexQueryer,
+			)
+			Expect(err).NotTo(HaveOccurred())
+			resp, err = server.ListTemplates(ctx, req)
+		})
+
+		When("there are no templates", func() {
+			BeforeEach(func() {
+				mockFrontmatterIndexQueryer.ExactMatchResults = []wikipage.PageIdentifier{}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return an empty list", func() {
+				Expect(resp.Templates).To(BeEmpty())
+			})
+		})
+
+		When("there are multiple templates", func() {
+			BeforeEach(func() {
+				mockFrontmatterIndexQueryer.ExactMatchResults = []wikipage.PageIdentifier{
+					"article_template",
+					"project_template",
+				}
+				mockPageReaderMutator.FrontmatterByID = map[string]map[string]any{
+					"article_template": {
+						"template":    true,
+						"title":       "Article Template",
+						"description": "For writing articles",
+					},
+					"project_template": {
+						"template": true,
+						"title":    "Project Template",
+					},
+				}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return all templates", func() {
+				Expect(resp.Templates).To(HaveLen(2))
+			})
+
+			It("should include template identifiers", func() {
+				identifiers := make([]string, len(resp.Templates))
+				for i, t := range resp.Templates {
+					identifiers[i] = t.Identifier
+				}
+				Expect(identifiers).To(ContainElements("article_template", "project_template"))
+			})
+
+			It("should include titles", func() {
+				for _, t := range resp.Templates {
+					if t.Identifier == "article_template" {
+						Expect(t.Title).To(Equal("Article Template"))
+					}
+				}
+			})
+
+			It("should include descriptions when available", func() {
+				for _, t := range resp.Templates {
+					if t.Identifier == "article_template" {
+						Expect(t.Description).To(Equal("For writing articles"))
+					}
+				}
+			})
+		})
+
+		When("exclude_identifiers is provided", func() {
+			BeforeEach(func() {
+				mockFrontmatterIndexQueryer.ExactMatchResults = []wikipage.PageIdentifier{
+					"article_template",
+					"inv_item",
+					"project_template",
+				}
+				mockPageReaderMutator.FrontmatterByID = map[string]map[string]any{
+					"article_template": {"template": true, "title": "Article"},
+					"inv_item":         {"template": true, "title": "Inventory Item"},
+					"project_template": {"template": true, "title": "Project"},
+				}
+				req.ExcludeIdentifiers = []string{"inv_item"}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should exclude the specified template", func() {
+				identifiers := make([]string, len(resp.Templates))
+				for i, t := range resp.Templates {
+					identifiers[i] = t.Identifier
+				}
+				Expect(identifiers).NotTo(ContainElement("inv_item"))
+			})
+
+			It("should include other templates", func() {
+				Expect(resp.Templates).To(HaveLen(2))
+			})
+		})
+
+		When("a template page cannot be read", func() {
+			BeforeEach(func() {
+				mockFrontmatterIndexQueryer.ExactMatchResults = []wikipage.PageIdentifier{
+					"good_template",
+					"broken_template",
+				}
+				mockPageReaderMutator.FrontmatterByID = map[string]map[string]any{
+					"good_template": {"template": true, "title": "Good Template"},
+				}
+				mockPageReaderMutator.ErrByID = map[string]error{
+					"broken_template": errors.New("disk error"),
+				}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should skip the broken template", func() {
+				Expect(resp.Templates).To(HaveLen(1))
+				Expect(resp.Templates[0].Identifier).To(Equal("good_template"))
 			})
 		})
 	})

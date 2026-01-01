@@ -1,5 +1,5 @@
 import { html, css, LitElement, nothing } from 'lit';
-import { TailscaleIdentity } from '../gen/api/v1/system_info_pb.js';
+import type { TailscaleIdentity } from '../gen/api/v1/system_info_pb.js';
 import { foundationCSS } from './shared-styles.js';
 
 export class SystemInfoIdentity extends LitElement {

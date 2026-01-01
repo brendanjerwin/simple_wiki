@@ -1,5 +1,6 @@
 import { expect, fixture, html } from '@open-wc/testing';
-import { spy, SinonSpy } from 'sinon';
+import type { SinonSpy } from 'sinon';
+import { spy } from 'sinon';
 import './editor-context-menu.js';
 import type { EditorContextMenu } from './editor-context-menu.js';
 
@@ -78,6 +79,14 @@ describe('EditorContextMenu', () => {
         item => item.textContent?.includes('Insert Link')
       );
       expect(link).to.exist;
+    });
+
+    it('should render Create & Link New Page option', () => {
+      const items = el.shadowRoot?.querySelectorAll('.menu-item');
+      const newPage = Array.from(items || []).find(
+        item => item.textContent?.includes('Create & Link New Page')
+      );
+      expect(newPage).to.exist;
     });
 
     it('should not render Take Photo option on desktop', () => {
@@ -306,6 +315,34 @@ describe('EditorContextMenu', () => {
     });
 
     it('should dispatch insert-link-requested event', () => {
+      expect(eventSpy).to.have.been.calledOnce;
+    });
+
+    it('should close the menu', () => {
+      expect(el.open).to.be.false;
+    });
+  });
+
+  describe('when Create & Link New Page is clicked', () => {
+    let eventSpy: SinonSpy;
+
+    beforeEach(async () => {
+      eventSpy = spy();
+      el.addEventListener('insert-new-page-requested', eventSpy);
+      el.openAt({ x: 100, y: 200 });
+      await el.updateComplete;
+
+      const items = el.shadowRoot?.querySelectorAll('.menu-item');
+      const newPage = Array.from(items || []).find(
+        item => item.textContent?.includes('Create & Link New Page')
+      );
+      if (newPage instanceof HTMLButtonElement) {
+        newPage.click();
+      }
+      await el.updateComplete;
+    });
+
+    it('should dispatch insert-new-page-requested event', () => {
       expect(eventSpy).to.have.been.calledOnce;
     });
 

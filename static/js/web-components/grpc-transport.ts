@@ -1,5 +1,5 @@
 import { createGrpcWebTransport } from '@connectrpc/connect-web';
-import { Transport } from '@connectrpc/connect';
+import type { Transport } from '@connectrpc/connect';
 
 /**
  * Shared gRPC Web Transport configuration

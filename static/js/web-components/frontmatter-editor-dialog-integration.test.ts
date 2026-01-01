@@ -1,5 +1,5 @@
 import { html, fixture, expect } from '@open-wc/testing';
-import { FrontmatterEditorDialog } from './frontmatter-editor-dialog.js';
+import type { FrontmatterEditorDialog } from './frontmatter-editor-dialog.js';
 import sinon from 'sinon';
 import './frontmatter-editor-dialog.js';
 

@@ -381,3 +381,9 @@ export class ConfirmationDialog extends LitElement {
 }
 
 customElements.define('confirmation-dialog', ConfirmationDialog);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'confirmation-dialog': ConfirmationDialog;
+  }
+}
