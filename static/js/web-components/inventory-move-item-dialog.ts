@@ -39,11 +39,6 @@ export class InventoryMoveItemDialog extends LitElement {
         animation: fadeIn 0.2s ease-out;
       }
 
-      @keyframes fadeIn {
-        from { opacity: 0; }
-        to { opacity: 1; }
-      }
-
       .backdrop {
         position: fixed;
         top: 0;
@@ -64,17 +59,6 @@ export class InventoryMoveItemDialog extends LitElement {
         z-index: 1;
         animation: slideIn 0.2s ease-out;
         border-radius: 8px;
-      }
-
-      @keyframes slideIn {
-        from {
-          transform: translateY(-20px);
-          opacity: 0;
-        }
-        to {
-          transform: translateY(0);
-          opacity: 1;
-        }
       }
 
       .content {
