@@ -3,6 +3,7 @@ import sinon from 'sinon';
 import { InventoryMoveItemDialog } from './inventory-move-item-dialog.js';
 import './inventory-move-item-dialog.js';
 import type { ItemScannedEventDetail, ScannedItemInfo } from './inventory-qr-scanner.js';
+import type { SearchResult } from '../gen/api/v1/search_pb.js';
 
 describe('InventoryMoveItemDialog', () => {
   let el: InventoryMoveItemDialog;
@@ -286,7 +287,7 @@ describe('InventoryMoveItemDialog', () => {
             fragment: '',
             highlights: [],
             frontmatter: { 'inventory.container': 'garage' },
-          } as unknown as import('../gen/api/v1/search_pb.js').SearchResult,
+          } as unknown as SearchResult,
           // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock test data
           {
             identifier: 'toolbox_shed',
@@ -294,7 +295,7 @@ describe('InventoryMoveItemDialog', () => {
             fragment: '',
             highlights: [],
             frontmatter: {},
-          } as unknown as import('../gen/api/v1/search_pb.js').SearchResult,
+          } as unknown as SearchResult,
         ];
         await el.updateComplete;
       });
@@ -338,7 +339,7 @@ describe('InventoryMoveItemDialog', () => {
             fragment: '',
             highlights: [],
             frontmatter: {},
-          } as unknown as import('../gen/api/v1/search_pb.js').SearchResult,
+          } as unknown as SearchResult,
         ];
         el.movingTo = 'toolbox_garage';
         await el.updateComplete;

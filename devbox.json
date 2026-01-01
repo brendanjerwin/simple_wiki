@@ -31,6 +31,9 @@
       "fe:lint": [
         "./scripts/run_fe_lint.sh"
       ],
+      "fe:lint:fix": [
+        "./scripts/run_fe_lint_fix.sh"
+      ],
       "fe:typecheck": [
         "./scripts/run_fe_typecheck.sh"
       ],

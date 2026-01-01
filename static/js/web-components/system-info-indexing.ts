@@ -1,5 +1,5 @@
 import { html, css, LitElement } from 'lit';
-import { GetJobStatusResponse } from '../gen/api/v1/system_info_pb.js';
+import type { GetJobStatusResponse } from '../gen/api/v1/system_info_pb.js';
 import { foundationCSS } from './shared-styles.js';
 
 export class SystemInfoIndexing extends LitElement {

@@ -1,5 +1,6 @@
 import { expect, fixture, html } from '@open-wc/testing';
-import { spy, SinonSpy } from 'sinon';
+import type { SinonSpy } from 'sinon';
+import { spy } from 'sinon';
 import './editor-toolbar.js';
 import type { EditorToolbar } from './editor-toolbar.js';
 
@@ -39,14 +40,19 @@ describe('EditorToolbar', () => {
       expect(uploadBtn).to.exist;
     });
 
-    it('should display upload file button', () => {
-      const fileBtn = toolbar.shadowRoot?.querySelector('[data-action="upload-file"]');
-      expect(fileBtn).to.exist;
+    it('should display upload dropdown toggle', () => {
+      const toggleBtn = toolbar.shadowRoot?.querySelector('.upload-btn-toggle');
+      expect(toggleBtn).to.exist;
     });
 
     it('should display exit button', () => {
       const exitBtn = toolbar.shadowRoot?.querySelector('[data-action="exit"]');
       expect(exitBtn).to.exist;
+    });
+
+    it('should display new page button', () => {
+      const newPageBtn = toolbar.shadowRoot?.querySelector('[data-action="new-page"]');
+      expect(newPageBtn).to.exist;
     });
   });
 
@@ -110,18 +116,64 @@ describe('EditorToolbar', () => {
     });
   });
 
-  describe('when upload file button is clicked', () => {
+  describe('when upload file is clicked via dropdown', () => {
     let eventSpy: SinonSpy;
 
     beforeEach(async () => {
       eventSpy = spy();
       toolbar.addEventListener('upload-file-requested', eventSpy);
+
+      // First open the dropdown
+      const toggleBtn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('.upload-btn-toggle');
+      toggleBtn?.click();
+      await toolbar.updateComplete;
+
+      // Then click the file upload option
       const fileBtn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="upload-file"]');
       fileBtn?.click();
     });
 
     it('should dispatch upload-file-requested event', () => {
       expect(eventSpy).to.have.been.calledOnce;
+    });
+  });
+
+  describe('upload dropdown behavior', () => {
+    describe('when dropdown toggle is clicked', () => {
+      beforeEach(async () => {
+        const toggleBtn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('.upload-btn-toggle');
+        toggleBtn?.click();
+        await toolbar.updateComplete;
+      });
+
+      it('should show upload file option in dropdown', () => {
+        const fileBtn = toolbar.shadowRoot?.querySelector('[data-action="upload-file"]');
+        expect(fileBtn).to.exist;
+      });
+
+      it('should show dropdown menu', () => {
+        const menu = toolbar.shadowRoot?.querySelector('.upload-dropdown-menu');
+        expect(menu).to.exist;
+      });
+    });
+
+    describe('when dropdown is open and image is clicked', () => {
+      beforeEach(async () => {
+        // Open dropdown first
+        const toggleBtn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('.upload-btn-toggle');
+        toggleBtn?.click();
+        await toolbar.updateComplete;
+
+        // Click image button
+        const imageBtn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="upload-image"]');
+        imageBtn?.click();
+        await toolbar.updateComplete;
+      });
+
+      it('should close the dropdown', () => {
+        const menu = toolbar.shadowRoot?.querySelector('.upload-dropdown-menu');
+        expect(menu).to.not.exist;
+      });
     });
   });
 
@@ -136,6 +188,21 @@ describe('EditorToolbar', () => {
     });
 
     it('should dispatch exit-requested event', () => {
+      expect(eventSpy).to.have.been.calledOnce;
+    });
+  });
+
+  describe('when new page button is clicked', () => {
+    let eventSpy: SinonSpy;
+
+    beforeEach(async () => {
+      eventSpy = spy();
+      toolbar.addEventListener('insert-new-page-requested', eventSpy);
+      const newPageBtn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="new-page"]');
+      newPageBtn?.click();
+    });
+
+    it('should dispatch insert-new-page-requested event', () => {
       expect(eventSpy).to.have.been.calledOnce;
     });
   });

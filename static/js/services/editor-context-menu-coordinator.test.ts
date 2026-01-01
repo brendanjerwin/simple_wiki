@@ -1,7 +1,10 @@
 import { expect, fixture, html } from '@open-wc/testing';
-import { stub, spy, SinonStub, SinonSpy } from 'sinon';
+import type { SinonStub, SinonSpy } from 'sinon';
+import { stub, spy } from 'sinon';
 import '../web-components/editor-context-menu.js';
+import '../web-components/insert-new-page-dialog.js';
 import type { EditorContextMenu } from '../web-components/editor-context-menu.js';
+import type { InsertNewPageDialog } from '../web-components/insert-new-page-dialog.js';
 import { EditorContextMenuCoordinator } from './editor-context-menu-coordinator.js';
 import { EditorUploadService } from './editor-upload-service.js';
 import { TextFormattingService } from './text-formatting-service.js';
@@ -219,6 +222,96 @@ describe('EditorContextMenuCoordinator', () => {
         clientY: 200,
       }));
       expect(contextMenuSpy).to.not.have.been.called;
+    });
+  });
+
+  describe('when Insert New Page menu item is clicked', () => {
+    let insertedDialog: InsertNewPageDialog | null;
+
+    beforeEach(async () => {
+      textarea.value = 'Some existing text';
+      textarea.selectionStart = 5;
+      textarea.selectionEnd = 5;
+
+      // Open context menu first
+      textarea.dispatchEvent(new MouseEvent('contextmenu', {
+        bubbles: true,
+        clientX: 100,
+        clientY: 200,
+      }));
+      await menu.updateComplete;
+
+      // Dispatch the insert-new-page-requested event
+      menu.dispatchEvent(new CustomEvent('insert-new-page-requested', { bubbles: true }));
+
+      // Wait for the dialog to be created
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      // Find the dialog that was inserted
+      insertedDialog = document.body.querySelector('insert-new-page-dialog');
+    });
+
+    afterEach(() => {
+      // Clean up the dialog from the DOM
+      if (insertedDialog) {
+        insertedDialog.remove();
+      }
+    });
+
+    it('should create the dialog element', () => {
+      expect(insertedDialog).to.exist;
+    });
+
+    it('should have openDialog as a function', () => {
+      expect(insertedDialog?.openDialog).to.be.a('function');
+    });
+
+    it('should append dialog to document body', () => {
+      expect(insertedDialog?.parentElement).to.equal(document.body);
+    });
+  });
+
+  describe('when page-created event is dispatched', () => {
+    let insertedDialog: InsertNewPageDialog | null;
+
+    beforeEach(async () => {
+      textarea.value = 'Some existing text';
+      textarea.selectionStart = 5;
+      textarea.selectionEnd = 5;
+
+      // Open context menu and trigger insert new page
+      textarea.dispatchEvent(new MouseEvent('contextmenu', {
+        bubbles: true,
+        clientX: 100,
+        clientY: 200,
+      }));
+      await menu.updateComplete;
+
+      menu.dispatchEvent(new CustomEvent('insert-new-page-requested', { bubbles: true }));
+      await new Promise(resolve => setTimeout(resolve, 0));
+
+      insertedDialog = document.body.querySelector('insert-new-page-dialog');
+
+      // Dispatch page-created event from the dialog
+      insertedDialog?.dispatchEvent(new CustomEvent('page-created', {
+        bubbles: true,
+        composed: true,
+        detail: {
+          identifier: 'my_new_page',
+          title: 'My New Page',
+          markdownLink: '[My New Page](/my_new_page)',
+        },
+      }));
+    });
+
+    afterEach(() => {
+      if (insertedDialog) {
+        insertedDialog.remove();
+      }
+    });
+
+    it('should insert the markdown link at cursor position', () => {
+      expect(textarea.value).to.equal('Some [My New Page](/my_new_page)existing text');
     });
   });
 });

@@ -7,6 +7,7 @@ import './wiki-search-results.js';
 import { SearchService, SearchContentRequestSchema } from '../gen/api/v1/search_pb.js';
 import type { SearchResult } from '../gen/api/v1/search_pb.js';
 import { coerceThirdPartyError } from './augment-error-service.js';
+import type { InventoryFilterChangedEventDetail } from './event-types.js';
 
 const INVENTORY_ONLY_STORAGE_KEY = 'wiki-search-inventory-only';
 
@@ -139,7 +140,8 @@ export class WikiSearch extends LitElement {
     window.removeEventListener('keydown', this._handleKeydown);
   }
 
-  private _handleKeydown(e: KeyboardEvent) {
+  // Exposed for event wiring verification in tests
+  _handleKeydown(e: KeyboardEvent) {
     const searchInput = this.shadowRoot?.querySelector<HTMLInputElement>('input[type="search"]');
     // Check if Ctrl (or Cmd on Macs) and K keys were pressed
     if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
@@ -204,7 +206,7 @@ export class WikiSearch extends LitElement {
     searchInput?.focus();
   }
 
-  async handleInventoryFilterChanged(e: CustomEvent<{ inventoryOnly: boolean }>) {
+  async handleInventoryFilterChanged(e: CustomEvent<InventoryFilterChangedEventDetail>) {
     this.inventoryOnly = e.detail.inventoryOnly;
     localStorage.setItem(INVENTORY_ONLY_STORAGE_KEY, String(this.inventoryOnly));
 
@@ -250,3 +252,9 @@ export class WikiSearch extends LitElement {
   }
 }
 customElements.define('wiki-search', WikiSearch);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'wiki-search': WikiSearch;
+  }
+}

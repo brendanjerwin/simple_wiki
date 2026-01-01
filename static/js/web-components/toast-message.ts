@@ -1,6 +1,6 @@
 import { html, css, LitElement } from 'lit';
 import { colorCSS, typographyCSS, themeCSS, foundationCSS, buttonCSS } from './shared-styles.js';
-import { AugmentedError } from './augment-error-service.js';
+import type { AugmentedError } from './augment-error-service.js';
 import './error-display.js';
 
 // Valid toast types - defined once for consistency

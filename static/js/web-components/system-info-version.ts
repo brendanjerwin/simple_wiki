@@ -1,5 +1,5 @@
 import { html, css, LitElement } from 'lit';
-import { GetVersionResponse } from '../gen/api/v1/system_info_pb.js';
+import type { GetVersionResponse } from '../gen/api/v1/system_info_pb.js';
 import { type Timestamp, timestampDate } from '@bufbuild/protobuf/wkt';
 import { foundationCSS } from './shared-styles.js';
 

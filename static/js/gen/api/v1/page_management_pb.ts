@@ -4,13 +4,14 @@
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
-import type { Message } from "@bufbuild/protobuf";
+import { file_google_protobuf_struct } from "@bufbuild/protobuf/wkt";
+import type { JsonObject, Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file api/v1/page_management.proto.
  */
 export const file_api_v1_page_management: GenFile = /*@__PURE__*/
-  fileDesc("ChxhcGkvdjEvcGFnZV9tYW5hZ2VtZW50LnByb3RvEgZhcGkudjEiWwoRQ3JlYXRlUGFnZVJlcXVlc3QSEQoJcGFnZV9uYW1lGAEgASgJEhgKEGNvbnRlbnRfbWFya2Rvd24YAiABKAkSGQoRZnJvbnRfbWF0dGVyX3RvbWwYAyABKAkiNAoSQ3JlYXRlUGFnZVJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSDQoFZXJyb3IYAiABKAkiJAoPUmVhZFBhZ2VSZXF1ZXN0EhEKCXBhZ2VfbmFtZRgBIAEoCSKJAQoQUmVhZFBhZ2VSZXNwb25zZRIYChBjb250ZW50X21hcmtkb3duGAEgASgJEhkKEWZyb250X21hdHRlcl90b21sGAIgASgJEh0KFXJlbmRlcmVkX2NvbnRlbnRfaHRtbBgDIAEoCRIhChlyZW5kZXJlZF9jb250ZW50X21hcmtkb3duGAQgASgJIiYKEVJlbmRlclBhZ2VSZXF1ZXN0EhEKCXBhZ2VfbmFtZRgBIAEoCSIzChJSZW5kZXJQYWdlUmVzcG9uc2USHQoVcmVuZGVyZWRfY29udGVudF9odG1sGAEgASgJImMKEVVwZGF0ZVBhZ2VSZXF1ZXN0EhEKCXBhZ2VfbmFtZRgBIAEoCRIcChRuZXdfY29udGVudF9tYXJrZG93bhgCIAEoCRIdChVuZXdfZnJvbnRfbWF0dGVyX3RvbWwYAyABKAkiNAoSVXBkYXRlUGFnZVJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSDQoFZXJyb3IYAiABKAkiSwoYVXBkYXRlUGFnZUNvbnRlbnRSZXF1ZXN0EhEKCXBhZ2VfbmFtZRgBIAEoCRIcChRuZXdfY29udGVudF9tYXJrZG93bhgCIAEoCSI7ChlVcGRhdGVQYWdlQ29udGVudFJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSDQoFZXJyb3IYAiABKAkiRwoWVXBkYXRlV2hvbGVQYWdlUmVxdWVzdBIRCglwYWdlX25hbWUYASABKAkSGgoSbmV3X3dob2xlX21hcmtkb3duGAIgASgJIjkKF1VwZGF0ZVdob2xlUGFnZVJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSDQoFZXJyb3IYAiABKAkiJgoRRGVsZXRlUGFnZVJlcXVlc3QSEQoJcGFnZV9uYW1lGAEgASgJIjQKEkRlbGV0ZVBhZ2VSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg0KBWVycm9yGAIgASgJIkAKGUdlbmVyYXRlSWRlbnRpZmllclJlcXVlc3QSDAoEdGV4dBgBIAEoCRIVCg1lbnN1cmVfdW5pcXVlGAIgASgIInQKGkdlbmVyYXRlSWRlbnRpZmllclJlc3BvbnNlEhIKCmlkZW50aWZpZXIYASABKAkSEQoJaXNfdW5pcXVlGAIgASgIEi8KDWV4aXN0aW5nX3BhZ2UYAyABKAsyGC5hcGkudjEuRXhpc3RpbmdQYWdlSW5mbyJIChBFeGlzdGluZ1BhZ2VJbmZvEhIKCmlkZW50aWZpZXIYASABKAkSDQoFdGl0bGUYAiABKAkSEQoJY29udGFpbmVyGAMgASgJMvUEChVQYWdlTWFuYWdlbWVudFNlcnZpY2USQwoKQ3JlYXRlUGFnZRIZLmFwaS52MS5DcmVhdGVQYWdlUmVxdWVzdBoaLmFwaS52MS5DcmVhdGVQYWdlUmVzcG9uc2USPQoIUmVhZFBhZ2USFy5hcGkudjEuUmVhZFBhZ2VSZXF1ZXN0GhguYXBpLnYxLlJlYWRQYWdlUmVzcG9uc2USQwoKUmVuZGVyUGFnZRIZLmFwaS52MS5SZW5kZXJQYWdlUmVxdWVzdBoaLmFwaS52MS5SZW5kZXJQYWdlUmVzcG9uc2USQwoKVXBkYXRlUGFnZRIZLmFwaS52MS5VcGRhdGVQYWdlUmVxdWVzdBoaLmFwaS52MS5VcGRhdGVQYWdlUmVzcG9uc2USWAoRVXBkYXRlUGFnZUNvbnRlbnQSIC5hcGkudjEuVXBkYXRlUGFnZUNvbnRlbnRSZXF1ZXN0GiEuYXBpLnYxLlVwZGF0ZVBhZ2VDb250ZW50UmVzcG9uc2USUgoPVXBkYXRlV2hvbGVQYWdlEh4uYXBpLnYxLlVwZGF0ZVdob2xlUGFnZVJlcXVlc3QaHy5hcGkudjEuVXBkYXRlV2hvbGVQYWdlUmVzcG9uc2USQwoKRGVsZXRlUGFnZRIZLmFwaS52MS5EZWxldGVQYWdlUmVxdWVzdBoaLmFwaS52MS5EZWxldGVQYWdlUmVzcG9uc2USWwoSR2VuZXJhdGVJZGVudGlmaWVyEiEuYXBpLnYxLkdlbmVyYXRlSWRlbnRpZmllclJlcXVlc3QaIi5hcGkudjEuR2VuZXJhdGVJZGVudGlmaWVyUmVzcG9uc2VCOlo4Z2l0aHViLmNvbS9icmVuZGFuamVyd2luL3NpbXBsZV93aWtpL2dlbi9nby9hcGkvdjE7YXBpdjFiBnByb3RvMw");
+  fileDesc("ChxhcGkvdjEvcGFnZV9tYW5hZ2VtZW50LnByb3RvEgZhcGkudjEikgEKEUNyZWF0ZVBhZ2VSZXF1ZXN0EhEKCXBhZ2VfbmFtZRgBIAEoCRIYChBjb250ZW50X21hcmtkb3duGAIgASgJEiwKC2Zyb250bWF0dGVyGAMgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIVCgh0ZW1wbGF0ZRgEIAEoCUgAiAEBQgsKCV90ZW1wbGF0ZSI0ChJDcmVhdGVQYWdlUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBINCgVlcnJvchgCIAEoCSIkCg9SZWFkUGFnZVJlcXVlc3QSEQoJcGFnZV9uYW1lGAEgASgJIokBChBSZWFkUGFnZVJlc3BvbnNlEhgKEGNvbnRlbnRfbWFya2Rvd24YASABKAkSGQoRZnJvbnRfbWF0dGVyX3RvbWwYAiABKAkSHQoVcmVuZGVyZWRfY29udGVudF9odG1sGAMgASgJEiEKGXJlbmRlcmVkX2NvbnRlbnRfbWFya2Rvd24YBCABKAkiJgoRUmVuZGVyUGFnZVJlcXVlc3QSEQoJcGFnZV9uYW1lGAEgASgJIjMKElJlbmRlclBhZ2VSZXNwb25zZRIdChVyZW5kZXJlZF9jb250ZW50X2h0bWwYASABKAkiYwoRVXBkYXRlUGFnZVJlcXVlc3QSEQoJcGFnZV9uYW1lGAEgASgJEhwKFG5ld19jb250ZW50X21hcmtkb3duGAIgASgJEh0KFW5ld19mcm9udF9tYXR0ZXJfdG9tbBgDIAEoCSI0ChJVcGRhdGVQYWdlUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBINCgVlcnJvchgCIAEoCSJLChhVcGRhdGVQYWdlQ29udGVudFJlcXVlc3QSEQoJcGFnZV9uYW1lGAEgASgJEhwKFG5ld19jb250ZW50X21hcmtkb3duGAIgASgJIjsKGVVwZGF0ZVBhZ2VDb250ZW50UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBINCgVlcnJvchgCIAEoCSJHChZVcGRhdGVXaG9sZVBhZ2VSZXF1ZXN0EhEKCXBhZ2VfbmFtZRgBIAEoCRIaChJuZXdfd2hvbGVfbWFya2Rvd24YAiABKAkiOQoXVXBkYXRlV2hvbGVQYWdlUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBINCgVlcnJvchgCIAEoCSImChFEZWxldGVQYWdlUmVxdWVzdBIRCglwYWdlX25hbWUYASABKAkiNAoSRGVsZXRlUGFnZVJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSDQoFZXJyb3IYAiABKAkiQAoZR2VuZXJhdGVJZGVudGlmaWVyUmVxdWVzdBIMCgR0ZXh0GAEgASgJEhUKDWVuc3VyZV91bmlxdWUYAiABKAgidAoaR2VuZXJhdGVJZGVudGlmaWVyUmVzcG9uc2USEgoKaWRlbnRpZmllchgBIAEoCRIRCglpc191bmlxdWUYAiABKAgSLwoNZXhpc3RpbmdfcGFnZRgDIAEoCzIYLmFwaS52MS5FeGlzdGluZ1BhZ2VJbmZvIkgKEEV4aXN0aW5nUGFnZUluZm8SEgoKaWRlbnRpZmllchgBIAEoCRINCgV0aXRsZRgCIAEoCRIRCgljb250YWluZXIYAyABKAkiMwoUTGlzdFRlbXBsYXRlc1JlcXVlc3QSGwoTZXhjbHVkZV9pZGVudGlmaWVycxgBIAMoCSJAChVMaXN0VGVtcGxhdGVzUmVzcG9uc2USJwoJdGVtcGxhdGVzGAEgAygLMhQuYXBpLnYxLlRlbXBsYXRlSW5mbyJGCgxUZW1wbGF0ZUluZm8SEgoKaWRlbnRpZmllchgBIAEoCRINCgV0aXRsZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCTLDBQoVUGFnZU1hbmFnZW1lbnRTZXJ2aWNlEkMKCkNyZWF0ZVBhZ2USGS5hcGkudjEuQ3JlYXRlUGFnZVJlcXVlc3QaGi5hcGkudjEuQ3JlYXRlUGFnZVJlc3BvbnNlEj0KCFJlYWRQYWdlEhcuYXBpLnYxLlJlYWRQYWdlUmVxdWVzdBoYLmFwaS52MS5SZWFkUGFnZVJlc3BvbnNlEkMKClJlbmRlclBhZ2USGS5hcGkudjEuUmVuZGVyUGFnZVJlcXVlc3QaGi5hcGkudjEuUmVuZGVyUGFnZVJlc3BvbnNlEkMKClVwZGF0ZVBhZ2USGS5hcGkudjEuVXBkYXRlUGFnZVJlcXVlc3QaGi5hcGkudjEuVXBkYXRlUGFnZVJlc3BvbnNlElgKEVVwZGF0ZVBhZ2VDb250ZW50EiAuYXBpLnYxLlVwZGF0ZVBhZ2VDb250ZW50UmVxdWVzdBohLmFwaS52MS5VcGRhdGVQYWdlQ29udGVudFJlc3BvbnNlElIKD1VwZGF0ZVdob2xlUGFnZRIeLmFwaS52MS5VcGRhdGVXaG9sZVBhZ2VSZXF1ZXN0Gh8uYXBpLnYxLlVwZGF0ZVdob2xlUGFnZVJlc3BvbnNlEkMKCkRlbGV0ZVBhZ2USGS5hcGkudjEuRGVsZXRlUGFnZVJlcXVlc3QaGi5hcGkudjEuRGVsZXRlUGFnZVJlc3BvbnNlElsKEkdlbmVyYXRlSWRlbnRpZmllchIhLmFwaS52MS5HZW5lcmF0ZUlkZW50aWZpZXJSZXF1ZXN0GiIuYXBpLnYxLkdlbmVyYXRlSWRlbnRpZmllclJlc3BvbnNlEkwKDUxpc3RUZW1wbGF0ZXMSHC5hcGkudjEuTGlzdFRlbXBsYXRlc1JlcXVlc3QaHS5hcGkudjEuTGlzdFRlbXBsYXRlc1Jlc3BvbnNlQjpaOGdpdGh1Yi5jb20vYnJlbmRhbmplcndpbi9zaW1wbGVfd2lraS9nZW4vZ28vYXBpL3YxO2FwaXYxYgZwcm90bzM", [file_google_protobuf_struct]);
 
 /**
  * Create Page
@@ -29,9 +30,19 @@ export type CreatePageRequest = Message<"api.v1.CreatePageRequest"> & {
   contentMarkdown: string;
 
   /**
-   * @generated from field: string front_matter_toml = 3;
+   * Structured frontmatter data. TOML serialization happens at file persistence time.
+   *
+   * @generated from field: google.protobuf.Struct frontmatter = 3;
    */
-  frontMatterToml: string;
+  frontmatter?: JsonObject;
+
+  /**
+   * Optional template identifier. If provided, the template's frontmatter is used as a base,
+   * with frontmatter merged on top (overriding template values).
+   *
+   * @generated from field: optional string template = 4;
+   */
+  template?: string;
 };
 
 /**
@@ -438,6 +449,80 @@ export const ExistingPageInfoSchema: GenMessage<ExistingPageInfo> = /*@__PURE__*
   messageDesc(file_api_v1_page_management, 16);
 
 /**
+ * List Templates
+ *
+ * @generated from message api.v1.ListTemplatesRequest
+ */
+export type ListTemplatesRequest = Message<"api.v1.ListTemplatesRequest"> & {
+  /**
+   * Template identifiers to exclude from the results (e.g., ["inv_item"]).
+   * This allows context-driven filtering of system-integrated templates.
+   *
+   * @generated from field: repeated string exclude_identifiers = 1;
+   */
+  excludeIdentifiers: string[];
+};
+
+/**
+ * Describes the message api.v1.ListTemplatesRequest.
+ * Use `create(ListTemplatesRequestSchema)` to create a new message.
+ */
+export const ListTemplatesRequestSchema: GenMessage<ListTemplatesRequest> = /*@__PURE__*/
+  messageDesc(file_api_v1_page_management, 17);
+
+/**
+ * @generated from message api.v1.ListTemplatesResponse
+ */
+export type ListTemplatesResponse = Message<"api.v1.ListTemplatesResponse"> & {
+  /**
+   * @generated from field: repeated api.v1.TemplateInfo templates = 1;
+   */
+  templates: TemplateInfo[];
+};
+
+/**
+ * Describes the message api.v1.ListTemplatesResponse.
+ * Use `create(ListTemplatesResponseSchema)` to create a new message.
+ */
+export const ListTemplatesResponseSchema: GenMessage<ListTemplatesResponse> = /*@__PURE__*/
+  messageDesc(file_api_v1_page_management, 18);
+
+/**
+ * Info about a template page.
+ *
+ * @generated from message api.v1.TemplateInfo
+ */
+export type TemplateInfo = Message<"api.v1.TemplateInfo"> & {
+  /**
+   * The template page identifier.
+   *
+   * @generated from field: string identifier = 1;
+   */
+  identifier: string;
+
+  /**
+   * The page title from frontmatter.
+   *
+   * @generated from field: string title = 2;
+   */
+  title: string;
+
+  /**
+   * Optional description from frontmatter.
+   *
+   * @generated from field: string description = 3;
+   */
+  description: string;
+};
+
+/**
+ * Describes the message api.v1.TemplateInfo.
+ * Use `create(TemplateInfoSchema)` to create a new message.
+ */
+export const TemplateInfoSchema: GenMessage<TemplateInfo> = /*@__PURE__*/
+  messageDesc(file_api_v1_page_management, 19);
+
+/**
  * @generated from service api.v1.PageManagementService
  */
 export const PageManagementService: GenService<{
@@ -507,6 +592,16 @@ export const PageManagementService: GenService<{
     methodKind: "unary";
     input: typeof GenerateIdentifierRequestSchema;
     output: typeof GenerateIdentifierResponseSchema;
+  },
+  /**
+   * ListTemplates returns all pages marked as templates (with template: true frontmatter).
+   *
+   * @generated from rpc api.v1.PageManagementService.ListTemplates
+   */
+  listTemplates: {
+    methodKind: "unary";
+    input: typeof ListTemplatesRequestSchema;
+    output: typeof ListTemplatesResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_api_v1_page_management, 0);

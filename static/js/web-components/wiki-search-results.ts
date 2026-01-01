@@ -403,3 +403,9 @@ class WikiSearchResults extends LitElement {
 }
 
 customElements.define('wiki-search-results', WikiSearchResults);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'wiki-search-results': WikiSearchResults;
+  }
+}

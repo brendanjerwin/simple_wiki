@@ -2,6 +2,7 @@ import { expect, waitUntil } from '@open-wc/testing';
 import sinon from 'sinon';
 import './wiki-search.js';
 import type { SearchResult } from '../gen/api/v1/search_pb.js';
+import type { InventoryFilterChangedEventDetail } from './event-types.js';
 
 const INVENTORY_ONLY_STORAGE_KEY = 'wiki-search-inventory-only';
 
@@ -14,7 +15,7 @@ interface WikiSearchElement extends HTMLElement {
   totalUnfilteredCount: number;
   _handleKeydown: (event: KeyboardEvent) => void;
   handleFormSubmit: (event: Event) => Promise<void>;
-  handleInventoryFilterChanged: (event: CustomEvent<{ inventoryOnly: boolean }>) => Promise<void>;
+  handleInventoryFilterChanged: (event: CustomEvent<InventoryFilterChangedEventDetail>) => Promise<void>;
   handleSearchInputFocused: (event: Event) => void;
   handleSearchResultsClosed: () => void;
   performSearch: (query: string) => Promise<{ results: SearchResult[], totalUnfilteredCount: number }>;

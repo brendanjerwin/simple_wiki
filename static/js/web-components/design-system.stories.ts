@@ -131,6 +131,12 @@ class DesignSystemDemo extends LitElement {
 
 customElements.define('design-system-demo', DesignSystemDemo);
 
+declare global {
+  interface HTMLElementTagNameMap {
+    'design-system-demo': DesignSystemDemo;
+  }
+}
+
 const meta: Meta = {
   title: 'Design System/Style Guide',
   component: 'design-system-demo',

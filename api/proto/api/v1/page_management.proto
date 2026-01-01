@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package api.v1;
 
+import "google/protobuf/struct.proto";
+
 option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
 
 service PageManagementService {
@@ -16,13 +18,20 @@ service PageManagementService {
   // GenerateIdentifier converts text to a wiki page identifier format.
   // Used by UI to auto-generate identifiers from titles and check availability.
   rpc GenerateIdentifier(GenerateIdentifierRequest) returns (GenerateIdentifierResponse);
+
+  // ListTemplates returns all pages marked as templates (with template: true frontmatter).
+  rpc ListTemplates(ListTemplatesRequest) returns (ListTemplatesResponse);
 }
 
 // Create Page
 message CreatePageRequest {
   string page_name = 1;
   string content_markdown = 2;
-  string front_matter_toml = 3;
+  // Structured frontmatter data. TOML serialization happens at file persistence time.
+  google.protobuf.Struct frontmatter = 3;
+  // Optional template identifier. If provided, the template's frontmatter is used as a base,
+  // with frontmatter merged on top (overriding template values).
+  optional string template = 4;
 }
 
 message CreatePageResponse {
@@ -129,4 +138,27 @@ message ExistingPageInfo {
 
   // The inventory.container value if this is an inventory item.
   string container = 3;
+}
+
+// List Templates
+message ListTemplatesRequest {
+  // Template identifiers to exclude from the results (e.g., ["inv_item"]).
+  // This allows context-driven filtering of system-integrated templates.
+  repeated string exclude_identifiers = 1;
+}
+
+message ListTemplatesResponse {
+  repeated TemplateInfo templates = 1;
+}
+
+// Info about a template page.
+message TemplateInfo {
+  // The template page identifier.
+  string identifier = 1;
+
+  // The page title from frontmatter.
+  string title = 2;
+
+  // Optional description from frontmatter.
+  string description = 3;
 }

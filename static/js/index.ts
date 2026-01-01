@@ -11,6 +11,7 @@ import './web-components/editor-context-menu.js';
 import './web-components/editor-toolbar.js';
 import './web-components/wiki-image.js';
 import './web-components/page-import-dialog.js';
+import './web-components/insert-new-page-dialog.js';
 import { showStoredToast } from './web-components/toast-message.js';
 import { setupGlobalErrorHandler } from './web-components/global-error-handler.js';
 import { pageDeleteService, type PageDeleter } from './web-components/page-deletion-service.js';

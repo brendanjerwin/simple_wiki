@@ -162,6 +162,10 @@ export class EditorContextMenu extends LitElement {
     this._dispatchMenuEvent('insert-link-requested');
   };
 
+  private _handleInsertNewPage = (): void => {
+    this._dispatchMenuEvent('insert-new-page-requested');
+  };
+
   override render() {
     if (!this.open) {
       return html``;
@@ -197,6 +201,12 @@ export class EditorContextMenu extends LitElement {
           <button class="menu-item" @click="${this._handleInsertLink}">
             <span class="menu-item-icon">&#128279;</span>
             Insert Link
+          </button>
+        </div>
+        <div class="menu-section">
+          <button class="menu-item" @click="${this._handleInsertNewPage}">
+            <span class="menu-item-icon">&#10010;</span>
+            Create & Link New Page
           </button>
         </div>
       </div>

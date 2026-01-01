@@ -1,4 +1,4 @@
-import { html, css, LitElement } from 'lit';
+import { html, css, LitElement, nothing } from 'lit';
 import { buttonCSS, foundationCSS } from './shared-styles.js';
 
 /**
@@ -6,6 +6,16 @@ import { buttonCSS, foundationCSS } from './shared-styles.js';
  * It displays formatting and upload buttons that are always visible.
  */
 export class EditorToolbar extends LitElement {
+  static override properties = {
+    _uploadMenuOpen: { state: true },
+  };
+
+  declare _uploadMenuOpen: boolean;
+
+  constructor() {
+    super();
+    this._uploadMenuOpen = false;
+  }
 
   static override styles = [
     foundationCSS,
@@ -33,7 +43,7 @@ export class EditorToolbar extends LitElement {
 
       .toolbar {
         display: flex;
-        flex-wrap: wrap;
+        flex-wrap: nowrap;
         gap: 4px;
         justify-content: center;
         align-items: center;
@@ -82,8 +92,127 @@ export class EditorToolbar extends LitElement {
       .btn-icon {
         font-size: 16px;
       }
+
+      /* Upload dropdown button */
+      .upload-dropdown {
+        position: relative;
+      }
+
+      .upload-btn-group {
+        display: flex;
+        align-items: stretch;
+        border: 1px solid var(--color-border, #555);
+        border-radius: 4px;
+        overflow: hidden;
+      }
+
+      .upload-btn-main {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 40px;
+        height: 36px;
+        padding: 0 10px;
+        border: none;
+        background: var(--color-background-secondary, #3d3d3d);
+        color: var(--color-text-primary, #e9ecef);
+        font-size: 14px;
+        cursor: pointer;
+        transition: background-color 0.15s ease;
+      }
+
+      .upload-btn-main:hover,
+      .upload-btn-main:active {
+        background: var(--color-background-hover, #4d4d4d);
+      }
+
+      .upload-btn-toggle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 24px;
+        height: 36px;
+        padding: 0;
+        border: none;
+        border-left: 1px solid var(--color-border, #555);
+        background: var(--color-background-secondary, #3d3d3d);
+        color: var(--color-text-primary, #e9ecef);
+        font-size: 10px;
+        cursor: pointer;
+        transition: background-color 0.15s ease;
+      }
+
+      .upload-btn-toggle:hover,
+      .upload-btn-toggle:active {
+        background: var(--color-background-hover, #4d4d4d);
+      }
+
+      .dropdown-arrow {
+        transition: transform 0.2s ease;
+      }
+
+      .dropdown-arrow.open {
+        transform: rotate(180deg);
+      }
+
+      .upload-dropdown-menu {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        margin-top: 4px;
+        background: var(--color-background-secondary, #3d3d3d);
+        border: 1px solid var(--color-border, #555);
+        border-radius: 4px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        z-index: 1000;
+        min-width: 140px;
+      }
+
+      .upload-dropdown-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        cursor: pointer;
+        border: none;
+        background: none;
+        width: 100%;
+        text-align: left;
+        font-size: 14px;
+        color: var(--color-text-primary, #e9ecef);
+        transition: background-color 0.2s ease;
+      }
+
+      .upload-dropdown-item:hover {
+        background: var(--color-background-hover, #4d4d4d);
+      }
+
+      .upload-dropdown-item:first-child {
+        border-radius: 4px 4px 0 0;
+      }
+
+      .upload-dropdown-item:last-child {
+        border-radius: 0 0 4px 4px;
+      }
     `
   ];
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    document.addEventListener('click', this._handleDocumentClick);
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    document.removeEventListener('click', this._handleDocumentClick);
+  }
+
+  private _handleDocumentClick = (event: Event): void => {
+    // Close dropdown if clicking outside
+    if (this._uploadMenuOpen && event.target instanceof Node && !this.contains(event.target)) {
+      this._uploadMenuOpen = false;
+    }
+  };
 
   private _dispatchEvent(eventName: string): void {
     this.dispatchEvent(new CustomEvent(eventName, {
@@ -105,11 +234,21 @@ export class EditorToolbar extends LitElement {
   };
 
   private _handleUploadImage = (): void => {
+    this._uploadMenuOpen = false;
     this._dispatchEvent('upload-image-requested');
   };
 
   private _handleUploadFile = (): void => {
+    this._uploadMenuOpen = false;
     this._dispatchEvent('upload-file-requested');
+  };
+
+  private _handleToggleUploadMenu = (): void => {
+    this._uploadMenuOpen = !this._uploadMenuOpen;
+  };
+
+  private _handleNewPage = (): void => {
+    this._dispatchEvent('insert-new-page-requested');
   };
 
   private _handleExit = (): void => {
@@ -131,11 +270,40 @@ export class EditorToolbar extends LitElement {
 
         <div class="separator"></div>
 
-        <button class="toolbar-btn" data-action="upload-image" @click="${this._handleUploadImage}" title="Upload Image">
-          <span class="btn-icon">&#128247;</span>
-        </button>
-        <button class="toolbar-btn" data-action="upload-file" @click="${this._handleUploadFile}" title="Upload File">
-          <span class="btn-icon">&#128196;</span>
+        <!-- Upload dropdown: main button for image, dropdown for file -->
+        <div class="upload-dropdown">
+          <div class="upload-btn-group">
+            <button
+              class="upload-btn-main"
+              data-action="upload-image"
+              @click="${this._handleUploadImage}"
+              title="Upload Image"
+            >
+              <span class="btn-icon">&#128247;</span>
+            </button>
+            <button
+              class="upload-btn-toggle"
+              @click="${this._handleToggleUploadMenu}"
+              title="More upload options"
+            >
+              <span class="dropdown-arrow ${this._uploadMenuOpen ? 'open' : ''}">&#9660;</span>
+            </button>
+          </div>
+          ${this._uploadMenuOpen ? html`
+            <div class="upload-dropdown-menu">
+              <button
+                class="upload-dropdown-item"
+                data-action="upload-file"
+                @click="${this._handleUploadFile}"
+              >
+                <span>&#128196;</span> Upload File
+              </button>
+            </div>
+          ` : nothing}
+        </div>
+
+        <button class="toolbar-btn" data-action="new-page" @click="${this._handleNewPage}" title="Create &amp; Link New Page">
+          <span class="btn-icon">&#10010;</span>
         </button>
 
         <div class="spacer"></div>

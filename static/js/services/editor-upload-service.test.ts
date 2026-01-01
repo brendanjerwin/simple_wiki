@@ -1,6 +1,8 @@
 import { expect, fixture, html } from '@open-wc/testing';
-import { stub, SinonStub, spy, SinonSpy } from 'sinon';
-import { EditorUploadService, UploadResult } from './editor-upload-service.js';
+import type { SinonStub, SinonSpy } from 'sinon';
+import { stub, spy } from 'sinon';
+import type { UploadResult } from './editor-upload-service.js';
+import { EditorUploadService } from './editor-upload-service.js';
 
 describe('EditorUploadService', () => {
   let service: EditorUploadService;

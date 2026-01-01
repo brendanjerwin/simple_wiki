@@ -5,10 +5,10 @@ import { createClient } from '@connectrpc/connect';
 import { create } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import { SearchService, SearchContentRequestSchema, type SearchResult } from '../gen/api/v1/search_pb.js';
-import type { ExistingPageInfo } from '../gen/api/v1/page_management_pb.js';
-import { AugmentedError, AugmentErrorService, coerceThirdPartyError } from './augment-error-service.js';
-import type { ErrorAction } from './error-display.js';
-import './error-display.js';
+import { coerceThirdPartyError } from './augment-error-service.js';
+import type { TitleChangeEventDetail, IdentifierChangeEventDetail } from './event-types.js';
+import './automagic-identifier-input.js';
+import type { AutomagicIdentifierInput, GenerateIdentifierResult } from './automagic-identifier-input.js';
 
 /**
  * InventoryAddItemDialog - Modal dialog for adding new inventory items
@@ -81,44 +81,6 @@ export class InventoryAddItemDialog extends LitElement {
       flex: 1;
     }
 
-    .identifier-field {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-    }
-
-    .identifier-field input {
-      flex: 1;
-    }
-
-    .automagic-button {
-      padding: 10px 12px;
-      border: 1px solid #ddd;
-      border-radius: 4px;
-      background: #f5f5f5;
-      cursor: pointer;
-      font-size: 14px;
-      color: #666;
-      transition: all 0.2s;
-    }
-
-    .automagic-button:hover {
-      background: #e8e8e8;
-      border-color: #ccc;
-    }
-
-    .automagic-button.automagic {
-      background: #e0f2fe;
-      border-color: #7dd3fc;
-      color: #0369a1;
-    }
-
-    .automagic-button.manual {
-      background: #fff3cd;
-      border-color: #ffc107;
-      color: #856404;
-    }
-
     .error-message {
       background: #fef2f2;
       border: 1px solid #fecaca;
@@ -127,21 +89,6 @@ export class InventoryAddItemDialog extends LitElement {
       border-radius: 4px;
       margin-bottom: 16px;
       font-size: 14px;
-    }
-
-    .conflict-warning {
-      background: #fffbeb;
-      border: 1px solid #fcd34d;
-      color: #92400e;
-      padding: 12px;
-      border-radius: 4px;
-      margin-top: 8px;
-      font-size: 13px;
-    }
-
-    .conflict-warning a {
-      color: #92400e;
-      font-weight: 500;
     }
 
     .search-results {
@@ -213,14 +160,11 @@ export class InventoryAddItemDialog extends LitElement {
     itemTitle: { type: String },
     itemIdentifier: { type: String },
     description: { type: String },
-    automagicMode: { type: Boolean },
+    isUnique: { state: true },
     loading: { state: true },
     error: { state: true },
-    isUnique: { state: true },
-    existingPage: { state: true },
     searchResults: { state: true },
     searchLoading: { state: true },
-    automagicError: { state: true },
   };
 
   declare open: boolean;
@@ -228,18 +172,14 @@ export class InventoryAddItemDialog extends LitElement {
   declare itemTitle: string;
   declare itemIdentifier: string;
   declare description: string;
-  declare automagicMode: boolean;
+  declare isUnique: boolean;
   declare loading: boolean;
   declare error: Error | null;
-  declare isUnique: boolean;
-  declare existingPage?: ExistingPageInfo;
   declare searchResults: SearchResult[];
   declare searchLoading: boolean;
-  declare automagicError: AugmentedError | null;
 
+  private _searchDebounceTimer?: ReturnType<typeof setTimeout>;
   private _debounceTimeoutMs = 300;
-  private _titleDebounceTimer?: ReturnType<typeof setTimeout>;
-  private _identifierDebounceTimer?: ReturnType<typeof setTimeout>;
   private searchClient = createClient(SearchService, getGrpcWebTransport());
   private inventoryItemCreatorMover = new InventoryItemCreatorMover();
 
@@ -250,14 +190,11 @@ export class InventoryAddItemDialog extends LitElement {
     this.itemTitle = '';
     this.itemIdentifier = '';
     this.description = '';
-    this.automagicMode = true;
+    this.isUnique = true;
     this.loading = false;
     this.error = null;
-    this.isUnique = true;
-    delete this.existingPage;
     this.searchResults = [];
     this.searchLoading = false;
-    this.automagicError = null;
   }
 
   override connectedCallback(): void {
@@ -268,17 +205,13 @@ export class InventoryAddItemDialog extends LitElement {
   override disconnectedCallback(): void {
     super.disconnectedCallback();
     document.removeEventListener('keydown', this._handleKeydown);
-    this._clearDebounceTimers();
+    this._clearSearchDebounceTimer();
   }
 
-  private _clearDebounceTimers(): void {
-    if (this._titleDebounceTimer) {
-      clearTimeout(this._titleDebounceTimer);
-      delete this._titleDebounceTimer;
-    }
-    if (this._identifierDebounceTimer) {
-      clearTimeout(this._identifierDebounceTimer);
-      delete this._identifierDebounceTimer;
+  private _clearSearchDebounceTimer(): void {
+    if (this._searchDebounceTimer) {
+      clearTimeout(this._searchDebounceTimer);
+      delete this._searchDebounceTimer;
     }
   }
 
@@ -293,32 +226,30 @@ export class InventoryAddItemDialog extends LitElement {
     this.itemTitle = '';
     this.itemIdentifier = '';
     this.description = '';
-    this.automagicMode = true;
+    this.isUnique = true;
     this.error = null;
     this.loading = false;
-    this.isUnique = true;
-    delete this.existingPage;
     this.searchResults = [];
     this.searchLoading = false;
     this.open = true;
 
-    // Focus title field after render
+    // Reset and focus the automagic identifier input after render
     this.updateComplete.then(() => {
-      const titleField = this.shadowRoot?.querySelector<HTMLInputElement>('input[name="title"]');
-      titleField?.focus();
+      const identifierInput = this.shadowRoot?.querySelector<AutomagicIdentifierInput>('automagic-identifier-input');
+      identifierInput?.reset();
+      identifierInput?.focusTitleInput();
     });
   }
 
   public close(): void {
     this.open = false;
-    this._clearDebounceTimers();
+    this._clearSearchDebounceTimer();
     this.itemTitle = '';
     this.itemIdentifier = '';
     this.description = '';
+    this.isUnique = true;
     this.error = null;
     this.loading = false;
-    this.isUnique = true;
-    delete this.existingPage;
     this.searchResults = [];
     this.searchLoading = false;
   }
@@ -331,100 +262,48 @@ export class InventoryAddItemDialog extends LitElement {
     event.stopPropagation();
   };
 
-  private _handleTitleInput = (event: Event): void => {
-    if (!(event.target instanceof HTMLInputElement)) {
-      return;
+  /**
+   * Adapter function to call InventoryItemCreatorMover.generateIdentifier
+   * in the format expected by AutomagicIdentifierInput.
+   */
+  private _generateIdentifier = async (text: string): Promise<GenerateIdentifierResult> => {
+    const result = await this.inventoryItemCreatorMover.generateIdentifier(text);
+    const generateResult: GenerateIdentifierResult = {
+      identifier: result.identifier,
+      isUnique: result.isUnique,
+    };
+    if (result.existingPage) {
+      generateResult.existingPage = result.existingPage;
     }
-    const input = event.target;
-    this.itemTitle = input.value;
-
-    // Clear existing timer
-    if (this._titleDebounceTimer) {
-      clearTimeout(this._titleDebounceTimer);
+    if (result.error) {
+      generateResult.error = result.error;
     }
-
-    // Debounce the API calls
-    this._titleDebounceTimer = setTimeout(() => {
-      this._onTitleChanged();
-    }, this._debounceTimeoutMs);
+    return generateResult;
   };
 
-  private async _onTitleChanged(): Promise<void> {
-    const title = this.itemTitle.trim();
+  private _handleTitleChange = (event: CustomEvent<TitleChangeEventDetail>): void => {
+    this.itemTitle = event.detail.title;
 
+    // Debounce search
+    if (this._searchDebounceTimer) {
+      clearTimeout(this._searchDebounceTimer);
+    }
+
+    const title = this.itemTitle.trim();
     if (!title) {
-      this.itemIdentifier = '';
-      this.isUnique = true;
-      delete this.existingPage;
       this.searchResults = [];
       return;
     }
 
-    // Generate identifier if in automagic mode
-    if (this.automagicMode) {
-      const result = await this.inventoryItemCreatorMover.generateIdentifier(title);
-      if (result.error) {
-        this.automagicError = AugmentErrorService.augmentError(
-          result.error,
-          'generating identifier'
-        );
-      } else {
-        this.automagicError = null;
-        this.itemIdentifier = result.identifier;
-        this.isUnique = result.isUnique;
-        if (result.existingPage) {
-          this.existingPage = result.existingPage;
-        } else {
-          delete this.existingPage;
-        }
-      }
-    }
-
-    // Search for similar items
-    await this._performSearch(title);
-  }
-
-  private _handleIdentifierInput = (event: Event): void => {
-    // Only allow editing in manual mode (not automagic)
-    if (this.automagicMode) return;
-
-    if (!(event.target instanceof HTMLInputElement)) {
-      return;
-    }
-    const input = event.target;
-    this.itemIdentifier = input.value;
-
-    // Clear existing timer
-    if (this._identifierDebounceTimer) {
-      clearTimeout(this._identifierDebounceTimer);
-    }
-
-    // Debounce the API call to check availability
-    this._identifierDebounceTimer = setTimeout(() => {
-      this._checkIdentifierAvailability();
+    this._searchDebounceTimer = setTimeout(() => {
+      this._performSearch(title);
     }, this._debounceTimeoutMs);
   };
 
-  private async _checkIdentifierAvailability(): Promise<void> {
-    const identifier = this.itemIdentifier.trim();
-
-    if (!identifier) {
-      this.isUnique = true;
-      delete this.existingPage;
-      return;
-    }
-
-    // We call generateIdentifier with ensure_unique=false just to check availability
-    const result = await this.inventoryItemCreatorMover.generateIdentifier(identifier);
-    if (!result.error) {
-      this.isUnique = result.isUnique;
-      if (result.existingPage) {
-        this.existingPage = result.existingPage;
-      } else {
-        delete this.existingPage;
-      }
-    }
-  }
+  private _handleIdentifierChange = (event: CustomEvent<IdentifierChangeEventDetail>): void => {
+    this.itemIdentifier = event.detail.identifier;
+    this.isUnique = event.detail.isUnique;
+  };
 
   private _handleDescriptionInput = (event: Event): void => {
     if (!(event.target instanceof HTMLTextAreaElement)) {
@@ -432,15 +311,6 @@ export class InventoryAddItemDialog extends LitElement {
     }
     const input = event.target;
     this.description = input.value;
-  };
-
-  private _handleAutomagicToggle = (): void => {
-    this.automagicMode = !this.automagicMode;
-
-    // If switching back to automagic, regenerate identifier from title
-    if (this.automagicMode && this.itemTitle.trim()) {
-      this._onTitleChanged();
-    }
   };
 
   private async _performSearch(query: string): Promise<void> {
@@ -511,46 +381,6 @@ export class InventoryAddItemDialog extends LitElement {
     }
   };
 
-  private _handleSwitchToManual = (): void => {
-    this.automagicMode = false;
-    this.automagicError = null;
-    this.itemIdentifier = '';
-  };
-
-  private _renderAutomagicError() {
-    if (!this.automagicError || !this.automagicMode) {
-      return nothing;
-    }
-
-    const action: ErrorAction = {
-      label: 'Switch to Manual',
-      onClick: this._handleSwitchToManual
-    };
-
-    return html`
-      <error-display
-        .augmentedError=${this.automagicError}
-        .action=${action}
-      ></error-display>
-    `;
-  }
-
-  private _renderConflictWarning() {
-    if (this.isUnique || !this.existingPage) {
-      return nothing;
-    }
-
-    return html`
-      <div class="conflict-warning">
-        <strong>Identifier already exists:</strong>
-        <a href="/${this.existingPage.identifier}">${this.existingPage.title || this.existingPage.identifier}</a>
-        ${this.existingPage.container
-          ? html` (Found In: <a href="/${this.existingPage.container}">${this.existingPage.container}</a>)`
-          : ''}
-      </div>
-    `;
-  }
-
   private _renderSearchResults() {
     if (this.searchResults.length === 0 && !this.searchLoading) {
       return nothing;
@@ -591,47 +421,16 @@ export class InventoryAddItemDialog extends LitElement {
             ? html`<div class="error-message">${this.error.message}</div>`
             : ''}
 
-          <div class="form-group">
-            <label for="title">Title *</label>
-            <input
-              type="text"
-              id="title"
-              name="title"
-              .value=${this.itemTitle}
-              @input=${this._handleTitleInput}
-              placeholder="e.g., Phillips Head Screwdriver"
-              ?disabled=${this.loading}
-            />
-            <div class="help-text">Human-readable name for the item (required)</div>
-          </div>
-
-          <div class="form-group">
-            <label for="itemIdentifier">Identifier *</label>
-            <div class="identifier-field">
-              <input
-                type="text"
-                id="itemIdentifier"
-                name="itemIdentifier"
-                .value=${this.itemIdentifier}
-                @input=${this._handleIdentifierInput}
-                placeholder=${this.automagicMode ? 'Auto-generated from title' : 'Enter identifier manually'}
-                ?disabled=${this.loading}
-                ?readonly=${this.automagicMode}
-                tabindex=${this.automagicMode ? '-1' : '0'}
-              />
-              <button
-                type="button"
-                class="automagic-button ${this.automagicMode ? 'automagic' : 'manual'}"
-                @click=${this._handleAutomagicToggle}
-                title=${this.automagicMode ? 'Click to edit identifier manually' : 'Click to auto-generate from title'}
-                ?disabled=${this.loading}
-              >
-                <i class="fa-solid ${this.automagicMode ? 'fa-wand-magic-sparkles' : 'fa-pen'}"></i>
-              </button>
-            </div>
-            ${this._renderAutomagicError()}
-            ${this._renderConflictWarning()}
-          </div>
+          <automagic-identifier-input
+            .title=${this.itemTitle}
+            .identifier=${this.itemIdentifier}
+            .generateIdentifier=${this._generateIdentifier}
+            .disabled=${this.loading}
+            titlePlaceholder="e.g., Phillips Head Screwdriver"
+            titleHelpText="Human-readable name for the item (required)"
+            @title-change=${this._handleTitleChange}
+            @identifier-change=${this._handleIdentifierChange}
+          ></automagic-identifier-input>
 
           <div class="form-group">
             <label for="description">Description (optional)</label>
@@ -670,3 +469,9 @@ export class InventoryAddItemDialog extends LitElement {
 }
 
 customElements.define('inventory-add-item-dialog', InventoryAddItemDialog);
+
+declare global {
+  interface HTMLElementTagNameMap {
+    'inventory-add-item-dialog': InventoryAddItemDialog;
+  }
+}

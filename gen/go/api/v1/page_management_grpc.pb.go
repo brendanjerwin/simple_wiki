@@ -27,6 +27,7 @@ const (
 	PageManagementService_UpdateWholePage_FullMethodName    = "/api.v1.PageManagementService/UpdateWholePage"
 	PageManagementService_DeletePage_FullMethodName         = "/api.v1.PageManagementService/DeletePage"
 	PageManagementService_GenerateIdentifier_FullMethodName = "/api.v1.PageManagementService/GenerateIdentifier"
+	PageManagementService_ListTemplates_FullMethodName      = "/api.v1.PageManagementService/ListTemplates"
 )
 
 // PageManagementServiceClient is the client API for PageManagementService service.
@@ -43,6 +44,8 @@ type PageManagementServiceClient interface {
 	// GenerateIdentifier converts text to a wiki page identifier format.
 	// Used by UI to auto-generate identifiers from titles and check availability.
 	GenerateIdentifier(ctx context.Context, in *GenerateIdentifierRequest, opts ...grpc.CallOption) (*GenerateIdentifierResponse, error)
+	// ListTemplates returns all pages marked as templates (with template: true frontmatter).
+	ListTemplates(ctx context.Context, in *ListTemplatesRequest, opts ...grpc.CallOption) (*ListTemplatesResponse, error)
 }
 
 type pageManagementServiceClient struct {
@@ -133,6 +136,16 @@ func (c *pageManagementServiceClient) GenerateIdentifier(ctx context.Context, in
 	return out, nil
 }
 
+func (c *pageManagementServiceClient) ListTemplates(ctx context.Context, in *ListTemplatesRequest, opts ...grpc.CallOption) (*ListTemplatesResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListTemplatesResponse)
+	err := c.cc.Invoke(ctx, PageManagementService_ListTemplates_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PageManagementServiceServer is the server API for PageManagementService service.
 // All implementations must embed UnimplementedPageManagementServiceServer
 // for forward compatibility
@@ -147,6 +160,8 @@ type PageManagementServiceServer interface {
 	// GenerateIdentifier converts text to a wiki page identifier format.
 	// Used by UI to auto-generate identifiers from titles and check availability.
 	GenerateIdentifier(context.Context, *GenerateIdentifierRequest) (*GenerateIdentifierResponse, error)
+	// ListTemplates returns all pages marked as templates (with template: true frontmatter).
+	ListTemplates(context.Context, *ListTemplatesRequest) (*ListTemplatesResponse, error)
 	mustEmbedUnimplementedPageManagementServiceServer()
 }
 
@@ -177,6 +192,9 @@ func (UnimplementedPageManagementServiceServer) DeletePage(context.Context, *Del
 }
 func (UnimplementedPageManagementServiceServer) GenerateIdentifier(context.Context, *GenerateIdentifierRequest) (*GenerateIdentifierResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GenerateIdentifier not implemented")
+}
+func (UnimplementedPageManagementServiceServer) ListTemplates(context.Context, *ListTemplatesRequest) (*ListTemplatesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListTemplates not implemented")
 }
 func (UnimplementedPageManagementServiceServer) mustEmbedUnimplementedPageManagementServiceServer() {}
 
@@ -335,6 +353,24 @@ func _PageManagementService_GenerateIdentifier_Handler(srv interface{}, ctx cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PageManagementService_ListTemplates_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListTemplatesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PageManagementServiceServer).ListTemplates(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PageManagementService_ListTemplates_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PageManagementServiceServer).ListTemplates(ctx, req.(*ListTemplatesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PageManagementService_ServiceDesc is the grpc.ServiceDesc for PageManagementService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -373,6 +409,10 @@ var PageManagementService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GenerateIdentifier",
 			Handler:    _PageManagementService_GenerateIdentifier_Handler,
+		},
+		{
+			MethodName: "ListTemplates",
+			Handler:    _PageManagementService_ListTemplates_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

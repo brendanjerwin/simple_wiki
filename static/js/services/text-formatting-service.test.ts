@@ -1,5 +1,6 @@
 import { expect } from '@open-wc/testing';
-import { TextFormattingService, FormattingResult } from './text-formatting-service.js';
+import type { FormattingResult } from './text-formatting-service.js';
+import { TextFormattingService } from './text-formatting-service.js';
 
 describe('TextFormattingService', () => {
   let service: TextFormattingService;

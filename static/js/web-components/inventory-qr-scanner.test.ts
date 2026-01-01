@@ -1,7 +1,8 @@
 import { html, fixture, expect } from '@open-wc/testing';
-import sinon, { SinonStub, SinonSpy } from 'sinon';
+import type { SinonStub, SinonSpy } from 'sinon';
+import sinon from 'sinon';
 import './inventory-qr-scanner.js';
-import { InventoryQrScanner, ItemScannedEventDetail } from './inventory-qr-scanner.js';
+import type { InventoryQrScanner, ItemScannedEventDetail } from './inventory-qr-scanner.js';
 import type { QrScanner, QrScannedEventDetail } from './qr-scanner.js';
 
 /**
