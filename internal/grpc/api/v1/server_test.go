@@ -55,7 +55,7 @@ func (m *gRPCStatusMatcher) Match(actual any) (success bool, err error) {
 
 	st, ok := status.FromError(actualErr)
 	if !ok {
-		return false, fmt.Errorf("error is not a gRPC status. Got\n\t%#v", actualErr)
+		return false, fmt.Errorf("error is not a gRPC status: %w", actualErr)
 	}
 
 	if st.Code() != m.expectedCode {
