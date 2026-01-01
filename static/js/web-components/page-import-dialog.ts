@@ -16,10 +16,7 @@ import {
 } from '../gen/api/v1/system_info_pb.js';
 import {
   sharedStyles,
-  foundationCSS,
-  dialogCSS,
-  responsiveCSS,
-  buttonCSS,
+  dialogStyles,
 } from './shared-styles.js';
 import './error-display.js';
 import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
@@ -53,12 +50,7 @@ export class PageImportDialog extends LitElement {
   // Must match server.PageImportJobName in server/page_import_job.go
   private static readonly PAGE_IMPORT_QUEUE_NAME = 'PageImportJob';
 
-  static override styles = [
-    foundationCSS,
-    dialogCSS,
-    responsiveCSS,
-    buttonCSS,
-    css`
+  static override styles = dialogStyles(css`
       :host {
         position: fixed;
         top: 0;
@@ -74,15 +66,6 @@ export class PageImportDialog extends LitElement {
         align-items: center;
         justify-content: center;
         animation: fadeIn 0.2s ease-out;
-      }
-
-      @keyframes fadeIn {
-        from {
-          opacity: 0;
-        }
-        to {
-          opacity: 1;
-        }
       }
 
       .backdrop {
@@ -105,17 +88,6 @@ export class PageImportDialog extends LitElement {
         z-index: 1;
         animation: slideIn 0.2s ease-out;
         border-radius: 8px;
-      }
-
-      @keyframes slideIn {
-        from {
-          transform: translateY(-20px);
-          opacity: 0;
-        }
-        to {
-          transform: translateY(0);
-          opacity: 1;
-        }
       }
 
       /* Mobile-first responsive behavior */
@@ -536,8 +508,8 @@ export class PageImportDialog extends LitElement {
         color: #dc3545;
         margin-bottom: 8px;
       }
-    `,
-  ];
+    `
+  );
 
   @property({ type: Boolean, reflect: true })
   open = false;
