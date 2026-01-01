@@ -94,7 +94,7 @@ func configFromFrontmatter(templateFrontmatter wikipage.FrontMatter) (PrinterCon
 		vendorValue = strings.TrimPrefix(vendorValue, "0x")
 		vendor, err := strconv.ParseUint(vendorValue, bitSize, bitSize)
 		if err != nil {
-			return PrinterConfig{}, fmt.Errorf("failed to parse vendor: %v", err)
+			return PrinterConfig{}, fmt.Errorf("failed to parse vendor: %w", err)
 		}
 
 		productValue, ok := printerValue["product"].(string)
@@ -105,7 +105,7 @@ func configFromFrontmatter(templateFrontmatter wikipage.FrontMatter) (PrinterCon
 		productValue = strings.TrimPrefix(productValue, "0x")
 		product, err := strconv.ParseUint(productValue, bitSize, bitSize)
 		if err != nil {
-			return PrinterConfig{}, fmt.Errorf("failed to parse product: %v", err)
+			return PrinterConfig{}, fmt.Errorf("failed to parse product: %w", err)
 		}
 
 		config.USBVendor = uint16(vendor)
