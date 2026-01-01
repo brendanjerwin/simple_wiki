@@ -1,4 +1,5 @@
 import { html, css, LitElement, nothing } from 'lit';
+import { state } from 'lit/decorators.js';
 import { buttonCSS, foundationCSS } from './shared-styles.js';
 
 /**
@@ -6,10 +7,7 @@ import { buttonCSS, foundationCSS } from './shared-styles.js';
  * It displays formatting and upload buttons that are always visible.
  */
 export class EditorToolbar extends LitElement {
-  static override properties = {
-    _uploadMenuOpen: { state: true },
-  };
-
+  @state()
   declare _uploadMenuOpen: boolean;
 
   constructor() {

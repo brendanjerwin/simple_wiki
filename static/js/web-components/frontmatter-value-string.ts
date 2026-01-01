@@ -1,4 +1,5 @@
 import { html, css, LitElement } from 'lit';
+import { property } from 'lit/decorators.js';
 import { inputCSS } from './shared-styles.js';
 
 export class FrontmatterValueString extends LitElement {
@@ -15,14 +16,13 @@ export class FrontmatterValueString extends LitElement {
     `
   ];
 
-  static override properties = {
-    value: { type: String },
-    placeholder: { type: String },
-    disabled: { type: Boolean },
-  };
-
+  @property({ type: String })
   declare value: string;
+
+  @property({ type: String })
   declare placeholder: string;
+
+  @property({ type: Boolean })
   declare disabled: boolean;
 
   constructor() {

@@ -1,4 +1,5 @@
 import { html, css, LitElement } from 'lit';
+import { property } from 'lit/decorators.js';
 import { buttonCSS, foundationCSS, menuCSS } from './shared-styles.js';
 
 export interface ContextMenuPosition {
@@ -73,14 +74,13 @@ export class EditorContextMenu extends LitElement {
     `
   ];
 
-  static override properties = {
-    open: { type: Boolean, reflect: true },
-    isMobile: { type: Boolean },
-    hasSelection: { type: Boolean },
-  };
-
+  @property({ type: Boolean, reflect: true })
   declare open: boolean;
+
+  @property({ type: Boolean })
   declare isMobile: boolean;
+
+  @property({ type: Boolean })
   declare hasSelection: boolean;
 
   constructor() {

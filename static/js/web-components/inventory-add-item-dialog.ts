@@ -1,4 +1,5 @@
 import { html, css, LitElement, nothing } from 'lit';
+import { property, state } from 'lit/decorators.js';
 import { sharedStyles, dialogStyles } from './shared-styles.js';
 import { InventoryItemCreatorMover } from './inventory-item-creator-mover.js';
 import { createClient } from '@connectrpc/connect';
@@ -154,28 +155,34 @@ export class InventoryAddItemDialog extends LitElement {
     }
   `);
 
-  static override properties = {
-    open: { type: Boolean, reflect: true },
-    container: { type: String },
-    itemTitle: { type: String },
-    itemIdentifier: { type: String },
-    description: { type: String },
-    isUnique: { state: true },
-    loading: { state: true },
-    error: { state: true },
-    searchResults: { state: true },
-    searchLoading: { state: true },
-  };
-
+  @property({ type: Boolean, reflect: true })
   declare open: boolean;
+
+  @property({ type: String })
   declare container: string;
+
+  @property({ type: String })
   declare itemTitle: string;
+
+  @property({ type: String })
   declare itemIdentifier: string;
+
+  @property({ type: String })
   declare description: string;
+
+  @state()
   declare isUnique: boolean;
+
+  @state()
   declare loading: boolean;
+
+  @state()
   declare error: Error | null;
+
+  @state()
   declare searchResults: SearchResult[];
+
+  @state()
   declare searchLoading: boolean;
 
   private _searchDebounceTimer?: ReturnType<typeof setTimeout>;

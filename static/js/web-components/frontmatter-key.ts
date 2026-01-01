@@ -1,4 +1,5 @@
 import { html, css, LitElement } from 'lit';
+import { property } from 'lit/decorators.js';
 
 export class FrontmatterKey extends LitElement {
   static override styles = css`
@@ -51,14 +52,13 @@ export class FrontmatterKey extends LitElement {
     }
   `;
 
-  static override properties = {
-    key: { type: String },
-    editable: { type: Boolean },
-    placeholder: { type: String },
-  };
-
+  @property({ type: String })
   declare key: string;
+
+  @property({ type: Boolean })
   declare editable: boolean;
+
+  @property({ type: String })
   declare placeholder: string;
 
   constructor() {

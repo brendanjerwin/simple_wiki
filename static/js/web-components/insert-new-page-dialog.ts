@@ -1,4 +1,5 @@
 import { html, css, LitElement, nothing } from 'lit';
+import { property, state } from 'lit/decorators.js';
 import type { JsonObject } from '@bufbuild/protobuf';
 import { sharedStyles, dialogStyles } from './shared-styles.js';
 import { PageCreator } from './page-creator.js';
@@ -163,32 +164,40 @@ export class InsertNewPageDialog extends LitElement {
     }
   `);
 
-  static override properties = {
-    open: { type: Boolean, reflect: true },
-    pageTitle: { type: String },
-    pageIdentifier: { type: String },
-    isUnique: { state: true },
-    loading: { state: true },
-    templatesLoading: { state: true },
-    error: { state: true },
-    templates: { state: true },
-    selectedTemplate: { state: true },
-    templateLocked: { state: true },
-    frontmatter: { state: true },
-    frontmatterDirty: { state: true },
-  };
-
+  @property({ type: Boolean, reflect: true })
   declare open: boolean;
+
+  @property({ type: String })
   declare pageTitle: string;
+
+  @property({ type: String })
   declare pageIdentifier: string;
+
+  @state()
   declare isUnique: boolean;
+
+  @state()
   declare loading: boolean;
+
+  @state()
   declare templatesLoading: boolean;
+
+  @state()
   declare error: AugmentedError | null;
+
+  @state()
   declare templates: TemplateInfo[];
+
+  @state()
   declare selectedTemplate: string;
+
+  @state()
   declare templateLocked: boolean;
+
+  @state()
   declare frontmatter: JsonObject;
+
+  @state()
   declare frontmatterDirty: boolean;
 
   private pageCreator = new PageCreator();
