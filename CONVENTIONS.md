@@ -104,15 +104,17 @@
 
 ### Web Components with Lit
 
-- All web components use **Lit** (https://lit.dev/) for the component framework.
+- All web components use **Lit** (<https://lit.dev/>) for the component framework.
 - **Use decorators for property declarations**: Now that the codebase is fully TypeScript, use `@property()` and `@state()` decorators instead of `static properties` declarations. Decorators provide better IDE support, type inference, and are the standard Lit idiom for TypeScript projects.
 
   **Decorator import:**
+
   ```typescript
   import { property, state } from 'lit/decorators.js';
   ```
 
   **Property declarations:**
+
   ```typescript
   export class MyComponent extends LitElement {
     // Public reactive properties

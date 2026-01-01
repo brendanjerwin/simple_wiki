@@ -1,5 +1,5 @@
 import { html, css, LitElement } from 'lit';
-import { property } from 'lit/decorators.js';
+import { property, state } from 'lit/decorators.js';
 import type { GetJobStatusResponse } from '../gen/api/v1/system_info_pb.js';
 import { foundationCSS } from './shared-styles.js';
 
@@ -186,7 +186,7 @@ export class SystemInfoIndexing extends LitElement {
   @property({ type: Boolean })
   declare loading: boolean;
 
-  @property({ type: String })
+  @state()
   declare error: Error | null;
 
   constructor() {
