@@ -307,169 +307,167 @@ var _ = Describe("InventoryNormalizer", func() {
 	})
 
 	Describe("GetContainerItems", func() {
-		Context("with standard setup", func() {
-			When("the page has items as []string", func() {
-				var items []string
-				var err error
+		When("the page has items as []string", func() {
+			var items []string
+			var err error
 
-				BeforeEach(func() {
-					deps.setPage("container", map[string]any{
-						"inventory": map[string]any{
-							"items": []string{"item1", "item2"},
-						},
-					}, "")
-					items, err = normalizer.GetContainerItems("container")
-				})
-
-				It("should not return an error", func() {
-					Expect(err).NotTo(HaveOccurred())
-				})
-
-				It("should return the items", func() {
-					Expect(items).To(HaveLen(2))
-					Expect(items).To(ContainElements("item1", "item2"))
-				})
+			BeforeEach(func() {
+				deps.setPage("container", map[string]any{
+					"inventory": map[string]any{
+						"items": []string{"item1", "item2"},
+					},
+				}, "")
+				items, err = normalizer.GetContainerItems("container")
 			})
 
-			When("the page has []string items that need munging", func() {
-				var items []string
-				var err error
-
-				BeforeEach(func() {
-					deps.setPage("container", map[string]any{
-						"inventory": map[string]any{
-							"items": []string{"PascalCaseItem", "another-item"},
-						},
-					}, "")
-					items, err = normalizer.GetContainerItems("container")
-				})
-
-				It("should not return an error", func() {
-					Expect(err).NotTo(HaveOccurred())
-				})
-
-				It("should munge the identifiers to snake_case", func() {
-					Expect(items).To(HaveLen(2))
-					Expect(items).To(ContainElement("pascal_case_item"))
-					Expect(items).To(ContainElement("another_item"))
-				})
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
 			})
 
-			When("the page has []string items with invalid identifier", func() {
-				var err error
+			It("should return the items", func() {
+				Expect(items).To(HaveLen(2))
+				Expect(items).To(ContainElements("item1", "item2"))
+			})
+		})
 
-				BeforeEach(func() {
-					deps.setPage("container", map[string]any{
-						"inventory": map[string]any{
-							"items": []string{"///"},
-						},
-					}, "")
-					_, err = normalizer.GetContainerItems("container")
-				})
+		When("the page has []string items that need munging", func() {
+			var items []string
+			var err error
 
-				It("should return an error about invalid item identifier", func() {
-					Expect(err).To(MatchError(ContainSubstring("invalid item identifier")))
-				})
+			BeforeEach(func() {
+				deps.setPage("container", map[string]any{
+					"inventory": map[string]any{
+						"items": []string{"PascalCaseItem", "another-item"},
+					},
+				}, "")
+				items, err = normalizer.GetContainerItems("container")
 			})
 
-			When("the page has items as []any", func() {
-				var items []string
-				var err error
-
-				BeforeEach(func() {
-					deps.setPage("container", map[string]any{
-						"inventory": map[string]any{
-							"items": []any{"item1", "item2"},
-						},
-					}, "")
-					items, err = normalizer.GetContainerItems("container")
-				})
-
-				It("should not return an error", func() {
-					Expect(err).NotTo(HaveOccurred())
-				})
-
-				It("should return the items", func() {
-					Expect(items).To(HaveLen(2))
-					Expect(items).To(ContainElements("item1", "item2"))
-				})
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
 			})
 
-			When("the page does not exist", func() {
-				var items []string
-				var err error
+			It("should munge the identifiers to snake_case", func() {
+				Expect(items).To(HaveLen(2))
+				Expect(items).To(ContainElement("pascal_case_item"))
+				Expect(items).To(ContainElement("another_item"))
+			})
+		})
 
-				BeforeEach(func() {
-					items, err = normalizer.GetContainerItems("nonexistent")
-				})
+		When("the page has []string items with invalid identifier", func() {
+			var err error
 
-				It("should not return an error", func() {
-					Expect(err).NotTo(HaveOccurred())
-				})
-
-				It("should return nil", func() {
-					Expect(items).To(BeNil())
-				})
+			BeforeEach(func() {
+				deps.setPage("container", map[string]any{
+					"inventory": map[string]any{
+						"items": []string{"///"},
+					},
+				}, "")
+				_, err = normalizer.GetContainerItems("container")
 			})
 
-			When("the page has no inventory section", func() {
-				var items []string
-				var err error
+			It("should return an error about invalid item identifier", func() {
+				Expect(err).To(MatchError(ContainSubstring("invalid item identifier")))
+			})
+		})
 
-				BeforeEach(func() {
-					deps.setPage("container", map[string]any{
-						"identifier": "container",
-					}, "")
-					items, err = normalizer.GetContainerItems("container")
-				})
+		When("the page has items as []any", func() {
+			var items []string
+			var err error
 
-				It("should not return an error", func() {
-					Expect(err).NotTo(HaveOccurred())
-				})
-
-				It("should return nil", func() {
-					Expect(items).To(BeNil())
-				})
+			BeforeEach(func() {
+				deps.setPage("container", map[string]any{
+					"inventory": map[string]any{
+						"items": []any{"item1", "item2"},
+					},
+				}, "")
+				items, err = normalizer.GetContainerItems("container")
 			})
 
-			When("the page has no items key", func() {
-				var items []string
-				var err error
-
-				BeforeEach(func() {
-					deps.setPage("container", map[string]any{
-						"inventory": map[string]any{
-							"is_container": true,
-						},
-					}, "")
-					items, err = normalizer.GetContainerItems("container")
-				})
-
-				It("should not return an error", func() {
-					Expect(err).NotTo(HaveOccurred())
-				})
-
-				It("should return nil", func() {
-					Expect(items).To(BeNil())
-				})
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
 			})
 
-			When("an item has invalid identifier", func() {
-				var err error
+			It("should return the items", func() {
+				Expect(items).To(HaveLen(2))
+				Expect(items).To(ContainElements("item1", "item2"))
+			})
+		})
 
-				BeforeEach(func() {
-					deps.setPage("container", map[string]any{
-						"inventory": map[string]any{
-							"items": []any{"///"},  // This will fail MungeIdentifier
-						},
-					}, "")
-					_, err = normalizer.GetContainerItems("container")
-				})
+		When("the page does not exist", func() {
+			var items []string
+			var err error
 
-				It("should return an error about invalid item identifier", func() {
-					Expect(err).To(MatchError(ContainSubstring("invalid item identifier")))
-					Expect(err.Error()).To(ContainSubstring("///"))
-				})
+			BeforeEach(func() {
+				items, err = normalizer.GetContainerItems("nonexistent")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return nil", func() {
+				Expect(items).To(BeNil())
+			})
+		})
+
+		When("the page has no inventory section", func() {
+			var items []string
+			var err error
+
+			BeforeEach(func() {
+				deps.setPage("container", map[string]any{
+					"identifier": "container",
+				}, "")
+				items, err = normalizer.GetContainerItems("container")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return nil", func() {
+				Expect(items).To(BeNil())
+			})
+		})
+
+		When("the page has no items key", func() {
+			var items []string
+			var err error
+
+			BeforeEach(func() {
+				deps.setPage("container", map[string]any{
+					"inventory": map[string]any{
+						"is_container": true,
+					},
+				}, "")
+				items, err = normalizer.GetContainerItems("container")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return nil", func() {
+				Expect(items).To(BeNil())
+			})
+		})
+
+		When("an item has invalid identifier", func() {
+			var err error
+
+			BeforeEach(func() {
+				deps.setPage("container", map[string]any{
+					"inventory": map[string]any{
+						"items": []any{"///"},  // This will fail MungeIdentifier
+					},
+				}, "")
+				_, err = normalizer.GetContainerItems("container")
+			})
+
+			It("should return an error about invalid item identifier", func() {
+				Expect(err).To(MatchError(ContainSubstring("invalid item identifier")))
+				Expect(err.Error()).To(ContainSubstring("///"))
 			})
 		})
 
