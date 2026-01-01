@@ -947,7 +947,7 @@ func (s *Server) loadTemplateFrontmatter(templateIdentifier string) (map[string]
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("template '%s' does not exist", templateIdentifier)
 		}
-		return nil, fmt.Errorf("failed to read template '%s': %v", templateIdentifier, err)
+		return nil, fmt.Errorf("failed to read template '%s': %w", templateIdentifier, err)
 	}
 
 	// Validate that the page is marked as a template

@@ -33,13 +33,13 @@ func (p *Page) parse() (FrontMatter, Markdown, error) {
 
 	// Try to parse with default delimiter which is ---
 	mdContent, err := adrgfrontmatter.Parse(r, frontmatter)
-	if err != nil && err != io.EOF {
+	if err != nil && !errors.Is(err, io.EOF) {
 		// Failed to parse, try swapping delimiters
 		// This handles the case where content has TOML-like frontmatter with +++ delimiters
 		// but the parser expects YAML-like frontmatter with --- delimiters
 		swapped := strings.Replace(p.Text, "+++", "---", 2)
 		mdContent, err = adrgfrontmatter.Parse(strings.NewReader(swapped), frontmatter)
-		if err != nil && err != io.EOF {
+		if err != nil && !errors.Is(err, io.EOF) {
 			// Neither delimiter worked, return the error
 			return nil, "", fmt.Errorf("failed to parse frontmatter: %w", err)
 		}
@@ -103,7 +103,7 @@ type RenderingResult struct {
 func ParseFrontmatterAndMarkdown(content string) ([]byte, map[string]any, error) {
 	matterMap := &map[string]any{}
 	markdownBytes, err := adrgfrontmatter.Parse(strings.NewReader(content), &matterMap)
-	if err != nil && err != io.EOF {
+	if err != nil && !errors.Is(err, io.EOF) {
 		return nil, nil, fmt.Errorf("failed to parse frontmatter: %w", err)
 	}
 

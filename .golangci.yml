@@ -4,7 +4,8 @@ version: "2"
 
 linters:
   enable:
-    - godox  # Detects TODO, FIXME, BUG comments
+    - godox       # Detects TODO, FIXME, BUG comments
+    - errorlint   # Ensures proper error wrapping with %w
   disable:
     - staticcheck  # We run staticcheck separately (built from source to match Go version)
 
@@ -17,6 +18,16 @@ linters-settings:
       - BUG
       - HACK
       - XXX
+  
+  errorlint:
+    # Check that fmt.Errorf uses %w instead of %v for error wrapping
+    errorf: true
+    # Allow multiple %w verbs in fmt.Errorf (Go 1.20+)
+    errorf-multi: true
+    # Check that errors.Is() is used instead of == for sentinel error comparisons
+    asserts: true
+    # Check that errors.As() is used instead of type assertions for error types
+    comparison: true
 
 issues:
   # Exclude generated files
