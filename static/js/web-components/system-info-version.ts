@@ -1,4 +1,5 @@
 import { html, css, LitElement } from 'lit';
+import { property } from 'lit/decorators.js';
 import type { GetVersionResponse } from '../gen/api/v1/system_info_pb.js';
 import { type Timestamp, timestampDate } from '@bufbuild/protobuf/wkt';
 import { foundationCSS } from './shared-styles.js';
@@ -53,14 +54,13 @@ export class SystemInfoVersion extends LitElement {
       }
     `];
 
-  static override properties = {
-    version: { type: Object },
-    loading: { type: Boolean },
-    error: { type: Object },
-  };
-
+  @property({ type: Object })
   declare version?: GetVersionResponse;
+
+  @property({ type: Boolean })
   declare loading: boolean;
+
+  @property({ type: Object })
   declare error: Error | null;
 
   constructor() {

@@ -1,4 +1,5 @@
 import { html, css, LitElement } from 'lit';
+import { property } from 'lit/decorators.js';
 import type { GetJobStatusResponse } from '../gen/api/v1/system_info_pb.js';
 import { foundationCSS } from './shared-styles.js';
 
@@ -179,14 +180,13 @@ export class SystemInfoIndexing extends LitElement {
 
     `];
 
-  static override properties = {
-    jobStatus: { type: Object },
-    loading: { type: Boolean },
-    error: { type: String },
-  };
-
+  @property({ type: Object })
   declare jobStatus?: GetJobStatusResponse;
+
+  @property({ type: Boolean })
   declare loading: boolean;
+
+  @property({ type: String })
   declare error: Error | null;
 
   constructor() {

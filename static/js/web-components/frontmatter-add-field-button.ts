@@ -1,4 +1,5 @@
 import { html, css, LitElement } from 'lit';
+import { property, state } from 'lit/decorators.js';
 import { buttonCSS, foundationCSS, menuCSS } from './shared-styles.js';
 
 export class FrontmatterAddFieldButton extends LitElement {
@@ -14,12 +15,10 @@ export class FrontmatterAddFieldButton extends LitElement {
     `
   ];
 
-  static override properties = {
-    open: { type: Boolean, state: true },
-    disabled: { type: Boolean },
-  };
-
+  @state()
   declare open: boolean;
+
+  @property({ type: Boolean })
   declare disabled: boolean;
 
   constructor() {

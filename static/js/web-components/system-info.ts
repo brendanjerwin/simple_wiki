@@ -1,4 +1,5 @@
 import { html, css, LitElement } from 'lit';
+import { state } from 'lit/decorators.js';
 import { createClient } from '@connectrpc/connect';
 import { create } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
@@ -122,18 +123,19 @@ export class SystemInfo extends LitElement {
       }
     `];
 
-  static override properties = {
-    version: { state: true },
-    jobStatus: { state: true },
-    loading: { state: true },
-    error: { state: true },
-    expanded: { state: true },
-  };
-
+  @state()
   declare version?: GetVersionResponse;
+
+  @state()
   declare jobStatus?: GetJobStatusResponse;
+
+  @state()
   declare loading: boolean;
+
+  @state()
   declare error: Error | null;
+
+  @state()
   declare expanded: boolean;
   private debounceTimer?: ReturnType<typeof setTimeout>;
   private refreshTimer?: ReturnType<typeof setInterval>;

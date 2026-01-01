@@ -1,4 +1,5 @@
 import { html, css, LitElement } from 'lit';
+import { property, state } from 'lit/decorators.js';
 import { createClient } from '@connectrpc/connect';
 import { create, type JsonObject } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
@@ -174,22 +175,25 @@ export class FrontmatterEditorDialog extends LitElement {
     `
   ];
 
-  static override properties = {
-    page: { type: String },
-    open: { type: Boolean, reflect: true },
-    loading: { state: true },
-    saving: { state: true },
-    augmentedError: { state: true },
-    frontmatter: { state: true },
-    workingFrontmatter: { state: true },
-  };
-
+  @property({ type: String })
   declare page: string;
+
+  @property({ type: Boolean, reflect: true })
   declare open: boolean;
+
+  @state()
   declare loading: boolean;
+
+  @state()
   declare saving: boolean;
+
+  @state()
   declare augmentedError?: AugmentedError | undefined;
+
+  @state()
   declare frontmatter?: GetFrontmatterResponse | undefined;
+
+  @state()
   declare workingFrontmatter?: JsonObject;
 
   private client = createClient(Frontmatter, getGrpcWebTransport());

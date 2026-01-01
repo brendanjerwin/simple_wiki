@@ -1,4 +1,5 @@
 import { html, css, LitElement, nothing } from 'lit';
+import { property, state } from 'lit/decorators.js';
 import { sharedStyles, dialogStyles } from './shared-styles.js';
 import { InventoryItemCreatorMover } from './inventory-item-creator-mover.js';
 import { createClient } from '@connectrpc/connect';
@@ -288,34 +289,40 @@ export class InventoryMoveItemDialog extends LitElement {
     `
   );
 
-  static override properties = {
-    open: { type: Boolean, reflect: true },
-    itemIdentifier: { type: String },
-    currentContainer: { type: String },
-    searchQuery: { type: String },
-    searchResults: { state: true },
-    searchLoading: { state: true },
-    movingTo: { state: true },
-    error: { state: true },
-    // QR scanner state
-    scannerMode: { state: true },
-    scannedDestination: { state: true },
-    scannedResult: { state: true },
-    scanError: { state: true },
-  };
-
+  @property({ type: Boolean, reflect: true })
   declare open: boolean;
+
+  @property({ type: String })
   declare itemIdentifier: string;
+
+  @property({ type: String })
   declare currentContainer: string;
+
+  @property({ type: String })
   declare searchQuery: string;
+
+  @state()
   declare searchResults: SearchResult[];
+
+  @state()
   declare searchLoading: boolean;
+
+  @state()
   declare movingTo: string | null;
+
+  @state()
   declare error: Error | null;
-  // QR scanner state
+
+  @state()
   declare scannerMode: boolean;
+
+  @state()
   declare scannedDestination: string | null;
+
+  @state()
   declare scannedResult: ScannedResultInfo | null;
+
+  @state()
   declare scanError: Error | null;
 
   private _searchDebounceTimeoutMs = 300;

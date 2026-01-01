@@ -1,4 +1,5 @@
 import { html, css, LitElement, nothing } from 'lit';
+import { property, state } from 'lit/decorators.js';
 import { buttonCSS, foundationCSS } from './shared-styles.js';
 
 const DEFAULT_DISARM_TIMEOUT_MS = 5000;
@@ -147,28 +148,34 @@ export class ConfirmationInterlockButton extends LitElement {
     `,
   ];
 
-  static override properties = {
-    label: { type: String },
-    confirmLabel: { type: String },
-    yesLabel: { type: String },
-    noLabel: { type: String },
-    armed: { type: Boolean, reflect: true },
-    disabled: { type: Boolean, reflect: true },
-    disarmTimeoutMs: { type: Number },
-    timerProvider: { type: Object },
-    popupPosition: { type: String },
-    _computedPosition: { state: true },
-  };
-
+  @property({ type: String })
   declare label: string;
+
+  @property({ type: String })
   declare confirmLabel: string;
+
+  @property({ type: String })
   declare yesLabel: string;
+
+  @property({ type: String })
   declare noLabel: string;
+
+  @property({ type: Boolean, reflect: true })
   declare armed: boolean;
+
+  @property({ type: Boolean, reflect: true })
   declare disabled: boolean;
+
+  @property({ type: Number })
   declare disarmTimeoutMs: number;
+
+  @property({ type: Object })
   declare timerProvider: TimerProvider;
+
+  @property({ type: String })
   declare popupPosition: PopupPosition;
+
+  @state()
   declare _computedPosition: 'left' | 'right';
 
   private _disarmTimerId: number | undefined;

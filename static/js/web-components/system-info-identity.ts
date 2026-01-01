@@ -1,4 +1,5 @@
 import { html, css, LitElement, nothing } from 'lit';
+import { property } from 'lit/decorators.js';
 import type { TailscaleIdentity } from '../gen/api/v1/system_info_pb.js';
 import { foundationCSS } from './shared-styles.js';
 
@@ -47,10 +48,7 @@ export class SystemInfoIdentity extends LitElement {
       }
     `];
 
-  static override properties = {
-    identity: { type: Object },
-  };
-
+  @property({ type: Object })
   declare identity?: TailscaleIdentity;
 
   constructor() {

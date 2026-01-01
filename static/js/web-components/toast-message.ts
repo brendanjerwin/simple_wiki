@@ -1,4 +1,5 @@
 import { html, css, LitElement } from 'lit';
+import { property } from 'lit/decorators.js';
 import { colorCSS, typographyCSS, themeCSS, foundationCSS, buttonCSS } from './shared-styles.js';
 import type { AugmentedError } from './augment-error-service.js';
 import './error-display.js';
@@ -182,20 +183,22 @@ export class ToastMessage extends LitElement {
     `
   ];
 
-  static override properties = {
-    message: { type: String },
-    type: { type: String },
-    visible: { type: Boolean, reflect: true },
-    timeoutSeconds: { type: Number },
-    autoClose: { type: Boolean },
-    augmentedError: { type: Object }
-  };
-
+  @property({ type: String })
   declare message: string;
+
+  @property({ type: String })
   declare type: ToastType;
+
+  @property({ type: Boolean, reflect: true })
   declare visible: boolean;
+
+  @property({ type: Number })
   declare timeoutSeconds: number;
+
+  @property({ type: Boolean })
   declare autoClose: boolean;
+
+  @property({ type: Object })
   declare augmentedError?: AugmentedError;
 
   private timeoutId?: number;

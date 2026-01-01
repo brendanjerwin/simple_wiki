@@ -1,4 +1,5 @@
 import { html, css, LitElement } from 'lit';
+import { property } from 'lit/decorators.js';
 import type { JsonObject } from '@bufbuild/protobuf';
 import { buttonCSS, foundationCSS, layoutCSS } from './shared-styles.js';
 import './frontmatter-key.js';
@@ -36,16 +37,16 @@ export class FrontmatterValueSection extends LitElement {
     `
   ];
 
-  static override properties = {
-    fields: { type: Object },
-    disabled: { type: Boolean },
-    isRoot: { type: Boolean },
-    title: { type: String },
-  };
-
+  @property({ type: Object })
   declare fields: JsonObject;
+
+  @property({ type: Boolean })
   declare disabled: boolean;
+
+  @property({ type: Boolean })
   declare isRoot: boolean;
+
+  @property({ type: String })
   declare title: string;
 
   constructor() {
