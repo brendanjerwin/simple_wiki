@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/jcelliott/lumber"
+	"github.com/brendanjerwin/simple_wiki/pkg/logging"
 	"github.com/mborders/artifex"
 )
 
@@ -31,7 +31,7 @@ func defaultDispatcherFactory(maxWorkers, maxQueue int) Dispatcher {
 type JobQueueCoordinator struct {
 	queues            map[string]Dispatcher
 	stats             map[string]*QueueStats
-	logger            lumber.Logger
+	logger            logging.Logger
 	mu                sync.RWMutex
 	dispatcherFactory DispatcherFactory
 }
@@ -53,7 +53,7 @@ func (c *JobQueueCoordinator) rollbackStats(stats *QueueStats) {
 }
 
 // NewJobQueueCoordinator creates a new JobQueueCoordinator.
-func NewJobQueueCoordinator(logger lumber.Logger) *JobQueueCoordinator {
+func NewJobQueueCoordinator(logger logging.Logger) *JobQueueCoordinator {
 	return &JobQueueCoordinator{
 		queues:            make(map[string]Dispatcher),
 		stats:             make(map[string]*QueueStats),
@@ -63,7 +63,7 @@ func NewJobQueueCoordinator(logger lumber.Logger) *JobQueueCoordinator {
 }
 
 // NewJobQueueCoordinatorWithFactory creates a JobQueueCoordinator with a custom dispatcher factory (for testing).
-func NewJobQueueCoordinatorWithFactory(logger lumber.Logger, factory DispatcherFactory) *JobQueueCoordinator {
+func NewJobQueueCoordinatorWithFactory(logger logging.Logger, factory DispatcherFactory) *JobQueueCoordinator {
 	return &JobQueueCoordinator{
 		queues:            make(map[string]Dispatcher),
 		stats:             make(map[string]*QueueStats),

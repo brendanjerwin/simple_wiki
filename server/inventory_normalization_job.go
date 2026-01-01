@@ -10,9 +10,9 @@ import (
 
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
+	"github.com/brendanjerwin/simple_wiki/pkg/logging"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
-	"github.com/jcelliott/lumber"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -62,7 +62,7 @@ type InventoryNormalizationJob struct {
 	normalizer *InventoryNormalizer
 	deps       InventoryNormalizationDependencies
 	fmIndex    frontmatter.IQueryFrontmatterIndex
-	logger     lumber.Logger
+	logger     logging.Logger
 }
 
 // NewInventoryNormalizationJob creates a new inventory normalization job.
@@ -70,7 +70,7 @@ type InventoryNormalizationJob struct {
 func NewInventoryNormalizationJob(
 	deps InventoryNormalizationDependencies,
 	fmIndex frontmatter.IQueryFrontmatterIndex,
-	logger lumber.Logger,
+	logger logging.Logger,
 ) (*InventoryNormalizationJob, error) {
 	if deps == nil {
 		return nil, errors.New("deps is required")

@@ -6,9 +6,9 @@ import (
 	"strings"
 
 	"github.com/brendanjerwin/simple_wiki/inventory"
+	"github.com/brendanjerwin/simple_wiki/pkg/logging"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
-	"github.com/jcelliott/lumber"
 	"github.com/stoewer/go-strcase"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -31,11 +31,11 @@ type NormalizeResult struct {
 // Both the full InventoryNormalizationJob and the per-page PageInventoryNormalizationJob use this.
 type InventoryNormalizer struct {
 	deps   InventoryNormalizationDependencies
-	logger lumber.Logger
+	logger logging.Logger
 }
 
 // NewInventoryNormalizer creates a new InventoryNormalizer.
-func NewInventoryNormalizer(deps InventoryNormalizationDependencies, logger lumber.Logger) *InventoryNormalizer {
+func NewInventoryNormalizer(deps InventoryNormalizationDependencies, logger logging.Logger) *InventoryNormalizer {
 	return &InventoryNormalizer{
 		deps:   deps,
 		logger: logger,
