@@ -471,20 +471,28 @@ var _ = Describe("InventoryNormalizer", func() {
 			})
 		})
 
-		When("reading frontmatter fails with non-NotExist error", func() {
-			var err error
-			var localDeps *mockPageReaderMutator
-			var localNormalizer *InventoryNormalizer
+		Context("with error conditions", func() {
+			var (
+				errorDeps       *mockPageReaderMutator
+				errorNormalizer *InventoryNormalizer
+			)
 
 			BeforeEach(func() {
-				localDeps = newMockPageReaderMutator()
-				localDeps.readFrontMatterErr = errors.New("permission denied")
-				localNormalizer = NewInventoryNormalizer(localDeps, lumber.NewConsoleLogger(lumber.WARN))
-				_, err = localNormalizer.GetContainerItems("container")
+				errorDeps = newMockPageReaderMutator()
+				errorNormalizer = NewInventoryNormalizer(errorDeps, logger)
 			})
 
-			It("should return an error with frontmatter read context", func() {
-				Expect(err).To(MatchError(ContainSubstring("failed to read frontmatter")))
+			When("reading frontmatter fails with non-NotExist error", func() {
+				var err error
+
+				BeforeEach(func() {
+					errorDeps.readFrontMatterErr = errors.New("permission denied")
+					_, err = errorNormalizer.GetContainerItems("container")
+				})
+
+				It("should return an error with frontmatter read context", func() {
+					Expect(err).To(MatchError(ContainSubstring("failed to read frontmatter")))
+				})
 			})
 		})
 	})
