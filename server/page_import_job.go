@@ -11,8 +11,8 @@ import (
 
 	"github.com/brendanjerwin/simple_wiki/inventory"
 	"github.com/brendanjerwin/simple_wiki/pageimport"
+	"github.com/brendanjerwin/simple_wiki/pkg/logging"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
-	"github.com/jcelliott/lumber"
 )
 
 const (
@@ -91,7 +91,7 @@ func (a *PageImportResultAccumulator) GetResult() PageImportResult {
 type SinglePageImportJob struct {
 	record            pageimport.ParsedRecord
 	pageReaderMutator wikipage.PageReaderMutator
-	logger            lumber.Logger
+	logger            logging.Logger
 	resultAccumulator *PageImportResultAccumulator
 }
 
@@ -100,7 +100,7 @@ type SinglePageImportJob struct {
 func NewSinglePageImportJob(
 	record pageimport.ParsedRecord,
 	pageReaderMutator wikipage.PageReaderMutator,
-	logger lumber.Logger,
+	logger logging.Logger,
 	resultAccumulator *PageImportResultAccumulator,
 ) (*SinglePageImportJob, error) {
 	if pageReaderMutator == nil {
@@ -349,7 +349,7 @@ func (*SinglePageImportJob) applyArrayOperation(fm map[string]any, op pageimport
 // PageImportReportJob generates the import report after all page imports complete.
 type PageImportReportJob struct {
 	pageReaderMutator wikipage.PageReaderMutator
-	logger            lumber.Logger
+	logger            logging.Logger
 	resultAccumulator *PageImportResultAccumulator
 }
 
@@ -357,7 +357,7 @@ type PageImportReportJob struct {
 // Returns an error if any required dependency is nil.
 func NewPageImportReportJob(
 	pageReaderMutator wikipage.PageReaderMutator,
-	logger lumber.Logger,
+	logger logging.Logger,
 	resultAccumulator *PageImportResultAccumulator,
 ) (*PageImportReportJob, error) {
 	if pageReaderMutator == nil {

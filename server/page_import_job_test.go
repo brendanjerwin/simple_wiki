@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/brendanjerwin/simple_wiki/pageimport"
+	"github.com/brendanjerwin/simple_wiki/pkg/logging"
 	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -14,7 +15,7 @@ import (
 var _ = Describe("SinglePageImportJob", func() {
 	var (
 		mockDeps          *mockPageReaderMutator
-		logger            lumber.Logger
+		logger            logging.Logger
 		resultAccumulator *PageImportResultAccumulator
 	)
 
@@ -926,7 +927,7 @@ var _ = Describe("PageImportResultAccumulator", func() {
 var _ = Describe("PageImportReportJob", func() {
 	var (
 		mockDeps          *mockPageReaderMutator
-		logger            lumber.Logger
+		logger            logging.Logger
 		resultAccumulator *PageImportResultAccumulator
 	)
 
