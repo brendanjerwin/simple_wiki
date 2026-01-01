@@ -6,18 +6,8 @@ import { ReplaceFrontmatterResponseSchema } from '../gen/api/v1/frontmatter_pb.j
 import sinon from 'sinon';
 import './frontmatter-editor-dialog.js';
 
-/**
- * NOTE: This test file was previously skipped due to browser hangs (issue #229).
- * Investigation showed that unlike the page-import-dialog issue (which was caused by an
- * ambiguous .button-secondary selector), this test already uses correct selectors
- * (.footer button:first-child, .footer button:last-child). Individual test cases and
- * subsets pass successfully, suggesting the issue may be related to test runner resource
- * management when running all 22 tests together. The test has been unskipped to verify
- * if the issue still exists in CI.
- *
- * Related: https://github.com/brendanjerwin/simple_wiki/issues/229
- */
-describe('FrontmatterEditorDialog - Save Functionality', () => {
+// Skipped: Browser hangs - see https://github.com/brendanjerwin/simple_wiki/issues/229
+describe.skip('FrontmatterEditorDialog - Save Functionality', () => {
   let el: FrontmatterEditorDialog;
   let clientStub: sinon.SinonStub;
   let sessionStorageStub: sinon.SinonStub;
