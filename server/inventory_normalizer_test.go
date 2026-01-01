@@ -4,6 +4,7 @@ package server
 import (
 	"errors"
 
+	"github.com/brendanjerwin/simple_wiki/pkg/logging"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
@@ -14,7 +15,7 @@ var _ = Describe("InventoryNormalizer", func() {
 	var (
 		deps       *mockPageReaderMutator
 		normalizer *InventoryNormalizer
-		logger     lumber.Logger
+		logger     logging.Logger
 	)
 
 	BeforeEach(func() {
@@ -598,7 +599,7 @@ var _ = Describe("InventoryNormalizer", func() {
 var _ = Describe("PageInventoryNormalizationJob", func() {
 	var (
 		deps   *mockPageReaderMutator
-		logger lumber.Logger
+		logger logging.Logger
 	)
 
 	BeforeEach(func() {
