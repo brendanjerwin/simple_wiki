@@ -1,4 +1,5 @@
 import { html, css, LitElement } from 'lit';
+import { property } from 'lit/decorators.js';
 import { createClient, type Client } from '@connectrpc/connect';
 import { createGrpcWebTransport } from '@connectrpc/connect-web';
 import { create } from '@bufbuild/protobuf';
@@ -102,20 +103,22 @@ export class WikiSearch extends LitElement {
     }
     `;
 
-  static override properties = {
-    results: { type: Array },
-    noResults: { type: Boolean, reflect: true, attribute: 'no-results' },
-    loading: { type: Boolean },
-    error: { type: String },
-    inventoryOnly: { type: Boolean },
-    totalUnfilteredCount: { type: Number },
-  };
-
+  @property({ type: Array })
   declare results: SearchResult[];
+
+  @property({ type: Boolean, reflect: true, attribute: 'no-results' })
   declare noResults: boolean;
+
+  @property({ type: Boolean })
   declare loading: boolean;
+
+  @property({ type: String })
   declare error: Error | null;
+
+  @property({ type: Boolean })
   declare inventoryOnly: boolean;
+
+  @property({ type: Number })
   declare totalUnfilteredCount: number;
   private lastSearchQuery: string = '';
 

@@ -1,4 +1,5 @@
 import { html, css, LitElement } from 'lit';
+import { property } from 'lit/decorators.js';
 import { sharedStyles, foundationCSS } from './shared-styles.js';
 import type { SearchResult, HighlightSpan, ContainerPathElement } from '../gen/api/v1/search_pb.js';
 
@@ -175,16 +176,16 @@ class WikiSearchResults extends LitElement {
     `
   ];
 
-  static override properties = {
-    results: { type: Array },
-    open: { type: Boolean, reflect: true },
-    inventoryOnly: { type: Boolean },
-    totalUnfilteredCount: { type: Number }
-  };
-
+  @property({ type: Array })
   declare results: SearchResult[];
+
+  @property({ type: Boolean, reflect: true })
   declare open: boolean;
+
+  @property({ type: Boolean })
   declare inventoryOnly: boolean;
+
+  @property({ type: Number })
   declare totalUnfilteredCount: number;
 
   private _handleClickOutside: (event: Event) => void;
