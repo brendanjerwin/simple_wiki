@@ -1,5 +1,5 @@
 import { html, css, LitElement } from 'lit';
-import { property } from 'lit/decorators.js';
+import { property, state } from 'lit/decorators.js';
 import { createClient, type Client } from '@connectrpc/connect';
 import { createGrpcWebTransport } from '@connectrpc/connect-web';
 import { create } from '@bufbuild/protobuf';
@@ -112,7 +112,7 @@ export class WikiSearch extends LitElement {
   @property({ type: Boolean })
   declare loading: boolean;
 
-  @property({ type: String })
+  @state()
   declare error: Error | null;
 
   @property({ type: Boolean })
