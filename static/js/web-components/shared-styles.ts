@@ -379,6 +379,28 @@ export const menuCSS = css`
 `;
 
 /* ==========================================================================
+   Animation Styles
+   ========================================================================== */
+
+export const animationCSS = css`
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes slideIn {
+    from {
+      transform: translateY(-20px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+`;
+
+/* ==========================================================================
    Dialog Component Styles
    ========================================================================== */
 
@@ -627,7 +649,7 @@ export const responsiveCSS = css`
  * Builds a styles array for dialog components with all common styles included.
  * Ensures responsiveCSS is always last to properly override desktop styles on mobile.
  *
- * Includes: foundationCSS, dialogCSS, buttonCSS, ...componentStyles, responsiveCSS
+ * Includes: foundationCSS, dialogCSS, buttonCSS, animationCSS, ...componentStyles, responsiveCSS
  *
  * Usage:
  * ```
@@ -635,6 +657,6 @@ export const responsiveCSS = css`
  * ```
  */
 export function dialogStyles(...componentStyles: CSSResult[]): CSSResult[] {
-  return [foundationCSS, dialogCSS, buttonCSS, ...componentStyles, responsiveCSS];
+  return [foundationCSS, dialogCSS, buttonCSS, animationCSS, ...componentStyles, responsiveCSS];
 }
 
