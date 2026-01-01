@@ -1,8 +1,8 @@
 package server
 
 import (
+	"github.com/brendanjerwin/simple_wiki/pkg/logging"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
-	"github.com/jcelliott/lumber"
 )
 
 const (
@@ -15,14 +15,14 @@ const (
 type PageInventoryNormalizationJob struct {
 	pageID     wikipage.PageIdentifier
 	normalizer *InventoryNormalizer
-	logger     lumber.Logger
+	logger     logging.Logger
 }
 
 // NewPageInventoryNormalizationJob creates a new per-page inventory normalization job.
 func NewPageInventoryNormalizationJob(
 	pageID wikipage.PageIdentifier,
 	deps InventoryNormalizationDependencies,
-	logger lumber.Logger,
+	logger logging.Logger,
 ) *PageInventoryNormalizationJob {
 	return &PageInventoryNormalizationJob{
 		pageID:     pageID,

@@ -3,19 +3,19 @@ package jobs
 import (
 	"sync"
 
-	"github.com/jcelliott/lumber"
+	"github.com/brendanjerwin/simple_wiki/pkg/logging"
 	"github.com/robfig/cron/v3"
 )
 
 // CronScheduler manages scheduled jobs using cron expressions.
 type CronScheduler struct {
 	cron   *cron.Cron
-	logger lumber.Logger
+	logger logging.Logger
 	mu     sync.RWMutex
 }
 
 // NewCronScheduler creates a new CronScheduler with the given logger.
-func NewCronScheduler(logger lumber.Logger) *CronScheduler {
+func NewCronScheduler(logger logging.Logger) *CronScheduler {
 	// Use cron with seconds support for more granular scheduling
 	c := cron.New(cron.WithSeconds())
 	return &CronScheduler{
