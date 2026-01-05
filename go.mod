@@ -30,8 +30,8 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.38.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.38.0
 	go.opentelemetry.io/otel/metric v1.39.0
-	go.opentelemetry.io/otel/sdk v1.38.0
-	go.opentelemetry.io/otel/sdk/metric v1.38.0
+	go.opentelemetry.io/otel/sdk v1.39.0
+	go.opentelemetry.io/otel/sdk/metric v1.39.0
 	go.opentelemetry.io/otel/trace v1.39.0
 	golang.org/x/net v0.47.0
 	golang.org/x/text v0.32.0
@@ -125,7 +125,7 @@ require (
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect
 	golang.org/x/mod v0.30.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
-	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/sys v0.39.0 // indirect
 	golang.org/x/tools v0.39.0 // indirect
 	golang.zx2c4.com/wireguard/windows v0.5.3 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20251029180050-ab9386a59fda // indirect
