@@ -29,7 +29,7 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v4
 
-      - uses: jetify-com/devbox-install-action@v0.11.0
+      - uses: jetify-com/devbox-install-action@v0.14.0
 
       - name: Build Go Binary
         run: |
