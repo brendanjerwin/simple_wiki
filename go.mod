@@ -43,6 +43,8 @@ require (
 )
 
 require (
+	connectrpc.com/connect v1.11.0 // indirect
+	connectrpc.com/grpcreflect v1.3.0 // indirect
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/BurntSushi/toml v1.4.1-0.20240526193622-a339e1f7089c // indirect
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
