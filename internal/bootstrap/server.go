@@ -323,9 +323,9 @@ func setupWikiMetrics(site *server.Site, logger *lumber.ConsoleLogger) (observab
 
 // buildVanguardTranscoder creates a vanguard Transcoder that accepts Connect, gRPC, and
 // gRPC-Web requests and transcodes them to gRPC for the underlying grpcServer. ConnectRPC
-// reflection is mounted alongside, enabling service discovery over HTTP/1.1 — compatible
-// with proxies like Tailscale Serve that don't forward HTTP/2 trailers. Non-RPC requests
-// fall through to the Gin router.
+// reflection is registered as vanguard services, enabling service discovery over HTTP/1.1 —
+// compatible with proxies like Tailscale Serve that don't forward HTTP/2 trailers. Non-RPC
+// requests fall through to the Gin router.
 func buildVanguardTranscoder(grpcServer *grpc.Server, ginRouter http.Handler, logger *lumber.ConsoleLogger) (*vanguard.Transcoder, error) {
 	// grpcServer only speaks gRPC; tell vanguard to use gRPC+proto on the backend leg.
 	grpcOpts := []vanguard.ServiceOption{
@@ -333,35 +333,41 @@ func buildVanguardTranscoder(grpcServer *grpc.Server, ginRouter http.Handler, lo
 		vanguard.WithTargetCodecs(vanguard.CodecProto),
 	}
 
-	services := []*vanguard.Service{
-		vanguard.NewService("api.v1.Frontmatter", grpcServer, grpcOpts...),
-		vanguard.NewService("api.v1.InventoryManagementService", grpcServer, grpcOpts...),
-		vanguard.NewService("api.v1.PageImportService", grpcServer, grpcOpts...),
-		vanguard.NewService("api.v1.PageManagementService", grpcServer, grpcOpts...),
-		vanguard.NewService("api.v1.SearchService", grpcServer, grpcOpts...),
-		vanguard.NewService("api.v1.SystemInfoService", grpcServer, grpcOpts...),
-	}
-
-	// ConnectRPC reflection handler works over HTTP/1.1 — no HTTP/2 trailers needed.
-	reflector := grpcreflect.NewStaticReflector(
+	// Single source of truth for service names to avoid drift between Vanguard and reflection.
+	serviceNames := []string{
 		"api.v1.Frontmatter",
 		"api.v1.InventoryManagementService",
 		"api.v1.PageImportService",
 		"api.v1.PageManagementService",
 		"api.v1.SearchService",
 		"api.v1.SystemInfoService",
-	)
+	}
+
+	services := make([]*vanguard.Service, 0, len(serviceNames)+2)
+	for _, name := range serviceNames {
+		services = append(services, vanguard.NewService(name, grpcServer, grpcOpts...))
+	}
+
+	// ConnectRPC reflection handler works over HTTP/1.1 — no HTTP/2 trailers needed.
+	reflector := grpcreflect.NewStaticReflector(serviceNames...)
 	reflectMux := http.NewServeMux()
 	reflectMux.Handle(grpcreflect.NewHandlerV1(reflector))
 	reflectMux.Handle(grpcreflect.NewHandlerV1Alpha(reflector))
 
-	// Unknown paths: reflection requests go to grpcreflect; everything else to Gin.
+	// Register reflection services with vanguard so they're routed correctly rather than 505'd.
+	// Vanguard intercepts all /{service}/{method} paths; without explicit registration the
+	// reflection service would return 505. The grpcreflect handlers speak Connect protocol.
+	connectOpts := []vanguard.ServiceOption{
+		vanguard.WithTargetProtocols(vanguard.ProtocolConnect),
+		vanguard.WithTargetCodecs(vanguard.CodecProto),
+	}
+	services = append(services,
+		vanguard.NewService("grpc.reflection.v1.ServerReflection", reflectMux, connectOpts...),
+		vanguard.NewService("grpc.reflection.v1alpha.ServerReflection", reflectMux, connectOpts...),
+	)
+
+	// Non-RPC paths fall through to Gin.
 	fallback := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.URL.Path, "/grpc.reflection.") {
-			logger.Debug("gRPC reflection request: %s %s", r.Method, r.URL.Path)
-			reflectMux.ServeHTTP(w, r)
-			return
-		}
 		logger.Debug("Gin request: %s %s", r.Method, r.URL.Path)
 		ginRouter.ServeHTTP(w, r)
 	})

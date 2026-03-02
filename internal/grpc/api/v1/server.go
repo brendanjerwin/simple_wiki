@@ -1002,12 +1002,12 @@ func (s *Server) UpdateWholePage(_ context.Context, req *apiv1.UpdateWholePageRe
 	}
 	fm[identifierKey] = req.PageName
 
-	if err := s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(req.PageName), fm); err != nil {
-		return nil, status.Errorf(codes.Internal, failedToWriteFrontmatterErrFmt, err)
-	}
-
 	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(req.PageName), md); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to write markdown: %v", err)
+	}
+
+	if err := s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(req.PageName), fm); err != nil {
+		return nil, status.Errorf(codes.Internal, failedToWriteFrontmatterErrFmt, err)
 	}
 
 	return &apiv1.UpdateWholePageResponse{Success: true}, nil
