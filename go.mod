@@ -3,6 +3,8 @@ module github.com/brendanjerwin/simple_wiki
 go 1.25.5
 
 require (
+	connectrpc.com/grpcreflect v1.3.0
+	connectrpc.com/vanguard v0.3.0
 	github.com/adrg/frontmatter v0.2.0
 	github.com/blevesearch/bleve v1.0.14
 	github.com/gabriel-vasile/mimetype v1.4.11
@@ -10,7 +12,6 @@ require (
 	github.com/gin-contrib/sessions v1.0.4
 	github.com/gin-gonic/gin v1.11.0
 	github.com/gorilla/sessions v1.4.0
-	github.com/improbable-eng/grpc-web v0.15.0
 	github.com/jcelliott/lumber v0.0.0-20160324203708-dd349441af25
 	github.com/k3a/html2text v1.2.1
 	github.com/karalabe/usb v0.0.2
@@ -43,8 +44,7 @@ require (
 )
 
 require (
-	connectrpc.com/connect v1.11.0 // indirect
-	connectrpc.com/grpcreflect v1.3.0 // indirect
+	connectrpc.com/connect v1.16.2 // indirect
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/BurntSushi/toml v1.4.1-0.20240526193622-a339e1f7089c // indirect
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
@@ -62,14 +62,12 @@ require (
 	github.com/blevesearch/zap/v15 v15.0.3 // indirect
 	github.com/bytedance/sonic v1.14.0 // indirect
 	github.com/bytedance/sonic/loader v0.3.0 // indirect
-	github.com/cenkalti/backoff/v4 v4.1.1 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
 	github.com/coder/websocket v1.8.12 // indirect
 	github.com/couchbase/vellum v1.0.2 // indirect
 	github.com/dblohm7/wingoes v0.0.0-20240119213807-a09d6be7affa // indirect
-	github.com/desertbit/timer v0.0.0-20180107155436-c41aec40b27f // indirect
 	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
 	github.com/gin-contrib/sse v1.1.0 // indirect
 	github.com/glycerine/go-unsnap-stream v0.0.0-20181221182339-f9677308dec2 // indirect
@@ -94,7 +92,6 @@ require (
 	github.com/hdevalence/ed25519consensus v0.2.0 // indirect
 	github.com/jsimonetti/rtnetlink v1.4.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
@@ -107,7 +104,6 @@ require (
 	github.com/philhofer/fwd v1.0.0 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.57.0 // indirect
-	github.com/rs/cors v1.7.0 // indirect
 	github.com/steveyen/gtreap v0.1.0 // indirect
 	github.com/tailscale/go-winio v0.0.0-20231025203758-c4f33415bf55 // indirect
 	github.com/tinylib/msgp v1.1.0 // indirect
@@ -132,7 +128,6 @@ require (
 	golang.zx2c4.com/wireguard/windows v0.5.3 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20251029180050-ab9386a59fda // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251029180050-ab9386a59fda // indirect
-	nhooyr.io/websocket v1.8.6 // indirect
 )
 
 replace github.com/karalabe/usb => github.com/brendanjerwin/usb v0.0.0-20231222144018-09a9b6ae5f52

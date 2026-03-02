@@ -8,17 +8,17 @@ import (
 	"strings"
 	"time"
 
+	"connectrpc.com/grpcreflect"
+	"connectrpc.com/vanguard"
 	grpcapi "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
 	"github.com/brendanjerwin/simple_wiki/internal/observability"
 	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/gin-gonic/gin"
-	"github.com/improbable-eng/grpc-web/go/grpcweb"
 	"github.com/jcelliott/lumber"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/reflection"
 )
 
 const (
@@ -280,19 +280,12 @@ func createMultiplexedHandler(
 		return nil, nil, err
 	}
 
-	wrappedGrpc := grpcweb.WrapServer(grpcServer,
-		grpcweb.WithOriginFunc(func(_ string) bool { return true }),
-	)
+	transcoder, err := buildVanguardTranscoder(grpcServer, ginRouter, logger)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create vanguard transcoder: %w", err)
+	}
 
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasPrefix(r.Header.Get("Content-Type"), "application/grpc") {
-			logger.Debug("gRPC-ish request: %s %s", r.Method, r.URL.Path)
-			wrappedGrpc.ServeHTTP(w, r)
-			return
-		}
-		logger.Debug("Gin request: %s %s", r.Method, r.URL.Path)
-		ginRouter.ServeHTTP(w, r)
-	}), metricsCleanup, nil
+	return transcoder, metricsCleanup, nil
 }
 
 // setupWikiMetrics creates and configures the wiki metrics recorder.
@@ -328,6 +321,54 @@ func setupWikiMetrics(site *server.Site, logger *lumber.ConsoleLogger) (observab
 	return counters, cleanup
 }
 
+// buildVanguardTranscoder creates a vanguard Transcoder that accepts Connect, gRPC, and
+// gRPC-Web requests and transcodes them to gRPC for the underlying grpcServer. ConnectRPC
+// reflection is mounted alongside, enabling service discovery over HTTP/1.1 — compatible
+// with proxies like Tailscale Serve that don't forward HTTP/2 trailers. Non-RPC requests
+// fall through to the Gin router.
+func buildVanguardTranscoder(grpcServer *grpc.Server, ginRouter http.Handler, logger *lumber.ConsoleLogger) (*vanguard.Transcoder, error) {
+	// grpcServer only speaks gRPC; tell vanguard to use gRPC+proto on the backend leg.
+	grpcOpts := []vanguard.ServiceOption{
+		vanguard.WithTargetProtocols(vanguard.ProtocolGRPC),
+		vanguard.WithTargetCodecs(vanguard.CodecProto),
+	}
+
+	services := []*vanguard.Service{
+		vanguard.NewService("api.v1.Frontmatter", grpcServer, grpcOpts...),
+		vanguard.NewService("api.v1.InventoryManagementService", grpcServer, grpcOpts...),
+		vanguard.NewService("api.v1.PageImportService", grpcServer, grpcOpts...),
+		vanguard.NewService("api.v1.PageManagementService", grpcServer, grpcOpts...),
+		vanguard.NewService("api.v1.SearchService", grpcServer, grpcOpts...),
+		vanguard.NewService("api.v1.SystemInfoService", grpcServer, grpcOpts...),
+	}
+
+	// ConnectRPC reflection handler works over HTTP/1.1 — no HTTP/2 trailers needed.
+	reflector := grpcreflect.NewStaticReflector(
+		"api.v1.Frontmatter",
+		"api.v1.InventoryManagementService",
+		"api.v1.PageImportService",
+		"api.v1.PageManagementService",
+		"api.v1.SearchService",
+		"api.v1.SystemInfoService",
+	)
+	reflectMux := http.NewServeMux()
+	reflectMux.Handle(grpcreflect.NewHandlerV1(reflector))
+	reflectMux.Handle(grpcreflect.NewHandlerV1Alpha(reflector))
+
+	// Unknown paths: reflection requests go to grpcreflect; everything else to Gin.
+	fallback := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/grpc.reflection.") {
+			logger.Debug("gRPC reflection request: %s %s", r.Method, r.URL.Path)
+			reflectMux.ServeHTTP(w, r)
+			return
+		}
+		logger.Debug("Gin request: %s %s", r.Method, r.URL.Path)
+		ginRouter.ServeHTTP(w, r)
+	})
+
+	return vanguard.NewTranscoder(services, vanguard.WithUnknownHandler(fallback))
+}
+
 // setupGRPCServer creates and configures the gRPC server with interceptors.
 func setupGRPCServer(
 	site *server.Site,
@@ -357,7 +398,6 @@ func setupGRPCServer(
 		grpc.ChainStreamInterceptor(streamInterceptors...),
 	)
 	grpcAPIServer.RegisterWithServer(grpcServer)
-	reflection.Register(grpcServer)
 
 	return grpcServer, nil
 }
