@@ -940,6 +940,79 @@ func (s *Server) CreatePage(_ context.Context, req *apiv1.CreatePageRequest) (*a
 	}, nil
 }
 
+// UpdatePageContent implements the UpdatePageContent RPC.
+// Updates only the markdown content of an existing page, preserving its frontmatter.
+func (s *Server) UpdatePageContent(_ context.Context, req *apiv1.UpdatePageContentRequest) (*apiv1.UpdatePageContentResponse, error) {
+	if req.PageName == "" {
+		return nil, status.Error(codes.InvalidArgument, "page_name is required")
+	}
+
+	// Verify the page exists
+	_, _, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.PageName))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.PageName)
+		}
+		return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, err)
+	}
+
+	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(req.PageName), wikipage.Markdown(req.NewContentMarkdown)); err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to write markdown: %v", err)
+	}
+
+	return &apiv1.UpdatePageContentResponse{Success: true}, nil
+}
+
+// UpdateWholePage implements the UpdateWholePage RPC.
+// Replaces the full content of an existing page, including its frontmatter.
+// The new_whole_markdown field must contain the complete page text (frontmatter + markdown).
+func (s *Server) UpdateWholePage(_ context.Context, req *apiv1.UpdateWholePageRequest) (*apiv1.UpdateWholePageResponse, error) {
+	if req.PageName == "" {
+		return nil, status.Error(codes.InvalidArgument, "page_name is required")
+	}
+
+	// Verify the page exists
+	_, _, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.PageName))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.PageName)
+		}
+		return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, err)
+	}
+
+	// Parse frontmatter and markdown from the combined content
+	page := &wikipage.Page{
+		Identifier: req.PageName,
+		Text:       req.NewWholeMarkdown,
+	}
+
+	fm, err := page.GetFrontMatter()
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "failed to parse frontmatter: %v", err)
+	}
+
+	md, err := page.GetMarkdown()
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "failed to parse markdown: %v", err)
+	}
+
+	// Preserve the page identifier in frontmatter
+	if fm == nil {
+		fm = make(map[string]any)
+	}
+	fm[identifierKey] = req.PageName
+
+	if err := s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(req.PageName), fm); err != nil {
+		return nil, status.Errorf(codes.Internal, failedToWriteFrontmatterErrFmt, err)
+	}
+
+	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(req.PageName), md); err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to write markdown: %v", err)
+	}
+
+	return &apiv1.UpdateWholePageResponse{Success: true}, nil
+}
+
 // loadTemplateFrontmatter loads and validates a template page's frontmatter.
 func (s *Server) loadTemplateFrontmatter(templateIdentifier string) (map[string]any, error) {
 	_, fm, err := s.pageReaderMutator.ReadFrontMatter(templateIdentifier)

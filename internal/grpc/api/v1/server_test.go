@@ -1392,6 +1392,222 @@ var _ = Describe("Server", func() {
 		})
 	})
 
+	Describe("UpdatePageContent", func() {
+		var (
+			req                   *apiv1.UpdatePageContentRequest
+			resp                  *apiv1.UpdatePageContentResponse
+			err                   error
+			mockPageReaderMutator *MockPageReaderMutator
+		)
+
+		BeforeEach(func() {
+			req = &apiv1.UpdatePageContentRequest{
+				PageName:           "test-page",
+				NewContentMarkdown: "# New Content",
+			}
+			mockPageReaderMutator = &MockPageReaderMutator{
+				Frontmatter: wikipage.FrontMatter{"identifier": "test-page"},
+			}
+		})
+
+		JustBeforeEach(func() {
+			server = mustNewServer(mockPageReaderMutator, nil, nil)
+			resp, err = server.UpdatePageContent(ctx, req)
+		})
+
+		When("page_name is empty", func() {
+			BeforeEach(func() {
+				req.PageName = ""
+			})
+
+			It("should return an invalid argument error and no response", func() {
+				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "page_name is required"))
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("the page does not exist", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = os.ErrNotExist
+			})
+
+			It("should return a not found error and no response", func() {
+				Expect(err).To(HaveGrpcStatus(codes.NotFound, "page not found: test-page"))
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("reading frontmatter fails with a generic error", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = errors.New("read error")
+			})
+
+			It("should return an internal error and no response", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to read frontmatter"))
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("writing the markdown fails", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.MarkdownWriteErr = errors.New("disk full")
+			})
+
+			It("should return an internal error and no response", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to write markdown"))
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("the update is successful", func() {
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a success response", func() {
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.Success).To(BeTrue())
+				Expect(resp.Error).To(BeEmpty())
+			})
+
+			It("should write the new markdown to the page", func() {
+				Expect(mockPageReaderMutator.WrittenIdentifier).To(Equal(wikipage.PageIdentifier("test-page")))
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(Equal(wikipage.Markdown("# New Content")))
+			})
+		})
+	})
+
+	Describe("UpdateWholePage", func() {
+		var (
+			req                   *apiv1.UpdateWholePageRequest
+			resp                  *apiv1.UpdateWholePageResponse
+			err                   error
+			mockPageReaderMutator *MockPageReaderMutator
+		)
+
+		BeforeEach(func() {
+			req = &apiv1.UpdateWholePageRequest{
+				PageName:         "test-page",
+				NewWholeMarkdown: "+++\ntitle = \"New Title\"\n+++\n# New Content",
+			}
+			mockPageReaderMutator = &MockPageReaderMutator{
+				Frontmatter: wikipage.FrontMatter{"identifier": "test-page", "title": "Old Title"},
+			}
+		})
+
+		JustBeforeEach(func() {
+			server = mustNewServer(mockPageReaderMutator, nil, nil)
+			resp, err = server.UpdateWholePage(ctx, req)
+		})
+
+		When("page_name is empty", func() {
+			BeforeEach(func() {
+				req.PageName = ""
+			})
+
+			It("should return an invalid argument error and no response", func() {
+				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "page_name is required"))
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("the page does not exist", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = os.ErrNotExist
+			})
+
+			It("should return a not found error and no response", func() {
+				Expect(err).To(HaveGrpcStatus(codes.NotFound, "page not found: test-page"))
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("reading frontmatter fails with a generic error", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = errors.New("read error")
+			})
+
+			It("should return an internal error and no response", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to read frontmatter"))
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("writing the frontmatter fails", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.WriteErr = errors.New("disk full")
+			})
+
+			It("should return an internal error and no response", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to write frontmatter"))
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("writing the markdown fails", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.MarkdownWriteErr = errors.New("disk full")
+			})
+
+			It("should return an internal error and no response", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to write markdown"))
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("the update is successful with TOML frontmatter", func() {
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a success response", func() {
+				Expect(resp).NotTo(BeNil())
+				Expect(resp.Success).To(BeTrue())
+				Expect(resp.Error).To(BeEmpty())
+			})
+
+			It("should write frontmatter with identifier preserved", func() {
+				Expect(mockPageReaderMutator.WrittenFrontmatter).To(HaveKeyWithValue("title", "New Title"))
+				Expect(mockPageReaderMutator.WrittenFrontmatter).To(HaveKeyWithValue("identifier", "test-page"))
+			})
+
+			It("should write the markdown content", func() {
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(Equal(wikipage.Markdown("# New Content")))
+			})
+		})
+
+		When("the update is successful with no frontmatter", func() {
+			BeforeEach(func() {
+				req.NewWholeMarkdown = "# Just Markdown"
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should write frontmatter containing only the identifier", func() {
+				Expect(mockPageReaderMutator.WrittenFrontmatter).To(HaveKeyWithValue("identifier", "test-page"))
+			})
+
+			It("should write the markdown content", func() {
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(Equal(wikipage.Markdown("# Just Markdown")))
+			})
+		})
+
+		When("the whole markdown contains an identifier key that differs from page_name", func() {
+			BeforeEach(func() {
+				req.NewWholeMarkdown = "+++\nidentifier = \"malicious-override\"\ntitle = \"Hacked\"\n+++\n# Content"
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should overwrite identifier with the correct page name", func() {
+				Expect(mockPageReaderMutator.WrittenFrontmatter).To(HaveKeyWithValue("identifier", "test-page"))
+			})
+		})
+	})
 
 	Describe("GetJobStatus", func() {
 		var (
