@@ -186,16 +186,24 @@ export class WikiImage extends LitElement {
   `;
 
   @property({ type: String })
-  src = '';
+  declare src: string;
 
   @property({ type: String })
-  alt = '';
+  declare alt: string;
 
   @property({ type: String, attribute: 'image-title' })
-  imageTitle?: string;
+  declare imageTitle: string | undefined;
 
   @property({ type: Boolean, reflect: true, attribute: 'tools-open' })
-  toolsOpen = false;
+  declare toolsOpen: boolean;
+
+  constructor() {
+    super();
+    this.src = '';
+    this.alt = '';
+    this.imageTitle = undefined;
+    this.toolsOpen = false;
+  }
 
   override connectedCallback(): void {
     super.connectedCallback();
