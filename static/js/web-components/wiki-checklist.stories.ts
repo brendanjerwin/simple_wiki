@@ -32,7 +32,7 @@ A fully API-driven interactive checklist component backed by the frontmatter gRP
 \`\`\`
 
 **Storybook note:** In Storybook, the component has no backend, so stories bypass
-the API by setting \`items\` (and optionally \`loading\`, \`error\`, \`filterTag\`)
+the API by setting \`items\` (and optionally \`loading\`, \`error\`, \`filterTags\`)
 directly on the element after fixture creation.
         `,
       },
@@ -206,7 +206,7 @@ export const FilteredByTag: Story = {
         <wiki-checklist
           list-name="grocery_list"
           .items=${items}
-          .filterTag=${'dairy'}
+          .filterTags=${['dairy']}
           .loading=${false}
           .error=${null}
         ></wiki-checklist>

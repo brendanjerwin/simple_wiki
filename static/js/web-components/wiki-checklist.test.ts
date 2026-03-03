@@ -466,7 +466,7 @@ describe('WikiChecklist', () => {
   });
 
   describe('getFilteredItems', () => {
-    describe('when filterTag is null', () => {
+    describe('when filterTags is empty', () => {
       let result: ReturnType<WikiChecklist['getFilteredItems']>;
 
       beforeEach(() => {
@@ -475,7 +475,7 @@ describe('WikiChecklist', () => {
           { text: 'Apples', checked: false, tags: ['produce'] },
           { text: 'Bread', checked: false, tags: [] },
         ];
-        el.filterTag = null;
+        el.filterTags = [];
         result = el.getFilteredItems();
       });
 
@@ -484,7 +484,7 @@ describe('WikiChecklist', () => {
       });
     });
 
-    describe('when filterTag is set to a matching tag', () => {
+    describe('when filterTags has a single matching tag', () => {
       let result: ReturnType<WikiChecklist['getFilteredItems']>;
 
       beforeEach(() => {
@@ -494,7 +494,7 @@ describe('WikiChecklist', () => {
           { text: 'Eggs', checked: false, tags: ['dairy', 'fridge'] },
           { text: 'Bread', checked: false, tags: [] },
         ];
-        el.filterTag = 'dairy';
+        el.filterTags = ['dairy'];
         result = el.getFilteredItems();
       });
 
@@ -513,14 +513,44 @@ describe('WikiChecklist', () => {
       });
     });
 
-    describe('when filterTag matches no items', () => {
+    describe('when filterTags has multiple tags (AND logic)', () => {
+      let result: ReturnType<WikiChecklist['getFilteredItems']>;
+
+      beforeEach(() => {
+        el.items = [
+          { text: 'Milk', checked: false, tags: ['dairy'] },
+          { text: 'Eggs', checked: false, tags: ['dairy', 'fridge'] },
+          { text: 'Cheese', checked: false, tags: ['dairy', 'fridge'] },
+          { text: 'Apples', checked: false, tags: ['produce'] },
+          { text: 'Butter', checked: false, tags: ['dairy'] },
+        ];
+        el.filterTags = ['dairy', 'fridge'];
+        result = el.getFilteredItems();
+      });
+
+      it('should return only items matching ALL filter tags', () => {
+        expect(result).to.have.length(2);
+      });
+
+      it('should include items that have both tags', () => {
+        const texts = result.map(r => r.item.text);
+        expect(texts).to.deep.equal(['Eggs', 'Cheese']);
+      });
+
+      it('should not include items that have only one of the filter tags', () => {
+        const texts = result.map(r => r.item.text);
+        expect(texts).to.not.include('Milk');
+      });
+    });
+
+    describe('when filterTags matches no items', () => {
       let result: ReturnType<WikiChecklist['getFilteredItems']>;
 
       beforeEach(() => {
         el.items = [
           { text: 'Milk', checked: false, tags: ['dairy'] },
         ];
-        el.filterTag = 'nonexistent';
+        el.filterTags = ['nonexistent'];
         result = el.getFilteredItems();
       });
 
@@ -808,7 +838,7 @@ describe('WikiChecklist', () => {
             { text: 'Apples', checked: false, tags: ['produce'] },
             { text: 'Eggs', checked: false, tags: ['dairy'] },
           ];
-          el.filterTag = 'dairy';
+          el.filterTags = ['dairy'];
           await el.updateComplete;
           activePill = el.shadowRoot?.querySelector('.tag-pill-active');
           renderedItems = el.shadowRoot?.querySelectorAll('.item-row');
@@ -843,8 +873,8 @@ describe('WikiChecklist', () => {
           renderedItems = el.shadowRoot?.querySelectorAll('.item-row');
         });
 
-        it('should set filterTag', () => {
-          expect(el.filterTag).to.equal('dairy');
+        it('should add clicked tag to filterTags', () => {
+          expect(el.filterTags).to.include('dairy');
         });
 
         it('should filter displayed items', () => {
@@ -852,7 +882,7 @@ describe('WikiChecklist', () => {
         });
       });
 
-      describe('when clicking the active tag pill to clear filter', () => {
+      describe('when clicking the active tag pill to remove it from filter', () => {
         let renderedItems: NodeListOf<Element> | undefined;
 
         beforeEach(async () => {
@@ -862,7 +892,7 @@ describe('WikiChecklist', () => {
             { text: 'Milk', checked: false, tags: ['dairy'] },
             { text: 'Apples', checked: false, tags: ['produce'] },
           ];
-          el.filterTag = 'dairy';
+          el.filterTags = ['dairy'];
           await el.updateComplete;
 
           const activePill = el.shadowRoot?.querySelector<HTMLButtonElement>('.tag-pill-active');
@@ -871,8 +901,8 @@ describe('WikiChecklist', () => {
           renderedItems = el.shadowRoot?.querySelectorAll('.item-row');
         });
 
-        it('should clear filterTag', () => {
-          expect(el.filterTag).to.be.null;
+        it('should remove the tag from filterTags', () => {
+          expect(el.filterTags).to.deep.equal([]);
         });
 
         it('should show all items', () => {
@@ -890,7 +920,7 @@ describe('WikiChecklist', () => {
             { text: 'Milk', checked: false, tags: ['dairy'] },
             { text: 'Apples', checked: false, tags: ['produce'] },
           ];
-          el.filterTag = 'dairy';
+          el.filterTags = ['dairy'];
           await el.updateComplete;
           clearBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.tag-filter-clear');
         });
@@ -910,7 +940,7 @@ describe('WikiChecklist', () => {
             { text: 'Milk', checked: false, tags: ['dairy'] },
             { text: 'Apples', checked: false, tags: ['produce'] },
           ];
-          el.filterTag = 'dairy';
+          el.filterTags = ['dairy'];
           await el.updateComplete;
 
           const clearBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.tag-filter-clear');
@@ -919,8 +949,8 @@ describe('WikiChecklist', () => {
           renderedItems = el.shadowRoot?.querySelectorAll('.item-row');
         });
 
-        it('should clear filterTag', () => {
-          expect(el.filterTag).to.be.null;
+        it('should clear filterTags', () => {
+          expect(el.filterTags).to.deep.equal([]);
         });
 
         it('should show all items', () => {
@@ -937,7 +967,7 @@ describe('WikiChecklist', () => {
           el.items = [
             { text: 'Milk', checked: false, tags: ['dairy'] },
           ];
-          el.filterTag = null;
+          el.filterTags = [];
           await el.updateComplete;
           clearBtn = el.shadowRoot?.querySelector('.tag-filter-bar .tag-filter-clear') as HTMLButtonElement | null;
         });
