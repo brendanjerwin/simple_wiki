@@ -12,6 +12,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"time"
 
 	"connectrpc.com/grpcreflect"
 	// Blank imports register all wiki API proto types in protoregistry.GlobalFiles / GlobalTypes.
@@ -27,10 +28,17 @@ const (
 	defaultWikiURL   = "https://wiki.monster-orfe.ts.net"
 	pathSeparator    = "/"
 	writeErrTemplate = "write error: %w"
+
+	// versionCheckTimeoutMs is the maximum time to wait for the version check API call.
+	versionCheckTimeoutMs = 3000
 )
 
-// version is set by ldflags at build time.
-var version = "dev"
+var (
+	// version is set by ldflags at build time.
+	version = "dev"
+	// commit is the git commit hash this binary was built from, set by ldflags.
+	commit = "dev"
+)
 
 func main() {
 	app := cli.NewApp()
@@ -39,6 +47,24 @@ func main() {
 	app.Description = appDescription()
 	app.Version = version
 	app.HideVersion = false
+	app.Flags = []cli.Flag{
+		cli.StringFlag{
+			Name:   "url, u",
+			Usage:  "wiki base URL (env: WIKI_URL)",
+			EnvVar: "WIKI_URL",
+			Value:  defaultWikiURL,
+		},
+	}
+	app.Before = func(c *cli.Context) error {
+		if err := checkVersionCompatibility(c.GlobalString("url")); err != nil {
+			// Print directly and exit to avoid urfave/cli dumping help text on error.
+			if _, writeErr := fmt.Fprintln(os.Stderr, err); writeErr != nil {
+				os.Exit(2)
+			}
+			os.Exit(1)
+		}
+		return nil
+	}
 	app.Commands = buildCommands()
 
 	if err := app.Run(os.Args); err != nil {
@@ -47,6 +73,67 @@ func main() {
 		}
 		os.Exit(1)
 	}
+}
+
+// versionResponse is the JSON shape returned by SystemInfoService/GetVersion.
+type versionResponse struct {
+	Commit string `json:"commit"`
+}
+
+// checkVersionCompatibility calls the wiki's GetVersion endpoint and compares
+// the server's commit with this binary's embedded commit. If they differ, it
+// returns an error telling the caller to download the latest binary.
+// Skipped when running in dev mode or when the server is unreachable.
+func checkVersionCompatibility(baseURL string) error {
+	if commit == "dev" {
+		return nil // dev build, skip check
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), versionCheckTimeoutMs*time.Millisecond)
+	defer cancel()
+
+	reqURL := strings.TrimRight(baseURL, pathSeparator) +
+		pathSeparator + "api.v1.SystemInfoService" +
+		pathSeparator + "GetVersion"
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bytes.NewReader([]byte("{}")))
+	if err != nil {
+		return nil // can't build request, skip check
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Connect-Protocol-Version", "1")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil // server unreachable, skip check (offline use is fine)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil // unexpected response, skip check
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil
+	}
+
+	var ver versionResponse
+	if err := json.Unmarshal(body, &ver); err != nil {
+		return nil
+	}
+
+	if ver.Commit != "" && ver.Commit != commit {
+		return fmt.Errorf(
+			"VERSION MISMATCH: this wiki-cli was built from commit %.8s but the wiki server is running commit %.8s\n\n"+
+				"Download the latest version:\n"+
+				"  curl -o wiki-cli %s/cli/wiki-cli-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/') && chmod +x wiki-cli\n\n"+
+				"Or manually from: %s/cli/",
+			commit, ver.Commit, baseURL, baseURL,
+		)
+	}
+
+	return nil
 }
 
 func appDescription() string {
