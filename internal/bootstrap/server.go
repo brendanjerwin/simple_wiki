@@ -11,6 +11,7 @@ import (
 	"connectrpc.com/grpcreflect"
 	"connectrpc.com/vanguard"
 	grpcapi "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
+	wikimcp "github.com/brendanjerwin/simple_wiki/internal/mcp"
 	"github.com/brendanjerwin/simple_wiki/internal/observability"
 	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
@@ -275,7 +276,7 @@ func createMultiplexedHandler(
 	// Create router with middleware already attached (before routes)
 	ginRouter := site.GinRouter(middleware...)
 
-	grpcServer, err := setupGRPCServer(site, commit, buildTime, identityResolver, counters, logger)
+	grpcServer, grpcAPIServer, err := setupGRPCServer(site, commit, buildTime, identityResolver, counters, logger)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -285,7 +286,16 @@ func createMultiplexedHandler(
 		return nil, nil, fmt.Errorf("failed to create vanguard transcoder: %w", err)
 	}
 
-	return transcoder, metricsCleanup, nil
+	mcpHandler, err := wikimcp.NewStreamableHTTPHandler(grpcAPIServer)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create MCP handler: %w", err)
+	}
+
+	outerMux := http.NewServeMux()
+	outerMux.Handle("/mcp", mcpHandler)
+	outerMux.Handle("/", transcoder)
+
+	return outerMux, metricsCleanup, nil
 }
 
 // setupWikiMetrics creates and configures the wiki metrics recorder.
@@ -370,6 +380,7 @@ func BuildVanguardTranscoder(grpcServer *grpc.Server, ginRouter http.Handler) (h
 }
 
 // setupGRPCServer creates and configures the gRPC server with interceptors.
+// It returns both the gRPC transport server and the underlying API server for direct in-process calls.
 func setupGRPCServer(
 	site *server.Site,
 	commit string,
@@ -377,20 +388,20 @@ func setupGRPCServer(
 	identityResolver tailscale.IdentityResolver,
 	counters observability.RequestCounter,
 	logger *lumber.ConsoleLogger,
-) (*grpc.Server, error) {
+) (*grpc.Server, *grpcapi.Server, error) {
 	grpcAPIServer, err := grpcapi.NewServer(
 		commit, buildTime, site, site.BleveIndexQueryer, site.GetJobQueueCoordinator(),
 		logger, site.MarkdownRenderer, server.TemplateExecutor{}, site.FrontmatterIndexQueryer,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create gRPC server: %w", err)
+		return nil, nil, fmt.Errorf("failed to create gRPC server: %w", err)
 	}
 
 	unaryInterceptors, streamInterceptors, err := buildGRPCInterceptors(
 		identityResolver, grpcAPIServer.LoggingInterceptor(), counters, logger,
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	grpcServer := grpc.NewServer(
@@ -399,7 +410,7 @@ func setupGRPCServer(
 	)
 	grpcAPIServer.RegisterWithServer(grpcServer)
 
-	return grpcServer, nil
+	return grpcServer, grpcAPIServer, nil
 }
 
 // metricsPersistJob triggers async metrics persistence via the job queue.

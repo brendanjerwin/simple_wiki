@@ -11,6 +11,7 @@ export PATH := $(BIN):$(PATH)
 export GOBIN := $(abspath $(BIN))
 COPYRIGHT_YEARS := 2021-2024
 LICENSE_IGNORE := --ignore /testdata/
+BUF_VERSION := 1.47.2
 
 .PHONY: help
 help: ## Describe useful make targets
@@ -77,8 +78,10 @@ lintfix: $(BIN)/golangci-lint $(BIN)/buf ## Automatically fix some lint errors
 
 .PHONY: generate
 generate: $(BIN)/buf $(BIN)/protoc-gen-go $(BIN)/protoc-gen-connect-go $(BIN)/license-header ## Regenerate code and licenses
+	go mod tidy
 	rm -rf internal/gen
 	PATH="$(abspath $(BIN))" buf generate
+	( cd cmd/protoc-gen-connect-go; ./generate.sh )
 	license-header \
 		--license-type apache \
 		--copyright-holder "The Connect Authors" \
@@ -100,15 +103,15 @@ $(BIN)/protoc-gen-connect-go:
 
 $(BIN)/buf: Makefile
 	@mkdir -p $(@D)
-	go install github.com/bufbuild/buf/cmd/buf@v1.27.2
+	go install github.com/bufbuild/buf/cmd/buf@v${BUF_VERSION}
 
 $(BIN)/license-header: Makefile
 	@mkdir -p $(@D)
-	go install github.com/bufbuild/buf/private/pkg/licenseheader/cmd/license-header@v1.27.2
+	go install github.com/bufbuild/buf/private/pkg/licenseheader/cmd/license-header@v${BUF_VERSION}
 
 $(BIN)/golangci-lint: Makefile
 	@mkdir -p $(@D)
-	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.55.2
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.60.0
 
 $(BIN)/protoc-gen-go: Makefile go.mod
 	@mkdir -p $(@D)
