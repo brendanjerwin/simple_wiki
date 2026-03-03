@@ -286,6 +286,8 @@ func BuildLinkToWithVisited(site wikipage.PageReader, currentPageTemplateContext
 	}
 }
 
+// BuildChecklist returns a template function that renders a wiki-checklist custom element.
+// The list-name attribute is taken from the argument; the page attribute from the template context.
 func BuildChecklist(templateContext TemplateContext) func(string) string {
 	return func(listName string) string {
 		return fmt.Sprintf(`<wiki-checklist list-name="%s" page="%s"></wiki-checklist>`, html.EscapeString(listName), html.EscapeString(templateContext.Identifier))
