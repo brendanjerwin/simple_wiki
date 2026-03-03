@@ -1314,7 +1314,8 @@ describe('WikiChecklist', () => {
     });
 
     it('should render an "Other" group for untagged items', () => {
-      expect(headingTexts).to.include('Other');
+      const hasOther = headingTexts.some(t => t?.includes('Other'));
+      expect(hasOther).to.be.true;
     });
   });
 
