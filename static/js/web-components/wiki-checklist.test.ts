@@ -10,14 +10,6 @@ import {
 } from '../gen/api/v1/frontmatter_pb.js';
 import type { JsonObject } from '@bufbuild/protobuf';
 
-// Helper type to access private methods for testing
-interface WikiChecklistInternal {
-  persistData(
-    items: ChecklistItem[],
-    groupOrder: string[] | null
-  ): Promise<void>;
-}
-
 describe('WikiChecklist', () => {
   let el: WikiChecklist;
 
@@ -75,75 +67,152 @@ describe('WikiChecklist', () => {
   });
 
   describe('formatTitle', () => {
-    it('should convert snake_case to Title Case', () => {
-      expect(el.formatTitle('grocery_list')).to.equal('Grocery List');
+    describe('when given snake_case input', () => {
+      let result: string;
+
+      beforeEach(() => {
+        result = el.formatTitle('grocery_list');
+      });
+
+      it('should convert to Title Case', () => {
+        expect(result).to.equal('Grocery List');
+      });
     });
 
-    it('should convert kebab-case to Title Case', () => {
-      expect(el.formatTitle('my-checklist')).to.equal('My Checklist');
+    describe('when given kebab-case input', () => {
+      let result: string;
+
+      beforeEach(() => {
+        result = el.formatTitle('my-checklist');
+      });
+
+      it('should convert to Title Case', () => {
+        expect(result).to.equal('My Checklist');
+      });
     });
 
-    it('should handle single word', () => {
-      expect(el.formatTitle('tasks')).to.equal('Tasks');
+    describe('when given a single word', () => {
+      let result: string;
+
+      beforeEach(() => {
+        result = el.formatTitle('tasks');
+      });
+
+      it('should capitalize the word', () => {
+        expect(result).to.equal('Tasks');
+      });
     });
 
-    it('should handle mixed snake and kebab case', () => {
-      expect(el.formatTitle('my_todo-list')).to.equal('My Todo List');
+    describe('when given mixed snake and kebab case', () => {
+      let result: string;
+
+      beforeEach(() => {
+        result = el.formatTitle('my_todo-list');
+      });
+
+      it('should convert to Title Case', () => {
+        expect(result).to.equal('My Todo List');
+      });
     });
 
-    it('should handle empty string', () => {
-      expect(el.formatTitle('')).to.equal('');
+    describe('when given an empty string', () => {
+      let result: string;
+
+      beforeEach(() => {
+        result = el.formatTitle('');
+      });
+
+      it('should return an empty string', () => {
+        expect(result).to.equal('');
+      });
     });
   });
 
   describe('extractChecklistData', () => {
-    it('should return empty items when frontmatter has no checklists', () => {
-      const frontmatter: JsonObject = { title: 'Test' };
-      const result = el.extractChecklistData(frontmatter, 'grocery_list');
-      expect(result.items).to.deep.equal([]);
-      expect(result.groupOrder).to.be.null;
-    });
+    describe('when frontmatter has no checklists', () => {
+      let result: ReturnType<WikiChecklist['extractChecklistData']>;
 
-    it('should return empty items when listName not in checklists', () => {
-      const frontmatter: JsonObject = {
-        checklists: { other_list: { items: [] } },
-      };
-      const result = el.extractChecklistData(frontmatter, 'grocery_list');
-      expect(result.items).to.deep.equal([]);
-    });
+      beforeEach(() => {
+        const frontmatter: JsonObject = { title: 'Test' };
+        result = el.extractChecklistData(frontmatter, 'grocery_list');
+      });
 
-    it('should extract items from checklists', () => {
-      const frontmatter: JsonObject = {
-        checklists: {
-          grocery_list: {
-            items: [
-              { text: 'Milk', checked: false },
-              { text: 'Eggs', checked: true, tag: 'Dairy' },
-            ],
-          },
-        },
-      };
-      const result = el.extractChecklistData(frontmatter, 'grocery_list');
-      expect(result.items).to.have.length(2);
-      expect(result.items[0]).to.deep.equal({ text: 'Milk', checked: false });
-      expect(result.items[1]).to.deep.equal({
-        text: 'Eggs',
-        checked: true,
-        tag: 'Dairy',
+      it('should return empty items', () => {
+        expect(result.items).to.deep.equal([]);
+      });
+
+      it('should return null groupOrder', () => {
+        expect(result.groupOrder).to.be.null;
       });
     });
 
-    it('should extract group_order from checklists', () => {
-      const frontmatter: JsonObject = {
-        checklists: {
-          grocery_list: {
-            items: [],
-            group_order: ['Dairy', 'Produce'],
+    describe('when listName is not in checklists', () => {
+      let result: ReturnType<WikiChecklist['extractChecklistData']>;
+
+      beforeEach(() => {
+        const frontmatter: JsonObject = {
+          checklists: { other_list: { items: [] } },
+        };
+        result = el.extractChecklistData(frontmatter, 'grocery_list');
+      });
+
+      it('should return empty items', () => {
+        expect(result.items).to.deep.equal([]);
+      });
+    });
+
+    describe('when checklists contain the requested list', () => {
+      let result: ReturnType<WikiChecklist['extractChecklistData']>;
+
+      beforeEach(() => {
+        const frontmatter: JsonObject = {
+          checklists: {
+            grocery_list: {
+              items: [
+                { text: 'Milk', checked: false },
+                { text: 'Eggs', checked: true, tag: 'Dairy' },
+              ],
+            },
           },
-        },
-      };
-      const result = el.extractChecklistData(frontmatter, 'grocery_list');
-      expect(result.groupOrder).to.deep.equal(['Dairy', 'Produce']);
+        };
+        result = el.extractChecklistData(frontmatter, 'grocery_list');
+      });
+
+      it('should extract the correct number of items', () => {
+        expect(result.items).to.have.length(2);
+      });
+
+      it('should extract plain items correctly', () => {
+        expect(result.items[0]).to.deep.equal({ text: 'Milk', checked: false });
+      });
+
+      it('should extract tagged items correctly', () => {
+        expect(result.items[1]).to.deep.equal({
+          text: 'Eggs',
+          checked: true,
+          tag: 'Dairy',
+        });
+      });
+    });
+
+    describe('when checklist has group_order', () => {
+      let result: ReturnType<WikiChecklist['extractChecklistData']>;
+
+      beforeEach(() => {
+        const frontmatter: JsonObject = {
+          checklists: {
+            grocery_list: {
+              items: [],
+              group_order: ['Dairy', 'Produce'],
+            },
+          },
+        };
+        result = el.extractChecklistData(frontmatter, 'grocery_list');
+      });
+
+      it('should extract group_order', () => {
+        expect(result.groupOrder).to.deep.equal(['Dairy', 'Produce']);
+      });
     });
   });
 
@@ -179,6 +248,9 @@ describe('WikiChecklist', () => {
   });
 
   describe('getGroupedItems', () => {
+    type GroupedResult = ReturnType<WikiChecklist['getGroupedItems']>;
+    let groups: GroupedResult;
+
     beforeEach(() => {
       el.items = [
         { text: 'Milk', checked: false, tag: 'Dairy' },
@@ -187,57 +259,96 @@ describe('WikiChecklist', () => {
         { text: 'Eggs', checked: true, tag: 'Dairy' },
         { text: 'Towels', checked: false },
       ];
+      groups = el.getGroupedItems();
     });
 
-    it('should group items by tag', () => {
-      const groups = el.getGroupedItems();
-      const dairyGroup = groups.find(g => g.tag === 'Dairy');
-      expect(dairyGroup).to.exist;
-      expect(dairyGroup!.items).to.have.length(2);
+    describe('grouping by tag', () => {
+      let dairyGroup: GroupedResult[number] | undefined;
+
+      beforeEach(() => {
+        dairyGroup = groups.find(g => g.tag === 'Dairy');
+      });
+
+      it('should create a Dairy group', () => {
+        expect(dairyGroup).to.exist;
+      });
+
+      it('should place both Dairy items in the group', () => {
+        expect(dairyGroup!.items).to.have.length(2);
+      });
     });
 
-    it('should put untagged items in "Other" group', () => {
-      const groups = el.getGroupedItems();
-      const otherGroup = groups.find(g => g.tag === 'Other');
-      expect(otherGroup).to.exist;
-      expect(otherGroup!.items).to.have.length(1);
-      const firstItem = otherGroup!.items[0];
-      expect(firstItem).to.exist;
-      expect(firstItem!.item.text).to.equal('Towels');
+    describe('untagged items', () => {
+      let otherGroup: GroupedResult[number] | undefined;
+
+      beforeEach(() => {
+        otherGroup = groups.find(g => g.tag === 'Other');
+      });
+
+      it('should place untagged items in an "Other" group', () => {
+        expect(otherGroup).to.exist;
+      });
+
+      it('should contain exactly one untagged item', () => {
+        expect(otherGroup!.items).to.have.length(1);
+      });
+
+      it('should contain the Towels item', () => {
+        expect(otherGroup!.items[0]!.item.text).to.equal('Towels');
+      });
+    });
+
+    describe('absolute index preservation', () => {
+      let dairyIndices: number[];
+
+      beforeEach(() => {
+        const dairyGroup = groups.find(g => g.tag === 'Dairy');
+        dairyIndices = dairyGroup!.items.map(i => i.index);
+      });
+
+      it('should preserve the Milk absolute index', () => {
+        expect(dairyIndices).to.include(0);
+      });
+
+      it('should preserve the Eggs absolute index', () => {
+        expect(dairyIndices).to.include(3);
+      });
     });
 
     describe('when groupOrder is provided', () => {
+      let orderedTags: string[];
+
       beforeEach(() => {
         el.groupOrder = ['Produce', 'Dairy', 'Bakery'];
+        groups = el.getGroupedItems();
+        orderedTags = groups.map(g => g.tag);
       });
 
-      it('should respect the custom group order', () => {
-        const groups = el.getGroupedItems();
-        expect(groups[0]?.tag).to.equal('Produce');
-        expect(groups[1]?.tag).to.equal('Dairy');
-        expect(groups[2]?.tag).to.equal('Bakery');
+      it('should place Produce first', () => {
+        expect(orderedTags[0]).to.equal('Produce');
+      });
+
+      it('should place Dairy second', () => {
+        expect(orderedTags[1]).to.equal('Dairy');
+      });
+
+      it('should place Bakery third', () => {
+        expect(orderedTags[2]).to.equal('Bakery');
       });
     });
 
     describe('when groupOrder is null', () => {
+      let taggedGroupTags: string[];
+
       beforeEach(() => {
         el.groupOrder = null;
+        groups = el.getGroupedItems();
+        taggedGroupTags = groups.filter(g => g.tag !== 'Other').map(g => g.tag);
       });
 
       it('should sort groups alphabetically', () => {
-        const groups = el.getGroupedItems();
-        const taggedGroups = groups.filter(g => g.tag !== 'Other');
-        const tags = taggedGroups.map(g => g.tag);
-        expect(tags).to.deep.equal(['Bakery', 'Dairy', 'Produce']);
+        expect(taggedGroupTags).to.deep.equal(['Bakery', 'Dairy', 'Produce']);
       });
-    });
-
-    it('should preserve absolute indices for items', () => {
-      const groups = el.getGroupedItems();
-      const dairyGroup = groups.find(g => g.tag === 'Dairy');
-      const indices = dairyGroup!.items.map(i => i.index);
-      expect(indices).to.include(0); // Milk is index 0
-      expect(indices).to.include(3); // Eggs is index 3
     });
   });
 
@@ -484,79 +595,141 @@ describe('WikiChecklist', () => {
     });
   });
 
-  describe('when persisting data', () => {
+  describe('when toggling a checkbox', () => {
     let getFrontmatterStub: SinonStub;
     let mergeFrontmatterStub: SinonStub;
 
-    beforeEach(() => {
+    beforeEach(async () => {
       sinon.restore();
+      el.remove();
+
+      el = buildElement();
+      const mockFrontmatter: JsonObject = {
+        checklists: {
+          grocery_list: {
+            items: [
+              { text: 'Milk', checked: false },
+              { text: 'Eggs', checked: true },
+            ],
+          },
+        },
+      };
       getFrontmatterStub = sinon
         .stub(el.client, 'getFrontmatter')
-        .resolves(create(GetFrontmatterResponseSchema, { frontmatter: {} }));
+        .resolves(
+          create(GetFrontmatterResponseSchema, { frontmatter: mockFrontmatter })
+        );
       mergeFrontmatterStub = sinon
         .stub(el.client, 'mergeFrontmatter')
         .resolves(create(MergeFrontmatterResponseSchema, { frontmatter: {} }));
+      document.body.appendChild(el);
+      // Wait for initial fetch + render of items
+      await el.updateComplete;
+      await el.updateComplete;
+
+      const checkbox = el.shadowRoot!.querySelector('input[type="checkbox"]') as HTMLInputElement;
+      checkbox.click();
+      await el.updateComplete;
     });
 
-    describe('when saving items succeeds', () => {
-      const newItems = [{ text: 'Milk', checked: true }];
-
-      beforeEach(async () => {
-        await (el as unknown as WikiChecklistInternal).persistData(
-          newItems,
-          null
-        );
-      });
-
-      it('should call mergeFrontmatter', () => {
-        expect(mergeFrontmatterStub).to.have.been.calledOnce;
-      });
-
-      it('should call getFrontmatter before mergeFrontmatter (read-modify-write)', () => {
-        expect(getFrontmatterStub).to.have.been.calledBefore(
-          mergeFrontmatterStub
-        );
-      });
-
-      it('should clear saving state after completion', () => {
-        expect(el.saving).to.be.false;
-      });
+    it('should call mergeFrontmatter', () => {
+      expect(mergeFrontmatterStub).to.have.been.calledOnce;
     });
 
-    describe('when save is in progress', () => {
-      let savingDuringMerge: boolean;
+    it('should call getFrontmatter before mergeFrontmatter (read-modify-write)', () => {
+      expect(getFrontmatterStub).to.have.been.calledBefore(
+        mergeFrontmatterStub
+      );
+    });
 
-      beforeEach(async () => {
-        savingDuringMerge = false;
-        mergeFrontmatterStub.callsFake(async () => {
+    it('should clear saving state after completion', () => {
+      expect(el.saving).to.be.false;
+    });
+  });
+
+  describe('when saving state is active', () => {
+    let savingDuringMerge: boolean;
+
+    beforeEach(async () => {
+      sinon.restore();
+      el.remove();
+
+      el = buildElement();
+      const mockFrontmatter: JsonObject = {
+        checklists: {
+          grocery_list: {
+            items: [{ text: 'Milk', checked: false }],
+          },
+        },
+      };
+      sinon
+        .stub(el.client, 'getFrontmatter')
+        .resolves(
+          create(GetFrontmatterResponseSchema, { frontmatter: mockFrontmatter })
+        );
+      savingDuringMerge = false;
+      sinon
+        .stub(el.client, 'mergeFrontmatter')
+        .callsFake(async () => {
           savingDuringMerge = el.saving;
           return create(MergeFrontmatterResponseSchema, { frontmatter: {} });
         });
-        await (el as unknown as WikiChecklistInternal).persistData([], null);
-      });
+      document.body.appendChild(el);
+      // Wait for initial fetch + render of items
+      await el.updateComplete;
+      await el.updateComplete;
 
-      it('should be in saving state during the merge call', () => {
-        expect(savingDuringMerge).to.be.true;
-      });
+      const checkbox = el.shadowRoot!.querySelector('input[type="checkbox"]') as HTMLInputElement;
+      checkbox.click();
+      await el.updateComplete;
     });
 
-    describe('when persist fails', () => {
-      beforeEach(async () => {
-        mergeFrontmatterStub.rejects(new Error('Save failed'));
-        await (el as unknown as WikiChecklistInternal).persistData([], null);
-      });
+    it('should be in saving state during the merge call', () => {
+      expect(savingDuringMerge).to.be.true;
+    });
+  });
 
-      it('should set error to an AugmentedError', () => {
-        expect(el.error).to.be.instanceOf(AugmentedError);
-      });
+  describe('when persist fails via checkbox toggle', () => {
+    beforeEach(async () => {
+      sinon.restore();
+      el.remove();
 
-      it('should describe the failed goal as saving checklist', () => {
-        expect(el.error?.failedGoalDescription).to.equal('saving checklist');
-      });
+      el = buildElement();
+      const mockFrontmatter: JsonObject = {
+        checklists: {
+          grocery_list: {
+            items: [{ text: 'Milk', checked: false }],
+          },
+        },
+      };
+      sinon
+        .stub(el.client, 'getFrontmatter')
+        .resolves(
+          create(GetFrontmatterResponseSchema, { frontmatter: mockFrontmatter })
+        );
+      sinon
+        .stub(el.client, 'mergeFrontmatter')
+        .rejects(new Error('Save failed'));
+      document.body.appendChild(el);
+      // Wait for initial fetch + render of items
+      await el.updateComplete;
+      await el.updateComplete;
 
-      it('should clear saving state', () => {
-        expect(el.saving).to.be.false;
-      });
+      const checkbox = el.shadowRoot!.querySelector('input[type="checkbox"]') as HTMLInputElement;
+      checkbox.click();
+      await el.updateComplete;
+    });
+
+    it('should set error to an AugmentedError', () => {
+      expect(el.error).to.be.instanceOf(AugmentedError);
+    });
+
+    it('should describe the failed goal as saving checklist', () => {
+      expect(el.error?.failedGoalDescription).to.equal('saving checklist');
+    });
+
+    it('should clear saving state', () => {
+      expect(el.saving).to.be.false;
     });
   });
 
