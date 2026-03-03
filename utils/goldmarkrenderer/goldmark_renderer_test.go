@@ -264,6 +264,22 @@ var _ = Describe("GoldmarkRenderer", func() {
 			})
 		})
 
+		When("rendering HTML with a wiki-checklist element", func() {
+			BeforeEach(func() {
+				source = []byte(`<wiki-checklist list-name="my-list" page="my-page"></wiki-checklist>`)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should preserve the wiki-checklist element and its attributes", func() {
+				Expect(string(output)).To(ContainSubstring("<wiki-checklist"))
+				Expect(string(output)).To(ContainSubstring(`list-name="my-list"`))
+				Expect(string(output)).To(ContainSubstring(`page="my-page"`))
+			})
+		})
+
 		When("rendering markdown with wikilinks", func() {
 			BeforeEach(func() {
 				source = []byte("This is a [[wikilink]] in text")

@@ -61,6 +61,9 @@ func (GoldmarkRenderer) Render(input []byte) ([]byte, error) {
 	// Allow wiki-image custom element
 	p.AllowElements("wiki-image")
 	p.AllowAttrs("src", "alt", "title").OnElements("wiki-image")
+	// Allow wiki-checklist custom element
+	p.AllowElements("wiki-checklist")
+	p.AllowAttrs("list-name", "page").OnElements("wiki-checklist")
 	return p.SanitizeBytes(buf.Bytes()), nil
 }
 
