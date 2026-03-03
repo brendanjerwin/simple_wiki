@@ -5,11 +5,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 
 	"connectrpc.com/grpcreflect"
@@ -23,7 +24,9 @@ import (
 )
 
 const (
-	defaultWikiURL = "https://wiki.monster-orfe.ts.net"
+	defaultWikiURL   = "https://wiki.monster-orfe.ts.net"
+	pathSeparator    = "/"
+	writeErrTemplate = "write error: %w"
 )
 
 // version is set by ldflags at build time.
@@ -32,21 +35,81 @@ var version = "dev"
 func main() {
 	app := cli.NewApp()
 	app.Name = "wiki-cli"
-	app.Usage = "command-line interface for the simple_wiki gRPC API"
+	app.Usage = "CLI for the simple_wiki gRPC API. Discover services, inspect schemas, and call methods."
+	app.Description = appDescription()
 	app.Version = version
 	app.HideVersion = false
+	app.Commands = buildCommands()
 
+	if err := app.Run(os.Args); err != nil {
+		if _, writeErr := fmt.Fprintln(os.Stderr, err); writeErr != nil {
+			os.Exit(2)
+		}
+		os.Exit(1)
+	}
+}
+
+func appDescription() string {
+	return `wiki-cli lets you explore and interact with the wiki's gRPC API using the
+Connect protocol over HTTP/1.1. It works through reverse proxies (e.g. Tailscale Serve).
+
+GETTING STARTED — DISCOVERY WORKFLOW:
+
+  1. List available services:
+       wiki-cli list
+
+  2. See what methods a service offers:
+       wiki-cli methods api.v1.SearchService
+
+  3. Inspect the request message schema to learn what fields to send:
+       wiki-cli describe api.v1.SearchContentRequest
+
+  4. Call the method with a JSON payload:
+       wiki-cli call api.v1.SearchService/SearchContent -d '{"query":"test"}'
+
+  Or use TOML for the payload:
+       wiki-cli call api.v1.PageManagementService/ReadPage -d 'page_name = "home"'
+
+Short service names work too (e.g. "SearchService" instead of "api.v1.SearchService").
+The describe command works on both services (shows methods) and message types (shows fields).
+To inspect a response type, use describe on the output type shown in the method signature.
+
+TARGET URL:
+
+  Set WIKI_URL env var or pass --url. Default: ` + defaultWikiURL + `
+
+TIPS FOR AI AGENTS:
+
+  - Start with "wiki-cli list" to discover all available services.
+  - Use "wiki-cli methods" (no args) to see every callable method across all services.
+  - Use "wiki-cli describe <RequestMessageType>" to learn the exact fields, types,
+    and cardinality (repeated/optional) before constructing a call payload.
+  - The -d flag accepts both JSON and TOML. TOML is convenient for simple key=value payloads.
+  - Responses are always pretty-printed JSON.
+  - All methods are unary (request/response) except StreamJobStatus (server streaming).`
+}
+
+func buildCommands() []cli.Command {
 	urlFlag := cli.StringFlag{
 		Name:   "url, u",
-		Usage:  "wiki base URL",
+		Usage:  "wiki base URL (env: WIKI_URL)",
 		EnvVar: "WIKI_URL",
 		Value:  defaultWikiURL,
 	}
 
-	app.Commands = []cli.Command{
+	return []cli.Command{
 		{
 			Name:  "list",
-			Usage: "list all gRPC services",
+			Usage: "List all gRPC services available on the wiki",
+			Description: `Lists all gRPC services. Tries server reflection first (requires a running wiki),
+falls back to the proto registry embedded in this binary.
+
+Example:
+  wiki-cli list
+
+Output is one fully-qualified service name per line. Use "wiki-cli methods <service>"
+to see the methods available on a service, or "wiki-cli describe <service>" for a
+full description including input/output types.`,
 			Flags: []cli.Flag{urlFlag},
 			Action: func(c *cli.Context) error {
 				return runList(c.String("url"))
@@ -54,49 +117,88 @@ func main() {
 		},
 		{
 			Name:      "methods",
-			Usage:     "list methods for a service (or all services if none given)",
+			Usage:     "List callable methods (all services, or one specific service)",
 			ArgsUsage: "[service]",
-			Flags:     []cli.Flag{urlFlag},
+			Description: `Lists methods in the format "service/Method", ready to use with "wiki-cli call".
+
+Without arguments, lists every method across all services:
+  wiki-cli methods
+
+With a service name, lists only that service's methods:
+  wiki-cli methods api.v1.SearchService
+  wiki-cli methods SearchService          # short name also works
+
+Each output line can be passed directly to "wiki-cli call".`,
+			Flags: []cli.Flag{urlFlag},
 			Action: func(c *cli.Context) error {
 				return runMethods(c.Args().First())
 			},
 		},
 		{
 			Name:      "describe",
-			Usage:     "describe a service or message type",
+			Usage:     "Describe a service (methods + types) or a message type (fields + types)",
 			ArgsUsage: "<name>",
+			Description: `Inspects a service or message type from the embedded proto registry (works offline).
+
+Describe a service to see its methods and their input/output types:
+  wiki-cli describe api.v1.SearchService
+
+Describe a message type to see its fields, types, and cardinality:
+  wiki-cli describe api.v1.SearchContentRequest
+
+This is essential for learning what fields to include in a "wiki-cli call" payload.
+Fields marked (repeated) accept JSON arrays. Fields marked (optional) can be omitted.
+When a field's type is another message (e.g. "google.protobuf.Struct"), you can
+describe that type too to see its nested structure.`,
 			Action: func(c *cli.Context) error {
 				name := c.Args().First()
 				if name == "" {
-					return fmt.Errorf("name argument required")
+					return errors.New("name argument required — try: wiki-cli describe api.v1.SearchService")
 				}
 				return runDescribe(name)
 			},
 		},
-		{
-			Name:      "call",
-			Usage:     "call a gRPC method",
-			ArgsUsage: "<Service/Method>",
-			Flags: []cli.Flag{
-				urlFlag,
-				cli.StringFlag{
-					Name:  "data, d",
-					Usage: "request payload (JSON or TOML)",
-				},
-			},
-			Action: func(c *cli.Context) error {
-				method := c.Args().First()
-				if method == "" {
-					return fmt.Errorf("method argument required (e.g. api.v1.SearchService/SearchContent)")
-				}
-				return runCall(context.Background(), c.String("url"), method, c.String("data"))
+		buildCallCommand(urlFlag),
+	}
+}
+
+func buildCallCommand(urlFlag cli.StringFlag) cli.Command {
+	return cli.Command{
+		Name:      "call",
+		Usage:     "Call a gRPC method with a JSON or TOML payload",
+		ArgsUsage: "<Service/Method>",
+		Description: `Performs a unary RPC call using the Connect protocol over HTTP/1.1.
+
+The method argument is "Service/Method" as shown by "wiki-cli methods":
+  wiki-cli call api.v1.SearchService/SearchContent -d '{"query":"test"}'
+
+Short service names work:
+  wiki-cli call SearchService/SearchContent -d '{"query":"test"}'
+
+TOML payloads are auto-detected (anything not starting with { or [):
+  wiki-cli call PageManagementService/ReadPage -d 'page_name = "home"'
+
+Omitting -d sends an empty JSON object {}:
+  wiki-cli call SystemInfoService/GetVersion
+
+The response is always pretty-printed JSON. Non-2xx status codes cause a non-zero exit.
+
+To learn what fields a method expects, use:
+  wiki-cli describe <RequestMessageType>`,
+		Flags: []cli.Flag{
+			urlFlag,
+			cli.StringFlag{
+				Name:  "data, d",
+				Usage: "request payload (JSON or TOML); omit for empty request",
 			},
 		},
-	}
-
-	if err := app.Run(os.Args); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		Action: func(c *cli.Context) error {
+			method := c.Args().First()
+			if method == "" {
+				return errors.New("method argument required — try: wiki-cli call api.v1.SearchService/SearchContent -d '{\"query\":\"test\"}'")
+			}
+			return runCall(context.Background(), c.String("url"), method, c.String("data"))
+		},
 	}
 }
 
@@ -109,9 +211,13 @@ func runList(baseURL string) error {
 		services = listServicesFromRegistry()
 	}
 
-	sort.Slice(services, func(i, j int) bool { return services[i] < services[j] })
+	slices.SortFunc(services, func(a, b protoreflect.FullName) int {
+		return strings.Compare(string(a), string(b))
+	})
 	for _, s := range services {
-		fmt.Println(s)
+		if _, err := fmt.Println(s); err != nil {
+			return fmt.Errorf(writeErrTemplate, err)
+		}
 	}
 	return nil
 }
@@ -119,35 +225,48 @@ func runList(baseURL string) error {
 // runMethods lists methods for one service (or all services when serviceName is empty).
 func runMethods(serviceName string) error {
 	if serviceName == "" {
-		// List all methods across all services
-		var svcs []protoreflect.ServiceDescriptor
-		protoregistry.GlobalFiles.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
-			for i := range fd.Services().Len() {
-				svc := fd.Services().Get(i)
-				if !isInternalService(svc.FullName()) {
-					svcs = append(svcs, svc)
-				}
-			}
-			return true
-		})
-		// sort by service name for deterministic output
-		sort.Slice(svcs, func(i, j int) bool { return svcs[i].FullName() < svcs[j].FullName() })
-		for _, svc := range svcs {
-			for i := range svc.Methods().Len() {
-				m := svc.Methods().Get(i)
-				fmt.Printf("%s/%s\n", svc.FullName(), m.Name())
+		return printAllMethods()
+	}
+	return printServiceMethods(serviceName)
+}
+
+func printAllMethods() error {
+	var svcs []protoreflect.ServiceDescriptor
+	protoregistry.GlobalFiles.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
+		for i := range fd.Services().Len() {
+			svc := fd.Services().Get(i)
+			if !isInternalService(svc.FullName()) {
+				svcs = append(svcs, svc)
 			}
 		}
-		return nil
-	}
+		return true
+	})
 
+	slices.SortFunc(svcs, func(a, b protoreflect.ServiceDescriptor) int {
+		return strings.Compare(string(a.FullName()), string(b.FullName()))
+	})
+	for _, svc := range svcs {
+		if err := printMethodsForService(svc); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func printServiceMethods(serviceName string) error {
 	svc, err := findServiceDescriptor(serviceName)
 	if err != nil {
 		return err
 	}
+	return printMethodsForService(svc)
+}
+
+func printMethodsForService(svc protoreflect.ServiceDescriptor) error {
 	for i := range svc.Methods().Len() {
 		m := svc.Methods().Get(i)
-		fmt.Printf("%s/%s\n", svc.FullName(), m.Name())
+		if _, err := fmt.Printf("%s%s%s\n", svc.FullName(), pathSeparator, m.Name()); err != nil {
+			return fmt.Errorf(writeErrTemplate, err)
+		}
 	}
 	return nil
 }
@@ -156,47 +275,61 @@ func runMethods(serviceName string) error {
 func runDescribe(name string) error {
 	// Try as a message type first.
 	if msgType, err := protoregistry.GlobalTypes.FindMessageByName(protoreflect.FullName(name)); err == nil {
-		describeMessage(msgType.Descriptor())
-		return nil
+		return describeMessage(msgType.Descriptor())
 	}
 
 	// Try as a service descriptor.
 	if svc, err := findServiceDescriptor(name); err == nil {
-		describeService(svc)
-		return nil
+		return describeService(svc)
 	}
 
 	return fmt.Errorf("no service or message type found with name %q", name)
 }
 
 // describeService prints a human-readable description of a gRPC service.
-func describeService(svc protoreflect.ServiceDescriptor) {
-	fmt.Printf("Service: %s\n", svc.FullName())
-	fmt.Println("Methods:")
+func describeService(svc protoreflect.ServiceDescriptor) error {
+	if _, err := fmt.Printf("Service: %s\n", svc.FullName()); err != nil {
+		return fmt.Errorf(writeErrTemplate, err)
+	}
+	if _, err := fmt.Println("Methods:"); err != nil {
+		return fmt.Errorf(writeErrTemplate, err)
+	}
 	for i := range svc.Methods().Len() {
 		m := svc.Methods().Get(i)
-		streaming := ""
-		switch {
-		case m.IsStreamingClient() && m.IsStreamingServer():
-			streaming = " [bidi streaming]"
-		case m.IsStreamingClient():
-			streaming = " [client streaming]"
-		case m.IsStreamingServer():
-			streaming = " [server streaming]"
-		}
-		fmt.Printf("  %s(%s) -> %s%s\n",
+		streaming := streamingLabel(m)
+		if _, err := fmt.Printf("  %s(%s) -> %s%s\n",
 			m.Name(),
 			m.Input().FullName(),
 			m.Output().FullName(),
 			streaming,
-		)
+		); err != nil {
+			return fmt.Errorf(writeErrTemplate, err)
+		}
+	}
+	return nil
+}
+
+func streamingLabel(m protoreflect.MethodDescriptor) string {
+	switch {
+	case m.IsStreamingClient() && m.IsStreamingServer():
+		return " [bidi streaming]"
+	case m.IsStreamingClient():
+		return " [client streaming]"
+	case m.IsStreamingServer():
+		return " [server streaming]"
+	default:
+		return ""
 	}
 }
 
 // describeMessage prints a human-readable description of a proto message type.
-func describeMessage(md protoreflect.MessageDescriptor) {
-	fmt.Printf("Message: %s\n", md.FullName())
-	fmt.Println("Fields:")
+func describeMessage(md protoreflect.MessageDescriptor) error {
+	if _, err := fmt.Printf("Message: %s\n", md.FullName()); err != nil {
+		return fmt.Errorf(writeErrTemplate, err)
+	}
+	if _, err := fmt.Println("Fields:"); err != nil {
+		return fmt.Errorf(writeErrTemplate, err)
+	}
 	for i := range md.Fields().Len() {
 		f := md.Fields().Get(i)
 		typeName := fieldTypeName(f)
@@ -208,8 +341,11 @@ func describeMessage(md protoreflect.MessageDescriptor) {
 		if f.HasOptionalKeyword() {
 			optional = " (optional)"
 		}
-		fmt.Printf("  %s: %s%s%s\n", f.Name(), typeName, repeated, optional)
+		if _, err := fmt.Printf("  %s: %s%s%s\n", f.Name(), typeName, repeated, optional); err != nil {
+			return fmt.Errorf(writeErrTemplate, err)
+		}
 	}
+	return nil
 }
 
 // fieldTypeName returns a human-readable type name for a proto field.
@@ -227,7 +363,7 @@ func fieldTypeName(f protoreflect.FieldDescriptor) string {
 // runCall performs a unary RPC call using the Connect protocol over HTTP/1.1.
 func runCall(ctx context.Context, baseURL, method, rawInput string) error {
 	// Split "api.v1.SearchService/SearchContent" → service + method.
-	slash := strings.LastIndex(method, "/")
+	slash := strings.LastIndex(method, pathSeparator)
 	if slash < 0 {
 		return fmt.Errorf("invalid method %q: expected Service/Method (e.g. api.v1.SearchService/SearchContent)", method)
 	}
@@ -247,7 +383,7 @@ func runCall(ctx context.Context, baseURL, method, rawInput string) error {
 	}
 
 	// Build the Connect-protocol URL.
-	reqURL := strings.TrimRight(baseURL, "/") + "/" + fullServiceName + "/" + methodName
+	reqURL := strings.TrimRight(baseURL, pathSeparator) + pathSeparator + fullServiceName + pathSeparator + methodName
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bytes.NewReader(jsonBody))
 	if err != nil {
@@ -260,24 +396,35 @@ func runCall(ctx context.Context, baseURL, method, rawInput string) error {
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("failed to read response: %w", err)
 	}
 
-	// Pretty-print JSON output.
-	var v any
-	if jsonErr := json.Unmarshal(body, &v); jsonErr == nil {
-		out, _ := json.MarshalIndent(v, "", "  ")
-		fmt.Println(string(out))
-	} else {
-		fmt.Println(string(body))
+	if err := printResponseBody(body); err != nil {
+		return err
 	}
 
 	if resp.StatusCode >= http.StatusBadRequest {
 		return fmt.Errorf("server returned %s", resp.Status)
+	}
+	return nil
+}
+
+// printResponseBody pretty-prints JSON response body, or prints raw text if not valid JSON.
+func printResponseBody(body []byte) error {
+	var v any
+	if jsonErr := json.Unmarshal(body, &v); jsonErr == nil {
+		out, _ := json.MarshalIndent(v, "", "  ")
+		if _, err := fmt.Println(string(out)); err != nil {
+			return fmt.Errorf(writeErrTemplate, err)
+		}
+	} else {
+		if _, err := fmt.Println(string(body)); err != nil {
+			return fmt.Errorf(writeErrTemplate, err)
+		}
 	}
 	return nil
 }
@@ -323,7 +470,6 @@ func listServicesFromRegistry() []protoreflect.FullName {
 	protoregistry.GlobalFiles.RangeFiles(func(fd protoreflect.FileDescriptor) bool {
 		for i := range fd.Services().Len() {
 			svc := fd.Services().Get(i)
-			// Skip the built-in gRPC reflection service.
 			if !isInternalService(svc.FullName()) {
 				services = append(services, svc.FullName())
 			}
