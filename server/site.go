@@ -134,7 +134,7 @@ func (s *Site) sniffContentType(name string) (string, error) {
 	// The mimetype library reads up to 3072 bytes by default.
 	buffer := make([]byte, 3072)
 	n, err := file.Read(buffer)
-	if err != nil && err != io.EOF {
+	if err != nil && !errors.Is(err, io.EOF) {
 		return "", err
 	}
 
@@ -535,7 +535,7 @@ func writeFrontmatterToBuffer(content *bytes.Buffer, fmBytes []byte) error {
 func combineFrontmatterAndMarkdown(fm wikipage.FrontMatter, md wikipage.Markdown) (string, error) {
 	fmBytes, err := toml.Marshal(fm)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal frontmatter: %v", err)
+		return "", fmt.Errorf("failed to marshal frontmatter: %w", err)
 	}
 
 	// If there's no content, no need to write anything.
