@@ -530,7 +530,7 @@ describe('WikiChecklist', () => {
     });
 
     describe('when items have tags (tag autocomplete)', () => {
-      let options: NodeListOf<HTMLOptionElement> | undefined;
+      let values: string[] | undefined;
 
       beforeEach(async () => {
         el.error = null;
@@ -540,14 +540,17 @@ describe('WikiChecklist', () => {
           { text: 'Apples', checked: false, tag: 'Produce' },
         ];
         await el.updateComplete;
-        options = el.shadowRoot?.querySelectorAll<HTMLOptionElement>(
+        const options = el.shadowRoot?.querySelectorAll<HTMLOptionElement>(
           'datalist#tag-suggestions-grocery_list option'
         );
+        values = Array.from(options ?? []).map(o => o.value);
       });
 
-      it('should populate datalist with existing tags', () => {
-        const values = Array.from(options ?? []).map(o => o.value);
+      it('should populate datalist with the Dairy tag', () => {
         expect(values).to.include('Dairy');
+      });
+
+      it('should populate datalist with the Produce tag', () => {
         expect(values).to.include('Produce');
       });
     });
@@ -865,19 +868,20 @@ describe('WikiChecklist', () => {
         };
 
         pollingEl = buildElement('test-page', 'grocery_list');
-        sinon
-          .stub(pollingEl.client, 'getFrontmatter')
-          .onFirstCall()
-          .resolves(
-            create(GetFrontmatterResponseSchema, {
-              frontmatter: initialFrontmatter,
-            })
-          )
-          .resolves(
-            create(GetFrontmatterResponseSchema, {
-              frontmatter: updatedFrontmatter,
-            })
-          );
+        const getFrontmatterStub = sinon.stub(
+          pollingEl.client,
+          'getFrontmatter'
+        );
+        getFrontmatterStub.onFirstCall().resolves(
+          create(GetFrontmatterResponseSchema, {
+            frontmatter: initialFrontmatter,
+          })
+        );
+        getFrontmatterStub.resolves(
+          create(GetFrontmatterResponseSchema, {
+            frontmatter: updatedFrontmatter,
+          })
+        );
 
         document.body.appendChild(pollingEl);
         // Two awaits needed: first for loading=true render, second for initial fetch to complete.
@@ -1297,6 +1301,7 @@ describe('WikiChecklist', () => {
 
   describe('when toggling to grouped view', () => {
     let groupHeadings: NodeListOf<Element> | undefined;
+    let headingTexts: (string | undefined)[] | undefined;
 
     beforeEach(async () => {
       el.error = null;
@@ -1315,6 +1320,9 @@ describe('WikiChecklist', () => {
       await el.updateComplete;
 
       groupHeadings = el.shadowRoot?.querySelectorAll('.group-header');
+      headingTexts = Array.from(groupHeadings ?? []).map(
+        h => h.textContent?.trim()
+      );
     });
 
     it('should switch to grouped view', () => {
@@ -1326,9 +1334,6 @@ describe('WikiChecklist', () => {
     });
 
     it('should render an "Other" group for untagged items', () => {
-      const headingTexts = Array.from(groupHeadings ?? []).map(
-        h => h.textContent?.trim()
-      );
       expect(headingTexts).to.include('Other');
     });
   });
