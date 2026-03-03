@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/wikipage"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -589,6 +590,167 @@ Content`
 			It("should not populate HTML field with error message", func() {
 				Expect(result.HTML).To(BeEmpty())
 			})
+		})
+	})
+})
+
+var _ = Describe("ParseFrontmatterAndMarkdown TOML array-of-tables", func() {
+	var (
+		content     string
+		markdown    []byte
+		frontmatter map[string]any
+		err         error
+	)
+
+	JustBeforeEach(func() {
+		markdown, frontmatter, err = wikipage.ParseFrontmatterAndMarkdown(content)
+	})
+
+	When("page has TOML with array of tables (checklist items)", func() {
+		var (
+			checklists  map[string]any
+			groceryList map[string]any
+			items       []any
+			checklistsOk  bool
+			groceryListOk bool
+			itemsOk       bool
+		)
+
+		BeforeEach(func() {
+			content = `+++
+title = "Test Page"
+
+[checklists.grocery_list]
+name = "Grocery List"
+
+[[checklists.grocery_list.items]]
+text = "Milk"
+checked = false
+
+[[checklists.grocery_list.items]]
+text = "Eggs"
+checked = true
++++
+# Shopping List`
+		})
+
+		JustBeforeEach(func() {
+			if frontmatter != nil {
+				var rawChecklists any
+				rawChecklists, checklistsOk = frontmatter["checklists"]
+				if checklistsOk {
+					checklists, checklistsOk = rawChecklists.(map[string]any)
+				}
+			}
+			if checklistsOk {
+				var rawGroceryList any
+				rawGroceryList, groceryListOk = checklists["grocery_list"]
+				if groceryListOk {
+					groceryList, groceryListOk = rawGroceryList.(map[string]any)
+				}
+			}
+			if groceryListOk {
+				var rawItems any
+				rawItems, itemsOk = groceryList["items"]
+				if itemsOk {
+					items, itemsOk = rawItems.([]any)
+				}
+			}
+		})
+
+		It("should parse without error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should extract markdown content", func() {
+			Expect(string(markdown)).To(Equal("# Shopping List"))
+		})
+
+		It("should have checklists key in frontmatter", func() {
+			Expect(frontmatter).To(HaveKey("checklists"))
+		})
+
+		It("should have items as []any not []map[string]any", func() {
+			// This is the key assertion: pelletier/go-toml/v2 produces []any
+			// while BurntSushi/toml produces []map[string]any which breaks structpb
+			Expect(itemsOk).To(BeTrue())
+		})
+
+		It("should have map[string]any for each item", func() {
+			Expect(items).To(HaveLen(2))
+			_, isMap := items[0].(map[string]any)
+			Expect(isMap).To(BeTrue())
+		})
+
+		It("should preserve item field values", func() {
+			Expect(items).To(HaveLen(2))
+
+			firstItem, ok := items[0].(map[string]any)
+			Expect(ok).To(BeTrue())
+			Expect(firstItem["text"]).To(Equal("Milk"))
+			Expect(firstItem["checked"]).To(Equal(false))
+
+			secondItem, ok := items[1].(map[string]any)
+			Expect(ok).To(BeTrue())
+			Expect(secondItem["text"]).To(Equal("Eggs"))
+			Expect(secondItem["checked"]).To(Equal(true))
+		})
+
+		It("should be compatible with structpb.NewStruct", func() {
+			_, structErr := structpb.NewStruct(frontmatter)
+			Expect(structErr).NotTo(HaveOccurred())
+		})
+	})
+})
+
+var _ = Describe("Page.parse TOML array-of-tables", func() {
+	var (
+		p           *wikipage.Page
+		frontmatter wikipage.FrontMatter
+		err         error
+	)
+
+	BeforeEach(func() {
+		p = &wikipage.Page{
+			Identifier: "testpage",
+		}
+	})
+
+	JustBeforeEach(func() {
+		frontmatter, err = p.GetFrontMatter()
+	})
+
+	When("page has TOML with array of tables (checklist items)", func() {
+		var itemsIsSliceAny bool
+
+		BeforeEach(func() {
+			p.Text = `+++
+title = "Checklist Page"
+
+[[checklists.grocery_list.items]]
+text = "Bread"
+checked = false
++++
+# Content`
+		})
+
+		JustBeforeEach(func() {
+			itemsIsSliceAny = false
+			if frontmatter != nil {
+				if checklists, ok := frontmatter["checklists"].(map[string]any); ok {
+					if groceryList, ok := checklists["grocery_list"].(map[string]any); ok {
+						_, itemsIsSliceAny = groceryList["items"].([]any)
+					}
+				}
+			}
+		})
+
+		It("should parse without error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should have items as []any", func() {
+			Expect(itemsIsSliceAny).To(BeTrue())
 		})
 	})
 })

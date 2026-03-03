@@ -116,7 +116,9 @@ func (f *Index) recursiveAddFrontmatter(identifier wikipage.PageIdentifier, keyP
 			case string:
 				f.saveToIndex(identifier, keyPath, str)
 			default:
-				return fmt.Errorf("frontmatter indexer: invalid array element type for page %q key %q (type: %T)", identifier, keyPath, array)
+				// Skip complex types (e.g., maps in arrays from checklists).
+				// These are application data, not indexable strings.
+				continue
 			}
 		}
 	case bool:

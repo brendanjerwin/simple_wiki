@@ -23,17 +23,11 @@ const POLL_INTERVAL_MS = 3000;
 export interface ChecklistItem {
   text: string;
   checked: boolean;
-  tag?: string;
+  tags: string[];
 }
 
 export interface ChecklistData {
   items: ChecklistItem[];
-  groupOrder: string[] | null;
-}
-
-export interface GroupedItems {
-  tag: string;
-  items: Array<{ item: ChecklistItem; index: number }>;
 }
 
 /**
@@ -91,28 +85,6 @@ export class WikiChecklist extends LitElement {
       .saving-indicator {
         font-size: 12px;
         color: #6c757d;
-      }
-
-      .view-toggle {
-        background: none;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        padding: 4px 8px;
-        font-size: 12px;
-        cursor: pointer;
-        color: #555;
-        transition: all 0.2s ease;
-      }
-
-      .view-toggle:hover {
-        background: #f0f0f0;
-        border-color: #aaa;
-      }
-
-      .view-toggle[aria-pressed='true'] {
-        background: #6c757d;
-        color: white;
-        border-color: #6c757d;
       }
 
       .loading {
@@ -188,28 +160,9 @@ export class WikiChecklist extends LitElement {
         border-radius: 12px;
         color: #555;
         white-space: nowrap;
-        cursor: pointer;
         border: none;
         font-family: inherit;
-        transition: background 0.1s ease;
-      }
-
-      .item-tag-badge:hover {
-        background: #d0d0d0;
-      }
-
-      .item-tag-input {
-        font-size: 11px;
-        padding: 2px 6px;
-        border: 1px solid #aaa;
-        border-radius: 12px;
-        width: 80px;
-        font-family: inherit;
-      }
-
-      .item-tag-input:focus {
-        outline: none;
-        border-color: #6c757d;
+        display: inline-block;
       }
 
       .remove-btn {
@@ -274,62 +227,80 @@ export class WikiChecklist extends LitElement {
         border-radius: 1px;
       }
 
-      .group-section {
-        margin-bottom: 12px;
+      .tag-filter-bar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 8px;
       }
 
-      .group-header {
-        position: relative;
+      .tag-pill {
         font-size: 12px;
-        font-weight: 600;
-        color: #6c757d;
-        text-transform: uppercase;
-        letter-spacing: 0.05em;
-        padding: 4px 4px 2px;
-        border-bottom: 1px solid #eee;
-        margin-bottom: 4px;
-        cursor: grab;
+        padding: 3px 10px;
+        background: #e9ecef;
+        border: 1px solid #dee2e6;
+        border-radius: 16px;
+        color: #555;
+        cursor: pointer;
+        font-family: inherit;
+        transition: all 0.15s ease;
       }
 
-      .group-header.drag-over-before::before {
-        content: '';
-        position: absolute;
-        top: -1px;
-        left: 0;
-        right: 0;
-        height: 2px;
+      .tag-pill:hover {
+        background: #d0d0d0;
+        border-color: #aaa;
+      }
+
+      .tag-pill-active {
         background: #0d6efd;
-        border-radius: 1px;
+        color: white;
+        border-color: #0d6efd;
       }
 
-      .group-header.drag-over-after::after {
-        content: '';
-        position: absolute;
-        bottom: -1px;
-        left: 0;
-        right: 0;
-        height: 2px;
-        background: #0d6efd;
-        border-radius: 1px;
+      .tag-pill-active:hover {
+        background: #0b5ed7;
+        border-color: #0b5ed7;
       }
 
-      .group-header.dragging {
-        opacity: 0.4;
+      .tag-filter-clear {
+        font-size: 12px;
+        padding: 3px 7px;
+        background: none;
+        border: 1px solid #dee2e6;
+        border-radius: 16px;
+        color: #dc3545;
+        cursor: pointer;
+        font-family: inherit;
+        line-height: 1;
+        transition: all 0.15s ease;
+      }
+
+      .tag-filter-clear:hover {
+        background: #dc3545;
+        color: white;
+        border-color: #dc3545;
+      }
+
+      .delete-checked-btn {
+        font-size: 12px;
+        padding: 3px 8px;
+        background: none;
+        border: none;
+        color: #888;
+        cursor: pointer;
+        font-family: inherit;
+        transition: color 0.15s ease;
+      }
+
+      .delete-checked-btn:hover {
+        color: #dc3545;
       }
 
       .add-item {
         display: flex;
         gap: 8px;
         margin-top: 12px;
-        align-items: flex-start;
-        flex-wrap: wrap;
-      }
-
-      .add-item-inputs {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        flex: 1;
+        align-items: center;
       }
 
       .add-text-input {
@@ -349,33 +320,6 @@ export class WikiChecklist extends LitElement {
         box-shadow: 0 0 0 2px rgba(108, 117, 125, 0.15);
       }
 
-      .add-tag-row {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-      }
-
-      .add-tag-input {
-        padding: 4px 8px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        font-size: 12px;
-        font-family: inherit;
-        width: 120px;
-        list-style: none;
-        box-sizing: border-box;
-      }
-
-      .add-tag-input:focus {
-        outline: none;
-        border-color: #6c757d;
-      }
-
-      .add-tag-label {
-        font-size: 12px;
-        color: #888;
-      }
-
       .add-btn {
         padding: 6px 14px;
         background: #6c757d;
@@ -387,7 +331,7 @@ export class WikiChecklist extends LitElement {
         font-family: inherit;
         transition: background 0.2s ease;
         white-space: nowrap;
-        align-self: flex-start;
+        flex-shrink: 0;
       }
 
       .add-btn:hover:not(:disabled) {
@@ -407,14 +351,6 @@ export class WikiChecklist extends LitElement {
         .checklist-container {
           padding: 12px;
         }
-
-        .add-item {
-          flex-direction: column;
-        }
-
-        .add-btn {
-          width: 100%;
-        }
       }
     `,
   ];
@@ -429,12 +365,6 @@ export class WikiChecklist extends LitElement {
   declare items: ChecklistItem[];
 
   @state()
-  declare groupOrder: string[] | null;
-
-  @state()
-  declare groupedView: boolean;
-
-  @state()
   declare loading: boolean;
 
   @state()
@@ -443,17 +373,16 @@ export class WikiChecklist extends LitElement {
   @state()
   declare error: AugmentedError | null;
 
-  // Track which item's tag is being edited
   @state()
-  private declare editingTagIndex: number | null;
+  declare filterTag: string | null;
+
+  // Index of the item currently being edited (text input focused)
+  @state()
+  private declare editingIndex: number | null;
 
   // Value of the new item text input
   @state()
   private declare newItemText: string;
-
-  // Value of the new item tag input
-  @state()
-  private declare newItemTag: string;
 
   // Drag-and-drop state for items
   @state()
@@ -465,16 +394,6 @@ export class WikiChecklist extends LitElement {
   @state()
   private declare _dragOverItemPosition: 'before' | 'after';
 
-  // Drag-and-drop state for group headings
-  @state()
-  private declare _dragSourceGroupTag: string | null;
-
-  @state()
-  private declare _dragOverGroupTag: string | null;
-
-  @state()
-  private declare _dragOverGroupPosition: 'before' | 'after';
-
   private pollingTimer: ReturnType<typeof setInterval> | null = null;
 
   readonly client = createClient(Frontmatter, getGrpcWebTransport());
@@ -484,20 +403,15 @@ export class WikiChecklist extends LitElement {
     this.listName = '';
     this.page = '';
     this.items = [];
-    this.groupOrder = null;
-    this.groupedView = false;
     this.loading = false;
     this.saving = false;
     this.error = null;
-    this.editingTagIndex = null;
+    this.filterTag = null;
+    this.editingIndex = null;
     this.newItemText = '';
-    this.newItemTag = '';
     this._dragSourceItemIndex = null;
     this._dragOverItemIndex = null;
     this._dragOverItemPosition = 'before';
-    this._dragSourceGroupTag = null;
-    this._dragOverGroupTag = null;
-    this._dragOverGroupPosition = 'before';
   }
 
   override connectedCallback(): void {
@@ -523,7 +437,7 @@ export class WikiChecklist extends LitElement {
 
   /**
    * Format a listName (snake_case or kebab-case) into a display title.
-   * e.g. "grocery_list" → "Grocery List", "my-checklist" → "My Checklist"
+   * e.g. "grocery_list" -> "Grocery List", "my-checklist" -> "My Checklist"
    */
   formatTitle(listName: string): string {
     if (!listName) return '';
@@ -534,6 +448,7 @@ export class WikiChecklist extends LitElement {
 
   /**
    * Extract ChecklistData from the raw frontmatter object.
+   * Backward-compatible: reads both `tag` (old string) and `tags` (new array).
    */
   extractChecklistData(
     frontmatter: JsonObject,
@@ -545,13 +460,13 @@ export class WikiChecklist extends LitElement {
       typeof checklists !== 'object' ||
       Array.isArray(checklists)
     ) {
-      return { items: [], groupOrder: null };
+      return { items: [] };
     }
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- narrowed above: non-null, non-array object
     const checklistsObj = checklists as Record<string, unknown>;
     const listData = checklistsObj[listName];
     if (!listData || typeof listData !== 'object' || Array.isArray(listData)) {
-      return { items: [], groupOrder: null };
+      return { items: [] };
     }
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- narrowed above: non-null, non-array object
     const listObj = listData as Record<string, unknown>;
@@ -565,22 +480,21 @@ export class WikiChecklist extends LitElement {
           const item: ChecklistItem = {
             text: typeof r['text'] === 'string' ? r['text'] : '',
             checked: Boolean(r['checked']),
+            tags: [],
           };
-          if (typeof r['tag'] === 'string' && r['tag']) {
-            item.tag = r['tag'];
+          // Prefer new `tags` array format, fall back to old `tag` string
+          if (Array.isArray(r['tags'])) {
+            item.tags = r['tags'].filter(
+              (t): t is string => typeof t === 'string' && t !== ''
+            );
+          } else if (typeof r['tag'] === 'string' && r['tag']) {
+            item.tags = [r['tag']];
           }
           items.push(item);
         }
       }
     }
-    const rawGroupOrder = listObj['group_order'];
-    let groupOrder: string[] | null = null;
-    if (Array.isArray(rawGroupOrder)) {
-      groupOrder = rawGroupOrder.filter(
-        (g): g is string => typeof g === 'string'
-      );
-    }
-    return { items, groupOrder };
+    return { items };
   }
 
   /**
@@ -589,62 +503,27 @@ export class WikiChecklist extends LitElement {
   getExistingTags(): string[] {
     const tagSet = new Set<string>();
     for (const item of this.items) {
-      if (item.tag) tagSet.add(item.tag);
+      for (const tag of item.tags) {
+        if (tag) tagSet.add(tag);
+      }
     }
     return Array.from(tagSet).sort();
   }
 
   /**
-   * Return items grouped by tag for grouped view.
-   * Preserves absolute indices into the items array.
+   * Return items filtered by the active filterTag.
+   * When filterTag is null, returns all items.
    */
-  getGroupedItems(): GroupedItems[] {
-    const groupMap = new Map<
-      string,
-      Array<{ item: ChecklistItem; index: number }>
-    >();
-
+  getFilteredItems(): Array<{ item: ChecklistItem; index: number }> {
+    const result: Array<{ item: ChecklistItem; index: number }> = [];
     for (let i = 0; i < this.items.length; i++) {
       const item = this.items[i];
       if (!item) continue;
-      const tag = item.tag || 'Other';
-      if (!groupMap.has(tag)) {
-        groupMap.set(tag, []);
+      if (this.filterTag === null || item.tags.includes(this.filterTag)) {
+        result.push({ item, index: i });
       }
-      const group = groupMap.get(tag);
-      if (group) group.push({ item, index: i });
     }
-
-    const allTags = Array.from(groupMap.keys());
-
-    let orderedTags: string[];
-    if (this.groupOrder && this.groupOrder.length > 0) {
-      // Start with the ordered tags that exist, then append remaining ones
-      orderedTags = [
-        ...this.groupOrder.filter(t => groupMap.has(t)),
-        ...allTags
-          .filter(t => !this.groupOrder!.includes(t) && t !== 'Other')
-          .sort(),
-      ];
-      // Append "Other" at the end if it exists
-      if (groupMap.has('Other')) {
-        orderedTags.push('Other');
-      }
-    } else {
-      // Alphabetical, with "Other" at the end
-      orderedTags = [
-        ...allTags.filter(t => t !== 'Other').sort(),
-        ...(groupMap.has('Other') ? ['Other'] : []),
-      ];
-    }
-
-    return orderedTags
-      .map(tag => {
-        const items = groupMap.get(tag);
-        if (!items) return null;
-        return { tag, items };
-      })
-      .filter((g): g is GroupedItems => g !== null);
+    return result;
   }
 
   /**
@@ -658,12 +537,11 @@ export class WikiChecklist extends LitElement {
     try {
       const request = create(GetFrontmatterRequestSchema, { page: this.page });
       const response = await this.client.getFrontmatter(request);
-      const { items, groupOrder } = this.extractChecklistData(
+      const { items } = this.extractChecklistData(
         response.frontmatter ?? {},
         this.listName
       );
       this.items = items;
-      this.groupOrder = groupOrder;
       this.error = null;
     } catch (err) {
       this.error = AugmentErrorService.augmentError(err, 'loading checklist');
@@ -676,8 +554,7 @@ export class WikiChecklist extends LitElement {
    * Read-modify-write: get current frontmatter, update checklists key, merge back.
    */
   private async persistData(
-    newItems: ChecklistItem[],
-    newGroupOrder: string[] | null
+    newItems: ChecklistItem[]
   ): Promise<void> {
     if (!this.page) {
       throw new Error('wiki-checklist: page attribute is required but not set');
@@ -699,13 +576,12 @@ export class WikiChecklist extends LitElement {
       const checklistData: JsonObject = {
         items: newItems.map(item => {
           const obj: JsonObject = { text: item.text, checked: item.checked };
-          if (item.tag) obj['tag'] = item.tag;
+          if (item.tags.length > 0) {
+            obj['tags'] = item.tags;
+          }
           return obj;
         }),
       };
-      if (newGroupOrder && newGroupOrder.length > 0) {
-        checklistData['group_order'] = newGroupOrder;
-      }
 
       // Update the checklists key
       const existingChecklists =
@@ -728,12 +604,11 @@ export class WikiChecklist extends LitElement {
 
       // Update local state from the response
       if (mergeResponse.frontmatter) {
-        const { items, groupOrder } = this.extractChecklistData(
+        const { items } = this.extractChecklistData(
           mergeResponse.frontmatter,
           this.listName
         );
         this.items = items;
-        this.groupOrder = groupOrder;
       }
       this.error = null;
     } catch (err) {
@@ -748,30 +623,41 @@ export class WikiChecklist extends LitElement {
       i === index ? { ...item, checked: !item.checked } : item
     );
     this.items = newItems;
-    await this.persistData(newItems, this.groupOrder);
+    await this.persistData(newItems);
   }
 
   private async _handleRemoveItem(index: number): Promise<void> {
     const newItems = this.items.filter((_, i) => i !== index);
     this.items = newItems;
-    await this.persistData(newItems, this.groupOrder);
+    await this.persistData(newItems);
   }
 
-  private _handleItemTextChange(index: number, value: string): void {
-    const newItems = this.items.map((item, i) =>
-      i === index ? { ...item, text: value } : item
-    );
-    this.items = newItems;
+  /**
+   * Compose structured item data into the editable `:tag` text format.
+   * e.g. { text: "milk", tags: ["dairy", "fridge"] } → "milk :dairy :fridge"
+   */
+  composeTaggedText(item: ChecklistItem): string {
+    if (item.tags.length === 0) return item.text;
+    return item.text + item.tags.map(t => ` :${t}`).join('');
+  }
+
+  private _handleItemFocus(index: number, inputEl: HTMLInputElement): void {
+    this.editingIndex = index;
+    const item = this.items[index];
+    if (item) {
+      inputEl.value = this.composeTaggedText(item);
+    }
   }
 
   private async _handleItemTextBlur(index: number, value: string): Promise<void> {
-    const trimmed = value.trim();
-    if (!trimmed) return;
+    this.editingIndex = null;
+    const { tags, text } = this.parseTaggedInput(value);
+    if (!text) return;
     const newItems = this.items.map((item, i) =>
-      i === index ? { ...item, text: trimmed } : item
+      i === index ? { ...item, text, tags } : item
     );
     this.items = newItems;
-    await this.persistData(newItems, this.groupOrder);
+    await this.persistData(newItems);
   }
 
   private _handleItemTextKeydown(
@@ -787,57 +673,43 @@ export class WikiChecklist extends LitElement {
     }
   }
 
-  private _handleTagBadgeClick(index: number): void {
-    this.editingTagIndex = index;
-  }
+  /**
+   * Parse all `:tag` tokens from the input string.
+   * A tag token is a colon followed by a non-whitespace word.
+   * Tags are lowercased for case-agnostic grouping.
+   * Examples:
+   *   "milk :dairy :fridge"  -> { tags: ["dairy", "fridge"], text: "milk" }
+   *   ":dairy milk :fridge"  -> { tags: ["dairy", "fridge"], text: "milk" }
+   *   "buy :dairy milk"      -> { tags: ["dairy"], text: "buy milk" }
+   *   "just milk"            -> { tags: [], text: "just milk" }
+   */
+  parseTaggedInput(input: string): { tags: string[]; text: string } {
+    const tags: string[] = [];
+    let text = input;
+    const tagPattern = /:(\S+)/g;
+    let match: RegExpExecArray | null;
 
-  private async _handleTagInputBlur(
-    index: number,
-    value: string
-  ): Promise<void> {
-    this.editingTagIndex = null;
-    const trimmed = value.trim();
-    const newItems = this.items.map((item, i) => {
-      if (i !== index) return item;
-      const updated = { ...item };
-      if (trimmed) {
-        updated.tag = trimmed;
-      } else {
-        delete updated.tag;
-      }
-      return updated;
-    });
-    this.items = newItems;
-    await this.persistData(newItems, this.groupOrder);
-  }
-
-  private _handleTagInputKeydown(
-    index: number,
-    value: string,
-    event: KeyboardEvent
-  ): void {
-    if (event.key === 'Enter') {
-      void this._handleTagInputBlur(index, value);
-      if (event.target instanceof HTMLElement) {
-        event.target.blur();
+    while ((match = tagPattern.exec(input)) !== null) {
+      const tag = match[1]?.trim().toLowerCase();
+      if (tag) {
+        tags.push(tag);
       }
     }
-    if (event.key === 'Escape') {
-      this.editingTagIndex = null;
-    }
+
+    // Remove all :tag tokens from the text
+    text = input.replace(/:(\S+)/g, '').replace(/\s+/g, ' ').trim();
+
+    return { tags, text };
   }
 
   private async _handleAddItem(): Promise<void> {
-    const text = this.newItemText.trim();
+    const { tags, text } = this.parseTaggedInput(this.newItemText);
     if (!text) return;
-    const tag = this.newItemTag.trim();
-    const newItem: ChecklistItem = { text, checked: false };
-    if (tag) newItem.tag = tag;
+    const newItem: ChecklistItem = { text, checked: false, tags };
     const newItems = [...this.items, newItem];
     this.items = newItems;
     this.newItemText = '';
-    this.newItemTag = '';
-    await this.persistData(newItems, this.groupOrder);
+    await this.persistData(newItems);
   }
 
   private _handleNewItemKeydown(event: KeyboardEvent): void {
@@ -846,8 +718,12 @@ export class WikiChecklist extends LitElement {
     }
   }
 
-  private _handleToggleView(): void {
-    this.groupedView = !this.groupedView;
+  private _handleFilterTagClick(tag: string): void {
+    if (this.filterTag === tag) {
+      this.filterTag = null;
+    } else {
+      this.filterTag = tag;
+    }
   }
 
   /**
@@ -873,38 +749,13 @@ export class WikiChecklist extends LitElement {
     return result;
   }
 
-  /**
-   * Reorder a group tag within the given ordered tag list.
-   * Returns a new array with fromTag moved to be before or after toTag.
-   */
-  computeNewGroupOrder(
-    currentTags: string[],
-    fromTag: string,
-    toTag: string,
-    position: 'before' | 'after'
-  ): string[] {
-    const fromIdx = currentTags.indexOf(fromTag);
-    const toIdx = currentTags.indexOf(toTag);
-    if (fromIdx === -1 || toIdx === -1) return [...currentTags];
-    const toInsertIndex = position === 'before' ? toIdx : toIdx + 1;
-    const result = [...currentTags];
-    result.splice(fromIdx, 1);
-    const adjustedIndex =
-      fromIdx < toInsertIndex ? toInsertIndex - 1 : toInsertIndex;
-    result.splice(adjustedIndex, 0, fromTag);
-    return result;
-  }
-
   private _clearDragState(): void {
     this._dragSourceItemIndex = null;
     this._dragOverItemIndex = null;
-    this._dragSourceGroupTag = null;
-    this._dragOverGroupTag = null;
   }
 
   private _handleItemDragStart(e: DragEvent, index: number): void {
     this._dragSourceItemIndex = index;
-    this._dragSourceGroupTag = null;
     if (e.dataTransfer) {
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('text/plain', String(index));
@@ -915,10 +766,7 @@ export class WikiChecklist extends LitElement {
     e: DragEvent,
     index: number
   ): void {
-    if (
-      this._dragSourceItemIndex === null &&
-      this._dragSourceGroupTag === null
-    ) {
+    if (this._dragSourceItemIndex === null) {
       return;
     }
     e.preventDefault();
@@ -934,8 +782,7 @@ export class WikiChecklist extends LitElement {
 
   private async _handleItemDrop(
     e: DragEvent,
-    targetIndex: number,
-    groupTag?: string
+    targetIndex: number
   ): Promise<void> {
     e.preventDefault();
     const sourceIndex = this._dragSourceItemIndex;
@@ -948,32 +795,11 @@ export class WikiChecklist extends LitElement {
     const insertIndex =
       position === 'before' ? targetIndex : targetIndex + 1;
 
-    let newItems = [...this.items];
-
-    // Handle cross-group drop: update the item's tag only when it changes
-    if (groupTag !== undefined) {
-      const sourceItem = newItems[sourceIndex];
-      if (!sourceItem) {
-        this._clearDragState();
-        return;
-      }
-      const newTag = groupTag === 'Other' ? undefined : groupTag;
-      if (newTag !== sourceItem.tag) {
-        const updatedItem = { ...sourceItem };
-        if (newTag === undefined) {
-          delete updatedItem.tag;
-        } else {
-          updatedItem.tag = newTag;
-        }
-        newItems[sourceIndex] = updatedItem;
-      }
-    }
-
-    newItems = this.reorderItems(newItems, sourceIndex, insertIndex);
+    const newItems = this.reorderItems(this.items, sourceIndex, insertIndex);
 
     this._clearDragState();
     this.items = newItems;
-    await this.persistData(newItems, this.groupOrder);
+    await this.persistData(newItems);
   }
 
   private _handleItemDragEnd(): void {
@@ -991,78 +817,10 @@ export class WikiChecklist extends LitElement {
     this._dragOverItemIndex = null;
   }
 
-  private _handleGroupDragStart(e: DragEvent, tag: string): void {
-    this._dragSourceGroupTag = tag;
-    this._dragSourceItemIndex = null;
-    if (e.dataTransfer) {
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', tag);
-    }
-  }
-
-  private _handleGroupDragOver(e: DragEvent, tag: string): void {
-    if (this._dragSourceGroupTag === null) return;
-    e.preventDefault();
-    if (e.dataTransfer) {
-      e.dataTransfer.dropEffect = 'move';
-    }
-    if (!(e.currentTarget instanceof HTMLElement)) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const midY = rect.top + rect.height / 2;
-    this._dragOverGroupTag = tag;
-    this._dragOverGroupPosition = e.clientY < midY ? 'before' : 'after';
-  }
-
-  private async _handleGroupDrop(e: DragEvent, targetTag: string): Promise<void> {
-    e.preventDefault();
-    const sourceTag = this._dragSourceGroupTag;
-    if (!sourceTag) {
-      this._clearDragState();
-      return;
-    }
-    if (sourceTag === targetTag) {
-      this._clearDragState();
-      return;
-    }
-
-    // Build ordered tag list from current grouped items (excluding 'Other')
-    const groups = this.getGroupedItems();
-    const currentTags = groups.map(g => g.tag).filter(t => t !== 'Other');
-
-    const newGroupOrder = this.computeNewGroupOrder(
-      currentTags,
-      sourceTag,
-      targetTag,
-      this._dragOverGroupPosition
-    );
-
-    this._clearDragState();
-    this.groupOrder = newGroupOrder;
-    await this.persistData(this.items, newGroupOrder);
-  }
-
-  private _handleGroupDragEnd(): void {
-    this._clearDragState();
-  }
-
-  private _handleGroupDragLeave(e: DragEvent): void {
-    if (
-      e.currentTarget instanceof HTMLElement &&
-      e.relatedTarget instanceof Node &&
-      e.currentTarget.contains(e.relatedTarget)
-    ) {
-      return;
-    }
-    this._dragOverGroupTag = null;
-  }
-
   private _renderItem(
     item: ChecklistItem,
-    index: number,
-    tagSuggestionsId: string,
-    groupTag?: string
+    index: number
   ) {
-    const isEditingTag = this.editingTagIndex === index;
     const isDragging = this._dragSourceItemIndex === index;
     const isDragOver = this._dragOverItemIndex === index;
     const dragOverClass = isDragOver
@@ -1078,10 +836,10 @@ export class WikiChecklist extends LitElement {
         @dragover="${(e: DragEvent) =>
           this._handleItemDragOver(e, index)}"
         @dragleave="${(e: DragEvent) => this._handleItemDragLeave(e)}"
-        @drop="${(e: DragEvent) => this._handleItemDrop(e, index, groupTag)}"
+        @drop="${(e: DragEvent) => this._handleItemDrop(e, index)}"
         @dragend="${() => this._handleItemDragEnd()}"
       >
-        <span class="drag-handle" aria-hidden="true">⠿</span>
+        <span class="drag-handle" aria-hidden="true">\u2807</span>
         <input
           type="checkbox"
           class="item-checkbox"
@@ -1093,11 +851,11 @@ export class WikiChecklist extends LitElement {
         <input
           type="text"
           class="item-text"
-          .value="${item.text}"
-          aria-label="Edit item text"
-          @input="${(e: InputEvent) => {
+          .value="${this.editingIndex === index ? this.composeTaggedText(item) : item.text}"
+          aria-label="Edit item text and tags"
+          @focus="${(e: FocusEvent) => {
             if (!(e.target instanceof HTMLInputElement)) return;
-            this._handleItemTextChange(index, e.target.value);
+            this._handleItemFocus(index, e.target);
           }}"
           @blur="${(e: FocusEvent) => {
             if (!(e.target instanceof HTMLInputElement)) return;
@@ -1108,35 +866,11 @@ export class WikiChecklist extends LitElement {
             this._handleItemTextKeydown(index, e.currentTarget.value, e);
           }}"
         />
-        ${isEditingTag
-          ? html`
-              <input
-                type="text"
-                class="item-tag-input"
-                .value="${item.tag ?? ''}"
-                placeholder="tag"
-                list="${tagSuggestionsId}"
-                aria-label="Edit item tag"
-                @blur="${(e: FocusEvent) => {
-                  if (!(e.target instanceof HTMLInputElement)) return;
-                  void this._handleTagInputBlur(index, e.target.value);
-                }}"
-                @keydown="${(e: KeyboardEvent) => {
-                  if (!(e.currentTarget instanceof HTMLInputElement)) return;
-                  this._handleTagInputKeydown(index, e.currentTarget.value, e);
-                }}"
-              />
-            `
-          : html`
-              <button
-                class="item-tag-badge"
-                title="${item.tag ? `Tag: ${item.tag}. Click to edit` : 'Click to add tag'}"
-                aria-label="${item.tag ? `Tag: ${item.tag}. Click to edit` : 'Add tag'}"
-                @click="${() => this._handleTagBadgeClick(index)}"
-              >
-                ${item.tag ?? '+tag'}
-              </button>
-            `}
+        ${this.editingIndex !== index
+          ? item.tags.map(
+              tag => html`<span class="item-tag-badge">${tag}</span>`
+            )
+          : nothing}
         <button
           class="remove-btn"
           title="Remove item"
@@ -1144,93 +878,76 @@ export class WikiChecklist extends LitElement {
           ?disabled="${this.saving}"
           @click="${() => this._handleRemoveItem(index)}"
         >
-          ✕
+          \u2715
         </button>
       </li>
     `;
   }
 
-  private _renderFlatItems(tagSuggestionsId: string) {
+  private async _handleDeleteChecked(): Promise<void> {
+    const newItems = this.items.filter(item => !item.checked);
+    this.items = newItems;
+    await this.persistData(newItems);
+  }
+
+  private _renderTagFilterBar() {
+    const tags = this.getExistingTags();
+    if (tags.length === 0) return nothing;
+
+    return html`
+      <div class="tag-filter-bar">
+        ${tags.map(
+          tag => html`
+            <button
+              class="tag-pill ${this.filterTag === tag ? 'tag-pill-active' : ''}"
+              @click="${() => this._handleFilterTagClick(tag)}"
+              aria-pressed="${this.filterTag === tag}"
+              aria-label="Filter by ${tag}"
+            >
+              ${tag}
+            </button>
+          `
+        )}
+        ${this.filterTag !== null
+          ? html`
+              <button
+                class="tag-filter-clear"
+                @click="${() => { this.filterTag = null; }}"
+                aria-label="Clear filter"
+              >
+                ✕
+              </button>
+            `
+          : nothing}
+      </div>
+    `;
+  }
+
+  private _renderItems() {
+    const filtered = this.getFilteredItems();
     return html`
       <ul class="items-list" role="list">
-        ${this.items.map((item, i) => this._renderItem(item, i, tagSuggestionsId))}
+        ${filtered.map(({ item, index }) => this._renderItem(item, index))}
       </ul>
     `;
   }
 
-  private _renderGroupedItems(tagSuggestionsId: string) {
-    const groups = this.getGroupedItems();
-    return html`
-      ${groups.map(group => {
-        const isGroupDragging = this._dragSourceGroupTag === group.tag;
-        const isGroupDragOver = this._dragOverGroupTag === group.tag;
-        const groupDragOverClass = isGroupDragOver
-          ? `drag-over-${this._dragOverGroupPosition}`
-          : '';
-        return html`
-          <div class="group-section">
-            <div
-              class="group-header ${isGroupDragging ? 'dragging' : ''} ${groupDragOverClass}"
-              role="heading"
-              aria-level="3"
-              draggable="true"
-              @dragstart="${(e: DragEvent) =>
-                this._handleGroupDragStart(e, group.tag)}"
-              @dragover="${(e: DragEvent) =>
-                this._handleGroupDragOver(e, group.tag)}"
-              @dragleave="${(e: DragEvent) => this._handleGroupDragLeave(e)}"
-              @drop="${(e: DragEvent) =>
-                this._handleGroupDrop(e, group.tag)}"
-              @dragend="${() => this._handleGroupDragEnd()}"
-            >
-              <span class="drag-handle" aria-hidden="true">⠿</span>
-              ${group.tag}
-            </div>
-            <ul class="items-list" role="list">
-              ${group.items.map(({ item, index }) =>
-                this._renderItem(item, index, tagSuggestionsId, group.tag)
-              )}
-            </ul>
-          </div>
-        `;
-      })}
-    `;
-  }
-
-  private _renderAddItem(tagSuggestionsId: string) {
+  private _renderAddItem() {
     return html`
       <div class="add-item">
-        <div class="add-item-inputs">
-          <input
-            type="text"
-            class="add-text-input"
-            .value="${this.newItemText}"
-            placeholder="Add new item…"
-            aria-label="New item text"
-            ?disabled="${this.saving}"
-            @input="${(e: InputEvent) => {
-              if (!(e.target instanceof HTMLInputElement)) return;
-              this.newItemText = e.target.value;
-            }}"
-            @keydown="${this._handleNewItemKeydown}"
-          />
-          <div class="add-tag-row">
-            <span class="add-tag-label">Tag (optional):</span>
-            <input
-              type="text"
-              class="add-tag-input"
-              .value="${this.newItemTag}"
-              placeholder="e.g. Dairy"
-              list="${tagSuggestionsId}"
-              aria-label="New item tag"
-              ?disabled="${this.saving}"
-              @input="${(e: InputEvent) => {
-                if (!(e.target instanceof HTMLInputElement)) return;
-                this.newItemTag = e.target.value;
-              }}"
-            />
-          </div>
-        </div>
+        <input
+          type="text"
+          class="add-text-input"
+          .value="${this.newItemText}"
+          placeholder="Add item\u2026 (use :tag for grouping)"
+          aria-label="New item text, with optional :tag anywhere for grouping"
+          ?disabled="${this.saving}"
+          @input="${(e: InputEvent) => {
+            if (!(e.target instanceof HTMLInputElement)) return;
+            this.newItemText = e.target.value;
+          }}"
+          @keydown="${this._handleNewItemKeydown}"
+        />
         <button
           class="add-btn button-base button-primary"
           ?disabled="${this.saving || !this.newItemText.trim()}"
@@ -1244,35 +961,24 @@ export class WikiChecklist extends LitElement {
   }
 
   override render() {
-    const tagSuggestionsId = `tag-suggestions-${this.listName}`;
-    const tags = this.getExistingTags();
-
     return html`
       ${sharedStyles}
-      <datalist id="${tagSuggestionsId}">
-        ${tags.map(t => html`<option value="${t}"></option>`)}
-      </datalist>
       <div class="checklist-container system-font">
         <div class="checklist-header">
           <h2 class="checklist-title">${this.formatTitle(this.listName)}</h2>
           <div class="header-actions">
             ${this.saving
-              ? html`<span class="saving-indicator">Saving…</span>`
+              ? html`<span class="saving-indicator">Saving\u2026</span>`
               : nothing}
-            ${this.items.length > 0
+            ${this.items.some(item => item.checked)
               ? html`
                   <button
-                    class="view-toggle"
-                    aria-pressed="${this.groupedView}"
-                    aria-label="${this.groupedView
-                      ? 'Switch to flat view'
-                      : 'Switch to grouped view'}"
-                    title="${this.groupedView
-                      ? 'Switch to flat view'
-                      : 'Switch to grouped view'}"
-                    @click="${this._handleToggleView}"
+                    class="delete-checked-btn"
+                    ?disabled="${this.saving}"
+                    @click="${this._handleDeleteChecked}"
+                    aria-label="Delete all checked items"
                   >
-                    ${this.groupedView ? 'Flat' : 'Group'}
+                    delete checked
                   </button>
                 `
               : nothing}
@@ -1283,7 +989,7 @@ export class WikiChecklist extends LitElement {
           ? html`
               <div class="loading" role="status" aria-live="polite">
                 <i class="fas fa-spinner fa-spin" aria-hidden="true"></i>
-                Loading checklist…
+                Loading checklist\u2026
               </div>
             `
           : this.error
@@ -1305,10 +1011,11 @@ export class WikiChecklist extends LitElement {
             : html`
                 ${this.items.length === 0
                   ? html`<div class="empty-state">No items yet. Add one below!</div>`
-                  : this.groupedView
-                    ? this._renderGroupedItems(tagSuggestionsId)
-                    : this._renderFlatItems(tagSuggestionsId)}
-                ${this._renderAddItem(tagSuggestionsId)}
+                  : html`
+                      ${this._renderTagFilterBar()}
+                      ${this._renderItems()}
+                    `}
+                ${this._renderAddItem()}
               `}
       </div>
     `;
