@@ -9,7 +9,20 @@ import (
 	"time"
 
 	adrgfrontmatter "github.com/adrg/frontmatter"
+	toml "github.com/pelletier/go-toml/v2"
+	"gopkg.in/yaml.v2"
 )
+
+// frontmatterFormats defines custom format handlers that use pelletier/go-toml/v2
+// for TOML unmarshalling instead of the default BurntSushi/toml.
+// pelletier produces []any for array-of-tables, which is compatible with structpb.NewStruct().
+// BurntSushi produces []map[string]any, which structpb rejects.
+var frontmatterFormats = []*adrgfrontmatter.Format{
+	adrgfrontmatter.NewFormat("---", "---", yaml.Unmarshal),
+	adrgfrontmatter.NewFormat("---yaml", "---", yaml.Unmarshal),
+	adrgfrontmatter.NewFormat("+++", "+++", toml.Unmarshal),
+	adrgfrontmatter.NewFormat("---toml", "---", toml.Unmarshal),
+}
 
 // DefaultPageTemplate is the default markdown template added to new wiki pages.
 // This displays the page title or identifier as an H1 heading.
@@ -31,14 +44,14 @@ func (p *Page) parse() (FrontMatter, Markdown, error) {
 	frontmatter := &map[string]any{}
 	r := strings.NewReader(p.Text)
 
-	// Try to parse with default delimiter which is ---
-	mdContent, err := adrgfrontmatter.Parse(r, frontmatter)
+	// Try to parse with custom formats that use pelletier/go-toml/v2 for TOML
+	mdContent, err := adrgfrontmatter.Parse(r, frontmatter, frontmatterFormats...)
 	if err != nil && !errors.Is(err, io.EOF) {
 		// Failed to parse, try swapping delimiters
 		// This handles the case where content has TOML-like frontmatter with +++ delimiters
 		// but the parser expects YAML-like frontmatter with --- delimiters
 		swapped := strings.Replace(p.Text, "+++", "---", 2)
-		mdContent, err = adrgfrontmatter.Parse(strings.NewReader(swapped), frontmatter)
+		mdContent, err = adrgfrontmatter.Parse(strings.NewReader(swapped), frontmatter, frontmatterFormats...)
 		if err != nil && !errors.Is(err, io.EOF) {
 			// Neither delimiter worked, return the error
 			return nil, "", fmt.Errorf("failed to parse frontmatter: %w", err)
@@ -102,7 +115,7 @@ type RenderingResult struct {
 // It returns the markdown content, the parsed frontmatter map, and any error encountered.
 func ParseFrontmatterAndMarkdown(content string) ([]byte, map[string]any, error) {
 	matterMap := &map[string]any{}
-	markdownBytes, err := adrgfrontmatter.Parse(strings.NewReader(content), &matterMap)
+	markdownBytes, err := adrgfrontmatter.Parse(strings.NewReader(content), &matterMap, frontmatterFormats...)
 	if err != nil && !errors.Is(err, io.EOF) {
 		return nil, nil, fmt.Errorf("failed to parse frontmatter: %w", err)
 	}
