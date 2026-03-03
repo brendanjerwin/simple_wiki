@@ -374,7 +374,7 @@ export class WikiChecklist extends LitElement {
   declare error: AugmentedError | null;
 
   @state()
-  declare filterTag: string | null;
+  declare filterTags: string[];
 
   // Index of the item currently being edited (text input focused)
   @state()
@@ -406,7 +406,7 @@ export class WikiChecklist extends LitElement {
     this.loading = false;
     this.saving = false;
     this.error = null;
-    this.filterTag = null;
+    this.filterTags = [];
     this.editingIndex = null;
     this.newItemText = '';
     this._dragSourceItemIndex = null;
@@ -511,15 +511,16 @@ export class WikiChecklist extends LitElement {
   }
 
   /**
-   * Return items filtered by the active filterTag.
-   * When filterTag is null, returns all items.
+   * Return items filtered by the active filterTags.
+   * When filterTags is empty, returns all items.
+   * When filterTags has entries, returns only items whose tags contain ALL filter tags (AND logic).
    */
   getFilteredItems(): Array<{ item: ChecklistItem; index: number }> {
     const result: Array<{ item: ChecklistItem; index: number }> = [];
     for (let i = 0; i < this.items.length; i++) {
       const item = this.items[i];
       if (!item) continue;
-      if (this.filterTag === null || item.tags.includes(this.filterTag)) {
+      if (this.filterTags.length === 0 || this.filterTags.every(ft => item.tags.includes(ft))) {
         result.push({ item, index: i });
       }
     }
@@ -719,10 +720,10 @@ export class WikiChecklist extends LitElement {
   }
 
   private _handleFilterTagClick(tag: string): void {
-    if (this.filterTag === tag) {
-      this.filterTag = null;
+    if (this.filterTags.includes(tag)) {
+      this.filterTags = this.filterTags.filter(t => t !== tag);
     } else {
-      this.filterTag = tag;
+      this.filterTags = [...this.filterTags, tag];
     }
   }
 
@@ -899,20 +900,20 @@ export class WikiChecklist extends LitElement {
         ${tags.map(
           tag => html`
             <button
-              class="tag-pill ${this.filterTag === tag ? 'tag-pill-active' : ''}"
+              class="tag-pill ${this.filterTags.includes(tag) ? 'tag-pill-active' : ''}"
               @click="${() => this._handleFilterTagClick(tag)}"
-              aria-pressed="${this.filterTag === tag}"
+              aria-pressed="${this.filterTags.includes(tag)}"
               aria-label="Filter by ${tag}"
             >
               ${tag}
             </button>
           `
         )}
-        ${this.filterTag !== null
+        ${this.filterTags.length > 0
           ? html`
               <button
                 class="tag-filter-clear"
-                @click="${() => { this.filterTag = null; }}"
+                @click="${() => { this.filterTags = []; }}"
                 aria-label="Clear filter"
               >
                 ✕
