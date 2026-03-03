@@ -14,10 +14,8 @@ import {
   inputCSS,
   sharedStyles,
 } from './shared-styles.js';
-import { AugmentErrorService } from './augment-error-service.js';
-import { showToast } from './toast-message.js';
+import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
 import './error-display.js';
-import './toast-message.js';
 
 // Polling interval in milliseconds
 const POLL_INTERVAL_MS = 3000;
@@ -369,7 +367,7 @@ export class WikiChecklist extends LitElement {
   declare saving: boolean;
 
   @state()
-  declare error: Error | null;
+  declare error: AugmentedError | null;
 
   // Track which item's tag is being edited
   @state()
@@ -552,7 +550,7 @@ export class WikiChecklist extends LitElement {
   /**
    * Fetch checklist data from GetFrontmatter and update state.
    */
-  async fetchData(): Promise<void> {
+  private async fetchData(): Promise<void> {
     if (!this.page) {
       throw new Error('wiki-checklist: page attribute is required but not set');
     }
@@ -577,7 +575,7 @@ export class WikiChecklist extends LitElement {
   /**
    * Read-modify-write: get current frontmatter, update checklists key, merge back.
    */
-  async persistData(
+  private async persistData(
     newItems: ChecklistItem[],
     newGroupOrder: string[] | null
   ): Promise<void> {
@@ -640,7 +638,6 @@ export class WikiChecklist extends LitElement {
       this.error = null;
     } catch (err) {
       this.error = AugmentErrorService.augmentError(err, 'saving checklist');
-      showToast('Failed to save checklist. Please try again.', 'error', 5);
     } finally {
       this.saving = false;
     }
@@ -755,11 +752,10 @@ export class WikiChecklist extends LitElement {
 
   private _renderItem(
     item: ChecklistItem,
-    index: number
+    index: number,
+    tagSuggestionsId: string
   ) {
     const isEditingTag = this.editingTagIndex === index;
-    const tags = this.getExistingTags();
-    const datalistId = `tag-suggestions-${this.listName}`;
 
     return html`
       <li
@@ -771,6 +767,7 @@ export class WikiChecklist extends LitElement {
           class="item-checkbox"
           .checked="${item.checked}"
           aria-label="${item.text}"
+          ?disabled="${this.saving}"
           @change="${() => this._handleToggleItem(index)}"
         />
         <input
@@ -798,7 +795,7 @@ export class WikiChecklist extends LitElement {
                 class="item-tag-input"
                 .value="${item.tag ?? ''}"
                 placeholder="tag"
-                list="${datalistId}"
+                list="${tagSuggestionsId}"
                 aria-label="Edit item tag"
                 @blur="${(e: FocusEvent) => {
                   if (!(e.target instanceof HTMLInputElement)) return;
@@ -824,26 +821,24 @@ export class WikiChecklist extends LitElement {
           class="remove-btn"
           title="Remove item"
           aria-label="Remove item"
+          ?disabled="${this.saving}"
           @click="${() => this._handleRemoveItem(index)}"
         >
           ✕
         </button>
       </li>
-      <datalist id="${datalistId}">
-        ${tags.map(t => html`<option value="${t}"></option>`)}
-      </datalist>
     `;
   }
 
-  private _renderFlatItems() {
+  private _renderFlatItems(tagSuggestionsId: string) {
     return html`
       <ul class="items-list" role="list">
-        ${this.items.map((item, i) => this._renderItem(item, i))}
+        ${this.items.map((item, i) => this._renderItem(item, i, tagSuggestionsId))}
       </ul>
     `;
   }
 
-  private _renderGroupedItems() {
+  private _renderGroupedItems(tagSuggestionsId: string) {
     const groups = this.getGroupedItems();
     return html`
       ${groups.map(
@@ -854,7 +849,7 @@ export class WikiChecklist extends LitElement {
             </div>
             <ul class="items-list" role="list">
               ${group.items.map(({ item, index }) =>
-                this._renderItem(item, index)
+                this._renderItem(item, index, tagSuggestionsId)
               )}
             </ul>
           </div>
@@ -863,9 +858,7 @@ export class WikiChecklist extends LitElement {
     `;
   }
 
-  private _renderAddItem() {
-    const tags = this.getExistingTags();
-    const datalistId = `new-tag-suggestions-${this.listName}`;
+  private _renderAddItem(tagSuggestionsId: string) {
     return html`
       <div class="add-item">
         <div class="add-item-inputs">
@@ -889,7 +882,7 @@ export class WikiChecklist extends LitElement {
               class="add-tag-input"
               .value="${this.newItemTag}"
               placeholder="e.g. Dairy"
-              list="${datalistId}"
+              list="${tagSuggestionsId}"
               aria-label="New item tag"
               ?disabled="${this.saving}"
               @input="${(e: InputEvent) => {
@@ -897,9 +890,6 @@ export class WikiChecklist extends LitElement {
                 this.newItemTag = e.target.value;
               }}"
             />
-            <datalist id="${datalistId}">
-              ${tags.map(t => html`<option value="${t}"></option>`)}
-            </datalist>
           </div>
         </div>
         <button
@@ -915,8 +905,14 @@ export class WikiChecklist extends LitElement {
   }
 
   override render() {
+    const tagSuggestionsId = `tag-suggestions-${this.listName}`;
+    const tags = this.getExistingTags();
+
     return html`
       ${sharedStyles}
+      <datalist id="${tagSuggestionsId}">
+        ${tags.map(t => html`<option value="${t}"></option>`)}
+      </datalist>
       <div class="checklist-container system-font">
         <div class="checklist-header">
           <h2 class="checklist-title">${this.formatTitle(this.listName)}</h2>
@@ -955,7 +951,7 @@ export class WikiChecklist extends LitElement {
             ? html`
                 <div class="error-wrapper">
                   <error-display
-                    .augmentedError="${AugmentErrorService.augmentError(this.error)}"
+                    .augmentedError="${this.error}"
                     .action="${{
                       label: 'Retry',
                       onClick: () => {
@@ -971,9 +967,9 @@ export class WikiChecklist extends LitElement {
                 ${this.items.length === 0
                   ? html`<div class="empty-state">No items yet. Add one below!</div>`
                   : this.groupedView
-                    ? this._renderGroupedItems()
-                    : this._renderFlatItems()}
-                ${this._renderAddItem()}
+                    ? this._renderGroupedItems(tagSuggestionsId)
+                    : this._renderFlatItems(tagSuggestionsId)}
+                ${this._renderAddItem(tagSuggestionsId)}
               `}
       </div>
     `;

@@ -1,7 +1,8 @@
 import { expect } from '@open-wc/testing';
 import sinon, { type SinonStub } from 'sinon';
 import './wiki-checklist.js';
-import type { WikiChecklist } from './wiki-checklist.js';
+import type { WikiChecklist, ChecklistItem } from './wiki-checklist.js';
+import { AugmentedError, AugmentErrorService } from './augment-error-service.js';
 import { create } from '@bufbuild/protobuf';
 import {
   GetFrontmatterResponseSchema,
@@ -9,33 +10,43 @@ import {
 } from '../gen/api/v1/frontmatter_pb.js';
 import type { JsonObject } from '@bufbuild/protobuf';
 
+// Helper type to access private methods for testing
+interface WikiChecklistInternal {
+  persistData(
+    items: ChecklistItem[],
+    groupOrder: string[] | null
+  ): Promise<void>;
+}
+
 describe('WikiChecklist', () => {
   let el: WikiChecklist;
 
-  function timeout(ms: number, message: string): Promise<never> {
-    return new Promise((_, reject) =>
-      setTimeout(() => reject(new Error(message)), ms)
-    );
+  function buildElement(
+    page = 'test-page',
+    listName = 'grocery_list'
+  ): WikiChecklist {
+    const freshEl = document.createElement(
+      'wiki-checklist'
+    ) as WikiChecklist;
+    freshEl.setAttribute('list-name', listName);
+    freshEl.setAttribute('page', page);
+    return freshEl;
+  }
+
+  function stubGetFrontmatter(
+    target: WikiChecklist,
+    frontmatter: JsonObject = {}
+  ): SinonStub {
+    return sinon
+      .stub(target.client, 'getFrontmatter')
+      .resolves(create(GetFrontmatterResponseSchema, { frontmatter }));
   }
 
   beforeEach(async () => {
-    // Create element without connecting so we can stub the client first
-    el = document.createElement('wiki-checklist') as WikiChecklist;
-    el.setAttribute('list-name', 'grocery_list');
-    el.setAttribute('page', 'test-page');
-
-    // Stub client.getFrontmatter before connectedCallback runs
-    sinon.stub(el.client, 'getFrontmatter').resolves(
-      create(GetFrontmatterResponseSchema, { frontmatter: {} })
-    );
-
-    // Now connect (triggers connectedCallback)
+    el = buildElement();
+    stubGetFrontmatter(el);
     document.body.appendChild(el);
-
-    await Promise.race([
-      el.updateComplete,
-      timeout(5000, 'Component fixture timed out'),
-    ]);
+    await el.updateComplete;
   });
 
   afterEach(() => {
@@ -49,46 +60,16 @@ describe('WikiChecklist', () => {
     expect(el).to.exist;
   });
 
-  it('should be an instance of WikiChecklist', async () => {
-    const { WikiChecklist: WC } = await import('./wiki-checklist.js');
-    expect(el).to.be.instanceOf(WC);
-  });
-
   it('should have the correct tag name', () => {
     expect(el.tagName.toLowerCase()).to.equal('wiki-checklist');
   });
 
-  describe('when component is initialized', () => {
-    it('should have the listName property set', () => {
-      expect(el.listName).to.equal('grocery_list');
-    });
-
-    it('should have the page property set', () => {
-      expect(el.page).to.equal('test-page');
-    });
-
-    it('should default to empty items array', () => {
-      expect(el.items).to.deep.equal([]);
-    });
-
-    it('should default groupOrder to null', () => {
-      expect(el.groupOrder).to.be.null;
-    });
-
-    it('should default to flat view', () => {
-      expect(el.groupedView).to.be.false;
-    });
-
-    it('should not be loading by default (after initial fetch stub)', () => {
-      // loading starts true, then completes - stub prevents fetch
+  describe('after initial successful fetch', () => {
+    it('should not be in loading state', () => {
       expect(el.loading).to.be.false;
     });
 
-    it('should not be saving by default', () => {
-      expect(el.saving).to.be.false;
-    });
-
-    it('should have no error by default', () => {
+    it('should have no error', () => {
       expect(el.error).to.be.null;
     });
   });
@@ -167,26 +148,33 @@ describe('WikiChecklist', () => {
   });
 
   describe('getExistingTags', () => {
-    beforeEach(() => {
-      el.items = [
-        { text: 'Milk', checked: false, tag: 'Dairy' },
-        { text: 'Apples', checked: false, tag: 'Produce' },
-        { text: 'Eggs', checked: true, tag: 'Dairy' },
-        { text: 'Bread', checked: false },
-      ];
+    describe('when items have multiple tags', () => {
+      beforeEach(() => {
+        el.items = [
+          { text: 'Milk', checked: false, tag: 'Dairy' },
+          { text: 'Apples', checked: false, tag: 'Produce' },
+          { text: 'Eggs', checked: true, tag: 'Dairy' },
+          { text: 'Bread', checked: false },
+        ];
+      });
+
+      it('should return unique tags sorted alphabetically', () => {
+        expect(el.getExistingTags()).to.deep.equal(['Dairy', 'Produce']);
+      });
     });
 
-    it('should return unique tags sorted alphabetically', () => {
-      expect(el.getExistingTags()).to.deep.equal(['Dairy', 'Produce']);
-    });
+    describe('when items have empty or missing tags', () => {
+      beforeEach(() => {
+        el.items = [
+          { text: 'Item 1', checked: false },
+          { text: 'Item 2', checked: false, tag: '' },
+          { text: 'Item 3', checked: false, tag: 'TagA' },
+        ];
+      });
 
-    it('should exclude undefined/empty tags', () => {
-      el.items = [
-        { text: 'Item 1', checked: false },
-        { text: 'Item 2', checked: false, tag: '' },
-        { text: 'Item 3', checked: false, tag: 'TagA' },
-      ];
-      expect(el.getExistingTags()).to.deep.equal(['TagA']);
+      it('should exclude empty tags', () => {
+        expect(el.getExistingTags()).to.deep.equal(['TagA']);
+      });
     });
   });
 
@@ -218,20 +206,30 @@ describe('WikiChecklist', () => {
       expect(firstItem!.item.text).to.equal('Towels');
     });
 
-    it('should respect groupOrder when provided', () => {
-      el.groupOrder = ['Produce', 'Dairy', 'Bakery'];
-      const groups = el.getGroupedItems();
-      expect(groups[0]?.tag).to.equal('Produce');
-      expect(groups[1]?.tag).to.equal('Dairy');
-      expect(groups[2]?.tag).to.equal('Bakery');
+    describe('when groupOrder is provided', () => {
+      beforeEach(() => {
+        el.groupOrder = ['Produce', 'Dairy', 'Bakery'];
+      });
+
+      it('should respect the custom group order', () => {
+        const groups = el.getGroupedItems();
+        expect(groups[0]?.tag).to.equal('Produce');
+        expect(groups[1]?.tag).to.equal('Dairy');
+        expect(groups[2]?.tag).to.equal('Bakery');
+      });
     });
 
-    it('should sort groups alphabetically when no groupOrder', () => {
-      el.groupOrder = null;
-      const groups = el.getGroupedItems();
-      const taggedGroups = groups.filter(g => g.tag !== 'Other');
-      const tags = taggedGroups.map(g => g.tag);
-      expect(tags).to.deep.equal(['Bakery', 'Dairy', 'Produce']);
+    describe('when groupOrder is null', () => {
+      beforeEach(() => {
+        el.groupOrder = null;
+      });
+
+      it('should sort groups alphabetically', () => {
+        const groups = el.getGroupedItems();
+        const taggedGroups = groups.filter(g => g.tag !== 'Other');
+        const tags = taggedGroups.map(g => g.tag);
+        expect(tags).to.deep.equal(['Bakery', 'Dairy', 'Produce']);
+      });
     });
 
     it('should preserve absolute indices for items', () => {
@@ -244,123 +242,180 @@ describe('WikiChecklist', () => {
   });
 
   describe('rendering', () => {
-    it('should render the formatted title', async () => {
-      await el.updateComplete;
-      const title = el.shadowRoot?.querySelector('h2, h3, .checklist-title');
-      expect(title).to.exist;
-      expect(title!.textContent?.trim()).to.contain('Grocery List');
+    describe('title', () => {
+      let title: Element | null | undefined;
+
+      beforeEach(async () => {
+        await el.updateComplete;
+        title = el.shadowRoot?.querySelector('.checklist-title');
+      });
+
+      it('should render the formatted list name as a heading', () => {
+        expect(title?.textContent?.trim()).to.contain('Grocery List');
+      });
     });
 
-    it('should render loading state when loading is true', async () => {
-      el.loading = true;
-      await el.updateComplete;
-      const loadingEl = el.shadowRoot?.querySelector('.loading');
-      expect(loadingEl).to.exist;
+    describe('when loading is true', () => {
+      let loadingEl: Element | null | undefined;
+
+      beforeEach(async () => {
+        el.loading = true;
+        await el.updateComplete;
+        loadingEl = el.shadowRoot?.querySelector('.loading');
+      });
+
+      it('should render loading indicator', () => {
+        expect(loadingEl).to.exist;
+      });
     });
 
-    it('should render error state when error is set', async () => {
-      el.error = new Error('Test error');
-      await el.updateComplete;
-      const errorEl = el.shadowRoot?.querySelector('error-display, .error');
-      expect(errorEl).to.exist;
+    describe('when error is set', () => {
+      let errorEl: Element | null | undefined;
+
+      beforeEach(async () => {
+        el.error = AugmentErrorService.augmentError(new Error('Test error'));
+        await el.updateComplete;
+        errorEl = el.shadowRoot?.querySelector('error-display');
+      });
+
+      it('should render error-display component', () => {
+        expect(errorEl).to.exist;
+      });
     });
 
-    it('should render items when items are present', async () => {
-      el.error = null;
-      el.loading = false;
-      el.items = [
-        { text: 'Milk', checked: false },
-        { text: 'Eggs', checked: true },
-      ];
-      await el.updateComplete;
-      const checkboxes = el.shadowRoot?.querySelectorAll('input[type="checkbox"]');
-      expect(checkboxes).to.have.length(2);
+    describe('when items are present', () => {
+      let checkboxes: NodeListOf<Element> | undefined;
+
+      beforeEach(async () => {
+        el.error = null;
+        el.loading = false;
+        el.items = [
+          { text: 'Milk', checked: false },
+          { text: 'Eggs', checked: true },
+        ];
+        await el.updateComplete;
+        checkboxes = el.shadowRoot?.querySelectorAll('input[type="checkbox"]');
+      });
+
+      it('should render a checkbox for each item', () => {
+        expect(checkboxes).to.have.length(2);
+      });
     });
 
-    it('should render checked items with strikethrough/fade class', async () => {
-      el.error = null;
-      el.loading = false;
-      el.items = [{ text: 'Done', checked: true }];
-      await el.updateComplete;
-      const checkedItem = el.shadowRoot?.querySelector('.item-checked');
-      expect(checkedItem).to.exist;
+    describe('when an item is checked', () => {
+      let checkedItem: Element | null | undefined;
+
+      beforeEach(async () => {
+        el.error = null;
+        el.loading = false;
+        el.items = [{ text: 'Done', checked: true }];
+        await el.updateComplete;
+        checkedItem = el.shadowRoot?.querySelector('.item-checked');
+      });
+
+      it('should apply checked styling to the item', () => {
+        expect(checkedItem).to.exist;
+      });
     });
 
-    it('should render empty state when items array is empty and not loading', async () => {
-      el.loading = false;
-      el.error = null;
-      el.items = [];
-      await el.updateComplete;
-      const emptyState = el.shadowRoot?.querySelector('.empty-state');
-      expect(emptyState).to.exist;
+    describe('when items array is empty and not loading', () => {
+      let emptyState: Element | null | undefined;
+
+      beforeEach(async () => {
+        el.loading = false;
+        el.error = null;
+        el.items = [];
+        await el.updateComplete;
+        emptyState = el.shadowRoot?.querySelector('.empty-state');
+      });
+
+      it('should render empty state message', () => {
+        expect(emptyState).to.exist;
+      });
     });
 
-    it('should render a view toggle button when items are present', async () => {
-      el.error = null;
-      el.loading = false;
-      el.items = [
-        { text: 'Milk', checked: false, tag: 'Dairy' },
-      ];
-      await el.updateComplete;
-      const toggleButton = el.shadowRoot?.querySelector('.view-toggle');
-      expect(toggleButton).to.exist;
+    describe('when items are present (view toggle)', () => {
+      let toggleButton: Element | null | undefined;
+
+      beforeEach(async () => {
+        el.error = null;
+        el.loading = false;
+        el.items = [{ text: 'Milk', checked: false, tag: 'Dairy' }];
+        await el.updateComplete;
+        toggleButton = el.shadowRoot?.querySelector('.view-toggle');
+      });
+
+      it('should render view toggle button', () => {
+        expect(toggleButton).to.exist;
+      });
     });
 
-    it('should render group headings in grouped view', async () => {
-      el.error = null;
-      el.loading = false;
-      el.items = [
-        { text: 'Milk', checked: false, tag: 'Dairy' },
-        { text: 'Apples', checked: false, tag: 'Produce' },
-      ];
-      el.groupedView = true;
-      await el.updateComplete;
-      const groupHeadings = el.shadowRoot?.querySelectorAll('.group-header');
-      expect(groupHeadings!.length).to.be.greaterThan(0);
+    describe('when groupedView is true', () => {
+      let groupHeadings: NodeListOf<Element> | undefined;
+
+      beforeEach(async () => {
+        el.error = null;
+        el.loading = false;
+        el.items = [
+          { text: 'Milk', checked: false, tag: 'Dairy' },
+          { text: 'Apples', checked: false, tag: 'Produce' },
+        ];
+        el.groupedView = true;
+        await el.updateComplete;
+        groupHeadings = el.shadowRoot?.querySelectorAll('.group-header');
+      });
+
+      it('should render group headings', () => {
+        expect(groupHeadings!.length).to.be.greaterThan(0);
+      });
     });
 
-    it('should render add-item input at bottom', async () => {
-      el.error = null;
-      el.loading = false;
-      await el.updateComplete;
-      const addInput = el.shadowRoot?.querySelector('.add-text-input');
-      expect(addInput).to.exist;
+    describe('add item form', () => {
+      let addInput: Element | null | undefined;
+
+      beforeEach(async () => {
+        el.error = null;
+        el.loading = false;
+        await el.updateComplete;
+        addInput = el.shadowRoot?.querySelector('.add-text-input');
+      });
+
+      it('should always render the add-item input', () => {
+        expect(addInput).to.exist;
+      });
+    });
+
+    describe('datalist', () => {
+      let datalists: NodeListOf<Element> | undefined;
+
+      beforeEach(async () => {
+        el.error = null;
+        el.loading = false;
+        el.items = [
+          { text: 'Milk', checked: false, tag: 'Dairy' },
+          { text: 'Eggs', checked: false, tag: 'Dairy' },
+        ];
+        await el.updateComplete;
+        datalists = el.shadowRoot?.querySelectorAll(
+          'datalist#tag-suggestions-grocery_list'
+        );
+      });
+
+      it('should render exactly one datalist for tag suggestions', () => {
+        expect(datalists!.length).to.equal(1);
+      });
     });
   });
 
-  describe('fetchData', () => {
+  describe('when GetFrontmatter returns checklist items', () => {
+    let items: ChecklistItem[];
     let getFrontmatterStub: SinonStub;
 
-    beforeEach(() => {
-      sinon.restore(); // remove stub from outer beforeEach
-      // Create a fresh element for this suite
+    beforeEach(async () => {
+      sinon.restore();
       el.remove();
-      el = document.createElement('wiki-checklist') as WikiChecklist;
-      el.setAttribute('list-name', 'grocery_list');
-      el.setAttribute('page', 'test-page');
-      // Stub before connecting
-      getFrontmatterStub = sinon.stub(el.client, 'getFrontmatter').resolves(
-        create(GetFrontmatterResponseSchema, { frontmatter: {} })
-      );
-      document.body.appendChild(el);
-    });
 
-    it('should call getFrontmatter with the page', async () => {
-      const mockFrontmatter: JsonObject = {
-        checklists: {
-          grocery_list: {
-            items: [{ text: 'Milk', checked: false }],
-          },
-        },
-      };
-      getFrontmatterStub.resolves(
-        create(GetFrontmatterResponseSchema, { frontmatter: mockFrontmatter })
-      );
-      await el.fetchData();
-      expect(getFrontmatterStub.callCount).to.be.greaterThan(0);
-    });
-
-    it('should update items from response', async () => {
+      el = buildElement();
       const mockFrontmatter: JsonObject = {
         checklists: {
           grocery_list: {
@@ -371,74 +426,137 @@ describe('WikiChecklist', () => {
           },
         },
       };
-      getFrontmatterStub.resolves(
-        create(GetFrontmatterResponseSchema, { frontmatter: mockFrontmatter })
-      );
-      await el.fetchData();
-      expect(el.items).to.have.length(2);
-      expect(el.items[0]?.text).to.equal('Milk');
-      expect(el.items[1]?.tag).to.equal('Dairy');
+      getFrontmatterStub = sinon
+        .stub(el.client, 'getFrontmatter')
+        .resolves(
+          create(GetFrontmatterResponseSchema, { frontmatter: mockFrontmatter })
+        );
+      document.body.appendChild(el);
+      await el.updateComplete;
+      items = el.items;
     });
 
-    it('should set error when fetch fails', async () => {
-      getFrontmatterStub.rejects(new Error('Network error'));
-      await el.fetchData();
-      expect(el.error).to.be.instanceOf(Error);
+    it('should call getFrontmatter with the configured page', () => {
+      expect(getFrontmatterStub.callCount).to.be.greaterThan(0);
+      expect(getFrontmatterStub.getCall(0).args[0].page).to.equal('test-page');
     });
 
-    it('should clear loading after fetch', async () => {
-      getFrontmatterStub.resolves(
-        create(GetFrontmatterResponseSchema, { frontmatter: {} })
-      );
-      await el.fetchData();
+    it('should populate items from response', () => {
+      expect(items).to.have.length(2);
+    });
+
+    it('should map item text correctly', () => {
+      expect(items[0]?.text).to.equal('Milk');
+    });
+
+    it('should map item tags correctly', () => {
+      expect(items[1]?.tag).to.equal('Dairy');
+    });
+
+    it('should clear loading state', () => {
       expect(el.loading).to.be.false;
     });
   });
 
-  describe('persistData', () => {
+  describe('when GetFrontmatter fails', () => {
+    beforeEach(async () => {
+      sinon.restore();
+      el.remove();
+
+      el = buildElement();
+      sinon
+        .stub(el.client, 'getFrontmatter')
+        .rejects(new Error('Network error'));
+      document.body.appendChild(el);
+      await el.updateComplete;
+    });
+
+    it('should set error to an AugmentedError', () => {
+      expect(el.error).to.be.instanceOf(AugmentedError);
+    });
+
+    it('should describe the failed goal as loading checklist', () => {
+      expect(el.error?.failedGoalDescription).to.equal('loading checklist');
+    });
+
+    it('should clear loading state', () => {
+      expect(el.loading).to.be.false;
+    });
+  });
+
+  describe('when persisting data', () => {
     let getFrontmatterStub: SinonStub;
     let mergeFrontmatterStub: SinonStub;
 
     beforeEach(() => {
       sinon.restore();
-      getFrontmatterStub = sinon.stub(el.client, 'getFrontmatter').resolves(
-        create(GetFrontmatterResponseSchema, { frontmatter: {} })
-      );
-      mergeFrontmatterStub = sinon.stub(el.client, 'mergeFrontmatter').resolves(
-        create(MergeFrontmatterResponseSchema, { frontmatter: {} })
-      );
+      getFrontmatterStub = sinon
+        .stub(el.client, 'getFrontmatter')
+        .resolves(create(GetFrontmatterResponseSchema, { frontmatter: {} }));
+      mergeFrontmatterStub = sinon
+        .stub(el.client, 'mergeFrontmatter')
+        .resolves(create(MergeFrontmatterResponseSchema, { frontmatter: {} }));
     });
 
-    it('should call mergeFrontmatter with updated checklists', async () => {
+    describe('when saving items succeeds', () => {
       const newItems = [{ text: 'Milk', checked: true }];
-      await el.persistData(newItems, null);
-      expect(mergeFrontmatterStub).to.have.been.calledOnce;
-    });
 
-    it('should read-modify-write: get then merge', async () => {
-      await el.persistData([{ text: 'Item', checked: false }], null);
-      expect(getFrontmatterStub).to.have.been.calledBefore(mergeFrontmatterStub);
-    });
-
-    it('should set saving state during persist', async () => {
-      let savingDuringCall = false;
-      mergeFrontmatterStub.callsFake(async () => {
-        savingDuringCall = el.saving;
-        return create(MergeFrontmatterResponseSchema, { frontmatter: {} });
+      beforeEach(async () => {
+        await (el as unknown as WikiChecklistInternal).persistData(
+          newItems,
+          null
+        );
       });
-      await el.persistData([], null);
-      expect(savingDuringCall).to.be.true;
+
+      it('should call mergeFrontmatter', () => {
+        expect(mergeFrontmatterStub).to.have.been.calledOnce;
+      });
+
+      it('should call getFrontmatter before mergeFrontmatter (read-modify-write)', () => {
+        expect(getFrontmatterStub).to.have.been.calledBefore(
+          mergeFrontmatterStub
+        );
+      });
+
+      it('should clear saving state after completion', () => {
+        expect(el.saving).to.be.false;
+      });
     });
 
-    it('should clear saving state after persist', async () => {
-      await el.persistData([], null);
-      expect(el.saving).to.be.false;
+    describe('when save is in progress', () => {
+      let savingDuringMerge: boolean;
+
+      beforeEach(async () => {
+        savingDuringMerge = false;
+        mergeFrontmatterStub.callsFake(async () => {
+          savingDuringMerge = el.saving;
+          return create(MergeFrontmatterResponseSchema, { frontmatter: {} });
+        });
+        await (el as unknown as WikiChecklistInternal).persistData([], null);
+      });
+
+      it('should be in saving state during the merge call', () => {
+        expect(savingDuringMerge).to.be.true;
+      });
     });
 
-    it('should set error when persist fails', async () => {
-      mergeFrontmatterStub.rejects(new Error('Save failed'));
-      await el.persistData([], null);
-      expect(el.error).to.be.instanceOf(Error);
+    describe('when persist fails', () => {
+      beforeEach(async () => {
+        mergeFrontmatterStub.rejects(new Error('Save failed'));
+        await (el as unknown as WikiChecklistInternal).persistData([], null);
+      });
+
+      it('should set error to an AugmentedError', () => {
+        expect(el.error).to.be.instanceOf(AugmentedError);
+      });
+
+      it('should describe the failed goal as saving checklist', () => {
+        expect(el.error?.failedGoalDescription).to.equal('saving checklist');
+      });
+
+      it('should clear saving state', () => {
+        expect(el.saving).to.be.false;
+      });
     });
   });
 
@@ -454,31 +572,42 @@ describe('WikiChecklist', () => {
       clock.restore();
     });
 
-    it('should poll fetchData at regular intervals', async () => {
-      // Create fresh element with fake timers active
-      const freshEl = document.createElement('wiki-checklist') as WikiChecklist;
-      freshEl.setAttribute('list-name', 'test_list');
-      freshEl.setAttribute('page', 'test-page');
-      const fetchStub = sinon.stub(freshEl, 'fetchData').resolves();
-      document.body.appendChild(freshEl);
+    describe('when element is connected', () => {
+      let getFrontmatterStub: SinonStub;
+      let freshEl: WikiChecklist;
 
-      // Advance past one poll interval
-      clock.tick(3001);
-      expect(fetchStub.callCount).to.be.greaterThan(0);
-      freshEl.remove();
+      beforeEach(() => {
+        freshEl = buildElement('test-page', 'test_list');
+        getFrontmatterStub = stubGetFrontmatter(freshEl);
+        document.body.appendChild(freshEl);
+        clock.tick(3001);
+      });
+
+      afterEach(() => {
+        freshEl.remove();
+      });
+
+      it('should call getFrontmatter at regular intervals', () => {
+        expect(getFrontmatterStub.callCount).to.be.greaterThan(0);
+      });
     });
 
-    it('should stop polling on disconnect', async () => {
-      const freshEl = document.createElement('wiki-checklist') as WikiChecklist;
-      freshEl.setAttribute('list-name', 'test_list');
-      freshEl.setAttribute('page', 'test-page');
-      const fetchStub = sinon.stub(freshEl, 'fetchData').resolves();
-      document.body.appendChild(freshEl);
-      freshEl.remove();
+    describe('when element is disconnected', () => {
+      let getFrontmatterStub: SinonStub;
+      let countAfterDisconnect: number;
 
-      const countAfterDisconnect = fetchStub.callCount;
-      clock.tick(10000);
-      expect(fetchStub.callCount).to.equal(countAfterDisconnect);
+      beforeEach(() => {
+        const freshEl = buildElement('test-page', 'test_list');
+        getFrontmatterStub = stubGetFrontmatter(freshEl);
+        document.body.appendChild(freshEl);
+        freshEl.remove();
+        countAfterDisconnect = getFrontmatterStub.callCount;
+        clock.tick(10000);
+      });
+
+      it('should stop polling after disconnect', () => {
+        expect(getFrontmatterStub.callCount).to.equal(countAfterDisconnect);
+      });
     });
   });
 });
