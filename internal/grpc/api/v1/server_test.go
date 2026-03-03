@@ -3624,9 +3624,10 @@ var _ = Describe("Checklist gRPC round-trip", func() {
 
 		When("a checklist with items and group_order is written", func() {
 			var (
-				shoppingChecklist map[string]any
-				items             []any
-				groupOrder        []any
+				items      []any
+				firstItem  map[string]any
+				secondItem map[string]any
+				groupOrder []any
 			)
 
 			BeforeEach(func() {
@@ -3634,8 +3635,8 @@ var _ = Describe("Checklist gRPC round-trip", func() {
 					"checklists": map[string]any{
 						"shopping": map[string]any{
 							"items": []any{
-								map[string]any{"text": "Buy milk", "checked": false, "tags": []any{"groceries"}},
-								map[string]any{"text": "Buy eggs", "checked": true, "tags": []any{"groceries"}},
+								map[string]any{"text": "Buy milk", "checked": false, "tag": "groceries"},
+								map[string]any{"text": "Buy eggs", "checked": true, "tag": "groceries"},
 							},
 							"group_order": []any{"groceries", "other"},
 						},
@@ -3656,9 +3657,13 @@ var _ = Describe("Checklist gRPC round-trip", func() {
 				if getErr == nil && getResp != nil {
 					fm := getResp.Frontmatter.AsMap()
 					checklists, _ := fm["checklists"].(map[string]any)
-					shoppingChecklist, _ = checklists["shopping"].(map[string]any)
+					shoppingChecklist, _ := checklists["shopping"].(map[string]any)
 					items, _ = shoppingChecklist["items"].([]any)
 					groupOrder, _ = shoppingChecklist["group_order"].([]any)
+					if len(items) >= 2 {
+						firstItem, _ = items[0].(map[string]any)
+						secondItem, _ = items[1].(map[string]any)
+					}
 				}
 			})
 
@@ -3670,18 +3675,20 @@ var _ = Describe("Checklist gRPC round-trip", func() {
 				Expect(items).To(HaveLen(2))
 			})
 
-			It("should preserve item text and checked state", func() {
-				first := items[0].(map[string]any)
-				Expect(first["text"]).To(Equal("Buy milk"))
-				Expect(first["checked"]).To(BeFalse())
-				second := items[1].(map[string]any)
-				Expect(second["checked"]).To(BeTrue())
+			It("should preserve first item text", func() {
+				Expect(firstItem["text"]).To(Equal("Buy milk"))
 			})
 
-			It("should preserve item tags", func() {
-				first := items[0].(map[string]any)
-				tags := first["tags"].([]any)
-				Expect(tags).To(ConsistOf("groceries"))
+			It("should preserve first item checked state", func() {
+				Expect(firstItem["checked"]).To(BeFalse())
+			})
+
+			It("should preserve second item checked state", func() {
+				Expect(secondItem["checked"]).To(BeTrue())
+			})
+
+			It("should preserve item tag", func() {
+				Expect(firstItem["tag"]).To(Equal("groceries"))
 			})
 
 			It("should preserve group_order as an array of strings", func() {
@@ -3691,7 +3698,10 @@ var _ = Describe("Checklist gRPC round-trip", func() {
 
 		When("performing a read-modify-write to update one of multiple checklists", func() {
 			var (
-				finalChecklists map[string]any
+				finalChecklists  map[string]any
+				shoppingItems    []any
+				tasksItems       []any
+				firstTaskItem    map[string]any
 			)
 
 			BeforeEach(func() {
@@ -3699,11 +3709,11 @@ var _ = Describe("Checklist gRPC round-trip", func() {
 				mockPageReaderMutator.Frontmatter = map[string]any{
 					"checklists": map[string]any{
 						"shopping": map[string]any{
-							"items":       []any{map[string]any{"text": "Buy milk", "checked": false, "tags": []any{"groceries"}}},
+							"items":       []any{map[string]any{"text": "Buy milk", "checked": false, "tag": "groceries"}},
 							"group_order": []any{"groceries"},
 						},
 						"tasks": map[string]any{
-							"items":       []any{map[string]any{"text": "Call dentist", "checked": false, "tags": []any{"health"}}},
+							"items":       []any{map[string]any{"text": "Call dentist", "checked": false, "tag": "health"}},
 							"group_order": []any{"health"},
 						},
 					},
@@ -3738,6 +3748,13 @@ var _ = Describe("Checklist gRPC round-trip", func() {
 				if getErr == nil && getResp != nil {
 					finalFm := getResp.Frontmatter.AsMap()
 					finalChecklists, _ = finalFm["checklists"].(map[string]any)
+					shopping, _ := finalChecklists["shopping"].(map[string]any)
+					shoppingItems, _ = shopping["items"].([]any)
+					tasks, _ := finalChecklists["tasks"].(map[string]any)
+					tasksItems, _ = tasks["items"].([]any)
+					if len(tasksItems) > 0 {
+						firstTaskItem, _ = tasksItems[0].(map[string]any)
+					}
 				}
 			})
 
@@ -3746,17 +3763,19 @@ var _ = Describe("Checklist gRPC round-trip", func() {
 			})
 
 			It("should reflect the update to the modified checklist", func() {
-				shopping := finalChecklists["shopping"].(map[string]any)
-				items := shopping["items"].([]any)
-				Expect(items[0].(map[string]any)["checked"]).To(BeTrue())
+				Expect(shoppingItems[0].(map[string]any)["checked"]).To(BeTrue())
 			})
 
-			It("should preserve the untouched checklist", func() {
-				tasks := finalChecklists["tasks"].(map[string]any)
-				items := tasks["items"].([]any)
-				Expect(items).To(HaveLen(1))
-				Expect(items[0].(map[string]any)["text"]).To(Equal("Call dentist"))
-				Expect(items[0].(map[string]any)["checked"]).To(BeFalse())
+			It("should preserve the untouched checklist item count", func() {
+				Expect(tasksItems).To(HaveLen(1))
+			})
+
+			It("should preserve the untouched checklist item text", func() {
+				Expect(firstTaskItem["text"]).To(Equal("Call dentist"))
+			})
+
+			It("should preserve the untouched checklist item checked state", func() {
+				Expect(firstTaskItem["checked"]).To(BeFalse())
 			})
 		})
 	})
@@ -3770,14 +3789,14 @@ var _ = Describe("Checklist gRPC round-trip", func() {
 			groupOrder []any
 		)
 
-		When("GetFrontmatter then modify items and group_order then MergeFrontmatter then GetFrontmatter", func() {
+		When("reading, modifying items and group_order, then writing back", func() {
 			BeforeEach(func() {
 				// Initial state: page with a checklist and a title
 				mockPageReaderMutator.Frontmatter = map[string]any{
 					"title": "My Page",
 					"checklists": map[string]any{
 						"todo": map[string]any{
-							"items":       []any{map[string]any{"text": "Write tests", "checked": false, "tags": []any{"coding"}}},
+							"items":       []any{map[string]any{"text": "Write tests", "checked": false, "tag": "coding"}},
 							"group_order": []any{"coding"},
 						},
 					},
@@ -3792,8 +3811,8 @@ var _ = Describe("Checklist gRPC round-trip", func() {
 				checklists := fm["checklists"].(map[string]any)
 				todo := checklists["todo"].(map[string]any)
 				todo["items"] = []any{
-					map[string]any{"text": "Write tests", "checked": true, "tags": []any{"coding"}},
-					map[string]any{"text": "Deploy", "checked": false, "tags": []any{"ops"}},
+					map[string]any{"text": "Write tests", "checked": true, "tag": "coding"},
+					map[string]any{"text": "Deploy", "checked": false, "tag": "ops"},
 				}
 				todo["group_order"] = []any{"coding", "ops"}
 				checklists["todo"] = todo
@@ -3827,8 +3846,11 @@ var _ = Describe("Checklist gRPC round-trip", func() {
 				Expect(finalItems[0].(map[string]any)["checked"]).To(BeTrue())
 			})
 
-			It("should contain the new item", func() {
+			It("should have two items after adding one", func() {
 				Expect(finalItems).To(HaveLen(2))
+			})
+
+			It("should include the new item text", func() {
 				Expect(finalItems[1].(map[string]any)["text"]).To(Equal("Deploy"))
 			})
 
