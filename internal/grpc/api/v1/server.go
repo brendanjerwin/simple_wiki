@@ -4,6 +4,7 @@ package v1
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"maps"
@@ -37,6 +38,13 @@ const (
 	failedToBuildPageTextErrFmt    = "failed to build page text: %v"
 	maxUniqueIdentifierAttempts    = 1000
 )
+
+// computeContentHash computes a SHA256 hash of the given markdown content,
+// returned as a lowercase hex string. Used for optimistic concurrency control.
+func computeContentHash(markdown wikipage.Markdown) string {
+	h := sha256.Sum256([]byte(markdown))
+	return fmt.Sprintf("%x", h)
+}
 
 // filterIdentifierKey removes the identifier key from a frontmatter map.
 func filterIdentifierKey(fm map[string]any) map[string]any {
@@ -786,6 +794,7 @@ func (s *Server) ReadPage(_ context.Context, req *apiv1.ReadPageRequest) (*apiv1
 		FrontMatterToml:         string(frontmatterToml),
 		RenderedContentHtml:     renderedHTML,
 		RenderedContentMarkdown: renderedMarkdown,
+		VersionHash:             computeContentHash(markdown),
 	}, nil
 }
 
@@ -942,9 +951,16 @@ func (s *Server) CreatePage(_ context.Context, req *apiv1.CreatePageRequest) (*a
 
 // UpdatePageContent implements the UpdatePageContent RPC.
 // Updates only the markdown content of an existing page, preserving its frontmatter.
+// If expected_version_hash is provided, the write will be rejected if the current content
+// has changed since the hash was computed (optimistic concurrency control).
+// Empty content is rejected; use ClearPageContent to explicitly clear a page's content.
 func (s *Server) UpdatePageContent(_ context.Context, req *apiv1.UpdatePageContentRequest) (*apiv1.UpdatePageContentResponse, error) {
 	if req.PageName == "" {
 		return nil, status.Error(codes.InvalidArgument, "page_name is required")
+	}
+
+	if strings.TrimSpace(req.NewContentMarkdown) == "" {
+		return nil, status.Error(codes.InvalidArgument, "new_content_markdown cannot be empty; use ClearPageContent to explicitly clear page content")
 	}
 
 	// Verify the page exists
@@ -956,11 +972,57 @@ func (s *Server) UpdatePageContent(_ context.Context, req *apiv1.UpdatePageConte
 		return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, err)
 	}
 
+	// If an expected version hash is provided, verify the current content matches.
+	if req.ExpectedVersionHash != nil {
+		_, currentMarkdown, err := s.pageReaderMutator.ReadMarkdown(wikipage.PageIdentifier(req.PageName))
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.PageName)
+			}
+			return nil, status.Errorf(codes.Internal, "failed to read current content for version check: %v", err)
+		}
+		currentHash := computeContentHash(currentMarkdown)
+		if currentHash != *req.ExpectedVersionHash {
+			return nil, status.Error(codes.Aborted, "content version mismatch: page was modified since last read; re-read the page and retry")
+		}
+	}
+
 	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(req.PageName), wikipage.Markdown(req.NewContentMarkdown)); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to write markdown: %v", err)
 	}
 
-	return &apiv1.UpdatePageContentResponse{Success: true}, nil
+	return &apiv1.UpdatePageContentResponse{
+		Success:     true,
+		VersionHash: computeContentHash(wikipage.Markdown(req.NewContentMarkdown)),
+	}, nil
+}
+
+// ClearPageContent implements the ClearPageContent RPC.
+// Explicitly clears the markdown content of a page, preserving its frontmatter.
+// confirm_clear must be true to prevent accidental data loss.
+func (s *Server) ClearPageContent(_ context.Context, req *apiv1.ClearPageContentRequest) (*apiv1.ClearPageContentResponse, error) {
+	if req.PageName == "" {
+		return nil, status.Error(codes.InvalidArgument, "page_name is required")
+	}
+
+	if !req.ConfirmClear {
+		return nil, status.Error(codes.InvalidArgument, "confirm_clear must be true to clear page content")
+	}
+
+	// Verify the page exists
+	_, _, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.PageName))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.PageName)
+		}
+		return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, err)
+	}
+
+	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(req.PageName), ""); err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to clear markdown: %v", err)
+	}
+
+	return &apiv1.ClearPageContentResponse{Success: true}, nil
 }
 
 // UpdateWholePage implements the UpdateWholePage RPC.
