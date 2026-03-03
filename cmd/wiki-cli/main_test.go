@@ -11,6 +11,8 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+const expectedVersionPath = "/api.v1.SystemInfoService/GetVersion"
+
 func TestWikiCLI(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "wiki-cli Suite")
@@ -103,6 +105,18 @@ var _ = Describe("commitsMatch", func() {
 	})
 })
 
+// versionHandler creates an httptest handler that validates the request method
+// and path, then responds with the given versionResponse as JSON.
+func versionHandler(resp versionResponse) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		Expect(r.Method).To(Equal(http.MethodPost))
+		Expect(r.URL.Path).To(Equal(expectedVersionPath))
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	}
+}
+
 var _ = Describe("checkVersionCompatibility", func() {
 	var originalCommit string
 
@@ -133,11 +147,7 @@ var _ = Describe("checkVersionCompatibility", func() {
 
 		BeforeEach(func() {
 			commit = "adbef9d2abc123def456"
-			server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				resp := versionResponse{Commit: "v3.5.1 (adbef9d)"}
-				_ = json.NewEncoder(w).Encode(resp)
-			}))
+			server = httptest.NewServer(versionHandler(versionResponse{Commit: "v3.5.1 (adbef9d)"}))
 
 			err = checkVersionCompatibility(server.URL)
 		})
@@ -157,11 +167,7 @@ var _ = Describe("checkVersionCompatibility", func() {
 
 		BeforeEach(func() {
 			commit = "adbef9d2abc123def456"
-			server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				resp := versionResponse{Commit: "ffff1234567890"}
-				_ = json.NewEncoder(w).Encode(resp)
-			}))
+			server = httptest.NewServer(versionHandler(versionResponse{Commit: "ffff1234567890"}))
 
 			err = checkVersionCompatibility(server.URL)
 		})
@@ -181,11 +187,7 @@ var _ = Describe("checkVersionCompatibility", func() {
 
 		BeforeEach(func() {
 			commit = "adbef9d2abc123def456"
-			server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Content-Type", "application/json")
-				resp := versionResponse{Commit: ""}
-				_ = json.NewEncoder(w).Encode(resp)
-			}))
+			server = httptest.NewServer(versionHandler(versionResponse{Commit: ""}))
 
 			err = checkVersionCompatibility(server.URL)
 		})
@@ -201,10 +203,15 @@ var _ = Describe("checkVersionCompatibility", func() {
 
 	When("the server is unreachable", func() {
 		var err error
+		var closedServerURL string
 
 		BeforeEach(func() {
 			commit = "adbef9d2abc123def456"
-			err = checkVersionCompatibility("http://127.0.0.1:1")
+			server := httptest.NewServer(nil)
+			closedServerURL = server.URL
+			server.Close()
+
+			err = checkVersionCompatibility(closedServerURL)
 		})
 
 		It("should return an UNREACHABLE error", func() {
@@ -219,6 +226,9 @@ var _ = Describe("checkVersionCompatibility", func() {
 		BeforeEach(func() {
 			commit = "adbef9d2abc123def456"
 			server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				Expect(r.Method).To(Equal(http.MethodPost))
+				Expect(r.URL.Path).To(Equal(expectedVersionPath))
+
 				w.WriteHeader(http.StatusInternalServerError)
 			}))
 
@@ -230,7 +240,10 @@ var _ = Describe("checkVersionCompatibility", func() {
 		})
 
 		It("should return an UNREACHABLE error with the status code", func() {
-			Expect(err).To(MatchError(ContainSubstring(fmt.Sprintf("HTTP %d", http.StatusInternalServerError))))
+			Expect(err).To(MatchError(And(
+				ContainSubstring("UNREACHABLE"),
+				ContainSubstring(fmt.Sprintf("HTTP %d", http.StatusInternalServerError)),
+			)))
 		})
 	})
 
@@ -241,6 +254,9 @@ var _ = Describe("checkVersionCompatibility", func() {
 		BeforeEach(func() {
 			commit = "adbef9d2abc123def456"
 			server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				Expect(r.Method).To(Equal(http.MethodPost))
+				Expect(r.URL.Path).To(Equal(expectedVersionPath))
+
 				w.Header().Set("Content-Type", "application/json")
 				_, _ = w.Write([]byte("not json"))
 			}))
@@ -253,7 +269,10 @@ var _ = Describe("checkVersionCompatibility", func() {
 		})
 
 		It("should return an UNREACHABLE error about invalid response", func() {
-			Expect(err).To(MatchError(ContainSubstring("invalid version response")))
+			Expect(err).To(MatchError(And(
+				ContainSubstring("UNREACHABLE"),
+				ContainSubstring("invalid version response"),
+			)))
 		})
 	})
 })
