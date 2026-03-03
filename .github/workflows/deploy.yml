@@ -24,10 +24,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Devbox
-        uses: jetify-com/devbox-install-action@v0.11.0
+        uses: jetify-com/devbox-install-action@v0.14.0
         with:
           enable-cache: false
-          skip-nix-installation: false
         
       - name: Check if release exists
         id: check_release
