@@ -46,6 +46,11 @@ describe('WikiChecklist', () => {
     return list['items'] as JsonObject[];
   }
 
+  function getMergePayloadChecklists(stub: SinonStub): JsonObject {
+    const mergeArgs = stub.getCall(0).args[0] as { frontmatter: JsonObject };
+    return mergeArgs.frontmatter['checklists'] as JsonObject;
+  }
+
   beforeEach(async () => {
     el = buildElement();
     stubGetFrontmatter(el);
@@ -530,7 +535,7 @@ describe('WikiChecklist', () => {
     });
 
     describe('when items have tags (tag autocomplete)', () => {
-      let values: string[] | undefined;
+      let values: string[];
 
       beforeEach(async () => {
         el.error = null;
@@ -583,6 +588,7 @@ describe('WikiChecklist', () => {
   describe('when GetFrontmatter returns checklist items', () => {
     let items: ChecklistItem[];
     let getFrontmatterStub: SinonStub;
+    let requestedPage: string;
 
     beforeEach(async () => {
       sinon.restore();
@@ -607,11 +613,15 @@ describe('WikiChecklist', () => {
       document.body.appendChild(el);
       await el.updateComplete;
       items = el.items;
+      requestedPage = getFrontmatterStub.getCall(0).args[0].page;
     });
 
-    it('should call getFrontmatter with the configured page', () => {
+    it('should call getFrontmatter', () => {
       expect(getFrontmatterStub.callCount).to.be.greaterThan(0);
-      expect(getFrontmatterStub.getCall(0).args[0].page).to.equal('test-page');
+    });
+
+    it('should request the configured page', () => {
+      expect(requestedPage).to.equal('test-page');
     });
 
     it('should populate items from response', () => {
@@ -660,38 +670,62 @@ describe('WikiChecklist', () => {
   describe('when toggling a checkbox', () => {
     let getFrontmatterStub: SinonStub;
     let mergeFrontmatterStub: SinonStub;
+    let mergePayloadItems: JsonObject[];
+    let mergeChecklists: JsonObject;
 
     beforeEach(async () => {
       sinon.restore();
       el.remove();
-
       el = buildElement();
-      const mockFrontmatter: JsonObject = {
+
+      const currentFrontmatter: JsonObject = {
         checklists: {
           grocery_list: {
             items: [
               { text: 'Milk', checked: false },
-              { text: 'Eggs', checked: true },
+              { text: 'Eggs', checked: false },
             ],
+          },
+          other_list: {
+            items: [{ text: 'Paper towels', checked: false }],
           },
         },
       };
+
       getFrontmatterStub = sinon
         .stub(el.client, 'getFrontmatter')
         .resolves(
-          create(GetFrontmatterResponseSchema, { frontmatter: mockFrontmatter })
+          create(GetFrontmatterResponseSchema, {
+            frontmatter: currentFrontmatter,
+          })
         );
       mergeFrontmatterStub = sinon
         .stub(el.client, 'mergeFrontmatter')
-        .resolves(create(MergeFrontmatterResponseSchema, { frontmatter: {} }));
+        .resolves(
+          create(MergeFrontmatterResponseSchema, {
+            frontmatter: currentFrontmatter,
+          })
+        );
+
       document.body.appendChild(el);
-      // Wait for initial fetch + render of items
       await el.updateComplete;
       await el.updateComplete;
 
-      const checkbox = el.shadowRoot!.querySelector('input[type="checkbox"]') as HTMLInputElement;
-      checkbox.click();
+      getFrontmatterStub.resetHistory();
+
+      const checkbox = el.shadowRoot?.querySelector<HTMLInputElement>(
+        'input[type="checkbox"]'
+      );
+      checkbox?.click();
+      await waitUntil(
+        () => mergeFrontmatterStub.callCount > 0,
+        'mergeFrontmatter should be called',
+        { timeout: 2000 }
+      );
       await el.updateComplete;
+
+      mergePayloadItems = getMergePayloadItems(mergeFrontmatterStub);
+      mergeChecklists = getMergePayloadChecklists(mergeFrontmatterStub);
     });
 
     it('should call mergeFrontmatter', () => {
@@ -699,9 +733,15 @@ describe('WikiChecklist', () => {
     });
 
     it('should call getFrontmatter before mergeFrontmatter (read-modify-write)', () => {
-      expect(getFrontmatterStub).to.have.been.calledBefore(
-        mergeFrontmatterStub
-      );
+      expect(getFrontmatterStub).to.have.been.calledBefore(mergeFrontmatterStub);
+    });
+
+    it('should send the toggled checked state in the merge payload', () => {
+      expect(mergePayloadItems[0]?.['checked']).to.be.true;
+    });
+
+    it('should preserve sibling checklists in the merge payload', () => {
+      expect(mergeChecklists).to.have.property('other_list');
     });
 
     it('should clear saving state after completion', () => {
@@ -737,7 +777,6 @@ describe('WikiChecklist', () => {
           return create(MergeFrontmatterResponseSchema, { frontmatter: {} });
         });
       document.body.appendChild(el);
-      // Wait for initial fetch + render of items
       await el.updateComplete;
       await el.updateComplete;
 
@@ -773,7 +812,6 @@ describe('WikiChecklist', () => {
         .stub(el.client, 'mergeFrontmatter')
         .rejects(new Error('Save failed'));
       document.body.appendChild(el);
-      // Wait for initial fetch + render of items
       await el.updateComplete;
       await el.updateComplete;
 
@@ -884,7 +922,6 @@ describe('WikiChecklist', () => {
         );
 
         document.body.appendChild(pollingEl);
-        // Two awaits needed: first for loading=true render, second for initial fetch to complete.
         await pollingEl.updateComplete;
         await pollingEl.updateComplete;
 
@@ -906,88 +943,10 @@ describe('WikiChecklist', () => {
     });
   });
 
-  describe('when toggling a checkbox', () => {
-    let getFrontmatterStub: SinonStub;
-    let mergeFrontmatterStub: SinonStub;
-
-    beforeEach(async () => {
-      sinon.restore();
-      el.remove();
-      el = buildElement();
-
-      const currentFrontmatter: JsonObject = {
-        checklists: {
-          grocery_list: {
-            items: [
-              { text: 'Milk', checked: false },
-              { text: 'Eggs', checked: false },
-            ],
-          },
-          other_list: {
-            items: [{ text: 'Paper towels', checked: false }],
-          },
-        },
-      };
-
-      getFrontmatterStub = sinon
-        .stub(el.client, 'getFrontmatter')
-        .resolves(
-          create(GetFrontmatterResponseSchema, {
-            frontmatter: currentFrontmatter,
-          })
-        );
-      mergeFrontmatterStub = sinon
-        .stub(el.client, 'mergeFrontmatter')
-        .resolves(
-          create(MergeFrontmatterResponseSchema, {
-            frontmatter: currentFrontmatter,
-          })
-        );
-
-      document.body.appendChild(el);
-      // Two awaits needed: first for the initial loading=true render,
-      // second for fetchData to complete and trigger the items-populated render.
-      await el.updateComplete;
-      await el.updateComplete;
-
-      getFrontmatterStub.resetHistory();
-
-      const checkbox = el.shadowRoot?.querySelector<HTMLInputElement>(
-        'input[type="checkbox"]'
-      );
-      checkbox?.click();
-      await waitUntil(
-        () => mergeFrontmatterStub.callCount > 0,
-        'mergeFrontmatter should be called',
-        { timeout: 2000 }
-      );
-      await el.updateComplete;
-    });
-
-    it('should call mergeFrontmatter', () => {
-      expect(mergeFrontmatterStub).to.have.been.calledOnce;
-    });
-
-    it('should call getFrontmatter before mergeFrontmatter (read-modify-write)', () => {
-      expect(getFrontmatterStub).to.have.been.calledBefore(mergeFrontmatterStub);
-    });
-
-    it('should send the toggled checked state in the merge payload', () => {
-      const items = getMergePayloadItems(mergeFrontmatterStub);
-      expect(items[0]?.['checked']).to.be.true;
-    });
-
-    it('should preserve sibling checklists in the merge payload', () => {
-      const mergeArgs = mergeFrontmatterStub.getCall(0).args[0] as {
-        frontmatter: JsonObject;
-      };
-      const checklists = mergeArgs.frontmatter['checklists'] as JsonObject;
-      expect(checklists).to.have.property('other_list');
-    });
-  });
-
   describe('when adding an item', () => {
     let mergeFrontmatterStub: SinonStub;
+    let mergePayloadItems: JsonObject[];
+    let addInputValue: string;
 
     beforeEach(async () => {
       sinon.restore();
@@ -1018,8 +977,6 @@ describe('WikiChecklist', () => {
         );
 
       document.body.appendChild(el);
-      // Two awaits needed: first for the initial loading=true render,
-      // second for fetchData to complete and trigger the items-populated render.
       await el.updateComplete;
       await el.updateComplete;
 
@@ -1040,23 +997,25 @@ describe('WikiChecklist', () => {
         { timeout: 2000 }
       );
       await el.updateComplete;
+
+      mergePayloadItems = getMergePayloadItems(mergeFrontmatterStub);
+      const addInputAfter =
+        el.shadowRoot?.querySelector<HTMLInputElement>('.add-text-input');
+      addInputValue = addInputAfter?.value ?? '';
     });
 
     it('should call mergeFrontmatter with the new item appended', () => {
-      const items = getMergePayloadItems(mergeFrontmatterStub);
-      const lastItem = items[items.length - 1];
+      const lastItem = mergePayloadItems[mergePayloadItems.length - 1];
       expect(lastItem?.['text']).to.equal('Bread');
     });
 
     it('should clear the add input after adding', () => {
-      const addInput =
-        el.shadowRoot?.querySelector<HTMLInputElement>('.add-text-input');
-      expect(addInput?.value).to.equal('');
+      expect(addInputValue).to.equal('');
     });
   });
 
   describe('when adding an item with a tag', () => {
-    let mergeFrontmatterStub: SinonStub;
+    let mergePayloadItems: JsonObject[];
 
     beforeEach(async () => {
       sinon.restore();
@@ -1074,7 +1033,7 @@ describe('WikiChecklist', () => {
             frontmatter: initialFrontmatter,
           })
         );
-      mergeFrontmatterStub = sinon
+      const mergeFrontmatterStub = sinon
         .stub(el.client, 'mergeFrontmatter')
         .resolves(
           create(MergeFrontmatterResponseSchema, {
@@ -1083,8 +1042,6 @@ describe('WikiChecklist', () => {
         );
 
       document.body.appendChild(el);
-      // Two awaits needed: first for the initial loading=true render,
-      // second for fetchData to complete and trigger the items-populated render.
       await el.updateComplete;
       await el.updateComplete;
 
@@ -1111,16 +1068,17 @@ describe('WikiChecklist', () => {
         { timeout: 2000 }
       );
       await el.updateComplete;
+
+      mergePayloadItems = getMergePayloadItems(mergeFrontmatterStub);
     });
 
     it('should include the tag in the persisted item', () => {
-      const items = getMergePayloadItems(mergeFrontmatterStub);
-      expect(items[0]?.['tag']).to.equal('Dairy');
+      expect(mergePayloadItems[0]?.['tag']).to.equal('Dairy');
     });
   });
 
   describe('when removing an item', () => {
-    let mergeFrontmatterStub: SinonStub;
+    let mergePayloadItems: JsonObject[];
 
     beforeEach(async () => {
       sinon.restore();
@@ -1145,7 +1103,7 @@ describe('WikiChecklist', () => {
             frontmatter: initialFrontmatter,
           })
         );
-      mergeFrontmatterStub = sinon
+      const mergeFrontmatterStub = sinon
         .stub(el.client, 'mergeFrontmatter')
         .resolves(
           create(MergeFrontmatterResponseSchema, {
@@ -1154,8 +1112,6 @@ describe('WikiChecklist', () => {
         );
 
       document.body.appendChild(el);
-      // Two awaits needed: first for the initial loading=true render,
-      // second for fetchData to complete and trigger the items-populated render.
       await el.updateComplete;
       await el.updateComplete;
 
@@ -1168,17 +1124,21 @@ describe('WikiChecklist', () => {
         { timeout: 2000 }
       );
       await el.updateComplete;
+
+      mergePayloadItems = getMergePayloadItems(mergeFrontmatterStub);
     });
 
-    it('should call mergeFrontmatter with the item removed', () => {
-      const items = getMergePayloadItems(mergeFrontmatterStub);
-      expect(items).to.have.length(1);
-      expect(items[0]?.['text']).to.equal('Eggs');
+    it('should reduce the item count by one', () => {
+      expect(mergePayloadItems).to.have.length(1);
+    });
+
+    it('should keep the remaining item', () => {
+      expect(mergePayloadItems[0]?.['text']).to.equal('Eggs');
     });
   });
 
   describe('when editing item text', () => {
-    let mergeFrontmatterStub: SinonStub;
+    let mergePayloadItems: JsonObject[];
 
     beforeEach(async () => {
       sinon.restore();
@@ -1200,7 +1160,7 @@ describe('WikiChecklist', () => {
             frontmatter: initialFrontmatter,
           })
         );
-      mergeFrontmatterStub = sinon
+      const mergeFrontmatterStub = sinon
         .stub(el.client, 'mergeFrontmatter')
         .resolves(
           create(MergeFrontmatterResponseSchema, {
@@ -1209,8 +1169,6 @@ describe('WikiChecklist', () => {
         );
 
       document.body.appendChild(el);
-      // Two awaits needed: first for the initial loading=true render,
-      // second for fetchData to complete and trigger the items-populated render.
       await el.updateComplete;
       await el.updateComplete;
 
@@ -1227,16 +1185,17 @@ describe('WikiChecklist', () => {
         { timeout: 2000 }
       );
       await el.updateComplete;
+
+      mergePayloadItems = getMergePayloadItems(mergeFrontmatterStub);
     });
 
     it('should call mergeFrontmatter with the updated text on blur', () => {
-      const items = getMergePayloadItems(mergeFrontmatterStub);
-      expect(items[0]?.['text']).to.equal('Whole Milk');
+      expect(mergePayloadItems[0]?.['text']).to.equal('Whole Milk');
     });
   });
 
   describe('when editing item tag', () => {
-    let mergeFrontmatterStub: SinonStub;
+    let mergePayloadItems: JsonObject[];
 
     beforeEach(async () => {
       sinon.restore();
@@ -1258,7 +1217,7 @@ describe('WikiChecklist', () => {
             frontmatter: initialFrontmatter,
           })
         );
-      mergeFrontmatterStub = sinon
+      const mergeFrontmatterStub = sinon
         .stub(el.client, 'mergeFrontmatter')
         .resolves(
           create(MergeFrontmatterResponseSchema, {
@@ -1267,18 +1226,14 @@ describe('WikiChecklist', () => {
         );
 
       document.body.appendChild(el);
-      // Two awaits needed: first for the initial loading=true render,
-      // second for fetchData to complete and trigger the items-populated render.
       await el.updateComplete;
       await el.updateComplete;
 
-      // Click the tag badge to switch to tag input
       const tagBadge =
         el.shadowRoot?.querySelector<HTMLButtonElement>('.item-tag-badge');
       tagBadge?.click();
       await el.updateComplete;
 
-      // Type a new tag and blur
       const tagInput =
         el.shadowRoot?.querySelector<HTMLInputElement>('.item-tag-input');
       if (tagInput) {
@@ -1291,17 +1246,18 @@ describe('WikiChecklist', () => {
         { timeout: 2000 }
       );
       await el.updateComplete;
+
+      mergePayloadItems = getMergePayloadItems(mergeFrontmatterStub);
     });
 
     it('should call mergeFrontmatter with the updated tag', () => {
-      const items = getMergePayloadItems(mergeFrontmatterStub);
-      expect(items[0]?.['tag']).to.equal('Dairy');
+      expect(mergePayloadItems[0]?.['tag']).to.equal('Dairy');
     });
   });
 
   describe('when toggling to grouped view', () => {
     let groupHeadings: NodeListOf<Element> | undefined;
-    let headingTexts: (string | undefined)[] | undefined;
+    let headingTexts: (string | undefined)[];
 
     beforeEach(async () => {
       el.error = null;
@@ -1368,4 +1324,3 @@ describe('WikiChecklist', () => {
     });
   });
 });
-
