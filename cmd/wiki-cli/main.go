@@ -127,9 +127,9 @@ func checkVersionCompatibility(baseURL string) error {
 		return fmt.Errorf("UNREACHABLE: wiki server at %s returned invalid version response", baseURL)
 	}
 
-	if ver.Commit != "" && ver.Commit != commit {
+	if ver.Commit != "" && !commitsMatch(commit, ver.Commit) {
 		return fmt.Errorf(
-			"VERSION MISMATCH: this wiki-cli was built from commit %.8s but the wiki server is running commit %.8s\n\n"+
+			"VERSION MISMATCH: this wiki-cli was built from commit %.8s but the wiki server is running %s\n\n"+
 				"Download the latest version:\n"+
 				"  curl -o wiki-cli %s/cli/wiki-cli-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m | sed 's/x86_64/amd64/' | sed 's/aarch64/arm64/') && chmod +x wiki-cli\n\n"+
 				"Or manually from: %s/cli/",
@@ -138,6 +138,30 @@ func checkVersionCompatibility(baseURL string) error {
 	}
 
 	return nil
+}
+
+// commitsMatch checks whether the CLI's embedded commit matches the server's
+// reported commit. The server may report either a raw hash ("adbef9d2...") or
+// a tagged format like "v3.5.0 (adbef9d)". This function extracts the hash
+// portion and compares using prefix matching so that a short hash from the
+// server matches the full hash embedded in the CLI.
+func commitsMatch(cliCommit, serverCommit string) bool {
+	serverHash := serverCommit
+
+	// If the server commit is in tagged format "v3.5.0 (adbef9d)", extract
+	// the hash from inside the parentheses.
+	if open := strings.LastIndex(serverCommit, "("); open >= 0 {
+		if close := strings.LastIndex(serverCommit, ")"); close > open {
+			serverHash = serverCommit[open+1 : close]
+		}
+	}
+
+	// Compare using prefix matching: whichever is shorter must be a prefix
+	// of the longer one. This handles short-hash vs full-hash comparison.
+	if len(serverHash) < len(cliCommit) {
+		return strings.HasPrefix(cliCommit, serverHash)
+	}
+	return strings.HasPrefix(serverHash, cliCommit)
 }
 
 func appDescription() string {
