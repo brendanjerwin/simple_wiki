@@ -26,6 +26,8 @@ func NewDiskFileStorer(dataDir string) (*DiskFileStorer, error) {
 }
 
 // Store computes the SHA256 hash of the content, saves it to disk, and returns the FileInfo.
+// The filename parameter is accepted for interface compatibility but not used for storage;
+// files are stored exclusively by their content hash.
 func (s *DiskFileStorer) Store(content io.Reader, _ string) (FileInfo, error) {
 	h := sha256.New()
 	buf, err := io.ReadAll(content)
