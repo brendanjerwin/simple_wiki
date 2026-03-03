@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"maps"
@@ -45,7 +46,7 @@ const (
 // returned as a lowercase hex string. Used for optimistic concurrency control.
 func computeContentHash(markdown wikipage.Markdown) string {
 	h := sha256.Sum256([]byte(markdown))
-	return fmt.Sprintf("%x", h)
+	return hex.EncodeToString(h[:])
 }
 
 // filterIdentifierKey removes the identifier key from a frontmatter map.
@@ -965,26 +966,22 @@ func (s *Server) UpdatePageContent(_ context.Context, req *apiv1.UpdatePageConte
 		return nil, status.Error(codes.InvalidArgument, "new_content_markdown cannot be empty; use ClearPageContent to explicitly clear page content")
 	}
 
-	// Verify the page exists
-	_, _, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.PageName))
+	// Read current content for: (1) page existence check, (2) version hash verification
+	// if requested, and (3) rollback data if the post-write invariant check fails.
+	_, originalMarkdown, err := s.pageReaderMutator.ReadMarkdown(wikipage.PageIdentifier(req.PageName))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.PageName)
 		}
-		return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, err)
+		return nil, status.Errorf(codes.Internal, "failed to read current content: %v", err)
 	}
 
-	// If an expected version hash is provided, verify the current content matches.
+	// NOTE: There is a narrow TOCTOU race between this check and the subsequent
+	// WriteMarkdown call. True atomicity would require file-level locking.
 	if req.ExpectedVersionHash != nil {
-		_, currentMarkdown, err := s.pageReaderMutator.ReadMarkdown(wikipage.PageIdentifier(req.PageName))
-		if err != nil {
-			if os.IsNotExist(err) {
-				return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.PageName)
-			}
-			return nil, status.Errorf(codes.Internal, "failed to read current content for version check: %v", err)
-		}
-		currentHash := computeContentHash(currentMarkdown)
-		if subtle.ConstantTimeCompare([]byte(currentHash), []byte(*req.ExpectedVersionHash)) != 1 {
+		currentHash := computeContentHash(originalMarkdown)
+		if len(currentHash) != len(*req.ExpectedVersionHash) ||
+			subtle.ConstantTimeCompare([]byte(currentHash), []byte(*req.ExpectedVersionHash)) != 1 {
 			return nil, status.Error(codes.Aborted, "content version mismatch: page was modified since last read; re-read the page and retry")
 		}
 	}
@@ -993,9 +990,21 @@ func (s *Server) UpdatePageContent(_ context.Context, req *apiv1.UpdatePageConte
 		return nil, status.Errorf(codes.Internal, "failed to write markdown: %v", err)
 	}
 
+	// Invariant check: read back the stored content to ensure the write did not blank the page.
+	// If the content is missing or empty after a successful write, attempt to restore the
+	// original content to prevent data loss.
+	_, storedMarkdown, readBackErr := s.pageReaderMutator.ReadMarkdown(wikipage.PageIdentifier(req.PageName))
+	if readBackErr != nil || strings.TrimSpace(string(storedMarkdown)) == "" {
+		_ = s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(req.PageName), originalMarkdown)
+		if readBackErr != nil {
+			return nil, status.Errorf(codes.Internal, "failed to verify stored content after write: %v", readBackErr)
+		}
+		return nil, status.Error(codes.Internal, "invariant violation: write resulted in empty content; original content has been restored")
+	}
+
 	return &apiv1.UpdatePageContentResponse{
 		Success:     true,
-		VersionHash: computeContentHash(wikipage.Markdown(req.NewContentMarkdown)),
+		VersionHash: computeContentHash(storedMarkdown),
 	}, nil
 }
 
