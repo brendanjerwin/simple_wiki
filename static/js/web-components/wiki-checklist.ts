@@ -853,6 +853,9 @@ export class WikiChecklist extends LitElement {
   /**
    * Move an item from fromIndex to the position specified by toInsertIndex
    * in the resulting array (before removal of the source item).
+   *
+   * For example: reorderItems([A,B,C,D], 3, 0) moves D to position 0,
+   * resulting in [D,A,B,C].
    */
   reorderItems(
     items: ChecklistItem[],
