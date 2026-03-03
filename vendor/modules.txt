@@ -322,6 +322,8 @@ github.com/klauspost/cpuid/v2
 ## explicit; go 1.18
 github.com/leodido/go-urn
 github.com/leodido/go-urn/scim/schema
+# github.com/mark3labs/mcp-go v0.44.1
+## explicit; go 1.23.0
 # github.com/mattn/go-isatty v0.0.20
 ## explicit; go 1.15
 github.com/mattn/go-isatty
