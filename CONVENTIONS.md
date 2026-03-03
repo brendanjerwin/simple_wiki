@@ -102,6 +102,62 @@
 - Test files should be placed next to the production code they test, using the `.test.js` suffix. For example, `wiki-search.js` should have its tests in `wiki-search.test.js` in the same directory.
 - **Scalar Variable Units**: Always include units in scalar variable names when the unit is meaningful. For example, use `timeoutMs` instead of `timeout`, `delaySeconds` instead of `delay`, `heightPx` instead of `height`. This makes the code self-documenting and prevents unit confusion.
 
+### Web Components with Lit
+
+- All web components use **Lit** (<https://lit.dev/>) for the component framework.
+- **Use decorators for property declarations**: Now that the codebase is fully TypeScript, use `@property()` and `@state()` decorators instead of `static properties` declarations. Decorators provide better IDE support, type inference, and are the standard Lit idiom for TypeScript projects.
+
+  **Decorator import:**
+
+  ```typescript
+  import { property, state } from 'lit/decorators.js';
+  ```
+
+  **Property declarations:**
+
+  ```typescript
+  export class MyComponent extends LitElement {
+    // Public reactive properties
+    @property({ type: String })
+    declare title: string;
+
+    @property({ type: Boolean, reflect: true })
+    declare open: boolean;
+
+    @property({ type: Number })
+    declare count: number;
+
+    // Properties that don't reflect to attributes
+    @property({ attribute: false })
+    declare complexData: ComplexType;
+
+    // Internal reactive state
+    @state()
+    declare loading: boolean;
+
+    @state()
+    declare error: Error | null;
+
+    constructor() {
+      super();
+      // Initialize properties with defaults
+      this.title = '';
+      this.open = false;
+      this.count = 0;
+      this.loading = false;
+      this.error = null;
+    }
+  }
+  ```
+
+  **Key points:**
+  - Use `@property()` for public properties that can be set via HTML attributes
+  - Use `@state()` for internal state that triggers re-renders but isn't exposed as an attribute
+  - Always use `declare` keyword with decorator properties (required by TypeScript)
+  - Initialize all properties in the constructor
+  - Use `reflect: true` when the property value should be reflected back to the HTML attribute
+  - Use `attribute: false` for complex objects that shouldn't be serialized to attributes
+
 ## Storybook
 
 Storybook is used for developing and documenting UI components in isolation. Follow these principles when creating and maintaining Storybook stories:
