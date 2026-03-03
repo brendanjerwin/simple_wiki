@@ -1,4 +1,4 @@
-import { expect } from '@open-wc/testing';
+import { expect, waitUntil } from '@open-wc/testing';
 import sinon, { type SinonStub } from 'sinon';
 import './wiki-checklist.js';
 import type { WikiChecklist, ChecklistItem } from './wiki-checklist.js';
@@ -32,6 +32,18 @@ describe('WikiChecklist', () => {
     return sinon
       .stub(target.client, 'getFrontmatter')
       .resolves(create(GetFrontmatterResponseSchema, { frontmatter }));
+  }
+
+  /**
+   * Extracts the checklist items from the first mergeFrontmatter stub call.
+   * The component always merges under the 'grocery_list' key (the default list
+   * name set by buildElement).
+   */
+  function getMergePayloadItems(stub: SinonStub): JsonObject[] {
+    const mergeArgs = stub.getCall(0).args[0] as { frontmatter: JsonObject };
+    const checklists = mergeArgs.frontmatter['checklists'] as JsonObject;
+    const list = checklists['grocery_list'] as JsonObject;
+    return list['items'] as JsonObject[];
   }
 
   beforeEach(async () => {
@@ -516,6 +528,53 @@ describe('WikiChecklist', () => {
         expect(datalists!.length).to.equal(1);
       });
     });
+
+    describe('when items have tags (tag autocomplete)', () => {
+      let options: NodeListOf<HTMLOptionElement> | undefined;
+
+      beforeEach(async () => {
+        el.error = null;
+        el.loading = false;
+        el.items = [
+          { text: 'Milk', checked: false, tag: 'Dairy' },
+          { text: 'Apples', checked: false, tag: 'Produce' },
+        ];
+        await el.updateComplete;
+        options = el.shadowRoot?.querySelectorAll<HTMLOptionElement>(
+          'datalist#tag-suggestions-grocery_list option'
+        );
+      });
+
+      it('should populate datalist with existing tags', () => {
+        const values = Array.from(options ?? []).map(o => o.value);
+        expect(values).to.include('Dairy');
+        expect(values).to.include('Produce');
+      });
+    });
+
+    describe('when in flat view', () => {
+      let tagBadges: NodeListOf<Element> | undefined;
+
+      beforeEach(async () => {
+        el.error = null;
+        el.loading = false;
+        el.groupedView = false;
+        el.items = [
+          { text: 'Milk', checked: false, tag: 'Dairy' },
+          { text: 'Bread', checked: false },
+        ];
+        await el.updateComplete;
+        tagBadges = el.shadowRoot?.querySelectorAll('.item-tag-badge');
+      });
+
+      it('should render tag badges next to items', () => {
+        expect(tagBadges!.length).to.be.greaterThan(0);
+      });
+
+      it('should render a badge for every item', () => {
+        expect(tagBadges!.length).to.equal(el.items.length);
+      });
+    });
   });
 
   describe('when GetFrontmatter returns checklist items', () => {
@@ -781,6 +840,526 @@ describe('WikiChecklist', () => {
       it('should stop polling after disconnect', () => {
         expect(getFrontmatterStub.callCount).to.equal(countAfterDisconnect);
       });
+    });
+
+    describe('when external change arrives via poll', () => {
+      let pollingEl: WikiChecklist;
+
+      beforeEach(async () => {
+        const initialFrontmatter: JsonObject = {
+          checklists: {
+            grocery_list: {
+              items: [{ text: 'Milk', checked: false }],
+            },
+          },
+        };
+        const updatedFrontmatter: JsonObject = {
+          checklists: {
+            grocery_list: {
+              items: [
+                { text: 'Milk', checked: true },
+                { text: 'Eggs', checked: false },
+              ],
+            },
+          },
+        };
+
+        pollingEl = buildElement('test-page', 'grocery_list');
+        sinon
+          .stub(pollingEl.client, 'getFrontmatter')
+          .onFirstCall()
+          .resolves(
+            create(GetFrontmatterResponseSchema, {
+              frontmatter: initialFrontmatter,
+            })
+          )
+          .resolves(
+            create(GetFrontmatterResponseSchema, {
+              frontmatter: updatedFrontmatter,
+            })
+          );
+
+        document.body.appendChild(pollingEl);
+        // Two awaits needed: first for loading=true render, second for initial fetch to complete.
+        await pollingEl.updateComplete;
+        await pollingEl.updateComplete;
+
+        await clock.tickAsync(3001);
+        await pollingEl.updateComplete;
+      });
+
+      afterEach(() => {
+        pollingEl.remove();
+      });
+
+      it('should reflect new items from the API after a poll', () => {
+        expect(pollingEl.items).to.have.length(2);
+      });
+
+      it('should reflect checked state changes from the API after a poll', () => {
+        expect(pollingEl.items[0]?.checked).to.be.true;
+      });
+    });
+  });
+
+  describe('when toggling a checkbox', () => {
+    let getFrontmatterStub: SinonStub;
+    let mergeFrontmatterStub: SinonStub;
+
+    beforeEach(async () => {
+      sinon.restore();
+      el.remove();
+      el = buildElement();
+
+      const currentFrontmatter: JsonObject = {
+        checklists: {
+          grocery_list: {
+            items: [
+              { text: 'Milk', checked: false },
+              { text: 'Eggs', checked: false },
+            ],
+          },
+          other_list: {
+            items: [{ text: 'Paper towels', checked: false }],
+          },
+        },
+      };
+
+      getFrontmatterStub = sinon
+        .stub(el.client, 'getFrontmatter')
+        .resolves(
+          create(GetFrontmatterResponseSchema, {
+            frontmatter: currentFrontmatter,
+          })
+        );
+      mergeFrontmatterStub = sinon
+        .stub(el.client, 'mergeFrontmatter')
+        .resolves(
+          create(MergeFrontmatterResponseSchema, {
+            frontmatter: currentFrontmatter,
+          })
+        );
+
+      document.body.appendChild(el);
+      // Two awaits needed: first for the initial loading=true render,
+      // second for fetchData to complete and trigger the items-populated render.
+      await el.updateComplete;
+      await el.updateComplete;
+
+      getFrontmatterStub.resetHistory();
+
+      const checkbox = el.shadowRoot?.querySelector<HTMLInputElement>(
+        'input[type="checkbox"]'
+      );
+      checkbox?.click();
+      await waitUntil(
+        () => mergeFrontmatterStub.callCount > 0,
+        'mergeFrontmatter should be called',
+        { timeout: 2000 }
+      );
+      await el.updateComplete;
+    });
+
+    it('should call mergeFrontmatter', () => {
+      expect(mergeFrontmatterStub).to.have.been.calledOnce;
+    });
+
+    it('should call getFrontmatter before mergeFrontmatter (read-modify-write)', () => {
+      expect(getFrontmatterStub).to.have.been.calledBefore(mergeFrontmatterStub);
+    });
+
+    it('should send the toggled checked state in the merge payload', () => {
+      const items = getMergePayloadItems(mergeFrontmatterStub);
+      expect(items[0]?.['checked']).to.be.true;
+    });
+
+    it('should preserve sibling checklists in the merge payload', () => {
+      const mergeArgs = mergeFrontmatterStub.getCall(0).args[0] as {
+        frontmatter: JsonObject;
+      };
+      const checklists = mergeArgs.frontmatter['checklists'] as JsonObject;
+      expect(checklists).to.have.property('other_list');
+    });
+  });
+
+  describe('when adding an item', () => {
+    let mergeFrontmatterStub: SinonStub;
+
+    beforeEach(async () => {
+      sinon.restore();
+      el.remove();
+      el = buildElement();
+
+      const initialFrontmatter: JsonObject = {
+        checklists: {
+          grocery_list: {
+            items: [{ text: 'Milk', checked: false }],
+          },
+        },
+      };
+
+      sinon
+        .stub(el.client, 'getFrontmatter')
+        .resolves(
+          create(GetFrontmatterResponseSchema, {
+            frontmatter: initialFrontmatter,
+          })
+        );
+      mergeFrontmatterStub = sinon
+        .stub(el.client, 'mergeFrontmatter')
+        .resolves(
+          create(MergeFrontmatterResponseSchema, {
+            frontmatter: initialFrontmatter,
+          })
+        );
+
+      document.body.appendChild(el);
+      // Two awaits needed: first for the initial loading=true render,
+      // second for fetchData to complete and trigger the items-populated render.
+      await el.updateComplete;
+      await el.updateComplete;
+
+      const addInput =
+        el.shadowRoot?.querySelector<HTMLInputElement>('.add-text-input');
+      if (addInput) {
+        addInput.value = 'Bread';
+        addInput.dispatchEvent(new InputEvent('input', { bubbles: true }));
+      }
+      await el.updateComplete;
+
+      const addBtn =
+        el.shadowRoot?.querySelector<HTMLButtonElement>('.add-btn');
+      addBtn?.click();
+      await waitUntil(
+        () => mergeFrontmatterStub.callCount > 0,
+        'mergeFrontmatter should be called',
+        { timeout: 2000 }
+      );
+      await el.updateComplete;
+    });
+
+    it('should call mergeFrontmatter with the new item appended', () => {
+      const items = getMergePayloadItems(mergeFrontmatterStub);
+      const lastItem = items[items.length - 1];
+      expect(lastItem?.['text']).to.equal('Bread');
+    });
+
+    it('should clear the add input after adding', () => {
+      const addInput =
+        el.shadowRoot?.querySelector<HTMLInputElement>('.add-text-input');
+      expect(addInput?.value).to.equal('');
+    });
+  });
+
+  describe('when adding an item with a tag', () => {
+    let mergeFrontmatterStub: SinonStub;
+
+    beforeEach(async () => {
+      sinon.restore();
+      el.remove();
+      el = buildElement();
+
+      const initialFrontmatter: JsonObject = {
+        checklists: { grocery_list: { items: [] } },
+      };
+
+      sinon
+        .stub(el.client, 'getFrontmatter')
+        .resolves(
+          create(GetFrontmatterResponseSchema, {
+            frontmatter: initialFrontmatter,
+          })
+        );
+      mergeFrontmatterStub = sinon
+        .stub(el.client, 'mergeFrontmatter')
+        .resolves(
+          create(MergeFrontmatterResponseSchema, {
+            frontmatter: initialFrontmatter,
+          })
+        );
+
+      document.body.appendChild(el);
+      // Two awaits needed: first for the initial loading=true render,
+      // second for fetchData to complete and trigger the items-populated render.
+      await el.updateComplete;
+      await el.updateComplete;
+
+      const addInput =
+        el.shadowRoot?.querySelector<HTMLInputElement>('.add-text-input');
+      if (addInput) {
+        addInput.value = 'Milk';
+        addInput.dispatchEvent(new InputEvent('input', { bubbles: true }));
+      }
+      const tagInput =
+        el.shadowRoot?.querySelector<HTMLInputElement>('.add-tag-input');
+      if (tagInput) {
+        tagInput.value = 'Dairy';
+        tagInput.dispatchEvent(new InputEvent('input', { bubbles: true }));
+      }
+      await el.updateComplete;
+
+      const addBtn =
+        el.shadowRoot?.querySelector<HTMLButtonElement>('.add-btn');
+      addBtn?.click();
+      await waitUntil(
+        () => mergeFrontmatterStub.callCount > 0,
+        'mergeFrontmatter should be called',
+        { timeout: 2000 }
+      );
+      await el.updateComplete;
+    });
+
+    it('should include the tag in the persisted item', () => {
+      const items = getMergePayloadItems(mergeFrontmatterStub);
+      expect(items[0]?.['tag']).to.equal('Dairy');
+    });
+  });
+
+  describe('when removing an item', () => {
+    let mergeFrontmatterStub: SinonStub;
+
+    beforeEach(async () => {
+      sinon.restore();
+      el.remove();
+      el = buildElement();
+
+      const initialFrontmatter: JsonObject = {
+        checklists: {
+          grocery_list: {
+            items: [
+              { text: 'Milk', checked: false },
+              { text: 'Eggs', checked: false },
+            ],
+          },
+        },
+      };
+
+      sinon
+        .stub(el.client, 'getFrontmatter')
+        .resolves(
+          create(GetFrontmatterResponseSchema, {
+            frontmatter: initialFrontmatter,
+          })
+        );
+      mergeFrontmatterStub = sinon
+        .stub(el.client, 'mergeFrontmatter')
+        .resolves(
+          create(MergeFrontmatterResponseSchema, {
+            frontmatter: initialFrontmatter,
+          })
+        );
+
+      document.body.appendChild(el);
+      // Two awaits needed: first for the initial loading=true render,
+      // second for fetchData to complete and trigger the items-populated render.
+      await el.updateComplete;
+      await el.updateComplete;
+
+      const removeBtn =
+        el.shadowRoot?.querySelector<HTMLButtonElement>('.remove-btn');
+      removeBtn?.click();
+      await waitUntil(
+        () => mergeFrontmatterStub.callCount > 0,
+        'mergeFrontmatter should be called',
+        { timeout: 2000 }
+      );
+      await el.updateComplete;
+    });
+
+    it('should call mergeFrontmatter with the item removed', () => {
+      const items = getMergePayloadItems(mergeFrontmatterStub);
+      expect(items).to.have.length(1);
+      expect(items[0]?.['text']).to.equal('Eggs');
+    });
+  });
+
+  describe('when editing item text', () => {
+    let mergeFrontmatterStub: SinonStub;
+
+    beforeEach(async () => {
+      sinon.restore();
+      el.remove();
+      el = buildElement();
+
+      const initialFrontmatter: JsonObject = {
+        checklists: {
+          grocery_list: {
+            items: [{ text: 'Milk', checked: false }],
+          },
+        },
+      };
+
+      sinon
+        .stub(el.client, 'getFrontmatter')
+        .resolves(
+          create(GetFrontmatterResponseSchema, {
+            frontmatter: initialFrontmatter,
+          })
+        );
+      mergeFrontmatterStub = sinon
+        .stub(el.client, 'mergeFrontmatter')
+        .resolves(
+          create(MergeFrontmatterResponseSchema, {
+            frontmatter: initialFrontmatter,
+          })
+        );
+
+      document.body.appendChild(el);
+      // Two awaits needed: first for the initial loading=true render,
+      // second for fetchData to complete and trigger the items-populated render.
+      await el.updateComplete;
+      await el.updateComplete;
+
+      const textInput =
+        el.shadowRoot?.querySelector<HTMLInputElement>('.item-text');
+      if (textInput) {
+        textInput.value = 'Whole Milk';
+        textInput.dispatchEvent(new InputEvent('input', { bubbles: true }));
+        textInput.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+      }
+      await waitUntil(
+        () => mergeFrontmatterStub.callCount > 0,
+        'mergeFrontmatter should be called',
+        { timeout: 2000 }
+      );
+      await el.updateComplete;
+    });
+
+    it('should call mergeFrontmatter with the updated text on blur', () => {
+      const items = getMergePayloadItems(mergeFrontmatterStub);
+      expect(items[0]?.['text']).to.equal('Whole Milk');
+    });
+  });
+
+  describe('when editing item tag', () => {
+    let mergeFrontmatterStub: SinonStub;
+
+    beforeEach(async () => {
+      sinon.restore();
+      el.remove();
+      el = buildElement();
+
+      const initialFrontmatter: JsonObject = {
+        checklists: {
+          grocery_list: {
+            items: [{ text: 'Milk', checked: false }],
+          },
+        },
+      };
+
+      sinon
+        .stub(el.client, 'getFrontmatter')
+        .resolves(
+          create(GetFrontmatterResponseSchema, {
+            frontmatter: initialFrontmatter,
+          })
+        );
+      mergeFrontmatterStub = sinon
+        .stub(el.client, 'mergeFrontmatter')
+        .resolves(
+          create(MergeFrontmatterResponseSchema, {
+            frontmatter: initialFrontmatter,
+          })
+        );
+
+      document.body.appendChild(el);
+      // Two awaits needed: first for the initial loading=true render,
+      // second for fetchData to complete and trigger the items-populated render.
+      await el.updateComplete;
+      await el.updateComplete;
+
+      // Click the tag badge to switch to tag input
+      const tagBadge =
+        el.shadowRoot?.querySelector<HTMLButtonElement>('.item-tag-badge');
+      tagBadge?.click();
+      await el.updateComplete;
+
+      // Type a new tag and blur
+      const tagInput =
+        el.shadowRoot?.querySelector<HTMLInputElement>('.item-tag-input');
+      if (tagInput) {
+        tagInput.value = 'Dairy';
+        tagInput.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
+      }
+      await waitUntil(
+        () => mergeFrontmatterStub.callCount > 0,
+        'mergeFrontmatter should be called',
+        { timeout: 2000 }
+      );
+      await el.updateComplete;
+    });
+
+    it('should call mergeFrontmatter with the updated tag', () => {
+      const items = getMergePayloadItems(mergeFrontmatterStub);
+      expect(items[0]?.['tag']).to.equal('Dairy');
+    });
+  });
+
+  describe('when toggling to grouped view', () => {
+    let groupHeadings: NodeListOf<Element> | undefined;
+
+    beforeEach(async () => {
+      el.error = null;
+      el.loading = false;
+      el.groupedView = false;
+      el.items = [
+        { text: 'Milk', checked: false, tag: 'Dairy' },
+        { text: 'Apples', checked: false, tag: 'Produce' },
+        { text: 'Towels', checked: false },
+      ];
+      await el.updateComplete;
+
+      const toggleBtn =
+        el.shadowRoot?.querySelector<HTMLButtonElement>('.view-toggle');
+      toggleBtn?.click();
+      await el.updateComplete;
+
+      groupHeadings = el.shadowRoot?.querySelectorAll('.group-header');
+    });
+
+    it('should switch to grouped view', () => {
+      expect(el.groupedView).to.be.true;
+    });
+
+    it('should render group headings for each tag', () => {
+      expect(groupHeadings!.length).to.be.greaterThan(0);
+    });
+
+    it('should render an "Other" group for untagged items', () => {
+      const headingTexts = Array.from(groupHeadings ?? []).map(
+        h => h.textContent?.trim()
+      );
+      expect(headingTexts).to.include('Other');
+    });
+  });
+
+  describe('when toggling back to flat view', () => {
+    let groupHeadings: NodeListOf<Element> | undefined;
+
+    beforeEach(async () => {
+      el.error = null;
+      el.loading = false;
+      el.groupedView = true;
+      el.items = [
+        { text: 'Milk', checked: false, tag: 'Dairy' },
+        { text: 'Apples', checked: false, tag: 'Produce' },
+      ];
+      await el.updateComplete;
+
+      const toggleBtn =
+        el.shadowRoot?.querySelector<HTMLButtonElement>('.view-toggle');
+      toggleBtn?.click();
+      await el.updateComplete;
+
+      groupHeadings = el.shadowRoot?.querySelectorAll('.group-header');
+    });
+
+    it('should switch back to flat view', () => {
+      expect(el.groupedView).to.be.false;
+    });
+
+    it('should not render group headings in flat view', () => {
+      expect(groupHeadings!.length).to.equal(0);
     });
   });
 });
