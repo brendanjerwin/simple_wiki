@@ -334,6 +334,7 @@ func BuildVanguardTranscoder(grpcServer *grpc.Server, ginRouter http.Handler) (h
 
 	// Single source of truth for service names to avoid drift between Vanguard and reflection.
 	serviceNames := []string{
+		"api.v1.FileStorageService",
 		"api.v1.Frontmatter",
 		"api.v1.InventoryManagementService",
 		"api.v1.PageImportService",
@@ -381,6 +382,7 @@ func setupGRPCServer(
 	grpcAPIServer, err := grpcapi.NewServer(
 		commit, buildTime, site, site.BleveIndexQueryer, site.GetJobQueueCoordinator(),
 		logger, site.MarkdownRenderer, server.TemplateExecutor{}, site.FrontmatterIndexQueryer,
+		site.FileStorer, site.Fileuploads,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create gRPC server: %w", err)
@@ -396,6 +398,7 @@ func setupGRPCServer(
 	grpcServer := grpc.NewServer(
 		grpc.ChainUnaryInterceptor(unaryInterceptors...),
 		grpc.ChainStreamInterceptor(streamInterceptors...),
+		grpc.MaxRecvMsgSize(int(site.MaxUploadSize)*1024*1024),
 	)
 	grpcAPIServer.RegisterWithServer(grpcServer)
 
