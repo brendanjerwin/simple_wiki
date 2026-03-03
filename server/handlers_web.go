@@ -84,6 +84,26 @@ func (s *Site) GinRouter(middleware ...gin.HandlerFunc) *gin.Engine {
 
 	router.POST("/uploads", s.handleUpload)
 
+	// Serve pre-built wiki-cli binaries so consumers always download the version
+	// that matches the running wiki.  Binaries are embedded in static.StaticContent
+	// at build time (see cmd/wiki-cli/generate.go).
+	router.GET("/cli/:binary", func(c *gin.Context) {
+		// path.Base prevents directory traversal; the pattern check guards against
+		// requests for arbitrary files in the embedded FS.
+		binary := path.Base(c.Param("binary"))
+		if !strings.HasPrefix(binary, "wiki-cli-") {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		data, err := static.StaticContent.ReadFile("cli/" + binary)
+		if err != nil {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, binary))
+		c.Data(http.StatusOK, "application/octet-stream", data)
+	})
+
 	router.GET("/:page", func(c *gin.Context) {
 		page := c.Param("page")
 		c.Redirect(httpStatusFound, "/"+page+"/view?"+c.Request.URL.RawQuery)
