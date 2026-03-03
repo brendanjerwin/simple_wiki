@@ -8,13 +8,14 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
+	"github.com/brendanjerwin/simple_wiki/pkg/logging"
 	"github.com/jcelliott/lumber"
 )
 
 var _ = Describe("CronScheduler", func() {
 	var (
 		scheduler *jobs.CronScheduler
-		logger    lumber.Logger
+		logger    logging.Logger
 	)
 
 	BeforeEach(func() {

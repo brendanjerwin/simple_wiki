@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 
+	"github.com/brendanjerwin/simple_wiki/pkg/logging"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
@@ -77,7 +78,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 		job      *InventoryNormalizationJob
 		mockDeps *mockNormalizationDeps
 		mockFmIndex *mockFrontmatterIndexQueryer
-		logger   lumber.Logger
+		logger   logging.Logger
 	)
 
 	BeforeEach(func() {
