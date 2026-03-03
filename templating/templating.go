@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"net/url"
 	"sort"
 	"strings"
@@ -305,6 +306,16 @@ func BuildIsContainer(query wikipage.IQueryFrontmatterIndex) func(string) bool {
 	}
 }
 
+// BuildChecklist returns a template function that renders a wiki-checklist custom element.
+// The list-name attribute is taken from the argument; the page attribute from the template context.
+func BuildChecklist(currentPageTemplateContext TemplateContext) func(string) string {
+	return func(listName string) string {
+		return fmt.Sprintf(`<wiki-checklist list-name="%s" page="%s"></wiki-checklist>`,
+			html.EscapeString(listName),
+			html.EscapeString(currentPageTemplateContext.Identifier))
+	}
+}
+
 // ExecuteTemplate executes a template string with the given frontmatter and site context.
 // Includes timeout protection to prevent infinite hangs.
 func ExecuteTemplate(templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query wikipage.IQueryFrontmatterIndex) ([]byte, error) {
@@ -367,6 +378,7 @@ func buildTemplateWithFunctions(ctx context.Context, templateString string, site
 		"FindBy":                  query.QueryExactMatch,
 		"FindByPrefix":            query.QueryPrefixMatch,
 		"FindByKeyExistence":      query.QueryKeyExistence,
+		"Checklist":               BuildChecklist(templateContext),
 	}
 
 	return template.New("page").Funcs(funcs).Parse(templateString)

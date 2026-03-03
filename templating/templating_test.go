@@ -1439,3 +1439,95 @@ Found {{ len $items }} items
 		})
 	})
 })
+
+var _ = Describe("BuildChecklist", func() {
+	var (
+		templateContext templating.TemplateContext
+		checklistFunc   func(string) string
+		result          string
+	)
+
+	BeforeEach(func() {
+		templateContext = templating.TemplateContext{
+			Identifier: "my_page",
+			Title:      "My Page",
+		}
+		checklistFunc = templating.BuildChecklist(templateContext)
+	})
+
+	When("rendering a checklist", func() {
+		BeforeEach(func() {
+			result = checklistFunc("my-list")
+		})
+
+		It("should output wiki-checklist tag", func() {
+			Expect(result).To(ContainSubstring("wiki-checklist"))
+		})
+
+		It("should include correct list-name attribute", func() {
+			Expect(result).To(ContainSubstring(`list-name="my-list"`))
+		})
+
+		It("should include correct page attribute from template context", func() {
+			Expect(result).To(ContainSubstring(`page="my_page"`))
+		})
+
+		It("should produce the complete wiki-checklist tag", func() {
+			Expect(result).To(Equal(`<wiki-checklist list-name="my-list" page="my_page"></wiki-checklist>`))
+		})
+	})
+
+	When("list name contains special characters", func() {
+		BeforeEach(func() {
+			result = checklistFunc(`<script>alert("xss")</script>`)
+		})
+
+		It("should properly escape the list-name attribute", func() {
+			Expect(result).NotTo(ContainSubstring("<script>"))
+			Expect(result).To(ContainSubstring(`list-name="&lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;"`))
+		})
+	})
+
+	When("used in full template execution", func() {
+		var (
+			mockSite  *mockPageReader
+			mockIndex *mockFrontmatterIndex
+			execResult []byte
+			execErr    error
+		)
+
+		BeforeEach(func() {
+			mockSite = &mockPageReader{
+				pages: map[string]wikipage.FrontMatter{},
+			}
+			mockIndex = &mockFrontmatterIndex{
+				index:  map[string]map[string][]string{},
+				values: map[string]map[string]string{},
+			}
+
+			templateString := `{{ Checklist "my-list" }}`
+			frontmatter := wikipage.FrontMatter{
+				identifierKey: "test_page",
+				titleKey:      "Test Page",
+			}
+
+			execResult, execErr = templating.ExecuteTemplate(templateString, frontmatter, mockSite, mockIndex)
+		})
+
+		It("should not return an error", func() {
+			Expect(execErr).NotTo(HaveOccurred())
+		})
+
+		It("should output wiki-checklist tag", func() {
+			Expect(string(execResult)).To(ContainSubstring("wiki-checklist"))
+		})
+
+		It("should include correct list-name attribute", func() {
+			Expect(string(execResult)).To(ContainSubstring(`list-name="my-list"`))
+		})
+
+		It("should include correct page attribute from template context", func() {
+			Expect(string(execResult)).To(ContainSubstring(`page="test_page"`))
+		})
+	})
+})
