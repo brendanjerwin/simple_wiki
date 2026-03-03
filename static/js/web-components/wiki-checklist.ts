@@ -404,10 +404,14 @@ export class WikiChecklist extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    this.loading = true;
-    void this.fetchData();
-    this.pollingTimer = setInterval(() => {
+    if (this.page) {
+      this.loading = true;
       void this.fetchData();
+    }
+    this.pollingTimer = setInterval(() => {
+      if (this.page) {
+        void this.fetchData();
+      }
     }, POLL_INTERVAL_MS);
   }
 
@@ -509,7 +513,8 @@ export class WikiChecklist extends LitElement {
       if (!groupMap.has(tag)) {
         groupMap.set(tag, []);
       }
-      groupMap.get(tag)!.push({ item, index: i });
+      const group = groupMap.get(tag);
+      if (group) group.push({ item, index: i });
     }
 
     const allTags = Array.from(groupMap.keys());
@@ -535,17 +540,22 @@ export class WikiChecklist extends LitElement {
       ];
     }
 
-    return orderedTags.map(tag => ({
-      tag,
-      items: groupMap.get(tag)!,
-    }));
+    return orderedTags
+      .map(tag => {
+        const items = groupMap.get(tag);
+        if (!items) return null;
+        return { tag, items };
+      })
+      .filter((g): g is GroupedItems => g !== null);
   }
 
   /**
    * Fetch checklist data from GetFrontmatter and update state.
    */
   async fetchData(): Promise<void> {
-    if (!this.page) return;
+    if (!this.page) {
+      throw new Error('wiki-checklist: page attribute is required but not set');
+    }
 
     try {
       const request = create(GetFrontmatterRequestSchema, { page: this.page });
@@ -571,7 +581,9 @@ export class WikiChecklist extends LitElement {
     newItems: ChecklistItem[],
     newGroupOrder: string[] | null
   ): Promise<void> {
-    if (!this.page) return;
+    if (!this.page) {
+      throw new Error('wiki-checklist: page attribute is required but not set');
+    }
 
     try {
       this.saving = true;
