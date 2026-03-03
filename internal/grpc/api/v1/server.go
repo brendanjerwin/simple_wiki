@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"maps"
@@ -36,6 +37,7 @@ const (
 	failedToReadFrontmatterErrFmt  = "failed to read frontmatter: %v"
 	failedToWriteFrontmatterErrFmt = "failed to write frontmatter: %v"
 	failedToBuildPageTextErrFmt    = "failed to build page text: %v"
+	pageNameRequiredErr            = "page_name is required"
 	maxUniqueIdentifierAttempts    = 1000
 )
 
@@ -877,7 +879,7 @@ func (s *Server) findUniqueIdentifier(baseIdentifier string) string {
 // Creates a new wiki page with optional template support.
 func (s *Server) CreatePage(_ context.Context, req *apiv1.CreatePageRequest) (*apiv1.CreatePageResponse, error) {
 	if req.PageName == "" {
-		return nil, status.Error(codes.InvalidArgument, "page_name is required")
+		return nil, status.Error(codes.InvalidArgument, pageNameRequiredErr)
 	}
 
 	// Munge the identifier
@@ -956,7 +958,7 @@ func (s *Server) CreatePage(_ context.Context, req *apiv1.CreatePageRequest) (*a
 // Empty content is rejected; use ClearPageContent to explicitly clear a page's content.
 func (s *Server) UpdatePageContent(_ context.Context, req *apiv1.UpdatePageContentRequest) (*apiv1.UpdatePageContentResponse, error) {
 	if req.PageName == "" {
-		return nil, status.Error(codes.InvalidArgument, "page_name is required")
+		return nil, status.Error(codes.InvalidArgument, pageNameRequiredErr)
 	}
 
 	if strings.TrimSpace(req.NewContentMarkdown) == "" {
@@ -982,7 +984,7 @@ func (s *Server) UpdatePageContent(_ context.Context, req *apiv1.UpdatePageConte
 			return nil, status.Errorf(codes.Internal, "failed to read current content for version check: %v", err)
 		}
 		currentHash := computeContentHash(currentMarkdown)
-		if currentHash != *req.ExpectedVersionHash {
+		if subtle.ConstantTimeCompare([]byte(currentHash), []byte(*req.ExpectedVersionHash)) != 1 {
 			return nil, status.Error(codes.Aborted, "content version mismatch: page was modified since last read; re-read the page and retry")
 		}
 	}
@@ -1002,7 +1004,7 @@ func (s *Server) UpdatePageContent(_ context.Context, req *apiv1.UpdatePageConte
 // confirm_clear must be true to prevent accidental data loss.
 func (s *Server) ClearPageContent(_ context.Context, req *apiv1.ClearPageContentRequest) (*apiv1.ClearPageContentResponse, error) {
 	if req.PageName == "" {
-		return nil, status.Error(codes.InvalidArgument, "page_name is required")
+		return nil, status.Error(codes.InvalidArgument, pageNameRequiredErr)
 	}
 
 	if !req.ConfirmClear {
@@ -1030,7 +1032,7 @@ func (s *Server) ClearPageContent(_ context.Context, req *apiv1.ClearPageContent
 // The new_whole_markdown field must contain the complete page text (frontmatter + markdown).
 func (s *Server) UpdateWholePage(_ context.Context, req *apiv1.UpdateWholePageRequest) (*apiv1.UpdateWholePageResponse, error) {
 	if req.PageName == "" {
-		return nil, status.Error(codes.InvalidArgument, "page_name is required")
+		return nil, status.Error(codes.InvalidArgument, pageNameRequiredErr)
 	}
 
 	// Verify the page exists

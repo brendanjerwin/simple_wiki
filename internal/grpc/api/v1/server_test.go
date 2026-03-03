@@ -130,7 +130,7 @@ type MockPageReaderMutator struct {
 	ErrByID            map[string]error          // For returning different errors per identifier
 	Markdown           wikipage.Markdown
 	Err                error
-	MarkdownReadErr    error // Separate error for ReadMarkdown
+	MarkdownReadErr    error // Separate error for ReadMarkdown; takes precedence over Err, allowing ReadFrontMatter to succeed while ReadMarkdown fails
 	WrittenFrontmatter wikipage.FrontMatter
 	WrittenMarkdown    wikipage.Markdown
 	WrittenIdentifier  wikipage.PageIdentifier
@@ -1510,11 +1510,9 @@ var _ = Describe("Server", func() {
 		When("expected_version_hash matches current content hash", func() {
 			BeforeEach(func() {
 				mockPageReaderMutator.Markdown = "# Old Content"
-				req.ExpectedVersionHash = func() *string {
-					// SHA256 of "# Old Content"
-					h := fmt.Sprintf("%x", sha256.Sum256([]byte("# Old Content")))
-					return &h
-				}()
+				// SHA256 of "# Old Content"
+				expectedHash := fmt.Sprintf("%x", sha256.Sum256([]byte("# Old Content")))
+				req.ExpectedVersionHash = &expectedHash
 			})
 
 			It("should not return an error", func() {
