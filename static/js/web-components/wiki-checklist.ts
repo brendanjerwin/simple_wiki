@@ -950,20 +950,23 @@ export class WikiChecklist extends LitElement {
 
     let newItems = [...this.items];
 
-    // Handle cross-group drop: update the item's tag
+    // Handle cross-group drop: update the item's tag only when it changes
     if (groupTag !== undefined) {
       const sourceItem = newItems[sourceIndex];
       if (!sourceItem) {
         this._clearDragState();
         return;
       }
-      const updatedItem = { ...sourceItem };
-      if (groupTag === 'Other') {
-        delete updatedItem.tag;
-      } else {
-        updatedItem.tag = groupTag;
+      const newTag = groupTag === 'Other' ? undefined : groupTag;
+      if (newTag !== sourceItem.tag) {
+        const updatedItem = { ...sourceItem };
+        if (newTag === undefined) {
+          delete updatedItem.tag;
+        } else {
+          updatedItem.tag = newTag;
+        }
+        newItems[sourceIndex] = updatedItem;
       }
-      newItems[sourceIndex] = updatedItem;
     }
 
     newItems = this.reorderItems(newItems, sourceIndex, insertIndex);
@@ -975,6 +978,17 @@ export class WikiChecklist extends LitElement {
 
   private _handleItemDragEnd(): void {
     this._clearDragState();
+  }
+
+  private _handleItemDragLeave(e: DragEvent): void {
+    if (
+      e.currentTarget instanceof HTMLElement &&
+      e.relatedTarget instanceof Node &&
+      e.currentTarget.contains(e.relatedTarget)
+    ) {
+      return;
+    }
+    this._dragOverItemIndex = null;
   }
 
   private _handleGroupDragStart(e: DragEvent, tag: string): void {
@@ -1031,6 +1045,17 @@ export class WikiChecklist extends LitElement {
     this._clearDragState();
   }
 
+  private _handleGroupDragLeave(e: DragEvent): void {
+    if (
+      e.currentTarget instanceof HTMLElement &&
+      e.relatedTarget instanceof Node &&
+      e.currentTarget.contains(e.relatedTarget)
+    ) {
+      return;
+    }
+    this._dragOverGroupTag = null;
+  }
+
   private _renderItem(
     item: ChecklistItem,
     index: number,
@@ -1052,6 +1077,7 @@ export class WikiChecklist extends LitElement {
         @dragstart="${(e: DragEvent) => this._handleItemDragStart(e, index)}"
         @dragover="${(e: DragEvent) =>
           this._handleItemDragOver(e, index)}"
+        @dragleave="${(e: DragEvent) => this._handleItemDragLeave(e)}"
         @drop="${(e: DragEvent) => this._handleItemDrop(e, index, groupTag)}"
         @dragend="${() => this._handleItemDragEnd()}"
       >
@@ -1152,6 +1178,7 @@ export class WikiChecklist extends LitElement {
                 this._handleGroupDragStart(e, group.tag)}"
               @dragover="${(e: DragEvent) =>
                 this._handleGroupDragOver(e, group.tag)}"
+              @dragleave="${(e: DragEvent) => this._handleGroupDragLeave(e)}"
               @drop="${(e: DragEvent) =>
                 this._handleGroupDrop(e, group.tag)}"
               @dragend="${() => this._handleGroupDragEnd()}"

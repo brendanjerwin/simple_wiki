@@ -1903,5 +1903,74 @@ describe('WikiChecklist', () => {
         });
       });
     });
+
+    describe('dragleave handler', () => {
+      let internal: WikiChecklistInternal;
+
+      beforeEach(() => {
+        internal = el as unknown as WikiChecklistInternal;
+      });
+
+      describe('when cursor leaves item row to an element outside the row', () => {
+        beforeEach(() => {
+          internal._dragOverItemIndex = 1;
+          const itemElement = document.createElement('li');
+          const outsideElement = document.createElement('div');
+          const leaveEvent = new DragEvent('dragleave', { cancelable: true });
+          Object.defineProperty(leaveEvent, 'currentTarget', {
+            value: itemElement,
+          });
+          Object.defineProperty(leaveEvent, 'relatedTarget', {
+            value: outsideElement,
+          });
+          internal._handleItemDragLeave(leaveEvent);
+        });
+
+        it('should clear _dragOverItemIndex', () => {
+          expect(internal._dragOverItemIndex).to.be.null;
+        });
+      });
+
+      describe('when cursor leaves item row to a child element within the row', () => {
+        beforeEach(() => {
+          internal._dragOverItemIndex = 1;
+          const itemElement = document.createElement('li');
+          const childElement = document.createElement('span');
+          itemElement.appendChild(childElement);
+          const leaveEvent = new DragEvent('dragleave', { cancelable: true });
+          Object.defineProperty(leaveEvent, 'currentTarget', {
+            value: itemElement,
+          });
+          Object.defineProperty(leaveEvent, 'relatedTarget', {
+            value: childElement,
+          });
+          internal._handleItemDragLeave(leaveEvent);
+        });
+
+        it('should not clear _dragOverItemIndex', () => {
+          expect(internal._dragOverItemIndex).to.equal(1);
+        });
+      });
+
+      describe('when cursor leaves group header to an element outside', () => {
+        beforeEach(() => {
+          internal._dragOverGroupTag = 'Dairy';
+          const headerElement = document.createElement('div');
+          const outsideElement = document.createElement('div');
+          const leaveEvent = new DragEvent('dragleave', { cancelable: true });
+          Object.defineProperty(leaveEvent, 'currentTarget', {
+            value: headerElement,
+          });
+          Object.defineProperty(leaveEvent, 'relatedTarget', {
+            value: outsideElement,
+          });
+          internal._handleGroupDragLeave(leaveEvent);
+        });
+
+        it('should clear _dragOverGroupTag', () => {
+          expect(internal._dragOverGroupTag).to.be.null;
+        });
+      });
+    });
   });
 });
