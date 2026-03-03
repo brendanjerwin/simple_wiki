@@ -83,7 +83,8 @@ type versionResponse struct {
 // checkVersionCompatibility calls the wiki's GetVersion endpoint and compares
 // the server's commit with this binary's embedded commit. If they differ, it
 // returns an error telling the caller to download the latest binary.
-// Skipped when running in dev mode or when the server is unreachable.
+// Skipped only for dev builds. All other failures (unreachable server, bad
+// response, version mismatch) are hard errors — there is no offline mode.
 func checkVersionCompatibility(baseURL string) error {
 	if commit == "dev" {
 		return nil // dev build, skip check
@@ -98,29 +99,32 @@ func checkVersionCompatibility(baseURL string) error {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bytes.NewReader([]byte("{}")))
 	if err != nil {
-		return nil // can't build request, skip check
+		return fmt.Errorf("UNREACHABLE: could not build version check request for %s: %w", baseURL, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Connect-Protocol-Version", "1")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil // server unreachable, skip check (offline use is fine)
+		return fmt.Errorf("UNREACHABLE: cannot connect to wiki server at %s\n\n"+
+			"Ensure the wiki is running and the URL is correct.\n"+
+			"Set WIKI_URL or pass --url to override (default: %s)",
+			baseURL, defaultWikiURL)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil // unexpected response, skip check
+		return fmt.Errorf("UNREACHABLE: wiki server at %s returned HTTP %d during version check", baseURL, resp.StatusCode)
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil
+		return fmt.Errorf("UNREACHABLE: failed to read version response from %s: %w", baseURL, err)
 	}
 
 	var ver versionResponse
 	if err := json.Unmarshal(body, &ver); err != nil {
-		return nil
+		return fmt.Errorf("UNREACHABLE: wiki server at %s returned invalid version response", baseURL)
 	}
 
 	if ver.Commit != "" && ver.Commit != commit {
