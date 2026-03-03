@@ -3,7 +3,7 @@ import { createClient } from '@connectrpc/connect';
 import { create, type JsonObject } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import { Frontmatter, GetFrontmatterRequestSchema, GetFrontmatterResponseSchema, ReplaceFrontmatterRequestSchema, type GetFrontmatterResponse } from '../gen/api/v1/frontmatter_pb.js';
-import { sharedStyles, foundationCSS, dialogCSS, responsiveCSS, buttonCSS } from './shared-styles.js';
+import { sharedStyles, dialogStyles } from './shared-styles.js';
 import './frontmatter-value-section.js';
 import { showToastAfter } from './toast-message.js';
 import './error-display.js';
@@ -41,12 +41,7 @@ import { AugmentErrorService, type AugmentedError } from './augment-error-servic
  * This separation allows for clean state management, proper event bubbling, and maintainable code.
  */
 export class FrontmatterEditorDialog extends LitElement {
-  static override styles = [
-    foundationCSS,
-    dialogCSS,
-    responsiveCSS,
-    buttonCSS,
-    css`
+  static override styles = dialogStyles(css`
       :host {
         position: fixed;
         top: 0;
@@ -62,15 +57,6 @@ export class FrontmatterEditorDialog extends LitElement {
         align-items: center;
         justify-content: center;
         animation: fadeIn 0.2s ease-out;
-      }
-
-      @keyframes fadeIn {
-        from {
-          opacity: 0;
-        }
-        to {
-          opacity: 1;
-        }
       }
 
       .backdrop {
@@ -93,17 +79,6 @@ export class FrontmatterEditorDialog extends LitElement {
         z-index: 1;
         animation: slideIn 0.2s ease-out;
         border-radius: 8px;
-      }
-
-      @keyframes slideIn {
-        from {
-          transform: translateY(-20px);
-          opacity: 0;
-        }
-        to {
-          transform: translateY(0);
-          opacity: 1;
-        }
       }
 
       /* Mobile-first responsive behavior */
@@ -172,7 +147,7 @@ export class FrontmatterEditorDialog extends LitElement {
         justify-content: flex-end;
       }
     `
-  ];
+  );
 
   static override properties = {
     page: { type: String },
