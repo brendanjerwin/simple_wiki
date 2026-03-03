@@ -144,6 +144,7 @@ export class WikiChecklist extends LitElement {
         padding: 6px 4px;
         border-radius: 4px;
         transition: background 0.1s ease;
+        position: relative;
       }
 
       .item-row:hover {
@@ -228,11 +229,57 @@ export class WikiChecklist extends LitElement {
         color: #dc3545;
       }
 
+      .drag-handle {
+        flex-shrink: 0;
+        cursor: grab;
+        color: #ccc;
+        font-size: 14px;
+        padding: 2px 2px;
+        line-height: 1;
+        user-select: none;
+        transition: color 0.15s ease;
+      }
+
+      .drag-handle:hover {
+        color: #888;
+      }
+
+      .drag-handle:active {
+        cursor: grabbing;
+      }
+
+      .item-row.dragging {
+        opacity: 0.4;
+      }
+
+      .item-row.drag-over-before::before {
+        content: '';
+        position: absolute;
+        top: -1px;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: #0d6efd;
+        border-radius: 1px;
+      }
+
+      .item-row.drag-over-after::after {
+        content: '';
+        position: absolute;
+        bottom: -1px;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: #0d6efd;
+        border-radius: 1px;
+      }
+
       .group-section {
         margin-bottom: 12px;
       }
 
       .group-header {
+        position: relative;
         font-size: 12px;
         font-weight: 600;
         color: #6c757d;
@@ -241,6 +288,33 @@ export class WikiChecklist extends LitElement {
         padding: 4px 4px 2px;
         border-bottom: 1px solid #eee;
         margin-bottom: 4px;
+        cursor: grab;
+      }
+
+      .group-header.drag-over-before::before {
+        content: '';
+        position: absolute;
+        top: -1px;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: #0d6efd;
+        border-radius: 1px;
+      }
+
+      .group-header.drag-over-after::after {
+        content: '';
+        position: absolute;
+        bottom: -1px;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: #0d6efd;
+        border-radius: 1px;
+      }
+
+      .group-header.dragging {
+        opacity: 0.4;
       }
 
       .add-item {
@@ -381,6 +455,26 @@ export class WikiChecklist extends LitElement {
   @state()
   private declare newItemTag: string;
 
+  // Drag-and-drop state for items
+  @state()
+  private declare _dragSourceItemIndex: number | null;
+
+  @state()
+  private declare _dragOverItemIndex: number | null;
+
+  @state()
+  private declare _dragOverItemPosition: 'before' | 'after';
+
+  // Drag-and-drop state for group headings
+  @state()
+  private declare _dragSourceGroupTag: string | null;
+
+  @state()
+  private declare _dragOverGroupTag: string | null;
+
+  @state()
+  private declare _dragOverGroupPosition: 'before' | 'after';
+
   private pollingTimer: ReturnType<typeof setInterval> | null = null;
 
   readonly client = createClient(Frontmatter, getGrpcWebTransport());
@@ -398,6 +492,12 @@ export class WikiChecklist extends LitElement {
     this.editingTagIndex = null;
     this.newItemText = '';
     this.newItemTag = '';
+    this._dragSourceItemIndex = null;
+    this._dragOverItemIndex = null;
+    this._dragOverItemPosition = 'before';
+    this._dragSourceGroupTag = null;
+    this._dragOverGroupTag = null;
+    this._dragOverGroupPosition = 'before';
   }
 
   override connectedCallback(): void {
@@ -750,18 +850,209 @@ export class WikiChecklist extends LitElement {
     this.groupedView = !this.groupedView;
   }
 
+  /**
+   * Move an item from fromIndex to the position specified by toInsertIndex
+   * in the resulting array (before removal of the source item).
+   */
+  reorderItems(
+    items: ChecklistItem[],
+    fromIndex: number,
+    toInsertIndex: number
+  ): ChecklistItem[] {
+    if (fromIndex < 0 || fromIndex >= items.length) return items;
+    if (toInsertIndex < 0 || toInsertIndex > items.length) return items;
+    const result = [...items];
+    const [item] = result.splice(fromIndex, 1);
+    if (!item) return items;
+    const adjustedIndex =
+      fromIndex < toInsertIndex ? toInsertIndex - 1 : toInsertIndex;
+    result.splice(adjustedIndex, 0, item);
+    return result;
+  }
+
+  /**
+   * Reorder a group tag within the given ordered tag list.
+   * Returns a new array with fromTag moved to be before or after toTag.
+   */
+  computeNewGroupOrder(
+    currentTags: string[],
+    fromTag: string,
+    toTag: string,
+    position: 'before' | 'after'
+  ): string[] {
+    const fromIdx = currentTags.indexOf(fromTag);
+    const toIdx = currentTags.indexOf(toTag);
+    if (fromIdx === -1 || toIdx === -1) return [...currentTags];
+    const toInsertIndex = position === 'before' ? toIdx : toIdx + 1;
+    const result = [...currentTags];
+    result.splice(fromIdx, 1);
+    const adjustedIndex =
+      fromIdx < toInsertIndex ? toInsertIndex - 1 : toInsertIndex;
+    result.splice(adjustedIndex, 0, fromTag);
+    return result;
+  }
+
+  private _clearDragState(): void {
+    this._dragSourceItemIndex = null;
+    this._dragOverItemIndex = null;
+    this._dragSourceGroupTag = null;
+    this._dragOverGroupTag = null;
+  }
+
+  private _handleItemDragStart(e: DragEvent, index: number): void {
+    this._dragSourceItemIndex = index;
+    this._dragSourceGroupTag = null;
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(index));
+    }
+  }
+
+  private _handleItemDragOver(
+    e: DragEvent,
+    index: number
+  ): void {
+    if (
+      this._dragSourceItemIndex === null &&
+      this._dragSourceGroupTag === null
+    ) {
+      return;
+    }
+    e.preventDefault();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'move';
+    }
+    if (!(e.currentTarget instanceof HTMLElement)) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    this._dragOverItemIndex = index;
+    this._dragOverItemPosition = e.clientY < midY ? 'before' : 'after';
+  }
+
+  private async _handleItemDrop(
+    e: DragEvent,
+    targetIndex: number,
+    groupTag?: string
+  ): Promise<void> {
+    e.preventDefault();
+    const sourceIndex = this._dragSourceItemIndex;
+    if (sourceIndex === null) {
+      this._clearDragState();
+      return;
+    }
+
+    const position = this._dragOverItemPosition;
+    const insertIndex =
+      position === 'before' ? targetIndex : targetIndex + 1;
+
+    let newItems = [...this.items];
+
+    // Handle cross-group drop: update the item's tag
+    if (groupTag !== undefined) {
+      const sourceItem = newItems[sourceIndex];
+      if (!sourceItem) {
+        this._clearDragState();
+        return;
+      }
+      const updatedItem = { ...sourceItem };
+      if (groupTag === 'Other') {
+        delete updatedItem.tag;
+      } else {
+        updatedItem.tag = groupTag;
+      }
+      newItems[sourceIndex] = updatedItem;
+    }
+
+    newItems = this.reorderItems(newItems, sourceIndex, insertIndex);
+
+    this._clearDragState();
+    this.items = newItems;
+    await this.persistData(newItems, this.groupOrder);
+  }
+
+  private _handleItemDragEnd(): void {
+    this._clearDragState();
+  }
+
+  private _handleGroupDragStart(e: DragEvent, tag: string): void {
+    this._dragSourceGroupTag = tag;
+    this._dragSourceItemIndex = null;
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', tag);
+    }
+  }
+
+  private _handleGroupDragOver(e: DragEvent, tag: string): void {
+    if (this._dragSourceGroupTag === null) return;
+    e.preventDefault();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'move';
+    }
+    if (!(e.currentTarget instanceof HTMLElement)) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    this._dragOverGroupTag = tag;
+    this._dragOverGroupPosition = e.clientY < midY ? 'before' : 'after';
+  }
+
+  private async _handleGroupDrop(e: DragEvent, targetTag: string): Promise<void> {
+    e.preventDefault();
+    const sourceTag = this._dragSourceGroupTag;
+    if (!sourceTag) {
+      this._clearDragState();
+      return;
+    }
+    if (sourceTag === targetTag) {
+      this._clearDragState();
+      return;
+    }
+
+    // Build ordered tag list from current grouped items (excluding 'Other')
+    const groups = this.getGroupedItems();
+    const currentTags = groups.map(g => g.tag).filter(t => t !== 'Other');
+
+    const newGroupOrder = this.computeNewGroupOrder(
+      currentTags,
+      sourceTag,
+      targetTag,
+      this._dragOverGroupPosition
+    );
+
+    this._clearDragState();
+    this.groupOrder = newGroupOrder;
+    await this.persistData(this.items, newGroupOrder);
+  }
+
+  private _handleGroupDragEnd(): void {
+    this._clearDragState();
+  }
+
   private _renderItem(
     item: ChecklistItem,
     index: number,
-    tagSuggestionsId: string
+    tagSuggestionsId: string,
+    groupTag?: string
   ) {
     const isEditingTag = this.editingTagIndex === index;
+    const isDragging = this._dragSourceItemIndex === index;
+    const isDragOver = this._dragOverItemIndex === index;
+    const dragOverClass = isDragOver
+      ? `drag-over-${this._dragOverItemPosition}`
+      : '';
 
     return html`
       <li
-        class="item-row ${item.checked ? 'item-checked' : ''}"
+        class="item-row ${item.checked ? 'item-checked' : ''} ${isDragging ? 'dragging' : ''} ${dragOverClass}"
         data-index="${index}"
+        draggable="true"
+        @dragstart="${(e: DragEvent) => this._handleItemDragStart(e, index)}"
+        @dragover="${(e: DragEvent) =>
+          this._handleItemDragOver(e, index)}"
+        @drop="${(e: DragEvent) => this._handleItemDrop(e, index, groupTag)}"
+        @dragend="${() => this._handleItemDragEnd()}"
       >
+        <span class="drag-handle" aria-hidden="true">⠿</span>
         <input
           type="checkbox"
           class="item-checkbox"
@@ -841,20 +1132,38 @@ export class WikiChecklist extends LitElement {
   private _renderGroupedItems(tagSuggestionsId: string) {
     const groups = this.getGroupedItems();
     return html`
-      ${groups.map(
-        group => html`
+      ${groups.map(group => {
+        const isGroupDragging = this._dragSourceGroupTag === group.tag;
+        const isGroupDragOver = this._dragOverGroupTag === group.tag;
+        const groupDragOverClass = isGroupDragOver
+          ? `drag-over-${this._dragOverGroupPosition}`
+          : '';
+        return html`
           <div class="group-section">
-            <div class="group-header" role="heading" aria-level="3">
+            <div
+              class="group-header ${isGroupDragging ? 'dragging' : ''} ${groupDragOverClass}"
+              role="heading"
+              aria-level="3"
+              draggable="true"
+              @dragstart="${(e: DragEvent) =>
+                this._handleGroupDragStart(e, group.tag)}"
+              @dragover="${(e: DragEvent) =>
+                this._handleGroupDragOver(e, group.tag)}"
+              @drop="${(e: DragEvent) =>
+                this._handleGroupDrop(e, group.tag)}"
+              @dragend="${() => this._handleGroupDragEnd()}"
+            >
+              <span class="drag-handle" aria-hidden="true">⠿</span>
               ${group.tag}
             </div>
             <ul class="items-list" role="list">
               ${group.items.map(({ item, index }) =>
-                this._renderItem(item, index, tagSuggestionsId)
+                this._renderItem(item, index, tagSuggestionsId, group.tag)
               )}
             </ul>
           </div>
-        `
-      )}
+        `;
+      })}
     `;
   }
 
