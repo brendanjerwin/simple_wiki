@@ -1438,4 +1438,64 @@ Found {{ len $items }} items
 			Expect(string(result)).To(ContainSubstring("Container exists"))
 		})
 	})
+
+	Context("with Checklist function", func() {
+		It("should produce a wiki-checklist tag with list-name and page attributes", func() {
+			frontmatter := wikipage.FrontMatter{
+				identifierKey: "my_page",
+				titleKey:      "My Page",
+			}
+
+			result, err := templating.ExecuteTemplate(`{{ Checklist "grocery_list" }}`, frontmatter, mockSite, mockIndex)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(string(result)).To(ContainSubstring(`list-name="grocery_list"`))
+			Expect(string(result)).To(ContainSubstring(`page="my_page"`))
+			Expect(string(result)).To(ContainSubstring(`<wiki-checklist`))
+			Expect(string(result)).To(ContainSubstring(`></wiki-checklist>`))
+		})
+	})
+})
+
+var _ = Describe("BuildChecklist", func() {
+	var (
+		templateContext templating.TemplateContext
+		checklistFunc   func(string) string
+	)
+
+	BeforeEach(func() {
+		templateContext = templating.TemplateContext{
+			Identifier: "my_page_id",
+			Title:      "My Page",
+		}
+		checklistFunc = templating.BuildChecklist(templateContext)
+	})
+
+	It("should return a wiki-checklist tag", func() {
+		result := checklistFunc("grocery_list")
+		Expect(result).To(ContainSubstring("<wiki-checklist"))
+		Expect(result).To(ContainSubstring("</wiki-checklist>"))
+	})
+
+	It("should include the list-name attribute matching the argument", func() {
+		result := checklistFunc("grocery_list")
+		Expect(result).To(ContainSubstring(`list-name="grocery_list"`))
+	})
+
+	It("should include the page attribute matching the page identifier", func() {
+		result := checklistFunc("grocery_list")
+		Expect(result).To(ContainSubstring(`page="my_page_id"`))
+	})
+
+	It("should use different list names correctly", func() {
+		result := checklistFunc("todo_list")
+		Expect(result).To(ContainSubstring(`list-name="todo_list"`))
+		Expect(result).To(ContainSubstring(`page="my_page_id"`))
+	})
+
+	It("should use a different page identifier correctly", func() {
+		otherContext := templating.TemplateContext{Identifier: "other_page"}
+		otherFunc := templating.BuildChecklist(otherContext)
+		result := otherFunc("my_list")
+		Expect(result).To(ContainSubstring(`page="other_page"`))
+	})
 })

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"net/url"
 	"sort"
 	"strings"
@@ -285,6 +286,12 @@ func BuildLinkToWithVisited(site wikipage.PageReader, currentPageTemplateContext
 	}
 }
 
+func BuildChecklist(templateContext TemplateContext) func(string) string {
+	return func(listName string) string {
+		return fmt.Sprintf(`<wiki-checklist list-name="%s" page="%s"></wiki-checklist>`, html.EscapeString(listName), html.EscapeString(templateContext.Identifier))
+	}
+}
+
 func BuildIsContainer(query wikipage.IQueryFrontmatterIndex) func(string) bool {
 	return func(identifier string) bool {
 		if identifier == "" {
@@ -367,6 +374,7 @@ func buildTemplateWithFunctions(ctx context.Context, templateString string, site
 		"FindBy":                  query.QueryExactMatch,
 		"FindByPrefix":            query.QueryPrefixMatch,
 		"FindByKeyExistence":      query.QueryKeyExistence,
+		"Checklist":               BuildChecklist(templateContext),
 	}
 
 	return template.New("page").Funcs(funcs).Parse(templateString)
