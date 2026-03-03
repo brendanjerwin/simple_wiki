@@ -286,9 +286,22 @@ func createMultiplexedHandler(
 		return nil, nil, fmt.Errorf("failed to create vanguard transcoder: %w", err)
 	}
 
-	mcpHandler, err := wikimcp.NewStreamableHTTPHandler(grpcAPIServer)
+	mcpHandler, err := wikimcp.NewStreamableHTTPHandler(grpcAPIServer, commit)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create MCP handler: %w", err)
+	}
+
+	// Wrap the MCP handler with Tailscale identity middleware so that MCP tool calls
+	// receive the same identity context as Gin routes and gRPC requests. Without this,
+	// IdentityFromContext would always return Anonymous for MCP callers.
+	// Note: the gRPC interceptors for logging and observability metrics still do not
+	// apply to in-process MCP tool calls (known limitation — MCP calls go directly to
+	// the service implementation, bypassing the gRPC transport layer).
+	if identityResolver != nil {
+		mcpHandler, err = tailscale.IdentityHTTPMiddlewareWithMetrics(identityResolver, logger, counters, mcpHandler)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create MCP identity middleware: %w", err)
+		}
 	}
 
 	outerMux := http.NewServeMux()

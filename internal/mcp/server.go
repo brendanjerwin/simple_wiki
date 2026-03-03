@@ -13,10 +13,18 @@ import (
 // NewStreamableHTTPHandler creates an MCP Streamable HTTP handler that exposes
 // all gRPC API services as MCP tools. The apiServer is called in-process with
 // no network hop.
-func NewStreamableHTTPHandler(apiServer *grpcapi.Server) (http.Handler, error) {
+//
+// Known limitation: MCP tool calls invoke the gRPC service methods directly on
+// apiServer, bypassing the gRPC interceptor chain. This means gRPC-level logging
+// (LoggingInterceptor) and gRPC observability metrics (GRPCInstrumentation) do not
+// capture MCP traffic. Tailscale identity is injected by the HTTP-level wrapper in
+// bootstrap (IdentityHTTPMiddlewareWithMetrics) so IdentityFromContext works correctly.
+//
+// The error return is reserved for future validation and is currently always nil.
+func NewStreamableHTTPHandler(apiServer *grpcapi.Server, commit string) (http.Handler, error) {
 	s := mcpserver.NewMCPServer(
 		"simple-wiki",
-		"1.0.0",
+		commit,
 		mcpserver.WithToolCapabilities(false),
 	)
 

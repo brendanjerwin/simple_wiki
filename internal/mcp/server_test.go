@@ -81,7 +81,7 @@ var _ = Describe("NewStreamableHTTPHandler", func() {
 	})
 
 	It("returns a non-nil handler without error", func() {
-		handler, err := wikimcp.NewStreamableHTTPHandler(apiServer)
+		handler, err := wikimcp.NewStreamableHTTPHandler(apiServer, "test-commit")
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(handler).NotTo(BeNil())
@@ -92,7 +92,7 @@ var _ = Describe("NewStreamableHTTPHandler", func() {
 
 		BeforeEach(func() {
 			var err error
-			handler, err = wikimcp.NewStreamableHTTPHandler(apiServer)
+			handler, err = wikimcp.NewStreamableHTTPHandler(apiServer, "test-commit")
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -122,7 +122,6 @@ var _ = Describe("NewStreamableHTTPHandler", func() {
 		})
 
 		When("receiving an MCP tools/list request", func() {
-			var sessionID string
 			var toolNames []string
 
 			BeforeEach(func() {
@@ -132,7 +131,7 @@ var _ = Describe("NewStreamableHTTPHandler", func() {
 				initReq.Header.Set("Content-Type", "application/json")
 				initResp := httptest.NewRecorder()
 				handler.ServeHTTP(initResp, initReq)
-				sessionID = initResp.Header().Get("Mcp-Session-Id")
+				sessionID := initResp.Header().Get("Mcp-Session-Id")
 
 				// Send tools/list
 				listBody := `{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}`
@@ -147,14 +146,14 @@ var _ = Describe("NewStreamableHTTPHandler", func() {
 				var result map[string]any
 				Expect(json.Unmarshal(listResp.Body.Bytes(), &result)).To(Succeed())
 				resultMap, ok := result["result"].(map[string]any)
-				Expect(ok).To(BeTrue())
+				Expect(ok).To(BeTrue(), "expected result to be a map")
 				toolList, ok := resultMap["tools"].([]any)
-				Expect(ok).To(BeTrue())
+				Expect(ok).To(BeTrue(), "expected tools to be a list")
 				for _, t := range toolList {
 					toolMap, ok := t.(map[string]any)
-					Expect(ok).To(BeTrue())
+					Expect(ok).To(BeTrue(), "expected tool to be a map")
 					name, ok := toolMap["name"].(string)
-					Expect(ok).To(BeTrue())
+					Expect(ok).To(BeTrue(), "expected tool name to be a string")
 					toolNames = append(toolNames, name)
 				}
 			})

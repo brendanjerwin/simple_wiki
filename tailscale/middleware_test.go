@@ -245,3 +245,140 @@ var _ = Describe("IdentityMiddleware", func() {
 		})
 	})
 })
+
+var _ = Describe("IdentityHTTPMiddlewareWithMetrics", func() {
+	Describe("constructor validation", func() {
+		When("logger is nil", func() {
+			It("should return an error", func() {
+				_, err := tailscale.IdentityHTTPMiddlewareWithMetrics(nil, nil, &mockMetricsRecorder{}, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+				Expect(err).To(MatchError("logger is required"))
+			})
+		})
+
+		When("metrics is nil", func() {
+			It("should return an error", func() {
+				_, err := tailscale.IdentityHTTPMiddlewareWithMetrics(nil, testLogger(), nil, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+				Expect(err).To(MatchError("metrics is required"))
+			})
+		})
+
+		When("next handler is nil", func() {
+			It("should return an error", func() {
+				_, err := tailscale.IdentityHTTPMiddlewareWithMetrics(nil, testLogger(), &mockMetricsRecorder{}, nil)
+				Expect(err).To(MatchError("next handler is required"))
+			})
+		})
+	})
+
+	Describe("extracting identity from headers", func() {
+		When("Tailscale-User-Login header is present from localhost", func() {
+			var (
+				capturedIdentity tailscale.IdentityValue
+				metrics          *mockMetricsRecorder
+				recorder         *httptest.ResponseRecorder
+			)
+
+			BeforeEach(func() {
+				metrics = &mockMetricsRecorder{}
+				recorder = httptest.NewRecorder()
+
+				handler, err := tailscale.IdentityHTTPMiddlewareWithMetrics(nil, testLogger(), metrics, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					capturedIdentity = tailscale.IdentityFromContext(r.Context())
+					w.WriteHeader(http.StatusOK)
+				}))
+				Expect(err).NotTo(HaveOccurred())
+
+				req, _ := http.NewRequest("GET", "/test", nil)
+				req.Header.Set("Tailscale-User-Login", "user@example.com")
+				req.Header.Set("Tailscale-User-Name", "Test User")
+				req.RemoteAddr = "127.0.0.1:12345"
+				handler.ServeHTTP(recorder, req)
+			})
+
+			It("should extract the identity from headers", func() {
+				Expect(capturedIdentity.IsAnonymous()).To(BeFalse())
+			})
+
+			It("should have the correct login name", func() {
+				Expect(capturedIdentity.LoginName()).To(Equal("user@example.com"))
+			})
+
+			It("should have the correct display name", func() {
+				Expect(capturedIdentity.DisplayName()).To(Equal("Test User"))
+			})
+
+			It("should record header extraction metric", func() {
+				Expect(metrics.extractionCalls).To(Equal(1))
+			})
+		})
+	})
+
+	Describe("falling back to WhoIs", func() {
+		When("no headers but WhoIs returns identity", func() {
+			var (
+				capturedIdentity tailscale.IdentityValue
+				metrics          *mockMetricsRecorder
+				recorder         *httptest.ResponseRecorder
+			)
+
+			BeforeEach(func() {
+				resolver := &mockIdentityResolver{
+					identity: tailscale.NewIdentity("whois@example.com", "WhoIs User", "my-laptop"),
+				}
+				metrics = &mockMetricsRecorder{}
+				recorder = httptest.NewRecorder()
+
+				handler, err := tailscale.IdentityHTTPMiddlewareWithMetrics(resolver, testLogger(), metrics, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					capturedIdentity = tailscale.IdentityFromContext(r.Context())
+					w.WriteHeader(http.StatusOK)
+				}))
+				Expect(err).NotTo(HaveOccurred())
+
+				req, _ := http.NewRequest("GET", "/test", nil)
+				handler.ServeHTTP(recorder, req)
+			})
+
+			It("should get identity from WhoIs", func() {
+				Expect(capturedIdentity.IsAnonymous()).To(BeFalse())
+			})
+
+			It("should have the correct login name from WhoIs", func() {
+				Expect(capturedIdentity.LoginName()).To(Equal("whois@example.com"))
+			})
+
+			It("should record success lookup metric", func() {
+				Expect(metrics.lookupCalls).To(Equal(1))
+			})
+		})
+	})
+
+	Describe("anonymous fallback", func() {
+		When("no headers and no resolver", func() {
+			var (
+				capturedIdentity tailscale.IdentityValue
+				recorder         *httptest.ResponseRecorder
+			)
+
+			BeforeEach(func() {
+				recorder = httptest.NewRecorder()
+
+				handler, err := tailscale.IdentityHTTPMiddlewareWithMetrics(nil, testLogger(), &mockMetricsRecorder{}, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					capturedIdentity = tailscale.IdentityFromContext(r.Context())
+					w.WriteHeader(http.StatusOK)
+				}))
+				Expect(err).NotTo(HaveOccurred())
+
+				req, _ := http.NewRequest("GET", "/test", nil)
+				handler.ServeHTTP(recorder, req)
+			})
+
+			It("should have anonymous identity in context", func() {
+				Expect(capturedIdentity.IsAnonymous()).To(BeTrue())
+			})
+
+			It("should still call the next handler", func() {
+				Expect(recorder.Code).To(Equal(http.StatusOK))
+			})
+		})
+	})
+})
