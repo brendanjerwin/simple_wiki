@@ -376,7 +376,7 @@ func (s *Site) handleUpload(c *gin.Context) {
 	}
 	defer func() { _ = file.Close() }()
 
-	fileInfo, err := s.FileStorer.Store(file, info.Filename)
+	fileInfo, err := s.FileStorer.Store(file)
 	if err != nil {
 		_ = c.AbortWithError(http.StatusInternalServerError, err)
 		s.Logger.Error(uploadFailureMessage, err.Error())

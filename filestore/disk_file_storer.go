@@ -26,24 +26,19 @@ func NewDiskFileStorer(dataDir string) (*DiskFileStorer, error) {
 }
 
 // Store computes the SHA256 hash of the content, saves it to disk, and returns the FileInfo.
-// The filename parameter is accepted for interface compatibility but not used for storage;
-// files are stored exclusively by their content hash.
-func (s *DiskFileStorer) Store(content io.Reader, _ string) (FileInfo, error) {
-	h := sha256.New()
+func (s *DiskFileStorer) Store(content io.Reader) (FileInfo, error) {
 	buf, err := io.ReadAll(content)
 	if err != nil {
 		return FileInfo{}, fmt.Errorf("failed to read content: %w", err)
 	}
+
+	h := sha256.New()
 	if _, err := h.Write(buf); err != nil {
 		return FileInfo{}, fmt.Errorf("failed to hash content: %w", err)
 	}
 
 	hash := "sha256-" + base32tools.EncodeBytesToBase32(h.Sum(nil))
 	filePath := filepath.Join(s.dataDir, hash+".upload")
-
-	if err := validateHashPath(hash); err != nil {
-		return FileInfo{}, err
-	}
 
 	if err := os.WriteFile(filePath, buf, 0600); err != nil {
 		return FileInfo{}, fmt.Errorf("failed to write file: %w", err)
@@ -85,10 +80,11 @@ func (s *DiskFileStorer) Delete(hash string) error {
 	return nil
 }
 
-// validateHashPath validates that the hash does not contain path traversal characters.
+// validateHashPath validates that the hash does not contain path traversal characters or null bytes.
 func validateHashPath(hash string) error {
-	if strings.Contains(hash, "/") || strings.Contains(hash, "..") || strings.Contains(hash, string(filepath.Separator)) {
-		return errors.New("invalid hash: contains path traversal characters")
+	if strings.Contains(hash, "/") || strings.Contains(hash, "..") ||
+		strings.Contains(hash, string(filepath.Separator)) || strings.ContainsRune(hash, 0) {
+		return fmt.Errorf("%w: contains invalid characters", ErrInvalidHash)
 	}
 	return nil
 }

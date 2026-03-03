@@ -2,6 +2,7 @@ package filestore_test
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/brendanjerwin/simple_wiki/filestore"
@@ -30,17 +31,32 @@ var _ = Describe("DiskFileStorer", func() {
 
 	Describe("NewDiskFileStorer", func() {
 		When("dataDir is empty", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = filestore.NewDiskFileStorer("")
+			})
+
 			It("should return an error", func() {
-				_, err := filestore.NewDiskFileStorer("")
-				Expect(err).To(HaveOccurred())
-				Expect(err.Error()).To(ContainSubstring("dataDir cannot be empty"))
+				Expect(err).To(MatchError("dataDir cannot be empty"))
 			})
 		})
 
 		When("dataDir is valid", func() {
-			It("should return a storer", func() {
-				s, err := filestore.NewDiskFileStorer(tmpDir)
+			var (
+				s   *filestore.DiskFileStorer
+				err error
+			)
+
+			BeforeEach(func() {
+				s, err = filestore.NewDiskFileStorer(tmpDir)
+			})
+
+			It("should not error", func() {
 				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a storer", func() {
 				Expect(s).NotTo(BeNil())
 			})
 		})
@@ -48,30 +64,48 @@ var _ = Describe("DiskFileStorer", func() {
 
 	Describe("Store", func() {
 		When("content is provided", func() {
-			It("should store the file and return FileInfo with hash and size", func() {
-				content := strings.NewReader("hello world")
-				info, err := storer.Store(content, "hello.txt")
+			var (
+				info filestore.FileInfo
+				err  error
+			)
+
+			BeforeEach(func() {
+				info, err = storer.Store(strings.NewReader("hello world"))
+			})
+
+			It("should not error", func() {
 				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a hash with sha256 prefix", func() {
 				Expect(info.Hash).To(HavePrefix("sha256-"))
+			})
+
+			It("should return the correct size", func() {
 				Expect(info.SizeBytes).To(Equal(int64(11)))
 			})
 
 			It("should create a file on disk", func() {
-				content := strings.NewReader("test content")
-				info, err := storer.Store(content, "test.txt")
-				Expect(err).NotTo(HaveOccurred())
-
-				_, statErr := os.Stat(tmpDir + "/" + info.Hash + ".upload")
+				_, statErr := os.Stat(filepath.Join(tmpDir, info.Hash+".upload"))
 				Expect(statErr).NotTo(HaveOccurred())
 			})
+		})
 
-			It("should produce the same hash for the same content", func() {
-				info1, err := storer.Store(strings.NewReader("same content"), "file1.txt")
+		When("the same content is stored twice", func() {
+			var (
+				info1 filestore.FileInfo
+				info2 filestore.FileInfo
+			)
+
+			BeforeEach(func() {
+				var err error
+				info1, err = storer.Store(strings.NewReader("same content"))
 				Expect(err).NotTo(HaveOccurred())
-
-				info2, err := storer.Store(strings.NewReader("same content"), "file2.txt")
+				info2, err = storer.Store(strings.NewReader("same content"))
 				Expect(err).NotTo(HaveOccurred())
+			})
 
+			It("should produce the same hash", func() {
 				Expect(info1.Hash).To(Equal(info2.Hash))
 			})
 		})
@@ -79,59 +113,128 @@ var _ = Describe("DiskFileStorer", func() {
 
 	Describe("GetInfo", func() {
 		When("file exists", func() {
-			It("should return FileInfo with correct hash and size", func() {
-				content := strings.NewReader("hello world")
-				stored, err := storer.Store(content, "hello.txt")
-				Expect(err).NotTo(HaveOccurred())
+			var (
+				stored filestore.FileInfo
+				info   filestore.FileInfo
+				err    error
+			)
 
-				info, err := storer.GetInfo(stored.Hash)
+			BeforeEach(func() {
+				var storeErr error
+				stored, storeErr = storer.Store(strings.NewReader("hello world"))
+				Expect(storeErr).NotTo(HaveOccurred())
+
+				info, err = storer.GetInfo(stored.Hash)
+			})
+
+			It("should not error", func() {
 				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return the correct hash", func() {
 				Expect(info.Hash).To(Equal(stored.Hash))
+			})
+
+			It("should return the correct size", func() {
 				Expect(info.SizeBytes).To(Equal(stored.SizeBytes))
 			})
 		})
 
 		When("file does not exist", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = storer.GetInfo("sha256-NONEXISTENT")
+			})
+
 			It("should return os.ErrNotExist", func() {
-				_, err := storer.GetInfo("sha256-NONEXISTENT")
 				Expect(err).To(MatchError(os.ErrNotExist))
 			})
 		})
 
 		When("hash contains path traversal", func() {
-			It("should return an error", func() {
-				_, err := storer.GetInfo("../../../etc/passwd")
-				Expect(err).To(HaveOccurred())
+			var err error
+
+			BeforeEach(func() {
+				_, err = storer.GetInfo("../../../etc/passwd")
+			})
+
+			It("should return ErrInvalidHash", func() {
+				Expect(err).To(MatchError(ContainSubstring("invalid hash")))
+			})
+		})
+
+		When("hash contains null bytes", func() {
+			var err error
+
+			BeforeEach(func() {
+				_, err = storer.GetInfo("sha256-evil\x00file")
+			})
+
+			It("should return ErrInvalidHash", func() {
+				Expect(err).To(MatchError(ContainSubstring("invalid hash")))
 			})
 		})
 	})
 
 	Describe("Delete", func() {
 		When("file exists", func() {
-			It("should delete the file", func() {
-				content := strings.NewReader("to be deleted")
-				stored, err := storer.Store(content, "delete-me.txt")
-				Expect(err).NotTo(HaveOccurred())
+			var (
+				stored  filestore.FileInfo
+				deleteErr error
+			)
 
-				err = storer.Delete(stored.Hash)
-				Expect(err).NotTo(HaveOccurred())
+			BeforeEach(func() {
+				var storeErr error
+				stored, storeErr = storer.Store(strings.NewReader("to be deleted"))
+				Expect(storeErr).NotTo(HaveOccurred())
 
-				_, statErr := os.Stat(tmpDir + "/" + stored.Hash + ".upload")
+				deleteErr = storer.Delete(stored.Hash)
+			})
+
+			It("should not error", func() {
+				Expect(deleteErr).NotTo(HaveOccurred())
+			})
+
+			It("should remove the file from disk", func() {
+				_, statErr := os.Stat(filepath.Join(tmpDir, stored.Hash+".upload"))
 				Expect(os.IsNotExist(statErr)).To(BeTrue())
 			})
 		})
 
 		When("file does not exist", func() {
+			var err error
+
+			BeforeEach(func() {
+				err = storer.Delete("sha256-NONEXISTENT")
+			})
+
 			It("should return os.ErrNotExist", func() {
-				err := storer.Delete("sha256-NONEXISTENT")
 				Expect(err).To(MatchError(os.ErrNotExist))
 			})
 		})
 
 		When("hash contains path traversal", func() {
-			It("should return an error", func() {
-				err := storer.Delete("../../../etc/passwd")
-				Expect(err).To(HaveOccurred())
+			var err error
+
+			BeforeEach(func() {
+				err = storer.Delete("../../../etc/passwd")
+			})
+
+			It("should return ErrInvalidHash", func() {
+				Expect(err).To(MatchError(ContainSubstring("invalid hash")))
+			})
+		})
+
+		When("hash contains null bytes", func() {
+			var err error
+
+			BeforeEach(func() {
+				err = storer.Delete("sha256-evil\x00file")
+			})
+
+			It("should return ErrInvalidHash", func() {
+				Expect(err).To(MatchError(ContainSubstring("invalid hash")))
 			})
 		})
 	})

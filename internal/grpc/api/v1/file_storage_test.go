@@ -3,6 +3,7 @@ package v1_test
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"time"
@@ -18,13 +19,13 @@ import (
 
 // mockFileStorer is a test double for filestore.FileStorer.
 type mockFileStorer struct {
-	StoreFunc   func(content io.Reader, filename string) (filestore.FileInfo, error)
+	StoreFunc   func(content io.Reader) (filestore.FileInfo, error)
 	GetInfoFunc func(hash string) (filestore.FileInfo, error)
 	DeleteFunc  func(hash string) error
 }
 
-func (m *mockFileStorer) Store(content io.Reader, filename string) (filestore.FileInfo, error) {
-	return m.StoreFunc(content, filename)
+func (m *mockFileStorer) Store(content io.Reader) (filestore.FileInfo, error) {
+	return m.StoreFunc(content)
 }
 
 func (m *mockFileStorer) GetInfo(hash string) (filestore.FileInfo, error) {
@@ -74,7 +75,7 @@ var _ = Describe("FileStorageService", func() {
 
 		BeforeEach(func() {
 			mockStorer = &mockFileStorer{
-				StoreFunc: func(content io.Reader, filename string) (filestore.FileInfo, error) {
+				StoreFunc: func(_ io.Reader) (filestore.FileInfo, error) {
 					return filestore.FileInfo{Hash: "sha256-TESTHASH", SizeBytes: 11}, nil
 				},
 			}
@@ -107,10 +108,19 @@ var _ = Describe("FileStorageService", func() {
 				server = mustNewServerWithFileStorer(mockStorer, true)
 			})
 
-			It("should return the hash and URL", func() {
+			It("should not error", func() {
 				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return the hash", func() {
 				Expect(resp.Hash).To(Equal("sha256-TESTHASH"))
+			})
+
+			It("should return a URL containing the hash", func() {
 				Expect(resp.UploadUrl).To(ContainSubstring("sha256-TESTHASH"))
+			})
+
+			It("should return a URL containing the filename", func() {
 				Expect(resp.UploadUrl).To(ContainSubstring("test.txt"))
 			})
 
@@ -131,6 +141,18 @@ var _ = Describe("FileStorageService", func() {
 
 				It("should return InvalidArgument error", func() {
 					Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "filename is required"))
+				})
+			})
+
+			When("the storer returns an error", func() {
+				BeforeEach(func() {
+					mockStorer.StoreFunc = func(_ io.Reader) (filestore.FileInfo, error) {
+						return filestore.FileInfo{}, errors.New("disk full")
+					}
+				})
+
+				It("should return an Internal error", func() {
+					Expect(err).To(HaveGrpcStatus(codes.Internal, "failed to store file: disk full"))
 				})
 			})
 		})
@@ -154,7 +176,6 @@ var _ = Describe("FileStorageService", func() {
 					return filestore.FileInfo{}, os.ErrNotExist
 				},
 			}
-			server = mustNewServerWithFileStorer(mockStorer, true)
 			req = &apiv1.GetFileInfoRequest{Hash: "sha256-EXISTS"}
 		})
 
@@ -162,31 +183,82 @@ var _ = Describe("FileStorageService", func() {
 			resp, err = server.GetFileInfo(ctx, req)
 		})
 
-		When("file exists", func() {
-			It("should return file info", func() {
-				Expect(err).NotTo(HaveOccurred())
-				Expect(resp.Hash).To(Equal("sha256-EXISTS"))
-				Expect(resp.SizeBytes).To(Equal(int64(42)))
+		When("file uploads are disabled", func() {
+			BeforeEach(func() {
+				server = mustNewServerWithFileStorer(mockStorer, false)
+			})
+
+			It("should return FailedPrecondition error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.FailedPrecondition, "file uploads are disabled on this server"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
 			})
 		})
 
-		When("file does not exist", func() {
+		When("file uploads are enabled", func() {
 			BeforeEach(func() {
-				req.Hash = "sha256-MISSING"
+				server = mustNewServerWithFileStorer(mockStorer, true)
 			})
 
-			It("should return NotFound error", func() {
-				Expect(err).To(HaveGrpcStatus(codes.NotFound, "file not found: sha256-MISSING"))
-			})
-		})
+			When("file exists", func() {
+				It("should not error", func() {
+					Expect(err).NotTo(HaveOccurred())
+				})
 
-		When("hash is empty", func() {
-			BeforeEach(func() {
-				req.Hash = ""
+				It("should return the correct hash", func() {
+					Expect(resp.Hash).To(Equal("sha256-EXISTS"))
+				})
+
+				It("should return the correct size", func() {
+					Expect(resp.SizeBytes).To(Equal(int64(42)))
+				})
 			})
 
-			It("should return InvalidArgument error", func() {
-				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "hash is required"))
+			When("file does not exist", func() {
+				BeforeEach(func() {
+					req.Hash = "sha256-MISSING"
+				})
+
+				It("should return NotFound error", func() {
+					Expect(err).To(HaveGrpcStatus(codes.NotFound, "file not found: sha256-MISSING"))
+				})
+			})
+
+			When("hash is empty", func() {
+				BeforeEach(func() {
+					req.Hash = ""
+				})
+
+				It("should return InvalidArgument error", func() {
+					Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "hash is required"))
+				})
+			})
+
+			When("hash is invalid", func() {
+				BeforeEach(func() {
+					mockStorer.GetInfoFunc = func(_ string) (filestore.FileInfo, error) {
+						return filestore.FileInfo{}, filestore.ErrInvalidHash
+					}
+					req.Hash = "../../../etc/passwd"
+				})
+
+				It("should return InvalidArgument error", func() {
+					Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "invalid hash"))
+				})
+			})
+
+			When("the storer returns an internal error", func() {
+				BeforeEach(func() {
+					mockStorer.GetInfoFunc = func(_ string) (filestore.FileInfo, error) {
+						return filestore.FileInfo{}, errors.New("disk read error")
+					}
+				})
+
+				It("should return an Internal error", func() {
+					Expect(err).To(HaveGrpcStatus(codes.Internal, "failed to get file info: disk read error"))
+				})
 			})
 		})
 	})
@@ -209,7 +281,6 @@ var _ = Describe("FileStorageService", func() {
 					return os.ErrNotExist
 				},
 			}
-			server = mustNewServerWithFileStorer(mockStorer, true)
 			req = &apiv1.DeleteFileRequest{Hash: "sha256-EXISTS"}
 		})
 
@@ -217,30 +288,78 @@ var _ = Describe("FileStorageService", func() {
 			resp, err = server.DeleteFile(ctx, req)
 		})
 
-		When("file exists", func() {
-			It("should return success", func() {
-				Expect(err).NotTo(HaveOccurred())
-				Expect(resp.Success).To(BeTrue())
+		When("file uploads are disabled", func() {
+			BeforeEach(func() {
+				server = mustNewServerWithFileStorer(mockStorer, false)
+			})
+
+			It("should return FailedPrecondition error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.FailedPrecondition, "file uploads are disabled on this server"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
 			})
 		})
 
-		When("file does not exist", func() {
+		When("file uploads are enabled", func() {
 			BeforeEach(func() {
-				req.Hash = "sha256-MISSING"
+				server = mustNewServerWithFileStorer(mockStorer, true)
 			})
 
-			It("should return NotFound error", func() {
-				Expect(err).To(HaveGrpcStatus(codes.NotFound, "file not found: sha256-MISSING"))
-			})
-		})
+			When("file exists", func() {
+				It("should not error", func() {
+					Expect(err).NotTo(HaveOccurred())
+				})
 
-		When("hash is empty", func() {
-			BeforeEach(func() {
-				req.Hash = ""
+				It("should return success", func() {
+					Expect(resp.Success).To(BeTrue())
+				})
 			})
 
-			It("should return InvalidArgument error", func() {
-				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "hash is required"))
+			When("file does not exist", func() {
+				BeforeEach(func() {
+					req.Hash = "sha256-MISSING"
+				})
+
+				It("should return NotFound error", func() {
+					Expect(err).To(HaveGrpcStatus(codes.NotFound, "file not found: sha256-MISSING"))
+				})
+			})
+
+			When("hash is empty", func() {
+				BeforeEach(func() {
+					req.Hash = ""
+				})
+
+				It("should return InvalidArgument error", func() {
+					Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "hash is required"))
+				})
+			})
+
+			When("hash is invalid", func() {
+				BeforeEach(func() {
+					mockStorer.DeleteFunc = func(_ string) error {
+						return filestore.ErrInvalidHash
+					}
+					req.Hash = "../../../etc/passwd"
+				})
+
+				It("should return InvalidArgument error", func() {
+					Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "invalid hash"))
+				})
+			})
+
+			When("the storer returns an internal error", func() {
+				BeforeEach(func() {
+					mockStorer.DeleteFunc = func(_ string) error {
+						return errors.New("disk write error")
+					}
+				})
+
+				It("should return an Internal error", func() {
+					Expect(err).To(HaveGrpcStatus(codes.Internal, "failed to delete file: disk write error"))
+				})
 			})
 		})
 	})
