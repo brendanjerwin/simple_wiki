@@ -3603,6 +3603,246 @@ var _ = Describe("Server", func() {
 	})
 })
 
+var _ = Describe("Checklist gRPC round-trip", func() {
+	var (
+		server                *v1.Server
+		ctx                   context.Context
+		mockPageReaderMutator *MockPageReaderMutator
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		mockPageReaderMutator = &MockPageReaderMutator{}
+		server = mustNewServer(mockPageReaderMutator, nil, nil)
+	})
+
+	Describe("writing checklist data via MergeFrontmatter then reading via GetFrontmatter", func() {
+		var (
+			getResp *apiv1.GetFrontmatterResponse
+			getErr  error
+		)
+
+		When("a checklist with items and group_order is written", func() {
+			var (
+				shoppingChecklist map[string]any
+				items             []any
+				groupOrder        []any
+			)
+
+			BeforeEach(func() {
+				checklistFm := map[string]any{
+					"checklists": map[string]any{
+						"shopping": map[string]any{
+							"items": []any{
+								map[string]any{"text": "Buy milk", "checked": false, "tags": []any{"groceries"}},
+								map[string]any{"text": "Buy eggs", "checked": true, "tags": []any{"groceries"}},
+							},
+							"group_order": []any{"groceries", "other"},
+						},
+					},
+				}
+				fmPb, err := structpb.NewStruct(checklistFm)
+				Expect(err).NotTo(HaveOccurred())
+
+				_, mergeErr := server.MergeFrontmatter(ctx, &apiv1.MergeFrontmatterRequest{
+					Page:        "test-page",
+					Frontmatter: fmPb,
+				})
+				Expect(mergeErr).NotTo(HaveOccurred())
+
+				getResp, getErr = server.GetFrontmatter(ctx, &apiv1.GetFrontmatterRequest{
+					Page: "test-page",
+				})
+				if getErr == nil && getResp != nil {
+					fm := getResp.Frontmatter.AsMap()
+					checklists, _ := fm["checklists"].(map[string]any)
+					shoppingChecklist, _ = checklists["shopping"].(map[string]any)
+					items, _ = shoppingChecklist["items"].([]any)
+					groupOrder, _ = shoppingChecklist["group_order"].([]any)
+				}
+			})
+
+			It("should not error on GetFrontmatter", func() {
+				Expect(getErr).NotTo(HaveOccurred())
+			})
+
+			It("should return both checklist items intact", func() {
+				Expect(items).To(HaveLen(2))
+			})
+
+			It("should preserve item text and checked state", func() {
+				first := items[0].(map[string]any)
+				Expect(first["text"]).To(Equal("Buy milk"))
+				Expect(first["checked"]).To(BeFalse())
+				second := items[1].(map[string]any)
+				Expect(second["checked"]).To(BeTrue())
+			})
+
+			It("should preserve item tags", func() {
+				first := items[0].(map[string]any)
+				tags := first["tags"].([]any)
+				Expect(tags).To(ConsistOf("groceries"))
+			})
+
+			It("should preserve group_order as an array of strings", func() {
+				Expect(groupOrder).To(Equal([]any{"groceries", "other"}))
+			})
+		})
+
+		When("performing a read-modify-write to update one of multiple checklists", func() {
+			var (
+				finalChecklists map[string]any
+			)
+
+			BeforeEach(func() {
+				// Initial state: page with two checklists
+				mockPageReaderMutator.Frontmatter = map[string]any{
+					"checklists": map[string]any{
+						"shopping": map[string]any{
+							"items":       []any{map[string]any{"text": "Buy milk", "checked": false, "tags": []any{"groceries"}}},
+							"group_order": []any{"groceries"},
+						},
+						"tasks": map[string]any{
+							"items":       []any{map[string]any{"text": "Call dentist", "checked": false, "tags": []any{"health"}}},
+							"group_order": []any{"health"},
+						},
+					},
+				}
+
+				// Step 1: client reads current frontmatter
+				readResp, err := server.GetFrontmatter(ctx, &apiv1.GetFrontmatterRequest{Page: "test-page"})
+				Expect(err).NotTo(HaveOccurred())
+
+				// Step 2: client modifies only the shopping checklist, keeping both in the payload
+				fm := readResp.Frontmatter.AsMap()
+				checklists := fm["checklists"].(map[string]any)
+				shopping := checklists["shopping"].(map[string]any)
+				items := shopping["items"].([]any)
+				firstItem := items[0].(map[string]any)
+				firstItem["checked"] = true
+				shopping["items"] = []any{firstItem}
+				checklists["shopping"] = shopping
+				fm["checklists"] = checklists
+
+				// Step 3: client writes back the full checklists map
+				updatedFmPb, err := structpb.NewStruct(fm)
+				Expect(err).NotTo(HaveOccurred())
+				_, mergeErr := server.MergeFrontmatter(ctx, &apiv1.MergeFrontmatterRequest{
+					Page:        "test-page",
+					Frontmatter: updatedFmPb,
+				})
+				Expect(mergeErr).NotTo(HaveOccurred())
+
+				// Step 4: read back the final state
+				getResp, getErr = server.GetFrontmatter(ctx, &apiv1.GetFrontmatterRequest{Page: "test-page"})
+				if getErr == nil && getResp != nil {
+					finalFm := getResp.Frontmatter.AsMap()
+					finalChecklists, _ = finalFm["checklists"].(map[string]any)
+				}
+			})
+
+			It("should not error on final GetFrontmatter", func() {
+				Expect(getErr).NotTo(HaveOccurred())
+			})
+
+			It("should reflect the update to the modified checklist", func() {
+				shopping := finalChecklists["shopping"].(map[string]any)
+				items := shopping["items"].([]any)
+				Expect(items[0].(map[string]any)["checked"]).To(BeTrue())
+			})
+
+			It("should preserve the untouched checklist", func() {
+				tasks := finalChecklists["tasks"].(map[string]any)
+				items := tasks["items"].([]any)
+				Expect(items).To(HaveLen(1))
+				Expect(items[0].(map[string]any)["text"]).To(Equal("Call dentist"))
+				Expect(items[0].(map[string]any)["checked"]).To(BeFalse())
+			})
+		})
+	})
+
+	Describe("AI assistant workflow", func() {
+		var (
+			getResp    *apiv1.GetFrontmatterResponse
+			getErr     error
+			finalFm    map[string]any
+			finalItems []any
+			groupOrder []any
+		)
+
+		When("GetFrontmatter then modify items and group_order then MergeFrontmatter then GetFrontmatter", func() {
+			BeforeEach(func() {
+				// Initial state: page with a checklist and a title
+				mockPageReaderMutator.Frontmatter = map[string]any{
+					"title": "My Page",
+					"checklists": map[string]any{
+						"todo": map[string]any{
+							"items":       []any{map[string]any{"text": "Write tests", "checked": false, "tags": []any{"coding"}}},
+							"group_order": []any{"coding"},
+						},
+					},
+				}
+
+				// AI reads current state
+				currentResp, err := server.GetFrontmatter(ctx, &apiv1.GetFrontmatterRequest{Page: "wiki-page"})
+				Expect(err).NotTo(HaveOccurred())
+
+				// AI modifies: marks first item done, adds a new item, updates group_order
+				fm := currentResp.Frontmatter.AsMap()
+				checklists := fm["checklists"].(map[string]any)
+				todo := checklists["todo"].(map[string]any)
+				todo["items"] = []any{
+					map[string]any{"text": "Write tests", "checked": true, "tags": []any{"coding"}},
+					map[string]any{"text": "Deploy", "checked": false, "tags": []any{"ops"}},
+				}
+				todo["group_order"] = []any{"coding", "ops"}
+				checklists["todo"] = todo
+				fm["checklists"] = checklists
+
+				// AI writes back
+				updatedFmPb, err := structpb.NewStruct(fm)
+				Expect(err).NotTo(HaveOccurred())
+				_, mergeErr := server.MergeFrontmatter(ctx, &apiv1.MergeFrontmatterRequest{
+					Page:        "wiki-page",
+					Frontmatter: updatedFmPb,
+				})
+				Expect(mergeErr).NotTo(HaveOccurred())
+
+				// Confirm final state
+				getResp, getErr = server.GetFrontmatter(ctx, &apiv1.GetFrontmatterRequest{Page: "wiki-page"})
+				if getErr == nil && getResp != nil {
+					finalFm = getResp.Frontmatter.AsMap()
+					checklists, _ := finalFm["checklists"].(map[string]any)
+					todo, _ := checklists["todo"].(map[string]any)
+					finalItems, _ = todo["items"].([]any)
+					groupOrder, _ = todo["group_order"].([]any)
+				}
+			})
+
+			It("should not error on final read", func() {
+				Expect(getErr).NotTo(HaveOccurred())
+			})
+
+			It("should reflect the first item as checked", func() {
+				Expect(finalItems[0].(map[string]any)["checked"]).To(BeTrue())
+			})
+
+			It("should contain the new item", func() {
+				Expect(finalItems).To(HaveLen(2))
+				Expect(finalItems[1].(map[string]any)["text"]).To(Equal("Deploy"))
+			})
+
+			It("should preserve the updated group_order", func() {
+				Expect(groupOrder).To(Equal([]any{"coding", "ops"}))
+			})
+
+			It("should preserve non-checklist frontmatter", func() {
+				Expect(finalFm["title"]).To(Equal("My Page"))
+			})
+		})
+	})
+})
+
 // MockMarkdownRenderer is a mock implementation of wikipage.IRenderMarkdownToHTML
 type MockMarkdownRenderer struct {
 	Result []byte
