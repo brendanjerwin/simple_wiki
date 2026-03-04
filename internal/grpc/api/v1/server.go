@@ -976,8 +976,8 @@ func (s *Server) UpdatePageContent(_ context.Context, req *apiv1.UpdatePageConte
 		return nil, status.Errorf(codes.Internal, "failed to read current content: %v", err)
 	}
 
-	// NOTE: There is a narrow TOCTOU race between this check and the subsequent
-	// WriteMarkdown call. True atomicity would require file-level locking.
+	// NOTE: There is a narrow TOCTOU race between this hash check and the subsequent
+	// WriteMarkdown call. True atomicity would require file-level locking at the storage layer.
 	if req.ExpectedVersionHash != nil {
 		currentHash := computeContentHash(originalMarkdown)
 		if len(currentHash) != len(*req.ExpectedVersionHash) ||

@@ -1519,8 +1519,11 @@ var _ = Describe("Server", func() {
 				Expect(resp.VersionHash).To(Equal(hex.EncodeToString(h[:])))
 			})
 
-			It("should write the new markdown to the page", func() {
+			It("should write to the correct page", func() {
 				Expect(mockPageReaderMutator.WrittenIdentifier).To(Equal(wikipage.PageIdentifier("test-page")))
+			})
+
+			It("should write the new markdown content", func() {
 				Expect(mockPageReaderMutator.WrittenMarkdown).To(Equal(wikipage.Markdown("# New Content")))
 			})
 		})
@@ -1754,8 +1757,11 @@ var _ = Describe("Server", func() {
 				Expect(resp.Error).To(BeEmpty())
 			})
 
-			It("should write empty markdown to the page", func() {
+			It("should write to the correct page", func() {
 				Expect(mockPageReaderMutator.WrittenIdentifier).To(Equal(wikipage.PageIdentifier("test-page")))
+			})
+
+			It("should write empty markdown content", func() {
 				Expect(mockPageReaderMutator.WrittenMarkdown).To(Equal(wikipage.Markdown("")))
 			})
 		})
