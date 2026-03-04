@@ -15,6 +15,10 @@ service PageManagementService {
   rpc UpdateWholePage(UpdateWholePageRequest) returns (UpdateWholePageResponse);
   rpc DeletePage(DeletePageRequest) returns (DeletePageResponse);
 
+  // ClearPageContent explicitly clears the markdown content of a page, preserving its frontmatter.
+  // This is a destructive operation that requires confirm_clear = true to prevent accidental data loss.
+  rpc ClearPageContent(ClearPageContentRequest) returns (ClearPageContentResponse);
+
   // GenerateIdentifier converts text to a wiki page identifier format.
   // Used by UI to auto-generate identifiers from titles and check availability.
   rpc GenerateIdentifier(GenerateIdentifierRequest) returns (GenerateIdentifierResponse);
@@ -53,6 +57,9 @@ message ReadPageResponse {
   // ~47% token savings compared to HTML while including all template-expanded content
   // like inventory lists from ShowInventoryContentsOf.
   string rendered_content_markdown = 4;
+  // version_hash is a SHA256 hash of the content_markdown, used for optimistic concurrency control.
+  // Pass this value as expected_version_hash in UpdatePageContentRequest to detect concurrent modifications.
+  string version_hash = 5;
 }
 
 // Render Page
@@ -80,9 +87,28 @@ message UpdatePageResponse {
 message UpdatePageContentRequest {
   string page_name = 1;
   string new_content_markdown = 2;
+  // expected_version_hash is the version_hash from a previous ReadPage call.
+  // If provided, the write will fail with ABORTED if the content has changed since the read.
+  // Omit to skip version checking (not recommended for concurrent access scenarios).
+  optional string expected_version_hash = 3;
 }
 
 message UpdatePageContentResponse {
+  bool success = 1;
+  string error = 2;
+  // version_hash is the SHA256 hash of the newly written content.
+  // Use this as expected_version_hash in the next UpdatePageContentRequest.
+  string version_hash = 3;
+}
+
+// Clear Page Content
+message ClearPageContentRequest {
+  string page_name = 1;
+  // confirm_clear must be true to prevent accidental data loss.
+  bool confirm_clear = 2;
+}
+
+message ClearPageContentResponse {
   bool success = 1;
   string error = 2;
 }

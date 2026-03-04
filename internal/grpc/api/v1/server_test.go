@@ -3,6 +3,8 @@ package v1_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"maps"
@@ -129,6 +131,7 @@ type MockPageReaderMutator struct {
 	ErrByID            map[string]error          // For returning different errors per identifier
 	Markdown           wikipage.Markdown
 	Err                error
+	MarkdownReadErr    error // Separate error for ReadMarkdown; takes precedence over Err, allowing ReadFrontMatter to succeed while ReadMarkdown fails
 	WrittenFrontmatter wikipage.FrontMatter
 	WrittenMarkdown    wikipage.Markdown
 	WrittenIdentifier  wikipage.PageIdentifier
@@ -138,6 +141,14 @@ type MockPageReaderMutator struct {
 	DeleteErr          error
 	// WrittenFrontmatterByID tracks all writes per identifier for multi-page scenarios
 	WrittenFrontmatterByID map[string]map[string]any
+	// PostWriteMarkdownReadErr is returned by ReadMarkdown after a successful WriteMarkdown call.
+	// Use this to simulate a read-back failure for invariant check testing.
+	PostWriteMarkdownReadErr error
+	// PostWriteMarkdown, when non-nil, overrides what ReadMarkdown returns after a successful
+	// WriteMarkdown. Use this to simulate an invariant violation (e.g. blank content after write).
+	PostWriteMarkdown *wikipage.Markdown
+	// markdownWritten tracks whether WriteMarkdown has been called successfully.
+	markdownWritten bool
 }
 
 func (m *MockPageReaderMutator) ReadFrontMatter(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
@@ -188,10 +199,25 @@ func (m *MockPageReaderMutator) WriteMarkdown(identifier wikipage.PageIdentifier
 	if m.MarkdownWriteErr != nil {
 		return m.MarkdownWriteErr
 	}
+	// Update Markdown to reflect what was written so subsequent ReadMarkdown calls
+	// return the current state of the page, enabling invariant check testing.
+	m.Markdown = md
+	m.markdownWritten = true
 	return nil
 }
 
 func (m *MockPageReaderMutator) ReadMarkdown(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
+	if m.MarkdownReadErr != nil {
+		return "", "", m.MarkdownReadErr
+	}
+	if m.markdownWritten {
+		if m.PostWriteMarkdownReadErr != nil {
+			return "", "", m.PostWriteMarkdownReadErr
+		}
+		if m.PostWriteMarkdown != nil {
+			return identifier, *m.PostWriteMarkdown, nil
+		}
+	}
 	if m.Err != nil {
 		return "", "", m.Err
 	}
@@ -1422,8 +1448,11 @@ var _ = Describe("Server", func() {
 				req.PageName = ""
 			})
 
-			It("should return an invalid argument error and no response", func() {
+			It("should return an invalid argument error", func() {
 				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "page_name is required"))
+			})
+
+			It("should not return a response", func() {
 				Expect(resp).To(BeNil())
 			})
 		})
@@ -1433,19 +1462,25 @@ var _ = Describe("Server", func() {
 				mockPageReaderMutator.Err = os.ErrNotExist
 			})
 
-			It("should return a not found error and no response", func() {
+			It("should return a not found error", func() {
 				Expect(err).To(HaveGrpcStatus(codes.NotFound, "page not found: test-page"))
+			})
+
+			It("should not return a response", func() {
 				Expect(resp).To(BeNil())
 			})
 		})
 
-		When("reading frontmatter fails with a generic error", func() {
+		When("reading current content fails with a generic error", func() {
 			BeforeEach(func() {
 				mockPageReaderMutator.Err = errors.New("read error")
 			})
 
-			It("should return an internal error and no response", func() {
-				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to read frontmatter"))
+			It("should return an internal error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to read current content"))
+			})
+
+			It("should not return a response", func() {
 				Expect(resp).To(BeNil())
 			})
 		})
@@ -1455,8 +1490,11 @@ var _ = Describe("Server", func() {
 				mockPageReaderMutator.MarkdownWriteErr = errors.New("disk full")
 			})
 
-			It("should return an internal error and no response", func() {
+			It("should return an internal error", func() {
 				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to write markdown"))
+			})
+
+			It("should not return a response", func() {
 				Expect(resp).To(BeNil())
 			})
 		})
@@ -1466,15 +1504,267 @@ var _ = Describe("Server", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("should return a success response", func() {
+			It("should return a response", func() {
 				Expect(resp).NotTo(BeNil())
+			})
+
+			It("should indicate success", func() {
 				Expect(resp.Success).To(BeTrue())
+			})
+
+			It("should not return an error message", func() {
 				Expect(resp.Error).To(BeEmpty())
 			})
 
-			It("should write the new markdown to the page", func() {
+			It("should return the version_hash of the stored content", func() {
+				h := sha256.Sum256([]byte("# New Content"))
+				Expect(resp.VersionHash).To(Equal(hex.EncodeToString(h[:])))
+			})
+
+			It("should write to the correct page", func() {
 				Expect(mockPageReaderMutator.WrittenIdentifier).To(Equal(wikipage.PageIdentifier("test-page")))
+			})
+
+			It("should write the new markdown content", func() {
 				Expect(mockPageReaderMutator.WrittenMarkdown).To(Equal(wikipage.Markdown("# New Content")))
+			})
+		})
+
+		When("new_content_markdown is empty", func() {
+			BeforeEach(func() {
+				req.NewContentMarkdown = ""
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "new_content_markdown cannot be empty"))
+			})
+
+			It("should not return a response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("new_content_markdown is only whitespace", func() {
+			BeforeEach(func() {
+				req.NewContentMarkdown = "   \n\t  "
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "new_content_markdown cannot be empty"))
+			})
+
+			It("should not return a response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("expected_version_hash matches current content hash", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Markdown = "# Old Content"
+				// SHA256 of "# Old Content"
+				expectedHash := fmt.Sprintf("%x", sha256.Sum256([]byte("# Old Content")))
+				req.ExpectedVersionHash = &expectedHash
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a response", func() {
+				Expect(resp).NotTo(BeNil())
+			})
+
+			It("should indicate success", func() {
+				Expect(resp.Success).To(BeTrue())
+			})
+		})
+
+		When("expected_version_hash does not match current content hash", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Markdown = "# Current Content"
+				staleHash := "stale-hash-value"
+				req.ExpectedVersionHash = &staleHash
+			})
+
+			It("should return an aborted error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Aborted, "content version mismatch"))
+			})
+
+			It("should not return a response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("reading current content fails before write", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.MarkdownReadErr = errors.New("disk read error")
+			})
+
+			It("should return an internal error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to read current content"))
+			})
+
+			It("should not return a response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("the post-write read-back fails (invariant check)", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Markdown = "# Original Content"
+				mockPageReaderMutator.PostWriteMarkdownReadErr = errors.New("storage failure")
+			})
+
+			It("should return an internal error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to verify stored content after write"))
+			})
+
+			It("should not return a response", func() {
+				Expect(resp).To(BeNil())
+			})
+
+			It("should attempt to restore the original content", func() {
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(Equal(wikipage.Markdown("# Original Content")))
+			})
+		})
+
+		When("the stored content is empty after write (invariant violation)", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Markdown = "# Original Content"
+				empty := wikipage.Markdown("")
+				mockPageReaderMutator.PostWriteMarkdown = &empty
+			})
+
+			It("should return an internal error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "invariant violation"))
+			})
+
+			It("should not return a response", func() {
+				Expect(resp).To(BeNil())
+			})
+
+			It("should restore the original content", func() {
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(Equal(wikipage.Markdown("# Original Content")))
+			})
+		})
+	})
+
+	Describe("ClearPageContent", func() {
+		var (
+			req                   *apiv1.ClearPageContentRequest
+			resp                  *apiv1.ClearPageContentResponse
+			err                   error
+			mockPageReaderMutator *MockPageReaderMutator
+		)
+
+		BeforeEach(func() {
+			req = &apiv1.ClearPageContentRequest{
+				PageName:     "test-page",
+				ConfirmClear: true,
+			}
+			mockPageReaderMutator = &MockPageReaderMutator{
+				Frontmatter: wikipage.FrontMatter{"identifier": "test-page"},
+			}
+		})
+
+		JustBeforeEach(func() {
+			server = mustNewServer(mockPageReaderMutator, nil, nil)
+			resp, err = server.ClearPageContent(ctx, req)
+		})
+
+		When("page_name is empty", func() {
+			BeforeEach(func() {
+				req.PageName = ""
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "page_name is required"))
+			})
+
+			It("should not return a response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("confirm_clear is false", func() {
+			BeforeEach(func() {
+				req.ConfirmClear = false
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "confirm_clear must be true to clear page content"))
+			})
+
+			It("should not return a response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("the page does not exist", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = os.ErrNotExist
+			})
+
+			It("should return a not found error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.NotFound, "page not found: test-page"))
+			})
+
+			It("should not return a response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("reading frontmatter fails with a generic error", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = errors.New("read error")
+			})
+
+			It("should return an internal error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to read frontmatter"))
+			})
+
+			It("should not return a response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("writing the markdown fails", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.MarkdownWriteErr = errors.New("disk full")
+			})
+
+			It("should return an internal error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to clear markdown"))
+			})
+
+			It("should not return a response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("the clear is successful", func() {
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a response", func() {
+				Expect(resp).NotTo(BeNil())
+			})
+
+			It("should indicate success", func() {
+				Expect(resp.Success).To(BeTrue())
+			})
+
+			It("should not return an error message", func() {
+				Expect(resp.Error).To(BeEmpty())
+			})
+
+			It("should write to the correct page", func() {
+				Expect(mockPageReaderMutator.WrittenIdentifier).To(Equal(wikipage.PageIdentifier("test-page")))
+			})
+
+			It("should write empty markdown content", func() {
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(Equal(wikipage.Markdown("")))
 			})
 		})
 	})
@@ -2493,6 +2783,16 @@ var _ = Describe("Server", func() {
 
 			It("should return the rendered markdown", func() {
 				Expect(resp.RenderedContentMarkdown).To(Equal("# Test Page\n\nThis is test content."))
+			})
+
+			It("should return a non-empty version_hash", func() {
+				Expect(resp.VersionHash).NotTo(BeEmpty())
+			})
+
+			It("should return a consistent version_hash for the same content", func() {
+				// Recompute the expected hash for "# Test Page\n\nThis is test content."
+				expectedHash := fmt.Sprintf("%x", sha256.Sum256([]byte("# Test Page\n\nThis is test content.")))
+				Expect(resp.VersionHash).To(Equal(expectedHash))
 			})
 		})
 

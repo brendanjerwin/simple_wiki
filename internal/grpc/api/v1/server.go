@@ -4,6 +4,9 @@ package v1
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"maps"
@@ -36,8 +39,16 @@ const (
 	failedToReadFrontmatterErrFmt  = "failed to read frontmatter: %v"
 	failedToWriteFrontmatterErrFmt = "failed to write frontmatter: %v"
 	failedToBuildPageTextErrFmt    = "failed to build page text: %v"
+	pageNameRequiredErr            = "page_name is required"
 	maxUniqueIdentifierAttempts    = 1000
 )
+
+// computeContentHash computes a SHA256 hash of the given markdown content,
+// returned as a lowercase hex string. Used for optimistic concurrency control.
+func computeContentHash(markdown wikipage.Markdown) string {
+	h := sha256.Sum256([]byte(markdown))
+	return hex.EncodeToString(h[:])
+}
 
 // filterIdentifierKey removes the identifier key from a frontmatter map.
 func filterIdentifierKey(fm map[string]any) map[string]any {
@@ -791,6 +802,7 @@ func (s *Server) ReadPage(_ context.Context, req *apiv1.ReadPageRequest) (*apiv1
 		FrontMatterToml:         string(frontmatterToml),
 		RenderedContentHtml:     renderedHTML,
 		RenderedContentMarkdown: renderedMarkdown,
+		VersionHash:             computeContentHash(markdown),
 	}, nil
 }
 
@@ -873,7 +885,7 @@ func (s *Server) findUniqueIdentifier(baseIdentifier string) string {
 // Creates a new wiki page with optional template support.
 func (s *Server) CreatePage(_ context.Context, req *apiv1.CreatePageRequest) (*apiv1.CreatePageResponse, error) {
 	if req.PageName == "" {
-		return nil, status.Error(codes.InvalidArgument, "page_name is required")
+		return nil, status.Error(codes.InvalidArgument, pageNameRequiredErr)
 	}
 
 	// Munge the identifier
@@ -947,9 +959,70 @@ func (s *Server) CreatePage(_ context.Context, req *apiv1.CreatePageRequest) (*a
 
 // UpdatePageContent implements the UpdatePageContent RPC.
 // Updates only the markdown content of an existing page, preserving its frontmatter.
+// If expected_version_hash is provided, the write will be rejected if the current content
+// has changed since the hash was computed (optimistic concurrency control).
+// Empty content is rejected; use ClearPageContent to explicitly clear a page's content.
 func (s *Server) UpdatePageContent(_ context.Context, req *apiv1.UpdatePageContentRequest) (*apiv1.UpdatePageContentResponse, error) {
 	if req.PageName == "" {
-		return nil, status.Error(codes.InvalidArgument, "page_name is required")
+		return nil, status.Error(codes.InvalidArgument, pageNameRequiredErr)
+	}
+
+	if strings.TrimSpace(req.NewContentMarkdown) == "" {
+		return nil, status.Error(codes.InvalidArgument, "new_content_markdown cannot be empty; use ClearPageContent to explicitly clear page content")
+	}
+
+	// Read current content for: (1) page existence check, (2) version hash verification
+	// if requested, and (3) rollback data if the post-write invariant check fails.
+	_, originalMarkdown, err := s.pageReaderMutator.ReadMarkdown(wikipage.PageIdentifier(req.PageName))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.PageName)
+		}
+		return nil, status.Errorf(codes.Internal, "failed to read current content: %v", err)
+	}
+
+	// NOTE: There is a narrow TOCTOU race between this hash check and the subsequent
+	// WriteMarkdown call. True atomicity would require file-level locking at the storage layer.
+	if req.ExpectedVersionHash != nil {
+		currentHash := computeContentHash(originalMarkdown)
+		if len(currentHash) != len(*req.ExpectedVersionHash) ||
+			subtle.ConstantTimeCompare([]byte(currentHash), []byte(*req.ExpectedVersionHash)) != 1 {
+			return nil, status.Error(codes.Aborted, "content version mismatch: page was modified since last read; re-read the page and retry")
+		}
+	}
+
+	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(req.PageName), wikipage.Markdown(req.NewContentMarkdown)); err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to write markdown: %v", err)
+	}
+
+	// Invariant check: read back the stored content to ensure the write did not blank the page.
+	// If the content is missing or empty after a successful write, attempt to restore the
+	// original content to prevent data loss.
+	_, storedMarkdown, readBackErr := s.pageReaderMutator.ReadMarkdown(wikipage.PageIdentifier(req.PageName))
+	if readBackErr != nil || strings.TrimSpace(string(storedMarkdown)) == "" {
+		_ = s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(req.PageName), originalMarkdown)
+		if readBackErr != nil {
+			return nil, status.Errorf(codes.Internal, "failed to verify stored content after write: %v", readBackErr)
+		}
+		return nil, status.Error(codes.Internal, "invariant violation: write resulted in empty content; original content has been restored")
+	}
+
+	return &apiv1.UpdatePageContentResponse{
+		Success:     true,
+		VersionHash: computeContentHash(storedMarkdown),
+	}, nil
+}
+
+// ClearPageContent implements the ClearPageContent RPC.
+// Explicitly clears the markdown content of a page, preserving its frontmatter.
+// confirm_clear must be true to prevent accidental data loss.
+func (s *Server) ClearPageContent(_ context.Context, req *apiv1.ClearPageContentRequest) (*apiv1.ClearPageContentResponse, error) {
+	if req.PageName == "" {
+		return nil, status.Error(codes.InvalidArgument, pageNameRequiredErr)
+	}
+
+	if !req.ConfirmClear {
+		return nil, status.Error(codes.InvalidArgument, "confirm_clear must be true to clear page content")
 	}
 
 	// Verify the page exists
@@ -961,11 +1034,11 @@ func (s *Server) UpdatePageContent(_ context.Context, req *apiv1.UpdatePageConte
 		return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, err)
 	}
 
-	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(req.PageName), wikipage.Markdown(req.NewContentMarkdown)); err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to write markdown: %v", err)
+	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(req.PageName), ""); err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to clear markdown: %v", err)
 	}
 
-	return &apiv1.UpdatePageContentResponse{Success: true}, nil
+	return &apiv1.ClearPageContentResponse{Success: true}, nil
 }
 
 // UpdateWholePage implements the UpdateWholePage RPC.
@@ -973,7 +1046,7 @@ func (s *Server) UpdatePageContent(_ context.Context, req *apiv1.UpdatePageConte
 // The new_whole_markdown field must contain the complete page text (frontmatter + markdown).
 func (s *Server) UpdateWholePage(_ context.Context, req *apiv1.UpdateWholePageRequest) (*apiv1.UpdateWholePageResponse, error) {
 	if req.PageName == "" {
-		return nil, status.Error(codes.InvalidArgument, "page_name is required")
+		return nil, status.Error(codes.InvalidArgument, pageNameRequiredErr)
 	}
 
 	// Verify the page exists

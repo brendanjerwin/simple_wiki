@@ -11,7 +11,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file api/v1/page_management.proto.
  */
 export const file_api_v1_page_management: GenFile = /*@__PURE__*/
-  fileDesc("ChxhcGkvdjEvcGFnZV9tYW5hZ2VtZW50LnByb3RvEgZhcGkudjEikgEKEUNyZWF0ZVBhZ2VSZXF1ZXN0EhEKCXBhZ2VfbmFtZRgBIAEoCRIYChBjb250ZW50X21hcmtkb3duGAIgASgJEiwKC2Zyb250bWF0dGVyGAMgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIVCgh0ZW1wbGF0ZRgEIAEoCUgAiAEBQgsKCV90ZW1wbGF0ZSI0ChJDcmVhdGVQYWdlUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBINCgVlcnJvchgCIAEoCSIkCg9SZWFkUGFnZVJlcXVlc3QSEQoJcGFnZV9uYW1lGAEgASgJIokBChBSZWFkUGFnZVJlc3BvbnNlEhgKEGNvbnRlbnRfbWFya2Rvd24YASABKAkSGQoRZnJvbnRfbWF0dGVyX3RvbWwYAiABKAkSHQoVcmVuZGVyZWRfY29udGVudF9odG1sGAMgASgJEiEKGXJlbmRlcmVkX2NvbnRlbnRfbWFya2Rvd24YBCABKAkiJgoRUmVuZGVyUGFnZVJlcXVlc3QSEQoJcGFnZV9uYW1lGAEgASgJIjMKElJlbmRlclBhZ2VSZXNwb25zZRIdChVyZW5kZXJlZF9jb250ZW50X2h0bWwYASABKAkiYwoRVXBkYXRlUGFnZVJlcXVlc3QSEQoJcGFnZV9uYW1lGAEgASgJEhwKFG5ld19jb250ZW50X21hcmtkb3duGAIgASgJEh0KFW5ld19mcm9udF9tYXR0ZXJfdG9tbBgDIAEoCSI0ChJVcGRhdGVQYWdlUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBINCgVlcnJvchgCIAEoCSJLChhVcGRhdGVQYWdlQ29udGVudFJlcXVlc3QSEQoJcGFnZV9uYW1lGAEgASgJEhwKFG5ld19jb250ZW50X21hcmtkb3duGAIgASgJIjsKGVVwZGF0ZVBhZ2VDb250ZW50UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBINCgVlcnJvchgCIAEoCSJHChZVcGRhdGVXaG9sZVBhZ2VSZXF1ZXN0EhEKCXBhZ2VfbmFtZRgBIAEoCRIaChJuZXdfd2hvbGVfbWFya2Rvd24YAiABKAkiOQoXVXBkYXRlV2hvbGVQYWdlUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBINCgVlcnJvchgCIAEoCSImChFEZWxldGVQYWdlUmVxdWVzdBIRCglwYWdlX25hbWUYASABKAkiNAoSRGVsZXRlUGFnZVJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSDQoFZXJyb3IYAiABKAkiQAoZR2VuZXJhdGVJZGVudGlmaWVyUmVxdWVzdBIMCgR0ZXh0GAEgASgJEhUKDWVuc3VyZV91bmlxdWUYAiABKAgidAoaR2VuZXJhdGVJZGVudGlmaWVyUmVzcG9uc2USEgoKaWRlbnRpZmllchgBIAEoCRIRCglpc191bmlxdWUYAiABKAgSLwoNZXhpc3RpbmdfcGFnZRgDIAEoCzIYLmFwaS52MS5FeGlzdGluZ1BhZ2VJbmZvIkgKEEV4aXN0aW5nUGFnZUluZm8SEgoKaWRlbnRpZmllchgBIAEoCRINCgV0aXRsZRgCIAEoCRIRCgljb250YWluZXIYAyABKAkiMwoUTGlzdFRlbXBsYXRlc1JlcXVlc3QSGwoTZXhjbHVkZV9pZGVudGlmaWVycxgBIAMoCSJAChVMaXN0VGVtcGxhdGVzUmVzcG9uc2USJwoJdGVtcGxhdGVzGAEgAygLMhQuYXBpLnYxLlRlbXBsYXRlSW5mbyJGCgxUZW1wbGF0ZUluZm8SEgoKaWRlbnRpZmllchgBIAEoCRINCgV0aXRsZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCTLDBQoVUGFnZU1hbmFnZW1lbnRTZXJ2aWNlEkMKCkNyZWF0ZVBhZ2USGS5hcGkudjEuQ3JlYXRlUGFnZVJlcXVlc3QaGi5hcGkudjEuQ3JlYXRlUGFnZVJlc3BvbnNlEj0KCFJlYWRQYWdlEhcuYXBpLnYxLlJlYWRQYWdlUmVxdWVzdBoYLmFwaS52MS5SZWFkUGFnZVJlc3BvbnNlEkMKClJlbmRlclBhZ2USGS5hcGkudjEuUmVuZGVyUGFnZVJlcXVlc3QaGi5hcGkudjEuUmVuZGVyUGFnZVJlc3BvbnNlEkMKClVwZGF0ZVBhZ2USGS5hcGkudjEuVXBkYXRlUGFnZVJlcXVlc3QaGi5hcGkudjEuVXBkYXRlUGFnZVJlc3BvbnNlElgKEVVwZGF0ZVBhZ2VDb250ZW50EiAuYXBpLnYxLlVwZGF0ZVBhZ2VDb250ZW50UmVxdWVzdBohLmFwaS52MS5VcGRhdGVQYWdlQ29udGVudFJlc3BvbnNlElIKD1VwZGF0ZVdob2xlUGFnZRIeLmFwaS52MS5VcGRhdGVXaG9sZVBhZ2VSZXF1ZXN0Gh8uYXBpLnYxLlVwZGF0ZVdob2xlUGFnZVJlc3BvbnNlEkMKCkRlbGV0ZVBhZ2USGS5hcGkudjEuRGVsZXRlUGFnZVJlcXVlc3QaGi5hcGkudjEuRGVsZXRlUGFnZVJlc3BvbnNlElsKEkdlbmVyYXRlSWRlbnRpZmllchIhLmFwaS52MS5HZW5lcmF0ZUlkZW50aWZpZXJSZXF1ZXN0GiIuYXBpLnYxLkdlbmVyYXRlSWRlbnRpZmllclJlc3BvbnNlEkwKDUxpc3RUZW1wbGF0ZXMSHC5hcGkudjEuTGlzdFRlbXBsYXRlc1JlcXVlc3QaHS5hcGkudjEuTGlzdFRlbXBsYXRlc1Jlc3BvbnNlQjpaOGdpdGh1Yi5jb20vYnJlbmRhbmplcndpbi9zaW1wbGVfd2lraS9nZW4vZ28vYXBpL3YxO2FwaXYxYgZwcm90bzM", [file_google_protobuf_struct]);
+  fileDesc("ChxhcGkvdjEvcGFnZV9tYW5hZ2VtZW50LnByb3RvEgZhcGkudjEikgEKEUNyZWF0ZVBhZ2VSZXF1ZXN0EhEKCXBhZ2VfbmFtZRgBIAEoCRIYChBjb250ZW50X21hcmtkb3duGAIgASgJEiwKC2Zyb250bWF0dGVyGAMgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIVCgh0ZW1wbGF0ZRgEIAEoCUgAiAEBQgsKCV90ZW1wbGF0ZSI0ChJDcmVhdGVQYWdlUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBINCgVlcnJvchgCIAEoCSIkCg9SZWFkUGFnZVJlcXVlc3QSEQoJcGFnZV9uYW1lGAEgASgJIp8BChBSZWFkUGFnZVJlc3BvbnNlEhgKEGNvbnRlbnRfbWFya2Rvd24YASABKAkSGQoRZnJvbnRfbWF0dGVyX3RvbWwYAiABKAkSHQoVcmVuZGVyZWRfY29udGVudF9odG1sGAMgASgJEiEKGXJlbmRlcmVkX2NvbnRlbnRfbWFya2Rvd24YBCABKAkSFAoMdmVyc2lvbl9oYXNoGAUgASgJIiYKEVJlbmRlclBhZ2VSZXF1ZXN0EhEKCXBhZ2VfbmFtZRgBIAEoCSIzChJSZW5kZXJQYWdlUmVzcG9uc2USHQoVcmVuZGVyZWRfY29udGVudF9odG1sGAEgASgJImMKEVVwZGF0ZVBhZ2VSZXF1ZXN0EhEKCXBhZ2VfbmFtZRgBIAEoCRIcChRuZXdfY29udGVudF9tYXJrZG93bhgCIAEoCRIdChVuZXdfZnJvbnRfbWF0dGVyX3RvbWwYAyABKAkiNAoSVXBkYXRlUGFnZVJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSDQoFZXJyb3IYAiABKAkiiQEKGFVwZGF0ZVBhZ2VDb250ZW50UmVxdWVzdBIRCglwYWdlX25hbWUYASABKAkSHAoUbmV3X2NvbnRlbnRfbWFya2Rvd24YAiABKAkSIgoVZXhwZWN0ZWRfdmVyc2lvbl9oYXNoGAMgASgJSACIAQFCGAoWX2V4cGVjdGVkX3ZlcnNpb25faGFzaCJRChlVcGRhdGVQYWdlQ29udGVudFJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSDQoFZXJyb3IYAiABKAkSFAoMdmVyc2lvbl9oYXNoGAMgASgJIkMKF0NsZWFyUGFnZUNvbnRlbnRSZXF1ZXN0EhEKCXBhZ2VfbmFtZRgBIAEoCRIVCg1jb25maXJtX2NsZWFyGAIgASgIIjoKGENsZWFyUGFnZUNvbnRlbnRSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg0KBWVycm9yGAIgASgJIkcKFlVwZGF0ZVdob2xlUGFnZVJlcXVlc3QSEQoJcGFnZV9uYW1lGAEgASgJEhoKEm5ld193aG9sZV9tYXJrZG93bhgCIAEoCSI5ChdVcGRhdGVXaG9sZVBhZ2VSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg0KBWVycm9yGAIgASgJIiYKEURlbGV0ZVBhZ2VSZXF1ZXN0EhEKCXBhZ2VfbmFtZRgBIAEoCSI0ChJEZWxldGVQYWdlUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBINCgVlcnJvchgCIAEoCSJAChlHZW5lcmF0ZUlkZW50aWZpZXJSZXF1ZXN0EgwKBHRleHQYASABKAkSFQoNZW5zdXJlX3VuaXF1ZRgCIAEoCCJ0ChpHZW5lcmF0ZUlkZW50aWZpZXJSZXNwb25zZRISCgppZGVudGlmaWVyGAEgASgJEhEKCWlzX3VuaXF1ZRgCIAEoCBIvCg1leGlzdGluZ19wYWdlGAMgASgLMhguYXBpLnYxLkV4aXN0aW5nUGFnZUluZm8iSAoQRXhpc3RpbmdQYWdlSW5mbxISCgppZGVudGlmaWVyGAEgASgJEg0KBXRpdGxlGAIgASgJEhEKCWNvbnRhaW5lchgDIAEoCSIzChRMaXN0VGVtcGxhdGVzUmVxdWVzdBIbChNleGNsdWRlX2lkZW50aWZpZXJzGAEgAygJIkAKFUxpc3RUZW1wbGF0ZXNSZXNwb25zZRInCgl0ZW1wbGF0ZXMYASADKAsyFC5hcGkudjEuVGVtcGxhdGVJbmZvIkYKDFRlbXBsYXRlSW5mbxISCgppZGVudGlmaWVyGAEgASgJEg0KBXRpdGxlGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJMpoGChVQYWdlTWFuYWdlbWVudFNlcnZpY2USQwoKQ3JlYXRlUGFnZRIZLmFwaS52MS5DcmVhdGVQYWdlUmVxdWVzdBoaLmFwaS52MS5DcmVhdGVQYWdlUmVzcG9uc2USPQoIUmVhZFBhZ2USFy5hcGkudjEuUmVhZFBhZ2VSZXF1ZXN0GhguYXBpLnYxLlJlYWRQYWdlUmVzcG9uc2USQwoKUmVuZGVyUGFnZRIZLmFwaS52MS5SZW5kZXJQYWdlUmVxdWVzdBoaLmFwaS52MS5SZW5kZXJQYWdlUmVzcG9uc2USQwoKVXBkYXRlUGFnZRIZLmFwaS52MS5VcGRhdGVQYWdlUmVxdWVzdBoaLmFwaS52MS5VcGRhdGVQYWdlUmVzcG9uc2USWAoRVXBkYXRlUGFnZUNvbnRlbnQSIC5hcGkudjEuVXBkYXRlUGFnZUNvbnRlbnRSZXF1ZXN0GiEuYXBpLnYxLlVwZGF0ZVBhZ2VDb250ZW50UmVzcG9uc2USUgoPVXBkYXRlV2hvbGVQYWdlEh4uYXBpLnYxLlVwZGF0ZVdob2xlUGFnZVJlcXVlc3QaHy5hcGkudjEuVXBkYXRlV2hvbGVQYWdlUmVzcG9uc2USQwoKRGVsZXRlUGFnZRIZLmFwaS52MS5EZWxldGVQYWdlUmVxdWVzdBoaLmFwaS52MS5EZWxldGVQYWdlUmVzcG9uc2USVQoQQ2xlYXJQYWdlQ29udGVudBIfLmFwaS52MS5DbGVhclBhZ2VDb250ZW50UmVxdWVzdBogLmFwaS52MS5DbGVhclBhZ2VDb250ZW50UmVzcG9uc2USWwoSR2VuZXJhdGVJZGVudGlmaWVyEiEuYXBpLnYxLkdlbmVyYXRlSWRlbnRpZmllclJlcXVlc3QaIi5hcGkudjEuR2VuZXJhdGVJZGVudGlmaWVyUmVzcG9uc2USTAoNTGlzdFRlbXBsYXRlcxIcLmFwaS52MS5MaXN0VGVtcGxhdGVzUmVxdWVzdBodLmFwaS52MS5MaXN0VGVtcGxhdGVzUmVzcG9uc2VCOlo4Z2l0aHViLmNvbS9icmVuZGFuamVyd2luL3NpbXBsZV93aWtpL2dlbi9nby9hcGkvdjE7YXBpdjFiBnByb3RvMw", [file_google_protobuf_struct]);
 
 /**
  * Create Page
@@ -121,6 +121,14 @@ export type ReadPageResponse = Message<"api.v1.ReadPageResponse"> & {
    * @generated from field: string rendered_content_markdown = 4;
    */
   renderedContentMarkdown: string;
+
+  /**
+   * version_hash is a SHA256 hash of the content_markdown, used for optimistic concurrency control.
+   * Pass this value as expected_version_hash in UpdatePageContentRequest to detect concurrent modifications.
+   *
+   * @generated from field: string version_hash = 5;
+   */
+  versionHash: string;
 };
 
 /**
@@ -232,6 +240,15 @@ export type UpdatePageContentRequest = Message<"api.v1.UpdatePageContentRequest"
    * @generated from field: string new_content_markdown = 2;
    */
   newContentMarkdown: string;
+
+  /**
+   * expected_version_hash is the version_hash from a previous ReadPage call.
+   * If provided, the write will fail with ABORTED if the content has changed since the read.
+   * Omit to skip version checking (not recommended for concurrent access scenarios).
+   *
+   * @generated from field: optional string expected_version_hash = 3;
+   */
+  expectedVersionHash?: string;
 };
 
 /**
@@ -254,6 +271,14 @@ export type UpdatePageContentResponse = Message<"api.v1.UpdatePageContentRespons
    * @generated from field: string error = 2;
    */
   error: string;
+
+  /**
+   * version_hash is the SHA256 hash of the newly written content.
+   * Use this as expected_version_hash in the next UpdatePageContentRequest.
+   *
+   * @generated from field: string version_hash = 3;
+   */
+  versionHash: string;
 };
 
 /**
@@ -262,6 +287,54 @@ export type UpdatePageContentResponse = Message<"api.v1.UpdatePageContentRespons
  */
 export const UpdatePageContentResponseSchema: GenMessage<UpdatePageContentResponse> = /*@__PURE__*/
   messageDesc(file_api_v1_page_management, 9);
+
+/**
+ * Clear Page Content
+ *
+ * @generated from message api.v1.ClearPageContentRequest
+ */
+export type ClearPageContentRequest = Message<"api.v1.ClearPageContentRequest"> & {
+  /**
+   * @generated from field: string page_name = 1;
+   */
+  pageName: string;
+
+  /**
+   * confirm_clear must be true to prevent accidental data loss.
+   *
+   * @generated from field: bool confirm_clear = 2;
+   */
+  confirmClear: boolean;
+};
+
+/**
+ * Describes the message api.v1.ClearPageContentRequest.
+ * Use `create(ClearPageContentRequestSchema)` to create a new message.
+ */
+export const ClearPageContentRequestSchema: GenMessage<ClearPageContentRequest> = /*@__PURE__*/
+  messageDesc(file_api_v1_page_management, 10);
+
+/**
+ * @generated from message api.v1.ClearPageContentResponse
+ */
+export type ClearPageContentResponse = Message<"api.v1.ClearPageContentResponse"> & {
+  /**
+   * @generated from field: bool success = 1;
+   */
+  success: boolean;
+
+  /**
+   * @generated from field: string error = 2;
+   */
+  error: string;
+};
+
+/**
+ * Describes the message api.v1.ClearPageContentResponse.
+ * Use `create(ClearPageContentResponseSchema)` to create a new message.
+ */
+export const ClearPageContentResponseSchema: GenMessage<ClearPageContentResponse> = /*@__PURE__*/
+  messageDesc(file_api_v1_page_management, 11);
 
 /**
  * Update Whole Page
@@ -287,7 +360,7 @@ export type UpdateWholePageRequest = Message<"api.v1.UpdateWholePageRequest"> & 
  * Use `create(UpdateWholePageRequestSchema)` to create a new message.
  */
 export const UpdateWholePageRequestSchema: GenMessage<UpdateWholePageRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_page_management, 10);
+  messageDesc(file_api_v1_page_management, 12);
 
 /**
  * @generated from message api.v1.UpdateWholePageResponse
@@ -309,7 +382,7 @@ export type UpdateWholePageResponse = Message<"api.v1.UpdateWholePageResponse"> 
  * Use `create(UpdateWholePageResponseSchema)` to create a new message.
  */
 export const UpdateWholePageResponseSchema: GenMessage<UpdateWholePageResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_page_management, 11);
+  messageDesc(file_api_v1_page_management, 13);
 
 /**
  * Delete Page
@@ -328,7 +401,7 @@ export type DeletePageRequest = Message<"api.v1.DeletePageRequest"> & {
  * Use `create(DeletePageRequestSchema)` to create a new message.
  */
 export const DeletePageRequestSchema: GenMessage<DeletePageRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_page_management, 12);
+  messageDesc(file_api_v1_page_management, 14);
 
 /**
  * @generated from message api.v1.DeletePageResponse
@@ -350,7 +423,7 @@ export type DeletePageResponse = Message<"api.v1.DeletePageResponse"> & {
  * Use `create(DeletePageResponseSchema)` to create a new message.
  */
 export const DeletePageResponseSchema: GenMessage<DeletePageResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_page_management, 13);
+  messageDesc(file_api_v1_page_management, 15);
 
 /**
  * Generate Identifier
@@ -378,7 +451,7 @@ export type GenerateIdentifierRequest = Message<"api.v1.GenerateIdentifierReques
  * Use `create(GenerateIdentifierRequestSchema)` to create a new message.
  */
 export const GenerateIdentifierRequestSchema: GenMessage<GenerateIdentifierRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_page_management, 14);
+  messageDesc(file_api_v1_page_management, 16);
 
 /**
  * @generated from message api.v1.GenerateIdentifierResponse
@@ -411,7 +484,7 @@ export type GenerateIdentifierResponse = Message<"api.v1.GenerateIdentifierRespo
  * Use `create(GenerateIdentifierResponseSchema)` to create a new message.
  */
 export const GenerateIdentifierResponseSchema: GenMessage<GenerateIdentifierResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_page_management, 15);
+  messageDesc(file_api_v1_page_management, 17);
 
 /**
  * Info about an existing page (used when identifier already exists).
@@ -446,7 +519,7 @@ export type ExistingPageInfo = Message<"api.v1.ExistingPageInfo"> & {
  * Use `create(ExistingPageInfoSchema)` to create a new message.
  */
 export const ExistingPageInfoSchema: GenMessage<ExistingPageInfo> = /*@__PURE__*/
-  messageDesc(file_api_v1_page_management, 16);
+  messageDesc(file_api_v1_page_management, 18);
 
 /**
  * List Templates
@@ -468,7 +541,7 @@ export type ListTemplatesRequest = Message<"api.v1.ListTemplatesRequest"> & {
  * Use `create(ListTemplatesRequestSchema)` to create a new message.
  */
 export const ListTemplatesRequestSchema: GenMessage<ListTemplatesRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_page_management, 17);
+  messageDesc(file_api_v1_page_management, 19);
 
 /**
  * @generated from message api.v1.ListTemplatesResponse
@@ -485,7 +558,7 @@ export type ListTemplatesResponse = Message<"api.v1.ListTemplatesResponse"> & {
  * Use `create(ListTemplatesResponseSchema)` to create a new message.
  */
 export const ListTemplatesResponseSchema: GenMessage<ListTemplatesResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_page_management, 18);
+  messageDesc(file_api_v1_page_management, 20);
 
 /**
  * Info about a template page.
@@ -520,7 +593,7 @@ export type TemplateInfo = Message<"api.v1.TemplateInfo"> & {
  * Use `create(TemplateInfoSchema)` to create a new message.
  */
 export const TemplateInfoSchema: GenMessage<TemplateInfo> = /*@__PURE__*/
-  messageDesc(file_api_v1_page_management, 19);
+  messageDesc(file_api_v1_page_management, 21);
 
 /**
  * @generated from service api.v1.PageManagementService
@@ -581,6 +654,17 @@ export const PageManagementService: GenService<{
     methodKind: "unary";
     input: typeof DeletePageRequestSchema;
     output: typeof DeletePageResponseSchema;
+  },
+  /**
+   * ClearPageContent explicitly clears the markdown content of a page, preserving its frontmatter.
+   * This is a destructive operation that requires confirm_clear = true to prevent accidental data loss.
+   *
+   * @generated from rpc api.v1.PageManagementService.ClearPageContent
+   */
+  clearPageContent: {
+    methodKind: "unary";
+    input: typeof ClearPageContentRequestSchema;
+    output: typeof ClearPageContentResponseSchema;
   },
   /**
    * GenerateIdentifier converts text to a wiki page identifier format.
