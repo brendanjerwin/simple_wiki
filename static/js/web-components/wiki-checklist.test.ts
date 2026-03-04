@@ -13,25 +13,16 @@ import type { JsonObject } from '@bufbuild/protobuf';
 // Helper type to access private methods for testing drag-and-drop
 interface WikiChecklistInternal {
   persistData(
-    items: ChecklistItem[],
-    groupOrder: string[] | null
+    items: ChecklistItem[]
   ): Promise<void>;
   _handleItemDragStart(e: DragEvent, index: number): void;
   _handleItemDragOver(e: DragEvent, index: number): void;
   _handleItemDragLeave(e: DragEvent): void;
-  _handleItemDrop(e: DragEvent, targetIndex: number, groupTag?: string): Promise<void>;
+  _handleItemDrop(e: DragEvent, targetIndex: number): Promise<void>;
   _handleItemDragEnd(): void;
-  _handleGroupDragStart(e: DragEvent, tag: string): void;
-  _handleGroupDragOver(e: DragEvent, tag: string): void;
-  _handleGroupDragLeave(e: DragEvent): void;
-  _handleGroupDrop(e: DragEvent, tag: string): Promise<void>;
-  _handleGroupDragEnd(): void;
   _dragSourceItemIndex: number | null;
   _dragOverItemIndex: number | null;
   _dragOverItemPosition: 'before' | 'after';
-  _dragSourceGroupTag: string | null;
-  _dragOverGroupTag: string | null;
-  _dragOverGroupPosition: 'before' | 'after';
 }
 
 describe('WikiChecklist', () => {
@@ -169,6 +160,170 @@ describe('WikiChecklist', () => {
     });
   });
 
+  describe('parseTaggedInput', () => {
+    describe('when input has a single :tag at the start', () => {
+      let result: ReturnType<WikiChecklist['parseTaggedInput']>;
+
+      beforeEach(() => {
+        result = el.parseTaggedInput(':Dairy Buy milk');
+      });
+
+      it('should extract the tag lowercased', () => {
+        expect(result.tags).to.deep.equal(['dairy']);
+      });
+
+      it('should extract the text after the tag', () => {
+        expect(result.text).to.equal('Buy milk');
+      });
+    });
+
+    describe('when input has a single :tag at the end', () => {
+      let result: ReturnType<WikiChecklist['parseTaggedInput']>;
+
+      beforeEach(() => {
+        result = el.parseTaggedInput('Buy milk :Dairy');
+      });
+
+      it('should extract the tag lowercased', () => {
+        expect(result.tags).to.deep.equal(['dairy']);
+      });
+
+      it('should extract the text without the tag', () => {
+        expect(result.text).to.equal('Buy milk');
+      });
+    });
+
+    describe('when input has a :tag in the middle', () => {
+      let result: ReturnType<WikiChecklist['parseTaggedInput']>;
+
+      beforeEach(() => {
+        result = el.parseTaggedInput('buy :dairy milk');
+      });
+
+      it('should extract the tag lowercased', () => {
+        expect(result.tags).to.deep.equal(['dairy']);
+      });
+
+      it('should join the remaining text', () => {
+        expect(result.text).to.equal('buy milk');
+      });
+    });
+
+    describe('when input has multiple tags', () => {
+      let result: ReturnType<WikiChecklist['parseTaggedInput']>;
+
+      beforeEach(() => {
+        result = el.parseTaggedInput('milk :dairy :fridge');
+      });
+
+      it('should extract all tags lowercased', () => {
+        expect(result.tags).to.deep.equal(['dairy', 'fridge']);
+      });
+
+      it('should extract the remaining text', () => {
+        expect(result.text).to.equal('milk');
+      });
+    });
+
+    describe('when input has multiple tags scattered', () => {
+      let result: ReturnType<WikiChecklist['parseTaggedInput']>;
+
+      beforeEach(() => {
+        result = el.parseTaggedInput(':dairy milk :fridge');
+      });
+
+      it('should extract all tags lowercased', () => {
+        expect(result.tags).to.deep.equal(['dairy', 'fridge']);
+      });
+
+      it('should extract the remaining text', () => {
+        expect(result.text).to.equal('milk');
+      });
+    });
+
+    describe('when input has no tag', () => {
+      let result: ReturnType<WikiChecklist['parseTaggedInput']>;
+
+      beforeEach(() => {
+        result = el.parseTaggedInput('Buy milk');
+      });
+
+      it('should have empty tags array', () => {
+        expect(result.tags).to.deep.equal([]);
+      });
+
+      it('should use the full input as text', () => {
+        expect(result.text).to.equal('Buy milk');
+      });
+    });
+
+    describe('when input has :tag but no item text', () => {
+      let result: ReturnType<WikiChecklist['parseTaggedInput']>;
+
+      beforeEach(() => {
+        result = el.parseTaggedInput(':Dairy');
+      });
+
+      it('should extract the tag lowercased', () => {
+        expect(result.tags).to.deep.equal(['dairy']);
+      });
+
+      it('should have empty text', () => {
+        expect(result.text).to.equal('');
+      });
+    });
+
+    describe('when input has mixed case tag', () => {
+      let result: ReturnType<WikiChecklist['parseTaggedInput']>;
+
+      beforeEach(() => {
+        result = el.parseTaggedInput('milk :DAIRY');
+      });
+
+      it('should lowercase the tag', () => {
+        expect(result.tags).to.deep.equal(['dairy']);
+      });
+    });
+  });
+
+  describe('composeTaggedText', () => {
+    describe('when item has tags', () => {
+      let result: string;
+
+      beforeEach(() => {
+        result = el.composeTaggedText({ text: 'milk', checked: false, tags: ['dairy', 'fridge'] });
+      });
+
+      it('should append tags with :tag syntax', () => {
+        expect(result).to.equal('milk :dairy :fridge');
+      });
+    });
+
+    describe('when item has no tags', () => {
+      let result: string;
+
+      beforeEach(() => {
+        result = el.composeTaggedText({ text: 'milk', checked: false, tags: [] });
+      });
+
+      it('should return just the text', () => {
+        expect(result).to.equal('milk');
+      });
+    });
+
+    describe('when item has a single tag', () => {
+      let result: string;
+
+      beforeEach(() => {
+        result = el.composeTaggedText({ text: 'eggs', checked: true, tags: ['dairy'] });
+      });
+
+      it('should append the single tag', () => {
+        expect(result).to.equal('eggs :dairy');
+      });
+    });
+  });
+
   describe('extractChecklistData', () => {
     describe('when frontmatter has no checklists', () => {
       let result: ReturnType<WikiChecklist['extractChecklistData']>;
@@ -180,10 +335,6 @@ describe('WikiChecklist', () => {
 
       it('should return empty items', () => {
         expect(result.items).to.deep.equal([]);
-      });
-
-      it('should return null groupOrder', () => {
-        expect(result.groupOrder).to.be.null;
       });
     });
 
@@ -202,7 +353,41 @@ describe('WikiChecklist', () => {
       });
     });
 
-    describe('when checklists contain the requested list', () => {
+    describe('when checklists contain items with new tags array format', () => {
+      let result: ReturnType<WikiChecklist['extractChecklistData']>;
+
+      beforeEach(() => {
+        const frontmatter: JsonObject = {
+          checklists: {
+            grocery_list: {
+              items: [
+                { text: 'Milk', checked: false },
+                { text: 'Eggs', checked: true, tags: ['dairy', 'fridge'] },
+              ],
+            },
+          },
+        };
+        result = el.extractChecklistData(frontmatter, 'grocery_list');
+      });
+
+      it('should extract the correct number of items', () => {
+        expect(result.items).to.have.length(2);
+      });
+
+      it('should extract plain items with empty tags array', () => {
+        expect(result.items[0]).to.deep.equal({ text: 'Milk', checked: false, tags: [] });
+      });
+
+      it('should extract items with tags array correctly', () => {
+        expect(result.items[1]).to.deep.equal({
+          text: 'Eggs',
+          checked: true,
+          tags: ['dairy', 'fridge'],
+        });
+      });
+    });
+
+    describe('when checklists contain items with old tag string format (backward-compatible)', () => {
       let result: ReturnType<WikiChecklist['extractChecklistData']>;
 
       beforeEach(() => {
@@ -223,36 +408,29 @@ describe('WikiChecklist', () => {
         expect(result.items).to.have.length(2);
       });
 
-      it('should extract plain items correctly', () => {
-        expect(result.items[0]).to.deep.equal({ text: 'Milk', checked: false });
-      });
-
-      it('should extract tagged items correctly', () => {
-        expect(result.items[1]).to.deep.equal({
-          text: 'Eggs',
-          checked: true,
-          tag: 'Dairy',
-        });
+      it('should wrap old tag string in an array', () => {
+        expect(result.items[1]?.tags).to.deep.equal(['Dairy']);
       });
     });
 
-    describe('when checklist has group_order', () => {
+    describe('when item has both tag and tags (tags takes precedence)', () => {
       let result: ReturnType<WikiChecklist['extractChecklistData']>;
 
       beforeEach(() => {
         const frontmatter: JsonObject = {
           checklists: {
             grocery_list: {
-              items: [],
-              group_order: ['Dairy', 'Produce'],
+              items: [
+                { text: 'Eggs', checked: false, tag: 'old', tags: ['new1', 'new2'] },
+              ],
             },
           },
         };
         result = el.extractChecklistData(frontmatter, 'grocery_list');
       });
 
-      it('should extract group_order', () => {
-        expect(result.groupOrder).to.deep.equal(['Dairy', 'Produce']);
+      it('should prefer the tags array over the tag string', () => {
+        expect(result.items[0]?.tags).to.deep.equal(['new1', 'new2']);
       });
     });
   });
@@ -261,134 +439,123 @@ describe('WikiChecklist', () => {
     describe('when items have multiple tags', () => {
       beforeEach(() => {
         el.items = [
-          { text: 'Milk', checked: false, tag: 'Dairy' },
-          { text: 'Apples', checked: false, tag: 'Produce' },
-          { text: 'Eggs', checked: true, tag: 'Dairy' },
-          { text: 'Bread', checked: false },
+          { text: 'Milk', checked: false, tags: ['dairy'] },
+          { text: 'Apples', checked: false, tags: ['produce'] },
+          { text: 'Eggs', checked: true, tags: ['dairy', 'fridge'] },
+          { text: 'Bread', checked: false, tags: [] },
         ];
       });
 
       it('should return unique tags sorted alphabetically', () => {
-        expect(el.getExistingTags()).to.deep.equal(['Dairy', 'Produce']);
+        expect(el.getExistingTags()).to.deep.equal(['dairy', 'fridge', 'produce']);
       });
     });
 
-    describe('when items have empty or missing tags', () => {
+    describe('when items have no tags', () => {
       beforeEach(() => {
         el.items = [
-          { text: 'Item 1', checked: false },
-          { text: 'Item 2', checked: false, tag: '' },
-          { text: 'Item 3', checked: false, tag: 'TagA' },
+          { text: 'Item 1', checked: false, tags: [] },
+          { text: 'Item 2', checked: false, tags: [] },
         ];
       });
 
-      it('should exclude empty tags', () => {
-        expect(el.getExistingTags()).to.deep.equal(['TagA']);
+      it('should return empty array', () => {
+        expect(el.getExistingTags()).to.deep.equal([]);
       });
     });
   });
 
-  describe('getGroupedItems', () => {
-    type GroupedResult = ReturnType<WikiChecklist['getGroupedItems']>;
-    let groups: GroupedResult;
-
-    beforeEach(() => {
-      el.items = [
-        { text: 'Milk', checked: false, tag: 'Dairy' },
-        { text: 'Bread', checked: false, tag: 'Bakery' },
-        { text: 'Apples', checked: false, tag: 'Produce' },
-        { text: 'Eggs', checked: true, tag: 'Dairy' },
-        { text: 'Towels', checked: false },
-      ];
-      groups = el.getGroupedItems();
-    });
-
-    describe('grouping by tag', () => {
-      let dairyGroup: GroupedResult[number] | undefined;
+  describe('getFilteredItems', () => {
+    describe('when filterTags is empty', () => {
+      let result: ReturnType<WikiChecklist['getFilteredItems']>;
 
       beforeEach(() => {
-        dairyGroup = groups.find(g => g.tag === 'Dairy');
+        el.items = [
+          { text: 'Milk', checked: false, tags: ['dairy'] },
+          { text: 'Apples', checked: false, tags: ['produce'] },
+          { text: 'Bread', checked: false, tags: [] },
+        ];
+        el.filterTags = [];
+        result = el.getFilteredItems();
       });
 
-      it('should create a Dairy group', () => {
-        expect(dairyGroup).to.exist;
-      });
-
-      it('should place both Dairy items in the group', () => {
-        expect(dairyGroup!.items).to.have.length(2);
+      it('should return all items', () => {
+        expect(result).to.have.length(3);
       });
     });
 
-    describe('untagged items', () => {
-      let otherGroup: GroupedResult[number] | undefined;
+    describe('when filterTags has a single matching tag', () => {
+      let result: ReturnType<WikiChecklist['getFilteredItems']>;
 
       beforeEach(() => {
-        otherGroup = groups.find(g => g.tag === 'Other');
+        el.items = [
+          { text: 'Milk', checked: false, tags: ['dairy'] },
+          { text: 'Apples', checked: false, tags: ['produce'] },
+          { text: 'Eggs', checked: false, tags: ['dairy', 'fridge'] },
+          { text: 'Bread', checked: false, tags: [] },
+        ];
+        el.filterTags = ['dairy'];
+        result = el.getFilteredItems();
       });
 
-      it('should place untagged items in an "Other" group', () => {
-        expect(otherGroup).to.exist;
+      it('should return only items with the matching tag', () => {
+        expect(result).to.have.length(2);
       });
 
-      it('should contain exactly one untagged item', () => {
-        expect(otherGroup!.items).to.have.length(1);
+      it('should include items that have the tag among multiple tags', () => {
+        const texts = result.map(r => r.item.text);
+        expect(texts).to.include('Eggs');
       });
 
-      it('should contain the Towels item', () => {
-        expect(otherGroup!.items[0]!.item.text).to.equal('Towels');
+      it('should preserve the original array index', () => {
+        const eggEntry = result.find(r => r.item.text === 'Eggs');
+        expect(eggEntry?.index).to.equal(2);
       });
     });
 
-    describe('absolute index preservation', () => {
-      let dairyIndices: number[];
+    describe('when filterTags has multiple tags (AND logic)', () => {
+      let result: ReturnType<WikiChecklist['getFilteredItems']>;
 
       beforeEach(() => {
-        const dairyGroup = groups.find(g => g.tag === 'Dairy');
-        dairyIndices = dairyGroup!.items.map(i => i.index);
+        el.items = [
+          { text: 'Milk', checked: false, tags: ['dairy'] },
+          { text: 'Eggs', checked: false, tags: ['dairy', 'fridge'] },
+          { text: 'Cheese', checked: false, tags: ['dairy', 'fridge'] },
+          { text: 'Apples', checked: false, tags: ['produce'] },
+          { text: 'Butter', checked: false, tags: ['dairy'] },
+        ];
+        el.filterTags = ['dairy', 'fridge'];
+        result = el.getFilteredItems();
       });
 
-      it('should preserve the Milk absolute index', () => {
-        expect(dairyIndices).to.include(0);
+      it('should return only items matching ALL filter tags', () => {
+        expect(result).to.have.length(2);
       });
 
-      it('should preserve the Eggs absolute index', () => {
-        expect(dairyIndices).to.include(3);
+      it('should include items that have both tags', () => {
+        const texts = result.map(r => r.item.text);
+        expect(texts).to.deep.equal(['Eggs', 'Cheese']);
+      });
+
+      it('should not include items that have only one of the filter tags', () => {
+        const texts = result.map(r => r.item.text);
+        expect(texts).to.not.include('Milk');
       });
     });
 
-    describe('when groupOrder is provided', () => {
-      let orderedTags: string[];
+    describe('when filterTags matches no items', () => {
+      let result: ReturnType<WikiChecklist['getFilteredItems']>;
 
       beforeEach(() => {
-        el.groupOrder = ['Produce', 'Dairy', 'Bakery'];
-        groups = el.getGroupedItems();
-        orderedTags = groups.map(g => g.tag);
+        el.items = [
+          { text: 'Milk', checked: false, tags: ['dairy'] },
+        ];
+        el.filterTags = ['nonexistent'];
+        result = el.getFilteredItems();
       });
 
-      it('should place Produce first', () => {
-        expect(orderedTags[0]).to.equal('Produce');
-      });
-
-      it('should place Dairy second', () => {
-        expect(orderedTags[1]).to.equal('Dairy');
-      });
-
-      it('should place Bakery third', () => {
-        expect(orderedTags[2]).to.equal('Bakery');
-      });
-    });
-
-    describe('when groupOrder is null', () => {
-      let taggedGroupTags: string[];
-
-      beforeEach(() => {
-        el.groupOrder = null;
-        groups = el.getGroupedItems();
-        taggedGroupTags = groups.filter(g => g.tag !== 'Other').map(g => g.tag);
-      });
-
-      it('should sort groups alphabetically', () => {
-        expect(taggedGroupTags).to.deep.equal(['Bakery', 'Dairy', 'Produce']);
+      it('should return empty array', () => {
+        expect(result).to.have.length(0);
       });
     });
   });
@@ -442,8 +609,8 @@ describe('WikiChecklist', () => {
         el.error = null;
         el.loading = false;
         el.items = [
-          { text: 'Milk', checked: false },
-          { text: 'Eggs', checked: true },
+          { text: 'Milk', checked: false, tags: [] },
+          { text: 'Eggs', checked: true, tags: [] },
         ];
         await el.updateComplete;
         checkboxes = el.shadowRoot?.querySelectorAll('input[type="checkbox"]');
@@ -460,7 +627,7 @@ describe('WikiChecklist', () => {
       beforeEach(async () => {
         el.error = null;
         el.loading = false;
-        el.items = [{ text: 'Done', checked: true }];
+        el.items = [{ text: 'Done', checked: true, tags: [] }];
         await el.updateComplete;
         checkedItem = el.shadowRoot?.querySelector('.item-checked');
       });
@@ -486,42 +653,6 @@ describe('WikiChecklist', () => {
       });
     });
 
-    describe('when items are present (view toggle)', () => {
-      let toggleButton: Element | null | undefined;
-
-      beforeEach(async () => {
-        el.error = null;
-        el.loading = false;
-        el.items = [{ text: 'Milk', checked: false, tag: 'Dairy' }];
-        await el.updateComplete;
-        toggleButton = el.shadowRoot?.querySelector('.view-toggle');
-      });
-
-      it('should render view toggle button', () => {
-        expect(toggleButton).to.exist;
-      });
-    });
-
-    describe('when groupedView is true', () => {
-      let groupHeadings: NodeListOf<Element> | undefined;
-
-      beforeEach(async () => {
-        el.error = null;
-        el.loading = false;
-        el.items = [
-          { text: 'Milk', checked: false, tag: 'Dairy' },
-          { text: 'Apples', checked: false, tag: 'Produce' },
-        ];
-        el.groupedView = true;
-        await el.updateComplete;
-        groupHeadings = el.shadowRoot?.querySelectorAll('.group-header');
-      });
-
-      it('should render group headings', () => {
-        expect(groupHeadings!.length).to.be.greaterThan(0);
-      });
-    });
-
     describe('add item form', () => {
       let addInput: Element | null | undefined;
 
@@ -537,74 +668,414 @@ describe('WikiChecklist', () => {
       });
     });
 
-    describe('datalist', () => {
-      let datalists: NodeListOf<Element> | undefined;
-
-      beforeEach(async () => {
-        el.error = null;
-        el.loading = false;
-        el.items = [
-          { text: 'Milk', checked: false, tag: 'Dairy' },
-          { text: 'Eggs', checked: false, tag: 'Dairy' },
-        ];
-        await el.updateComplete;
-        datalists = el.shadowRoot?.querySelectorAll(
-          'datalist#tag-suggestions-grocery_list'
-        );
-      });
-
-      it('should render exactly one datalist for tag suggestions', () => {
-        expect(datalists!.length).to.equal(1);
-      });
-    });
-
-    describe('when items have tags (tag autocomplete)', () => {
-      let values: string[];
-
-      beforeEach(async () => {
-        el.error = null;
-        el.loading = false;
-        el.items = [
-          { text: 'Milk', checked: false, tag: 'Dairy' },
-          { text: 'Apples', checked: false, tag: 'Produce' },
-        ];
-        await el.updateComplete;
-        const options = el.shadowRoot?.querySelectorAll<HTMLOptionElement>(
-          'datalist#tag-suggestions-grocery_list option'
-        );
-        values = Array.from(options ?? []).map(o => o.value);
-      });
-
-      it('should populate datalist with the Dairy tag', () => {
-        expect(values).to.include('Dairy');
-      });
-
-      it('should populate datalist with the Produce tag', () => {
-        expect(values).to.include('Produce');
-      });
-    });
-
-    describe('when in flat view', () => {
+    describe('when items have tags', () => {
       let tagBadges: NodeListOf<Element> | undefined;
 
       beforeEach(async () => {
         el.error = null;
         el.loading = false;
-        el.groupedView = false;
         el.items = [
-          { text: 'Milk', checked: false, tag: 'Dairy' },
-          { text: 'Bread', checked: false },
+          { text: 'Milk', checked: false, tags: ['dairy', 'fridge'] },
+          { text: 'Bread', checked: false, tags: [] },
         ];
         await el.updateComplete;
         tagBadges = el.shadowRoot?.querySelectorAll('.item-tag-badge');
       });
 
-      it('should render tag badges next to items', () => {
-        expect(tagBadges!.length).to.be.greaterThan(0);
+      it('should render a tag badge for each tag', () => {
+        expect(tagBadges!.length).to.equal(2);
+      });
+    });
+
+    describe('when focusing an item with tags', () => {
+      let textInput: HTMLInputElement | null | undefined;
+
+      beforeEach(async () => {
+        el.error = null;
+        el.loading = false;
+        el.items = [
+          { text: 'Milk', checked: false, tags: ['dairy', 'fridge'] },
+        ];
+        await el.updateComplete;
+        textInput = el.shadowRoot?.querySelector<HTMLInputElement>('.item-text');
+        textInput?.focus();
+        textInput?.dispatchEvent(new FocusEvent('focus'));
+        await el.updateComplete;
       });
 
-      it('should render a badge for every item', () => {
-        expect(tagBadges!.length).to.equal(el.items.length);
+      it('should set editingIndex', () => {
+        expect((el as unknown as { editingIndex: number | null }).editingIndex).to.equal(0);
+      });
+
+      it('should show composed tagged text in the input', () => {
+        expect(textInput?.value).to.equal('Milk :dairy :fridge');
+      });
+
+      it('should hide tag badges while editing', () => {
+        const badges = el.shadowRoot?.querySelectorAll('.item-tag-badge');
+        expect(badges?.length).to.equal(0);
+      });
+    });
+
+    describe('when blurring an item after editing tags', () => {
+      let mergeFrontmatterStub: SinonStub;
+
+      beforeEach(async () => {
+        sinon.restore();
+        el.remove();
+        el = buildElement();
+
+        const initialFrontmatter: JsonObject = {
+          checklists: {
+            grocery_list: {
+              items: [
+                { text: 'Milk', checked: false, tags: ['dairy'] },
+              ],
+            },
+          },
+        };
+
+        sinon
+          .stub(el.client, 'getFrontmatter')
+          .resolves(
+            create(GetFrontmatterResponseSchema, { frontmatter: initialFrontmatter })
+          );
+        mergeFrontmatterStub = sinon
+          .stub(el.client, 'mergeFrontmatter')
+          .callsFake(async (req: { frontmatter?: JsonObject }) =>
+            create(MergeFrontmatterResponseSchema, {
+              frontmatter: req.frontmatter ?? {},
+            })
+          );
+
+        document.body.appendChild(el);
+        await el.updateComplete;
+        await el.updateComplete;
+
+        const textInput = el.shadowRoot?.querySelector<HTMLInputElement>('.item-text');
+        textInput?.focus();
+        textInput?.dispatchEvent(new FocusEvent('focus'));
+        await el.updateComplete;
+
+        if (textInput) {
+          textInput.value = 'Milk :dairy :fridge';
+          textInput.dispatchEvent(new FocusEvent('blur'));
+        }
+        await waitUntil(
+          () => mergeFrontmatterStub.callCount > 0,
+          'mergeFrontmatter should be called',
+          { timeout: 2000 }
+        );
+        await el.updateComplete;
+      });
+
+      it('should update the item tags', () => {
+        expect(el.items[0]?.tags).to.deep.equal(['dairy', 'fridge']);
+      });
+
+      it('should persist the updated tags', () => {
+        const mergeArgs = mergeFrontmatterStub.getCall(0).args[0] as { frontmatter: JsonObject };
+        const checklists = mergeArgs.frontmatter['checklists'] as JsonObject;
+        const list = checklists['grocery_list'] as JsonObject;
+        const items = list['items'] as JsonObject[];
+        expect(items[0]?.['tags']).to.deep.equal(['dairy', 'fridge']);
+      });
+    });
+
+    describe('tag filter bar', () => {
+      describe('when items have tags', () => {
+        let filterBar: Element | null | undefined;
+        let pills: NodeListOf<Element> | undefined;
+
+        beforeEach(async () => {
+          el.error = null;
+          el.loading = false;
+          el.items = [
+            { text: 'Milk', checked: false, tags: ['dairy'] },
+            { text: 'Apples', checked: false, tags: ['produce'] },
+          ];
+          await el.updateComplete;
+          filterBar = el.shadowRoot?.querySelector('.tag-filter-bar');
+          pills = el.shadowRoot?.querySelectorAll('.tag-pill');
+        });
+
+        it('should render the tag filter bar', () => {
+          expect(filterBar).to.exist;
+        });
+
+        it('should render a pill for each unique tag', () => {
+          expect(pills!.length).to.equal(2);
+        });
+      });
+
+      describe('when no items have tags', () => {
+        let filterBar: Element | null | undefined;
+
+        beforeEach(async () => {
+          el.error = null;
+          el.loading = false;
+          el.items = [
+            { text: 'Milk', checked: false, tags: [] },
+          ];
+          await el.updateComplete;
+          filterBar = el.shadowRoot?.querySelector('.tag-filter-bar');
+        });
+
+        it('should not render the tag filter bar', () => {
+          expect(filterBar).to.not.exist;
+        });
+      });
+
+      describe('when a filter tag is active', () => {
+        let activePill: Element | null | undefined;
+        let renderedItems: NodeListOf<Element> | undefined;
+
+        beforeEach(async () => {
+          el.error = null;
+          el.loading = false;
+          el.items = [
+            { text: 'Milk', checked: false, tags: ['dairy'] },
+            { text: 'Apples', checked: false, tags: ['produce'] },
+            { text: 'Eggs', checked: false, tags: ['dairy'] },
+          ];
+          el.filterTags = ['dairy'];
+          await el.updateComplete;
+          activePill = el.shadowRoot?.querySelector('.tag-pill-active');
+          renderedItems = el.shadowRoot?.querySelectorAll('.item-row');
+        });
+
+        it('should highlight the active filter pill', () => {
+          expect(activePill).to.exist;
+        });
+
+        it('should only render items matching the filter', () => {
+          expect(renderedItems!.length).to.equal(2);
+        });
+      });
+
+      describe('when clicking a tag pill to activate filter', () => {
+        let renderedItems: NodeListOf<Element> | undefined;
+
+        beforeEach(async () => {
+          el.error = null;
+          el.loading = false;
+          el.items = [
+            { text: 'Milk', checked: false, tags: ['dairy'] },
+            { text: 'Apples', checked: false, tags: ['produce'] },
+            { text: 'Eggs', checked: false, tags: ['dairy'] },
+          ];
+          await el.updateComplete;
+
+          const pills = el.shadowRoot?.querySelectorAll<HTMLButtonElement>('.tag-pill');
+          const dairyPill = Array.from(pills ?? []).find(p => p.textContent?.trim() === 'dairy');
+          dairyPill?.click();
+          await el.updateComplete;
+          renderedItems = el.shadowRoot?.querySelectorAll('.item-row');
+        });
+
+        it('should add clicked tag to filterTags', () => {
+          expect(el.filterTags).to.include('dairy');
+        });
+
+        it('should filter displayed items', () => {
+          expect(renderedItems!.length).to.equal(2);
+        });
+      });
+
+      describe('when clicking the active tag pill to remove it from filter', () => {
+        let renderedItems: NodeListOf<Element> | undefined;
+
+        beforeEach(async () => {
+          el.error = null;
+          el.loading = false;
+          el.items = [
+            { text: 'Milk', checked: false, tags: ['dairy'] },
+            { text: 'Apples', checked: false, tags: ['produce'] },
+          ];
+          el.filterTags = ['dairy'];
+          await el.updateComplete;
+
+          const activePill = el.shadowRoot?.querySelector<HTMLButtonElement>('.tag-pill-active');
+          activePill?.click();
+          await el.updateComplete;
+          renderedItems = el.shadowRoot?.querySelectorAll('.item-row');
+        });
+
+        it('should remove the tag from filterTags', () => {
+          expect(el.filterTags).to.deep.equal([]);
+        });
+
+        it('should show all items', () => {
+          expect(renderedItems!.length).to.equal(2);
+        });
+      });
+
+      describe('when a filter is active', () => {
+        let clearBtn: HTMLButtonElement | null | undefined;
+
+        beforeEach(async () => {
+          el.error = null;
+          el.loading = false;
+          el.items = [
+            { text: 'Milk', checked: false, tags: ['dairy'] },
+            { text: 'Apples', checked: false, tags: ['produce'] },
+          ];
+          el.filterTags = ['dairy'];
+          await el.updateComplete;
+          clearBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.tag-filter-clear');
+        });
+
+        it('should show the clear filter button', () => {
+          expect(clearBtn).to.exist;
+        });
+      });
+
+      describe('when clicking the clear filter button', () => {
+        let renderedItems: NodeListOf<Element> | undefined;
+
+        beforeEach(async () => {
+          el.error = null;
+          el.loading = false;
+          el.items = [
+            { text: 'Milk', checked: false, tags: ['dairy'] },
+            { text: 'Apples', checked: false, tags: ['produce'] },
+          ];
+          el.filterTags = ['dairy'];
+          await el.updateComplete;
+
+          const clearBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.tag-filter-clear');
+          clearBtn?.click();
+          await el.updateComplete;
+          renderedItems = el.shadowRoot?.querySelectorAll('.item-row');
+        });
+
+        it('should clear filterTags', () => {
+          expect(el.filterTags).to.deep.equal([]);
+        });
+
+        it('should show all items', () => {
+          expect(renderedItems!.length).to.equal(2);
+        });
+      });
+
+      describe('when no filter is active', () => {
+        let clearBtn: HTMLButtonElement | null | undefined;
+
+        beforeEach(async () => {
+          el.error = null;
+          el.loading = false;
+          el.items = [
+            { text: 'Milk', checked: false, tags: ['dairy'] },
+          ];
+          el.filterTags = [];
+          await el.updateComplete;
+          clearBtn = el.shadowRoot?.querySelector('.tag-filter-bar .tag-filter-clear') as HTMLButtonElement | null;
+        });
+
+        it('should not show the clear filter button', () => {
+          expect(clearBtn).to.not.exist;
+        });
+      });
+    });
+
+    describe('delete checked button', () => {
+      describe('when some items are checked', () => {
+        let clearCheckedBtn: HTMLButtonElement | null | undefined;
+
+        beforeEach(async () => {
+          el.error = null;
+          el.loading = false;
+          el.items = [
+            { text: 'Milk', checked: true, tags: [] },
+            { text: 'Eggs', checked: false, tags: [] },
+          ];
+          await el.updateComplete;
+          clearCheckedBtn = Array.from(
+            el.shadowRoot?.querySelectorAll<HTMLButtonElement>('.delete-checked-btn') ?? []
+          ).find(btn => btn.textContent?.trim() === 'delete checked');
+        });
+
+        it('should show the clear checked button', () => {
+          expect(clearCheckedBtn).to.exist;
+        });
+      });
+
+      describe('when no items are checked', () => {
+        let clearCheckedBtn: HTMLButtonElement | null | undefined;
+
+        beforeEach(async () => {
+          el.error = null;
+          el.loading = false;
+          el.items = [
+            { text: 'Milk', checked: false, tags: [] },
+          ];
+          await el.updateComplete;
+          clearCheckedBtn = Array.from(
+            el.shadowRoot?.querySelectorAll<HTMLButtonElement>('.delete-checked-btn') ?? []
+          ).find(btn => btn.textContent?.trim() === 'delete checked');
+        });
+
+        it('should not show the clear checked button', () => {
+          expect(clearCheckedBtn).to.not.exist;
+        });
+      });
+
+      describe('when clicking clear checked', () => {
+        let mergeFrontmatterStub: SinonStub;
+
+        beforeEach(async () => {
+          sinon.restore();
+          el.remove();
+          el = buildElement();
+
+          const initialFrontmatter: JsonObject = {
+            checklists: {
+              grocery_list: {
+                items: [
+                  { text: 'Milk', checked: true, tags: [] },
+                  { text: 'Eggs', checked: false, tags: [] },
+                  { text: 'Bread', checked: true, tags: [] },
+                ],
+              },
+            },
+          };
+
+          sinon
+            .stub(el.client, 'getFrontmatter')
+            .resolves(
+              create(GetFrontmatterResponseSchema, { frontmatter: initialFrontmatter })
+            );
+          mergeFrontmatterStub = sinon
+            .stub(el.client, 'mergeFrontmatter')
+            .callsFake(async (req: { frontmatter?: JsonObject }) =>
+              create(MergeFrontmatterResponseSchema, {
+                frontmatter: req.frontmatter ?? {},
+              })
+            );
+
+          document.body.appendChild(el);
+          await el.updateComplete;
+          await el.updateComplete;
+
+          const clearCheckedBtn = Array.from(
+            el.shadowRoot?.querySelectorAll<HTMLButtonElement>('.delete-checked-btn') ?? []
+          ).find(btn => btn.textContent?.trim() === 'delete checked');
+          clearCheckedBtn?.click();
+          await waitUntil(
+            () => mergeFrontmatterStub.callCount > 0,
+            'mergeFrontmatter should be called',
+            { timeout: 2000 }
+          );
+          await el.updateComplete;
+        });
+
+        it('should remove checked items', () => {
+          expect(el.items).to.have.length(1);
+        });
+
+        it('should keep only unchecked items', () => {
+          expect(el.items[0]?.text).to.equal('Eggs');
+        });
       });
     });
   });
@@ -624,7 +1095,7 @@ describe('WikiChecklist', () => {
           grocery_list: {
             items: [
               { text: 'Milk', checked: false },
-              { text: 'Eggs', checked: true, tag: 'Dairy' },
+              { text: 'Eggs', checked: true, tags: ['dairy'] },
             ],
           },
         },
@@ -657,7 +1128,7 @@ describe('WikiChecklist', () => {
     });
 
     it('should map item tags correctly', () => {
-      expect(items[1]?.tag).to.equal('Dairy');
+      expect(items[1]?.tags).to.deep.equal(['dairy']);
     });
 
     it('should clear loading state', () => {
@@ -1072,14 +1543,8 @@ describe('WikiChecklist', () => {
       const addInput =
         el.shadowRoot?.querySelector<HTMLInputElement>('.add-text-input');
       if (addInput) {
-        addInput.value = 'Milk';
+        addInput.value = 'Milk :dairy';
         addInput.dispatchEvent(new InputEvent('input', { bubbles: true }));
-      }
-      const tagInput =
-        el.shadowRoot?.querySelector<HTMLInputElement>('.add-tag-input');
-      if (tagInput) {
-        tagInput.value = 'Dairy';
-        tagInput.dispatchEvent(new InputEvent('input', { bubbles: true }));
       }
       await el.updateComplete;
 
@@ -1096,8 +1561,8 @@ describe('WikiChecklist', () => {
       mergePayloadItems = getMergePayloadItems(mergeFrontmatterStub);
     });
 
-    it('should include the tag in the persisted item', () => {
-      expect(mergePayloadItems[0]?.['tag']).to.equal('Dairy');
+    it('should include the tags array in the persisted item', () => {
+      expect(mergePayloadItems[0]?.['tags']).to.deep.equal(['dairy']);
     });
   });
 
@@ -1218,137 +1683,6 @@ describe('WikiChecklist', () => {
     });
   });
 
-  describe('when editing item tag', () => {
-    let mergePayloadItems: JsonObject[];
-
-    beforeEach(async () => {
-      sinon.restore();
-      el.remove();
-      el = buildElement();
-
-      const initialFrontmatter: JsonObject = {
-        checklists: {
-          grocery_list: {
-            items: [{ text: 'Milk', checked: false }],
-          },
-        },
-      };
-
-      sinon
-        .stub(el.client, 'getFrontmatter')
-        .resolves(
-          create(GetFrontmatterResponseSchema, {
-            frontmatter: initialFrontmatter,
-          })
-        );
-      const mergeFrontmatterStub = sinon
-        .stub(el.client, 'mergeFrontmatter')
-        .resolves(
-          create(MergeFrontmatterResponseSchema, {
-            frontmatter: initialFrontmatter,
-          })
-        );
-
-      document.body.appendChild(el);
-      await el.updateComplete;
-      await el.updateComplete;
-
-      const tagBadge =
-        el.shadowRoot?.querySelector<HTMLButtonElement>('.item-tag-badge');
-      tagBadge?.click();
-      await el.updateComplete;
-
-      const tagInput =
-        el.shadowRoot?.querySelector<HTMLInputElement>('.item-tag-input');
-      if (tagInput) {
-        tagInput.value = 'Dairy';
-        tagInput.dispatchEvent(new FocusEvent('blur', { bubbles: true }));
-      }
-      await waitUntil(
-        () => mergeFrontmatterStub.callCount > 0,
-        'mergeFrontmatter should be called',
-        { timeout: 2000 }
-      );
-      await el.updateComplete;
-
-      mergePayloadItems = getMergePayloadItems(mergeFrontmatterStub);
-    });
-
-    it('should call mergeFrontmatter with the updated tag', () => {
-      expect(mergePayloadItems[0]?.['tag']).to.equal('Dairy');
-    });
-  });
-
-  describe('when toggling to grouped view', () => {
-    let groupHeadings: NodeListOf<Element> | undefined;
-    let headingTexts: (string | undefined)[];
-
-    beforeEach(async () => {
-      el.error = null;
-      el.loading = false;
-      el.groupedView = false;
-      el.items = [
-        { text: 'Milk', checked: false, tag: 'Dairy' },
-        { text: 'Apples', checked: false, tag: 'Produce' },
-        { text: 'Towels', checked: false },
-      ];
-      await el.updateComplete;
-
-      const toggleBtn =
-        el.shadowRoot?.querySelector<HTMLButtonElement>('.view-toggle');
-      toggleBtn?.click();
-      await el.updateComplete;
-
-      groupHeadings = el.shadowRoot?.querySelectorAll('.group-header');
-      headingTexts = Array.from(groupHeadings ?? []).map(
-        h => h.textContent?.trim()
-      );
-    });
-
-    it('should switch to grouped view', () => {
-      expect(el.groupedView).to.be.true;
-    });
-
-    it('should render group headings for each tag', () => {
-      expect(groupHeadings!.length).to.be.greaterThan(0);
-    });
-
-    it('should render an "Other" group for untagged items', () => {
-      const hasOther = headingTexts.some(t => t?.includes('Other'));
-      expect(hasOther).to.be.true;
-    });
-  });
-
-  describe('when toggling back to flat view', () => {
-    let groupHeadings: NodeListOf<Element> | undefined;
-
-    beforeEach(async () => {
-      el.error = null;
-      el.loading = false;
-      el.groupedView = true;
-      el.items = [
-        { text: 'Milk', checked: false, tag: 'Dairy' },
-        { text: 'Apples', checked: false, tag: 'Produce' },
-      ];
-      await el.updateComplete;
-
-      const toggleBtn =
-        el.shadowRoot?.querySelector<HTMLButtonElement>('.view-toggle');
-      toggleBtn?.click();
-      await el.updateComplete;
-
-      groupHeadings = el.shadowRoot?.querySelectorAll('.group-header');
-    });
-
-    it('should switch back to flat view', () => {
-      expect(el.groupedView).to.be.false;
-    });
-
-    it('should not render group headings in flat view', () => {
-      expect(groupHeadings!.length).to.equal(0);
-    });
-  });
-
   describe('drag-and-drop reordering', () => {
     describe('reorderItems', () => {
       describe('when moving from earlier to later index', () => {
@@ -1356,10 +1690,10 @@ describe('WikiChecklist', () => {
 
         beforeEach(() => {
           const items: ChecklistItem[] = [
-            { text: 'A', checked: false },
-            { text: 'B', checked: false },
-            { text: 'C', checked: false },
-            { text: 'D', checked: false },
+            { text: 'A', checked: false, tags: [] },
+            { text: 'B', checked: false, tags: [] },
+            { text: 'C', checked: false, tags: [] },
+            { text: 'D', checked: false, tags: [] },
           ];
           result = el.reorderItems(items, 0, 3);
         });
@@ -1374,10 +1708,10 @@ describe('WikiChecklist', () => {
 
         beforeEach(() => {
           const items: ChecklistItem[] = [
-            { text: 'A', checked: false },
-            { text: 'B', checked: false },
-            { text: 'C', checked: false },
-            { text: 'D', checked: false },
+            { text: 'A', checked: false, tags: [] },
+            { text: 'B', checked: false, tags: [] },
+            { text: 'C', checked: false, tags: [] },
+            { text: 'D', checked: false, tags: [] },
           ];
           result = el.reorderItems(items, 3, 1);
         });
@@ -1392,8 +1726,8 @@ describe('WikiChecklist', () => {
 
         beforeEach(() => {
           const items: ChecklistItem[] = [
-            { text: 'A', checked: false },
-            { text: 'B', checked: false },
+            { text: 'A', checked: false, tags: [] },
+            { text: 'B', checked: false, tags: [] },
           ];
           result = el.reorderItems(items, 1, 1);
         });
@@ -1408,7 +1742,7 @@ describe('WikiChecklist', () => {
         let result: ChecklistItem[];
 
         beforeEach(() => {
-          items = [{ text: 'A', checked: false }];
+          items = [{ text: 'A', checked: false, tags: [] }];
           result = el.reorderItems(items, 5, 0);
         });
 
@@ -1422,10 +1756,10 @@ describe('WikiChecklist', () => {
 
         beforeEach(() => {
           const items: ChecklistItem[] = [
-            { text: 'Milk', checked: false, tag: 'Dairy' },
-            { text: 'Bread', checked: false, tag: 'Bakery' },
-            { text: 'Apples', checked: false, tag: 'Produce' },
-            { text: 'Eggs', checked: false, tag: 'Dairy' },
+            { text: 'Milk', checked: false, tags: ['dairy'] },
+            { text: 'Bread', checked: false, tags: ['bakery'] },
+            { text: 'Apples', checked: false, tags: ['produce'] },
+            { text: 'Eggs', checked: false, tags: ['dairy'] },
           ];
           result = el.reorderItems(items, 3, 0);
         });
@@ -1441,87 +1775,6 @@ describe('WikiChecklist', () => {
       });
     });
 
-    describe('computeNewGroupOrder', () => {
-      describe('when moving earlier tag to before later tag', () => {
-        let result: string[];
-
-        beforeEach(() => {
-          result = el.computeNewGroupOrder(
-            ['Bakery', 'Dairy', 'Produce'],
-            'Bakery',
-            'Produce',
-            'before'
-          );
-        });
-
-        it('should place the tag before the target', () => {
-          expect(result).to.deep.equal(['Dairy', 'Bakery', 'Produce']);
-        });
-      });
-
-      describe('when moving later tag to before earlier tag', () => {
-        let result: string[];
-
-        beforeEach(() => {
-          result = el.computeNewGroupOrder(
-            ['Bakery', 'Dairy', 'Produce'],
-            'Produce',
-            'Dairy',
-            'before'
-          );
-        });
-
-        it('should place the tag before the target', () => {
-          expect(result).to.deep.equal(['Bakery', 'Produce', 'Dairy']);
-        });
-      });
-
-      describe('when moving tag after another tag', () => {
-        let result: string[];
-
-        beforeEach(() => {
-          result = el.computeNewGroupOrder(
-            ['Bakery', 'Dairy', 'Produce'],
-            'Bakery',
-            'Produce',
-            'after'
-          );
-        });
-
-        it('should place the tag after the target', () => {
-          expect(result).to.deep.equal(['Dairy', 'Produce', 'Bakery']);
-        });
-      });
-
-      describe('when fromTag is not found', () => {
-        let originalTags: string[];
-        let result: string[];
-
-        beforeEach(() => {
-          originalTags = ['Bakery', 'Dairy'];
-          result = el.computeNewGroupOrder(originalTags, 'Missing', 'Bakery', 'before');
-        });
-
-        it('should return the original array', () => {
-          expect(result).to.deep.equal(originalTags);
-        });
-      });
-
-      describe('when toTag is not found', () => {
-        let originalTags: string[];
-        let result: string[];
-
-        beforeEach(() => {
-          originalTags = ['Bakery', 'Dairy'];
-          result = el.computeNewGroupOrder(originalTags, 'Bakery', 'Missing', 'before');
-        });
-
-        it('should return the original array', () => {
-          expect(result).to.deep.equal(originalTags);
-        });
-      });
-    });
-
     describe('rendering with drag support', () => {
       let handles: NodeListOf<Element> | undefined;
       let rows: NodeListOf<Element> | undefined;
@@ -1530,9 +1783,9 @@ describe('WikiChecklist', () => {
         el.error = null;
         el.loading = false;
         el.items = [
-          { text: 'Milk', checked: false, tag: 'Dairy' },
-          { text: 'Bread', checked: false, tag: 'Bakery' },
-          { text: 'Eggs', checked: false, tag: 'Dairy' },
+          { text: 'Milk', checked: false, tags: ['dairy'] },
+          { text: 'Bread', checked: false, tags: ['bakery'] },
+          { text: 'Eggs', checked: false, tags: ['dairy'] },
         ];
         await el.updateComplete;
         handles = el.shadowRoot?.querySelectorAll('.drag-handle');
@@ -1558,31 +1811,6 @@ describe('WikiChecklist', () => {
       it('should render item rows as draggable', () => {
         expect(rows?.[0]?.getAttribute('draggable')).to.equal('true');
       });
-
-      describe('when in grouped view', () => {
-        let groupHeaders: NodeListOf<Element> | undefined;
-        let groupedRows: NodeListOf<Element> | undefined;
-
-        beforeEach(async () => {
-          el.groupedView = true;
-          await el.updateComplete;
-          groupHeaders = el.shadowRoot?.querySelectorAll('.group-header');
-          groupedRows = el.shadowRoot?.querySelectorAll('.item-row');
-        });
-
-        it('should render group headers as draggable', () => {
-          expect(groupHeaders?.[0]?.getAttribute('draggable')).to.equal('true');
-        });
-
-        it('should preserve absolute data-index values on items', () => {
-          const indices = Array.from(groupedRows ?? []).map(r =>
-            r.getAttribute('data-index')
-          );
-          expect(indices).to.include('0');
-          expect(indices).to.include('1');
-          expect(indices).to.include('2');
-        });
-      });
     });
 
     describe('drop handler: flat view reordering', () => {
@@ -1602,9 +1830,9 @@ describe('WikiChecklist', () => {
           );
 
         el.items = [
-          { text: 'Milk', checked: false },
-          { text: 'Bread', checked: false },
-          { text: 'Eggs', checked: false },
+          { text: 'Milk', checked: false, tags: [] },
+          { text: 'Bread', checked: false, tags: [] },
+          { text: 'Eggs', checked: false, tags: [] },
         ];
         await el.updateComplete;
       });
@@ -1672,179 +1900,6 @@ describe('WikiChecklist', () => {
 
         it('should not call mergeFrontmatter', () => {
           expect(mergeFrontmatterStub).not.to.have.been.called;
-        });
-      });
-    });
-
-    describe('drop handler: cross-group reordering', () => {
-      let mergeFrontmatterStub: SinonStub;
-
-      beforeEach(async () => {
-        sinon.restore();
-        sinon
-          .stub(el.client, 'getFrontmatter')
-          .resolves(create(GetFrontmatterResponseSchema, { frontmatter: {} }));
-        mergeFrontmatterStub = sinon
-          .stub(el.client, 'mergeFrontmatter')
-          .callsFake(async (req: { frontmatter?: JsonObject }) =>
-            create(MergeFrontmatterResponseSchema, {
-              frontmatter: req.frontmatter ?? {},
-            })
-          );
-
-        el.items = [
-          { text: 'Milk', checked: false, tag: 'Dairy' },
-          { text: 'Bread', checked: false, tag: 'Bakery' },
-          { text: 'Eggs', checked: false, tag: 'Dairy' },
-        ];
-        await el.updateComplete;
-      });
-
-      describe('when dropping on a different group', () => {
-        let milk: ChecklistItem | undefined;
-
-        beforeEach(async () => {
-          const internal = el as unknown as WikiChecklistInternal;
-          internal._dragSourceItemIndex = 0;
-          internal._dragOverItemPosition = 'before';
-          const dropEvent = new DragEvent('drop', { cancelable: true });
-          await internal._handleItemDrop(dropEvent, 1, 'Bakery');
-          milk = el.items.find(i => i.text === 'Milk');
-        });
-
-        it('should update the tag to the target group', () => {
-          expect(milk?.tag).to.equal('Bakery');
-        });
-
-        it('should call mergeFrontmatter', () => {
-          expect(mergeFrontmatterStub).to.have.been.called;
-        });
-      });
-
-      describe('when dropping on Other group', () => {
-        let milk: ChecklistItem | undefined;
-
-        beforeEach(async () => {
-          const internal = el as unknown as WikiChecklistInternal;
-          internal._dragSourceItemIndex = 0;
-          internal._dragOverItemPosition = 'before';
-          const dropEvent = new DragEvent('drop', { cancelable: true });
-          await internal._handleItemDrop(dropEvent, 1, 'Other');
-          milk = el.items.find(i => i.text === 'Milk');
-        });
-
-        it('should remove the tag', () => {
-          expect(milk?.tag).to.be.undefined;
-        });
-      });
-
-      describe('when dropping in the same group', () => {
-        beforeEach(async () => {
-          const internal = el as unknown as WikiChecklistInternal;
-          internal._dragSourceItemIndex = 2;
-          internal._dragOverItemPosition = 'before';
-          const dropEvent = new DragEvent('drop', { cancelable: true });
-          await internal._handleItemDrop(dropEvent, 0, 'Dairy');
-        });
-
-        it('should not change the first item tag', () => {
-          expect(el.items[0]?.tag).to.equal('Dairy');
-        });
-
-        it('should not change the second item tag', () => {
-          expect(el.items[1]?.tag).to.equal('Dairy');
-        });
-      });
-    });
-
-    describe('drop handler: group heading reordering', () => {
-      let mergeFrontmatterStub: SinonStub;
-
-      beforeEach(async () => {
-        sinon.restore();
-        sinon
-          .stub(el.client, 'getFrontmatter')
-          .resolves(create(GetFrontmatterResponseSchema, { frontmatter: {} }));
-        mergeFrontmatterStub = sinon
-          .stub(el.client, 'mergeFrontmatter')
-          .callsFake(async (req: { frontmatter?: JsonObject }) =>
-            create(MergeFrontmatterResponseSchema, {
-              frontmatter: req.frontmatter ?? {},
-            })
-          );
-
-        el.items = [
-          { text: 'Milk', checked: false, tag: 'Dairy' },
-          { text: 'Bread', checked: false, tag: 'Bakery' },
-          { text: 'Apples', checked: false, tag: 'Produce' },
-        ];
-        el.groupOrder = ['Bakery', 'Dairy', 'Produce'];
-        await el.updateComplete;
-      });
-
-      describe('when reordering headings', () => {
-        beforeEach(async () => {
-          const internal = el as unknown as WikiChecklistInternal;
-          internal._dragSourceGroupTag = 'Bakery';
-          internal._dragOverGroupPosition = 'before';
-          const dropEvent = new DragEvent('drop', { cancelable: true });
-          await internal._handleGroupDrop(dropEvent, 'Produce');
-        });
-
-        it('should update groupOrder', () => {
-          expect(el.groupOrder).to.deep.equal(['Dairy', 'Bakery', 'Produce']);
-        });
-
-        it('should call mergeFrontmatter', () => {
-          expect(mergeFrontmatterStub).to.have.been.called;
-        });
-      });
-
-      describe('when groupOrder is null', () => {
-        beforeEach(async () => {
-          el.groupOrder = null;
-          const internal = el as unknown as WikiChecklistInternal;
-          internal._dragSourceGroupTag = 'Dairy';
-          internal._dragOverGroupPosition = 'before';
-          const dropEvent = new DragEvent('drop', { cancelable: true });
-          await internal._handleGroupDrop(dropEvent, 'Bakery');
-        });
-
-        it('should create groupOrder from alphabetical with the change applied', () => {
-          expect(el.groupOrder).to.deep.equal(['Dairy', 'Bakery', 'Produce']);
-        });
-      });
-
-      describe('when no source group tag is set', () => {
-        beforeEach(async () => {
-          const internal = el as unknown as WikiChecklistInternal;
-          internal._dragSourceGroupTag = null;
-          const dropEvent = new DragEvent('drop', { cancelable: true });
-          await internal._handleGroupDrop(dropEvent, 'Produce');
-        });
-
-        it('should not call mergeFrontmatter', () => {
-          expect(mergeFrontmatterStub).not.to.have.been.called;
-        });
-      });
-
-      describe('when group drop completes', () => {
-        let internal: WikiChecklistInternal;
-
-        beforeEach(async () => {
-          internal = el as unknown as WikiChecklistInternal;
-          internal._dragSourceGroupTag = 'Bakery';
-          internal._dragOverGroupPosition = 'before';
-          const dropEvent = new DragEvent('drop', { cancelable: true });
-          await internal._handleGroupDrop(dropEvent, 'Produce');
-        });
-
-        it('should clear drag source group tag', () => {
-          expect(internal._dragSourceGroupTag).to.be.null;
-        });
-
-        it('should clear drag over group tag', () => {
-          expect(internal._dragOverGroupTag).to.be.null;
         });
       });
     });
@@ -1950,26 +2005,6 @@ describe('WikiChecklist', () => {
 
         it('should not clear _dragOverItemIndex', () => {
           expect(internal._dragOverItemIndex).to.equal(1);
-        });
-      });
-
-      describe('when cursor leaves group header to an element outside', () => {
-        beforeEach(() => {
-          internal._dragOverGroupTag = 'Dairy';
-          const headerElement = document.createElement('div');
-          const outsideElement = document.createElement('div');
-          const leaveEvent = new DragEvent('dragleave', { cancelable: true });
-          Object.defineProperty(leaveEvent, 'currentTarget', {
-            value: headerElement,
-          });
-          Object.defineProperty(leaveEvent, 'relatedTarget', {
-            value: outsideElement,
-          });
-          internal._handleGroupDragLeave(leaveEvent);
-        });
-
-        it('should clear _dragOverGroupTag', () => {
-          expect(internal._dragOverGroupTag).to.be.null;
         });
       });
     });
