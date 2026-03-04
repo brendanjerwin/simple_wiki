@@ -151,8 +151,8 @@ func commitsMatch(cliCommit, serverCommit string) bool {
 	// If the server commit is in tagged format "v3.5.0 (adbef9d)", extract
 	// the hash from inside the parentheses.
 	if open := strings.LastIndex(serverCommit, "("); open >= 0 {
-		if close := strings.LastIndex(serverCommit, ")"); close > open {
-			serverHash = serverCommit[open+1 : close]
+		if closeIdx := strings.LastIndex(serverCommit, ")"); closeIdx > open {
+			serverHash = serverCommit[open+1 : closeIdx]
 		}
 	}
 
