@@ -2,12 +2,10 @@ package server
 
 import (
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"html/template"
-	"io"
 	"mime"
 	"net/http"
 	"net/url"
@@ -19,7 +17,6 @@ import (
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/static"
-	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/gin-contrib/multitemplate"
 	"github.com/gin-contrib/sessions"
@@ -379,32 +376,14 @@ func (s *Site) handleUpload(c *gin.Context) {
 	}
 	defer func() { _ = file.Close() }()
 
-	h := sha256.New()
-	if _, err := io.Copy(h, file); err != nil {
-		_ = c.AbortWithError(http.StatusInternalServerError, err)
-		s.Logger.Error(uploadFailureMessage, err.Error())
-		return
-	}
-
-	newName := "sha256-" + base32tools.EncodeBytesToBase32(h.Sum(nil))
-
-	// Replaces any existing version, but sha256 collisions are rare as anything.
-	outfile, err := os.Create(path.Join(s.PathToData, newName+".upload"))
+	fileInfo, err := s.FileStorer.Store(file)
 	if err != nil {
 		_ = c.AbortWithError(http.StatusInternalServerError, err)
 		s.Logger.Error(uploadFailureMessage, err.Error())
 		return
 	}
 
-	_, _ = file.Seek(0, io.SeekStart)
-	_, err = io.Copy(outfile, file)
-	if err != nil {
-		_ = c.AbortWithError(http.StatusInternalServerError, err)
-		s.Logger.Error(uploadFailureMessage, err.Error())
-		return
-	}
-
-	c.Header("Location", "/uploads/"+newName+"?filename="+url.QueryEscape(info.Filename))
+	c.Header("Location", "/uploads/"+fileInfo.Hash+"?filename="+url.QueryEscape(info.Filename))
 }
 
 func (*Site) handleFavicon(c *gin.Context) {
