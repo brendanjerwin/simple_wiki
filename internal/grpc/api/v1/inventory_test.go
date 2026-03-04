@@ -810,7 +810,6 @@ var _ = Describe("InventoryManagementService", func() {
 					nil,
 					mockFrontmatterIndexQueryer,
 					nil,
-					false,
 				)
 				Expect(serverErr).NotTo(HaveOccurred())
 				resp, err = server.ListContainerContents(ctx, req)
@@ -854,7 +853,6 @@ var _ = Describe("InventoryManagementService", func() {
 					nil,
 					mockFrontmatterIndexQueryer,
 					nil,
-					false,
 				)
 				Expect(serverErr).NotTo(HaveOccurred())
 				resp, err = server.ListContainerContents(ctx, req)
