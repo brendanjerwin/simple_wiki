@@ -19,11 +19,11 @@ A fully API-driven interactive checklist component backed by the frontmatter gRP
 **Features:**
 - Check/uncheck items (persisted immediately)
 - Inline text editing per item
-- Tag badges — click to edit or add a tag
-- Grouped view: items organized by tag
-- Flat view: all items in order with tag badges
-- Add new items with optional tag
+- Multiple tags per item via \`:tag\` syntax
+- Tag filter bar: click a tag pill to filter visible items
+- Add new items with optional tags (e.g. "milk :dairy :fridge")
 - Remove items
+- Drag-and-drop reordering
 - Automatic polling every 3 s to stay in sync
 
 **Usage:**
@@ -32,7 +32,7 @@ A fully API-driven interactive checklist component backed by the frontmatter gRP
 \`\`\`
 
 **Storybook note:** In Storybook, the component has no backend, so stories bypass
-the API by setting \`items\` (and optionally \`groupedView\`, \`loading\`, \`error\`)
+the API by setting \`items\` (and optionally \`loading\`, \`error\`, \`filterTags\`)
 directly on the element after fixture creation.
         `,
       },
@@ -68,12 +68,12 @@ export const Default: Story = {
 export const WithItems: Story = {
   render: () => {
     const items: ChecklistItem[] = [
-      { text: 'Milk', checked: false, tag: 'Dairy' },
-      { text: 'Eggs', checked: true, tag: 'Dairy' },
-      { text: 'Apples', checked: false, tag: 'Produce' },
-      { text: 'Bananas', checked: true, tag: 'Produce' },
-      { text: 'Sourdough bread', checked: false, tag: 'Bakery' },
-      { text: 'Butter', checked: false },
+      { text: 'Milk', checked: false, tags: ['dairy'] },
+      { text: 'Eggs', checked: true, tags: ['dairy'] },
+      { text: 'Apples', checked: false, tags: ['produce'] },
+      { text: 'Bananas', checked: true, tags: ['produce'] },
+      { text: 'Sourdough bread', checked: false, tags: ['bakery'] },
+      { text: 'Butter', checked: false, tags: [] },
     ];
 
     return html`
@@ -92,7 +92,7 @@ export const WithItems: Story = {
     docs: {
       description: {
         story:
-          'Mix of checked and unchecked items, some with tags. Checked items show strikethrough and reduced opacity.',
+          'Mix of checked and unchecked items, some with tags. Checked items show strikethrough and reduced opacity. Tag filter bar appears above the list.',
       },
     },
   },
@@ -101,11 +101,11 @@ export const WithItems: Story = {
 export const AllChecked: Story = {
   render: () => {
     const items: ChecklistItem[] = [
-      { text: 'Buy coffee', checked: true },
-      { text: 'Read emails', checked: true },
-      { text: 'Team stand-up', checked: true },
-      { text: 'Code review', checked: true },
-      { text: 'Deploy to staging', checked: true },
+      { text: 'Buy coffee', checked: true, tags: [] },
+      { text: 'Read emails', checked: true, tags: [] },
+      { text: 'Team stand-up', checked: true, tags: [] },
+      { text: 'Code review', checked: true, tags: [] },
+      { text: 'Deploy to staging', checked: true, tags: [] },
     ];
 
     return html`
@@ -132,7 +132,7 @@ export const AllChecked: Story = {
 export const SingleItem: Story = {
   render: () => {
     const items: ChecklistItem[] = [
-      { text: 'Pick up dry cleaning', checked: false },
+      { text: 'Pick up dry cleaning', checked: false, tags: [] },
     ];
 
     return html`
@@ -150,33 +150,30 @@ export const SingleItem: Story = {
     docs: {
       description: {
         story:
-          'Minimal checklist with a single item — useful for verifying layout at minimum size.',
+          'Minimal checklist with a single item -- useful for verifying layout at minimum size.',
       },
     },
   },
 };
 
-export const TaggedGroceryList: Story = {
+export const MultipleTagsPerItem: Story = {
   render: () => {
     const items: ChecklistItem[] = [
-      { text: 'Whole milk (2L)', checked: false, tag: 'Dairy' },
-      { text: 'Cheddar cheese', checked: true, tag: 'Dairy' },
-      { text: 'Greek yogurt', checked: false, tag: 'Dairy' },
-      { text: 'Fuji apples', checked: false, tag: 'Produce' },
-      { text: 'Baby spinach', checked: false, tag: 'Produce' },
-      { text: 'Roma tomatoes', checked: true, tag: 'Produce' },
-      { text: 'Sourdough loaf', checked: false, tag: 'Bakery' },
-      { text: 'Croissants (×4)', checked: false, tag: 'Bakery' },
+      { text: 'Whole milk (2L)', checked: false, tags: ['dairy', 'fridge'] },
+      { text: 'Cheddar cheese', checked: true, tags: ['dairy', 'fridge'] },
+      { text: 'Greek yogurt', checked: false, tags: ['dairy', 'fridge'] },
+      { text: 'Fuji apples', checked: false, tags: ['produce', 'fridge'] },
+      { text: 'Baby spinach', checked: false, tags: ['produce', 'fridge'] },
+      { text: 'Roma tomatoes', checked: true, tags: ['produce'] },
+      { text: 'Sourdough loaf', checked: false, tags: ['bakery'] },
+      { text: 'Croissants (x4)', checked: false, tags: ['bakery'] },
     ];
-    const groupOrder = ['Produce', 'Dairy', 'Bakery'];
 
     return html`
       <div style="max-width: 640px; padding: 20px;">
         <wiki-checklist
           list-name="grocery_list"
           .items=${items}
-          .groupOrder=${groupOrder}
-          .groupedView=${true}
           .loading=${false}
           .error=${null}
         ></wiki-checklist>
@@ -187,24 +184,21 @@ export const TaggedGroceryList: Story = {
     docs: {
       description: {
         story:
-          'Realistic grocery list in grouped view (Produce → Dairy → Bakery). ' +
-          'The `groupOrder` property controls section ordering.',
+          'Grocery list where items can have multiple tags (e.g. "dairy" and "fridge"). ' +
+          'The tag filter bar shows all unique tags as clickable pills.',
       },
     },
   },
 };
 
-export const FlatViewWithTags: Story = {
+export const FilteredByTag: Story = {
   render: () => {
     const items: ChecklistItem[] = [
-      { text: 'Whole milk (2L)', checked: false, tag: 'Dairy' },
-      { text: 'Cheddar cheese', checked: true, tag: 'Dairy' },
-      { text: 'Greek yogurt', checked: false, tag: 'Dairy' },
-      { text: 'Fuji apples', checked: false, tag: 'Produce' },
-      { text: 'Baby spinach', checked: false, tag: 'Produce' },
-      { text: 'Roma tomatoes', checked: true, tag: 'Produce' },
-      { text: 'Sourdough loaf', checked: false, tag: 'Bakery' },
-      { text: 'Croissants (×4)', checked: false, tag: 'Bakery' },
+      { text: 'Whole milk (2L)', checked: false, tags: ['dairy', 'fridge'] },
+      { text: 'Cheddar cheese', checked: true, tags: ['dairy'] },
+      { text: 'Fuji apples', checked: false, tags: ['produce'] },
+      { text: 'Baby spinach', checked: false, tags: ['produce', 'fridge'] },
+      { text: 'Sourdough loaf', checked: false, tags: ['bakery'] },
     ];
 
     return html`
@@ -212,7 +206,7 @@ export const FlatViewWithTags: Story = {
         <wiki-checklist
           list-name="grocery_list"
           .items=${items}
-          .groupedView=${false}
+          .filterTags=${['dairy']}
           .loading=${false}
           .error=${null}
         ></wiki-checklist>
@@ -223,7 +217,8 @@ export const FlatViewWithTags: Story = {
     docs: {
       description: {
         story:
-          'Same grocery items as TaggedGroceryList but in flat view. Tags are shown as small clickable badges next to each item.',
+          'Tag filter active on "dairy". Only items tagged with "dairy" are shown. ' +
+          'The active pill is highlighted. Click it again to clear the filter.',
       },
     },
   },
@@ -232,12 +227,12 @@ export const FlatViewWithTags: Story = {
 export const MixedTaggedUntagged: Story = {
   render: () => {
     const items: ChecklistItem[] = [
-      { text: 'Write unit tests', checked: false, tag: 'Dev' },
-      { text: 'Update README', checked: true },
-      { text: 'Fix TypeScript error', checked: false, tag: 'Dev' },
-      { text: 'Buy coffee beans', checked: false },
-      { text: 'Review PR #42', checked: false, tag: 'Dev' },
-      { text: 'Call dentist', checked: true },
+      { text: 'Write unit tests', checked: false, tags: ['dev'] },
+      { text: 'Update README', checked: true, tags: [] },
+      { text: 'Fix TypeScript error', checked: false, tags: ['dev'] },
+      { text: 'Buy coffee beans', checked: false, tags: [] },
+      { text: 'Review PR #42', checked: false, tags: ['dev'] },
+      { text: 'Call dentist', checked: true, tags: [] },
     ];
 
     return html`
@@ -255,7 +250,7 @@ export const MixedTaggedUntagged: Story = {
     docs: {
       description: {
         story:
-          'Some items have tags and some do not. Untagged items show a "+tag" badge to invite adding a tag.',
+          'Some items have tags and some do not. Untagged items show no badges. Filter bar only shows existing tags.',
       },
     },
   },
@@ -265,39 +260,36 @@ export const LongList: Story = {
   render: () => {
     const items: ChecklistItem[] = [
       // Dairy
-      { text: 'Whole milk (2L)', checked: false, tag: 'Dairy' },
-      { text: 'Skimmed milk (1L)', checked: true, tag: 'Dairy' },
-      { text: 'Cheddar cheese', checked: false, tag: 'Dairy' },
-      { text: 'Greek yogurt', checked: false, tag: 'Dairy' },
-      { text: 'Butter (250g)', checked: true, tag: 'Dairy' },
+      { text: 'Whole milk (2L)', checked: false, tags: ['dairy'] },
+      { text: 'Skimmed milk (1L)', checked: true, tags: ['dairy'] },
+      { text: 'Cheddar cheese', checked: false, tags: ['dairy'] },
+      { text: 'Greek yogurt', checked: false, tags: ['dairy'] },
+      { text: 'Butter (250g)', checked: true, tags: ['dairy'] },
       // Produce
-      { text: 'Fuji apples (×6)', checked: false, tag: 'Produce' },
-      { text: 'Baby spinach', checked: false, tag: 'Produce' },
-      { text: 'Roma tomatoes', checked: true, tag: 'Produce' },
-      { text: 'Yellow onions', checked: false, tag: 'Produce' },
-      { text: 'Garlic (bulb)', checked: false, tag: 'Produce' },
+      { text: 'Fuji apples (x6)', checked: false, tags: ['produce'] },
+      { text: 'Baby spinach', checked: false, tags: ['produce'] },
+      { text: 'Roma tomatoes', checked: true, tags: ['produce'] },
+      { text: 'Yellow onions', checked: false, tags: ['produce'] },
+      { text: 'Garlic (bulb)', checked: false, tags: ['produce'] },
       // Bakery
-      { text: 'Sourdough loaf', checked: false, tag: 'Bakery' },
-      { text: 'Croissants (×4)', checked: false, tag: 'Bakery' },
-      { text: 'Bagels (×6)', checked: true, tag: 'Bakery' },
+      { text: 'Sourdough loaf', checked: false, tags: ['bakery'] },
+      { text: 'Croissants (x4)', checked: false, tags: ['bakery'] },
+      { text: 'Bagels (x6)', checked: true, tags: ['bakery'] },
       // Frozen
-      { text: 'Frozen peas (400g)', checked: false, tag: 'Frozen' },
-      { text: 'Ice cream (vanilla)', checked: false, tag: 'Frozen' },
-      { text: 'Frozen fish fillets', checked: true, tag: 'Frozen' },
+      { text: 'Frozen peas (400g)', checked: false, tags: ['frozen'] },
+      { text: 'Ice cream (vanilla)', checked: false, tags: ['frozen'] },
+      { text: 'Frozen fish fillets', checked: true, tags: ['frozen'] },
       // Pantry
-      { text: 'Pasta (500g)', checked: false, tag: 'Pantry' },
-      { text: 'Olive oil (500ml)', checked: false, tag: 'Pantry' },
-      { text: 'Tinned tomatoes (×4)', checked: true, tag: 'Pantry' },
+      { text: 'Pasta (500g)', checked: false, tags: ['pantry'] },
+      { text: 'Olive oil (500ml)', checked: false, tags: ['pantry'] },
+      { text: 'Tinned tomatoes (x4)', checked: true, tags: ['pantry'] },
     ];
-    const groupOrder = ['Produce', 'Dairy', 'Bakery', 'Frozen', 'Pantry'];
 
     return html`
       <div style="max-width: 640px; padding: 20px;">
         <wiki-checklist
           list-name="big_shop"
           .items=${items}
-          .groupOrder=${groupOrder}
-          .groupedView=${true}
           .loading=${false}
           .error=${null}
         ></wiki-checklist>
@@ -308,8 +300,9 @@ export const LongList: Story = {
     docs: {
       description: {
         story:
-          '19 items spread across 5 tag groups (Produce, Dairy, Bakery, Frozen, Pantry). ' +
-          'Useful for verifying scrolling and that grouped view handles many sections cleanly.',
+          '19 items spread across 5 tag categories (dairy, produce, bakery, frozen, pantry). ' +
+          'Use the tag filter bar to focus on a specific category. ' +
+          'Useful for verifying scrolling and that the filter handles many tags cleanly.',
       },
     },
   },
@@ -333,7 +326,7 @@ export const Loading: Story = {
       description: {
         story:
           'Initial loading state shown while the component fetches checklist data from the API. ' +
-          'A spinner and "Loading checklist…" message is displayed.',
+          'A spinner and "Loading checklist..." message is displayed.',
       },
     },
   },
@@ -370,11 +363,11 @@ export const ErrorState: Story = {
 export const InteractiveTesting: Story = {
   render: () => {
     const groceryItems: ChecklistItem[] = [
-      { text: 'Whole milk', checked: false, tag: 'Dairy' },
-      { text: 'Eggs (×12)', checked: false, tag: 'Dairy' },
-      { text: 'Apples', checked: false, tag: 'Produce' },
-      { text: 'Sourdough bread', checked: false, tag: 'Bakery' },
-      { text: 'Butter', checked: false },
+      { text: 'Whole milk', checked: false, tags: ['dairy', 'fridge'] },
+      { text: 'Eggs (x12)', checked: false, tags: ['dairy'] },
+      { text: 'Apples', checked: false, tags: ['produce'] },
+      { text: 'Sourdough bread', checked: false, tags: ['bakery'] },
+      { text: 'Butter', checked: false, tags: [] },
     ];
 
     return html`
@@ -386,12 +379,12 @@ export const InteractiveTesting: Story = {
 
         <h4>Test scenarios</h4>
         <ul style="margin-bottom: 20px; padding-left: 20px; font-size: 0.9em; color: #555;">
-          <li>Check/uncheck items — triggers an API save (no backend in Storybook, so a network error is expected)</li>
-          <li>Click the <em>Group</em> button to switch to grouped view</li>
-          <li>Click a tag badge to edit it inline; press Enter or click away to save</li>
-          <li>Click the <em>+tag</em> badge on "Butter" to add a tag</li>
-          <li>Type in the "Add new item…" field and press Enter or click Add</li>
-          <li>Click ✕ to remove an item</li>
+          <li>Check/uncheck items -- triggers an API save (no backend in Storybook, so a network error is expected)</li>
+          <li>Click tag pills in the filter bar to filter items by tag</li>
+          <li>Click the active pill again to clear the filter</li>
+          <li>Type in the "Add item..." field with :tag syntax and press Enter or click Add</li>
+          <li>Click the remove button to remove an item</li>
+          <li>Drag items to reorder them</li>
         </ul>
 
         <wiki-checklist
@@ -404,8 +397,8 @@ export const InteractiveTesting: Story = {
 
         <div style="margin-top: 24px; padding: 14px; background: #fff3cd; border-radius: 6px; font-size: 0.88em; color: #555;">
           <strong>Note:</strong> This story injects items directly, bypassing the gRPC API.
-          Interactions that trigger save/load will result in a network error in Storybook — this is expected.
-          The UI interactions (toggling view, editing tags, etc.) work without a backend.
+          Interactions that trigger save/load will result in a network error in Storybook -- this is expected.
+          The UI interactions (filtering, drag-and-drop, etc.) work without a backend.
         </div>
       </div>
     `;
@@ -415,7 +408,7 @@ export const InteractiveTesting: Story = {
       description: {
         story:
           'Fully interactive story for manual QA. Pre-loaded with grocery items. ' +
-          'Test checking items, toggling grouped/flat view, editing tags, adding and removing items. ' +
+          'Test checking items, filtering by tag, adding and removing items, drag-and-drop reordering. ' +
           'Open the browser developer tools console to see the action logs.',
       },
     },
