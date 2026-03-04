@@ -232,10 +232,25 @@ export class ConfirmationDialog extends LitElement {
     `
   ];
 
-  @state() private config: ConfirmationConfig | null = null;
-  @state() private loading = false;
-  @state() private augmentedError: AugmentedError | undefined;
-  @state() private open = false;
+  @state()
+  declare private config: ConfirmationConfig | null;
+
+  @state()
+  declare private loading: boolean;
+
+  @state()
+  declare private augmentedError: AugmentedError | undefined;
+
+  @state()
+  declare private open: boolean;
+
+  constructor() {
+    super();
+    this.config = null;
+    this.loading = false;
+    this.augmentedError = undefined;
+    this.open = false;
+  }
 
   /**
    * Opens the confirmation dialog with the specified configuration
