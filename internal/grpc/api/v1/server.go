@@ -15,6 +15,7 @@ import (
 	"time"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
+	"github.com/brendanjerwin/simple_wiki/filestore"
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
 	"github.com/brendanjerwin/simple_wiki/pageimport"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
@@ -98,6 +99,7 @@ type Server struct {
 	apiv1.UnimplementedSearchServiceServer
 	apiv1.UnimplementedInventoryManagementServiceServer
 	apiv1.UnimplementedPageImportServiceServer
+	apiv1.UnimplementedFileStorageServiceServer
 	commit                  string
 	buildTime               time.Time
 	pageReaderMutator       wikipage.PageReaderMutator
@@ -107,6 +109,7 @@ type Server struct {
 	markdownRenderer        wikipage.IRenderMarkdownToHTML
 	templateExecutor        wikipage.IExecuteTemplate
 	frontmatterIndexQueryer wikipage.IQueryFrontmatterIndex
+	fileStorer              filestore.FileStorer
 }
 
 // MergeFrontmatter implements the MergeFrontmatter RPC.
@@ -314,6 +317,7 @@ func NewServer(
 	markdownRenderer wikipage.IRenderMarkdownToHTML,
 	templateExecutor wikipage.IExecuteTemplate,
 	frontmatterIndexQueryer wikipage.IQueryFrontmatterIndex,
+	fileStorer filestore.FileStorer,
 ) (*Server, error) {
 	if pageReaderMutator == nil {
 		return nil, errors.New("pageReaderMutator is required")
@@ -327,7 +331,6 @@ func NewServer(
 	if logger == nil {
 		return nil, errors.New("logger is required")
 	}
-
 	return &Server{
 		commit:                  commit,
 		buildTime:               buildTime,
@@ -338,6 +341,7 @@ func NewServer(
 		markdownRenderer:        markdownRenderer,
 		templateExecutor:        templateExecutor,
 		frontmatterIndexQueryer: frontmatterIndexQueryer,
+		fileStorer:              fileStorer,
 	}, nil
 }
 
@@ -349,6 +353,7 @@ func (s *Server) RegisterWithServer(grpcServer *grpc.Server) {
 	apiv1.RegisterSearchServiceServer(grpcServer, s)
 	apiv1.RegisterInventoryManagementServiceServer(grpcServer, s)
 	apiv1.RegisterPageImportServiceServer(grpcServer, s)
+	apiv1.RegisterFileStorageServiceServer(grpcServer, s)
 }
 
 // GetVersion implements the GetVersion RPC.

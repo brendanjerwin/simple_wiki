@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/brendanjerwin/simple_wiki/filestore"
 	"github.com/brendanjerwin/simple_wiki/index"
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
@@ -53,6 +54,7 @@ type Site struct {
 	Fileuploads             bool
 	MaxUploadSize           uint
 	MaxDocumentSize         uint // in runes; about a 10mb limit by default
+	FileStorer              filestore.FileStorer
 	Logger                  *lumber.ConsoleLogger
 	MarkdownRenderer        IRenderMarkdownToHTML
 	IndexCoordinator        *index.IndexCoordinator
@@ -112,6 +114,12 @@ func NewSite(
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize site: %w", err)
 	}
+
+	fileStorer, err := filestore.NewDiskFileStorer(filepathToData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create file storer: %w", err)
+	}
+	site.FileStorer = fileStorer
 
 	logger.Info("Site initialization complete")
 	return site, nil

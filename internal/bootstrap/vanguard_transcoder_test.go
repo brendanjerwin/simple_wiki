@@ -17,6 +17,7 @@ var _ = Describe("BuildVanguardTranscoder", func() {
 
 	BeforeEach(func() {
 		grpcServer = grpc.NewServer()
+		apiv1.RegisterFileStorageServiceServer(grpcServer, nil)
 		apiv1.RegisterFrontmatterServer(grpcServer, nil)
 		apiv1.RegisterInventoryManagementServiceServer(grpcServer, nil)
 		apiv1.RegisterPageImportServiceServer(grpcServer, nil)
