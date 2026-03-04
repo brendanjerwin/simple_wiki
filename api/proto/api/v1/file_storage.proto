@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package api.v1;
+
+option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
+
+// The FileStorageService provides methods for uploading, querying, and deleting files.
+service FileStorageService {
+  // UploadFile uploads a file and returns its hash and URL.
+  rpc UploadFile(UploadFileRequest) returns (UploadFileResponse) {}
+  // GetFileInfo returns metadata about an uploaded file.
+  rpc GetFileInfo(GetFileInfoRequest) returns (GetFileInfoResponse) {}
+  // DeleteFile removes an uploaded file.
+  rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse) {}
+}
+
+// Request message for UploadFile.
+message UploadFileRequest {
+  bytes content = 1;
+  string filename = 2;
+}
+
+// Response message for UploadFile.
+message UploadFileResponse {
+  string hash = 1;
+  string upload_url = 2;
+}
+
+// Request message for GetFileInfo.
+message GetFileInfoRequest {
+  string hash = 1;
+}
+
+// Response message for GetFileInfo.
+message GetFileInfoResponse {
+  string hash = 1;
+  int64 size_bytes = 2;
+}
+
+// Request message for DeleteFile.
+message DeleteFileRequest {
+  string hash = 1;
+}
+
+// Response message for DeleteFile.
+message DeleteFileResponse {
+  bool success = 1;
+}
