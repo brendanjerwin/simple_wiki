@@ -22,6 +22,7 @@
   "shell": {
     "init_hook": [
       ". ./scripts/ensure_staticcheck.sh",
+      ". ./scripts/ensure_protoc_gen_go_mcp.sh",
       "export PATH=\"${DEVBOX_PROJECT_ROOT:-.}/.devbox/gobin:$PATH\""
     ],
     "scripts": {
