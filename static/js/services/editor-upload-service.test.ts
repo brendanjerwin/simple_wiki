@@ -1,14 +1,23 @@
 import { expect, fixture, html } from '@open-wc/testing';
 import type { SinonStub, SinonSpy } from 'sinon';
 import { stub, spy } from 'sinon';
+import type { Client } from '@connectrpc/connect';
+import { ConnectError, Code } from '@connectrpc/connect';
 import type { UploadResult } from './editor-upload-service.js';
 import { EditorUploadService } from './editor-upload-service.js';
+import type { FileStorageService } from '../gen/api/v1/file_storage_pb.js';
 
 describe('EditorUploadService', () => {
   let service: EditorUploadService;
+  let uploadFileStub: SinonStub;
+  let mockClient: Client<typeof FileStorageService>;
 
   beforeEach(() => {
-    service = new EditorUploadService();
+    uploadFileStub = stub();
+    mockClient = {
+      uploadFile: uploadFileStub,
+    } as unknown as Client<typeof FileStorageService>;
+    service = new EditorUploadService(mockClient);
   });
 
   it('should exist', () => {
@@ -16,38 +25,26 @@ describe('EditorUploadService', () => {
   });
 
   describe('uploadFile', () => {
-    let fetchStub: SinonStub;
-
-    beforeEach(() => {
-      fetchStub = stub(window, 'fetch');
-    });
-
-    afterEach(() => {
-      fetchStub.restore();
-    });
-
     describe('when uploading an image', () => {
       let result: UploadResult;
       const mockFile = new File(['content'], 'test.png', { type: 'image/png' });
 
       beforeEach(async () => {
-        fetchStub.resolves(new Response('', {
-          status: 200,
-          headers: { 'Location': '/uploads/sha256-abc123?filename=test.png' }
-        }));
+        uploadFileStub.resolves({
+          hash: 'abc123',
+          uploadUrl: '/uploads/sha256-abc123?filename=test.png',
+        });
         result = await service.uploadFile(mockFile);
       });
 
-      it('should POST to /uploads', () => {
-        expect(fetchStub).to.have.been.calledOnce;
-        const [url, options] = fetchStub.firstCall.args;
-        expect(url).to.equal('/uploads');
-        expect(options.method).to.equal('POST');
+      it('should call gRPC uploadFile', () => {
+        expect(uploadFileStub).to.have.been.calledOnce;
       });
 
-      it('should send file in FormData', () => {
-        const [, options] = fetchStub.firstCall.args;
-        expect(options.body).to.be.instanceOf(FormData);
+      it('should send file content and filename in the request', () => {
+        const request = uploadFileStub.firstCall.args[0];
+        expect(request.filename).to.equal('test.png');
+        expect(request.content).to.be.instanceOf(Uint8Array);
       });
 
       it('should return markdown with image prefix', () => {
@@ -64,10 +61,10 @@ describe('EditorUploadService', () => {
       const mockFile = new File(['content'], 'document.pdf', { type: 'application/pdf' });
 
       beforeEach(async () => {
-        fetchStub.resolves(new Response('', {
-          status: 200,
-          headers: { 'Location': '/uploads/sha256-def456?filename=document.pdf' }
-        }));
+        uploadFileStub.resolves({
+          hash: 'def456',
+          uploadUrl: '/uploads/sha256-def456?filename=document.pdf',
+        });
         result = await service.uploadFile(mockFile);
       });
 
@@ -76,47 +73,26 @@ describe('EditorUploadService', () => {
       });
     });
 
-    describe('when upload fails', () => {
-      let error: Error;
+    describe('when gRPC call fails', () => {
+      let caughtError: unknown;
 
       beforeEach(async () => {
-        fetchStub.resolves(new Response('', {
-          status: 500,
-          statusText: 'Internal Server Error'
-        }));
+        uploadFileStub.rejects(
+          new ConnectError('upload failed', Code.Internal)
+        );
         try {
           await service.uploadFile(new File([''], 'test.txt', { type: 'text/plain' }));
         } catch (e) {
-          if (e instanceof Error) {
-            error = e;
-          }
+          caughtError = e;
         }
       });
 
-      it('should throw error with status', () => {
-        expect(error).to.exist;
-        expect(error.message).to.include('500');
-        expect(error.message).to.include('Internal Server Error');
-      });
-    });
-
-    describe('when response has no Location header', () => {
-      let error: Error;
-
-      beforeEach(async () => {
-        fetchStub.resolves(new Response('', { status: 200 }));
-        try {
-          await service.uploadFile(new File([''], 'test.txt', { type: 'text/plain' }));
-        } catch (e) {
-          if (e instanceof Error) {
-            error = e;
-          }
-        }
+      it('should throw a ConnectError', () => {
+        expect(caughtError).to.be.instanceOf(ConnectError);
       });
 
-      it('should throw error about missing Location', () => {
-        expect(error).to.exist;
-        expect(error.message).to.include('Location');
+      it('should preserve the error code', () => {
+        expect((caughtError as ConnectError).code).to.equal(Code.Internal);
       });
     });
   });

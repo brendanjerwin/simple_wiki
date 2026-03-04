@@ -1,3 +1,8 @@
+import { createClient, type Client } from '@connectrpc/connect';
+import { create } from '@bufbuild/protobuf';
+import { getGrpcWebTransport } from '../web-components/grpc-transport.js';
+import { FileStorageService, UploadFileRequestSchema } from '../gen/api/v1/file_storage_pb.js';
+
 /**
  * Result of a file upload operation.
  */
@@ -12,6 +17,12 @@ export interface UploadResult {
  * EditorUploadService handles file uploads and markdown insertion for the editor.
  */
 export class EditorUploadService {
+  private client: Client<typeof FileStorageService>;
+
+  constructor(client?: Client<typeof FileStorageService>) {
+    this.client = client ?? createClient(FileStorageService, getGrpcWebTransport());
+  }
+
   /**
    * Opens file picker for images and uploads the selected file.
    * @returns Promise resolving to upload result, or undefined if cancelled
@@ -37,32 +48,24 @@ export class EditorUploadService {
   }
 
   /**
-   * Uploads a file to the server.
+   * Uploads a file to the server via gRPC.
    * @param file The file to upload
    * @returns Promise resolving to upload result
    */
   async uploadFile(file: File): Promise<UploadResult> {
-    const formData = new FormData();
-    formData.append('file', file);
-
-    const response = await fetch('/uploads', {
-      method: 'POST',
-      body: formData,
+    const content = new Uint8Array(await file.arrayBuffer());
+    const request = create(UploadFileRequestSchema, {
+      content,
+      filename: file.name,
     });
 
-    if (!response.ok) {
-      throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
-    }
+    const response = await this.client.uploadFile(request);
 
-    const location = response.headers.get('Location');
-    if (!location) {
-      throw new Error('No Location header in upload response');
-    }
-
-    const filename = this.extractFilename(location);
+    const uploadUrl = response.uploadUrl;
+    const filename = this.extractFilename(uploadUrl);
     const isImage = file.type.startsWith('image/');
     const prefix = isImage ? '!' : '';
-    const markdownLink = `${prefix}[${filename}](${location})`;
+    const markdownLink = `${prefix}[${filename}](${uploadUrl})`;
 
     return { markdownLink, filename };
   }
