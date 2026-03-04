@@ -63,8 +63,11 @@ var (
 	//	in heterogeneous environments. The following structure is recommended to library developers:
 	//
 	//	User-Agent → "grpc-" Language ?("-" Variant) "/" Version ?( " ("  *(AdditionalProperty ";") ")" )
+	//
+	//nolint:gochecknoglobals
 	defaultGrpcUserAgent = fmt.Sprintf("grpc-go-connect/%s (%s)", Version, runtime.Version())
-	grpcAllowedMethods   = map[string]struct{}{
+	//nolint:gochecknoglobals
+	grpcAllowedMethods = map[string]struct{}{
 		http.MethodPost: {},
 	}
 )
@@ -841,7 +844,7 @@ func grpcErrorToTrailer(trailer http.Header, protobuf Codec, err error) {
 		return
 	}
 	if connectErr, ok := asError(err); ok && !connectErr.wireErr {
-		mergeMetadataHeaders(trailer, connectErr.meta)
+		mergeNonProtocolHeaders(trailer, connectErr.meta)
 	}
 	var (
 		status  = grpcStatusFromError(err)

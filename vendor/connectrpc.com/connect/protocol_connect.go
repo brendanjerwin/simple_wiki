@@ -60,6 +60,8 @@ const (
 )
 
 // defaultConnectUserAgent returns a User-Agent string similar to those used in gRPC.
+//
+//nolint:gochecknoglobals
 var defaultConnectUserAgent = fmt.Sprintf("connect-go/%s (%s)", Version, runtime.Version())
 
 type protocolConnect struct{}
@@ -765,7 +767,7 @@ func (hc *connectUnaryHandlerConn) mergeResponseHeader(err error) {
 	}
 	if err != nil {
 		if connectErr, ok := asError(err); ok && !connectErr.wireErr {
-			mergeMetadataHeaders(header, connectErr.meta)
+			mergeNonProtocolHeaders(header, connectErr.meta)
 		}
 	}
 	for k, v := range hc.responseTrailer {
@@ -850,7 +852,7 @@ func (m *connectStreamingMarshaler) MarshalEndStream(err error, trailer http.Hea
 	if err != nil {
 		end.Error = newConnectWireError(err)
 		if connectErr, ok := asError(err); ok && !connectErr.wireErr {
-			mergeMetadataHeaders(end.Trailer, connectErr.meta)
+			mergeNonProtocolHeaders(end.Trailer, connectErr.meta)
 		}
 	}
 	data, marshalErr := json.Marshal(end)
@@ -1016,7 +1018,8 @@ func (m *connectUnaryRequestMarshaler) marshalWithGet(message any) *Error {
 	if !isTooBig {
 		url := m.buildGetURL(data, false /* compressed */)
 		if m.getURLMaxBytes <= 0 || len(url.String()) < m.getURLMaxBytes {
-			return m.writeWithGet(url)
+			m.writeWithGet(url)
+			return nil
 		}
 		if m.compressionPool == nil {
 			if m.getUseFallback {
@@ -1042,7 +1045,8 @@ func (m *connectUnaryRequestMarshaler) marshalWithGet(message any) *Error {
 	}
 	url := m.buildGetURL(compressed.Bytes(), true /* compressed */)
 	if m.getURLMaxBytes <= 0 || len(url.String()) < m.getURLMaxBytes {
-		return m.writeWithGet(url)
+		m.writeWithGet(url)
+		return nil
 	}
 	if m.getUseFallback {
 		setHeaderCanonical(m.header, connectUnaryHeaderCompression, m.compressionName)
@@ -1069,14 +1073,13 @@ func (m *connectUnaryRequestMarshaler) buildGetURL(data []byte, compressed bool)
 	return &url
 }
 
-func (m *connectUnaryRequestMarshaler) writeWithGet(url *url.URL) *Error {
+func (m *connectUnaryRequestMarshaler) writeWithGet(url *url.URL) {
 	delHeaderCanonical(m.header, connectHeaderProtocolVersion)
 	delHeaderCanonical(m.header, headerContentType)
 	delHeaderCanonical(m.header, headerContentEncoding)
 	delHeaderCanonical(m.header, headerContentLength)
 	m.duplexCall.SetMethod(http.MethodGet)
 	*m.duplexCall.URL() = *url
-	return nil
 }
 
 type connectUnaryUnmarshaler struct {
@@ -1405,7 +1408,7 @@ func connectValidateStreamResponseContentType(requestCodecName string, streamTyp
 			CodeUnknown,
 			"invalid content-type: %q; expecting %q",
 			responseContentType,
-			connectUnaryContentTypePrefix+requestCodecName,
+			connectStreamingContentTypePrefix+requestCodecName,
 		)
 	}
 	responseCodecName := connectCodecFromContentType(

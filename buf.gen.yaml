@@ -9,6 +9,11 @@ plugins:
     out: gen/go
     opt: paths=source_relative
 
+  # MCP tool generation from proto services
+  - plugin: go-mcp
+    out: gen/go
+    opt: paths=source_relative
+
   # Connect-ES plugins for browser clients (v2 uses only bufbuild/es plugin)
   - plugin: buf.build/bufbuild/es:v2.10.2
     out: static/js/gen
