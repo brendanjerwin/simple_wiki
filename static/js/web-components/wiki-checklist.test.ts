@@ -23,6 +23,21 @@ interface WikiChecklistInternal {
   _dragSourceItemIndex: number | null;
   _dragOverItemIndex: number | null;
   _dragOverItemPosition: 'before' | 'after';
+
+  // Touch drag internals
+  _handleTouchStart(e: TouchEvent, index: number): void;
+  _handleTouchMove(e: TouchEvent): void;
+  _handleTouchEnd(e: TouchEvent): void;
+  _handleTouchCancel(): void;
+  _startTouchDrag(index: number, touch: Touch): void;
+  _cancelLongPress(): void;
+  _cleanupTouchDrag(): void;
+  _touchDragActive: boolean;
+  _longPressTimerId: ReturnType<typeof setTimeout> | null;
+  _longPressHandleIndex: number | null;
+  _touchStartX: number;
+  _touchStartY: number;
+  _touchGhostEl: HTMLElement | null;
 }
 
 describe('WikiChecklist', () => {
@@ -2006,6 +2021,261 @@ describe('WikiChecklist', () => {
         it('should not clear _dragOverItemIndex', () => {
           expect(internal._dragOverItemIndex).to.equal(1);
         });
+      });
+    });
+  });
+
+  describe('touch drag reordering', () => {
+    let internal: WikiChecklistInternal;
+    let mergeFrontmatterStub: SinonStub;
+
+    function makeTouchEvent(
+      type: string,
+      clientX: number,
+      clientY: number,
+      target?: EventTarget
+    ): TouchEvent {
+      const touch = new Touch({
+        identifier: 0,
+        target: target ?? el,
+        clientX,
+        clientY,
+      });
+      return new TouchEvent(type, {
+        cancelable: true,
+        bubbles: true,
+        touches: type === 'touchend' || type === 'touchcancel' ? [] : [touch],
+        changedTouches: [touch],
+      });
+    }
+
+    function makeTouch(clientX: number, clientY: number): Touch {
+      return new Touch({
+        identifier: 0,
+        target: el,
+        clientX,
+        clientY,
+      });
+    }
+
+    beforeEach(async () => {
+      sinon.restore();
+      sinon
+        .stub(el.client, 'getFrontmatter')
+        .resolves(create(GetFrontmatterResponseSchema, { frontmatter: {} }));
+      mergeFrontmatterStub = sinon
+        .stub(el.client, 'mergeFrontmatter')
+        .callsFake(async (req: { frontmatter?: JsonObject }) =>
+          create(MergeFrontmatterResponseSchema, {
+            frontmatter: req.frontmatter ?? {},
+          })
+        );
+
+      el.items = [
+        { text: 'Milk', checked: false, tags: [] },
+        { text: 'Bread', checked: false, tags: [] },
+        { text: 'Eggs', checked: false, tags: [] },
+      ];
+      await el.updateComplete;
+      internal = el as unknown as WikiChecklistInternal;
+    });
+
+    describe('when touching the drag handle', () => {
+      beforeEach(() => {
+        const touchEvent = makeTouchEvent('touchstart', 100, 200);
+        internal._handleTouchStart(touchEvent, 1);
+      });
+
+      it('should start long-press timer', () => {
+        expect(internal._longPressTimerId).to.not.be.null;
+      });
+
+      it('should record the handle index', () => {
+        expect(internal._longPressHandleIndex).to.equal(1);
+      });
+
+      it('should record the start coordinates', () => {
+        expect(internal._touchStartX).to.equal(100);
+        expect(internal._touchStartY).to.equal(200);
+      });
+
+      it('should not yet activate touch drag', () => {
+        expect(internal._touchDragActive).to.be.false;
+      });
+    });
+
+    describe('when long-press activates (calling _startTouchDrag directly)', () => {
+      beforeEach(() => {
+        const touch = makeTouch(100, 200);
+        internal._startTouchDrag(1, touch);
+      });
+
+      it('should set _touchDragActive to true', () => {
+        expect(internal._touchDragActive).to.be.true;
+      });
+
+      it('should set _dragSourceItemIndex', () => {
+        expect(internal._dragSourceItemIndex).to.equal(1);
+      });
+
+      it('should create a ghost element in shadow root', () => {
+        expect(internal._touchGhostEl).to.not.be.null;
+        const ghost = el.shadowRoot?.querySelector('.touch-drag-ghost');
+        expect(ghost).to.not.be.null;
+      });
+    });
+
+    describe('when touch moves >10px before long-press', () => {
+      beforeEach(() => {
+        const touchEvent = makeTouchEvent('touchstart', 100, 200);
+        internal._handleTouchStart(touchEvent, 1);
+
+        // Move 15px to the right (exceeds 10px threshold)
+        const moveEvent = makeTouchEvent('touchmove', 115, 200);
+        internal._handleTouchMove(moveEvent);
+      });
+
+      it('should cancel long-press timer', () => {
+        expect(internal._longPressTimerId).to.be.null;
+      });
+
+      it('should keep _touchDragActive false', () => {
+        expect(internal._touchDragActive).to.be.false;
+      });
+
+      it('should clear _longPressHandleIndex', () => {
+        expect(internal._longPressHandleIndex).to.be.null;
+      });
+    });
+
+    describe('when touch moves <10px before long-press', () => {
+      beforeEach(() => {
+        const touchEvent = makeTouchEvent('touchstart', 100, 200);
+        internal._handleTouchStart(touchEvent, 1);
+
+        // Move 5px (under the 10px threshold)
+        const moveEvent = makeTouchEvent('touchmove', 103, 204);
+        internal._handleTouchMove(moveEvent);
+      });
+
+      it('should NOT cancel long-press timer', () => {
+        expect(internal._longPressTimerId).to.not.be.null;
+      });
+
+      it('should keep _longPressHandleIndex set', () => {
+        expect(internal._longPressHandleIndex).to.equal(1);
+      });
+    });
+
+    describe('when touch moves during active drag', () => {
+      beforeEach(() => {
+        // Activate touch drag directly
+        const touch = makeTouch(100, 200);
+        internal._startTouchDrag(0, touch);
+
+        // Stub elementFromPoint on the shadow root to return item at index 2
+        const row = el.shadowRoot?.querySelectorAll('.item-row')[2];
+        if (row instanceof HTMLElement) {
+          row.getBoundingClientRect = () =>
+            ({ top: 280, bottom: 320, height: 40, left: 0, right: 200, width: 200 }) as DOMRect;
+        }
+        sinon.stub(el.shadowRoot!, 'elementFromPoint').returns(row ?? null);
+
+        // Move to y=310 (in the lower half of item at index 2)
+        const moveEvent = makeTouchEvent('touchmove', 100, 310);
+        internal._handleTouchMove(moveEvent);
+      });
+
+      it('should update _dragOverItemIndex', () => {
+        expect(internal._dragOverItemIndex).to.equal(2);
+      });
+
+      it('should update _dragOverItemPosition', () => {
+        expect(internal._dragOverItemPosition).to.equal('after');
+      });
+    });
+
+    describe('when touch ends during active drag', () => {
+      beforeEach(async () => {
+        // Activate touch drag directly
+        const touch = makeTouch(100, 200);
+        internal._startTouchDrag(2, touch);
+
+        // Set up the drop target — simulate dragging to before item 0
+        internal._dragOverItemIndex = 0;
+        internal._dragOverItemPosition = 'before';
+
+        const endEvent = makeTouchEvent('touchend', 100, 100);
+        internal._handleTouchEnd(endEvent);
+
+        // Wait for persistData's async call to complete
+        await el.updateComplete;
+      });
+
+      it('should set _touchDragActive to false', () => {
+        expect(internal._touchDragActive).to.be.false;
+      });
+
+      it('should remove ghost element', () => {
+        expect(internal._touchGhostEl).to.be.null;
+      });
+
+      it('should reorder items', () => {
+        expect(el.items[0]?.text).to.equal('Eggs');
+      });
+
+      it('should call persistData (mergeFrontmatter)', () => {
+        expect(mergeFrontmatterStub.called).to.be.true;
+      });
+    });
+
+    describe('when touch is cancelled during active drag', () => {
+      let originalItems: ChecklistItem[];
+
+      beforeEach(() => {
+        // Activate touch drag directly
+        const touch = makeTouch(100, 200);
+        internal._startTouchDrag(1, touch);
+
+        originalItems = [...el.items];
+        internal._dragOverItemIndex = 0;
+        internal._dragOverItemPosition = 'before';
+
+        internal._handleTouchCancel();
+      });
+
+      it('should NOT reorder items', () => {
+        expect(el.items.map(i => i.text)).to.deep.equal(originalItems.map(i => i.text));
+      });
+
+      it('should remove ghost element', () => {
+        expect(internal._touchGhostEl).to.be.null;
+      });
+
+      it('should clear drag state', () => {
+        expect(internal._touchDragActive).to.be.false;
+        expect(internal._dragSourceItemIndex).to.be.null;
+        expect(internal._dragOverItemIndex).to.be.null;
+      });
+    });
+
+    describe('when touch ends before long-press fires', () => {
+      beforeEach(() => {
+        const touchEvent = makeTouchEvent('touchstart', 100, 200);
+        internal._handleTouchStart(touchEvent, 1);
+
+        // End before the 400ms fires — no active drag
+        const endEvent = makeTouchEvent('touchend', 100, 200);
+        internal._handleTouchEnd(endEvent);
+      });
+
+      it('should cancel long-press timer', () => {
+        expect(internal._longPressTimerId).to.be.null;
+      });
+
+      it('should not set any drag state', () => {
+        expect(internal._touchDragActive).to.be.false;
+        expect(internal._dragSourceItemIndex).to.be.null;
       });
     });
   });
