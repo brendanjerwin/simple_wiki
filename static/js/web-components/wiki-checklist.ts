@@ -20,6 +20,12 @@ import './error-display.js';
 // Polling interval in milliseconds
 const POLL_INTERVAL_MS = 3000;
 
+// Long-press delay in milliseconds before initiating touch drag
+const LONG_PRESS_DELAY_MS = 400;
+
+// Movement threshold in pixels; exceeding this cancels the long-press
+const LONG_PRESS_MOVE_THRESHOLD_PX = 10;
+
 export interface ChecklistItem {
   text: string;
   checked: boolean;
@@ -131,8 +137,18 @@ export class WikiChecklist extends LitElement {
         accent-color: #6c757d;
       }
 
-      .item-text {
+      .item-content {
+        display: flex;
         flex: 1;
+        align-items: center;
+        gap: 4px;
+        flex-wrap: wrap;
+        min-width: 0;
+      }
+
+      .item-text {
+        flex: 1 1 auto;
+        min-width: 80px;
         font-size: 14px;
         border: none;
         background: transparent;
@@ -225,6 +241,26 @@ export class WikiChecklist extends LitElement {
         height: 2px;
         background: #0d6efd;
         border-radius: 1px;
+      }
+
+      :host(.touch-dragging) {
+        touch-action: none;
+        user-select: none;
+      }
+
+      .drag-handle.long-press-pending {
+        color: #0d6efd;
+        transform: scale(1.2);
+      }
+
+      .touch-drag-ghost {
+        position: fixed;
+        z-index: 9999;
+        pointer-events: none;
+        opacity: 0.85;
+        background: #fff;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        border-radius: 4px;
       }
 
       .tag-filter-bar {
@@ -394,6 +430,21 @@ export class WikiChecklist extends LitElement {
   @state()
   private declare _dragOverItemPosition: 'before' | 'after';
 
+  // Touch drag state
+  @state()
+  declare _touchDragActive: boolean;
+
+  private _longPressTimerId: ReturnType<typeof setTimeout> | null = null;
+  private _longPressHandleIndex: number | null = null;
+  private _touchStartX = 0;
+  private _touchStartY = 0;
+  private _touchGhostEl: HTMLElement | null = null;
+
+  // Bound listener references for proper cleanup
+  private _boundTouchMove: ((e: TouchEvent) => void) | null = null;
+  private _boundTouchEnd: ((e: TouchEvent) => void) | null = null;
+  private _boundTouchCancel: ((e: TouchEvent) => void) | null = null;
+
   private pollingTimer: ReturnType<typeof setInterval> | null = null;
 
   readonly client = createClient(Frontmatter, getGrpcWebTransport());
@@ -412,6 +463,7 @@ export class WikiChecklist extends LitElement {
     this._dragSourceItemIndex = null;
     this._dragOverItemIndex = null;
     this._dragOverItemPosition = 'before';
+    this._touchDragActive = false;
   }
 
   override connectedCallback(): void {
@@ -433,6 +485,7 @@ export class WikiChecklist extends LitElement {
       clearInterval(this.pollingTimer);
       this.pollingTimer = null;
     }
+    this._cleanupTouchDrag();
   }
 
   /**
@@ -818,6 +871,178 @@ export class WikiChecklist extends LitElement {
     this._dragOverItemIndex = null;
   }
 
+  _handleTouchStart(e: TouchEvent, index: number): void {
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+
+    // Cancel any existing long-press
+    this._cancelLongPress();
+
+    this._touchStartX = touch.clientX;
+    this._touchStartY = touch.clientY;
+    this._longPressHandleIndex = index;
+
+    // Register document-level listeners for move/end/cancel
+    this._boundTouchMove = (ev: TouchEvent) => this._handleTouchMove(ev);
+    this._boundTouchEnd = (ev: TouchEvent) => this._handleTouchEnd(ev);
+    this._boundTouchCancel = () => this._handleTouchCancel();
+    document.addEventListener('touchmove', this._boundTouchMove, { passive: false });
+    document.addEventListener('touchend', this._boundTouchEnd);
+    document.addEventListener('touchcancel', this._boundTouchCancel);
+
+    this._longPressTimerId = setTimeout(() => {
+      this._longPressTimerId = null;
+      this._startTouchDrag(index, touch);
+    }, LONG_PRESS_DELAY_MS);
+  }
+
+  private _handleTouchMove(e: TouchEvent): void {
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+
+    if (this._touchDragActive) {
+      // Active drag: prevent scrolling, move ghost, compute drop target
+      e.preventDefault();
+      this._moveGhost(touch.clientX, touch.clientY);
+
+      // Hide ghost temporarily so elementFromPoint can see the row beneath
+      if (this._touchGhostEl) {
+        this._touchGhostEl.style.display = 'none';
+      }
+      const elementUnderFinger = this.shadowRoot?.elementFromPoint(touch.clientX, touch.clientY);
+      if (this._touchGhostEl) {
+        this._touchGhostEl.style.display = '';
+      }
+
+      // Walk up to find the .item-row and read data-index
+      const row = elementUnderFinger?.closest('.item-row');
+      if (row instanceof HTMLElement) {
+        const indexAttr = row.getAttribute('data-index');
+        if (indexAttr !== null) {
+          const targetIndex = parseInt(indexAttr, 10);
+          const rect = row.getBoundingClientRect();
+          const midY = rect.top + rect.height / 2;
+          this._dragOverItemIndex = targetIndex;
+          this._dragOverItemPosition = touch.clientY < midY ? 'before' : 'after';
+        }
+      }
+    } else if (this._longPressTimerId !== null) {
+      // Pre-drag: check if finger moved beyond threshold (user is scrolling)
+      const dx = touch.clientX - this._touchStartX;
+      const dy = touch.clientY - this._touchStartY;
+      const distancePx = Math.sqrt(dx * dx + dy * dy);
+      if (distancePx > LONG_PRESS_MOVE_THRESHOLD_PX) {
+        this._cancelLongPress();
+        this._removeDocumentTouchListeners();
+      }
+    }
+  }
+
+  private _handleTouchEnd(e: TouchEvent): void {
+    void e;
+
+    if (this._touchDragActive) {
+      // Commit the reorder
+      const sourceIndex = this._dragSourceItemIndex;
+      const targetIndex = this._dragOverItemIndex;
+      const position = this._dragOverItemPosition;
+
+      this._cleanupTouchDrag();
+
+      if (sourceIndex !== null && targetIndex !== null) {
+        const insertIndex = position === 'before' ? targetIndex : targetIndex + 1;
+        const newItems = this.reorderItems(this.items, sourceIndex, insertIndex);
+        this.items = newItems;
+        void this.persistData(newItems);
+      }
+    } else {
+      // Touch ended before long-press fired
+      this._cancelLongPress();
+      this._removeDocumentTouchListeners();
+    }
+  }
+
+  private _handleTouchCancel(): void {
+    this._cleanupTouchDrag();
+  }
+
+  _startTouchDrag(index: number, touch: Touch): void {
+    this._touchDragActive = true;
+    this._dragSourceItemIndex = index;
+    this._longPressHandleIndex = null;
+
+    // Add touch-dragging class to host
+    this.classList.add('touch-dragging');
+
+    // Create ghost element from the source row
+    const rows = this.shadowRoot?.querySelectorAll('.item-row');
+    const sourceRow = rows?.[index];
+    if (sourceRow instanceof HTMLElement) {
+      const cloned = sourceRow.cloneNode(true);
+      if (!(cloned instanceof HTMLElement)) return;
+      const ghost = cloned;
+      ghost.classList.add('touch-drag-ghost');
+      // Size the ghost to match the source row
+      const rect = sourceRow.getBoundingClientRect();
+      ghost.style.width = `${rect.width}px`;
+      this._moveGhost(touch.clientX, touch.clientY, ghost);
+      this.shadowRoot?.appendChild(ghost);
+      this._touchGhostEl = ghost;
+    }
+  }
+
+  _cleanupTouchDrag(): void {
+    this._cancelLongPress();
+
+    // Remove ghost
+    if (this._touchGhostEl) {
+      this._touchGhostEl.remove();
+      this._touchGhostEl = null;
+    }
+
+    // Remove document listeners
+    this._removeDocumentTouchListeners();
+
+    // Reset state
+    this._touchDragActive = false;
+    this._dragSourceItemIndex = null;
+    this._dragOverItemIndex = null;
+    this._longPressHandleIndex = null;
+
+    // Remove host class
+    this.classList.remove('touch-dragging');
+  }
+
+  private _cancelLongPress(): void {
+    if (this._longPressTimerId !== null) {
+      clearTimeout(this._longPressTimerId);
+      this._longPressTimerId = null;
+    }
+    this._longPressHandleIndex = null;
+  }
+
+  private _removeDocumentTouchListeners(): void {
+    if (this._boundTouchMove) {
+      document.removeEventListener('touchmove', this._boundTouchMove);
+      this._boundTouchMove = null;
+    }
+    if (this._boundTouchEnd) {
+      document.removeEventListener('touchend', this._boundTouchEnd);
+      this._boundTouchEnd = null;
+    }
+    if (this._boundTouchCancel) {
+      document.removeEventListener('touchcancel', this._boundTouchCancel);
+      this._boundTouchCancel = null;
+    }
+  }
+
+  private _moveGhost(clientX: number, clientY: number, ghost?: HTMLElement): void {
+    const el = ghost ?? this._touchGhostEl;
+    if (!el) return;
+    el.style.left = `${clientX}px`;
+    el.style.top = `${clientY - 20}px`;
+  }
+
   private _renderItem(
     item: ChecklistItem,
     index: number
@@ -840,7 +1065,11 @@ export class WikiChecklist extends LitElement {
         @drop="${(e: DragEvent) => this._handleItemDrop(e, index)}"
         @dragend="${() => this._handleItemDragEnd()}"
       >
-        <span class="drag-handle" aria-hidden="true">\u2807</span>
+        <span
+          class="drag-handle ${this._longPressHandleIndex === index ? 'long-press-pending' : ''}"
+          aria-hidden="true"
+          @touchstart="${(e: TouchEvent) => this._handleTouchStart(e, index)}"
+        >\u2807</span>
         <input
           type="checkbox"
           class="item-checkbox"
@@ -849,29 +1078,31 @@ export class WikiChecklist extends LitElement {
           ?disabled="${this.saving}"
           @change="${() => this._handleToggleItem(index)}"
         />
-        <input
-          type="text"
-          class="item-text"
-          .value="${this.editingIndex === index ? this.composeTaggedText(item) : item.text}"
-          aria-label="Edit item text and tags"
-          @focus="${(e: FocusEvent) => {
-            if (!(e.target instanceof HTMLInputElement)) return;
-            this._handleItemFocus(index, e.target);
-          }}"
-          @blur="${(e: FocusEvent) => {
-            if (!(e.target instanceof HTMLInputElement)) return;
-            void this._handleItemTextBlur(index, e.target.value);
-          }}"
-          @keydown="${(e: KeyboardEvent) => {
-            if (!(e.currentTarget instanceof HTMLInputElement)) return;
-            this._handleItemTextKeydown(index, e.currentTarget.value, e);
-          }}"
-        />
-        ${this.editingIndex !== index
-          ? item.tags.map(
-              tag => html`<span class="item-tag-badge">${tag}</span>`
-            )
-          : nothing}
+        <span class="item-content">
+          <input
+            type="text"
+            class="item-text"
+            .value="${this.editingIndex === index ? this.composeTaggedText(item) : item.text}"
+            aria-label="Edit item text and tags"
+            @focus="${(e: FocusEvent) => {
+              if (!(e.target instanceof HTMLInputElement)) return;
+              this._handleItemFocus(index, e.target);
+            }}"
+            @blur="${(e: FocusEvent) => {
+              if (!(e.target instanceof HTMLInputElement)) return;
+              void this._handleItemTextBlur(index, e.target.value);
+            }}"
+            @keydown="${(e: KeyboardEvent) => {
+              if (!(e.currentTarget instanceof HTMLInputElement)) return;
+              this._handleItemTextKeydown(index, e.currentTarget.value, e);
+            }}"
+          />
+          ${this.editingIndex !== index
+            ? item.tags.map(
+                tag => html`<span class="item-tag-badge">${tag}</span>`
+              )
+            : nothing}
+        </span>
         <button
           class="remove-btn"
           title="Remove item"
