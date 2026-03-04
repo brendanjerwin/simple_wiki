@@ -10,21 +10,17 @@ import (
 	mcpserver "github.com/mark3labs/mcp-go/server"
 )
 
-// NewStreamableHTTPHandler creates an MCP Streamable HTTP handler that exposes
-// all gRPC API services as MCP tools. The apiServer is called in-process with
-// no network hop.
+// NewStreamableHTTPHandler creates an MCP Streamable HTTP handler that wires MCP tool
+// invocations directly to the gRPC API server in-process.
 //
-// Known limitation: MCP tool calls invoke the gRPC service methods directly on
-// apiServer, bypassing the gRPC interceptor chain. This means gRPC-level logging
-// (LoggingInterceptor) and gRPC observability metrics (GRPCInstrumentation) do not
-// capture MCP traffic. Tailscale identity is injected by the HTTP-level wrapper in
-// bootstrap (IdentityHTTPMiddlewareWithMetrics) so IdentityFromContext works correctly.
-//
-// The error return is reserved for future validation and is currently always nil.
-func NewStreamableHTTPHandler(apiServer *grpcapi.Server, commit string) (http.Handler, error) {
+// KNOWN LIMITATION: MCP calls bypass gRPC interceptors (identity resolution, logging,
+// and observability). This means MCP callers have no user identity injected into context,
+// MCP calls are not visible in gRPC request logs, and are not counted in request metrics.
+// When the MCP server runtime adds middleware support, these should be added.
+func NewStreamableHTTPHandler(apiServer *grpcapi.Server, version string) (http.Handler, error) {
 	s := mcpserver.NewMCPServer(
 		"simple-wiki",
-		commit,
+		version,
 		mcpserver.WithToolCapabilities(false),
 	)
 

@@ -81,7 +81,7 @@ var _ = Describe("NewStreamableHTTPHandler", func() {
 	})
 
 	It("returns a non-nil handler without error", func() {
-		handler, err := wikimcp.NewStreamableHTTPHandler(apiServer, "test-commit")
+		handler, err := wikimcp.NewStreamableHTTPHandler(apiServer, "test-version")
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(handler).NotTo(BeNil())
@@ -92,7 +92,7 @@ var _ = Describe("NewStreamableHTTPHandler", func() {
 
 		BeforeEach(func() {
 			var err error
-			handler, err = wikimcp.NewStreamableHTTPHandler(apiServer, "test-commit")
+			handler, err = wikimcp.NewStreamableHTTPHandler(apiServer, "test-version")
 			Expect(err).NotTo(HaveOccurred())
 		})
 

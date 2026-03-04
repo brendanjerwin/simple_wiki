@@ -305,6 +305,10 @@ func createMultiplexedHandler(
 	}
 
 	outerMux := http.NewServeMux()
+	// NOTE: The /mcp endpoint is mounted without authentication middleware.
+	// This is consistent with the gRPC API handlers which also do not enforce
+	// authorization beyond identity injection. If Tailscale identity enforcement
+	// is added to gRPC handlers in the future, it should also be applied here.
 	outerMux.Handle("/mcp", mcpHandler)
 	outerMux.Handle("/", transcoder)
 
