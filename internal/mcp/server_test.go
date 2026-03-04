@@ -68,6 +68,7 @@ func mustNewAPIServer() *grpcapi.Server {
 		nil,
 		nil,
 		noOpFrontmatterIndexQueryer{},
+		nil,
 	)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred())
 	return srv
