@@ -275,23 +275,23 @@ export class QrScanner extends LitElement {
   ];
 
   @property({ type: Boolean, reflect: true })
-  expanded = false;
+  declare expanded: boolean;
 
   /** When true, hides built-in controls (toggle, camera select, stop button) - parent handles UI */
   @property({ type: Boolean, reflect: true })
-  embedded = false;
+  declare embedded: boolean;
 
   @state()
-  private loading = false;
+  declare private loading: boolean;
 
   @state()
-  private error?: Error;
+  declare private error: Error | undefined;
 
   @state()
-  private cameras: CameraDevice[] = [];
+  declare private cameras: CameraDevice[];
 
   @state()
-  private selectedCameraId?: string;
+  declare private selectedCameraId: string | undefined;
 
   private cameraProvider: CameraProvider = new QrScannerCameraProvider();
 
@@ -307,6 +307,16 @@ export class QrScanner extends LitElement {
   /** ResizeObserver for container size changes */
   private resizeObserver: ResizeObserver | null = null;
 
+  constructor() {
+    super();
+    this.expanded = false;
+    this.embedded = false;
+    this.loading = false;
+    this.error = undefined;
+    this.cameras = [];
+    this.selectedCameraId = undefined;
+  }
+
   /**
    * Set a custom camera provider (for testing)
    */
@@ -319,7 +329,7 @@ export class QrScanner extends LitElement {
    */
   async expand(): Promise<void> {
     this.expanded = true;
-    delete this.error;
+    this.error = undefined;
     this.loading = true;
 
     try {
@@ -357,9 +367,9 @@ export class QrScanner extends LitElement {
   async collapse(): Promise<void> {
     await this._stopScanning();
     this.expanded = false;
-    delete this.error;
+    this.error = undefined;
     this.cameras = [];
-    delete this.selectedCameraId;
+    this.selectedCameraId = undefined;
   }
 
   /**
