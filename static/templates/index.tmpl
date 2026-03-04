@@ -10,7 +10,6 @@
 
         <link rel="stylesheet" href="/static/vendor/css/fontawesome.min.css">
         <link rel="stylesheet" href="/static/vendor/css/solid.min.css">
-        <link rel="stylesheet" href="/static/vendor/css/dropzone.css">
         <link rel="stylesheet" href="/static/vendor/css/github-markdown.css">
         <link rel="stylesheet" href="/static/vendor/css/menus-min.css">
         <link rel="stylesheet" href="/static/vendor/css/base-min.css">
@@ -26,7 +25,6 @@
 
         <script src="/static/vendor/js/jquery.min.js"></script>
         <script src="/static/vendor/js/highlight.min.js"></script>
-        <script src="/static/vendor/js/dropzone.js"></script>
 
         <script type="module" src="/static/js/dist/web-components.js"></script>
 
@@ -98,23 +96,9 @@
                 {{ if .EditPage }}
 
                     <div id="pad">
-
-                        <script>
-                            Dropzone.options.userInputForm = {
-                                clickable: false,
-                                maxFilesize: {{ if .MaxUploadMB }} {{.MaxUploadMB}} {{ else }} 10 {{end }}, // MB
-                                init: function initDropzone() {
-                                    this.on("complete", onUploadFinished);
-                                }
-                            };
-                        </script>
-
-                        <form
-                            id="userInputForm"
-                            action="/uploads"
-                            {{ if .AllowFileUploads }}
-                            class="dropzone"
-                            {{ end }}
+                        <file-drop-zone
+                            {{ if .AllowFileUploads }}allow-uploads{{ end }}
+                            max-upload-mb="{{ if .MaxUploadMB }}{{ .MaxUploadMB }}{{ else }}10{{ end }}"
                         >
                             <textarea
                                 autofocus
@@ -122,7 +106,7 @@
                                 autocapitalize="none"
                                 id="userInput"
                             >{{ .RawPage }}</textarea>
-                        </form>
+                        </file-drop-zone>
                     </div>
                 {{ end }}
 

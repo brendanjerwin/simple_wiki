@@ -328,33 +328,27 @@ function printLabel(template_identifier) {
         });
 }
 
-// TODO: Avoid uploading the same thing twice (check if it's already present while allowing failed uploads to be overwritten?)
-function onUploadFinished(file) {
-    this.removeFile(file);
-    var cursorPos = $('#userInput').prop('selectionStart');
-    var cursorEnd = $('#userInput').prop('selectionEnd');
-    var v = $('#userInput').val();
+// Handle file uploads from the file-drop-zone component
+document.addEventListener('file-uploaded', function(e) {
+    var detail = e.detail;
+    var textarea = document.getElementById('userInput');
+    if (!textarea) return;
+
+    var cursorPos = textarea.selectionStart;
+    var cursorEnd = textarea.selectionEnd;
+    var v = textarea.value;
     var textBefore = v.substring(0, cursorPos);
     var textAfter = v.substring(cursorPos, v.length);
     if (cursorEnd > cursorPos) {
         textAfter = v.substring(cursorEnd, v.length);
     }
-    var prefix = '';
-    if (file.type.startsWith("image")) {
-        prefix = '!';
-    }
-    var extraText = prefix + '[' + file.xhr.getResponseHeader("Location").split('filename=')[1] + '](' +
-        file.xhr.getResponseHeader("Location") +
-        ')';
+    var prefix = detail.isImage ? '!' : '';
+    var extraText = prefix + '[' + detail.filename + '](' + detail.uploadUrl + ')';
 
-    $('#userInput').val(
-        textBefore +
-        extraText +
-        textAfter
-    );
+    textarea.value = textBefore + extraText + textAfter;
 
     // Select the newly-inserted link
-    $('#userInput').prop('selectionStart', cursorPos);
-    $('#userInput').prop('selectionEnd', cursorPos + extraText.length);
-    $('#userInput').trigger('keyup'); // trigger a save
-}
+    textarea.selectionStart = cursorPos;
+    textarea.selectionEnd = cursorPos + extraText.length;
+    $(textarea).trigger('keyup'); // trigger a save
+});

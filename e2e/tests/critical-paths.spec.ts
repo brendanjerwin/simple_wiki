@@ -30,7 +30,7 @@ test.describe('Simple Wiki E2E Critical Paths', () => {
     
     // Should have the edit interface elements
     await expect(page.locator('#userInput')).toBeVisible();
-    await expect(page.locator('form')).toBeVisible();
+    await expect(page.locator('file-drop-zone')).toBeVisible();
     
     // Should have some default content with frontmatter
     const textarea = page.locator('#userInput');
