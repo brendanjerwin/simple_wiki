@@ -415,6 +415,62 @@ export const InteractiveTesting: Story = {
   },
 };
 
+export const TouchDragTesting: Story = {
+  render: () => {
+    const items: ChecklistItem[] = [
+      { text: 'Whole milk', checked: false, tags: ['dairy', 'fridge'] },
+      { text: 'Eggs (x12)', checked: false, tags: ['dairy'] },
+      { text: 'Apples', checked: false, tags: ['produce'] },
+      { text: 'Sourdough bread', checked: false, tags: ['bakery'] },
+      { text: 'Butter', checked: false, tags: [] },
+      { text: 'Greek yogurt', checked: false, tags: ['dairy', 'fridge'] },
+      { text: 'Bananas', checked: false, tags: ['produce'] },
+    ];
+
+    return html`
+      <div style="max-width: 700px; padding: 20px;">
+        <h3 style="margin-top: 0;">Touch Drag Reordering (Mobile QA)</h3>
+        <p>
+          <strong>Use Chrome DevTools touch emulation or a real mobile device.</strong>
+        </p>
+
+        <h4>Test steps</h4>
+        <ol style="margin-bottom: 20px; padding-left: 20px; font-size: 0.9em; color: #555;">
+          <li>Long-press the drag handle (the dots on the left) -- after ~400ms a ghost should appear</li>
+          <li>While holding, drag over other items -- a blue insertion line should follow</li>
+          <li>Release to drop -- the item should reorder and persist</li>
+          <li>Quick tap on a drag handle -- should NOT trigger drag (timer cancelled)</li>
+          <li>Touch and scroll on the list body -- normal scrolling should work (no drag)</li>
+          <li>Start a long-press, then move finger >10px before 400ms -- should cancel (scrolling)</li>
+        </ol>
+
+        <wiki-checklist
+          list-name="grocery_list"
+          .items=${items}
+          .loading=${false}
+          .error=${null}
+          @click=${action('checklist-click')}
+        ></wiki-checklist>
+
+        <div style="margin-top: 24px; padding: 14px; background: #d1ecf1; border-radius: 6px; font-size: 0.88em; color: #0c5460;">
+          <strong>Tip:</strong> In Chrome DevTools, toggle "Device toolbar" (Ctrl+Shift+M) and
+          select a mobile device preset to enable touch event emulation.
+        </div>
+      </div>
+    `;
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Story for testing touch-based long-press-to-drag reordering on mobile devices. ' +
+          'Use Chrome DevTools touch emulation or a real touch device. ' +
+          'Long-press the drag handle to initiate drag mode, then drag to reorder.',
+      },
+    },
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Decorator-based approach: use a play function to set state post-render
 // for stories where Lit property bindings alone are insufficient (e.g. when
