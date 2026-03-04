@@ -170,16 +170,17 @@ export class ErrorDisplay extends LitElement {
   `];
 
   @property({ type: Object })
-  augmentedError?: AugmentedError;
+  declare augmentedError?: AugmentedError;
 
   @property({ type: Object })
-  action?: ErrorAction;
+  declare action?: ErrorAction;
 
   @state()
-  private expanded = false;
+  declare private expanded: boolean;
 
   constructor() {
     super();
+    this.expanded = false;
   }
 
   private _handleExpandToggle(): void {

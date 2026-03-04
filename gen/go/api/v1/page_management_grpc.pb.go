@@ -26,6 +26,7 @@ const (
 	PageManagementService_UpdatePageContent_FullMethodName  = "/api.v1.PageManagementService/UpdatePageContent"
 	PageManagementService_UpdateWholePage_FullMethodName    = "/api.v1.PageManagementService/UpdateWholePage"
 	PageManagementService_DeletePage_FullMethodName         = "/api.v1.PageManagementService/DeletePage"
+	PageManagementService_ClearPageContent_FullMethodName   = "/api.v1.PageManagementService/ClearPageContent"
 	PageManagementService_GenerateIdentifier_FullMethodName = "/api.v1.PageManagementService/GenerateIdentifier"
 	PageManagementService_ListTemplates_FullMethodName      = "/api.v1.PageManagementService/ListTemplates"
 )
@@ -41,6 +42,9 @@ type PageManagementServiceClient interface {
 	UpdatePageContent(ctx context.Context, in *UpdatePageContentRequest, opts ...grpc.CallOption) (*UpdatePageContentResponse, error)
 	UpdateWholePage(ctx context.Context, in *UpdateWholePageRequest, opts ...grpc.CallOption) (*UpdateWholePageResponse, error)
 	DeletePage(ctx context.Context, in *DeletePageRequest, opts ...grpc.CallOption) (*DeletePageResponse, error)
+	// ClearPageContent explicitly clears the markdown content of a page, preserving its frontmatter.
+	// This is a destructive operation that requires confirm_clear = true to prevent accidental data loss.
+	ClearPageContent(ctx context.Context, in *ClearPageContentRequest, opts ...grpc.CallOption) (*ClearPageContentResponse, error)
 	// GenerateIdentifier converts text to a wiki page identifier format.
 	// Used by UI to auto-generate identifiers from titles and check availability.
 	GenerateIdentifier(ctx context.Context, in *GenerateIdentifierRequest, opts ...grpc.CallOption) (*GenerateIdentifierResponse, error)
@@ -126,6 +130,16 @@ func (c *pageManagementServiceClient) DeletePage(ctx context.Context, in *Delete
 	return out, nil
 }
 
+func (c *pageManagementServiceClient) ClearPageContent(ctx context.Context, in *ClearPageContentRequest, opts ...grpc.CallOption) (*ClearPageContentResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ClearPageContentResponse)
+	err := c.cc.Invoke(ctx, PageManagementService_ClearPageContent_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *pageManagementServiceClient) GenerateIdentifier(ctx context.Context, in *GenerateIdentifierRequest, opts ...grpc.CallOption) (*GenerateIdentifierResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GenerateIdentifierResponse)
@@ -157,6 +171,9 @@ type PageManagementServiceServer interface {
 	UpdatePageContent(context.Context, *UpdatePageContentRequest) (*UpdatePageContentResponse, error)
 	UpdateWholePage(context.Context, *UpdateWholePageRequest) (*UpdateWholePageResponse, error)
 	DeletePage(context.Context, *DeletePageRequest) (*DeletePageResponse, error)
+	// ClearPageContent explicitly clears the markdown content of a page, preserving its frontmatter.
+	// This is a destructive operation that requires confirm_clear = true to prevent accidental data loss.
+	ClearPageContent(context.Context, *ClearPageContentRequest) (*ClearPageContentResponse, error)
 	// GenerateIdentifier converts text to a wiki page identifier format.
 	// Used by UI to auto-generate identifiers from titles and check availability.
 	GenerateIdentifier(context.Context, *GenerateIdentifierRequest) (*GenerateIdentifierResponse, error)
@@ -189,6 +206,9 @@ func (UnimplementedPageManagementServiceServer) UpdateWholePage(context.Context,
 }
 func (UnimplementedPageManagementServiceServer) DeletePage(context.Context, *DeletePageRequest) (*DeletePageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeletePage not implemented")
+}
+func (UnimplementedPageManagementServiceServer) ClearPageContent(context.Context, *ClearPageContentRequest) (*ClearPageContentResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ClearPageContent not implemented")
 }
 func (UnimplementedPageManagementServiceServer) GenerateIdentifier(context.Context, *GenerateIdentifierRequest) (*GenerateIdentifierResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GenerateIdentifier not implemented")
@@ -335,6 +355,24 @@ func _PageManagementService_DeletePage_Handler(srv interface{}, ctx context.Cont
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PageManagementService_ClearPageContent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ClearPageContentRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PageManagementServiceServer).ClearPageContent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PageManagementService_ClearPageContent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PageManagementServiceServer).ClearPageContent(ctx, req.(*ClearPageContentRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _PageManagementService_GenerateIdentifier_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GenerateIdentifierRequest)
 	if err := dec(in); err != nil {
@@ -405,6 +443,10 @@ var PageManagementService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeletePage",
 			Handler:    _PageManagementService_DeletePage_Handler,
+		},
+		{
+			MethodName: "ClearPageContent",
+			Handler:    _PageManagementService_ClearPageContent_Handler,
 		},
 		{
 			MethodName: "GenerateIdentifier",

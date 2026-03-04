@@ -146,7 +146,12 @@ export class KernelPanic extends LitElement {
   ];
 
   @property({ type: Object })
-  augmentedError: AugmentedError | null = null;
+  declare augmentedError: AugmentedError | null;
+
+  constructor() {
+    super();
+    this.augmentedError = null;
+  }
 
   private _handleRefresh = (): void => {
     window.location.reload();

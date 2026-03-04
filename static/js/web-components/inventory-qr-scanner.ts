@@ -100,15 +100,22 @@ export class InventoryQrScanner extends LitElement {
   ];
 
   @property({ type: Boolean })
-  disabled = false;
+  declare disabled: boolean;
 
   @state()
-  private augmentedError: AugmentedError | null = null;
+  declare private augmentedError: AugmentedError | null;
 
   @state()
-  private validating = false;
+  declare private validating: boolean;
 
   private frontmatterClient = createClient(Frontmatter, getGrpcWebTransport());
+
+  constructor() {
+    super();
+    this.disabled = false;
+    this.augmentedError = null;
+    this.validating = false;
+  }
 
   /**
    * Expand the scanner and start camera
