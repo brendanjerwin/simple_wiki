@@ -99,7 +99,6 @@ type Server struct {
 	templateExecutor        wikipage.IExecuteTemplate
 	frontmatterIndexQueryer wikipage.IQueryFrontmatterIndex
 	fileStorer              filestore.FileStorer
-	fileUploadsEnabled      bool
 }
 
 // MergeFrontmatter implements the MergeFrontmatter RPC.
@@ -308,7 +307,6 @@ func NewServer(
 	templateExecutor wikipage.IExecuteTemplate,
 	frontmatterIndexQueryer wikipage.IQueryFrontmatterIndex,
 	fileStorer filestore.FileStorer,
-	fileUploadsEnabled bool,
 ) (*Server, error) {
 	if pageReaderMutator == nil {
 		return nil, errors.New("pageReaderMutator is required")
@@ -322,10 +320,6 @@ func NewServer(
 	if logger == nil {
 		return nil, errors.New("logger is required")
 	}
-	if fileUploadsEnabled && fileStorer == nil {
-		return nil, errors.New("fileStorer is required when file uploads are enabled")
-	}
-
 	return &Server{
 		commit:                  commit,
 		buildTime:               buildTime,
@@ -337,7 +331,6 @@ func NewServer(
 		templateExecutor:        templateExecutor,
 		frontmatterIndexQueryer: frontmatterIndexQueryer,
 		fileStorer:              fileStorer,
-		fileUploadsEnabled:      fileUploadsEnabled,
 	}, nil
 }
 

@@ -10,7 +10,7 @@ import (
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/filestore"
-	v1 "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
+	"github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
 	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -38,7 +38,6 @@ func (m *mockFileStorer) Delete(hash string) error {
 
 func mustNewServerWithFileStorer(
 	fileStorer filestore.FileStorer,
-	fileUploadsEnabled bool,
 ) *v1.Server {
 	server, err := v1.NewServer(
 		"commit",
@@ -51,7 +50,6 @@ func mustNewServerWithFileStorer(
 		nil,
 		noOpFrontmatterIndexQueryer{},
 		fileStorer,
-		fileUploadsEnabled,
 	)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred())
 	return server
@@ -91,7 +89,7 @@ var _ = Describe("FileStorageService", func() {
 
 		When("file uploads are disabled", func() {
 			BeforeEach(func() {
-				server = mustNewServerWithFileStorer(mockStorer, false)
+				server = mustNewServerWithFileStorer(nil)
 			})
 
 			It("should return FailedPrecondition error", func() {
@@ -105,7 +103,7 @@ var _ = Describe("FileStorageService", func() {
 
 		When("file uploads are enabled", func() {
 			BeforeEach(func() {
-				server = mustNewServerWithFileStorer(mockStorer, true)
+				server = mustNewServerWithFileStorer(mockStorer)
 			})
 
 			It("should not error", func() {
@@ -185,7 +183,7 @@ var _ = Describe("FileStorageService", func() {
 
 		When("file uploads are disabled", func() {
 			BeforeEach(func() {
-				server = mustNewServerWithFileStorer(mockStorer, false)
+				server = mustNewServerWithFileStorer(nil)
 			})
 
 			It("should return FailedPrecondition error", func() {
@@ -199,7 +197,7 @@ var _ = Describe("FileStorageService", func() {
 
 		When("file uploads are enabled", func() {
 			BeforeEach(func() {
-				server = mustNewServerWithFileStorer(mockStorer, true)
+				server = mustNewServerWithFileStorer(mockStorer)
 			})
 
 			When("file exists", func() {
@@ -290,7 +288,7 @@ var _ = Describe("FileStorageService", func() {
 
 		When("file uploads are disabled", func() {
 			BeforeEach(func() {
-				server = mustNewServerWithFileStorer(mockStorer, false)
+				server = mustNewServerWithFileStorer(nil)
 			})
 
 			It("should return FailedPrecondition error", func() {
@@ -304,7 +302,7 @@ var _ = Describe("FileStorageService", func() {
 
 		When("file uploads are enabled", func() {
 			BeforeEach(func() {
-				server = mustNewServerWithFileStorer(mockStorer, true)
+				server = mustNewServerWithFileStorer(mockStorer)
 			})
 
 			When("file exists", func() {

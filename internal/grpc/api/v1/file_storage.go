@@ -15,7 +15,7 @@ import (
 
 // UploadFile implements the UploadFile RPC.
 func (s *Server) UploadFile(_ context.Context, req *apiv1.UploadFileRequest) (*apiv1.UploadFileResponse, error) {
-	if !s.fileUploadsEnabled {
+	if s.fileStorer == nil {
 		return nil, status.Error(codes.FailedPrecondition, "file uploads are disabled on this server")
 	}
 	if len(req.GetContent()) == 0 {
@@ -39,7 +39,7 @@ func (s *Server) UploadFile(_ context.Context, req *apiv1.UploadFileRequest) (*a
 
 // GetFileInfo implements the GetFileInfo RPC.
 func (s *Server) GetFileInfo(_ context.Context, req *apiv1.GetFileInfoRequest) (*apiv1.GetFileInfoResponse, error) {
-	if !s.fileUploadsEnabled {
+	if s.fileStorer == nil {
 		return nil, status.Error(codes.FailedPrecondition, "file uploads are disabled on this server")
 	}
 	if req.GetHash() == "" {
@@ -65,7 +65,7 @@ func (s *Server) GetFileInfo(_ context.Context, req *apiv1.GetFileInfoRequest) (
 
 // DeleteFile implements the DeleteFile RPC.
 func (s *Server) DeleteFile(_ context.Context, req *apiv1.DeleteFileRequest) (*apiv1.DeleteFileResponse, error) {
-	if !s.fileUploadsEnabled {
+	if s.fileStorer == nil {
 		return nil, status.Error(codes.FailedPrecondition, "file uploads are disabled on this server")
 	}
 	if req.GetHash() == "" {

@@ -335,8 +335,7 @@ func mustNewServerWithJobCoordinator(
 		nil, // markdownRenderer is optional
 		nil, // templateExecutor is optional
 		frontmatterIndexQueryer,
-		nil,   // fileStorer is optional when uploads disabled
-		false, // fileUploadsEnabled
+		nil, // fileStorer — nil means uploads disabled
 	)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "mustNewServerWithJobCoordinator failed")
 	return server
@@ -1327,8 +1326,7 @@ var _ = Describe("Server", func() {
 					nil, // templateExecutor
 					noOpFrontmatterIndexQueryer{},
 					nil,   // fileStorer
-					false, // fileUploadsEnabled
-				)
+					)
 			})
 
 			It("should return an error", func() {
@@ -2413,7 +2411,6 @@ var _ = Describe("Server", func() {
 				mockTemplateExecutor,
 				mockFrontmatterIndexQueryer,
 				nil,   // fileStorer
-				false, // fileUploadsEnabled
 			)
 			Expect(serverErr).NotTo(HaveOccurred())
 			resp, err = server.ReadPage(ctx, req)
@@ -3074,7 +3071,6 @@ var _ = Describe("Server", func() {
 				nil,
 				noOpFrontmatterIndexQueryer{},
 				nil,   // fileStorer
-				false, // fileUploadsEnabled
 			)
 			Expect(serverErr).NotTo(HaveOccurred())
 			resp, err = server.GenerateIdentifier(ctx, req)
@@ -3234,7 +3230,6 @@ var _ = Describe("Server", func() {
 				nil,
 				mockFrontmatterIndexQueryer,
 				nil,   // fileStorer
-				false, // fileUploadsEnabled
 			)
 			Expect(err).NotTo(HaveOccurred())
 			resp, err = server.CreatePage(ctx, req)
@@ -3485,7 +3480,6 @@ var _ = Describe("Server", func() {
 				nil,
 				mockFrontmatterIndexQueryer,
 				nil,   // fileStorer
-				false, // fileUploadsEnabled
 			)
 			Expect(err).NotTo(HaveOccurred())
 			resp, err = server.ListTemplates(ctx, req)
