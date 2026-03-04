@@ -19,7 +19,6 @@ func TestWikiCLI(t *testing.T) {
 }
 
 var _ = Describe("commitsMatch", func() {
-
 	When("the server reports a raw hash matching the CLI commit", func() {
 		var result bool
 
