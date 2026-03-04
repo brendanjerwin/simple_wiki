@@ -381,6 +381,41 @@ var _ = Describe("Index", func() {
 			})
 		})
 
+		Describe("when frontmatter has arrays of maps (checklist data)", func() {
+			var err error
+
+			BeforeEach(func() {
+				mockReader.AddPage("checklist-page", wikipage.FrontMatter{
+					"identifier": "checklist-page",
+					"title":      "Checklist Page",
+					"checklists": map[string]any{
+						"grocery_list": map[string]any{
+							"name": "Grocery List",
+							"items": []any{
+								map[string]any{"text": "Milk", "checked": false},
+								map[string]any{"text": "Eggs", "checked": true},
+							},
+						},
+					},
+				})
+				err = index.AddPageToIndex("checklist-page")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should index parent keys for existence queries", func() {
+				results := index.QueryKeyExistence("checklists.grocery_list")
+				Expect(results).To(ContainElement("checklist_page"))
+			})
+
+			It("should index the name field within the checklist", func() {
+				results := index.QueryExactMatch("checklists.grocery_list.name", "Grocery List")
+				Expect(results).To(ContainElement("checklist_page"))
+			})
+		})
+
 		Describe("when frontmatter has empty array values", func() {
 			var err error
 
