@@ -808,11 +808,15 @@ export class WikiChecklist extends LitElement {
     this._dragOverItemIndex = null;
   }
 
-  private _handleItemDragStart(e: DragEvent, index: number): void {
-    if (e.target instanceof HTMLInputElement) {
-      e.preventDefault();
-      return;
+  private _handleDragHandleMousedown(e: MouseEvent): void {
+    if (!(e.target instanceof HTMLElement)) return;
+    const row = e.target.closest('.item-row');
+    if (row instanceof HTMLElement) {
+      row.draggable = true;
     }
+  }
+
+  private _handleItemDragStart(e: DragEvent, index: number): void {
     this._dragSourceItemIndex = index;
     if (e.dataTransfer) {
       e.dataTransfer.effectAllowed = 'move';
@@ -860,7 +864,10 @@ export class WikiChecklist extends LitElement {
     await this.persistData(newItems);
   }
 
-  private _handleItemDragEnd(): void {
+  private _handleItemDragEnd(e: DragEvent): void {
+    if (e.currentTarget instanceof HTMLElement) {
+      e.currentTarget.draggable = false;
+    }
     this._clearDragState();
   }
 
@@ -1061,17 +1068,17 @@ export class WikiChecklist extends LitElement {
       <li
         class="item-row ${item.checked ? 'item-checked' : ''} ${isDragging ? 'dragging' : ''} ${dragOverClass}"
         data-index="${index}"
-        draggable="true"
         @dragstart="${(e: DragEvent) => this._handleItemDragStart(e, index)}"
         @dragover="${(e: DragEvent) =>
           this._handleItemDragOver(e, index)}"
         @dragleave="${(e: DragEvent) => this._handleItemDragLeave(e)}"
         @drop="${(e: DragEvent) => this._handleItemDrop(e, index)}"
-        @dragend="${() => this._handleItemDragEnd()}"
+        @dragend="${(e: DragEvent) => this._handleItemDragEnd(e)}"
       >
         <span
           class="drag-handle ${this._longPressHandleIndex === index ? 'long-press-pending' : ''}"
           aria-hidden="true"
+          @mousedown="${(e: MouseEvent) => this._handleDragHandleMousedown(e)}"
           @touchstart="${(e: TouchEvent) => this._handleTouchStart(e, index)}"
         >\u2807</span>
         <input
