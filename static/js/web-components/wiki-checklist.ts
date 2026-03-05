@@ -699,11 +699,7 @@ export class WikiChecklist extends LitElement {
     this.editingIndex = index;
     const item = this.items[index];
     if (item) {
-      const cursorPos = inputEl.selectionStart;
       inputEl.value = this.composeTaggedText(item);
-      if (cursorPos !== null) {
-        inputEl.setSelectionRange(cursorPos, cursorPos);
-      }
     }
   }
 
@@ -813,6 +809,10 @@ export class WikiChecklist extends LitElement {
   }
 
   private _handleItemDragStart(e: DragEvent, index: number): void {
+    if (e.target instanceof HTMLInputElement) {
+      e.preventDefault();
+      return;
+    }
     this._dragSourceItemIndex = index;
     if (e.dataTransfer) {
       e.dataTransfer.effectAllowed = 'move';
