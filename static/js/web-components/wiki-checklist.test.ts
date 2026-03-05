@@ -19,7 +19,8 @@ interface WikiChecklistInternal {
   _handleItemDragOver(e: DragEvent, index: number): void;
   _handleItemDragLeave(e: DragEvent): void;
   _handleItemDrop(e: DragEvent, targetIndex: number): Promise<void>;
-  _handleItemDragEnd(): void;
+  _handleItemDragEnd(e: DragEvent): void;
+  _handleDragHandleMousedown(e: MouseEvent): void;
   _dragSourceItemIndex: number | null;
   _dragOverItemIndex: number | null;
   _dragOverItemPosition: 'before' | 'after';
@@ -1823,13 +1824,13 @@ describe('WikiChecklist', () => {
         expect(rows?.[2]?.getAttribute('data-index')).to.equal('2');
       });
 
-      it('should render item rows as draggable', () => {
-        expect(rows?.[0]?.getAttribute('draggable')).to.equal('true');
+      it('should not render item rows as statically draggable', () => {
+        expect(rows?.[0]?.getAttribute('draggable')).to.not.equal('true');
       });
     });
 
-    describe('when dragstart originates from the text input', () => {
-      let dragEvent: DragEvent;
+    describe('when mousedown on drag handle', () => {
+      let row: Element | null | undefined;
 
       beforeEach(async () => {
         el.error = null;
@@ -1839,21 +1840,38 @@ describe('WikiChecklist', () => {
           { text: 'Bread', checked: false, tags: ['bakery'] },
         ];
         await el.updateComplete;
-        const textInput = el.shadowRoot?.querySelector<HTMLInputElement>('.item-text');
-        dragEvent = new DragEvent('dragstart', {
-          bubbles: true,
-          cancelable: true,
-        });
-        Object.defineProperty(dragEvent, 'target', { value: textInput });
-        (el as unknown as WikiChecklistInternal)._handleItemDragStart(dragEvent, 0);
+        row = el.shadowRoot?.querySelector('.item-row');
+        const handle = el.shadowRoot?.querySelector('.drag-handle');
+        handle?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
       });
 
-      it('should cancel the drag', () => {
-        expect(dragEvent.defaultPrevented).to.be.true;
+      it('should set draggable on the parent row', () => {
+        expect((row as HTMLElement)?.draggable).to.be.true;
+      });
+    });
+
+    describe('when dragend fires after a drag', () => {
+      let row: HTMLElement | null | undefined;
+
+      beforeEach(async () => {
+        el.error = null;
+        el.loading = false;
+        el.items = [
+          { text: 'Milk', checked: false, tags: ['dairy'] },
+          { text: 'Bread', checked: false, tags: ['bakery'] },
+        ];
+        await el.updateComplete;
+        row = el.shadowRoot?.querySelector<HTMLElement>('.item-row');
+        // Simulate: mousedown on handle sets draggable
+        row!.draggable = true;
+        // Then dragend fires
+        const dragEndEvent = new DragEvent('dragend', { bubbles: true });
+        Object.defineProperty(dragEndEvent, 'currentTarget', { value: row });
+        (el as unknown as WikiChecklistInternal)._handleItemDragEnd(dragEndEvent);
       });
 
-      it('should not set _dragSourceItemIndex', () => {
-        expect((el as unknown as WikiChecklistInternal)._dragSourceItemIndex).to.be.null;
+      it('should clear draggable on the row', () => {
+        expect(row?.draggable).to.be.false;
       });
     });
 
