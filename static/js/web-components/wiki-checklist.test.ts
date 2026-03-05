@@ -732,6 +732,30 @@ describe('WikiChecklist', () => {
       });
     });
 
+    describe('when clicking to position cursor in an item', () => {
+      let textInput: HTMLInputElement | null | undefined;
+
+      beforeEach(async () => {
+        el.error = null;
+        el.loading = false;
+        el.items = [
+          { text: 'Milk', checked: false, tags: ['dairy', 'fridge'] },
+        ];
+        await el.updateComplete;
+        textInput = el.shadowRoot?.querySelector<HTMLInputElement>('.item-text');
+        // Simulate clicking at cursor position 2 (between "Mi" and "lk")
+        textInput!.setSelectionRange(2, 2);
+        textInput?.focus();
+        textInput?.dispatchEvent(new FocusEvent('focus'));
+        await el.updateComplete;
+      });
+
+      it('should preserve cursor position after re-render', () => {
+        expect(textInput?.selectionStart).to.equal(2);
+        expect(textInput?.selectionEnd).to.equal(2);
+      });
+    });
+
     describe('when blurring an item after editing tags', () => {
       let mergeFrontmatterStub: SinonStub;
 

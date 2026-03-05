@@ -1,4 +1,4 @@
-import { html, css, LitElement, nothing } from 'lit';
+import { html, css, LitElement, nothing, noChange } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import { createClient } from '@connectrpc/connect';
 import { create, type JsonObject } from '@bufbuild/protobuf';
@@ -699,7 +699,11 @@ export class WikiChecklist extends LitElement {
     this.editingIndex = index;
     const item = this.items[index];
     if (item) {
+      const cursorPos = inputEl.selectionStart;
       inputEl.value = this.composeTaggedText(item);
+      if (cursorPos !== null) {
+        inputEl.setSelectionRange(cursorPos, cursorPos);
+      }
     }
   }
 
@@ -1082,7 +1086,7 @@ export class WikiChecklist extends LitElement {
           <input
             type="text"
             class="item-text"
-            .value="${this.editingIndex === index ? this.composeTaggedText(item) : item.text}"
+            .value="${this.editingIndex !== index ? item.text : noChange}"
             aria-label="Edit item text and tags"
             @focus="${(e: FocusEvent) => {
               if (!(e.target instanceof HTMLInputElement)) return;
