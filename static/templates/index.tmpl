@@ -76,11 +76,6 @@
                                 <li class="pure-menu-item"><a href="#" class="pure-menu-link" id="erasePage"><i class="fas fa-recycle"></i> Erase</a></li>
                             </ul>
                         </li>
-                        {{ if .EditPage }}
-                        <li class="pure-menu-item">
-                            <span id="saveEditButton" class="pure-menu-link">Edit</span>
-                        </li>
-                        {{ end }}
                     </ul>
                     {{ if .ViewPage }}
                     <wiki-search id="site-search"></wiki-search>
@@ -94,20 +89,12 @@
 
             <div id="wrap">
                 {{ if .EditPage }}
-
-                    <div id="pad">
-                        <file-drop-zone
-                            {{ if .AllowFileUploads }}allow-uploads{{ end }}
-                            max-upload-mb="{{ if .MaxUploadMB }}{{ .MaxUploadMB }}{{ else }}10{{ end }}"
-                        >
-                            <textarea
-                                autofocus
-                                placeholder="Use markdown here."
-                                autocapitalize="none"
-                                id="userInput"
-                            >{{ .RawPage }}</textarea>
-                        </file-drop-zone>
-                    </div>
+                    <wiki-editor
+                        page="{{ .Page }}"
+                        {{ if .AllowFileUploads }}allow-uploads{{ end }}
+                        max-upload-mb="{{ if .MaxUploadMB }}{{ .MaxUploadMB }}{{ else }}10{{ end }}"
+                        debounce-ms="{{ .Debounce }}"
+                    ></wiki-editor>
                 {{ end }}
 
                 <div id="rendered">
