@@ -76,6 +76,12 @@ export class WikiEditor extends LitElement {
         color: #777;
         background: #f8f8f8;
         border-bottom: 1px solid #eee;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+      }
+
+      .status-bar.visible {
+        opacity: 1;
       }
 
       .status-indicator {
@@ -398,7 +404,7 @@ export class WikiEditor extends LitElement {
     return html`
       ${sharedStyles}
       <div class="editor-container">
-        <div class="status-bar">
+        <div class="status-bar ${this.saveStatus !== 'idle' ? 'visible' : ''}">
           <span class="status-indicator ${this.saveStatus}">
             ${this.saveStatus === 'saving'
               ? html`<i class="fa-solid fa-spinner fa-spin"></i>`

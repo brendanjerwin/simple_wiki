@@ -118,7 +118,6 @@ describe('WikiEditor', () => {
   describe('when connected to DOM and content loaded', () => {
     let readPageStub: SinonStub;
     let textarea: HTMLTextAreaElement | null | undefined;
-    let statusIndicator: Element | null | undefined;
 
     beforeEach(async () => {
       el = buildElement();
@@ -126,7 +125,6 @@ describe('WikiEditor', () => {
       stubUpdateWholePage(el);
       await mountAndLoad(el);
       textarea = el.shadowRoot?.querySelector('textarea');
-      statusIndicator = el.shadowRoot?.querySelector('.status-indicator');
     });
 
     it('should call readPage with the page name', () => {
@@ -149,8 +147,10 @@ describe('WikiEditor', () => {
       expect(textarea?.value).to.equal('+++\ntitle = "Test"\n+++\n# Hello World');
     });
 
-    it('should show empty status text when idle', () => {
-      expect(statusIndicator?.textContent?.trim()).to.equal('');
+    it('should not show the status bar when idle', () => {
+      const statusBar = el.shadowRoot?.querySelector('.status-bar');
+      expect(statusBar).to.exist;
+      expect(statusBar?.classList.contains('visible')).to.be.false;
     });
 
     it('should not show loading overlay', () => {
