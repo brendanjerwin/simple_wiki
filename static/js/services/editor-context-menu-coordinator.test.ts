@@ -271,6 +271,48 @@ describe('EditorContextMenuCoordinator', () => {
     });
   });
 
+  describe('when textarea is inside a shadow DOM', () => {
+    let shadowHost: HTMLDivElement;
+    let shadowTextarea: HTMLTextAreaElement;
+    let shadowCoordinator: EditorContextMenuCoordinator;
+
+    beforeEach(async () => {
+      shadowHost = document.createElement('div');
+      document.body.appendChild(shadowHost);
+      const shadowRoot = shadowHost.attachShadow({ mode: 'open' });
+      shadowTextarea = document.createElement('textarea');
+      shadowTextarea.value = 'Shadow content';
+      shadowRoot.appendChild(shadowTextarea);
+
+      shadowCoordinator = new EditorContextMenuCoordinator(
+        shadowTextarea, menu, uploadService, formattingService
+      );
+
+      shadowTextarea.selectionStart = 7;
+      shadowTextarea.selectionEnd = 14; // "content" selected
+
+      // Simulate right-click to save selection (works even in shadow DOM
+      // since the listener is attached directly on the textarea element)
+      shadowTextarea.dispatchEvent(new MouseEvent('contextmenu', {
+        bubbles: true,
+        clientX: 100,
+        clientY: 200,
+      }));
+      await menu.updateComplete;
+
+      menu.dispatchEvent(new CustomEvent('format-bold-requested', { bubbles: true }));
+    });
+
+    afterEach(() => {
+      shadowCoordinator.detach();
+      shadowHost.remove();
+    });
+
+    it('should apply formatting to the shadow DOM textarea', () => {
+      expect(shadowTextarea.value).to.equal('Shadow **content**');
+    });
+  });
+
   describe('when page-created event is dispatched', () => {
     let insertedDialog: InsertNewPageDialog | null;
 

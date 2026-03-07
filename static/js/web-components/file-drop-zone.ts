@@ -36,6 +36,7 @@ export class FileDropZone extends LitElement {
       .drop-zone {
         position: relative;
         min-height: 200px;
+        height: 100%;
       }
 
       .drop-overlay,

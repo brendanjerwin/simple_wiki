@@ -14,11 +14,10 @@ import './web-components/page-import-dialog.js';
 import './web-components/insert-new-page-dialog.js';
 import './web-components/wiki-checklist.js';
 import './web-components/file-drop-zone.js';
+import './web-components/wiki-editor.js';
 import { showStoredToast } from './web-components/toast-message.js';
 import { setupGlobalErrorHandler } from './web-components/global-error-handler.js';
 import { pageDeleteService, type PageDeleter } from './web-components/page-deletion-service.js';
-import { EditorContextMenuCoordinator } from './services/editor-context-menu-coordinator.js';
-import type { EditorContextMenu } from './web-components/editor-context-menu.js';
 import type { EditorToolbar } from './web-components/editor-toolbar.js';
 
 // Set up global error handling to catch unhandled errors
@@ -43,15 +42,8 @@ window.pageDeleteService = pageDeleteService;
 document.addEventListener('DOMContentLoaded', () => {
   showStoredToast();
 
-  // Initialize editor context menu and toolbar on edit pages
-  const textarea = document.getElementById('userInput');
-  const menu = document.querySelector<EditorContextMenu>('editor-context-menu#editor-context-menu');
-  const toolbar = document.querySelector<EditorToolbar>('editor-toolbar#editor-toolbar');
-  if (textarea instanceof HTMLTextAreaElement && menu) {
-    new EditorContextMenuCoordinator(textarea, menu, undefined, undefined, toolbar ?? null);
-  }
-
   // Handle toolbar exit button
+  const toolbar = document.querySelector<EditorToolbar>('editor-toolbar#editor-toolbar');
   if (toolbar) {
     toolbar.addEventListener('exit-requested', () => {
       const pageName = window.simple_wiki?.pageName;
