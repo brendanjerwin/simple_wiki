@@ -149,8 +149,8 @@ describe('WikiEditor', () => {
       expect(textarea?.value).to.equal('+++\ntitle = "Test"\n+++\n# Hello World');
     });
 
-    it('should show idle status text', () => {
-      expect(statusIndicator?.textContent?.trim()).to.contain('Edit');
+    it('should show empty status text when idle', () => {
+      expect(statusIndicator?.textContent?.trim()).to.equal('');
     });
 
     it('should not show loading overlay', () => {
@@ -174,6 +174,48 @@ describe('WikiEditor', () => {
 
     it('should set content without frontmatter delimiters', () => {
       expect((el as unknown as WikiEditorInternal).content).to.equal('# Just Content');
+    });
+  });
+
+  describe('when page property changes after initial load', () => {
+    let readPageStub: SinonStub;
+
+    beforeEach(async () => {
+      el = buildElement();
+      readPageStub = stubReadPage(el, '# First Page', '', 'hash1');
+      stubUpdateWholePage(el);
+      await mountAndLoad(el);
+
+      // Change the stub to return different content for the second page
+      readPageStub.resolves(
+        create(ReadPageResponseSchema, {
+          contentMarkdown: '# Second Page',
+          frontMatterToml: '',
+          versionHash: 'hash2',
+          renderedContentHtml: '',
+          renderedContentMarkdown: '',
+        })
+      );
+
+      el.page = 'other-page';
+      await waitUntil(
+        () => !(el as unknown as WikiEditorInternal).loading,
+        'should finish loading second page',
+        { timeout: 3000 }
+      );
+      await el.updateComplete;
+    });
+
+    it('should load the new page content', () => {
+      expect((el as unknown as WikiEditorInternal).content).to.equal('# Second Page');
+    });
+
+    it('should update the version hash', () => {
+      expect((el as unknown as WikiEditorInternal).versionHash).to.equal('hash2');
+    });
+
+    it('should call readPage a second time', () => {
+      expect(readPageStub).to.have.been.calledTwice;
     });
   });
 

@@ -1,4 +1,4 @@
-import { html, css, LitElement, nothing } from 'lit';
+import { html, css, LitElement, nothing, type PropertyValues } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import { createClient } from '@connectrpc/connect';
 import { create } from '@bufbuild/protobuf';
@@ -200,6 +200,22 @@ export class WikiEditor extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    this.initialize();
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this.teardown();
+  }
+
+  override updated(changedProperties: PropertyValues<this>): void {
+    if (changedProperties.has('page') && changedProperties.get('page') !== undefined) {
+      this.teardown();
+      this.initialize();
+    }
+  }
+
+  private initialize(): void {
     void this.loadContent();
     void this.updateComplete.then(() => {
       this.setupSaveQueue();
@@ -208,8 +224,7 @@ export class WikiEditor extends LitElement {
     });
   }
 
-  override disconnectedCallback(): void {
-    super.disconnectedCallback();
+  private teardown(): void {
     this.saveQueue?.destroy();
     this.saveQueue = null;
     this.coordinator?.detach();
@@ -359,7 +374,7 @@ export class WikiEditor extends LitElement {
       case 'error':
         return 'Error';
       default:
-        return 'Edit';
+        return '';
     }
   }
 

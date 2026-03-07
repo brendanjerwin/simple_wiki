@@ -205,10 +205,22 @@ export class EditorContextMenuCoordinator {
    * This is needed for toolbar actions where we don't have a prior event to save selection.
    */
   private captureCurrentSelection(): void {
-    // Only capture if textarea still has valid selection
-    if (document.activeElement === this.textarea) {
+    if (this.isTextareaFocused()) {
       this.saveSelection();
     }
+  }
+
+  /**
+   * Checks whether the textarea is focused, traversing shadow DOM boundaries.
+   * When a textarea is inside a shadow root, document.activeElement returns the
+   * shadow host rather than the textarea itself.
+   */
+  private isTextareaFocused(): boolean {
+    let active: Element | null = document.activeElement;
+    while (active?.shadowRoot?.activeElement) {
+      active = active.shadowRoot.activeElement;
+    }
+    return active === this.textarea;
   }
 
   private applyFormattingResult(result: { newText: string; newSelectionStart: number; newSelectionEnd: number }): void {
