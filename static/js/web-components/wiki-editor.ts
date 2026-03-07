@@ -1,4 +1,5 @@
 import { html, css, LitElement, nothing, type PropertyValues } from 'lit';
+import { live } from 'lit/directives/live.js';
 import { property, state } from 'lit/decorators.js';
 import { createClient } from '@connectrpc/connect';
 import { create } from '@bufbuild/protobuf';
@@ -222,8 +223,8 @@ export class WikiEditor extends LitElement {
   }
 
   private initialize(): void {
-    void this.loadContent();
-    void this.updateComplete.then(() => {
+    void this.loadContent().then(async () => {
+      await this.updateComplete;
       this.setupSaveQueue();
       this.setupCoordinator();
       this.focusTextarea();
@@ -424,7 +425,7 @@ export class WikiEditor extends LitElement {
             <textarea
               placeholder="Use markdown here."
               autocapitalize="none"
-              .value=${this.content}
+              .value=${live(this.content)}
               @input=${this._onInput}
               @keyup=${this._onKeyup}
               @keydown=${this._onKeydown}
