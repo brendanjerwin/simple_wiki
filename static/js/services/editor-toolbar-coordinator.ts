@@ -39,7 +39,6 @@ export class EditorToolbarCoordinator {
   private attachEventListeners(): void {
     // Save selection before toolbar button steals focus
     this.toolbar.addEventListener('mousedown', this._handleToolbarInteractionStart);
-    this.toolbar.addEventListener('touchstart', this._handleToolbarInteractionStart);
 
     this.toolbar.addEventListener('upload-image-requested', this._handleUploadImage);
     this.toolbar.addEventListener('upload-file-requested', this._handleUploadFile);
@@ -54,7 +53,6 @@ export class EditorToolbarCoordinator {
    */
   detach(): void {
     this.toolbar.removeEventListener('mousedown', this._handleToolbarInteractionStart);
-    this.toolbar.removeEventListener('touchstart', this._handleToolbarInteractionStart);
     this.toolbar.removeEventListener('upload-image-requested', this._handleUploadImage);
     this.toolbar.removeEventListener('upload-file-requested', this._handleUploadFile);
     this.toolbar.removeEventListener('format-bold-requested', this._handleBold);
@@ -103,6 +101,7 @@ export class EditorToolbarCoordinator {
 
   private _handleBold = (): void => {
     this.restoreSelection();
+    if (this.savedSelectionStart === this.savedSelectionEnd) return;
     const result = this.formattingService.wrapBold(
       this.textarea.value,
       this.savedSelectionStart,
@@ -113,6 +112,7 @@ export class EditorToolbarCoordinator {
 
   private _handleItalic = (): void => {
     this.restoreSelection();
+    if (this.savedSelectionStart === this.savedSelectionEnd) return;
     const result = this.formattingService.wrapItalic(
       this.textarea.value,
       this.savedSelectionStart,
@@ -123,6 +123,7 @@ export class EditorToolbarCoordinator {
 
   private _handleInsertLink = (): void => {
     this.restoreSelection();
+    if (this.savedSelectionStart === this.savedSelectionEnd) return;
     const result = this.formattingService.insertLink(
       this.textarea.value,
       this.savedSelectionStart,

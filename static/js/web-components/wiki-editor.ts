@@ -133,6 +133,8 @@ export class WikiEditor extends LitElement {
         font-family: "Lucida Console", Monaco, monospace;
         padding-left: 2%;
         padding-right: 2%;
+        -webkit-user-select: text;
+        user-select: text;
       }
 
       .loading-overlay {
@@ -190,10 +192,14 @@ export class WikiEditor extends LitElement {
   @state()
   declare content: string;
 
+  @state()
+  declare _hasSelection: boolean;
+
   /** Stored for future optimistic concurrency control */
   versionHash = '';
   private saveQueue: EditorSaveQueue | null = null;
   private coordinator: EditorToolbarCoordinator | null = null;
+  private savedTimerId: ReturnType<typeof setTimeout> | null = null;
 
   readonly client = createClient(PageManagementService, getGrpcWebTransport());
 
@@ -207,17 +213,28 @@ export class WikiEditor extends LitElement {
     this.saveStatus = 'idle';
     this.error = null;
     this.content = '';
+    this._hasSelection = false;
   }
 
   override connectedCallback(): void {
     super.connectedCallback();
+    document.addEventListener('selectionchange', this._selectionChangeHandler);
     this.initialize();
   }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
+    document.removeEventListener('selectionchange', this._selectionChangeHandler);
     this.teardown();
   }
+
+  private _selectionChangeHandler = (): void => {
+    const textarea = this.shadowRoot?.querySelector('textarea');
+    if (!textarea) return;
+    if (this.shadowRoot?.activeElement === textarea) {
+      this._hasSelection = textarea.selectionStart !== textarea.selectionEnd;
+    }
+  };
 
   override updated(changedProperties: PropertyValues<this>): void {
     if (changedProperties.has('page') && changedProperties.get('page') !== undefined) {
@@ -237,6 +254,10 @@ export class WikiEditor extends LitElement {
   }
 
   private teardown(): void {
+    if (this.savedTimerId !== null) {
+      clearTimeout(this.savedTimerId);
+      this.savedTimerId = null;
+    }
     this.saveQueue?.destroy();
     this.saveQueue = null;
     this.coordinator?.detach();
@@ -287,11 +308,23 @@ export class WikiEditor extends LitElement {
         return { success: true };
       },
       (status, err) => {
+        if (this.savedTimerId !== null) {
+          clearTimeout(this.savedTimerId);
+          this.savedTimerId = null;
+        }
+
         this.saveStatus = status;
         if (status === 'error' && err) {
           this.error = AugmentErrorService.augmentError(err, 'save page');
         } else if (status !== 'error') {
           this.error = null;
+        }
+
+        if (status === 'saved') {
+          this.savedTimerId = setTimeout(() => {
+            this.saveStatus = 'idle';
+            this.savedTimerId = null;
+          }, 2000);
         }
       }
     );
@@ -406,7 +439,7 @@ export class WikiEditor extends LitElement {
     return html`
       ${sharedStyles}
       <div class="editor-container">
-        <editor-toolbar @exit-requested=${this._onExitRequested}></editor-toolbar>
+        <editor-toolbar ?has-selection=${this._hasSelection} @exit-requested=${this._onExitRequested}></editor-toolbar>
         <div class="status-bar ${this.saveStatus !== 'idle' ? 'visible' : ''}">
           <span class="status-indicator ${this.saveStatus}">
             ${this.saveStatus === 'saving'

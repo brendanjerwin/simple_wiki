@@ -1,5 +1,5 @@
 import { html, css, LitElement, nothing } from 'lit';
-import { state } from 'lit/decorators.js';
+import { property, state } from 'lit/decorators.js';
 import { buttonCSS, foundationCSS } from './shared-styles.js';
 
 /**
@@ -7,11 +7,15 @@ import { buttonCSS, foundationCSS } from './shared-styles.js';
  * It displays formatting and upload buttons that are always visible.
  */
 export class EditorToolbar extends LitElement {
+  @property({ type: Boolean, attribute: 'has-selection' })
+  declare hasSelection: boolean;
+
   @state()
   declare _uploadMenuOpen: boolean;
 
   constructor() {
     super();
+    this.hasSelection = false;
     this._uploadMenuOpen = false;
   }
 
@@ -58,6 +62,17 @@ export class EditorToolbar extends LitElement {
 
       .toolbar-btn:active {
         transform: scale(0.98);
+      }
+
+      .toolbar-btn:disabled {
+        opacity: 0.4;
+        cursor: default;
+      }
+
+      .toolbar-btn:disabled:hover,
+      .toolbar-btn:disabled:active {
+        background: var(--color-background-secondary, #3d3d3d);
+        transform: none;
       }
 
       .toolbar-btn.exit-btn {
@@ -244,13 +259,13 @@ export class EditorToolbar extends LitElement {
   override render() {
     return html`
       <div class="toolbar">
-        <button class="toolbar-btn" data-action="bold" @click="${this._handleBold}" title="Bold">
+        <button class="toolbar-btn" data-action="bold" @click="${this._handleBold}" ?disabled="${!this.hasSelection}" title="Bold">
           <strong class="btn-icon">B</strong>
         </button>
-        <button class="toolbar-btn" data-action="italic" @click="${this._handleItalic}" title="Italic">
+        <button class="toolbar-btn" data-action="italic" @click="${this._handleItalic}" ?disabled="${!this.hasSelection}" title="Italic">
           <em class="btn-icon">I</em>
         </button>
-        <button class="toolbar-btn" data-action="link" @click="${this._handleLink}" title="Insert Link">
+        <button class="toolbar-btn" data-action="link" @click="${this._handleLink}" ?disabled="${!this.hasSelection}" title="Insert Link">
           <span class="btn-icon">&#128279;</span>
         </button>
 

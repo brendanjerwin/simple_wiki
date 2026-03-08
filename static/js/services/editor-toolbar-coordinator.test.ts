@@ -165,6 +165,51 @@ describe('EditorToolbarCoordinator', () => {
     });
   });
 
+  describe('when Bold toolbar button is clicked with no selection', () => {
+    beforeEach(() => {
+      textarea.value = 'Hello world!';
+      textarea.selectionStart = 5;
+      textarea.selectionEnd = 5; // No selection (collapsed cursor)
+
+      toolbar.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      toolbar.dispatchEvent(new CustomEvent('format-bold-requested', { bubbles: true }));
+    });
+
+    it('should not modify the textarea', () => {
+      expect(textarea.value).to.equal('Hello world!');
+    });
+  });
+
+  describe('when Italic toolbar button is clicked with no selection', () => {
+    beforeEach(() => {
+      textarea.value = 'Hello world!';
+      textarea.selectionStart = 5;
+      textarea.selectionEnd = 5;
+
+      toolbar.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      toolbar.dispatchEvent(new CustomEvent('format-italic-requested', { bubbles: true }));
+    });
+
+    it('should not modify the textarea', () => {
+      expect(textarea.value).to.equal('Hello world!');
+    });
+  });
+
+  describe('when Insert Link toolbar button is clicked with no selection', () => {
+    beforeEach(() => {
+      textarea.value = 'Hello world!';
+      textarea.selectionStart = 5;
+      textarea.selectionEnd = 5;
+
+      toolbar.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      toolbar.dispatchEvent(new CustomEvent('insert-link-requested', { bubbles: true }));
+    });
+
+    it('should not modify the textarea', () => {
+      expect(textarea.value).to.equal('Hello world!');
+    });
+  });
+
   describe('when Insert New Page toolbar button is clicked', () => {
     let insertedDialog: InsertNewPageDialog | null;
 

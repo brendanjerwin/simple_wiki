@@ -130,11 +130,42 @@ describe('WikiEditor integration with toolbar', () => {
     expect(getTextarea().value).to.equal('Hello [world](url)');
   });
 
-  it('should insert bold placeholder at cursor when no text selected', async () => {
+  it('should not modify text when bold is clicked with no selection', async () => {
     selectText(getTextarea(), 5, 5);
     clickToolbarButton('bold');
     await wikiEditor.updateComplete;
 
-    expect(getTextarea().value).to.equal('Hello**bold** world');
+    expect(getTextarea().value).to.equal('Hello world');
+  });
+
+  describe('when text is selected in the textarea', () => {
+    let toolbar: EditorToolbar;
+
+    beforeEach(async () => {
+      toolbar = getToolbar();
+      selectText(getTextarea(), 6, 11); // "world"
+      // Fire selectionchange to trigger has-selection update
+      document.dispatchEvent(new Event('selectionchange'));
+      await wikiEditor.updateComplete;
+    });
+
+    it('should set has-selection attribute on toolbar', () => {
+      expect(toolbar.hasAttribute('has-selection')).to.be.true;
+    });
+  });
+
+  describe('when no text is selected in the textarea', () => {
+    let toolbar: EditorToolbar;
+
+    beforeEach(async () => {
+      toolbar = getToolbar();
+      selectText(getTextarea(), 5, 5); // collapsed cursor
+      document.dispatchEvent(new Event('selectionchange'));
+      await wikiEditor.updateComplete;
+    });
+
+    it('should not set has-selection attribute on toolbar', () => {
+      expect(toolbar.hasAttribute('has-selection')).to.be.false;
+    });
   });
 });

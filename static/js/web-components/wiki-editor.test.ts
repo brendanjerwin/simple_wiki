@@ -320,6 +320,58 @@ describe('WikiEditor', () => {
     });
   });
 
+  describe('when save completes and saved status transitions to idle', () => {
+    let clock: SinonFakeTimers;
+
+    beforeEach(async () => {
+      clock = sinon.useFakeTimers({
+        shouldAdvanceTime: true,
+        shouldClearNativeTimers: true,
+      });
+      el = buildElement();
+      stubReadPage(el, '# Hello', '', 'hash1');
+      stubUpdateWholePage(el);
+      document.body.appendChild(el);
+      await waitUntil(
+        () => !(el as unknown as WikiEditorInternal).loading,
+        'should finish loading',
+        { timeout: 5000 }
+      );
+      await el.updateComplete;
+
+      // Type and trigger save
+      const textarea = el.shadowRoot!.querySelector('textarea')!;
+      textarea.value = '# Hello World';
+      textarea.dispatchEvent(new Event('input', { bubbles: true }));
+      await clock.tickAsync(500); // debounce elapses, save completes
+      await el.updateComplete;
+    });
+
+    afterEach(() => {
+      clock.restore();
+    });
+
+    it('should show saved status initially', () => {
+      expect((el as unknown as WikiEditorInternal).saveStatus).to.equal('saved');
+    });
+
+    describe('when 2 seconds elapse after save', () => {
+      beforeEach(async () => {
+        await clock.tickAsync(2000);
+        await el.updateComplete;
+      });
+
+      it('should transition to idle status', () => {
+        expect((el as unknown as WikiEditorInternal).saveStatus).to.equal('idle');
+      });
+
+      it('should hide the status bar', () => {
+        const statusBar = el.shadowRoot?.querySelector('.status-bar');
+        expect(statusBar?.classList.contains('visible')).to.be.false;
+      });
+    });
+  });
+
   describe('when save returns an error', () => {
     let clock: SinonFakeTimers;
     let statusIndicator: Element | null | undefined;
