@@ -117,9 +117,8 @@ export class EditorContextMenuCoordinator {
     this.showMenuAt(e.clientX, e.clientY);
   };
 
-  private _handleToolbarInteractionStart = (e: Event): void => {
-    // Prevent toolbar from stealing focus from the textarea
-    e.preventDefault();
+  private _handleToolbarInteractionStart = (): void => {
+    // Save selection before toolbar button steals focus
     this.saveSelection();
   };
 
