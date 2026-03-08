@@ -218,23 +218,13 @@ export class WikiEditor extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    document.addEventListener('selectionchange', this._selectionChangeHandler);
     this.initialize();
   }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
-    document.removeEventListener('selectionchange', this._selectionChangeHandler);
     this.teardown();
   }
-
-  private _selectionChangeHandler = (): void => {
-    const textarea = this.shadowRoot?.querySelector('textarea');
-    if (!textarea) return;
-    if (this.shadowRoot?.activeElement === textarea) {
-      this._hasSelection = textarea.selectionStart !== textarea.selectionEnd;
-    }
-  };
 
   override updated(changedProperties: PropertyValues<this>): void {
     if (changedProperties.has('page') && changedProperties.get('page') !== undefined) {
@@ -345,6 +335,12 @@ export class WikiEditor extends LitElement {
     this.coordinator = new EditorToolbarCoordinator(textarea, toolbar);
   }
 
+  _checkSelection(): void {
+    const textarea = this.shadowRoot?.querySelector('textarea');
+    if (!textarea) return;
+    this._hasSelection = textarea.selectionStart !== textarea.selectionEnd;
+  }
+
   _onInput(e: Event): void {
     if (!(e.target instanceof HTMLTextAreaElement)) return;
     this.content = e.target.value;
@@ -358,6 +354,7 @@ export class WikiEditor extends LitElement {
       this.content = textarea.value;
       this.saveQueue?.contentChanged(this.content);
     }
+    this._checkSelection();
   }
 
   _onKeydown(e: KeyboardEvent): void {
@@ -464,6 +461,8 @@ export class WikiEditor extends LitElement {
               @input=${this._onInput}
               @keyup=${this._onKeyup}
               @keydown=${this._onKeydown}
+              @select=${this._checkSelection}
+              @mouseup=${this._checkSelection}
             ></textarea>
           </file-drop-zone>
         </div>

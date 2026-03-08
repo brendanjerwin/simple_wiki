@@ -16,6 +16,7 @@ interface WikiEditorInternal {
   error: AugmentedError | null;
   content: string;
   versionHash: string;
+  _hasSelection: boolean;
   saveQueue: { destroy: () => void } | null;
   coordinator: { detach: () => void } | null;
   client: {
@@ -166,6 +167,46 @@ describe('WikiEditor', () => {
     it('should render editor-toolbar in shadow DOM', () => {
       const toolbar = el.shadowRoot?.querySelector('editor-toolbar');
       expect(toolbar).to.exist;
+    });
+  });
+
+  describe('when textarea select event fires with a selection', () => {
+    beforeEach(async () => {
+      el = buildElement();
+      stubReadPage(el, '# Hello World', '', 'hash1');
+      stubUpdateWholePage(el);
+      await mountAndLoad(el);
+
+      const textarea = el.shadowRoot!.querySelector('textarea')!;
+      textarea.focus();
+      textarea.selectionStart = 2;
+      textarea.selectionEnd = 7;
+      textarea.dispatchEvent(new Event('select', { bubbles: true }));
+      await el.updateComplete;
+    });
+
+    it('should set _hasSelection to true', () => {
+      expect((el as unknown as WikiEditorInternal)._hasSelection).to.be.true;
+    });
+  });
+
+  describe('when textarea mouseup fires with collapsed selection', () => {
+    beforeEach(async () => {
+      el = buildElement();
+      stubReadPage(el, '# Hello World', '', 'hash1');
+      stubUpdateWholePage(el);
+      await mountAndLoad(el);
+
+      const textarea = el.shadowRoot!.querySelector('textarea')!;
+      textarea.focus();
+      textarea.selectionStart = 5;
+      textarea.selectionEnd = 5;
+      textarea.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+      await el.updateComplete;
+    });
+
+    it('should set _hasSelection to false', () => {
+      expect((el as unknown as WikiEditorInternal)._hasSelection).to.be.false;
     });
   });
 

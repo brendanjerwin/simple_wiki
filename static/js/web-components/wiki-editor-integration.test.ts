@@ -138,14 +138,14 @@ describe('WikiEditor integration with toolbar', () => {
     expect(getTextarea().value).to.equal('Hello world');
   });
 
-  describe('when text is selected in the textarea', () => {
+  describe('when text is selected in the textarea via select event', () => {
     let toolbar: EditorToolbar;
 
     beforeEach(async () => {
       toolbar = getToolbar();
-      selectText(getTextarea(), 6, 11); // "world"
-      // Fire selectionchange to trigger has-selection update
-      document.dispatchEvent(new Event('selectionchange'));
+      const textarea = getTextarea();
+      selectText(textarea, 6, 11); // "world"
+      textarea.dispatchEvent(new Event('select', { bubbles: true }));
       await wikiEditor.updateComplete;
     });
 
@@ -154,18 +154,57 @@ describe('WikiEditor integration with toolbar', () => {
     });
   });
 
-  describe('when no text is selected in the textarea', () => {
+  describe('when text is selected in the textarea via mouseup', () => {
     let toolbar: EditorToolbar;
 
     beforeEach(async () => {
       toolbar = getToolbar();
-      selectText(getTextarea(), 5, 5); // collapsed cursor
-      document.dispatchEvent(new Event('selectionchange'));
+      const textarea = getTextarea();
+      selectText(textarea, 6, 11); // "world"
+      textarea.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
       await wikiEditor.updateComplete;
     });
 
-    it('should not set has-selection attribute on toolbar', () => {
+    it('should set has-selection attribute on toolbar', () => {
+      expect(toolbar.hasAttribute('has-selection')).to.be.true;
+    });
+  });
+
+  describe('when selection is collapsed via mouseup', () => {
+    let toolbar: EditorToolbar;
+
+    beforeEach(async () => {
+      toolbar = getToolbar();
+      const textarea = getTextarea();
+      // First make a selection so has-selection is true
+      selectText(textarea, 6, 11);
+      textarea.dispatchEvent(new Event('select', { bubbles: true }));
+      await wikiEditor.updateComplete;
+
+      // Then collapse the selection
+      selectText(textarea, 5, 5);
+      textarea.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+      await wikiEditor.updateComplete;
+    });
+
+    it('should remove has-selection attribute from toolbar', () => {
       expect(toolbar.hasAttribute('has-selection')).to.be.false;
+    });
+  });
+
+  describe('when selection is made via keyboard (keyup)', () => {
+    let toolbar: EditorToolbar;
+
+    beforeEach(async () => {
+      toolbar = getToolbar();
+      const textarea = getTextarea();
+      selectText(textarea, 6, 11); // Simulates Shift+Arrow selection
+      textarea.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowRight', shiftKey: true, bubbles: true }));
+      await wikiEditor.updateComplete;
+    });
+
+    it('should set has-selection attribute on toolbar', () => {
+      expect(toolbar.hasAttribute('has-selection')).to.be.true;
     });
   });
 });
