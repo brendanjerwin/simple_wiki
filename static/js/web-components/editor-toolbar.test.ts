@@ -19,6 +19,68 @@ describe('EditorToolbar', () => {
     expect(toolbar.tagName.toLowerCase()).to.equal('editor-toolbar');
   });
 
+  describe('when has-selection is not set', () => {
+    let boldBtn: HTMLButtonElement | null | undefined;
+    let italicBtn: HTMLButtonElement | null | undefined;
+    let linkBtn: HTMLButtonElement | null | undefined;
+    let exitBtn: HTMLButtonElement | null | undefined;
+    let newPageBtn: HTMLButtonElement | null | undefined;
+
+    beforeEach(() => {
+      boldBtn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="bold"]');
+      italicBtn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="italic"]');
+      linkBtn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="link"]');
+      exitBtn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="exit"]');
+      newPageBtn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="new-page"]');
+    });
+
+    it('should disable the bold button', () => {
+      expect(boldBtn?.disabled).to.be.true;
+    });
+
+    it('should disable the italic button', () => {
+      expect(italicBtn?.disabled).to.be.true;
+    });
+
+    it('should disable the link button', () => {
+      expect(linkBtn?.disabled).to.be.true;
+    });
+
+    it('should not disable the exit button', () => {
+      expect(exitBtn?.disabled).to.be.false;
+    });
+
+    it('should not disable the new page button', () => {
+      expect(newPageBtn?.disabled).to.be.false;
+    });
+  });
+
+  describe('when has-selection is set', () => {
+    let boldBtn: HTMLButtonElement | null | undefined;
+    let italicBtn: HTMLButtonElement | null | undefined;
+    let linkBtn: HTMLButtonElement | null | undefined;
+
+    beforeEach(async () => {
+      toolbar.hasSelection = true;
+      await toolbar.updateComplete;
+      boldBtn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="bold"]');
+      italicBtn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="italic"]');
+      linkBtn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="link"]');
+    });
+
+    it('should enable the bold button', () => {
+      expect(boldBtn?.disabled).to.be.false;
+    });
+
+    it('should enable the italic button', () => {
+      expect(italicBtn?.disabled).to.be.false;
+    });
+
+    it('should enable the link button', () => {
+      expect(linkBtn?.disabled).to.be.false;
+    });
+  });
+
   describe('when rendered', () => {
     it('should display bold button', () => {
       const boldBtn = toolbar.shadowRoot?.querySelector('[data-action="bold"]');
@@ -56,10 +118,12 @@ describe('EditorToolbar', () => {
     });
   });
 
-  describe('when bold button is clicked', () => {
+  describe('when bold button is clicked with selection', () => {
     let eventSpy: SinonSpy;
 
     beforeEach(async () => {
+      toolbar.hasSelection = true;
+      await toolbar.updateComplete;
       eventSpy = spy();
       toolbar.addEventListener('format-bold-requested', eventSpy);
       const boldBtn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="bold"]');
@@ -71,10 +135,12 @@ describe('EditorToolbar', () => {
     });
   });
 
-  describe('when italic button is clicked', () => {
+  describe('when italic button is clicked with selection', () => {
     let eventSpy: SinonSpy;
 
     beforeEach(async () => {
+      toolbar.hasSelection = true;
+      await toolbar.updateComplete;
       eventSpy = spy();
       toolbar.addEventListener('format-italic-requested', eventSpy);
       const italicBtn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="italic"]');
@@ -86,10 +152,12 @@ describe('EditorToolbar', () => {
     });
   });
 
-  describe('when link button is clicked', () => {
+  describe('when link button is clicked with selection', () => {
     let eventSpy: SinonSpy;
 
     beforeEach(async () => {
+      toolbar.hasSelection = true;
+      await toolbar.updateComplete;
       eventSpy = spy();
       toolbar.addEventListener('insert-link-requested', eventSpy);
       const linkBtn = toolbar.shadowRoot?.querySelector<HTMLButtonElement>('[data-action="link"]');
