@@ -15,9 +15,9 @@ import {
   EditorSaveQueue,
   type SaveStatus,
 } from '../services/editor-save-queue.js';
-import { EditorContextMenuCoordinator } from '../services/editor-context-menu-coordinator.js';
-import type { EditorContextMenu } from './editor-context-menu.js';
+import { EditorToolbarCoordinator } from '../services/editor-toolbar-coordinator.js';
 import type { EditorToolbar } from './editor-toolbar.js';
+import './editor-toolbar.js';
 import { foundationCSS, sharedStyles } from './shared-styles.js';
 import './error-display.js';
 
@@ -43,7 +43,7 @@ function isFileUploadedDetail(value: unknown): value is FileUploadedDetail {
  *
  * Loads content via ReadPage, auto-saves via UpdateWholePage with debouncing
  * and concurrent-save prevention, and integrates with file-drop-zone for uploads
- * and EditorContextMenuCoordinator for formatting.
+ * and EditorToolbarCoordinator for formatting.
  *
  * @element wiki-editor
  *
@@ -103,6 +103,10 @@ export class WikiEditor extends LitElement {
       .status-indicator.error {
         color: #d9534f;
         font-weight: bold;
+      }
+
+      editor-toolbar {
+        flex: 0 0 auto;
       }
 
       .editor-area {
@@ -189,7 +193,7 @@ export class WikiEditor extends LitElement {
   /** Stored for future optimistic concurrency control */
   versionHash = '';
   private saveQueue: EditorSaveQueue | null = null;
-  private coordinator: EditorContextMenuCoordinator | null = null;
+  private coordinator: EditorToolbarCoordinator | null = null;
 
   readonly client = createClient(PageManagementService, getGrpcWebTransport());
 
@@ -224,6 +228,7 @@ export class WikiEditor extends LitElement {
 
   private initialize(): void {
     void this.loadContent().then(async () => {
+      if (!this.isConnected) return;
       await this.updateComplete;
       this.setupSaveQueue();
       this.setupCoordinator();
@@ -301,18 +306,10 @@ export class WikiEditor extends LitElement {
     const textarea = this.shadowRoot?.querySelector('textarea');
     if (!textarea) return;
 
-    const menu = document.querySelector<EditorContextMenu>('editor-context-menu');
-    const toolbar = document.querySelector<EditorToolbar>('editor-toolbar');
+    const toolbar = this.shadowRoot?.querySelector<EditorToolbar>('editor-toolbar');
+    if (!toolbar) return;
 
-    if (menu) {
-      this.coordinator = new EditorContextMenuCoordinator(
-        textarea,
-        menu,
-        undefined,
-        undefined,
-        toolbar ?? null
-      );
-    }
+    this.coordinator = new EditorToolbarCoordinator(textarea, toolbar);
   }
 
   _onInput(e: Event): void {
@@ -345,6 +342,10 @@ export class WikiEditor extends LitElement {
       this.content = textarea.value;
       this.saveQueue?.contentChanged(this.content);
     }
+  }
+
+  _onExitRequested(): void {
+    this.dispatchEvent(new CustomEvent('exit-requested', { bubbles: true, composed: true }));
   }
 
   _onFileUploaded(e: Event): void {
@@ -405,6 +406,7 @@ export class WikiEditor extends LitElement {
     return html`
       ${sharedStyles}
       <div class="editor-container">
+        <editor-toolbar @exit-requested=${this._onExitRequested}></editor-toolbar>
         <div class="status-bar ${this.saveStatus !== 'idle' ? 'visible' : ''}">
           <span class="status-indicator ${this.saveStatus}">
             ${this.saveStatus === 'saving'

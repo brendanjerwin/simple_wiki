@@ -7,8 +7,6 @@ import './web-components/toast-message.js';
 import './web-components/kernel-panic.js'; // Import to register the component
 import './web-components/inventory-add-item-dialog.js';
 import './web-components/inventory-move-item-dialog.js';
-import './web-components/editor-context-menu.js';
-import './web-components/editor-toolbar.js';
 import './web-components/wiki-image.js';
 import './web-components/page-import-dialog.js';
 import './web-components/insert-new-page-dialog.js';
@@ -18,7 +16,6 @@ import './web-components/wiki-editor.js';
 import { showStoredToast } from './web-components/toast-message.js';
 import { setupGlobalErrorHandler } from './web-components/global-error-handler.js';
 import { pageDeleteService, type PageDeleter } from './web-components/page-deletion-service.js';
-import type { EditorToolbar } from './web-components/editor-toolbar.js';
 
 // Set up global error handling to catch unhandled errors
 setupGlobalErrorHandler();
@@ -42,10 +39,10 @@ window.pageDeleteService = pageDeleteService;
 document.addEventListener('DOMContentLoaded', () => {
   showStoredToast();
 
-  // Handle toolbar exit button
-  const toolbar = document.querySelector<EditorToolbar>('editor-toolbar#editor-toolbar');
-  if (toolbar) {
-    toolbar.addEventListener('exit-requested', () => {
+  // Handle editor exit button (toolbar is inside wiki-editor shadow DOM)
+  const wikiEditor = document.querySelector('wiki-editor');
+  if (wikiEditor) {
+    wikiEditor.addEventListener('exit-requested', () => {
       const pageName = window.simple_wiki?.pageName;
       if (pageName) {
         window.location.href = `/${pageName}/view`;

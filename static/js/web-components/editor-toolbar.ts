@@ -20,23 +20,11 @@ export class EditorToolbar extends LitElement {
     buttonCSS,
     css`
       :host {
-        display: none; /* Hidden by default (desktop) */
-      }
-
-      /* Show toolbar on touch devices - fixed at top */
-      @media (pointer: coarse) {
-        :host {
-          display: block;
-          background: var(--color-background-primary, #2d2d2d);
-          border-bottom: 1px solid var(--color-border, #444);
-          padding: 6px 8px;
-          box-sizing: border-box;
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          z-index: 100;
-        }
+        display: block;
+        background: var(--color-background-primary, #2d2d2d);
+        border-bottom: 1px solid var(--color-border, #444);
+        padding: 6px 8px;
+        box-sizing: border-box;
       }
 
       .toolbar {
@@ -206,8 +194,8 @@ export class EditorToolbar extends LitElement {
   }
 
   private _handleDocumentClick = (event: Event): void => {
-    // Close dropdown if clicking outside
-    if (this._uploadMenuOpen && event.target instanceof Node && !this.contains(event.target)) {
+    // Close dropdown if clicking outside (composedPath handles shadow DOM)
+    if (this._uploadMenuOpen && !event.composedPath().includes(this)) {
       this._uploadMenuOpen = false;
     }
   };

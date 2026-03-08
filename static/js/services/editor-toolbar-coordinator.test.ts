@@ -1,27 +1,27 @@
 import { expect, fixture, html } from '@open-wc/testing';
 import type { SinonStub, SinonSpy } from 'sinon';
 import { stub, spy } from 'sinon';
-import '../web-components/editor-context-menu.js';
+import '../web-components/editor-toolbar.js';
 import '../web-components/insert-new-page-dialog.js';
-import type { EditorContextMenu } from '../web-components/editor-context-menu.js';
+import type { EditorToolbar } from '../web-components/editor-toolbar.js';
 import type { InsertNewPageDialog } from '../web-components/insert-new-page-dialog.js';
-import { EditorContextMenuCoordinator } from './editor-context-menu-coordinator.js';
+import { EditorToolbarCoordinator } from './editor-toolbar-coordinator.js';
 import { EditorUploadService } from './editor-upload-service.js';
 import { TextFormattingService } from './text-formatting-service.js';
 
-describe('EditorContextMenuCoordinator', () => {
+describe('EditorToolbarCoordinator', () => {
   let textarea: HTMLTextAreaElement;
-  let menu: EditorContextMenu;
-  let coordinator: EditorContextMenuCoordinator;
+  let toolbar: EditorToolbar;
+  let coordinator: EditorToolbarCoordinator;
   let uploadService: EditorUploadService;
   let formattingService: TextFormattingService;
 
   beforeEach(async () => {
     textarea = await fixture<HTMLTextAreaElement>(html`<textarea>Hello world!</textarea>`);
-    menu = await fixture<EditorContextMenu>(html`<editor-context-menu></editor-context-menu>`);
+    toolbar = await fixture<EditorToolbar>(html`<editor-toolbar></editor-toolbar>`);
     uploadService = new EditorUploadService();
     formattingService = new TextFormattingService();
-    coordinator = new EditorContextMenuCoordinator(textarea, menu, uploadService, formattingService);
+    coordinator = new EditorToolbarCoordinator(textarea, toolbar, uploadService, formattingService);
   });
 
   afterEach(() => {
@@ -32,55 +32,19 @@ describe('EditorContextMenuCoordinator', () => {
     expect(coordinator).to.exist;
   });
 
-  describe('when right-clicking on textarea', () => {
-    let openAtSpy: SinonSpy;
-
-    beforeEach(async () => {
-      openAtSpy = spy(menu, 'openAt');
-      const event = new MouseEvent('contextmenu', {
-        bubbles: true,
-        clientX: 150,
-        clientY: 250,
-      });
-      textarea.dispatchEvent(event);
-      await menu.updateComplete;
-    });
-
-    afterEach(() => {
-      openAtSpy.restore();
-    });
-
-    it('should open the menu at click position', () => {
-      expect(openAtSpy).to.have.been.calledOnce;
-      expect(openAtSpy).to.have.been.calledWith({ x: 150, y: 250 });
-    });
-
-    it('should prevent default context menu', () => {
-      // Menu should be open, indicating default was prevented
-      expect(menu.open).to.be.true;
-    });
-  });
-
-  describe('when Bold menu item is clicked', () => {
+  describe('when Bold toolbar button is clicked', () => {
     let keyupSpy: SinonSpy;
 
-    beforeEach(async () => {
+    beforeEach(() => {
       keyupSpy = spy();
       textarea.addEventListener('keyup', keyupSpy);
       textarea.value = 'Hello world!';
       textarea.selectionStart = 6;
       textarea.selectionEnd = 11; // "world" selected
 
-      // Simulate right-click to save selection
-      textarea.dispatchEvent(new MouseEvent('contextmenu', {
-        bubbles: true,
-        clientX: 100,
-        clientY: 200,
-      }));
-      await menu.updateComplete;
-
-      // Simulate clicking Bold
-      menu.dispatchEvent(new CustomEvent('format-bold-requested', { bubbles: true }));
+      // Simulate mousedown to save selection, then dispatch Bold event
+      toolbar.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      toolbar.dispatchEvent(new CustomEvent('format-bold-requested', { bubbles: true }));
     });
 
     it('should wrap selection in bold markers', () => {
@@ -92,20 +56,14 @@ describe('EditorContextMenuCoordinator', () => {
     });
   });
 
-  describe('when Italic menu item is clicked', () => {
-    beforeEach(async () => {
+  describe('when Italic toolbar button is clicked', () => {
+    beforeEach(() => {
       textarea.value = 'Hello world!';
       textarea.selectionStart = 6;
       textarea.selectionEnd = 11;
 
-      textarea.dispatchEvent(new MouseEvent('contextmenu', {
-        bubbles: true,
-        clientX: 100,
-        clientY: 200,
-      }));
-      await menu.updateComplete;
-
-      menu.dispatchEvent(new CustomEvent('format-italic-requested', { bubbles: true }));
+      toolbar.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      toolbar.dispatchEvent(new CustomEvent('format-italic-requested', { bubbles: true }));
     });
 
     it('should wrap selection in italic markers', () => {
@@ -113,20 +71,14 @@ describe('EditorContextMenuCoordinator', () => {
     });
   });
 
-  describe('when Insert Link menu item is clicked', () => {
-    beforeEach(async () => {
+  describe('when Insert Link toolbar button is clicked', () => {
+    beforeEach(() => {
       textarea.value = 'Click here!';
       textarea.selectionStart = 6;
       textarea.selectionEnd = 10; // "here" selected
 
-      textarea.dispatchEvent(new MouseEvent('contextmenu', {
-        bubbles: true,
-        clientX: 100,
-        clientY: 200,
-      }));
-      await menu.updateComplete;
-
-      menu.dispatchEvent(new CustomEvent('insert-link-requested', { bubbles: true }));
+      toolbar.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      toolbar.dispatchEvent(new CustomEvent('insert-link-requested', { bubbles: true }));
     });
 
     it('should wrap selection in link syntax', () => {
@@ -134,7 +86,7 @@ describe('EditorContextMenuCoordinator', () => {
     });
   });
 
-  describe('when Upload Image menu item is clicked', () => {
+  describe('when Upload Image toolbar button is clicked', () => {
     let selectAndUploadImageStub: SinonStub;
 
     beforeEach(async () => {
@@ -148,14 +100,8 @@ describe('EditorContextMenuCoordinator', () => {
       textarea.selectionStart = 5;
       textarea.selectionEnd = 5;
 
-      textarea.dispatchEvent(new MouseEvent('contextmenu', {
-        bubbles: true,
-        clientX: 100,
-        clientY: 200,
-      }));
-      await menu.updateComplete;
-
-      menu.dispatchEvent(new CustomEvent('upload-image-requested', { bubbles: true }));
+      toolbar.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      toolbar.dispatchEvent(new CustomEvent('upload-image-requested', { bubbles: true }));
       await new Promise(resolve => setTimeout(resolve, 0));
     });
 
@@ -183,14 +129,8 @@ describe('EditorContextMenuCoordinator', () => {
       textarea.selectionStart = 5;
       textarea.selectionEnd = 5;
 
-      textarea.dispatchEvent(new MouseEvent('contextmenu', {
-        bubbles: true,
-        clientX: 100,
-        clientY: 200,
-      }));
-      await menu.updateComplete;
-
-      menu.dispatchEvent(new CustomEvent('upload-image-requested', { bubbles: true }));
+      toolbar.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      toolbar.dispatchEvent(new CustomEvent('upload-image-requested', { bubbles: true }));
       await new Promise(resolve => setTimeout(resolve, 0));
     });
 
@@ -204,28 +144,28 @@ describe('EditorContextMenuCoordinator', () => {
   });
 
   describe('detach', () => {
-    let contextMenuSpy: SinonSpy;
+    let boldSpy: SinonSpy;
 
     beforeEach(() => {
-      contextMenuSpy = spy(menu, 'openAt');
+      boldSpy = spy();
       coordinator.detach();
+
+      textarea.value = 'Hello world!';
+      textarea.selectionStart = 6;
+      textarea.selectionEnd = 11;
+      textarea.addEventListener('keyup', boldSpy);
+
+      toolbar.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      toolbar.dispatchEvent(new CustomEvent('format-bold-requested', { bubbles: true }));
     });
 
-    afterEach(() => {
-      contextMenuSpy.restore();
-    });
-
-    it('should stop responding to context menu events', () => {
-      textarea.dispatchEvent(new MouseEvent('contextmenu', {
-        bubbles: true,
-        clientX: 100,
-        clientY: 200,
-      }));
-      expect(contextMenuSpy).to.not.have.been.called;
+    it('should stop responding to toolbar events', () => {
+      expect(boldSpy).to.not.have.been.called;
+      expect(textarea.value).to.equal('Hello world!');
     });
   });
 
-  describe('when Insert New Page menu item is clicked', () => {
+  describe('when Insert New Page toolbar button is clicked', () => {
     let insertedDialog: InsertNewPageDialog | null;
 
     beforeEach(async () => {
@@ -233,26 +173,16 @@ describe('EditorContextMenuCoordinator', () => {
       textarea.selectionStart = 5;
       textarea.selectionEnd = 5;
 
-      // Open context menu first
-      textarea.dispatchEvent(new MouseEvent('contextmenu', {
-        bubbles: true,
-        clientX: 100,
-        clientY: 200,
-      }));
-      await menu.updateComplete;
-
-      // Dispatch the insert-new-page-requested event
-      menu.dispatchEvent(new CustomEvent('insert-new-page-requested', { bubbles: true }));
+      toolbar.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      toolbar.dispatchEvent(new CustomEvent('insert-new-page-requested', { bubbles: true }));
 
       // Wait for the dialog to be created
       await new Promise(resolve => setTimeout(resolve, 0));
 
-      // Find the dialog that was inserted
       insertedDialog = document.body.querySelector('insert-new-page-dialog');
     });
 
     afterEach(() => {
-      // Clean up the dialog from the DOM
       if (insertedDialog) {
         insertedDialog.remove();
       }
@@ -274,9 +204,9 @@ describe('EditorContextMenuCoordinator', () => {
   describe('when textarea is inside a shadow DOM', () => {
     let shadowHost: HTMLDivElement;
     let shadowTextarea: HTMLTextAreaElement;
-    let shadowCoordinator: EditorContextMenuCoordinator;
+    let shadowCoordinator: EditorToolbarCoordinator;
 
-    beforeEach(async () => {
+    beforeEach(() => {
       shadowHost = document.createElement('div');
       document.body.appendChild(shadowHost);
       const shadowRoot = shadowHost.attachShadow({ mode: 'open' });
@@ -284,23 +214,16 @@ describe('EditorContextMenuCoordinator', () => {
       shadowTextarea.value = 'Shadow content';
       shadowRoot.appendChild(shadowTextarea);
 
-      shadowCoordinator = new EditorContextMenuCoordinator(
-        shadowTextarea, menu, uploadService, formattingService
+      shadowCoordinator = new EditorToolbarCoordinator(
+        shadowTextarea, toolbar, uploadService, formattingService
       );
 
       shadowTextarea.selectionStart = 7;
       shadowTextarea.selectionEnd = 14; // "content" selected
 
-      // Simulate right-click to save selection (works even in shadow DOM
-      // since the listener is attached directly on the textarea element)
-      shadowTextarea.dispatchEvent(new MouseEvent('contextmenu', {
-        bubbles: true,
-        clientX: 100,
-        clientY: 200,
-      }));
-      await menu.updateComplete;
-
-      menu.dispatchEvent(new CustomEvent('format-bold-requested', { bubbles: true }));
+      // Simulate toolbar interaction
+      toolbar.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      toolbar.dispatchEvent(new CustomEvent('format-bold-requested', { bubbles: true }));
     });
 
     afterEach(() => {
@@ -321,15 +244,8 @@ describe('EditorContextMenuCoordinator', () => {
       textarea.selectionStart = 5;
       textarea.selectionEnd = 5;
 
-      // Open context menu and trigger insert new page
-      textarea.dispatchEvent(new MouseEvent('contextmenu', {
-        bubbles: true,
-        clientX: 100,
-        clientY: 200,
-      }));
-      await menu.updateComplete;
-
-      menu.dispatchEvent(new CustomEvent('insert-new-page-requested', { bubbles: true }));
+      toolbar.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      toolbar.dispatchEvent(new CustomEvent('insert-new-page-requested', { bubbles: true }));
       await new Promise(resolve => setTimeout(resolve, 0));
 
       insertedDialog = document.body.querySelector('insert-new-page-dialog');

@@ -101,16 +101,16 @@ ul.pure-menu-list {
   }
 }
 
-/* Touch device edit page: simplified fixed toolbar layout */
+/* Touch device edit page: toolbar is inside wiki-editor shadow DOM */
 @media (pointer: coarse) {
   /* Hide the main menu on touch edit pages - toolbar provides exit */
   body.EditPage div#menu {
     display: none;
   }
 
-  /* Position wrap below the fixed toolbar */
+  /* No fixed toolbar overlay - toolbar is in shadow DOM */
   body.EditPage div#wrap {
-    top: 50px; /* toolbar height */
+    top: 0;
   }
 }
 

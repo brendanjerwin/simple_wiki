@@ -162,6 +162,11 @@ describe('WikiEditor', () => {
       const dropZone = el.shadowRoot?.querySelector('file-drop-zone');
       expect(dropZone).to.exist;
     });
+
+    it('should render editor-toolbar in shadow DOM', () => {
+      const toolbar = el.shadowRoot?.querySelector('editor-toolbar');
+      expect(toolbar).to.exist;
+    });
   });
 
   describe('when content has no frontmatter', () => {
@@ -597,7 +602,7 @@ describe('WikiEditor', () => {
     });
 
     it('should detach the coordinator if present', () => {
-      // Coordinator may not be created if no editor-context-menu is in the document
+      // Coordinator may not be created if no editor-toolbar is in the shadow DOM
       if (coordinatorDetachSpy.callCount > 0) {
         expect(coordinatorDetachSpy).to.have.been.calledOnce;
       }
