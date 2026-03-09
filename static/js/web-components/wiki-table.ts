@@ -1,190 +1,242 @@
 import type { TemplateResult } from 'lit';
-import { html, css, LitElement } from 'lit';
+import { html, css, LitElement, nothing } from 'lit';
 import { state } from 'lit/decorators.js';
-import { extractTableData } from './table-data-extractor.js';
-import { sortRows, filterRows } from './table-sorter-filterer.js';
+import { extractTableData, getUniqueColumnValues, getColumnNumericRange } from './table-data-extractor.js';
+import { sortRows, applyAllFilters, hasActiveFilters, isFilterActive } from './table-sorter-filterer.js';
+import { pillCSS } from './shared-styles.js';
+import './table-filter-popover.js';
+import type { SortDirectionChangedEventDetail, FilterChangedEventDetail } from './table-filter-popover.js';
 import type { ExtractedTableData } from './table-data-extractor.js';
-import type { SortDirection } from './table-sorter-filterer.js';
+import type { SortDirection, TableFilterState } from './table-sorter-filterer.js';
 
 export class WikiTable extends LitElement {
-  static override styles = css`
-    :host {
-      display: block;
-    }
+  static override styles = [
+    pillCSS,
+    css`
+      :host {
+        display: block;
+      }
 
-    .wiki-table-toolbar {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 4px 8px;
-      font-size: 0.85rem;
-      color: #555;
-      border-bottom: 1px solid #e0e0e0;
-      flex-wrap: wrap;
-    }
+      .status-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 4px 8px;
+        font-size: 12px;
+        color: #888;
+        border-bottom: 1px solid #e0e0e0;
+      }
 
-    .toolbar-btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 44px;
-      min-width: 44px;
-      padding: 4px 8px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      background: #f8f8f8;
-      cursor: pointer;
-      font-size: 0.85rem;
-    }
+      .row-count {
+        white-space: nowrap;
+      }
 
-    .toolbar-btn:hover {
-      background: #e8e8e8;
-    }
+      .row-count-filtered {
+        font-weight: 600;
+        color: #333;
+      }
 
-    .toolbar-btn.active {
-      background: #d0e0f0;
-      border-color: #80a0c0;
-    }
+      .status-pills {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
 
-    .row-count {
-      margin-left: auto;
-      white-space: nowrap;
-    }
+      .table-scroll-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        position: relative;
+      }
 
-    .table-scroll-container {
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-      position: relative;
-    }
+      :host([scroll-middle]) .table-scroll-container::before,
+      :host([scroll-end]) .table-scroll-container::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 16px;
+        background: linear-gradient(to right, rgba(0,0,0,0.08), transparent);
+        pointer-events: none;
+        z-index: 3;
+      }
 
-    :host([scroll-middle]) .table-scroll-container::before,
-    :host([scroll-end]) .table-scroll-container::before {
-      content: '';
-      position: absolute;
-      left: 0;
-      top: 0;
-      bottom: 0;
-      width: 16px;
-      background: linear-gradient(to right, rgba(0,0,0,0.08), transparent);
-      pointer-events: none;
-      z-index: 3;
-    }
+      :host([scroll-start]) .table-scroll-container::after,
+      :host([scroll-middle]) .table-scroll-container::after {
+        content: '';
+        position: absolute;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        width: 16px;
+        background: linear-gradient(to left, rgba(0,0,0,0.08), transparent);
+        pointer-events: none;
+        z-index: 3;
+      }
 
-    :host([scroll-start]) .table-scroll-container::after,
-    :host([scroll-middle]) .table-scroll-container::after {
-      content: '';
-      position: absolute;
-      right: 0;
-      top: 0;
-      bottom: 0;
-      width: 16px;
-      background: linear-gradient(to left, rgba(0,0,0,0.08), transparent);
-      pointer-events: none;
-      z-index: 3;
-    }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.95rem;
+      }
 
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.95rem;
-    }
+      thead th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: #f5f5f5;
+        padding: 0;
+        text-align: left;
+        border-bottom: 2px solid #ddd;
+        user-select: none;
+        white-space: nowrap;
+      }
 
-    thead th {
-      position: sticky;
-      top: 0;
-      z-index: 2;
-      background: #f5f5f5;
-      padding: 8px 12px;
-      text-align: left;
-      border-bottom: 2px solid #ddd;
-      cursor: pointer;
-      user-select: none;
-      white-space: nowrap;
-    }
+      thead th:hover {
+        background: #e8e8e8;
+      }
 
-    thead th:hover {
-      background: #e8e8e8;
-    }
+      .header-cell {
+        display: flex;
+        align-items: center;
+      }
 
-    .sort-indicator {
-      margin-left: 4px;
-      opacity: 0.4;
-    }
+      .header-main {
+        flex: 1;
+        padding: 8px 4px 8px 12px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+      }
 
-    thead th.sorted .sort-indicator {
-      opacity: 1;
-    }
+      .filter-dot {
+        display: inline-block;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #0d6efd;
+        flex-shrink: 0;
+      }
 
-    .filter-row th {
-      padding: 4px;
-      position: sticky;
-      top: 38px;
-      z-index: 2;
-      background: #f5f5f5;
-      cursor: default;
-    }
+      .sort-arrows {
+        padding: 8px 8px 8px 4px;
+        cursor: pointer;
+        opacity: 0.4;
+        flex-shrink: 0;
+      }
 
-    .filter-input {
-      width: 100%;
-      min-height: 44px;
-      padding: 4px 8px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-      font-size: 0.85rem;
-      box-sizing: border-box;
-    }
+      .sort-arrows:hover {
+        opacity: 0.8;
+      }
 
-    tbody td {
-      padding: 8px 12px;
-      border-bottom: 1px solid #eee;
-    }
+      thead th.sorted .sort-arrows {
+        opacity: 1;
+      }
 
-    tbody tr:hover {
-      background: #f9f9f9;
-    }
+      tbody td {
+        padding: 8px 12px;
+        border-bottom: 1px solid #eee;
+      }
 
-    .card-view {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
+      tbody tr:hover {
+        background: #f9f9f9;
+      }
 
-    .card {
-      border: 1px solid #ddd;
-      border-radius: 8px;
-      padding: 12px;
-      background: #fff;
-    }
+      .card-view {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 8px;
+        background: #f5f5f5;
+      }
 
-    .card-row {
-      display: flex;
-      justify-content: space-between;
-      padding: 4px 0;
-      border-bottom: 1px solid #f0f0f0;
-    }
+      .card {
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 12px;
+        background: #fff;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+      }
 
-    .card-row:last-child {
-      border-bottom: none;
-    }
+      .card-row {
+        display: flex;
+        justify-content: space-between;
+        padding: 4px 0;
+        border-bottom: 1px solid #f0f0f0;
+      }
 
-    .card-label {
-      font-weight: bold;
-      font-variant: small-caps;
-      font-size: 0.85rem;
-      color: #666;
-    }
+      .card-row:last-child {
+        border-bottom: none;
+      }
 
-    .card-value {
-      text-align: right;
-    }
+      .card-label {
+        font-weight: bold;
+        font-variant: small-caps;
+        font-size: 0.85rem;
+        color: #666;
+      }
 
-    .no-results {
-      padding: 16px;
-      text-align: center;
-      color: #888;
-      font-style: italic;
-    }
-  `;
+      .card-value {
+        text-align: right;
+      }
+
+      .no-results {
+        padding: 16px;
+        text-align: center;
+        color: #888;
+        font-style: italic;
+      }
+
+      .column-picker-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.3);
+        z-index: 9998;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .column-picker {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        padding: 8px 0;
+        min-width: 180px;
+        max-height: 60vh;
+        overflow-y: auto;
+      }
+
+      .column-picker-title {
+        padding: 6px 14px;
+        font-size: 11px;
+        font-weight: 600;
+        color: #888;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      .column-picker-item {
+        padding: 8px 14px;
+        cursor: pointer;
+        font-size: 13px;
+        color: #333;
+        border: none;
+        background: none;
+        width: 100%;
+        text-align: left;
+        font-family: inherit;
+      }
+
+      .column-picker-item:hover {
+        background: #f0f0f0;
+      }
+    `,
+  ];
 
   @state()
   declare extractedData: ExtractedTableData | null;
@@ -196,13 +248,16 @@ export class WikiTable extends LitElement {
   declare sortDirection: SortDirection;
 
   @state()
-  declare columnFilters: Map<number, string>;
-
-  @state()
-  declare filtersVisible: boolean;
+  declare tableFilters: TableFilterState;
 
   @state()
   declare cardViewActive: boolean;
+
+  @state()
+  declare popoverColumnIndex: number | null;
+
+  @state()
+  declare columnPickerOpen: boolean;
 
   private _mediaQuery: MediaQueryList | null = null;
   private _scrollContainer: HTMLElement | null = null;
@@ -213,9 +268,10 @@ export class WikiTable extends LitElement {
     this.extractedData = null;
     this.sortColumnIndex = null;
     this.sortDirection = 'none';
-    this.columnFilters = new Map();
-    this.filtersVisible = false;
+    this.tableFilters = new Map();
     this.cardViewActive = false;
+    this.popoverColumnIndex = null;
+    this.columnPickerOpen = false;
   }
 
   override connectedCallback(): void {
@@ -278,13 +334,8 @@ export class WikiTable extends LitElement {
     if (!this.extractedData) return [];
     let rows = this.extractedData.rows;
 
-    for (const [colIndex, filterText] of this.columnFilters) {
-      if (filterText.trim() !== '') {
-        const colDef = this.extractedData.columns[colIndex];
-        if (colDef) {
-          rows = filterRows(rows, colIndex, filterText, colDef.typeInfo.detectedType);
-        }
-      }
+    if (hasActiveFilters(this.tableFilters)) {
+      rows = applyAllFilters(rows, this.tableFilters, this.extractedData.columns);
     }
 
     if (this.sortColumnIndex !== null && this.sortDirection !== 'none') {
@@ -297,7 +348,12 @@ export class WikiTable extends LitElement {
     return rows;
   }
 
-  private _handleHeaderClick(columnIndex: number): void {
+  private _handleHeaderMainClick(columnIndex: number): void {
+    this.popoverColumnIndex = columnIndex;
+  }
+
+  private _handleSortArrowClick(columnIndex: number, e: Event): void {
+    e.stopPropagation();
     if (this.sortColumnIndex === columnIndex) {
       if (this.sortDirection === 'none') {
         this.sortDirection = 'ascending';
@@ -313,26 +369,26 @@ export class WikiTable extends LitElement {
     }
   }
 
-  private _handleFilterInput(columnIndex: number, value: string): void {
-    const newFilters = new Map(this.columnFilters);
-    if (value.trim() === '') {
-      newFilters.delete(columnIndex);
-    } else {
-      newFilters.set(columnIndex, value);
-    }
-    this.columnFilters = newFilters;
-  }
-
-  private _toggleFilters(): void {
-    this.filtersVisible = !this.filtersVisible;
+  private _handleFilterDotClick(columnIndex: number, e: Event): void {
+    e.stopPropagation();
+    this.popoverColumnIndex = columnIndex;
   }
 
   private _toggleCardView(): void {
     this.cardViewActive = !this.cardViewActive;
   }
 
-  private _clearFilters(): void {
-    this.columnFilters = new Map();
+  private _clearAllFilters(): void {
+    this.tableFilters = new Map();
+  }
+
+  private _hasActiveFilters(): boolean {
+    return hasActiveFilters(this.tableFilters);
+  }
+
+  private _isColumnFiltered(columnIndex: number): boolean {
+    const filter = this.tableFilters.get(columnIndex);
+    return filter !== undefined && isFilterActive(filter);
   }
 
   private _getSortIndicator(columnIndex: number): string {
@@ -340,6 +396,48 @@ export class WikiTable extends LitElement {
       return '\u21C5';
     }
     return this.sortDirection === 'ascending' ? '\u2191' : '\u2193';
+  }
+
+  private _handlePopoverSortChanged(e: CustomEvent<SortDirectionChangedEventDetail>): void {
+    const { direction } = e.detail;
+    if (direction === 'none') {
+      this.sortDirection = 'none';
+      this.sortColumnIndex = null;
+    } else if (this.popoverColumnIndex !== null) {
+      this.sortColumnIndex = this.popoverColumnIndex;
+      this.sortDirection = direction;
+    }
+  }
+
+  private _handlePopoverFilterChanged(e: CustomEvent<FilterChangedEventDetail>): void {
+    if (this.popoverColumnIndex === null) return;
+    const { filter } = e.detail;
+    const newFilters = new Map(this.tableFilters);
+    if (filter === null) {
+      newFilters.delete(this.popoverColumnIndex);
+    } else {
+      newFilters.set(this.popoverColumnIndex, filter);
+    }
+    this.tableFilters = newFilters;
+  }
+
+  private _handlePopoverClosed(): void {
+    this.popoverColumnIndex = null;
+  }
+
+  private _openColumnPicker(): void {
+    this.columnPickerOpen = true;
+  }
+
+  private _handleColumnPickerSelect(columnIndex: number): void {
+    this.columnPickerOpen = false;
+    this.popoverColumnIndex = columnIndex;
+  }
+
+  private _handleColumnPickerOverlayClick(e: Event): void {
+    if (e.target instanceof HTMLElement && e.target.classList.contains('column-picker-overlay')) {
+      this.columnPickerOpen = false;
+    }
   }
 
   override updated(): void {
@@ -352,10 +450,6 @@ export class WikiTable extends LitElement {
     }
   }
 
-  private _hasActiveFilters(): boolean {
-    return this.columnFilters.size > 0;
-  }
-
   override render(): TemplateResult {
     if (!this.extractedData) {
       return html`<slot></slot>`;
@@ -364,40 +458,97 @@ export class WikiTable extends LitElement {
     const processedRows = this._getProcessedRows();
     const totalRows = this.extractedData.rows.length;
     const shownRows = processedRows.length;
+    const filtered = this._hasActiveFilters();
 
     return html`
-      <div class="wiki-table-toolbar">
-        <button
-          type="button"
-          class="toolbar-btn ${this.filtersVisible ? 'active' : ''}"
-          @click=${this._toggleFilters}
-          title="Toggle filters"
-          aria-label="Toggle filters"
-        >\u2AF7</button>
-        <button
-          type="button"
-          class="toolbar-btn ${this.cardViewActive ? 'active' : ''}"
-          @click=${this._toggleCardView}
-          title="Toggle card view"
-          aria-label="Toggle card view"
-        >${this.cardViewActive ? '\u2637' : '\u2636'}</button>
-        ${this._hasActiveFilters() ? html`
+      <div class="status-bar">
+        <span class="row-count ${filtered ? 'row-count-filtered' : ''}">
+          ${filtered
+            ? `${shownRows} of ${totalRows} rows`
+            : `${totalRows} rows`}
+        </span>
+        <div class="status-pills">
+          ${filtered ? html`
+            <button
+              type="button"
+              class="tag-filter-clear"
+              @click=${this._clearAllFilters}
+              aria-label="Clear all filters"
+            >\u2715 clear all</button>
+          ` : nothing}
           <button
             type="button"
-            class="toolbar-btn"
-            @click=${this._clearFilters}
-            title="Clear filters"
-            aria-label="Clear filters"
-          >\u2715</button>
-        ` : ''}
-        <span class="row-count">${shownRows === totalRows
-          ? `${totalRows} rows`
-          : `${shownRows} of ${totalRows} rows`}</span>
+            class="tag-pill ${this.cardViewActive ? 'tag-pill-active' : ''}"
+            @click=${this._toggleCardView}
+            aria-label="Toggle view"
+          >${this.cardViewActive ? '\u229E cards' : '\u25A4 table'}</button>
+          ${this.cardViewActive ? html`
+            <button
+              type="button"
+              class="tag-pill"
+              @click=${this._openColumnPicker}
+              aria-label="Open filter picker"
+            >\u2699 filter</button>
+          ` : nothing}
+        </div>
       </div>
       ${this.cardViewActive
         ? this._renderCardView(processedRows)
         : this._renderTableView(processedRows)}
+      ${this._renderPopover()}
+      ${this.columnPickerOpen ? this._renderColumnPicker() : nothing}
       <slot style="display:none"></slot>
+    `;
+  }
+
+  private _renderPopover(): TemplateResult {
+    if (this.popoverColumnIndex === null || !this.extractedData) {
+      return html``;
+    }
+
+    const col = this.extractedData.columns[this.popoverColumnIndex];
+    if (!col) return html``;
+
+    const uniqueValues = getUniqueColumnValues(this.extractedData.rows, this.popoverColumnIndex);
+    const numericRange = getColumnNumericRange(
+      this.extractedData.rows,
+      this.popoverColumnIndex,
+      col.typeInfo.detectedType,
+    );
+    const currentFilter = this.tableFilters.get(this.popoverColumnIndex) ?? null;
+    const currentSortDirection = this.sortColumnIndex === this.popoverColumnIndex
+      ? this.sortDirection
+      : 'none';
+
+    return html`
+      <table-filter-popover
+        .columnDefinition=${col}
+        .uniqueValues=${uniqueValues}
+        .numericRange=${numericRange}
+        .currentFilter=${currentFilter}
+        .currentSortDirection=${currentSortDirection}
+        .open=${true}
+        @sort-direction-changed=${this._handlePopoverSortChanged}
+        @filter-changed=${this._handlePopoverFilterChanged}
+        @popover-closed=${this._handlePopoverClosed}
+      ></table-filter-popover>
+    `;
+  }
+
+  private _renderColumnPicker(): TemplateResult {
+    return html`
+      <div class="column-picker-overlay" @click=${this._handleColumnPickerOverlayClick}>
+        <div class="column-picker">
+          <div class="column-picker-title">Filter by column</div>
+          ${this.extractedData!.columns.map(col => html`
+            <button
+              type="button"
+              class="column-picker-item"
+              @click=${() => this._handleColumnPickerSelect(col.columnIndex)}
+            >${col.headerText}</button>
+          `)}
+        </div>
+      </div>
     `;
   }
 
@@ -410,35 +561,25 @@ export class WikiTable extends LitElement {
               ${this.extractedData!.columns.map((col, i) => html`
                 <th
                   class="${this.sortColumnIndex === i ? 'sorted' : ''}"
-                  @click=${() => this._handleHeaderClick(i)}
+                  title="Detected type: ${col.typeInfo.detectedType}"
                   aria-sort="${this.sortColumnIndex === i ? this.sortDirection : 'none'}"
                 >
-                  ${col.headerText}
-                  <span class="sort-indicator">${this._getSortIndicator(i)}</span>
+                  <div class="header-cell">
+                    <span
+                      class="header-main"
+                      @click=${() => this._handleHeaderMainClick(i)}
+                    >
+                      ${col.headerText}
+                      ${this._isColumnFiltered(i) ? html`<span class="filter-dot" @click=${(e: Event) => this._handleFilterDotClick(i, e)}></span>` : nothing}
+                    </span>
+                    <span
+                      class="sort-arrows"
+                      @click=${(e: Event) => this._handleSortArrowClick(i, e)}
+                    >${this._getSortIndicator(i)}</span>
+                  </div>
                 </th>
               `)}
             </tr>
-            ${this.filtersVisible ? html`
-              <tr class="filter-row">
-                ${this.extractedData!.columns.map((col, i) => html`
-                  <th>
-                    <input
-                      class="filter-input"
-                      type="text"
-                      placeholder="Filter..."
-                      aria-label="Filter by ${col.headerText}"
-                      .value=${this.columnFilters.get(i) ?? ''}
-                      @input=${(e: InputEvent) => {
-                        const target = e.target;
-                        if (target instanceof HTMLInputElement) {
-                          this._handleFilterInput(i, target.value);
-                        }
-                      }}
-                    />
-                  </th>
-                `)}
-              </tr>
-            ` : ''}
           </thead>
           <tbody>
             ${processedRows.length === 0 ? html`

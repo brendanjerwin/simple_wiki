@@ -13,9 +13,11 @@ const meta: Meta = {
         component: `
 Enhances standard HTML tables rendered from markdown with interactive features:
 
-- **Column sorting**: Click headers to cycle through ascending/descending/none
-- **Column filtering**: Toggle filter row for per-column text/numeric filtering
+- **Column sorting**: Click sort arrows in headers, or use the filter popover
+- **Column filtering**: Click header to open popover with checkbox, range, or text-search filters
 - **Smart type detection**: Automatically detects number, currency, percentage, date, and text columns
+- **Status bar**: Shows row count with pill buttons for view toggle and filter management
+- **Filter popover**: Centered popover with sort controls and auto-detected filter type
 - **Card view**: Responsive card layout for narrow screens (auto or manual toggle)
 - **Scroll shadows**: Visual indicators when table content is scrollable horizontally
 - **Progressive enhancement**: Falls back to plain table if JS is disabled
@@ -45,6 +47,13 @@ export const Default: Story = {
       </table>
     </wiki-table>
   `,
+  parameters: {
+    docs: {
+      description: {
+        story: 'Basic table with text columns. Click a column header to open the filter popover with checkbox filter (fewer than 15 unique values). Use sort arrows on the right side of headers for quick sort cycling.',
+      },
+    },
+  },
 };
 
 export const NumericData: Story = {
@@ -67,7 +76,7 @@ export const NumericData: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Table with currency and numeric columns. Sorting uses numeric comparison, not lexicographic. Try sorting the Price or Quantity columns to verify.',
+        story: 'Table with currency and numeric columns. Click a numeric column header to see the range slider filter. Hover over headers to see detected type.',
       },
     },
   },
@@ -94,7 +103,7 @@ export const MixedTypes: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Table with dates, currencies, percentages, and text. Each column type is auto-detected and sorted appropriately.',
+        story: 'Table with dates, currencies, percentages, and text. Each column type is auto-detected. Hover headers to see types. Click to open type-appropriate filter popovers.',
       },
     },
   },
@@ -124,7 +133,7 @@ export const WideTable: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Constrained to 500px width to demonstrate horizontal scrolling with scroll shadow indicators. Scroll left/right to see the gradient shadows appear.',
+        story: 'Constrained to 500px width to demonstrate horizontal scrolling with scroll shadow indicators.',
       },
     },
   },
@@ -150,7 +159,7 @@ export const CardView: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Narrow container simulating mobile viewport. Toggle the card/table view button in the toolbar, or resize the browser to under 600px for automatic card view.',
+        story: 'Narrow container simulating mobile viewport. Use the view toggle pill in the status bar. In card view, use the filter pill to access column filters via a column picker.',
       },
     },
   },
@@ -167,18 +176,18 @@ export const InteractiveTesting: Story = {
         @click=${(e: Event) => {
           const target = e.composedPath()[0];
           if (target instanceof HTMLElement) {
-            if (target.closest('th') && !target.closest('.filter-row')) {
-              logSort({ column: target.textContent?.trim() });
+            if (target.closest('.sort-arrows')) {
+              logSort({ action: 'sort-arrow-click' });
             }
-            if (target.closest('[aria-label="Toggle card view"]')) {
+            if (target.closest('.header-main')) {
+              logSort({ action: 'header-click-opens-popover' });
+            }
+            if (target.closest('[aria-label="Toggle view"]')) {
               logViewToggle({});
             }
-          }
-        }}
-        @input=${(e: Event) => {
-          const target = e.composedPath()[0];
-          if (target instanceof HTMLInputElement && target.classList.contains('filter-input')) {
-            logFilter({ value: target.value });
+            if (target.closest('[aria-label="Clear all filters"]')) {
+              logFilter({ action: 'clear-all' });
+            }
           }
         }}
       >
@@ -200,7 +209,7 @@ export const InteractiveTesting: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Interactive testing story. Open the browser developer tools console to see action logs. Try: sorting columns, toggling filters, entering filter values, toggling card view.',
+        story: 'Interactive testing story. Open the browser developer tools console to see action logs. Try: clicking headers to open filter popovers, using sort arrows, toggling card view, filtering with checkboxes/range sliders.',
       },
     },
   },

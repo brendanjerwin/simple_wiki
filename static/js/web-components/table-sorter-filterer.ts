@@ -9,6 +9,26 @@ import type { TableRowData } from './table-data-extractor.js';
 
 export type SortDirection = 'ascending' | 'descending' | 'none';
 
+export interface CheckboxFilterState {
+  kind: 'checkbox';
+  excludedValues: Set<string>;
+}
+
+export interface RangeFilterState {
+  kind: 'range';
+  min: number | null;
+  max: number | null;
+}
+
+export interface TextSearchFilterState {
+  kind: 'text-search';
+  searchText: string;
+}
+
+export type ColumnFilterState = CheckboxFilterState | RangeFilterState | TextSearchFilterState;
+
+export type TableFilterState = Map<number, ColumnFilterState>;
+
 function parseForType(text: string, columnType: ColumnDataType): number {
   switch (columnType) {
     case 'number': return parseNumericValue(text);
@@ -101,4 +121,66 @@ export function filterRows(
 
     return cellText.toLowerCase().includes(filterText.trim().toLowerCase());
   });
+}
+
+export function applyColumnFilter(
+  rows: TableRowData[],
+  columnIndex: number,
+  filterState: ColumnFilterState,
+  columnType: ColumnDataType,
+): TableRowData[] {
+  return rows.filter(row => {
+    const cellText = row.cells[columnIndex] ?? '';
+
+    switch (filterState.kind) {
+      case 'checkbox':
+        return !filterState.excludedValues.has(cellText);
+
+      case 'range': {
+        const value = parseForType(cellText, columnType);
+        if (Number.isNaN(value)) return false;
+        if (filterState.min !== null && value < filterState.min) return false;
+        if (filterState.max !== null && value > filterState.max) return false;
+        return true;
+      }
+
+      case 'text-search':
+        return cellText.toLowerCase().includes(filterState.searchText.trim().toLowerCase());
+    }
+  });
+}
+
+export function applyAllFilters(
+  rows: TableRowData[],
+  filters: TableFilterState,
+  columns: { columnIndex: number; typeInfo: { detectedType: ColumnDataType } }[],
+): TableRowData[] {
+  let result = rows;
+
+  for (const [colIndex, filterState] of filters) {
+    if (!isFilterActive(filterState)) continue;
+    const colDef = columns.find(c => c.columnIndex === colIndex);
+    if (!colDef) continue;
+    result = applyColumnFilter(result, colIndex, filterState, colDef.typeInfo.detectedType);
+  }
+
+  return result;
+}
+
+export function isFilterActive(filterState: ColumnFilterState): boolean {
+  switch (filterState.kind) {
+    case 'checkbox':
+      return filterState.excludedValues.size > 0;
+    case 'range':
+      return filterState.min !== null || filterState.max !== null;
+    case 'text-search':
+      return filterState.searchText.trim() !== '';
+  }
+}
+
+export function hasActiveFilters(filters: TableFilterState): boolean {
+  for (const filterState of filters.values()) {
+    if (isFilterActive(filterState)) return true;
+  }
+  return false;
 }

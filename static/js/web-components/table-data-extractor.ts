@@ -1,5 +1,11 @@
 import { detectColumnType } from './column-type-detector.js';
-import type { ColumnTypeInfo } from './column-type-detector.js';
+import type { ColumnTypeInfo, ColumnDataType } from './column-type-detector.js';
+import {
+  parseNumericValue,
+  parseCurrencyValue,
+  parsePercentageValue,
+  parseDateValue,
+} from './column-type-detector.js';
 
 export interface TableColumnDefinition {
   headerText: string;
@@ -56,4 +62,49 @@ export function extractTableData(tableElement: HTMLTableElement): ExtractedTable
   });
 
   return { columns, rows };
+}
+
+export function getUniqueColumnValues(rows: TableRowData[], columnIndex: number): string[] {
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const value = row.cells[columnIndex] ?? '';
+    if (value !== '') {
+      seen.add(value);
+    }
+  }
+  return Array.from(seen).sort();
+}
+
+function parseForColumnType(text: string, columnType: ColumnDataType): number {
+  switch (columnType) {
+    case 'number': return parseNumericValue(text);
+    case 'currency': return parseCurrencyValue(text);
+    case 'percentage': return parsePercentageValue(text);
+    case 'date': return parseDateValue(text);
+    default: return NaN;
+  }
+}
+
+export function getColumnNumericRange(
+  rows: TableRowData[],
+  columnIndex: number,
+  columnType: ColumnDataType,
+): { min: number; max: number } | null {
+  if (columnType === 'text') return null;
+
+  let min = Infinity;
+  let max = -Infinity;
+  let hasValue = false;
+
+  for (const row of rows) {
+    const cellText = row.cells[columnIndex] ?? '';
+    const value = parseForColumnType(cellText, columnType);
+    if (!Number.isNaN(value)) {
+      hasValue = true;
+      if (value < min) min = value;
+      if (value > max) max = value;
+    }
+  }
+
+  return hasValue ? { min, max } : null;
 }

@@ -1,6 +1,10 @@
 import { expect } from '@open-wc/testing';
-import { extractTableData } from './table-data-extractor.js';
-import type { ExtractedTableData } from './table-data-extractor.js';
+import {
+  extractTableData,
+  getUniqueColumnValues,
+  getColumnNumericRange,
+} from './table-data-extractor.js';
+import type { ExtractedTableData, TableRowData } from './table-data-extractor.js';
 
 function createTable(html: string): HTMLTableElement {
   const container = document.createElement('div');
@@ -152,6 +156,150 @@ describe('table-data-extractor', () => {
 
       it('should trim cell whitespace', () => {
         expect(result.rows[0]!.cells[0]).to.equal('Widget');
+      });
+    });
+  });
+
+  describe('getUniqueColumnValues', () => {
+
+    function makeRows(values: string[][]): TableRowData[] {
+      return values.map((cells, i) => ({ cells, originalIndex: i }));
+    }
+
+    describe('when column has unique values', () => {
+      let result: string[];
+
+      beforeEach(() => {
+        const rows = makeRows([['Cherry'], ['Apple'], ['Banana']]);
+        result = getUniqueColumnValues(rows, 0);
+      });
+
+      it('should return sorted unique values', () => {
+        expect(result).to.deep.equal(['Apple', 'Banana', 'Cherry']);
+      });
+    });
+
+    describe('when column has duplicate values', () => {
+      let result: string[];
+
+      beforeEach(() => {
+        const rows = makeRows([['Apple'], ['Banana'], ['Apple'], ['Banana']]);
+        result = getUniqueColumnValues(rows, 0);
+      });
+
+      it('should deduplicate values', () => {
+        expect(result).to.deep.equal(['Apple', 'Banana']);
+      });
+    });
+
+    describe('when column has empty values', () => {
+      let result: string[];
+
+      beforeEach(() => {
+        const rows = makeRows([['Apple'], [''], ['Banana'], ['']]);
+        result = getUniqueColumnValues(rows, 0);
+      });
+
+      it('should exclude empty values', () => {
+        expect(result).to.deep.equal(['Apple', 'Banana']);
+      });
+    });
+
+    describe('when column is empty', () => {
+      let result: string[];
+
+      beforeEach(() => {
+        const rows = makeRows([[''], [''], ['']]);
+        result = getUniqueColumnValues(rows, 0);
+      });
+
+      it('should return empty array', () => {
+        expect(result).to.deep.equal([]);
+      });
+    });
+  });
+
+  describe('getColumnNumericRange', () => {
+
+    function makeRows(values: string[][]): TableRowData[] {
+      return values.map((cells, i) => ({ cells, originalIndex: i }));
+    }
+
+    describe('when column is numeric', () => {
+      let result: { min: number; max: number } | null;
+
+      beforeEach(() => {
+        const rows = makeRows([['5'], ['10'], ['3'], ['20']]);
+        result = getColumnNumericRange(rows, 0, 'number');
+      });
+
+      it('should return min and max', () => {
+        expect(result).to.deep.equal({ min: 3, max: 20 });
+      });
+    });
+
+    describe('when column is currency', () => {
+      let result: { min: number; max: number } | null;
+
+      beforeEach(() => {
+        const rows = makeRows([['$9.99'], ['$24.50'], ['$1.50']]);
+        result = getColumnNumericRange(rows, 0, 'currency');
+      });
+
+      it('should return parsed currency min and max', () => {
+        expect(result).to.deep.equal({ min: 1.5, max: 24.5 });
+      });
+    });
+
+    describe('when column is percentage', () => {
+      let result: { min: number; max: number } | null;
+
+      beforeEach(() => {
+        const rows = makeRows([['25%'], ['75%'], ['50%']]);
+        result = getColumnNumericRange(rows, 0, 'percentage');
+      });
+
+      it('should return parsed percentage min and max', () => {
+        expect(result).to.deep.equal({ min: 25, max: 75 });
+      });
+    });
+
+    describe('when column is text', () => {
+      let result: { min: number; max: number } | null;
+
+      beforeEach(() => {
+        const rows = makeRows([['Apple'], ['Banana']]);
+        result = getColumnNumericRange(rows, 0, 'text');
+      });
+
+      it('should return null', () => {
+        expect(result).to.be.null;
+      });
+    });
+
+    describe('when no values are parseable', () => {
+      let result: { min: number; max: number } | null;
+
+      beforeEach(() => {
+        const rows = makeRows([['abc'], ['xyz']]);
+        result = getColumnNumericRange(rows, 0, 'number');
+      });
+
+      it('should return null', () => {
+        expect(result).to.be.null;
+      });
+    });
+
+    describe('when some values are unparseable', () => {
+      let result: { min: number; max: number } | null;
+
+      beforeEach(() => {
+        const rows = makeRows([['5'], ['abc'], ['15']]);
+        result = getColumnNumericRange(rows, 0, 'number');
+      });
+
+      it('should compute range from parseable values only', () => {
+        expect(result).to.deep.equal({ min: 5, max: 15 });
       });
     });
   });
