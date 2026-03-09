@@ -95,6 +95,16 @@ describe('column-type-detector', () => {
           expect(result.detectedType).to.equal('currency');
         });
       });
+
+      describe('when values mix positive and negative with symbol-then-negative format', () => {
+        beforeEach(() => {
+          result = detectColumnType(['$100.00', '€-10.50', '$25.00', '-£5.00']);
+        });
+
+        it('should detect currency type', () => {
+          expect(result.detectedType).to.equal('currency');
+        });
+      });
     });
 
     describe('when given percentage values', () => {
@@ -307,13 +317,23 @@ describe('column-type-detector', () => {
       });
     });
 
-    describe('when given a negative currency value', () => {
+    describe('when given a negative currency value with leading minus', () => {
       beforeEach(() => {
         result = parseCurrencyValue('-$15.00');
       });
 
       it('should return the negative numeric value', () => {
         expect(result).to.equal(-15);
+      });
+    });
+
+    describe('when given a negative currency value with symbol-then-minus', () => {
+      beforeEach(() => {
+        result = parseCurrencyValue('€-10.50');
+      });
+
+      it('should return the negative numeric value', () => {
+        expect(result).to.be.closeTo(-10.50, 0.001);
       });
     });
 

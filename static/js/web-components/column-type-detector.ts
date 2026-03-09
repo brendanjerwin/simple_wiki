@@ -5,7 +5,7 @@ export interface ColumnTypeInfo {
   confidenceRatio: number;
 }
 
-const currencyPattern = /^-?[$€£¥]\s?[\d,]+\.?\d*$/;
+const currencyPattern = /^(?:-?[$€£¥]\s?[\d,]+\.?\d*|[$€£¥]\s?-[\d,]+\.?\d*)$/;
 const percentagePattern = /^-?\d+\.?\d*%$/;
 const numberPattern = /^-?[\d,]+\.?\d*$/;
 const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
@@ -89,8 +89,8 @@ export function parseDateValue(text: string): number {
 
 export function parseCurrencyValue(text: string): number {
   const trimmed = text.trim();
-  const negative = trimmed.startsWith('-');
-  const cleaned = trimmed.replace(/^-?\s*[$€£¥]\s?/, '').replace(/,/g, '');
+  const negative = trimmed.startsWith('-') || /^[$€£¥]\s?-/.test(trimmed);
+  const cleaned = trimmed.replace(/^-?\s*[$€£¥]\s?-?/, '').replace(/,/g, '');
   const value = Number(cleaned);
   return Number.isNaN(value) ? NaN : (negative ? -value : value);
 }

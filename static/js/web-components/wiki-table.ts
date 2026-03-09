@@ -118,7 +118,8 @@ export class WikiTable extends LitElement {
     .filter-row th {
       padding: 4px;
       position: sticky;
-      top: 0;
+      top: 38px;
+      z-index: 2;
       background: #f5f5f5;
       cursor: default;
     }
@@ -367,12 +368,14 @@ export class WikiTable extends LitElement {
     return html`
       <div class="wiki-table-toolbar">
         <button
+          type="button"
           class="toolbar-btn ${this.filtersVisible ? 'active' : ''}"
           @click=${this._toggleFilters}
           title="Toggle filters"
           aria-label="Toggle filters"
         >\u2AF7</button>
         <button
+          type="button"
           class="toolbar-btn ${this.cardViewActive ? 'active' : ''}"
           @click=${this._toggleCardView}
           title="Toggle card view"
@@ -380,6 +383,7 @@ export class WikiTable extends LitElement {
         >${this.cardViewActive ? '\u2637' : '\u2636'}</button>
         ${this._hasActiveFilters() ? html`
           <button
+            type="button"
             class="toolbar-btn"
             @click=${this._clearFilters}
             title="Clear filters"
@@ -416,12 +420,13 @@ export class WikiTable extends LitElement {
             </tr>
             ${this.filtersVisible ? html`
               <tr class="filter-row">
-                ${this.extractedData!.columns.map((_, i) => html`
+                ${this.extractedData!.columns.map((col, i) => html`
                   <th>
                     <input
                       class="filter-input"
                       type="text"
                       placeholder="Filter..."
+                      aria-label="Filter by ${col.headerText}"
                       .value=${this.columnFilters.get(i) ?? ''}
                       @input=${(e: InputEvent) => {
                         const target = e.target;
