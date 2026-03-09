@@ -128,8 +128,8 @@ describe('table-data-extractor', () => {
         result = extractTableData(table);
       });
 
-      it('should detect number type for count column', () => {
-        expect(result.columns[1]!.typeInfo.detectedType).to.equal('number');
+      it('should detect integer type for count column', () => {
+        expect(result.columns[1]!.typeInfo.detectedType).to.equal('integer');
       });
 
       it('should detect percentage type for completion column', () => {
@@ -230,7 +230,7 @@ describe('table-data-extractor', () => {
 
       beforeEach(() => {
         const rows = makeRows([['5'], ['10'], ['3'], ['20']]);
-        result = getColumnNumericRange(rows, 0, 'number');
+        result = getColumnNumericRange(rows, 0, 'integer');
       });
 
       it('should return min and max', () => {
@@ -282,7 +282,7 @@ describe('table-data-extractor', () => {
 
       beforeEach(() => {
         const rows = makeRows([['abc'], ['xyz']]);
-        result = getColumnNumericRange(rows, 0, 'number');
+        result = getColumnNumericRange(rows, 0, 'integer');
       });
 
       it('should return null', () => {
@@ -295,7 +295,7 @@ describe('table-data-extractor', () => {
 
       beforeEach(() => {
         const rows = makeRows([['5'], ['abc'], ['15']]);
-        result = getColumnNumericRange(rows, 0, 'number');
+        result = getColumnNumericRange(rows, 0, 'integer');
       });
 
       it('should compute range from parseable values only', () => {

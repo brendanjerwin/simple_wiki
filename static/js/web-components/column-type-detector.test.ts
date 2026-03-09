@@ -20,8 +20,8 @@ describe('column-type-detector', () => {
           result = detectColumnType(['1', '2', '3', '100']);
         });
 
-        it('should detect number type', () => {
-          expect(result.detectedType).to.equal('number');
+        it('should detect integer type', () => {
+          expect(result.detectedType).to.equal('integer');
         });
 
         it('should have high confidence', () => {
@@ -34,8 +34,8 @@ describe('column-type-detector', () => {
           result = detectColumnType(['1.5', '2.0', '3.14']);
         });
 
-        it('should detect number type', () => {
-          expect(result.detectedType).to.equal('number');
+        it('should detect decimal type', () => {
+          expect(result.detectedType).to.equal('decimal');
         });
       });
 
@@ -44,18 +44,28 @@ describe('column-type-detector', () => {
           result = detectColumnType(['-1', '2', '-3.5']);
         });
 
-        it('should detect number type', () => {
-          expect(result.detectedType).to.equal('number');
+        it('should detect decimal type', () => {
+          expect(result.detectedType).to.equal('decimal');
         });
       });
 
-      describe('when values include comma-separated numbers', () => {
+      describe('when values include comma-separated integers', () => {
         beforeEach(() => {
           result = detectColumnType(['1,000', '2,500', '10,000']);
         });
 
-        it('should detect number type', () => {
-          expect(result.detectedType).to.equal('number');
+        it('should detect integer type', () => {
+          expect(result.detectedType).to.equal('integer');
+        });
+      });
+
+      describe('when values are a mix of integers and decimals', () => {
+        beforeEach(() => {
+          result = detectColumnType(['1', '2.5', '3', '4.7']);
+        });
+
+        it('should detect decimal type', () => {
+          expect(result.detectedType).to.equal('decimal');
         });
       });
     });
@@ -201,8 +211,8 @@ describe('column-type-detector', () => {
           result = detectColumnType(['1', '', '3', '', '5']);
         });
 
-        it('should detect number type (ignoring empties)', () => {
-          expect(result.detectedType).to.equal('number');
+        it('should detect integer type (ignoring empties)', () => {
+          expect(result.detectedType).to.equal('integer');
         });
 
         it('should calculate confidence from non-empty values only', () => {

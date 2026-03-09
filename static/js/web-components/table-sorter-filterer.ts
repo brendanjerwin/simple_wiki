@@ -31,7 +31,8 @@ export type TableFilterState = Map<number, ColumnFilterState>;
 
 function parseForType(text: string, columnType: ColumnDataType): number {
   switch (columnType) {
-    case 'number': return parseNumericValue(text);
+    case 'integer':
+    case 'decimal': return parseNumericValue(text);
     case 'currency': return parseCurrencyValue(text);
     case 'percentage': return parsePercentageValue(text);
     case 'date': return parseDateValue(text);
@@ -109,7 +110,7 @@ export function filterRows(
     return [...rows];
   }
 
-  const isNumericType = columnType === 'number' || columnType === 'currency' || columnType === 'percentage';
+  const isNumericType = columnType === 'integer' || columnType === 'decimal' || columnType === 'currency' || columnType === 'percentage';
 
   return rows.filter(row => {
     const cellText = row.cells[columnIndex] ?? '';

@@ -35,9 +35,9 @@ const textColumn: TableColumnDefinition = {
   columnIndex: 0,
 };
 
-const numberColumn: TableColumnDefinition = {
+const integerColumn: TableColumnDefinition = {
   headerText: 'Quantity',
-  typeInfo: { detectedType: 'number', confidenceRatio: 1 },
+  typeInfo: { detectedType: 'integer', confidenceRatio: 1 },
   columnIndex: 1,
 };
 
@@ -133,7 +133,7 @@ export const TextSearchFilter: Story = {
 export const RangeFilterNumber: Story = {
   render: () => html`
     <table-filter-popover
-      .columnDefinition=${numberColumn}
+      .columnDefinition=${integerColumn}
       .uniqueValues=${['10', '25', '50', '75', '100', '150', '200']}
       .numericRange=${{ min: 10, max: 200 }}
       .currentSortDirection=${'none' as SortDirection}
@@ -199,7 +199,7 @@ export const RangeFilterPercentage: Story = {
 export const RangeFilterPrePopulated: Story = {
   render: () => html`
     <table-filter-popover
-      .columnDefinition=${numberColumn}
+      .columnDefinition=${integerColumn}
       .uniqueValues=${['10', '25', '50', '75', '100', '150', '200']}
       .numericRange=${{ min: 10, max: 200 }}
       .currentFilter=${{ kind: 'range', min: 50, max: 150 } as ColumnFilterState}

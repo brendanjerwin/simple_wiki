@@ -24,10 +24,31 @@ async function createBasicFixture(): Promise<WikiTable> {
   return el;
 }
 
+async function createManyRowsFixture(): Promise<WikiTable> {
+  const rows = Array.from({ length: 20 }, (_, i) => {
+    const price = (i * 1.5 + 1).toFixed(2);
+    return `<tr><td>Item ${i + 1}</td><td>$${price}</td><td>${i + 1}</td></tr>`;
+  }).join('\n');
+  const container = document.createElement('div');
+  container.innerHTML = `
+    <wiki-table>
+      <table>
+        <thead><tr><th>Name</th><th>Price</th><th>Count</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </wiki-table>
+  `;
+  document.body.appendChild(container);
+  const el = container.querySelector('wiki-table') as WikiTable;
+  await el.updateComplete;
+  return el;
+}
+
 describe('WikiTable', () => {
 
   afterEach(() => {
     document.querySelectorAll('wiki-table').forEach(el => el.parentElement?.remove());
+    localStorage.clear();
   });
 
   describe('when connected with a basic table', () => {
@@ -687,7 +708,7 @@ describe('WikiTable', () => {
       });
     });
 
-    describe('when opening popover for a currency column', () => {
+    describe('when opening popover for a currency column with few values', () => {
       let el: WikiTable;
 
       beforeEach(async () => {
@@ -697,10 +718,10 @@ describe('WikiTable', () => {
         await el.updateComplete;
       });
 
-      it('should render range filter for currency column', () => {
+      it('should render checkbox filter for currency column with few values', () => {
         const popover = el.shadowRoot?.querySelector('table-filter-popover');
-        const rangeContainer = popover?.shadowRoot?.querySelector('.range-container');
-        expect(rangeContainer).to.exist;
+        const checkboxList = popover?.shadowRoot?.querySelector('.checkbox-list');
+        expect(checkboxList).to.exist;
       });
     });
 
@@ -744,7 +765,7 @@ describe('WikiTable', () => {
       let el: WikiTable;
 
       beforeEach(async () => {
-        el = await createBasicFixture();
+        el = await createManyRowsFixture();
         const headerMains = el.shadowRoot?.querySelectorAll('.header-main');
         headerMains?.[2]?.dispatchEvent(new Event('click', { bubbles: true }));
         await el.updateComplete;
@@ -762,12 +783,12 @@ describe('WikiTable', () => {
 
       it('should filter rows by numeric range', () => {
         const rows = el.shadowRoot?.querySelectorAll('tbody tr');
-        expect(rows).to.have.length(2);
+        expect(rows).to.have.length(11);
       });
 
       it('should show filtered row count', () => {
         const rowCount = el.shadowRoot?.querySelector('.row-count');
-        expect(rowCount?.textContent).to.contain('2 of 3 rows');
+        expect(rowCount?.textContent).to.contain('11 of 20 rows');
       });
     });
 
@@ -1018,6 +1039,136 @@ describe('WikiTable', () => {
 
       it('should preserve the sort', () => {
         expect(el.sortDirection).to.equal('ascending');
+      });
+    });
+  });
+
+  describe('state persistence', () => {
+
+    afterEach(() => {
+      localStorage.clear();
+    });
+
+    describe('when sorting via sort arrows', () => {
+      let el: WikiTable;
+
+      beforeEach(async () => {
+        el = await createBasicFixture();
+        const arrows = el.shadowRoot?.querySelector('.sort-arrows');
+        arrows?.dispatchEvent(new Event('click', { bubbles: true }));
+        await el.updateComplete;
+      });
+
+      it('should save state to localStorage', () => {
+        const keys = Object.keys(localStorage).filter(k => k.startsWith('wiki-table-state:'));
+        expect(keys).to.have.length(1);
+      });
+
+      it('should save the sort direction', () => {
+        const keys = Object.keys(localStorage).filter(k => k.startsWith('wiki-table-state:'));
+        const stored = JSON.parse(localStorage.getItem(keys[0]!)!);
+        expect(stored.state.sortDirection).to.equal('ascending');
+      });
+    });
+
+    describe('when applying a filter via popover', () => {
+      let el: WikiTable;
+
+      beforeEach(async () => {
+        el = await createBasicFixture();
+        el.popoverColumnIndex = 0;
+        await el.updateComplete;
+
+        const popover = el.shadowRoot?.querySelector('table-filter-popover');
+        popover?.dispatchEvent(new CustomEvent('filter-changed', {
+          detail: { filter: { kind: 'checkbox', excludedValues: new Set(['Gadget']) } },
+          bubbles: true,
+          composed: true,
+        }));
+        await el.updateComplete;
+      });
+
+      it('should save filter state to localStorage', () => {
+        const keys = Object.keys(localStorage).filter(k => k.startsWith('wiki-table-state:'));
+        expect(keys).to.have.length(1);
+        const stored = JSON.parse(localStorage.getItem(keys[0]!)!);
+        expect(stored.state.filters).to.have.length(1);
+      });
+    });
+
+    describe('when clearing all filters', () => {
+      let el: WikiTable;
+
+      beforeEach(async () => {
+        el = await createBasicFixture();
+        el.tableFilters = new Map([
+          [0, { kind: 'checkbox', excludedValues: new Set(['Gadget']) }],
+        ]);
+        await el.updateComplete;
+
+        const clearAll = el.shadowRoot?.querySelector('[aria-label="Clear all filters"]') as HTMLButtonElement;
+        clearAll.click();
+        await el.updateComplete;
+      });
+
+      it('should save cleared state to localStorage', () => {
+        const keys = Object.keys(localStorage).filter(k => k.startsWith('wiki-table-state:'));
+        expect(keys).to.have.length(1);
+        const stored = JSON.parse(localStorage.getItem(keys[0]!)!);
+        expect(stored.state.filters).to.have.length(0);
+      });
+    });
+
+    describe('when a table is created with previously saved state', () => {
+      let el: WikiTable;
+
+      beforeEach(async () => {
+        // Create a first instance to generate and save state
+        const first = await createBasicFixture();
+        const arrows = first.shadowRoot?.querySelectorAll('.sort-arrows');
+        arrows?.[0]?.dispatchEvent(new Event('click', { bubbles: true }));
+        await first.updateComplete;
+
+        // Apply a filter
+        first.popoverColumnIndex = 0;
+        await first.updateComplete;
+        const popover = first.shadowRoot?.querySelector('table-filter-popover');
+        popover?.dispatchEvent(new CustomEvent('filter-changed', {
+          detail: { filter: { kind: 'checkbox', excludedValues: new Set(['Widget']) } },
+          bubbles: true,
+          composed: true,
+        }));
+        await first.updateComplete;
+
+        // Remove the first instance
+        first.parentElement?.remove();
+
+        // Create a second instance with the same table data
+        el = await createBasicFixture();
+      });
+
+      it('should restore the sort direction', () => {
+        expect(el.sortDirection).to.equal('ascending');
+      });
+
+      it('should restore the sort column index', () => {
+        expect(el.sortColumnIndex).to.equal(0);
+      });
+
+      it('should restore the filter state', () => {
+        expect(el.tableFilters.size).to.equal(1);
+        const filter = el.tableFilters.get(0);
+        expect(filter?.kind).to.equal('checkbox');
+      });
+
+      it('should apply the restored filter to the rows', () => {
+        const rows = el.shadowRoot?.querySelectorAll('tbody tr');
+        expect(rows).to.have.length(2);
+      });
+
+      it('should show the filtered row count', () => {
+        const rowCount = el.shadowRoot?.querySelector('.row-count');
+        expect(rowCount?.textContent).to.contain('2 of 3 rows');
       });
     });
   });

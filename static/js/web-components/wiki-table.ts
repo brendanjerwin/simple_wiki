@@ -3,6 +3,7 @@ import { html, css, LitElement, nothing } from 'lit';
 import { state } from 'lit/decorators.js';
 import { extractTableData, getUniqueColumnValues, getColumnNumericRange } from './table-data-extractor.js';
 import { sortRows, applyAllFilters, hasActiveFilters, isFilterActive } from './table-sorter-filterer.js';
+import { computeTableHash, saveTableState, loadTableState, deserializeFilter } from './table-state-persistence.js';
 import { pillCSS } from './shared-styles.js';
 import './table-filter-popover.js';
 import type { SortDirectionChangedEventDetail, FilterChangedEventDetail } from './table-filter-popover.js';
@@ -327,6 +328,7 @@ export class WikiTable extends LitElement {
   private _mediaQuery: MediaQueryList | null = null;
   private _scrollContainer: HTMLElement | null = null;
   private _sourceTable: HTMLTableElement | null = null;
+  private _tableHash: string | null = null;
 
   constructor() {
     super();
@@ -393,6 +395,26 @@ export class WikiTable extends LitElement {
     this._sourceTable = table as HTMLTableElement;
     this._sourceTable.style.display = 'none';
     this.extractedData = extractTableData(this._sourceTable);
+
+    const headerTexts = this.extractedData.columns.map(c => c.headerText);
+    const cellValues = this.extractedData.rows.map(r => r.cells.map(String));
+    this._tableHash = computeTableHash(headerTexts, cellValues);
+
+    const saved = loadTableState(this._tableHash);
+    if (saved) {
+      this.sortColumnIndex = saved.sortColumnIndex;
+      this.sortDirection = saved.sortDirection;
+      const restoredFilters: TableFilterState = new Map();
+      for (const [colIndex, serialized] of saved.filters) {
+        restoredFilters.set(colIndex, deserializeFilter(serialized));
+      }
+      this.tableFilters = restoredFilters;
+    }
+  }
+
+  private _saveState(): void {
+    if (!this._tableHash) return;
+    saveTableState(this._tableHash, this.sortColumnIndex, this.sortDirection, this.tableFilters);
   }
 
   private _getProcessedRows() {
@@ -432,6 +454,7 @@ export class WikiTable extends LitElement {
       this.sortColumnIndex = columnIndex;
       this.sortDirection = 'ascending';
     }
+    this._saveState();
   }
 
   private _handleFilterDotClick(columnIndex: number, e: Event): void {
@@ -445,6 +468,7 @@ export class WikiTable extends LitElement {
 
   private _clearAllFilters(): void {
     this.tableFilters = new Map();
+    this._saveState();
   }
 
   private _hasActiveFilters(): boolean {
@@ -472,6 +496,7 @@ export class WikiTable extends LitElement {
       this.sortColumnIndex = this.popoverColumnIndex;
       this.sortDirection = direction;
     }
+    this._saveState();
   }
 
   private _handlePopoverFilterChanged(e: CustomEvent<FilterChangedEventDetail>): void {
@@ -484,6 +509,7 @@ export class WikiTable extends LitElement {
       newFilters.set(this.popoverColumnIndex, filter);
     }
     this.tableFilters = newFilters;
+    this._saveState();
   }
 
   private _handlePopoverClosed(): void {

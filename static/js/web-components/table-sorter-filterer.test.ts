@@ -85,7 +85,7 @@ describe('table-sorter-filterer', () => {
 
       beforeEach(() => {
         const rows = makeRows([['10'], ['2'], ['100'], ['1']]);
-        result = sortRows(rows, 0, 'ascending', 'number');
+        result = sortRows(rows, 0, 'ascending', 'integer');
       });
 
       it('should sort numerically, not lexicographically', () => {
@@ -98,7 +98,7 @@ describe('table-sorter-filterer', () => {
 
       beforeEach(() => {
         const rows = makeRows([['10'], ['2'], ['100']]);
-        result = sortRows(rows, 0, 'descending', 'number');
+        result = sortRows(rows, 0, 'descending', 'integer');
       });
 
       it('should sort numerically descending', () => {
@@ -194,7 +194,7 @@ describe('table-sorter-filterer', () => {
 
       beforeEach(() => {
         const rows = makeRows([['5'], ['10'], ['15'], ['20']]);
-        result = filterRows(rows, 0, '>10', 'number');
+        result = filterRows(rows, 0, '>10', 'integer');
       });
 
       it('should return rows with values greater than 10', () => {
@@ -207,7 +207,7 @@ describe('table-sorter-filterer', () => {
 
       beforeEach(() => {
         const rows = makeRows([['5'], ['10'], ['15'], ['20']]);
-        result = filterRows(rows, 0, '<15', 'number');
+        result = filterRows(rows, 0, '<15', 'integer');
       });
 
       it('should return rows with values less than 15', () => {
@@ -220,7 +220,7 @@ describe('table-sorter-filterer', () => {
 
       beforeEach(() => {
         const rows = makeRows([['5'], ['10'], ['15']]);
-        result = filterRows(rows, 0, '>=10', 'number');
+        result = filterRows(rows, 0, '>=10', 'integer');
       });
 
       it('should return rows with values >= 10', () => {
@@ -233,7 +233,7 @@ describe('table-sorter-filterer', () => {
 
       beforeEach(() => {
         const rows = makeRows([['5'], ['10'], ['15']]);
-        result = filterRows(rows, 0, '<=10', 'number');
+        result = filterRows(rows, 0, '<=10', 'integer');
       });
 
       it('should return rows with values <= 10', () => {
@@ -246,7 +246,7 @@ describe('table-sorter-filterer', () => {
 
       beforeEach(() => {
         const rows = makeRows([['5'], ['10'], ['15']]);
-        result = filterRows(rows, 0, '=10', 'number');
+        result = filterRows(rows, 0, '=10', 'integer');
       });
 
       it('should return rows with value equal to 10', () => {
@@ -259,7 +259,7 @@ describe('table-sorter-filterer', () => {
 
       beforeEach(() => {
         const rows = makeRows([['5'], ['10'], ['15'], ['100']]);
-        result = filterRows(rows, 0, '10', 'number');
+        result = filterRows(rows, 0, '10', 'integer');
       });
 
       it('should fall back to substring match', () => {
@@ -358,7 +358,7 @@ describe('table-sorter-filterer', () => {
         beforeEach(() => {
           const rows = makeRows([['5'], ['10'], ['15'], ['20']]);
           const filter: RangeFilterState = { kind: 'range', min: 10, max: null };
-          result = applyColumnFilter(rows, 0, filter, 'number');
+          result = applyColumnFilter(rows, 0, filter, 'integer');
         });
 
         it('should exclude rows below min', () => {
@@ -372,7 +372,7 @@ describe('table-sorter-filterer', () => {
         beforeEach(() => {
           const rows = makeRows([['5'], ['10'], ['15'], ['20']]);
           const filter: RangeFilterState = { kind: 'range', min: null, max: 15 };
-          result = applyColumnFilter(rows, 0, filter, 'number');
+          result = applyColumnFilter(rows, 0, filter, 'integer');
         });
 
         it('should exclude rows above max', () => {
@@ -386,7 +386,7 @@ describe('table-sorter-filterer', () => {
         beforeEach(() => {
           const rows = makeRows([['5'], ['10'], ['15'], ['20']]);
           const filter: RangeFilterState = { kind: 'range', min: 10, max: 15 };
-          result = applyColumnFilter(rows, 0, filter, 'number');
+          result = applyColumnFilter(rows, 0, filter, 'integer');
         });
 
         it('should include only rows within range', () => {
@@ -414,7 +414,7 @@ describe('table-sorter-filterer', () => {
         beforeEach(() => {
           const rows = makeRows([['abc'], ['10'], ['xyz']]);
           const filter: RangeFilterState = { kind: 'range', min: 5, max: 15 };
-          result = applyColumnFilter(rows, 0, filter, 'number');
+          result = applyColumnFilter(rows, 0, filter, 'integer');
         });
 
         it('should exclude unparseable values', () => {
@@ -473,7 +473,7 @@ describe('table-sorter-filterer', () => {
         ]);
         const columns = [
           { columnIndex: 0, typeInfo: { detectedType: 'text' as const } },
-          { columnIndex: 1, typeInfo: { detectedType: 'number' as const } },
+          { columnIndex: 1, typeInfo: { detectedType: 'integer' as const } },
         ];
         result = applyAllFilters(rows, filters, columns);
       });

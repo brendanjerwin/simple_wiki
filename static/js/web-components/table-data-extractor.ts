@@ -77,7 +77,8 @@ export function getUniqueColumnValues(rows: TableRowData[], columnIndex: number)
 
 function parseForColumnType(text: string, columnType: ColumnDataType): number {
   switch (columnType) {
-    case 'number': return parseNumericValue(text);
+    case 'integer':
+    case 'decimal': return parseNumericValue(text);
     case 'currency': return parseCurrencyValue(text);
     case 'percentage': return parsePercentageValue(text);
     case 'date': return parseDateValue(text);

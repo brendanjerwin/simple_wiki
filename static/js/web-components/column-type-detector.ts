@@ -1,4 +1,4 @@
-export type ColumnDataType = 'number' | 'currency' | 'percentage' | 'date' | 'text';
+export type ColumnDataType = 'integer' | 'decimal' | 'currency' | 'percentage' | 'date' | 'text';
 
 export interface ColumnTypeInfo {
   detectedType: ColumnDataType;
@@ -8,6 +8,7 @@ export interface ColumnTypeInfo {
 const currencyPattern = /^(?:-?[$€£¥]\s?[\d,]+\.?\d*|[$€£¥]\s?-[\d,]+\.?\d*)$/;
 const percentagePattern = /^-?\d+\.?\d*%$/;
 const numberPattern = /^-?[\d,]+\.?\d*$/;
+const integerPattern = /^-?[\d,]+$/;
 const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
 const usDatePattern = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
 const humanDatePattern = /^[A-Z][a-z]{2}\s+\d{1,2},?\s+\d{4}$/;
@@ -26,6 +27,10 @@ function isNumber(text: string): boolean {
   return numberPattern.test(text.trim());
 }
 
+function isInteger(text: string): boolean {
+  return integerPattern.test(text.trim());
+}
+
 function isDate(text: string): boolean {
   const trimmed = text.trim();
   return isoDatePattern.test(trimmed) || usDatePattern.test(trimmed) || humanDatePattern.test(trimmed);
@@ -36,7 +41,6 @@ type TypeChecker = { type: ColumnDataType; test: (text: string) => boolean };
 const typeCheckers: TypeChecker[] = [
   { type: 'currency', test: isCurrency },
   { type: 'percentage', test: isPercentage },
-  { type: 'number', test: isNumber },
   { type: 'date', test: isDate },
 ];
 
@@ -53,6 +57,16 @@ export function detectColumnType(cellTexts: string[]): ColumnTypeInfo {
     if (ratio >= confidenceThreshold) {
       return { detectedType: checker.type, confidenceRatio: ratio };
     }
+  }
+
+  const numberMatchCount = nonEmpty.filter(t => isNumber(t)).length;
+  const numberRatio = numberMatchCount / nonEmpty.length;
+  if (numberRatio >= confidenceThreshold) {
+    const allIntegers = nonEmpty.filter(t => isNumber(t)).every(t => isInteger(t));
+    return {
+      detectedType: allIntegers ? 'integer' : 'decimal',
+      confidenceRatio: numberRatio,
+    };
   }
 
   return { detectedType: 'text', confidenceRatio: 1 };

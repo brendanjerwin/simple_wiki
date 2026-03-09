@@ -390,8 +390,8 @@ export class TableFilterPopover extends LitElement {
 
   private _getFilterKind(): 'checkbox' | 'range' | 'text-search' {
     if (this.currentFilter) return this.currentFilter.kind;
-    if (this.numericRange !== null) return 'range';
     if (this.uniqueValues.length <= CHECKBOX_THRESHOLD) return 'checkbox';
+    if (this.numericRange !== null) return 'range';
     return 'text-search';
   }
 
@@ -621,11 +621,19 @@ export class TableFilterPopover extends LitElement {
     `;
   }
 
+  private _getRangeStep(): string {
+    const type = this.columnDefinition?.typeInfo.detectedType;
+    if (type === 'integer') return '1';
+    if (type === 'currency') return '0.01';
+    return 'any';
+  }
+
   private _renderRangeFilter(): TemplateResult {
     const dataMin = this.numericRange?.min ?? 0;
     const dataMax = this.numericRange?.max ?? 100;
     const sliderMin = this._rangeMin ?? dataMin;
     const sliderMax = this._rangeMax ?? dataMax;
+    const step = this._getRangeStep();
 
     return html`
       <div class="range-container">
@@ -634,7 +642,7 @@ export class TableFilterPopover extends LitElement {
           class="range-slider"
           min=${dataMin}
           max=${dataMax}
-          step="any"
+          step=${step}
           .value=${String(sliderMin)}
           @input=${(e: Event) => {
             if (!(e.target instanceof HTMLInputElement)) return;
@@ -647,7 +655,7 @@ export class TableFilterPopover extends LitElement {
           class="range-slider"
           min=${dataMin}
           max=${dataMax}
-          step="any"
+          step=${step}
           .value=${String(sliderMax)}
           @input=${(e: Event) => {
             if (!(e.target instanceof HTMLInputElement)) return;

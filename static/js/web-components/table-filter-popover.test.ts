@@ -15,10 +15,10 @@ function makeTextColumn(headerText: string): TableColumnDefinition {
   };
 }
 
-function makeNumberColumn(headerText: string): TableColumnDefinition {
+function makeIntegerColumn(headerText: string): TableColumnDefinition {
   return {
     headerText,
-    typeInfo: { detectedType: 'number', confidenceRatio: 1 },
+    typeInfo: { detectedType: 'integer', confidenceRatio: 1 },
     columnIndex: 0,
   };
 }
@@ -365,17 +365,66 @@ describe('TableFilterPopover', () => {
     });
   });
 
-  describe('range filter', () => {
+  describe('numeric columns with few unique values', () => {
 
-    describe('when column is numeric with range', () => {
+    describe('when integer column has 4 unique values', () => {
       let el: TableFilterPopover;
 
       beforeEach(async () => {
         el = await fixture(html`
           <table-filter-popover
-            .columnDefinition=${makeNumberColumn('Count')}
+            .columnDefinition=${makeIntegerColumn('Count')}
             .uniqueValues=${['5', '10', '15', '20']}
             .numericRange=${{ min: 5, max: 20 }}
+            .open=${true}
+          ></table-filter-popover>
+        `);
+      });
+
+      it('should render checkbox filter', () => {
+        const checkboxList = el.shadowRoot!.querySelector('.checkbox-list');
+        expect(checkboxList).to.exist;
+      });
+
+      it('should not render range container', () => {
+        const container = el.shadowRoot!.querySelector('.range-container');
+        expect(container).to.not.exist;
+      });
+    });
+
+    describe('when currency column has 3 unique values', () => {
+      let el: TableFilterPopover;
+
+      beforeEach(async () => {
+        el = await fixture(html`
+          <table-filter-popover
+            .columnDefinition=${makeCurrencyColumn('Price')}
+            .uniqueValues=${['$5.00', '$10.00', '$20.00']}
+            .numericRange=${{ min: 5, max: 20 }}
+            .open=${true}
+          ></table-filter-popover>
+        `);
+      });
+
+      it('should render checkbox filter', () => {
+        const checkboxList = el.shadowRoot!.querySelector('.checkbox-list');
+        expect(checkboxList).to.exist;
+      });
+    });
+  });
+
+  describe('range filter', () => {
+
+    describe('when integer column has many unique values', () => {
+      let el: TableFilterPopover;
+      const manyValues = Array.from({ length: 20 }, (_, i) => String(i * 5));
+
+      beforeEach(async () => {
+        el = await fixture(html`
+          <table-filter-popover
+            .columnDefinition=${makeIntegerColumn('Count')}
+            .uniqueValues=${manyValues}
+            .numericRange=${{ min: 0, max: 95 }}
             .open=${true}
           ></table-filter-popover>
         `);
@@ -400,17 +449,60 @@ describe('TableFilterPopover', () => {
         const checkboxList = el.shadowRoot!.querySelector('.checkbox-list');
         expect(checkboxList).to.not.exist;
       });
+
+      it('should use step 1 for integer column sliders', () => {
+        const sliders = el.shadowRoot!.querySelectorAll('.range-slider') as NodeListOf<HTMLInputElement>;
+        expect(sliders[0]!.step).to.equal('1');
+        expect(sliders[1]!.step).to.equal('1');
+      });
     });
 
-    describe('when currency column has range', () => {
+    describe('when decimal column has many unique values', () => {
       let el: TableFilterPopover;
+
+      function makeDecimalColumn(headerText: string): TableColumnDefinition {
+        return {
+          headerText,
+          typeInfo: { detectedType: 'decimal', confidenceRatio: 1 },
+          columnIndex: 0,
+        };
+      }
+
+      const manyValues = Array.from({ length: 20 }, (_, i) => String(i * 0.5));
+
+      beforeEach(async () => {
+        el = await fixture(html`
+          <table-filter-popover
+            .columnDefinition=${makeDecimalColumn('Rating')}
+            .uniqueValues=${manyValues}
+            .numericRange=${{ min: 0, max: 9.5 }}
+            .open=${true}
+          ></table-filter-popover>
+        `);
+      });
+
+      it('should render range container', () => {
+        const container = el.shadowRoot!.querySelector('.range-container');
+        expect(container).to.exist;
+      });
+
+      it('should use step any for decimal column sliders', () => {
+        const sliders = el.shadowRoot!.querySelectorAll('.range-slider') as NodeListOf<HTMLInputElement>;
+        expect(sliders[0]!.step).to.equal('any');
+        expect(sliders[1]!.step).to.equal('any');
+      });
+    });
+
+    describe('when currency column has many unique values', () => {
+      let el: TableFilterPopover;
+      const manyValues = Array.from({ length: 20 }, (_, i) => `$${i * 10}.00`);
 
       beforeEach(async () => {
         el = await fixture(html`
           <table-filter-popover
             .columnDefinition=${makeCurrencyColumn('Price')}
-            .uniqueValues=${['$5.00', '$10.00', '$20.00']}
-            .numericRange=${{ min: 5, max: 20 }}
+            .uniqueValues=${manyValues}
+            .numericRange=${{ min: 0, max: 190 }}
             .open=${true}
           ></table-filter-popover>
         `);
@@ -419,6 +511,12 @@ describe('TableFilterPopover', () => {
       it('should render range filter for currency', () => {
         const container = el.shadowRoot!.querySelector('.range-container');
         expect(container).to.exist;
+      });
+
+      it('should use step 0.01 for currency column sliders', () => {
+        const sliders = el.shadowRoot!.querySelectorAll('.range-slider') as NodeListOf<HTMLInputElement>;
+        expect(sliders[0]!.step).to.equal('0.01');
+        expect(sliders[1]!.step).to.equal('0.01');
       });
     });
   });
@@ -495,14 +593,15 @@ describe('TableFilterPopover', () => {
     describe('when clicking OK with range filter changes', () => {
       let el: TableFilterPopover;
       let filterDetail: { filter: ColumnFilterState | null } | null;
+      const manyValues = Array.from({ length: 20 }, (_, i) => String(i * 5));
 
       beforeEach(async () => {
         filterDetail = null;
         el = await fixture(html`
           <table-filter-popover
-            .columnDefinition=${makeNumberColumn('Count')}
-            .uniqueValues=${['5', '10', '15', '20']}
-            .numericRange=${{ min: 5, max: 20 }}
+            .columnDefinition=${makeIntegerColumn('Count')}
+            .uniqueValues=${manyValues}
+            .numericRange=${{ min: 0, max: 95 }}
             .open=${true}
             @filter-changed=${(e: CustomEvent) => { filterDetail = e.detail as { filter: ColumnFilterState | null }; }}
           ></table-filter-popover>
@@ -847,13 +946,14 @@ describe('TableFilterPopover', () => {
 
     describe('when opened with existing range filter', () => {
       let el: TableFilterPopover;
+      const manyValues = Array.from({ length: 20 }, (_, i) => String(i * 5));
 
       beforeEach(async () => {
         el = await fixture(html`
           <table-filter-popover
-            .columnDefinition=${makeNumberColumn('Count')}
-            .uniqueValues=${['5', '10', '15', '20']}
-            .numericRange=${{ min: 5, max: 20 }}
+            .columnDefinition=${makeIntegerColumn('Count')}
+            .uniqueValues=${manyValues}
+            .numericRange=${{ min: 0, max: 95 }}
             .currentFilter=${{ kind: 'range', min: 10, max: 15 } as ColumnFilterState}
             .open=${true}
           ></table-filter-popover>
