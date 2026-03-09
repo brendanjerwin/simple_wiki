@@ -88,6 +88,40 @@ export class TableFilterPopover extends LitElement {
         flex: 1;
       }
 
+      .popover-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        padding: 10px 14px;
+        border-top: 1px solid #e0e0e0;
+      }
+
+      .footer-btn {
+        padding: 6px 16px;
+        border-radius: 4px;
+        font-size: 13px;
+        font-family: inherit;
+        cursor: pointer;
+        border: 1px solid #ddd;
+        background: #f5f5f5;
+        color: #333;
+      }
+
+      .footer-btn:hover {
+        background: #e8e8e8;
+      }
+
+      .footer-btn-primary {
+        background: #0d6efd;
+        color: white;
+        border-color: #0d6efd;
+      }
+
+      .footer-btn-primary:hover {
+        background: #0b5ed7;
+        border-color: #0b5ed7;
+      }
+
       .section-label {
         font-size: 11px;
         font-weight: 600;
@@ -269,6 +303,9 @@ export class TableFilterPopover extends LitElement {
   @state()
   declare _searchText: string;
 
+  @state()
+  declare _pendingSortDirection: SortDirection;
+
   private _handleClickOutside: (event: Event) => void;
   private _handleKeydown: (event: KeyboardEvent) => void;
   private _pendingTimerId: ReturnType<typeof setTimeout> | null = null;
@@ -285,6 +322,7 @@ export class TableFilterPopover extends LitElement {
     this._rangeMin = null;
     this._rangeMax = null;
     this._searchText = '';
+    this._pendingSortDirection = 'none';
     this._handleClickOutside = this.handleClickOutside.bind(this);
     this._handleKeydown = this.handleKeydown.bind(this);
   }
@@ -304,8 +342,8 @@ export class TableFilterPopover extends LitElement {
   }
 
   override willUpdate(changed: Map<string, unknown>): void {
-    if (changed.has('currentFilter') || changed.has('open')) {
-      this._syncFromCurrentFilter();
+    if (changed.has('currentFilter') || changed.has('open') || changed.has('currentSortDirection')) {
+      this._syncFromInputs();
     }
     if (changed.has('open')) {
       if (this.open) {
@@ -325,7 +363,9 @@ export class TableFilterPopover extends LitElement {
     }
   }
 
-  private _syncFromCurrentFilter(): void {
+  private _syncFromInputs(): void {
+    this._pendingSortDirection = this.currentSortDirection;
+
     if (!this.currentFilter) {
       this._excludedValues = new Set();
       this._rangeMin = null;
@@ -360,18 +400,18 @@ export class TableFilterPopover extends LitElement {
     const popover = this.shadowRoot?.querySelector('.popover');
 
     if (this.open && popover && !path.includes(popover)) {
-      this._close();
+      this._cancel();
     }
   }
 
   handleKeydown(event: KeyboardEvent): void {
     if (this.open && event.key === 'Escape') {
       event.preventDefault();
-      this._close();
+      this._cancel();
     }
   }
 
-  private _close(): void {
+  private _cancel(): void {
     this.dispatchEvent(new CustomEvent('popover-closed', {
       bubbles: true,
       composed: true,
@@ -383,17 +423,76 @@ export class TableFilterPopover extends LitElement {
   }
 
   private _handleSortClick(direction: SortDirection): void {
-    const newDirection = this.currentSortDirection === direction ? 'none' : direction;
-    this.dispatchEvent(new CustomEvent<SortDirectionChangedEventDetail>('sort-direction-changed', {
-      detail: { direction: newDirection },
-      bubbles: true,
-      composed: true,
-    }));
+    this._pendingSortDirection = this._pendingSortDirection === direction ? 'none' : direction;
   }
 
-  private _emitFilterChanged(filter: ColumnFilterState | null): void {
-    this.dispatchEvent(new CustomEvent<FilterChangedEventDetail>('filter-changed', {
-      detail: { filter },
+  private _buildCurrentFilter(): ColumnFilterState | null {
+    const filterKind = this._getFilterKind();
+
+    switch (filterKind) {
+      case 'checkbox':
+        return this._excludedValues.size === 0
+          ? null
+          : { kind: 'checkbox', excludedValues: new Set(this._excludedValues) };
+      case 'range':
+        return this._rangeMin === null && this._rangeMax === null
+          ? null
+          : { kind: 'range', min: this._rangeMin, max: this._rangeMax };
+      case 'text-search':
+        return this._searchText.trim() === ''
+          ? null
+          : { kind: 'text-search', searchText: this._searchText };
+    }
+  }
+
+  private _filtersChanged(): boolean {
+    const newFilter = this._buildCurrentFilter();
+    const oldFilter = this.currentFilter;
+
+    if (newFilter === null && oldFilter === null) return false;
+    if (newFilter === null || oldFilter === null) return true;
+    if (newFilter.kind !== oldFilter.kind) return true;
+
+    if (newFilter.kind === 'checkbox' && oldFilter.kind === 'checkbox') {
+      if (newFilter.excludedValues.size !== oldFilter.excludedValues.size) return true;
+      for (const v of newFilter.excludedValues) {
+        if (!oldFilter.excludedValues.has(v)) return true;
+      }
+      return false;
+    }
+
+    if (newFilter.kind === 'range' && oldFilter.kind === 'range') {
+      return newFilter.min !== oldFilter.min || newFilter.max !== oldFilter.max;
+    }
+
+    if (newFilter.kind === 'text-search' && oldFilter.kind === 'text-search') {
+      return newFilter.searchText !== oldFilter.searchText;
+    }
+
+    return true;
+  }
+
+  private _handleOk(): void {
+    const sortChanged = this._pendingSortDirection !== this.currentSortDirection;
+    const filterChanged = this._filtersChanged();
+
+    if (sortChanged) {
+      this.dispatchEvent(new CustomEvent<SortDirectionChangedEventDetail>('sort-direction-changed', {
+        detail: { direction: this._pendingSortDirection },
+        bubbles: true,
+        composed: true,
+      }));
+    }
+
+    if (filterChanged) {
+      this.dispatchEvent(new CustomEvent<FilterChangedEventDetail>('filter-changed', {
+        detail: { filter: this._buildCurrentFilter() },
+        bubbles: true,
+        composed: true,
+      }));
+    }
+
+    this.dispatchEvent(new CustomEvent('popover-closed', {
       bubbles: true,
       composed: true,
     }));
@@ -407,59 +506,34 @@ export class TableFilterPopover extends LitElement {
       newExcluded.add(value);
     }
     this._excludedValues = newExcluded;
-
-    if (newExcluded.size === 0) {
-      this._emitFilterChanged(null);
-    } else {
-      this._emitFilterChanged({ kind: 'checkbox', excludedValues: newExcluded });
-    }
   }
 
   private _handleSelectAll(): void {
     this._excludedValues = new Set();
-    this._emitFilterChanged(null);
   }
 
   private _handleSelectNone(): void {
     this._excludedValues = new Set(this.uniqueValues);
-    this._emitFilterChanged({ kind: 'checkbox', excludedValues: this._excludedValues });
   }
 
   private _handleRangeMinChange(value: string): void {
     this._rangeMin = value === '' ? null : Number(value);
-    this._emitRangeFilter();
   }
 
   private _handleRangeMaxChange(value: string): void {
     this._rangeMax = value === '' ? null : Number(value);
-    this._emitRangeFilter();
   }
 
   private _handleRangeSliderMinChange(value: string): void {
     this._rangeMin = Number(value);
-    this._emitRangeFilter();
   }
 
   private _handleRangeSliderMaxChange(value: string): void {
     this._rangeMax = Number(value);
-    this._emitRangeFilter();
-  }
-
-  private _emitRangeFilter(): void {
-    if (this._rangeMin === null && this._rangeMax === null) {
-      this._emitFilterChanged(null);
-    } else {
-      this._emitFilterChanged({ kind: 'range', min: this._rangeMin, max: this._rangeMax });
-    }
   }
 
   private _handleSearchInput(value: string): void {
     this._searchText = value;
-    if (value.trim() === '') {
-      this._emitFilterChanged(null);
-    } else {
-      this._emitFilterChanged({ kind: 'text-search', searchText: value });
-    }
   }
 
   override render(): TemplateResult {
@@ -480,7 +554,7 @@ export class TableFilterPopover extends LitElement {
           ${col.headerText}
           <span class="popover-type">(${col.typeInfo.detectedType})</span>
         </span>
-        <button type="button" class="close-btn" @click=${this._close} aria-label="Close">
+        <button type="button" class="close-btn" @click=${this._cancel} aria-label="Close">
           \u2715
         </button>
       </div>
@@ -489,21 +563,21 @@ export class TableFilterPopover extends LitElement {
         <div class="sort-controls">
           <button
             type="button"
-            class="sort-pill ${this.currentSortDirection === 'ascending' ? 'sort-pill-active' : ''}"
+            class="sort-pill ${this._pendingSortDirection === 'ascending' ? 'sort-pill-active' : ''}"
             @click=${() => this._handleSortClick('ascending')}
             aria-label="Sort ascending"
           >\u2191 Ascending</button>
           <button
             type="button"
-            class="sort-pill ${this.currentSortDirection === 'descending' ? 'sort-pill-active' : ''}"
+            class="sort-pill ${this._pendingSortDirection === 'descending' ? 'sort-pill-active' : ''}"
             @click=${() => this._handleSortClick('descending')}
             aria-label="Sort descending"
           >\u2193 Descending</button>
-          ${this.currentSortDirection !== 'none' ? html`
+          ${this._pendingSortDirection !== 'none' ? html`
             <button
               type="button"
               class="sort-pill"
-              @click=${() => this._handleSortClick(this.currentSortDirection)}
+              @click=${() => this._handleSortClick(this._pendingSortDirection)}
               aria-label="Clear sort"
             >\u2715</button>
           ` : nothing}
@@ -515,6 +589,10 @@ export class TableFilterPopover extends LitElement {
         ${filterKind === 'checkbox' ? this._renderCheckboxFilter() : nothing}
         ${filterKind === 'range' ? this._renderRangeFilter() : nothing}
         ${filterKind === 'text-search' ? this._renderTextSearchFilter() : nothing}
+      </div>
+      <div class="popover-footer">
+        <button type="button" class="footer-btn" @click=${this._cancel} aria-label="Cancel">Cancel</button>
+        <button type="button" class="footer-btn footer-btn-primary" @click=${this._handleOk} aria-label="Apply">OK</button>
       </div>
     `;
   }

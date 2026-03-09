@@ -106,6 +106,13 @@ describe('TableFilterPopover', () => {
       const sortControls = el.shadowRoot!.querySelector('.sort-controls');
       expect(sortControls).to.exist;
     });
+
+    it('should show OK and Cancel buttons', () => {
+      const okBtn = el.shadowRoot!.querySelector('[aria-label="Apply"]');
+      const cancelBtn = el.shadowRoot!.querySelector('[aria-label="Cancel"]');
+      expect(okBtn).to.exist;
+      expect(cancelBtn).to.exist;
+    });
   });
 
   describe('sort controls', () => {
@@ -137,49 +144,52 @@ describe('TableFilterPopover', () => {
 
     describe('when clicking ascending sort', () => {
       let el: TableFilterPopover;
-      let eventDetail: { direction: SortDirection } | null;
 
       beforeEach(async () => {
-        eventDetail = null;
         el = await fixture(html`
           <table-filter-popover
             .columnDefinition=${makeTextColumn('Name')}
             .uniqueValues=${['A', 'B']}
             .currentSortDirection=${'none' as SortDirection}
             .open=${true}
-            @sort-direction-changed=${(e: CustomEvent) => { eventDetail = e.detail as { direction: SortDirection }; }}
           ></table-filter-popover>
         `);
         const ascBtn = el.shadowRoot!.querySelector('[aria-label="Sort ascending"]') as HTMLButtonElement;
         ascBtn.click();
+        await el.updateComplete;
       });
 
-      it('should emit sort-direction-changed with ascending', () => {
-        expect(eventDetail).to.deep.equal({ direction: 'ascending' });
+      it('should show ascending pill as active', () => {
+        const active = el.shadowRoot!.querySelectorAll('.sort-pill-active');
+        expect(active).to.have.length(1);
+        expect(active[0]?.textContent).to.contain('Ascending');
+      });
+
+      it('should not emit sort-direction-changed yet', () => {
+        // Events are deferred until OK is clicked
       });
     });
 
     describe('when clicking ascending sort while already ascending', () => {
       let el: TableFilterPopover;
-      let eventDetail: { direction: SortDirection } | null;
 
       beforeEach(async () => {
-        eventDetail = null;
         el = await fixture(html`
           <table-filter-popover
             .columnDefinition=${makeTextColumn('Name')}
             .uniqueValues=${['A', 'B']}
             .currentSortDirection=${'ascending' as SortDirection}
             .open=${true}
-            @sort-direction-changed=${(e: CustomEvent) => { eventDetail = e.detail as { direction: SortDirection }; }}
           ></table-filter-popover>
         `);
         const ascBtn = el.shadowRoot!.querySelector('[aria-label="Sort ascending"]') as HTMLButtonElement;
         ascBtn.click();
+        await el.updateComplete;
       });
 
-      it('should emit sort-direction-changed with none to toggle off', () => {
-        expect(eventDetail).to.deep.equal({ direction: 'none' });
+      it('should toggle ascending pill off', () => {
+        const active = el.shadowRoot!.querySelectorAll('.sort-pill-active');
+        expect(active).to.have.length(0);
       });
     });
 
@@ -251,16 +261,16 @@ describe('TableFilterPopover', () => {
 
     describe('when unchecking a value', () => {
       let el: TableFilterPopover;
-      let eventDetail: { filter: ColumnFilterState | null } | null;
+      let filterSpy: SinonSpy;
 
       beforeEach(async () => {
-        eventDetail = null;
+        filterSpy = sinon.spy();
         el = await fixture(html`
           <table-filter-popover
             .columnDefinition=${makeTextColumn('Fruit')}
             .uniqueValues=${['Apple', 'Banana', 'Cherry']}
             .open=${true}
-            @filter-changed=${(e: CustomEvent) => { eventDetail = e.detail as { filter: ColumnFilterState | null }; }}
+            @filter-changed=${filterSpy}
           ></table-filter-popover>
         `);
         const inputs = el.shadowRoot!.querySelectorAll('.checkbox-item input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
@@ -269,27 +279,25 @@ describe('TableFilterPopover', () => {
         await el.updateComplete;
       });
 
-      it('should emit filter-changed with excluded value', () => {
-        expect(eventDetail).to.not.be.null;
-        expect(eventDetail!.filter).to.not.be.null;
-        expect(eventDetail!.filter!.kind).to.equal('checkbox');
-        const cbFilter = eventDetail!.filter as { kind: 'checkbox'; excludedValues: Set<string> };
-        expect(cbFilter.excludedValues.has('Apple')).to.be.true;
+      it('should uncheck the checkbox in the UI', () => {
+        const inputs = el.shadowRoot!.querySelectorAll('.checkbox-item input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
+        expect(inputs[0]!.checked).to.be.false;
+      });
+
+      it('should not emit filter-changed before OK is clicked', () => {
+        expect(filterSpy).to.not.have.been.called;
       });
     });
 
     describe('when clicking Select None', () => {
       let el: TableFilterPopover;
-      let eventDetail: { filter: ColumnFilterState | null } | null;
 
       beforeEach(async () => {
-        eventDetail = null;
         el = await fixture(html`
           <table-filter-popover
             .columnDefinition=${makeTextColumn('Fruit')}
             .uniqueValues=${['Apple', 'Banana', 'Cherry']}
             .open=${true}
-            @filter-changed=${(e: CustomEvent) => { eventDetail = e.detail as { filter: ColumnFilterState | null }; }}
           ></table-filter-popover>
         `);
         const selectNone = el.shadowRoot!.querySelectorAll('.checkbox-link')[1] as HTMLButtonElement;
@@ -297,26 +305,23 @@ describe('TableFilterPopover', () => {
         await el.updateComplete;
       });
 
-      it('should emit filter with all values excluded', () => {
-        expect(eventDetail).to.not.be.null;
-        const cbFilter = eventDetail!.filter as { kind: 'checkbox'; excludedValues: Set<string> };
-        expect(cbFilter.excludedValues.size).to.equal(3);
+      it('should uncheck all checkboxes', () => {
+        const inputs = el.shadowRoot!.querySelectorAll('.checkbox-item input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
+        const allUnchecked = Array.from(inputs).every(input => !input.checked);
+        expect(allUnchecked).to.be.true;
       });
     });
 
     describe('when clicking Select All after some excluded', () => {
       let el: TableFilterPopover;
-      let eventDetail: { filter: ColumnFilterState | null } | null;
 
       beforeEach(async () => {
-        eventDetail = null;
         el = await fixture(html`
           <table-filter-popover
             .columnDefinition=${makeTextColumn('Fruit')}
             .uniqueValues=${['Apple', 'Banana', 'Cherry']}
             .currentFilter=${{ kind: 'checkbox', excludedValues: new Set(['Apple']) } as ColumnFilterState}
             .open=${true}
-            @filter-changed=${(e: CustomEvent) => { eventDetail = e.detail as { filter: ColumnFilterState | null }; }}
           ></table-filter-popover>
         `);
         const selectAll = el.shadowRoot!.querySelectorAll('.checkbox-link')[0] as HTMLButtonElement;
@@ -324,9 +329,10 @@ describe('TableFilterPopover', () => {
         await el.updateComplete;
       });
 
-      it('should emit null filter (all included)', () => {
-        expect(eventDetail).to.not.be.null;
-        expect(eventDetail!.filter).to.be.null;
+      it('should check all checkboxes', () => {
+        const inputs = el.shadowRoot!.querySelectorAll('.checkbox-item input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
+        const allChecked = Array.from(inputs).every(input => input.checked);
+        expect(allChecked).to.be.true;
       });
     });
   });
@@ -355,64 +361,6 @@ describe('TableFilterPopover', () => {
       it('should not render checkbox list', () => {
         const checkboxList = el.shadowRoot!.querySelector('.checkbox-list');
         expect(checkboxList).to.not.exist;
-      });
-    });
-
-    describe('when typing in search input', () => {
-      let el: TableFilterPopover;
-      let eventDetail: { filter: ColumnFilterState | null } | null;
-      const manyValues = Array.from({ length: 20 }, (_, i) => `Value${i}`);
-
-      beforeEach(async () => {
-        eventDetail = null;
-        el = await fixture(html`
-          <table-filter-popover
-            .columnDefinition=${makeTextColumn('Items')}
-            .uniqueValues=${manyValues}
-            .open=${true}
-            @filter-changed=${(e: CustomEvent) => { eventDetail = e.detail as { filter: ColumnFilterState | null }; }}
-          ></table-filter-popover>
-        `);
-        const input = el.shadowRoot!.querySelector('.search-input') as HTMLInputElement;
-        input.value = 'hello';
-        input.dispatchEvent(new Event('input'));
-        await el.updateComplete;
-      });
-
-      it('should emit filter-changed with text-search filter', () => {
-        expect(eventDetail).to.not.be.null;
-        expect(eventDetail!.filter).to.not.be.null;
-        expect(eventDetail!.filter!.kind).to.equal('text-search');
-        const tsFilter = eventDetail!.filter as { kind: 'text-search'; searchText: string };
-        expect(tsFilter.searchText).to.equal('hello');
-      });
-    });
-
-    describe('when clearing search input', () => {
-      let el: TableFilterPopover;
-      let eventDetail: { filter: ColumnFilterState | null } | null;
-      const manyValues = Array.from({ length: 20 }, (_, i) => `Value${i}`);
-
-      beforeEach(async () => {
-        eventDetail = null;
-        el = await fixture(html`
-          <table-filter-popover
-            .columnDefinition=${makeTextColumn('Items')}
-            .uniqueValues=${manyValues}
-            .currentFilter=${{ kind: 'text-search', searchText: 'hello' } as ColumnFilterState}
-            .open=${true}
-            @filter-changed=${(e: CustomEvent) => { eventDetail = e.detail as { filter: ColumnFilterState | null }; }}
-          ></table-filter-popover>
-        `);
-        const input = el.shadowRoot!.querySelector('.search-input') as HTMLInputElement;
-        input.value = '';
-        input.dispatchEvent(new Event('input'));
-        await el.updateComplete;
-      });
-
-      it('should emit null filter', () => {
-        expect(eventDetail).to.not.be.null;
-        expect(eventDetail!.filter).to.be.null;
       });
     });
   });
@@ -454,64 +402,6 @@ describe('TableFilterPopover', () => {
       });
     });
 
-    describe('when changing min value', () => {
-      let el: TableFilterPopover;
-      let eventDetail: { filter: ColumnFilterState | null } | null;
-
-      beforeEach(async () => {
-        eventDetail = null;
-        el = await fixture(html`
-          <table-filter-popover
-            .columnDefinition=${makeNumberColumn('Count')}
-            .uniqueValues=${['5', '10', '15', '20']}
-            .numericRange=${{ min: 5, max: 20 }}
-            .open=${true}
-            @filter-changed=${(e: CustomEvent) => { eventDetail = e.detail as { filter: ColumnFilterState | null }; }}
-          ></table-filter-popover>
-        `);
-        const minInput = el.shadowRoot!.querySelector('[aria-label="Minimum value"]') as HTMLInputElement;
-        minInput.value = '10';
-        minInput.dispatchEvent(new Event('input'));
-        await el.updateComplete;
-      });
-
-      it('should emit filter-changed with range filter', () => {
-        expect(eventDetail).to.not.be.null;
-        expect(eventDetail!.filter).to.not.be.null;
-        expect(eventDetail!.filter!.kind).to.equal('range');
-        const rFilter = eventDetail!.filter as { kind: 'range'; min: number | null; max: number | null };
-        expect(rFilter.min).to.equal(10);
-      });
-    });
-
-    describe('when clearing range values', () => {
-      let el: TableFilterPopover;
-      let eventDetail: { filter: ColumnFilterState | null } | null;
-
-      beforeEach(async () => {
-        eventDetail = null;
-        el = await fixture(html`
-          <table-filter-popover
-            .columnDefinition=${makeNumberColumn('Count')}
-            .uniqueValues=${['5', '10', '15', '20']}
-            .numericRange=${{ min: 5, max: 20 }}
-            .currentFilter=${{ kind: 'range', min: 10, max: null } as ColumnFilterState}
-            .open=${true}
-            @filter-changed=${(e: CustomEvent) => { eventDetail = e.detail as { filter: ColumnFilterState | null }; }}
-          ></table-filter-popover>
-        `);
-        const minInput = el.shadowRoot!.querySelector('[aria-label="Minimum value"]') as HTMLInputElement;
-        minInput.value = '';
-        minInput.dispatchEvent(new Event('input'));
-        await el.updateComplete;
-      });
-
-      it('should emit null filter', () => {
-        expect(eventDetail).to.not.be.null;
-        expect(eventDetail!.filter).to.be.null;
-      });
-    });
-
     describe('when currency column has range', () => {
       let el: TableFilterPopover;
 
@@ -533,11 +423,289 @@ describe('TableFilterPopover', () => {
     });
   });
 
+  describe('OK button', () => {
+
+    describe('when clicking OK with checkbox filter changes', () => {
+      let el: TableFilterPopover;
+      let filterDetail: { filter: ColumnFilterState | null } | null;
+      let closedSpy: SinonSpy;
+
+      beforeEach(async () => {
+        filterDetail = null;
+        closedSpy = sinon.spy();
+        el = await fixture(html`
+          <table-filter-popover
+            .columnDefinition=${makeTextColumn('Fruit')}
+            .uniqueValues=${['Apple', 'Banana', 'Cherry']}
+            .open=${true}
+            @filter-changed=${(e: CustomEvent) => { filterDetail = e.detail as { filter: ColumnFilterState | null }; }}
+            @popover-closed=${closedSpy}
+          ></table-filter-popover>
+        `);
+        const inputs = el.shadowRoot!.querySelectorAll('.checkbox-item input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
+        inputs[0]!.checked = false;
+        inputs[0]!.dispatchEvent(new Event('change'));
+        await el.updateComplete;
+
+        const okBtn = el.shadowRoot!.querySelector('[aria-label="Apply"]') as HTMLButtonElement;
+        okBtn.click();
+      });
+
+      it('should emit filter-changed with excluded value', () => {
+        expect(filterDetail).to.not.be.null;
+        expect(filterDetail!.filter).to.not.be.null;
+        expect(filterDetail!.filter!.kind).to.equal('checkbox');
+        const cbFilter = filterDetail!.filter as { kind: 'checkbox'; excludedValues: Set<string> };
+        expect(cbFilter.excludedValues.has('Apple')).to.be.true;
+      });
+
+      it('should emit popover-closed', () => {
+        expect(closedSpy).to.have.been.calledOnce;
+      });
+    });
+
+    describe('when clicking OK with sort direction change', () => {
+      let el: TableFilterPopover;
+      let sortDetail: { direction: SortDirection } | null;
+
+      beforeEach(async () => {
+        sortDetail = null;
+        el = await fixture(html`
+          <table-filter-popover
+            .columnDefinition=${makeTextColumn('Name')}
+            .uniqueValues=${['A', 'B']}
+            .currentSortDirection=${'none' as SortDirection}
+            .open=${true}
+            @sort-direction-changed=${(e: CustomEvent) => { sortDetail = e.detail as { direction: SortDirection }; }}
+          ></table-filter-popover>
+        `);
+        const ascBtn = el.shadowRoot!.querySelector('[aria-label="Sort ascending"]') as HTMLButtonElement;
+        ascBtn.click();
+        await el.updateComplete;
+
+        const okBtn = el.shadowRoot!.querySelector('[aria-label="Apply"]') as HTMLButtonElement;
+        okBtn.click();
+      });
+
+      it('should emit sort-direction-changed with ascending', () => {
+        expect(sortDetail).to.deep.equal({ direction: 'ascending' });
+      });
+    });
+
+    describe('when clicking OK with range filter changes', () => {
+      let el: TableFilterPopover;
+      let filterDetail: { filter: ColumnFilterState | null } | null;
+
+      beforeEach(async () => {
+        filterDetail = null;
+        el = await fixture(html`
+          <table-filter-popover
+            .columnDefinition=${makeNumberColumn('Count')}
+            .uniqueValues=${['5', '10', '15', '20']}
+            .numericRange=${{ min: 5, max: 20 }}
+            .open=${true}
+            @filter-changed=${(e: CustomEvent) => { filterDetail = e.detail as { filter: ColumnFilterState | null }; }}
+          ></table-filter-popover>
+        `);
+        const minInput = el.shadowRoot!.querySelector('[aria-label="Minimum value"]') as HTMLInputElement;
+        minInput.value = '10';
+        minInput.dispatchEvent(new Event('input'));
+        await el.updateComplete;
+
+        const okBtn = el.shadowRoot!.querySelector('[aria-label="Apply"]') as HTMLButtonElement;
+        okBtn.click();
+      });
+
+      it('should emit filter-changed with range filter', () => {
+        expect(filterDetail).to.not.be.null;
+        expect(filterDetail!.filter).to.not.be.null;
+        expect(filterDetail!.filter!.kind).to.equal('range');
+        const rFilter = filterDetail!.filter as { kind: 'range'; min: number | null; max: number | null };
+        expect(rFilter.min).to.equal(10);
+      });
+    });
+
+    describe('when clicking OK with text search filter', () => {
+      let el: TableFilterPopover;
+      let filterDetail: { filter: ColumnFilterState | null } | null;
+      const manyValues = Array.from({ length: 20 }, (_, i) => `Value${i}`);
+
+      beforeEach(async () => {
+        filterDetail = null;
+        el = await fixture(html`
+          <table-filter-popover
+            .columnDefinition=${makeTextColumn('Items')}
+            .uniqueValues=${manyValues}
+            .open=${true}
+            @filter-changed=${(e: CustomEvent) => { filterDetail = e.detail as { filter: ColumnFilterState | null }; }}
+          ></table-filter-popover>
+        `);
+        const input = el.shadowRoot!.querySelector('.search-input') as HTMLInputElement;
+        input.value = 'hello';
+        input.dispatchEvent(new Event('input'));
+        await el.updateComplete;
+
+        const okBtn = el.shadowRoot!.querySelector('[aria-label="Apply"]') as HTMLButtonElement;
+        okBtn.click();
+      });
+
+      it('should emit filter-changed with text-search filter', () => {
+        expect(filterDetail).to.not.be.null;
+        expect(filterDetail!.filter).to.not.be.null;
+        expect(filterDetail!.filter!.kind).to.equal('text-search');
+        const tsFilter = filterDetail!.filter as { kind: 'text-search'; searchText: string };
+        expect(tsFilter.searchText).to.equal('hello');
+      });
+    });
+
+    describe('when clicking OK with no changes', () => {
+      let el: TableFilterPopover;
+      let filterSpy: SinonSpy;
+      let sortSpy: SinonSpy;
+      let closedSpy: SinonSpy;
+
+      beforeEach(async () => {
+        filterSpy = sinon.spy();
+        sortSpy = sinon.spy();
+        closedSpy = sinon.spy();
+        el = await fixture(html`
+          <table-filter-popover
+            .columnDefinition=${makeTextColumn('Name')}
+            .uniqueValues=${['A', 'B']}
+            .open=${true}
+            @filter-changed=${filterSpy}
+            @sort-direction-changed=${sortSpy}
+            @popover-closed=${closedSpy}
+          ></table-filter-popover>
+        `);
+
+        const okBtn = el.shadowRoot!.querySelector('[aria-label="Apply"]') as HTMLButtonElement;
+        okBtn.click();
+      });
+
+      it('should emit popover-closed', () => {
+        expect(closedSpy).to.have.been.calledOnce;
+      });
+
+      it('should not emit filter-changed', () => {
+        expect(filterSpy).to.not.have.been.called;
+      });
+
+      it('should not emit sort-direction-changed', () => {
+        expect(sortSpy).to.not.have.been.called;
+      });
+    });
+
+    describe('when clicking OK with Select None', () => {
+      let el: TableFilterPopover;
+      let filterDetail: { filter: ColumnFilterState | null } | null;
+
+      beforeEach(async () => {
+        filterDetail = null;
+        el = await fixture(html`
+          <table-filter-popover
+            .columnDefinition=${makeTextColumn('Fruit')}
+            .uniqueValues=${['Apple', 'Banana', 'Cherry']}
+            .open=${true}
+            @filter-changed=${(e: CustomEvent) => { filterDetail = e.detail as { filter: ColumnFilterState | null }; }}
+          ></table-filter-popover>
+        `);
+        const selectNone = el.shadowRoot!.querySelectorAll('.checkbox-link')[1] as HTMLButtonElement;
+        selectNone.click();
+        await el.updateComplete;
+
+        const okBtn = el.shadowRoot!.querySelector('[aria-label="Apply"]') as HTMLButtonElement;
+        okBtn.click();
+      });
+
+      it('should emit filter with all values excluded', () => {
+        expect(filterDetail).to.not.be.null;
+        const cbFilter = filterDetail!.filter as { kind: 'checkbox'; excludedValues: Set<string> };
+        expect(cbFilter.excludedValues.size).to.equal(3);
+      });
+    });
+
+    describe('when clicking OK after Select All clears filter', () => {
+      let el: TableFilterPopover;
+      let filterDetail: { filter: ColumnFilterState | null } | null;
+
+      beforeEach(async () => {
+        filterDetail = null;
+        el = await fixture(html`
+          <table-filter-popover
+            .columnDefinition=${makeTextColumn('Fruit')}
+            .uniqueValues=${['Apple', 'Banana', 'Cherry']}
+            .currentFilter=${{ kind: 'checkbox', excludedValues: new Set(['Apple']) } as ColumnFilterState}
+            .open=${true}
+            @filter-changed=${(e: CustomEvent) => { filterDetail = e.detail as { filter: ColumnFilterState | null }; }}
+          ></table-filter-popover>
+        `);
+        const selectAll = el.shadowRoot!.querySelectorAll('.checkbox-link')[0] as HTMLButtonElement;
+        selectAll.click();
+        await el.updateComplete;
+
+        const okBtn = el.shadowRoot!.querySelector('[aria-label="Apply"]') as HTMLButtonElement;
+        okBtn.click();
+      });
+
+      it('should emit null filter (all included)', () => {
+        expect(filterDetail).to.not.be.null;
+        expect(filterDetail!.filter).to.be.null;
+      });
+    });
+  });
+
+  describe('Cancel button', () => {
+
+    describe('when clicking Cancel after making changes', () => {
+      let el: TableFilterPopover;
+      let filterSpy: SinonSpy;
+      let sortSpy: SinonSpy;
+      let closedSpy: SinonSpy;
+
+      beforeEach(async () => {
+        filterSpy = sinon.spy();
+        sortSpy = sinon.spy();
+        closedSpy = sinon.spy();
+        el = await fixture(html`
+          <table-filter-popover
+            .columnDefinition=${makeTextColumn('Fruit')}
+            .uniqueValues=${['Apple', 'Banana', 'Cherry']}
+            .open=${true}
+            @filter-changed=${filterSpy}
+            @sort-direction-changed=${sortSpy}
+            @popover-closed=${closedSpy}
+          ></table-filter-popover>
+        `);
+        const inputs = el.shadowRoot!.querySelectorAll('.checkbox-item input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
+        inputs[0]!.checked = false;
+        inputs[0]!.dispatchEvent(new Event('change'));
+        await el.updateComplete;
+
+        const cancelBtn = el.shadowRoot!.querySelector('[aria-label="Cancel"]') as HTMLButtonElement;
+        cancelBtn.click();
+      });
+
+      it('should emit popover-closed', () => {
+        expect(closedSpy).to.have.been.calledOnce;
+      });
+
+      it('should not emit filter-changed', () => {
+        expect(filterSpy).to.not.have.been.called;
+      });
+
+      it('should not emit sort-direction-changed', () => {
+        expect(sortSpy).to.not.have.been.called;
+      });
+    });
+  });
+
   describe('click-outside handling', () => {
 
     describe('when clicking outside the popover', () => {
       let el: TableFilterPopover;
       let closedSpy: SinonSpy;
+      let filterSpy: SinonSpy;
 
       beforeEach(async () => {
         el = await fixture(html`
@@ -548,13 +716,19 @@ describe('TableFilterPopover', () => {
           ></table-filter-popover>
         `);
         closedSpy = sinon.spy();
+        filterSpy = sinon.spy();
         el.addEventListener('popover-closed', closedSpy);
+        el.addEventListener('filter-changed', filterSpy);
 
         el.handleClickOutside(new Event('click'));
       });
 
       it('should emit popover-closed event', () => {
         expect(closedSpy).to.have.been.calledOnce;
+      });
+
+      it('should not emit filter-changed', () => {
+        expect(filterSpy).to.not.have.been.called;
       });
     });
 

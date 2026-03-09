@@ -25,6 +25,8 @@ export class WikiTable extends LitElement {
         font-size: 12px;
         color: #888;
         border-bottom: 1px solid #e0e0e0;
+        container-type: inline-size;
+        container-name: status-bar;
       }
 
       .row-count {
@@ -107,6 +109,34 @@ export class WikiTable extends LitElement {
       .view-toggle-active {
         background: #0d6efd;
         color: white;
+      }
+
+      .pill-icon {
+        display: inline;
+      }
+
+      .pill-text {
+        display: inline;
+      }
+
+      @container status-bar (max-width: 300px) {
+        .pill-text {
+          display: none;
+        }
+
+        .view-toggle-text {
+          display: none;
+        }
+      }
+
+      @media (max-width: 400px) {
+        .pill-text {
+          display: none;
+        }
+
+        .view-toggle-text {
+          display: none;
+        }
       }
 
       table {
@@ -270,17 +300,6 @@ export class WikiTable extends LitElement {
       .column-picker-item:hover {
         background: #f0f0f0;
       }
-
-      .column-picker-item-active {
-        background: #e8f0fe;
-        color: #0d6efd;
-        font-weight: 600;
-      }
-
-      .column-picker-arrow {
-        margin-left: 4px;
-        font-weight: 600;
-      }
     `,
   ];
 
@@ -303,7 +322,7 @@ export class WikiTable extends LitElement {
   declare popoverColumnIndex: number | null;
 
   @state()
-  declare columnPickerMode: 'filter' | 'sort' | null;
+  declare columnPickerOpen: boolean;
 
   private _mediaQuery: MediaQueryList | null = null;
   private _scrollContainer: HTMLElement | null = null;
@@ -317,7 +336,7 @@ export class WikiTable extends LitElement {
     this.tableFilters = new Map();
     this.cardViewActive = false;
     this.popoverColumnIndex = null;
-    this.columnPickerMode = null;
+    this.columnPickerOpen = false;
   }
 
   override connectedCallback(): void {
@@ -471,43 +490,18 @@ export class WikiTable extends LitElement {
     this.popoverColumnIndex = null;
   }
 
-  private _openFilterPicker(): void {
-    this.columnPickerMode = 'filter';
-  }
-
-  private _openSortPicker(): void {
-    this.columnPickerMode = 'sort';
+  private _openColumnPicker(): void {
+    this.columnPickerOpen = true;
   }
 
   private _handleColumnPickerSelect(columnIndex: number): void {
-    if (this.columnPickerMode === 'sort') {
-      this.columnPickerMode = null;
-      this._cycleSortForColumn(columnIndex);
-    } else {
-      this.columnPickerMode = null;
-      this.popoverColumnIndex = columnIndex;
-    }
-  }
-
-  private _cycleSortForColumn(columnIndex: number): void {
-    if (this.sortColumnIndex === columnIndex) {
-      if (this.sortDirection === 'ascending') {
-        this.sortDirection = 'descending';
-      } else if (this.sortDirection === 'descending') {
-        this.sortDirection = 'none';
-        this.sortColumnIndex = null;
-      } else {
-        this.sortDirection = 'ascending';
-      }
-    } else {
-      this.sortColumnIndex = columnIndex;
-      this.sortDirection = 'ascending';
-    }
+    this.columnPickerOpen = false;
+    this.popoverColumnIndex = columnIndex;
   }
 
   private _handleColumnPickerOverlayClick(e: Event): void {
     if (e.target instanceof HTMLElement && e.target.classList.contains('column-picker-overlay')) {
-      this.columnPickerMode = null;
+      this.columnPickerOpen = false;
     }
   }
 
@@ -551,21 +545,15 @@ export class WikiTable extends LitElement {
               class="tag-filter-clear"
               @click=${this._clearAllFilters}
               aria-label="Clear all filters"
-            >\u2715 clear all</button>
+            ><span class="pill-icon">\u2715</span><span class="pill-text"> clear</span></button>
           ` : nothing}
           ${this.cardViewActive ? html`
             <button
               type="button"
               class="tag-pill"
-              @click=${this._openFilterPicker}
-              aria-label="Open filter picker"
-            >\u2699 filter</button>
-            <button
-              type="button"
-              class="tag-pill"
-              @click=${this._openSortPicker}
-              aria-label="Open sort picker"
-            >\u21C5 sort</button>
+              @click=${this._openColumnPicker}
+              aria-label="Sort and filter"
+            ><span class="pill-icon">\u2699</span><span class="pill-text"> sort/filter</span></button>
           ` : nothing}
           <div
             class="view-toggle"
@@ -573,8 +561,8 @@ export class WikiTable extends LitElement {
             aria-label="View mode"
             @click=${this._toggleCardView}
           >
-            <span class="view-toggle-option ${!this.cardViewActive ? 'view-toggle-active' : ''}">\u25A4 table</span>
-            <span class="view-toggle-option ${this.cardViewActive ? 'view-toggle-active' : ''}">\u229E cards</span>
+            <span class="view-toggle-option ${!this.cardViewActive ? 'view-toggle-active' : ''}">\u25A4<span class="view-toggle-text"> table</span></span>
+            <span class="view-toggle-option ${this.cardViewActive ? 'view-toggle-active' : ''}">\u229E<span class="view-toggle-text"> cards</span></span>
           </div>
         </div>
       </div>
@@ -582,7 +570,7 @@ export class WikiTable extends LitElement {
         ? this._renderCardView(processedRows)
         : this._renderTableView(processedRows)}
       ${this._renderPopover()}
-      ${this.columnPickerMode !== null ? this._renderColumnPicker() : nothing}
+      ${this.columnPickerOpen ? this._renderColumnPicker() : nothing}
       <slot style="display:none"></slot>
     `;
   }
@@ -627,18 +615,14 @@ export class WikiTable extends LitElement {
     return html`
       <div class="column-picker-overlay" @click=${this._handleColumnPickerOverlayClick}>
         <div class="column-picker">
-          <div class="column-picker-title">${this.columnPickerMode === 'sort' ? 'Sort by column' : 'Filter by column'}</div>
-          ${this.extractedData!.columns.map(col => {
-            const isSorted = this.columnPickerMode === 'sort' && this.sortColumnIndex === col.columnIndex && this.sortDirection !== 'none';
-            const arrow = isSorted ? (this.sortDirection === 'ascending' ? '\u2191' : '\u2193') : '';
-            return html`
-              <button
-                type="button"
-                class="column-picker-item ${isSorted ? 'column-picker-item-active' : ''}"
-                @click=${() => this._handleColumnPickerSelect(col.columnIndex)}
-              >${col.headerText}${arrow ? html`<span class="column-picker-arrow">${arrow}</span>` : nothing}</button>
-            `;
-          })}
+          <div class="column-picker-title">Select column</div>
+          ${this.extractedData!.columns.map(col => html`
+            <button
+              type="button"
+              class="column-picker-item"
+              @click=${() => this._handleColumnPickerSelect(col.columnIndex)}
+            >${col.headerText}</button>
+          `)}
         </div>
       </div>
     `;

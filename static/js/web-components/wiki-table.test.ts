@@ -208,63 +208,51 @@ describe('WikiTable', () => {
         expect(activeSegment?.textContent).to.contain('cards');
       });
 
-      it('should show filter picker pill', () => {
-        const filterPill = el.shadowRoot?.querySelector('[aria-label="Open filter picker"]');
-        expect(filterPill).to.exist;
+      it('should show sort/filter pill', () => {
+        const sortFilterPill = el.shadowRoot?.querySelector('[aria-label="Sort and filter"]');
+        expect(sortFilterPill).to.exist;
       });
 
-      it('should show sort picker pill', () => {
-        const sortPill = el.shadowRoot?.querySelector('[aria-label="Open sort picker"]');
-        expect(sortPill).to.exist;
-      });
-
-      it('should not show filter picker pill in table view', async () => {
+      it('should not show sort/filter pill in table view', async () => {
         el.cardViewActive = false;
         await el.updateComplete;
-        const filterPill = el.shadowRoot?.querySelector('[aria-label="Open filter picker"]');
-        expect(filterPill).to.not.exist;
-      });
-
-      it('should not show sort picker pill in table view', async () => {
-        el.cardViewActive = false;
-        await el.updateComplete;
-        const sortPill = el.shadowRoot?.querySelector('[aria-label="Open sort picker"]');
-        expect(sortPill).to.not.exist;
+        const sortFilterPill = el.shadowRoot?.querySelector('[aria-label="Sort and filter"]');
+        expect(sortFilterPill).to.not.exist;
       });
     });
   });
 
-  describe('card view sort picker', () => {
+  describe('card view column picker', () => {
 
-    describe('when clicking sort pill in card view', () => {
+    describe('when clicking sort/filter pill in card view', () => {
       let el: WikiTable;
 
       beforeEach(async () => {
         el = await createBasicFixture();
         el.cardViewActive = true;
         await el.updateComplete;
-        const sortPill = el.shadowRoot?.querySelector('[aria-label="Open sort picker"]') as HTMLButtonElement;
-        sortPill.click();
+        const pill = el.shadowRoot?.querySelector('[aria-label="Sort and filter"]') as HTMLButtonElement;
+        pill.click();
         await el.updateComplete;
       });
 
-      it('should open column picker in sort mode', () => {
-        expect(el.columnPickerMode).to.equal('sort');
+      it('should open column picker', () => {
+        expect(el.columnPickerOpen).to.be.true;
       });
 
-      it('should show sort title in column picker', () => {
+      it('should show select column title', () => {
         const title = el.shadowRoot?.querySelector('.column-picker-title');
-        expect(title?.textContent).to.contain('Sort by column');
+        expect(title?.textContent).to.contain('Select column');
       });
     });
 
-    describe('when selecting a column from sort picker', () => {
+    describe('when selecting a column from picker', () => {
       let el: WikiTable;
 
       beforeEach(async () => {
         el = await createBasicFixture();
         el.cardViewActive = true;
-        el.columnPickerMode = 'sort';
+        el.columnPickerOpen = true;
         await el.updateComplete;
         const items = el.shadowRoot?.querySelectorAll('.column-picker-item') as NodeListOf<HTMLButtonElement>;
         items[0]?.click();
@@ -272,100 +260,11 @@ describe('WikiTable', () => {
       });
 
       it('should close the column picker', () => {
-        expect(el.columnPickerMode).to.be.null;
+        expect(el.columnPickerOpen).to.be.false;
       });
 
-      it('should sort ascending by the selected column', () => {
-        expect(el.sortColumnIndex).to.equal(0);
-        expect(el.sortDirection).to.equal('ascending');
-      });
-    });
-
-    describe('when selecting the same sorted column from sort picker', () => {
-      let el: WikiTable;
-
-      beforeEach(async () => {
-        el = await createBasicFixture();
-        el.cardViewActive = true;
-        el.sortColumnIndex = 0;
-        el.sortDirection = 'ascending';
-        el.columnPickerMode = 'sort';
-        await el.updateComplete;
-        const items = el.shadowRoot?.querySelectorAll('.column-picker-item') as NodeListOf<HTMLButtonElement>;
-        items[0]?.click();
-        await el.updateComplete;
-      });
-
-      it('should toggle to descending', () => {
-        expect(el.sortDirection).to.equal('descending');
-      });
-    });
-
-    describe('when sort picker shows the currently sorted column', () => {
-      let el: WikiTable;
-
-      beforeEach(async () => {
-        el = await createBasicFixture();
-        el.cardViewActive = true;
-        el.sortColumnIndex = 0;
-        el.sortDirection = 'ascending';
-        el.columnPickerMode = 'sort';
-        await el.updateComplete;
-      });
-
-      it('should show ascending arrow on the sorted column item', () => {
-        const items = el.shadowRoot?.querySelectorAll('.column-picker-item') as NodeListOf<HTMLButtonElement>;
-        expect(items[0]?.textContent).to.contain('\u2191');
-      });
-
-      it('should not show an arrow on unsorted columns', () => {
-        const items = el.shadowRoot?.querySelectorAll('.column-picker-item') as NodeListOf<HTMLButtonElement>;
-        expect(items[1]?.textContent).to.not.contain('\u2191');
-        expect(items[1]?.textContent).to.not.contain('\u2193');
-      });
-
-      it('should highlight the sorted column item', () => {
-        const activeItems = el.shadowRoot?.querySelectorAll('.column-picker-item-active');
-        expect(activeItems).to.have.length(1);
-      });
-    });
-
-    describe('when sort picker shows descending sort', () => {
-      let el: WikiTable;
-
-      beforeEach(async () => {
-        el = await createBasicFixture();
-        el.cardViewActive = true;
-        el.sortColumnIndex = 1;
-        el.sortDirection = 'descending';
-        el.columnPickerMode = 'sort';
-        await el.updateComplete;
-      });
-
-      it('should show descending arrow on the sorted column', () => {
-        const items = el.shadowRoot?.querySelectorAll('.column-picker-item') as NodeListOf<HTMLButtonElement>;
-        expect(items[1]?.textContent).to.contain('\u2193');
-      });
-    });
-
-    describe('when selecting a descending-sorted column from sort picker', () => {
-      let el: WikiTable;
-
-      beforeEach(async () => {
-        el = await createBasicFixture();
-        el.cardViewActive = true;
-        el.sortColumnIndex = 0;
-        el.sortDirection = 'descending';
-        el.columnPickerMode = 'sort';
-        await el.updateComplete;
-        const items = el.shadowRoot?.querySelectorAll('.column-picker-item') as NodeListOf<HTMLButtonElement>;
-        items[0]?.click();
-        await el.updateComplete;
-      });
-
-      it('should clear the sort', () => {
-        expect(el.sortDirection).to.equal('none');
-        expect(el.sortColumnIndex).to.be.null;
+      it('should open the popover for the selected column', () => {
+        expect(el.popoverColumnIndex).to.equal(0);
       });
     });
   });
@@ -657,22 +556,16 @@ describe('WikiTable', () => {
     });
   });
 
-  describe('card view filter picker', () => {
+  describe('card view column picker overlay', () => {
 
-    describe('when clicking filter pill in card view', () => {
+    describe('when column picker is open in card view', () => {
       let el: WikiTable;
 
       beforeEach(async () => {
         el = await createBasicFixture();
         el.cardViewActive = true;
+        el.columnPickerOpen = true;
         await el.updateComplete;
-        const filterPill = el.shadowRoot?.querySelector('[aria-label="Open filter picker"]') as HTMLButtonElement;
-        filterPill.click();
-        await el.updateComplete;
-      });
-
-      it('should open column picker in filter mode', () => {
-        expect(el.columnPickerMode).to.equal('filter');
       });
 
       it('should render column picker overlay', () => {
@@ -692,7 +585,7 @@ describe('WikiTable', () => {
       beforeEach(async () => {
         el = await createBasicFixture();
         el.cardViewActive = true;
-        el.columnPickerMode = 'filter';
+        el.columnPickerOpen = true;
         await el.updateComplete;
         const items = el.shadowRoot?.querySelectorAll('.column-picker-item') as NodeListOf<HTMLButtonElement>;
         items[1]?.click();
@@ -700,7 +593,7 @@ describe('WikiTable', () => {
       });
 
       it('should close the column picker', () => {
-        expect(el.columnPickerMode).to.be.null;
+        expect(el.columnPickerOpen).to.be.false;
       });
 
       it('should open the popover for the selected column', () => {
@@ -824,6 +717,10 @@ describe('WikiTable', () => {
         const checkboxes = popover?.shadowRoot?.querySelectorAll('.checkbox-item input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
         checkboxes[0]!.checked = false;
         checkboxes[0]!.dispatchEvent(new Event('change'));
+        await popover!.updateComplete;
+
+        const okBtn = popover?.shadowRoot?.querySelector('[aria-label="Apply"]') as HTMLButtonElement;
+        okBtn.click();
         await el.updateComplete;
       });
 
@@ -856,6 +753,10 @@ describe('WikiTable', () => {
         const minInput = popover?.shadowRoot?.querySelector('[aria-label="Minimum value"]') as HTMLInputElement;
         minInput.value = '10';
         minInput.dispatchEvent(new Event('input'));
+        await popover!.updateComplete;
+
+        const okBtn = popover?.shadowRoot?.querySelector('[aria-label="Apply"]') as HTMLButtonElement;
+        okBtn.click();
         await el.updateComplete;
       });
 
@@ -882,6 +783,10 @@ describe('WikiTable', () => {
         const popover = el.shadowRoot?.querySelector('table-filter-popover');
         const ascBtn = popover?.shadowRoot?.querySelector('[aria-label="Sort ascending"]') as HTMLButtonElement;
         ascBtn.click();
+        await popover!.updateComplete;
+
+        const okBtn = popover?.shadowRoot?.querySelector('[aria-label="Apply"]') as HTMLButtonElement;
+        okBtn.click();
         await el.updateComplete;
       });
 
@@ -910,9 +815,10 @@ describe('WikiTable', () => {
         const checkboxes = popover?.shadowRoot?.querySelectorAll('.checkbox-item input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
         checkboxes[0]!.checked = false;
         checkboxes[0]!.dispatchEvent(new Event('change'));
-        await el.updateComplete;
+        await popover!.updateComplete;
 
-        el.popoverColumnIndex = null;
+        const okBtn = popover?.shadowRoot?.querySelector('[aria-label="Apply"]') as HTMLButtonElement;
+        okBtn.click();
         await el.updateComplete;
 
         headerMain?.dispatchEvent(new Event('click', { bubbles: true }));
@@ -970,7 +876,7 @@ describe('WikiTable', () => {
         el.cardViewActive = true;
         await el.updateComplete;
 
-        const filterPill = el.shadowRoot?.querySelector('[aria-label="Open filter picker"]') as HTMLButtonElement;
+        const filterPill = el.shadowRoot?.querySelector('[aria-label="Sort and filter"]') as HTMLButtonElement;
         filterPill.click();
         await el.updateComplete;
 
@@ -999,7 +905,7 @@ describe('WikiTable', () => {
         el.cardViewActive = true;
         await el.updateComplete;
 
-        const filterPill = el.shadowRoot?.querySelector('[aria-label="Open filter picker"]') as HTMLButtonElement;
+        const filterPill = el.shadowRoot?.querySelector('[aria-label="Sort and filter"]') as HTMLButtonElement;
         filterPill.click();
         await el.updateComplete;
 
@@ -1011,6 +917,10 @@ describe('WikiTable', () => {
         const checkboxes = popover?.shadowRoot?.querySelectorAll('.checkbox-item input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
         checkboxes[0]!.checked = false;
         checkboxes[0]!.dispatchEvent(new Event('change'));
+        await popover!.updateComplete;
+
+        const okBtn = popover?.shadowRoot?.querySelector('[aria-label="Apply"]') as HTMLButtonElement;
+        okBtn.click();
         await el.updateComplete;
       });
 
@@ -1025,7 +935,7 @@ describe('WikiTable', () => {
       });
     });
 
-    describe('when using sort picker in card view', () => {
+    describe('when sorting via popover in card view', () => {
       let el: WikiTable;
 
       beforeEach(async () => {
@@ -1033,12 +943,21 @@ describe('WikiTable', () => {
         el.cardViewActive = true;
         await el.updateComplete;
 
-        const sortPill = el.shadowRoot?.querySelector('[aria-label="Open sort picker"]') as HTMLButtonElement;
-        sortPill.click();
+        const pill = el.shadowRoot?.querySelector('[aria-label="Sort and filter"]') as HTMLButtonElement;
+        pill.click();
         await el.updateComplete;
 
         const items = el.shadowRoot?.querySelectorAll('.column-picker-item') as NodeListOf<HTMLButtonElement>;
         items[0]?.click();
+        await el.updateComplete;
+
+        const popover = el.shadowRoot?.querySelector('table-filter-popover');
+        const ascBtn = popover?.shadowRoot?.querySelector('[aria-label="Sort ascending"]') as HTMLButtonElement;
+        ascBtn.click();
+        await popover!.updateComplete;
+
+        const okBtn = popover?.shadowRoot?.querySelector('[aria-label="Apply"]') as HTMLButtonElement;
+        okBtn.click();
         await el.updateComplete;
       });
 
@@ -1055,7 +974,7 @@ describe('WikiTable', () => {
       beforeEach(async () => {
         el = await createBasicFixture();
         el.cardViewActive = true;
-        el.columnPickerMode = 'filter';
+        el.columnPickerOpen = true;
         await el.updateComplete;
 
         const overlay = el.shadowRoot?.querySelector('.column-picker-overlay') as HTMLElement;
@@ -1064,7 +983,7 @@ describe('WikiTable', () => {
       });
 
       it('should close the column picker', () => {
-        expect(el.columnPickerMode).to.be.null;
+        expect(el.columnPickerOpen).to.be.false;
       });
     });
   });
