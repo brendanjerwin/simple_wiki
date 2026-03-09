@@ -85,8 +85,8 @@ export function parseForType(text: string, columnType: ColumnDataType): number {
 
 export function parseNumericValue(text: string): number {
   const cleaned = text.trim().replace(/,/g, '');
-  const value = Number(cleaned);
-  return value;
+  if (cleaned === '') return NaN;
+  return Number(cleaned);
 }
 
 export function parseDateValue(text: string): number {
@@ -114,8 +114,10 @@ export function parseDateValue(text: string): number {
 
 export function parseCurrencyValue(text: string): number {
   const trimmed = text.trim();
+  if (trimmed === '') return NaN;
   const negative = trimmed.startsWith('-') || /^[$€£¥]\s?-/.test(trimmed);
   const cleaned = trimmed.replace(/^-?\s*[$€£¥]\s?-?/, '').replace(/,/g, '');
+  if (cleaned === '') return NaN;
   const value = Number(cleaned);
   return Number.isNaN(value) ? NaN : (negative ? -value : value);
 }

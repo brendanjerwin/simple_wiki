@@ -302,6 +302,26 @@ describe('column-type-detector', () => {
         expect(result).to.be.NaN;
       });
     });
+
+    describe('when given an empty string', () => {
+      beforeEach(() => {
+        result = parseNumericValue('');
+      });
+
+      it('should return NaN', () => {
+        expect(result).to.be.NaN;
+      });
+    });
+
+    describe('when given a whitespace-only string', () => {
+      beforeEach(() => {
+        result = parseNumericValue('   ');
+      });
+
+      it('should return NaN', () => {
+        expect(result).to.be.NaN;
+      });
+    });
   });
 
   describe('parseCurrencyValue', () => {
@@ -360,6 +380,26 @@ describe('column-type-detector', () => {
     describe('when given non-currency text', () => {
       beforeEach(() => {
         result = parseCurrencyValue('hello');
+      });
+
+      it('should return NaN', () => {
+        expect(result).to.be.NaN;
+      });
+    });
+
+    describe('when given an empty string', () => {
+      beforeEach(() => {
+        result = parseCurrencyValue('');
+      });
+
+      it('should return NaN', () => {
+        expect(result).to.be.NaN;
+      });
+    });
+
+    describe('when given a whitespace-only string', () => {
+      beforeEach(() => {
+        result = parseCurrencyValue('   ');
       });
 
       it('should return NaN', () => {

@@ -1,7 +1,6 @@
 import type { TemplateResult } from 'lit';
 import { html, css, LitElement, nothing } from 'lit';
 import { property, state } from 'lit/decorators.js';
-import { pillCSS } from './shared-styles.js';
 import type { TableColumnDefinition } from './table-data-extractor.js';
 import type { SortDirection, ColumnFilterState } from './table-sorter-filterer.js';
 
@@ -17,7 +16,6 @@ export interface FilterChangedEventDetail {
 
 export class TableFilterPopover extends LitElement {
   static override styles = [
-    pillCSS,
     css`
       :host {
         display: block;

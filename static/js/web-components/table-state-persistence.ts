@@ -109,11 +109,11 @@ function isStorageEnvelope(value: unknown): value is StorageEnvelope {
 }
 
 export function loadTableState(hash: string): PersistedTableState | null {
-  const key = STORAGE_PREFIX + hash;
-  const raw = localStorage.getItem(key);
-  if (raw === null) return null;
-
   try {
+    const key = STORAGE_PREFIX + hash;
+    const raw = localStorage.getItem(key);
+    if (raw === null) return null;
+
     const parsed: unknown = JSON.parse(raw);
     if (!isStorageEnvelope(parsed)) {
       localStorage.removeItem(key);
@@ -125,7 +125,7 @@ export function loadTableState(hash: string): PersistedTableState | null {
     }
     return parsed.state;
   } catch {
-    localStorage.removeItem(key);
+    // localStorage unavailable (privacy mode) or corrupt data — silently ignore
     return null;
   }
 }

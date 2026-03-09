@@ -9,6 +9,7 @@ export interface TableColumnDefinition {
 
 export interface TableRowData {
   cells: string[];
+  htmlCells: string[];
   originalIndex: number;
 }
 
@@ -41,10 +42,14 @@ export function extractTableData(tableElement: HTMLTableElement): ExtractedTable
     dataRows = allRows.slice(1) as HTMLTableRowElement[];
   }
 
-  const rows: TableRowData[] = dataRows.map((row, index) => ({
-    cells: Array.from(row.querySelectorAll('td, th')).map(cell => cell.textContent?.trim() ?? ''),
-    originalIndex: index,
-  }));
+  const rows: TableRowData[] = dataRows.map((row, index) => {
+    const cellElements = Array.from(row.querySelectorAll('td, th'));
+    return {
+      cells: cellElements.map(cell => cell.textContent?.trim() ?? ''),
+      htmlCells: cellElements.map(cell => cell.innerHTML.trim()),
+      originalIndex: index,
+    };
+  });
 
   const columns: TableColumnDefinition[] = headerCells.map((headerText, columnIndex) => {
     const columnValues = rows.map(row => row.cells[columnIndex] ?? '');
@@ -74,7 +79,7 @@ export function getColumnNumericRange(
   columnIndex: number,
   columnType: ColumnDataType,
 ): { min: number; max: number } | null {
-  if (columnType === 'text') return null;
+  if (columnType === 'text' || columnType === 'date') return null;
 
   let min = Infinity;
   let max = -Infinity;

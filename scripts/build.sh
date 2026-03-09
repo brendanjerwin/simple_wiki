@@ -120,8 +120,17 @@ echo "Output: ${BINARY_NAME}"
 
 # Generate frontend and protos (unless explicitly skipped)
 if [ "$SKIP_GENERATE" != "true" ]; then
-    echo "Generating protos and frontend"
-    go generate ./...
+    # Only run buf generate if proto files have changed (avoids needing protoc plugins in CI)
+    if git diff --name-only HEAD~1 2>/dev/null | grep -q '^api/proto' || \
+       git status --porcelain api/proto 2>/dev/null | grep -q '.'; then
+        echo "Proto changes detected, running buf generate"
+        buf generate
+    else
+        echo "No proto changes, skipping buf generate"
+    fi
+
+    echo "Generating frontend"
+    go generate ./static/...
 fi
 
 # Build the binary

@@ -1,6 +1,7 @@
 import type { TemplateResult } from 'lit';
 import { html, css, LitElement, nothing } from 'lit';
 import { state } from 'lit/decorators.js';
+import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { extractTableData, getUniqueColumnValues, getColumnNumericRange } from './table-data-extractor.js';
 import { sortRows, applyAllFilters, hasActiveFilters, isFilterActive } from './table-sorter-filterer.js';
 import { computeTableHash, saveTableState, loadTableState, deserializeFilter } from './table-state-persistence.js';
@@ -689,7 +690,7 @@ export class WikiTable extends LitElement {
               <tr><td colspan="${this.extractedData!.columns.length}" class="no-results">No matching rows</td></tr>
             ` : processedRows.map(row => html`
               <tr>
-                ${row.cells.map(cell => html`<td>${cell}</td>`)}
+                ${row.htmlCells.map(cell => html`<td>${unsafeHTML(cell)}</td>`)}
               </tr>
             `)}
           </tbody>
@@ -711,7 +712,7 @@ export class WikiTable extends LitElement {
             ${this.extractedData!.columns.map((col, i) => html`
               <div class="card-row">
                 <span class="card-label">${col.headerText}</span>
-                <span class="card-value">${row.cells[i]}</span>
+                <span class="card-value">${unsafeHTML(row.htmlCells[i])}</span>
               </div>
             `)}
           </div>

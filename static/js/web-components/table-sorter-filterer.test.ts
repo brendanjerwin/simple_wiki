@@ -16,7 +16,7 @@ import type {
 import type { TableRowData } from './table-data-extractor.js';
 
 function makeRows(values: string[][]): TableRowData[] {
-  return values.map((cells, i) => ({ cells, originalIndex: i }));
+  return values.map((cells, i) => ({ cells, htmlCells: cells, originalIndex: i }));
 }
 
 function extractColumn(rows: TableRowData[], colIndex: number): string[] {

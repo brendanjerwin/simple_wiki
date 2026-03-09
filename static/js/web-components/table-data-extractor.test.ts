@@ -137,6 +137,33 @@ describe('table-data-extractor', () => {
       });
     });
 
+    describe('when given a table with inline HTML in cells', () => {
+      beforeEach(() => {
+        const table = createTable(`
+          <table>
+            <thead><tr><th>Name</th><th>Link</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Widget</strong></td><td><a href="/page">Details</a></td></tr>
+              <tr><td><em>Gadget</em></td><td><code>G-100</code></td></tr>
+            </tbody>
+          </table>
+        `);
+        result = extractTableData(table);
+      });
+
+      it('should extract plain text for cells', () => {
+        expect(result.rows[0]!.cells).to.deep.equal(['Widget', 'Details']);
+        expect(result.rows[1]!.cells).to.deep.equal(['Gadget', 'G-100']);
+      });
+
+      it('should preserve innerHTML in htmlCells', () => {
+        expect(result.rows[0]!.htmlCells[0]).to.equal('<strong>Widget</strong>');
+        expect(result.rows[0]!.htmlCells[1]).to.equal('<a href="/page">Details</a>');
+        expect(result.rows[1]!.htmlCells[0]).to.equal('<em>Gadget</em>');
+        expect(result.rows[1]!.htmlCells[1]).to.equal('<code>G-100</code>');
+      });
+    });
+
     describe('when given a table with whitespace in cells', () => {
       beforeEach(() => {
         const table = createTable(`
@@ -163,7 +190,7 @@ describe('table-data-extractor', () => {
   describe('getUniqueColumnValues', () => {
 
     function makeRows(values: string[][]): TableRowData[] {
-      return values.map((cells, i) => ({ cells, originalIndex: i }));
+      return values.map((cells, i) => ({ cells, htmlCells: cells, originalIndex: i }));
     }
 
     describe('when column has unique values', () => {
@@ -222,7 +249,7 @@ describe('table-data-extractor', () => {
   describe('getColumnNumericRange', () => {
 
     function makeRows(values: string[][]): TableRowData[] {
-      return values.map((cells, i) => ({ cells, originalIndex: i }));
+      return values.map((cells, i) => ({ cells, htmlCells: cells, originalIndex: i }));
     }
 
     describe('when column is numeric', () => {
@@ -261,6 +288,19 @@ describe('table-data-extractor', () => {
 
       it('should return parsed percentage min and max', () => {
         expect(result).to.deep.equal({ min: 25, max: 75 });
+      });
+    });
+
+    describe('when column is date', () => {
+      let result: { min: number; max: number } | null;
+
+      beforeEach(() => {
+        const rows = makeRows([['2024-01-15'], ['2024-06-20'], ['2024-03-10']]);
+        result = getColumnNumericRange(rows, 0, 'date');
+      });
+
+      it('should return null', () => {
+        expect(result).to.be.null;
       });
     });
 
