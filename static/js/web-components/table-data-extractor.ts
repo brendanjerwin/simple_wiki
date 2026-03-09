@@ -1,11 +1,5 @@
-import { detectColumnType } from './column-type-detector.js';
+import { detectColumnType, parseForType } from './column-type-detector.js';
 import type { ColumnTypeInfo, ColumnDataType } from './column-type-detector.js';
-import {
-  parseNumericValue,
-  parseCurrencyValue,
-  parsePercentageValue,
-  parseDateValue,
-} from './column-type-detector.js';
 
 export interface TableColumnDefinition {
   headerText: string;
@@ -75,17 +69,6 @@ export function getUniqueColumnValues(rows: TableRowData[], columnIndex: number)
   return Array.from(seen).sort();
 }
 
-function parseForColumnType(text: string, columnType: ColumnDataType): number {
-  switch (columnType) {
-    case 'integer':
-    case 'decimal': return parseNumericValue(text);
-    case 'currency': return parseCurrencyValue(text);
-    case 'percentage': return parsePercentageValue(text);
-    case 'date': return parseDateValue(text);
-    default: return NaN;
-  }
-}
-
 export function getColumnNumericRange(
   rows: TableRowData[],
   columnIndex: number,
@@ -99,7 +82,7 @@ export function getColumnNumericRange(
 
   for (const row of rows) {
     const cellText = row.cells[columnIndex] ?? '';
-    const value = parseForColumnType(cellText, columnType);
+    const value = parseForType(cellText, columnType);
     if (!Number.isNaN(value)) {
       hasValue = true;
       if (value < min) min = value;

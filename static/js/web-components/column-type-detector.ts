@@ -72,6 +72,17 @@ export function detectColumnType(cellTexts: string[]): ColumnTypeInfo {
   return { detectedType: 'text', confidenceRatio: 1 };
 }
 
+export function parseForType(text: string, columnType: ColumnDataType): number {
+  switch (columnType) {
+    case 'integer':
+    case 'decimal': return parseNumericValue(text);
+    case 'currency': return parseCurrencyValue(text);
+    case 'percentage': return parsePercentageValue(text);
+    case 'date': return parseDateValue(text);
+    default: return NaN;
+  }
+}
+
 export function parseNumericValue(text: string): number {
   const cleaned = text.trim().replace(/,/g, '');
   const value = Number(cleaned);

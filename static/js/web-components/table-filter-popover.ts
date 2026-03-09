@@ -327,10 +327,6 @@ export class TableFilterPopover extends LitElement {
     this._handleKeydown = this.handleKeydown.bind(this);
   }
 
-  override connectedCallback(): void {
-    super.connectedCallback();
-  }
-
   override disconnectedCallback(): void {
     if (this._pendingTimerId !== null) {
       clearTimeout(this._pendingTimerId);

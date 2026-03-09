@@ -1,9 +1,4 @@
-import {
-  parseNumericValue,
-  parseCurrencyValue,
-  parsePercentageValue,
-  parseDateValue,
-} from './column-type-detector.js';
+import { parseForType } from './column-type-detector.js';
 import type { ColumnDataType } from './column-type-detector.js';
 import type { TableRowData } from './table-data-extractor.js';
 
@@ -28,17 +23,6 @@ export interface TextSearchFilterState {
 export type ColumnFilterState = CheckboxFilterState | RangeFilterState | TextSearchFilterState;
 
 export type TableFilterState = Map<number, ColumnFilterState>;
-
-function parseForType(text: string, columnType: ColumnDataType): number {
-  switch (columnType) {
-    case 'integer':
-    case 'decimal': return parseNumericValue(text);
-    case 'currency': return parseCurrencyValue(text);
-    case 'percentage': return parsePercentageValue(text);
-    case 'date': return parseDateValue(text);
-    default: return NaN;
-  }
-}
 
 export function sortRows(
   rows: TableRowData[],
@@ -72,56 +56,6 @@ export function sortRows(
   });
 
   return sorted;
-}
-
-const operatorPattern = /^(>=|<=|>|<|=)\s*(-?\d+\.?\d*)$/;
-
-function matchesNumericFilter(
-  cellText: string,
-  filterText: string,
-  columnType: ColumnDataType,
-): boolean | null {
-  const match = operatorPattern.exec(filterText.trim());
-  if (!match) return null;
-
-  const operator = match[1]!;
-  const threshold = Number(match[2]);
-  const cellValue = parseForType(cellText, columnType);
-
-  if (Number.isNaN(cellValue)) return false;
-
-  switch (operator) {
-    case '>': return cellValue > threshold;
-    case '<': return cellValue < threshold;
-    case '>=': return cellValue >= threshold;
-    case '<=': return cellValue <= threshold;
-    case '=': return cellValue === threshold;
-    default: return false;
-  }
-}
-
-export function filterRows(
-  rows: TableRowData[],
-  columnIndex: number,
-  filterText: string,
-  columnType: ColumnDataType,
-): TableRowData[] {
-  if (filterText.trim() === '') {
-    return [...rows];
-  }
-
-  const isNumericType = columnType === 'integer' || columnType === 'decimal' || columnType === 'currency' || columnType === 'percentage';
-
-  return rows.filter(row => {
-    const cellText = row.cells[columnIndex] ?? '';
-
-    if (isNumericType) {
-      const numericResult = matchesNumericFilter(cellText, filterText, columnType);
-      if (numericResult !== null) return numericResult;
-    }
-
-    return cellText.toLowerCase().includes(filterText.trim().toLowerCase());
-  });
 }
 
 export function applyColumnFilter(
