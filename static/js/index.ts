@@ -13,6 +13,7 @@ import './web-components/insert-new-page-dialog.js';
 import './web-components/wiki-checklist.js';
 import './web-components/file-drop-zone.js';
 import './web-components/wiki-editor.js';
+import './web-components/wiki-table.js';
 import { showStoredToast } from './web-components/toast-message.js';
 import { setupGlobalErrorHandler } from './web-components/global-error-handler.js';
 import { pageDeleteService, type PageDeleter } from './web-components/page-deletion-service.js';

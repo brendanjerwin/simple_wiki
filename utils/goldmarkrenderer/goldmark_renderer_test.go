@@ -80,8 +80,8 @@ var _ = Describe("GoldmarkRenderer", func() {
 				Expect(err).ToNot(HaveOccurred())
 			})
 
-			It("should render an HTML table", func() {
-				expected := "<table>\n<thead>\n<tr>\n<th>A</th>\n<th>B</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>1</td>\n<td>2</td>\n</tr>\n</tbody>\n</table>\n"
+			It("should render an HTML table wrapped in wiki-table", func() {
+				expected := "<wiki-table><table>\n<thead>\n<tr>\n<th>A</th>\n<th>B</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>1</td>\n<td>2</td>\n</tr>\n</tbody>\n</table>\n</wiki-table>\n"
 				Expect(string(output)).To(Equal(expected))
 			})
 		})
