@@ -624,6 +624,66 @@ describe('TableFilterPopover', () => {
       });
     });
 
+    describe('when typing intermediate non-numeric value into range min input', () => {
+      let el: TableFilterPopover;
+      let filterSpy: SinonSpy;
+      const manyValues = Array.from({ length: 20 }, (_, i) => String(i * 5));
+
+      beforeEach(async () => {
+        filterSpy = sinon.spy();
+        el = await fixture(html`
+          <table-filter-popover
+            .columnDefinition=${makeIntegerColumn('Count')}
+            .uniqueValues=${manyValues}
+            .numericRange=${{ min: 0, max: 95 }}
+            .open=${true}
+            @filter-changed=${filterSpy}
+          ></table-filter-popover>
+        `);
+        const minInput = el.shadowRoot!.querySelector('[aria-label="Minimum value"]') as HTMLInputElement;
+        minInput.value = '-';
+        minInput.dispatchEvent(new Event('input'));
+        await el.updateComplete;
+
+        const okBtn = el.shadowRoot!.querySelector('[aria-label="Apply"]') as HTMLButtonElement;
+        okBtn.click();
+      });
+
+      it('should not emit filter-changed for NaN-producing input', () => {
+        expect(filterSpy).to.not.have.been.called;
+      });
+    });
+
+    describe('when typing intermediate non-numeric value into range max input', () => {
+      let el: TableFilterPopover;
+      let filterSpy: SinonSpy;
+      const manyValues = Array.from({ length: 20 }, (_, i) => String(i * 5));
+
+      beforeEach(async () => {
+        filterSpy = sinon.spy();
+        el = await fixture(html`
+          <table-filter-popover
+            .columnDefinition=${makeIntegerColumn('Count')}
+            .uniqueValues=${manyValues}
+            .numericRange=${{ min: 0, max: 95 }}
+            .open=${true}
+            @filter-changed=${filterSpy}
+          ></table-filter-popover>
+        `);
+        const maxInput = el.shadowRoot!.querySelector('[aria-label="Maximum value"]') as HTMLInputElement;
+        maxInput.value = 'e';
+        maxInput.dispatchEvent(new Event('input'));
+        await el.updateComplete;
+
+        const okBtn = el.shadowRoot!.querySelector('[aria-label="Apply"]') as HTMLButtonElement;
+        okBtn.click();
+      });
+
+      it('should not emit filter-changed for NaN-producing input', () => {
+        expect(filterSpy).to.not.have.been.called;
+      });
+    });
+
     describe('when clicking OK with text search filter', () => {
       let el: TableFilterPopover;
       let filterDetail: { filter: ColumnFilterState | null } | null;

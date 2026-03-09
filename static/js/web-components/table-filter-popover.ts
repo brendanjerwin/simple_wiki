@@ -511,11 +511,13 @@ export class TableFilterPopover extends LitElement {
   }
 
   private _handleRangeMinChange(value: string): void {
-    this._rangeMin = value === '' ? null : Number(value);
+    const parsed = Number(value);
+    this._rangeMin = value === '' || Number.isNaN(parsed) ? null : parsed;
   }
 
   private _handleRangeMaxChange(value: string): void {
-    this._rangeMax = value === '' ? null : Number(value);
+    const parsed = Number(value);
+    this._rangeMax = value === '' || Number.isNaN(parsed) ? null : parsed;
   }
 
   private _handleRangeSliderMinChange(value: string): void {
