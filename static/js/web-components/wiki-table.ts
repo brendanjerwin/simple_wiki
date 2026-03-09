@@ -42,14 +42,17 @@ export class WikiTable extends LitElement {
         align-items: center;
       }
 
-      .table-scroll-container {
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
+      .table-wrapper {
         position: relative;
       }
 
-      :host([scroll-middle]) .table-scroll-container::before,
-      :host([scroll-end]) .table-scroll-container::before {
+      .table-scroll-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      :host([scroll-middle]) .table-wrapper::before,
+      :host([scroll-end]) .table-wrapper::before {
         content: '';
         position: absolute;
         left: 0;
@@ -61,8 +64,8 @@ export class WikiTable extends LitElement {
         z-index: 3;
       }
 
-      :host([scroll-start]) .table-scroll-container::after,
-      :host([scroll-middle]) .table-scroll-container::after {
+      :host([scroll-start]) .table-wrapper::after,
+      :host([scroll-middle]) .table-wrapper::after {
         content: '';
         position: absolute;
         right: 0;
@@ -72,6 +75,38 @@ export class WikiTable extends LitElement {
         background: linear-gradient(to left, rgba(0,0,0,0.08), transparent);
         pointer-events: none;
         z-index: 3;
+      }
+
+      .popover-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.15);
+        z-index: 9998;
+      }
+
+      .view-toggle {
+        display: inline-flex;
+        border: 1px solid #ddd;
+        border-radius: 16px;
+        overflow: hidden;
+        cursor: pointer;
+        font-size: 12px;
+        user-select: none;
+      }
+
+      .view-toggle-option {
+        padding: 4px 10px;
+        color: #555;
+        transition: all 0.15s ease;
+        white-space: nowrap;
+      }
+
+      .view-toggle-active {
+        background: #0d6efd;
+        color: white;
       }
 
       table {
@@ -257,7 +292,7 @@ export class WikiTable extends LitElement {
   declare popoverColumnIndex: number | null;
 
   @state()
-  declare columnPickerOpen: boolean;
+  declare columnPickerMode: 'filter' | 'sort' | null;
 
   private _mediaQuery: MediaQueryList | null = null;
   private _scrollContainer: HTMLElement | null = null;
@@ -271,7 +306,7 @@ export class WikiTable extends LitElement {
     this.tableFilters = new Map();
     this.cardViewActive = false;
     this.popoverColumnIndex = null;
-    this.columnPickerOpen = false;
+    this.columnPickerMode = null;
   }
 
   override connectedCallback(): void {
@@ -425,18 +460,49 @@ export class WikiTable extends LitElement {
     this.popoverColumnIndex = null;
   }
 
-  private _openColumnPicker(): void {
-    this.columnPickerOpen = true;
+  private _openFilterPicker(): void {
+    this.columnPickerMode = 'filter';
+  }
+
+  private _openSortPicker(): void {
+    this.columnPickerMode = 'sort';
   }
 
   private _handleColumnPickerSelect(columnIndex: number): void {
-    this.columnPickerOpen = false;
-    this.popoverColumnIndex = columnIndex;
+    if (this.columnPickerMode === 'sort') {
+      this.columnPickerMode = null;
+      this._cycleSortForColumn(columnIndex);
+    } else {
+      this.columnPickerMode = null;
+      this.popoverColumnIndex = columnIndex;
+    }
+  }
+
+  private _cycleSortForColumn(columnIndex: number): void {
+    if (this.sortColumnIndex === columnIndex) {
+      if (this.sortDirection === 'ascending') {
+        this.sortDirection = 'descending';
+      } else if (this.sortDirection === 'descending') {
+        this.sortDirection = 'none';
+        this.sortColumnIndex = null;
+      } else {
+        this.sortDirection = 'ascending';
+      }
+    } else {
+      this.sortColumnIndex = columnIndex;
+      this.sortDirection = 'ascending';
+    }
   }
 
   private _handleColumnPickerOverlayClick(e: Event): void {
     if (e.target instanceof HTMLElement && e.target.classList.contains('column-picker-overlay')) {
-      this.columnPickerOpen = false;
+      this.columnPickerMode = null;
+    }
+  }
+
+  private _handlePopoverOverlayClick(e: Event): void {
+    if (e.target instanceof HTMLElement && e.target.classList.contains('popover-overlay')) {
+      this._handlePopoverClosed();
     }
   }
 
@@ -476,27 +542,36 @@ export class WikiTable extends LitElement {
               aria-label="Clear all filters"
             >\u2715 clear all</button>
           ` : nothing}
-          <button
-            type="button"
-            class="tag-pill ${this.cardViewActive ? 'tag-pill-active' : ''}"
-            @click=${this._toggleCardView}
-            aria-label="Toggle view"
-          >${this.cardViewActive ? '\u229E cards' : '\u25A4 table'}</button>
           ${this.cardViewActive ? html`
             <button
               type="button"
               class="tag-pill"
-              @click=${this._openColumnPicker}
+              @click=${this._openFilterPicker}
               aria-label="Open filter picker"
             >\u2699 filter</button>
+            <button
+              type="button"
+              class="tag-pill"
+              @click=${this._openSortPicker}
+              aria-label="Open sort picker"
+            >\u21C5 sort</button>
           ` : nothing}
+          <div
+            class="view-toggle"
+            role="radiogroup"
+            aria-label="View mode"
+            @click=${this._toggleCardView}
+          >
+            <span class="view-toggle-option ${!this.cardViewActive ? 'view-toggle-active' : ''}">\u25A4 table</span>
+            <span class="view-toggle-option ${this.cardViewActive ? 'view-toggle-active' : ''}">\u229E cards</span>
+          </div>
         </div>
       </div>
       ${this.cardViewActive
         ? this._renderCardView(processedRows)
         : this._renderTableView(processedRows)}
       ${this._renderPopover()}
-      ${this.columnPickerOpen ? this._renderColumnPicker() : nothing}
+      ${this.columnPickerMode !== null ? this._renderColumnPicker() : nothing}
       <slot style="display:none"></slot>
     `;
   }
@@ -521,17 +596,19 @@ export class WikiTable extends LitElement {
       : 'none';
 
     return html`
-      <table-filter-popover
-        .columnDefinition=${col}
-        .uniqueValues=${uniqueValues}
-        .numericRange=${numericRange}
-        .currentFilter=${currentFilter}
-        .currentSortDirection=${currentSortDirection}
-        .open=${true}
-        @sort-direction-changed=${this._handlePopoverSortChanged}
-        @filter-changed=${this._handlePopoverFilterChanged}
-        @popover-closed=${this._handlePopoverClosed}
-      ></table-filter-popover>
+      <div class="popover-overlay" @click=${this._handlePopoverOverlayClick}>
+        <table-filter-popover
+          .columnDefinition=${col}
+          .uniqueValues=${uniqueValues}
+          .numericRange=${numericRange}
+          .currentFilter=${currentFilter}
+          .currentSortDirection=${currentSortDirection}
+          .open=${true}
+          @sort-direction-changed=${this._handlePopoverSortChanged}
+          @filter-changed=${this._handlePopoverFilterChanged}
+          @popover-closed=${this._handlePopoverClosed}
+        ></table-filter-popover>
+      </div>
     `;
   }
 
@@ -539,7 +616,7 @@ export class WikiTable extends LitElement {
     return html`
       <div class="column-picker-overlay" @click=${this._handleColumnPickerOverlayClick}>
         <div class="column-picker">
-          <div class="column-picker-title">Filter by column</div>
+          <div class="column-picker-title">${this.columnPickerMode === 'sort' ? 'Sort by column' : 'Filter by column'}</div>
           ${this.extractedData!.columns.map(col => html`
             <button
               type="button"
@@ -554,6 +631,7 @@ export class WikiTable extends LitElement {
 
   private _renderTableView(processedRows: ReturnType<typeof this._getProcessedRows>): TemplateResult {
     return html`
+      <div class="table-wrapper">
       <div class="table-scroll-container">
         <table>
           <thead>
@@ -591,6 +669,7 @@ export class WikiTable extends LitElement {
             `)}
           </tbody>
         </table>
+      </div>
       </div>
     `;
   }

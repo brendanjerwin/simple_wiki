@@ -16,7 +16,7 @@ Enhances standard HTML tables rendered from markdown with interactive features:
 - **Column sorting**: Click sort arrows in headers, or use the filter popover
 - **Column filtering**: Click header to open popover with checkbox, range, or text-search filters
 - **Smart type detection**: Automatically detects number, currency, percentage, date, and text columns
-- **Status bar**: Shows row count with pill buttons for view toggle and filter management
+- **Status bar**: Shows row count with segmented view toggle and pill buttons for filter/sort
 - **Filter popover**: Centered popover with sort controls and auto-detected filter type
 - **Card view**: Responsive card layout for narrow screens (auto or manual toggle)
 - **Scroll shadows**: Visual indicators when table content is scrollable horizontally
@@ -159,7 +159,7 @@ export const CardView: Story = {
   parameters: {
     docs: {
       description: {
-        story: 'Narrow container simulating mobile viewport. Use the view toggle pill in the status bar. In card view, use the filter pill to access column filters via a column picker.',
+        story: 'Narrow container simulating mobile viewport. Use the segmented view toggle in the status bar. In card view, use the filter and sort pills to access column filters and sorting via a column picker.',
       },
     },
   },
@@ -182,7 +182,7 @@ export const InteractiveTesting: Story = {
             if (target.closest('.header-main')) {
               logSort({ action: 'header-click-opens-popover' });
             }
-            if (target.closest('[aria-label="Toggle view"]')) {
+            if (target.closest('[aria-label="View mode"]')) {
               logViewToggle({});
             }
             if (target.closest('[aria-label="Clear all filters"]')) {

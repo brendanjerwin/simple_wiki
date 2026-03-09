@@ -271,6 +271,7 @@ export class TableFilterPopover extends LitElement {
 
   private _handleClickOutside: (event: Event) => void;
   private _handleKeydown: (event: KeyboardEvent) => void;
+  private _pendingTimerId: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
     super();
@@ -290,11 +291,13 @@ export class TableFilterPopover extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    document.addEventListener('click', this._handleClickOutside);
-    document.addEventListener('keydown', this._handleKeydown);
   }
 
   override disconnectedCallback(): void {
+    if (this._pendingTimerId !== null) {
+      clearTimeout(this._pendingTimerId);
+      this._pendingTimerId = null;
+    }
     document.removeEventListener('click', this._handleClickOutside);
     document.removeEventListener('keydown', this._handleKeydown);
     super.disconnectedCallback();
@@ -303,6 +306,22 @@ export class TableFilterPopover extends LitElement {
   override willUpdate(changed: Map<string, unknown>): void {
     if (changed.has('currentFilter') || changed.has('open')) {
       this._syncFromCurrentFilter();
+    }
+    if (changed.has('open')) {
+      if (this.open) {
+        this._pendingTimerId = setTimeout(() => {
+          this._pendingTimerId = null;
+          document.addEventListener('click', this._handleClickOutside);
+          document.addEventListener('keydown', this._handleKeydown);
+        }, 0);
+      } else {
+        if (this._pendingTimerId !== null) {
+          clearTimeout(this._pendingTimerId);
+          this._pendingTimerId = null;
+        }
+        document.removeEventListener('click', this._handleClickOutside);
+        document.removeEventListener('keydown', this._handleKeydown);
+      }
     }
   }
 

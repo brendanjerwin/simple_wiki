@@ -758,24 +758,49 @@ describe('TableFilterPopover', () => {
 
   describe('event listener wiring', () => {
 
-    describe('when component is connected to DOM', () => {
+    describe('when component opens', () => {
       let addEventListenerSpy: SinonSpy;
 
       beforeEach(async () => {
         addEventListenerSpy = sinon.spy(document, 'addEventListener');
-        await fixture(html`<table-filter-popover></table-filter-popover>`);
+        await fixture(html`
+          <table-filter-popover
+            .columnDefinition=${makeTextColumn('Name')}
+            .uniqueValues=${['A', 'B']}
+            .open=${true}
+          ></table-filter-popover>
+        `);
+        await new Promise(resolve => setTimeout(resolve, 0));
       });
 
       afterEach(() => {
         addEventListenerSpy.restore();
       });
 
-      it('should add click event listener to document', () => {
+      it('should add click event listener to document after animation frame', () => {
         expect(addEventListenerSpy).to.have.been.calledWith('click');
       });
 
-      it('should add keydown event listener to document', () => {
+      it('should add keydown event listener to document after animation frame', () => {
         expect(addEventListenerSpy).to.have.been.calledWith('keydown');
+      });
+    });
+
+    describe('when component is connected but not open', () => {
+      let addEventListenerSpy: SinonSpy;
+
+      beforeEach(async () => {
+        addEventListenerSpy = sinon.spy(document, 'addEventListener');
+        await fixture(html`<table-filter-popover></table-filter-popover>`);
+        await new Promise(resolve => setTimeout(resolve, 0));
+      });
+
+      afterEach(() => {
+        addEventListenerSpy.restore();
+      });
+
+      it('should not add click event listener to document', () => {
+        expect(addEventListenerSpy).to.not.have.been.calledWith('click');
       });
     });
 
@@ -784,7 +809,14 @@ describe('TableFilterPopover', () => {
       let el: TableFilterPopover;
 
       beforeEach(async () => {
-        el = await fixture(html`<table-filter-popover></table-filter-popover>`);
+        el = await fixture(html`
+          <table-filter-popover
+            .columnDefinition=${makeTextColumn('Name')}
+            .uniqueValues=${['A', 'B']}
+            .open=${true}
+          ></table-filter-popover>
+        `);
+        await new Promise(resolve => setTimeout(resolve, 0));
         removeEventListenerSpy = sinon.spy(document, 'removeEventListener');
         el.remove();
       });
