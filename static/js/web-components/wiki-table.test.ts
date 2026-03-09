@@ -300,6 +300,74 @@ describe('WikiTable', () => {
         expect(el.sortDirection).to.equal('descending');
       });
     });
+
+    describe('when sort picker shows the currently sorted column', () => {
+      let el: WikiTable;
+
+      beforeEach(async () => {
+        el = await createBasicFixture();
+        el.cardViewActive = true;
+        el.sortColumnIndex = 0;
+        el.sortDirection = 'ascending';
+        el.columnPickerMode = 'sort';
+        await el.updateComplete;
+      });
+
+      it('should show ascending arrow on the sorted column item', () => {
+        const items = el.shadowRoot?.querySelectorAll('.column-picker-item') as NodeListOf<HTMLButtonElement>;
+        expect(items[0]?.textContent).to.contain('\u2191');
+      });
+
+      it('should not show an arrow on unsorted columns', () => {
+        const items = el.shadowRoot?.querySelectorAll('.column-picker-item') as NodeListOf<HTMLButtonElement>;
+        expect(items[1]?.textContent).to.not.contain('\u2191');
+        expect(items[1]?.textContent).to.not.contain('\u2193');
+      });
+
+      it('should highlight the sorted column item', () => {
+        const activeItems = el.shadowRoot?.querySelectorAll('.column-picker-item-active');
+        expect(activeItems).to.have.length(1);
+      });
+    });
+
+    describe('when sort picker shows descending sort', () => {
+      let el: WikiTable;
+
+      beforeEach(async () => {
+        el = await createBasicFixture();
+        el.cardViewActive = true;
+        el.sortColumnIndex = 1;
+        el.sortDirection = 'descending';
+        el.columnPickerMode = 'sort';
+        await el.updateComplete;
+      });
+
+      it('should show descending arrow on the sorted column', () => {
+        const items = el.shadowRoot?.querySelectorAll('.column-picker-item') as NodeListOf<HTMLButtonElement>;
+        expect(items[1]?.textContent).to.contain('\u2193');
+      });
+    });
+
+    describe('when selecting a descending-sorted column from sort picker', () => {
+      let el: WikiTable;
+
+      beforeEach(async () => {
+        el = await createBasicFixture();
+        el.cardViewActive = true;
+        el.sortColumnIndex = 0;
+        el.sortDirection = 'descending';
+        el.columnPickerMode = 'sort';
+        await el.updateComplete;
+        const items = el.shadowRoot?.querySelectorAll('.column-picker-item') as NodeListOf<HTMLButtonElement>;
+        items[0]?.click();
+        await el.updateComplete;
+      });
+
+      it('should clear the sort', () => {
+        expect(el.sortDirection).to.equal('none');
+        expect(el.sortColumnIndex).to.be.null;
+      });
+    });
   });
 
   describe('header title attribute', () => {
@@ -698,6 +766,340 @@ describe('WikiTable', () => {
     it('should render a slot for the content', () => {
       const slot = el.shadowRoot?.querySelector('slot');
       expect(slot).to.exist;
+    });
+  });
+
+  describe('end-to-end popover filter flow', () => {
+
+    describe('when opening popover for a text column', () => {
+      let el: WikiTable;
+
+      beforeEach(async () => {
+        el = await createBasicFixture();
+        const headerMain = el.shadowRoot?.querySelector('.header-main');
+        headerMain?.dispatchEvent(new Event('click', { bubbles: true }));
+        await el.updateComplete;
+      });
+
+      it('should render checkbox filter for text column with few values', () => {
+        const popover = el.shadowRoot?.querySelector('table-filter-popover');
+        const checkboxList = popover?.shadowRoot?.querySelector('.checkbox-list');
+        expect(checkboxList).to.exist;
+      });
+
+      it('should show checkboxes for each unique value', () => {
+        const popover = el.shadowRoot?.querySelector('table-filter-popover');
+        const items = popover?.shadowRoot?.querySelectorAll('.checkbox-item');
+        expect(items).to.have.length(3);
+      });
+    });
+
+    describe('when opening popover for a currency column', () => {
+      let el: WikiTable;
+
+      beforeEach(async () => {
+        el = await createBasicFixture();
+        const headerMains = el.shadowRoot?.querySelectorAll('.header-main');
+        headerMains?.[1]?.dispatchEvent(new Event('click', { bubbles: true }));
+        await el.updateComplete;
+      });
+
+      it('should render range filter for currency column', () => {
+        const popover = el.shadowRoot?.querySelector('table-filter-popover');
+        const rangeContainer = popover?.shadowRoot?.querySelector('.range-container');
+        expect(rangeContainer).to.exist;
+      });
+    });
+
+    describe('when unchecking a value in the popover checkbox filter', () => {
+      let el: WikiTable;
+
+      beforeEach(async () => {
+        el = await createBasicFixture();
+        const headerMain = el.shadowRoot?.querySelector('.header-main');
+        headerMain?.dispatchEvent(new Event('click', { bubbles: true }));
+        await el.updateComplete;
+
+        const popover = el.shadowRoot?.querySelector('table-filter-popover');
+        const checkboxes = popover?.shadowRoot?.querySelectorAll('.checkbox-item input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
+        checkboxes[0]!.checked = false;
+        checkboxes[0]!.dispatchEvent(new Event('change'));
+        await el.updateComplete;
+      });
+
+      it('should filter rows in the table', () => {
+        const rows = el.shadowRoot?.querySelectorAll('tbody tr');
+        expect(rows).to.have.length(2);
+      });
+
+      it('should update the status bar row count', () => {
+        const rowCount = el.shadowRoot?.querySelector('.row-count');
+        expect(rowCount?.textContent).to.contain('2 of 3 rows');
+      });
+
+      it('should show a filter dot on the column header', () => {
+        const filterDots = el.shadowRoot?.querySelectorAll('.filter-dot');
+        expect(filterDots).to.have.length(1);
+      });
+    });
+
+    describe('when setting range min in the popover range filter', () => {
+      let el: WikiTable;
+
+      beforeEach(async () => {
+        el = await createBasicFixture();
+        const headerMains = el.shadowRoot?.querySelectorAll('.header-main');
+        headerMains?.[2]?.dispatchEvent(new Event('click', { bubbles: true }));
+        await el.updateComplete;
+
+        const popover = el.shadowRoot?.querySelector('table-filter-popover');
+        const minInput = popover?.shadowRoot?.querySelector('[aria-label="Minimum value"]') as HTMLInputElement;
+        minInput.value = '10';
+        minInput.dispatchEvent(new Event('input'));
+        await el.updateComplete;
+      });
+
+      it('should filter rows by numeric range', () => {
+        const rows = el.shadowRoot?.querySelectorAll('tbody tr');
+        expect(rows).to.have.length(2);
+      });
+
+      it('should show filtered row count', () => {
+        const rowCount = el.shadowRoot?.querySelector('.row-count');
+        expect(rowCount?.textContent).to.contain('2 of 3 rows');
+      });
+    });
+
+    describe('when clicking ascending sort in popover', () => {
+      let el: WikiTable;
+
+      beforeEach(async () => {
+        el = await createBasicFixture();
+        const headerMain = el.shadowRoot?.querySelector('.header-main');
+        headerMain?.dispatchEvent(new Event('click', { bubbles: true }));
+        await el.updateComplete;
+
+        const popover = el.shadowRoot?.querySelector('table-filter-popover');
+        const ascBtn = popover?.shadowRoot?.querySelector('[aria-label="Sort ascending"]') as HTMLButtonElement;
+        ascBtn.click();
+        await el.updateComplete;
+      });
+
+      it('should sort table rows ascending', () => {
+        const firstCells = el.shadowRoot?.querySelectorAll('tbody tr td:first-child');
+        const values = Array.from(firstCells ?? []).map(td => td.textContent);
+        expect(values).to.deep.equal(['Doohickey', 'Gadget', 'Widget']);
+      });
+
+      it('should show ascending sort indicator on the column', () => {
+        const sortedTh = el.shadowRoot?.querySelector('th.sorted');
+        expect(sortedTh).to.exist;
+      });
+    });
+
+    describe('when filter is applied, popover closed, then reopened', () => {
+      let el: WikiTable;
+
+      beforeEach(async () => {
+        el = await createBasicFixture();
+        const headerMain = el.shadowRoot?.querySelector('.header-main');
+        headerMain?.dispatchEvent(new Event('click', { bubbles: true }));
+        await el.updateComplete;
+
+        const popover = el.shadowRoot?.querySelector('table-filter-popover');
+        const checkboxes = popover?.shadowRoot?.querySelectorAll('.checkbox-item input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
+        checkboxes[0]!.checked = false;
+        checkboxes[0]!.dispatchEvent(new Event('change'));
+        await el.updateComplete;
+
+        el.popoverColumnIndex = null;
+        await el.updateComplete;
+
+        headerMain?.dispatchEvent(new Event('click', { bubbles: true }));
+        await el.updateComplete;
+      });
+
+      it('should show the previously excluded value still unchecked', () => {
+        const popover = el.shadowRoot?.querySelector('table-filter-popover');
+        const checkboxes = popover?.shadowRoot?.querySelectorAll('.checkbox-item input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
+        expect(checkboxes[0]!.checked).to.be.false;
+      });
+
+      it('should still show the filtered rows', () => {
+        const rows = el.shadowRoot?.querySelectorAll('tbody tr');
+        expect(rows).to.have.length(2);
+      });
+    });
+
+    describe('when filtering two columns simultaneously', () => {
+      let el: WikiTable;
+
+      beforeEach(async () => {
+        el = await createBasicFixture();
+        el.tableFilters = new Map([
+          [0, { kind: 'checkbox', excludedValues: new Set(['Widget']) }],
+          [2, { kind: 'range', min: 10, max: null }],
+        ]);
+        await el.updateComplete;
+      });
+
+      it('should apply both filters to the rows', () => {
+        const rows = el.shadowRoot?.querySelectorAll('tbody tr');
+        expect(rows).to.have.length(1);
+      });
+
+      it('should show filter dots on both columns', () => {
+        const filterDots = el.shadowRoot?.querySelectorAll('.filter-dot');
+        expect(filterDots).to.have.length(2);
+      });
+
+      it('should show the correct filtered count', () => {
+        const rowCount = el.shadowRoot?.querySelector('.row-count');
+        expect(rowCount?.textContent).to.contain('1 of 3 rows');
+      });
+    });
+  });
+
+  describe('end-to-end card view picker flows', () => {
+
+    describe('when using filter picker to open popover in card view', () => {
+      let el: WikiTable;
+
+      beforeEach(async () => {
+        el = await createBasicFixture();
+        el.cardViewActive = true;
+        await el.updateComplete;
+
+        const filterPill = el.shadowRoot?.querySelector('[aria-label="Open filter picker"]') as HTMLButtonElement;
+        filterPill.click();
+        await el.updateComplete;
+
+        const items = el.shadowRoot?.querySelectorAll('.column-picker-item') as NodeListOf<HTMLButtonElement>;
+        items[0]?.click();
+        await el.updateComplete;
+      });
+
+      it('should open the popover', () => {
+        const popover = el.shadowRoot?.querySelector('table-filter-popover');
+        expect(popover).to.exist;
+      });
+
+      it('should show checkbox filter in the popover', () => {
+        const popover = el.shadowRoot?.querySelector('table-filter-popover');
+        const checkboxList = popover?.shadowRoot?.querySelector('.checkbox-list');
+        expect(checkboxList).to.exist;
+      });
+    });
+
+    describe('when applying filter via card view picker flow', () => {
+      let el: WikiTable;
+
+      beforeEach(async () => {
+        el = await createBasicFixture();
+        el.cardViewActive = true;
+        await el.updateComplete;
+
+        const filterPill = el.shadowRoot?.querySelector('[aria-label="Open filter picker"]') as HTMLButtonElement;
+        filterPill.click();
+        await el.updateComplete;
+
+        const items = el.shadowRoot?.querySelectorAll('.column-picker-item') as NodeListOf<HTMLButtonElement>;
+        items[0]?.click();
+        await el.updateComplete;
+
+        const popover = el.shadowRoot?.querySelector('table-filter-popover');
+        const checkboxes = popover?.shadowRoot?.querySelectorAll('.checkbox-item input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
+        checkboxes[0]!.checked = false;
+        checkboxes[0]!.dispatchEvent(new Event('change'));
+        await el.updateComplete;
+      });
+
+      it('should filter cards', () => {
+        const cards = el.shadowRoot?.querySelectorAll('.card');
+        expect(cards).to.have.length(2);
+      });
+
+      it('should show filtered row count', () => {
+        const rowCount = el.shadowRoot?.querySelector('.row-count');
+        expect(rowCount?.textContent).to.contain('2 of 3 rows');
+      });
+    });
+
+    describe('when using sort picker in card view', () => {
+      let el: WikiTable;
+
+      beforeEach(async () => {
+        el = await createBasicFixture();
+        el.cardViewActive = true;
+        await el.updateComplete;
+
+        const sortPill = el.shadowRoot?.querySelector('[aria-label="Open sort picker"]') as HTMLButtonElement;
+        sortPill.click();
+        await el.updateComplete;
+
+        const items = el.shadowRoot?.querySelectorAll('.column-picker-item') as NodeListOf<HTMLButtonElement>;
+        items[0]?.click();
+        await el.updateComplete;
+      });
+
+      it('should sort the cards', () => {
+        const cards = el.shadowRoot?.querySelectorAll('.card');
+        const firstCardValue = cards?.[0]?.querySelector('.card-value');
+        expect(firstCardValue?.textContent).to.equal('Doohickey');
+      });
+    });
+
+    describe('when clicking column picker overlay background', () => {
+      let el: WikiTable;
+
+      beforeEach(async () => {
+        el = await createBasicFixture();
+        el.cardViewActive = true;
+        el.columnPickerMode = 'filter';
+        await el.updateComplete;
+
+        const overlay = el.shadowRoot?.querySelector('.column-picker-overlay') as HTMLElement;
+        overlay.dispatchEvent(new Event('click', { bubbles: true }));
+        await el.updateComplete;
+      });
+
+      it('should close the column picker', () => {
+        expect(el.columnPickerMode).to.be.null;
+      });
+    });
+  });
+
+  describe('end-to-end clear all flow', () => {
+
+    describe('when clearing all after sort and filter are active', () => {
+      let el: WikiTable;
+
+      beforeEach(async () => {
+        el = await createBasicFixture();
+        el.sortColumnIndex = 0;
+        el.sortDirection = 'ascending';
+        el.tableFilters = new Map([
+          [0, { kind: 'checkbox', excludedValues: new Set(['Widget']) }],
+        ]);
+        await el.updateComplete;
+
+        const clearAll = el.shadowRoot?.querySelector('[aria-label="Clear all filters"]') as HTMLButtonElement;
+        clearAll.click();
+        await el.updateComplete;
+      });
+
+      it('should clear all filters', () => {
+        expect(el.tableFilters.size).to.equal(0);
+      });
+
+      it('should show all rows', () => {
+        const rows = el.shadowRoot?.querySelectorAll('tbody tr');
+        expect(rows).to.have.length(3);
+      });
+
+      it('should preserve the sort', () => {
+        expect(el.sortDirection).to.equal('ascending');
+      });
     });
   });
 

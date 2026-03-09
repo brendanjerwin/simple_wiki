@@ -270,6 +270,17 @@ export class WikiTable extends LitElement {
       .column-picker-item:hover {
         background: #f0f0f0;
       }
+
+      .column-picker-item-active {
+        background: #e8f0fe;
+        color: #0d6efd;
+        font-weight: 600;
+      }
+
+      .column-picker-arrow {
+        margin-left: 4px;
+        font-weight: 600;
+      }
     `,
   ];
 
@@ -617,13 +628,17 @@ export class WikiTable extends LitElement {
       <div class="column-picker-overlay" @click=${this._handleColumnPickerOverlayClick}>
         <div class="column-picker">
           <div class="column-picker-title">${this.columnPickerMode === 'sort' ? 'Sort by column' : 'Filter by column'}</div>
-          ${this.extractedData!.columns.map(col => html`
-            <button
-              type="button"
-              class="column-picker-item"
-              @click=${() => this._handleColumnPickerSelect(col.columnIndex)}
-            >${col.headerText}</button>
-          `)}
+          ${this.extractedData!.columns.map(col => {
+            const isSorted = this.columnPickerMode === 'sort' && this.sortColumnIndex === col.columnIndex && this.sortDirection !== 'none';
+            const arrow = isSorted ? (this.sortDirection === 'ascending' ? '\u2191' : '\u2193') : '';
+            return html`
+              <button
+                type="button"
+                class="column-picker-item ${isSorted ? 'column-picker-item-active' : ''}"
+                @click=${() => this._handleColumnPickerSelect(col.columnIndex)}
+              >${col.headerText}${arrow ? html`<span class="column-picker-arrow">${arrow}</span>` : nothing}</button>
+            `;
+          })}
         </div>
       </div>
     `;
