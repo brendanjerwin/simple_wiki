@@ -1,0 +1,41 @@
+{
+  "manifest_version": 2,
+  "name": "Online Order Recorder",
+  "version": "1.0.0",
+  "description": "Detects online order pages and records them to a wiki page as a markdown table.",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "online-order-recorder@simple-wiki",
+      "update_url": "http://localhost:8050/extensions/updates.json"
+    }
+  },
+  "permissions": [
+    "activeTab",
+    "storage"
+  ],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "browser_action": {
+    "default_icon": {
+      "48": "icons/icon-48.png",
+      "96": "icons/icon-96.png"
+    },
+    "default_title": "Online Order Recorder",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.amazon.com/gp/your-account/order-details/*",
+        "*://*.amazon.com/your-orders*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "48": "icons/icon-48.png",
+    "96": "icons/icon-96.png"
+  }
+}

@@ -101,6 +101,59 @@ func (s *Site) GinRouter(middleware ...gin.HandlerFunc) *gin.Engine {
 		c.Data(http.StatusOK, "application/octet-stream", data)
 	})
 
+	// Serve browser extension files (XPI packages and update manifests).
+	// Built by extensions/online-order-recorder/generate.go and embedded in
+	// static.StaticContent at build time.
+	router.GET("/extensions/:file", func(c *gin.Context) {
+		file := path.Base(c.Param("file"))
+
+		switch file {
+		case "online-order-recorder.xpi":
+			data, err := static.StaticContent.ReadFile("extensions/" + file)
+			if err != nil {
+				c.Status(http.StatusNotFound)
+				return
+			}
+			c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, file))
+			c.Data(http.StatusOK, "application/x-xpinstall", data)
+
+		case "updates.json":
+			versionBytes, err := static.StaticContent.ReadFile("extensions/version.txt")
+			if err != nil {
+				c.Status(http.StatusNotFound)
+				return
+			}
+			version := strings.TrimSpace(string(versionBytes))
+
+			scheme := "http"
+			if c.Request.TLS != nil {
+				scheme = "https"
+			}
+			if fwdProto := c.GetHeader("X-Forwarded-Proto"); fwdProto != "" {
+				scheme = fwdProto
+			}
+			host := c.Request.Host
+
+			updatesJSON := fmt.Sprintf(`{
+  "addons": {
+    "online-order-recorder@simple-wiki": {
+      "updates": [
+        {
+          "version": %q,
+          "update_link": "%s://%s/extensions/online-order-recorder.xpi"
+        }
+      ]
+    }
+  }
+}`, version, scheme, host)
+
+			c.Data(http.StatusOK, "application/json", []byte(updatesJSON))
+
+		default:
+			c.Status(http.StatusNotFound)
+		}
+	})
+
 	router.GET("/:page", func(c *gin.Context) {
 		page := c.Param("page")
 		c.Redirect(httpStatusFound, "/"+page+"/view?"+c.Request.URL.RawQuery)
