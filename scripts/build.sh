@@ -120,8 +120,20 @@ echo "Output: ${BINARY_NAME}"
 
 # Generate frontend and protos (unless explicitly skipped)
 if [ "$SKIP_GENERATE" != "true" ]; then
-    echo "Generating protos and frontend"
-    go generate ./...
+    # Only run buf generate if proto files have changed (avoids needing protoc plugins in CI)
+    # Use merge-base to detect changes across the entire branch, not just the last commit
+    MERGE_BASE=$(git merge-base HEAD origin/main 2>/dev/null || echo "HEAD~1")
+    if git diff --name-only "$MERGE_BASE" 2>/dev/null | grep -q '^api/proto' || \
+       git status --porcelain api/proto 2>/dev/null | grep -q '.'; then
+        echo "Proto changes detected, running buf generate"
+        buf generate
+    else
+        echo "No proto changes, skipping buf generate"
+    fi
+
+    echo "Generating frontend and wiki-cli"
+    go generate ./static/...
+    go generate ./cmd/wiki-cli/...
 fi
 
 # Build the binary

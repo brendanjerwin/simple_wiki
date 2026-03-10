@@ -23,6 +23,11 @@ import (
 // Higher priority means it runs before default renderers.
 const wikiImageRendererPriority = 100
 
+// wikiTableRendererPriority must be lower than the GFM default table renderer (500)
+// because goldmark registers renderers from highest to lowest priority,
+// and the last registration wins.
+const wikiTableRendererPriority = 400
+
 type GoldmarkRenderer struct{}
 
 // Render renders the input markdown to HTML.
@@ -45,6 +50,7 @@ func (GoldmarkRenderer) Render(input []byte) ([]byte, error) {
 			html.WithUnsafe(),
 			renderer.WithNodeRenderers(
 				util.Prioritized(NewWikiImageRenderer(html.WithUnsafe()), wikiImageRendererPriority),
+				util.Prioritized(NewWikiTableRenderer(html.WithUnsafe()), wikiTableRendererPriority),
 			),
 		),
 	)
@@ -61,6 +67,8 @@ func (GoldmarkRenderer) Render(input []byte) ([]byte, error) {
 	// Allow wiki-image custom element
 	p.AllowElements("wiki-image")
 	p.AllowAttrs("src", "alt", "title").OnElements("wiki-image")
+	// Allow wiki-table custom element (AllowNoAttrs is required for bluemonday to preserve the element)
+	p.AllowNoAttrs().OnElements("wiki-table")
 	// Allow wiki-checklist custom element
 	p.AllowElements("wiki-checklist")
 	p.AllowAttrs("list-name", "page").OnElements("wiki-checklist")

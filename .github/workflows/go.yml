@@ -122,9 +122,18 @@ jobs:
       - name: Combine coverage
         run: |
           echo "mode: set" > coverage.txt
-          find coverage-artifacts -name "*.cover" -exec cat {} + | grep -v "mode: set" >> coverage.txt
+          COVER_FILES=$(find coverage-artifacts -name "*.cover" -type f)
+          if [ -z "$COVER_FILES" ]; then
+            echo "WARNING: No .cover files found in coverage-artifacts"
+            find coverage-artifacts -type f | head -20
+          else
+            echo "Found coverage files:"
+            echo "$COVER_FILES"
+            cat $COVER_FILES | grep -v "^mode:" >> coverage.txt
+          fi
+          echo "Coverage file line count: $(wc -l < coverage.txt)"
       - name: Upload combined coverage to Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           file: coverage.txt

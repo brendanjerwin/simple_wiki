@@ -642,6 +642,71 @@ export const responsiveCSS = css`
 `;
 
 /* ==========================================================================
+   Pill Badge Styles
+   ========================================================================== */
+
+export const pillCSS = css`
+  .tag-pill {
+    font-size: 12px;
+    padding: 3px 10px;
+    background: #e9ecef;
+    border: 1px solid #dee2e6;
+    border-radius: 16px;
+    color: #555;
+    cursor: pointer;
+    font-family: inherit;
+    transition: all 0.15s ease;
+  }
+
+  .tag-pill:hover {
+    background: #d0d0d0;
+    border-color: #aaa;
+  }
+
+  .tag-pill-active {
+    background: #0d6efd;
+    color: white;
+    border-color: #0d6efd;
+  }
+
+  .tag-pill-active:hover {
+    background: #0b5ed7;
+    border-color: #0b5ed7;
+  }
+
+  .tag-filter-clear {
+    font-size: 12px;
+    padding: 3px 7px;
+    background: none;
+    border: 1px solid #dee2e6;
+    border-radius: 16px;
+    color: #dc3545;
+    cursor: pointer;
+    font-family: inherit;
+    line-height: 1;
+    transition: all 0.15s ease;
+  }
+
+  .tag-filter-clear:hover {
+    background: #dc3545;
+    color: white;
+    border-color: #dc3545;
+  }
+
+  .item-tag-badge {
+    font-size: 11px;
+    padding: 2px 6px;
+    background: #e9ecef;
+    border-radius: 12px;
+    color: #555;
+    white-space: nowrap;
+    border: none;
+    font-family: inherit;
+    display: inline-block;
+  }
+`;
+
+/* ==========================================================================
    Dialog Styles Builder
    ========================================================================== */
 

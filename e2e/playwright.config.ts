@@ -1,5 +1,4 @@
 import { defineConfig, devices } from '@playwright/test';
-import path from 'path';
 
 /**
  * Get Chromium executable path, preferring environment variable like web-test-runner
@@ -35,7 +34,7 @@ export default defineConfig({
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
-    baseURL: 'http://localhost:8051',
+    baseURL: 'http://localhost:8090',
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
@@ -50,10 +49,12 @@ export default defineConfig({
     headless: process.env.PLAYWRIGHT_HEADED !== 'true',
   },
 
-  /* Configure web server - this replaces the complex shell script */
+  /* Configure web server - this replaces the complex shell script.
+   * Port 8090 is chosen to avoid conflicts with the default dev server (8050)
+   * and its auto-assigned TLS port (8051) when Tailscale is detected. */
   webServer: {
-    command: 'cd .. && ./simple_wiki-linux-amd64 --port 8051 --data e2e/test-data --debug',
-    url: 'http://localhost:8051',
+    command: 'cd .. && ./simple_wiki-linux-amd64 --port 8090 --data e2e/test-data --debug',
+    url: 'http://localhost:8090',
     reuseExistingServer: !process.env.CI,
     stdout: 'pipe',
     stderr: 'pipe',
