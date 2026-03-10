@@ -131,9 +131,10 @@ if [ "$SKIP_GENERATE" != "true" ]; then
         echo "No proto changes, skipping buf generate"
     fi
 
-    echo "Generating frontend and wiki-cli"
+    echo "Generating frontend, wiki-cli, and extensions"
     go generate ./static/...
     go generate ./cmd/wiki-cli/...
+    go generate ./extensions/...
 fi
 
 # Build the binary
