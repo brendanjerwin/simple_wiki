@@ -131,10 +131,11 @@ if [ "$SKIP_GENERATE" != "true" ]; then
         echo "No proto changes, skipping buf generate"
     fi
 
-    echo "Generating frontend, wiki-cli, and extensions"
+    echo "Generating extensions, frontend, and wiki-cli"
+    # Extensions must be built before static/ so the XPI is present when go:embed runs
+    go generate ./extensions/...
     go generate ./static/...
     go generate ./cmd/wiki-cli/...
-    go generate ./extensions/...
 fi
 
 # Build the binary
