@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Your Orders - Amazon.com Test Fixture</title>
+  <style>
+    /* Minimal structural styles to make the fixture readable when opened directly */
+    body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #e3e6e6; }
+    .a-box { border: 1px solid #d5d9d9; border-radius: 8px; background: #fff; }
+    .a-box-group { margin-bottom: 16px; }
+    .a-spacing-base { margin-bottom: 16px; }
+    .a-color-offset-background { background: #f0f2f2; }
+    .order-header { padding: 16px; border-bottom: 1px solid #d5d9d9; border-radius: 8px 8px 0 0; }
+    .order-header__header-list { list-style: none; display: flex; gap: 32px; padding: 0; margin: 0; }
+    .order-header__header-list li { display: flex; flex-direction: column; font-size: 12px; }
+    .a-color-secondary { color: #565959; }
+    .a-size-mini { font-size: 11px; }
+    .a-size-base { font-size: 13px; }
+    .delivery-box { padding: 16px; }
+    .delivery-box__primary-text { font-size: 18px; font-weight: 700; }
+    .item-box { padding: 8px 0; }
+    .a-fixed-left-grid { display: flex; gap: 16px; align-items: flex-start; }
+    .a-fixed-left-grid-inner { display: flex; gap: 16px; }
+    .a-fixed-left-grid-col { flex-shrink: 0; }
+    .a-col-right { flex: 1; }
+    .a-link-normal { color: #0066c0; text-decoration: none; }
+    .a-price { font-size: 13px; }
+    .a-offscreen { position: absolute; left: -10000px; width: 1px; height: 1px; overflow: hidden; }
+    .a-text-bold { font-weight: 700; }
+    img.product-image { width: 100px; height: 100px; object-fit: contain; background: #f7f7f7; }
+  </style>
+</head>
+<body>
+<div id="ordersContainer">
+  <div id="your-orders-content-container">
+
+    <!-- ====== ORDER 1: Multi-item, arriving ====== -->
+    <div class="order-card js-order-card">
+      <div class="a-box-group a-spacing-base">
+
+        <!-- Order Header -->
+        <div class="a-box a-color-offset-background order-header">
+          <div class="a-box-inner">
+            <ul class="order-header__header-list">
+              <li>
+                <span class="a-size-mini a-color-secondary">Order placed</span>
+                <span class="a-size-base a-text-bold">March 5, 2026</span>
+              </li>
+              <li>
+                <span class="a-size-mini a-color-secondary">Total</span>
+                <span class="a-size-base a-text-bold">$45.52</span>
+              </li>
+              <li class="yohtmlc-order-level-connections">
+                <span class="a-size-mini a-color-secondary">Ship to</span>
+                <span class="a-size-base">Jane Doe</span>
+              </li>
+              <li>
+                <div class="yohtmlc-order-id">
+                  <span class="a-size-mini a-color-secondary">Order #</span>
+                  <span class="a-color-secondary" dir="ltr">111-2345678-9012345</span>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Shipment / Delivery Status -->
+        <div class="a-box delivery-box">
+          <div class="a-box-inner">
+            <div class="yohtmlc-shipment-status-primaryText">
+              <h3>
+                <span class="delivery-box__primary-text">Arriving March 12 - March 16</span>
+              </h3>
+            </div>
+
+            <!-- Item 1 -->
+            <ul class="a-unordered-list a-nostyle a-vertical">
+              <li>
+                <div class="a-fixed-left-grid item-box">
+                  <div class="a-fixed-left-grid-inner">
+                    <div class="a-fixed-left-grid-col a-col-left">
+                      <img class="product-image" alt="Acme Wireless Bluetooth Headphones" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
+                    </div>
+                    <div class="a-fixed-left-grid-col a-col-right">
+                      <div class="yohtmlc-product-title">
+                        <a class="a-link-normal" href="/dp/B0EXAMPLE01">Acme Wireless Bluetooth Headphones</a>
+                      </div>
+                      <span class="a-price aok-align-center">
+                        <span class="a-offscreen">$29.99</span>
+                        <span aria-hidden="true">
+                          <span class="a-price-whole">29</span>
+                          <span class="a-price-decimal">.</span>
+                          <span class="a-price-fraction">99</span>
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </li>
+
+              <!-- Item 2 -->
+              <li>
+                <div class="a-fixed-left-grid item-box">
+                  <div class="a-fixed-left-grid-inner">
+                    <div class="a-fixed-left-grid-col a-col-left">
+                      <img class="product-image" alt="USB-C Charging Cable 6ft" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
+                    </div>
+                    <div class="a-fixed-left-grid-col a-col-right">
+                      <div class="yohtmlc-product-title">
+                        <a class="a-link-normal" href="/dp/B0EXAMPLE02">USB-C Charging Cable 6ft</a>
+                      </div>
+                      <span class="a-price aok-align-center">
+                        <span class="a-offscreen">$15.53</span>
+                        <span aria-hidden="true">
+                          <span class="a-price-whole">15</span>
+                          <span class="a-price-decimal">.</span>
+                          <span class="a-price-fraction">53</span>
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </li>
+            </ul>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ====== ORDER 2: Single item, delivered ====== -->
+    <div class="order-card js-order-card">
+      <div class="a-box-group a-spacing-base">
+
+        <!-- Order Header -->
+        <div class="a-box a-color-offset-background order-header">
+          <div class="a-box-inner">
+            <ul class="order-header__header-list">
+              <li>
+                <span class="a-size-mini a-color-secondary">Order placed</span>
+                <span class="a-size-base a-text-bold">March 1, 2026</span>
+              </li>
+              <li>
+                <span class="a-size-mini a-color-secondary">Total</span>
+                <span class="a-size-base a-text-bold">$16.99</span>
+              </li>
+              <li class="yohtmlc-order-level-connections">
+                <span class="a-size-mini a-color-secondary">Ship to</span>
+                <span class="a-size-base">Jane Doe</span>
+              </li>
+              <li>
+                <div class="yohtmlc-order-id">
+                  <span class="a-size-mini a-color-secondary">Order #</span>
+                  <span class="a-color-secondary" dir="ltr">222-3456789-0123456</span>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Shipment / Delivery Status -->
+        <div class="a-box delivery-box">
+          <div class="a-box-inner">
+            <div class="yohtmlc-shipment-status-primaryText">
+              <h3>
+                <span class="delivery-box__primary-text">Delivered March 4</span>
+              </h3>
+            </div>
+
+            <!-- Item 1 -->
+            <ul class="a-unordered-list a-nostyle a-vertical">
+              <li>
+                <div class="a-fixed-left-grid item-box">
+                  <div class="a-fixed-left-grid-inner">
+                    <div class="a-fixed-left-grid-col a-col-left">
+                      <img class="product-image" alt="Stainless Steel Water Bottle 32oz" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
+                    </div>
+                    <div class="a-fixed-left-grid-col a-col-right">
+                      <div class="yohtmlc-product-title">
+                        <a class="a-link-normal" href="/dp/B0EXAMPLE03">Stainless Steel Water Bottle 32oz</a>
+                      </div>
+                      <span class="a-price aok-align-center">
+                        <span class="a-offscreen">$16.99</span>
+                        <span aria-hidden="true">
+                          <span class="a-price-whole">16</span>
+                          <span class="a-price-decimal">.</span>
+                          <span class="a-price-fraction">99</span>
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </li>
+            </ul>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ====== ORDER 3: Three items, cancelled ====== -->
+    <div class="order-card js-order-card">
+      <div class="a-box-group a-spacing-base">
+
+        <!-- Order Header -->
+        <div class="a-box a-color-offset-background order-header">
+          <div class="a-box-inner">
+            <ul class="order-header__header-list">
+              <li>
+                <span class="a-size-mini a-color-secondary">Order placed</span>
+                <span class="a-size-base a-text-bold">February 28, 2026</span>
+              </li>
+              <li>
+                <span class="a-size-mini a-color-secondary">Total</span>
+                <span class="a-size-base a-text-bold">$89.97</span>
+              </li>
+              <li class="yohtmlc-order-level-connections">
+                <span class="a-size-mini a-color-secondary">Ship to</span>
+                <span class="a-size-base">Jane Doe</span>
+              </li>
+              <li>
+                <div class="yohtmlc-order-id">
+                  <span class="a-size-mini a-color-secondary">Order #</span>
+                  <span class="a-color-secondary" dir="ltr">333-4567890-1234567</span>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- Shipment / Delivery Status -->
+        <div class="a-box delivery-box">
+          <div class="a-box-inner">
+            <div class="yohtmlc-shipment-status-primaryText">
+              <h3>
+                <span class="delivery-box__primary-text">Cancelled</span>
+              </h3>
+            </div>
+
+            <!-- Item 1 -->
+            <ul class="a-unordered-list a-nostyle a-vertical">
+              <li>
+                <div class="a-fixed-left-grid item-box">
+                  <div class="a-fixed-left-grid-inner">
+                    <div class="a-fixed-left-grid-col a-col-left">
+                      <img class="product-image" alt="Ergonomic Desk Lamp LED" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
+                    </div>
+                    <div class="a-fixed-left-grid-col a-col-right">
+                      <div class="yohtmlc-product-title">
+                        <a class="a-link-normal" href="/dp/B0EXAMPLE04">Ergonomic Desk Lamp LED</a>
+                      </div>
+                      <span class="a-price aok-align-center">
+                        <span class="a-offscreen">$34.99</span>
+                        <span aria-hidden="true">
+                          <span class="a-price-whole">34</span>
+                          <span class="a-price-decimal">.</span>
+                          <span class="a-price-fraction">99</span>
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </li>
+
+              <!-- Item 2 -->
+              <li>
+                <div class="a-fixed-left-grid item-box">
+                  <div class="a-fixed-left-grid-inner">
+                    <div class="a-fixed-left-grid-col a-col-left">
+                      <img class="product-image" alt="Mechanical Keyboard Switches" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
+                    </div>
+                    <div class="a-fixed-left-grid-col a-col-right">
+                      <div class="yohtmlc-product-title">
+                        <a class="a-link-normal" href="/dp/B0EXAMPLE05">Mechanical Keyboard Switches</a>
+                      </div>
+                      <span class="a-price aok-align-center">
+                        <span class="a-offscreen">$24.99</span>
+                        <span aria-hidden="true">
+                          <span class="a-price-whole">24</span>
+                          <span class="a-price-decimal">.</span>
+                          <span class="a-price-fraction">99</span>
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </li>
+
+              <!-- Item 3 -->
+              <li>
+                <div class="a-fixed-left-grid item-box">
+                  <div class="a-fixed-left-grid-inner">
+                    <div class="a-fixed-left-grid-col a-col-left">
+                      <img class="product-image" alt="Desk Organizer Set" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7">
+                    </div>
+                    <div class="a-fixed-left-grid-col a-col-right">
+                      <div class="yohtmlc-product-title">
+                        <a class="a-link-normal" href="/dp/B0EXAMPLE06">Desk Organizer Set</a>
+                      </div>
+                      <span class="a-price aok-align-center">
+                        <span class="a-offscreen">$29.99</span>
+                        <span aria-hidden="true">
+                          <span class="a-price-whole">29</span>
+                          <span class="a-price-decimal">.</span>
+                          <span class="a-price-fraction">99</span>
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </li>
+            </ul>
+
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>

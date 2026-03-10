@@ -808,6 +808,54 @@
           "store_path": "/nix/store/1phnqzzsjljyfjdyg44msnypxv41gs5a-rootlesskit-2.3.5"
         }
       }
+    },
+    "zip@latest": {
+      "last_modified": "2026-03-02T11:03:52Z",
+      "resolved": "github:NixOS/nixpkgs/dc7513872406b53d2ff417a003895d6daffdff2f#zip",
+      "source": "devbox-search",
+      "version": "3.0",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/4rfg0pjmj25xx8k7mxk3m5gafgqb7d3k-zip-3.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/4rfg0pjmj25xx8k7mxk3m5gafgqb7d3k-zip-3.0"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/jj76yph34yjq8qrd1dl6ch5z9jj6hbm5-zip-3.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/jj76yph34yjq8qrd1dl6ch5z9jj6hbm5-zip-3.0"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/7mdqylmagsjvj7rh44zm0j0whdb0h28b-zip-3.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/7mdqylmagsjvj7rh44zm0j0whdb0h28b-zip-3.0"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/1z15yyjr7jhz2qx16x14zlb1bansxibl-zip-3.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/1z15yyjr7jhz2qx16x14zlb1bansxibl-zip-3.0"
+        }
+      }
     }
   }
 }

@@ -17,7 +17,8 @@
     "playwright-driver@latest",
     "playwright-test@latest",
     "gh@latest",
-    "golangci-lint@latest"
+    "golangci-lint@latest",
+    "zip@latest"
   ],
   "shell": {
     "init_hook": [
