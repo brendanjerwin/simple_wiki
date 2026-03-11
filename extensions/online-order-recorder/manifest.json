@@ -1,11 +1,12 @@
 {
   "manifest_version": 2,
   "name": "Online Order Recorder",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Detects online order pages and records them to a wiki page as a markdown table.",
   "browser_specific_settings": {
     "gecko": {
       "id": "online-order-recorder@simple-wiki",
+      "strict_min_version": "109.0",
       "update_url": "http://localhost:8050/extensions/updates.json"
     }
   },

@@ -131,9 +131,40 @@ if [ "$SKIP_GENERATE" != "true" ]; then
         echo "No proto changes, skipping buf generate"
     fi
 
+    # Derive extension version from git tag if available
+    # Firefox requires 1-4 dot-separated integers, so strip 'v' prefix and pre-release suffix
+    if [ -n "$TAG" ]; then
+        EXT_VER="${TAG#v}"
+        EXT_VER="${EXT_VER%%-*}"
+        if [[ "$EXT_VER" =~ ^[0-9]+(\.[0-9]+){0,3}$ ]]; then
+            export EXTENSION_VERSION="$EXT_VER"
+            echo "Extension version from git tag: $EXTENSION_VERSION"
+        else
+            echo "Git tag '$TAG' does not produce a valid extension version, using manifest default"
+        fi
+    fi
+
     echo "Generating extensions, frontend, and wiki-cli"
     # Extensions must be built before static/ so the XPI is present when go:embed runs
     go generate ./extensions/...
+
+    # Sign extension if AMO credentials are available (CI only)
+    if [[ -n "${AMO_API_KEY:-}" && -n "${AMO_API_SECRET:-}" ]]; then
+        echo "Signing extension with AMO..."
+        EXTENSION_DIR="extensions/online-order-recorder"
+        web-ext sign \
+            --source-dir "$EXTENSION_DIR/dist" \
+            --artifacts-dir "$EXTENSION_DIR/signed" \
+            --api-key "$AMO_API_KEY" \
+            --api-secret "$AMO_API_SECRET" \
+            --channel unlisted
+        # Replace unsigned XPI with signed one
+        cp "$EXTENSION_DIR"/signed/*.xpi static/extensions/online-order-recorder.xpi
+        echo "Extension signed successfully"
+    else
+        echo "AMO credentials not set, skipping extension signing"
+    fi
+
     go generate ./static/...
     go generate ./cmd/wiki-cli/...
 fi
