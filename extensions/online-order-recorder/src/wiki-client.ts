@@ -1,6 +1,6 @@
 interface ConnectResponse {
-  content_markdown?: string;
-  version_hash?: string;
+  contentMarkdown?: string;
+  versionHash?: string;
   [key: string]: unknown;
 }
 
@@ -37,11 +37,11 @@ export async function readPage(
     wikiUrl,
     'api.v1.PageManagementService',
     'ReadPage',
-    { page: pageName }
+    { pageName }
   );
   return {
-    contentMarkdown: resp['content_markdown'] as string ?? '',
-    versionHash: resp['version_hash'] as string ?? '',
+    contentMarkdown: resp['contentMarkdown'] as string ?? '',
+    versionHash: resp['versionHash'] as string ?? '',
   };
 }
 
@@ -56,9 +56,9 @@ export async function updatePageContent(
     'api.v1.PageManagementService',
     'UpdatePageContent',
     {
-      page: pageName,
-      new_content_markdown: newContentMarkdown,
-      expected_version_hash: expectedVersionHash,
+      pageName,
+      newContentMarkdown,
+      expectedVersionHash,
     }
   );
 }
@@ -73,8 +73,8 @@ export async function createPage(
     'api.v1.PageManagementService',
     'CreatePage',
     {
-      page: pageName,
-      content_markdown: contentMarkdown,
+      pageName,
+      contentMarkdown,
     }
   );
 }
