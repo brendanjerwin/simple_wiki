@@ -32,3 +32,20 @@ h1 {
 #status.success {
   color: #2e7d32;
 }
+
+.settings-toggle {
+  margin-top: 12px;
+  border-top: 1px solid #e0e0e0;
+  padding-top: 8px;
+}
+
+.settings-toggle summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: #888;
+  user-select: none;
+}
+
+.settings-toggle summary:hover {
+  color: #555;
+}

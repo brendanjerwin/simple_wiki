@@ -46,6 +46,24 @@ function parsePriceCents(priceText: string): number {
   return dollars * 100 + cents;
 }
 
+// Finds a header value by its label text (e.g. "Order placed", "Total").
+// Amazon nests these in .order-header__header-list-item elements with a
+// label span (.a-text-caps) and a value span (.aok-break-word or .a-text-bold).
+function findHeaderValue(card: Element, labelText: string): string {
+  const headerItems = card.querySelectorAll('.order-header__header-list-item, .order-header__header-list > li');
+
+  for (const item of headerItems) {
+    const label = item.querySelector('.a-color-secondary')?.textContent?.trim().toLowerCase() ?? '';
+    if (label.includes(labelText.toLowerCase())) {
+      // Try new Amazon DOM first (.aok-break-word), then old (.a-text-bold)
+      const valueEl = item.querySelector('.aok-break-word') ?? item.querySelector('.a-text-bold');
+      return valueEl?.textContent?.trim() ?? '';
+    }
+  }
+
+  return '';
+}
+
 function parseOrderCard(card: Element): Order | null {
   const orderIdEl = card.querySelector('.yohtmlc-order-id span[dir="ltr"]');
   if (!orderIdEl) {
@@ -59,25 +77,10 @@ function parseOrderCard(card: Element): Order | null {
   }
   const orderNumber = orderNumberMatch[0];
 
-  const headerItems = card.querySelectorAll('.order-header__header-list > li');
-  let orderDate = '';
-  let totalCents = 0;
+  const orderDate = parseAmazonDate(findHeaderValue(card, 'order placed'));
+  const totalCents = parsePriceCents(findHeaderValue(card, 'total'));
 
-  for (const li of headerItems) {
-    const label = li.querySelector('.a-color-secondary')?.textContent?.trim().toLowerCase() ?? '';
-
-    if (label === 'order placed') {
-      const dateEl = li.querySelector('.a-text-bold');
-      if (dateEl) {
-        orderDate = parseAmazonDate(dateEl.textContent?.trim() ?? '');
-      }
-    } else if (label === 'total') {
-      const totalEl = li.querySelector('.a-text-bold');
-      if (totalEl) {
-        totalCents = parsePriceCents(totalEl.textContent?.trim() ?? '');
-      }
-    }
-  }
+  console.debug('[Simple Wiki Companion] Amazon: order', orderNumber, 'date:', orderDate, 'total:', totalCents);
 
   const statusEl = card.querySelector('.delivery-box__primary-text');
   const deliveryStatus = statusEl?.textContent?.trim() ?? '';
@@ -86,9 +89,11 @@ function parseOrderCard(card: Element): Order | null {
   const items: OrderItem[] = [];
 
   for (const itemBox of itemBoxes) {
-    const titleEl = itemBox.querySelector('.yohtmlc-product-title a');
+    const titleEl = itemBox.querySelector('.yohtmlc-product-title a') ?? itemBox.querySelector('.yohtmlc-product-title');
     const name = titleEl?.textContent?.trim() ?? '';
 
+    // Individual item prices aren't shown on the order list page,
+    // so we use 0 for per-item price. The order total is captured above.
     const priceEl = itemBox.querySelector('.a-price .a-offscreen');
     const priceCents = parsePriceCents(priceEl?.textContent?.trim() ?? '');
 
@@ -119,7 +124,7 @@ export function parseOrders(doc: Document): Order[] {
   for (const card of orderCards) {
     const order = parseOrderCard(card);
     if (order) {
-      console.debug('[Simple Wiki Companion] Amazon: parsed order', order.orderNumber, '-', order.items.length, 'items');
+      console.debug('[Simple Wiki Companion] Amazon: parsed order', order.orderNumber, '-', order.items.length, 'items, total:', order.totalCents);
       orders.push(order);
     } else {
       console.debug('[Simple Wiki Companion] Amazon: failed to parse an order card');

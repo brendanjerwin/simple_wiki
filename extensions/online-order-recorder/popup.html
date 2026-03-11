@@ -7,9 +7,12 @@
 <body>
   <div id="app">
     <h1>Simple Wiki Companion</h1>
-    <settings-panel></settings-panel>
     <order-list></order-list>
     <div id="status"></div>
+    <details class="settings-toggle">
+      <summary>Settings</summary>
+      <settings-panel></settings-panel>
+    </details>
   </div>
   <script src="popup.js" type="module"></script>
 </body>
