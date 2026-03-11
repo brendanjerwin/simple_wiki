@@ -191,23 +191,29 @@ if [ "$SKIP_GENERATE" != "true" ]; then
                     break
                 fi
                 if [ "$SIGN_ATTEMPTS" -ge "$SIGN_MAX" ]; then
-                    echo "AMO signing failed after $SIGN_MAX attempts"
-                    exit 1
+                    echo "⚠️  AMO signing failed after $SIGN_MAX attempts, deploying unsigned"
+                    rm -rf "$SIGN_DIR"
+                    break
                 fi
                 echo "AMO signing attempt $SIGN_ATTEMPTS failed, retrying in 60s..."
                 sleep 60
             done
             rm -rf "$SIGN_DIR"
-            # Replace unsigned XPI with signed one
-            cp "$EXTENSION_DIR"/signed/*.xpi static/extensions/simple-wiki-companion.xpi
-            echo "Extension signed successfully"
+            # Replace unsigned XPI with signed one if signing succeeded
+            SIGNED_FILES=("$EXTENSION_DIR"/signed/*.xpi)
+            if [[ -f "${SIGNED_FILES[0]}" ]]; then
+                cp "$EXTENSION_DIR"/signed/*.xpi static/extensions/simple-wiki-companion.xpi
+                echo "Extension signed successfully"
 
-            # Update cache for next build
-            if [[ -n "${SIGNED_XPI_CACHE_DIR:-}" ]]; then
-                mkdir -p "$SIGNED_XPI_CACHE_DIR"
-                cp static/extensions/simple-wiki-companion.xpi "$CACHED_XPI"
-                echo "$EXT_HASH" > "$CACHED_HASH"
-                echo "Cached signed XPI (hash $EXT_HASH)"
+                # Update cache for next build
+                if [[ -n "${SIGNED_XPI_CACHE_DIR:-}" ]]; then
+                    mkdir -p "$SIGNED_XPI_CACHE_DIR"
+                    cp static/extensions/simple-wiki-companion.xpi "$CACHED_XPI"
+                    echo "$EXT_HASH" > "$CACHED_HASH"
+                    echo "Cached signed XPI (hash $EXT_HASH)"
+                fi
+            else
+                echo "Deploying with unsigned extension"
             fi
         fi
     else
