@@ -152,12 +152,26 @@ if [ "$SKIP_GENERATE" != "true" ]; then
     if [[ -n "${AMO_API_KEY:-}" && -n "${AMO_API_SECRET:-}" ]]; then
         echo "Signing extension with AMO..."
         EXTENSION_DIR="extensions/online-order-recorder"
+
+        # AMO rejects http:// update_url, so strip it before signing.
+        # The unsigned XPI (used locally) keeps it for auto-update checks.
+        SIGN_DIR="$EXTENSION_DIR/sign-staging"
+        cp -r "$EXTENSION_DIR/dist" "$SIGN_DIR"
+        node -e "
+            const fs = require('fs');
+            const p = '$SIGN_DIR/manifest.json';
+            const m = JSON.parse(fs.readFileSync(p, 'utf8'));
+            delete m.browser_specific_settings.gecko.update_url;
+            fs.writeFileSync(p, JSON.stringify(m, null, 2) + '\n');
+        "
+
         web-ext sign \
-            --source-dir "$EXTENSION_DIR/dist" \
+            --source-dir "$SIGN_DIR" \
             --artifacts-dir "$EXTENSION_DIR/signed" \
             --api-key "$AMO_API_KEY" \
             --api-secret "$AMO_API_SECRET" \
             --channel unlisted
+        rm -rf "$SIGN_DIR"
         # Replace unsigned XPI with signed one
         cp "$EXTENSION_DIR"/signed/*.xpi static/extensions/online-order-recorder.xpi
         echo "Extension signed successfully"
