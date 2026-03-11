@@ -32,6 +32,9 @@ jobs:
       - uses: jetify-com/devbox-install-action@v0.14.0
 
       - name: Build Go Binary
+        env:
+          AMO_API_KEY: ${{ secrets.AMO_API_KEY }}
+          AMO_API_SECRET: ${{ secrets.AMO_API_SECRET }}
         run: |
           devbox run build ${{ matrix.goos }} ${{ matrix.goarch }}
 
