@@ -1,11 +1,11 @@
 {
   "manifest_version": 2,
-  "name": "Online Order Recorder",
+  "name": "Simple Wiki Companion",
   "version": "1.0.1",
-  "description": "Detects online order pages and records them to a wiki page as a markdown table.",
+  "description": "A companion extension for Simple Wiki — detects online order pages and records them, auto-configures wiki URL, and more.",
   "browser_specific_settings": {
     "gecko": {
-      "id": "online-order-recorder@simple-wiki",
+      "id": "simple-wiki-companion@simple-wiki",
       "strict_min_version": "109.0",
       "update_url": "http://localhost:8050/extensions/updates.json",
       "data_collection_permissions": {
@@ -26,16 +26,22 @@
       "48": "icons/icon-48.png",
       "96": "icons/icon-96.png"
     },
-    "default_title": "Online Order Recorder",
+    "default_title": "Simple Wiki Companion",
     "default_popup": "popup.html"
   },
   "content_scripts": [
     {
       "matches": [
         "*://*.amazon.com/gp/your-account/order-details/*",
-        "*://*.amazon.com/your-orders*"
+        "*://*.amazon.com/your-orders*",
+        "*://*.amazon.com/gp/css/order-history*"
       ],
       "js": ["content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content-wiki-detect.js"],
       "run_at": "document_idle"
     }
   ],

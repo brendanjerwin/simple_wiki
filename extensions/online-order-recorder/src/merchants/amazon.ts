@@ -113,12 +113,16 @@ function parseOrderCard(card: Element): Order | null {
 
 export function parseOrders(doc: Document): Order[] {
   const orderCards = doc.querySelectorAll('.order-card.js-order-card');
+  console.debug('[Simple Wiki Companion] Amazon: found', orderCards.length, 'order cards');
   const orders: Order[] = [];
 
   for (const card of orderCards) {
     const order = parseOrderCard(card);
     if (order) {
+      console.debug('[Simple Wiki Companion] Amazon: parsed order', order.orderNumber, '-', order.items.length, 'items');
       orders.push(order);
+    } else {
+      console.debug('[Simple Wiki Companion] Amazon: failed to parse an order card');
     }
   }
 

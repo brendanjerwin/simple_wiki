@@ -1,5 +1,5 @@
-import { LitElement, html, css } from 'lit';
-import { customElement, property, state } from 'lit/decorators.js';
+import { LitElement, html, css, nothing } from 'lit';
+import { customElement, state } from 'lit/decorators.js';
 
 @customElement('settings-panel')
 export class SettingsPanel extends LitElement {
@@ -42,44 +42,101 @@ export class SettingsPanel extends LitElement {
       background: #f5f5f5;
     }
 
-    .saved-msg {
+    .status-msg {
       font-size: 11px;
+      margin-top: 4px;
+    }
+
+    .status-msg.saved {
       color: #2e7d32;
+    }
+
+    .status-msg.auto-detected {
+      color: #1565c0;
+    }
+
+    .reset-link {
+      font-size: 11px;
+      color: #1565c0;
+      cursor: pointer;
+      text-decoration: underline;
+      background: none;
+      border: none;
+      padding: 0;
       margin-top: 4px;
     }
   `;
 
-  @property()
+  @state()
   declare wikiUrl: string;
 
   @state()
   declare showSaved: boolean;
 
+  @state()
+  declare isManuallySet: boolean;
+
+  @state()
+  declare showAutoDetected: boolean;
+
+  private _storageListener = this._handleStorageChanged.bind(this);
+
   constructor() {
     super();
     this.wikiUrl = 'http://localhost:8050';
     this.showSaved = false;
+    this.isManuallySet = false;
+    this.showAutoDetected = false;
   }
 
   override connectedCallback(): void {
     super.connectedCallback();
-    this.loadUrl();
+    this._loadSettings();
+    browser.storage.onChanged.addListener(this._storageListener);
   }
 
-  private async loadUrl(): Promise<void> {
-    const stored = await browser.storage.local.get('wikiUrl');
-    if (stored['wikiUrl']) {
-      this.wikiUrl = stored['wikiUrl'] as string;
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    browser.storage.onChanged.removeListener(this._storageListener);
+  }
+
+  private _handleStorageChanged(changes: Record<string, browser.storage.StorageChange>, areaName: string): void {
+    if (areaName !== 'local') return;
+
+    if (changes['wikiUrl']?.newValue !== undefined) {
+      this.wikiUrl = changes['wikiUrl'].newValue as string;
+      if (!this.isManuallySet) {
+        this.showAutoDetected = true;
+        setTimeout(() => { this.showAutoDetected = false; }, 3000);
+      }
+    }
+
+    if (changes['wikiUrlManuallySet']?.newValue !== undefined) {
+      this.isManuallySet = changes['wikiUrlManuallySet'].newValue as boolean;
     }
   }
 
-  private async handleSave(): Promise<void> {
-    await browser.storage.local.set({ wikiUrl: this.wikiUrl });
+  private async _loadSettings(): Promise<void> {
+    const stored = await browser.storage.local.get(['wikiUrl', 'wikiUrlManuallySet']);
+    if (stored['wikiUrl']) {
+      this.wikiUrl = stored['wikiUrl'] as string;
+    }
+    this.isManuallySet = stored['wikiUrlManuallySet'] === true;
+  }
+
+  private async _handleSave(): Promise<void> {
+    await browser.storage.local.set({ wikiUrl: this.wikiUrl, wikiUrlManuallySet: true });
+    this.isManuallySet = true;
     this.showSaved = true;
     setTimeout(() => { this.showSaved = false; }, 2000);
   }
 
-  private handleInput(e: Event): void {
+  private async _handleResetToAutoDetect(): Promise<void> {
+    await browser.storage.local.remove('wikiUrlManuallySet');
+    this.isManuallySet = false;
+  }
+
+  private _handleInput(e: Event): void {
     this.wikiUrl = (e.target as HTMLInputElement).value;
   }
 
@@ -90,12 +147,14 @@ export class SettingsPanel extends LitElement {
         <input
           type="url"
           .value=${this.wikiUrl}
-          @input=${this.handleInput}
+          @input=${this._handleInput}
           placeholder="http://localhost:8050"
         />
-        <button @click=${this.handleSave}>Save</button>
+        <button @click=${this._handleSave}>Save</button>
       </div>
-      ${this.showSaved ? html`<div class="saved-msg">Saved</div>` : ''}
+      ${this.showSaved ? html`<div class="status-msg saved">Saved (manual)</div>` : nothing}
+      ${this.showAutoDetected ? html`<div class="status-msg auto-detected">Auto-detected from wiki</div>` : nothing}
+      ${this.isManuallySet ? html`<button class="reset-link" @click=${this._handleResetToAutoDetect}>Reset to auto-detect</button>` : nothing}
     `;
   }
 }

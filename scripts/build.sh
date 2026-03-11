@@ -173,7 +173,7 @@ if [ "$SKIP_GENERATE" != "true" ]; then
             --channel unlisted
         rm -rf "$SIGN_DIR"
         # Replace unsigned XPI with signed one
-        cp "$EXTENSION_DIR"/signed/*.xpi static/extensions/online-order-recorder.xpi
+        cp "$EXTENSION_DIR"/signed/*.xpi static/extensions/simple-wiki-companion.xpi
         echo "Extension signed successfully"
     else
         echo "AMO credentials not set, skipping extension signing"

@@ -717,6 +717,66 @@ var _ = Describe("Session Logging Functions", func() {
 	})
 })
 
+var _ = Describe("requestBaseURL", func() {
+	var c *gin.Context
+	var result string
+
+	BeforeEach(func() {
+		w := httptest.NewRecorder()
+		c, _ = gin.CreateTestContext(w)
+	})
+
+	When("the request is plain HTTP", func() {
+		BeforeEach(func() {
+			c.Request, _ = http.NewRequest("GET", "/", nil)
+			c.Request.Host = "wiki.example.com:8050"
+			result = server.RequestBaseURLForTesting(c)
+		})
+
+		It("should return http scheme with host", func() {
+			Expect(result).To(Equal("http://wiki.example.com:8050"))
+		})
+	})
+
+	When("the request is TLS", func() {
+		BeforeEach(func() {
+			c.Request = httptest.NewRequest("GET", "https://wiki.example.com/", nil)
+			c.Request.Host = "wiki.example.com"
+			result = server.RequestBaseURLForTesting(c)
+		})
+
+		It("should return https scheme", func() {
+			Expect(result).To(Equal("https://wiki.example.com"))
+		})
+	})
+
+	When("X-Forwarded-Proto header is set", func() {
+		BeforeEach(func() {
+			c.Request, _ = http.NewRequest("GET", "/", nil)
+			c.Request.Host = "wiki.example.com"
+			c.Request.Header.Set("X-Forwarded-Proto", "https")
+			result = server.RequestBaseURLForTesting(c)
+		})
+
+		It("should use the forwarded proto", func() {
+			Expect(result).To(Equal("https://wiki.example.com"))
+		})
+	})
+
+	When("X-Forwarded-Proto overrides TLS", func() {
+		BeforeEach(func() {
+			c.Request = httptest.NewRequest("GET", "https://wiki.example.com/", nil)
+			c.Request.Host = "wiki.example.com"
+			c.Request.Header.Set("X-Forwarded-Proto", "http")
+			result = server.RequestBaseURLForTesting(c)
+		})
+
+		It("should prefer X-Forwarded-Proto over TLS state", func() {
+			Expect(result).To(Equal("http://wiki.example.com"))
+		})
+	})
+})
+
 // handlerTestWriteCloser wraps a buffer to implement io.WriteCloser for logger testing
 type handlerTestWriteCloser struct {
 	*bytes.Buffer

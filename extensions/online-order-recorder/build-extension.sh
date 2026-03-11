@@ -38,11 +38,11 @@ fi
 
 # Package as .xpi (just a zip with .xpi extension)
 cd dist
-zip -r -FS "$SCRIPT_DIR/$OUT/online-order-recorder.xpi" . -x "*.map"
+zip -r -FS "$SCRIPT_DIR/$OUT/simple-wiki-companion.xpi" . -x "*.map"
 cd "$SCRIPT_DIR"
 
 # Write version file for dynamic updates.json generation
 VERSION=$(node -p "require('./dist/manifest.json').version")
 echo "$VERSION" > "$OUT/version.txt"
 
-echo "Done. Built online-order-recorder.xpi (version ${VERSION})."
+echo "Done. Built simple-wiki-companion.xpi (version ${VERSION})."
