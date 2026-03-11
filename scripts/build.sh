@@ -148,33 +148,54 @@ if [ "$SKIP_GENERATE" != "true" ]; then
     # Extensions must be built before static/ so the XPI is present when go:embed runs
     go generate ./extensions/...
 
-    # Sign extension if AMO credentials are available (CI only)
+    # Sign extension if AMO credentials are available (CI only).
+    # To avoid AMO rate limits, skip signing when a cached signed XPI
+    # matches the current extension source (set SIGNED_XPI_CACHE_DIR
+    # from the workflow to enable caching).
     if [[ -n "${AMO_API_KEY:-}" && -n "${AMO_API_SECRET:-}" ]]; then
-        echo "Signing extension with AMO..."
         EXTENSION_DIR="extensions/online-order-recorder"
+        EXT_HASH=$(find "$EXTENSION_DIR/dist" -type f | sort | xargs sha256sum | sha256sum | cut -d' ' -f1)
+        CACHED_XPI="${SIGNED_XPI_CACHE_DIR:-}/simple-wiki-companion.xpi"
+        CACHED_HASH="${SIGNED_XPI_CACHE_DIR:-}/simple-wiki-companion.sha256"
 
-        # AMO rejects http:// update_url, so strip it before signing.
-        # The unsigned XPI (used locally) keeps it for auto-update checks.
-        SIGN_DIR="$EXTENSION_DIR/sign-staging"
-        cp -r "$EXTENSION_DIR/dist" "$SIGN_DIR"
-        node -e "
-            const fs = require('fs');
-            const p = '$SIGN_DIR/manifest.json';
-            const m = JSON.parse(fs.readFileSync(p, 'utf8'));
-            delete m.browser_specific_settings.gecko.update_url;
-            fs.writeFileSync(p, JSON.stringify(m, null, 2) + '\n');
-        "
+        if [[ -n "${SIGNED_XPI_CACHE_DIR:-}" && -f "$CACHED_XPI" && -f "$CACHED_HASH" ]] && \
+           [[ "$(cat "$CACHED_HASH")" == "$EXT_HASH" ]]; then
+            echo "Extension unchanged (hash $EXT_HASH), using cached signed XPI"
+            cp "$CACHED_XPI" static/extensions/simple-wiki-companion.xpi
+        else
+            echo "Signing extension with AMO..."
 
-        web-ext sign \
-            --source-dir "$SIGN_DIR" \
-            --artifacts-dir "$EXTENSION_DIR/signed" \
-            --api-key "$AMO_API_KEY" \
-            --api-secret "$AMO_API_SECRET" \
-            --channel unlisted
-        rm -rf "$SIGN_DIR"
-        # Replace unsigned XPI with signed one
-        cp "$EXTENSION_DIR"/signed/*.xpi static/extensions/simple-wiki-companion.xpi
-        echo "Extension signed successfully"
+            # AMO rejects http:// update_url, so strip it before signing.
+            # The unsigned XPI (used locally) keeps it for auto-update checks.
+            SIGN_DIR="$EXTENSION_DIR/sign-staging"
+            cp -r "$EXTENSION_DIR/dist" "$SIGN_DIR"
+            node -e "
+                const fs = require('fs');
+                const p = '$SIGN_DIR/manifest.json';
+                const m = JSON.parse(fs.readFileSync(p, 'utf8'));
+                delete m.browser_specific_settings.gecko.update_url;
+                fs.writeFileSync(p, JSON.stringify(m, null, 2) + '\n');
+            "
+
+            web-ext sign \
+                --source-dir "$SIGN_DIR" \
+                --artifacts-dir "$EXTENSION_DIR/signed" \
+                --api-key "$AMO_API_KEY" \
+                --api-secret "$AMO_API_SECRET" \
+                --channel unlisted
+            rm -rf "$SIGN_DIR"
+            # Replace unsigned XPI with signed one
+            cp "$EXTENSION_DIR"/signed/*.xpi static/extensions/simple-wiki-companion.xpi
+            echo "Extension signed successfully"
+
+            # Update cache for next build
+            if [[ -n "${SIGNED_XPI_CACHE_DIR:-}" ]]; then
+                mkdir -p "$SIGNED_XPI_CACHE_DIR"
+                cp static/extensions/simple-wiki-companion.xpi "$CACHED_XPI"
+                echo "$EXT_HASH" > "$CACHED_HASH"
+                echo "Cached signed XPI (hash $EXT_HASH)"
+            fi
+        fi
     else
         echo "AMO credentials not set, skipping extension signing"
     fi
