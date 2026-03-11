@@ -182,27 +182,14 @@ if [ "$SKIP_GENERATE" != "true" ]; then
                 fs.writeFileSync(p, JSON.stringify(m, null, 2) + '\n');
             "
 
-            # Retry signing up to 3 times to handle transient AMO throttling
-            SIGN_ATTEMPTS=0
-            SIGN_MAX=3
-            while true; do
-                SIGN_ATTEMPTS=$((SIGN_ATTEMPTS + 1))
-                if web-ext sign \
-                    --source-dir "$SIGN_DIR" \
-                    --artifacts-dir "$EXTENSION_DIR/signed" \
-                    --api-key "$AMO_API_KEY" \
-                    --api-secret "$AMO_API_SECRET" \
-                    --channel unlisted; then
-                    break
-                fi
-                if [ "$SIGN_ATTEMPTS" -ge "$SIGN_MAX" ]; then
-                    echo "⚠️  AMO signing failed after $SIGN_MAX attempts, deploying unsigned"
-                    rm -rf "$SIGN_DIR"
-                    break
-                fi
-                echo "AMO signing attempt $SIGN_ATTEMPTS failed, retrying in 60s..."
-                sleep 60
-            done
+            if ! web-ext sign \
+                --source-dir "$SIGN_DIR" \
+                --artifacts-dir "$EXTENSION_DIR/signed" \
+                --api-key "$AMO_API_KEY" \
+                --api-secret "$AMO_API_SECRET" \
+                --channel unlisted; then
+                echo "⚠️  AMO signing failed, deploying unsigned"
+            fi
             rm -rf "$SIGN_DIR"
             # Replace unsigned XPI with signed one if signing succeeded
             SIGNED_FILES=("$EXTENSION_DIR"/signed/*.xpi)
