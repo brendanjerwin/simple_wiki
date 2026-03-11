@@ -1,4 +1,4 @@
-import { LitElement, html, css } from 'lit';
+import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { Order } from '../merchants/types.js';
 
@@ -13,6 +13,12 @@ export class OrderList extends LitElement {
   static override styles = css`
     :host {
       display: block;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
     }
 
     .order-item {
@@ -48,17 +54,27 @@ export class OrderList extends LitElement {
       margin-top: 2px;
     }
 
+    .item-list {
+      margin-top: 4px;
+      padding-left: 0;
+      list-style: none;
+    }
+
+    .item-name {
+      font-size: 11px;
+      color: #444;
+      line-height: 1.3;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 300px;
+    }
+
     .no-orders {
       color: #888;
       font-style: italic;
       padding: 16px 0;
       text-align: center;
-    }
-
-    .actions {
-      margin-top: 12px;
-      display: flex;
-      gap: 8px;
     }
 
     button {
@@ -140,6 +156,12 @@ export class OrderList extends LitElement {
     }
 
     return html`
+      <div class="actions">
+        <button class="primary" @click=${this.handleSave} ?disabled=${this.saving || this.checkedIndices.size === 0}>
+          ${this.saving ? 'Saving...' : 'Save to Wiki'}
+        </button>
+        <button @click=${this.handleDismiss} ?disabled=${this.saving}>Dismiss</button>
+      </div>
       ${this.orders.map((order, i) => html`
         <div class="order-item">
           <input
@@ -152,17 +174,17 @@ export class OrderList extends LitElement {
             <div class="order-merchant">${order.merchant}</div>
             <div class="order-number">${order.orderNumber}</div>
             <div class="order-meta">
-              ${order.orderDate} &middot; ${order.items.length} item${order.items.length !== 1 ? 's' : ''} &middot; ${formatCentsDisplay(order.totalCents)}
+              ${order.orderDate} &middot; ${formatCentsDisplay(order.totalCents)}
+              ${order.deliveryStatus ? html` &middot; ${order.deliveryStatus}` : nothing}
             </div>
+            <ul class="item-list">
+              ${order.items.map(item => html`
+                <li class="item-name" title="${item.name}">${item.name}</li>
+              `)}
+            </ul>
           </div>
         </div>
       `)}
-      <div class="actions">
-        <button class="primary" @click=${this.handleSave} ?disabled=${this.saving || this.checkedIndices.size === 0}>
-          ${this.saving ? 'Saving...' : 'Save to Wiki'}
-        </button>
-        <button @click=${this.handleDismiss} ?disabled=${this.saving}>Dismiss</button>
-      </div>
     `;
   }
 }

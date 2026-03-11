@@ -35,7 +35,7 @@ export async function readPage(
 ): Promise<{ contentMarkdown: string; versionHash: string }> {
   const resp = await callConnectRPC(
     wikiUrl,
-    'wiki.v1.WikiPageService',
+    'api.v1.PageManagementService',
     'ReadPage',
     { page: pageName }
   );
@@ -53,7 +53,7 @@ export async function updatePageContent(
 ): Promise<void> {
   await callConnectRPC(
     wikiUrl,
-    'wiki.v1.WikiPageService',
+    'api.v1.PageManagementService',
     'UpdatePageContent',
     {
       page: pageName,
@@ -70,7 +70,7 @@ export async function createPage(
 ): Promise<void> {
   await callConnectRPC(
     wikiUrl,
-    'wiki.v1.WikiPageService',
+    'api.v1.PageManagementService',
     'CreatePage',
     {
       page: pageName,
