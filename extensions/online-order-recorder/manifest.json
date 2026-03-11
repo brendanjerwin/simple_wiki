@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Simple Wiki Companion",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "A companion extension for Simple Wiki — detects online order pages and records them, auto-configures wiki URL, and more.",
   "browser_specific_settings": {
     "gecko": {

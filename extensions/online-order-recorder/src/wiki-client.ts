@@ -1,47 +1,36 @@
-interface ConnectResponse {
-  contentMarkdown?: string;
-  versionHash?: string;
-  [key: string]: unknown;
-}
+import { createClient, type Client } from '@connectrpc/connect';
+import { createGrpcWebTransport } from '@connectrpc/connect-web';
+import { create } from '@bufbuild/protobuf';
+import {
+  PageManagementService,
+  ReadPageRequestSchema,
+  CreatePageRequestSchema,
+  UpdatePageContentRequestSchema,
+} from '../../../static/js/gen/api/v1/page_management_pb.js';
 
-export async function callConnectRPC(
-  wikiUrl: string,
-  service: string,
-  method: string,
-  payload: Record<string, unknown>
-): Promise<ConnectResponse> {
-  const url = `${wikiUrl.replace(/\/+$/, '')}/${service}/${method}`;
+let cachedClient: { url: string; client: Client<typeof PageManagementService> } | null = null;
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Connect-Protocol-Version': '1',
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Connect RPC ${method} failed (${response.status}): ${body}`);
+function getWikiClient(wikiUrl: string): Client<typeof PageManagementService> {
+  const url = wikiUrl.replace(/\/+$/, '');
+  if (cachedClient?.url === url) {
+    return cachedClient.client;
   }
-
-  return response.json() as Promise<ConnectResponse>;
+  const transport = createGrpcWebTransport({ baseUrl: url });
+  const client = createClient(PageManagementService, transport);
+  cachedClient = { url, client };
+  return client;
 }
 
 export async function readPage(
   wikiUrl: string,
   pageName: string
 ): Promise<{ contentMarkdown: string; versionHash: string }> {
-  const resp = await callConnectRPC(
-    wikiUrl,
-    'api.v1.PageManagementService',
-    'ReadPage',
-    { pageName }
-  );
+  const client = getWikiClient(wikiUrl);
+  const request = create(ReadPageRequestSchema, { pageName });
+  const response = await client.readPage(request);
   return {
-    contentMarkdown: resp['contentMarkdown'] as string ?? '',
-    versionHash: resp['versionHash'] as string ?? '',
+    contentMarkdown: response.contentMarkdown,
+    versionHash: response.versionHash,
   };
 }
 
@@ -51,16 +40,13 @@ export async function updatePageContent(
   newContentMarkdown: string,
   expectedVersionHash: string
 ): Promise<void> {
-  await callConnectRPC(
-    wikiUrl,
-    'api.v1.PageManagementService',
-    'UpdatePageContent',
-    {
-      pageName,
-      newContentMarkdown,
-      expectedVersionHash,
-    }
-  );
+  const client = getWikiClient(wikiUrl);
+  const request = create(UpdatePageContentRequestSchema, {
+    pageName,
+    newContentMarkdown,
+    expectedVersionHash,
+  });
+  await client.updatePageContent(request);
 }
 
 export async function createPage(
@@ -68,13 +54,10 @@ export async function createPage(
   pageName: string,
   contentMarkdown: string
 ): Promise<void> {
-  await callConnectRPC(
-    wikiUrl,
-    'api.v1.PageManagementService',
-    'CreatePage',
-    {
-      pageName,
-      contentMarkdown,
-    }
-  );
+  const client = getWikiClient(wikiUrl);
+  const request = create(CreatePageRequestSchema, {
+    pageName,
+    contentMarkdown,
+  });
+  await client.createPage(request);
 }

@@ -9,8 +9,18 @@ cd "$SCRIPT_DIR"
 OUT="../../static/extensions"
 mkdir -p "$OUT"
 
-# Install dependencies
+# Install extension-specific dependencies
 bun install
+
+# Ensure static/js dependencies are installed (needed for generated Connect-ES clients)
+(cd ../../static/js && bun install)
+
+# Symlink Connect-ES packages from static/js (shared with main frontend).
+# These are used by the generated protobuf code imported via relative paths.
+mkdir -p node_modules/@bufbuild node_modules/@connectrpc
+ln -sfn ../../../../static/js/node_modules/@bufbuild/protobuf node_modules/@bufbuild/protobuf
+ln -sfn ../../../../static/js/node_modules/@connectrpc/connect node_modules/@connectrpc/connect
+ln -sfn ../../../../static/js/node_modules/@connectrpc/connect-web node_modules/@connectrpc/connect-web
 
 # Typecheck
 bun run typecheck
