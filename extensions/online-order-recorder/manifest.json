@@ -1,22 +1,17 @@
 {
   "manifest_version": 2,
   "name": "Simple Wiki Companion",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "A companion extension for Simple Wiki — detects online order pages and records them, auto-configures wiki URL, and more.",
   "browser_specific_settings": {
     "gecko": {
-      "id": "simple-wiki-companion@simple-wiki",
-      "strict_min_version": "109.0",
-      "update_url": "http://localhost:8050/extensions/updates.json",
-      "data_collection_permissions": {
-        "required": ["none"],
-        "optional": []
-      }
+      "id": "simple-wiki-companion@simple-wiki"
     }
   },
   "permissions": [
     "activeTab",
-    "storage"
+    "storage",
+    "<all_urls>"
   ],
   "background": {
     "scripts": ["background.js"]
