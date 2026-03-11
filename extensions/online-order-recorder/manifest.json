@@ -9,10 +9,8 @@
       "strict_min_version": "109.0",
       "update_url": "http://localhost:8050/extensions/updates.json",
       "data_collection_permissions": {
-        "urlBarReporting": false,
-        "searchSuggestionsOptIn": false,
-        "healthReportUploadEnabled": false,
-        "personalized_extension_recommendations": false
+        "required": ["none"],
+        "optional": []
       }
     }
   },
