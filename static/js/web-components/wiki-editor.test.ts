@@ -456,6 +456,27 @@ describe('WikiEditor', () => {
     it('should show Error in the status bar', () => {
       expect(statusIndicator?.textContent?.trim()).to.contain('Error');
     });
+
+    it('should render error-display inline', () => {
+      const errorDisplay = el.shadowRoot?.querySelector('error-display');
+      expect(errorDisplay).to.not.be.null;
+    });
+
+    it('should render the textarea alongside the error', () => {
+      const textarea = el.shadowRoot?.querySelector('textarea');
+      expect(textarea).to.not.be.null;
+    });
+
+    it('should clear the error and status when dismiss is clicked', async () => {
+      const errorDisplay = el.shadowRoot?.querySelector('error-display') as HTMLElement & { action?: { onClick: () => void } };
+      expect(errorDisplay).to.not.be.null;
+      // Simulate clicking the dismiss button by invoking the action callback
+      // (error-display renders the button; we verify the contract via the property)
+      errorDisplay.action?.onClick();
+      await el.updateComplete;
+      expect((el as unknown as WikiEditorInternal).error).to.be.null;
+      expect((el as unknown as WikiEditorInternal).saveStatus).to.equal('idle');
+    });
   });
 
   describe('when coordinator dispatches keyup (formatting operation)', () => {

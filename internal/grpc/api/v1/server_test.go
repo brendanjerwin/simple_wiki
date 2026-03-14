@@ -1647,6 +1647,33 @@ var _ = Describe("Server", func() {
 				Expect(mockPageReaderMutator.WrittenMarkdown).To(Equal(wikipage.Markdown("# Original Content")))
 			})
 		})
+
+		When("new_content_markdown contains an invalid template macro", func() {
+			BeforeEach(func() {
+				req.NewContentMarkdown = `# Page
+{{ CheckList "todos" }}`
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "invalid template"))
+			})
+
+			It("should include the unknown macro name in the error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "CheckList"))
+			})
+
+			It("should suggest the correct macro name", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "Checklist"))
+			})
+
+			It("should not return a response", func() {
+				Expect(resp).To(BeNil())
+			})
+
+			It("should not write any content", func() {
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(BeEmpty())
+			})
+		})
 	})
 
 	Describe("ClearPageContent", func() {
@@ -1897,6 +1924,32 @@ var _ = Describe("Server", func() {
 
 			It("should overwrite identifier with the correct page name", func() {
 				Expect(mockPageReaderMutator.WrittenFrontmatter).To(HaveKeyWithValue("identifier", "test-page"))
+			})
+		})
+
+		When("new_whole_markdown contains an invalid template macro", func() {
+			BeforeEach(func() {
+				req.NewWholeMarkdown = "+++\ntitle = \"Test\"\n+++\n# Page\n{{ CheckList \"todos\" }}"
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "invalid template"))
+			})
+
+			It("should include the unknown macro name in the error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "CheckList"))
+			})
+
+			It("should suggest the correct macro name", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "Checklist"))
+			})
+
+			It("should not return a response", func() {
+				Expect(resp).To(BeNil())
+			})
+
+			It("should not write any content", func() {
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(BeEmpty())
 			})
 		})
 	})
@@ -3749,6 +3802,34 @@ var _ = Describe("Server", func() {
 
 			It("should return an error about not being a template", func() {
 				Expect(resp.Error).To(ContainSubstring("not a template"))
+			})
+		})
+
+		When("content_markdown contains an invalid template macro", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = os.ErrNotExist
+				req.ContentMarkdown = `# Page
+{{ CheckList "todos" }}`
+			})
+
+			It("should not return a gRPC error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return success=false", func() {
+				Expect(resp.Success).To(BeFalse())
+			})
+
+			It("should include the unknown macro name in the error", func() {
+				Expect(resp.Error).To(ContainSubstring("CheckList"))
+			})
+
+			It("should suggest the correct macro name", func() {
+				Expect(resp.Error).To(ContainSubstring("Checklist"))
+			})
+
+			It("should not write any content", func() {
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(BeEmpty())
 			})
 		})
 	})

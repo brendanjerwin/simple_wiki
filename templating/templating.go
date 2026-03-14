@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 	"text/template"
@@ -400,4 +402,111 @@ func executeTemplateInternal(ctx context.Context, tmpl *template.Template, templ
 	return buf.Bytes(), nil
 }
 
+// validationFuncMap returns a FuncMap with stub implementations for all
+// registered template functions. Used for parse-only validation so that we
+// can detect unknown function names without executing any real logic.
+// This is the single source of truth for registered macro names.
+func validationFuncMap() template.FuncMap {
+	return template.FuncMap{
+		"ShowInventoryContentsOf": func(string) string { return "" },
+		"LinkTo":                  func(string) string { return "" },
+		"IsContainer":             func(string) bool { return false },
+		"FindBy":                  func(string, string) []string { return nil },
+		"FindByPrefix":            func(string, string) []string { return nil },
+		"FindByKeyExistence":      func(string) []string { return nil },
+		"Checklist":               func(string) string { return "" },
+	}
+}
+
+// knownTemplateFuncNames returns the sorted list of all registered template
+// function names. Derived from validationFuncMap to avoid drift.
+func knownTemplateFuncNames() []string {
+	fm := validationFuncMap()
+	names := make([]string, 0, len(fm))
+	for name := range fm {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// templatePositionRe matches the position prefix produced by text/template parse errors:
+// "template: NAME:LINE:COL: …" or "template: NAME:LINE: …"
+var templatePositionRe = regexp.MustCompile(`^template:\s+[^:]+:(\d+)(?::(\d+))?:`)
+
+// ValidateTemplate parses the markdown as a Go text/template and verifies that
+// every function call refers to a registered macro. It returns nil when the
+// template is valid, or an error with a human-readable message that includes:
+//   - the name of the unknown macro
+//   - its line (and column) position in the source
+//   - a "Did you mean …?" suggestion for common misspellings (e.g. wrong case)
+//   - the full list of available macros
+func ValidateTemplate(markdown string) error {
+	_, err := template.New("page").Funcs(validationFuncMap()).Parse(markdown)
+	if err == nil {
+		return nil
+	}
+	return formatTemplateValidationError(err)
+}
+
+// formatTemplateValidationError turns a raw text/template parse error into a
+// user-friendly message. It specifically handles the "function not defined"
+// case with position info and suggestions; all other parse errors are wrapped
+// with a brief prefix.
+func formatTemplateValidationError(parseErr error) error {
+	errStr := parseErr.Error()
+
+	const funcNotDefinedMarker = `function "`
+	if idx := strings.Index(errStr, funcNotDefinedMarker); idx >= 0 {
+		rest := errStr[idx+len(funcNotDefinedMarker):]
+		if endIdx := strings.Index(rest, `"`); endIdx >= 0 {
+			unknownFunc := rest[:endIdx]
+
+			posInfo := extractTemplatePosition(errStr)
+			known := knownTemplateFuncNames()
+			suggestion := findMacroSuggestion(unknownFunc, known)
+
+			var msg strings.Builder
+			msg.WriteString(fmt.Sprintf("invalid macro %q", unknownFunc))
+			if posInfo != "" {
+				msg.WriteString(" at " + posInfo)
+			}
+			if suggestion != "" {
+				msg.WriteString(fmt.Sprintf("; did you mean %q?", suggestion))
+			}
+			msg.WriteString("\nAvailable macros: " + strings.Join(known, ", "))
+
+			return errors.New(msg.String())
+		}
+	}
+
+	return fmt.Errorf("invalid template syntax: %w", parseErr)
+}
+
+// extractTemplatePosition parses the position prefix from a text/template error
+// string and returns a human-readable "line N, column M" string, or "" if the
+// position cannot be determined.
+func extractTemplatePosition(errStr string) string {
+	m := templatePositionRe.FindStringSubmatch(errStr)
+	if m == nil {
+		return ""
+	}
+	if m[2] != "" {
+		return fmt.Sprintf("line %s, column %s", m[1], m[2])
+	}
+	return fmt.Sprintf("line %s", m[1])
+}
+
+// findMacroSuggestion returns the known macro name that most closely matches
+// the unknown name, or "" when no close match exists.
+// Currently checks for an exact case-insensitive match (the most common mistake).
+func findMacroSuggestion(unknown string, known []string) string {
+	lowerUnknown := strings.ToLower(unknown)
+	for _, k := range known {
+		if strings.ToLower(k) == lowerUnknown {
+			return k
+		}
+	}
+	return ""
+}
 

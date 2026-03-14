@@ -21,6 +21,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
+	"github.com/brendanjerwin/simple_wiki/templating"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
@@ -948,6 +949,14 @@ func (s *Server) CreatePage(_ context.Context, req *apiv1.CreatePageRequest) (*a
 	if markdown == "" {
 		markdown = wikipage.DefaultPageTemplate
 	}
+
+	if err := templating.ValidateTemplate(string(markdown)); err != nil {
+		return &apiv1.CreatePageResponse{
+			Success: false,
+			Error:   fmt.Sprintf("invalid template in page content: %v", err),
+		}, nil
+	}
+
 	if err := s.pageReaderMutator.WriteMarkdown(identifier, markdown); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to write markdown: %v", err)
 	}
@@ -989,6 +998,10 @@ func (s *Server) UpdatePageContent(_ context.Context, req *apiv1.UpdatePageConte
 			subtle.ConstantTimeCompare([]byte(currentHash), []byte(*req.ExpectedVersionHash)) != 1 {
 			return nil, status.Error(codes.Aborted, "content version mismatch: page was modified since last read; re-read the page and retry")
 		}
+	}
+
+	if err := templating.ValidateTemplate(req.NewContentMarkdown); err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid template in page content: %v", err)
 	}
 
 	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(req.PageName), wikipage.Markdown(req.NewContentMarkdown)); err != nil {
@@ -1072,6 +1085,10 @@ func (s *Server) UpdateWholePage(_ context.Context, req *apiv1.UpdateWholePageRe
 	md, err := page.GetMarkdown()
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "failed to parse markdown: %v", err)
+	}
+
+	if err := templating.ValidateTemplate(string(md)); err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid template in page content: %v", err)
 	}
 
 	// Preserve the page identifier in frontmatter

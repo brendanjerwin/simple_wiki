@@ -1499,3 +1499,46 @@ var _ = Describe("BuildChecklist", func() {
 		Expect(result).To(ContainSubstring(`page="other_page"`))
 	})
 })
+
+var _ = Describe("ValidateTemplate", func() {
+	It("should return nil for valid markdown with no template actions", func() {
+		Expect(templating.ValidateTemplate("# Hello\n\nSome plain **markdown**.")).To(BeNil())
+	})
+
+	It("should return nil for valid use of a known macro", func() {
+		Expect(templating.ValidateTemplate(`{{ Checklist "todos" }}`)).To(BeNil())
+	})
+
+	It("should return nil for all registered macros", func() {
+		Expect(templating.ValidateTemplate(
+			`{{ Checklist "list" }} {{ LinkTo "page" }} {{ IsContainer "p" }} {{ ShowInventoryContentsOf "c" }}`,
+		)).To(BeNil())
+	})
+
+	It("should return an error for an unknown macro", func() {
+		err := templating.ValidateTemplate(`{{ UnknownMacro "arg" }}`)
+		Expect(err).NotTo(BeNil())
+		Expect(err.Error()).To(ContainSubstring(`"UnknownMacro"`))
+		Expect(err.Error()).To(ContainSubstring("Available macros"))
+	})
+
+	It("should include position info in the error message", func() {
+		err := templating.ValidateTemplate("line one\n{{ BadMacro }}")
+		Expect(err).NotTo(BeNil())
+		Expect(err.Error()).To(ContainSubstring("line 2"))
+	})
+
+	It("should suggest the correct macro name for a case mismatch", func() {
+		// CheckList vs Checklist — the motivating example from the issue
+		err := templating.ValidateTemplate(`{{ CheckList "todos" }}`)
+		Expect(err).NotTo(BeNil())
+		Expect(err.Error()).To(ContainSubstring(`"CheckList"`))
+		Expect(err.Error()).To(ContainSubstring(`"Checklist"`))
+	})
+
+	It("should return an error for other template syntax errors", func() {
+		err := templating.ValidateTemplate("{{ .Unclosed")
+		Expect(err).NotTo(BeNil())
+		Expect(err.Error()).To(ContainSubstring("invalid template syntax"))
+	})
+})
