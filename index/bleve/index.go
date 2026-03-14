@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/blevesearch/bleve"
 	"github.com/blevesearch/bleve/search"
@@ -160,6 +161,11 @@ func (b *Index) extractFragmentFromLocations(contentText string, locations searc
 	
 	// Extract the fragment text
 	fragment := contentText[fragmentStart:fragmentEnd]
+
+	// Defensive sanitization: remove any residual invalid UTF-8 bytes from source content.
+	if !utf8.ValidString(fragment) {
+		fragment = strings.ToValidUTF8(fragment, "")
+	}
 	
 	// Convert absolute byte positions to relative positions within the fragment
 	var highlights []HighlightSpan
@@ -210,6 +216,20 @@ func (*Index) calculateFragmentWindow(contentText string, locations []*search.Lo
 	// Defensive check: ensure start <= end (can happen with stale index data)
 	if fragmentStart > fragmentEnd {
 		fragmentStart = fragmentEnd
+	}
+
+	// Align to rune boundaries to prevent splitting multi-byte UTF-8 characters.
+	// In valid UTF-8, a rune uses at most 4 bytes, so these loops advance/retreat
+	// at most 3 steps (past continuation bytes). For invalid UTF-8 the loops are
+	// still bounded by the [fragmentStart, fragmentEnd) range; any remaining invalid
+	// bytes are removed by the ToValidUTF8 call in extractFragmentFromLocations.
+	// Move fragmentStart forward past any continuation bytes.
+	for fragmentStart < fragmentEnd && !utf8.RuneStart(contentText[fragmentStart]) {
+		fragmentStart++
+	}
+	// Move fragmentEnd backward past any continuation bytes (only when not at end of string).
+	for fragmentEnd > fragmentStart && fragmentEnd < len(contentText) && !utf8.RuneStart(contentText[fragmentEnd]) {
+		fragmentEnd--
 	}
 
 	return fragmentStart, fragmentEnd
