@@ -155,7 +155,7 @@ if [ "$SKIP_GENERATE" != "true" ]; then
 
     # Use a pre-signed XPI if provided (e.g. from a prior CI job).
     # This avoids hitting AMO multiple times in a matrix build.
-    if [[ -n "${SIGNED_XPI_PATH:-}" && -f "$SIGNED_XPI_PATH" ]]; then
+    if [[ -n "${SIGNED_XPI_PATH:-}" && -s "$SIGNED_XPI_PATH" ]]; then
         echo "Using pre-signed XPI from $SIGNED_XPI_PATH"
         cp "$SIGNED_XPI_PATH" static/extensions/simple-wiki-companion.xpi
 
