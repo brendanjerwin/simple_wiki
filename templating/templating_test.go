@@ -740,7 +740,7 @@ var _ = Describe("ConstructTemplateContextFromFrontmatterWithVisited with circul
 		mockIndex = &mockFrontmatterIndex{
 			index: map[string]map[string][]string{
 				"inventory.container": {
-					"circular_container": []string{"item1", "item2"},
+					"circular_container": {"item1", "item2"},
 				},
 			},
 			values: map[string]map[string]string{
@@ -1091,7 +1091,7 @@ var _ = Describe("BuildIsContainer edge cases", func() {
 	Context("with legacy container (items reference it)", func() {
 		BeforeEach(func() {
 			mockIndex.index["inventory.container"] = map[string][]string{
-				"legacy_container": []string{"item1", "item2"},
+				"legacy_container": {"item1", "item2"},
 			}
 		})
 
@@ -1227,7 +1227,7 @@ var _ = Describe("ExecuteTemplate", func() {
 	Context("with FindBy function", func() {
 		It("should execute template with FindBy function", func() {
 			mockIndex.index["tag"] = map[string][]string{
-				"electronics": []string{"item1", "item2"},
+				"electronics": {"item1", "item2"},
 			}
 
 			templateString := "{{ $items := FindBy \"tag\" \"electronics\" }}Count: {{ len $items }}"
@@ -1334,7 +1334,7 @@ var _ = Describe("ExecuteTemplate", func() {
 	Context("with FindByPrefix function", func() {
 		It("should execute template with FindByPrefix function", func() {
 			mockIndex.index["tag"] = map[string][]string{
-				"electronics": []string{"item1", "item2"},
+				"electronics": {"item1", "item2"},
 			}
 
 			templateString := "{{ $items := FindByPrefix \"tag\" \"elect\" }}Count: {{ len $items }}"
@@ -1352,7 +1352,7 @@ var _ = Describe("ExecuteTemplate", func() {
 	Context("with FindByKeyExistence function", func() {
 		It("should execute template with FindByKeyExistence function", func() {
 			mockIndex.index["has_serial"] = map[string][]string{
-				"": []string{"item1", "item2"},
+				"": {"item1", "item2"},
 			}
 
 			templateString := "{{ $items := FindByKeyExistence \"has_serial\" }}Count: {{ len $items }}"
@@ -1414,7 +1414,7 @@ var _ = Describe("ExecuteTemplate", func() {
 				titleKey:      "Page 1",
 			}
 			mockIndex.index["tag"] = map[string][]string{
-				"important": []string{"page1"},
+				"important": {"page1"},
 			}
 			mockIndex.values["test_container"] = map[string]string{
 				"inventory.is_container": "true",
@@ -1497,5 +1497,48 @@ var _ = Describe("BuildChecklist", func() {
 		otherFunc := templating.BuildChecklist(otherContext)
 		result := otherFunc("my_list")
 		Expect(result).To(ContainSubstring(`page="other_page"`))
+	})
+})
+
+var _ = Describe("ValidateTemplate", func() {
+	It("should return nil for valid markdown with no template actions", func() {
+		Expect(templating.ValidateTemplate("# Hello\n\nSome plain **markdown**.")).To(BeNil())
+	})
+
+	It("should return nil for valid use of a known macro", func() {
+		Expect(templating.ValidateTemplate(`{{ Checklist "todos" }}`)).To(BeNil())
+	})
+
+	It("should return nil for all registered macros", func() {
+		Expect(templating.ValidateTemplate(
+			`{{ Checklist "list" }} {{ LinkTo "page" }} {{ IsContainer "p" }} {{ ShowInventoryContentsOf "c" }} {{ FindBy "key" "val" }} {{ FindByPrefix "key" "prefix" }} {{ FindByKeyExistence "key" }}`,
+		)).To(BeNil())
+	})
+
+	It("should return an error for an unknown macro", func() {
+		err := templating.ValidateTemplate(`{{ UnknownMacro "arg" }}`)
+		Expect(err).NotTo(BeNil())
+		Expect(err.Error()).To(ContainSubstring(`"UnknownMacro"`))
+		Expect(err.Error()).To(ContainSubstring("available macros"))
+	})
+
+	It("should include position info in the error message", func() {
+		err := templating.ValidateTemplate("line one\n{{ BadMacro }}")
+		Expect(err).NotTo(BeNil())
+		Expect(err.Error()).To(ContainSubstring("line 2"))
+	})
+
+	It("should suggest the correct macro name for a case mismatch", func() {
+		// CheckList vs Checklist — the motivating example from the issue
+		err := templating.ValidateTemplate(`{{ CheckList "todos" }}`)
+		Expect(err).NotTo(BeNil())
+		Expect(err.Error()).To(ContainSubstring(`"CheckList"`))
+		Expect(err.Error()).To(ContainSubstring(`"Checklist"`))
+	})
+
+	It("should return an error for other template syntax errors", func() {
+		err := templating.ValidateTemplate("{{ .Unclosed")
+		Expect(err).NotTo(BeNil())
+		Expect(err.Error()).To(ContainSubstring("invalid template syntax"))
 	})
 })

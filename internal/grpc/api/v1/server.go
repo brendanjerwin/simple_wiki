@@ -21,6 +21,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
+	"github.com/brendanjerwin/simple_wiki/templating"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
@@ -888,18 +889,15 @@ func (s *Server) CreatePage(_ context.Context, req *apiv1.CreatePageRequest) (*a
 		return nil, status.Error(codes.InvalidArgument, pageNameRequiredErr)
 	}
 
-	// Munge the identifier
 	identifier, err := wikiidentifiers.MungeIdentifier(req.PageName)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid page name: %v", err)
 	}
 
-	// Check if page already exists
 	_, existingFm, err := s.pageReaderMutator.ReadFrontMatter(identifier)
 	if err != nil && !os.IsNotExist(err) {
 		return nil, status.Errorf(codes.Internal, "failed to check page existence: %v", err)
 	}
-
 	if existingFm != nil {
 		return &apiv1.CreatePageResponse{
 			Success: false,
@@ -907,47 +905,30 @@ func (s *Server) CreatePage(_ context.Context, req *apiv1.CreatePageRequest) (*a
 		}, nil
 	}
 
-	// Build frontmatter starting with template if provided
-	fm := make(map[string]any)
-	fm[identifierKey] = identifier
-
-	if req.Template != nil && *req.Template != "" {
-		templateFm, err := s.loadTemplateFrontmatter(*req.Template)
-		if err != nil {
-			return &apiv1.CreatePageResponse{
-				Success: false,
-				Error:   err.Error(),
-			}, nil
-		}
-		// Copy template frontmatter (excluding identifier and template flag)
-		for k, v := range templateFm {
-			if k != identifierKey && k != "template" {
-				fm[k] = v
-			}
-		}
+	fm, err := s.buildNewPageFrontmatter(identifier, req.Template, req.Frontmatter)
+	if err != nil {
+		return &apiv1.CreatePageResponse{
+			Success: false,
+			Error:   err.Error(),
+		}, nil
 	}
 
-	// Merge provided structured frontmatter (overrides template values)
-	if req.Frontmatter != nil {
-		providedFm := req.Frontmatter.AsMap()
-		// Merge provided frontmatter, but don't allow overriding identifier
-		for k, v := range providedFm {
-			if k != identifierKey {
-				fm[k] = v
-			}
-		}
-	}
-
-	// Write frontmatter
-	if err := s.pageReaderMutator.WriteFrontMatter(identifier, fm); err != nil {
-		return nil, status.Errorf(codes.Internal, failedToWriteFrontmatterErrFmt, err)
-	}
-
-	// Write markdown content (use provided content or default template)
 	markdown := req.ContentMarkdown
 	if markdown == "" {
 		markdown = wikipage.DefaultPageTemplate
 	}
+
+	if err := templating.ValidateTemplate(string(markdown)); err != nil {
+		return &apiv1.CreatePageResponse{
+			Success: false,
+			Error:   fmt.Sprintf("invalid template in page content: %v", err),
+		}, nil
+	}
+
+	if err := s.pageReaderMutator.WriteFrontMatter(identifier, fm); err != nil {
+		return nil, status.Errorf(codes.Internal, failedToWriteFrontmatterErrFmt, err)
+	}
+
 	if err := s.pageReaderMutator.WriteMarkdown(identifier, markdown); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to write markdown: %v", err)
 	}
@@ -955,6 +936,34 @@ func (s *Server) CreatePage(_ context.Context, req *apiv1.CreatePageRequest) (*a
 	return &apiv1.CreatePageResponse{
 		Success: true,
 	}, nil
+}
+
+// buildNewPageFrontmatter assembles frontmatter for a new page by merging
+// template defaults with any explicitly provided frontmatter values.
+func (s *Server) buildNewPageFrontmatter(identifier string, template *string, frontmatter *structpb.Struct) (map[string]any, error) {
+	fm := map[string]any{identifierKey: identifier}
+
+	if template != nil && *template != "" {
+		templateFm, err := s.loadTemplateFrontmatter(*template)
+		if err != nil {
+			return nil, err
+		}
+		for k, v := range templateFm {
+			if k != identifierKey && k != "template" {
+				fm[k] = v
+			}
+		}
+	}
+
+	if frontmatter != nil {
+		for k, v := range frontmatter.AsMap() {
+			if k != identifierKey {
+				fm[k] = v
+			}
+		}
+	}
+
+	return fm, nil
 }
 
 // UpdatePageContent implements the UpdatePageContent RPC.
@@ -989,6 +998,10 @@ func (s *Server) UpdatePageContent(_ context.Context, req *apiv1.UpdatePageConte
 			subtle.ConstantTimeCompare([]byte(currentHash), []byte(*req.ExpectedVersionHash)) != 1 {
 			return nil, status.Error(codes.Aborted, "content version mismatch: page was modified since last read; re-read the page and retry")
 		}
+	}
+
+	if err := templating.ValidateTemplate(req.NewContentMarkdown); err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid template in page content: %v", err)
 	}
 
 	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(req.PageName), wikipage.Markdown(req.NewContentMarkdown)); err != nil {
@@ -1072,6 +1085,10 @@ func (s *Server) UpdateWholePage(_ context.Context, req *apiv1.UpdateWholePageRe
 	md, err := page.GetMarkdown()
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "failed to parse markdown: %v", err)
+	}
+
+	if err := templating.ValidateTemplate(string(md)); err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid template in page content: %v", err)
 	}
 
 	// Preserve the page identifier in frontmatter

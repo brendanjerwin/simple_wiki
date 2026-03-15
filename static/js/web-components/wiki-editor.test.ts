@@ -415,7 +415,6 @@ describe('WikiEditor', () => {
 
   describe('when save returns an error', () => {
     let clock: SinonFakeTimers;
-    let statusIndicator: Element | null | undefined;
 
     beforeEach(async () => {
       clock = sinon.useFakeTimers({
@@ -438,7 +437,6 @@ describe('WikiEditor', () => {
       textarea.dispatchEvent(new Event('input', { bubbles: true }));
       await clock.tickAsync(500);
       await el.updateComplete;
-      statusIndicator = el.shadowRoot?.querySelector('.status-indicator');
     });
 
     afterEach(() => {
@@ -453,8 +451,30 @@ describe('WikiEditor', () => {
       expect((el as unknown as WikiEditorInternal).error).to.not.be.null;
     });
 
-    it('should show Error in the status bar', () => {
-      expect(statusIndicator?.textContent?.trim()).to.contain('Error');
+    it('should hide the status bar during errors', () => {
+      const statusBar = el.shadowRoot?.querySelector('.status-bar');
+      expect(statusBar?.classList.contains('visible')).to.be.false;
+    });
+
+    it('should render error-display inline', () => {
+      const errorDisplay = el.shadowRoot?.querySelector('error-display');
+      expect(errorDisplay).to.not.be.null;
+    });
+
+    it('should render the textarea alongside the error', () => {
+      const textarea = el.shadowRoot?.querySelector('textarea');
+      expect(textarea).to.not.be.null;
+    });
+
+    it('should clear the error and status when dismiss is clicked', async () => {
+      const errorDisplay = el.shadowRoot?.querySelector('error-display') as HTMLElement & { action?: { onClick: () => void } };
+      expect(errorDisplay).to.not.be.null;
+      // Simulate clicking the dismiss button by invoking the action callback
+      // (error-display renders the button; we verify the contract via the property)
+      errorDisplay.action?.onClick();
+      await el.updateComplete;
+      expect((el as unknown as WikiEditorInternal).error).to.be.null;
+      expect((el as unknown as WikiEditorInternal).saveStatus).to.equal('idle');
     });
   });
 

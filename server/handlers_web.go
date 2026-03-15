@@ -75,6 +75,11 @@ func (s *Site) GinRouter(middleware ...gin.HandlerFunc) *gin.Engine {
 
 	router.Use(sessions.Sessions("_session", s.SessionStore))
 
+	s.registerRoutes(router)
+	return router
+}
+
+func (s *Site) registerRoutes(router *gin.Engine) {
 	router.GET("/", func(c *gin.Context) {
 		c.Redirect(httpStatusFound, "/"+s.DefaultPage+"/view")
 	})
@@ -93,7 +98,6 @@ func (s *Site) GinRouter(middleware ...gin.HandlerFunc) *gin.Engine {
 	router.GET("/api/find_by", s.handleFindBy)
 	router.GET("/api/find_by_prefix", s.handleFindByPrefix)
 	router.GET("/api/find_by_key_existence", s.handleFindByKeyExistence)
-	return router
 }
 
 // serveCLIBinary serves pre-built wiki-cli binaries so consumers always

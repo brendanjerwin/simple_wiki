@@ -416,6 +416,11 @@ export class WikiEditor extends LitElement {
     }
   }
 
+  _dismissSaveError(): void {
+    this.error = null;
+    this.saveStatus = 'idle';
+  }
+
   override render() {
     if (this.loading) {
       return html`
@@ -437,17 +442,22 @@ export class WikiEditor extends LitElement {
       ${sharedStyles}
       <div class="editor-container">
         <editor-toolbar ?has-selection=${this._hasSelection} @exit-requested=${this._onExitRequested}></editor-toolbar>
-        <div class="status-bar ${this.saveStatus !== 'idle' ? 'visible' : ''}">
+        <div class="status-bar ${this.saveStatus !== 'idle' && this.saveStatus !== 'error' ? 'visible' : ''}">
           <span class="status-indicator ${this.saveStatus}">
             ${this.saveStatus === 'saving'
               ? html`<i class="fa-solid fa-spinner fa-spin"></i>`
               : nothing}
             ${this.statusText}
           </span>
-          ${this.error && this.saveStatus === 'error'
-            ? html`<span class="status-error">&nbsp;— ${this.error.message}</span>`
-            : nothing}
         </div>
+        ${this.error && this.saveStatus === 'error'
+          ? html`
+            <error-display
+              .augmentedError=${this.error}
+              .action=${{ label: 'Dismiss', onClick: () => this._dismissSaveError() }}
+            ></error-display>
+          `
+          : nothing}
         <div class="editor-area">
           <file-drop-zone
             ?allow-uploads=${this.allowUploads}
