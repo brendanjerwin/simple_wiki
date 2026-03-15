@@ -50,8 +50,21 @@ jobs:
           fileName: 'simple_wiki-linux-amd64'
           out-file-path: '.'
 
+      - name: Restore signed extension cache
+        if: steps.check_release.outputs.release_exists == 'false'
+        uses: actions/cache@v4
+        with:
+          path: .signed-xpi-cache
+          key: signed-xpi-${{ hashFiles('extensions/online-order-recorder/src/**', 'extensions/online-order-recorder/manifest.json', 'extensions/online-order-recorder/package.json', 'extensions/online-order-recorder/icons/**') }}
+          restore-keys: |
+            signed-xpi-
+
       - name: Build binary locally
         if: steps.check_release.outputs.release_exists == 'false'
+        env:
+          AMO_API_KEY: ${{ secrets.AMO_API_KEY }}
+          AMO_API_SECRET: ${{ secrets.AMO_API_SECRET }}
+          SIGNED_XPI_CACHE_DIR: .signed-xpi-cache
         run: |
           echo "Building simple_wiki for linux/amd64..."
           devbox run build linux amd64

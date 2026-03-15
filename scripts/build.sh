@@ -131,9 +131,87 @@ if [ "$SKIP_GENERATE" != "true" ]; then
         echo "No proto changes, skipping buf generate"
     fi
 
+    # Derive extension version from git tag if available
+    # Firefox requires 1-4 dot-separated integers, so strip 'v' prefix and pre-release suffix
+    if [ -n "$TAG" ]; then
+        EXT_VER="${TAG#v}"
+        EXT_VER="${EXT_VER%%-*}"
+        if [[ "$EXT_VER" =~ ^[0-9]+(\.[0-9]+){0,3}$ ]]; then
+            export EXTENSION_VERSION="$EXT_VER"
+            echo "Extension version from git tag: $EXTENSION_VERSION"
+        else
+            echo "Git tag '$TAG' does not produce a valid extension version, using manifest default"
+        fi
+    fi
+
     echo "Generating extensions, frontend, and wiki-cli"
     # Extensions must be built before static/ so the XPI is present when go:embed runs
     go generate ./extensions/...
+
+    # TODO: Move AMO signing to the running wiki server so it can inject the
+    # correct update_url (based on its actual hostname) into the manifest before
+    # signing. Currently signing happens at build time with no knowledge of the
+    # deployment URL, so update_url is omitted from the signed XPI.
+
+    # Sign extension if AMO credentials are available (CI only).
+    # To avoid AMO rate limits, skip signing when a cached signed XPI
+    # matches the current extension source (set SIGNED_XPI_CACHE_DIR
+    # from the workflow to enable caching).
+    if [[ -n "${AMO_API_KEY:-}" && -n "${AMO_API_SECRET:-}" ]]; then
+        EXTENSION_DIR="extensions/online-order-recorder"
+        EXT_HASH=$(find "$EXTENSION_DIR/dist" -type f | sort | xargs sha256sum | sha256sum | cut -d' ' -f1)
+        CACHED_XPI="${SIGNED_XPI_CACHE_DIR:-}/simple-wiki-companion.xpi"
+        CACHED_HASH="${SIGNED_XPI_CACHE_DIR:-}/simple-wiki-companion.sha256"
+
+        if [[ -n "${SIGNED_XPI_CACHE_DIR:-}" && -f "$CACHED_XPI" && -f "$CACHED_HASH" ]] && \
+           [[ "$(cat "$CACHED_HASH")" == "$EXT_HASH" ]]; then
+            echo "Extension unchanged (hash $EXT_HASH), using cached signed XPI"
+            cp "$CACHED_XPI" static/extensions/simple-wiki-companion.xpi
+        else
+            echo "Signing extension with AMO..."
+
+            # AMO rejects http:// update_url, so strip it before signing.
+            # The unsigned XPI (used locally) keeps it for auto-update checks.
+            SIGN_DIR="$EXTENSION_DIR/sign-staging"
+            cp -r "$EXTENSION_DIR/dist" "$SIGN_DIR"
+            node -e "
+                const fs = require('fs');
+                const p = '$SIGN_DIR/manifest.json';
+                const m = JSON.parse(fs.readFileSync(p, 'utf8'));
+                delete m.browser_specific_settings.gecko.update_url;
+                fs.writeFileSync(p, JSON.stringify(m, null, 2) + '\n');
+            "
+
+            if ! web-ext sign \
+                --source-dir "$SIGN_DIR" \
+                --artifacts-dir "$EXTENSION_DIR/signed" \
+                --api-key "$AMO_API_KEY" \
+                --api-secret "$AMO_API_SECRET" \
+                --channel unlisted; then
+                echo "⚠️  AMO signing failed, deploying unsigned"
+            fi
+            rm -rf "$SIGN_DIR"
+            # Replace unsigned XPI with signed one if signing succeeded
+            SIGNED_FILES=("$EXTENSION_DIR"/signed/*.xpi)
+            if [[ -f "${SIGNED_FILES[0]}" ]]; then
+                cp "$EXTENSION_DIR"/signed/*.xpi static/extensions/simple-wiki-companion.xpi
+                echo "Extension signed successfully"
+
+                # Update cache for next build
+                if [[ -n "${SIGNED_XPI_CACHE_DIR:-}" ]]; then
+                    mkdir -p "$SIGNED_XPI_CACHE_DIR"
+                    cp static/extensions/simple-wiki-companion.xpi "$CACHED_XPI"
+                    echo "$EXT_HASH" > "$CACHED_HASH"
+                    echo "Cached signed XPI (hash $EXT_HASH)"
+                fi
+            else
+                echo "Deploying with unsigned extension"
+            fi
+        fi
+    else
+        echo "AMO credentials not set, skipping extension signing"
+    fi
+
     go generate ./static/...
     go generate ./cmd/wiki-cli/...
 fi

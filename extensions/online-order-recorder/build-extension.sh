@@ -9,8 +9,18 @@ cd "$SCRIPT_DIR"
 OUT="../../static/extensions"
 mkdir -p "$OUT"
 
-# Install dependencies
+# Install extension-specific dependencies
 bun install
+
+# Ensure static/js dependencies are installed (needed for generated Connect-ES clients)
+(cd ../../static/js && bun install)
+
+# Symlink Connect-ES packages from static/js (shared with main frontend).
+# These are used by the generated protobuf code imported via relative paths.
+mkdir -p node_modules/@bufbuild node_modules/@connectrpc
+ln -sfn ../../../../static/js/node_modules/@bufbuild/protobuf node_modules/@bufbuild/protobuf
+ln -sfn ../../../../static/js/node_modules/@connectrpc/connect node_modules/@connectrpc/connect
+ln -sfn ../../../../static/js/node_modules/@connectrpc/connect-web node_modules/@connectrpc/connect-web
 
 # Typecheck
 bun run typecheck
@@ -24,13 +34,25 @@ cp popup.html dist/
 cp popup.css dist/
 cp -r icons dist/
 
+# Override version from environment if set (derived from git tag by build.sh)
+if [[ -n "${EXTENSION_VERSION:-}" ]]; then
+    echo "Setting extension version to $EXTENSION_VERSION (from git tag)"
+    node -e "
+        const fs = require('fs');
+        const p = 'dist/manifest.json';
+        const m = JSON.parse(fs.readFileSync(p, 'utf8'));
+        m.version = process.argv[1];
+        fs.writeFileSync(p, JSON.stringify(m, null, 2) + '\n');
+    " "$EXTENSION_VERSION"
+fi
+
 # Package as .xpi (just a zip with .xpi extension)
 cd dist
-zip -r -FS "$SCRIPT_DIR/$OUT/online-order-recorder.xpi" . -x "*.map"
+zip -r -FS "$SCRIPT_DIR/$OUT/simple-wiki-companion.xpi" . -x "*.map"
 cd "$SCRIPT_DIR"
 
 # Write version file for dynamic updates.json generation
-VERSION=$(node -p "require('./manifest.json').version")
+VERSION=$(node -p "require('./dist/manifest.json').version")
 echo "$VERSION" > "$OUT/version.txt"
 
-echo "Done. Built online-order-recorder.xpi (version ${VERSION})."
+echo "Done. Built simple-wiki-companion.xpi (version ${VERSION})."

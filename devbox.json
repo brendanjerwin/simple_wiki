@@ -18,7 +18,8 @@
     "playwright-test@latest",
     "gh@latest",
     "golangci-lint@latest",
-    "zip@latest"
+    "zip@latest",
+    "web-ext@latest"
   ],
   "shell": {
     "init_hook": [

@@ -80,79 +80,8 @@ func (s *Site) GinRouter(middleware ...gin.HandlerFunc) *gin.Engine {
 	})
 
 	router.POST("/uploads", s.handleUpload)
-
-	// Serve pre-built wiki-cli binaries so consumers always download the version
-	// that matches the running wiki.  Binaries are embedded in static.StaticContent
-	// at build time (see cmd/wiki-cli/generate.go).
-	router.GET("/cli/:binary", func(c *gin.Context) {
-		// path.Base prevents directory traversal; the pattern check guards against
-		// requests for arbitrary files in the embedded FS.
-		binary := path.Base(c.Param("binary"))
-		if !strings.HasPrefix(binary, "wiki-cli-") {
-			c.Status(http.StatusNotFound)
-			return
-		}
-		data, err := static.StaticContent.ReadFile("cli/" + binary)
-		if err != nil {
-			c.Status(http.StatusNotFound)
-			return
-		}
-		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, binary))
-		c.Data(http.StatusOK, "application/octet-stream", data)
-	})
-
-	// Serve browser extension files (XPI packages and update manifests).
-	// Built by extensions/online-order-recorder/generate.go and embedded in
-	// static.StaticContent at build time.
-	router.GET("/extensions/:file", func(c *gin.Context) {
-		file := path.Base(c.Param("file"))
-
-		switch file {
-		case "online-order-recorder.xpi":
-			data, err := static.StaticContent.ReadFile("extensions/" + file)
-			if err != nil {
-				c.Status(http.StatusNotFound)
-				return
-			}
-			c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, file))
-			c.Data(http.StatusOK, "application/x-xpinstall", data)
-
-		case "updates.json":
-			versionBytes, err := static.StaticContent.ReadFile("extensions/version.txt")
-			if err != nil {
-				c.Status(http.StatusNotFound)
-				return
-			}
-			version := strings.TrimSpace(string(versionBytes))
-
-			scheme := "http"
-			if c.Request.TLS != nil {
-				scheme = "https"
-			}
-			if fwdProto := c.GetHeader("X-Forwarded-Proto"); fwdProto != "" {
-				scheme = fwdProto
-			}
-			host := c.Request.Host
-
-			updatesJSON := fmt.Sprintf(`{
-  "addons": {
-    "online-order-recorder@simple-wiki": {
-      "updates": [
-        {
-          "version": %q,
-          "update_link": "%s://%s/extensions/online-order-recorder.xpi"
-        }
-      ]
-    }
-  }
-}`, version, scheme, host)
-
-			c.Data(http.StatusOK, "application/json", []byte(updatesJSON))
-
-		default:
-			c.Status(http.StatusNotFound)
-		}
-	})
+	router.GET("/cli/:binary", serveCLIBinary)
+	router.GET("/extensions/:file", serveExtensionFile)
 
 	router.GET("/:page", func(c *gin.Context) {
 		page := c.Param("page")
@@ -165,6 +94,71 @@ func (s *Site) GinRouter(middleware ...gin.HandlerFunc) *gin.Engine {
 	router.GET("/api/find_by_prefix", s.handleFindByPrefix)
 	router.GET("/api/find_by_key_existence", s.handleFindByKeyExistence)
 	return router
+}
+
+// serveCLIBinary serves pre-built wiki-cli binaries so consumers always
+// download the version that matches the running wiki. Binaries are embedded
+// in static.StaticContent at build time (see cmd/wiki-cli/generate.go).
+func serveCLIBinary(c *gin.Context) {
+	// path.Base prevents directory traversal; the pattern check guards against
+	// requests for arbitrary files in the embedded FS.
+	binary := path.Base(c.Param("binary"))
+	if !strings.HasPrefix(binary, "wiki-cli-") {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	data, err := static.StaticContent.ReadFile("cli/" + binary)
+	if err != nil {
+		c.Status(http.StatusNotFound)
+		return
+	}
+	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, binary))
+	c.Data(http.StatusOK, "application/octet-stream", data)
+}
+
+// serveExtensionFile serves browser extension files (XPI packages and update
+// manifests). Built by extensions/online-order-recorder/generate.go and
+// embedded in static.StaticContent at build time.
+func serveExtensionFile(c *gin.Context) {
+	file := path.Base(c.Param("file"))
+
+	switch file {
+	case "simple-wiki-companion.xpi":
+		data, err := static.StaticContent.ReadFile("extensions/" + file)
+		if err != nil {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, file))
+		c.Data(http.StatusOK, "application/x-xpinstall", data)
+
+	case "updates.json":
+		versionBytes, err := static.StaticContent.ReadFile("extensions/version.txt")
+		if err != nil {
+			c.Status(http.StatusNotFound)
+			return
+		}
+		version := strings.TrimSpace(string(versionBytes))
+		baseURL := requestBaseURL(c)
+
+		updatesJSON := fmt.Sprintf(`{
+  "addons": {
+    "simple-wiki-companion@simple-wiki": {
+      "updates": [
+        {
+          "version": %q,
+          "update_link": "%s/extensions/simple-wiki-companion.xpi"
+        }
+      ]
+    }
+  }
+}`, version, baseURL)
+
+		c.Data(http.StatusOK, "application/json", []byte(updatesJSON))
+
+	default:
+		c.Status(http.StatusNotFound)
+	}
 }
 
 func (s *Site) loadTemplate() multitemplate.Render {
@@ -326,6 +320,7 @@ func (s *Site) buildTemplateData(page, command string, directoryEntries []os.Fil
 		"UnixTime":         time.Now().Unix(),
 		"AllowFileUploads": s.Fileuploads,
 		"MaxUploadMB":      s.MaxUploadSize,
+		"WikiBaseURL":       requestBaseURL(c),
 	}
 }
 
@@ -528,6 +523,19 @@ func contentTypeFromName(filename string) string {
 	return mimeType
 }
 
+// requestBaseURL derives the base URL (scheme://host) from the request context.
+// It checks TLS state and the X-Forwarded-Proto header to determine the scheme.
+func requestBaseURL(c *gin.Context) string {
+	scheme := "http"
+	if c.Request.TLS != nil {
+		scheme = "https"
+	}
+	if fwdProto := c.GetHeader("X-Forwarded-Proto"); fwdProto != "" {
+		scheme = fwdProto
+	}
+	return scheme + "://" + c.Request.Host
+}
+
 // Test helper functions to expose private functions for testing
 
 // GetSetSessionIDForTesting exposes getSetSessionID for testing
@@ -538,4 +546,9 @@ func GetSetSessionIDForTesting(c *gin.Context, logger *lumber.ConsoleLogger) str
 // GetRecentlyEditedForTesting exposes getRecentlyEdited for testing
 func GetRecentlyEditedForTesting(title string, c *gin.Context, logger *lumber.ConsoleLogger) []string {
 	return getRecentlyEdited(title, c, logger)
+}
+
+// RequestBaseURLForTesting exposes requestBaseURL for testing
+func RequestBaseURLForTesting(c *gin.Context) string {
+	return requestBaseURL(c)
 }

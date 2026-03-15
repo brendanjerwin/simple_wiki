@@ -25,11 +25,31 @@ interface DismissMessage {
   type: 'DISMISS';
 }
 
-type ExtensionMessage = OrdersDetectedMessage | SaveOrdersMessage | GetPendingMessage | DismissMessage;
+interface WikiUrlDetectedMessage {
+  type: 'WIKI_URL_DETECTED';
+  wikiUrl: string;
+}
+
+type ExtensionMessage = OrdersDetectedMessage | SaveOrdersMessage | GetPendingMessage | DismissMessage | WikiUrlDetectedMessage;
 
 async function getWikiUrl(): Promise<string> {
   const stored = await browser.storage.local.get('wikiUrl');
   return (stored['wikiUrl'] as string | undefined) ?? DEFAULT_WIKI_URL;
+}
+
+async function handleWikiUrlDetected(wikiUrl: string): Promise<void> {
+  const stored = await browser.storage.local.get(['wikiUrl', 'wikiUrlManuallySet']);
+  if (stored['wikiUrlManuallySet'] === true) {
+    console.debug('[Simple Wiki Companion] Wiki URL manually set, ignoring auto-detected URL:', wikiUrl);
+    return;
+  }
+  const currentUrl = stored['wikiUrl'] as string | undefined;
+  if (currentUrl === wikiUrl) {
+    console.debug('[Simple Wiki Companion] Wiki URL unchanged:', wikiUrl);
+    return;
+  }
+  console.debug('[Simple Wiki Companion] Auto-configuring wiki URL:', wikiUrl);
+  await browser.storage.local.set({ wikiUrl });
 }
 
 async function saveOrdersToWiki(orders: Order[]): Promise<{ savedCount: number; skippedCount: number }> {
@@ -81,29 +101,45 @@ browser.runtime.onMessage.addListener((
 ): true | undefined => {
   const msg = message as ExtensionMessage;
 
+  console.debug('[Simple Wiki Companion] Received message:', msg.type);
+
   switch (msg.type) {
     case 'ORDERS_DETECTED':
+      console.debug('[Simple Wiki Companion] Orders detected:', msg.orders.length);
       pendingOrders = msg.orders;
       browser.browserAction.setBadgeText({ text: String(pendingOrders.length) });
       browser.browserAction.setBadgeBackgroundColor({ color: '#43a047' });
       return undefined;
 
     case 'GET_PENDING':
+      console.debug('[Simple Wiki Companion] Returning', pendingOrders.length, 'pending orders');
       sendResponse({ orders: pendingOrders });
       return undefined;
 
     case 'SAVE_ORDERS':
+      console.debug('[Simple Wiki Companion] Saving', msg.orders.length, 'orders to wiki');
       saveOrdersToWiki(msg.orders)
-        .then(result => sendResponse({ success: true, ...result }))
-        .catch(err => sendResponse({
-          success: false,
-          error: err instanceof Error ? err.message : String(err),
-        }));
+        .then(result => {
+          console.debug('[Simple Wiki Companion] Save result:', result);
+          sendResponse({ success: true, ...result });
+        })
+        .catch(err => {
+          console.debug('[Simple Wiki Companion] Save failed:', err);
+          sendResponse({
+            success: false,
+            error: err instanceof Error ? err.message : String(err),
+          });
+        });
       return true;
 
     case 'DISMISS':
+      console.debug('[Simple Wiki Companion] Dismissed pending orders');
       pendingOrders = [];
       browser.browserAction.setBadgeText({ text: '' });
+      return undefined;
+
+    case 'WIKI_URL_DETECTED':
+      handleWikiUrlDetected(msg.wikiUrl);
       return undefined;
 
     default:
