@@ -45,7 +45,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.24
+          go-version-file: go.mod
       - name: Generate matrix
         id: generate
         run: go run ./tools/generate_matrix.go
@@ -57,7 +57,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.24
+          go-version-file: go.mod
       - name: Cache Go modules
         uses: actions/cache@v4
         with:
@@ -114,7 +114,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: 1.24
+          go-version-file: go.mod
       - name: Download coverage artifacts
         uses: actions/download-artifact@v4
         with:

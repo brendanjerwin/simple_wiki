@@ -11,8 +11,9 @@ ln -sf "$LOG_FILE" "$LOG_DIR/current_task.log"
 
 echo "Logging to: $LOG_FILE"
 
-# Ensure staticcheck is built from source and available
+# Ensure staticcheck and golangci-lint are built from source and available
 . ./scripts/ensure_staticcheck.sh
+. ./scripts/ensure_golangci_lint.sh
 
 {
   echo "Running staticcheck..."
