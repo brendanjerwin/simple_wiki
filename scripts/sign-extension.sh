@@ -22,6 +22,20 @@ if [[ -z "${AMO_API_KEY:-}" || -z "${AMO_API_SECRET:-}" ]]; then
     exit 1
 fi
 
+# Derive extension version from git tag if available
+# Firefox requires 1-4 dot-separated integers, so strip 'v' prefix and pre-release suffix
+TAG=$(git tag --points-at HEAD 2>/dev/null | head -1)
+if [[ -n "$TAG" ]]; then
+    EXT_VER="${TAG#v}"
+    EXT_VER="${EXT_VER%%-*}"
+    if [[ "$EXT_VER" =~ ^[0-9]+(\.[0-9]+){0,3}$ ]]; then
+        export EXTENSION_VERSION="$EXT_VER"
+        echo "Extension version from git tag: $EXTENSION_VERSION"
+    else
+        echo "Git tag '$TAG' does not produce a valid extension version, using manifest default"
+    fi
+fi
+
 # Build the extension XPI
 go generate ./extensions/...
 
