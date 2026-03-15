@@ -21,11 +21,10 @@ jobs:
       - uses: jetify-com/devbox-install-action@v0.14.0
 
       - name: Restore signed extension cache
-        id: cache
         uses: actions/cache@v4
         with:
           path: .signed-xpi-cache
-          key: signed-xpi-${{ hashFiles('extensions/online-order-recorder/src/**', 'extensions/online-order-recorder/manifest.json', 'extensions/online-order-recorder/package.json', 'extensions/online-order-recorder/icons/**') }}
+          key: signed-xpi-${{ hashFiles('extensions/online-order-recorder/src/**', 'extensions/online-order-recorder/manifest.json', 'extensions/online-order-recorder/package.json', 'extensions/online-order-recorder/icons/**', 'extensions/online-order-recorder/build-extension.sh', 'static/js/bun.lock') }}
           restore-keys: |
             signed-xpi-
 
@@ -34,61 +33,14 @@ jobs:
           AMO_API_KEY: ${{ secrets.AMO_API_KEY }}
           AMO_API_SECRET: ${{ secrets.AMO_API_SECRET }}
           SIGNED_XPI_CACHE_DIR: .signed-xpi-cache
-        run: |
-          # Build the extension XPI (go generate handles this)
-          go generate ./extensions/...
-
-          EXTENSION_DIR="extensions/online-order-recorder"
-          EXT_HASH=$(find "$EXTENSION_DIR/dist" -type f | sort | xargs sha256sum | sha256sum | cut -d' ' -f1)
-          CACHED_XPI="${SIGNED_XPI_CACHE_DIR}/simple-wiki-companion.xpi"
-          CACHED_HASH="${SIGNED_XPI_CACHE_DIR}/simple-wiki-companion.sha256"
-
-          mkdir -p signed-xpi-artifact
-
-          # Check cache first
-          if [[ -f "$CACHED_XPI" && -f "$CACHED_HASH" ]] && \
-             [[ "$(cat "$CACHED_HASH")" == "$EXT_HASH" ]]; then
-            echo "Extension unchanged (hash $EXT_HASH), using cached signed XPI"
-            cp "$CACHED_XPI" signed-xpi-artifact/simple-wiki-companion.xpi
-          else
-            echo "Signing extension with AMO..."
-
-            # Strip update_url (AMO rejects http://)
-            SIGN_DIR="$EXTENSION_DIR/sign-staging"
-            cp -r "$EXTENSION_DIR/dist" "$SIGN_DIR"
-            node -e "
-              const fs = require('fs');
-              const p = '$SIGN_DIR/manifest.json';
-              const m = JSON.parse(fs.readFileSync(p, 'utf8'));
-              delete m.browser_specific_settings.gecko.update_url;
-              fs.writeFileSync(p, JSON.stringify(m, null, 2) + '\n');
-            "
-
-            if web-ext sign \
-                --source-dir "$SIGN_DIR" \
-                --artifacts-dir "$EXTENSION_DIR/signed" \
-                --api-key "$AMO_API_KEY" \
-                --api-secret "$AMO_API_SECRET" \
-                --channel unlisted; then
-              cp "$EXTENSION_DIR"/signed/*.xpi signed-xpi-artifact/simple-wiki-companion.xpi
-              echo "Extension signed successfully"
-
-              # Update cache
-              mkdir -p "$SIGNED_XPI_CACHE_DIR"
-              cp signed-xpi-artifact/simple-wiki-companion.xpi "$CACHED_XPI"
-              echo "$EXT_HASH" > "$CACHED_HASH"
-            else
-              echo "⚠️  AMO signing failed, builds will use unsigned extension"
-            fi
-            rm -rf "$SIGN_DIR"
-          fi
+        run: devbox run -- bash scripts/sign-extension.sh
 
       - name: Upload signed XPI artifact
         uses: actions/upload-artifact@v4
         with:
           name: signed-xpi
           path: signed-xpi-artifact/
-          if-no-files-found: ignore
+          if-no-files-found: error
           retention-days: 1
 
   build:
@@ -122,7 +74,6 @@ jobs:
         with:
           name: signed-xpi
           path: signed-xpi-artifact/
-        continue-on-error: true
 
       - name: Build Go Binary
         env:
