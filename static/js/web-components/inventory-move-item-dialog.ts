@@ -8,7 +8,8 @@ import { getGrpcWebTransport } from './grpc-transport.js';
 import { SearchService, SearchContentRequestSchema, type SearchResult } from '../gen/api/v1/search_pb.js';
 import './inventory-qr-scanner.js';
 import type { ItemScannedEventDetail, ScannedItemInfo, InventoryQrScanner } from './inventory-qr-scanner.js';
-import { coerceThirdPartyError } from './augment-error-service.js';
+import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
+import './error-display.js';
 
 /**
  * Information about a scanned container result (alias for ScannedItemInfo)
@@ -66,16 +67,6 @@ export class InventoryMoveItemDialog extends LitElement {
         padding: 20px;
         overflow-y: auto;
         flex: 1;
-      }
-
-      .error-message {
-        background: #fef2f2;
-        border: 1px solid #fecaca;
-        color: #dc2626;
-        padding: 12px;
-        border-radius: 4px;
-        margin-bottom: 16px;
-        font-size: 14px;
       }
 
       .search-results {
@@ -235,41 +226,6 @@ export class InventoryMoveItemDialog extends LitElement {
         gap: 12px;
       }
 
-      .scan-error {
-        margin-top: 12px;
-        padding: 12px;
-        background: #fef2f2;
-        border: 1px solid #fecaca;
-        border-radius: 4px;
-      }
-
-      .scan-error-message {
-        color: #dc2626;
-        font-size: 14px;
-        margin-bottom: 10px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
-
-      .scan-error-message .icon {
-        font-size: 16px;
-      }
-
-      .scan-again-button {
-        padding: 6px 12px;
-        border: 1px solid #fca5a5;
-        border-radius: 4px;
-        background: white;
-        color: #dc2626;
-        font-size: 13px;
-        cursor: pointer;
-        transition: all 0.15s;
-      }
-
-      .scan-again-button:hover {
-        background: #fef2f2;
-      }
     `
   );
 
@@ -295,7 +251,7 @@ export class InventoryMoveItemDialog extends LitElement {
   declare movingTo: string | null;
 
   @state()
-  declare error: Error | null;
+  declare error: AugmentedError | null;
 
   @state()
   declare scannerMode: boolean;
@@ -307,7 +263,7 @@ export class InventoryMoveItemDialog extends LitElement {
   declare scannedResult: ScannedResultInfo | null;
 
   @state()
-  declare scanError: Error | null;
+  declare scanError: AugmentedError | null;
 
   private _searchDebounceTimeoutMs = 300;
   private _searchDebounceTimer?: ReturnType<typeof setTimeout>;
@@ -448,7 +404,7 @@ export class InventoryMoveItemDialog extends LitElement {
       );
     } catch (err) {
       this.searchResults = [];
-      this.error = coerceThirdPartyError(err, 'Container search failed');
+      this.error = AugmentErrorService.augmentError(err, 'search containers');
     } finally {
       this.searchLoading = false;
     }
@@ -476,13 +432,19 @@ export class InventoryMoveItemDialog extends LitElement {
 
     // Validate: is it a container?
     if (!item.isContainer) {
-      this.scanError = new Error(`"${item.identifier}" is not marked as a container`);
+      this.scanError = AugmentErrorService.augmentError(
+        new Error(`"${item.identifier}" is not marked as a container`),
+        'scan item'
+      );
       return;
     }
 
     // Validate: not the current container?
     if (item.identifier === this.currentContainer) {
-      this.scanError = new Error('Cannot move to current location');
+      this.scanError = AugmentErrorService.augmentError(
+        new Error('Cannot move to current location'),
+        'scan item'
+      );
       return;
     }
 
@@ -559,7 +521,7 @@ export class InventoryMoveItemDialog extends LitElement {
       );
       this.close();
     } else {
-      this.error = result.error ?? null;
+      this.error = result.error ? AugmentErrorService.augmentError(result.error, 'move item') : null;
       this.movingTo = null;
     }
   };
@@ -651,15 +613,10 @@ export class InventoryMoveItemDialog extends LitElement {
     }
 
     return html`
-      <div class="scan-error">
-        <div class="scan-error-message">
-          <span class="icon"><i class="fa-solid fa-triangle-exclamation"></i></span>
-          ${this.scanError.message}
-        </div>
-        <button class="scan-again-button" @click=${this._handleScanAgain}>
-          <i class="fa-solid fa-qrcode"></i> Scan Again
-        </button>
-      </div>
+      <error-display
+        .augmentedError=${this.scanError}
+        .action=${{ label: 'Scan Again', onClick: () => this._handleScanAgain() }}
+      ></error-display>
     `;
   }
 
@@ -674,7 +631,10 @@ export class InventoryMoveItemDialog extends LitElement {
 
         <div class="content">
           ${this.error
-            ? html`<div class="error-message">${this.error.message}</div>`
+            ? html`<error-display
+                .augmentedError=${this.error}
+                .action=${{ label: 'Dismiss', onClick: () => { this.error = null; } }}
+              ></error-display>`
             : ''}
 
           <div class="form-group">

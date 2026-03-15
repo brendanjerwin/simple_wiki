@@ -3,6 +3,8 @@ import { stub } from 'sinon';
 import { create } from '@bufbuild/protobuf';
 import { SystemInfoIndexing } from './system-info-indexing.js';
 import { GetJobStatusResponseSchema, JobQueueStatusSchema, type JobQueueStatus } from '../gen/api/v1/system_info_pb.js';
+import { AugmentErrorService } from './augment-error-service.js';
+import type { ErrorDisplay } from './error-display.js';
 
 function timeout(ms: number, message: string) {
   return new Promise((_, reject) =>
@@ -13,17 +15,12 @@ function timeout(ms: number, message: string) {
 describe('SystemInfoIndexing', () => {
   let el: SystemInfoIndexing;
   let fetchStub: ReturnType<typeof stub>;
-  let writeTextStub: ReturnType<typeof stub>;
 
   beforeEach(async () => {
     // Prevent any potential network calls that could cause hanging
     fetchStub = stub(window, 'fetch');
     fetchStub.resolves(new Response('{}'));
 
-    // Stub clipboard writeText for error click tests
-    writeTextStub = stub(navigator.clipboard, 'writeText');
-    writeTextStub.resolves();
-    
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- fixture returns unknown when using Promise.race
     el = await Promise.race([
       fixture<SystemInfoIndexing>(html`<system-info-indexing></system-info-indexing>`),
@@ -34,9 +31,6 @@ describe('SystemInfoIndexing', () => {
   afterEach(() => {
     if (fetchStub) {
       fetchStub.restore();
-    }
-    if (writeTextStub) {
-      writeTextStub.restore();
     }
   });
 
@@ -75,14 +69,14 @@ describe('SystemInfoIndexing', () => {
 
   describe('when error is set', () => {
     beforeEach(async () => {
-      el.error = new Error('Test error message');
+      el.error = AugmentErrorService.augmentError(new Error('Test error message'), 'load indexing status');
       await el.updateComplete;
     });
 
     it('should display error message', () => {
-      const errorElement = el.shadowRoot?.querySelector('.error');
-      expect(errorElement).to.exist;
-      expect(errorElement?.textContent?.trim()).to.equal('Test error message');
+      const errorDisplay = el.shadowRoot?.querySelector('error-display');
+      expect(errorDisplay).to.exist;
+      expect((errorDisplay as ErrorDisplay).augmentedError?.message).to.equal('Test error message');
     });
 
     it('should not display indexing info', () => {
@@ -151,8 +145,8 @@ describe('SystemInfoIndexing', () => {
       const loadingElement = el.shadowRoot?.querySelector('.loading');
       expect(loadingElement).to.not.exist;
       
-      const errorElement = el.shadowRoot?.querySelector('.error');
-      expect(errorElement).to.not.exist;
+      const errorDisplay = el.shadowRoot?.querySelector('error-display');
+      expect(errorDisplay).to.not.exist;
     });
 
     it('should have empty shadowRoot content', () => {
@@ -221,8 +215,8 @@ describe('SystemInfoIndexing', () => {
     });
 
     it('should not display error message', () => {
-      const errorElement = el.shadowRoot?.querySelector('.error');
-      expect(errorElement).to.not.exist;
+      const errorDisplay = el.shadowRoot?.querySelector('error-display');
+      expect(errorDisplay).to.not.exist;
     });
   });
 
@@ -373,26 +367,19 @@ describe('SystemInfoIndexing', () => {
 
   describe('when error state is present', () => {
     beforeEach(async () => {
-      el.error = new Error('Connection failed');
+      el.error = AugmentErrorService.augmentError(new Error('Connection failed'), 'load indexing status');
       await el.updateComplete;
     });
 
     it('should display error message', () => {
-      const errorElement = el.shadowRoot?.querySelector('.error');
-      expect(errorElement).to.exist;
-      expect(errorElement?.textContent?.trim()).to.equal('Connection failed');
+      const errorDisplay = el.shadowRoot?.querySelector('error-display');
+      expect(errorDisplay).to.exist;
+      expect((errorDisplay as ErrorDisplay).augmentedError?.message).to.equal('Connection failed');
     });
 
-    it('should have basic error styling', () => {
-      const errorElement = el.shadowRoot?.querySelector('.error');
-      expect(errorElement).to.exist;
-      expect(errorElement?.classList.contains('error')).to.be.true;
-    });
-
-    it('should not have clickable styling by default', () => {
-      const errorElement = el.shadowRoot?.querySelector('.error');
-      expect(errorElement).to.exist;
-      expect(errorElement?.classList.contains('clickable')).to.be.false;
+    it('should render error-display element', () => {
+      const errorDisplay = el.shadowRoot?.querySelector('error-display');
+      expect(errorDisplay).to.exist;
     });
   });
 
@@ -511,23 +498,14 @@ describe('SystemInfoIndexing', () => {
   describe('accessibility', () => {
     describe('when error is present', () => {
       beforeEach(async () => {
-        el.error = new Error('Accessibility test error');
+        el.error = AugmentErrorService.augmentError(new Error('Accessibility test error'), 'load indexing status');
         await el.updateComplete;
       });
 
-      it('should display error message in accessible format', () => {
-        const errorElement = el.shadowRoot?.querySelector<HTMLElement>('.error');
-        expect(errorElement).to.exist;
-        expect(errorElement!.textContent?.trim()).to.equal('Accessibility test error');
-      });
-
-      it('should have basic error element without interactive features', () => {
-        const errorElement = el.shadowRoot?.querySelector<HTMLElement>('.error');
-        expect(errorElement).to.exist;
-
-        // Should not have interactive attributes since error clicking is not implemented
-        expect(errorElement!.tabIndex).to.not.equal(0);
-        expect(errorElement!.classList.contains('clickable')).to.be.false;
+      it('should display error via error-display component', () => {
+        const errorDisplay = el.shadowRoot?.querySelector('error-display');
+        expect(errorDisplay).to.exist;
+        expect((errorDisplay as ErrorDisplay).augmentedError?.message).to.equal('Accessibility test error');
       });
     });
 

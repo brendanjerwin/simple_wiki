@@ -6,7 +6,8 @@ import { createClient } from '@connectrpc/connect';
 import { create } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import { SearchService, SearchContentRequestSchema, type SearchResult } from '../gen/api/v1/search_pb.js';
-import { coerceThirdPartyError } from './augment-error-service.js';
+import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
+import './error-display.js';
 import type { TitleChangeEventDetail, IdentifierChangeEventDetail } from './event-types.js';
 import './automagic-identifier-input.js';
 import type { AutomagicIdentifierInput, GenerateIdentifierResult } from './automagic-identifier-input.js';
@@ -64,16 +65,6 @@ export class InventoryAddItemDialog extends LitElement {
       padding: 20px;
       overflow-y: auto;
       flex: 1;
-    }
-
-    .error-message {
-      background: #fef2f2;
-      border: 1px solid #fecaca;
-      color: #dc2626;
-      padding: 12px;
-      border-radius: 4px;
-      margin-bottom: 16px;
-      font-size: 14px;
     }
 
     .search-results {
@@ -161,7 +152,7 @@ export class InventoryAddItemDialog extends LitElement {
   declare loading: boolean;
 
   @state()
-  declare error: Error | null;
+  declare error: AugmentedError | null;
 
   @state()
   declare searchResults: SearchResult[];
@@ -324,7 +315,7 @@ export class InventoryAddItemDialog extends LitElement {
       this.searchResults = response.results;
     } catch (err) {
       this.searchResults = [];
-      this.error = coerceThirdPartyError(err, 'Container search failed');
+      this.error = AugmentErrorService.augmentError(err, 'search containers');
     } finally {
       this.searchLoading = false;
     }
@@ -368,7 +359,7 @@ export class InventoryAddItemDialog extends LitElement {
       if (!result.error) {
         throw new Error('InventoryItemCreatorMover.addItem returned success=false without an error');
       }
-      this.error = result.error;
+      this.error = AugmentErrorService.augmentError(result.error, 'create item');
     }
   };
 
@@ -409,7 +400,10 @@ export class InventoryAddItemDialog extends LitElement {
 
         <div class="content">
           ${this.error
-            ? html`<div class="error-message">${this.error.message}</div>`
+            ? html`<error-display
+                .augmentedError=${this.error}
+                .action=${{ label: 'Dismiss', onClick: () => { this.error = null; } }}
+              ></error-display>`
             : ''}
 
           <automagic-identifier-input

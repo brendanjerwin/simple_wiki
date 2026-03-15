@@ -3,6 +3,7 @@ import { stub } from 'sinon';
 import type { SinonStub } from 'sinon';
 import './file-drop-zone.js';
 import type { FileDropZone } from './file-drop-zone.js';
+import { AugmentedError } from './augment-error-service.js';
 
 // Minimal stub interface matching the shape of FileStorageService client
 interface StubClient {
@@ -389,8 +390,8 @@ describe('FileDropZone', () => {
         await el.updateComplete;
       });
 
-      it('should set error', () => {
-        expect(el.error).to.be.instanceOf(Error);
+      it('should set error as AugmentedError', () => {
+        expect(el.error).to.be.instanceOf(AugmentedError);
       });
 
       it('should include file name in error message', () => {
@@ -407,6 +408,11 @@ describe('FileDropZone', () => {
 
       it('should not set uploading to true', () => {
         expect(el.uploading).to.be.false;
+      });
+
+      it('should render error-display component', () => {
+        const errorDisplay = el.shadowRoot?.querySelector('error-display');
+        expect(errorDisplay).to.exist;
       });
     });
 
@@ -472,8 +478,8 @@ describe('FileDropZone', () => {
       await el.updateComplete;
     });
 
-    it('should set error with the upload error', () => {
-      expect(el.error).to.be.instanceOf(Error);
+    it('should set error as AugmentedError', () => {
+      expect(el.error).to.be.instanceOf(AugmentedError);
     });
 
     it('should preserve the original error message', () => {
@@ -482,6 +488,11 @@ describe('FileDropZone', () => {
 
     it('should reset uploading to false', () => {
       expect(el.uploading).to.be.false;
+    });
+
+    it('should render error-display component', () => {
+      const errorDisplay = el.shadowRoot?.querySelector('error-display');
+      expect(errorDisplay).to.exist;
     });
   });
 

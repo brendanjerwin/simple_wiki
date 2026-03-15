@@ -5,6 +5,7 @@ import { GetVersionResponseSchema, GetJobStatusResponseSchema, JobQueueStatusSch
 import { create } from '@bufbuild/protobuf';
 import { TimestampSchema } from '@bufbuild/protobuf/wkt';
 import { stub, useFakeTimers, type SinonFakeTimers, type SinonStub } from 'sinon';
+import { AugmentErrorService, AugmentedError } from './augment-error-service.js';
 import './system-info.js';
 
 // Interface for testing private methods - accessed via unknown cast
@@ -72,7 +73,7 @@ describe('SystemInfo', () => {
   describe('when there is an error', () => {
     beforeEach(async () => {
       el.loading = false;
-      el.error = new Error('Connection failed');
+      el.error = AugmentErrorService.augmentError(new Error('Connection failed'), 'load system info');
       delete el.version;
       await el.updateComplete;
     });
@@ -575,7 +576,7 @@ describe('SystemInfo', () => {
     describe('when an error occurs', () => {
       beforeEach(async () => {
         el.loading = false;
-        el.error = new Error('Test error message');
+        el.error = AugmentErrorService.augmentError(new Error('Test error message'), 'load system info');
         await el.updateComplete;
       });
 
@@ -595,7 +596,7 @@ describe('SystemInfo', () => {
 
     describe('when error is cleared', () => {
       beforeEach(async () => {
-        el.error = new Error('Previous error');
+        el.error = AugmentErrorService.augmentError(new Error('Previous error'), 'load system info');
         await el.updateComplete;
         el.error = null;
         await el.updateComplete;
@@ -800,9 +801,9 @@ describe('SystemInfo error handling', () => {
       });
 
       it('should convert to Error object', () => {
-        expect(el.error).to.be.instanceOf(Error);
-        // The error message will be the stringified version of the object
-        expect(el.error?.message).to.equal('[object Object]');
+        expect(el.error).to.be.instanceOf(AugmentedError);
+        // AugmentErrorService uses JSON.stringify for non-Error objects
+        expect(el.error?.message).to.equal('{"code":"UNAVAILABLE"}');
       });
     });
   });
@@ -915,7 +916,7 @@ describe('SystemInfo error handling', () => {
       });
 
       it('should convert to Error object', () => {
-        expect(el.error).to.be.instanceOf(Error);
+        expect(el.error).to.be.instanceOf(AugmentedError);
       });
     });
   });
@@ -1426,7 +1427,7 @@ describe('SystemInfo error handling', () => {
       });
 
       it('should convert to Error object', () => {
-        expect(el.error).to.be.instanceOf(Error);
+        expect(el.error).to.be.instanceOf(AugmentedError);
         expect(el.error?.message).to.equal('string error from stream');
       });
     });

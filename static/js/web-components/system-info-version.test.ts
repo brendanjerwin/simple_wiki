@@ -4,6 +4,7 @@ import { SystemInfoVersion } from './system-info-version.js';
 import { GetVersionResponseSchema } from '../gen/api/v1/system_info_pb.js';
 import { create } from '@bufbuild/protobuf';
 import { TimestampSchema } from '@bufbuild/protobuf/wkt';
+import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
 import './system-info-version.js';
 
 function timeout(ms: number, message: string) {
@@ -94,7 +95,7 @@ describe('SystemInfoVersion', () => {
   describe('when in error state without version data', () => {
     beforeEach(async () => {
       el.loading = false;
-      el.error = new Error('Failed to load version info');
+      el.error = AugmentErrorService.augmentError(new Error('Failed to load version info'), 'load version info');
       delete el.version;
 
       await Promise.race([
@@ -104,8 +105,8 @@ describe('SystemInfoVersion', () => {
     });
 
     it('should display error message', () => {
-      const errorElement = el.shadowRoot?.querySelector('.error');
-      expect(errorElement?.textContent).to.equal('Failed to load version info');
+      const errorElement = el.shadowRoot?.querySelector('error-display');
+      expect((errorElement as unknown as { augmentedError: AugmentedError })?.augmentedError?.message).to.equal('Failed to load version info');
     });
 
     it('should not display version rows', () => {
@@ -153,7 +154,7 @@ describe('SystemInfoVersion', () => {
       });
 
       it('should not display error state', () => {
-        const errorElement = el.shadowRoot?.querySelector('.error');
+        const errorElement = el.shadowRoot?.querySelector('error-display');
         expect(errorElement).to.not.exist;
       });
     });
@@ -529,13 +530,13 @@ describe('SystemInfoVersion', () => {
         });
 
         el.loading = false;
-        el.error = new Error('Some error');
+        el.error = AugmentErrorService.augmentError(new Error('Some error'), 'some operation');
         el.version = create(GetVersionResponseSchema, {
           commit: 'abcdef1234567890',
           buildTime: mockTimestamp
         });
 
-  
+
         await Promise.race([
           el.updateComplete,
           timeout(5000, "Component update timed out"),
@@ -545,8 +546,8 @@ describe('SystemInfoVersion', () => {
       it('should display version information instead of error', () => {
         const commitValue = el.shadowRoot?.querySelector('.version-row:first-child .value');
         expect(commitValue?.textContent).to.equal('abcdef1');
-        
-        const errorElement = el.shadowRoot?.querySelector('.error');
+
+        const errorElement = el.shadowRoot?.querySelector('error-display');
         expect(errorElement).to.not.exist;
       });
     });
