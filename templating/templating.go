@@ -112,8 +112,7 @@ func ConstructTemplateContextFromFrontmatterWithVisited(fm wikipage.FrontMatter,
 }
 
 const (
-	maxRecursionDepth        = 10
-	maxInventoryDepth        = 10               // Maximum depth for recursive inventory traversal  
+	maxInventoryDepth        = 10               // Maximum depth for recursive inventory traversal
 	templateExecutionTimeout = 30 * time.Second // Timeout for template execution
 	timeoutMessage           = "  [Template execution timeout]"
 )
@@ -405,7 +404,7 @@ func executeTemplateInternal(ctx context.Context, tmpl *template.Template, templ
 // validationFuncMap returns a FuncMap with stub implementations for all
 // registered template functions. Used for parse-only validation so that we
 // can detect unknown function names without executing any real logic.
-// This is the single source of truth for registered macro names.
+// This map must be kept in sync with the runtime FuncMap in buildTemplateWithFunctions.
 func validationFuncMap() template.FuncMap {
 	return template.FuncMap{
 		"ShowInventoryContentsOf": func(string) string { return "" },
@@ -467,14 +466,14 @@ func formatTemplateValidationError(parseErr error) error {
 			suggestion := findMacroSuggestion(unknownFunc, known)
 
 			var msg strings.Builder
-			msg.WriteString(fmt.Sprintf("invalid macro %q", unknownFunc))
+			_, _ = msg.WriteString(fmt.Sprintf("invalid macro %q", unknownFunc))
 			if posInfo != "" {
-				msg.WriteString(" at " + posInfo)
+				_, _ = msg.WriteString(" at " + posInfo)
 			}
 			if suggestion != "" {
-				msg.WriteString(fmt.Sprintf("; did you mean %q?", suggestion))
+				_, _ = msg.WriteString(fmt.Sprintf("; did you mean %q?", suggestion))
 			}
-			msg.WriteString("\nAvailable macros: " + strings.Join(known, ", "))
+			_, _ = msg.WriteString("; available macros: " + strings.Join(known, ", "))
 
 			return errors.New(msg.String())
 		}

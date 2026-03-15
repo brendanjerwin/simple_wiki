@@ -185,10 +185,7 @@ func (m *MockPageReaderMutator) WriteFrontMatter(identifier wikipage.PageIdentif
 		m.WrittenFrontmatterByID = make(map[string]map[string]any)
 	}
 	// Shallow copy the frontmatter (sufficient for test isolation)
-	fmCopy := make(map[string]any)
-	for k, v := range fm {
-		fmCopy[k] = v
-	}
+	fmCopy := maps.Clone(fm)
 	m.WrittenFrontmatterByID[string(identifier)] = fmCopy
 	return m.WriteErr
 }
@@ -2655,7 +2652,7 @@ var _ = Describe("Server", func() {
 					mockFrontmatterIndexQueryer.GetValueResults["screwdriver"] = map[string]string{
 						"inventory.container": "container_0",
 					}
-					for i := 0; i < 25; i++ {
+					for i := range 25 {
 						containerID := fmt.Sprintf("container_%d", i)
 						nextID := fmt.Sprintf("container_%d", i+1)
 						mockFrontmatterIndexQueryer.GetValueResults[containerID] = map[string]string{
@@ -2679,7 +2676,7 @@ var _ = Describe("Server", func() {
 					Expect(resp.Results[0].InventoryContext.Path).To(HaveLen(20))
 					
 					// Verify depth values are correct (0 to 19)
-					for i := 0; i < 20; i++ {
+					for i := range 20 {
 						Expect(resp.Results[0].InventoryContext.Path[i].Depth).To(Equal(int32(i)))
 					}
 				})
@@ -3828,8 +3825,12 @@ var _ = Describe("Server", func() {
 				Expect(resp.Error).To(ContainSubstring("Checklist"))
 			})
 
-			It("should not write any content", func() {
+			It("should not write any markdown", func() {
 				Expect(mockPageReaderMutator.WrittenMarkdown).To(BeEmpty())
+			})
+
+			It("should not write any frontmatter", func() {
+				Expect(mockPageReaderMutator.WrittenFrontmatter).To(BeNil())
 			})
 		})
 	})

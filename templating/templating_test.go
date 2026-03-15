@@ -740,7 +740,7 @@ var _ = Describe("ConstructTemplateContextFromFrontmatterWithVisited with circul
 		mockIndex = &mockFrontmatterIndex{
 			index: map[string]map[string][]string{
 				"inventory.container": {
-					"circular_container": []string{"item1", "item2"},
+					"circular_container": {"item1", "item2"},
 				},
 			},
 			values: map[string]map[string]string{
@@ -1091,7 +1091,7 @@ var _ = Describe("BuildIsContainer edge cases", func() {
 	Context("with legacy container (items reference it)", func() {
 		BeforeEach(func() {
 			mockIndex.index["inventory.container"] = map[string][]string{
-				"legacy_container": []string{"item1", "item2"},
+				"legacy_container": {"item1", "item2"},
 			}
 		})
 
@@ -1227,7 +1227,7 @@ var _ = Describe("ExecuteTemplate", func() {
 	Context("with FindBy function", func() {
 		It("should execute template with FindBy function", func() {
 			mockIndex.index["tag"] = map[string][]string{
-				"electronics": []string{"item1", "item2"},
+				"electronics": {"item1", "item2"},
 			}
 
 			templateString := "{{ $items := FindBy \"tag\" \"electronics\" }}Count: {{ len $items }}"
@@ -1334,7 +1334,7 @@ var _ = Describe("ExecuteTemplate", func() {
 	Context("with FindByPrefix function", func() {
 		It("should execute template with FindByPrefix function", func() {
 			mockIndex.index["tag"] = map[string][]string{
-				"electronics": []string{"item1", "item2"},
+				"electronics": {"item1", "item2"},
 			}
 
 			templateString := "{{ $items := FindByPrefix \"tag\" \"elect\" }}Count: {{ len $items }}"
@@ -1352,7 +1352,7 @@ var _ = Describe("ExecuteTemplate", func() {
 	Context("with FindByKeyExistence function", func() {
 		It("should execute template with FindByKeyExistence function", func() {
 			mockIndex.index["has_serial"] = map[string][]string{
-				"": []string{"item1", "item2"},
+				"": {"item1", "item2"},
 			}
 
 			templateString := "{{ $items := FindByKeyExistence \"has_serial\" }}Count: {{ len $items }}"
@@ -1414,7 +1414,7 @@ var _ = Describe("ExecuteTemplate", func() {
 				titleKey:      "Page 1",
 			}
 			mockIndex.index["tag"] = map[string][]string{
-				"important": []string{"page1"},
+				"important": {"page1"},
 			}
 			mockIndex.values["test_container"] = map[string]string{
 				"inventory.is_container": "true",
@@ -1511,7 +1511,7 @@ var _ = Describe("ValidateTemplate", func() {
 
 	It("should return nil for all registered macros", func() {
 		Expect(templating.ValidateTemplate(
-			`{{ Checklist "list" }} {{ LinkTo "page" }} {{ IsContainer "p" }} {{ ShowInventoryContentsOf "c" }}`,
+			`{{ Checklist "list" }} {{ LinkTo "page" }} {{ IsContainer "p" }} {{ ShowInventoryContentsOf "c" }} {{ FindBy "key" "val" }} {{ FindByPrefix "key" "prefix" }} {{ FindByKeyExistence "key" }}`,
 		)).To(BeNil())
 	})
 
@@ -1519,7 +1519,7 @@ var _ = Describe("ValidateTemplate", func() {
 		err := templating.ValidateTemplate(`{{ UnknownMacro "arg" }}`)
 		Expect(err).NotTo(BeNil())
 		Expect(err.Error()).To(ContainSubstring(`"UnknownMacro"`))
-		Expect(err.Error()).To(ContainSubstring("Available macros"))
+		Expect(err.Error()).To(ContainSubstring("available macros"))
 	})
 
 	It("should include position info in the error message", func() {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/inventory"
@@ -27,7 +28,6 @@ const (
 	itemsKey            = "items"
 	titleKey            = "title"
 	descriptionKey      = "description"
-	newlineConst        = "\n"
 	defaultMaxRecursion = 10
 )
 
@@ -605,10 +605,8 @@ func (s *Server) addItemToContainerList(containerID, itemID string) error {
 	}
 
 	// Check if item already exists
-	for _, item := range items {
-		if item == itemID {
-			return nil // Already in the list
-		}
+	if slices.Contains(items, itemID) {
+		return nil
 	}
 
 	// Add the item

@@ -415,7 +415,6 @@ describe('WikiEditor', () => {
 
   describe('when save returns an error', () => {
     let clock: SinonFakeTimers;
-    let statusIndicator: Element | null | undefined;
 
     beforeEach(async () => {
       clock = sinon.useFakeTimers({
@@ -438,7 +437,6 @@ describe('WikiEditor', () => {
       textarea.dispatchEvent(new Event('input', { bubbles: true }));
       await clock.tickAsync(500);
       await el.updateComplete;
-      statusIndicator = el.shadowRoot?.querySelector('.status-indicator');
     });
 
     afterEach(() => {
@@ -453,8 +451,9 @@ describe('WikiEditor', () => {
       expect((el as unknown as WikiEditorInternal).error).to.not.be.null;
     });
 
-    it('should show Error in the status bar', () => {
-      expect(statusIndicator?.textContent?.trim()).to.contain('Error');
+    it('should hide the status bar during errors', () => {
+      const statusBar = el.shadowRoot?.querySelector('.status-bar');
+      expect(statusBar?.classList.contains('visible')).to.be.false;
     });
 
     it('should render error-display inline', () => {
