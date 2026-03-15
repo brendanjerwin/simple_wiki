@@ -1,6 +1,6 @@
-[![GoDoc](https://godoc.org/github.com/k3a/html2text?status.svg)](https://godoc.org/github.com/k3a/html2text)
-[![Build Status](https://travis-ci.org/k3a/html2text.svg?branch=master)](https://travis-ci.org/k3a/html2text)
-[![Coverage Status](https://coveralls.io/repos/github/k3a/html2text/badge.svg?branch=master)](https://coveralls.io/github/k3a/html2text?branch=master)
+[![Go Reference](https://pkg.go.dev/badge/github.com/k3a/html2text.svg)](https://pkg.go.dev/github.com/k3a/html2text)
+[![test](https://github.com/k3a/html2text/actions/workflows/test.yml/badge.svg?branch=master)](https://github.com/k3a/html2text/actions/workflows/test.yml)
+[![coverage](https://raw.githubusercontent.com/k3a/html2text/badges/.badges/master/coverage.svg)](https://github.com/k3a/html2text/tree/badges)
 [![Report Card](https://goreportcard.com/badge/github.com/k3a/html2text)](https://goreportcard.com/report/github.com/k3a/html2text)
 
 # html2text
@@ -52,7 +52,7 @@ To see all features, please look info `html2text_test.go`.
 
 ## Alternatives
 - https://github.com/jaytaylor/html2text (heavier, with more features)
-- https://git.alexwennerberg.com/nanohtml2text (rewrite of this module in Rust)
+- https://git.sr.ht/~aw/nanohtml2text (rewrite of this module in Rust)
 
 ## License
 
