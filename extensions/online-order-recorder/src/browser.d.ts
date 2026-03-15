@@ -30,9 +30,32 @@ declare namespace browser {
   }
 
   namespace storage {
+    interface StorageChange {
+      oldValue?: unknown;
+      newValue?: unknown;
+    }
+
+    interface StorageChangedEvent {
+      addListener(
+        callback: (
+          changes: Record<string, StorageChange>,
+          areaName: string
+        ) => void
+      ): void;
+      removeListener(
+        callback: (
+          changes: Record<string, StorageChange>,
+          areaName: string
+        ) => void
+      ): void;
+    }
+
+    const onChanged: StorageChangedEvent;
+
     namespace local {
       function get(keys?: string | string[]): Promise<Record<string, unknown>>;
       function set(items: Record<string, unknown>): Promise<void>;
+      function remove(keys: string | string[]): Promise<void>;
     }
   }
 }

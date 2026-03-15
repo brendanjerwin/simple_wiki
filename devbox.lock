@@ -809,6 +809,54 @@
         }
       }
     },
+    "web-ext@latest": {
+      "last_modified": "2026-02-23T15:40:43Z",
+      "resolved": "github:NixOS/nixpkgs/80d901ec0377e19ac3f7bb8c035201e2e098cc97#web-ext",
+      "source": "devbox-search",
+      "version": "8.10.0",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/v188a76q0fgccyw0yf8pgivmbja7m83a-web-ext-8.10.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/v188a76q0fgccyw0yf8pgivmbja7m83a-web-ext-8.10.0"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/qbp4jkzv7jd7iz9gzrhyfd3x17f68l7l-web-ext-8.10.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/qbp4jkzv7jd7iz9gzrhyfd3x17f68l7l-web-ext-8.10.0"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/yy0cm980x9ynxk5k1sp4a70bwahfhawz-web-ext-8.10.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/yy0cm980x9ynxk5k1sp4a70bwahfhawz-web-ext-8.10.0"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/9absyj1n7ja821m5y7swdsg2yzr3m382-web-ext-8.10.0",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/9absyj1n7ja821m5y7swdsg2yzr3m382-web-ext-8.10.0"
+        }
+      }
+    },
     "zip@latest": {
       "last_modified": "2026-03-02T11:03:52Z",
       "resolved": "github:NixOS/nixpkgs/dc7513872406b53d2ff417a003895d6daffdff2f#zip",

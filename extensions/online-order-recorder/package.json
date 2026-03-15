@@ -6,7 +6,8 @@
     "build:content": "bun build ./src/content.ts --outfile ./dist/content.js --target browser",
     "build:background": "bun build ./src/background.ts --outfile ./dist/background.js --target browser",
     "build:popup": "bun build ./src/popup.ts --outfile ./dist/popup.js --target browser",
-    "build": "bun run build:content && bun run build:background && bun run build:popup",
+    "build:content-wiki-detect": "bun build ./src/content-wiki-detect.ts --outfile ./dist/content-wiki-detect.js --target browser",
+    "build": "bun run build:content && bun run build:background && bun run build:popup && bun run build:content-wiki-detect",
     "test": "vitest run"
   },
   "dependencies": {
