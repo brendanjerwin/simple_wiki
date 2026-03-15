@@ -153,11 +153,17 @@ if [ "$SKIP_GENERATE" != "true" ]; then
     # signing. Currently signing happens at build time with no knowledge of the
     # deployment URL, so update_url is omitted from the signed XPI.
 
+    # Use a pre-signed XPI if provided (e.g. from a prior CI job).
+    # This avoids hitting AMO multiple times in a matrix build.
+    if [[ -n "${SIGNED_XPI_PATH:-}" && -f "$SIGNED_XPI_PATH" ]]; then
+        echo "Using pre-signed XPI from $SIGNED_XPI_PATH"
+        cp "$SIGNED_XPI_PATH" static/extensions/simple-wiki-companion.xpi
+
     # Sign extension if AMO credentials are available (CI only).
     # To avoid AMO rate limits, skip signing when a cached signed XPI
     # matches the current extension source (set SIGNED_XPI_CACHE_DIR
     # from the workflow to enable caching).
-    if [[ -n "${AMO_API_KEY:-}" && -n "${AMO_API_SECRET:-}" ]]; then
+    elif [[ -n "${AMO_API_KEY:-}" && -n "${AMO_API_SECRET:-}" ]]; then
         EXTENSION_DIR="extensions/online-order-recorder"
         EXT_HASH=$(find "$EXTENSION_DIR/dist" -type f | sort | xargs sha256sum | sha256sum | cut -d' ' -f1)
         CACHED_XPI="${SIGNED_XPI_CACHE_DIR:-}/simple-wiki-companion.xpi"

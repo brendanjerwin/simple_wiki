@@ -9,9 +9,94 @@ on:
     branches: [main]
 
 jobs:
+  sign-extension:
+    name: Sign Extension
+    runs-on: ubuntu-latest
+    # Only sign on release events (not on every push/PR)
+    if: github.event_name == 'release'
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - uses: jetify-com/devbox-install-action@v0.14.0
+
+      - name: Restore signed extension cache
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: .signed-xpi-cache
+          key: signed-xpi-${{ hashFiles('extensions/online-order-recorder/src/**', 'extensions/online-order-recorder/manifest.json', 'extensions/online-order-recorder/package.json', 'extensions/online-order-recorder/icons/**') }}
+          restore-keys: |
+            signed-xpi-
+
+      - name: Build and sign extension
+        env:
+          AMO_API_KEY: ${{ secrets.AMO_API_KEY }}
+          AMO_API_SECRET: ${{ secrets.AMO_API_SECRET }}
+          SIGNED_XPI_CACHE_DIR: .signed-xpi-cache
+        run: |
+          # Build the extension XPI (go generate handles this)
+          go generate ./extensions/...
+
+          EXTENSION_DIR="extensions/online-order-recorder"
+          EXT_HASH=$(find "$EXTENSION_DIR/dist" -type f | sort | xargs sha256sum | sha256sum | cut -d' ' -f1)
+          CACHED_XPI="${SIGNED_XPI_CACHE_DIR}/simple-wiki-companion.xpi"
+          CACHED_HASH="${SIGNED_XPI_CACHE_DIR}/simple-wiki-companion.sha256"
+
+          mkdir -p signed-xpi-artifact
+
+          # Check cache first
+          if [[ -f "$CACHED_XPI" && -f "$CACHED_HASH" ]] && \
+             [[ "$(cat "$CACHED_HASH")" == "$EXT_HASH" ]]; then
+            echo "Extension unchanged (hash $EXT_HASH), using cached signed XPI"
+            cp "$CACHED_XPI" signed-xpi-artifact/simple-wiki-companion.xpi
+          else
+            echo "Signing extension with AMO..."
+
+            # Strip update_url (AMO rejects http://)
+            SIGN_DIR="$EXTENSION_DIR/sign-staging"
+            cp -r "$EXTENSION_DIR/dist" "$SIGN_DIR"
+            node -e "
+              const fs = require('fs');
+              const p = '$SIGN_DIR/manifest.json';
+              const m = JSON.parse(fs.readFileSync(p, 'utf8'));
+              delete m.browser_specific_settings.gecko.update_url;
+              fs.writeFileSync(p, JSON.stringify(m, null, 2) + '\n');
+            "
+
+            if web-ext sign \
+                --source-dir "$SIGN_DIR" \
+                --artifacts-dir "$EXTENSION_DIR/signed" \
+                --api-key "$AMO_API_KEY" \
+                --api-secret "$AMO_API_SECRET" \
+                --channel unlisted; then
+              cp "$EXTENSION_DIR"/signed/*.xpi signed-xpi-artifact/simple-wiki-companion.xpi
+              echo "Extension signed successfully"
+
+              # Update cache
+              mkdir -p "$SIGNED_XPI_CACHE_DIR"
+              cp signed-xpi-artifact/simple-wiki-companion.xpi "$CACHED_XPI"
+              echo "$EXT_HASH" > "$CACHED_HASH"
+            else
+              echo "⚠️  AMO signing failed, builds will use unsigned extension"
+            fi
+            rm -rf "$SIGN_DIR"
+          fi
+
+      - name: Upload signed XPI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-xpi
+          path: signed-xpi-artifact/
+          if-no-files-found: ignore
+          retention-days: 1
+
   build:
     name: Build and Release Go Binary
     runs-on: ubuntu-latest
+    needs: [sign-extension]
+    # Run builds even if signing was skipped (push/PR) or failed
+    if: always() && !cancelled()
     strategy:
       matrix:
         include:
@@ -31,10 +116,17 @@ jobs:
 
       - uses: jetify-com/devbox-install-action@v0.14.0
 
+      - name: Download signed XPI
+        if: needs.sign-extension.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: signed-xpi
+          path: signed-xpi-artifact/
+        continue-on-error: true
+
       - name: Build Go Binary
         env:
-          AMO_API_KEY: ${{ secrets.AMO_API_KEY }}
-          AMO_API_SECRET: ${{ secrets.AMO_API_SECRET }}
+          SIGNED_XPI_PATH: ${{ github.workspace }}/signed-xpi-artifact/simple-wiki-companion.xpi
         run: |
           devbox run build ${{ matrix.goos }} ${{ matrix.goarch }}
 
@@ -50,4 +142,3 @@ jobs:
         with:
           files: "./simple_wiki-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.exe' || '' }}"
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-
