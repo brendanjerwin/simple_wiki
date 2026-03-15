@@ -4,7 +4,7 @@
 # environment for working on tailscale, for use with "nix develop".
 #
 # For more information about this and why this file is useful, see:
-# https://nixos.wiki/wiki/Flakes
+# https://wiki.nixos.org/wiki/Flakes
 #
 # Also look into direnv: https://direnv.net/, this can make it so that you can
 # automatically get your environment set up when you change folders into the
@@ -55,7 +55,7 @@
           system = system;
           overlays = [
             (final: prev: {
-              go_1_25 = prev.go_1_25.overrideAttrs {
+              go_1_26 = prev.go_1_26.overrideAttrs {
                 version = goVersion;
                 src = prev.fetchFromGitHub {
                   owner = "tailscale";
@@ -132,7 +132,7 @@
     });
 
     devShells = eachSystem (pkgs: {
-      devShell = pkgs.mkShell {
+      default = pkgs.mkShell {
         packages = with pkgs; [
           curl
           git
@@ -140,7 +140,7 @@
           gotools
           graphviz
           perl
-          go_1_25
+          go_1_26
           yarn
 
           # qemu and e2fsprogs are needed for natlab
@@ -151,4 +151,4 @@
     });
   };
 }
-# nix-direnv cache busting line: sha256-jJSSXMyUqcJoZuqfSlBsKDQezyqS+jDkRglMMjG1K8g=
+# nix-direnv cache busting line: sha256-rhuWEEN+CtumVxOw6Dy/IRxWIrZ2x6RJb6ULYwXCQc4=
