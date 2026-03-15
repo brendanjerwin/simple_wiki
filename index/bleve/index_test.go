@@ -4,6 +4,7 @@ package bleve_test
 import (
 	"errors"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/blevesearch/bleve/search"
 	. "github.com/onsi/ginkgo/v2"
@@ -373,6 +374,42 @@ var _ = Describe("Index", func() {
 				Expect(end).To(BeNumerically("<=", len(contentText)))
 			})
 		})
+
+		Context("when the calculated boundary falls mid-rune in multi-byte UTF-8 content", func() {
+			var start, end int
+			// Build a string where a 3-byte rune straddles a fragment boundary.
+			// Each Japanese character ('日', '本', '語') is 3 bytes.
+			// We construct content so that adding contextPadding to a match position
+			// would naturally land on a continuation byte of one of these runes.
+			var contentText string
+
+			BeforeEach(func() {
+				// '日' is 3 bytes (0xE6 0x97 0xA5), placed at bytes [198, 201).
+				// A match at byte 50 with contextPadding=50 => fragmentStart=0, fragmentEnd=200.
+				// fragmentEnd=200 lands on the third byte (0xA5) of '日', which is a continuation byte.
+				// Without the fix, slicing contentText[0:200] would produce invalid UTF-8.
+				contentText = strings.Repeat("a", 198) + "日本語" + strings.Repeat("b", 300)
+				locations := []*search.Location{{Start: 50, End: 55}}
+				start, end = bleve.CalculateFragmentWindowForTest(idx, contentText, locations)
+			})
+
+			It("should produce boundaries at valid rune starts", func() {
+				// start=0 is implicitly valid (start of string is always a rune start).
+				// For non-zero start, verify it lands on a rune start byte.
+				if start > 0 {
+					Expect(utf8.RuneStart(contentText[start])).To(BeTrue(), "fragmentStart should be at a rune start")
+				}
+				// end=len(contentText) is implicitly valid (end of string, no byte to check).
+				// For end within the string, verify it lands on a rune start byte.
+				if end < len(contentText) {
+					Expect(utf8.RuneStart(contentText[end])).To(BeTrue(), "fragmentEnd should be at a rune start")
+				}
+			})
+
+			It("should produce a valid UTF-8 slice", func() {
+				Expect(utf8.ValidString(contentText[start:end])).To(BeTrue())
+			})
+		})
 	})
 
 	Describe("extractFragmentFromLocations", func() {
@@ -496,6 +533,51 @@ var _ = Describe("Index", func() {
 			It("should have at least one highlight", func() {
 				// Should have at least one highlight
 				Expect(len(highlights)).To(BeNumerically(">=", 1))
+			})
+		})
+
+		Context("when content has multi-byte UTF-8 characters near fragment boundary", func() {
+			var fragment string
+			var highlights []bleve.HighlightSpan
+
+			BeforeEach(func() {
+				// 198 ASCII bytes + '日' (3 bytes) + remainder; match at byte 50 causes
+				// fragmentEnd=200 which lands on a continuation byte of '日'.
+				contentText := strings.Repeat("a", 198) + "日本語" + strings.Repeat("b", 300)
+				locations := search.FieldTermLocationMap{
+					"content": map[string]search.Locations{
+						"term": []*search.Location{{Start: 50, End: 55}},
+					},
+				}
+				fragment, highlights = bleve.ExtractFragmentFromLocationsForTest(idx, contentText, locations)
+			})
+
+			It("should return a valid UTF-8 fragment", func() {
+				Expect(utf8.ValidString(fragment)).To(BeTrue())
+			})
+
+			It("should have at least one highlight", func() {
+				Expect(highlights).To(HaveLen(1))
+			})
+		})
+
+		Context("when content itself contains invalid UTF-8 bytes", func() {
+			var fragment string
+
+			BeforeEach(func() {
+				// Construct a string with an invalid UTF-8 sequence embedded in it.
+				// 0xFF is never valid in UTF-8.
+				contentText := "valid prefix " + string([]byte{0xFF, 0xFE}) + " valid suffix with more text to fill"
+				locations := search.FieldTermLocationMap{
+					"content": map[string]search.Locations{
+						"term": []*search.Location{{Start: 0, End: 5}},
+					},
+				}
+				fragment, _ = bleve.ExtractFragmentFromLocationsForTest(idx, contentText, locations)
+			})
+
+			It("should return a valid UTF-8 fragment", func() {
+				Expect(utf8.ValidString(fragment)).To(BeTrue())
 			})
 		})
 	})
