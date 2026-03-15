@@ -9,6 +9,8 @@ import {
   UploadFileRequestSchema,
 } from '../gen/api/v1/file_storage_pb.js';
 import { foundationCSS, sharedStyles } from './shared-styles.js';
+import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
+import './error-display.js';
 
 const MB_TO_BYTES = 1024 * 1024;
 
@@ -95,7 +97,7 @@ export class FileDropZone extends LitElement {
   declare uploading: boolean;
 
   @state()
-  declare error: Error | null;
+  declare error: AugmentedError | null;
 
   private _client: Client<typeof FileStorageService> | null = null;
 
@@ -164,8 +166,9 @@ export class FileDropZone extends LitElement {
   async _uploadFile(file: File): Promise<void> {
     const maxSizeBytes = this.maxUploadMb * MB_TO_BYTES;
     if (file.size > maxSizeBytes) {
-      this.error = new Error(
-        `File "${file.name}" is too large (${(file.size / MB_TO_BYTES).toFixed(1)} MB). Maximum size is ${this.maxUploadMb} MB.`
+      this.error = AugmentErrorService.augmentError(
+        new Error(`File "${file.name}" is too large (${(file.size / MB_TO_BYTES).toFixed(1)} MB). Maximum size is ${this.maxUploadMb} MB.`),
+        'validate file size'
       );
       return;
     }
@@ -193,7 +196,7 @@ export class FileDropZone extends LitElement {
         })
       );
     } catch (err) {
-      this.error = err instanceof Error ? err : new Error(String(err));
+      this.error = AugmentErrorService.augmentError(err, 'upload file');
     } finally {
       this.uploading = false;
     }
@@ -226,6 +229,12 @@ export class FileDropZone extends LitElement {
                 <span>Uploading...</span>
               </div>
             `
+          : nothing}
+        ${this.error
+          ? html`<error-display
+              .augmentedError=${this.error}
+              .action=${{ label: 'Dismiss', onClick: () => { this.error = null; } }}
+            ></error-display>`
           : nothing}
       </div>
     `;

@@ -2,6 +2,8 @@ import { html, css, LitElement } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import type { GetJobStatusResponse } from '../gen/api/v1/system_info_pb.js';
 import { foundationCSS } from './shared-styles.js';
+import type { AugmentedError } from './augment-error-service.js';
+import './error-display.js';
 
 export class SystemInfoIndexing extends LitElement {
 
@@ -148,31 +150,6 @@ export class SystemInfoIndexing extends LitElement {
         white-space: nowrap;
       }
 
-      .error {
-        color: #ff6b6b;
-        font-size: 10px;
-      }
-
-      .error.clickable {
-        cursor: pointer;
-        transition: background-color 0.2s ease;
-        border-radius: 4px;
-        padding: 4px;
-      }
-
-      .error.clickable:hover {
-        background-color: rgba(255, 107, 107, 0.1);
-      }
-
-      .error.clickable:focus {
-        outline: 2px solid #ff6b6b;
-        outline-offset: 2px;
-      }
-
-      .error.clickable:active {
-        background-color: rgba(255, 107, 107, 0.2);
-      }
-
       .loading {
         color: #adb5bd;
         font-style: italic;
@@ -187,7 +164,7 @@ export class SystemInfoIndexing extends LitElement {
   declare loading: boolean;
 
   @state()
-  declare error: Error | null;
+  declare error: AugmentedError | null;
 
   constructor() {
     super();
@@ -213,7 +190,7 @@ export class SystemInfoIndexing extends LitElement {
     }
 
     if (this.error) {
-      return html`<div class="error">${this.error.message}</div>`;
+      return html`<error-display .augmentedError=${this.error}></error-display>`;
     }
 
     if (!this.jobStatus) {

@@ -7,7 +7,8 @@ import { sharedStyles } from './shared-styles.js';
 import './wiki-search-results.js';
 import { SearchService, SearchContentRequestSchema } from '../gen/api/v1/search_pb.js';
 import type { SearchResult } from '../gen/api/v1/search_pb.js';
-import { coerceThirdPartyError } from './augment-error-service.js';
+import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
+import './error-display.js';
 import type { InventoryFilterChangedEventDetail } from './event-types.js';
 
 const INVENTORY_ONLY_STORAGE_KEY = 'wiki-search-inventory-only';
@@ -92,15 +93,6 @@ export class WikiSearch extends LitElement {
         background-color: #9da5ab;
     }
 
-    .error {
-        color: #721c24;
-        background-color: #f8d7da;
-        border: 1px solid #f5c6cb;
-        padding: 10px;
-        margin: 10px 0;
-        border-radius: 5px;
-        text-align: center;
-    }
     `;
 
   @property({ type: Array })
@@ -113,7 +105,7 @@ export class WikiSearch extends LitElement {
   declare loading: boolean;
 
   @state()
-  declare error: Error | null;
+  declare error: AugmentedError | null;
 
   @property({ type: Boolean })
   declare inventoryOnly: boolean;
@@ -195,7 +187,26 @@ export class WikiSearch extends LitElement {
     } catch (error) {
       this.results = [];
       this.totalUnfilteredCount = 0;
-      this.error = coerceThirdPartyError(error, 'Search failed');
+      this.error = AugmentErrorService.augmentError(error, 'search');
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  async _retrySearch(): Promise<void> {
+    if (!this.lastSearchQuery) return;
+    this.error = null;
+    this.loading = true;
+
+    try {
+      const response = await this.performSearch(this.lastSearchQuery);
+      this.results = [...response.results];
+      this.totalUnfilteredCount = response.totalUnfilteredCount;
+      this.noResults = response.results.length === 0;
+    } catch (error) {
+      this.results = [];
+      this.totalUnfilteredCount = 0;
+      this.error = AugmentErrorService.augmentError(error, 'search');
     } finally {
       this.loading = false;
     }
@@ -226,7 +237,7 @@ export class WikiSearch extends LitElement {
       } catch (error) {
         this.results = [];
         this.totalUnfilteredCount = 0;
-        this.error = coerceThirdPartyError(error, 'Search failed');
+        this.error = AugmentErrorService.augmentError(error, 'search');
       } finally {
         this.loading = false;
       }
@@ -241,7 +252,10 @@ export class WikiSearch extends LitElement {
                 <input type="search" name="search" placeholder="Search..." required @focus="${this.handleSearchInputFocused}">
                 <button type="submit"><i class="fa-solid fa-search"></i></button>
             </form>
-            ${this.error ? html`<div class="error">${this.error.message}</div>` : ''}
+            ${this.error ? html`<error-display
+              .augmentedError=${this.error}
+              .action=${{ label: 'Retry', onClick: () => this._retrySearch() }}
+            ></error-display>` : ''}
             <wiki-search-results
                 .results="${this.results}"
                 .open="${this.results.length > 0 || this.noResults}"

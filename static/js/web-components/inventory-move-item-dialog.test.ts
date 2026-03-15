@@ -4,6 +4,8 @@ import { InventoryMoveItemDialog } from './inventory-move-item-dialog.js';
 import './inventory-move-item-dialog.js';
 import type { ItemScannedEventDetail, ScannedItemInfo } from './inventory-qr-scanner.js';
 import type { SearchResult } from '../gen/api/v1/search_pb.js';
+import { AugmentErrorService } from './augment-error-service.js';
+import type { ErrorDisplay } from './error-display.js';
 
 describe('InventoryMoveItemDialog', () => {
   let el: InventoryMoveItemDialog;
@@ -236,13 +238,13 @@ describe('InventoryMoveItemDialog', () => {
     describe('when error is present', () => {
       beforeEach(async () => {
         el.openDialog('screwdriver', 'drawer_kitchen');
-        el.error = new Error('Container not found');
+        el.error = AugmentErrorService.augmentError(new Error('Container not found'), 'test');
         await el.updateComplete;
       });
 
       it('should display error message', () => {
-        const errorDiv = el.shadowRoot?.querySelector('.error-message');
-        expect(errorDiv?.textContent).to.contain('Container not found');
+        const errorDisplay = el.shadowRoot?.querySelector<ErrorDisplay>('error-display');
+        expect(errorDisplay?.augmentedError?.message).to.contain('Container not found');
       });
     });
 
@@ -511,18 +513,18 @@ describe('InventoryMoveItemDialog', () => {
       describe('when scanError is set', () => {
         beforeEach(async () => {
           el.openDialog('screwdriver', 'drawer_kitchen');
-          el.scanError = new Error('Page "xyz" not found');
+          el.scanError = AugmentErrorService.augmentError(new Error('Page "xyz" not found'), 'test');
           await el.updateComplete;
         });
 
         it('should display scan error message', () => {
-          const errorDiv = el.shadowRoot?.querySelector('.scan-error-message');
-          expect(errorDiv?.textContent).to.contain('Page "xyz" not found');
+          const errorDisplay = el.shadowRoot?.querySelector<ErrorDisplay>('error-display');
+          expect(errorDisplay?.augmentedError?.message).to.contain('Page "xyz" not found');
         });
 
-        it('should display Scan Again button', () => {
-          const scanAgainBtn = el.shadowRoot?.querySelector('.scan-again-button');
-          expect(scanAgainBtn?.textContent).to.contain('Scan Again');
+        it('should have Scan Again action', () => {
+          const errorDisplay = el.shadowRoot?.querySelector<ErrorDisplay>('error-display');
+          expect(errorDisplay?.action?.label).to.equal('Scan Again');
         });
       });
     });
@@ -570,7 +572,7 @@ describe('InventoryMoveItemDialog', () => {
           identifier: 'garage_toolbox',
           title: 'Garage Toolbox',
         };
-        el.scanError = new Error('Previous error');
+        el.scanError = AugmentErrorService.augmentError(new Error('Previous error'), 'test');
 
         callClearScannedResult(el);
         await el.updateComplete;
@@ -594,7 +596,7 @@ describe('InventoryMoveItemDialog', () => {
         // Set some scan state
         el.scannedDestination = 'old_container';
         el.scannedResult = { identifier: 'old', title: 'Old' };
-        el.scanError = new Error('Old error');
+        el.scanError = AugmentErrorService.augmentError(new Error('Old error'), 'test');
 
         // Open dialog should reset
         el.openDialog('new_item', 'new_container');
@@ -618,7 +620,7 @@ describe('InventoryMoveItemDialog', () => {
         el.openDialog('item', 'container');
         el.scannedDestination = 'scanned_container';
         el.scannedResult = { identifier: 'scanned', title: 'Scanned' };
-        el.scanError = new Error('Some error');
+        el.scanError = AugmentErrorService.augmentError(new Error('Some error'), 'test');
 
         el.close();
       });

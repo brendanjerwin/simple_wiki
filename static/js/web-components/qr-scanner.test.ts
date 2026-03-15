@@ -3,6 +3,8 @@ import type { SinonStub, SinonSpy } from 'sinon';
 import sinon from 'sinon';
 import './qr-scanner.js';
 import type { QrScanner, CameraProvider, CameraDevice, ScannerErrorEventDetail } from './qr-scanner.js';
+import { AugmentedError } from './augment-error-service.js';
+import type { ErrorDisplay } from './error-display.js';
 
 /**
  * Mock camera provider for testing
@@ -113,9 +115,10 @@ describe('QrScanner', () => {
       });
 
       it('should show error message', () => {
-        const error = el.shadowRoot?.querySelector('.error-message');
-        expect(error).to.exist;
-        expect(error?.textContent).to.include('No camera');
+        const errorDisplay = el.shadowRoot?.querySelector<ErrorDisplay>('error-display');
+        expect(errorDisplay).to.exist;
+        expect(errorDisplay?.augmentedError).to.be.instanceOf(AugmentedError);
+        expect(errorDisplay?.augmentedError?.message).to.include('No camera');
       });
 
       it('should not start scanning', () => {
@@ -142,9 +145,10 @@ describe('QrScanner', () => {
       });
 
       it('should show permission error message', () => {
-        const error = el.shadowRoot?.querySelector('.error-message');
-        expect(error).to.exist;
-        expect(error?.textContent).to.include('denied');
+        const errorDisplay = el.shadowRoot?.querySelector<ErrorDisplay>('error-display');
+        expect(errorDisplay).to.exist;
+        expect(errorDisplay?.augmentedError).to.be.instanceOf(AugmentedError);
+        expect(errorDisplay?.augmentedError?.message).to.include('denied');
       });
 
       it('should emit scanner-error event', () => {
@@ -384,9 +388,10 @@ describe('QrScanner', () => {
       });
 
       it('should show the string as error message', () => {
-        const error = el.shadowRoot?.querySelector('.error-message');
-        expect(error).to.exist;
-        expect(error?.textContent).to.include('String error from library');
+        const errorDisplay = el.shadowRoot?.querySelector<ErrorDisplay>('error-display');
+        expect(errorDisplay).to.exist;
+        expect(errorDisplay?.augmentedError).to.be.instanceOf(AugmentedError);
+        expect(errorDisplay?.augmentedError?.message).to.include('String error from library');
       });
 
       it('should emit scanner-error event', () => {
@@ -421,9 +426,10 @@ describe('QrScanner', () => {
       });
 
       it('should show unknown error message', () => {
-        const error = el.shadowRoot?.querySelector('.error-message');
-        expect(error).to.exist;
-        expect(error?.textContent).to.include('Unknown error (null or undefined)');
+        const errorDisplay = el.shadowRoot?.querySelector<ErrorDisplay>('error-display');
+        expect(errorDisplay).to.exist;
+        expect(errorDisplay?.augmentedError).to.be.instanceOf(AugmentedError);
+        expect(errorDisplay?.augmentedError?.message).to.include('Unknown error (null or undefined)');
       });
 
       it('should emit scanner-error event with Error object', () => {
@@ -454,9 +460,10 @@ describe('QrScanner', () => {
       });
 
       it('should show unknown error message', () => {
-        const error = el.shadowRoot?.querySelector('.error-message');
-        expect(error).to.exist;
-        expect(error?.textContent).to.include('Unknown error (null or undefined)');
+        const errorDisplay = el.shadowRoot?.querySelector<ErrorDisplay>('error-display');
+        expect(errorDisplay).to.exist;
+        expect(errorDisplay?.augmentedError).to.be.instanceOf(AugmentedError);
+        expect(errorDisplay?.augmentedError?.message).to.include('Unknown error (null or undefined)');
       });
 
       it('should emit scanner-error event with Error object', () => {
@@ -487,10 +494,11 @@ describe('QrScanner', () => {
       });
 
       it('should show unknown error message with object type', () => {
-        const error = el.shadowRoot?.querySelector('.error-message');
-        expect(error).to.exist;
-        expect(error?.textContent).to.include('Unknown error:');
-        expect(error?.textContent).to.include('[object Object]');
+        const errorDisplay = el.shadowRoot?.querySelector<ErrorDisplay>('error-display');
+        expect(errorDisplay).to.exist;
+        expect(errorDisplay?.augmentedError).to.be.instanceOf(AugmentedError);
+        expect(errorDisplay?.augmentedError?.message).to.include('Unknown error:');
+        expect(errorDisplay?.augmentedError?.message).to.include('[object Object]');
       });
 
       it('should emit scanner-error event with Error object', () => {
@@ -527,9 +535,10 @@ describe('QrScanner', () => {
       });
 
       it('should show unknown error message with stringified value', () => {
-        const error = el.shadowRoot?.querySelector('.error-message');
-        expect(error).to.exist;
-        expect(error?.textContent).to.include('Unknown error: 42');
+        const errorDisplay = el.shadowRoot?.querySelector<ErrorDisplay>('error-display');
+        expect(errorDisplay).to.exist;
+        expect(errorDisplay?.augmentedError).to.be.instanceOf(AugmentedError);
+        expect(errorDisplay?.augmentedError?.message).to.include('Unknown error: 42');
       });
 
       it('should emit scanner-error event with Error object', () => {
@@ -559,9 +568,10 @@ describe('QrScanner', () => {
       });
 
       it('should show camera permission error message', () => {
-        const error = el.shadowRoot?.querySelector('.error-message');
-        expect(error).to.exist;
-        expect(error?.textContent).to.include('denied');
+        const errorDisplay = el.shadowRoot?.querySelector<ErrorDisplay>('error-display');
+        expect(errorDisplay).to.exist;
+        expect(errorDisplay?.augmentedError).to.be.instanceOf(AugmentedError);
+        expect(errorDisplay?.augmentedError?.message).to.include('denied');
       });
 
       it('should emit scanner-error event', () => {

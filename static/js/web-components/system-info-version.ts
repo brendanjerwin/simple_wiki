@@ -3,6 +3,8 @@ import { property } from 'lit/decorators.js';
 import type { GetVersionResponse } from '../gen/api/v1/system_info_pb.js';
 import { type Timestamp, timestampDate } from '@bufbuild/protobuf/wkt';
 import { foundationCSS } from './shared-styles.js';
+import type { AugmentedError } from './augment-error-service.js';
+import './error-display.js';
 
 export class SystemInfoVersion extends LitElement {
   static override styles = [
@@ -45,10 +47,6 @@ export class SystemInfoVersion extends LitElement {
         text-overflow: ellipsis;
       }
 
-      .error {
-        color: #ff6b6b;
-      }
-
       .loading {
         color: #ccc;
       }
@@ -61,7 +59,7 @@ export class SystemInfoVersion extends LitElement {
   declare loading: boolean;
 
   @property({ type: Object })
-  declare error: Error | null;
+  declare error: AugmentedError | null;
 
   constructor() {
     super();
@@ -104,7 +102,7 @@ export class SystemInfoVersion extends LitElement {
   }
 
   private renderError() {
-    return html`<div class="error">${this.error?.message}</div>`;
+    return html`<error-display .augmentedError=${this.error}></error-display>`;
   }
 
   private renderVersion() {

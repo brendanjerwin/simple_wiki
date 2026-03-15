@@ -1,6 +1,7 @@
 import { html, fixture, expect } from '@open-wc/testing';
 import sinon, { type SinonStub } from 'sinon';
 import { InventoryAddItemDialog } from './inventory-add-item-dialog.js';
+import { AugmentErrorService, AugmentedError } from './augment-error-service.js';
 import type { InventoryItemCreatorMover } from './inventory-item-creator-mover.js';
 import type { AutomagicIdentifierInput } from './automagic-identifier-input.js';
 import type { SearchResult } from '../gen/api/v1/search_pb.js';
@@ -253,21 +254,27 @@ describe('InventoryAddItemDialog', () => {
     describe('when error is present', () => {
       beforeEach(async () => {
         el.openDialog('drawer_kitchen');
-        el.error = new Error('Item already exists');
+        el.error = AugmentErrorService.augmentError(new Error('Item already exists'), 'test');
         await el.updateComplete;
       });
 
-      it('should store error as Error object', () => {
-        expect(el.error).to.be.instanceOf(Error);
+      it('should store error as AugmentedError object', () => {
+        expect(el.error).to.be.instanceOf(AugmentedError);
       });
 
       it('should preserve error message', () => {
         expect(el.error?.message).to.equal('Item already exists');
       });
 
-      it('should display error message in UI', () => {
-        const errorDiv = el.shadowRoot?.querySelector('.error-message');
-        expect(errorDiv?.textContent).to.contain('Item already exists');
+      it('should render error-display component', () => {
+        const errorDisplay = el.shadowRoot?.querySelector('error-display');
+        expect(errorDisplay).to.exist;
+      });
+
+      it('should pass augmented error to error-display', () => {
+        const errorDisplay = el.shadowRoot?.querySelector('error-display');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access -- accessing component property for testing
+        expect((errorDisplay as any).augmentedError?.message).to.equal('Item already exists');
       });
     });
 
@@ -737,8 +744,8 @@ describe('InventoryAddItemDialog', () => {
         expect(el.searchResults).to.deep.equal([]);
       });
 
-      it('should set error', () => {
-        expect(el.error).to.be.instanceOf(Error);
+      it('should set error as AugmentedError', () => {
+        expect(el.error).to.be.instanceOf(AugmentedError);
       });
 
       it('should set searchLoading to false', () => {
@@ -951,8 +958,12 @@ describe('InventoryAddItemDialog', () => {
         await el.updateComplete;
       });
 
-      it('should set error', () => {
-        expect(el.error).to.equal(testError);
+      it('should set error as AugmentedError', () => {
+        expect(el.error).to.be.instanceOf(AugmentedError);
+      });
+
+      it('should preserve original error message in augmented error', () => {
+        expect(el.error?.message).to.equal('Item creation failed');
       });
 
       it('should set loading to false', () => {

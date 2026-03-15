@@ -3,6 +3,7 @@ import sinon from 'sinon';
 import './wiki-search.js';
 import type { SearchResult } from '../gen/api/v1/search_pb.js';
 import type { InventoryFilterChangedEventDetail } from './event-types.js';
+import type { AugmentedError } from './augment-error-service.js';
 
 const INVENTORY_ONLY_STORAGE_KEY = 'wiki-search-inventory-only';
 
@@ -10,7 +11,7 @@ interface WikiSearchElement extends HTMLElement {
   results: SearchResult[];
   noResults: boolean;
   loading: boolean;
-  error: Error | null;
+  error: AugmentedError | null;
   inventoryOnly: boolean;
   totalUnfilteredCount: number;
   _handleKeydown: (event: KeyboardEvent) => void;
@@ -404,9 +405,9 @@ describe('WikiSearch', () => {
       });
 
       it('should display error message', () => {
-        const errorDiv = el.shadowRoot?.querySelector('.error');
-        expect(errorDiv).to.exist;
-        expect(errorDiv?.textContent).to.equal('Network error');
+        const errorDisplay = el.shadowRoot?.querySelector('error-display');
+        expect(errorDisplay).to.exist;
+        expect((errorDisplay as unknown as { augmentedError: AugmentedError }).augmentedError.message).to.equal('Network error');
       });
 
       it('should reset totalUnfilteredCount to 0', () => {

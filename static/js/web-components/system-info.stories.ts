@@ -8,6 +8,7 @@ import { GetVersionResponseSchema, GetJobStatusResponseSchema, JobQueueStatusSch
 import { create } from '@bufbuild/protobuf';
 import { TimestampSchema } from '@bufbuild/protobuf/wkt';
 import { stub } from 'sinon';
+import { AugmentErrorService } from './augment-error-service.js';
 
 const meta: Meta = {
   title: 'Components/SystemInfo',
@@ -376,7 +377,7 @@ export const ErrorState: Story = {
     stub(el, 'stopAutoRefresh' as any);
     
     el.loading = false;
-    el.error = new Error('Failed to connect to system info service');
+    el.error = AugmentErrorService.augmentError(new Error('Failed to connect to system info service'), 'load system info');
     delete el.version;
     delete el.jobStatus;
     

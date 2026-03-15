@@ -5,6 +5,7 @@ import { create } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import { SystemInfoService, GetVersionRequestSchema, GetJobStatusRequestSchema, StreamJobStatusRequestSchema, type GetVersionResponse, type GetJobStatusResponse } from '../gen/api/v1/system_info_pb.js';
 import { foundationCSS } from './shared-styles.js';
+import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
 import './system-info-identity.js';
 import './system-info-indexing.js';
 import './system-info-version.js';
@@ -133,7 +134,7 @@ export class SystemInfo extends LitElement {
   declare loading: boolean;
 
   @state()
-  declare error: Error | null;
+  declare error: AugmentedError | null;
 
   @state()
   declare expanded: boolean;
@@ -230,7 +231,7 @@ export class SystemInfo extends LitElement {
     try {
       this.version = await this.client.getVersion(create(GetVersionRequestSchema, {}));
     } catch (err) {
-      this.error = err instanceof Error ? err : new Error(String(err));
+      this.error = AugmentErrorService.augmentError(err, 'load system info');
     } finally {
       this.requestUpdate();
     }
@@ -275,7 +276,7 @@ export class SystemInfo extends LitElement {
         this.startAutoRefresh();
       }
     } catch (err) {
-      this.error = err instanceof Error ? err : new Error(String(err));
+      this.error = AugmentErrorService.augmentError(err, 'load system info');
       // Fallback to polling on error
       this.startAutoRefresh();
     } finally {
@@ -312,7 +313,7 @@ export class SystemInfo extends LitElement {
     } catch (err) {
       const isAbortError = err instanceof Error && err.name === 'AbortError';
       if (!isAbortError) {
-        this.error = err instanceof Error ? err : new Error(String(err));
+        this.error = AugmentErrorService.augmentError(err, 'load system info');
         // Fallback to polling
         this.startAutoRefresh();
       }

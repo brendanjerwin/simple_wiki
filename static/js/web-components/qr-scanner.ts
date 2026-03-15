@@ -1,6 +1,8 @@
 import { html, css, LitElement, nothing } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import { sharedStyles, foundationCSS, buttonCSS, responsiveCSS } from './shared-styles.js';
+import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
+import './error-display.js';
 import QrScannerLib from 'qr-scanner';
 
 /**
@@ -236,16 +238,6 @@ export class QrScanner extends LitElement {
         background: #c82333;
       }
 
-      .error-message {
-        padding: 12px;
-        background: #fef2f2;
-        border: 1px solid #fecaca;
-        border-radius: 4px;
-        color: #dc2626;
-        font-size: 14px;
-        margin-top: 8px;
-      }
-
       .loading {
         display: flex;
         align-items: center;
@@ -285,7 +277,7 @@ export class QrScanner extends LitElement {
   declare private loading: boolean;
 
   @state()
-  declare private error: Error | undefined;
+  declare private error: AugmentedError | undefined;
 
   @state()
   declare private cameras: CameraDevice[];
@@ -577,7 +569,7 @@ export class QrScanner extends LitElement {
       error = new Error(message, { cause: err });
     }
 
-    this.error = error;
+    this.error = AugmentErrorService.augmentError(error, 'start camera');
 
     // Emit error event with full error object
     const event = new CustomEvent<ScannerErrorEventDetail>('scanner-error', {
@@ -631,7 +623,10 @@ export class QrScanner extends LitElement {
           : nothing}
 
         ${this.error
-          ? html`<div class="error-message">${this.error.message}</div>`
+          ? html`<error-display
+              .augmentedError=${this.error}
+              .action=${{ label: 'Try Again', onClick: () => { this.error = undefined; this.expand(); } }}
+            ></error-display>`
           : nothing}
 
         <div class="scanner-area ${this.expanded || this.embedded ? '' : 'collapsed'}" part="scanner-area">
