@@ -1,4 +1,4 @@
-// Copyright 2023-2024 Buf Technologies, Inc.
+// Copyright 2023-2026 Buf Technologies, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@ package vanguard
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -160,12 +161,17 @@ func (r restClientProtocol) prepareUnmarshalledRequest(op *operation, src []byte
 			return err
 		}
 	}
+
 	// And finally from the query string:
+	discardUnknownQueryParams := op.methodConf.restUnmarshalOptions.DiscardUnknownQueryParams
 	for fieldPath, values := range op.queryValues() {
 		fields, err := resolvePathToFieldDescriptors(
 			msg.Descriptor(), fieldPath, true,
 		)
 		if err != nil {
+			if discardUnknownQueryParams && errors.Is(err, errUnknownField) {
+				continue
+			}
 			return err
 		}
 		for _, value := range values {
@@ -431,6 +437,9 @@ func restHTTPBodyRequest(op *operation) bool {
 }
 
 func restHTTPBodyResponse(op *operation) bool {
+	if op.restTarget == nil {
+		return false
+	}
 	return restIsHTTPBody(op.methodConf.descriptor.Output(), op.restTarget.responseBodyFields)
 }
 

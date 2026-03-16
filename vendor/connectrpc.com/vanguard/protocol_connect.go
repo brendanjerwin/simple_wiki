@@ -1,4 +1,4 @@
-// Copyright 2023-2024 Buf Technologies, Inc.
+// Copyright 2023-2026 Buf Technologies, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -390,7 +390,7 @@ func (c connectUnaryServerProtocol) requestLine(op *operation, msg proto.Message
 
 	vals.Set("message", msgStr)
 	queryString := vals.Encode()
-	if uint32(len(op.methodConf.methodPath)+len(queryString)+1) > op.methodConf.maxGetURLBytes {
+	if int64(len(op.methodConf.methodPath)+len(queryString)+1) > int64(op.methodConf.maxGetURLBytes) {
 		// URL is too big; fall back to POST
 		return op.methodConf.methodPath, "", http.MethodPost, true, nil
 	}
@@ -453,7 +453,12 @@ func (c connectStreamClientProtocol) encodeEnd(op *operation, end *responseEnd, 
 		buffer.WriteString(`{"error": {"code": "internal", "message": ` + strconv.Quote(err.Error()) + `}}`)
 	}
 	// TODO: compress?
-	env := envelope{trailer: true, length: uint32(buffer.Len())}
+	length := buffer.Len()
+	limit := op.methodConf.maxMsgBufferBytes
+	if length > int(limit) {
+		return nil
+	}
+	env := envelope{trailer: true, length: uint32(buffer.Len())} //nolint:gosec // Length is validated above.
 	envBytes := c.encodeEnvelope(env)
 	_, _ = writer.Write(envBytes[:])
 	_, _ = buffer.WriteTo(writer)
@@ -593,8 +598,8 @@ func connectExtractUnaryTrailers(headers http.Header) http.Header {
 	}
 	result := make(http.Header, count)
 	for k, v := range headers {
-		if strings.HasPrefix(k, "Trailer-") {
-			result[strings.TrimPrefix(k, "Trailer-")] = v
+		if after, ok := strings.CutPrefix(k, "Trailer-"); ok {
+			result[after] = v
 			delete(headers, k)
 		}
 	}

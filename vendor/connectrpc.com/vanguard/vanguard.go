@@ -1,4 +1,4 @@
-// Copyright 2023-2024 Buf Technologies, Inc.
+// Copyright 2023-2026 Buf Technologies, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -393,6 +393,20 @@ func WithMaxGetURLBytes(limit uint32) ServiceOption {
 	})
 }
 
+// WithRESTUnmarshalOptions returns a service option that sets the unmarshal options for use with the REST protocol.
+func WithRESTUnmarshalOptions(options RESTUnmarshalOptions) ServiceOption {
+	return serviceOptionFunc(func(opts *serviceOptions) {
+		opts.restUnmarshalOptions = options
+	})
+}
+
+// RESTUnmarshalOptions contains options for unmarshalling REST requests.
+type RESTUnmarshalOptions struct {
+	// If DiscardUnknownQueryParams is true, any query parameters in a request that do not correspond to a field in the
+	// request message will be ignored. If false, such query parameters will cause an error. Defaults to false.
+	DiscardUnknownQueryParams bool
+}
+
 type transcoderOptions struct {
 	defaultServiceOptions []ServiceOption
 	rules                 []*annotations.HttpRule
@@ -420,10 +434,12 @@ type serviceOptions struct {
 	preferredCodec              string
 	maxMsgBufferBytes           uint32
 	maxGetURLBytes              uint32
+	restUnmarshalOptions        RESTUnmarshalOptions
 }
 
 type methodConfig struct {
 	*serviceOptions
+
 	descriptor                protoreflect.MethodDescriptor
 	requestType, responseType protoreflect.MessageType
 	methodPath                string

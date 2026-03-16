@@ -1,4 +1,4 @@
-// Copyright 2023-2024 Buf Technologies, Inc.
+// Copyright 2023-2026 Buf Technologies, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -33,6 +33,10 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/dynamicpb"
+)
+
+var (
+	errFinalDataAlreadyWritten = fmt.Errorf("final RPC response data already written: %w", context.Canceled)
 )
 
 // Transcoder is a Vanguard handler which acts like a router and a middleware. It transforms
@@ -387,8 +391,7 @@ func (o *operation) validate(transcoder *Transcoder) error {
 	o.request.ContentLength = -1 // transforming it will likely change it
 
 	// Identify the method being invoked.
-	err := o.resolveMethod(transcoder)
-	if err != nil {
+	if err := o.resolveMethod(transcoder); err != nil {
 		return err
 	}
 	if !o.client.protocol.acceptsStreamType(o, o.methodConf.streamType) {
@@ -861,16 +864,17 @@ func (r *envelopingReader) prepareNext() error {
 		env.compressed = r.rw.op.client.reqCompression != nil
 		if r.rw.op.contentLen != -1 {
 			limit := int64(r.rw.op.methodConf.maxMsgBufferBytes)
-			if r.rw.op.contentLen > limit {
+			length := r.rw.op.contentLen
+			if length > limit {
 				return bufferLimitError(limit)
 			}
 			r.current = &hardLimitReader{r: r.r, rw: r.rw, limit: r.rw.op.contentLen, makeError: contentLengthError}
-			env.length = uint32(r.rw.op.contentLen)
+			env.length = uint32(length) //nolint:gosec // Length is validated above.
 		} else {
 			// Oof. We have to buffer entire request in order to measure it.
 			limit := int64(r.rw.op.methodConf.maxMsgBufferBytes)
 			buf := r.rw.op.bufferPool.Get()
-			_, err := io.Copy(buf, &hardLimitReader{r: r.r, rw: r.rw, limit: limit})
+			_, err := io.Copy(buf, &hardLimitReader{r: r.r, rw: r.rw, limit: limit + 1})
 			if err != nil {
 				r.rw.op.bufferPool.Put(buf)
 				r.err = err
@@ -878,7 +882,7 @@ func (r *envelopingReader) prepareNext() error {
 			}
 			r.current = buf
 			r.mustReleaseCurrent = true
-			env.length = uint32(buf.Len())
+			env.length = uint32(buf.Len()) //nolint:gosec // Length is validated above.
 		}
 	default: // clientEnveloper != nil
 		var envBytes envelopeBytes
@@ -990,10 +994,14 @@ func (r *transformingReader) prepareMessage() error {
 		r.envRemain = 0
 		return nil
 	}
+	length := r.buffer.Len()
+	if limit := int(r.rw.op.methodConf.maxMsgBufferBytes); length > limit {
+		return bufferLimitError(int64(limit))
+	}
 	// Need to prefix the buffer with an envelope
 	env := envelope{
 		compressed: r.msg.wasCompressed && r.rw.op.server.reqCompression != nil,
-		length:     uint32(r.buffer.Len()),
+		length:     uint32(length), //nolint:gosec // Length is validated above.
 	}
 	r.env = r.rw.op.serverEnveloper.encodeEnvelope(env)
 	r.envRemain = envelopeLen
@@ -1094,12 +1102,6 @@ func (w *responseWriter) WriteHeader(statusCode int) {
 		w.op.client.respCompression = respCompression
 		w.op.server.respCompression = respCompression
 	}
-	if respMeta.codec != "" && respMeta.codec != w.op.server.codec.Name() &&
-		!restHTTPBodyResponse(w.op) {
-		// unexpected content-type for reply
-		w.reportError(fmt.Errorf("response uses incorrect codec: expecting %q but instead got %q", w.op.server.codec.Name(), respMeta.codec))
-		return
-	}
 
 	if respMeta.end != nil {
 		// RPC failed immediately.
@@ -1116,6 +1118,13 @@ func (w *responseWriter) WriteHeader(statusCode int) {
 		// We can send back error response immediately.
 		w.flushHeaders()
 		w.w = noResponseBodyWriter{}
+		return
+	}
+
+	if respMeta.codec != "" && respMeta.codec != w.op.server.codec.Name() &&
+		!restHTTPBodyResponse(w.op) {
+		// unexpected content-type for reply
+		w.reportError(fmt.Errorf("response uses incorrect codec: expecting %q but instead got %q", w.op.server.codec.Name(), respMeta.codec))
 		return
 	}
 
@@ -1222,8 +1231,7 @@ func (w *responseWriter) reportEnd(end *responseEnd) {
 	}
 	w.flusher.Flush()
 	// response is done
-	w.op.cancel()
-	w.err = context.Canceled
+	w.err = errFinalDataAlreadyWritten
 }
 
 func (w *responseWriter) flushHeaders() {
@@ -1311,7 +1319,7 @@ type envelopingWriter struct {
 	trailerIsCompressed bool
 }
 
-func (w *envelopingWriter) Write(data []byte) (int, error) {
+func (w *envelopingWriter) Write(data []byte) (n int, err error) {
 	w.maybeInit()
 	if w.err != nil {
 		return 0, w.err
@@ -1356,9 +1364,12 @@ func (w *envelopingWriter) Write(data []byte) (int, error) {
 		}
 
 		if w.currentIsTrailer {
-			err := w.handleTrailer()
-			if err != nil {
+			if err := w.handleTrailer(); err != nil {
 				return written, err
+			}
+			if len(data) == 0 {
+				// All done
+				return written, nil
 			}
 		} else {
 			// flush after each message and reset for next envelope
@@ -1403,8 +1414,7 @@ func (w *envelopingWriter) handleEnvelopeWritten() error {
 	}
 	if w.rw.op.clientEnveloper != nil {
 		envBytes := w.rw.op.clientEnveloper.encodeEnvelope(env)
-		_, err := w.w.Write(envBytes[:])
-		if err != nil {
+		if _, err := w.w.Write(envBytes[:]); err != nil {
 			w.err = err
 			return err
 		}
@@ -1431,17 +1441,23 @@ func (w *envelopingWriter) Close() error {
 		defer w.rw.op.bufferPool.Put(buf)
 	}
 	if w.remainingBytes == -1 && w.mustReleaseCurrent && w.err == nil {
+		length := buf.Len()
+		if limit := int(w.rw.op.methodConf.maxMsgBufferBytes); length > limit {
+			w.err = bufferLimitError(int64(limit))
+			return w.err
+		}
 		// We were buffering in order to measure size and create envelope,
 		// so do that now.
-		env := envelope{compressed: w.rw.op.client.respCompression != nil, length: uint32(buf.Len())}
+		env := envelope{
+			compressed: w.rw.op.client.respCompression != nil,
+			length:     uint32(buf.Len()), //nolint:gosec // Length is validated above.
+		}
 		envBytes := w.rw.op.clientEnveloper.encodeEnvelope(env)
-		_, err := w.w.Write(envBytes[:])
-		if err != nil {
+		if _, err := w.w.Write(envBytes[:]); err != nil {
 			w.err = err
 			return err
 		}
-		_, err = buf.WriteTo(w.w)
-		if err != nil {
+		if _, err := buf.WriteTo(w.w); err != nil {
 			w.err = err
 			return err
 		}
@@ -1491,12 +1507,15 @@ func (w *envelopingWriter) maybeInit() {
 		return
 	}
 	// synthesize envelope
+	if limit := int(w.rw.op.methodConf.maxMsgBufferBytes); w.rw.contentLen > limit {
+		w.err = bufferLimitError(int64(limit))
+		return
+	}
 	var env envelope
 	env.compressed = w.rw.op.client.respCompression != nil
-	env.length = uint32(w.rw.contentLen)
-	envBytes := w.rw.op.clientEnveloper.encodeEnvelope(envelope{})
-	_, err := w.w.Write(envBytes[:])
-	if err != nil {
+	env.length = uint32(w.rw.contentLen) //nolint:gosec // Length is validated above.
+	envBytes := w.rw.op.clientEnveloper.encodeEnvelope(env)
+	if _, err := w.w.Write(envBytes[:]); err != nil {
 		w.err = err
 		return
 	}
@@ -1527,7 +1546,7 @@ func (w *envelopingWriter) handleTrailer() error {
 	}
 	end.wasCompressed = w.trailerIsCompressed
 	w.rw.reportEnd(&end)
-	w.err = errors.New("final data already written")
+	w.err = errFinalDataAlreadyWritten
 	return nil
 }
 
@@ -1583,7 +1602,7 @@ func (w *transformingWriter) Write(data []byte) (n int, err error) {
 		w.buffer.Write(data[:remainingBytes])
 		written += remainingBytes
 		data = data[remainingBytes:]
-		if w.writingEnvelope {
+		if w.writingEnvelope { //nolint:nestif
 			var envBytes envelopeBytes
 			_, _ = w.buffer.Read(envBytes[:])
 			var err error
@@ -1606,6 +1625,10 @@ func (w *transformingWriter) Write(data []byte) (n int, err error) {
 			if err := w.flushMessage(); err != nil {
 				w.rw.reportError(err)
 				return written, err
+			}
+			if w.latestEnvelope.trailer && len(data) == 0 {
+				// All done.
+				return written, nil
 			}
 			w.expectingBytes = envelopeLen
 			w.writingEnvelope = true
@@ -1651,7 +1674,7 @@ func (w *transformingWriter) flushMessage() error {
 		}
 		end.wasCompressed = w.latestEnvelope.compressed
 		w.rw.reportEnd(&end)
-		w.err = errors.New("final data already written")
+		w.err = errFinalDataAlreadyWritten
 		return nil
 	}
 
@@ -1662,9 +1685,13 @@ func (w *transformingWriter) flushMessage() error {
 	}
 	buffer := w.msg.sendBuffer()
 	if enveloper := w.rw.op.clientEnveloper; enveloper != nil {
+		length := buffer.Len()
+		if limit := int(w.rw.op.methodConf.maxMsgBufferBytes); length > limit {
+			return bufferLimitError(int64(limit))
+		}
 		env := envelope{
 			compressed: w.msg.wasCompressed && w.rw.op.client.respCompression != nil,
-			length:     uint32(buffer.Len()),
+			length:     uint32(length), //nolint:gosec // Length is validated above.
 		}
 		envBytes := enveloper.encodeEnvelope(env)
 		if _, err := w.w.Write(envBytes[:]); err != nil {
@@ -1748,7 +1775,7 @@ type noResponseBodyWriter struct {
 }
 
 func (c noResponseBodyWriter) Write([]byte) (int, error) {
-	return 0, errors.New("final data already written")
+	return 0, errFinalDataAlreadyWritten
 }
 
 func (c noResponseBodyWriter) Close() error {
@@ -1762,7 +1789,8 @@ type limitWriter struct {
 }
 
 func (l *limitWriter) Write(data []byte) (n int, err error) {
-	if uint32(l.buf.Len()+len(data)) > l.limit {
+	length := l.buf.Len() + len(data)
+	if length > int(l.limit) {
 		err := bufferLimitError(int64(l.limit))
 		l.rw.reportError(err)
 		return 0, err

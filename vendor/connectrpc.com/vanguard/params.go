@@ -1,4 +1,4 @@
-// Copyright 2023-2024 Buf Technologies, Inc.
+// Copyright 2023-2026 Buf Technologies, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -67,8 +67,8 @@ func isWKTWithScalarJSONMapping(field protoreflect.FieldDescriptor) bool {
 func setParameter(msg protoreflect.Message, fields []protoreflect.FieldDescriptor, param string) error {
 	// Traverse the message to the last field.
 	leaf := msg
-	for i := 0; i < len(fields)-1; i++ {
-		leaf = leaf.Mutable(fields[i]).Message()
+	for _, field := range fields[:len(fields)-1] {
+		leaf = leaf.Mutable(field).Message()
 	}
 	field := fields[len(fields)-1]
 
@@ -88,7 +88,7 @@ func setParameter(msg protoreflect.Message, fields []protoreflect.FieldDescripto
 			)
 		}
 		return connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("invalid parameter %q %w", fieldPath, err),
+			fmt.Errorf("invalid parameter %q: %w", fieldPath, err),
 		)
 	}
 
@@ -255,8 +255,8 @@ func isNullValue(field protoreflect.FieldDescriptor) bool {
 func getParameter(msg protoreflect.Message, fields []protoreflect.FieldDescriptor, index int) (string, error) {
 	// Traverse the message to the last field.
 	leaf := msg
-	for i := 0; i < len(fields)-1; i++ {
-		leaf = leaf.Mutable(fields[i]).Message()
+	for _, field := range fields[:len(fields)-1] {
+		leaf = leaf.Mutable(field).Message()
 	}
 	field := fields[len(fields)-1]
 
