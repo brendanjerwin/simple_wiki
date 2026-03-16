@@ -676,8 +676,8 @@ var _ = Describe("Server", func() {
 					},
 					"metadata": map[string]any{
 						"identifier": "nested-identifier-should-be-allowed",
+						"author":     "existing-author",
 						"version":    "1.0",
-						// Note: "author" from existing metadata is overwritten by maps.Copy
 					},
 				}
 				

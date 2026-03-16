@@ -9,7 +9,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"maps"
 	"os"
 	"strings"
 	"time"
@@ -78,6 +77,29 @@ func validateNoIdentifierKey(fm map[string]any) error {
 	return nil
 }
 
+func mergeFrontmatterDeep(target, source map[string]any) {
+	for key, value := range source {
+		nestedSource, ok := value.(map[string]any)
+		if !ok {
+			target[key] = value
+			continue
+		}
+
+		existingValue, exists := target[key]
+		if !exists {
+			existingValue = nil
+		}
+
+		nestedTarget, ok := existingValue.(map[string]any)
+		if !ok {
+			nestedTarget = make(map[string]any)
+			target[key] = nestedTarget
+		}
+
+		mergeFrontmatterDeep(nestedTarget, nestedSource)
+	}
+}
+
 // isIdentifierKeyPath checks if the given path targets the identifier key at the root level.
 func isIdentifierKeyPath(path []*apiv1.PathComponent) bool {
 	if len(path) != 1 {
@@ -134,7 +156,7 @@ func (s *Server) MergeFrontmatter(_ context.Context, req *apiv1.MergeFrontmatter
 
 	if req.Frontmatter != nil {
 		newFm := req.Frontmatter.AsMap()
-		maps.Copy(existingFm, newFm)
+		mergeFrontmatterDeep(existingFm, newFm)
 	}
 
 	err = s.pageReaderMutator.WriteFrontMatter(req.Page, existingFm)
