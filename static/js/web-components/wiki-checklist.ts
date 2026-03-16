@@ -178,7 +178,7 @@ export class WikiChecklist extends LitElement {
         font-size: 14px;
         padding: 2px 4px;
         cursor: text;
-        word-break: break-word;
+        overflow-wrap: break-word;
       }
 
       .item-display-text:focus {
@@ -670,6 +670,9 @@ export class WikiChecklist extends LitElement {
   private async _enterEditMode(index: number): Promise<void> {
     this.editingIndex = index;
     await this.updateComplete;
+    if (this.editingIndex !== index) {
+      return;
+    }
     const input = this.shadowRoot?.querySelector<HTMLInputElement>('.item-text');
     const item = this.items[index];
     if (input && item) {
@@ -1083,10 +1086,14 @@ export class WikiChecklist extends LitElement {
             : html`
               <span
                 class="item-display-text"
+                role="button"
                 tabindex="0"
                 @click="${() => void this._enterEditMode(index)}"
                 @keydown="${(e: KeyboardEvent) => {
-                  if (e.key === 'Enter') void this._enterEditMode(index);
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    void this._enterEditMode(index);
+                  }
                 }}"
               >${item.text}</span>
               ${item.tags.map(
