@@ -56,6 +56,10 @@ export class WikiBlog extends LitElement {
         margin-bottom: 8px;
       }
 
+      .blog-list-scroll {
+        overflow-y: auto;
+      }
+
       .blog-list {
         list-style: none;
         padding: 0;
@@ -110,8 +114,30 @@ export class WikiBlog extends LitElement {
         line-height: 1.4;
       }
 
-      .new-post-btn {
+      .load-more {
+        text-align: center;
+        padding: 12px 0;
+      }
+
+      .load-more-btn {
+        background: none;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 6px 16px;
+        color: #337ab7;
         cursor: pointer;
+        font-size: 0.9em;
+      }
+
+      .load-more-btn:hover {
+        background: #f5f5f5;
+        border-color: #ccc;
+      }
+
+      .empty-state {
+        color: #999;
+        font-style: italic;
+        padding: 12px 0;
       }
     `,
   ];
@@ -137,7 +163,16 @@ export class WikiBlog extends LitElement {
   @state()
   declare error: AugmentedError | null;
 
+  @state()
+  declare displayCount: number;
+
+  @state()
+  declare hasMore: boolean;
+
   readonly client = createClient(SearchService, getGrpcWebTransport());
+
+  /** Height captured from server-rendered content for scroll container. */
+  private initialHeightPx = 0;
 
   constructor() {
     super();
@@ -148,28 +183,43 @@ export class WikiBlog extends LitElement {
     this.posts = [];
     this.loading = false;
     this.error = null;
+    this.displayCount = 0;
+    this.hasMore = false;
   }
 
   override connectedCallback(): void {
     super.connectedCallback();
+
+    // Capture height of server-rendered content before hiding it
+    this.initialHeightPx = this.offsetHeight;
+
+    // Hide server-rendered light DOM children (progressive enhancement)
+    for (const child of Array.from(this.children)) {
+      if (child instanceof HTMLElement) {
+        child.style.display = 'none';
+      }
+    }
+
     if (this.blogId) {
+      this.displayCount = this.maxArticles;
       this.loading = true;
-      void this.fetchPosts();
+      void this.fetchPosts(this.maxArticles);
     }
   }
 
-  private async fetchPosts(): Promise<void> {
+  private async fetchPosts(count: number): Promise<void> {
     if (!this.blogId) {
       throw new Error('wiki-blog: blog-id attribute is required but not set');
     }
 
     try {
+      // Fetch one extra to detect if there are more
       const request = create(ListPagesByFrontmatterRequestSchema, {
         matchKey: 'blog.identifier',
         matchValue: this.blogId,
         sortByKey: 'blog.published-date',
         sortAscending: false,
-        maxResults: this.maxArticles,
+        maxResults: count + 1,
         frontmatterKeysToReturn: [
           'title',
           'blog.subtitle',
@@ -181,13 +231,22 @@ export class WikiBlog extends LitElement {
       });
 
       const response = await this.client.listPagesByFrontmatter(request);
-      this.posts = response.results.map(blogPostFromResult);
+      const allResults = response.results.map(blogPostFromResult);
+
+      this.hasMore = allResults.length > count;
+      this.posts = allResults.slice(0, count);
       this.error = null;
     } catch (err) {
       this.error = AugmentErrorService.augmentError(err, 'loading blog posts');
     } finally {
       this.loading = false;
     }
+  }
+
+  private _loadMore(): void {
+    this.displayCount += this.maxArticles;
+    this.loading = true;
+    void this.fetchPosts(this.displayCount);
   }
 
   private _openNewPostDialog(): void {
@@ -198,8 +257,9 @@ export class WikiBlog extends LitElement {
   }
 
   private _onPostCreated(): void {
+    this.displayCount = this.maxArticles;
     this.loading = true;
-    void this.fetchPosts();
+    void this.fetchPosts(this.maxArticles);
   }
 
   private _renderPost(post: BlogPost) {
@@ -229,27 +289,45 @@ export class WikiBlog extends LitElement {
     `;
   }
 
+  private get scrollStyle(): string {
+    if (this.initialHeightPx > 0 && this.posts.length > this.maxArticles) {
+      return `max-height: ${this.initialHeightPx}px`;
+    }
+    return '';
+  }
+
   override render() {
     return html`
       ${sharedStyles}
       <div class="blog-container system-font">
         <div class="blog-header">
-          <button class="btn new-post-btn" @click=${this._openNewPostDialog}>
+          <button class="btn" @click=${this._openNewPostDialog}>
             <i class="fa-solid fa-plus"></i> New Post
           </button>
         </div>
         ${this.loading
-          ? html`<div class="loading">Loading blog posts...</div>`
+          ? html`<div class="loading"><i class="fa-solid fa-spinner fa-spin"></i> Loading blog posts...</div>`
           : this.error
             ? html`<error-display
                 .augmentedError="${this.error}"
-                .action=${{ label: 'Retry', onClick: () => { this.error = null; this.loading = true; void this.fetchPosts(); } }}
+                .action=${{ label: 'Retry', onClick: () => { this.error = null; this.loading = true; void this.fetchPosts(this.displayCount); } }}
               ></error-display>`
-            : html`
-                <ul class="blog-list">
-                  ${this.posts.map(post => this._renderPost(post))}
-                </ul>
-              `}
+            : this.posts.length === 0
+              ? html`<div class="empty-state">No posts yet.</div>`
+              : html`
+                  <div class="blog-list-scroll" style="${this.scrollStyle}">
+                    <ul class="blog-list">
+                      ${this.posts.map(post => this._renderPost(post))}
+                    </ul>
+                  </div>
+                  ${this.hasMore
+                    ? html`<div class="load-more">
+                        <button class="load-more-btn" @click=${this._loadMore}>
+                          Load older posts
+                        </button>
+                      </div>`
+                    : nothing}
+                `}
       </div>
       <blog-new-post-dialog
         blog-id="${this.blogId}"

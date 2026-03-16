@@ -2,6 +2,7 @@ import { expect } from '@open-wc/testing';
 import sinon from 'sinon';
 import './blog-new-post-dialog.js';
 import type { BlogNewPostDialog } from './blog-new-post-dialog.js';
+import type { TitleInput } from './title-input.js';
 
 describe('BlogNewPostDialog', () => {
   let el: BlogNewPostDialog;
@@ -51,9 +52,9 @@ describe('BlogNewPostDialog', () => {
     });
 
     it('should have a title input', () => {
-      const input = el.shadowRoot?.querySelector('#post-title') as HTMLInputElement;
+      const input = el.shadowRoot?.querySelector<TitleInput>('#post-title');
       expect(input).to.exist;
-      expect(input.type).to.equal('text');
+      expect(input?.tagName.toLowerCase()).to.equal('title-input');
     });
 
     it('should have a date input defaulting to today', () => {
@@ -104,9 +105,10 @@ describe('BlogNewPostDialog', () => {
       el.open = true;
       await el.updateComplete;
 
-      const input = el.shadowRoot?.querySelector('#post-title') as HTMLInputElement;
-      input.value = 'My New Post';
-      input.dispatchEvent(new Event('input'));
+      const titleInput = el.shadowRoot?.querySelector<TitleInput>('#post-title');
+      if (!titleInput) throw new Error('title-input not found');
+      titleInput.value = 'My New Post';
+      titleInput.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
       await el.updateComplete;
     });
 

@@ -7,6 +7,8 @@ import { AugmentErrorService, type AugmentedError } from './augment-error-servic
 import type { WikiEditor } from './wiki-editor.js';
 import './wiki-editor.js';
 import './error-display.js';
+import type { TitleInput } from './title-input.js';
+import './title-input.js';
 
 /**
  * BlogNewPostDialog - Modal dialog for creating new blog posts.
@@ -96,13 +98,17 @@ export class BlogNewPostDialog extends LitElement {
       font-size: 0.9em;
     }
 
-    .form-group input {
+    .form-group input,
+    .form-group title-input {
       width: 100%;
+      font-size: 1em;
+      box-sizing: border-box;
+    }
+
+    .form-group input {
       padding: 8px;
       border: 1px solid #ddd;
       border-radius: 4px;
-      font-size: 1em;
-      box-sizing: border-box;
     }
 
     .editor-container {
@@ -209,9 +215,10 @@ export class BlogNewPostDialog extends LitElement {
     this.error = null;
   }
 
-  private _onTitleInput(e: Event): void {
-    if (e.target instanceof HTMLInputElement) {
-      this.title = e.target.value;
+  private _onTitleInput(): void {
+    const titleInput = this.shadowRoot?.querySelector<TitleInput>('title-input');
+    if (titleInput) {
+      this.title = titleInput.value;
     }
   }
 
@@ -303,14 +310,13 @@ export class BlogNewPostDialog extends LitElement {
             : nothing}
           <div class="form-group">
             <label for="post-title">Title</label>
-            <input
+            <title-input
               id="post-title"
-              type="text"
               .value=${this.title}
               @input=${this._onTitleInput}
               placeholder="Enter post title"
               ?disabled=${this.creating}
-            />
+            ></title-input>
           </div>
           <div class="form-group">
             <label for="post-date">Published Date</label>

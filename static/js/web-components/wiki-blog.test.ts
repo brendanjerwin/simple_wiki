@@ -184,7 +184,7 @@ describe('WikiBlog', () => {
     });
 
     it('should still show the New Post button', () => {
-      const btn = el.shadowRoot?.querySelector('.new-post-btn');
+      const btn = el.shadowRoot?.querySelector('.blog-header .btn');
       expect(btn).to.exist;
     });
   });
@@ -194,7 +194,7 @@ describe('WikiBlog', () => {
       el = buildElement();
       stubListPagesByFrontmatter(el, []);
       await mountAndLoad(el);
-      const btn = el.shadowRoot?.querySelector('.new-post-btn') as HTMLButtonElement;
+      const btn = el.shadowRoot?.querySelector('.blog-header .btn') as HTMLButtonElement;
       btn.click();
       await el.updateComplete;
     });
