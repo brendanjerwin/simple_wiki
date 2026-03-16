@@ -207,6 +207,24 @@ describe('WikiBlog', () => {
     });
   });
 
+  describe('when element has server-rendered light DOM children', () => {
+    beforeEach(async () => {
+      el = buildElement();
+      // Simulate server-rendered fallback content inside the element
+      el.innerHTML = '<span class="blog-article"><a href="/post">A Post</a></span>';
+      stubListPagesByFrontmatter(el, []);
+      await mountAndLoad(el);
+    });
+
+    it('should remove all light DOM children after connecting', () => {
+      expect(el.innerHTML).to.equal('');
+    });
+
+    it('should have no child nodes in light DOM', () => {
+      expect(el.childNodes.length).to.equal(0);
+    });
+  });
+
   describe('when the New Post button is clicked', () => {
     beforeEach(async () => {
       el = buildElement();

@@ -208,15 +208,13 @@ export class WikiBlog extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
 
-    // Capture height of server-rendered content before hiding it
+    // Capture height of server-rendered content before removing it
     this.initialHeightPx = this.offsetHeight;
 
-    // Hide server-rendered light DOM children (progressive enhancement)
-    for (const child of Array.from(this.children)) {
-      if (child instanceof HTMLElement) {
-        child.style.display = 'none';
-      }
-    }
+    // Remove server-rendered fallback content now that JS has taken over.
+    // Shadow DOM hides light DOM children, but removing them ensures no
+    // rendering artifacts from HTML parser reordering.
+    this.innerHTML = '';
 
     if (this.blogId) {
       this.displayCount = this.maxArticles;

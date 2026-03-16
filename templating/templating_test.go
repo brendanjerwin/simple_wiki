@@ -1702,6 +1702,27 @@ var _ = Describe("BuildBlog", func() {
 		})
 	})
 
+	Describe("when hosting page has hide-new-post set as string true", func() {
+		var result string
+
+		BeforeEach(func() {
+			ctx := templating.TemplateContext{
+				Identifier: "blog_page",
+				Map: map[string]any{
+					"blog": map[string]any{
+						"hide-new-post": "true",
+					},
+				},
+			}
+			blogFunc := templating.BuildBlog(ctx, mockIndex, mockSite)
+			result = blogFunc("my-blog", 10)
+		})
+
+		It("should include the hide-new-post attribute", func() {
+			Expect(result).To(ContainSubstring("hide-new-post"))
+		})
+	})
+
 	Describe("when hosting page does not have hide-new-post", func() {
 		var result string
 

@@ -310,8 +310,15 @@ func BuildBlog(templateContext TemplateContext, query wikipage.IQueryFrontmatter
 
 		hideNewPost := ""
 		if blogMap, ok := templateContext.Map["blog"].(map[string]any); ok {
-			if hide, ok := blogMap["hide-new-post"].(bool); ok && hide {
-				hideNewPost = ` hide-new-post`
+			switch v := blogMap["hide-new-post"].(type) {
+			case bool:
+				if v {
+					hideNewPost = ` hide-new-post`
+				}
+			case string:
+				if v == "true" {
+					hideNewPost = ` hide-new-post`
+				}
 			}
 		}
 
