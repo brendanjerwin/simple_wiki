@@ -1,4 +1,4 @@
-import { html, css, LitElement, nothing, noChange } from 'lit';
+import { html, css, LitElement, nothing } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import { createClient } from '@connectrpc/connect';
 import { create, type JsonObject } from '@bufbuild/protobuf';
@@ -119,7 +119,7 @@ export class WikiChecklist extends LitElement {
 
       .item-row {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         gap: 8px;
         padding: 6px 4px;
         border-radius: 4px;
@@ -135,6 +135,7 @@ export class WikiChecklist extends LitElement {
         flex-shrink: 0;
         width: 16px;
         height: 16px;
+        margin-top: 2px;
         cursor: pointer;
         accent-color: #6c757d;
       }
@@ -171,6 +172,27 @@ export class WikiChecklist extends LitElement {
         color: #888;
       }
 
+      .item-display-text {
+        flex: 1 1 auto;
+        min-width: 80px;
+        font-size: 14px;
+        padding: 2px 4px;
+        cursor: text;
+        overflow-wrap: break-word;
+      }
+
+      .item-display-text:focus {
+        outline: 2px solid #6c757d;
+        outline-offset: 1px;
+        border-radius: 3px;
+      }
+
+      .item-checked .item-display-text {
+        text-decoration: line-through;
+        opacity: 0.6;
+        color: #888;
+      }
+
       /* .item-tag-badge styles provided by pillCSS */
 
       .remove-btn {
@@ -196,6 +218,7 @@ export class WikiChecklist extends LitElement {
         color: #ccc;
         font-size: 14px;
         padding: 2px 2px;
+        margin-top: 2px;
         line-height: 1;
         user-select: none;
         transition: color 0.15s ease;
@@ -644,11 +667,17 @@ export class WikiChecklist extends LitElement {
     return item.text + item.tags.map(t => ` :${t}`).join('');
   }
 
-  private _handleItemFocus(index: number, inputEl: HTMLInputElement): void {
+  private async _enterEditMode(index: number): Promise<void> {
     this.editingIndex = index;
+    await this.updateComplete;
+    if (this.editingIndex !== index) {
+      return;
+    }
+    const input = this.shadowRoot?.querySelector<HTMLInputElement>('.item-text');
     const item = this.items[index];
-    if (item) {
-      inputEl.value = this.composeTaggedText(item);
+    if (input && item) {
+      input.value = this.composeTaggedText(item);
+      input.focus();
     }
   }
 
@@ -1039,29 +1068,37 @@ export class WikiChecklist extends LitElement {
           @change="${() => this._handleToggleItem(index)}"
         />
         <span class="item-content">
-          <input
-            type="text"
-            class="item-text"
-            .value="${this.editingIndex !== index ? item.text : noChange}"
-            aria-label="Edit item text and tags"
-            @focus="${(e: FocusEvent) => {
-              if (!(e.target instanceof HTMLInputElement)) return;
-              this._handleItemFocus(index, e.target);
-            }}"
-            @blur="${(e: FocusEvent) => {
-              if (!(e.target instanceof HTMLInputElement)) return;
-              void this._handleItemTextBlur(index, e.target.value);
-            }}"
-            @keydown="${(e: KeyboardEvent) => {
-              if (!(e.currentTarget instanceof HTMLInputElement)) return;
-              this._handleItemTextKeydown(index, e.currentTarget.value, e);
-            }}"
-          />
-          ${this.editingIndex !== index
-            ? item.tags.map(
+          ${this.editingIndex === index
+            ? html`
+              <input
+                type="text"
+                class="item-text"
+                aria-label="Edit item text and tags"
+                @blur="${(e: FocusEvent) => {
+                  if (!(e.target instanceof HTMLInputElement)) return;
+                  void this._handleItemTextBlur(index, e.target.value);
+                }}"
+                @keydown="${(e: KeyboardEvent) => {
+                  if (!(e.currentTarget instanceof HTMLInputElement)) return;
+                  this._handleItemTextKeydown(index, e.currentTarget.value, e);
+                }}"
+              />`
+            : html`
+              <span
+                class="item-display-text"
+                role="button"
+                tabindex="0"
+                @click="${() => void this._enterEditMode(index)}"
+                @keydown="${(e: KeyboardEvent) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    void this._enterEditMode(index);
+                  }
+                }}"
+              >${item.text}</span>
+              ${item.tags.map(
                 tag => html`<span class="item-tag-badge">${tag}</span>`
-              )
-            : nothing}
+              )}`}
         </span>
         <button
           class="remove-btn"
