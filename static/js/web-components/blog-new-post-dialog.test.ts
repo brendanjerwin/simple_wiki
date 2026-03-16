@@ -63,6 +63,18 @@ describe('BlogNewPostDialog', () => {
       expect(input.value).to.equal(new Date().toISOString().slice(0, 10));
     });
 
+    it('should have a subtitle input', () => {
+      const input = el.shadowRoot?.querySelector('#post-subtitle') as HTMLInputElement;
+      expect(input).to.exist;
+    });
+
+    it('should have date and subtitle on the same row', () => {
+      const row = el.shadowRoot?.querySelector('.form-row');
+      expect(row).to.exist;
+      expect(row?.querySelector('#post-date')).to.exist;
+      expect(row?.querySelector('#post-subtitle')).to.exist;
+    });
+
     it('should have a Create Post button', () => {
       const btn = el.shadowRoot?.querySelector('.btn-primary');
       expect(btn).to.exist;

@@ -88,7 +88,25 @@ export class BlogNewPostDialog extends LitElement {
     }
 
     .form-group {
-      margin-bottom: 16px;
+      margin-bottom: 12px;
+    }
+
+    .form-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .form-row .form-group {
+      margin-bottom: 0;
+    }
+
+    .form-row .form-group:first-child {
+      flex: 0 0 auto;
+    }
+
+    .form-row .form-group:last-child {
+      flex: 1;
     }
 
     .form-group label {
@@ -226,6 +244,9 @@ export class BlogNewPostDialog extends LitElement {
   @state()
   declare summary: string;
 
+  @state()
+  declare subtitle: string;
+
   private pageCreator = new PageCreator();
 
   private get identifierPreview(): string {
@@ -248,6 +269,7 @@ export class BlogNewPostDialog extends LitElement {
     this.error = null;
     this.summaryExpanded = false;
     this.summary = '';
+    this.subtitle = '';
   }
 
   private _onTitleInput(): void {
@@ -267,6 +289,12 @@ export class BlogNewPostDialog extends LitElement {
     }
   }
 
+  private _onSubtitleInput(e: Event): void {
+    if (e.target instanceof HTMLInputElement) {
+      this.subtitle = e.target.value;
+    }
+  }
+
   private _onDateInput(e: Event): void {
     if (e.target instanceof HTMLInputElement) {
       this.date = e.target.value;
@@ -281,6 +309,7 @@ export class BlogNewPostDialog extends LitElement {
     this.creating = false;
     this.summaryExpanded = false;
     this.summary = '';
+    this.subtitle = '';
   }
 
   private async _submit(): Promise<void> {
@@ -307,6 +336,9 @@ export class BlogNewPostDialog extends LitElement {
         identifier: this.blogId,
         'published-date': this.date,
       };
+      if (this.subtitle.trim()) {
+        blogMeta['subtitle'] = this.subtitle.trim();
+      }
       if (this.summary.trim()) {
         blogMeta['summary_markdown'] = this.summary.trim();
       }
@@ -369,15 +401,28 @@ export class BlogNewPostDialog extends LitElement {
               ?disabled=${this.creating}
             ></title-input>
           </div>
-          <div class="form-group">
-            <label for="post-date">Published Date</label>
-            <input
-              id="post-date"
-              type="date"
-              .value=${this.date}
-              @input=${this._onDateInput}
-              ?disabled=${this.creating}
-            />
+          <div class="form-row">
+            <div class="form-group">
+              <label for="post-date">Date</label>
+              <input
+                id="post-date"
+                type="date"
+                .value=${this.date}
+                @input=${this._onDateInput}
+                ?disabled=${this.creating}
+              />
+            </div>
+            <div class="form-group">
+              <label for="post-subtitle">Subtitle</label>
+              <input
+                id="post-subtitle"
+                type="text"
+                placeholder="Optional subtitle"
+                .value=${this.subtitle}
+                @input=${this._onSubtitleInput}
+                ?disabled=${this.creating}
+              />
+            </div>
           </div>
           ${this.identifierPreview
             ? html`<div class="identifier-preview">${this.identifierPreview}</div>`
