@@ -104,6 +104,25 @@ describe('WikiChecklist', () => {
     expect(el.tagName.toLowerCase()).to.equal('wiki-checklist');
   });
 
+  describe('when element has server-rendered fallback content', () => {
+    beforeEach(async () => {
+      el.remove();
+      el = buildElement();
+      el.innerHTML = '<span class="checklist-item">[ ] Buy milk</span><span class="checklist-item">[x] Walk dog</span>';
+      stubGetFrontmatter(el);
+      document.body.appendChild(el);
+      await el.updateComplete;
+    });
+
+    it('should remove all light DOM children after connecting', () => {
+      expect(el.innerHTML).to.equal('');
+    });
+
+    it('should have no child nodes in light DOM', () => {
+      expect(el.childNodes.length).to.equal(0);
+    });
+  });
+
   describe('after initial successful fetch', () => {
     it('should not be in loading state', () => {
       expect(el.loading).to.be.false;

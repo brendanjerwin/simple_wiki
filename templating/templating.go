@@ -287,12 +287,52 @@ func BuildLinkToWithVisited(site wikipage.PageReader, currentPageTemplateContext
 	}
 }
 
-// BuildChecklist returns a template function that renders a wiki-checklist custom element.
-// The list-name attribute is taken from the argument; the page attribute from the template context.
+// BuildChecklist returns a template function that renders a wiki-checklist custom element
+// with a server-rendered fallback list of checklist items inside it.
 func BuildChecklist(templateContext TemplateContext) func(string) string {
 	return func(listName string) string {
-		return fmt.Sprintf(`<wiki-checklist list-name="%s" page="%s"></wiki-checklist>`, html.EscapeString(listName), html.EscapeString(templateContext.Identifier))
+		fallback := renderChecklistFallback(templateContext.Map, listName)
+		return fmt.Sprintf(`<wiki-checklist list-name="%s" page="%s">%s</wiki-checklist>`,
+			html.EscapeString(listName),
+			html.EscapeString(templateContext.Identifier),
+			fallback,
+		)
 	}
+}
+
+func renderChecklistFallback(frontmatter map[string]any, listName string) string {
+	checklists, ok := frontmatter["checklists"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	list, ok := checklists[listName].(map[string]any)
+	if !ok {
+		return ""
+	}
+	items, ok := list["items"].([]any)
+	if !ok || len(items) == 0 {
+		return ""
+	}
+
+	var buf strings.Builder
+	for _, raw := range items {
+		item, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		text, _ := item["text"].(string)
+		if text == "" {
+			continue
+		}
+		checked, _ := item["checked"].(bool)
+		marker := "[ ]"
+		if checked {
+			marker = "[x]"
+		}
+		// Single-line plain text to avoid goldmark paragraph breaks.
+		buf.WriteString(fmt.Sprintf(`<span class="checklist-item">%s %s</span>`, marker, html.EscapeString(text)))
+	}
+	return buf.String()
 }
 
 const blogSnippetMaxChars = 200

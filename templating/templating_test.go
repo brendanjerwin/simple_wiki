@@ -1531,6 +1531,65 @@ var _ = Describe("BuildChecklist", func() {
 		result := otherFunc("my_list")
 		Expect(result).To(ContainSubstring(`page="other_page"`))
 	})
+
+	Describe("when frontmatter has checklist items", func() {
+		var result string
+
+		BeforeEach(func() {
+			templateContext = templating.TemplateContext{
+				Identifier: "my_page_id",
+				Map: map[string]any{
+					"checklists": map[string]any{
+						"todos": map[string]any{
+							"items": []any{
+								map[string]any{"text": "Buy milk", "checked": false},
+								map[string]any{"text": "Walk the dog", "checked": true},
+								map[string]any{"text": "Write tests", "checked": false},
+							},
+						},
+					},
+				},
+			}
+			checklistFunc = templating.BuildChecklist(templateContext)
+			result = checklistFunc("todos")
+		})
+
+		It("should include fallback content with item text", func() {
+			Expect(result).To(ContainSubstring("Buy milk"))
+			Expect(result).To(ContainSubstring("Walk the dog"))
+			Expect(result).To(ContainSubstring("Write tests"))
+		})
+
+		It("should show unchecked marker for unchecked items", func() {
+			Expect(result).To(ContainSubstring("[ ] Buy milk"))
+		})
+
+		It("should show checked marker for checked items", func() {
+			Expect(result).To(ContainSubstring("[x] Walk the dog"))
+		})
+
+		It("should not contain newlines that could break goldmark", func() {
+			Expect(result).NotTo(ContainSubstring("\n"))
+		})
+	})
+
+	Describe("when frontmatter has no checklist data", func() {
+		var result string
+
+		BeforeEach(func() {
+			templateContext = templating.TemplateContext{
+				Identifier: "my_page_id",
+				Map:        map[string]any{},
+			}
+			checklistFunc = templating.BuildChecklist(templateContext)
+			result = checklistFunc("todos")
+		})
+
+		It("should render empty element without fallback", func() {
+			Expect(result).To(ContainSubstring(`<wiki-checklist`))
+			Expect(result).To(ContainSubstring(`></wiki-checklist>`))
+		})
+	})
 })
 
 var _ = Describe("BuildBlog", func() {

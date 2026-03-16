@@ -415,6 +415,8 @@ export class WikiChecklist extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
+    // Remove server-rendered fallback content now that JS has taken over.
+    this.innerHTML = '';
     if (this.page) {
       this.loading = true;
       void this.fetchData();
