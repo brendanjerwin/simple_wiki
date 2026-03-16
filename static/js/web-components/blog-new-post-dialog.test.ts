@@ -1,0 +1,118 @@
+import { expect } from '@open-wc/testing';
+import sinon from 'sinon';
+import './blog-new-post-dialog.js';
+import type { BlogNewPostDialog } from './blog-new-post-dialog.js';
+
+describe('BlogNewPostDialog', () => {
+  let el: BlogNewPostDialog;
+
+  function buildElement(): BlogNewPostDialog {
+    const dialog = document.createElement('blog-new-post-dialog') as BlogNewPostDialog;
+    dialog.setAttribute('blog-id', 'test-blog');
+    dialog.setAttribute('page-template', 'blog-post');
+    return dialog;
+  }
+
+  afterEach(() => {
+    sinon.restore();
+    if (el) el.remove();
+  });
+
+  it('should exist', () => {
+    el = buildElement();
+    document.body.appendChild(el);
+    expect(el).to.exist;
+  });
+
+  describe('when closed', () => {
+    beforeEach(async () => {
+      el = buildElement();
+      document.body.appendChild(el);
+      await el.updateComplete;
+    });
+
+    it('should not render dialog content', () => {
+      const dialog = el.shadowRoot?.querySelector('.dialog');
+      expect(dialog).to.not.exist;
+    });
+  });
+
+  describe('when opened', () => {
+    beforeEach(async () => {
+      el = buildElement();
+      document.body.appendChild(el);
+      el.open = true;
+      await el.updateComplete;
+    });
+
+    it('should render the dialog', () => {
+      const dialog = el.shadowRoot?.querySelector('.dialog');
+      expect(dialog).to.exist;
+    });
+
+    it('should have a title input', () => {
+      const input = el.shadowRoot?.querySelector('#post-title') as HTMLInputElement;
+      expect(input).to.exist;
+      expect(input.type).to.equal('text');
+    });
+
+    it('should have a date input defaulting to today', () => {
+      const input = el.shadowRoot?.querySelector('#post-date') as HTMLInputElement;
+      expect(input).to.exist;
+      expect(input.type).to.equal('date');
+      expect(input.value).to.equal(new Date().toISOString().slice(0, 10));
+    });
+
+    it('should have a Create Post button', () => {
+      const btn = el.shadowRoot?.querySelector('.btn-primary');
+      expect(btn).to.exist;
+      expect(btn?.textContent?.trim()).to.equal('Create Post');
+    });
+
+    it('should disable Create Post button when title is empty', () => {
+      const btn = el.shadowRoot?.querySelector('.btn-primary') as HTMLButtonElement;
+      expect(btn.disabled).to.be.true;
+    });
+
+    it('should have an embedded wiki-editor', () => {
+      const editor = el.shadowRoot?.querySelector('wiki-editor');
+      expect(editor).to.exist;
+    });
+  });
+
+  describe('when close button is clicked', () => {
+    beforeEach(async () => {
+      el = buildElement();
+      document.body.appendChild(el);
+      el.open = true;
+      await el.updateComplete;
+
+      const closeBtn = el.shadowRoot?.querySelector('.close-btn') as HTMLButtonElement;
+      closeBtn.click();
+      await el.updateComplete;
+    });
+
+    it('should close the dialog', () => {
+      expect(el.open).to.be.false;
+    });
+  });
+
+  describe('when title is entered', () => {
+    beforeEach(async () => {
+      el = buildElement();
+      document.body.appendChild(el);
+      el.open = true;
+      await el.updateComplete;
+
+      const input = el.shadowRoot?.querySelector('#post-title') as HTMLInputElement;
+      input.value = 'My New Post';
+      input.dispatchEvent(new Event('input'));
+      await el.updateComplete;
+    });
+
+    it('should enable the Create Post button', () => {
+      const btn = el.shadowRoot?.querySelector('.btn-primary') as HTMLButtonElement;
+      expect(btn.disabled).to.be.false;
+    });
+  });
+});

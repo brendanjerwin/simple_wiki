@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file api/v1/search.proto.
  */
 export const file_api_v1_search: GenFile = /*@__PURE__*/
-  fileDesc("ChNhcGkvdjEvc2VhcmNoLnByb3RvEgZhcGkudjEipgEKFFNlYXJjaENvbnRlbnRSZXF1ZXN0Eg0KBXF1ZXJ5GAEgASgJEicKH2Zyb250bWF0dGVyX2tleV9pbmNsdWRlX2ZpbHRlcnMYAiADKAkSJwofZnJvbnRtYXR0ZXJfa2V5X2V4Y2x1ZGVfZmlsdGVycxgDIAMoCRItCiVmcm9udG1hdHRlcl9rZXlzX3RvX3JldHVybl9pbl9yZXN1bHRzGAQgAygJIl4KFVNlYXJjaENvbnRlbnRSZXNwb25zZRIlCgdyZXN1bHRzGAEgAygLMhQuYXBpLnYxLlNlYXJjaFJlc3VsdBIeChZ0b3RhbF91bmZpbHRlcmVkX2NvdW50GAIgASgFIpMCCgxTZWFyY2hSZXN1bHQSEgoKaWRlbnRpZmllchgBIAEoCRINCgV0aXRsZRgCIAEoCRIQCghmcmFnbWVudBgDIAEoCRIpCgpoaWdobGlnaHRzGAQgAygLMhUuYXBpLnYxLkhpZ2hsaWdodFNwYW4SOgoLZnJvbnRtYXR0ZXIYBSADKAsyJS5hcGkudjEuU2VhcmNoUmVzdWx0LkZyb250bWF0dGVyRW50cnkSMwoRaW52ZW50b3J5X2NvbnRleHQYBiABKAsyGC5hcGkudjEuSW52ZW50b3J5Q29udGV4dBoyChBGcm9udG1hdHRlckVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiXAoQSW52ZW50b3J5Q29udGV4dBIcChRpc19pbnZlbnRvcnlfcmVsYXRlZBgBIAEoCBIqCgRwYXRoGAIgAygLMhwuYXBpLnYxLkNvbnRhaW5lclBhdGhFbGVtZW50IkgKFENvbnRhaW5lclBhdGhFbGVtZW50EhIKCmlkZW50aWZpZXIYASABKAkSDQoFdGl0bGUYAiABKAkSDQoFZGVwdGgYAyABKAUiKwoNSGlnaGxpZ2h0U3BhbhINCgVzdGFydBgBIAEoBRILCgNlbmQYAiABKAUyXwoNU2VhcmNoU2VydmljZRJOCg1TZWFyY2hDb250ZW50EhwuYXBpLnYxLlNlYXJjaENvbnRlbnRSZXF1ZXN0Gh0uYXBpLnYxLlNlYXJjaENvbnRlbnRSZXNwb25zZSIAQjpaOGdpdGh1Yi5jb20vYnJlbmRhbmplcndpbi9zaW1wbGVfd2lraS9nZW4vZ28vYXBpL3YxO2FwaXYxYgZwcm90bzM");
+  fileDesc("ChNhcGkvdjEvc2VhcmNoLnByb3RvEgZhcGkudjEipgEKFFNlYXJjaENvbnRlbnRSZXF1ZXN0Eg0KBXF1ZXJ5GAEgASgJEicKH2Zyb250bWF0dGVyX2tleV9pbmNsdWRlX2ZpbHRlcnMYAiADKAkSJwofZnJvbnRtYXR0ZXJfa2V5X2V4Y2x1ZGVfZmlsdGVycxgDIAMoCRItCiVmcm9udG1hdHRlcl9rZXlzX3RvX3JldHVybl9pbl9yZXN1bHRzGAQgAygJIl4KFVNlYXJjaENvbnRlbnRSZXNwb25zZRIlCgdyZXN1bHRzGAEgAygLMhQuYXBpLnYxLlNlYXJjaFJlc3VsdBIeChZ0b3RhbF91bmZpbHRlcmVkX2NvdW50GAIgASgFIpMCCgxTZWFyY2hSZXN1bHQSEgoKaWRlbnRpZmllchgBIAEoCRINCgV0aXRsZRgCIAEoCRIQCghmcmFnbWVudBgDIAEoCRIpCgpoaWdobGlnaHRzGAQgAygLMhUuYXBpLnYxLkhpZ2hsaWdodFNwYW4SOgoLZnJvbnRtYXR0ZXIYBSADKAsyJS5hcGkudjEuU2VhcmNoUmVzdWx0LkZyb250bWF0dGVyRW50cnkSMwoRaW52ZW50b3J5X2NvbnRleHQYBiABKAsyGC5hcGkudjEuSW52ZW50b3J5Q29udGV4dBoyChBGcm9udG1hdHRlckVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiXAoQSW52ZW50b3J5Q29udGV4dBIcChRpc19pbnZlbnRvcnlfcmVsYXRlZBgBIAEoCBIqCgRwYXRoGAIgAygLMhwuYXBpLnYxLkNvbnRhaW5lclBhdGhFbGVtZW50IkgKFENvbnRhaW5lclBhdGhFbGVtZW50EhIKCmlkZW50aWZpZXIYASABKAkSDQoFdGl0bGUYAiABKAkSDQoFZGVwdGgYAyABKAUiKwoNSGlnaGxpZ2h0U3BhbhINCgVzdGFydBgBIAEoBRILCgNlbmQYAiABKAUi0AEKHUxpc3RQYWdlc0J5RnJvbnRtYXR0ZXJSZXF1ZXN0EhEKCW1hdGNoX2tleRgBIAEoCRITCgttYXRjaF92YWx1ZRgCIAEoCRITCgtzb3J0X2J5X2tleRgDIAEoCRIWCg5zb3J0X2FzY2VuZGluZxgEIAEoCBITCgttYXhfcmVzdWx0cxgFIAEoBRIiChpmcm9udG1hdHRlcl9rZXlzX3RvX3JldHVybhgGIAMoCRIhChljb250ZW50X2V4Y2VycHRfbWF4X2NoYXJzGAcgASgFIlEKHkxpc3RQYWdlc0J5RnJvbnRtYXR0ZXJSZXNwb25zZRIvCgdyZXN1bHRzGAEgAygLMh4uYXBpLnYxLkZyb250bWF0dGVyUXVlcnlSZXN1bHQi0gEKFkZyb250bWF0dGVyUXVlcnlSZXN1bHQSEgoKaWRlbnRpZmllchgBIAEoCRJRChJmcm9udG1hdHRlcl92YWx1ZXMYAiADKAsyNS5hcGkudjEuRnJvbnRtYXR0ZXJRdWVyeVJlc3VsdC5Gcm9udG1hdHRlclZhbHVlc0VudHJ5EhcKD2NvbnRlbnRfZXhjZXJwdBgDIAEoCRo4ChZGcm9udG1hdHRlclZhbHVlc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEyygEKDVNlYXJjaFNlcnZpY2USTgoNU2VhcmNoQ29udGVudBIcLmFwaS52MS5TZWFyY2hDb250ZW50UmVxdWVzdBodLmFwaS52MS5TZWFyY2hDb250ZW50UmVzcG9uc2UiABJpChZMaXN0UGFnZXNCeUZyb250bWF0dGVyEiUuYXBpLnYxLkxpc3RQYWdlc0J5RnJvbnRtYXR0ZXJSZXF1ZXN0GiYuYXBpLnYxLkxpc3RQYWdlc0J5RnJvbnRtYXR0ZXJSZXNwb25zZSIAQjpaOGdpdGh1Yi5jb20vYnJlbmRhbmplcndpbi9zaW1wbGVfd2lraS9nZW4vZ28vYXBpL3YxO2FwaXYxYgZwcm90bzM");
 
 /**
  * The request message for searching content.
@@ -226,6 +226,123 @@ export const HighlightSpanSchema: GenMessage<HighlightSpan> = /*@__PURE__*/
   messageDesc(file_api_v1_search, 5);
 
 /**
+ * Request for listing pages by frontmatter key-value match with sorting.
+ *
+ * @generated from message api.v1.ListPagesByFrontmatterRequest
+ */
+export type ListPagesByFrontmatterRequest = Message<"api.v1.ListPagesByFrontmatterRequest"> & {
+  /**
+   * Frontmatter dot-path to match (e.g., "blog.identifier")
+   *
+   * @generated from field: string match_key = 1;
+   */
+  matchKey: string;
+
+  /**
+   * Value to match
+   *
+   * @generated from field: string match_value = 2;
+   */
+  matchValue: string;
+
+  /**
+   * Frontmatter dot-path to sort by (e.g., "blog.published-date")
+   *
+   * @generated from field: string sort_by_key = 3;
+   */
+  sortByKey: string;
+
+  /**
+   * Sort direction (false = descending)
+   *
+   * @generated from field: bool sort_ascending = 4;
+   */
+  sortAscending: boolean;
+
+  /**
+   * Maximum number of results (0 = unlimited)
+   *
+   * @generated from field: int32 max_results = 5;
+   */
+  maxResults: number;
+
+  /**
+   * Frontmatter dot-paths to include in results
+   *
+   * @generated from field: repeated string frontmatter_keys_to_return = 6;
+   */
+  frontmatterKeysToReturn: string[];
+
+  /**
+   * If > 0, include the first N characters of page markdown content in each result.
+   *
+   * @generated from field: int32 content_excerpt_max_chars = 7;
+   */
+  contentExcerptMaxChars: number;
+};
+
+/**
+ * Describes the message api.v1.ListPagesByFrontmatterRequest.
+ * Use `create(ListPagesByFrontmatterRequestSchema)` to create a new message.
+ */
+export const ListPagesByFrontmatterRequestSchema: GenMessage<ListPagesByFrontmatterRequest> = /*@__PURE__*/
+  messageDesc(file_api_v1_search, 6);
+
+/**
+ * Response containing pages matching frontmatter query.
+ *
+ * @generated from message api.v1.ListPagesByFrontmatterResponse
+ */
+export type ListPagesByFrontmatterResponse = Message<"api.v1.ListPagesByFrontmatterResponse"> & {
+  /**
+   * @generated from field: repeated api.v1.FrontmatterQueryResult results = 1;
+   */
+  results: FrontmatterQueryResult[];
+};
+
+/**
+ * Describes the message api.v1.ListPagesByFrontmatterResponse.
+ * Use `create(ListPagesByFrontmatterResponseSchema)` to create a new message.
+ */
+export const ListPagesByFrontmatterResponseSchema: GenMessage<ListPagesByFrontmatterResponse> = /*@__PURE__*/
+  messageDesc(file_api_v1_search, 7);
+
+/**
+ * A single result from a frontmatter query.
+ *
+ * @generated from message api.v1.FrontmatterQueryResult
+ */
+export type FrontmatterQueryResult = Message<"api.v1.FrontmatterQueryResult"> & {
+  /**
+   * Page identifier
+   *
+   * @generated from field: string identifier = 1;
+   */
+  identifier: string;
+
+  /**
+   * Requested frontmatter values
+   *
+   * @generated from field: map<string, string> frontmatter_values = 2;
+   */
+  frontmatterValues: { [key: string]: string };
+
+  /**
+   * First N chars of page content, if requested
+   *
+   * @generated from field: string content_excerpt = 3;
+   */
+  contentExcerpt: string;
+};
+
+/**
+ * Describes the message api.v1.FrontmatterQueryResult.
+ * Use `create(FrontmatterQueryResultSchema)` to create a new message.
+ */
+export const FrontmatterQueryResultSchema: GenMessage<FrontmatterQueryResult> = /*@__PURE__*/
+  messageDesc(file_api_v1_search, 8);
+
+/**
  * The Search service definition.
  *
  * @generated from service api.v1.SearchService
@@ -240,6 +357,16 @@ export const SearchService: GenService<{
     methodKind: "unary";
     input: typeof SearchContentRequestSchema;
     output: typeof SearchContentResponseSchema;
+  },
+  /**
+   * Lists pages matching a frontmatter key-value pair, sorted by another frontmatter key.
+   *
+   * @generated from rpc api.v1.SearchService.ListPagesByFrontmatter
+   */
+  listPagesByFrontmatter: {
+    methodKind: "unary";
+    input: typeof ListPagesByFrontmatterRequestSchema;
+    output: typeof ListPagesByFrontmatterResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_api_v1_search, 0);

@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 
 # This script runs Go code generation with logging.
+# Ensure .devbox/gobin is on PATH so buf can find protoc-gen-go-mcp.
 
 set -e
+
+GOBIN_DIR="${DEVBOX_PROJECT_ROOT:-.}/.devbox/gobin"
+export PATH="$GOBIN_DIR:$PATH"
 
 LOG_DIR="/tmp/simple_wiki_logs"
 mkdir -p "$LOG_DIR"

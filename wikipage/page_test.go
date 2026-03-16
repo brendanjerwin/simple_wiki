@@ -899,3 +899,7 @@ func (*mockQueryFrontmatterIndex) QueryPrefixMatch(dottedKeyPath wikipage.Dotted
 func (*mockQueryFrontmatterIndex) GetValue(identifier wikipage.PageIdentifier, dottedKeyPath wikipage.DottedKeyPath) wikipage.Value {
 	return ""
 }
+
+func (*mockQueryFrontmatterIndex) QueryExactMatchSortedBy(_ wikipage.DottedKeyPath, _ wikipage.Value, _ wikipage.DottedKeyPath, _ bool, _ int) []wikipage.PageIdentifier {
+	return nil
+}

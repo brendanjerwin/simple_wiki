@@ -180,6 +180,12 @@ export class WikiEditor extends LitElement {
   @property({ type: Number, attribute: 'debounce-ms' })
   declare debounceMs: number;
 
+  @property({ type: String, attribute: 'initial-content' })
+  declare initialContent: string | undefined;
+
+  @property({ type: Boolean, attribute: 'auto-save' })
+  declare autoSave: boolean;
+
   @state()
   declare loading: boolean;
 
@@ -209,6 +215,8 @@ export class WikiEditor extends LitElement {
     this.allowUploads = false;
     this.maxUploadMb = 10;
     this.debounceMs = 750;
+    this.autoSave = true;
+    this.initialContent = undefined;
     this.loading = true;
     this.saveStatus = 'idle';
     this.error = null;
@@ -237,7 +245,9 @@ export class WikiEditor extends LitElement {
     void this.loadContent().then(async () => {
       if (!this.isConnected) return;
       await this.updateComplete;
-      this.setupSaveQueue();
+      if (this.autoSave) {
+        this.setupSaveQueue();
+      }
       this.setupCoordinator();
       this.focusTextarea();
     });
@@ -255,6 +265,12 @@ export class WikiEditor extends LitElement {
   }
 
   private async loadContent(): Promise<void> {
+    if (this.initialContent !== undefined) {
+      this.content = this.initialContent;
+      this.loading = false;
+      return;
+    }
+
     if (!this.page) {
       this.loading = false;
       return;
@@ -333,6 +349,11 @@ export class WikiEditor extends LitElement {
     if (!toolbar) return;
 
     this.coordinator = new EditorToolbarCoordinator(textarea, toolbar);
+  }
+
+  /** Returns the current editor content. */
+  getContent(): string {
+    return this.content;
   }
 
   _checkSelection(): void {

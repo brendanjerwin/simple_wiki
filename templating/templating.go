@@ -295,6 +295,76 @@ func BuildChecklist(templateContext TemplateContext) func(string) string {
 	}
 }
 
+const blogSnippetMaxChars = 200
+
+// BuildBlog returns a template function that renders a wiki-blog custom element
+// with a server-rendered fallback list of blog posts inside it.
+func BuildBlog(templateContext TemplateContext, query wikipage.IQueryFrontmatterIndex, site wikipage.PageReader) func(string, string, int) string {
+	return func(blogIdentifier, pageTemplate string, maxArticles int) string {
+		posts := query.QueryExactMatchSortedBy("blog.identifier", blogIdentifier, "blog.published-date", false, maxArticles)
+
+		var articles string
+		for _, postID := range posts {
+			articles += renderBlogArticle(postID, query, site)
+		}
+
+		return fmt.Sprintf(`<wiki-blog blog-id="%s" page-template="%s" max-articles="%d" page="%s">%s</wiki-blog>`,
+			html.EscapeString(blogIdentifier),
+			html.EscapeString(pageTemplate),
+			maxArticles,
+			html.EscapeString(templateContext.Identifier),
+			articles,
+		)
+	}
+}
+
+func renderBlogArticle(postID string, query wikipage.IQueryFrontmatterIndex, site wikipage.PageReader) string {
+	title := query.GetValue(postID, "title")
+	if title == "" {
+		title = postID
+	}
+	publishedDate := query.GetValue(postID, "blog.published-date")
+	subtitle := query.GetValue(postID, "blog.subtitle")
+	externalURL := query.GetValue(postID, "blog.external_url")
+	snippet := blogSnippet(postID, query, site)
+
+	linkHref := "/" + html.EscapeString(postID)
+	if externalURL != "" {
+		linkHref = html.EscapeString(externalURL)
+	}
+
+	article := fmt.Sprintf(`<article><a href="%s">%s</a>`, linkHref, html.EscapeString(title))
+	if externalURL != "" {
+		article += fmt.Sprintf(` <a href="/%s" class="wiki-link">[wiki]</a>`, html.EscapeString(postID))
+	}
+	if subtitle != "" {
+		article += fmt.Sprintf(`<p class="subtitle">%s</p>`, html.EscapeString(subtitle))
+	}
+	if publishedDate != "" {
+		article += fmt.Sprintf(`<time datetime="%s">%s</time>`, html.EscapeString(publishedDate), html.EscapeString(publishedDate))
+	}
+	if snippet != "" {
+		article += fmt.Sprintf(`<p class="snippet">%s</p>`, html.EscapeString(snippet))
+	}
+	article += "</article>"
+	return article
+}
+
+func blogSnippet(postID string, query wikipage.IQueryFrontmatterIndex, site wikipage.PageReader) string {
+	if summary := query.GetValue(postID, "blog.summary_markdown"); summary != "" {
+		return summary
+	}
+	_, markdown, err := site.ReadMarkdown(postID)
+	if err != nil || len(markdown) == 0 {
+		return ""
+	}
+	content := string(markdown)
+	if len(content) > blogSnippetMaxChars {
+		content = content[:blogSnippetMaxChars]
+	}
+	return content
+}
+
 func BuildIsContainer(query wikipage.IQueryFrontmatterIndex) func(string) bool {
 	return func(identifier string) bool {
 		if identifier == "" {
@@ -378,6 +448,7 @@ func buildTemplateWithFunctions(ctx context.Context, templateString string, site
 		"FindByPrefix":            query.QueryPrefixMatch,
 		"FindByKeyExistence":      query.QueryKeyExistence,
 		"Checklist":               BuildChecklist(templateContext),
+		"Blog":                    BuildBlog(templateContext, query, site),
 	}
 
 	return template.New("page").Funcs(funcs).Parse(templateString)
@@ -414,6 +485,7 @@ func validationFuncMap() template.FuncMap {
 		"FindByPrefix":            func(string, string) []string { return nil },
 		"FindByKeyExistence":      func(string) []string { return nil },
 		"Checklist":               func(string) string { return "" },
+		"Blog":                    func(string, string, int) string { return "" },
 	}
 }
 

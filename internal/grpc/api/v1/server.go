@@ -555,6 +555,52 @@ func (s *Server) SearchContent(_ context.Context, req *apiv1.SearchContentReques
 	}, nil
 }
 
+// ListPagesByFrontmatter lists pages matching a frontmatter key-value pair, sorted by another frontmatter key.
+func (s *Server) ListPagesByFrontmatter(_ context.Context, req *apiv1.ListPagesByFrontmatterRequest) (*apiv1.ListPagesByFrontmatterResponse, error) {
+	if req.MatchKey == "" {
+		return nil, status.Error(codes.InvalidArgument, "match_key is required")
+	}
+
+	pageIDs := s.frontmatterIndexQueryer.QueryExactMatchSortedBy(
+		req.MatchKey,
+		req.MatchValue,
+		req.SortByKey,
+		req.SortAscending,
+		int(req.MaxResults),
+	)
+
+	results := make([]*apiv1.FrontmatterQueryResult, 0, len(pageIDs))
+	for _, id := range pageIDs {
+		fmValues := make(map[string]string, len(req.FrontmatterKeysToReturn))
+		for _, key := range req.FrontmatterKeysToReturn {
+			fmValues[key] = s.frontmatterIndexQueryer.GetValue(id, key)
+		}
+
+		var contentExcerpt string
+		if req.ContentExcerptMaxChars > 0 {
+			_, markdown, err := s.pageReaderMutator.ReadMarkdown(id)
+			if err == nil && len(markdown) > 0 {
+				maxChars := int(req.ContentExcerptMaxChars)
+				if len(markdown) > maxChars {
+					contentExcerpt = string(markdown[:maxChars])
+				} else {
+					contentExcerpt = string(markdown)
+				}
+			}
+		}
+
+		results = append(results, &apiv1.FrontmatterQueryResult{
+			Identifier:       id,
+			FrontmatterValues: fmValues,
+			ContentExcerpt:   contentExcerpt,
+		})
+	}
+
+	return &apiv1.ListPagesByFrontmatterResponse{
+		Results: results,
+	}, nil
+}
+
 // validateSearchRequest validates the search request.
 func (*Server) validateSearchRequest(req *apiv1.SearchContentRequest) error {
 	if req.Query == "" {

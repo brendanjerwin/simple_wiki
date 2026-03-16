@@ -35,3 +35,7 @@ func (m *mockFrontmatterIndexQueryer) QueryKeyExistence(key string) []string {
 	}
 	return nil
 }
+
+func (*mockFrontmatterIndexQueryer) QueryExactMatchSortedBy(_ string, _ string, _ string, _ bool, _ int) []string {
+	return nil
+}

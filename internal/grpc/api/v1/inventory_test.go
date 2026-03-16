@@ -1067,3 +1067,7 @@ func (m *FlexibleMockFrontmatterIndexQueryer) GetValue(identifier wikipage.PageI
 	}
 	return ""
 }
+
+func (*FlexibleMockFrontmatterIndexQueryer) QueryExactMatchSortedBy(_ wikipage.DottedKeyPath, _ wikipage.Value, _ wikipage.DottedKeyPath, _ bool, _ int) []wikipage.PageIdentifier {
+	return nil
+}

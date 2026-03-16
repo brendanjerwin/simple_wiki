@@ -8,6 +8,9 @@ option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
 service SearchService {
   // Searches the wiki content and returns matching results.
   rpc SearchContent(SearchContentRequest) returns (SearchContentResponse) {}
+
+  // Lists pages matching a frontmatter key-value pair, sorted by another frontmatter key.
+  rpc ListPagesByFrontmatter(ListPagesByFrontmatterRequest) returns (ListPagesByFrontmatterResponse) {}
 }
 
 // The request message for searching content.
@@ -55,4 +58,28 @@ message ContainerPathElement {
 message HighlightSpan {
   int32 start = 1; // Start position in fragment
   int32 end = 2; // End position in fragment
+}
+
+// Request for listing pages by frontmatter key-value match with sorting.
+message ListPagesByFrontmatterRequest {
+  string match_key = 1; // Frontmatter dot-path to match (e.g., "blog.identifier")
+  string match_value = 2; // Value to match
+  string sort_by_key = 3; // Frontmatter dot-path to sort by (e.g., "blog.published-date")
+  bool sort_ascending = 4; // Sort direction (false = descending)
+  int32 max_results = 5; // Maximum number of results (0 = unlimited)
+  repeated string frontmatter_keys_to_return = 6; // Frontmatter dot-paths to include in results
+  // If > 0, include the first N characters of page markdown content in each result.
+  int32 content_excerpt_max_chars = 7;
+}
+
+// Response containing pages matching frontmatter query.
+message ListPagesByFrontmatterResponse {
+  repeated FrontmatterQueryResult results = 1;
+}
+
+// A single result from a frontmatter query.
+message FrontmatterQueryResult {
+  string identifier = 1; // Page identifier
+  map<string, string> frontmatter_values = 2; // Requested frontmatter values
+  string content_excerpt = 3; // First N chars of page content, if requested
 }

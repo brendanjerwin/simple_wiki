@@ -522,3 +522,7 @@ func (*mockFrontmatterIndexQueryerForCallbackTest) QueryPrefixMatch(_, _ string)
 func (*mockFrontmatterIndexQueryerForCallbackTest) QueryKeyExistence(_ string) []string {
 	return nil
 }
+
+func (*mockFrontmatterIndexQueryerForCallbackTest) QueryExactMatchSortedBy(_, _, _ string, _ bool, _ int) []string {
+	return nil
+}

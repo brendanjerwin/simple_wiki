@@ -306,6 +306,131 @@ var _ = Describe("Index", func() {
 		})
 	})
 
+	Describe("QueryExactMatchSortedBy", func() {
+		Describe("when multiple pages match with different sort values", func() {
+			var results []string
+
+			BeforeEach(func() {
+				mockReader.AddPage("post-2026-03-01", wikipage.FrontMatter{
+					"identifier": "post-2026-03-01",
+					"title":      "March Post",
+					"blog": map[string]any{
+						"identifier":     "my-blog",
+						"published-date": "2026-03-01",
+					},
+				})
+				mockReader.AddPage("post-2026-01-15", wikipage.FrontMatter{
+					"identifier": "post-2026-01-15",
+					"title":      "January Post",
+					"blog": map[string]any{
+						"identifier":     "my-blog",
+						"published-date": "2026-01-15",
+					},
+				})
+				mockReader.AddPage("post-2026-02-10", wikipage.FrontMatter{
+					"identifier": "post-2026-02-10",
+					"title":      "February Post",
+					"blog": map[string]any{
+						"identifier":     "my-blog",
+						"published-date": "2026-02-10",
+					},
+				})
+
+				_ = index.AddPageToIndex("post-2026-03-01")
+				_ = index.AddPageToIndex("post-2026-01-15")
+				_ = index.AddPageToIndex("post-2026-02-10")
+			})
+
+			Describe("when sorting descending", func() {
+				BeforeEach(func() {
+					results = index.QueryExactMatchSortedBy("blog.identifier", "my-blog", "blog.published-date", false, 0)
+				})
+
+				It("should return all matching pages", func() {
+					Expect(results).To(HaveLen(3))
+				})
+
+				It("should return results sorted by date descending", func() {
+					Expect(results[0]).To(Equal("post_2026_03_01"))
+					Expect(results[1]).To(Equal("post_2026_02_10"))
+					Expect(results[2]).To(Equal("post_2026_01_15"))
+				})
+			})
+
+			Describe("when sorting ascending", func() {
+				BeforeEach(func() {
+					results = index.QueryExactMatchSortedBy("blog.identifier", "my-blog", "blog.published-date", true, 0)
+				})
+
+				It("should return results sorted by date ascending", func() {
+					Expect(results[0]).To(Equal("post_2026_01_15"))
+					Expect(results[1]).To(Equal("post_2026_02_10"))
+					Expect(results[2]).To(Equal("post_2026_03_01"))
+				})
+			})
+
+			Describe("when limiting results", func() {
+				BeforeEach(func() {
+					results = index.QueryExactMatchSortedBy("blog.identifier", "my-blog", "blog.published-date", false, 2)
+				})
+
+				It("should return only the requested number of results", func() {
+					Expect(results).To(HaveLen(2))
+				})
+
+				It("should return the top N sorted results", func() {
+					Expect(results[0]).To(Equal("post_2026_03_01"))
+					Expect(results[1]).To(Equal("post_2026_02_10"))
+				})
+			})
+		})
+
+		Describe("when no pages match", func() {
+			var results []string
+
+			BeforeEach(func() {
+				results = index.QueryExactMatchSortedBy("blog.identifier", "nonexistent", "blog.published-date", false, 10)
+			})
+
+			It("should return nil", func() {
+				Expect(results).To(BeNil())
+			})
+		})
+
+		Describe("when pages have no sort key value", func() {
+			var results []string
+
+			BeforeEach(func() {
+				mockReader.AddPage("post-with-date", wikipage.FrontMatter{
+					"identifier": "post-with-date",
+					"blog": map[string]any{
+						"identifier":     "test-blog",
+						"published-date": "2026-05-01",
+					},
+				})
+				mockReader.AddPage("post-without-date", wikipage.FrontMatter{
+					"identifier": "post-without-date",
+					"blog": map[string]any{
+						"identifier": "test-blog",
+					},
+				})
+
+				_ = index.AddPageToIndex("post-with-date")
+				_ = index.AddPageToIndex("post-without-date")
+
+				results = index.QueryExactMatchSortedBy("blog.identifier", "test-blog", "blog.published-date", false, 0)
+			})
+
+			It("should return all matching pages", func() {
+				Expect(results).To(HaveLen(2))
+			})
+
+			It("should sort pages with values before pages without", func() {
+				Expect(results[0]).To(Equal("post_with_date"))
+			})
+		})
+	})
+
 	Describe("edge cases and error handling", func() {
 		Describe("when page does not exist", func() {
 			var err error
