@@ -76,7 +76,6 @@ func (GoldmarkRenderer) Render(input []byte) ([]byte, error) {
 	p.AllowElements("wiki-blog")
 	p.AllowAttrs("blog-id", "max-articles", "page").OnElements("wiki-blog")
 	p.AllowAttrs("class").OnElements("span")
-	p.AllowAttrs("datetime").OnElements("time")
 	return p.SanitizeBytes(buf.Bytes()), nil
 }
 

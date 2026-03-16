@@ -139,6 +139,21 @@ export class WikiBlog extends LitElement {
         font-style: italic;
         padding: 12px 0;
       }
+
+      @keyframes fadeSlideIn {
+        from {
+          opacity: 0;
+          transform: translateY(-8px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .blog-entry.new-entry {
+        animation: fadeSlideIn 0.3s ease-out;
+      }
     `,
   ];
 
@@ -170,6 +185,9 @@ export class WikiBlog extends LitElement {
 
   /** Height captured from server-rendered content for scroll container. */
   private initialHeightPx = 0;
+
+  /** Number of posts before the last "Load More", for animation. */
+  private previousPostCount = 0;
 
   constructor() {
     super();
@@ -240,6 +258,7 @@ export class WikiBlog extends LitElement {
   }
 
   private _loadMore(): void {
+    this.previousPostCount = this.posts.length;
     this.displayCount += this.maxArticles;
     this.loading = true;
     void this.fetchPosts(this.displayCount);
@@ -258,12 +277,13 @@ export class WikiBlog extends LitElement {
     void this.fetchPosts(this.maxArticles);
   }
 
-  private _renderPost(post: BlogPost) {
+  private _renderPost(post: BlogPost, index: number) {
     const href = post.externalUrl || `/${post.identifier}`;
     const snippet = post.summaryMarkdown || post.contentExcerpt;
+    const isNew = index >= this.previousPostCount && this.previousPostCount > 0;
 
     return html`
-      <li class="blog-entry">
+      <li class="blog-entry ${isNew ? 'new-entry' : ''}">
         <div class="entry-title">
           <a href="${href}">${post.title}</a>
           ${post.externalUrl
@@ -313,7 +333,7 @@ export class WikiBlog extends LitElement {
               : html`
                   <div class="blog-list-scroll" style="${this.scrollStyle}">
                     <ul class="blog-list">
-                      ${this.posts.map(post => this._renderPost(post))}
+                      ${this.posts.map((post, i) => this._renderPost(post, i))}
                     </ul>
                   </div>
                   ${this.hasMore

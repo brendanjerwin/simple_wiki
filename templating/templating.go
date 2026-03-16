@@ -332,20 +332,20 @@ func renderBlogArticle(postID string, query wikipage.IQueryFrontmatterIndex, sit
 		linkHref = html.EscapeString(externalURL)
 	}
 
-	article := fmt.Sprintf(`<article><a href="%s">%s</a>`, linkHref, html.EscapeString(title))
+	article := fmt.Sprintf(`<span class="blog-article"><a href="%s">%s</a>`, linkHref, html.EscapeString(title))
 	if externalURL != "" {
 		article += fmt.Sprintf(` <a href="/%s" class="wiki-link">[wiki]</a>`, html.EscapeString(postID))
 	}
 	if subtitle != "" {
-		article += fmt.Sprintf(`<span class="subtitle">%s</span>`, html.EscapeString(subtitle))
+		article += fmt.Sprintf(` <span class="subtitle">%s</span>`, html.EscapeString(subtitle))
 	}
 	if publishedDate != "" {
-		article += fmt.Sprintf(`<time datetime="%s">%s</time>`, html.EscapeString(publishedDate), html.EscapeString(publishedDate))
+		article += fmt.Sprintf(` <span class="date">%s</span>`, html.EscapeString(publishedDate))
 	}
 	if snippet != "" {
-		article += fmt.Sprintf(`<span class="snippet">%s</span>`, html.EscapeString(snippet))
+		article += fmt.Sprintf(` <span class="snippet">%s</span>`, html.EscapeString(snippet))
 	}
-	article += "</article>"
+	article += "</span>"
 	return article
 }
 

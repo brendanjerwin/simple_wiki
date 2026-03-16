@@ -1606,7 +1606,7 @@ var _ = Describe("BuildBlog", func() {
 		})
 
 		It("should include article elements for each post", func() {
-			Expect(strings.Count(result, "<article>")).To(Equal(3))
+			Expect(strings.Count(result, "blog-article")).To(Equal(3))
 		})
 
 		It("should include post titles as links", func() {
@@ -1662,7 +1662,7 @@ var _ = Describe("BuildBlog", func() {
 		})
 
 		It("should only include the limited number of articles", func() {
-			Expect(strings.Count(result, "<article>")).To(Equal(2))
+			Expect(strings.Count(result, "blog-article")).To(Equal(2))
 		})
 	})
 
@@ -1677,7 +1677,7 @@ var _ = Describe("BuildBlog", func() {
 
 		It("should render an empty wiki-blog element", func() {
 			Expect(result).To(ContainSubstring("<wiki-blog"))
-			Expect(result).NotTo(ContainSubstring("<article>"))
+			Expect(result).NotTo(ContainSubstring("blog-article"))
 		})
 	})
 })
