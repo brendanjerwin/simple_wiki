@@ -153,14 +153,14 @@ export class WikiEditor extends LitElement {
       }
 
       @media (min-width: 70em) {
-        textarea {
+        :host(:not([compact])) textarea {
           padding-left: 15%;
           padding-right: 15%;
         }
       }
 
       @media (min-width: 100em) {
-        textarea {
+        :host(:not([compact])) textarea {
           padding-left: 20%;
           padding-right: 20%;
         }
@@ -179,6 +179,15 @@ export class WikiEditor extends LitElement {
 
   @property({ type: Number, attribute: 'debounce-ms' })
   declare debounceMs: number;
+
+  @property({ type: String, attribute: 'initial-content' })
+  declare initialContent: string | undefined;
+
+  @property({ type: Boolean, attribute: 'auto-save' })
+  declare autoSave: boolean;
+
+  @property({ type: Boolean, reflect: true })
+  declare compact: boolean;
 
   @state()
   declare loading: boolean;
@@ -209,6 +218,9 @@ export class WikiEditor extends LitElement {
     this.allowUploads = false;
     this.maxUploadMb = 10;
     this.debounceMs = 750;
+    this.autoSave = true;
+    this.compact = false;
+    this.initialContent = undefined;
     this.loading = true;
     this.saveStatus = 'idle';
     this.error = null;
@@ -237,7 +249,9 @@ export class WikiEditor extends LitElement {
     void this.loadContent().then(async () => {
       if (!this.isConnected) return;
       await this.updateComplete;
-      this.setupSaveQueue();
+      if (this.autoSave) {
+        this.setupSaveQueue();
+      }
       this.setupCoordinator();
       this.focusTextarea();
     });
@@ -255,6 +269,12 @@ export class WikiEditor extends LitElement {
   }
 
   private async loadContent(): Promise<void> {
+    if (this.initialContent !== undefined) {
+      this.content = this.initialContent;
+      this.loading = false;
+      return;
+    }
+
     if (!this.page) {
       this.loading = false;
       return;
@@ -333,6 +353,11 @@ export class WikiEditor extends LitElement {
     if (!toolbar) return;
 
     this.coordinator = new EditorToolbarCoordinator(textarea, toolbar);
+  }
+
+  /** Returns the current editor content. */
+  getContent(): string {
+    return this.content;
   }
 
   _checkSelection(): void {
@@ -441,7 +466,7 @@ export class WikiEditor extends LitElement {
     return html`
       ${sharedStyles}
       <div class="editor-container">
-        <editor-toolbar ?has-selection=${this._hasSelection} @exit-requested=${this._onExitRequested}></editor-toolbar>
+        <editor-toolbar ?has-selection=${this._hasSelection} ?hide-exit=${!this.autoSave} @exit-requested=${this._onExitRequested}></editor-toolbar>
         <div class="status-bar ${this.saveStatus !== 'idle' && this.saveStatus !== 'error' ? 'visible' : ''}">
           <span class="status-indicator ${this.saveStatus}">
             ${this.saveStatus === 'saving'

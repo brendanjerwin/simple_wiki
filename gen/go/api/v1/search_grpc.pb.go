@@ -19,7 +19,8 @@ import (
 const _ = grpc.SupportPackageIsVersion8
 
 const (
-	SearchService_SearchContent_FullMethodName = "/api.v1.SearchService/SearchContent"
+	SearchService_SearchContent_FullMethodName          = "/api.v1.SearchService/SearchContent"
+	SearchService_ListPagesByFrontmatter_FullMethodName = "/api.v1.SearchService/ListPagesByFrontmatter"
 )
 
 // SearchServiceClient is the client API for SearchService service.
@@ -30,6 +31,8 @@ const (
 type SearchServiceClient interface {
 	// Searches the wiki content and returns matching results.
 	SearchContent(ctx context.Context, in *SearchContentRequest, opts ...grpc.CallOption) (*SearchContentResponse, error)
+	// Lists pages matching a frontmatter key-value pair, sorted by another frontmatter key.
+	ListPagesByFrontmatter(ctx context.Context, in *ListPagesByFrontmatterRequest, opts ...grpc.CallOption) (*ListPagesByFrontmatterResponse, error)
 }
 
 type searchServiceClient struct {
@@ -50,6 +53,16 @@ func (c *searchServiceClient) SearchContent(ctx context.Context, in *SearchConte
 	return out, nil
 }
 
+func (c *searchServiceClient) ListPagesByFrontmatter(ctx context.Context, in *ListPagesByFrontmatterRequest, opts ...grpc.CallOption) (*ListPagesByFrontmatterResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListPagesByFrontmatterResponse)
+	err := c.cc.Invoke(ctx, SearchService_ListPagesByFrontmatter_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SearchServiceServer is the server API for SearchService service.
 // All implementations must embed UnimplementedSearchServiceServer
 // for forward compatibility
@@ -58,6 +71,8 @@ func (c *searchServiceClient) SearchContent(ctx context.Context, in *SearchConte
 type SearchServiceServer interface {
 	// Searches the wiki content and returns matching results.
 	SearchContent(context.Context, *SearchContentRequest) (*SearchContentResponse, error)
+	// Lists pages matching a frontmatter key-value pair, sorted by another frontmatter key.
+	ListPagesByFrontmatter(context.Context, *ListPagesByFrontmatterRequest) (*ListPagesByFrontmatterResponse, error)
 	mustEmbedUnimplementedSearchServiceServer()
 }
 
@@ -67,6 +82,9 @@ type UnimplementedSearchServiceServer struct {
 
 func (UnimplementedSearchServiceServer) SearchContent(context.Context, *SearchContentRequest) (*SearchContentResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SearchContent not implemented")
+}
+func (UnimplementedSearchServiceServer) ListPagesByFrontmatter(context.Context, *ListPagesByFrontmatterRequest) (*ListPagesByFrontmatterResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListPagesByFrontmatter not implemented")
 }
 func (UnimplementedSearchServiceServer) mustEmbedUnimplementedSearchServiceServer() {}
 
@@ -99,6 +117,24 @@ func _SearchService_SearchContent_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _SearchService_ListPagesByFrontmatter_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListPagesByFrontmatterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SearchServiceServer).ListPagesByFrontmatter(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: SearchService_ListPagesByFrontmatter_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SearchServiceServer).ListPagesByFrontmatter(ctx, req.(*ListPagesByFrontmatterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // SearchService_ServiceDesc is the grpc.ServiceDesc for SearchService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -109,6 +145,10 @@ var SearchService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SearchContent",
 			Handler:    _SearchService_SearchContent_Handler,
+		},
+		{
+			MethodName: "ListPagesByFrontmatter",
+			Handler:    _SearchService_ListPagesByFrontmatter_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -6,6 +6,8 @@ import type { AugmentedError } from './augment-error-service.js';
 import { AugmentErrorService } from './augment-error-service.js';
 import type { ErrorAction } from './error-display.js';
 import './error-display.js';
+import type { TitleInput } from './title-input.js';
+import './title-input.js';
 
 /**
  * Result from the identifier generator function.
@@ -198,8 +200,8 @@ export class AutomagicIdentifierInput extends LitElement {
    * Focus the title input field.
    */
   public focusTitleInput(): void {
-    const titleInput = this.shadowRoot?.querySelector<HTMLInputElement>('input[name="title"]');
-    titleInput?.focus();
+    const titleInput = this.shadowRoot?.querySelector<TitleInput>('title-input');
+    titleInput?.focusInput();
   }
 
   /**
@@ -215,12 +217,10 @@ export class AutomagicIdentifierInput extends LitElement {
     this.automagicError = null;
   }
 
-  private _handleTitleInput = (event: Event): void => {
-    if (!(event.target instanceof HTMLInputElement)) {
-      return;
-    }
-    const input = event.target;
-    this.title = input.value;
+  private _handleTitleInput = (): void => {
+    const titleInput = this.shadowRoot?.querySelector<TitleInput>('title-input');
+    if (!titleInput) return;
+    this.title = titleInput.value;
 
     // Dispatch title-change event immediately
     this.dispatchEvent(
@@ -386,16 +386,15 @@ export class AutomagicIdentifierInput extends LitElement {
     return html`
       ${sharedStyles}
       <div class="form-group">
-        <label for="title">Title</label>
-        <input
-          type="text"
+        <label @click=${() => this.shadowRoot?.querySelector<HTMLElement>('title-input')?.focus()}>Title</label>
+        <title-input
           id="title"
           name="title"
           .value=${this.title}
           @input=${this._handleTitleInput}
           placeholder=${this.titlePlaceholder}
           ?disabled=${this.disabled}
-        />
+        ></title-input>
         ${this.titleHelpText ? html`<div class="help-text">${this.titleHelpText}</div>` : nothing}
       </div>
 

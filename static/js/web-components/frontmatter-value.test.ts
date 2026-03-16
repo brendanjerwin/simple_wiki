@@ -1,7 +1,7 @@
 import { fixture, html, expect } from '@open-wc/testing';
 import type { TemplateResult } from 'lit';
 import { restore } from 'sinon';
-import { FrontmatterValue } from './frontmatter-value.js';
+import { FrontmatterValue, coercePrimitive } from './frontmatter-value.js';
 
 async function createFixtureWithTimeout(template: TemplateResult, timeoutMs = 5000): Promise<FrontmatterValue> {
   const timeout = (ms: number, message: string) =>
@@ -15,6 +15,33 @@ async function createFixtureWithTimeout(template: TemplateResult, timeoutMs = 50
     timeout(timeoutMs, 'Component fixture timed out')
   ]) as Promise<FrontmatterValue>;
 }
+
+describe('coercePrimitive', () => {
+  it('should convert "true" to boolean true', () => {
+    expect(coercePrimitive('true')).to.equal(true);
+  });
+
+  it('should convert "false" to boolean false', () => {
+    expect(coercePrimitive('false')).to.equal(false);
+  });
+
+  it('should convert numeric strings to numbers', () => {
+    expect(coercePrimitive('42')).to.equal(42);
+    expect(coercePrimitive('3.14')).to.equal(3.14);
+    expect(coercePrimitive('0')).to.equal(0);
+  });
+
+  it('should leave regular strings unchanged', () => {
+    expect(coercePrimitive('hello')).to.equal('hello');
+    expect(coercePrimitive('')).to.equal('');
+  });
+
+  it('should leave non-string values unchanged', () => {
+    expect(coercePrimitive(true)).to.equal(true);
+    expect(coercePrimitive(42)).to.equal(42);
+    expect(coercePrimitive(null)).to.equal(null);
+  });
+});
 
 describe('FrontmatterValue', () => {
   let el: FrontmatterValue;
@@ -274,6 +301,60 @@ describe('FrontmatterValue', () => {
 
       it('should update the value property', () => {
         expect(el.value).to.equal('modified');
+      });
+    });
+
+    describe('when string "true" is entered for a value', () => {
+      let valueChangeEvent: CustomEvent | null;
+
+      beforeEach(async () => {
+        valueChangeEvent = null;
+        el = await createFixtureWithTimeout(html`<frontmatter-value .value="${true}"></frontmatter-value>`);
+
+        el.addEventListener('value-change', (event) => {
+          if (event instanceof CustomEvent) {
+            valueChangeEvent = event;
+          }
+        });
+
+        const stringComponent = el.shadowRoot?.querySelector<HTMLElement>('frontmatter-value-string');
+        stringComponent!.dispatchEvent(new CustomEvent('value-change', {
+          detail: { oldValue: 'true', newValue: 'true' },
+          bubbles: true
+        }));
+      });
+
+      it('should coerce "true" back to boolean true', () => {
+        expect(valueChangeEvent?.detail.newValue).to.equal(true);
+      });
+
+      it('should update the value property as boolean', () => {
+        expect(el.value).to.equal(true);
+      });
+    });
+
+    describe('when string "false" is entered for a value', () => {
+      let valueChangeEvent: CustomEvent | null;
+
+      beforeEach(async () => {
+        valueChangeEvent = null;
+        el = await createFixtureWithTimeout(html`<frontmatter-value .value="${true}"></frontmatter-value>`);
+
+        el.addEventListener('value-change', (event) => {
+          if (event instanceof CustomEvent) {
+            valueChangeEvent = event;
+          }
+        });
+
+        const stringComponent = el.shadowRoot?.querySelector<HTMLElement>('frontmatter-value-string');
+        stringComponent!.dispatchEvent(new CustomEvent('value-change', {
+          detail: { oldValue: 'true', newValue: 'false' },
+          bubbles: true
+        }));
+      });
+
+      it('should coerce "false" back to boolean false', () => {
+        expect(valueChangeEvent?.detail.newValue).to.equal(false);
       });
     });
 

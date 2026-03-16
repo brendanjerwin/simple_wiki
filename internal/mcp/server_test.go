@@ -56,6 +56,9 @@ func (noOpFrontmatterIndexQueryer) QueryPrefixMatch(wikipage.DottedKeyPath, stri
 func (noOpFrontmatterIndexQueryer) GetValue(wikipage.PageIdentifier, wikipage.DottedKeyPath) wikipage.Value {
 	return ""
 }
+func (noOpFrontmatterIndexQueryer) QueryExactMatchSortedBy(wikipage.DottedKeyPath, wikipage.Value, wikipage.DottedKeyPath, bool, int) []wikipage.PageIdentifier {
+	return nil
+}
 
 func mustNewAPIServer() *grpcapi.Server {
 	srv, err := grpcapi.NewServer(

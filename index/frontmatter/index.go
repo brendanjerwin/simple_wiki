@@ -4,6 +4,7 @@ package frontmatter
 import (
 	"fmt"
 	"slices"
+	"sort"
 	"strings"
 	"sync"
 
@@ -23,6 +24,7 @@ type IQueryFrontmatterIndex interface {
 	QueryExactMatch(dottedKeyPath DottedKeyPath, value Value) []wikipage.PageIdentifier
 	QueryKeyExistence(dottedKeyPath DottedKeyPath) []wikipage.PageIdentifier
 	QueryPrefixMatch(dottedKeyPath DottedKeyPath, valuePrefix string) []wikipage.PageIdentifier
+	QueryExactMatchSortedBy(matchKey DottedKeyPath, matchValue Value, sortByKey DottedKeyPath, ascending bool, maxResults int) []wikipage.PageIdentifier
 
 	GetValue(identifier wikipage.PageIdentifier, dottedKeyPath DottedKeyPath) Value
 }
@@ -189,6 +191,66 @@ func (f *Index) QueryPrefixMatch(dottedKeyPath DottedKeyPath, valuePrefix string
 		}
 	}
 	return identifiersWithKey
+}
+
+// QueryExactMatchSortedBy queries the index for exact matches of a key-value pair,
+// sorts the results by the value of another frontmatter key, and limits the result count.
+// A maxResults of 0 means unlimited.
+//
+//revive:disable-next-line:flag-parameter ascending controls sort direction, which is a natural boolean choice for this API
+func (f *Index) QueryExactMatchSortedBy(matchKey DottedKeyPath, matchValue Value, sortByKey DottedKeyPath, ascending bool, maxResults int) []wikipage.PageIdentifier {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+
+	matches := f.InvertedIndex[matchKey][matchValue]
+	if len(matches) == 0 {
+		return nil
+	}
+
+	// Copy to avoid mutating the index slice
+	sorted := make([]wikipage.PageIdentifier, len(matches))
+	copy(sorted, matches)
+
+	// Stable sort by the sort key value with identifier as tie-breaker
+	sort.SliceStable(sorted, func(i, j int) bool {
+		valI := f.getValueInternal(sorted[i], sortByKey)
+		valJ := f.getValueInternal(sorted[j], sortByKey)
+		if valI != valJ {
+			if ascending {
+				return valI < valJ
+			}
+			return valI > valJ
+		}
+		return sorted[i] < sorted[j]
+	})
+
+	if maxResults > 0 && len(sorted) > maxResults {
+		sorted = sorted[:maxResults]
+	}
+
+	return sorted
+}
+
+// getValueInternal retrieves a value without acquiring the lock (caller must hold it).
+// When multiple values exist for the same key, returns the lexicographically smallest
+// to ensure deterministic behavior.
+func (f *Index) getValueInternal(identifier wikipage.PageIdentifier, dottedKeyPath DottedKeyPath) Value {
+	if munged, err := wikiidentifiers.MungeIdentifier(identifier); err == nil {
+		identifier = munged
+	}
+	values := f.PageKeyMap[identifier][dottedKeyPath]
+	if len(values) == 0 {
+		return ""
+	}
+	var result Value
+	first := true
+	for value := range values {
+		if first || value < result {
+			result = value
+			first = false
+		}
+	}
+	return result
 }
 
 // GetValue retrieves the value of a frontmatter key for a given page.

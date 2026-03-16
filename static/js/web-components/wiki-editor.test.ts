@@ -721,4 +721,71 @@ describe('WikiEditor', () => {
       }
     });
   });
+
+  describe('when initialContent is set', () => {
+    beforeEach(async () => {
+      el = document.createElement('wiki-editor') as WikiEditor;
+      el.setAttribute('initial-content', '# Pre-loaded content');
+      el.setAttribute('debounce-ms', '500');
+      // Do NOT stub readPage - it should not be called
+      document.body.appendChild(el);
+      await waitUntil(
+        () => !(el as unknown as WikiEditorInternal).loading,
+        'should finish loading',
+        { timeout: 3000 }
+      );
+      await el.updateComplete;
+    });
+
+    it('should use initialContent instead of fetching from server', () => {
+      const internal = el as unknown as WikiEditorInternal;
+      expect(internal.content).to.equal('# Pre-loaded content');
+    });
+
+    it('should not be in loading state', () => {
+      expect((el as unknown as WikiEditorInternal).loading).to.be.false;
+    });
+  });
+
+  describe('when autoSave is false', () => {
+    beforeEach(async () => {
+      el = document.createElement('wiki-editor') as WikiEditor;
+      el.setAttribute('initial-content', 'test content');
+      el.setAttribute('debounce-ms', '500');
+      // auto-save is a boolean attribute; absence means false when using ?auto-save
+      // but as a property, set it directly:
+      el.autoSave = false;
+      document.body.appendChild(el);
+      await waitUntil(
+        () => !(el as unknown as WikiEditorInternal).loading,
+        'should finish loading',
+        { timeout: 3000 }
+      );
+      await el.updateComplete;
+    });
+
+    it('should not create a save queue', () => {
+      const internal = el as unknown as WikiEditorInternal;
+      expect(internal.saveQueue).to.be.null;
+    });
+  });
+
+  describe('getContent', () => {
+    beforeEach(async () => {
+      el = document.createElement('wiki-editor') as WikiEditor;
+      el.setAttribute('initial-content', '# My Content');
+      el.setAttribute('debounce-ms', '500');
+      document.body.appendChild(el);
+      await waitUntil(
+        () => !(el as unknown as WikiEditorInternal).loading,
+        'should finish loading',
+        { timeout: 3000 }
+      );
+      await el.updateComplete;
+    });
+
+    it('should return the current editor content', () => {
+      expect(el.getContent()).to.equal('# My Content');
+    });
+  });
 });

@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"text/template"
 	"time"
@@ -30,7 +31,8 @@ const (
 
 // Mock implementations for testing
 type mockPageReader struct {
-	pages map[string]wikipage.FrontMatter
+	pages    map[string]wikipage.FrontMatter
+	markdown map[string]string
 }
 
 func (m *mockPageReader) ReadFrontMatter(identifier string) (string, wikipage.FrontMatter, error) {
@@ -44,8 +46,13 @@ func (m *mockPageReader) ReadFrontMatter(identifier string) (string, wikipage.Fr
 	return identifier, nil, errors.New("page not found")
 }
 
-func (*mockPageReader) ReadMarkdown(identifier string) (string, wikipage.Markdown, error) {
-	return identifier, "", nil // Not needed for this test
+func (m *mockPageReader) ReadMarkdown(identifier string) (string, wikipage.Markdown, error) {
+	if m.markdown != nil {
+		if md, exists := m.markdown[identifier]; exists {
+			return identifier, wikipage.Markdown(md), nil
+		}
+	}
+	return identifier, "", nil
 }
 
 type mockFrontmatterIndex struct {
@@ -77,6 +84,32 @@ func (m *mockFrontmatterIndex) GetValue(identifier, key string) string {
 		}
 	}
 	return ""
+}
+
+//revive:disable-next-line:flag-parameter interface implementation requires ascending parameter
+func (m *mockFrontmatterIndex) QueryExactMatchSortedBy(matchKey, matchValue, sortByKey string, ascending bool, maxResults int) []string {
+	matches := m.QueryExactMatch(matchKey, matchValue)
+	if len(matches) == 0 {
+		return nil
+	}
+
+	sorted := make([]string, len(matches))
+	copy(sorted, matches)
+
+	sort.Slice(sorted, func(i, j int) bool {
+		valI := m.GetValue(sorted[i], sortByKey)
+		valJ := m.GetValue(sorted[j], sortByKey)
+		if ascending {
+			return valI < valJ
+		}
+		return valI > valJ
+	})
+
+	if maxResults > 0 && len(sorted) > maxResults {
+		sorted = sorted[:maxResults]
+	}
+
+	return sorted
 }
 
 var _ = Describe("BuildShowInventoryContentsOf", func() {
@@ -1497,6 +1530,296 @@ var _ = Describe("BuildChecklist", func() {
 		otherFunc := templating.BuildChecklist(otherContext)
 		result := otherFunc("my_list")
 		Expect(result).To(ContainSubstring(`page="other_page"`))
+	})
+
+	Describe("when frontmatter has checklist items", func() {
+		var result string
+
+		BeforeEach(func() {
+			templateContext = templating.TemplateContext{
+				Identifier: "my_page_id",
+				Map: map[string]any{
+					"checklists": map[string]any{
+						"todos": map[string]any{
+							"items": []any{
+								map[string]any{"text": "Buy milk", "checked": false},
+								map[string]any{"text": "Walk the dog", "checked": true},
+								map[string]any{"text": "Write tests", "checked": false},
+							},
+						},
+					},
+				},
+			}
+			checklistFunc = templating.BuildChecklist(templateContext)
+			result = checklistFunc("todos")
+		})
+
+		It("should include fallback content with item text", func() {
+			Expect(result).To(ContainSubstring("Buy milk"))
+			Expect(result).To(ContainSubstring("Walk the dog"))
+			Expect(result).To(ContainSubstring("Write tests"))
+		})
+
+		It("should show unchecked marker for unchecked items", func() {
+			Expect(result).To(ContainSubstring("[ ] Buy milk"))
+		})
+
+		It("should show checked marker for checked items", func() {
+			Expect(result).To(ContainSubstring("[x] Walk the dog"))
+		})
+
+		It("should not contain newlines that could break goldmark", func() {
+			Expect(result).NotTo(ContainSubstring("\n"))
+		})
+	})
+
+	Describe("when frontmatter has no checklist data", func() {
+		var result string
+
+		BeforeEach(func() {
+			templateContext = templating.TemplateContext{
+				Identifier: "my_page_id",
+				Map:        map[string]any{},
+			}
+			checklistFunc = templating.BuildChecklist(templateContext)
+			result = checklistFunc("todos")
+		})
+
+		It("should render empty element without fallback", func() {
+			Expect(result).To(ContainSubstring(`<wiki-checklist`))
+			Expect(result).To(ContainSubstring(`></wiki-checklist>`))
+		})
+	})
+})
+
+var _ = Describe("BuildBlog", func() {
+	var (
+		mockSite  *mockPageReader
+		mockIndex *mockFrontmatterIndex
+	)
+
+	BeforeEach(func() {
+		mockSite = &mockPageReader{
+			pages: map[string]wikipage.FrontMatter{},
+			markdown: map[string]string{
+				"post_one":   "This is the content of post one with some interesting details.",
+				"post_two":   "Second post content here.",
+				"post_three": "Third post with a lot of content that should be truncated if it exceeds the limit.",
+			},
+		}
+		mockIndex = &mockFrontmatterIndex{
+			index: map[string]map[string][]string{
+				"blog.identifier": {
+					"my-blog": {"post_one", "post_two", "post_three"},
+				},
+			},
+			values: map[string]map[string]string{
+				"post_one": {
+					"title":              "First Post",
+					"blog.identifier":    "my-blog",
+					"blog.published-date": "2026-03-15",
+				},
+				"post_two": {
+					"title":              "Second Post",
+					"blog.identifier":    "my-blog",
+					"blog.published-date": "2026-03-10",
+					"blog.subtitle":       "A great subtitle",
+				},
+				"post_three": {
+					"title":                "Third Post",
+					"blog.identifier":      "my-blog",
+					"blog.published-date":  "2026-03-01",
+					"blog.summary_markdown": "Custom summary for the blog list.",
+				},
+			},
+		}
+	})
+
+	Describe("when rendering a blog with posts", func() {
+		var result string
+
+		BeforeEach(func() {
+			ctx := templating.TemplateContext{
+				Identifier: "blog_page",
+				Title:      "My Blog",
+			}
+			blogFunc := templating.BuildBlog(ctx, mockIndex, mockSite)
+			result = blogFunc("my-blog", 10)
+		})
+
+		It("should render a wiki-blog element", func() {
+			Expect(result).To(ContainSubstring("<wiki-blog"))
+			Expect(result).To(ContainSubstring("</wiki-blog>"))
+		})
+
+		It("should include the blog-id attribute", func() {
+			Expect(result).To(ContainSubstring(`blog-id="my-blog"`))
+		})
+
+		It("should include the max-articles attribute", func() {
+			Expect(result).To(ContainSubstring(`max-articles="10"`))
+		})
+
+		It("should include the page attribute", func() {
+			Expect(result).To(ContainSubstring(`page="blog_page"`))
+		})
+
+		It("should include article elements for each post", func() {
+			Expect(strings.Count(result, "blog-article")).To(Equal(3))
+		})
+
+		It("should include post titles as links", func() {
+			Expect(result).To(ContainSubstring("First Post"))
+			Expect(result).To(ContainSubstring("Second Post"))
+			Expect(result).To(ContainSubstring("Third Post"))
+		})
+
+		It("should include published dates", func() {
+			Expect(result).To(ContainSubstring("2026-03-15"))
+			Expect(result).To(ContainSubstring("2026-03-10"))
+		})
+
+		It("should include subtitle when present", func() {
+			Expect(result).To(ContainSubstring("A great subtitle"))
+		})
+
+		It("should use summary_markdown when present instead of content excerpt", func() {
+			Expect(result).To(ContainSubstring("Custom summary for the blog list."))
+		})
+
+		It("should use content excerpt as fallback snippet", func() {
+			Expect(result).To(ContainSubstring("This is the content of post one"))
+		})
+	})
+
+	Describe("when snippet contains markdown syntax and newlines", func() {
+		var result string
+
+		BeforeEach(func() {
+			mockSite.markdown["post_one"] = "# Heading\n\nSome **bold** text with [links](http://example.com).\n\nAnother paragraph."
+			mockIndex.values["post_one"]["blog.summary_markdown"] = ""
+			ctx := templating.TemplateContext{Identifier: "blog_page"}
+			blogFunc := templating.BuildBlog(ctx, mockIndex, mockSite)
+			result = blogFunc("my-blog", 10)
+		})
+
+		It("should strip markdown heading markers", func() {
+			Expect(result).NotTo(ContainSubstring("# "))
+		})
+
+		It("should collapse newlines to single-line text", func() {
+			Expect(result).NotTo(ContainSubstring("\n"))
+		})
+
+		It("should preserve the readable text content", func() {
+			Expect(result).To(ContainSubstring("Heading"))
+			Expect(result).To(ContainSubstring("Some"))
+			Expect(result).To(ContainSubstring("text"))
+		})
+	})
+
+	Describe("when rendering with external URL", func() {
+		var result string
+
+		BeforeEach(func() {
+			mockIndex.values["post_one"]["blog.external_url"] = "https://example.com/post"
+			ctx := templating.TemplateContext{Identifier: "blog_page"}
+			blogFunc := templating.BuildBlog(ctx, mockIndex, mockSite)
+			result = blogFunc("my-blog", 10)
+		})
+
+		It("should link title to external URL", func() {
+			Expect(result).To(ContainSubstring(`href="https://example.com/post"`))
+		})
+
+		It("should include a wiki page link", func() {
+			Expect(result).To(ContainSubstring(`class="wiki-link"`))
+		})
+	})
+
+	Describe("when limiting results", func() {
+		var result string
+
+		BeforeEach(func() {
+			ctx := templating.TemplateContext{Identifier: "blog_page"}
+			blogFunc := templating.BuildBlog(ctx, mockIndex, mockSite)
+			result = blogFunc("my-blog", 2)
+		})
+
+		It("should only include the limited number of articles", func() {
+			Expect(strings.Count(result, "blog-article")).To(Equal(2))
+		})
+	})
+
+	Describe("when no posts match", func() {
+		var result string
+
+		BeforeEach(func() {
+			ctx := templating.TemplateContext{Identifier: "blog_page"}
+			blogFunc := templating.BuildBlog(ctx, mockIndex, mockSite)
+			result = blogFunc("nonexistent-blog", 10)
+		})
+
+		It("should render an empty wiki-blog element", func() {
+			Expect(result).To(ContainSubstring("<wiki-blog"))
+			Expect(result).NotTo(ContainSubstring("blog-article"))
+		})
+	})
+
+	Describe("when hosting page has hide-new-post set", func() {
+		var result string
+
+		BeforeEach(func() {
+			ctx := templating.TemplateContext{
+				Identifier: "blog_page",
+				Map: map[string]any{
+					"blog": map[string]any{
+						"hide-new-post": true,
+					},
+				},
+			}
+			blogFunc := templating.BuildBlog(ctx, mockIndex, mockSite)
+			result = blogFunc("my-blog", 10)
+		})
+
+		It("should include the hide-new-post attribute", func() {
+			Expect(result).To(ContainSubstring("hide-new-post"))
+		})
+	})
+
+	Describe("when hosting page has hide-new-post set as string true", func() {
+		var result string
+
+		BeforeEach(func() {
+			ctx := templating.TemplateContext{
+				Identifier: "blog_page",
+				Map: map[string]any{
+					"blog": map[string]any{
+						"hide-new-post": "true",
+					},
+				},
+			}
+			blogFunc := templating.BuildBlog(ctx, mockIndex, mockSite)
+			result = blogFunc("my-blog", 10)
+		})
+
+		It("should include the hide-new-post attribute", func() {
+			Expect(result).To(ContainSubstring("hide-new-post"))
+		})
+	})
+
+	Describe("when hosting page does not have hide-new-post", func() {
+		var result string
+
+		BeforeEach(func() {
+			ctx := templating.TemplateContext{Identifier: "blog_page"}
+			blogFunc := templating.BuildBlog(ctx, mockIndex, mockSite)
+			result = blogFunc("my-blog", 10)
+		})
+
+		It("should not include the hide-new-post attribute", func() {
+			Expect(result).NotTo(ContainSubstring("hide-new-post"))
+		})
 	})
 })
 

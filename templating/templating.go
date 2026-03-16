@@ -21,6 +21,8 @@ import (
 	"golang.org/x/text/language"
 )
 
+const singleSpace = " "
+
 type InventoryFrontmatter struct {
 	Container string   `json:"container"`
 	Items     []string `json:"items"`
@@ -188,7 +190,7 @@ func buildShowInventoryContentsOfSync(ctx context.Context, site wikipage.PageRea
 		"FindBy":                  query.QueryExactMatch,
 		"FindByPrefix":            query.QueryPrefixMatch,
 		"FindByKeyExistence":      query.QueryKeyExistence,
-		"__Indent":                func() string { return strings.Repeat(" ", indent*2) },
+		"__Indent":                func() string { return strings.Repeat(singleSpace, indent*2) },
 	}
 
 	tmpl, err := template.New("content").Funcs(funcs).Parse(tmplString)
@@ -228,7 +230,7 @@ func BuildLinkToWithVisited(site wikipage.PageReader, currentPageTemplateContext
 		if visited[identifierToLink] {
 			// Return a safe fallback link without triggering template execution - use munged identifier for URL
 			titleCaser := cases.Title(language.AmericanEnglish)
-			titleCasedTitle := titleCaser.String(strings.ReplaceAll(strcase.SnakeCase(identifierToLink), "_", " "))
+			titleCasedTitle := titleCaser.String(strings.ReplaceAll(strcase.SnakeCase(identifierToLink), "_", singleSpace))
 			mungedIdentifier, err := wikiidentifiers.MungeIdentifier(identifierToLink)
 			if err != nil {
 				return fmt.Sprintf("[ERROR: LinkTo circular reference, munging %q: %v]", identifierToLink, err)
@@ -245,7 +247,7 @@ func BuildLinkToWithVisited(site wikipage.PageReader, currentPageTemplateContext
 		identifierToLink, frontmatterForLinkedPage, err := site.ReadFrontMatter(identifierToLink)
 		if err != nil {
 			titleCaser := cases.Title(language.AmericanEnglish)
-			titleCasedTitle := titleCaser.String(strings.ReplaceAll(strcase.SnakeCase(identifierToLink), "_", " "))
+			titleCasedTitle := titleCaser.String(strings.ReplaceAll(strcase.SnakeCase(identifierToLink), "_", singleSpace))
 			urlEncodedTitle := url.QueryEscape(titleCasedTitle)
 			// Doesnt look like it exists yet, return a link.
 			// It'll render and let the page get created.
@@ -287,12 +289,162 @@ func BuildLinkToWithVisited(site wikipage.PageReader, currentPageTemplateContext
 	}
 }
 
-// BuildChecklist returns a template function that renders a wiki-checklist custom element.
-// The list-name attribute is taken from the argument; the page attribute from the template context.
+// BuildChecklist returns a template function that renders a wiki-checklist custom element
+// with a server-rendered fallback list of checklist items inside it.
 func BuildChecklist(templateContext TemplateContext) func(string) string {
 	return func(listName string) string {
-		return fmt.Sprintf(`<wiki-checklist list-name="%s" page="%s"></wiki-checklist>`, html.EscapeString(listName), html.EscapeString(templateContext.Identifier))
+		fallback := renderChecklistFallback(templateContext.Map, listName)
+		return fmt.Sprintf(`<wiki-checklist list-name="%s" page="%s">%s</wiki-checklist>`,
+			html.EscapeString(listName),
+			html.EscapeString(templateContext.Identifier),
+			fallback,
+		)
 	}
+}
+
+func renderChecklistFallback(frontmatter map[string]any, listName string) string {
+	checklists, ok := frontmatter["checklists"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	list, ok := checklists[listName].(map[string]any)
+	if !ok {
+		return ""
+	}
+	items, ok := list["items"].([]any)
+	if !ok || len(items) == 0 {
+		return ""
+	}
+
+	var buf strings.Builder
+	for _, raw := range items {
+		item, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		text, textOk := item["text"].(string)
+		if !textOk || text == "" {
+			continue
+		}
+		checked, checkedOk := item["checked"].(bool)
+		if !checkedOk {
+			checked = false
+		}
+		marker := "[ ]"
+		if checked {
+			marker = "[x]"
+		}
+		// Single-line plain text to avoid goldmark paragraph breaks.
+		_, _ = fmt.Fprintf(&buf, `<span class="checklist-item">%s %s</span>`, marker, html.EscapeString(text))
+	}
+	return buf.String()
+}
+
+const blogSnippetMaxChars = 200
+
+// BuildBlog returns a template function that renders a wiki-blog custom element
+// with a server-rendered fallback list of blog posts inside it.
+func BuildBlog(templateContext TemplateContext, query wikipage.IQueryFrontmatterIndex, site wikipage.PageReader) func(string, int) string {
+	return func(blogIdentifier string, maxArticles int) string {
+		posts := query.QueryExactMatchSortedBy("blog.identifier", blogIdentifier, "blog.published-date", false, maxArticles)
+
+		var articlesBuf strings.Builder
+		for _, postID := range posts {
+			_, _ = articlesBuf.WriteString(renderBlogArticle(postID, query, site))
+		}
+		articles := articlesBuf.String()
+
+		hideNewPost := ""
+		if blogMap, ok := templateContext.Map["blog"].(map[string]any); ok {
+			switch v := blogMap["hide-new-post"].(type) {
+			case bool:
+				if v {
+					hideNewPost = ` hide-new-post`
+				}
+			case string:
+				if v == "true" {
+					hideNewPost = ` hide-new-post`
+				}
+			}
+		}
+
+		return fmt.Sprintf(`<wiki-blog blog-id="%s" max-articles="%d" page="%s"%s>%s</wiki-blog>`,
+			html.EscapeString(blogIdentifier),
+			maxArticles,
+			html.EscapeString(templateContext.Identifier),
+			hideNewPost,
+			articles,
+		)
+	}
+}
+
+func renderBlogArticle(postID string, query wikipage.IQueryFrontmatterIndex, site wikipage.PageReader) string {
+	title := query.GetValue(postID, "title")
+	if title == "" {
+		title = postID
+	}
+	publishedDate := query.GetValue(postID, "blog.published-date")
+	subtitle := query.GetValue(postID, "blog.subtitle")
+	externalURL := query.GetValue(postID, "blog.external_url")
+	snippet := blogSnippet(postID, query, site)
+
+	linkHref := "/" + html.EscapeString(postID)
+	if externalURL != "" && isSafeURL(externalURL) {
+		linkHref = html.EscapeString(externalURL)
+	}
+
+	article := fmt.Sprintf(`<span class="blog-article"><a href="%s">%s</a>`, linkHref, html.EscapeString(title))
+	if externalURL != "" {
+		article += fmt.Sprintf(` <a href="/%s" class="wiki-link">[wiki]</a>`, html.EscapeString(postID))
+	}
+	if subtitle != "" {
+		article += fmt.Sprintf(` <span class="subtitle">%s</span>`, html.EscapeString(subtitle))
+	}
+	if publishedDate != "" {
+		article += fmt.Sprintf(` <span class="date">%s</span>`, html.EscapeString(publishedDate))
+	}
+	if snippet != "" {
+		article += fmt.Sprintf(` <span class="snippet">%s</span>`, html.EscapeString(snippet))
+	}
+	article += "</span>"
+	return article
+}
+
+// isSafeURL checks that a URL uses a safe scheme (http or https).
+// Rejects javascript:, data:, and other schemes that could be XSS vectors.
+func isSafeURL(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	scheme := strings.ToLower(u.Scheme)
+	return scheme == "http" || scheme == "https"
+}
+
+// markdownSyntax matches common markdown syntax characters that would be
+// interpreted by goldmark if left in the server-rendered fallback HTML.
+var markdownSyntax = regexp.MustCompile(`(?m)^#{1,6}\s+|[*_~` + "`" + `\[\]]`)
+
+func blogSnippet(postID string, query wikipage.IQueryFrontmatterIndex, site wikipage.PageReader) string {
+	raw := query.GetValue(postID, "blog.summary_markdown")
+	if raw == "" {
+		_, markdown, err := site.ReadMarkdown(postID)
+		if err != nil || len(markdown) == 0 {
+			return ""
+		}
+		raw = string(markdown)
+	}
+	runes := []rune(raw)
+	if len(runes) > blogSnippetMaxChars {
+		raw = string(runes[:blogSnippetMaxChars])
+	}
+	// Collapse to a single line of plain text so goldmark cannot interpret
+	// markdown syntax or create paragraph breaks inside the fallback HTML.
+	// strings.Fields splits on all whitespace (including \r\n, \n) and
+	// strings.Join reassembles with single spaces — no explicit newline replacement needed.
+	raw = markdownSyntax.ReplaceAllString(raw, "")
+	raw = strings.Join(strings.Fields(raw), singleSpace)
+	return raw
 }
 
 func BuildIsContainer(query wikipage.IQueryFrontmatterIndex) func(string) bool {
@@ -378,6 +530,7 @@ func buildTemplateWithFunctions(ctx context.Context, templateString string, site
 		"FindByPrefix":            query.QueryPrefixMatch,
 		"FindByKeyExistence":      query.QueryKeyExistence,
 		"Checklist":               BuildChecklist(templateContext),
+		"Blog":                    BuildBlog(templateContext, query, site),
 	}
 
 	return template.New("page").Funcs(funcs).Parse(templateString)
@@ -414,6 +567,7 @@ func validationFuncMap() template.FuncMap {
 		"FindByPrefix":            func(string, string) []string { return nil },
 		"FindByKeyExistence":      func(string) []string { return nil },
 		"Checklist":               func(string) string { return "" },
+		"Blog":                    func(string, int) string { return "" },
 	}
 }
 

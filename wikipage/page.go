@@ -100,6 +100,7 @@ type IQueryFrontmatterIndex interface {
 	QueryExactMatch(dottedKeyPath DottedKeyPath, value Value) []PageIdentifier
 	QueryKeyExistence(dottedKeyPath DottedKeyPath) []PageIdentifier
 	QueryPrefixMatch(dottedKeyPath DottedKeyPath, valuePrefix string) []PageIdentifier
+	QueryExactMatchSortedBy(matchKey DottedKeyPath, matchValue Value, sortByKey DottedKeyPath, ascending bool, maxResults int) []PageIdentifier
 	GetValue(identifier PageIdentifier, dottedKeyPath DottedKeyPath) Value
 }
 

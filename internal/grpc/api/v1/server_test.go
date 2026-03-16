@@ -298,6 +298,9 @@ func (noOpFrontmatterIndexQueryer) QueryPrefixMatch(wikipage.DottedKeyPath, stri
 func (noOpFrontmatterIndexQueryer) GetValue(wikipage.PageIdentifier, wikipage.DottedKeyPath) wikipage.Value {
 	return ""
 }
+func (noOpFrontmatterIndexQueryer) QueryExactMatchSortedBy(wikipage.DottedKeyPath, wikipage.Value, wikipage.DottedKeyPath, bool, int) []wikipage.PageIdentifier {
+	return nil
+}
 
 // noOpBleveIndexQueryer is a minimal mock for tests that don't need search indexing.
 type noOpBleveIndexQueryer struct{}
@@ -4340,6 +4343,10 @@ func (m *MockFrontmatterIndexQueryer) QueryPrefixMatch(dottedKeyPath wikipage.Do
 
 func (m *MockFrontmatterIndexQueryer) GetValue(identifier wikipage.PageIdentifier, dottedKeyPath wikipage.DottedKeyPath) wikipage.Value {
 	return m.GetValueResult
+}
+
+func (*MockFrontmatterIndexQueryer) QueryExactMatchSortedBy(_ wikipage.DottedKeyPath, _ wikipage.Value, _ wikipage.DottedKeyPath, _ bool, _ int) []wikipage.PageIdentifier {
+	return nil
 }
 
 // MockJobQueueCoordinator is a mock implementation for testing job queue interactions.

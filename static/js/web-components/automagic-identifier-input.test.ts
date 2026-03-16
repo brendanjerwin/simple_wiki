@@ -3,6 +3,7 @@ import { stub, restore, type SinonStub, useFakeTimers, type SinonFakeTimers } fr
 import './automagic-identifier-input.js';
 import type { AutomagicIdentifierInput } from './automagic-identifier-input.js';
 import type { ExistingPageInfo } from '../gen/api/v1/page_management_pb.js';
+import type { TitleInput } from './title-input.js';
 
 describe('AutomagicIdentifierInput', () => {
   let element: AutomagicIdentifierInput;
@@ -42,7 +43,7 @@ describe('AutomagicIdentifierInput', () => {
     });
 
     it('should render title input', () => {
-      const titleInput = element.shadowRoot?.querySelector('input[name="title"]');
+      const titleInput = element.shadowRoot?.querySelector('title-input');
       expect(titleInput).to.exist;
     });
 
@@ -74,10 +75,10 @@ describe('AutomagicIdentifierInput', () => {
         ></automagic-identifier-input>
       `);
 
-      const titleInput = element.shadowRoot?.querySelector<HTMLInputElement>('input[name="title"]');
+      const titleInput = element.shadowRoot?.querySelector<TitleInput>('title-input');
       if (titleInput) {
         titleInput.value = 'My Page';
-        titleInput.dispatchEvent(new Event('input', { bubbles: true }));
+        titleInput.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
       }
     });
 
@@ -218,7 +219,7 @@ describe('AutomagicIdentifierInput', () => {
     });
 
     it('should disable title input', () => {
-      const titleInput = element.shadowRoot?.querySelector<HTMLInputElement>('input[name="title"]');
+      const titleInput = element.shadowRoot?.querySelector<TitleInput>('title-input');
       expect(titleInput?.disabled).to.be.true;
     });
 
@@ -246,10 +247,10 @@ describe('AutomagicIdentifierInput', () => {
           ></automagic-identifier-input>
         `);
 
-        const titleInput = element.shadowRoot?.querySelector<HTMLInputElement>('input[name="title"]');
+        const titleInput = element.shadowRoot?.querySelector<TitleInput>('title-input');
         if (titleInput) {
           titleInput.value = 'New Title';
-          titleInput.dispatchEvent(new Event('input', { bubbles: true }));
+          titleInput.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
         }
       });
 
@@ -282,10 +283,10 @@ describe('AutomagicIdentifierInput', () => {
           ></automagic-identifier-input>
         `);
 
-        const titleInput = element.shadowRoot?.querySelector<HTMLInputElement>('input[name="title"]');
+        const titleInput = element.shadowRoot?.querySelector<TitleInput>('title-input');
         if (titleInput) {
           titleInput.value = 'My Title';
-          titleInput.dispatchEvent(new Event('input', { bubbles: true }));
+          titleInput.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
         }
 
         await clock.tickAsync(300);
@@ -322,10 +323,10 @@ describe('AutomagicIdentifierInput', () => {
         ></automagic-identifier-input>
       `);
 
-      const titleInput = element.shadowRoot?.querySelector<HTMLInputElement>('input[name="title"]');
+      const titleInput = element.shadowRoot?.querySelector<TitleInput>('title-input');
       if (titleInput) {
         titleInput.value = 'My Page';
-        titleInput.dispatchEvent(new Event('input', { bubbles: true }));
+        titleInput.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
       }
 
       await clock.tickAsync(300);

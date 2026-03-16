@@ -1,0 +1,99 @@
+name: Deploy to Home Server
+
+on:
+  workflow_dispatch:
+    inputs:
+      server_host:
+        description: 'Target server hostname'
+        required: false
+        default: 'wiki'
+        type: string
+      username:
+        description: 'SSH username for deployment'
+        required: false
+        default: 'brendanjerwin'
+        type: string
+
+jobs:
+  deploy:
+    name: Deploy Wiki to Home Server
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Devbox
+        uses: jetify-com/devbox-install-action@v0.14.0
+
+      - name: Check if release exists
+        id: check_release
+        run: |
+          if gh release view "${{ github.ref_name }}" >/dev/null 2>&1; then
+            echo "release_exists=true" >> $GITHUB_OUTPUT
+            echo "✅ Release found for ${{ github.ref_name }}"
+          else
+            echo "release_exists=false" >> $GITHUB_OUTPUT
+            echo "ℹ️ No release found for ${{ github.ref_name }}, will build locally"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Download release asset
+        if: steps.check_release.outputs.release_exists == 'true'
+        uses: robinraju/release-downloader@v1.10
+        with:
+          repository: ${{ github.repository }}
+          tag: ${{ github.ref_name }}
+          fileName: 'simple_wiki-linux-amd64'
+          out-file-path: '.'
+
+      - name: Build binary locally
+        if: steps.check_release.outputs.release_exists == 'false'
+        run: |
+          echo "Building simple_wiki for linux/amd64..."
+          devbox run build linux amd64
+          echo "✅ Binary built successfully"
+
+      - name: Verify binary
+        run: |
+          ls -la simple_wiki-linux-amd64
+          file simple_wiki-linux-amd64
+          chmod +x simple_wiki-linux-amd64
+          if [ "${{ steps.check_release.outputs.release_exists }}" == "true" ]; then
+            echo "✅ Using binary from release ${{ github.ref_name }}"
+          else
+            echo "✅ Using locally built binary for ${{ github.ref_name }}"
+          fi
+
+      - name: Setup Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:github-actions
+
+      - name: Prepare deployment files
+        run: |
+          mkdir -p deployment-package
+          cp simple_wiki-linux-amd64 deployment-package/
+          cp deployment/simple_wiki.service deployment-package/
+          cp deployment/deploy.sh deployment-package/
+          chmod +x deployment-package/deploy.sh
+
+      - name: Deploy to server
+        uses: FarisZR/tailscale-ssh-deploy@v1
+        with:
+          remote_host: ${{ inputs.username }}@${{ inputs.server_host }}
+          directory: deployment-package
+          remote_destination: /tmp
+          post_upload_command: /tmp/deployment-package/deploy.sh "${{ github.ref_name }}"
+
+      - name: Report deployment status
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "🎉 Successfully deployed ${{ github.ref_name }} to ${{ inputs.server_host }}"
+          else
+            echo "❌ Deployment of ${{ github.ref_name }} to ${{ inputs.server_host }} failed"
+          fi

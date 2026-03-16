@@ -4,6 +4,20 @@ import './frontmatter-value-string.js';
 import './frontmatter-value-array.js';
 import './frontmatter-value-section.js';
 
+/**
+ * Coerce string representations of booleans and numbers back to their
+ * native types. The string input component necessarily converts all values
+ * to strings; this restores the original type on save so TOML serialization
+ * preserves `true` (boolean) rather than `"true"` (string).
+ */
+export function coercePrimitive(value: unknown): unknown {
+  if (typeof value !== 'string') return value;
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  if (value !== '' && !isNaN(Number(value))) return Number(value);
+  return value;
+}
+
 export class FrontmatterValue extends LitElement {
   static override styles = css`
     :host {
@@ -52,7 +66,7 @@ export class FrontmatterValue extends LitElement {
 
     // Extract the new value based on the event type
     if (event.type === 'value-change') {
-      newValue = event.detail.newValue;
+      newValue = coercePrimitive(event.detail.newValue);
     } else if (event.type === 'array-change') {
       newValue = event.detail.newArray;
     } else if (event.type === 'section-change') {
