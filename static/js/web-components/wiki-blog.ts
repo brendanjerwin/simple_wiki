@@ -166,6 +166,9 @@ export class WikiBlog extends LitElement {
   @property({ type: String })
   declare page: string;
 
+  @property({ type: Boolean, attribute: 'hide-new-post' })
+  declare hideNewPost: boolean;
+
   @state()
   declare posts: BlogPost[];
 
@@ -194,6 +197,7 @@ export class WikiBlog extends LitElement {
     this.blogId = '';
     this.maxArticles = 10;
     this.page = '';
+    this.hideNewPost = false;
     this.posts = [];
     this.loading = false;
     this.error = null;
@@ -316,11 +320,13 @@ export class WikiBlog extends LitElement {
     return html`
       ${sharedStyles}
       <div class="blog-container system-font">
-        <div class="blog-header">
-          <button class="btn" @click=${this._openNewPostDialog}>
-            <i class="fa-solid fa-plus"></i> New Post
-          </button>
-        </div>
+        ${this.hideNewPost ? nothing : html`
+          <div class="blog-header">
+            <button class="btn" @click=${this._openNewPostDialog}>
+              <i class="fa-solid fa-plus"></i> New Post
+            </button>
+          </div>
+        `}
         ${this.loading
           ? html`<div class="loading"><i class="fa-solid fa-spinner fa-spin"></i> Loading blog posts...</div>`
           : this.error
@@ -345,10 +351,12 @@ export class WikiBlog extends LitElement {
                     : nothing}
                 `}
       </div>
-      <blog-new-post-dialog
-        blog-id="${this.blogId}"
-        @post-created=${this._onPostCreated}
-      ></blog-new-post-dialog>
+      ${this.hideNewPost ? nothing : html`
+        <blog-new-post-dialog
+          blog-id="${this.blogId}"
+          @post-created=${this._onPostCreated}
+        ></blog-new-post-dialog>
+      `}
     `;
   }
 }

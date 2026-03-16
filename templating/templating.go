@@ -308,10 +308,18 @@ func BuildBlog(templateContext TemplateContext, query wikipage.IQueryFrontmatter
 			articles += renderBlogArticle(postID, query, site)
 		}
 
-		return fmt.Sprintf(`<wiki-blog blog-id="%s" max-articles="%d" page="%s">%s</wiki-blog>`,
+		hideNewPost := ""
+		if blogMap, ok := templateContext.Map["blog"].(map[string]any); ok {
+			if hide, ok := blogMap["hide-new-post"].(bool); ok && hide {
+				hideNewPost = ` hide-new-post`
+			}
+		}
+
+		return fmt.Sprintf(`<wiki-blog blog-id="%s" max-articles="%d" page="%s"%s>%s</wiki-blog>`,
 			html.EscapeString(blogIdentifier),
 			maxArticles,
 			html.EscapeString(templateContext.Identifier),
+			hideNewPost,
 			articles,
 		)
 	}

@@ -19,7 +19,6 @@ interface WikiBlogInternal {
 function buildElement(blogId = 'test-blog'): WikiBlog {
   const el = document.createElement('wiki-blog') as WikiBlog;
   el.setAttribute('blog-id', blogId);
-  el.setAttribute('page-template', 'blog-post');
   el.setAttribute('max-articles', '10');
   el.setAttribute('page', 'blog-page');
   return el;
@@ -186,6 +185,25 @@ describe('WikiBlog', () => {
     it('should still show the New Post button', () => {
       const btn = el.shadowRoot?.querySelector('.blog-header .btn');
       expect(btn).to.exist;
+    });
+  });
+
+  describe('when hide-new-post is set', () => {
+    beforeEach(async () => {
+      el = buildElement();
+      el.setAttribute('hide-new-post', '');
+      stubListPagesByFrontmatter(el, []);
+      await mountAndLoad(el);
+    });
+
+    it('should not render the New Post button', () => {
+      const btn = el.shadowRoot?.querySelector('.blog-header .btn');
+      expect(btn).to.not.exist;
+    });
+
+    it('should not render the blog new post dialog', () => {
+      const dialog = el.shadowRoot?.querySelector('blog-new-post-dialog');
+      expect(dialog).to.not.exist;
     });
   });
 
