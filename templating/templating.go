@@ -364,19 +364,29 @@ func renderBlogArticle(postID string, query wikipage.IQueryFrontmatterIndex, sit
 	return article
 }
 
+// markdownSyntax matches common markdown syntax characters that would be
+// interpreted by goldmark if left in the server-rendered fallback HTML.
+var markdownSyntax = regexp.MustCompile(`(?m)^#{1,6}\s+|[*_~` + "`" + `\[\]]`)
+
 func blogSnippet(postID string, query wikipage.IQueryFrontmatterIndex, site wikipage.PageReader) string {
-	if summary := query.GetValue(postID, "blog.summary_markdown"); summary != "" {
-		return summary
+	raw := query.GetValue(postID, "blog.summary_markdown")
+	if raw == "" {
+		_, markdown, err := site.ReadMarkdown(postID)
+		if err != nil || len(markdown) == 0 {
+			return ""
+		}
+		raw = string(markdown)
 	}
-	_, markdown, err := site.ReadMarkdown(postID)
-	if err != nil || len(markdown) == 0 {
-		return ""
+	if len(raw) > blogSnippetMaxChars {
+		raw = raw[:blogSnippetMaxChars]
 	}
-	content := string(markdown)
-	if len(content) > blogSnippetMaxChars {
-		content = content[:blogSnippetMaxChars]
-	}
-	return content
+	// Collapse to a single line of plain text so goldmark cannot interpret
+	// markdown syntax or create paragraph breaks inside the fallback HTML.
+	raw = strings.ReplaceAll(raw, "\r\n", " ")
+	raw = strings.ReplaceAll(raw, "\n", " ")
+	raw = markdownSyntax.ReplaceAllString(raw, "")
+	raw = strings.Join(strings.Fields(raw), " ")
+	return raw
 }
 
 func BuildIsContainer(query wikipage.IQueryFrontmatterIndex) func(string) bool {

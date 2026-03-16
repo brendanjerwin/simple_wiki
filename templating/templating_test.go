@@ -1633,6 +1633,32 @@ var _ = Describe("BuildBlog", func() {
 		})
 	})
 
+	Describe("when snippet contains markdown syntax and newlines", func() {
+		var result string
+
+		BeforeEach(func() {
+			mockSite.markdown["post_one"] = "# Heading\n\nSome **bold** text with [links](http://example.com).\n\nAnother paragraph."
+			mockIndex.values["post_one"]["blog.summary_markdown"] = ""
+			ctx := templating.TemplateContext{Identifier: "blog_page"}
+			blogFunc := templating.BuildBlog(ctx, mockIndex, mockSite)
+			result = blogFunc("my-blog", 10)
+		})
+
+		It("should strip markdown heading markers", func() {
+			Expect(result).NotTo(ContainSubstring("# "))
+		})
+
+		It("should collapse newlines to single-line text", func() {
+			Expect(result).NotTo(ContainSubstring("\n"))
+		})
+
+		It("should preserve the readable text content", func() {
+			Expect(result).To(ContainSubstring("Heading"))
+			Expect(result).To(ContainSubstring("Some"))
+			Expect(result).To(ContainSubstring("text"))
+		})
+	})
+
 	Describe("when rendering with external URL", func() {
 		var result string
 
