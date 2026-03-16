@@ -85,11 +85,7 @@ func mergeFrontmatterDeep(target, source map[string]any) {
 			continue
 		}
 
-		existingValue, exists := target[key]
-		if !exists {
-			existingValue = nil
-		}
-
+		existingValue := target[key]
 		nestedTarget, ok := existingValue.(map[string]any)
 		if !ok {
 			nestedTarget = make(map[string]any)
