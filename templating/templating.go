@@ -337,13 +337,13 @@ func renderBlogArticle(postID string, query wikipage.IQueryFrontmatterIndex, sit
 		article += fmt.Sprintf(` <a href="/%s" class="wiki-link">[wiki]</a>`, html.EscapeString(postID))
 	}
 	if subtitle != "" {
-		article += fmt.Sprintf(`<p class="subtitle">%s</p>`, html.EscapeString(subtitle))
+		article += fmt.Sprintf(`<span class="subtitle">%s</span>`, html.EscapeString(subtitle))
 	}
 	if publishedDate != "" {
 		article += fmt.Sprintf(`<time datetime="%s">%s</time>`, html.EscapeString(publishedDate), html.EscapeString(publishedDate))
 	}
 	if snippet != "" {
-		article += fmt.Sprintf(`<p class="snippet">%s</p>`, html.EscapeString(snippet))
+		article += fmt.Sprintf(`<span class="snippet">%s</span>`, html.EscapeString(snippet))
 	}
 	article += "</article>"
 	return article
