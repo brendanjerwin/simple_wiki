@@ -21,6 +21,8 @@ import (
 	"golang.org/x/text/language"
 )
 
+const singleSpace = " "
+
 type InventoryFrontmatter struct {
 	Container string   `json:"container"`
 	Items     []string `json:"items"`
@@ -188,7 +190,7 @@ func buildShowInventoryContentsOfSync(ctx context.Context, site wikipage.PageRea
 		"FindBy":                  query.QueryExactMatch,
 		"FindByPrefix":            query.QueryPrefixMatch,
 		"FindByKeyExistence":      query.QueryKeyExistence,
-		"__Indent":                func() string { return strings.Repeat(" ", indent*2) },
+		"__Indent":                func() string { return strings.Repeat(singleSpace, indent*2) },
 	}
 
 	tmpl, err := template.New("content").Funcs(funcs).Parse(tmplString)
@@ -228,7 +230,7 @@ func BuildLinkToWithVisited(site wikipage.PageReader, currentPageTemplateContext
 		if visited[identifierToLink] {
 			// Return a safe fallback link without triggering template execution - use munged identifier for URL
 			titleCaser := cases.Title(language.AmericanEnglish)
-			titleCasedTitle := titleCaser.String(strings.ReplaceAll(strcase.SnakeCase(identifierToLink), "_", " "))
+			titleCasedTitle := titleCaser.String(strings.ReplaceAll(strcase.SnakeCase(identifierToLink), "_", singleSpace))
 			mungedIdentifier, err := wikiidentifiers.MungeIdentifier(identifierToLink)
 			if err != nil {
 				return fmt.Sprintf("[ERROR: LinkTo circular reference, munging %q: %v]", identifierToLink, err)
@@ -245,7 +247,7 @@ func BuildLinkToWithVisited(site wikipage.PageReader, currentPageTemplateContext
 		identifierToLink, frontmatterForLinkedPage, err := site.ReadFrontMatter(identifierToLink)
 		if err != nil {
 			titleCaser := cases.Title(language.AmericanEnglish)
-			titleCasedTitle := titleCaser.String(strings.ReplaceAll(strcase.SnakeCase(identifierToLink), "_", " "))
+			titleCasedTitle := titleCaser.String(strings.ReplaceAll(strcase.SnakeCase(identifierToLink), "_", singleSpace))
 			urlEncodedTitle := url.QueryEscape(titleCasedTitle)
 			// Doesnt look like it exists yet, return a link.
 			// It'll render and let the page get created.
@@ -320,17 +322,20 @@ func renderChecklistFallback(frontmatter map[string]any, listName string) string
 		if !ok {
 			continue
 		}
-		text, _ := item["text"].(string)
-		if text == "" {
+		text, textOk := item["text"].(string)
+		if !textOk || text == "" {
 			continue
 		}
-		checked, _ := item["checked"].(bool)
+		checked, checkedOk := item["checked"].(bool)
+		if !checkedOk {
+			checked = false
+		}
 		marker := "[ ]"
 		if checked {
 			marker = "[x]"
 		}
 		// Single-line plain text to avoid goldmark paragraph breaks.
-		buf.WriteString(fmt.Sprintf(`<span class="checklist-item">%s %s</span>`, marker, html.EscapeString(text)))
+		_, _ = fmt.Fprintf(&buf, `<span class="checklist-item">%s %s</span>`, marker, html.EscapeString(text))
 	}
 	return buf.String()
 }
@@ -343,10 +348,11 @@ func BuildBlog(templateContext TemplateContext, query wikipage.IQueryFrontmatter
 	return func(blogIdentifier string, maxArticles int) string {
 		posts := query.QueryExactMatchSortedBy("blog.identifier", blogIdentifier, "blog.published-date", false, maxArticles)
 
-		var articles string
+		var articlesBuf strings.Builder
 		for _, postID := range posts {
-			articles += renderBlogArticle(postID, query, site)
+			_, _ = articlesBuf.WriteString(renderBlogArticle(postID, query, site))
 		}
+		articles := articlesBuf.String()
 
 		hideNewPost := ""
 		if blogMap, ok := templateContext.Map["blog"].(map[string]any); ok {
@@ -383,7 +389,7 @@ func renderBlogArticle(postID string, query wikipage.IQueryFrontmatterIndex, sit
 	snippet := blogSnippet(postID, query, site)
 
 	linkHref := "/" + html.EscapeString(postID)
-	if externalURL != "" {
+	if externalURL != "" && isSafeURL(externalURL) {
 		linkHref = html.EscapeString(externalURL)
 	}
 
@@ -404,6 +410,17 @@ func renderBlogArticle(postID string, query wikipage.IQueryFrontmatterIndex, sit
 	return article
 }
 
+// isSafeURL checks that a URL uses a safe scheme (http or https).
+// Rejects javascript:, data:, and other schemes that could be XSS vectors.
+func isSafeURL(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	scheme := strings.ToLower(u.Scheme)
+	return scheme == "http" || scheme == "https"
+}
+
 // markdownSyntax matches common markdown syntax characters that would be
 // interpreted by goldmark if left in the server-rendered fallback HTML.
 var markdownSyntax = regexp.MustCompile(`(?m)^#{1,6}\s+|[*_~` + "`" + `\[\]]`)
@@ -417,15 +434,16 @@ func blogSnippet(postID string, query wikipage.IQueryFrontmatterIndex, site wiki
 		}
 		raw = string(markdown)
 	}
-	if len(raw) > blogSnippetMaxChars {
-		raw = raw[:blogSnippetMaxChars]
+	runes := []rune(raw)
+	if len(runes) > blogSnippetMaxChars {
+		raw = string(runes[:blogSnippetMaxChars])
 	}
 	// Collapse to a single line of plain text so goldmark cannot interpret
 	// markdown syntax or create paragraph breaks inside the fallback HTML.
-	raw = strings.ReplaceAll(raw, "\r\n", " ")
-	raw = strings.ReplaceAll(raw, "\n", " ")
+	// strings.Fields splits on all whitespace (including \r\n, \n) and
+	// strings.Join reassembles with single spaces — no explicit newline replacement needed.
 	raw = markdownSyntax.ReplaceAllString(raw, "")
-	raw = strings.Join(strings.Fields(raw), " ")
+	raw = strings.Join(strings.Fields(raw), singleSpace)
 	return raw
 }
 

@@ -560,6 +560,15 @@ func (s *Server) ListPagesByFrontmatter(_ context.Context, req *apiv1.ListPagesB
 	if req.MatchKey == "" {
 		return nil, status.Error(codes.InvalidArgument, "match_key is required")
 	}
+	if req.SortByKey == "" {
+		return nil, status.Error(codes.InvalidArgument, "sort_by_key is required")
+	}
+	if req.MaxResults < 0 {
+		return nil, status.Error(codes.InvalidArgument, "max_results must be >= 0")
+	}
+	if req.ContentExcerptMaxChars < 0 {
+		return nil, status.Error(codes.InvalidArgument, "content_excerpt_max_chars must be >= 0")
+	}
 
 	pageIDs := s.frontmatterIndexQueryer.QueryExactMatchSortedBy(
 		req.MatchKey,
@@ -580,11 +589,13 @@ func (s *Server) ListPagesByFrontmatter(_ context.Context, req *apiv1.ListPagesB
 		if req.ContentExcerptMaxChars > 0 {
 			_, markdown, err := s.pageReaderMutator.ReadMarkdown(id)
 			if err == nil && len(markdown) > 0 {
+				content := string(markdown)
 				maxChars := int(req.ContentExcerptMaxChars)
-				if len(markdown) > maxChars {
-					contentExcerpt = string(markdown[:maxChars])
+				runes := []rune(content)
+				if len(runes) > maxChars {
+					contentExcerpt = string(runes[:maxChars])
 				} else {
-					contentExcerpt = string(markdown)
+					contentExcerpt = content
 				}
 			}
 		}

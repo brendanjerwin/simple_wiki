@@ -211,14 +211,17 @@ func (f *Index) QueryExactMatchSortedBy(matchKey DottedKeyPath, matchValue Value
 	sorted := make([]wikipage.PageIdentifier, len(matches))
 	copy(sorted, matches)
 
-	// Sort by the sort key value
-	sort.Slice(sorted, func(i, j int) bool {
+	// Stable sort by the sort key value with identifier as tie-breaker
+	sort.SliceStable(sorted, func(i, j int) bool {
 		valI := f.getValueInternal(sorted[i], sortByKey)
 		valJ := f.getValueInternal(sorted[j], sortByKey)
-		if ascending {
-			return valI < valJ
+		if valI != valJ {
+			if ascending {
+				return valI < valJ
+			}
+			return valI > valJ
 		}
-		return valI > valJ
+		return sorted[i] < sorted[j]
 	})
 
 	if maxResults > 0 && len(sorted) > maxResults {
@@ -229,14 +232,25 @@ func (f *Index) QueryExactMatchSortedBy(matchKey DottedKeyPath, matchValue Value
 }
 
 // getValueInternal retrieves a value without acquiring the lock (caller must hold it).
+// When multiple values exist for the same key, returns the lexicographically smallest
+// to ensure deterministic behavior.
 func (f *Index) getValueInternal(identifier wikipage.PageIdentifier, dottedKeyPath DottedKeyPath) Value {
 	if munged, err := wikiidentifiers.MungeIdentifier(identifier); err == nil {
 		identifier = munged
 	}
-	for value := range f.PageKeyMap[identifier][dottedKeyPath] {
-		return value
+	values := f.PageKeyMap[identifier][dottedKeyPath]
+	if len(values) == 0 {
+		return ""
 	}
-	return ""
+	var result Value
+	first := true
+	for value := range values {
+		if first || value < result {
+			result = value
+			first = false
+		}
+	}
+	return result
 }
 
 // GetValue retrieves the value of a frontmatter key for a given page.

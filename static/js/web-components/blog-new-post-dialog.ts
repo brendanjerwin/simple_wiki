@@ -301,6 +301,32 @@ export class BlogNewPostDialog extends LitElement {
     }
   }
 
+  override updated(changed: Map<string, unknown>): void {
+    if (changed.has('open') && this.open) {
+      // Focus the title input when dialog opens
+      requestAnimationFrame(() => {
+        const titleInput = this.shadowRoot?.querySelector<HTMLElement>('title-input');
+        titleInput?.focus();
+      });
+    }
+  }
+
+  private _handleKeydown = (e: KeyboardEvent): void => {
+    if (e.key === 'Escape' && this.open) {
+      this._close();
+    }
+  };
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    document.addEventListener('keydown', this._handleKeydown);
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    document.removeEventListener('keydown', this._handleKeydown);
+  }
+
   private _close(): void {
     this.open = false;
     this.title = '';
@@ -383,7 +409,7 @@ export class BlogNewPostDialog extends LitElement {
       <div class="dialog">
         <div class="header">
           <h2>New Blog Post</h2>
-          <button class="close-btn" @click=${this._close}>
+          <button class="close-btn" aria-label="Close" @click=${this._close}>
             <i class="fa-solid fa-xmark"></i>
           </button>
         </div>
@@ -392,7 +418,7 @@ export class BlogNewPostDialog extends LitElement {
             ? html`<error-display .augmentedError="${this.error}"></error-display>`
             : nothing}
           <div class="form-group">
-            <label for="post-title">Title</label>
+            <label @click=${() => this.shadowRoot?.querySelector<HTMLElement>('title-input')?.focus()}>Title</label>
             <title-input
               id="post-title"
               .value=${this.title}

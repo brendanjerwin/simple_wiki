@@ -279,8 +279,18 @@ export class WikiBlog extends LitElement {
     void this.fetchPosts(this.maxArticles);
   }
 
+  private static isSafeUrl(url: string): boolean {
+    try {
+      const parsed = new URL(url, window.location.origin);
+      return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  }
+
   private _renderPost(post: BlogPost, index: number) {
-    const href = post.externalUrl || `/${post.identifier}`;
+    const safeExternal = post.externalUrl && WikiBlog.isSafeUrl(post.externalUrl) ? post.externalUrl : '';
+    const href = safeExternal || `/${post.identifier}`;
     const snippet = post.summaryMarkdown || post.contentExcerpt;
     const isNew = index >= this.previousPostCount && this.previousPostCount > 0;
 
@@ -288,7 +298,7 @@ export class WikiBlog extends LitElement {
       <li class="blog-entry ${isNew ? 'new-entry' : ''}">
         <div class="entry-title">
           <a href="${href}">${post.title}</a>
-          ${post.externalUrl
+          ${safeExternal
             ? html`<a href="/${post.identifier}" class="wiki-link">[wiki]</a>`
             : nothing}
         </div>

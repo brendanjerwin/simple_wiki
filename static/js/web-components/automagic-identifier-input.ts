@@ -386,7 +386,7 @@ export class AutomagicIdentifierInput extends LitElement {
     return html`
       ${sharedStyles}
       <div class="form-group">
-        <label for="title">Title</label>
+        <label @click=${() => this.shadowRoot?.querySelector<HTMLElement>('title-input')?.focus()}>Title</label>
         <title-input
           id="title"
           name="title"
