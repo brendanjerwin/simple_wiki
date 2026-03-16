@@ -3,9 +3,9 @@ module github.com/brendanjerwin/simple_wiki
 go 1.26.1
 
 require (
-	connectrpc.com/connect v1.18.1
+	connectrpc.com/connect v1.19.1
 	connectrpc.com/grpcreflect v1.3.0
-	connectrpc.com/vanguard v0.3.0
+	connectrpc.com/vanguard v0.4.0
 	github.com/adrg/frontmatter v0.2.0
 	github.com/blevesearch/bleve v1.0.14
 	github.com/gabriel-vasile/mimetype v1.4.13
@@ -137,8 +137,8 @@ require (
 	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/tools v0.41.0 // indirect
 	golang.zx2c4.com/wireguard/windows v0.5.3 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20260209200024-4cfbd4190f57 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260209200024-4cfbd4190f57 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20260223185530-2f722ef697dc // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260223185530-2f722ef697dc // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 

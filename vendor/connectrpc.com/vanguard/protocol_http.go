@@ -1,4 +1,4 @@
-// Copyright 2023-2024 Buf Technologies, Inc.
+// Copyright 2023-2026 Buf Technologies, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -101,7 +101,7 @@ func httpWriteError(rsp http.ResponseWriter, err error) {
 		bin = []byte(`{"code": 12, "message":"` + err.Error() + `"}`)
 	}
 	rsp.WriteHeader(statusCode)
-	_, _ = rsp.Write(bin)
+	_, _ = rsp.Write(bin) //nolint:gosec // writing error response, not user-tainted data
 }
 
 func httpErrorFromResponse(statusCode int, contentType string, src *bytes.Buffer) *connect.Error {
@@ -119,12 +119,11 @@ func httpErrorFromResponse(statusCode int, contentType string, src *bytes.Buffer
 			return connect.NewError(connect.CodeInternal, err)
 		}
 		stat.Details = append(stat.Details, body)
-		stat.Code = int32(httpStatusCodeToRPC(statusCode))
+		stat.Code = int32(httpStatusCodeToRPC(statusCode)) //nolint:gosec
 		stat.Message = http.StatusText(statusCode)
 	}
-
 	connectErr := connect.NewWireError(
-		connect.Code(stat.GetCode()),
+		connect.Code(stat.GetCode()), //nolint:gosec // No information loss.
 		errors.New(stat.GetMessage()),
 	)
 	for _, msg := range stat.GetDetails() {
@@ -305,14 +304,20 @@ func httpEncodePathValues(input protoreflect.Message, target *routeTarget) (
 }
 
 func httpExtractTrailers(headers http.Header, knownTrailerKeys headerKeys) http.Header {
-	trailers := make(http.Header, len(knownTrailerKeys))
+	var trailers http.Header
 	for key, vals := range headers {
 		if strings.HasPrefix(key, http.TrailerPrefix) {
+			if trailers == nil {
+				trailers = make(http.Header, len(knownTrailerKeys))
+			}
 			trailers[strings.TrimPrefix(key, http.TrailerPrefix)] = vals
 			delete(headers, key)
 			continue
 		}
 		if _, expected := knownTrailerKeys[key]; expected {
+			if trailers == nil {
+				trailers = make(http.Header, len(knownTrailerKeys))
+			}
 			trailers[key] = vals
 			delete(headers, key)
 			continue
@@ -349,10 +354,40 @@ func httpExtractContentLength(headers http.Header) (int, error) {
 }
 
 func getHTTPRuleExtension(desc protoreflect.MethodDescriptor) (*annotations.HttpRule, bool) {
-	opts := desc.Options()
-	if !proto.HasExtension(opts, annotations.E_Http) {
+	opts := desc.Options().ProtoReflect()
+	// We don't use proto.GetExtension(opts, annotations.E_Http) because that will try
+	// to type-assert the value to a *annotations.HttpRule. However, if this descriptor
+	// is from a dynamic schema, it is possible that the value is a dynamic message
+	// value, and the type-assertion would result in a panic.
+	extDesc := annotations.E_Http.TypeDescriptor()
+	if !opts.Has(extDesc) {
 		return nil, false
 	}
-	rule, ok := proto.GetExtension(opts, annotations.E_Http).(*annotations.HttpRule)
-	return rule, ok
+	extVal := opts.Get(extDesc).Message().Interface()
+	if rule, ok := extVal.(*annotations.HttpRule); ok {
+		return rule, true
+	}
+
+	var rule annotations.HttpRule
+	if extVal.ProtoReflect().Descriptor() == rule.ProtoReflect().Descriptor() {
+		// Same descriptor, so we can safely use proto.Merge.
+		proto.Merge(&rule, extVal)
+		return &rule, true
+	}
+	// We can't use proto.Merge. This can happen when the incoming extension
+	// is dynamic -- the descriptor could have come from a deserialized descriptor
+	// set or have been created by a compiler, generating descriptors from source.
+	// In such cases, we have to serialize to bytes and then de-serialize into
+	// the appropriately typed value.
+	serialized, err := proto.Marshal(extVal)
+	if err != nil {
+		// Ideally, we could return this error instead of just eating it.
+		// But this is so unlikely to happen in practice...
+		return nil, false
+	}
+	if err := proto.Unmarshal(serialized, &rule); err != nil {
+		// Ditto...
+		return nil, false
+	}
+	return &rule, true
 }

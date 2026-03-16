@@ -1,4 +1,4 @@
-// Copyright 2023-2024 Buf Technologies, Inc.
+// Copyright 2023-2026 Buf Technologies, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -22,6 +22,10 @@ import (
 
 	"google.golang.org/genproto/googleapis/api/annotations"
 	"google.golang.org/protobuf/reflect/protoreflect"
+)
+
+var (
+	errUnknownField = errors.New("unknown field")
 )
 
 // routeTrie is a prefix trie of valid REST URI paths to route targets.
@@ -375,8 +379,8 @@ func resolvePathToFieldDescriptors(
 		if field == nil {
 			field = fields.ByName(protoreflect.Name(part))
 			if field == nil {
-				return nil, fmt.Errorf("in field path %q: element %q does not correspond to any field of type %s",
-					path, part, msg.FullName())
+				return nil, fmt.Errorf("%w in field path %q: element %q does not correspond to any field of type %s",
+					errUnknownField, path, part, msg.FullName())
 			}
 		}
 		result[i] = field

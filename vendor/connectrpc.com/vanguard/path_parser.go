@@ -1,4 +1,4 @@
-// Copyright 2023-2024 Buf Technologies, Inc.
+// Copyright 2023-2026 Buf Technologies, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -295,7 +295,7 @@ func pathIsHexSlash(input string) bool {
 func pathEscape(input string, mode pathEncoding) string {
 	// Count the number of characters that possibly escaping.
 	hexCount := 0
-	for i := 0; i < len(input); i++ {
+	for i := range len(input) {
 		if pathShouldEscape(input[i], mode) {
 			hexCount++
 		}
