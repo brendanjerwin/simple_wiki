@@ -153,14 +153,14 @@ export class WikiEditor extends LitElement {
       }
 
       @media (min-width: 70em) {
-        textarea {
+        :host(:not([compact])) textarea {
           padding-left: 15%;
           padding-right: 15%;
         }
       }
 
       @media (min-width: 100em) {
-        textarea {
+        :host(:not([compact])) textarea {
           padding-left: 20%;
           padding-right: 20%;
         }
@@ -185,6 +185,9 @@ export class WikiEditor extends LitElement {
 
   @property({ type: Boolean, attribute: 'auto-save' })
   declare autoSave: boolean;
+
+  @property({ type: Boolean, reflect: true })
+  declare compact: boolean;
 
   @state()
   declare loading: boolean;
@@ -216,6 +219,7 @@ export class WikiEditor extends LitElement {
     this.maxUploadMb = 10;
     this.debounceMs = 750;
     this.autoSave = true;
+    this.compact = false;
     this.initialContent = undefined;
     this.loading = true;
     this.saveStatus = 'idle';
@@ -462,7 +466,7 @@ export class WikiEditor extends LitElement {
     return html`
       ${sharedStyles}
       <div class="editor-container">
-        <editor-toolbar ?has-selection=${this._hasSelection} @exit-requested=${this._onExitRequested}></editor-toolbar>
+        <editor-toolbar ?has-selection=${this._hasSelection} ?hide-exit=${!this.autoSave} @exit-requested=${this._onExitRequested}></editor-toolbar>
         <div class="status-bar ${this.saveStatus !== 'idle' && this.saveStatus !== 'error' ? 'visible' : ''}">
           <span class="status-indicator ${this.saveStatus}">
             ${this.saveStatus === 'saving'

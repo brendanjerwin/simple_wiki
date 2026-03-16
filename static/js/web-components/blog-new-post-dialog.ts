@@ -147,6 +147,13 @@ export class BlogNewPostDialog extends LitElement {
       background: white;
     }
 
+    .identifier-preview {
+      font-size: 0.8em;
+      color: #999;
+      font-family: "Lucida Console", Monaco, monospace;
+      margin-top: 4px;
+    }
+
     @keyframes fadeIn {
       from { opacity: 0; }
       to { opacity: 1; }
@@ -180,6 +187,16 @@ export class BlogNewPostDialog extends LitElement {
   declare error: AugmentedError | null;
 
   private pageCreator = new PageCreator();
+
+  private get identifierPreview(): string {
+    if (!this.blogId || !this.date || !this.title.trim()) return '';
+    const slug = this.title.trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-');
+    return `${this.blogId}-${this.date}-${slug}`;
+  }
 
   constructor() {
     super();
@@ -305,12 +322,16 @@ export class BlogNewPostDialog extends LitElement {
               ?disabled=${this.creating}
             />
           </div>
+          ${this.identifierPreview
+            ? html`<div class="identifier-preview">${this.identifierPreview}</div>`
+            : nothing}
           <div class="form-group">
             <label>Body</label>
             <div class="editor-container">
               <wiki-editor
                 initial-content=""
-                ?auto-save=${false}
+                .autoSave=${false}
+                compact
               ></wiki-editor>
             </div>
           </div>

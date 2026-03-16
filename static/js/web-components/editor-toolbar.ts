@@ -10,12 +10,16 @@ export class EditorToolbar extends LitElement {
   @property({ type: Boolean, attribute: 'has-selection' })
   declare hasSelection: boolean;
 
+  @property({ type: Boolean, attribute: 'hide-exit' })
+  declare hideExit: boolean;
+
   @state()
   declare _uploadMenuOpen: boolean;
 
   constructor() {
     super();
     this.hasSelection = false;
+    this.hideExit = false;
     this._uploadMenuOpen = false;
   }
 
@@ -309,9 +313,11 @@ export class EditorToolbar extends LitElement {
 
         <div class="spacer"></div>
 
-        <button class="toolbar-btn exit-btn" data-action="exit" @click="${this._handleExit}" title="Done Editing">
-          <span class="btn-icon">&#10003;</span> Done
-        </button>
+        ${this.hideExit ? nothing : html`
+          <button class="toolbar-btn exit-btn" data-action="exit" @click="${this._handleExit}" title="Done Editing">
+            <span class="btn-icon">&#10003;</span> Done
+          </button>
+        `}
       </div>
     `;
   }
