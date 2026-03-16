@@ -10,7 +10,6 @@ describe('BlogNewPostDialog', () => {
   function buildElement(): BlogNewPostDialog {
     const dialog = document.createElement('blog-new-post-dialog') as BlogNewPostDialog;
     dialog.setAttribute('blog-id', 'test-blog');
-    dialog.setAttribute('page-template', 'blog-post');
     return dialog;
   }
 
@@ -78,6 +77,35 @@ describe('BlogNewPostDialog', () => {
     it('should have an embedded wiki-editor', () => {
       const editor = el.shadowRoot?.querySelector('wiki-editor');
       expect(editor).to.exist;
+    });
+
+    it('should have a collapsed summary section', () => {
+      const toggle = el.shadowRoot?.querySelector('.summary-toggle');
+      expect(toggle).to.exist;
+      expect(toggle?.textContent).to.contain('Summary');
+    });
+
+    it('should not show the summary textarea when collapsed', () => {
+      const textarea = el.shadowRoot?.querySelector('#post-summary');
+      expect(textarea).to.not.exist;
+    });
+  });
+
+  describe('when summary section is expanded', () => {
+    beforeEach(async () => {
+      el = buildElement();
+      document.body.appendChild(el);
+      el.open = true;
+      await el.updateComplete;
+
+      const toggle = el.shadowRoot?.querySelector('.summary-toggle') as HTMLButtonElement;
+      toggle.click();
+      await el.updateComplete;
+    });
+
+    it('should show the summary textarea', () => {
+      const textarea = el.shadowRoot?.querySelector('#post-summary') as HTMLTextAreaElement;
+      expect(textarea).to.exist;
     });
   });
 

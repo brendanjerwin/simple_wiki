@@ -74,7 +74,7 @@ func (GoldmarkRenderer) Render(input []byte) ([]byte, error) {
 	p.AllowAttrs("list-name", "page").OnElements("wiki-checklist")
 	// Allow wiki-blog custom element
 	p.AllowElements("wiki-blog")
-	p.AllowAttrs("blog-id", "page-template", "max-articles", "page").OnElements("wiki-blog")
+	p.AllowAttrs("blog-id", "max-articles", "page").OnElements("wiki-blog")
 	return p.SanitizeBytes(buf.Bytes()), nil
 }
 

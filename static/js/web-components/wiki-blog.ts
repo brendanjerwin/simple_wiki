@@ -145,9 +145,6 @@ export class WikiBlog extends LitElement {
   @property({ type: String, attribute: 'blog-id' })
   declare blogId: string;
 
-  @property({ type: String, attribute: 'page-template' })
-  declare pageTemplate: string;
-
   @property({ type: Number, attribute: 'max-articles' })
   declare maxArticles: number;
 
@@ -177,7 +174,6 @@ export class WikiBlog extends LitElement {
   constructor() {
     super();
     this.blogId = '';
-    this.pageTemplate = '';
     this.maxArticles = 10;
     this.page = '';
     this.posts = [];
@@ -331,7 +327,6 @@ export class WikiBlog extends LitElement {
       </div>
       <blog-new-post-dialog
         blog-id="${this.blogId}"
-        page-template="${this.pageTemplate}"
         @post-created=${this._onPostCreated}
       ></blog-new-post-dialog>
     `;

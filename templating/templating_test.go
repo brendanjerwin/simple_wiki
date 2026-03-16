@@ -1585,7 +1585,7 @@ var _ = Describe("BuildBlog", func() {
 				Title:      "My Blog",
 			}
 			blogFunc := templating.BuildBlog(ctx, mockIndex, mockSite)
-			result = blogFunc("my-blog", "blog-post", 10)
+			result = blogFunc("my-blog", 10)
 		})
 
 		It("should render a wiki-blog element", func() {
@@ -1595,10 +1595,6 @@ var _ = Describe("BuildBlog", func() {
 
 		It("should include the blog-id attribute", func() {
 			Expect(result).To(ContainSubstring(`blog-id="my-blog"`))
-		})
-
-		It("should include the page-template attribute", func() {
-			Expect(result).To(ContainSubstring(`page-template="blog-post"`))
 		})
 
 		It("should include the max-articles attribute", func() {
@@ -1644,7 +1640,7 @@ var _ = Describe("BuildBlog", func() {
 			mockIndex.values["post_one"]["blog.external_url"] = "https://example.com/post"
 			ctx := templating.TemplateContext{Identifier: "blog_page"}
 			blogFunc := templating.BuildBlog(ctx, mockIndex, mockSite)
-			result = blogFunc("my-blog", "blog-post", 10)
+			result = blogFunc("my-blog", 10)
 		})
 
 		It("should link title to external URL", func() {
@@ -1662,7 +1658,7 @@ var _ = Describe("BuildBlog", func() {
 		BeforeEach(func() {
 			ctx := templating.TemplateContext{Identifier: "blog_page"}
 			blogFunc := templating.BuildBlog(ctx, mockIndex, mockSite)
-			result = blogFunc("my-blog", "blog-post", 2)
+			result = blogFunc("my-blog", 2)
 		})
 
 		It("should only include the limited number of articles", func() {
@@ -1676,7 +1672,7 @@ var _ = Describe("BuildBlog", func() {
 		BeforeEach(func() {
 			ctx := templating.TemplateContext{Identifier: "blog_page"}
 			blogFunc := templating.BuildBlog(ctx, mockIndex, mockSite)
-			result = blogFunc("nonexistent-blog", "blog-post", 10)
+			result = blogFunc("nonexistent-blog", 10)
 		})
 
 		It("should render an empty wiki-blog element", func() {

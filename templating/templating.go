@@ -299,8 +299,8 @@ const blogSnippetMaxChars = 200
 
 // BuildBlog returns a template function that renders a wiki-blog custom element
 // with a server-rendered fallback list of blog posts inside it.
-func BuildBlog(templateContext TemplateContext, query wikipage.IQueryFrontmatterIndex, site wikipage.PageReader) func(string, string, int) string {
-	return func(blogIdentifier, pageTemplate string, maxArticles int) string {
+func BuildBlog(templateContext TemplateContext, query wikipage.IQueryFrontmatterIndex, site wikipage.PageReader) func(string, int) string {
+	return func(blogIdentifier string, maxArticles int) string {
 		posts := query.QueryExactMatchSortedBy("blog.identifier", blogIdentifier, "blog.published-date", false, maxArticles)
 
 		var articles string
@@ -308,9 +308,8 @@ func BuildBlog(templateContext TemplateContext, query wikipage.IQueryFrontmatter
 			articles += renderBlogArticle(postID, query, site)
 		}
 
-		return fmt.Sprintf(`<wiki-blog blog-id="%s" page-template="%s" max-articles="%d" page="%s">%s</wiki-blog>`,
+		return fmt.Sprintf(`<wiki-blog blog-id="%s" max-articles="%d" page="%s">%s</wiki-blog>`,
 			html.EscapeString(blogIdentifier),
-			html.EscapeString(pageTemplate),
 			maxArticles,
 			html.EscapeString(templateContext.Identifier),
 			articles,
@@ -485,7 +484,7 @@ func validationFuncMap() template.FuncMap {
 		"FindByPrefix":            func(string, string) []string { return nil },
 		"FindByKeyExistence":      func(string) []string { return nil },
 		"Checklist":               func(string) string { return "" },
-		"Blog":                    func(string, string, int) string { return "" },
+		"Blog":                    func(string, int) string { return "" },
 	}
 }
 

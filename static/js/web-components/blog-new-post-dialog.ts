@@ -153,6 +153,37 @@ export class BlogNewPostDialog extends LitElement {
       background: white;
     }
 
+    .summary-toggle {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 0.9em;
+      font-weight: 600;
+      color: #555;
+      padding: 0;
+      margin-bottom: 4px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .summary-toggle i {
+      font-size: 0.75em;
+      width: 10px;
+    }
+
+    #post-summary {
+      width: 100%;
+      font-size: 0.9em;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      box-sizing: border-box;
+      resize: vertical;
+      font-family: inherit;
+      margin-top: 4px;
+    }
+
     .identifier-preview {
       font-size: 0.8em;
       color: #999;
@@ -174,9 +205,6 @@ export class BlogNewPostDialog extends LitElement {
   @property({ type: String, attribute: 'blog-id' })
   declare blogId: string;
 
-  @property({ type: String, attribute: 'page-template' })
-  declare pageTemplate: string;
-
   @property({ type: Boolean, reflect: true })
   declare open: boolean;
 
@@ -191,6 +219,12 @@ export class BlogNewPostDialog extends LitElement {
 
   @state()
   declare error: AugmentedError | null;
+
+  @state()
+  declare summaryExpanded: boolean;
+
+  @state()
+  declare summary: string;
 
   private pageCreator = new PageCreator();
 
@@ -207,18 +241,29 @@ export class BlogNewPostDialog extends LitElement {
   constructor() {
     super();
     this.blogId = '';
-    this.pageTemplate = '';
     this.open = false;
     this.title = '';
     this.date = new Date().toISOString().slice(0, 10);
     this.creating = false;
     this.error = null;
+    this.summaryExpanded = false;
+    this.summary = '';
   }
 
   private _onTitleInput(): void {
     const titleInput = this.shadowRoot?.querySelector<TitleInput>('title-input');
     if (titleInput) {
       this.title = titleInput.value;
+    }
+  }
+
+  private _toggleSummary(): void {
+    this.summaryExpanded = !this.summaryExpanded;
+  }
+
+  private _onSummaryInput(e: Event): void {
+    if (e.target instanceof HTMLTextAreaElement) {
+      this.summary = e.target.value;
     }
   }
 
@@ -234,6 +279,8 @@ export class BlogNewPostDialog extends LitElement {
     this.date = new Date().toISOString().slice(0, 10);
     this.error = null;
     this.creating = false;
+    this.summaryExpanded = false;
+    this.summary = '';
   }
 
   private async _submit(): Promise<void> {
@@ -256,19 +303,23 @@ export class BlogNewPostDialog extends LitElement {
       const bodyContent = editor?.getContent() || '';
 
       // Build frontmatter
+      const blogMeta: JsonObject = {
+        identifier: this.blogId,
+        'published-date': this.date,
+      };
+      if (this.summary.trim()) {
+        blogMeta['summary_markdown'] = this.summary.trim();
+      }
       const frontmatter: JsonObject = {
         title: this.title,
-        blog: {
-          identifier: this.blogId,
-          'published-date': this.date,
-        },
+        blog: blogMeta,
       };
 
       // Create the page
       const result = await this.pageCreator.createPage(
         idResult.identifier,
         bodyContent,
-        this.pageTemplate || undefined,
+        undefined,
         frontmatter
       );
 
@@ -331,6 +382,22 @@ export class BlogNewPostDialog extends LitElement {
           ${this.identifierPreview
             ? html`<div class="identifier-preview">${this.identifierPreview}</div>`
             : nothing}
+          <div class="form-group">
+            <button class="summary-toggle" @click=${this._toggleSummary} type="button">
+              <i class="fa-solid fa-chevron-${this.summaryExpanded ? 'down' : 'right'}"></i>
+              Summary
+            </button>
+            ${this.summaryExpanded
+              ? html`<textarea
+                  id="post-summary"
+                  rows="3"
+                  placeholder="Optional summary shown in the blog list"
+                  .value=${this.summary}
+                  @input=${this._onSummaryInput}
+                  ?disabled=${this.creating}
+                ></textarea>`
+              : nothing}
+          </div>
           <div class="form-group">
             <label>Body</label>
             <div class="editor-container">
