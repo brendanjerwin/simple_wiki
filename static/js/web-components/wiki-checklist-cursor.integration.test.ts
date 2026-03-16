@@ -42,17 +42,27 @@ describe('WikiChecklist cursor positioning', () => {
     sinon.restore();
   });
 
-  describe('when the text input is rendered', () => {
+  describe('when the item row is rendered in display mode', () => {
     let row: HTMLElement | null | undefined;
-    let textInput: HTMLInputElement | null | undefined;
 
     beforeEach(() => {
       row = el.shadowRoot?.querySelector<HTMLElement>('.item-row');
-      textInput = el.shadowRoot?.querySelector<HTMLInputElement>('.item-text');
     });
 
     it('should NOT have draggable attribute on the item row', () => {
       expect(row?.draggable).to.be.false;
+    });
+  });
+
+  describe('when the text input is rendered after clicking display text', () => {
+    let textInput: HTMLInputElement | null | undefined;
+
+    beforeEach(async () => {
+      // Click the display span to enter edit mode
+      const displaySpan = el.shadowRoot?.querySelector('.item-display-text');
+      (displaySpan as HTMLElement)?.click();
+      await el.updateComplete;
+      textInput = el.shadowRoot?.querySelector<HTMLInputElement>('.item-text');
     });
 
     it('should allow setting cursor position via setSelectionRange', () => {
@@ -62,11 +72,6 @@ describe('WikiChecklist cursor positioning', () => {
     });
 
     it('should not reset cursor when re-rendered during editing', async () => {
-      // Focus and enter edit mode
-      textInput!.focus();
-      textInput!.dispatchEvent(new FocusEvent('focus'));
-      await el.updateComplete;
-
       // Now manually set cursor to position 5
       textInput!.setSelectionRange(5, 5);
       expect(textInput!.selectionStart).to.equal(5);
@@ -75,7 +80,7 @@ describe('WikiChecklist cursor positioning', () => {
       el.requestUpdate();
       await el.updateComplete;
 
-      // Cursor should still be at 5 (noChange prevents value clobber)
+      // Cursor should still be at 5 (editingIndex keeps the input rendered)
       expect(textInput!.selectionStart).to.equal(5);
     });
   });

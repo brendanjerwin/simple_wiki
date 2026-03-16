@@ -722,33 +722,114 @@ describe('WikiChecklist', () => {
       });
     });
 
-    describe('when focusing an item with tags', () => {
-      let textInput: HTMLInputElement | null | undefined;
+    describe('item text display and editing', () => {
+      describe('when not editing an item', () => {
+        beforeEach(async () => {
+          el.error = null;
+          el.loading = false;
+          el.items = [
+            { text: 'Milk', checked: false, tags: ['dairy'] },
+          ];
+          await el.updateComplete;
+        });
 
-      beforeEach(async () => {
-        el.error = null;
-        el.loading = false;
-        el.items = [
-          { text: 'Milk', checked: false, tags: ['dairy', 'fridge'] },
-        ];
-        await el.updateComplete;
-        textInput = el.shadowRoot?.querySelector<HTMLInputElement>('.item-text');
-        textInput?.focus();
-        textInput?.dispatchEvent(new FocusEvent('focus'));
-        await el.updateComplete;
+        it('should render a span for item text, not an input', () => {
+          const span = el.shadowRoot?.querySelector('.item-display-text');
+          const input = el.shadowRoot?.querySelector('.item-text');
+          expect(span).to.exist;
+          expect(input).to.be.null;
+        });
+
+        it('should display the item text in the span', () => {
+          const span = el.shadowRoot?.querySelector('.item-display-text');
+          expect(span?.textContent).to.equal('Milk');
+        });
       });
 
-      it('should set editingIndex', () => {
-        expect((el as unknown as { editingIndex: number | null }).editingIndex).to.equal(0);
+      describe('when clicking the display text', () => {
+        let textInput: HTMLInputElement | null | undefined;
+
+        beforeEach(async () => {
+          el.error = null;
+          el.loading = false;
+          el.items = [
+            { text: 'Milk', checked: false, tags: ['dairy', 'fridge'] },
+          ];
+          await el.updateComplete;
+
+          const displaySpan = el.shadowRoot?.querySelector('.item-display-text');
+          (displaySpan as HTMLElement)?.click();
+          await el.updateComplete;
+          textInput = el.shadowRoot?.querySelector<HTMLInputElement>('.item-text');
+        });
+
+        it('should switch to an input for editing', () => {
+          expect(textInput).to.exist;
+        });
+
+        it('should show composed tagged text in the input', () => {
+          expect(textInput?.value).to.equal('Milk :dairy :fridge');
+        });
+
+        it('should hide tag badges while editing', () => {
+          const badges = el.shadowRoot?.querySelectorAll('.item-tag-badge');
+          expect(badges?.length).to.equal(0);
+        });
+
+        it('should hide the display span while editing', () => {
+          const displaySpan = el.shadowRoot?.querySelector('.item-display-text');
+          expect(displaySpan).to.be.null;
+        });
       });
 
-      it('should show composed tagged text in the input', () => {
-        expect(textInput?.value).to.equal('Milk :dairy :fridge');
+      describe('when blurring the edit input', () => {
+        beforeEach(async () => {
+          el.error = null;
+          el.loading = false;
+          el.items = [
+            { text: 'Milk', checked: false, tags: [] },
+          ];
+          await el.updateComplete;
+
+          // Enter edit mode
+          const displaySpan = el.shadowRoot?.querySelector('.item-display-text');
+          (displaySpan as HTMLElement)?.click();
+          await el.updateComplete;
+
+          // Blur to exit edit mode
+          const textInput = el.shadowRoot?.querySelector<HTMLInputElement>('.item-text');
+          if (textInput) {
+            textInput.value = 'Milk';
+            textInput.dispatchEvent(new FocusEvent('blur'));
+          }
+          await el.updateComplete;
+        });
+
+        it('should switch back to a span', () => {
+          const span = el.shadowRoot?.querySelector('.item-display-text');
+          const input = el.shadowRoot?.querySelector('.item-text');
+          expect(span).to.exist;
+          expect(input).to.be.null;
+        });
       });
 
-      it('should hide tag badges while editing', () => {
-        const badges = el.shadowRoot?.querySelectorAll('.item-tag-badge');
-        expect(badges?.length).to.equal(0);
+      describe('when item text is long', () => {
+        beforeEach(async () => {
+          el.error = null;
+          el.loading = false;
+          el.items = [
+            { text: 'This is a very long checklist item text that should wrap on mobile screens', checked: false, tags: [] },
+          ];
+          await el.updateComplete;
+        });
+
+        it('should render text in a span that can wrap', () => {
+          const span = el.shadowRoot?.querySelector('.item-display-text');
+          const input = el.shadowRoot?.querySelector('.item-text');
+          expect(span).to.exist;
+          expect(input).to.be.null;
+          expect(span?.textContent).to.equal('This is a very long checklist item text that should wrap on mobile screens');
+        });
       });
     });
 
@@ -787,11 +868,12 @@ describe('WikiChecklist', () => {
         await el.updateComplete;
         await el.updateComplete;
 
-        const textInput = el.shadowRoot?.querySelector<HTMLInputElement>('.item-text');
-        textInput?.focus();
-        textInput?.dispatchEvent(new FocusEvent('focus'));
+        // Click the display span to enter edit mode
+        const displaySpan = el.shadowRoot?.querySelector('.item-display-text');
+        (displaySpan as HTMLElement)?.click();
         await el.updateComplete;
 
+        const textInput = el.shadowRoot?.querySelector<HTMLInputElement>('.item-text');
         if (textInput) {
           textInput.value = 'Milk :dairy :fridge';
           textInput.dispatchEvent(new FocusEvent('blur'));
@@ -1694,6 +1776,11 @@ describe('WikiChecklist', () => {
 
       document.body.appendChild(el);
       await el.updateComplete;
+      await el.updateComplete;
+
+      // Click the display span to enter edit mode
+      const displaySpan = el.shadowRoot?.querySelector('.item-display-text');
+      (displaySpan as HTMLElement)?.click();
       await el.updateComplete;
 
       const textInput =
