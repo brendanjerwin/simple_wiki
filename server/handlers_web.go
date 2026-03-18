@@ -437,7 +437,7 @@ func (s *Site) handleUpload(c *gin.Context) {
 	}
 
 	identity := tailscale.IdentityFromContext(c.Request.Context())
-	s.Logger.Info("[AUDIT] upload | file: %s | user: %s", info.Filename, identity.ForLog())
+	s.Logger.Info("[AUDIT] upload | file: %q | user: %s", info.Filename, identity.ForLog())
 
 	c.Header("Location", "/uploads/"+fileInfo.Hash+"?filename="+url.QueryEscape(info.Filename))
 }

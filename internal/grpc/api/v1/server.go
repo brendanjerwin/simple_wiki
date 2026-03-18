@@ -536,7 +536,7 @@ func (s *Server) DeletePage(ctx context.Context, req *apiv1.DeletePageRequest) (
 	}
 
 	identity := tailscale.IdentityFromContext(ctx)
-	s.logger.Info("[AUDIT] delete | page: %s | user: %s", req.PageName, identity.ForLog())
+	s.logger.Info("[AUDIT] delete | page: %q | user: %s", req.PageName, identity.ForLog())
 
 	return &apiv1.DeletePageResponse{
 		Success: true,
