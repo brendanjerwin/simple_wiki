@@ -1674,6 +1674,89 @@ var _ = Describe("Server", func() {
 				Expect(mockPageReaderMutator.WrittenMarkdown).To(BeEmpty())
 			})
 		})
+
+		When("old_content_markdown is provided and found in the current content", func() {
+			const expectedContent = "# Section One (Updated)\n\nUpdated content here.\n\n# Section Two\n\nMore content."
+
+			BeforeEach(func() {
+				mockPageReaderMutator.Markdown = "# Section One\n\nContent here.\n\n# Section Two\n\nMore content."
+				oldContent := "# Section One\n\nContent here."
+				req.OldContentMarkdown = &oldContent
+				req.NewContentMarkdown = "# Section One (Updated)\n\nUpdated content here."
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a response", func() {
+				Expect(resp).NotTo(BeNil())
+			})
+
+			It("should indicate success", func() {
+				Expect(resp.Success).To(BeTrue())
+			})
+
+			It("should write only the substituted content, preserving the rest of the page", func() {
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(Equal(wikipage.Markdown(expectedContent)))
+			})
+
+			It("should return the version_hash of the stored content", func() {
+				h := sha256.Sum256([]byte(expectedContent))
+				Expect(resp.VersionHash).To(Equal(hex.EncodeToString(h[:])))
+			})
+		})
+
+		When("old_content_markdown is provided but not found in the current content", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Markdown = "# Section One\n\nContent here."
+				notPresent := "# Section That Does Not Exist"
+				req.OldContentMarkdown = &notPresent
+				req.NewContentMarkdown = "# Replacement"
+			})
+
+			It("should return a not found error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.NotFound, "old_content_markdown not found"))
+			})
+
+			It("should not return a response", func() {
+				Expect(resp).To(BeNil())
+			})
+
+			It("should not write any content", func() {
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(BeEmpty())
+			})
+		})
+
+		When("old_content_markdown is provided but empty", func() {
+			BeforeEach(func() {
+				emptyOld := ""
+				req.OldContentMarkdown = &emptyOld
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "old_content_markdown cannot be empty"))
+			})
+
+			It("should not return a response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("old_content_markdown is provided but only whitespace", func() {
+			BeforeEach(func() {
+				whitespaceOld := "   \n\t  "
+				req.OldContentMarkdown = &whitespaceOld
+			})
+
+			It("should return an invalid argument error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "old_content_markdown cannot be empty"))
+			})
+
+			It("should not return a response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
 	})
 
 	Describe("ClearPageContent", func() {

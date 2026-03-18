@@ -91,6 +91,14 @@ message UpdatePageContentRequest {
   // If provided, the write will fail with ABORTED if the content has changed since the read.
   // Omit to skip version checking (not recommended for concurrent access scenarios).
   optional string expected_version_hash = 3;
+  // old_content_markdown, when provided, enables find-and-replace behavior.
+  // The RPC will locate old_content_markdown within the current page content and replace
+  // exactly that substring with new_content_markdown, leaving the rest of the page intact.
+  // Only the first occurrence is replaced. If old_content_markdown appears multiple times,
+  // consider using expected_version_hash to guard against concurrent edits.
+  // If old_content_markdown is not found in the current content, the RPC returns a NOT_FOUND error.
+  // When omitted, new_content_markdown replaces the entire page content (full replacement).
+  optional string old_content_markdown = 4;
 }
 
 message UpdatePageContentResponse {
