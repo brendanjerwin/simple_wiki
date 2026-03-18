@@ -1043,6 +1043,8 @@ func (s *Server) buildNewPageFrontmatter(identifier string, template *string, fr
 
 // UpdatePageContent implements the UpdatePageContent RPC.
 // Updates only the markdown content of an existing page, preserving its frontmatter.
+// If old_content_markdown is provided, performs a find-and-replace: locates the old content
+// within the page and substitutes it with new_content_markdown, leaving the rest intact.
 // If expected_version_hash is provided, the write will be rejected if the current content
 // has changed since the hash was computed (optimistic concurrency control).
 // Empty content is rejected; use ClearPageContent to explicitly clear a page's content.
@@ -1053,6 +1055,10 @@ func (s *Server) UpdatePageContent(_ context.Context, req *apiv1.UpdatePageConte
 
 	if strings.TrimSpace(req.NewContentMarkdown) == "" {
 		return nil, status.Error(codes.InvalidArgument, "new_content_markdown cannot be empty; use ClearPageContent to explicitly clear page content")
+	}
+
+	if req.OldContentMarkdown != nil && strings.TrimSpace(*req.OldContentMarkdown) == "" {
+		return nil, status.Error(codes.InvalidArgument, "old_content_markdown cannot be empty when provided")
 	}
 
 	// Read current content for: (1) page existence check, (2) version hash verification
@@ -1079,7 +1085,20 @@ func (s *Server) UpdatePageContent(_ context.Context, req *apiv1.UpdatePageConte
 		return nil, status.Errorf(codes.InvalidArgument, "invalid template in page content: %v", err)
 	}
 
-	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(req.PageName), wikipage.Markdown(req.NewContentMarkdown)); err != nil {
+	// Compute the markdown to write: find-and-replace when old_content_markdown is set,
+	// otherwise replace the entire page content.
+	var markdownToWrite wikipage.Markdown
+	if req.OldContentMarkdown != nil {
+		oldContent := *req.OldContentMarkdown
+		if !strings.Contains(string(originalMarkdown), oldContent) {
+			return nil, status.Error(codes.NotFound, "old_content_markdown not found in current page content")
+		}
+		markdownToWrite = wikipage.Markdown(strings.Replace(string(originalMarkdown), oldContent, req.NewContentMarkdown, 1))
+	} else {
+		markdownToWrite = wikipage.Markdown(req.NewContentMarkdown)
+	}
+
+	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(req.PageName), markdownToWrite); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to write markdown: %v", err)
 	}
 
