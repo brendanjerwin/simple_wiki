@@ -204,7 +204,10 @@ func (s *Site) InitializeIndexing() error {
 	s.startMigrationJobs()
 
 	// Get all files that need to be indexed
-	files := s.DirectoryList()
+	files, err := s.DirectoryList()
+	if err != nil {
+		return fmt.Errorf("failed to list pages for indexing: %w", err)
+	}
 	if len(files) == 0 {
 		s.Logger.Info("No pages found to index.")
 		return nil
@@ -344,9 +347,7 @@ func (s *Site) applyMigrationsForPage(page *wikipage.Page, content []byte) ([]by
 
 	migratedContent, err := s.MigrationApplicator.ApplyMigrations(content)
 	if err != nil {
-		// Log migration failure but continue with original content
-		s.Logger.Warn("Migration failed, using original content: %v", err)
-		return content, nil
+		return content, fmt.Errorf("failed to apply content migrations: %w", err)
 	}
 
 	// If migration was applied, save the migrated content
@@ -465,8 +466,11 @@ func (DirectoryEntry) Sys() any {
 }
 
 // DirectoryList returns a list of all wiki pages in the data directory.
-func (s *Site) DirectoryList() []os.FileInfo {
-	files, _ := os.ReadDir(s.PathToData)
+func (s *Site) DirectoryList() ([]os.FileInfo, error) {
+	files, err := os.ReadDir(s.PathToData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read data directory: %w", err)
+	}
 	entries := make([]os.FileInfo, len(files))
 	found := 0
 	for _, f := range files {
@@ -496,7 +500,7 @@ func (s *Site) DirectoryList() []os.FileInfo {
 	}
 	entries = entries[:found]
 	sort.Slice(entries, func(i, j int) bool { return entries[i].ModTime().Before(entries[j].ModTime()) })
-	return entries
+	return entries, nil
 }
 
 // UploadEntry represents an uploaded file entry.

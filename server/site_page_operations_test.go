@@ -86,7 +86,8 @@ var _ = Describe("Site Page Operations", func() {
 					Expect(completed).To(BeTrue())
 				}
 
-				pages = s.DirectoryList()
+				pages, err = s.DirectoryList()
+				Expect(err).ToNot(HaveOccurred())
 			})
 
 			It("should return all the pages", func() {

@@ -287,7 +287,11 @@ func (s *Site) getDirectoryEntries(page, command string) ([]os.FileInfo, string,
 	var directoryEntries []os.FileInfo
 	if page == "ls" {
 		command = "/view"
-		directoryEntries = s.DirectoryList()
+		var dirErr error
+		directoryEntries, dirErr = s.DirectoryList()
+		if dirErr != nil {
+			return nil, command, dirErr
+		}
 	}
 	if page == uploadsPage {
 		command = "/view"
