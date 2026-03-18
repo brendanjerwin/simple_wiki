@@ -777,6 +777,78 @@ var _ = Describe("requestBaseURL", func() {
 	})
 })
 
+var _ = Describe("sanitizePageName", func() {
+	DescribeTable("strips leading slashes to prevent open redirects",
+		func(input, expected string) {
+			Expect(server.SanitizePageNameForTesting(input)).To(Equal(expected))
+		},
+		Entry("normal page name is unchanged", "mypage", "mypage"),
+		Entry("single leading slash is stripped", "/evil.com", "evil.com"),
+		Entry("double leading slash is stripped", "//evil.com", "evil.com"),
+		Entry("triple leading slash is stripped", "///evil.com", "evil.com"),
+		Entry("empty string stays empty", "", ""),
+		Entry("only slashes become empty", "///", ""),
+		Entry("slash in the middle is preserved", "some/path", "some/path"),
+		Entry("trailing slash is preserved (TrimLeft only affects the left)", "mypage/", "mypage/"),
+	)
+})
+
+var _ = Describe("Open redirect prevention", func() {
+	var site *server.Site
+	var router *gin.Engine
+	var w *httptest.ResponseRecorder
+	var tmpDir string
+
+	BeforeEach(func() {
+		var err error
+		tmpDir, err = os.MkdirTemp("", "simple_wiki_test")
+		Expect(err).NotTo(HaveOccurred())
+		logger := lumber.NewConsoleLogger(lumber.TRACE)
+		site, err = server.NewSite(tmpDir, "", "testpage", 0, "secret", true, 1024, 1024, logger)
+		Expect(err).NotTo(HaveOccurred())
+		router = site.GinRouter()
+		w = httptest.NewRecorder()
+	})
+
+	AfterEach(func() {
+		_ = os.RemoveAll(tmpDir)
+	})
+
+	When("the /:page route receives a normal page name", func() {
+		BeforeEach(func() {
+			req, _ := http.NewRequest(http.MethodGet, "/mypage", nil)
+			router.ServeHTTP(w, req)
+		})
+
+		It("should redirect", func() {
+			Expect(w.Code).To(Equal(http.StatusFound))
+		})
+
+		It("should redirect to a safe relative URL", func() {
+			location := w.Header().Get("Location")
+			Expect(location).To(HavePrefix("/mypage/view"))
+			Expect(location).NotTo(HavePrefix("//"))
+		})
+	})
+
+	When("the /:page/*command route receives an empty command (redirects to /view)", func() {
+		BeforeEach(func() {
+			req, _ := http.NewRequest(http.MethodGet, "/mypage/", nil)
+			router.ServeHTTP(w, req)
+		})
+
+		It("should redirect", func() {
+			Expect(w.Code).To(Equal(http.StatusFound))
+		})
+
+		It("should redirect to a safe relative URL", func() {
+			location := w.Header().Get("Location")
+			Expect(location).To(Equal("/mypage/view"))
+			Expect(location).NotTo(HavePrefix("//"))
+		})
+	})
+})
+
 // handlerTestWriteCloser wraps a buffer to implement io.WriteCloser for logger testing
 type handlerTestWriteCloser struct {
 	*bytes.Buffer

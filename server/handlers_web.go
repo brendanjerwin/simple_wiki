@@ -89,7 +89,7 @@ func (s *Site) registerRoutes(router *gin.Engine) {
 	router.GET("/extensions/:file", serveExtensionFile)
 
 	router.GET("/:page", func(c *gin.Context) {
-		page := c.Param("page")
+		page := sanitizePageName(c.Param("page"))
 		c.Redirect(httpStatusFound, "/"+page+"/view?"+c.Request.URL.RawQuery)
 	})
 	router.GET("/:page/*command", s.handlePageRequest)
@@ -212,7 +212,7 @@ func getSetSessionID(c *gin.Context, logger *lumber.ConsoleLogger) (sid string) 
 }
 
 func (s *Site) handlePageRequest(c *gin.Context) {
-	page := c.Param("page")
+	page := sanitizePageName(c.Param("page"))
 	command := c.Param("command")
 
 	// Handle special pages (favicon, static, uploads)
@@ -527,6 +527,14 @@ func contentTypeFromName(filename string) string {
 	return mimeType
 }
 
+// sanitizePageName strips leading slashes from a wiki page name to prevent
+// open redirect attacks. A page name that begins with a slash would cause
+// "/"+page to produce a protocol-relative URL (e.g. "//evil.com") that
+// browsers follow as an external redirect.
+func sanitizePageName(page string) string {
+	return strings.TrimLeft(page, "/")
+}
+
 // requestBaseURL derives the base URL (scheme://host) from the request context.
 // It checks TLS state and the X-Forwarded-Proto header to determine the scheme.
 func requestBaseURL(c *gin.Context) string {
@@ -555,4 +563,9 @@ func GetRecentlyEditedForTesting(title string, c *gin.Context, logger *lumber.Co
 // RequestBaseURLForTesting exposes requestBaseURL for testing
 func RequestBaseURLForTesting(c *gin.Context) string {
 	return requestBaseURL(c)
+}
+
+// SanitizePageNameForTesting exposes sanitizePageName for testing
+func SanitizePageNameForTesting(page string) string {
+	return sanitizePageName(page)
 }
