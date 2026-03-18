@@ -58,6 +58,14 @@ var _ = Describe("Site Page Operations", func() {
 	})
 
 	Describe("Site.DirectoryList", func() {
+		When("the data directory does not exist", func() {
+			It("should return an error", func() {
+				s.PathToData = filepath.Join(pathToData, "nonexistent_subdir")
+				_, err := s.DirectoryList()
+				Expect(err).To(HaveOccurred())
+			})
+		})
+
 		When("there are pages", func() {
 			var pages []os.FileInfo
 

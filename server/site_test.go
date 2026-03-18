@@ -857,7 +857,8 @@ status = "published"
 				_, fm, err = s.ReadFrontMatter(pageIdentifier)
 				
 				// Read the saved content for verification
-				rawContent, readErr := os.ReadFile(pagePath)
+				var rawContent []byte
+				rawContent, readErr = os.ReadFile(pagePath)
 				if readErr == nil {
 					savedContent = string(rawContent)
 				}
@@ -910,7 +911,8 @@ title = "Clean Page"
 				_, fm, err = s.ReadFrontMatter(pageIdentifier)
 				
 				// Read the saved content for verification
-				rawContent, readErr := os.ReadFile(pagePath)
+				var rawContent []byte
+				rawContent, readErr = os.ReadFile(pagePath)
 				if readErr == nil {
 					savedContent = string(rawContent)
 				}
@@ -961,7 +963,8 @@ title = "Test Page"
 				_, fm, err = s.ReadFrontMatter(pageIdentifier)
 				
 				// Read the saved content for verification
-				rawContent, readErr := os.ReadFile(pagePath)
+				var rawContent []byte
+				rawContent, readErr = os.ReadFile(pagePath)
 				if readErr == nil {
 					savedContent = string(rawContent)
 				}

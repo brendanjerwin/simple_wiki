@@ -479,8 +479,7 @@ func (s *Site) DirectoryList() ([]os.FileInfo, error) {
 			// Each ReadPage() call will acquire its own read lock
 			p, err := s.ReadPage(name)
 			if err != nil {
-				s.Logger.Warn("Failed to open page %s for directory listing: %v", name, err)
-				continue
+				return nil, fmt.Errorf("failed to read page %q for directory listing: %w", name, err)
 			}
 
 			// Get file modification time from filesystem
