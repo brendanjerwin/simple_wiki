@@ -22,27 +22,25 @@ async function callPageAPI(
 }
 
 // Ensure the test page exists with the given markdown body.
-// Tries CreatePage first; if the page already exists, falls back to UpdateWholePage.
+// Tries CreatePage first; if creation fails or the page already exists, falls back to
+// UpdatePageContent in full-replacement mode to reset the body — no frontmatter required.
 async function setupTestPage(request: APIRequestContext, markdown: string): Promise<void> {
   const createResp = await callPageAPI(request, 'CreatePage', {
     pageName: TEST_PAGE,
     contentMarkdown: markdown,
   });
-
   if (createResp.ok()) {
     const body = await createResp.json() as { success: boolean };
-    if (body.success) {
-      return;
-    }
+    if (body.success) return;
   }
 
-  // Page already exists — overwrite it with fresh content.
-  const wholePageMarkdown = `+++\nidentifier = "${TEST_PAGE}"\n+++\n\n${markdown}`;
-  const updateResp = await callPageAPI(request, 'UpdateWholePage', {
+  // Page already exists (CreatePage returns HTTP 200 with success=false for existing pages)
+  // or the HTTP request itself failed — reset body with full-replacement UpdatePageContent.
+  const resetResp = await callPageAPI(request, 'UpdatePageContent', {
     pageName: TEST_PAGE,
-    newWholeMarkdown: wholePageMarkdown,
+    newContentMarkdown: markdown,
   });
-  expect(updateResp.ok()).toBeTruthy();
+  expect(resetResp.ok()).toBeTruthy();
 }
 
 // Read the current markdown body and version hash of the test page.
@@ -99,25 +97,26 @@ test.describe('UpdatePageContent find-and-replace behavior', () => {
 
     // The page content must remain unchanged.
     const { contentMarkdown } = await readTestPage(request);
-    expect(contentMarkdown).toBe(INITIAL_MARKDOWN);
+    expect(contentMarkdown).toContain('# Section One\n\nOriginal content here.');
+    expect(contentMarkdown).toContain('# Section Two\n\nMore content.');
   });
 
   test('version conflict: rejects the update when expected_version_hash does not match', async ({ request }) => {
     const { versionHash } = await readTestPage(request);
 
-    // Advance the page using full-replacement mode (no oldContentMarkdown) so the hash is stale.
-    // UpdatePageContent supports both full-replacement (oldContentMarkdown omitted) and
-    // find-and-replace (oldContentMarkdown provided) modes.  The version-hash check fires
-    // before the mode branch, so either mode exercises the conflict logic equally.
+    // Advance the page via find-and-replace so the captured hash is now stale.
+    const intermediateContent = '# Intermediate Edit\n\nThis update makes the original hash stale.';
     const intermediateResp = await callPageAPI(request, 'UpdatePageContent', {
       pageName: TEST_PAGE,
-      newContentMarkdown: '# Intermediate Edit\n\nThis update makes the original hash stale.',
+      oldContentMarkdown: INITIAL_MARKDOWN,
+      newContentMarkdown: intermediateContent,
     });
     expect(intermediateResp.ok()).toBeTruthy();
 
-    // Now attempt an update using the stale hash — this must be rejected.
+    // Attempt a find-and-replace with the stale hash — this must be rejected.
     const conflictResp = await callPageAPI(request, 'UpdatePageContent', {
       pageName: TEST_PAGE,
+      oldContentMarkdown: intermediateContent,
       expectedVersionHash: versionHash,
       newContentMarkdown: '# Conflicting Edit',
     });
