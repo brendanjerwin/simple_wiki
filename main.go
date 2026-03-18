@@ -73,6 +73,19 @@ func generateRandomCookieSecret() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
+// resolveCookieSecret returns the provided secret unchanged when non-empty.
+// When provided is empty it generates a random secret and returns generated=true.
+func resolveCookieSecret(provided string) (secret string, generated bool, err error) {
+	if provided != "" {
+		return provided, false, nil
+	}
+	secret, err = generateRandomCookieSecret()
+	if err != nil {
+		return "", false, err
+	}
+	return secret, true, nil
+}
+
 func createSite(c *cli.Context) (*server.Site, error) {
 	pathToData := c.GlobalString("data")
 	if err := os.MkdirAll(pathToData, 0755); err != nil {
@@ -87,13 +100,11 @@ func createSite(c *cli.Context) (*server.Site, error) {
 
 	logger.Info("Starting simple_wiki server...")
 
-	cookieSecret := c.GlobalString("cookie-secret")
-	if cookieSecret == "" {
-		var err error
-		cookieSecret, err = generateRandomCookieSecret()
-		if err != nil {
-			return nil, err
-		}
+	cookieSecret, generated, err := resolveCookieSecret(c.GlobalString("cookie-secret"))
+	if err != nil {
+		return nil, err
+	}
+	if generated {
 		logger.Warn("No --cookie-secret provided; a random secret was generated. Sessions will not persist across restarts. Set --cookie-secret to a persistent value to maintain sessions across restarts.")
 	}
 

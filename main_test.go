@@ -8,7 +8,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func TestMain(t *testing.T) {
+func TestGenerateCookieSecret(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Main Suite")
 }
@@ -28,5 +28,25 @@ var _ = Describe("generateRandomCookieSecret", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(secret1).NotTo(Equal(secret2))
+	})
+})
+
+var _ = Describe("resolveCookieSecret", func() {
+	When("a non-empty secret is provided", func() {
+		It("should return the provided secret unchanged and generated=false", func() {
+			secret, generated, err := resolveCookieSecret("my-explicit-secret")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(secret).To(Equal("my-explicit-secret"))
+			Expect(generated).To(BeFalse())
+		})
+	})
+
+	When("an empty secret is provided", func() {
+		It("should return a valid random secret and generated=true", func() {
+			secret, generated, err := resolveCookieSecret("")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(secret).To(MatchRegexp(`^[0-9a-f]{64}$`))
+			Expect(generated).To(BeTrue())
+		})
 	})
 })
