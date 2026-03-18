@@ -212,6 +212,38 @@ var _ = Describe("Handlers", func() {
 			})
 		})
 
+		When("the page has been modified since fetched_at (version conflict)", func() {
+			var response map[string]any
+			var pageName string
+
+			BeforeEach(func() {
+				pageName = "test-conflict"
+				p, err := site.ReadPage(pageName)
+				Expect(err).NotTo(HaveOccurred())
+				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
+
+				// Use a fetched_at timestamp in the past so IsModifiedSince returns true
+				body, _ := json.Marshal(map[string]any{
+					"page":       pageName,
+					"new_text":   "conflicting content",
+					"fetched_at": int64(1),
+				})
+				req, _ := http.NewRequest(http.MethodPost, "/update", bytes.NewBuffer(body))
+				req.Header.Set("Content-Type", "application/json")
+				router.ServeHTTP(w, req)
+				_ = json.Unmarshal(w.Body.Bytes(), &response)
+			})
+
+			It("should return a 409 Conflict status code", func() {
+				Expect(w.Code).To(Equal(http.StatusConflict))
+			})
+
+			It("should return a failure message", func() {
+				Expect(response["success"]).To(BeFalse())
+				Expect(response["message"]).To(Equal("Refusing to overwrite others work"))
+			})
+		})
+
 		When("the page is updated successfully", func() {
 			var response map[string]any
 			var pageName string
