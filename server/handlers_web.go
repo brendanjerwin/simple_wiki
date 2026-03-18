@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"log"
 	"mime"
 	"net/http"
 	"net/url"
@@ -518,14 +519,26 @@ func (*Site) handleFrontmatter(c *gin.Context, command string, p *wikipage.Page)
 }
 
 func init() {
-	_ = mime.AddExtensionType(".md", "text/markdown")
-	_ = mime.AddExtensionType(".heic", "image/heic")
-	_ = mime.AddExtensionType(".heif", "image/heif")
+	if err := mime.AddExtensionType(".md", "text/markdown"); err != nil {
+		log.Fatalf("failed to register .md MIME type: %v", err)
+	}
+	if err := mime.AddExtensionType(".heic", "image/heic"); err != nil {
+		log.Fatalf("failed to register .heic MIME type: %v", err)
+	}
+	if err := mime.AddExtensionType(".heif", "image/heif"); err != nil {
+		log.Fatalf("failed to register .heif MIME type: %v", err)
+	}
 }
 
 func contentTypeFromName(filename string) string {
-	nameParts := strings.Split(filename, ".")
-	mimeType := mime.TypeByExtension("." + nameParts[len(nameParts)-1])
+	ext := filepath.Ext(filename)
+	if ext == "" {
+		return "text/plain"
+	}
+	mimeType := mime.TypeByExtension(ext)
+	if mimeType == "" {
+		return "text/plain"
+	}
 	return mimeType
 }
 
@@ -557,4 +570,9 @@ func GetRecentlyEditedForTesting(title string, c *gin.Context, logger *lumber.Co
 // RequestBaseURLForTesting exposes requestBaseURL for testing
 func RequestBaseURLForTesting(c *gin.Context) string {
 	return requestBaseURL(c)
+}
+
+// ContentTypeFromNameForTesting exposes contentTypeFromName for testing
+func ContentTypeFromNameForTesting(filename string) string {
+	return contentTypeFromName(filename)
 }
