@@ -36,10 +36,3 @@ jobs:
         run: devbox run fe:test
         env:
           CI_COVERAGE: 'true'
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
-        with:
-          directory: ./static/js/coverage
-          token: ${{ secrets.CODECOV_TOKEN }}
-          flags: javascript
