@@ -395,7 +395,7 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 		return
 	}
 	if json.FetchedAt > 0 && p.IsModifiedSince(json.FetchedAt) {
-		c.JSON(http.StatusConflict, gin.H{"success": false, "message": "Refusing to overwrite others work", "unix_time": time.Now().Unix()})
+		c.JSON(http.StatusConflict, gin.H{"success": false, "message": "Refusing to overwrite others' work", "unix_time": time.Now().Unix()})
 		return
 	}
 

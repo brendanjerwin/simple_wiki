@@ -240,7 +240,7 @@ var _ = Describe("Handlers", func() {
 
 			It("should return a failure message", func() {
 				Expect(response["success"]).To(BeFalse())
-				Expect(response["message"]).To(Equal("Refusing to overwrite others work"))
+				Expect(response["message"]).To(Equal("Refusing to overwrite others' work"))
 			})
 		})
 
