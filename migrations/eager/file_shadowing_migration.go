@@ -211,7 +211,7 @@ func (j *FileShadowingMigrationJob) Execute() error {
 
 	// Check for shadowing conflicts using interface methods
 	// We can use ReadPage() for the munged version since we want to read it normally
-	mungedPage, err := j.opener.ReadPage(mungedID)
+	mungedPage, err := j.opener.ReadPage(wikipage.PageIdentifier(mungedID))
 	if err != nil {
 		return fmt.Errorf("failed to open munged page %s: %w", mungedID, err)
 	}

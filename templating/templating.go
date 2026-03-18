@@ -99,7 +99,7 @@ func ConstructTemplateContextFromFrontmatterWithVisited(fm wikipage.FrontMatter,
 		itemTitle := query.GetValue(item, "title")
 		delete(uniqueItems, itemTitle)
 
-		uniqueItems[item] = true
+		uniqueItems[string(item)] = true
 	}
 
 	// Convert the map back to a slice
@@ -154,7 +154,7 @@ func buildShowInventoryContentsOfSync(ctx context.Context, site wikipage.PageRea
 	default:
 	}
 
-	_, containerFrontmatter, err := site.ReadFrontMatter(containerIdentifier)
+	_, containerFrontmatter, err := site.ReadFrontMatter(wikipage.PageIdentifier(containerIdentifier))
 	if err != nil {
 		return err.Error()
 	}
@@ -244,7 +244,8 @@ func BuildLinkToWithVisited(site wikipage.PageReader, currentPageTemplateContext
 			delete(visited, identifierToLink)
 		}()
 
-		identifierToLink, frontmatterForLinkedPage, err := site.ReadFrontMatter(identifierToLink)
+		resolvedIdentifier, frontmatterForLinkedPage, err := site.ReadFrontMatter(wikipage.PageIdentifier(identifierToLink))
+		resolvedIdentifierStr := string(resolvedIdentifier)
 		if err != nil {
 			titleCaser := cases.Title(language.AmericanEnglish)
 			titleCasedTitle := titleCaser.String(strings.ReplaceAll(strcase.SnakeCase(identifierToLink), "_", singleSpace))
@@ -269,9 +270,9 @@ func BuildLinkToWithVisited(site wikipage.PageReader, currentPageTemplateContext
 		}
 
 		// Linked Page Exists - use munged identifier for URL
-		mungedIdentifier, mungeErr := wikiidentifiers.MungeIdentifier(identifierToLink)
+		mungedIdentifier, mungeErr := wikiidentifiers.MungeIdentifier(resolvedIdentifierStr)
 		if mungeErr != nil {
-			return fmt.Sprintf("[ERROR: LinkTo existing page, munging %q: %v]", identifierToLink, mungeErr)
+			return fmt.Sprintf("[ERROR: LinkTo existing page, munging %q: %v]", resolvedIdentifierStr, mungeErr)
 		}
 		tmplString := "{{if index . \"title\"}}[{{ index . \"title\" }}](/" + mungedIdentifier + "){{else}}[{{ index . \"identifier\" }}](/" + mungedIdentifier + "){{end}}"
 		tmpl, err := template.New("content").Parse(tmplString)
@@ -378,24 +379,24 @@ func BuildBlog(templateContext TemplateContext, query wikipage.IQueryFrontmatter
 	}
 }
 
-func renderBlogArticle(postID string, query wikipage.IQueryFrontmatterIndex, site wikipage.PageReader) string {
+func renderBlogArticle(postID wikipage.PageIdentifier, query wikipage.IQueryFrontmatterIndex, site wikipage.PageReader) string {
 	title := query.GetValue(postID, "title")
 	if title == "" {
-		title = postID
+		title = string(postID)
 	}
 	publishedDate := query.GetValue(postID, "blog.published-date")
 	subtitle := query.GetValue(postID, "blog.subtitle")
 	externalURL := query.GetValue(postID, "blog.external_url")
 	snippet := blogSnippet(postID, query, site)
 
-	linkHref := "/" + html.EscapeString(postID)
+	linkHref := "/" + html.EscapeString(string(postID))
 	if externalURL != "" && isSafeURL(externalURL) {
 		linkHref = html.EscapeString(externalURL)
 	}
 
 	article := fmt.Sprintf(`<span class="blog-article"><a href="%s">%s</a>`, linkHref, html.EscapeString(title))
 	if externalURL != "" {
-		article += fmt.Sprintf(` <a href="/%s" class="wiki-link">[wiki]</a>`, html.EscapeString(postID))
+		article += fmt.Sprintf(` <a href="/%s" class="wiki-link">[wiki]</a>`, html.EscapeString(string(postID)))
 	}
 	if subtitle != "" {
 		article += fmt.Sprintf(` <span class="subtitle">%s</span>`, html.EscapeString(subtitle))
@@ -425,7 +426,7 @@ func isSafeURL(rawURL string) bool {
 // interpreted by goldmark if left in the server-rendered fallback HTML.
 var markdownSyntax = regexp.MustCompile(`(?m)^#{1,6}\s+|[*_~` + "`" + `\[\]]`)
 
-func blogSnippet(postID string, query wikipage.IQueryFrontmatterIndex, site wikipage.PageReader) string {
+func blogSnippet(postID wikipage.PageIdentifier, query wikipage.IQueryFrontmatterIndex, site wikipage.PageReader) string {
 	raw := query.GetValue(postID, "blog.summary_markdown")
 	if raw == "" {
 		_, markdown, err := site.ReadMarkdown(postID)
@@ -454,7 +455,7 @@ func BuildIsContainer(query wikipage.IQueryFrontmatterIndex) func(string) bool {
 		}
 
 		// Primary: Check explicit is_container field
-		if query.GetValue(identifier, "inventory.is_container") == "true" {
+		if query.GetValue(wikipage.PageIdentifier(identifier), "inventory.is_container") == "true" {
 			return true
 		}
 

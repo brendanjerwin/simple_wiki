@@ -24,12 +24,12 @@ type Printer interface {
 
 // PrintLabel prints a label using the specified template and identifier.
 func PrintLabel(templateIdentifier string, identifier string, site wikipage.PageReader, query frontmatter.IQueryFrontmatterIndex) error {
-	templateIdentifier, templateData, err := site.ReadMarkdown(templateIdentifier)
+	resolvedTemplateID, templateData, err := site.ReadMarkdown(wikipage.PageIdentifier(templateIdentifier))
 	if err != nil {
 		return err
 	}
 
-	_, templateFrontmatter, err := site.ReadFrontMatter(templateIdentifier)
+	_, templateFrontmatter, err := site.ReadFrontMatter(resolvedTemplateID)
 	if err != nil {
 		return err	}
 
@@ -52,7 +52,7 @@ func PrintLabel(templateIdentifier string, identifier string, site wikipage.Page
 	}
 	defer func() { _ = printer.Close() }()
 
-		_, pageFrontmatter, err := site.ReadFrontMatter(identifier)
+		_, pageFrontmatter, err := site.ReadFrontMatter(wikipage.PageIdentifier(identifier))
 	if err != nil {
 		return err
 	}
