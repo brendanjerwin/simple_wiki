@@ -18,15 +18,17 @@ import './web-components/wiki-editor.js';
 import './web-components/wiki-table.js';
 import { showStoredToast } from './web-components/toast-message.js';
 import { setupGlobalErrorHandler } from './web-components/global-error-handler.js';
-import { pageDeleteService, type PageDeleter } from './web-components/page-deletion-service.js';
+import { pageDeleteService } from './web-components/page-deletion-service.js';
+import { initInventoryMenu } from './web-components/inventory-menu.js';
+import { initPrintMenu } from './web-components/print-label.js';
+import { initPageImportMenu } from './web-components/page-import-menu.js';
+import type { FrontmatterEditorDialog } from './web-components/frontmatter-editor-dialog.js';
 
 // Set up global error handling to catch unhandled errors
 setupGlobalErrorHandler();
 
-// Make services available globally for simple_wiki.js
 declare global {
   interface Window {
-    pageDeleteService: PageDeleter;
     simple_wiki?: {
       pageName?: string;
       debounceMS?: number;
@@ -35,12 +37,33 @@ declare global {
   }
 }
 
-// Make pageDeleteService available globally
-window.pageDeleteService = pageDeleteService;
-
 // Show any stored toast messages after page load
 document.addEventListener('DOMContentLoaded', () => {
   showStoredToast();
+
+  // Handle page deletion
+  const erasePageEl = document.getElementById('erasePage');
+  erasePageEl?.addEventListener('click', (e) => {
+    e.preventDefault();
+    const pageName = window.simple_wiki?.pageName;
+    if (pageName) {
+      pageDeleteService.confirmAndDeletePage(pageName);
+    }
+  });
+
+  // Handle frontmatter editing
+  const editFrontmatterEl = document.getElementById('editFrontmatter');
+  editFrontmatterEl?.addEventListener('click', (e) => {
+    e.preventDefault();
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- frontmatter-editor-dialog is registered in HTMLElementTagNameMap
+    const dialog = document.getElementById('frontmatter-dialog') as FrontmatterEditorDialog | null;
+    dialog?.openDialog(window.simple_wiki?.pageName ?? '');
+  });
+
+  // Initialize dynamic menu items
+  initPrintMenu();
+  initInventoryMenu();
+  initPageImportMenu();
 
   // Handle editor exit button (toolbar is inside wiki-editor shadow DOM)
   const wikiEditor = document.querySelector('wiki-editor');

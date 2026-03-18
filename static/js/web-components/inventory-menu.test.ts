@@ -1,28 +1,12 @@
 import { expect } from '@esm-bundle/chai';
-
-// Test the buildInventoryMenu logic by extracting and testing the core functionality
-// Since simple_wiki.js uses global functions, we test the logic patterns here
+import {
+  extractInventoryData,
+  validateInventoryResponse,
+  findPageInInventoryList,
+} from './inventory-menu.js';
 
 describe('Inventory Menu Logic', () => {
   describe('extractInventoryData', () => {
-    // Helper that mirrors the logic in buildInventoryMenu
-    function extractInventoryData(frontmatter: unknown): {
-      inventory: { items?: unknown; container?: string } | null;
-      isContainer: boolean;
-      isItem: boolean;
-      currentContainer: string;
-    } {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- extracting nested object from unknown frontmatter
-      const inventory = (frontmatter && typeof frontmatter === 'object')
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- extracting inventory property
-        ? (frontmatter as Record<string, unknown>)['inventory'] as { items?: unknown; container?: string } | null
-        : null;
-      const isContainer = !!(inventory && (Array.isArray(inventory.items) || inventory.items !== undefined));
-      const isItem = !!(inventory && typeof inventory.container === 'string' && inventory.container !== '');
-      const currentContainer = (inventory && inventory.container) || '';
-
-      return { inventory, isContainer, isItem, currentContainer };
-    }
 
     describe('when frontmatter is null', () => {
       let result: ReturnType<typeof extractInventoryData>;
@@ -258,14 +242,7 @@ describe('Inventory Menu Logic', () => {
     });
   });
 
-  describe('validateInventoryResponse', () => {
-    // Helper that mirrors the validation logic in addInventoryMenu
-    function validateInventoryResponse(data: unknown): boolean {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- validating unknown data structure
-      return !!(data && typeof data === 'object' && Array.isArray((data as Record<string, unknown>)['ids']));
-    }
-
-    describe('when data is null', () => {
+  describe('validateInventoryResponse', () => {    describe('when data is null', () => {
       it('should return false', () => {
         expect(validateInventoryResponse(null)).to.be.false;
       });
@@ -310,16 +287,7 @@ describe('Inventory Menu Logic', () => {
     });
   });
 
-  describe('findPageInInventoryList', () => {
-    // Helper that mirrors the page finding logic
-    function findPageInInventoryList(ids: unknown[], currentPage: string): boolean {
-      return ids.some(function(item) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- checking identifier property on unknown item
-        return item && (item as Record<string, unknown>)['identifier'] === currentPage;
-      });
-    }
-
-    describe('when ids is empty', () => {
+  describe('findPageInInventoryList', () => {    describe('when ids is empty', () => {
       it('should return false', () => {
         expect(findPageInInventoryList([], 'test_page')).to.be.false;
       });
