@@ -542,16 +542,23 @@ var _ = Describe("Index", func() {
 		})
 
 		Describe("when a page has multiple values for the queried key", func() {
-			var results []string
+			var (
+				err     error
+				results []wikipage.PageIdentifier
+			)
 
 			BeforeEach(func() {
 				mockReader.AddPage("multi-value-page", wikipage.FrontMatter{
 					"identifier": "multi-value-page",
 					"tags":       []any{"go", "testing", "wiki"},
 				})
-				_ = index.AddPageToIndex("multi-value-page")
+				err = index.AddPageToIndex("multi-value-page")
 
 				results = index.QueryKeyExistence("tags")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("should return the page only once despite multiple indexed values", func() {
