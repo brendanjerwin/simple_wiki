@@ -517,11 +517,13 @@ func (*Site) handleFrontmatter(c *gin.Context, command string, p *wikipage.Page)
 	return false
 }
 
-func contentTypeFromName(filename string) string {
+func init() {
 	_ = mime.AddExtensionType(".md", "text/markdown")
 	_ = mime.AddExtensionType(".heic", "image/heic")
 	_ = mime.AddExtensionType(".heif", "image/heif")
+}
 
+func contentTypeFromName(filename string) string {
 	nameParts := strings.Split(filename, ".")
 	mimeType := mime.TypeByExtension("." + nameParts[len(nameParts)-1])
 	return mimeType
