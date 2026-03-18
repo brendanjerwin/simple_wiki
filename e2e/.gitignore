@@ -22,3 +22,5 @@ videos/
 
 # Logs
 *.log
+# npm lockfile (project uses bun.lock)
+package-lock.json
