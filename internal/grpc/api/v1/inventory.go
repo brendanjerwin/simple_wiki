@@ -23,7 +23,6 @@ import (
 // Clients should handle gRPC errors as exceptional, Success=false as normal control flow.
 
 const (
-	inventoryKey        = "inventory"
 	containerKey        = "container"
 	itemsKey            = "items"
 	titleKey            = "title"
@@ -102,7 +101,7 @@ func (s *Server) CreateInventoryItem(_ context.Context, req *apiv1.CreateInvento
 		inventoryData[containerKey] = container
 	}
 	inventoryData[itemsKey] = []string{}
-	fm[inventoryKey] = inventoryData
+	fm[inventory.FrontmatterKey] = inventoryData
 
 	// Write the frontmatter
 	if err := s.pageReaderMutator.WriteFrontMatter(identifier, fm); err != nil {
@@ -202,7 +201,7 @@ func handleMoveItemReadError(err error, identifier string) (*apiv1.MoveInventory
 
 // getContainerFromFrontmatter extracts the container value from frontmatter.
 func getContainerFromFrontmatter(fm map[string]any) string {
-	inv, ok := fm[inventoryKey].(map[string]any)
+	inv, ok := fm[inventory.FrontmatterKey].(map[string]any)
 	if !ok {
 		return ""
 	}
@@ -231,13 +230,13 @@ func buildAlreadyInContainerResponse(identifier, previousContainer, newContainer
 
 // updateItemContainer updates the inventory.container in frontmatter.
 func updateItemContainer(fm map[string]any, newContainer string) {
-	if fm[inventoryKey] == nil {
-		fm[inventoryKey] = make(map[string]any)
+	if fm[inventory.FrontmatterKey] == nil {
+		fm[inventory.FrontmatterKey] = make(map[string]any)
 	}
-	inv, ok := fm[inventoryKey].(map[string]any)
+	inv, ok := fm[inventory.FrontmatterKey].(map[string]any)
 	if !ok {
 		inv = make(map[string]any)
-		fm[inventoryKey] = inv
+		fm[inventory.FrontmatterKey] = inv
 	}
 	if newContainer == "" {
 		delete(inv, containerKey)
@@ -379,7 +378,7 @@ func (s *Server) addItemsFromContainerArray(containerID string, itemIDSet map[st
 		return nil // Page doesn't exist or can't be read - not an error for this purpose
 	}
 
-	inv, ok := containerFm[inventoryKey].(map[string]any)
+	inv, ok := containerFm[inventory.FrontmatterKey].(map[string]any)
 	if !ok {
 		return nil // No inventory section
 	}
@@ -536,7 +535,7 @@ func (s *Server) removeItemFromContainerList(containerID, itemID string) error {
 		return fmt.Errorf("failed to read container frontmatter: %w", err)
 	}
 
-	inv, ok := containerFm[inventoryKey].(map[string]any)
+	inv, ok := containerFm[inventory.FrontmatterKey].(map[string]any)
 	if !ok {
 		// No inventory section, nothing to update
 		return nil
@@ -583,10 +582,10 @@ func (s *Server) addItemToContainerList(containerID, itemID string) error {
 	}
 
 	// Ensure inventory section exists
-	inv, ok := containerFm[inventoryKey].(map[string]any)
+	inv, ok := containerFm[inventory.FrontmatterKey].(map[string]any)
 	if !ok {
 		inv = make(map[string]any)
-		containerFm[inventoryKey] = inv
+		containerFm[inventory.FrontmatterKey] = inv
 	}
 
 	// Get or initialize items list
