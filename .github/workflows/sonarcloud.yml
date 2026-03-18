@@ -18,14 +18,19 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run Go tests with coverage
+        run: |
+          go test -coverprofile=coverage.txt -covermode=atomic $(go list ./... | grep -v '/gen/')
+
       - name: Install Devbox
         uses: jetify-com/devbox-install-action@a0d2d53632934ae004f878c840055956d9f741b0 # v0.14.0
         with:
           enable-cache: 'true'
-
-      - name: Run Go tests with coverage
-        run: |
-          devbox run -- go test -coverprofile=coverage.txt -covermode=atomic ./...
 
       - name: Run frontend tests with coverage
         run: devbox run fe:test
