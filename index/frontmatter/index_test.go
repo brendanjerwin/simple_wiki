@@ -541,6 +541,31 @@ var _ = Describe("Index", func() {
 			})
 		})
 
+		Describe("when a page has multiple values for the queried key", func() {
+			var results []string
+
+			BeforeEach(func() {
+				mockReader.AddPage("multi-value-page", wikipage.FrontMatter{
+					"identifier": "multi-value-page",
+					"tags":       []any{"go", "testing", "wiki"},
+				})
+				_ = index.AddPageToIndex("multi-value-page")
+
+				results = index.QueryKeyExistence("tags")
+			})
+
+			It("should return the page only once despite multiple indexed values", func() {
+				Expect(results).To(ContainElement("multi_value_page"))
+				count := 0
+				for _, r := range results {
+					if r == "multi_value_page" {
+						count++
+					}
+				}
+				Expect(count).To(Equal(1))
+			})
+		})
+
 		Describe("when frontmatter has empty array values", func() {
 			var err error
 

@@ -173,9 +173,15 @@ func (f *Index) QueryExactMatch(dottedKeyPath DottedKeyPath, value Value) []wiki
 func (f *Index) QueryKeyExistence(dottedKeyPath DottedKeyPath) []wikipage.PageIdentifier {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
+	seen := make(map[wikipage.PageIdentifier]struct{})
 	var identifiersWithKey []wikipage.PageIdentifier
 	for indexedValue := range f.InvertedIndex[dottedKeyPath] {
-		identifiersWithKey = append(identifiersWithKey, f.InvertedIndex[dottedKeyPath][indexedValue]...)
+		for _, id := range f.InvertedIndex[dottedKeyPath][indexedValue] {
+			if _, exists := seen[id]; !exists {
+				seen[id] = struct{}{}
+				identifiersWithKey = append(identifiersWithKey, id)
+			}
+		}
 	}
 	return identifiersWithKey
 }
