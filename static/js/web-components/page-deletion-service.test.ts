@@ -181,33 +181,28 @@ describe('PageDeleter', () => {
 
     describe('when confirm event is dispatched', () => {
       describe('when no page name is stored', () => {
-        let thrownError: Error | undefined;
-
         beforeEach(async () => {
           delete mockDialog.dataset.pageName;
 
-          try {
-            // handleConfirm is async, need to await it
-            // Extract the confirm handler that was registered and call it
-            const confirmCall = mockDialog.addEventListener.getCalls().find(call => call.args[0] === 'confirm');
-            const handler: unknown = confirmCall?.args[1];
-            const confirmHandler = typeof handler === 'function' ? (handler as (event: Event) => Promise<void>) : undefined;
-            if (confirmHandler) {
-              await confirmHandler(new CustomEvent('confirm'));
-            }
-          } catch (err: unknown) {
-            if (err instanceof Error) {
-              thrownError = err;
-            }
+          // Extract the confirm handler that was registered and call it
+          const confirmCall = mockDialog.addEventListener.getCalls().find(call => call.args[0] === 'confirm');
+          const handler: unknown = confirmCall?.args[1];
+          const confirmHandler = typeof handler === 'function' ? (handler as () => void) : undefined;
+          if (confirmHandler) {
+            confirmHandler();
+            // Allow microtasks to flush so the async handleConfirm completes
+            await Promise.resolve();
           }
         });
 
-        it('should throw an error', () => {
-          expect(thrownError).to.exist;
+        it('should show error in dialog', () => {
+          expect(mockDialog.showError).to.have.been.called;
         });
 
-        it('should throw with correct message', () => {
-          expect(thrownError?.message).to.equal('PageDeleter: No page name found for deletion');
+        it('should show error with correct message', () => {
+          const errorArg: unknown = mockDialog.showError.firstCall?.args[0];
+          expect(errorArg).to.be.instanceOf(Error);
+          expect((errorArg as Error).message).to.include('No page name found for deletion');
         });
       });
 
