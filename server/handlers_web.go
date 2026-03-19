@@ -529,10 +529,10 @@ func contentTypeFromName(filename string) string {
 
 // sanitizePageName strips leading slashes from a wiki page name to prevent
 // open redirect attacks. A page name that begins with a slash would cause
-// "/"+page to produce a protocol-relative URL (e.g. "//evil.com") that
+// rootPath+page to produce a protocol-relative URL (e.g. "//evil.com") that
 // browsers follow as an external redirect.
 func sanitizePageName(page string) string {
-	return strings.TrimLeft(page, "/")
+	return strings.TrimLeft(page, rootPath)
 }
 
 // requestBaseURL derives the base URL (scheme://host) from the request context.
