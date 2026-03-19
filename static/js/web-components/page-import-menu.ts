@@ -17,7 +17,10 @@ export function initPageImportMenu(): void {
   link.href = '#';
   link.className = 'pure-menu-link';
   link.id = 'page-import-trigger';
-  link.innerHTML = '<i class="fa-solid fa-file-import"></i> Import Pages';
+  const importIcon = document.createElement('i');
+  importIcon.className = 'fa-solid fa-file-import';
+  link.appendChild(importIcon);
+  link.appendChild(document.createTextNode(' Import Pages'));
   link.addEventListener('click', (e) => {
     e.preventDefault();
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- page-import-dialog is registered in HTMLElementTagNameMap

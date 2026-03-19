@@ -41,62 +41,86 @@ function buildInventoryMenu(currentPage: string, frontmatter: unknown): void {
 
   const { isContainer, isItem, currentContainer } = extractInventoryData(frontmatter);
 
-  const addItemHtml = isContainer ? `
-    <li class="pure-menu-item">
-      <a href="#" class="pure-menu-link" id="inventory-add-item"><i class="fa-solid fa-plus"></i> Add Item Here</a>
-    </li>
-  ` : '';
+  const submenu = document.createElement('li');
+  submenu.className = 'pure-menu-item pure-menu-has-children';
+  submenu.id = 'inventory-submenu';
 
-  const moveItemHtml = isItem ? `
-    <li class="pure-menu-item">
-      <a href="#" class="pure-menu-link" id="inventory-move-item"><i class="fa-solid fa-arrows-up-down-left-right"></i> Move This Item</a>
-    </li>
-  ` : '';
+  const trigger = document.createElement('a');
+  trigger.href = '#';
+  trigger.className = 'pure-menu-link';
+  trigger.id = 'inventory-submenu-trigger';
+  const triggerIcon = document.createElement('i');
+  triggerIcon.className = 'fa-solid fa-box-open';
+  trigger.appendChild(triggerIcon);
+  trigger.appendChild(document.createTextNode(' Inventory'));
+  submenu.appendChild(trigger);
 
-  const inventoryMenuHtml = `
-    <li class="pure-menu-item pure-menu-has-children" id="inventory-submenu">
-      <a href="#" class="pure-menu-link" id="inventory-submenu-trigger"><i class="fa-solid fa-box-open"></i> Inventory</a>
-      <ul class="pure-menu-children">
-        ${addItemHtml}
-        ${moveItemHtml}
-      </ul>
-    </li>
-  `;
+  const children = document.createElement('ul');
+  children.className = 'pure-menu-children';
+  submenu.appendChild(children);
 
-  utilitySection.insertAdjacentHTML('afterend', inventoryMenuHtml);
+  let addItemEl: HTMLAnchorElement | null = null;
+  let moveItemEl: HTMLAnchorElement | null = null;
 
-  const submenu = document.getElementById('inventory-submenu');
-  const trigger = document.getElementById('inventory-submenu-trigger');
+  if (isContainer) {
+    const addItem = document.createElement('li');
+    addItem.className = 'pure-menu-item';
+    addItemEl = document.createElement('a');
+    addItemEl.href = '#';
+    addItemEl.className = 'pure-menu-link';
+    addItemEl.id = 'inventory-add-item';
+    const addIcon = document.createElement('i');
+    addIcon.className = 'fa-solid fa-plus';
+    addItemEl.appendChild(addIcon);
+    addItemEl.appendChild(document.createTextNode(' Add Item Here'));
+    addItem.appendChild(addItemEl);
+    children.appendChild(addItem);
+  }
 
-  trigger?.addEventListener('click', (e) => {
+  if (isItem) {
+    const moveItem = document.createElement('li');
+    moveItem.className = 'pure-menu-item';
+    moveItemEl = document.createElement('a');
+    moveItemEl.href = '#';
+    moveItemEl.className = 'pure-menu-link';
+    moveItemEl.id = 'inventory-move-item';
+    const moveIcon = document.createElement('i');
+    moveIcon.className = 'fa-solid fa-arrows-up-down-left-right';
+    moveItemEl.appendChild(moveIcon);
+    moveItemEl.appendChild(document.createTextNode(' Move This Item'));
+    moveItem.appendChild(moveItemEl);
+    children.appendChild(moveItem);
+  }
+
+  utilitySection.insertAdjacentElement('afterend', submenu);
+
+  trigger.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
-    submenu?.classList.toggle('submenu-open');
+    submenu.classList.toggle('submenu-open');
   });
 
   document.addEventListener('click', (e) => {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- e.target in DOM click events is always a Node
-    if (submenu && !submenu.contains(e.target as Node)) {
+    if (!submenu.contains(e.target as Node)) {
       submenu.classList.remove('submenu-open');
     }
   });
 
-  if (isContainer) {
-    const addItemEl = document.getElementById('inventory-add-item');
-    addItemEl?.addEventListener('click', (e) => {
+  if (isContainer && addItemEl) {
+    addItemEl.addEventListener('click', (e) => {
       e.preventDefault();
-      submenu?.classList.remove('submenu-open');
+      submenu.classList.remove('submenu-open');
       // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- inventory-add-item-dialog is registered in HTMLElementTagNameMap
       const dialog = document.getElementById('inventory-add-dialog') as InventoryAddItemDialog | null;
       dialog?.openDialog(currentPage);
     });
   }
 
-  if (isItem) {
-    const moveItemEl = document.getElementById('inventory-move-item');
-    moveItemEl?.addEventListener('click', (e) => {
+  if (isItem && moveItemEl) {
+    moveItemEl.addEventListener('click', (e) => {
       e.preventDefault();
-      submenu?.classList.remove('submenu-open');
+      submenu.classList.remove('submenu-open');
       // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- inventory-move-item-dialog is registered in HTMLElementTagNameMap
       const dialog = document.getElementById('inventory-move-dialog') as InventoryMoveItemDialog | null;
       dialog?.openDialog(currentPage, currentContainer);

@@ -242,7 +242,8 @@ describe('Inventory Menu Logic', () => {
     });
   });
 
-  describe('validateInventoryResponse', () => {    describe('when data is null', () => {
+  describe('validateInventoryResponse', () => {
+    describe('when data is null', () => {
       it('should return false', () => {
         expect(validateInventoryResponse(null)).to.be.false;
       });
@@ -287,7 +288,8 @@ describe('Inventory Menu Logic', () => {
     });
   });
 
-  describe('findPageInInventoryList', () => {    describe('when ids is empty', () => {
+  describe('findPageInInventoryList', () => {
+    describe('when ids is empty', () => {
       it('should return false', () => {
         expect(findPageInInventoryList([], 'test_page')).to.be.false;
       });
