@@ -787,6 +787,7 @@ var _ = Describe("contentTypeFromName", func() {
 		Entry("for .heif files (init-registered)", "photo.heif", "image/heif"),
 		Entry("for extensionless identifiers", "testpage", "text/plain"),
 		Entry("for paths with no extension", "img/favicon/no-ext", "text/plain"),
+		Entry("for unknown extensions", "file.xyz123unknown", "text/plain"),
 	)
 })
 

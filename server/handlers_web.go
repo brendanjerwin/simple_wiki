@@ -520,14 +520,14 @@ func (*Site) handleFrontmatter(c *gin.Context, command string, p *wikipage.Page)
 }
 
 func init() {
-	if err := mime.AddExtensionType(".md", "text/markdown"); err != nil {
-		log.Fatalf("failed to register .md MIME type: %v", err)
-	}
-	if err := mime.AddExtensionType(".heic", "image/heic"); err != nil {
-		log.Fatalf("failed to register .heic MIME type: %v", err)
-	}
-	if err := mime.AddExtensionType(".heif", "image/heif"); err != nil {
-		log.Fatalf("failed to register .heif MIME type: %v", err)
+	for _, m := range [][2]string{
+		{".md", "text/markdown"},
+		{".heic", "image/heic"},
+		{".heif", "image/heif"},
+	} {
+		if err := mime.AddExtensionType(m[0], m[1]); err != nil {
+			log.Fatalf("failed to register %s MIME type: %v", m[0], err)
+		}
 	}
 }
 
