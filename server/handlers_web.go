@@ -90,7 +90,7 @@ func (s *Site) registerRoutes(router *gin.Engine) {
 
 	router.GET("/:page", func(c *gin.Context) {
 		page := sanitizePageName(c.Param("page"))
-		target := path.Join(rootPath, page, "view")
+		target := path.Join(rootPath, url.PathEscape(page), "view")
 		if q := c.Request.URL.RawQuery; q != "" {
 			target += "?" + q
 		}
@@ -225,7 +225,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 	}
 
 	if len(command) < 2 {
-		c.Redirect(httpStatusFound, path.Join(rootPath, page, "view"))
+		c.Redirect(httpStatusFound, path.Join(rootPath, url.PathEscape(page), "view"))
 		return
 	}
 
@@ -532,11 +532,11 @@ func contentTypeFromName(filename string) string {
 }
 
 // sanitizePageName strips leading forward slashes and backslashes from a wiki
-// page name to prevent open redirect attacks. A leading '/' causes
-// rootPath+page to produce a protocol-relative URL (e.g. "//evil.com"). A
-// leading '\' can be treated by some browsers as '/' (giving the same result,
-// e.g. "/\evil.com"). Both characters are stripped so that the redirect target
-// always resolves within the wiki.
+// page name. This prevents path traversal and, as defense-in-depth, removes
+// characters that could produce a protocol-relative URL (e.g. "//evil.com") if
+// the sanitized name were ever used un-encoded in a URL. The primary open-redirect
+// defense in redirect URLs is url.PathEscape, which percent-encodes all special
+// characters so that no injected character can be interpreted as URL syntax.
 func sanitizePageName(page string) string {
 	return strings.TrimLeft(page, "/\\")
 }
