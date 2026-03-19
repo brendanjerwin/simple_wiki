@@ -54,6 +54,21 @@ var _ = Describe("resolveCookieSecret", func() {
 	})
 })
 
+var _ = Describe("getFlags", func() {
+	It("should include a cookie-secret flag with an empty default value", func() {
+		flags := getFlags()
+		var found *cli.StringFlag
+		for _, f := range flags {
+			if sf, ok := f.(cli.StringFlag); ok && sf.Name == "cookie-secret" {
+				found = &sf
+				break
+			}
+		}
+		Expect(found).NotTo(BeNil(), "cookie-secret flag not found")
+		Expect(found.Value).To(Equal(""), "cookie-secret default should be empty, not 'secret'")
+	})
+})
+
 var _ = Describe("createSite", func() {
 	var tmpDir string
 
