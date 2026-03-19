@@ -91,9 +91,13 @@ jobs:
 
       - name: Report deployment status
         if: always()
+        env:
+          REF_NAME: ${{ github.ref_name }}
+          SERVER_HOST: ${{ inputs.server_host }}
+          JOB_STATUS: ${{ job.status }}
         run: |
-          if [ "${{ job.status }}" == "success" ]; then
-            echo "🎉 Successfully deployed ${{ github.ref_name }} to ${{ inputs.server_host }}"
+          if [ "$JOB_STATUS" == "success" ]; then
+            echo "🎉 Successfully deployed $REF_NAME to $SERVER_HOST"
           else
-            echo "❌ Deployment of ${{ github.ref_name }} to ${{ inputs.server_host }} failed"
+            echo "❌ Deployment of $REF_NAME to $SERVER_HOST failed"
           fi
