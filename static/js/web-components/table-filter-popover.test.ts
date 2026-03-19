@@ -144,14 +144,17 @@ describe('TableFilterPopover', () => {
 
     describe('when clicking ascending sort', () => {
       let el: TableFilterPopover;
+      let sortSpy: SinonSpy;
 
       beforeEach(async () => {
+        sortSpy = sinon.spy();
         el = await fixture(html`
           <table-filter-popover
             .columnDefinition=${makeTextColumn('Name')}
             .uniqueValues=${['A', 'B']}
             .currentSortDirection=${'none' as SortDirection}
             .open=${true}
+            @sort-direction-changed=${sortSpy}
           ></table-filter-popover>
         `);
         const ascBtn = el.shadowRoot!.querySelector('[aria-label="Sort ascending"]') as HTMLButtonElement;
@@ -166,7 +169,7 @@ describe('TableFilterPopover', () => {
       });
 
       it('should not emit sort-direction-changed yet', () => {
-        // Events are deferred until OK is clicked
+        expect(sortSpy).to.not.have.been.called;
       });
     });
 
