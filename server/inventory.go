@@ -36,7 +36,7 @@ func (s *Site) CreateInventoryItemPage(params InventoryItemParams) (*wikipage.Pa
 	}
 
 	// Check if page already exists
-	p, err := s.ReadPage(identifier)
+	p, err := s.ReadPage(wikipage.PageIdentifier(identifier))
 	if err != nil {
 		return nil, fmt.Errorf("failed to read page %s: %w", identifier, err)
 	}

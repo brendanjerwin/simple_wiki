@@ -9,6 +9,7 @@ import (
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/inventory"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/stoewer/go-strcase"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
@@ -58,7 +59,7 @@ func (s *Server) CreateInventoryItem(_ context.Context, req *apiv1.CreateInvento
 	}
 
 	// Check if page already exists
-	_, existingFm, err := s.pageReaderMutator.ReadFrontMatter(identifier)
+	_, existingFm, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(identifier))
 	if err != nil && !os.IsNotExist(err) {
 		return nil, status.Errorf(codes.Internal, "failed to read page: %v", err)
 	}
@@ -105,13 +106,13 @@ func (s *Server) CreateInventoryItem(_ context.Context, req *apiv1.CreateInvento
 	fm[inventoryKey] = inventoryData
 
 	// Write the frontmatter
-	if err := s.pageReaderMutator.WriteFrontMatter(identifier, fm); err != nil {
+	if err := s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(identifier), fm); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to write frontmatter: %v", err)
 	}
 
 	// Build and write the markdown content
 	markdown := inventory.BuildItemMarkdown()
-	if err := s.pageReaderMutator.WriteMarkdown(identifier, markdown); err != nil {
+	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(identifier), wikipage.Markdown(markdown)); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to write markdown: %v", err)
 	}
 
@@ -145,7 +146,7 @@ func (s *Server) MoveInventoryItem(_ context.Context, req *apiv1.MoveInventoryIt
 	}
 
 	// Read the item's current frontmatter
-	_, itemFm, err := s.pageReaderMutator.ReadFrontMatter(identifier)
+	_, itemFm, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(identifier))
 	if err != nil {
 		return handleMoveItemReadError(err, identifier)
 	}
@@ -161,7 +162,7 @@ func (s *Server) MoveInventoryItem(_ context.Context, req *apiv1.MoveInventoryIt
 	updateItemContainer(itemFm, newContainer)
 
 	// Write the updated item frontmatter
-	if err := s.pageReaderMutator.WriteFrontMatter(identifier, itemFm); err != nil {
+	if err := s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(identifier), itemFm); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to update item frontmatter: %v", err)
 	}
 
@@ -360,7 +361,7 @@ func (s *Server) collectContainerItemIDs(containerID string) (map[string]bool, e
 	// Source 1: Query for items that have this container as their inventory.container
 	itemIDsFromContainer := s.frontmatterIndexQueryer.QueryExactMatch("inventory.container", containerID)
 	for _, itemID := range itemIDsFromContainer {
-		itemIDSet[itemID] = true
+		itemIDSet[string(itemID)] = true
 	}
 
 	// Source 2: Get items from the container's inventory.items array
@@ -374,7 +375,7 @@ func (s *Server) collectContainerItemIDs(containerID string) (map[string]bool, e
 // addItemsFromContainerArray adds items from the container's inventory.items array to the set.
 // Returns an error if the items array contains invalid types.
 func (s *Server) addItemsFromContainerArray(containerID string, itemIDSet map[string]bool) error {
-	_, containerFm, err := s.pageReaderMutator.ReadFrontMatter(containerID)
+	_, containerFm, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(containerID))
 	if err != nil {
 		return nil // Page doesn't exist or can't be read - not an error for this purpose
 	}
@@ -423,12 +424,12 @@ func (s *Server) buildInventoryItem(itemID, containerID string) *apiv1.Inventory
 		Container:  containerID,
 	}
 
-	if title := s.frontmatterIndexQueryer.GetValue(itemID, titleKey); title != "" {
+	if title := s.frontmatterIndexQueryer.GetValue(wikipage.PageIdentifier(itemID), titleKey); title != "" {
 		item.Title = title
 	}
 
 	// Primary: Check explicit is_container field
-	if s.frontmatterIndexQueryer.GetValue(itemID, "inventory.is_container") == "true" {
+	if s.frontmatterIndexQueryer.GetValue(wikipage.PageIdentifier(itemID), "inventory.is_container") == "true" {
 		item.IsContainer = true
 	} else {
 		// Fallback for legacy: items reference this as their container
@@ -450,7 +451,7 @@ func (s *Server) FindItemLocation(_ context.Context, req *apiv1.FindItemLocation
 	}
 
 	// Read the item's frontmatter
-	_, itemFm, err := s.pageReaderMutator.ReadFrontMatter(itemID)
+	_, itemFm, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(itemID))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return &apiv1.FindItemLocationResponse{
@@ -514,7 +515,7 @@ func (s *Server) buildContainerHierarchy(containerID string) []string {
 		path = append([]string{current}, path...) // Prepend
 
 		// Get the container's parent
-		_, fm, err := s.pageReaderMutator.ReadFrontMatter(current)
+		_, fm, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(current))
 		if err != nil {
 			break
 		}
@@ -527,7 +528,7 @@ func (s *Server) buildContainerHierarchy(containerID string) []string {
 
 // removeItemFromContainerList removes an item from a container's inventory.items list.
 func (s *Server) removeItemFromContainerList(containerID, itemID string) error {
-	_, containerFm, err := s.pageReaderMutator.ReadFrontMatter(containerID)
+	_, containerFm, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(containerID))
 	if err != nil {
 		if os.IsNotExist(err) {
 			// Container doesn't exist, nothing to update
@@ -568,12 +569,12 @@ func (s *Server) removeItemFromContainerList(containerID, itemID string) error {
 	}
 
 	inv[itemsKey] = newItems
-	return s.pageReaderMutator.WriteFrontMatter(containerID, containerFm)
+	return s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(containerID), containerFm)
 }
 
 // addItemToContainerList adds an item to a container's inventory.items list if not already present.
 func (s *Server) addItemToContainerList(containerID, itemID string) error {
-	_, containerFm, err := s.pageReaderMutator.ReadFrontMatter(containerID)
+	_, containerFm, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(containerID))
 	if err != nil {
 		if os.IsNotExist(err) {
 			// Container doesn't exist, can't update
@@ -613,5 +614,5 @@ func (s *Server) addItemToContainerList(containerID, itemID string) error {
 	items = append(items, itemID)
 	inv[itemsKey] = items
 
-	return s.pageReaderMutator.WriteFrontMatter(containerID, containerFm)
+	return s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(containerID), containerFm)
 }

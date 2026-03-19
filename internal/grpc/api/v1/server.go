@@ -141,7 +141,7 @@ func (s *Server) MergeFrontmatter(_ context.Context, req *apiv1.MergeFrontmatter
 		}
 	}
 
-	_, existingFm, err := s.pageReaderMutator.ReadFrontMatter(req.Page)
+	_, existingFm, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))
 	if err != nil && !os.IsNotExist(err) {
 		return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, err)
 	}
@@ -155,7 +155,7 @@ func (s *Server) MergeFrontmatter(_ context.Context, req *apiv1.MergeFrontmatter
 		mergeFrontmatterDeep(existingFm, newFm)
 	}
 
-	err = s.pageReaderMutator.WriteFrontMatter(req.Page, existingFm)
+	err = s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(req.Page), existingFm)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, failedToWriteFrontmatterErrFmt, err)
 	}
@@ -182,7 +182,7 @@ func (s *Server) ReplaceFrontmatter(_ context.Context, req *apiv1.ReplaceFrontma
 		fm[identifierKey] = req.Page
 	}
 
-	err = s.pageReaderMutator.WriteFrontMatter(req.Page, fm)
+	err = s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(req.Page), fm)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, failedToWriteFrontmatterErrFmt, err)
 	}
@@ -217,7 +217,7 @@ func (s *Server) RemoveKeyAtPath(_ context.Context, req *apiv1.RemoveKeyAtPathRe
 		return nil, status.Error(codes.InvalidArgument, "identifier key cannot be removed")
 	}
 
-	_, fm, err := s.pageReaderMutator.ReadFrontMatter(req.Page)
+	_, fm, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.Page)
@@ -235,7 +235,7 @@ func (s *Server) RemoveKeyAtPath(_ context.Context, req *apiv1.RemoveKeyAtPathRe
 		return nil, err
 	}
 
-	err = s.pageReaderMutator.WriteFrontMatter(req.Page, updatedFm.(map[string]any))
+	err = s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(req.Page), updatedFm.(map[string]any))
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, failedToWriteFrontmatterErrFmt, err)
 	}
@@ -466,7 +466,7 @@ func (s *Server) buildJobStatusResponse() *apiv1.GetJobStatusResponse {
 // GetFrontmatter implements the GetFrontmatter RPC.
 func (s *Server) GetFrontmatter(_ context.Context, req *apiv1.GetFrontmatterRequest) (resp *apiv1.GetFrontmatterResponse, err error) {
 	var fm map[string]any
-	_, fm, err = s.pageReaderMutator.ReadFrontMatter(req.Page)
+	_, fm, err = s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.Page)

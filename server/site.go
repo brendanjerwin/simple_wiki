@@ -211,9 +211,9 @@ func (s *Site) InitializeIndexing() error {
 	}
 
 	// Convert files to page identifiers
-	pageIdentifiers := make([]string, len(files))
+	pageIdentifiers := make([]wikipage.PageIdentifier, len(files))
 	for i, file := range files {
-		pageIdentifiers[i] = file.Name()
+		pageIdentifiers[i] = wikipage.PageIdentifier(file.Name())
 	}
 
 	// Start background indexing with completion callback to chain the normalization job.
@@ -297,15 +297,16 @@ func (s *Site) readFileByIdentifier(identifier, extension string) (string, []byt
 }
 
 // ReadPage opens a page by its identifier.
-func (s *Site) ReadPage(requestedIdentifier string) (*wikipage.Page, error) {
+func (s *Site) ReadPage(requestedIdentifier wikipage.PageIdentifier) (*wikipage.Page, error) {
+	identifierStr := string(requestedIdentifier)
 	// Create a new page object to be returned if no file is found.
 	p := new(wikipage.Page)
-	p.Identifier = requestedIdentifier
+	p.Identifier = identifierStr
 	p.Text = ""
 	p.WasLoadedFromDisk = false
 
 	// Load from .md file
-	identifier, mdBytes, err := s.readFileByIdentifier(requestedIdentifier, mdExtension)
+	identifier, mdBytes, err := s.readFileByIdentifier(identifierStr, mdExtension)
 	if err != nil {
 		// File not found - return empty page (this is normal for new pages)
 		return p, nil
@@ -366,7 +367,7 @@ func (s *Site) applyMigrationsForPage(page *wikipage.Page, content []byte) ([]by
 // readOrInitPage opens a page or initializes a new one if it doesn't exist.
 // Returns an error if page initialization fails to save.
 func (s *Site) readOrInitPage(requestedIdentifier string, req *http.Request) (*wikipage.Page, error) {
-	p, err := s.ReadPage(requestedIdentifier)
+	p, err := s.ReadPage(wikipage.PageIdentifier(requestedIdentifier))
 	if err != nil {
 		return nil, fmt.Errorf(failedToOpenPageErrFmt, requestedIdentifier, err)
 	}
@@ -473,7 +474,7 @@ func (s *Site) DirectoryList() []os.FileInfo {
 		if strings.HasSuffix(f.Name(), ".md") {
 			name := decodeFileName(f.Name())
 			// Each ReadPage() call will acquire its own read lock
-			p, err := s.ReadPage(name)
+			p, err := s.ReadPage(wikipage.PageIdentifier(name))
 			if err != nil {
 				s.Logger.Warn("Failed to open page %s for directory listing: %v", name, err)
 				continue
@@ -599,7 +600,7 @@ func (s *Site) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Mar
 
 // ReadFrontMatter reads the frontmatter for a page.
 func (s *Site) ReadFrontMatter(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
-	page, err := s.ReadPage(string(identifier))
+	page, err := s.ReadPage(identifier)
 	if err != nil {
 		return identifier, nil, fmt.Errorf(failedToOpenPageErrFmt, identifier, err)
 	}
@@ -615,7 +616,7 @@ func (s *Site) ReadFrontMatter(identifier wikipage.PageIdentifier) (wikipage.Pag
 
 // ReadMarkdown reads the markdown content for a page.
 func (s *Site) ReadMarkdown(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
-	page, err := s.ReadPage(string(identifier))
+	page, err := s.ReadPage(identifier)
 	if err != nil {
 		return identifier, "", fmt.Errorf(failedToOpenPageErrFmt, identifier, err)
 	}
@@ -638,7 +639,7 @@ func (s *Site) DeletePage(identifier wikipage.PageIdentifier) error {
 
 	// Enqueue removal jobs for both frontmatter and bleve indexes
 	if s.IndexCoordinator != nil {
-		if err := s.IndexCoordinator.EnqueueIndexJob(string(identifier), index.Remove); err != nil {
+		if err := s.IndexCoordinator.EnqueueIndexJob(identifier, index.Remove); err != nil {
 			s.Logger.Error("Failed to enqueue index removal job for %s: %v", identifier, err)
 		}
 	}
@@ -672,7 +673,7 @@ func (s *Site) DeletePage(identifier wikipage.PageIdentifier) error {
 // UpdatePageContent updates a page's full content, applying migrations, rendering, and saving.
 // This replaces the functionality of Page.Update() but at the Site interface level.
 func (s *Site) UpdatePageContent(identifier wikipage.PageIdentifier, newText string) error {
-	p, err := s.ReadPage(string(identifier))
+	p, err := s.ReadPage(identifier)
 	if err != nil {
 		return fmt.Errorf("failed to open page %s for update: %w", identifier, err)
 	}
@@ -709,14 +710,14 @@ func (s *Site) savePageAndIndex(p *wikipage.Page) error {
 
 	// Enqueue indexing jobs for both frontmatter and bleve indexes
 	if s.IndexCoordinator != nil {
-		if err := s.IndexCoordinator.EnqueueIndexJob(p.Identifier, index.Add); err != nil {
+		if err := s.IndexCoordinator.EnqueueIndexJob(wikipage.PageIdentifier(p.Identifier), index.Add); err != nil {
 			s.Logger.Error("Failed to enqueue index job for %s: %v", p.Identifier, err)
 		}
 	}
 
 	// Enqueue per-page inventory normalization job
 	if s.JobQueueCoordinator != nil {
-		normJob := NewPageInventoryNormalizationJob(p.Identifier, s, s.Logger)
+		normJob := NewPageInventoryNormalizationJob(wikipage.PageIdentifier(p.Identifier), s, s.Logger)
 		if err := s.JobQueueCoordinator.EnqueueJob(normJob); err != nil {
 			s.Logger.Error("Failed to enqueue per-page inventory normalization job for %s: %v", p.Identifier, err)
 		}

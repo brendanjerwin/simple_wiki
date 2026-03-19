@@ -145,7 +145,7 @@ func (j *InventoryNormalizationJob) createMissingItemPages(containers []string) 
 	var anomalies []InventoryAnomaly
 
 	for _, containerID := range containers {
-		items, err := j.normalizer.GetContainerItems(containerID)
+		items, err := j.normalizer.GetContainerItems(wikipage.PageIdentifier(containerID))
 		if err != nil {
 			j.logger.Error("Failed to get container items for %s: %v", containerID, err)
 			anomalies = append(anomalies, InventoryAnomaly{
@@ -158,7 +158,7 @@ func (j *InventoryNormalizationJob) createMissingItemPages(containers []string) 
 			continue
 		}
 		for _, itemID := range items {
-			_, _, err := j.deps.ReadFrontMatter(itemID)
+			_, _, err := j.deps.ReadFrontMatter(wikipage.PageIdentifier(itemID))
 			if err == nil {
 				continue // Page exists
 			}
@@ -217,7 +217,7 @@ func (j *InventoryNormalizationJob) buildItemContainerMap(containers []string) m
 		}
 
 		// Source 2: Items listed in this container's inventory.items array
-		containerItems, err := j.normalizer.GetContainerItems(containerID)
+		containerItems, err := j.normalizer.GetContainerItems(wikipage.PageIdentifier(containerID))
 		if err != nil {
 			j.logger.Error("Failed to get container items for %s: %v", containerID, err)
 			continue
@@ -269,11 +269,11 @@ func (j *InventoryNormalizationJob) detectOrphanedItems() []InventoryAnomaly {
 		if containerRef == "" {
 			continue
 		}
-		_, _, err := j.deps.ReadFrontMatter(containerRef)
+		_, _, err := j.deps.ReadFrontMatter(wikipage.PageIdentifier(containerRef))
 		if err != nil {
 			anomalies = append(anomalies, InventoryAnomaly{
 				Type:        "orphan",
-				ItemID:      itemID,
+				ItemID:      string(itemID),
 				Description: fmt.Sprintf("Item '%s' references non-existent container '%s'", itemID, containerRef),
 				Containers:  []string{containerRef},
 				Severity:    "warning",
@@ -302,14 +302,14 @@ func (j *InventoryNormalizationJob) findAllContainers() []string {
 	pagesWithIsContainer := j.fmIndex.QueryKeyExistence(inventoryIsContainerKeyPath)
 	for _, pageID := range pagesWithIsContainer {
 		if j.fmIndex.GetValue(pageID, inventoryIsContainerKeyPath) == "true" {
-			containerSet[pageID] = true
+			containerSet[string(pageID)] = true
 		}
 	}
 
 	// Source 2: Pages with inventory.items (legacy containers)
 	pagesWithItems := j.fmIndex.QueryKeyExistence(inventoryItemsKeyPath)
 	for _, pageID := range pagesWithItems {
-		containerSet[pageID] = true
+		containerSet[string(pageID)] = true
 	}
 
 	// Source 3: Pages referenced as inventory.container by other items
@@ -355,14 +355,14 @@ func (j *InventoryNormalizationJob) migrateContainersToIsContainerField() int {
 			continue
 		}
 		if len(items) > 0 {
-			containerSet[pageID] = true
+			containerSet[string(pageID)] = true
 		}
 	}
 
 	// For each identified container, check if it needs migration
 	for containerID := range containerSet {
 		// Read frontmatter to check current state
-		_, fm, err := j.deps.ReadFrontMatter(containerID)
+		_, fm, err := j.deps.ReadFrontMatter(wikipage.PageIdentifier(containerID))
 		if err != nil {
 			j.logger.Error("Failed to read frontmatter for container %s during migration: %v", containerID, err)
 			continue
@@ -389,7 +389,7 @@ func (j *InventoryNormalizationJob) migrateContainersToIsContainerField() int {
 		inventory["is_container"] = true
 
 		// Write back frontmatter
-		if err := j.deps.WriteFrontMatter(containerID, fm); err != nil {
+		if err := j.deps.WriteFrontMatter(wikipage.PageIdentifier(containerID), fm); err != nil {
 			j.logger.Error("Failed to write frontmatter for container %s during migration: %v", containerID, err)
 			continue
 		}
@@ -433,7 +433,12 @@ func isContainerAlreadySet(fm map[string]any) (bool, error) {
 
 // getItemsWithContainerReference gets items that have inventory.container set to this container.
 func (j *InventoryNormalizationJob) getItemsWithContainerReference(containerID string) []string {
-	return j.fmIndex.QueryExactMatch(inventoryContainerKeyPath, containerID)
+	pageIDs := j.fmIndex.QueryExactMatch(inventoryContainerKeyPath, containerID)
+	result := make([]string, len(pageIDs))
+	for i, id := range pageIDs {
+		result[i] = string(id)
+	}
+	return result
 }
 
 // detectCircularReferences detects circular references in the container hierarchy.
@@ -485,7 +490,7 @@ func (j *InventoryNormalizationJob) findCycle(containerID string, visited map[st
 	newPath[len(newPath)-1] = containerID
 
 	// Get the container's parent
-	parentContainer := j.fmIndex.GetValue(containerID, inventoryContainerKeyPath)
+	parentContainer := j.fmIndex.GetValue(wikipage.PageIdentifier(containerID), inventoryContainerKeyPath)
 	if parentContainer != "" {
 		return j.findCycle(parentContainer, visited, newPath)
 	}
@@ -546,10 +551,10 @@ func (j *InventoryNormalizationJob) generateAuditReport(anomalies []InventoryAno
 	}
 
 	// Write frontmatter and markdown
-	if err := j.deps.WriteFrontMatter(AuditReportPage, fm); err != nil {
+	if err := j.deps.WriteFrontMatter(wikipage.PageIdentifier(AuditReportPage), fm); err != nil {
 		return fmt.Errorf("failed to write audit report frontmatter: %w", err)
 	}
-	if err := j.deps.WriteMarkdown(AuditReportPage, report.String()); err != nil {
+	if err := j.deps.WriteMarkdown(wikipage.PageIdentifier(AuditReportPage), wikipage.Markdown(report.String())); err != nil {
 		return fmt.Errorf("failed to write audit report markdown: %w", err)
 	}
 
@@ -602,7 +607,7 @@ func (j *InventoryNormalizationJob) removeItemsFromParentContainers(containers [
 // Returns the count of removed items and any error from the operation.
 func (j *InventoryNormalizationJob) processContainerForItemRemoval(containerID string) (int, error) {
 	// Read the container's frontmatter
-	_, containerFm, err := j.deps.ReadFrontMatter(containerID)
+	_, containerFm, err := j.deps.ReadFrontMatter(wikipage.PageIdentifier(containerID))
 	if err != nil {
 		return 0, nil // Container doesn't exist, not an error for this operation
 	}
@@ -683,7 +688,7 @@ func (j *InventoryNormalizationJob) findItemsWithContainerReference(containerID 
 
 // itemReferencesContainer checks if an item's frontmatter references the given container.
 func (j *InventoryNormalizationJob) itemReferencesContainer(itemID, containerID string) bool {
-	_, itemFm, err := j.deps.ReadFrontMatter(itemID)
+	_, itemFm, err := j.deps.ReadFrontMatter(wikipage.PageIdentifier(itemID))
 	if err != nil {
 		return false
 	}
@@ -738,7 +743,7 @@ func (j *InventoryNormalizationJob) removeAndWriteItems(containerID string, cont
 
 	// Update and write back
 	inventory["items"] = newItems
-	if err := j.deps.WriteFrontMatter(containerID, containerFm); err != nil {
+	if err := j.deps.WriteFrontMatter(wikipage.PageIdentifier(containerID), containerFm); err != nil {
 		return 0, fmt.Errorf("failed to write frontmatter for container %s: %w", containerID, err)
 	}
 
