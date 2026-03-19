@@ -394,18 +394,19 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to open page"})
 		return
 	}
+	unixTime := time.Now().Unix()
 	if json.FetchedAt > 0 && p.IsModifiedSince(json.FetchedAt) {
-		c.JSON(http.StatusConflict, gin.H{"success": false, "message": "Refusing to overwrite others' work", "unix_time": time.Now().Unix()})
+		c.JSON(http.StatusConflict, gin.H{"success": false, "message": "Refusing to overwrite others' work", "unix_time": unixTime})
 		return
 	}
 
 	p.Text = json.NewText
 	err = s.savePageAndIndex(p)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error(), "unix_time": time.Now().Unix()})
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": err.Error(), "unix_time": unixTime})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Saved", "unix_time": time.Now().Unix()})
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Saved", "unix_time": unixTime})
 }
 
 

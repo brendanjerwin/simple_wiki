@@ -197,8 +197,8 @@ var _ = Describe("Handlers", func() {
 				_ = os.Chmod(dataDir, originalMode)
 			})
 
-			It("should return a 200 status code", func() {
-				Expect(w.Code).To(Equal(http.StatusOK))
+			It("should return a 500 status code", func() {
+				Expect(w.Code).To(Equal(http.StatusInternalServerError))
 			})
 
 			It("should return a failure message", func() {
@@ -220,18 +220,22 @@ var _ = Describe("Handlers", func() {
 				pageName = "test-conflict"
 				p, err := site.ReadPage(pageName)
 				Expect(err).NotTo(HaveOccurred())
-				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
+				err = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
+				Expect(err).NotTo(HaveOccurred())
 
 				// Use a fetched_at timestamp in the past so IsModifiedSince returns true
-				body, _ := json.Marshal(map[string]any{
+				body, err := json.Marshal(map[string]any{
 					"page":       pageName,
 					"new_text":   "conflicting content",
 					"fetched_at": int64(1),
 				})
-				req, _ := http.NewRequest(http.MethodPost, "/update", bytes.NewBuffer(body))
+				Expect(err).NotTo(HaveOccurred())
+				req, err := http.NewRequest(http.MethodPost, "/update", bytes.NewBuffer(body))
+				Expect(err).NotTo(HaveOccurred())
 				req.Header.Set("Content-Type", "application/json")
 				router.ServeHTTP(w, req)
-				_ = json.Unmarshal(w.Body.Bytes(), &response)
+				err = json.Unmarshal(w.Body.Bytes(), &response)
+				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("should return a 409 Conflict status code", func() {
@@ -322,8 +326,8 @@ var _ = Describe("Handlers", func() {
 				_ = os.Chmod(tmpDir, originalPermissions)
 			})
 
-			It("should return a 200 status code", func() {
-				Expect(w.Code).To(Equal(http.StatusOK))
+			It("should return a 500 status code", func() {
+				Expect(w.Code).To(Equal(http.StatusInternalServerError))
 			})
 
 			It("should return a failure response", func() {
@@ -371,8 +375,8 @@ var _ = Describe("Handlers", func() {
 				site.PathToData = originalDataPath
 			})
 
-			It("should return a 200 status code", func() {
-				Expect(w.Code).To(Equal(http.StatusOK))
+			It("should return a 500 status code", func() {
+				Expect(w.Code).To(Equal(http.StatusInternalServerError))
 			})
 
 			It("should return a failure response", func() {
