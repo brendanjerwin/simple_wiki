@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -454,6 +455,10 @@ var _ = Describe("handlePageRequest directory listing", func() {
 		var originalMode os.FileMode
 
 		BeforeEach(func() {
+			if runtime.GOOS == "windows" {
+				Skip("chmod permission semantics are not enforced on Windows")
+			}
+
 			// Pre-create the "ls" page so readOrInitPage succeeds later
 			preReq, _ := http.NewRequest(http.MethodGet, "/ls/view", nil)
 			preW := httptest.NewRecorder()

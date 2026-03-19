@@ -347,7 +347,7 @@ func (s *Site) applyMigrationsForPage(page *wikipage.Page, content []byte) ([]by
 
 	migratedContent, err := s.MigrationApplicator.ApplyMigrations(content)
 	if err != nil {
-		return content, fmt.Errorf("failed to apply content migrations: %w", err)
+		return nil, fmt.Errorf("failed to apply content migrations: %w", err)
 	}
 
 	// If migration was applied, save the migrated content
@@ -466,6 +466,10 @@ func (DirectoryEntry) Sys() any {
 }
 
 // DirectoryList returns a list of all wiki pages in the data directory.
+// It returns a non-nil error only if the data directory itself cannot be read
+// (e.g., directory is missing or unreadable). Individual page read failures are
+// logged and skipped so that one corrupt or unreadable .md file does not prevent
+// the rest of the listing from being returned.
 func (s *Site) DirectoryList() ([]os.FileInfo, error) {
 	files, err := os.ReadDir(s.PathToData)
 	if err != nil {
@@ -479,7 +483,8 @@ func (s *Site) DirectoryList() ([]os.FileInfo, error) {
 			// Each ReadPage() call will acquire its own read lock
 			p, err := s.ReadPage(name)
 			if err != nil {
-				return nil, fmt.Errorf("failed to read page %q for directory listing: %w", name, err)
+				s.Logger.Error("Failed to read page %q for directory listing, skipping: %v", name, err)
+				continue
 			}
 
 			// Get file modification time from filesystem
