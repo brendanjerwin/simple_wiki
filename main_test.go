@@ -2,6 +2,9 @@
 package main
 
 import (
+	"bytes"
+	"crypto/rand"
+	"errors"
 	"flag"
 	"os"
 	"testing"
@@ -17,22 +20,36 @@ func TestGenerateCookieSecret(t *testing.T) {
 }
 
 var _ = Describe("generateRandomCookieSecret", func() {
-	It("should return a 64-character lowercase hex string (32 bytes)", func() {
-		secret, err := generateRandomCookieSecret()
+	It("should encode bytes from the reader as a lowercase hex string", func() {
+		// All-zeros reader → deterministic output of 64 '0' characters.
+		reader := bytes.NewReader(make([]byte, 32))
+		secret, err := generateRandomCookieSecret(reader)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(secret).To(MatchRegexp(`^[0-9a-f]{64}$`))
+		Expect(secret).To(Equal("0000000000000000000000000000000000000000000000000000000000000000"))
 	})
 
-	It("should return different secrets on two successive calls", func() {
-		secret1, err := generateRandomCookieSecret()
+	It("should return different secrets on two successive calls with crypto/rand", func() {
+		secret1, err := generateRandomCookieSecret(rand.Reader)
 		Expect(err).NotTo(HaveOccurred())
 
-		secret2, err := generateRandomCookieSecret()
+		secret2, err := generateRandomCookieSecret(rand.Reader)
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(secret1).NotTo(Equal(secret2))
 	})
+
+	It("should propagate an error from the reader", func() {
+		errReader := &errorReader{err: errors.New("simulated read failure")}
+		_, err := generateRandomCookieSecret(errReader)
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("failed to generate random cookie secret"))
+	})
 })
+
+// errorReader is an io.Reader that always returns an error.
+type errorReader struct{ err error }
+
+func (e *errorReader) Read(_ []byte) (int, error) { return 0, e.err }
 
 var _ = Describe("resolveCookieSecret", func() {
 	When("a non-empty secret is provided", func() {

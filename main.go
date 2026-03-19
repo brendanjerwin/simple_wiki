@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -64,22 +65,24 @@ func getBuildTime() time.Time {
 var app *cli.App
 
 // generateRandomCookieSecret generates a cryptographically random 32-byte secret
-// encoded as a hex string.
-func generateRandomCookieSecret() (string, error) {
+// encoded as a hex string. reader is the source of randomness; pass rand.Reader
+// in production code.
+func generateRandomCookieSecret(reader io.Reader) (string, error) {
 	b := make([]byte, 32)
-	if _, err := rand.Read(b); err != nil {
+	if _, err := io.ReadFull(reader, b); err != nil {
 		return "", fmt.Errorf("failed to generate random cookie secret: %w", err)
 	}
 	return hex.EncodeToString(b), nil
 }
 
 // resolveCookieSecret returns the provided secret unchanged when non-empty.
-// When provided is empty it generates a random secret and returns generated=true.
+// When provided is empty it generates a random secret using crypto/rand and
+// returns generated=true.
 func resolveCookieSecret(provided string) (secret string, generated bool, err error) {
 	if provided != "" {
 		return provided, false, nil
 	}
-	secret, err = generateRandomCookieSecret()
+	secret, err = generateRandomCookieSecret(rand.Reader)
 	if err != nil {
 		return "", false, err
 	}
