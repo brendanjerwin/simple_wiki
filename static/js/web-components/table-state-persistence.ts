@@ -38,7 +38,7 @@ export function serializeFilter(filter: ColumnFilterState): SerializedFilterStat
     case 'checkbox':
       return {
         kind: 'checkbox',
-        excludedValues: Array.from(filter.excludedValues).sort(),
+        excludedValues: Array.from(filter.excludedValues).sort((a, b) => a.localeCompare(b)),
       };
     case 'range':
       return {
