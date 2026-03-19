@@ -113,22 +113,22 @@ var _ = Describe("Index", func() {
 
 			It("should index nested keys with dotted notation", func() {
 				results := index.QueryExactMatch("inventory.container", "GarageInventory")
-				Expect(results).To(ContainElement("inventory_item"))
+				Expect(results).To(ContainElement(wikipage.PageIdentifier("inventory_item")))
 			})
 
 			It("should index nested category keys", func() {
 				results := index.QueryExactMatch("inventory.category", "tools")
-				Expect(results).To(ContainElement("inventory_item"))
+				Expect(results).To(ContainElement(wikipage.PageIdentifier("inventory_item")))
 			})
 
 			It("should allow key existence queries for nested paths", func() {
 				results := index.QueryKeyExistence("inventory.container")
-				Expect(results).To(ContainElement("inventory_item"))
+				Expect(results).To(ContainElement(wikipage.PageIdentifier("inventory_item")))
 			})
 
 			It("should allow key existence queries for parent paths", func() {
 				results := index.QueryKeyExistence("inventory")
-				Expect(results).To(ContainElement("inventory_item"))
+				Expect(results).To(ContainElement(wikipage.PageIdentifier("inventory_item")))
 			})
 
 			It("should get nested values using dotted notation", func() {
@@ -140,7 +140,7 @@ var _ = Describe("Index", func() {
 
 	Describe("QueryExactMatch with inventory.container scenario", func() {
 		Describe("when multiple pages have inventory.container frontmatter", func() {
-			var results []string
+			var results []wikipage.PageIdentifier
 
 			BeforeEach(func() {
 				// Add multiple pages with different container values
@@ -176,12 +176,12 @@ var _ = Describe("Index", func() {
 			})
 
 			It("should return all items with matching container", func() {
-				Expect(results).To(ContainElement("hammer"))
-				Expect(results).To(ContainElement("screwdriver"))
+				Expect(results).To(ContainElement(wikipage.PageIdentifier("hammer")))
+				Expect(results).To(ContainElement(wikipage.PageIdentifier("screwdriver")))
 			})
 
 			It("should not return items with different container", func() {
-				Expect(results).NotTo(ContainElement("cookbook"))
+				Expect(results).NotTo(ContainElement(wikipage.PageIdentifier("cookbook")))
 			})
 
 			It("should return exactly 2 items for garage_inventory", func() {
@@ -222,8 +222,8 @@ var _ = Describe("Index", func() {
 			})
 
 			It("should find items that reference the container", func() {
-				Expect(itemsFromIndex).To(ContainElement("tool1"))
-				Expect(itemsFromIndex).To(ContainElement("tool2"))
+				Expect(itemsFromIndex).To(ContainElement(wikipage.PageIdentifier("tool1")))
+				Expect(itemsFromIndex).To(ContainElement(wikipage.PageIdentifier("tool2")))
 			})
 
 			It("should return the correct number of items", func() {
@@ -254,7 +254,7 @@ var _ = Describe("Index", func() {
 
 			It("should no longer find the page in queries", func() {
 				results := index.QueryExactMatch("inventory.container", "TestContainer")
-				Expect(results).NotTo(ContainElement("temp-page"))
+				Expect(results).NotTo(ContainElement(wikipage.PageIdentifier("temp-page")))
 			})
 
 			It("should return empty value for removed page", func() {
@@ -266,7 +266,7 @@ var _ = Describe("Index", func() {
 
 	Describe("QueryPrefixMatch", func() {
 		Describe("when pages have values with common prefixes", func() {
-			var results []string
+			var results []wikipage.PageIdentifier
 
 			BeforeEach(func() {
 				mockReader.AddPage("garage-tool", wikipage.FrontMatter{
@@ -296,19 +296,19 @@ var _ = Describe("Index", func() {
 			})
 
 			It("should return items with matching prefix", func() {
-				Expect(results).To(ContainElement("garage_tool"))
-				Expect(results).To(ContainElement("garage_item"))
+				Expect(results).To(ContainElement(wikipage.PageIdentifier("garage_tool")))
+				Expect(results).To(ContainElement(wikipage.PageIdentifier("garage_item")))
 			})
 
 			It("should not return items without matching prefix", func() {
-				Expect(results).NotTo(ContainElement("kitchen_item"))
+				Expect(results).NotTo(ContainElement(wikipage.PageIdentifier("kitchen_item")))
 			})
 		})
 	})
 
 	Describe("QueryExactMatchSortedBy", func() {
 		Describe("when multiple pages match with different sort values", func() {
-			var results []string
+			var results []wikipage.PageIdentifier
 
 			BeforeEach(func() {
 				mockReader.AddPage("post-2026-03-01", wikipage.FrontMatter{
@@ -351,9 +351,9 @@ var _ = Describe("Index", func() {
 				})
 
 				It("should return results sorted by date descending", func() {
-					Expect(results[0]).To(Equal("post_2026_03_01"))
-					Expect(results[1]).To(Equal("post_2026_02_10"))
-					Expect(results[2]).To(Equal("post_2026_01_15"))
+					Expect(results[0]).To(Equal(wikipage.PageIdentifier("post_2026_03_01")))
+					Expect(results[1]).To(Equal(wikipage.PageIdentifier("post_2026_02_10")))
+					Expect(results[2]).To(Equal(wikipage.PageIdentifier("post_2026_01_15")))
 				})
 			})
 
@@ -363,9 +363,9 @@ var _ = Describe("Index", func() {
 				})
 
 				It("should return results sorted by date ascending", func() {
-					Expect(results[0]).To(Equal("post_2026_01_15"))
-					Expect(results[1]).To(Equal("post_2026_02_10"))
-					Expect(results[2]).To(Equal("post_2026_03_01"))
+					Expect(results[0]).To(Equal(wikipage.PageIdentifier("post_2026_01_15")))
+					Expect(results[1]).To(Equal(wikipage.PageIdentifier("post_2026_02_10")))
+					Expect(results[2]).To(Equal(wikipage.PageIdentifier("post_2026_03_01")))
 				})
 			})
 
@@ -379,14 +379,14 @@ var _ = Describe("Index", func() {
 				})
 
 				It("should return the top N sorted results", func() {
-					Expect(results[0]).To(Equal("post_2026_03_01"))
-					Expect(results[1]).To(Equal("post_2026_02_10"))
+					Expect(results[0]).To(Equal(wikipage.PageIdentifier("post_2026_03_01")))
+					Expect(results[1]).To(Equal(wikipage.PageIdentifier("post_2026_02_10")))
 				})
 			})
 		})
 
 		Describe("when no pages match", func() {
-			var results []string
+			var results []wikipage.PageIdentifier
 
 			BeforeEach(func() {
 				results = index.QueryExactMatchSortedBy("blog.identifier", "nonexistent", "blog.published-date", false, 10)
@@ -398,7 +398,7 @@ var _ = Describe("Index", func() {
 		})
 
 		Describe("when pages have no sort key value", func() {
-			var results []string
+			var results []wikipage.PageIdentifier
 
 			BeforeEach(func() {
 				mockReader.AddPage("post-with-date", wikipage.FrontMatter{
@@ -426,7 +426,7 @@ var _ = Describe("Index", func() {
 			})
 
 			It("should sort pages with values before pages without", func() {
-				Expect(results[0]).To(Equal("post_with_date"))
+				Expect(results[0]).To(Equal(wikipage.PageIdentifier("post_with_date")))
 			})
 		})
 	})
