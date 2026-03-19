@@ -169,7 +169,7 @@ body.EditPage div#wrap {
 /* Arrow indicator for sub-menu items */
 .pure-menu-children .pure-menu-has-children > .pure-menu-link::after {
   content: '\f054'; /* FontAwesome chevron-right */
-  font-family: 'Font Awesome 6 Free';
+  font-family: 'Font Awesome 6 Free', sans-serif;
   font-weight: 900;
   font-size: 0.7em;
   margin-left: 0.5em;
