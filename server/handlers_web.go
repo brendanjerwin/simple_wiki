@@ -38,6 +38,7 @@ const (
 	rootPath             = "/"
 	uploadFailureMessage = "Failed to upload: %s"
 	uploadsPage          = "uploads"
+	mimeTextPlain        = "text/plain"
 )
 
 var (
@@ -498,7 +499,7 @@ func (s *Site) handleUploads(c *gin.Context, command string) {
 
 func (*Site) handleRawContent(c *gin.Context, command string, p *wikipage.Page, rawText string) bool {
 	if len(command) > maxContentLength && command[0:maxContentLength] == "/ra" {
-		c.Writer.Header().Set("Content-Type", "text/plain")
+		c.Writer.Header().Set("Content-Type", mimeTextPlain)
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Max-Age", "86400")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE, UPDATE")
@@ -533,11 +534,11 @@ func init() {
 func contentTypeFromName(filename string) string {
 	ext := filepath.Ext(filename)
 	if ext == "" {
-		return "text/plain"
+		return mimeTextPlain
 	}
 	mimeType := mime.TypeByExtension(ext)
 	if mimeType == "" {
-		return "text/plain"
+		return mimeTextPlain
 	}
 	return mimeType
 }
