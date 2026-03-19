@@ -304,6 +304,40 @@ var _ = Describe("Index", func() {
 				Expect(results).NotTo(ContainElement("kitchen_item"))
 			})
 		})
+
+		Describe("when a page has multiple values that match the prefix", func() {
+			var (
+				err     error
+				results []wikipage.PageIdentifier
+			)
+
+			BeforeEach(func() {
+				mockReader.AddPage("multi-location-item", wikipage.FrontMatter{
+					"identifier": "multi-location-item",
+					"inventory": map[string]any{
+						"containers": []any{"Garage-Section-A", "Garage-Section-B"},
+					},
+				})
+				err = index.AddPageToIndex("multi-location-item")
+
+				results = index.QueryPrefixMatch("inventory.containers", "Garage")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return the page only once despite multiple matching values", func() {
+				Expect(results).To(ContainElement(wikipage.PageIdentifier("multi_location_item")))
+				count := 0
+				for _, r := range results {
+					if r == wikipage.PageIdentifier("multi_location_item") {
+						count++
+					}
+				}
+				Expect(count).To(Equal(1))
+			})
+		})
 	})
 
 	Describe("QueryExactMatchSortedBy", func() {

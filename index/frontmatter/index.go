@@ -191,10 +191,17 @@ func (f *Index) QueryKeyExistence(dottedKeyPath DottedKeyPath) []wikipage.PageId
 func (f *Index) QueryPrefixMatch(dottedKeyPath DottedKeyPath, valuePrefix string) []wikipage.PageIdentifier {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
+	seen := make(map[wikipage.PageIdentifier]struct{})
 	var identifiersWithKey []wikipage.PageIdentifier
-	for indexedValue := range f.InvertedIndex[dottedKeyPath] {
+	values := f.InvertedIndex[dottedKeyPath]
+	for indexedValue := range values {
 		if strings.HasPrefix(indexedValue, valuePrefix) {
-			identifiersWithKey = append(identifiersWithKey, f.InvertedIndex[dottedKeyPath][indexedValue]...)
+			for _, id := range values[indexedValue] {
+				if _, exists := seen[id]; !exists {
+					seen[id] = struct{}{}
+					identifiersWithKey = append(identifiersWithKey, id)
+				}
+			}
 		}
 	}
 	return identifiersWithKey
