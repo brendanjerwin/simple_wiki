@@ -4,7 +4,7 @@ import { test, expect, APIRequestContext } from '@playwright/test';
 // These tests call the Connect protocol API directly (no browser UI) to verify
 // the precise gRPC-level semantics introduced in PR #327.
 
-const TEST_PAGE = 'e2e-update-page-content-test';
+const TEST_PAGE = 'e2e_update_page_content_test';
 
 // Initial markdown body used to seed the test page before each test.
 const INITIAL_MARKDOWN = '# Section One\n\nOriginal content here.\n\n# Section Two\n\nMore content.';
