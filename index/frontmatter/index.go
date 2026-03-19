@@ -175,8 +175,9 @@ func (f *Index) QueryKeyExistence(dottedKeyPath DottedKeyPath) []wikipage.PageId
 	defer f.mu.RUnlock()
 	seen := make(map[wikipage.PageIdentifier]struct{})
 	var identifiersWithKey []wikipage.PageIdentifier
-	for indexedValue := range f.InvertedIndex[dottedKeyPath] {
-		for _, id := range f.InvertedIndex[dottedKeyPath][indexedValue] {
+	values := f.InvertedIndex[dottedKeyPath]
+	for indexedValue := range values {
+		for _, id := range values[indexedValue] {
 			if _, exists := seen[id]; !exists {
 				seen[id] = struct{}{}
 				identifiersWithKey = append(identifiersWithKey, id)

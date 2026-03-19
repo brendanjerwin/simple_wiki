@@ -562,10 +562,10 @@ var _ = Describe("Index", func() {
 			})
 
 			It("should return the page only once despite multiple indexed values", func() {
-				Expect(results).To(ContainElement("multi_value_page"))
+				Expect(results).To(ContainElement(wikipage.PageIdentifier("multi_value_page")))
 				count := 0
 				for _, r := range results {
-					if r == "multi_value_page" {
+					if r == wikipage.PageIdentifier("multi_value_page") {
 						count++
 					}
 				}
