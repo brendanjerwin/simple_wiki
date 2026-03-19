@@ -532,7 +532,7 @@ export class WikiChecklist extends LitElement {
         if (tag) tagSet.add(tag);
       }
     }
-    return Array.from(tagSet).sort();
+    return Array.from(tagSet).sort((a, b) => a.localeCompare(b));
   }
 
   /**
