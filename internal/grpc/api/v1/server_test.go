@@ -2112,7 +2112,7 @@ var _ = Describe("Server", func() {
 			}
 			mockBleveIndexQueryer = &MockBleveIndexQueryer{}
 			mockFrontmatterIndexQueryer = &FlexibleMockFrontmatterIndexQueryer{
-				ExactMatchResults: make(map[string][]string),
+				ExactMatchResults: make(map[string][]wikipage.PageIdentifier),
 				GetValueResults:   make(map[string]map[string]string),
 			}
 		})
@@ -2518,7 +2518,7 @@ var _ = Describe("Server", func() {
 
 			BeforeEach(func() {
 				mockFrontmatterIndexQueryer = &FlexibleMockFrontmatterIndexQueryer{
-					ExactMatchResults: make(map[string][]string),
+					ExactMatchResults: make(map[string][]wikipage.PageIdentifier),
 					GetValueResults:   make(map[string]map[string]string),
 				}
 				// Search returns a page with various frontmatter fields
@@ -2580,7 +2580,7 @@ var _ = Describe("Server", func() {
 
 			BeforeEach(func() {
 				mockFrontmatterIndexQueryer = &FlexibleMockFrontmatterIndexQueryer{
-					ExactMatchResults: make(map[string][]string),
+					ExactMatchResults: make(map[string][]wikipage.PageIdentifier),
 					GetValueResults:   make(map[string]map[string]string),
 				}
 				// Search returns an item with a container
@@ -2777,7 +2777,7 @@ var _ = Describe("Server", func() {
 
 			BeforeEach(func() {
 				mockFrontmatterIndexQueryer = &FlexibleMockFrontmatterIndexQueryer{
-					ExactMatchResults: make(map[string][]string),
+					ExactMatchResults: make(map[string][]wikipage.PageIdentifier),
 					GetValueResults:   make(map[string]map[string]string),
 				}
 				searchResults = []bleve.SearchResult{

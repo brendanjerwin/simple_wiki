@@ -92,6 +92,8 @@ func (f *Index) recursiveAddFrontmatter(identifier wikipage.PageIdentifier, keyP
 	// recursively build the dotted key path. a value in frontmatter can be either a string or a map[string]any
 	// if it is a map[string]any, then we need to recurse
 	switch v := value.(type) {
+	case wikipage.FrontMatter:
+		return f.recursiveAddFrontmatter(identifier, keyPath, map[string]any(v))
 	case map[string]any:
 		for key, val := range v {
 			newKeyPath := keyPath

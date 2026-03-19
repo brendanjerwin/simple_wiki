@@ -78,12 +78,12 @@ var _ = Describe("Index", func() {
 
 			It("should allow querying by exact match", func() {
 				results := index.QueryExactMatch("title", "Test Page")
-				Expect(results).To(ContainElement("test_page"))
+				Expect(results).To(ContainElement(wikipage.PageIdentifier("test_page")))
 			})
 
 			It("should allow querying by key existence", func() {
 				results := index.QueryKeyExistence("category")
-				Expect(results).To(ContainElement("test_page"))
+				Expect(results).To(ContainElement(wikipage.PageIdentifier("test_page")))
 			})
 
 			It("should allow getting values", func() {
@@ -193,7 +193,7 @@ var _ = Describe("Index", func() {
 			var templateContext struct {
 				Identifier string
 			}
-			var itemsFromIndex []string
+			var itemsFromIndex []wikipage.PageIdentifier
 
 			BeforeEach(func() {
 				templateContext.Identifier = "GarageInventory"
@@ -468,12 +468,12 @@ var _ = Describe("Index", func() {
 
 			It("should index deeply nested keys", func() {
 				results := index.QueryExactMatch("level1.level2.level3.deepvalue", "found")
-				Expect(results).To(ContainElement("deep_page"))
+				Expect(results).To(ContainElement(wikipage.PageIdentifier("deep_page")))
 			})
 
 			It("should index intermediate levels", func() {
 				results := index.QueryKeyExistence("level1.level2")
-				Expect(results).To(ContainElement("deep_page"))
+				Expect(results).To(ContainElement(wikipage.PageIdentifier("deep_page")))
 			})
 		})
 
@@ -497,12 +497,12 @@ var _ = Describe("Index", func() {
 
 			It("should index array elements individually", func() {
 				results := index.QueryExactMatch("tags", "tag2")
-				Expect(results).To(ContainElement("array_page"))
+				Expect(results).To(ContainElement(wikipage.PageIdentifier("array_page")))
 			})
 
 			It("should index nested array elements", func() {
 				results := index.QueryExactMatch("inventory.items", "item1")
-				Expect(results).To(ContainElement("array_page"))
+				Expect(results).To(ContainElement(wikipage.PageIdentifier("array_page")))
 			})
 		})
 
@@ -532,12 +532,12 @@ var _ = Describe("Index", func() {
 
 			It("should index parent keys for existence queries", func() {
 				results := index.QueryKeyExistence("checklists.grocery_list")
-				Expect(results).To(ContainElement("checklist_page"))
+				Expect(results).To(ContainElement(wikipage.PageIdentifier("checklist_page")))
 			})
 
 			It("should index the name field within the checklist", func() {
 				results := index.QueryExactMatch("checklists.grocery_list.name", "Grocery List")
-				Expect(results).To(ContainElement("checklist_page"))
+				Expect(results).To(ContainElement(wikipage.PageIdentifier("checklist_page")))
 			})
 		})
 
@@ -561,7 +561,7 @@ var _ = Describe("Index", func() {
 
 			It("should allow key existence queries for empty arrays", func() {
 				results := index.QueryKeyExistence("inventory.items")
-				Expect(results).To(ContainElement("container_page"))
+				Expect(results).To(ContainElement(wikipage.PageIdentifier("container_page")))
 			})
 		})
 	})

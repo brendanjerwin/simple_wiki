@@ -63,14 +63,14 @@ func (m *mockPageReaderMutator) getMarkdown(id string) string {
 }
 
 func (m *mockPageReaderMutator) ReadFrontMatter(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
-	m.readFrontMatterCalls = append(m.readFrontMatterCalls, id)
+	m.readFrontMatterCalls = append(m.readFrontMatterCalls, string(id))
 
 	// Global error takes precedence
 	if m.readFrontMatterErr != nil {
 		return "", nil, m.readFrontMatterErr
 	}
 
-	page, ok := m.pages[id]
+	page, ok := m.pages[string(id)]
 	if !ok {
 		return "", nil, os.ErrNotExist
 	}
@@ -83,7 +83,7 @@ func (m *mockPageReaderMutator) ReadFrontMatter(id wikipage.PageIdentifier) (wik
 }
 
 func (m *mockPageReaderMutator) ReadMarkdown(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
-	page, ok := m.pages[id]
+	page, ok := m.pages[string(id)]
 	if !ok {
 		return "", "", os.ErrNotExist
 	}
@@ -92,45 +92,45 @@ func (m *mockPageReaderMutator) ReadMarkdown(id wikipage.PageIdentifier) (wikipa
 		return "", "", page.readErr
 	}
 
-	return id, page.markdown, nil
+	return id, wikipage.Markdown(page.markdown), nil
 }
 
 func (m *mockPageReaderMutator) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
-	m.writeFrontMatterCalls = append(m.writeFrontMatterCalls, id)
+	m.writeFrontMatterCalls = append(m.writeFrontMatterCalls, string(id))
 
 	if m.writeFrontMatterErr != nil {
 		return m.writeFrontMatterErr
 	}
 
-	if m.pages[id] == nil {
-		m.pages[id] = &mockPage{}
+	if m.pages[string(id)] == nil {
+		m.pages[string(id)] = &mockPage{}
 	}
-	m.pages[id].frontmatter = fm
+	m.pages[string(id)].frontmatter = fm
 	return nil
 }
 
 func (m *mockPageReaderMutator) WriteMarkdown(id wikipage.PageIdentifier, md wikipage.Markdown) error {
-	m.writeMarkdownCalls = append(m.writeMarkdownCalls, id)
+	m.writeMarkdownCalls = append(m.writeMarkdownCalls, string(id))
 
 	if m.writeMarkdownErr != nil {
 		return m.writeMarkdownErr
 	}
 
-	if m.pages[id] == nil {
-		m.pages[id] = &mockPage{}
+	if m.pages[string(id)] == nil {
+		m.pages[string(id)] = &mockPage{}
 	}
-	m.pages[id].markdown = md
+	m.pages[string(id)].markdown = string(md)
 	return nil
 }
 
 func (m *mockPageReaderMutator) DeletePage(id wikipage.PageIdentifier) error {
-	m.deletedPages = append(m.deletedPages, id)
+	m.deletedPages = append(m.deletedPages, string(id))
 
 	if m.deletePageErr != nil {
 		return m.deletePageErr
 	}
 
-	delete(m.pages, id)
+	delete(m.pages, string(id))
 	return nil
 }
 
