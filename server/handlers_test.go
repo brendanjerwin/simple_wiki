@@ -464,7 +464,8 @@ var _ = Describe("handleUpload Audit Logging", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(writer.Close()).To(Succeed())
 
-			req, _ := http.NewRequest(http.MethodPost, "/uploads", body)
+			req, err := http.NewRequest(http.MethodPost, "/uploads", body)
+			Expect(err).NotTo(HaveOccurred())
 			req.Header.Set("Content-Type", writer.FormDataContentType())
 
 			identity := tailscale.NewIdentity("uploader@example.com", "Uploader", "upload-device")
@@ -472,12 +473,13 @@ var _ = Describe("handleUpload Audit Logging", func() {
 
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
+			Expect(w.Code).To(Equal(http.StatusOK))
 
 			logOutput = logBuffer.String()
 		})
 
 		It("should log the upload with the filename", func() {
-			Expect(logOutput).To(ContainSubstring("test.txt"))
+			Expect(logOutput).To(ContainSubstring(`[AUDIT] upload | file: "test.txt"`))
 		})
 
 		It("should log the upload with the user identity", func() {
@@ -485,7 +487,7 @@ var _ = Describe("handleUpload Audit Logging", func() {
 		})
 
 		It("should log the operation type", func() {
-			Expect(logOutput).To(ContainSubstring("upload"))
+			Expect(logOutput).To(ContainSubstring("[AUDIT] upload"))
 		})
 	})
 
@@ -501,17 +503,19 @@ var _ = Describe("handleUpload Audit Logging", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(writer.Close()).To(Succeed())
 
-			req, _ := http.NewRequest(http.MethodPost, "/uploads", body)
+			req, err := http.NewRequest(http.MethodPost, "/uploads", body)
+			Expect(err).NotTo(HaveOccurred())
 			req.Header.Set("Content-Type", writer.FormDataContentType())
 
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
+			Expect(w.Code).To(Equal(http.StatusOK))
 
 			logOutput = logBuffer.String()
 		})
 
 		It("should log as anonymous", func() {
-			Expect(logOutput).To(ContainSubstring("anonymous"))
+			Expect(logOutput).To(ContainSubstring(`[AUDIT] upload | file: "anon.txt" | user: "anonymous"`))
 		})
 	})
 })
