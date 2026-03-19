@@ -90,7 +90,11 @@ func (s *Site) registerRoutes(router *gin.Engine) {
 
 	router.GET("/:page", func(c *gin.Context) {
 		page := sanitizePageName(c.Param("page"))
-		c.Redirect(httpStatusFound, "/"+page+"/view?"+c.Request.URL.RawQuery)
+		target := path.Join(rootPath, page, "view")
+		if q := c.Request.URL.RawQuery; q != "" {
+			target += "?" + q
+		}
+		c.Redirect(httpStatusFound, target)
 	})
 	router.GET("/:page/*command", s.handlePageRequest)
 	router.POST("/update", s.handlePageUpdate)
@@ -221,7 +225,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 	}
 
 	if len(command) < 2 {
-		c.Redirect(httpStatusFound, "/"+page+"/view")
+		c.Redirect(httpStatusFound, path.Join(rootPath, page, "view"))
 		return
 	}
 
@@ -527,12 +531,14 @@ func contentTypeFromName(filename string) string {
 	return mimeType
 }
 
-// sanitizePageName strips leading slashes from a wiki page name to prevent
-// open redirect attacks. A page name that begins with a slash would cause
-// rootPath+page to produce a protocol-relative URL (e.g. "//evil.com") that
-// browsers follow as an external redirect.
+// sanitizePageName strips leading forward slashes and backslashes from a wiki
+// page name to prevent open redirect attacks. A leading '/' causes
+// rootPath+page to produce a protocol-relative URL (e.g. "//evil.com"). A
+// leading '\' can be treated by some browsers as '/' (giving the same result,
+// e.g. "/\evil.com"). Both characters are stripped so that the redirect target
+// always resolves within the wiki.
 func sanitizePageName(page string) string {
-	return strings.TrimLeft(page, rootPath)
+	return strings.TrimLeft(page, "/\\")
 }
 
 // requestBaseURL derives the base URL (scheme://host) from the request context.

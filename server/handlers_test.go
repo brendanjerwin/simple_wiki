@@ -778,7 +778,7 @@ var _ = Describe("requestBaseURL", func() {
 })
 
 var _ = Describe("sanitizePageName", func() {
-	DescribeTable("strips leading slashes to prevent open redirects",
+	DescribeTable("strips leading slashes and backslashes to prevent open redirects",
 		func(input, expected string) {
 			Expect(server.SanitizePageNameForTesting(input)).To(Equal(expected))
 		},
@@ -786,8 +786,13 @@ var _ = Describe("sanitizePageName", func() {
 		Entry("single leading slash is stripped", "/evil.com", "evil.com"),
 		Entry("double leading slash is stripped", "//evil.com", "evil.com"),
 		Entry("triple leading slash is stripped", "///evil.com", "evil.com"),
+		Entry("leading backslash is stripped", `\evil.com`, "evil.com"),
+		Entry("double leading backslash is stripped", `\\evil.com`, "evil.com"),
+		Entry("mixed leading slash and backslash are stripped", `/\evil.com`, "evil.com"),
+		Entry("mixed leading backslash and slash are stripped", `\/evil.com`, "evil.com"),
 		Entry("empty string stays empty", "", ""),
 		Entry("only slashes become empty", "///", ""),
+		Entry("only backslashes become empty", `\\\`, ""),
 		Entry("slash in the middle is preserved", "some/path", "some/path"),
 		Entry("trailing slash is preserved (TrimLeft only affects the left)", "mypage/", "mypage/"),
 	)
@@ -845,6 +850,43 @@ var _ = Describe("Open redirect prevention", func() {
 			location := w.Header().Get("Location")
 			Expect(location).To(Equal("/mypage/view"))
 			Expect(location).NotTo(HavePrefix("//"))
+		})
+	})
+
+	When("the /:page route receives a URL-encoded backslash prefix (open redirect bypass attempt)", func() {
+		BeforeEach(func() {
+			// %5C is a URL-encoded backslash; Gin decodes it to '\' in c.Param("page").
+			// Without sanitization, "/"+"\evil.com"+"/view" = "/\evil.com/view", which
+			// some browsers treat as an external redirect to //evil.com/view.
+			req, _ := http.NewRequest(http.MethodGet, "/%5Cevil.com", nil)
+			router.ServeHTTP(w, req)
+		})
+
+		It("should redirect", func() {
+			Expect(w.Code).To(Equal(http.StatusFound))
+		})
+
+		It("should redirect to a safe relative URL with no leading backslash or double-slash", func() {
+			location := w.Header().Get("Location")
+			Expect(location).NotTo(HavePrefix("//"))
+			Expect(location).NotTo(MatchRegexp(`^/\\`))
+		})
+	})
+
+	When("the /:page/*command route receives a URL-encoded backslash prefix (open redirect bypass attempt)", func() {
+		BeforeEach(func() {
+			req, _ := http.NewRequest(http.MethodGet, "/%5Cevil.com/", nil)
+			router.ServeHTTP(w, req)
+		})
+
+		It("should redirect", func() {
+			Expect(w.Code).To(Equal(http.StatusFound))
+		})
+
+		It("should redirect to a safe relative URL with no leading backslash or double-slash", func() {
+			location := w.Header().Get("Location")
+			Expect(location).NotTo(HavePrefix("//"))
+			Expect(location).NotTo(MatchRegexp(`^/\\`))
 		})
 	})
 })
