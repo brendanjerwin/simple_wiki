@@ -802,6 +802,19 @@ identifier = "test"
 				Expect(files[0].Name()).To(Equal("test"))
 			})
 		})
+
+		When("the data directory does not exist", func() {
+			var err error
+
+			BeforeEach(func() {
+				s.PathToData = filepath.Join(tempDir, "nonexistent_subdir")
+				err = s.InitializeIndexing()
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+		})
 	})
 
 	Describe("Rolling migrations integration", func() {
