@@ -11,9 +11,6 @@ import (
 	"golang.org/x/text/language"
 )
 
-const (
-	inventoryKeyPath = "inventory"
-)
 
 // InventoryItemParams contains the parameters for creating an inventory item page.
 type InventoryItemParams struct {
@@ -67,7 +64,7 @@ func (s *Site) CreateInventoryItemPage(params InventoryItemParams) (*wikipage.Pa
 		}
 		inventoryData["container"] = mungedContainer
 	}
-	fm[inventoryKeyPath] = inventoryData
+	fm[inventory.FrontmatterKey] = inventoryData
 
 	// Build page content
 	pageText, err := inventory.BuildItemPageText(fm)
@@ -95,7 +92,7 @@ func (s *Site) CreateInventoryItemPage(params InventoryItemParams) (*wikipage.Pa
 // Note: This only ensures the inventory map exists, not the items array.
 // Items array and is_container are only added for actual containers.
 func EnsureInventoryFrontmatterStructure(fm map[string]any) {
-	if _, exists := fm[inventoryKeyPath]; !exists {
-		fm[inventoryKeyPath] = make(map[string]any)
+	if _, exists := fm[inventory.FrontmatterKey]; !exists {
+		fm[inventory.FrontmatterKey] = make(map[string]any)
 	}
 }
