@@ -16,7 +16,7 @@ async function callPageAPI(
   body: Record<string, unknown>,
 ) {
   return request.post(`/api.v1.PageManagementService/${method}`, {
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' },
     data: body,
   });
 }
