@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/server"
+	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
@@ -197,8 +199,8 @@ var _ = Describe("Handlers", func() {
 				_ = os.Chmod(dataDir, originalMode)
 			})
 
-			It("should return a 200 status code", func() {
-				Expect(w.Code).To(Equal(http.StatusOK))
+			It("should return a 500 status code", func() {
+				Expect(w.Code).To(Equal(http.StatusInternalServerError))
 			})
 
 			It("should return a failure message", func() {
@@ -209,6 +211,42 @@ var _ = Describe("Handlers", func() {
 			It("should log the error", func() {
 				Expect(logOutput).To(ContainSubstring("Failed to save page 'test-update-fail'"))
 				Expect(logOutput).To(ContainSubstring("ERROR"))
+			})
+		})
+
+		When("the page has been modified since fetched_at (version conflict)", func() {
+			var response map[string]any
+			var pageName string
+
+			BeforeEach(func() {
+				pageName = "test-conflict"
+				p, err := site.ReadPage(pageName)
+				Expect(err).NotTo(HaveOccurred())
+				err = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
+				Expect(err).NotTo(HaveOccurred())
+
+				// Use a fetched_at timestamp in the past so IsModifiedSince returns true
+				body, err := json.Marshal(map[string]any{
+					"page":       pageName,
+					"new_text":   "conflicting content",
+					"fetched_at": int64(1),
+				})
+				Expect(err).NotTo(HaveOccurred())
+				req, err := http.NewRequest(http.MethodPost, "/update", bytes.NewBuffer(body))
+				Expect(err).NotTo(HaveOccurred())
+				req.Header.Set("Content-Type", "application/json")
+				router.ServeHTTP(w, req)
+				err = json.Unmarshal(w.Body.Bytes(), &response)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a 409 Conflict status code", func() {
+				Expect(w.Code).To(Equal(http.StatusConflict))
+			})
+
+			It("should return a failure message", func() {
+				Expect(response["success"]).To(BeFalse())
+				Expect(response["message"]).To(Equal("Refusing to overwrite others' work"))
 			})
 		})
 
@@ -290,8 +328,8 @@ var _ = Describe("Handlers", func() {
 				_ = os.Chmod(tmpDir, originalPermissions)
 			})
 
-			It("should return a 200 status code", func() {
-				Expect(w.Code).To(Equal(http.StatusOK))
+			It("should return a 500 status code", func() {
+				Expect(w.Code).To(Equal(http.StatusInternalServerError))
 			})
 
 			It("should return a failure response", func() {
@@ -339,8 +377,8 @@ var _ = Describe("Handlers", func() {
 				site.PathToData = originalDataPath
 			})
 
-			It("should return a 200 status code", func() {
-				Expect(w.Code).To(Equal(http.StatusOK))
+			It("should return a 500 status code", func() {
+				Expect(w.Code).To(Equal(http.StatusInternalServerError))
 			})
 
 			It("should return a failure response", func() {
@@ -423,6 +461,97 @@ var _ = Describe("handleUploads Path Injection Prevention", func() {
 
 		It("should serve the file content", func() {
 			Expect(w.Body.String()).To(Equal("test content"))
+		})
+	})
+})
+
+var _ = Describe("handleUpload Audit Logging", func() {
+	var (
+		tmpDir    string
+		logBuffer *bytes.Buffer
+		router    *gin.Engine
+	)
+
+	BeforeEach(func() {
+		var err error
+		tmpDir, err = os.MkdirTemp("", "simple_wiki_audit_test")
+		Expect(err).NotTo(HaveOccurred())
+
+		logBuffer = &bytes.Buffer{}
+		logger := lumber.NewBasicLogger(&handlerTestWriteCloser{logBuffer}, lumber.TRACE)
+		site, err := server.NewSite(tmpDir, "", "testpage", 0, "secret", true, 1024, 1024, logger)
+		Expect(err).NotTo(HaveOccurred())
+		router = site.GinRouter()
+	})
+
+	AfterEach(func() {
+		_ = os.RemoveAll(tmpDir)
+	})
+
+	When("a file is uploaded with an authenticated Tailscale identity", func() {
+		var logOutput string
+
+		BeforeEach(func() {
+			body := &bytes.Buffer{}
+			writer := multipart.NewWriter(body)
+			part, err := writer.CreateFormFile("file", "test.txt")
+			Expect(err).NotTo(HaveOccurred())
+			_, err = part.Write([]byte("hello audit"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(writer.Close()).To(Succeed())
+
+			req, err := http.NewRequest(http.MethodPost, "/uploads", body)
+			Expect(err).NotTo(HaveOccurred())
+			req.Header.Set("Content-Type", writer.FormDataContentType())
+
+			identity := tailscale.NewIdentity("uploader@example.com", "Uploader", "upload-device")
+			req = req.WithContext(tailscale.ContextWithIdentity(req.Context(), identity))
+
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			Expect(w.Code).To(Equal(http.StatusOK))
+
+			logOutput = logBuffer.String()
+		})
+
+		It("should log the upload with the filename", func() {
+			Expect(logOutput).To(ContainSubstring(`[AUDIT] upload | file: "test.txt"`))
+		})
+
+		It("should log the upload with the user identity", func() {
+			Expect(logOutput).To(ContainSubstring("uploader@example.com"))
+		})
+
+		It("should log the operation type", func() {
+			Expect(logOutput).To(ContainSubstring("[AUDIT] upload"))
+		})
+	})
+
+	When("a file is uploaded without a Tailscale identity (anonymous)", func() {
+		var logOutput string
+
+		BeforeEach(func() {
+			body := &bytes.Buffer{}
+			writer := multipart.NewWriter(body)
+			part, err := writer.CreateFormFile("file", "anon.txt")
+			Expect(err).NotTo(HaveOccurred())
+			_, err = part.Write([]byte("anon content"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(writer.Close()).To(Succeed())
+
+			req, err := http.NewRequest(http.MethodPost, "/uploads", body)
+			Expect(err).NotTo(HaveOccurred())
+			req.Header.Set("Content-Type", writer.FormDataContentType())
+
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			Expect(w.Code).To(Equal(http.StatusOK))
+
+			logOutput = logBuffer.String()
+		})
+
+		It("should log as anonymous", func() {
+			Expect(logOutput).To(ContainSubstring(`[AUDIT] upload | file: "anon.txt" | user: "anonymous"`))
 		})
 	})
 })
@@ -775,6 +904,22 @@ var _ = Describe("requestBaseURL", func() {
 			Expect(result).To(Equal("http://wiki.example.com"))
 		})
 	})
+})
+
+var _ = Describe("contentTypeFromName", func() {
+	DescribeTable("returns correct MIME type",
+		func(filename, expectedType string) {
+			Expect(server.ContentTypeFromNameForTesting(filename)).To(Equal(expectedType))
+		},
+		Entry("for .md files (init-registered)", "readme.md", "text/markdown; charset=utf-8"),
+		Entry("for .heic files (init-registered)", "photo.heic", "image/heic"),
+		Entry("for .heif files (init-registered)", "photo.heif", "image/heif"),
+		Entry("for .woff2 files (init-registered)", "fa-solid-900.woff2", "font/woff2"),
+		Entry("for .ttf files (init-registered)", "fa-solid-900.ttf", "font/ttf"),
+		Entry("for extensionless identifiers", "testpage", "text/plain"),
+		Entry("for paths with no extension", "img/favicon/no-ext", "text/plain"),
+		Entry("for unknown extensions", "file.xyz123unknown", "text/plain"),
+	)
 })
 
 // handlerTestWriteCloser wraps a buffer to implement io.WriteCloser for logger testing

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"log"
 	"mime"
 	"net/http"
 	"net/url"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/static"
+	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/gin-contrib/multitemplate"
 	"github.com/gin-contrib/sessions"
@@ -37,6 +39,7 @@ const (
 	rootPath             = "/"
 	uploadFailureMessage = "Failed to upload: %s"
 	uploadsPage          = "uploads"
+	mimeTextPlain        = "text/plain"
 )
 
 var (
@@ -394,23 +397,19 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to open page"})
 		return
 	}
-	var message string
-	success := false
+	unixTime := time.Now().Unix()
 	if json.FetchedAt > 0 && p.IsModifiedSince(json.FetchedAt) {
-		message = "Refusing to overwrite others work"
-		success = false  // Explicitly set to make error handling clear
-	} else {
-		p.Text = json.NewText
-		err := s.savePageAndIndex(p)
-		if err != nil {
-			message = err.Error()
-			success = false  // Explicitly set to make error handling clear
-		} else {
-			message = "Saved"
-			success = true
-		}
+		c.JSON(http.StatusConflict, gin.H{"success": false, "message": "Refusing to overwrite others' work", "unix_time": unixTime})
+		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": success, "message": message, "unix_time": time.Now().Unix()})
+
+	p.Text = json.NewText
+	err = s.savePageAndIndex(p)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": err.Error(), "unix_time": unixTime})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Saved", "unix_time": unixTime})
 }
 
 
@@ -434,6 +433,9 @@ func (s *Site) handleUpload(c *gin.Context) {
 		s.Logger.Error(uploadFailureMessage, err.Error())
 		return
 	}
+
+	identity := tailscale.IdentityFromContext(c.Request.Context())
+	s.Logger.Info("[AUDIT] upload | file: %q | user: %q", info.Filename, identity.ForLog())
 
 	c.Header("Location", "/uploads/"+fileInfo.Hash+"?filename="+url.QueryEscape(info.Filename))
 }
@@ -497,7 +499,7 @@ func (s *Site) handleUploads(c *gin.Context, command string) {
 
 func (*Site) handleRawContent(c *gin.Context, command string, p *wikipage.Page, rawText string) bool {
 	if len(command) > maxContentLength && command[0:maxContentLength] == "/ra" {
-		c.Writer.Header().Set("Content-Type", "text/plain")
+		c.Writer.Header().Set("Content-Type", mimeTextPlain)
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Max-Age", "86400")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE, UPDATE")
@@ -517,13 +519,29 @@ func (*Site) handleFrontmatter(c *gin.Context, command string, p *wikipage.Page)
 	return false
 }
 
-func contentTypeFromName(filename string) string {
-	_ = mime.AddExtensionType(".md", "text/markdown")
-	_ = mime.AddExtensionType(".heic", "image/heic")
-	_ = mime.AddExtensionType(".heif", "image/heif")
+func init() {
+	for _, m := range [][2]string{
+		{".md", "text/markdown"},
+		{".heic", "image/heic"},
+		{".heif", "image/heif"},
+		{".woff2", "font/woff2"},
+		{".ttf", "font/ttf"},
+	} {
+		if err := mime.AddExtensionType(m[0], m[1]); err != nil {
+			log.Fatalf("failed to register %s MIME type: %v", m[0], err)
+		}
+	}
+}
 
-	nameParts := strings.Split(filename, ".")
-	mimeType := mime.TypeByExtension("." + nameParts[len(nameParts)-1])
+func contentTypeFromName(filename string) string {
+	ext := filepath.Ext(filename)
+	if ext == "" {
+		return mimeTextPlain
+	}
+	mimeType := mime.TypeByExtension(ext)
+	if mimeType == "" {
+		return mimeTextPlain
+	}
 	return mimeType
 }
 
@@ -555,4 +573,9 @@ func GetRecentlyEditedForTesting(title string, c *gin.Context, logger *lumber.Co
 // RequestBaseURLForTesting exposes requestBaseURL for testing
 func RequestBaseURLForTesting(c *gin.Context) string {
 	return requestBaseURL(c)
+}
+
+// ContentTypeFromNameForTesting exposes contentTypeFromName for testing
+func ContentTypeFromNameForTesting(filename string) string {
+	return contentTypeFromName(filename)
 }
