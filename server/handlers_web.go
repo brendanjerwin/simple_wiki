@@ -524,6 +524,8 @@ func init() {
 		{".md", "text/markdown"},
 		{".heic", "image/heic"},
 		{".heif", "image/heif"},
+		{".woff2", "font/woff2"},
+		{".ttf", "font/ttf"},
 	} {
 		if err := mime.AddExtensionType(m[0], m[1]); err != nil {
 			log.Fatalf("failed to register %s MIME type: %v", m[0], err)
