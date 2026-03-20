@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/server"
+	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
@@ -482,6 +484,97 @@ var _ = Describe("handlePageRequest directory listing", func() {
 
 		It("should return a 500 status code", func() {
 			Expect(w.Code).To(Equal(http.StatusInternalServerError))
+		})
+	})
+})
+
+var _ = Describe("handleUpload Audit Logging", func() {
+	var (
+		tmpDir    string
+		logBuffer *bytes.Buffer
+		router    *gin.Engine
+	)
+
+	BeforeEach(func() {
+		var err error
+		tmpDir, err = os.MkdirTemp("", "simple_wiki_audit_test")
+		Expect(err).NotTo(HaveOccurred())
+
+		logBuffer = &bytes.Buffer{}
+		logger := lumber.NewBasicLogger(&handlerTestWriteCloser{logBuffer}, lumber.TRACE)
+		site, err := server.NewSite(tmpDir, "", "testpage", 0, "secret", true, 1024, 1024, logger)
+		Expect(err).NotTo(HaveOccurred())
+		router = site.GinRouter()
+	})
+
+	AfterEach(func() {
+		_ = os.RemoveAll(tmpDir)
+	})
+
+	When("a file is uploaded with an authenticated Tailscale identity", func() {
+		var logOutput string
+
+		BeforeEach(func() {
+			body := &bytes.Buffer{}
+			writer := multipart.NewWriter(body)
+			part, err := writer.CreateFormFile("file", "test.txt")
+			Expect(err).NotTo(HaveOccurred())
+			_, err = part.Write([]byte("hello audit"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(writer.Close()).To(Succeed())
+
+			req, err := http.NewRequest(http.MethodPost, "/uploads", body)
+			Expect(err).NotTo(HaveOccurred())
+			req.Header.Set("Content-Type", writer.FormDataContentType())
+
+			identity := tailscale.NewIdentity("uploader@example.com", "Uploader", "upload-device")
+			req = req.WithContext(tailscale.ContextWithIdentity(req.Context(), identity))
+
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			Expect(w.Code).To(Equal(http.StatusOK))
+
+			logOutput = logBuffer.String()
+		})
+
+		It("should log the upload with the filename", func() {
+			Expect(logOutput).To(ContainSubstring(`[AUDIT] upload | file: "test.txt"`))
+		})
+
+		It("should log the upload with the user identity", func() {
+			Expect(logOutput).To(ContainSubstring("uploader@example.com"))
+		})
+
+		It("should log the operation type", func() {
+			Expect(logOutput).To(ContainSubstring("[AUDIT] upload"))
+		})
+	})
+
+	When("a file is uploaded without a Tailscale identity (anonymous)", func() {
+		var logOutput string
+
+		BeforeEach(func() {
+			body := &bytes.Buffer{}
+			writer := multipart.NewWriter(body)
+			part, err := writer.CreateFormFile("file", "anon.txt")
+			Expect(err).NotTo(HaveOccurred())
+			_, err = part.Write([]byte("anon content"))
+			Expect(err).NotTo(HaveOccurred())
+			Expect(writer.Close()).To(Succeed())
+
+			req, err := http.NewRequest(http.MethodPost, "/uploads", body)
+			Expect(err).NotTo(HaveOccurred())
+			req.Header.Set("Content-Type", writer.FormDataContentType())
+
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, req)
+			Expect(w.Code).To(Equal(http.StatusOK))
+
+			logOutput = logBuffer.String()
+		})
+
+		It("should log as anonymous", func() {
+			Expect(logOutput).To(ContainSubstring(`[AUDIT] upload | file: "anon.txt" | user: "anonymous"`))
 		})
 	})
 })
