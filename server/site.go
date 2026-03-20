@@ -204,21 +204,21 @@ func (s *Site) InitializeIndexing() error {
 	s.startMigrationJobs()
 
 	// Get all files that need to be indexed
-	files, pageReadErrs, err := s.DirectoryList()
+	listing, err := s.DirectoryList()
 	if err != nil {
 		return fmt.Errorf("failed to list pages for indexing: %w", err)
 	}
-	for _, re := range pageReadErrs {
+	for _, re := range listing.ReadErrors {
 		s.Logger.Error("Skipping page %q from indexing due to read error: %v", re.PageName, re.Err)
 	}
-	if len(files) == 0 {
+	if len(listing.Entries) == 0 {
 		s.Logger.Info("No pages found to index.")
 		return nil
 	}
 
 	// Convert files to page identifiers
-	pageIdentifiers := make([]string, len(files))
-	for i, file := range files {
+	pageIdentifiers := make([]string, len(listing.Entries))
+	for i, file := range listing.Entries {
 		pageIdentifiers[i] = file.Name()
 	}
 
@@ -241,7 +241,7 @@ func (s *Site) InitializeIndexing() error {
 		// This error means the bulk enqueue failed immediately - the callback won't run
 		s.Logger.Error("Failed to enqueue bulk indexing jobs: %v", err)
 	}
-	s.Logger.Info("Background indexing started for %d pages. Application is ready.", len(files))
+	s.Logger.Info("Background indexing started for %d pages. Application is ready.", len(listing.Entries))
 
 	return nil
 }
@@ -474,14 +474,21 @@ type PageReadError struct {
 	Err      error
 }
 
-// DirectoryList returns a list of all wiki pages in the data directory along with any per-page read errors.
+// DirectoryListing holds the result of a directory listing operation, including
+// successfully read page entries and any per-page read errors collected during iteration.
+type DirectoryListing struct {
+	Entries    []os.FileInfo
+	ReadErrors []PageReadError
+}
+
+// DirectoryList returns a listing of all wiki pages in the data directory.
 // It returns a non-nil error only if the data directory itself cannot be read (e.g., directory is missing
-// or unreadable). Individual page read failures are collected in the returned []PageReadError slice so that
-// callers can inform the user which pages could not be loaded without aborting the entire listing.
-func (s *Site) DirectoryList() ([]os.FileInfo, []PageReadError, error) {
+// or unreadable). Individual page read failures are collected in the returned DirectoryListing.ReadErrors
+// slice so that callers can inform the user which pages could not be loaded without aborting the entire listing.
+func (s *Site) DirectoryList() (DirectoryListing, error) {
 	files, err := os.ReadDir(s.PathToData)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to read data directory: %w", err)
+		return DirectoryListing{}, fmt.Errorf("failed to read data directory: %w", err)
 	}
 	entries := make([]os.FileInfo, 0, len(files))
 	var readErrors []PageReadError
@@ -511,7 +518,7 @@ func (s *Site) DirectoryList() ([]os.FileInfo, []PageReadError, error) {
 		}
 	}
 	sort.Slice(entries, func(i, j int) bool { return entries[i].ModTime().Before(entries[j].ModTime()) })
-	return entries, readErrors, nil
+	return DirectoryListing{Entries: entries, ReadErrors: readErrors}, nil
 }
 
 // UploadEntry represents an uploaded file entry.

@@ -61,13 +61,13 @@ var _ = Describe("Site Page Operations", func() {
 		When("the data directory does not exist", func() {
 			It("should return an error", func() {
 				s.PathToData = filepath.Join(pathToData, "nonexistent_subdir")
-				_, _, err := s.DirectoryList()
+				_, err := s.DirectoryList()
 				Expect(err).To(HaveOccurred())
 			})
 		})
 
 		When("there are pages", func() {
-			var pages []os.FileInfo
+			var listing DirectoryListing
 
 			BeforeEach(func() {
 				req, _ := http.NewRequest("GET", "/", nil)
@@ -94,19 +94,19 @@ var _ = Describe("Site Page Operations", func() {
 					Expect(completed).To(BeTrue())
 				}
 
-				pages, _, err = s.DirectoryList()
+				listing, err = s.DirectoryList()
 				Expect(err).ToNot(HaveOccurred())
 			})
 
 			It("should return all the pages", func() {
-				Expect(pages).To(HaveLen(3))
+				Expect(listing.Entries).To(HaveLen(3))
 			})
 
 			It("should sort pages by modification time (oldest first)", func() {
 				// Aider: don't change the order here. 3 should be _last_
-				Expect(pages[0].Name()).To(Equal("testpage"))
-				Expect(pages[1].Name()).To(Equal("testpage2"))
-				Expect(pages[2].Name()).To(Equal("testpage3"))
+				Expect(listing.Entries[0].Name()).To(Equal("testpage"))
+				Expect(listing.Entries[1].Name()).To(Equal("testpage2"))
+				Expect(listing.Entries[2].Name()).To(Equal("testpage3"))
 			})
 		})
 	})

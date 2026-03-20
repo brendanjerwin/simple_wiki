@@ -796,10 +796,10 @@ identifier = "test"
 
 			It("should index the test page", func() {
 				// The page should be indexed (we can verify by checking DirectoryList)
-				files, _, err := s.DirectoryList()
+				listing, err := s.DirectoryList()
 				Expect(err).ToNot(HaveOccurred())
-				Expect(len(files)).To(BeNumerically(">", 0))
-				Expect(files[0].Name()).To(Equal("test"))
+				Expect(len(listing.Entries)).To(BeNumerically(">", 0))
+				Expect(listing.Entries[0].Name()).To(Equal("test"))
 			})
 		})
 
