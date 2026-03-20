@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
+	"log"
 	"mime"
 	"net/http"
 	"net/url"
@@ -38,6 +39,7 @@ const (
 	rootPath             = "/"
 	uploadFailureMessage = "Failed to upload: %s"
 	uploadsPage          = "uploads"
+	mimeTextPlain        = "text/plain"
 )
 
 var (
@@ -497,7 +499,7 @@ func (s *Site) handleUploads(c *gin.Context, command string) {
 
 func (*Site) handleRawContent(c *gin.Context, command string, p *wikipage.Page, rawText string) bool {
 	if len(command) > maxContentLength && command[0:maxContentLength] == "/ra" {
-		c.Writer.Header().Set("Content-Type", "text/plain")
+		c.Writer.Header().Set("Content-Type", mimeTextPlain)
 		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
 		c.Writer.Header().Set("Access-Control-Max-Age", "86400")
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE, UPDATE")
@@ -517,13 +519,29 @@ func (*Site) handleFrontmatter(c *gin.Context, command string, p *wikipage.Page)
 	return false
 }
 
-func contentTypeFromName(filename string) string {
-	_ = mime.AddExtensionType(".md", "text/markdown")
-	_ = mime.AddExtensionType(".heic", "image/heic")
-	_ = mime.AddExtensionType(".heif", "image/heif")
+func init() {
+	for _, m := range [][2]string{
+		{".md", "text/markdown"},
+		{".heic", "image/heic"},
+		{".heif", "image/heif"},
+		{".woff2", "font/woff2"},
+		{".ttf", "font/ttf"},
+	} {
+		if err := mime.AddExtensionType(m[0], m[1]); err != nil {
+			log.Fatalf("failed to register %s MIME type: %v", m[0], err)
+		}
+	}
+}
 
-	nameParts := strings.Split(filename, ".")
-	mimeType := mime.TypeByExtension("." + nameParts[len(nameParts)-1])
+func contentTypeFromName(filename string) string {
+	ext := filepath.Ext(filename)
+	if ext == "" {
+		return mimeTextPlain
+	}
+	mimeType := mime.TypeByExtension(ext)
+	if mimeType == "" {
+		return mimeTextPlain
+	}
 	return mimeType
 }
 
@@ -555,4 +573,9 @@ func GetRecentlyEditedForTesting(title string, c *gin.Context, logger *lumber.Co
 // RequestBaseURLForTesting exposes requestBaseURL for testing
 func RequestBaseURLForTesting(c *gin.Context) string {
 	return requestBaseURL(c)
+}
+
+// ContentTypeFromNameForTesting exposes contentTypeFromName for testing
+func ContentTypeFromNameForTesting(filename string) string {
+	return contentTypeFromName(filename)
 }
