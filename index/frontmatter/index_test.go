@@ -304,6 +304,40 @@ var _ = Describe("Index", func() {
 				Expect(results).NotTo(ContainElement("kitchen_item"))
 			})
 		})
+
+		Describe("when a page has multiple values that match the prefix", func() {
+			var (
+				err     error
+				results []wikipage.PageIdentifier
+			)
+
+			BeforeEach(func() {
+				mockReader.AddPage("multi-location-item", wikipage.FrontMatter{
+					"identifier": "multi-location-item",
+					"inventory": map[string]any{
+						"containers": []any{"Garage-Section-A", "Garage-Section-B"},
+					},
+				})
+				err = index.AddPageToIndex("multi-location-item")
+
+				results = index.QueryPrefixMatch("inventory.containers", "Garage")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return the page only once despite multiple matching values", func() {
+				Expect(results).To(ContainElement(wikipage.PageIdentifier("multi_location_item")))
+				count := 0
+				for _, r := range results {
+					if r == wikipage.PageIdentifier("multi_location_item") {
+						count++
+					}
+				}
+				Expect(count).To(Equal(1))
+			})
+		})
 	})
 
 	Describe("QueryExactMatchSortedBy", func() {
@@ -538,6 +572,38 @@ var _ = Describe("Index", func() {
 			It("should index the name field within the checklist", func() {
 				results := index.QueryExactMatch("checklists.grocery_list.name", "Grocery List")
 				Expect(results).To(ContainElement("checklist_page"))
+			})
+		})
+
+		Describe("when a page has multiple values for the queried key", func() {
+			var (
+				err     error
+				results []wikipage.PageIdentifier
+			)
+
+			BeforeEach(func() {
+				mockReader.AddPage("multi-value-page", wikipage.FrontMatter{
+					"identifier": "multi-value-page",
+					"tags":       []any{"go", "testing", "wiki"},
+				})
+				err = index.AddPageToIndex("multi-value-page")
+
+				results = index.QueryKeyExistence("tags")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return the page only once despite multiple indexed values", func() {
+				Expect(results).To(ContainElement(wikipage.PageIdentifier("multi_value_page")))
+				count := 0
+				for _, r := range results {
+					if r == wikipage.PageIdentifier("multi_value_page") {
+						count++
+					}
+				}
+				Expect(count).To(Equal(1))
 			})
 		})
 
