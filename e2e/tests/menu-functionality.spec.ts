@@ -14,7 +14,8 @@ test.describe('Menu Functionality (migrated from simple_wiki.js)', () => {
       await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
       // The page import trigger should be injected by initPageImportMenu()
-      await expect(page.locator('#page-import-trigger')).toBeVisible({ timeout: MENU_APPEAR_TIMEOUT_MS });
+      // It lives inside .pure-menu-children (CSS-hidden dropdown), so check DOM attachment not CSS visibility
+      await expect(page.locator('#page-import-trigger')).toBeAttached({ timeout: MENU_APPEAR_TIMEOUT_MS });
     });
 
     test('should show the FontAwesome import icon next to the label', async ({ page }) => {
@@ -22,7 +23,8 @@ test.describe('Menu Functionality (migrated from simple_wiki.js)', () => {
       await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
       const trigger = page.locator('#page-import-trigger');
-      await expect(trigger).toBeVisible({ timeout: MENU_APPEAR_TIMEOUT_MS });
+      // Item lives inside .pure-menu-children (CSS-hidden dropdown), so check DOM attachment not CSS visibility
+      await expect(trigger).toBeAttached({ timeout: MENU_APPEAR_TIMEOUT_MS });
       await expect(trigger.locator('i.fa-solid.fa-file-import')).toBeAttached();
     });
 
@@ -30,7 +32,10 @@ test.describe('Menu Functionality (migrated from simple_wiki.js)', () => {
       await page.goto('/home/view');
       await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
-      await expect(page.locator('#page-import-trigger')).toBeVisible({ timeout: MENU_APPEAR_TIMEOUT_MS });
+      // Item lives inside .pure-menu-children (CSS-hidden dropdown); confirm it's attached before interacting
+      await expect(page.locator('#page-import-trigger')).toBeAttached({ timeout: MENU_APPEAR_TIMEOUT_MS });
+      // Hover over the tools-menu to open the CSS dropdown, then click the import trigger
+      await page.locator('.tools-menu').hover();
       await page.locator('#page-import-trigger').click();
 
       // The page-import-dialog should become open/visible
@@ -123,6 +128,8 @@ This page is used by E2E tests for the inventory menu.`);
       await expect(page.locator('#inventory-submenu-trigger')).toBeAttached({ timeout: MENU_APPEAR_TIMEOUT_MS });
 
       const trigger = page.locator('#inventory-submenu-trigger');
+      // Hover over the tools-menu to open the CSS dropdown, making the trigger clickable
+      await page.locator('.tools-menu').hover();
       await trigger.click();
       await expect(trigger).toHaveAttribute('aria-expanded', 'true');
 
