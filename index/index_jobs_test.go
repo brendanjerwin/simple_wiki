@@ -82,7 +82,7 @@ var _ = Describe("FrontmatterIndexJob", func() {
 			})
 
 			It("should call AddPageToIndex on the index", func() {
-				Expect(mockIndex.addCalled).To(ContainElement("test-page"))
+				Expect(mockIndex.addCalled).To(ContainElement(wikipage.PageIdentifier("test-page")))
 			})
 
 			It("should not call RemovePageFromIndex", func() {
@@ -97,7 +97,7 @@ var _ = Describe("FrontmatterIndexJob", func() {
 			})
 
 			It("should call RemovePageFromIndex on the index", func() {
-				Expect(mockIndex.removeCalled).To(ContainElement("test-page"))
+				Expect(mockIndex.removeCalled).To(ContainElement(wikipage.PageIdentifier("test-page")))
 			})
 
 			It("should not call AddPageToIndex", func() {
@@ -216,7 +216,7 @@ var _ = Describe("BleveIndexJob", func() {
 			})
 
 			It("should call AddPageToIndex on the index", func() {
-				Expect(mockIndex.addCalled).To(ContainElement("test-page"))
+				Expect(mockIndex.addCalled).To(ContainElement(wikipage.PageIdentifier("test-page")))
 			})
 
 			It("should not call RemovePageFromIndex", func() {
@@ -231,7 +231,7 @@ var _ = Describe("BleveIndexJob", func() {
 			})
 
 			It("should call RemovePageFromIndex on the index", func() {
-				Expect(mockIndex.removeCalled).To(ContainElement("test-page"))
+				Expect(mockIndex.removeCalled).To(ContainElement(wikipage.PageIdentifier("test-page")))
 			})
 
 			It("should not call AddPageToIndex", func() {

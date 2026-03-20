@@ -270,7 +270,7 @@ func (r *WikiMetricsRecorder) buildFrontmatter(fm map[string]any) {
 
 // writeTemplate writes the markdown template for the metrics page.
 func (r *WikiMetricsRecorder) writeTemplate() error {
-	if err := r.pageWriter.WriteMarkdown(ObservabilityMetricsPage, r.buildMarkdownTemplate()); err != nil {
+	if err := r.pageWriter.WriteMarkdown(ObservabilityMetricsPage, wikipage.Markdown(r.buildMarkdownTemplate())); err != nil {
 		if r.logger != nil {
 			r.logger.Error("Failed to write metrics page template: %v", err)
 		}

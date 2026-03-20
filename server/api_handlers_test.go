@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/gin-gonic/gin"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -18,7 +19,7 @@ var _ = Describe("API Handlers", func() {
 		Describe("createPageReferences", func() {
 			When("creating page references from a list of IDs", func() {
 				var s *Site
-				var ids []string
+				var ids []wikipage.PageIdentifier
 				var actual []PageReference
 
 				BeforeEach(func() {
@@ -31,7 +32,7 @@ var _ = Describe("API Handlers", func() {
 							},
 						},
 					}
-					ids = []string{"id1", "id2", "id3", "id4"}
+					ids = []wikipage.PageIdentifier{"id1", "id2", "id3", "id4"}
 
 					actual = s.createPageReferences(ids)
 				})
@@ -80,7 +81,7 @@ var _ = Describe("API Handlers", func() {
 					}
 					var testReq TestReq
 
-					executor := func() []string {
+					executor := func() []wikipage.PageIdentifier {
 						Fail("executor should not be called")
 						return nil
 					}
@@ -112,7 +113,7 @@ var _ = Describe("API Handlers", func() {
 					}
 					var testReq TestReq
 
-					executor := func() []string {
+					executor := func() []wikipage.PageIdentifier {
 						Fail("executor should not be called")
 						return nil
 					}
@@ -144,8 +145,8 @@ var _ = Describe("API Handlers", func() {
 					}
 					var testReq TestReq
 
-					executor := func() []string {
-						return []string{"id1", "id2"}
+					executor := func() []wikipage.PageIdentifier {
+						return []wikipage.PageIdentifier{"id1", "id2"}
 					}
 
 					s.executeFrontmatterQuery(c, &testReq, executor)
@@ -185,9 +186,9 @@ var _ = Describe("API Handlers", func() {
 					data: map[string]map[string]string{
 						"id1": {"title": "Title A"},
 					},
-					QueryExactMatchFunc: func(key, value string) []string {
+					QueryExactMatchFunc: func(key, value string) []wikipage.PageIdentifier {
 						if key == "test.key" && value == "test_value" {
-							return []string{"id1"}
+							return []wikipage.PageIdentifier{"id1"}
 						}
 						return nil
 					},
@@ -237,9 +238,9 @@ var _ = Describe("API Handlers", func() {
 						"id1": {"title": "Title A"},
 						"id2": {"title": "Title B"},
 					},
-					QueryPrefixMatchFunc: func(key, prefix string) []string {
+					QueryPrefixMatchFunc: func(key, prefix string) []wikipage.PageIdentifier {
 						if key == "test.key" && prefix == "test_val" {
-							return []string{"id1", "id2"}
+							return []wikipage.PageIdentifier{"id1", "id2"}
 						}
 						return nil
 					},
@@ -289,9 +290,9 @@ var _ = Describe("API Handlers", func() {
 					data: map[string]map[string]string{
 						"id1": {"title": "Title A"},
 					},
-					QueryKeyExistenceFunc: func(key string) []string {
+					QueryKeyExistenceFunc: func(key string) []wikipage.PageIdentifier {
 						if key == "test.key" {
-							return []string{"id1"}
+							return []wikipage.PageIdentifier{"id1"}
 						}
 						return nil
 					},
