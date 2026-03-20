@@ -35,20 +35,20 @@ type mockPageReader struct {
 	markdown map[string]string
 }
 
-func (m *mockPageReader) ReadFrontMatter(identifier string) (string, wikipage.FrontMatter, error) {
-	if fm, exists := m.pages[identifier]; exists {
+func (m *mockPageReader) ReadFrontMatter(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
+	if fm, exists := m.pages[string(identifier)]; exists {
 		// Return the identifier from frontmatter if present, otherwise use the lookup key
 		if fmID, ok := fm[identifierKey].(string); ok {
-			return fmID, fm, nil
+			return wikipage.PageIdentifier(fmID), fm, nil
 		}
 		return identifier, fm, nil
 	}
 	return identifier, nil, errors.New("page not found")
 }
 
-func (m *mockPageReader) ReadMarkdown(identifier string) (string, wikipage.Markdown, error) {
+func (m *mockPageReader) ReadMarkdown(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
 	if m.markdown != nil {
-		if md, exists := m.markdown[identifier]; exists {
+		if md, exists := m.markdown[string(identifier)]; exists {
 			return identifier, wikipage.Markdown(md), nil
 		}
 	}
@@ -56,29 +56,29 @@ func (m *mockPageReader) ReadMarkdown(identifier string) (string, wikipage.Markd
 }
 
 type mockFrontmatterIndex struct {
-	index  map[string]map[string][]string
+	index  map[string]map[string][]wikipage.PageIdentifier
 	values map[string]map[string]string
 }
 
-func (m *mockFrontmatterIndex) QueryExactMatch(key, value string) []string {
+func (m *mockFrontmatterIndex) QueryExactMatch(key, value string) []wikipage.PageIdentifier {
 	if keyMap, exists := m.index[key]; exists {
 		if results, exists := keyMap[value]; exists {
 			return results
 		}
 	}
-	return []string{}
+	return []wikipage.PageIdentifier{}
 }
 
-func (*mockFrontmatterIndex) QueryPrefixMatch(key, prefix string) []string {
-	return []string{}
+func (*mockFrontmatterIndex) QueryPrefixMatch(key, prefix string) []wikipage.PageIdentifier {
+	return []wikipage.PageIdentifier{}
 }
 
-func (*mockFrontmatterIndex) QueryKeyExistence(key string) []string {
-	return []string{}
+func (*mockFrontmatterIndex) QueryKeyExistence(key string) []wikipage.PageIdentifier {
+	return []wikipage.PageIdentifier{}
 }
 
-func (m *mockFrontmatterIndex) GetValue(identifier, key string) string {
-	if idMap, exists := m.values[identifier]; exists {
+func (m *mockFrontmatterIndex) GetValue(identifier wikipage.PageIdentifier, key string) string {
+	if idMap, exists := m.values[string(identifier)]; exists {
 		if value, exists := idMap[key]; exists {
 			return value
 		}
@@ -87,13 +87,13 @@ func (m *mockFrontmatterIndex) GetValue(identifier, key string) string {
 }
 
 //revive:disable-next-line:flag-parameter interface implementation requires ascending parameter
-func (m *mockFrontmatterIndex) QueryExactMatchSortedBy(matchKey, matchValue, sortByKey string, ascending bool, maxResults int) []string {
+func (m *mockFrontmatterIndex) QueryExactMatchSortedBy(matchKey, matchValue, sortByKey string, ascending bool, maxResults int) []wikipage.PageIdentifier {
 	matches := m.QueryExactMatch(matchKey, matchValue)
 	if len(matches) == 0 {
 		return nil
 	}
 
-	sorted := make([]string, len(matches))
+	sorted := make([]wikipage.PageIdentifier, len(matches))
 	copy(sorted, matches)
 
 	sort.Slice(sorted, func(i, j int) bool {
@@ -143,7 +143,7 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 			}
 
 			mockIndex = &mockFrontmatterIndex{
-				index: map[string]map[string][]string{},
+				index: map[string]map[string][]wikipage.PageIdentifier{},
 				values: map[string]map[string]string{
 					containerA: {
 						"inventory.items": containerB,
@@ -232,9 +232,9 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 
 			// Set up index to return item_from_index when querying for inventory.container = test_container
 			mockIndex = &mockFrontmatterIndex{
-				index: map[string]map[string][]string{
+				index: map[string]map[string][]wikipage.PageIdentifier{
 					"inventory.container": {
-						"test_container": []string{"item_from_index"}, // This is the key integration
+						"test_container": []wikipage.PageIdentifier{"item_from_index"}, // This is the key integration
 					},
 				},
 				values: map[string]map[string]string{
@@ -303,9 +303,9 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 
 			// Set up index to return index_item for mixed_container
 			isolatedMockIndex = &mockFrontmatterIndex{
-				index: map[string]map[string][]string{
+				index: map[string]map[string][]wikipage.PageIdentifier{
 					"inventory.container": {
-						"isolated_mixed_container": []string{"isolated_index_item"}, 
+						"isolated_mixed_container": []wikipage.PageIdentifier{"isolated_index_item"}, 
 					},
 				},
 				values: map[string]map[string]string{
@@ -358,7 +358,7 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 			}
 
 			mockIndex = &mockFrontmatterIndex{
-				index:  map[string]map[string][]string{},
+				index:  map[string]map[string][]wikipage.PageIdentifier{},
 				values: map[string]map[string]string{
 					"simple_item": {
 						titleKey: "Simple Item",
@@ -407,7 +407,7 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 			}
 
 			mockIndex := &mockFrontmatterIndex{
-				index:  map[string]map[string][]string{},
+				index:  map[string]map[string][]wikipage.PageIdentifier{},
 				values: map[string]map[string]string{
 					"simple_item": {
 						titleKey: "Simple Item",
@@ -477,9 +477,9 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 			}
 
 			mockIndex := &mockFrontmatterIndex{
-				index: map[string]map[string][]string{
+				index: map[string]map[string][]wikipage.PageIdentifier{
 					"inventory.container": {
-						"mixed_container": []string{"index_item"}, 
+						"mixed_container": []wikipage.PageIdentifier{"index_item"}, 
 					},
 				},
 				values: map[string]map[string]string{
@@ -550,9 +550,9 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 			}
 
 			mockIndex := &mockFrontmatterIndex{
-				index: map[string]map[string][]string{
+				index: map[string]map[string][]wikipage.PageIdentifier{
 					"inventory.container": {
-						"mixed_container": []string{"index_item"}, 
+						"mixed_container": []wikipage.PageIdentifier{"index_item"}, 
 					},
 				},
 				values: map[string]map[string]string{
@@ -622,7 +622,7 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 			}
 
 			mockIndex = &mockFrontmatterIndex{
-				index:  map[string]map[string][]string{},
+				index:  map[string]map[string][]wikipage.PageIdentifier{},
 				values: map[string]map[string]string{},
 			}
 
@@ -658,7 +658,7 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 			}
 
 			mockIndex = &mockFrontmatterIndex{
-				index:  map[string]map[string][]string{},
+				index:  map[string]map[string][]wikipage.PageIdentifier{},
 				values: map[string]map[string]string{},
 			}
 
@@ -692,7 +692,7 @@ var _ = Describe("ConstructTemplateContextFromFrontmatterWithVisited", func() {
 			}
 
 			mockIndex = &mockFrontmatterIndex{
-				index:  map[string]map[string][]string{},
+				index:  map[string]map[string][]wikipage.PageIdentifier{},
 				values: map[string]map[string]string{},
 			}
 
@@ -731,9 +731,9 @@ var _ = Describe("ConstructTemplateContextFromFrontmatterWithVisited", func() {
 			}
 
 			mockIndex = &mockFrontmatterIndex{
-				index: map[string]map[string][]string{
+				index: map[string]map[string][]wikipage.PageIdentifier{
 					"inventory.container": {
-						"test_container": []string{"item_from_index"},
+						"test_container": []wikipage.PageIdentifier{"item_from_index"},
 					},
 				},
 				values: map[string]map[string]string{
@@ -771,7 +771,7 @@ var _ = Describe("ConstructTemplateContextFromFrontmatterWithVisited with circul
 
 	BeforeEach(func() {
 		mockIndex = &mockFrontmatterIndex{
-			index: map[string]map[string][]string{
+			index: map[string]map[string][]wikipage.PageIdentifier{
 				"inventory.container": {
 					"circular_container": {"item1", "item2"},
 				},
@@ -832,7 +832,7 @@ func createDeepNestedPages() map[string]wikipage.FrontMatter {
 
 func createDeepNestedIndex() *mockFrontmatterIndex {
 	mockIndex := &mockFrontmatterIndex{
-		index:  map[string]map[string][]string{},
+		index:  map[string]map[string][]wikipage.PageIdentifier{},
 		values: make(map[string]map[string]string),
 	}
 
@@ -866,7 +866,7 @@ var _ = Describe("BuildLinkTo", func() {
 			pages: map[string]wikipage.FrontMatter{},
 		}
 		mockIndex = &mockFrontmatterIndex{
-			index:  map[string]map[string][]string{},
+			index:  map[string]map[string][]wikipage.PageIdentifier{},
 			values: map[string]map[string]string{},
 		}
 		currentPageTemplateContext = templating.TemplateContext{
@@ -1097,7 +1097,7 @@ var _ = Describe("BuildIsContainer edge cases", func() {
 
 	BeforeEach(func() {
 		mockIndex = &mockFrontmatterIndex{
-			index:  map[string]map[string][]string{},
+			index:  map[string]map[string][]wikipage.PageIdentifier{},
 			values: map[string]map[string]string{},
 		}
 		isContainerFunc = templating.BuildIsContainer(mockIndex)
@@ -1123,7 +1123,7 @@ var _ = Describe("BuildIsContainer edge cases", func() {
 
 	Context("with legacy container (items reference it)", func() {
 		BeforeEach(func() {
-			mockIndex.index["inventory.container"] = map[string][]string{
+			mockIndex.index["inventory.container"] = map[string][]wikipage.PageIdentifier{
 				"legacy_container": {"item1", "item2"},
 			}
 		})
@@ -1158,7 +1158,7 @@ var _ = Describe("ExecuteTemplate", func() {
 		}
 
 		mockIndex = &mockFrontmatterIndex{
-			index:  map[string]map[string][]string{},
+			index:  map[string]map[string][]wikipage.PageIdentifier{},
 			values: map[string]map[string]string{},
 		}
 	})
@@ -1259,7 +1259,7 @@ var _ = Describe("ExecuteTemplate", func() {
 
 	Context("with FindBy function", func() {
 		It("should execute template with FindBy function", func() {
-			mockIndex.index["tag"] = map[string][]string{
+			mockIndex.index["tag"] = map[string][]wikipage.PageIdentifier{
 				"electronics": {"item1", "item2"},
 			}
 
@@ -1366,7 +1366,7 @@ var _ = Describe("ExecuteTemplate", func() {
 
 	Context("with FindByPrefix function", func() {
 		It("should execute template with FindByPrefix function", func() {
-			mockIndex.index["tag"] = map[string][]string{
+			mockIndex.index["tag"] = map[string][]wikipage.PageIdentifier{
 				"electronics": {"item1", "item2"},
 			}
 
@@ -1384,7 +1384,7 @@ var _ = Describe("ExecuteTemplate", func() {
 
 	Context("with FindByKeyExistence function", func() {
 		It("should execute template with FindByKeyExistence function", func() {
-			mockIndex.index["has_serial"] = map[string][]string{
+			mockIndex.index["has_serial"] = map[string][]wikipage.PageIdentifier{
 				"": {"item1", "item2"},
 			}
 
@@ -1446,7 +1446,7 @@ var _ = Describe("ExecuteTemplate", func() {
 				identifierKey: "page1",
 				titleKey:      "Page 1",
 			}
-			mockIndex.index["tag"] = map[string][]string{
+			mockIndex.index["tag"] = map[string][]wikipage.PageIdentifier{
 				"important": {"page1"},
 			}
 			mockIndex.values["test_container"] = map[string]string{
@@ -1608,7 +1608,7 @@ var _ = Describe("BuildBlog", func() {
 			},
 		}
 		mockIndex = &mockFrontmatterIndex{
-			index: map[string]map[string][]string{
+			index: map[string]map[string][]wikipage.PageIdentifier{
 				"blog.identifier": {
 					"my-blog": {"post_one", "post_two", "post_three"},
 				},

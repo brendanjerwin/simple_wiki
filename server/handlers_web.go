@@ -395,7 +395,7 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 		return
 	}
 	s.Logger.Trace("Update: %v", json)
-	p, err := s.ReadPage(json.Page)
+	p, err := s.ReadPage(wikipage.PageIdentifier(json.Page))
 	if err != nil {
 		s.Logger.Error("Failed to open page %s for update: %v", json.Page, err)
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to open page"})

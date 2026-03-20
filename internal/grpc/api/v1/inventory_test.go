@@ -694,7 +694,7 @@ var _ = Describe("InventoryManagementService", func() {
 				ContainerIdentifier: "test-container",
 			}
 			mockFrontmatterIndexQueryer = &FlexibleMockFrontmatterIndexQueryer{
-				ExactMatchResults: make(map[string][]string),
+				ExactMatchResults: make(map[string][]wikipage.PageIdentifier),
 				GetValueResults:   make(map[string]map[string]string),
 			}
 		})
@@ -743,7 +743,7 @@ var _ = Describe("InventoryManagementService", func() {
 
 		When("container has items", func() {
 			BeforeEach(func() {
-				mockFrontmatterIndexQueryer.ExactMatchResults["inventory.container:test_container"] = []string{
+				mockFrontmatterIndexQueryer.ExactMatchResults["inventory.container:test_container"] = []wikipage.PageIdentifier{
 					"item_1",
 					"item_2",
 				}
@@ -784,7 +784,7 @@ var _ = Describe("InventoryManagementService", func() {
 
 			BeforeEach(func() {
 				// Item not in index yet (no inventory.container set)
-				mockFrontmatterIndexQueryer.ExactMatchResults["inventory.container:test_container"] = []string{}
+				mockFrontmatterIndexQueryer.ExactMatchResults["inventory.container:test_container"] = []wikipage.PageIdentifier{}
 				mockPageReaderMutator = &MockPageReaderMutator{
 					FrontmatterByID: map[string]map[string]any{
 						"test_container": {
@@ -827,7 +827,7 @@ var _ = Describe("InventoryManagementService", func() {
 
 			BeforeEach(func() {
 				// Same item appears in both index and inventory.items array
-				mockFrontmatterIndexQueryer.ExactMatchResults["inventory.container:test_container"] = []string{"shared_item"}
+				mockFrontmatterIndexQueryer.ExactMatchResults["inventory.container:test_container"] = []wikipage.PageIdentifier{"shared_item"}
 				mockPageReaderMutator = &MockPageReaderMutator{
 					FrontmatterByID: map[string]map[string]any{
 						"test_container": {
@@ -1038,8 +1038,8 @@ var _ = Describe("InventoryManagementService", func() {
 
 // FlexibleMockFrontmatterIndexQueryer is a more flexible mock for testing
 type FlexibleMockFrontmatterIndexQueryer struct {
-	ExactMatchResults map[string][]string     // key:value -> results
-	GetValueResults   map[string]map[string]string // identifier -> keypath -> value
+	ExactMatchResults map[string][]wikipage.PageIdentifier // key:value -> results
+	GetValueResults   map[string]map[string]string         // identifier -> keypath -> value
 }
 
 func (m *FlexibleMockFrontmatterIndexQueryer) QueryExactMatch(dottedKeyPath wikipage.DottedKeyPath, value wikipage.Value) []wikipage.PageIdentifier {

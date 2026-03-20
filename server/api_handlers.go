@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/brendanjerwin/simple_wiki/labels"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/gin-gonic/gin"
 )
 
@@ -50,7 +51,7 @@ func (s *Site) handleFindBy(c *gin.Context) {
 	}
 
 	var req Req
-	s.executeFrontmatterQuery(c, &req, func() []string {
+	s.executeFrontmatterQuery(c, &req, func() []wikipage.PageIdentifier {
 		return s.FrontmatterIndexQueryer.QueryExactMatch(req.DottedKeyPath, req.Value)
 	})
 }
@@ -63,7 +64,7 @@ func (s *Site) handleFindByPrefix(c *gin.Context) {
 	}
 
 	var req Req
-	s.executeFrontmatterQuery(c, &req, func() []string {
+	s.executeFrontmatterQuery(c, &req, func() []wikipage.PageIdentifier {
 		return s.FrontmatterIndexQueryer.QueryPrefixMatch(req.DottedKeyPath, req.ValuePrefix)
 	})
 }
@@ -75,12 +76,12 @@ func (s *Site) handleFindByKeyExistence(c *gin.Context) {
 	}
 
 	var req Req
-	s.executeFrontmatterQuery(c, &req, func() []string {
+	s.executeFrontmatterQuery(c, &req, func() []wikipage.PageIdentifier {
 		return s.FrontmatterIndexQueryer.QueryKeyExistence(req.DottedKeyPath)
 	})
 }
 
-func (s *Site) executeFrontmatterQuery(c *gin.Context, req any, queryExecutor func() []string) {
+func (s *Site) executeFrontmatterQuery(c *gin.Context, req any, queryExecutor func() []wikipage.PageIdentifier) {
 	if s.FrontmatterIndexQueryer == nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Frontmatter index is not available"})
 		return
@@ -96,11 +97,11 @@ func (s *Site) executeFrontmatterQuery(c *gin.Context, req any, queryExecutor fu
 	c.JSON(http.StatusOK, gin.H{"success": true, "ids": results})
 }
 
-func (s *Site) createPageReferences(ids []string) []PageReference {
+func (s *Site) createPageReferences(ids []wikipage.PageIdentifier) []PageReference {
 	results := make([]PageReference, len(ids))
 	for idx, id := range ids {
 		results[idx] = PageReference{
-			Identifier: id,
+			Identifier: string(id),
 			Title:      s.FrontmatterIndexQueryer.GetValue(id, "title"),
 		}
 	}

@@ -127,7 +127,7 @@ var _ = Describe("Site Page Operations", func() {
 				Expect(err).ToNot(HaveOccurred())
 				
 				// Re-fetch the page to get the updated content
-				p, err = s.ReadPage(p.Identifier)
+				p, err = s.ReadPage(wikipage.PageIdentifier(p.Identifier))
 				Expect(err).ToNot(HaveOccurred())
 				Expect(p.Render(s, s.MarkdownRenderer, TemplateExecutor{}, s.FrontmatterIndexQueryer)).To(Succeed())
 			})
@@ -142,7 +142,7 @@ var _ = Describe("Site Page Operations", func() {
 					Expect(err).ToNot(HaveOccurred())
 					
 					// Re-fetch the page to get the updated content
-					p, err = s.ReadPage(p.Identifier)
+					p, err = s.ReadPage(wikipage.PageIdentifier(p.Identifier))
 					Expect(err).ToNot(HaveOccurred())
 					Expect(p.Render(s, s.MarkdownRenderer, TemplateExecutor{}, s.FrontmatterIndexQueryer)).To(Succeed())
 				})
@@ -217,7 +217,7 @@ var _ = Describe("Site Page Operations", func() {
 				s.MigrationApplicator = mockApplicator
 				
 				// This call should complete without hanging and apply migrations
-				p, err = s.ReadPage(pageIdentifier)
+				p, err = s.ReadPage(wikipage.PageIdentifier(pageIdentifier))
 				Expect(err).NotTo(HaveOccurred())
 				
 				// Wait for any background indexing operations triggered by the save

@@ -1022,7 +1022,7 @@ title = "Test Page"
 				Expect(fileErr).NotTo(HaveOccurred())
 
 				// With no migration applicator, Open() should return an error
-				_, openErr = s.ReadPage(string(pageIdentifier))
+				_, openErr = s.ReadPage(pageIdentifier)
 			})
 
 			It("should return an error", func() {
@@ -1061,13 +1061,13 @@ title = "Fixed Title"
 title = "Bad Title"
 +++
 # Content`
-				page, err = s.ReadPage(pageIdentifier)
+				page, err = s.ReadPage(wikipage.PageIdentifier(pageIdentifier))
 				Expect(err).NotTo(HaveOccurred())
 				err = s.UpdatePageContent(wikipage.PageIdentifier(page.Identifier), originalContent)
 				
 				// Re-fetch the page to get the updated content
 				if err == nil {
-					page, err = s.ReadPage(pageIdentifier)
+					page, err = s.ReadPage(wikipage.PageIdentifier(pageIdentifier))
 					Expect(err).NotTo(HaveOccurred())
 				}
 			})
@@ -1090,13 +1090,13 @@ title = "Bad Title"
 					// Set mock to not apply
 					mockMig.AppliesToResult = false
 					
-					page, err = s.ReadPage(pageIdentifier + "-no-migration")
+					page, err = s.ReadPage(wikipage.PageIdentifier(pageIdentifier + "-no-migration"))
 					Expect(err).NotTo(HaveOccurred())
 					err = s.UpdatePageContent(wikipage.PageIdentifier(page.Identifier), originalContent)
 					
 					// Re-fetch the page to get the updated content
 					if err == nil {
-						page, err = s.ReadPage(pageIdentifier + "-no-migration")
+						page, err = s.ReadPage(wikipage.PageIdentifier(pageIdentifier + "-no-migration"))
 						Expect(err).NotTo(HaveOccurred())
 					}
 				})
@@ -1118,13 +1118,13 @@ title = "Migrated"
 +++
 # Content`)
 					
-					page, err = s.ReadPage(pageIdentifier + "-recursive")
+					page, err = s.ReadPage(wikipage.PageIdentifier(pageIdentifier + "-recursive"))
 					Expect(err).NotTo(HaveOccurred())
 					err = s.UpdatePageContent(wikipage.PageIdentifier(page.Identifier), originalContent)
 					
 					// Re-fetch the page to get the updated content
 					if err == nil {
-						page, err = s.ReadPage(pageIdentifier + "-recursive")
+						page, err = s.ReadPage(wikipage.PageIdentifier(pageIdentifier + "-recursive"))
 						Expect(err).NotTo(HaveOccurred())
 					}
 				})
