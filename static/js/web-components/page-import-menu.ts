@@ -1,11 +1,6 @@
 import type { PageImportDialog } from './page-import-dialog.js';
 
 export function initPageImportMenu(): void {
-  const contentEl = document.querySelector('article.content');
-  if (!contentEl) {
-    return;
-  }
-
   const utilitySection = document.getElementById('utilityMenuSection');
   if (!utilitySection) {
     return;

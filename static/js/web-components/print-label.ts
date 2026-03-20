@@ -1,8 +1,7 @@
 import { showToast } from './toast-message.js';
 
 export async function printLabel(templateIdentifier: string): Promise<void> {
-  const contentEl = document.querySelector('article.content');
-  const dataIdentifier = contentEl?.id ?? window.simple_wiki?.pageName ?? '';
+  const dataIdentifier = window.simple_wiki?.pageName ?? '';
 
   try {
     const response = await fetch('/api/print_label', {
@@ -13,8 +12,16 @@ export async function printLabel(templateIdentifier: string): Promise<void> {
       body: JSON.stringify({ template_identifier: templateIdentifier, data_identifier: dataIdentifier }),
     });
     const data = await response.json() as unknown;
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- extracting message from unknown API response
-    const message = (data as Record<string, unknown>)['message'];
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- extracting fields from unknown API response
+    const dataRecord = data as Record<string, unknown>;
+    const message = dataRecord['message'];
+    const success = dataRecord['success'];
+
+    if (!response.ok || success === false) {
+      const errorMessage = typeof message === 'string' ? message : 'Print failed';
+      showToast(errorMessage, 'error', 5);
+      return;
+    }
     showToast(typeof message === 'string' ? message : 'Print successful', 'success', 5);
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : 'Print failed';
@@ -23,8 +30,7 @@ export async function printLabel(templateIdentifier: string): Promise<void> {
 }
 
 export function initPrintMenu(): void {
-  const contentEl = document.querySelector('article.content');
-  if (!contentEl) {
+  if (!document.getElementById('utilityMenuSection')) {
     return;
   }
 

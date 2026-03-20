@@ -134,12 +134,12 @@ function buildInventoryMenu(currentPage: string, frontmatter: unknown): void {
 }
 
 export function initInventoryMenu(): void {
-  const contentEl = document.querySelector('article.content');
-  if (!contentEl) {
+  const utilitySection = document.getElementById('utilityMenuSection');
+  if (!utilitySection) {
     return;
   }
 
-  const currentPage = contentEl.id;
+  const currentPage = window.simple_wiki?.pageName ?? '';
   if (!currentPage) {
     return;
   }
