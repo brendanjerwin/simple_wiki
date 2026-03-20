@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/static"
+	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/gin-contrib/multitemplate"
 	"github.com/gin-contrib/sessions"
@@ -394,23 +395,19 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to open page"})
 		return
 	}
-	var message string
-	success := false
+	unixTime := time.Now().Unix()
 	if json.FetchedAt > 0 && p.IsModifiedSince(json.FetchedAt) {
-		message = "Refusing to overwrite others work"
-		success = false  // Explicitly set to make error handling clear
-	} else {
-		p.Text = json.NewText
-		err := s.savePageAndIndex(p)
-		if err != nil {
-			message = err.Error()
-			success = false  // Explicitly set to make error handling clear
-		} else {
-			message = "Saved"
-			success = true
-		}
+		c.JSON(http.StatusConflict, gin.H{"success": false, "message": "Refusing to overwrite others' work", "unix_time": unixTime})
+		return
 	}
-	c.JSON(http.StatusOK, gin.H{"success": success, "message": message, "unix_time": time.Now().Unix()})
+
+	p.Text = json.NewText
+	err = s.savePageAndIndex(p)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": err.Error(), "unix_time": unixTime})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Saved", "unix_time": unixTime})
 }
 
 
@@ -434,6 +431,9 @@ func (s *Site) handleUpload(c *gin.Context) {
 		s.Logger.Error(uploadFailureMessage, err.Error())
 		return
 	}
+
+	identity := tailscale.IdentityFromContext(c.Request.Context())
+	s.Logger.Info("[AUDIT] upload | file: %q | user: %q", info.Filename, identity.ForLog())
 
 	c.Header("Location", "/uploads/"+fileInfo.Hash+"?filename="+url.QueryEscape(info.Filename))
 }

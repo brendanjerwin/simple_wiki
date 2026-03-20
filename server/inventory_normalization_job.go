@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
+	"github.com/brendanjerwin/simple_wiki/inventory"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/pkg/logging"
 	"github.com/brendanjerwin/simple_wiki/wikiidentifiers"
@@ -37,7 +38,6 @@ const (
 	inventoryContainerKeyPath   = "inventory.container"
 	inventoryItemsKeyPath       = "inventory.items"
 	inventoryIsContainerKeyPath = "inventory.is_container"
-	inventoryKey                = "inventory"
 	newlineDelim                = "\n"
 )
 
@@ -379,14 +379,14 @@ func (j *InventoryNormalizationJob) migrateContainersToIsContainerField() int {
 		}
 
 		// Ensure inventory map exists
-		inventory, ok := fm[inventoryKey].(map[string]any)
+		inv, ok := fm[inventory.FrontmatterKey].(map[string]any)
 		if !ok {
-			inventory = make(map[string]any)
-			fm[inventoryKey] = inventory
+			inv = make(map[string]any)
+			fm[inventory.FrontmatterKey] = inv
 		}
 
 		// Set is_container = true
-		inventory["is_container"] = true
+		inv["is_container"] = true
 
 		// Write back frontmatter
 		if err := j.deps.WriteFrontMatter(wikipage.PageIdentifier(containerID), fm); err != nil {
@@ -404,12 +404,12 @@ func (j *InventoryNormalizationJob) migrateContainersToIsContainerField() int {
 // Handles both boolean true and string "true" values.
 // Returns an UnexpectedIsContainerTypeError if is_container has an unexpected type.
 func isContainerAlreadySet(fm map[string]any) (bool, error) {
-	inventory, ok := fm[inventoryKey].(map[string]any)
+	inv, ok := fm[inventory.FrontmatterKey].(map[string]any)
 	if !ok {
 		return false, nil
 	}
 
-	isContainer := inventory["is_container"]
+	isContainer := inv["is_container"]
 	if isContainer == nil {
 		return false, nil
 	}
@@ -612,12 +612,12 @@ func (j *InventoryNormalizationJob) processContainerForItemRemoval(containerID s
 		return 0, nil // Container doesn't exist, not an error for this operation
 	}
 
-	inventory, ok := containerFm[inventoryKey].(map[string]any)
+	inv, ok := containerFm[inventory.FrontmatterKey].(map[string]any)
 	if !ok {
 		return 0, nil // No inventory section, nothing to do
 	}
 
-	items, ok := j.extractItemsArray(inventory)
+	items, ok := j.extractItemsArray(inv)
 	if !ok || len(items) == 0 {
 		return 0, nil // No items array or empty, nothing to do
 	}
@@ -629,12 +629,12 @@ func (j *InventoryNormalizationJob) processContainerForItemRemoval(containerID s
 	}
 
 	// Filter out items and write back
-	return j.removeAndWriteItems(containerID, containerFm, inventory, items, itemsToRemove)
+	return j.removeAndWriteItems(containerID, containerFm, inv, items, itemsToRemove)
 }
 
 // extractItemsArray extracts and normalizes the items array from inventory frontmatter.
-func (*InventoryNormalizationJob) extractItemsArray(inventory map[string]any) ([]any, bool) {
-	itemsRaw, ok := inventory["items"]
+func (*InventoryNormalizationJob) extractItemsArray(inv map[string]any) ([]any, bool) {
+	itemsRaw, ok := inv["items"]
 	if !ok {
 		return nil, false
 	}
@@ -693,7 +693,7 @@ func (j *InventoryNormalizationJob) itemReferencesContainer(itemID, containerID 
 		return false
 	}
 
-	itemInventory, ok := itemFm[inventoryKey].(map[string]any)
+	itemInventory, ok := itemFm[inventory.FrontmatterKey].(map[string]any)
 	if !ok {
 		return false
 	}
@@ -712,7 +712,7 @@ func (j *InventoryNormalizationJob) itemReferencesContainer(itemID, containerID 
 
 // removeAndWriteItems removes items from the list and writes back the updated frontmatter.
 // Returns the count of removed items and any error from writing frontmatter.
-func (j *InventoryNormalizationJob) removeAndWriteItems(containerID string, containerFm map[string]any, inventory map[string]any, items []any, itemsToRemove map[string]bool) (int, error) {
+func (j *InventoryNormalizationJob) removeAndWriteItems(containerID string, containerFm map[string]any, inv map[string]any, items []any, itemsToRemove map[string]bool) (int, error) {
 	removedCount := 0
 	var newItems []any
 
@@ -742,7 +742,7 @@ func (j *InventoryNormalizationJob) removeAndWriteItems(containerID string, cont
 	}
 
 	// Update and write back
-	inventory["items"] = newItems
+	inv["items"] = newItems
 	if err := j.deps.WriteFrontMatter(wikipage.PageIdentifier(containerID), containerFm); err != nil {
 		return 0, fmt.Errorf("failed to write frontmatter for container %s: %w", containerID, err)
 	}

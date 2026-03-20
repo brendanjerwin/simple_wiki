@@ -526,7 +526,7 @@ func (s *Server) LoggingInterceptor() grpc.UnaryServerInterceptor {
 }
 
 // DeletePage implements the DeletePage RPC.
-func (s *Server) DeletePage(_ context.Context, req *apiv1.DeletePageRequest) (*apiv1.DeletePageResponse, error) {
+func (s *Server) DeletePage(ctx context.Context, req *apiv1.DeletePageRequest) (*apiv1.DeletePageResponse, error) {
 	err := s.pageReaderMutator.DeletePage(wikipage.PageIdentifier(req.PageName))
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -534,6 +534,9 @@ func (s *Server) DeletePage(_ context.Context, req *apiv1.DeletePageRequest) (*a
 		}
 		return nil, status.Errorf(codes.Internal, "failed to delete page: %v", err)
 	}
+
+	identity := tailscale.IdentityFromContext(ctx)
+	s.logger.Info("[AUDIT] delete | page: %q | user: %q", req.PageName, identity.ForLog())
 
 	return &apiv1.DeletePageResponse{
 		Success: true,
@@ -1457,7 +1460,7 @@ func convertParsedRecordToProto(parsed pageimport.ParsedRecord) (*apiv1.PageImpo
 
 // StartPageImportJob implements the StartPageImportJob RPC for the PageImportService.
 // It starts background jobs to import pages from the CSV content - one job per page.
-func (s *Server) StartPageImportJob(_ context.Context, req *apiv1.StartPageImportJobRequest) (*apiv1.StartPageImportJobResponse, error) {
+func (s *Server) StartPageImportJob(ctx context.Context, req *apiv1.StartPageImportJobRequest) (*apiv1.StartPageImportJobResponse, error) {
 	if req.CsvContent == "" {
 		return nil, status.Error(codes.InvalidArgument, "csv_content cannot be empty")
 	}
@@ -1516,6 +1519,9 @@ func (s *Server) StartPageImportJob(_ context.Context, req *apiv1.StartPageImpor
 			return nil, status.Errorf(codes.Internal, "failed to enqueue import job for record %d: %v", i+1, err)
 		}
 	}
+
+	identity := tailscale.IdentityFromContext(ctx)
+	s.logger.Info("[AUDIT] import | records: %d | user: %q", len(allRecords), identity.ForLog())
 
 	return &apiv1.StartPageImportJobResponse{
 		Success:     true,

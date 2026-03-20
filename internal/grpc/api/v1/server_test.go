@@ -2,6 +2,7 @@
 package v1_test
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -17,6 +18,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
 	"github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
+	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
@@ -364,6 +366,38 @@ func mustNewServerWithJobCoordinator(
 		nil, // fileStorer — nil means uploads disabled
 	)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "mustNewServerWithJobCoordinator failed")
+	return server
+}
+
+// logWriteCloser wraps a bytes.Buffer to implement io.WriteCloser for capturing log output in tests.
+type logWriteCloser struct {
+	*bytes.Buffer
+}
+
+func (*logWriteCloser) Close() error { return nil }
+
+// mustNewServerWithLogger creates a server with the given logger (for capturing log output).
+func mustNewServerWithLogger(
+	pageReaderMutator wikipage.PageReaderMutator,
+	jobCoordinator jobs.JobCoordinator,
+	logger *lumber.ConsoleLogger,
+) *v1.Server {
+	if pageReaderMutator == nil {
+		pageReaderMutator = noOpPageReaderMutator{}
+	}
+	server, err := v1.NewServer(
+		"test-commit",
+		time.Now(),
+		pageReaderMutator,
+		noOpBleveIndexQueryer{},
+		jobCoordinator,
+		logger,
+		nil,
+		nil,
+		noOpFrontmatterIndexQueryer{},
+		nil,
+	)
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "mustNewServerWithLogger failed")
 	return server
 }
 
@@ -1419,6 +1453,96 @@ var _ = Describe("Server", func() {
 			})
 		})
 	})
+
+	Describe("Audit logging for destructive operations", func() {
+		var (
+			logBuffer *bytes.Buffer
+			logOutput string
+		)
+
+		BeforeEach(func() {
+			logBuffer = &bytes.Buffer{}
+		})
+
+		Describe("DeletePage audit log", func() {
+			When("called with an authenticated Tailscale identity", func() {
+				BeforeEach(func() {
+					logger := lumber.NewBasicLogger(&logWriteCloser{logBuffer}, lumber.TRACE)
+					srv := mustNewServerWithLogger(&MockPageReaderMutator{}, nil, logger)
+					identity := tailscale.NewIdentity("user@example.com", "User Name", "device-name")
+					identCtx := tailscale.ContextWithIdentity(ctx, identity)
+					_, _ = srv.DeletePage(identCtx, &apiv1.DeletePageRequest{PageName: "audit-page"})
+					logOutput = logBuffer.String()
+				})
+
+				It("should log the operation with the page name", func() {
+					Expect(logOutput).To(ContainSubstring("audit-page"))
+				})
+
+				It("should log the identity", func() {
+					Expect(logOutput).To(ContainSubstring("user@example.com"))
+				})
+
+				It("should log the operation type", func() {
+					Expect(logOutput).To(ContainSubstring("delete"))
+				})
+			})
+
+			When("called with no identity (anonymous)", func() {
+				BeforeEach(func() {
+					logger := lumber.NewBasicLogger(&logWriteCloser{logBuffer}, lumber.TRACE)
+					srv := mustNewServerWithLogger(&MockPageReaderMutator{}, nil, logger)
+					_, _ = srv.DeletePage(ctx, &apiv1.DeletePageRequest{PageName: "anon-page"})
+					logOutput = logBuffer.String()
+				})
+
+				It("should log as anonymous", func() {
+					Expect(logOutput).To(ContainSubstring("anonymous"))
+				})
+			})
+		})
+
+		Describe("StartPageImportJob audit log", func() {
+			When("called with an authenticated Tailscale identity", func() {
+				BeforeEach(func() {
+					logger := lumber.NewBasicLogger(&logWriteCloser{logBuffer}, lumber.TRACE)
+					mockCoordinator := &MockJobQueueCoordinator{}
+					srv := mustNewServerWithLogger(&MockPageReaderMutator{Err: os.ErrNotExist}, mockCoordinator.AsCoordinator(), logger)
+					identity := tailscale.NewIdentity("importer@example.com", "Importer", "import-device")
+					identCtx := tailscale.ContextWithIdentity(ctx, identity)
+					_, _ = srv.StartPageImportJob(identCtx, &apiv1.StartPageImportJobRequest{
+						CsvContent: "identifier,title\ntest_page,Test Page",
+					})
+					logOutput = logBuffer.String()
+				})
+
+				It("should log the identity", func() {
+					Expect(logOutput).To(ContainSubstring("importer@example.com"))
+				})
+
+				It("should log the operation type", func() {
+					Expect(logOutput).To(ContainSubstring("import"))
+				})
+			})
+
+			When("called with no identity (anonymous)", func() {
+				BeforeEach(func() {
+					logger := lumber.NewBasicLogger(&logWriteCloser{logBuffer}, lumber.TRACE)
+					mockCoordinator := &MockJobQueueCoordinator{}
+					srv := mustNewServerWithLogger(&MockPageReaderMutator{Err: os.ErrNotExist}, mockCoordinator.AsCoordinator(), logger)
+					_, _ = srv.StartPageImportJob(ctx, &apiv1.StartPageImportJobRequest{
+						CsvContent: "identifier,title\ntest_page,Test Page",
+					})
+					logOutput = logBuffer.String()
+				})
+
+				It("should log as anonymous", func() {
+					Expect(logOutput).To(ContainSubstring("anonymous"))
+				})
+			})
+		})
+	})
+
 
 	Describe("UpdatePageContent", func() {
 		var (
