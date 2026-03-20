@@ -163,7 +163,7 @@ func (j *SinglePageImportJob) processRecord(record pageimport.ParsedRecord) erro
 	identifier := record.Identifier
 
 	// Check if page exists
-	_, existingFm, err := j.pageReaderMutator.ReadFrontMatter(identifier)
+	_, existingFm, err := j.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(identifier))
 	var isNewPage bool
 	if err != nil {
 		if !os.IsNotExist(err) {
@@ -203,14 +203,14 @@ func (j *SinglePageImportJob) processRecord(record pageimport.ParsedRecord) erro
 	}
 
 	// Write frontmatter
-	if err := j.pageReaderMutator.WriteFrontMatter(identifier, fm); err != nil {
+	if err := j.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(identifier), fm); err != nil {
 		return fmt.Errorf("failed to write frontmatter: %w", err)
 	}
 
 	// For new pages with inv_item template, also write the inventory markdown
 	if isNewPage && record.Template == pageimport.InvItemTemplate {
 		markdown := inventory.BuildItemMarkdown()
-		if err := j.pageReaderMutator.WriteMarkdown(identifier, markdown); err != nil {
+		if err := j.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(identifier), wikipage.Markdown(markdown)); err != nil {
 			return fmt.Errorf("failed to write markdown: %w", err)
 		}
 	}
@@ -445,10 +445,10 @@ func (j *PageImportReportJob) generateReport(result PageImportResult) error {
 	}
 
 	// Write frontmatter and markdown
-	if err := j.pageReaderMutator.WriteFrontMatter(PageImportReportPage, fm); err != nil {
+	if err := j.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(PageImportReportPage), fm); err != nil {
 		return fmt.Errorf("failed to write import report frontmatter: %w", err)
 	}
-	if err := j.pageReaderMutator.WriteMarkdown(PageImportReportPage, report.String()); err != nil {
+	if err := j.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(PageImportReportPage), wikipage.Markdown(report.String())); err != nil {
 		return fmt.Errorf("failed to write import report markdown: %w", err)
 	}
 

@@ -57,7 +57,7 @@ var (
 
 // AddPageToIndex adds a page to the Bleve index.
 func (b *Index) AddPageToIndex(requestedIdentifier wikipage.PageIdentifier) error {
-	mungedIdentifier, err := wikiidentifiers.MungeIdentifier(requestedIdentifier)
+	mungedIdentifier, err := wikiidentifiers.MungeIdentifier(string(requestedIdentifier))
 	if err != nil {
 		return fmt.Errorf("invalid identifier %q: %w", requestedIdentifier, err)
 	}
@@ -71,7 +71,7 @@ func (b *Index) AddPageToIndex(requestedIdentifier wikipage.PageIdentifier) erro
 		return fmt.Errorf("bleve indexer failed to read frontmatter for page %q: %w", requestedIdentifier, err)
 	}
 
-	renderedBytes, err := templating.ExecuteTemplate(markdown, pageFrontmatter, b.pageReader, b.frontmatterQueryer)
+	renderedBytes, err := templating.ExecuteTemplate(string(markdown), pageFrontmatter, b.pageReader, b.frontmatterQueryer)
 	if err != nil {
 		return fmt.Errorf("bleve indexer failed to execute template for page %q: %w", requestedIdentifier, err)
 	}
@@ -92,11 +92,11 @@ func (b *Index) AddPageToIndex(requestedIdentifier wikipage.PageIdentifier) erro
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	_ = b.index.Delete(identifier)
-	_ = b.index.Delete(requestedIdentifier)
+	_ = b.index.Delete(string(identifier))
+	_ = b.index.Delete(string(requestedIdentifier))
 	_ = b.index.Delete(mungedIdentifier)
 
-	err = b.index.Index(identifier, pageFrontmatter)
+	err = b.index.Index(string(identifier), pageFrontmatter)
 	if err != nil {
 		return fmt.Errorf("bleve indexer failed to index page %q: %w", requestedIdentifier, err)
 	}
@@ -108,8 +108,8 @@ func (b *Index) AddPageToIndex(requestedIdentifier wikipage.PageIdentifier) erro
 func (b *Index) RemovePageFromIndex(identifier wikipage.PageIdentifier) error {
 	// Munge identifier for consistent lookup; if munging fails, use original
 	mungedIdentifier := identifier
-	if munged, err := wikiidentifiers.MungeIdentifier(identifier); err == nil {
-		mungedIdentifier = munged
+	if munged, err := wikiidentifiers.MungeIdentifier(string(identifier)); err == nil {
+		mungedIdentifier = wikipage.PageIdentifier(munged)
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -117,8 +117,8 @@ func (b *Index) RemovePageFromIndex(identifier wikipage.PageIdentifier) error {
 	// Try to delete all possible variations of the identifier to ensure complete removal.
 	// Unlike AddPageToIndex where deletion is background cleanup, RemovePageFromIndex's
 	// primary purpose is deletion, so we return any errors encountered.
-	err1 := b.index.Delete(identifier)
-	err2 := b.index.Delete(mungedIdentifier)
+	err1 := b.index.Delete(string(identifier))
+	err2 := b.index.Delete(string(mungedIdentifier))
 
 	return errors.Join(err1, err2)
 }
@@ -269,12 +269,12 @@ func (b *Index) Query(query string) ([]SearchResult, error) {
 	var results []SearchResult
 	for _, hit := range bleveResults.Hits {
 		result := SearchResult{
-			Identifier: hit.ID,
-			Title:      b.frontmatterQueryer.GetValue(hit.ID, "title"),
+			Identifier: wikipage.PageIdentifier(hit.ID),
+			Title:      b.frontmatterQueryer.GetValue(wikipage.PageIdentifier(hit.ID), "title"),
 		}
 
 		if result.Title == "" {
-			result.Title = result.Identifier
+			result.Title = string(result.Identifier)
 		}
 
 		// Get fragment and highlights from the structured location data

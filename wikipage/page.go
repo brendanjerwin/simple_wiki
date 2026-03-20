@@ -64,7 +64,7 @@ func (p *Page) parse() (FrontMatter, Markdown, error) {
 		frontmatter = &empty
 	}
 
-	return *frontmatter, string(mdContent), nil
+	return FrontMatter(*frontmatter), Markdown(mdContent), nil
 }
 
 // GetFrontMatter returns the parsed frontmatter from the page

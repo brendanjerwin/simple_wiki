@@ -141,7 +141,7 @@ func (s *Server) MergeFrontmatter(_ context.Context, req *apiv1.MergeFrontmatter
 		}
 	}
 
-	_, existingFm, err := s.pageReaderMutator.ReadFrontMatter(req.Page)
+	_, existingFm, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))
 	if err != nil && !os.IsNotExist(err) {
 		return nil, status.Errorf(codes.Internal, failedToReadFrontmatterErrFmt, err)
 	}
@@ -155,7 +155,7 @@ func (s *Server) MergeFrontmatter(_ context.Context, req *apiv1.MergeFrontmatter
 		mergeFrontmatterDeep(existingFm, newFm)
 	}
 
-	err = s.pageReaderMutator.WriteFrontMatter(req.Page, existingFm)
+	err = s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(req.Page), existingFm)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, failedToWriteFrontmatterErrFmt, err)
 	}
@@ -182,7 +182,7 @@ func (s *Server) ReplaceFrontmatter(_ context.Context, req *apiv1.ReplaceFrontma
 		fm[identifierKey] = req.Page
 	}
 
-	err = s.pageReaderMutator.WriteFrontMatter(req.Page, fm)
+	err = s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(req.Page), fm)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, failedToWriteFrontmatterErrFmt, err)
 	}
@@ -217,7 +217,7 @@ func (s *Server) RemoveKeyAtPath(_ context.Context, req *apiv1.RemoveKeyAtPathRe
 		return nil, status.Error(codes.InvalidArgument, "identifier key cannot be removed")
 	}
 
-	_, fm, err := s.pageReaderMutator.ReadFrontMatter(req.Page)
+	_, fm, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.Page)
@@ -230,12 +230,12 @@ func (s *Server) RemoveKeyAtPath(_ context.Context, req *apiv1.RemoveKeyAtPathRe
 		fm = make(map[string]any)
 	}
 
-	updatedFm, err := removeAtPath(fm, req.GetKeyPath())
+	updatedFm, err := removeAtPath(map[string]any(fm), req.GetKeyPath())
 	if err != nil {
 		return nil, err
 	}
 
-	err = s.pageReaderMutator.WriteFrontMatter(req.Page, updatedFm.(map[string]any))
+	err = s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(req.Page), wikipage.FrontMatter(updatedFm.(map[string]any)))
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, failedToWriteFrontmatterErrFmt, err)
 	}
@@ -466,7 +466,7 @@ func (s *Server) buildJobStatusResponse() *apiv1.GetJobStatusResponse {
 // GetFrontmatter implements the GetFrontmatter RPC.
 func (s *Server) GetFrontmatter(_ context.Context, req *apiv1.GetFrontmatterRequest) (resp *apiv1.GetFrontmatterResponse, err error) {
 	var fm map[string]any
-	_, fm, err = s.pageReaderMutator.ReadFrontMatter(req.Page)
+	_, fm, err = s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.Page)
@@ -527,7 +527,7 @@ func (s *Server) LoggingInterceptor() grpc.UnaryServerInterceptor {
 
 // DeletePage implements the DeletePage RPC.
 func (s *Server) DeletePage(ctx context.Context, req *apiv1.DeletePageRequest) (*apiv1.DeletePageResponse, error) {
-	err := s.pageReaderMutator.DeletePage(req.PageName)
+	err := s.pageReaderMutator.DeletePage(wikipage.PageIdentifier(req.PageName))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, status.Errorf(codes.NotFound, "page not found: %s", req.PageName)
@@ -622,7 +622,7 @@ func (s *Server) ListPagesByFrontmatter(_ context.Context, req *apiv1.ListPagesB
 		}
 
 		results = append(results, &apiv1.FrontmatterQueryResult{
-			Identifier:       id,
+			Identifier:        string(id),
 			FrontmatterValues: fmValues,
 			ContentExcerpt:   contentExcerpt,
 		})
@@ -917,7 +917,7 @@ func (s *Server) GenerateIdentifier(_ context.Context, req *apiv1.GenerateIdenti
 
 // checkIdentifierAvailability checks if an identifier is available and returns info about existing page if not.
 func (s *Server) checkIdentifierAvailability(identifier string) (bool, *apiv1.ExistingPageInfo) {
-	_, fm, err := s.pageReaderMutator.ReadFrontMatter(identifier)
+	_, fm, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(identifier))
 	if err != nil {
 		// Page doesn't exist
 		return true, nil
@@ -949,7 +949,7 @@ func (s *Server) findUniqueIdentifier(baseIdentifier string) string {
 	for i := 1; i < maxUniqueIdentifierAttempts; i++ {
 		candidate := fmt.Sprintf("%s_%d", baseIdentifier, i)
 
-		_, _, err := s.pageReaderMutator.ReadFrontMatter(candidate)
+		_, _, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(candidate))
 		if err != nil {
 			// Page doesn't exist, we found a unique identifier
 			return candidate
@@ -972,7 +972,7 @@ func (s *Server) CreatePage(_ context.Context, req *apiv1.CreatePageRequest) (*a
 		return nil, status.Errorf(codes.InvalidArgument, "invalid page name: %v", err)
 	}
 
-	_, existingFm, err := s.pageReaderMutator.ReadFrontMatter(identifier)
+	_, existingFm, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(identifier))
 	if err != nil && !os.IsNotExist(err) {
 		return nil, status.Errorf(codes.Internal, "failed to check page existence: %v", err)
 	}
@@ -1003,11 +1003,11 @@ func (s *Server) CreatePage(_ context.Context, req *apiv1.CreatePageRequest) (*a
 		}, nil
 	}
 
-	if err := s.pageReaderMutator.WriteFrontMatter(identifier, fm); err != nil {
+	if err := s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(identifier), wikipage.FrontMatter(fm)); err != nil {
 		return nil, status.Errorf(codes.Internal, failedToWriteFrontmatterErrFmt, err)
 	}
 
-	if err := s.pageReaderMutator.WriteMarkdown(identifier, markdown); err != nil {
+	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(identifier), wikipage.Markdown(markdown)); err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to write markdown: %v", err)
 	}
 
@@ -1207,7 +1207,7 @@ func (s *Server) UpdateWholePage(_ context.Context, req *apiv1.UpdateWholePageRe
 
 // loadTemplateFrontmatter loads and validates a template page's frontmatter.
 func (s *Server) loadTemplateFrontmatter(templateIdentifier string) (map[string]any, error) {
-	_, fm, err := s.pageReaderMutator.ReadFrontMatter(templateIdentifier)
+	_, fm, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(templateIdentifier))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("template '%s' does not exist", templateIdentifier)
@@ -1261,7 +1261,7 @@ func (s *Server) ListTemplates(_ context.Context, req *apiv1.ListTemplatesReques
 	templates := make([]*apiv1.TemplateInfo, 0, len(templatePages))
 	for _, pageID := range templatePages {
 		// Skip excluded identifiers
-		if excludeSet[pageID] {
+		if excludeSet[string(pageID)] {
 			continue
 		}
 
@@ -1273,7 +1273,7 @@ func (s *Server) ListTemplates(_ context.Context, req *apiv1.ListTemplatesReques
 		}
 
 		template := &apiv1.TemplateInfo{
-			Identifier: pageID,
+			Identifier: string(pageID),
 		}
 
 		// Get title
@@ -1300,7 +1300,7 @@ type serverPageExistenceChecker struct {
 }
 
 func (c *serverPageExistenceChecker) PageExists(identifier string) bool {
-	_, _, err := c.reader.ReadFrontMatter(identifier)
+	_, _, err := c.reader.ReadFrontMatter(wikipage.PageIdentifier(identifier))
 	return err == nil
 }
 
@@ -1310,7 +1310,7 @@ type serverContainerReferenceGetter struct {
 }
 
 func (c *serverContainerReferenceGetter) GetContainerReference(identifier string) string {
-	_, fm, err := c.reader.ReadFrontMatter(identifier)
+	_, fm, err := c.reader.ReadFrontMatter(wikipage.PageIdentifier(identifier))
 	if err != nil {
 		return ""
 	}
@@ -1376,13 +1376,13 @@ func (s *Server) ParseCSVPreview(_ context.Context, req *apiv1.ParseCSVPreviewRe
 		}
 
 		// Check if the page exists
-		_, _, readErr := s.pageReaderMutator.ReadFrontMatter(parsed.Identifier)
+		_, _, readErr := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(parsed.Identifier))
 		pageExists := readErr == nil
 		record.PageExists = pageExists
 
 		// Validate template if specified (skip the built-in inv_item template)
 		if parsed.Template != "" && !parsed.HasErrors() && parsed.Template != pageimport.InvItemTemplate {
-			_, templateFm, templateErr := s.pageReaderMutator.ReadFrontMatter(parsed.Template)
+			_, templateFm, templateErr := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(parsed.Template))
 			if templateErr != nil {
 				if os.IsNotExist(templateErr) {
 					record.ValidationErrors = append(record.ValidationErrors,

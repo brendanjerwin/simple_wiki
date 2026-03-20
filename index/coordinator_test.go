@@ -73,11 +73,11 @@ var _ = Describe("IndexCoordinator", func() {
 			})
 
 			It("should call AddPageToIndex on frontmatter index", func() {
-				Expect(frontmatterMock.addCalled).To(ContainElement("test-page"))
+				Expect(frontmatterMock.addCalled).To(ContainElement(wikipage.PageIdentifier("test-page")))
 			})
 
 			It("should call AddPageToIndex on bleve index", func() {
-				Expect(bleveMock.addCalled).To(ContainElement("test-page"))
+				Expect(bleveMock.addCalled).To(ContainElement(wikipage.PageIdentifier("test-page")))
 			})
 
 			It("should not call remove methods", func() {
@@ -100,11 +100,11 @@ var _ = Describe("IndexCoordinator", func() {
 			})
 
 			It("should call RemovePageFromIndex on frontmatter index", func() {
-				Expect(frontmatterMock.removeCalled).To(ContainElement("test-page"))
+				Expect(frontmatterMock.removeCalled).To(ContainElement(wikipage.PageIdentifier("test-page")))
 			})
 
 			It("should call RemovePageFromIndex on bleve index", func() {
-				Expect(bleveMock.removeCalled).To(ContainElement("test-page"))
+				Expect(bleveMock.removeCalled).To(ContainElement(wikipage.PageIdentifier("test-page")))
 			})
 
 			It("should not call add methods", func() {
@@ -147,11 +147,11 @@ var _ = Describe("IndexCoordinator", func() {
 			})
 
 			It("should call AddPageToIndex for all pages on frontmatter index", func() {
-				Expect(frontmatterMock.addCalled).To(ContainElements("page1", "page2", "page3"))
+				Expect(frontmatterMock.addCalled).To(ContainElements(wikipage.PageIdentifier("page1"), wikipage.PageIdentifier("page2"), wikipage.PageIdentifier("page3")))
 			})
 
 			It("should call AddPageToIndex for all pages on bleve index", func() {
-				Expect(bleveMock.addCalled).To(ContainElements("page1", "page2", "page3"))
+				Expect(bleveMock.addCalled).To(ContainElements(wikipage.PageIdentifier("page1"), wikipage.PageIdentifier("page2"), wikipage.PageIdentifier("page3")))
 			})
 		})
 	})

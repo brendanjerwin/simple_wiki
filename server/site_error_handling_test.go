@@ -366,7 +366,7 @@ identifier = "test-callback"
 
 				// Simulate what InitializeIndexing does - call BulkEnqueuePagesWithCompletion
 				// with a callback that tries to create a normalization job
-				pageIdentifiers := []string{"test-callback"}
+				pageIdentifiers := []wikipage.PageIdentifier{"test-callback"}
 				err := s.IndexCoordinator.BulkEnqueuePagesWithCompletion(pageIdentifiers, index.Add, func() {
 					// This is the callback that would normally run after indexing completes
 					// It tries to create an InventoryNormalizationJob
@@ -446,7 +446,7 @@ identifier = "test-enqueue-fail"
 				s.FrontmatterIndexQueryer = &mockFrontmatterIndexQueryerForCallbackTest{}
 
 				// Simulate what InitializeIndexing does
-				pageIdentifiers := []string{"test-enqueue-fail"}
+				pageIdentifiers := []wikipage.PageIdentifier{"test-enqueue-fail"}
 				err := s.IndexCoordinator.BulkEnqueuePagesWithCompletion(pageIdentifiers, index.Add, func() {
 					normJob, err := NewInventoryNormalizationJob(s, s.FrontmatterIndexQueryer, s.Logger)
 					if err != nil {
@@ -487,15 +487,15 @@ type MockIndexCoordinatorWithFailingEnqueue struct {
 	EnqueueError error
 }
 
-func (m *MockIndexCoordinatorWithFailingEnqueue) EnqueueIndexJob(_ string, _ index.Operation) error {
+func (m *MockIndexCoordinatorWithFailingEnqueue) EnqueueIndexJob(_ wikipage.PageIdentifier, _ index.Operation) error {
 	return m.EnqueueError
 }
 
-func (m *MockIndexCoordinatorWithFailingEnqueue) BulkEnqueuePages(_ []string, _ index.Operation) error {
+func (m *MockIndexCoordinatorWithFailingEnqueue) BulkEnqueuePages(_ []wikipage.PageIdentifier, _ index.Operation) error {
 	return m.EnqueueError
 }
 
-func (m *MockIndexCoordinatorWithFailingEnqueue) BulkEnqueuePagesWithCompletion(_ []string, _ index.Operation, onComplete func()) error {
+func (m *MockIndexCoordinatorWithFailingEnqueue) BulkEnqueuePagesWithCompletion(_ []wikipage.PageIdentifier, _ index.Operation, onComplete func()) error {
 	if onComplete != nil {
 		onComplete()
 	}
@@ -507,22 +507,22 @@ type mockFrontmatterIndexQueryerForCallbackTest struct{}
 
 var _ frontmatter.IQueryFrontmatterIndex = (*mockFrontmatterIndexQueryerForCallbackTest)(nil)
 
-func (*mockFrontmatterIndexQueryerForCallbackTest) GetValue(_, _ string) string {
+func (*mockFrontmatterIndexQueryerForCallbackTest) GetValue(_ wikipage.PageIdentifier, _ string) string {
 	return ""
 }
 
-func (*mockFrontmatterIndexQueryerForCallbackTest) QueryExactMatch(_, _ string) []string {
+func (*mockFrontmatterIndexQueryerForCallbackTest) QueryExactMatch(_, _ string) []wikipage.PageIdentifier {
 	return nil
 }
 
-func (*mockFrontmatterIndexQueryerForCallbackTest) QueryPrefixMatch(_, _ string) []string {
+func (*mockFrontmatterIndexQueryerForCallbackTest) QueryPrefixMatch(_, _ string) []wikipage.PageIdentifier {
 	return nil
 }
 
-func (*mockFrontmatterIndexQueryerForCallbackTest) QueryKeyExistence(_ string) []string {
+func (*mockFrontmatterIndexQueryerForCallbackTest) QueryKeyExistence(_ string) []wikipage.PageIdentifier {
 	return nil
 }
 
-func (*mockFrontmatterIndexQueryerForCallbackTest) QueryExactMatchSortedBy(_, _, _ string, _ bool, _ int) []string {
+func (*mockFrontmatterIndexQueryerForCallbackTest) QueryExactMatchSortedBy(_, _, _ string, _ bool, _ int) []wikipage.PageIdentifier {
 	return nil
 }

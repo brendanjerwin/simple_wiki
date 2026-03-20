@@ -84,7 +84,7 @@ inventory.container = 'GarageInventory'
 
 			BeforeEach(func() {
 				var openErr error
-				openedPage, openErr = site.ReadPage(identifier)
+				openedPage, openErr = site.ReadPage(wikipage.PageIdentifier(identifier))
 				Expect(openErr).NotTo(HaveOccurred())
 				openedContent = openedPage.Text
 				if openedPage.WasLoadedFromDisk {
@@ -142,7 +142,7 @@ inventory.container = 'GarageInventory'
 			BeforeEach(func() {
 				// Test with no migration applicator
 				site.MigrationApplicator = nil
-				_, openErr := site.ReadPage(identifier)
+				_, openErr := site.ReadPage(wikipage.PageIdentifier(identifier))
 				err = openErr // Capture the error for testing
 			})
 
@@ -185,7 +185,7 @@ container = 'already_migrated'
 			Expect(writeErr).NotTo(HaveOccurred())
 
 			// Open it
-			openedPage, openErr := site.ReadPage(identifier)
+			openedPage, openErr := site.ReadPage(wikipage.PageIdentifier(identifier))
 			Expect(openErr).NotTo(HaveOccurred())
 			openedContent = openedPage.Text
 			if openedPage.WasLoadedFromDisk {

@@ -27,26 +27,26 @@ func newMockPageReaderWriter() *mockPageReaderWriter {
 }
 
 func (m *mockPageReaderWriter) ReadFrontMatter(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
-	if fm, ok := m.frontmatter[identifier]; ok {
+	if fm, ok := m.frontmatter[string(identifier)]; ok {
 		return identifier, fm, nil
 	}
 	return identifier, nil, nil
 }
 
 func (m *mockPageReaderWriter) ReadMarkdown(identifier wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
-	if md, ok := m.markdown[identifier]; ok {
+	if md, ok := m.markdown[string(identifier)]; ok {
 		return identifier, wikipage.Markdown(md), nil
 	}
 	return identifier, "", nil
 }
 
 func (m *mockPageReaderWriter) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
-	m.frontmatter[identifier] = fm
+	m.frontmatter[string(identifier)] = fm
 	return nil
 }
 
 func (m *mockPageReaderWriter) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Markdown) error {
-	m.markdown[identifier] = string(md)
+	m.markdown[string(identifier)] = string(md)
 	return nil
 }
 
