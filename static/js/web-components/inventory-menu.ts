@@ -172,11 +172,11 @@ export function initInventoryMenu(): void {
         .then(frontmatter => {
           buildInventoryMenu(currentPage, frontmatter);
         })
-        .catch((_error: unknown) => {
+        .catch(() => {
           buildInventoryMenu(currentPage, {});
         });
     })
-    .catch((_error: unknown) => {
+    .catch(() => {
       // Silently ignore: inventory menu is non-critical, failure just means no inventory options shown
     });
 }

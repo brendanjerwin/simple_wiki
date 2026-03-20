@@ -71,7 +71,7 @@ export function initPrintMenu(): void {
         utilitySection.insertAdjacentElement('afterend', menuItem);
       });
     })
-    .catch((_error: unknown) => {
+    .catch(() => {
       // Silently ignore: print menu is non-critical, failure just means no print options shown
     });
 }
