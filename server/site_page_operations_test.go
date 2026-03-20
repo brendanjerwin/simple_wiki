@@ -61,7 +61,7 @@ var _ = Describe("Site Page Operations", func() {
 		When("the data directory does not exist", func() {
 			It("should return an error", func() {
 				s.PathToData = filepath.Join(pathToData, "nonexistent_subdir")
-				_, err := s.DirectoryList()
+				_, _, err := s.DirectoryList()
 				Expect(err).To(HaveOccurred())
 			})
 		})
@@ -94,7 +94,7 @@ var _ = Describe("Site Page Operations", func() {
 					Expect(completed).To(BeTrue())
 				}
 
-				pages, err = s.DirectoryList()
+				pages, _, err = s.DirectoryList()
 				Expect(err).ToNot(HaveOccurred())
 			})
 

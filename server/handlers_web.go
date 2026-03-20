@@ -270,13 +270,13 @@ func (s *Site) renderPageContent(c *gin.Context, page, command string, p *wikipa
 		return
 	}
 
-	directoryEntries, command, err := s.getDirectoryEntries(page, command)
+	directoryEntries, directoryErrors, command, err := s.getDirectoryEntries(page, command)
 	if err != nil {
 		_ = c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
 
-	templateData := s.buildTemplateData(page, command, directoryEntries, contentHTML, rawText, c)
+	templateData := s.buildTemplateData(page, command, directoryEntries, directoryErrors, contentHTML, rawText, c)
 	c.HTML(http.StatusOK, "index.tmpl", templateData)
 }
 
@@ -286,14 +286,15 @@ func (*Site) getPageContent(p *wikipage.Page) (rawText string, contentHTML []byt
 	return rawText, contentHTML
 }
 
-func (s *Site) getDirectoryEntries(page, command string) ([]os.FileInfo, string, error) {
+func (s *Site) getDirectoryEntries(page, command string) ([]os.FileInfo, []PageReadError, string, error) {
 	var directoryEntries []os.FileInfo
+	var directoryErrors []PageReadError
 	if page == "ls" {
 		command = "/view"
 		var dirErr error
-		directoryEntries, dirErr = s.DirectoryList()
+		directoryEntries, directoryErrors, dirErr = s.DirectoryList()
 		if dirErr != nil {
-			return nil, command, dirErr
+			return nil, nil, command, dirErr
 		}
 	}
 	if page == uploadsPage {
@@ -301,13 +302,13 @@ func (s *Site) getDirectoryEntries(page, command string) ([]os.FileInfo, string,
 		var err error
 		directoryEntries, err = s.UploadList()
 		if err != nil {
-			return nil, command, err
+			return nil, nil, command, err
 		}
 	}
-	return directoryEntries, command, nil
+	return directoryEntries, directoryErrors, command, nil
 }
 
-func (s *Site) buildTemplateData(page, command string, directoryEntries []os.FileInfo, contentHTML []byte, rawText string, c *gin.Context) gin.H {
+func (s *Site) buildTemplateData(page, command string, directoryEntries []os.FileInfo, directoryErrors []PageReadError, contentHTML []byte, rawText string, c *gin.Context) gin.H {
 	return gin.H{
 		"EditPage": command[0:2] == "/e", // /edit
 		"ViewPage": command[0:2] == "/v", // /view
@@ -319,6 +320,7 @@ func (s *Site) buildTemplateData(page, command string, directoryEntries []os.Fil
 		"DirectoryPage":    page == "ls" || page == uploadsPage,
 		"UploadPage":       page == uploadsPage,
 		"DirectoryEntries": directoryEntries,
+		"DirectoryErrors":  directoryErrors,
 		"Page":             page,
 		"RenderedPage":     template.HTML([]byte(contentHTML)),
 		"RawPage":          rawText,

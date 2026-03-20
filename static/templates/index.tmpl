@@ -113,6 +113,16 @@
 
 
                     {{ if .DirectoryPage }}
+                        {{ if .DirectoryErrors }}
+                        <div class="directory-error-banner">
+                            <strong>⚠ Warning: the following pages could not be loaded:</strong>
+                            <ul>
+                            {{ range .DirectoryErrors }}
+                                <li>{{ .PageName }}: {{ .Err }}</li>
+                            {{ end }}
+                            </ul>
+                        </div>
+                        {{ end }}
                         <table style="width:100%">
                           {{ $upload := .UploadPage }}
                           <tr>
@@ -131,6 +141,11 @@
                             </td>
                             <td>{{.Size}}</td>
                             <td>{{.ModTime.Format "Mon Jan 2 15:04:05 MST 2006" }}</td>
+                          </tr>
+                          {{ end }}
+                          {{ range .DirectoryErrors }}
+                          <tr class="directory-error-row">
+                            <td colspan="3">⚠ <strong>{{ .PageName }}</strong> — could not be loaded: {{ .Err }}</td>
                           </tr>
                           {{ end }}
                         </table>
