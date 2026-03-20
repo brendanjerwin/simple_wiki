@@ -2236,7 +2236,7 @@ var _ = Describe("Server", func() {
 			}
 			mockBleveIndexQueryer = &MockBleveIndexQueryer{}
 			mockFrontmatterIndexQueryer = &FlexibleMockFrontmatterIndexQueryer{
-				ExactMatchResults: make(map[string][]string),
+				ExactMatchResults: make(map[string][]wikipage.PageIdentifier),
 				GetValueResults:   make(map[string]map[string]string),
 			}
 		})
@@ -2642,7 +2642,7 @@ var _ = Describe("Server", func() {
 
 			BeforeEach(func() {
 				mockFrontmatterIndexQueryer = &FlexibleMockFrontmatterIndexQueryer{
-					ExactMatchResults: make(map[string][]string),
+					ExactMatchResults: make(map[string][]wikipage.PageIdentifier),
 					GetValueResults:   make(map[string]map[string]string),
 				}
 				// Search returns a page with various frontmatter fields
@@ -2704,7 +2704,7 @@ var _ = Describe("Server", func() {
 
 			BeforeEach(func() {
 				mockFrontmatterIndexQueryer = &FlexibleMockFrontmatterIndexQueryer{
-					ExactMatchResults: make(map[string][]string),
+					ExactMatchResults: make(map[string][]wikipage.PageIdentifier),
 					GetValueResults:   make(map[string]map[string]string),
 				}
 				// Search returns an item with a container
@@ -2901,7 +2901,7 @@ var _ = Describe("Server", func() {
 
 			BeforeEach(func() {
 				mockFrontmatterIndexQueryer = &FlexibleMockFrontmatterIndexQueryer{
-					ExactMatchResults: make(map[string][]string),
+					ExactMatchResults: make(map[string][]wikipage.PageIdentifier),
 					GetValueResults:   make(map[string]map[string]string),
 				}
 				searchResults = []bleve.SearchResult{
@@ -3858,7 +3858,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should write the custom markdown", func() {
-				Expect(mockPageReaderMutator.WrittenMarkdown).To(Equal("# Custom Content\n\nThis is my page."))
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(Equal(wikipage.Markdown("# Custom Content\n\nThis is my page.")))
 			})
 		})
 

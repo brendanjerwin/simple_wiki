@@ -62,7 +62,7 @@ func (n *InventoryNormalizer) NormalizePage(pageID wikipage.PageIdentifier) (*No
 	containerIDStr := string(pageID)
 	for _, itemID := range items {
 		// Check if page exists
-		_, _, err := n.deps.ReadFrontMatter(itemID)
+		_, _, err := n.deps.ReadFrontMatter(wikipage.PageIdentifier(itemID))
 		if err == nil {
 			continue // Page exists
 		}
@@ -201,13 +201,13 @@ func (n *InventoryNormalizer) CreateItemPage(itemID, containerID string) error {
 	fm["inventory"] = inventoryData
 
 	// Write frontmatter
-	if err := n.deps.WriteFrontMatter(identifier, fm); err != nil {
+	if err := n.deps.WriteFrontMatter(wikipage.PageIdentifier(identifier), fm); err != nil {
 		return fmt.Errorf("failed to write frontmatter: %w", err)
 	}
 
 	// Build and write markdown
 	markdown := inventory.BuildItemMarkdown()
-	if err := n.deps.WriteMarkdown(identifier, markdown); err != nil {
+	if err := n.deps.WriteMarkdown(wikipage.PageIdentifier(identifier), wikipage.Markdown(markdown)); err != nil {
 		return fmt.Errorf("failed to write markdown: %w", err)
 	}
 

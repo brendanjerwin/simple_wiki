@@ -172,7 +172,7 @@ var _ = Describe("Handlers", func() {
 				customRouter = customSite.GinRouter()
 
 				// Create and save a page first
-				p, err := customSite.ReadPage(pageName)
+				p, err := customSite.ReadPage(wikipage.PageIdentifier(pageName))
 				Expect(err).NotTo(HaveOccurred())
 				_ = customSite.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
 
@@ -220,7 +220,7 @@ var _ = Describe("Handlers", func() {
 
 			BeforeEach(func() {
 				pageName = "test-conflict"
-				p, err := site.ReadPage(pageName)
+				p, err := site.ReadPage(wikipage.PageIdentifier(pageName))
 				Expect(err).NotTo(HaveOccurred())
 				err = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
 				Expect(err).NotTo(HaveOccurred())
@@ -258,7 +258,7 @@ var _ = Describe("Handlers", func() {
 			BeforeEach(func() {
 				pageName = "test-update"
 				newText = "new content"
-				p, err := site.ReadPage(pageName)
+				p, err := site.ReadPage(wikipage.PageIdentifier(pageName))
 				Expect(err).NotTo(HaveOccurred())
 				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
 
@@ -283,7 +283,7 @@ var _ = Describe("Handlers", func() {
 			})
 
 			It("should update the page content", func() {
-				p, err := site.ReadPage(pageName)
+				p, err := site.ReadPage(wikipage.PageIdentifier(pageName))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(p.Text).To(Equal(newText))
 			})
@@ -300,10 +300,10 @@ var _ = Describe("Handlers", func() {
 				newText = "new content that should fail to save"
 				
 				// Create the page first
-				p, err := site.ReadPage(pageName)
+				p, err := site.ReadPage(wikipage.PageIdentifier(pageName))
 				Expect(err).NotTo(HaveOccurred())
 				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "initial content")
-				_ = site.UpdatePageContent(p.Identifier, p.Text)
+				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), p.Text)
 
 				// Make the data directory read-only to simulate save failure
 				dirInfo, err := os.Stat(tmpDir)
@@ -347,7 +347,7 @@ var _ = Describe("Handlers", func() {
 			BeforeEach(func() {
 				pageName = "test-update-fail"
 				newText = "new content"
-				p, err := site.ReadPage(pageName)
+				p, err := site.ReadPage(wikipage.PageIdentifier(pageName))
 				Expect(err).NotTo(HaveOccurred())
 				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
 
@@ -831,7 +831,7 @@ var _ = Describe("Session Logging Functions", func() {
 				p, err := site.ReadPage("test-integration")
 				Expect(err).NotTo(HaveOccurred())
 				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "test content")
-				_ = site.UpdatePageContent(p.Identifier, p.Text)
+				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), p.Text)
 			})
 
 			It("should pass logger to session functions in handlePageRequest", func() {
