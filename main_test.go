@@ -74,15 +74,17 @@ var _ = Describe("resolveCookieSecret", func() {
 var _ = Describe("getFlags", func() {
 	It("should include a cookie-secret flag with an empty default value", func() {
 		flags := getFlags()
-		var found *cli.StringFlag
+		var foundFlag cli.StringFlag
+		foundOk := false
 		for _, f := range flags {
 			if sf, ok := f.(cli.StringFlag); ok && sf.Name == "cookie-secret" {
-				found = &sf
+				foundFlag = sf
+				foundOk = true
 				break
 			}
 		}
-		Expect(found).NotTo(BeNil(), "cookie-secret flag not found")
-		Expect(found.Value).To(Equal(""), "cookie-secret default should be empty, not 'secret'")
+		Expect(foundOk).To(BeTrue(), "cookie-secret flag not found")
+		Expect(foundFlag.Value).To(Equal(""), "cookie-secret default should be empty, not 'secret'")
 	})
 })
 
@@ -118,6 +120,8 @@ var _ = Describe("createSite", func() {
 			site, err := createSite(newContext(""))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(site).NotTo(BeNil())
+			Expect(site.SessionStore).NotTo(BeNil())
+			Expect(site.PathToData).To(Equal(tmpDir))
 		})
 	})
 
@@ -126,6 +130,8 @@ var _ = Describe("createSite", func() {
 			site, err := createSite(newContext("explicit-test-secret"))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(site).NotTo(BeNil())
+			Expect(site.SessionStore).NotTo(BeNil())
+			Expect(site.PathToData).To(Equal(tmpDir))
 		})
 	})
 })
