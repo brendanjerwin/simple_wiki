@@ -54,6 +54,9 @@ async function readTestPage(
 }
 
 test.describe('UpdatePageContent find-and-replace behavior', () => {
+  // Run serially: tests share a single mutable TEST_PAGE and beforeEach resets it.
+  // Serial mode prevents races between the reset and the next test's reads/writes.
+  test.describe.configure({ mode: 'serial' });
   test.setTimeout(30000);
 
   test.beforeEach(async ({ request }) => {
@@ -128,7 +131,7 @@ test.describe('UpdatePageContent find-and-replace behavior', () => {
     expect(body.message).toContain('version mismatch');
   });
 
-  test('version conflict (full-replacement): rejects the update when expected_version_hash does not match', async ({ request }) => {
+  test('version conflict (full-replacement): rejects the update when expectedVersionHash does not match', async ({ request }) => {
     const { versionHash } = await readTestPage(request);
 
     // Advance the page with a full-replacement so the captured hash is now stale.
@@ -153,11 +156,11 @@ test.describe('UpdatePageContent find-and-replace behavior', () => {
   });
 
   test('correct hash (find-and-replace): accepts the update and returns a new version hash', async ({ request }) => {
-    const { versionHash: originalHash } = await readTestPage(request);
+    const { versionHash: originalHash, contentMarkdown } = await readTestPage(request);
 
     const resp = await callPageAPI(request, 'UpdatePageContent', {
       pageName: TEST_PAGE,
-      oldContentMarkdown: '# Section One\n\nOriginal content here.',
+      oldContentMarkdown: contentMarkdown,
       expectedVersionHash: originalHash,
       newContentMarkdown: '# Section One\n\nUpdated with correct hash.',
     });
@@ -170,9 +173,9 @@ test.describe('UpdatePageContent find-and-replace behavior', () => {
     expect(body.versionHash).not.toBe(originalHash);
 
     // The page content must reflect the find-and-replace.
-    const { contentMarkdown } = await readTestPage(request);
-    expect(contentMarkdown).toContain('Updated with correct hash.');
-    expect(contentMarkdown).not.toContain('Original content here.');
+    const { contentMarkdown: updatedMarkdown } = await readTestPage(request);
+    expect(updatedMarkdown).toContain('Updated with correct hash.');
+    expect(updatedMarkdown).not.toContain('Original content here.');
   });
 
   test('correct hash (full-replacement): accepts the update and returns a new version hash', async ({ request }) => {
