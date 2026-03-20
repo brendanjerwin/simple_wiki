@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/static"
+	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/gin-contrib/multitemplate"
 	"github.com/gin-contrib/sessions"
@@ -430,6 +431,9 @@ func (s *Site) handleUpload(c *gin.Context) {
 		s.Logger.Error(uploadFailureMessage, err.Error())
 		return
 	}
+
+	identity := tailscale.IdentityFromContext(c.Request.Context())
+	s.Logger.Info("[AUDIT] upload | file: %q | user: %q", info.Filename, identity.ForLog())
 
 	c.Header("Location", "/uploads/"+fileInfo.Hash+"?filename="+url.QueryEscape(info.Filename))
 }
