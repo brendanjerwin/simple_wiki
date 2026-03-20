@@ -200,8 +200,8 @@ var _ = Describe("Handlers", func() {
 				_ = os.Chmod(dataDir, originalMode)
 			})
 
-			It("should return a 200 status code", func() {
-				Expect(w.Code).To(Equal(http.StatusOK))
+			It("should return a 500 status code", func() {
+				Expect(w.Code).To(Equal(http.StatusInternalServerError))
 			})
 
 			It("should return a failure message", func() {
@@ -212,6 +212,42 @@ var _ = Describe("Handlers", func() {
 			It("should log the error", func() {
 				Expect(logOutput).To(ContainSubstring("Failed to save page 'test-update-fail'"))
 				Expect(logOutput).To(ContainSubstring("ERROR"))
+			})
+		})
+
+		When("the page has been modified since fetched_at (version conflict)", func() {
+			var response map[string]any
+			var pageName string
+
+			BeforeEach(func() {
+				pageName = "test-conflict"
+				p, err := site.ReadPage(pageName)
+				Expect(err).NotTo(HaveOccurred())
+				err = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
+				Expect(err).NotTo(HaveOccurred())
+
+				// Use a fetched_at timestamp in the past so IsModifiedSince returns true
+				body, err := json.Marshal(map[string]any{
+					"page":       pageName,
+					"new_text":   "conflicting content",
+					"fetched_at": int64(1),
+				})
+				Expect(err).NotTo(HaveOccurred())
+				req, err := http.NewRequest(http.MethodPost, "/update", bytes.NewBuffer(body))
+				Expect(err).NotTo(HaveOccurred())
+				req.Header.Set("Content-Type", "application/json")
+				router.ServeHTTP(w, req)
+				err = json.Unmarshal(w.Body.Bytes(), &response)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a 409 Conflict status code", func() {
+				Expect(w.Code).To(Equal(http.StatusConflict))
+			})
+
+			It("should return a failure message", func() {
+				Expect(response["success"]).To(BeFalse())
+				Expect(response["message"]).To(Equal("Refusing to overwrite others' work"))
 			})
 		})
 
@@ -293,8 +329,8 @@ var _ = Describe("Handlers", func() {
 				_ = os.Chmod(tmpDir, originalPermissions)
 			})
 
-			It("should return a 200 status code", func() {
-				Expect(w.Code).To(Equal(http.StatusOK))
+			It("should return a 500 status code", func() {
+				Expect(w.Code).To(Equal(http.StatusInternalServerError))
 			})
 
 			It("should return a failure response", func() {
@@ -342,8 +378,8 @@ var _ = Describe("Handlers", func() {
 				site.PathToData = originalDataPath
 			})
 
-			It("should return a 200 status code", func() {
-				Expect(w.Code).To(Equal(http.StatusOK))
+			It("should return a 500 status code", func() {
+				Expect(w.Code).To(Equal(http.StatusInternalServerError))
 			})
 
 			It("should return a failure response", func() {
