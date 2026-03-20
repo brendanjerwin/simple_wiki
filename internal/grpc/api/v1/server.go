@@ -230,7 +230,7 @@ func (s *Server) RemoveKeyAtPath(_ context.Context, req *apiv1.RemoveKeyAtPathRe
 		fm = make(map[string]any)
 	}
 
-	updatedFm, err := removeAtPath(fm, req.GetKeyPath())
+	updatedFm, err := removeAtPath(map[string]any(fm), req.GetKeyPath())
 	if err != nil {
 		return nil, err
 	}

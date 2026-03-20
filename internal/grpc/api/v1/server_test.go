@@ -3734,7 +3734,7 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should write the custom markdown", func() {
-				Expect(mockPageReaderMutator.WrittenMarkdown).To(Equal("# Custom Content\n\nThis is my page."))
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(Equal(wikipage.Markdown("# Custom Content\n\nThis is my page.")))
 			})
 		})
 
