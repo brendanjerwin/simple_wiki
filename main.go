@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -61,6 +64,31 @@ func getBuildTime() time.Time {
 
 var app *cli.App
 
+// generateRandomCookieSecret generates a cryptographically random 32-byte secret
+// encoded as a hex string. reader is the source of randomness; pass rand.Reader
+// in production code.
+func generateRandomCookieSecret(reader io.Reader) (string, error) {
+	b := make([]byte, 32)
+	if _, err := io.ReadFull(reader, b); err != nil {
+		return "", fmt.Errorf("failed to generate random cookie secret: %w", err)
+	}
+	return hex.EncodeToString(b), nil
+}
+
+// resolveCookieSecret returns the provided secret unchanged when non-empty.
+// When provided is empty it generates a random secret using crypto/rand and
+// returns generated=true.
+func resolveCookieSecret(provided string) (secret string, generated bool, err error) {
+	if provided != "" {
+		return provided, false, nil
+	}
+	secret, err = generateRandomCookieSecret(rand.Reader)
+	if err != nil {
+		return "", false, err
+	}
+	return secret, true, nil
+}
+
 func createSite(c *cli.Context) (*server.Site, error) {
 	pathToData := c.GlobalString("data")
 	if err := os.MkdirAll(pathToData, 0755); err != nil {
@@ -75,12 +103,20 @@ func createSite(c *cli.Context) (*server.Site, error) {
 
 	logger.Info("Starting simple_wiki server...")
 
+	cookieSecret, generated, err := resolveCookieSecret(c.GlobalString("cookie-secret"))
+	if err != nil {
+		return nil, err
+	}
+	if generated {
+		logger.Warn("No --cookie-secret provided; a random secret was generated. Sessions will not persist across restarts. Set --cookie-secret to a persistent value to maintain sessions across restarts.")
+	}
+
 	return server.NewSite(
 		pathToData,
 		c.GlobalString("css"),
 		c.GlobalString("default-page"),
 		c.GlobalInt("debounce"),
-		c.GlobalString("cookie-secret"),
+		cookieSecret,
 		!c.GlobalBool("block-file-uploads"),
 		c.GlobalUint("max-upload-mb"),
 		c.GlobalUint("max-document-length"),
@@ -299,8 +335,8 @@ func getFlags() []cli.Flag {
 		},
 		cli.StringFlag{
 			Name:  "cookie-secret",
-			Value: "secret",
-			Usage: "random data to use for cookies; changing it will invalidate all sessions",
+			Value: "",
+			Usage: "random data to use for cookies; changing it will invalidate all sessions (if empty, a random secret is generated per startup)",
 		},
 		cli.BoolFlag{
 			Name:  "block-file-uploads",
