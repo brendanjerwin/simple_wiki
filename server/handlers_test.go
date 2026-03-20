@@ -965,6 +965,22 @@ var _ = Describe("requestBaseURL", func() {
 	})
 })
 
+var _ = Describe("contentTypeFromName", func() {
+	DescribeTable("returns correct MIME type",
+		func(filename, expectedType string) {
+			Expect(server.ContentTypeFromNameForTesting(filename)).To(Equal(expectedType))
+		},
+		Entry("for .md files (init-registered)", "readme.md", "text/markdown; charset=utf-8"),
+		Entry("for .heic files (init-registered)", "photo.heic", "image/heic"),
+		Entry("for .heif files (init-registered)", "photo.heif", "image/heif"),
+		Entry("for .woff2 files (init-registered)", "fa-solid-900.woff2", "font/woff2"),
+		Entry("for .ttf files (init-registered)", "fa-solid-900.ttf", "font/ttf"),
+		Entry("for extensionless identifiers", "testpage", "text/plain"),
+		Entry("for paths with no extension", "img/favicon/no-ext", "text/plain"),
+		Entry("for unknown extensions", "file.xyz123unknown", "text/plain"),
+	)
+})
+
 // handlerTestWriteCloser wraps a buffer to implement io.WriteCloser for logger testing
 type handlerTestWriteCloser struct {
 	*bytes.Buffer
