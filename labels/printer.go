@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"strings"
 
-		"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/brendanjerwin/simple_wiki/index/frontmatter"
 	"github.com/brendanjerwin/simple_wiki/templating"
+	"github.com/brendanjerwin/simple_wiki/wikipage"
 )
 
 const (
@@ -31,7 +31,8 @@ func PrintLabel(templateIdentifier string, identifier string, site wikipage.Page
 
 	_, templateFrontmatter, err := site.ReadFrontMatter(resolvedTemplateID)
 	if err != nil {
-		return err	}
+		return err
+	}
 
 	config, err := configFromFrontmatter(templateFrontmatter)
 	if err != nil {
@@ -52,7 +53,7 @@ func PrintLabel(templateIdentifier string, identifier string, site wikipage.Page
 	}
 	defer func() { _ = printer.Close() }()
 
-		_, pageFrontmatter, err := site.ReadFrontMatter(wikipage.PageIdentifier(identifier))
+	_, pageFrontmatter, err := site.ReadFrontMatter(wikipage.PageIdentifier(identifier))
 	if err != nil {
 		return err
 	}
