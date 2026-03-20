@@ -33,7 +33,7 @@ func newMockNormalizationDeps() *mockNormalizationDeps {
 }
 
 func (m *mockNormalizationDeps) ReadFrontMatter(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
-	if page, ok := m.pages[id]; ok {
+	if page, ok := m.pages[string(id)]; ok {
 		if page.err != nil {
 			return "", nil, page.err
 		}
@@ -43,33 +43,33 @@ func (m *mockNormalizationDeps) ReadFrontMatter(id wikipage.PageIdentifier) (wik
 }
 
 func (m *mockNormalizationDeps) ReadMarkdown(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
-	if page, ok := m.pages[id]; ok {
+	if page, ok := m.pages[string(id)]; ok {
 		if page.err != nil {
 			return "", "", page.err
 		}
-		return id, page.markdown, nil
+		return id, wikipage.Markdown(page.markdown), nil
 	}
 	return "", "", os.ErrNotExist
 }
 
 func (m *mockNormalizationDeps) WriteFrontMatter(id wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
-	if m.writtenPages[id] == nil {
-		m.writtenPages[id] = &mockPageData{}
+	if m.writtenPages[string(id)] == nil {
+		m.writtenPages[string(id)] = &mockPageData{}
 	}
-	m.writtenPages[id].frontmatter = fm
+	m.writtenPages[string(id)].frontmatter = fm
 	return nil
 }
 
 func (m *mockNormalizationDeps) WriteMarkdown(id wikipage.PageIdentifier, md wikipage.Markdown) error {
-	if m.writtenPages[id] == nil {
-		m.writtenPages[id] = &mockPageData{}
+	if m.writtenPages[string(id)] == nil {
+		m.writtenPages[string(id)] = &mockPageData{}
 	}
-	m.writtenPages[id].markdown = md
+	m.writtenPages[string(id)].markdown = string(md)
 	return nil
 }
 
 func (m *mockNormalizationDeps) DeletePage(id wikipage.PageIdentifier) error {
-	m.deletedPages = append(m.deletedPages, id)
+	m.deletedPages = append(m.deletedPages, string(id))
 	return nil
 }
 
@@ -156,15 +156,15 @@ var _ = Describe("InventoryNormalizationJob", func() {
 			var containers []string
 
 			BeforeEach(func() {
-				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
+				mockFmIndex.QueryKeyExistenceFunc = func(key string) []wikipage.PageIdentifier {
 					if key == "inventory.items" {
-						return []string{"drawer", "box"}
+						return []wikipage.PageIdentifier{"drawer", "box"}
 					}
 					if key == "inventory.container" {
-						return []string{}
+						return []wikipage.PageIdentifier{}
 					}
 					if key == "inventory.is_container" {
-						return []string{}
+						return []wikipage.PageIdentifier{}
 					}
 					return nil
 				}
@@ -181,15 +181,15 @@ var _ = Describe("InventoryNormalizationJob", func() {
 			var containers []string
 
 			BeforeEach(func() {
-				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
+				mockFmIndex.QueryKeyExistenceFunc = func(key string) []wikipage.PageIdentifier {
 					if key == "inventory.items" {
-						return []string{}
+						return []wikipage.PageIdentifier{}
 					}
 					if key == "inventory.is_container" {
-						return []string{}
+						return []wikipage.PageIdentifier{}
 					}
 					if key == "inventory.container" {
-						return []string{"item1", "item2"}
+						return []wikipage.PageIdentifier{"item1", "item2"}
 					}
 					return nil
 				}
@@ -411,14 +411,14 @@ var _ = Describe("InventoryNormalizationJob", func() {
 					},
 				}
 
-				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
+				mockFmIndex.QueryKeyExistenceFunc = func(key string) []wikipage.PageIdentifier {
 					if key == "inventory.items" {
-						return []string{"tool_box"}
+						return []wikipage.PageIdentifier{"tool_box"}
 					}
 					if key == "inventory.is_container" {
-						return []string{}
+						return []wikipage.PageIdentifier{}
 					}
-					return []string{}
+					return []wikipage.PageIdentifier{}
 				}
 
 				err = job.Execute()
@@ -466,14 +466,14 @@ var _ = Describe("InventoryNormalizationJob", func() {
 					},
 				}
 
-				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
+				mockFmIndex.QueryKeyExistenceFunc = func(key string) []wikipage.PageIdentifier {
 					if key == "inventory.items" {
-						return []string{"tool_box"}
+						return []wikipage.PageIdentifier{"tool_box"}
 					}
 					if key == "inventory.is_container" {
-						return []string{}
+						return []wikipage.PageIdentifier{}
 					}
-					return []string{}
+					return []wikipage.PageIdentifier{}
 				}
 
 				err = job.Execute()
@@ -504,11 +504,11 @@ var _ = Describe("InventoryNormalizationJob", func() {
 					},
 				}
 
-				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
+				mockFmIndex.QueryKeyExistenceFunc = func(key string) []wikipage.PageIdentifier {
 					if key == "inventory.items" {
-						return []string{"empty_box"}
+						return []wikipage.PageIdentifier{"empty_box"}
 					}
-					return []string{}
+					return []wikipage.PageIdentifier{}
 				}
 
 				err = job.Execute()
@@ -539,11 +539,11 @@ var _ = Describe("InventoryNormalizationJob", func() {
 					},
 				}
 
-				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
+				mockFmIndex.QueryKeyExistenceFunc = func(key string) []wikipage.PageIdentifier {
 					if key == "inventory.container" {
-						return []string{"orphan_item"}
+						return []wikipage.PageIdentifier{"orphan_item"}
 					}
-					return []string{}
+					return []wikipage.PageIdentifier{}
 				}
 				mockFmIndex.data["orphan_item"] = map[string]string{
 					"inventory.container": "nonexistent_container",
@@ -567,23 +567,23 @@ var _ = Describe("InventoryNormalizationJob", func() {
 			var err error
 
 			BeforeEach(func() {
-				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
+				mockFmIndex.QueryKeyExistenceFunc = func(key string) []wikipage.PageIdentifier {
 					if key == "inventory.items" {
-						return []string{}
+						return []wikipage.PageIdentifier{}
 					}
 					if key == "inventory.container" {
-						return []string{}
+						return []wikipage.PageIdentifier{}
 					}
-					return []string{}
+					return []wikipage.PageIdentifier{}
 				}
-				mockFmIndex.QueryExactMatchFunc = func(key, value string) []string {
+				mockFmIndex.QueryExactMatchFunc = func(key, value string) []wikipage.PageIdentifier {
 					if key == "inventory.container" {
 						// Simulate an item being in multiple containers
 						if value == "drawer_1" {
-							return []string{"multi_item"}
+							return []wikipage.PageIdentifier{"multi_item"}
 						}
 						if value == "drawer_2" {
-							return []string{"multi_item"}
+							return []wikipage.PageIdentifier{"multi_item"}
 						}
 					}
 					return nil
@@ -813,9 +813,9 @@ var _ = Describe("InventoryNormalizationJob", func() {
 			var items []string
 
 			BeforeEach(func() {
-				mockFmIndex.QueryExactMatchFunc = func(key, value string) []string {
+				mockFmIndex.QueryExactMatchFunc = func(key, value string) []wikipage.PageIdentifier {
 					if key == "inventory.container" && value == "drawer" {
-						return []string{"screwdriver", "hammer"}
+						return []wikipage.PageIdentifier{"screwdriver", "hammer"}
 					}
 					return nil
 				}
@@ -1016,9 +1016,9 @@ var _ = Describe("InventoryNormalizationJob", func() {
 
 			BeforeEach(func() {
 				// Item in drawer via inventory.container reference
-				mockFmIndex.QueryExactMatchFunc = func(key, value string) []string {
+				mockFmIndex.QueryExactMatchFunc = func(key, value string) []wikipage.PageIdentifier {
 					if key == "inventory.container" && value == "drawer" {
-						return []string{"item_a"}
+						return []wikipage.PageIdentifier{"item_a"}
 					}
 					return nil
 				}
@@ -1051,11 +1051,11 @@ var _ = Describe("InventoryNormalizationJob", func() {
 			var anomalies []InventoryAnomaly
 
 			BeforeEach(func() {
-				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
+				mockFmIndex.QueryKeyExistenceFunc = func(key string) []wikipage.PageIdentifier {
 					if key == "inventory.container" {
-						return []string{"item_with_empty_container"}
+						return []wikipage.PageIdentifier{"item_with_empty_container"}
 					}
-					return []string{}
+					return []wikipage.PageIdentifier{}
 				}
 				mockFmIndex.data["item_with_empty_container"] = map[string]string{
 					"inventory.container": "",
@@ -1343,11 +1343,11 @@ var _ = Describe("InventoryNormalizationJob", func() {
 					},
 				}
 
-				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
+				mockFmIndex.QueryKeyExistenceFunc = func(key string) []wikipage.PageIdentifier {
 					if key == "inventory.container" {
-						return []string{"hammer"}
+						return []wikipage.PageIdentifier{"hammer"}
 					}
-					return []string{}
+					return []wikipage.PageIdentifier{}
 				}
 				mockFmIndex.data["hammer"] = map[string]string{
 					"inventory.container": "tool_box",
@@ -1380,11 +1380,11 @@ var _ = Describe("InventoryNormalizationJob", func() {
 					},
 				}
 
-				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
+				mockFmIndex.QueryKeyExistenceFunc = func(key string) []wikipage.PageIdentifier {
 					if key == "inventory.container" {
-						return []string{"hammer"}
+						return []wikipage.PageIdentifier{"hammer"}
 					}
-					return []string{}
+					return []wikipage.PageIdentifier{}
 				}
 				mockFmIndex.data["hammer"] = map[string]string{
 					"inventory.container": "tool_box",
@@ -1417,11 +1417,11 @@ var _ = Describe("InventoryNormalizationJob", func() {
 					},
 				}
 
-				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
+				mockFmIndex.QueryKeyExistenceFunc = func(key string) []wikipage.PageIdentifier {
 					if key == "inventory.container" {
-						return []string{"hammer"}
+						return []wikipage.PageIdentifier{"hammer"}
 					}
-					return []string{}
+					return []wikipage.PageIdentifier{}
 				}
 				mockFmIndex.data["hammer"] = map[string]string{
 					"inventory.container": "tool_box",
@@ -1461,7 +1461,7 @@ var _ = Describe("InventoryNormalizationJob", func() {
 						},
 					},
 				}
-				mockFmIndex.QueryExactMatchFunc = func(key, value string) []string {
+				mockFmIndex.QueryExactMatchFunc = func(key, value string) []wikipage.PageIdentifier {
 					return nil
 				}
 				job, _ = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
@@ -1493,14 +1493,14 @@ var _ = Describe("InventoryNormalizationJob", func() {
 						},
 					},
 				}
-				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
+				mockFmIndex.QueryKeyExistenceFunc = func(key string) []wikipage.PageIdentifier {
 					if key == "inventory.items" {
-						return []string{"drawer"}
+						return []wikipage.PageIdentifier{"drawer"}
 					}
 					if key == "inventory.container" {
-						return []string{}
+						return []wikipage.PageIdentifier{}
 					}
-					return []string{}
+					return []wikipage.PageIdentifier{}
 				}
 				job, _ = NewInventoryNormalizationJob(mockDeps, mockFmIndex, logger)
 
@@ -1528,14 +1528,14 @@ var _ = Describe("InventoryNormalizationJob", func() {
 						},
 					},
 				}
-				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
+				mockFmIndex.QueryKeyExistenceFunc = func(key string) []wikipage.PageIdentifier {
 					if key == "inventory.items" {
-						return []string{"drawer"}
+						return []wikipage.PageIdentifier{"drawer"}
 					}
 					if key == "inventory.container" {
-						return []string{}
+						return []wikipage.PageIdentifier{}
 					}
-					return []string{}
+					return []wikipage.PageIdentifier{}
 				}
 
 				failingDeps := &mockNormalizationDepsWithFailure{
@@ -1581,17 +1581,17 @@ var _ = Describe("InventoryNormalizationJob", func() {
 					},
 				}
 
-				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
+				mockFmIndex.QueryKeyExistenceFunc = func(key string) []wikipage.PageIdentifier {
 					if key == "inventory.items" {
-						return []string{"tool_box"}
+						return []wikipage.PageIdentifier{"tool_box"}
 					}
 					if key == "inventory.is_container" {
-						return []string{"tool_box"}
+						return []wikipage.PageIdentifier{"tool_box"}
 					}
 					if key == "inventory.container" {
-						return []string{"hammer"}
+						return []wikipage.PageIdentifier{"hammer"}
 					}
-					return []string{}
+					return []wikipage.PageIdentifier{}
 				}
 
 				mockFmIndex.data["tool_box"] = map[string]string{
@@ -1601,9 +1601,9 @@ var _ = Describe("InventoryNormalizationJob", func() {
 					"inventory.container": "tool_box",
 				}
 
-				mockFmIndex.QueryExactMatchFunc = func(key, value string) []string {
+				mockFmIndex.QueryExactMatchFunc = func(key, value string) []wikipage.PageIdentifier {
 					if key == "inventory.container" && value == "tool_box" {
-						return []string{"hammer"}
+						return []wikipage.PageIdentifier{"hammer"}
 					}
 					return nil
 				}
@@ -1648,17 +1648,17 @@ var _ = Describe("InventoryNormalizationJob", func() {
 					},
 				}
 
-				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
+				mockFmIndex.QueryKeyExistenceFunc = func(key string) []wikipage.PageIdentifier {
 					if key == "inventory.items" {
-						return []string{"tool_box"}
+						return []wikipage.PageIdentifier{"tool_box"}
 					}
 					if key == "inventory.is_container" {
-						return []string{"tool_box"}
+						return []wikipage.PageIdentifier{"tool_box"}
 					}
 					if key == "inventory.container" {
-						return []string{"big_hammer"}
+						return []wikipage.PageIdentifier{"big_hammer"}
 					}
-					return []string{}
+					return []wikipage.PageIdentifier{}
 				}
 
 				mockFmIndex.data["tool_box"] = map[string]string{
@@ -1668,9 +1668,9 @@ var _ = Describe("InventoryNormalizationJob", func() {
 					"inventory.container": "tool_box",
 				}
 
-				mockFmIndex.QueryExactMatchFunc = func(key, value string) []string {
+				mockFmIndex.QueryExactMatchFunc = func(key, value string) []wikipage.PageIdentifier {
 					if key == "inventory.container" && value == "tool_box" {
-						return []string{"big_hammer"}
+						return []wikipage.PageIdentifier{"big_hammer"}
 					}
 					return nil
 				}
@@ -2139,11 +2139,11 @@ var _ = Describe("InventoryNormalizationJob", func() {
 					},
 				}
 
-				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
+				mockFmIndex.QueryKeyExistenceFunc = func(key string) []wikipage.PageIdentifier {
 					if key == "inventory.container" {
-						return []string{"hammer"}
+						return []wikipage.PageIdentifier{"hammer"}
 					}
-					return []string{}
+					return []wikipage.PageIdentifier{}
 				}
 				mockFmIndex.data["hammer"] = map[string]string{
 					"inventory.container": "tool_box",
@@ -2211,15 +2211,15 @@ var _ = Describe("InventoryNormalizationJob", func() {
 			var containers []string
 
 			BeforeEach(func() {
-				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
+				mockFmIndex.QueryKeyExistenceFunc = func(key string) []wikipage.PageIdentifier {
 					if key == "inventory.is_container" {
-						return []string{"drawer", "box"}
+						return []wikipage.PageIdentifier{"drawer", "box"}
 					}
 					if key == "inventory.items" {
-						return []string{}
+						return []wikipage.PageIdentifier{}
 					}
 					if key == "inventory.container" {
-						return []string{}
+						return []wikipage.PageIdentifier{}
 					}
 					return nil
 				}
@@ -2238,15 +2238,15 @@ var _ = Describe("InventoryNormalizationJob", func() {
 			var containers []string
 
 			BeforeEach(func() {
-				mockFmIndex.QueryKeyExistenceFunc = func(key string) []string {
+				mockFmIndex.QueryKeyExistenceFunc = func(key string) []wikipage.PageIdentifier {
 					if key == "inventory.is_container" {
-						return []string{"drawer"}
+						return []wikipage.PageIdentifier{"drawer"}
 					}
 					if key == "inventory.items" {
-						return []string{}
+						return []wikipage.PageIdentifier{}
 					}
 					if key == "inventory.container" {
-						return []string{}
+						return []wikipage.PageIdentifier{}
 					}
 					return nil
 				}

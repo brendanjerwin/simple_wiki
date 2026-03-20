@@ -1,13 +1,19 @@
 package wikipage
 
 // PageIdentifier is the unique identifier for a page.
-type PageIdentifier = string
+type PageIdentifier string
+
+// String returns the string representation of the PageIdentifier.
+func (p PageIdentifier) String() string { return string(p) }
 
 // Markdown is the content of a page in Markdown format.
-type Markdown = string
+type Markdown string
+
+// String returns the string representation of the Markdown.
+func (m Markdown) String() string { return string(m) }
 
 // FrontMatter is the frontmatter of a page.
-type FrontMatter = map[string]any
+type FrontMatter map[string]any
 
 // PageReader is an interface for reading page content.
 type PageReader interface {
