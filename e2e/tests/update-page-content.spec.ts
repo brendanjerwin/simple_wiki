@@ -54,6 +54,9 @@ async function readTestPage(
 }
 
 test.describe('UpdatePageContent find-and-replace behavior', () => {
+  // Run serially: tests share a single mutable TEST_PAGE and beforeEach resets it.
+  // Serial mode prevents races between the reset and the next test's reads/writes.
+  test.describe.configure({ mode: 'serial' });
   test.setTimeout(30000);
 
   test.beforeEach(async ({ request }) => {
@@ -126,5 +129,74 @@ test.describe('UpdatePageContent find-and-replace behavior', () => {
     const body = await conflictResp.json() as { code: string; message: string };
     expect(body.code).toBe('aborted');
     expect(body.message).toContain('version mismatch');
+  });
+
+  test('version conflict (full-replacement): rejects the update when expectedVersionHash does not match', async ({ request }) => {
+    const { versionHash } = await readTestPage(request);
+
+    // Advance the page with a full-replacement so the captured hash is now stale.
+    const advanceResp = await callPageAPI(request, 'UpdatePageContent', {
+      pageName: TEST_PAGE,
+      newContentMarkdown: '# Intermediate Full Replacement\n\nThis makes the original hash stale.',
+    });
+    expect(advanceResp.ok()).toBeTruthy();
+
+    // Attempt a full-replacement with the stale hash — this must be rejected.
+    const conflictResp = await callPageAPI(request, 'UpdatePageContent', {
+      pageName: TEST_PAGE,
+      expectedVersionHash: versionHash,
+      newContentMarkdown: '# Conflicting Full Replacement',
+    });
+
+    // Connect protocol maps gRPC codes.Aborted to HTTP 409.
+    expect(conflictResp.status()).toBe(409);
+    const body = await conflictResp.json() as { code: string; message: string };
+    expect(body.code).toBe('aborted');
+    expect(body.message).toContain('version mismatch');
+  });
+
+  test('correct hash (find-and-replace): accepts the update and returns a new version hash', async ({ request }) => {
+    const { versionHash: originalHash, contentMarkdown } = await readTestPage(request);
+
+    const resp = await callPageAPI(request, 'UpdatePageContent', {
+      pageName: TEST_PAGE,
+      oldContentMarkdown: contentMarkdown,
+      expectedVersionHash: originalHash,
+      newContentMarkdown: '# Section One\n\nUpdated with correct hash.',
+    });
+
+    expect(resp.status()).toBe(200);
+    const body = await resp.json() as { success: boolean; versionHash: string };
+    expect(body.success).toBe(true);
+    // Response body must contain a new version hash reflecting the updated content.
+    expect(body.versionHash).toBeTruthy();
+    expect(body.versionHash).not.toBe(originalHash);
+
+    // The page content must reflect the find-and-replace.
+    const { contentMarkdown: updatedMarkdown } = await readTestPage(request);
+    expect(updatedMarkdown).toContain('Updated with correct hash.');
+    expect(updatedMarkdown).not.toContain('Original content here.');
+  });
+
+  test('correct hash (full-replacement): accepts the update and returns a new version hash', async ({ request }) => {
+    const { versionHash: originalHash } = await readTestPage(request);
+
+    const resp = await callPageAPI(request, 'UpdatePageContent', {
+      pageName: TEST_PAGE,
+      expectedVersionHash: originalHash,
+      newContentMarkdown: '# Fully replaced with correct hash.',
+    });
+
+    expect(resp.status()).toBe(200);
+    const body = await resp.json() as { success: boolean; versionHash: string };
+    expect(body.success).toBe(true);
+    // Response body must contain a new version hash reflecting the updated content.
+    expect(body.versionHash).toBeTruthy();
+    expect(body.versionHash).not.toBe(originalHash);
+
+    // The page content must reflect the full replacement.
+    const { contentMarkdown } = await readTestPage(request);
+    expect(contentMarkdown).toContain('Fully replaced with correct hash.');
+    expect(contentMarkdown).not.toContain('Section One');
   });
 });
