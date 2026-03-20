@@ -66,7 +66,7 @@ export const Loading: Story = {
   },
 };
 
-export const Error: Story = {
+export const ErrorState: Story = {
   args: {
     page: 'error-page',
     open: true,

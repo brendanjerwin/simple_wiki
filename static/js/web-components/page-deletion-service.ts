@@ -44,7 +44,7 @@ export class PageDeleter {
 
   constructor() {
     // Bind event handlers once to ensure proper cleanup
-    this.boundHandleConfirm = this.handleConfirm.bind(this);
+    this.boundHandleConfirm = () => { void this.handleConfirm(); };
     this.boundHandleCancel = this.handleCancel.bind(this);
     
     this.ensureDialogExists();
@@ -108,7 +108,10 @@ export class PageDeleter {
     const pageName = this.dialog.dataset.pageName;
 
     if (!pageName) {
-      throw new Error('PageDeleter: No page name found for deletion');
+      const error = new Error('PageDeleter: No page name found for deletion');
+      const augmentedError = AugmentErrorService.augmentError(error, 'delete page');
+      this.dialog.showError(augmentedError);
+      return;
     }
 
     // Set loading state
