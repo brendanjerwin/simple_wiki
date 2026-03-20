@@ -49,6 +49,8 @@ function buildInventoryMenu(currentPage: string, frontmatter: unknown): void {
   trigger.href = '#';
   trigger.className = 'pure-menu-link';
   trigger.id = 'inventory-submenu-trigger';
+  trigger.setAttribute('aria-expanded', 'false');
+  trigger.setAttribute('aria-controls', 'inventory-submenu-children');
   const triggerIcon = document.createElement('i');
   triggerIcon.className = 'fa-solid fa-box-open';
   trigger.appendChild(triggerIcon);
@@ -57,6 +59,7 @@ function buildInventoryMenu(currentPage: string, frontmatter: unknown): void {
 
   const children = document.createElement('ul');
   children.className = 'pure-menu-children';
+  children.id = 'inventory-submenu-children';
   submenu.appendChild(children);
 
   let addItemEl: HTMLAnchorElement | null = null;
@@ -97,13 +100,15 @@ function buildInventoryMenu(currentPage: string, frontmatter: unknown): void {
   trigger.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
-    submenu.classList.toggle('submenu-open');
+    const isOpen = submenu.classList.toggle('submenu-open');
+    trigger.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
   });
 
   document.addEventListener('click', (e) => {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- e.target in DOM click events is always a Node
     if (!submenu.contains(e.target as Node)) {
       submenu.classList.remove('submenu-open');
+      trigger.setAttribute('aria-expanded', 'false');
     }
   });
 
@@ -167,12 +172,11 @@ export function initInventoryMenu(): void {
         .then(frontmatter => {
           buildInventoryMenu(currentPage, frontmatter);
         })
-        .catch((error: unknown) => {
-          console.error('Error fetching frontmatter:', error);
+        .catch((_error: unknown) => {
           buildInventoryMenu(currentPage, {});
         });
     })
-    .catch((error: unknown) => {
-      console.error('Error checking inventory:', error);
+    .catch((_error: unknown) => {
+      // Silently ignore: inventory menu is non-critical, failure just means no inventory options shown
     });
 }

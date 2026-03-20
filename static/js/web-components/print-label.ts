@@ -29,7 +29,12 @@ export function initPrintMenu(): void {
   }
 
   fetch('/api/find_by_key_existence?k=label_printer')
-    .then(response => response.json() as Promise<unknown>)
+    .then(response => {
+      if (!response.ok) {
+      throw new Error(`Server returned error status when fetching print labels: ${response.status}`);
+      }
+      return response.json() as Promise<unknown>;
+    })
     .then(data => {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- extracting ids from unknown API response
       const ids = (data as Record<string, unknown>)['ids'];
@@ -66,7 +71,7 @@ export function initPrintMenu(): void {
         utilitySection.insertAdjacentElement('afterend', menuItem);
       });
     })
-    .catch((error: unknown) => {
-      console.error('Error fetching print labels:', error);
+    .catch((_error: unknown) => {
+      // Silently ignore: print menu is non-critical, failure just means no print options shown
     });
 }
