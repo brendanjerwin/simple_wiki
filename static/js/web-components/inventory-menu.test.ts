@@ -1,28 +1,21 @@
 import { expect } from '@esm-bundle/chai';
+import sinon from 'sinon';
+import {
+  extractInventoryData,
+  validateInventoryResponse,
+  findPageInInventoryList,
+  initInventoryMenu,
+} from './inventory-menu.js';
 
-// Test the buildInventoryMenu logic by extracting and testing the core functionality
-// Since simple_wiki.js uses global functions, we test the logic patterns here
+function makeJsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
 
 describe('Inventory Menu Logic', () => {
   describe('extractInventoryData', () => {
-    // Helper that mirrors the logic in buildInventoryMenu
-    function extractInventoryData(frontmatter: unknown): {
-      inventory: { items?: unknown; container?: string } | null;
-      isContainer: boolean;
-      isItem: boolean;
-      currentContainer: string;
-    } {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- extracting nested object from unknown frontmatter
-      const inventory = (frontmatter && typeof frontmatter === 'object')
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- extracting inventory property
-        ? (frontmatter as Record<string, unknown>)['inventory'] as { items?: unknown; container?: string } | null
-        : null;
-      const isContainer = !!(inventory && (Array.isArray(inventory.items) || inventory.items !== undefined));
-      const isItem = !!(inventory && typeof inventory.container === 'string' && inventory.container !== '');
-      const currentContainer = (inventory && inventory.container) || '';
-
-      return { inventory, isContainer, isItem, currentContainer };
-    }
 
     describe('when frontmatter is null', () => {
       let result: ReturnType<typeof extractInventoryData>;
@@ -259,12 +252,6 @@ describe('Inventory Menu Logic', () => {
   });
 
   describe('validateInventoryResponse', () => {
-    // Helper that mirrors the validation logic in addInventoryMenu
-    function validateInventoryResponse(data: unknown): boolean {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- validating unknown data structure
-      return !!(data && typeof data === 'object' && Array.isArray((data as Record<string, unknown>)['ids']));
-    }
-
     describe('when data is null', () => {
       it('should return false', () => {
         expect(validateInventoryResponse(null)).to.be.false;
@@ -311,14 +298,6 @@ describe('Inventory Menu Logic', () => {
   });
 
   describe('findPageInInventoryList', () => {
-    // Helper that mirrors the page finding logic
-    function findPageInInventoryList(ids: unknown[], currentPage: string): boolean {
-      return ids.some(function(item) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- checking identifier property on unknown item
-        return item && (item as Record<string, unknown>)['identifier'] === currentPage;
-      });
-    }
-
     describe('when ids is empty', () => {
       it('should return false', () => {
         expect(findPageInInventoryList([], 'test_page')).to.be.false;
@@ -352,6 +331,287 @@ describe('Inventory Menu Logic', () => {
     describe('when list items have no identifier', () => {
       it('should handle missing identifier gracefully', () => {
         expect(findPageInInventoryList([{ other: 'prop' }], 'test_page')).to.be.false;
+      });
+    });
+  });
+});
+
+describe('initInventoryMenu', () => {
+  let fetchStub: sinon.SinonStub;
+  let utilitySection: HTMLElement;
+
+  beforeEach(() => {
+    fetchStub = sinon.stub(window, 'fetch');
+    window.simple_wiki = { pageName: 'test_page' };
+
+    utilitySection = document.createElement('hr');
+    utilitySection.id = 'utilityMenuSection';
+    document.body.appendChild(utilitySection);
+  });
+
+  afterEach(() => {
+    fetchStub.restore();
+    delete window.simple_wiki;
+    utilitySection.remove();
+    document.getElementById('inventory-submenu')?.remove();
+  });
+
+  describe('when utilityMenuSection is absent', () => {
+    beforeEach(() => {
+      utilitySection.remove();
+      initInventoryMenu();
+    });
+
+    it('should not make any fetch calls', () => {
+      expect(fetchStub.called).to.be.false;
+    });
+  });
+
+  describe('when pageName is empty', () => {
+    beforeEach(() => {
+      window.simple_wiki = { pageName: '' };
+      initInventoryMenu();
+    });
+
+    it('should not make any fetch calls', () => {
+      expect(fetchStub.called).to.be.false;
+    });
+  });
+
+  describe('when pageName is absent', () => {
+    beforeEach(() => {
+      window.simple_wiki = {};
+      initInventoryMenu();
+    });
+
+    it('should not make any fetch calls', () => {
+      expect(fetchStub.called).to.be.false;
+    });
+  });
+
+  describe('when current page is not in inventory list', () => {
+    beforeEach(async () => {
+      fetchStub.onFirstCall().resolves(makeJsonResponse({
+        ids: [{ identifier: 'other_page' }],
+      }));
+      initInventoryMenu();
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+
+    it('should not inject a submenu', () => {
+      expect(document.getElementById('inventory-submenu')).to.be.null;
+    });
+  });
+
+  describe('when API returns empty ids', () => {
+    beforeEach(async () => {
+      fetchStub.onFirstCall().resolves(makeJsonResponse({ ids: [] }));
+      initInventoryMenu();
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+
+    it('should not inject a submenu', () => {
+      expect(document.getElementById('inventory-submenu')).to.be.null;
+    });
+  });
+
+  describe('when API returns invalid response structure', () => {
+    beforeEach(async () => {
+      fetchStub.onFirstCall().resolves(makeJsonResponse({ notIds: [] }));
+      initInventoryMenu();
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+
+    it('should not inject a submenu', () => {
+      expect(document.getElementById('inventory-submenu')).to.be.null;
+    });
+  });
+
+  describe('when API returns non-OK status', () => {
+    beforeEach(async () => {
+      fetchStub.onFirstCall().resolves(new Response('error', { status: 500 }));
+      initInventoryMenu();
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+
+    it('should not inject a submenu (silently ignores)', () => {
+      expect(document.getElementById('inventory-submenu')).to.be.null;
+    });
+  });
+
+  describe('when fetch throws', () => {
+    beforeEach(async () => {
+      fetchStub.onFirstCall().rejects(new Error('Network error'));
+      initInventoryMenu();
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+
+    it('should not inject a submenu (silently ignores)', () => {
+      expect(document.getElementById('inventory-submenu')).to.be.null;
+    });
+  });
+
+  describe('when current page is in inventory list (container page)', () => {
+    beforeEach(async () => {
+      fetchStub.onFirstCall().resolves(makeJsonResponse({
+        ids: [{ identifier: 'test_page' }],
+      }));
+      fetchStub.onSecondCall().resolves(makeJsonResponse({
+        inventory: { items: ['child1', 'child2'] },
+      }));
+      initInventoryMenu();
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+
+    it('should inject an inventory submenu', () => {
+      expect(document.getElementById('inventory-submenu')).to.exist;
+    });
+
+    it('should include the submenu trigger link', () => {
+      expect(document.getElementById('inventory-submenu-trigger')).to.exist;
+    });
+
+    it('should initialise aria-expanded to false', () => {
+      const trigger = document.getElementById('inventory-submenu-trigger');
+      expect(trigger?.getAttribute('aria-expanded')).to.equal('false');
+    });
+
+    it('should include aria-controls pointing at children ul', () => {
+      const trigger = document.getElementById('inventory-submenu-trigger');
+      expect(trigger?.getAttribute('aria-controls')).to.equal('inventory-submenu-children');
+    });
+
+    it('should include the children ul with correct id', () => {
+      expect(document.getElementById('inventory-submenu-children')).to.exist;
+    });
+
+    it('should set role="menu" on the children ul', () => {
+      const children = document.getElementById('inventory-submenu-children');
+      expect(children?.getAttribute('role')).to.equal('menu');
+    });
+
+    it('should include the Add Item Here link', () => {
+      expect(document.getElementById('inventory-add-item')).to.exist;
+    });
+
+    it('should set role="menuitem" on the Add Item Here link', () => {
+      const link = document.getElementById('inventory-add-item');
+      expect(link?.getAttribute('role')).to.equal('menuitem');
+    });
+
+    it('should not include the Move This Item link for a container page', () => {
+      expect(document.getElementById('inventory-move-item')).to.be.null;
+    });
+  });
+
+  describe('when current page is an inventory item (not a container)', () => {
+    beforeEach(async () => {
+      fetchStub.onFirstCall().resolves(makeJsonResponse({
+        ids: [{ identifier: 'test_page' }],
+      }));
+      fetchStub.onSecondCall().resolves(makeJsonResponse({
+        inventory: { container: 'parent_container' },
+      }));
+      initInventoryMenu();
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+
+    it('should inject an inventory submenu', () => {
+      expect(document.getElementById('inventory-submenu')).to.exist;
+    });
+
+    it('should not include the Add Item Here link', () => {
+      expect(document.getElementById('inventory-add-item')).to.be.null;
+    });
+
+    it('should include the Move This Item link', () => {
+      expect(document.getElementById('inventory-move-item')).to.exist;
+    });
+
+    it('should set role="menuitem" on the Move This Item link', () => {
+      const link = document.getElementById('inventory-move-item');
+      expect(link?.getAttribute('role')).to.equal('menuitem');
+    });
+  });
+
+  describe('when current page is both container and item', () => {
+    beforeEach(async () => {
+      fetchStub.onFirstCall().resolves(makeJsonResponse({
+        ids: [{ identifier: 'test_page' }],
+      }));
+      fetchStub.onSecondCall().resolves(makeJsonResponse({
+        inventory: { items: ['child1'], container: 'parent_container' },
+      }));
+      initInventoryMenu();
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+
+    it('should include both Add Item Here and Move This Item links', () => {
+      expect(document.getElementById('inventory-add-item')).to.exist;
+      expect(document.getElementById('inventory-move-item')).to.exist;
+    });
+  });
+
+  describe('when frontmatter fetch fails', () => {
+    beforeEach(async () => {
+      fetchStub.onFirstCall().resolves(makeJsonResponse({
+        ids: [{ identifier: 'test_page' }],
+      }));
+      fetchStub.onSecondCall().rejects(new Error('Frontmatter fetch failed'));
+      initInventoryMenu();
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+
+    it('should still inject the submenu with empty inventory data', () => {
+      // buildInventoryMenu is called with {} as fallback
+      expect(document.getElementById('inventory-submenu')).to.exist;
+    });
+  });
+
+  describe('submenu trigger toggle', () => {
+    beforeEach(async () => {
+      fetchStub.onFirstCall().resolves(makeJsonResponse({
+        ids: [{ identifier: 'test_page' }],
+      }));
+      fetchStub.onSecondCall().resolves(makeJsonResponse({
+        inventory: { items: [] },
+      }));
+      initInventoryMenu();
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+
+    describe('when the trigger is clicked once', () => {
+      beforeEach(() => {
+        const trigger = document.getElementById('inventory-submenu-trigger') as HTMLAnchorElement;
+        trigger.click();
+      });
+
+      it('should set aria-expanded to true', () => {
+        const trigger = document.getElementById('inventory-submenu-trigger');
+        expect(trigger?.getAttribute('aria-expanded')).to.equal('true');
+      });
+
+      describe('when the trigger is clicked a second time', () => {
+        beforeEach(() => {
+          const trigger = document.getElementById('inventory-submenu-trigger') as HTMLAnchorElement;
+          trigger.click();
+        });
+
+        it('should set aria-expanded back to false', () => {
+          const trigger = document.getElementById('inventory-submenu-trigger');
+          expect(trigger?.getAttribute('aria-expanded')).to.equal('false');
+        });
+      });
+
+      describe('when an outside click occurs', () => {
+        beforeEach(() => {
+          document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        });
+
+        it('should set aria-expanded to false', () => {
+          const trigger = document.getElementById('inventory-submenu-trigger');
+          expect(trigger?.getAttribute('aria-expanded')).to.equal('false');
+        });
       });
     });
   });

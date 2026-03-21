@@ -24,7 +24,6 @@
             <link rel="stylesheet" type="text/css" href="/static/css/default.css">
         {{ end }}
 
-        <script src="/static/vendor/js/jquery.min.js"></script>
         <script src="/static/vendor/js/highlight.min.js"></script>
 
         <script type="module" src="/static/js/dist/web-components.js"></script>
@@ -41,7 +40,6 @@
                 pageName: "{{ .Page }}",
             }
         </script>
-        <script type="text/javascript" src="/static/js/simple_wiki.js"></script>
     </head>
     <body id="pad" class="
         {{ if .EditPage }} EditPage {{ end }}
