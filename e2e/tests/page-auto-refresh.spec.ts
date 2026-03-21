@@ -44,7 +44,6 @@ test.describe('Page auto-refresh and system-info page status', () => {
   test('page-auto-refresh component receives page-name attribute in view mode', async ({ page }) => {
     await page.goto(`/${TEST_PAGE}/view`);
 
-    // The page-auto-refresh component should be present and have the correct page-name
     const autoRefresh = page.locator('page-auto-refresh');
     await expect(autoRefresh).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
     await expect(autoRefresh).toHaveAttribute('page-name', TEST_PAGE);
@@ -53,59 +52,15 @@ test.describe('Page auto-refresh and system-info page status', () => {
   test('page-auto-refresh component is not present in edit mode', async ({ page }) => {
     await page.goto(`/${TEST_PAGE}/edit`);
 
-    // Wait for the editor to load
     await expect(page.locator('wiki-editor textarea')).toBeVisible({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
-    // page-auto-refresh should NOT be present in edit mode
     const autoRefresh = page.locator('page-auto-refresh');
     await expect(autoRefresh).not.toBeAttached();
-  });
-
-  test('system-info panel shows page status when viewing a page', async ({ page }) => {
-    await page.goto(`/${TEST_PAGE}/view`);
-
-    // Wait for the page-auto-refresh component to be present
-    await expect(page.locator('page-auto-refresh')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-
-    // Expand the system-info panel
-    const systemPanel = page.locator('system-info');
-    await expect(systemPanel).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-
-    // Click to expand the panel - the panel is in shadow DOM
-    const drawerTab = systemPanel.locator('.system-panel');
-    await drawerTab.click();
-
-    // The system-info-page component should show the page name
-    // It's nested inside system-info's shadow DOM
-    const pageInfo = systemPanel.locator('system-info-page');
-    await expect(pageInfo).toBeAttached({ timeout: 10000 });
-
-    // Check that the page name is displayed within the component's shadow DOM
-    const pageValue = pageInfo.locator('.page-value');
-    await expect(pageValue).toContainText(TEST_PAGE, { timeout: 10000 });
-  });
-
-  test('system-info panel shows version hash for the page', async ({ page }) => {
-    await page.goto(`/${TEST_PAGE}/view`);
-
-    await expect(page.locator('page-auto-refresh')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-
-    // Expand the system-info panel
-    const systemPanel = page.locator('system-info');
-    await expect(systemPanel).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-    await systemPanel.locator('.system-panel').click();
-
-    // The hash should appear after the WatchPage stream sends the first response
-    const hashValue = systemPanel.locator('system-info-page .hash');
-    await expect(hashValue).toBeAttached({ timeout: 10000 });
-    // Hash should be a truncated hex string (8 chars + "...")
-    await expect(hashValue).toHaveText(/^[a-f0-9]{8}\.\.\.$/);
   });
 
   test('page content auto-refreshes when updated via API', async ({ page, request }) => {
     await page.goto(`/${TEST_PAGE}/view`);
 
-    // Verify initial content is displayed
     await expect(page.locator('#rendered')).toContainText('Initial content for auto-refresh testing', { timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
     // Update the page content via the API (simulating another user/session)
@@ -115,16 +70,38 @@ test.describe('Page auto-refresh and system-info page status', () => {
     });
     expect(updateResp.ok()).toBeTruthy();
 
-    // The page should auto-refresh and show the new content
     // The WatchPage stream checks every 1 second, so allow a few seconds
     await expect(page.locator('#rendered')).toContainText('Content was updated by another session!', { timeout: 10000 });
-
-    // Original content should no longer be visible
     await expect(page.locator('#rendered')).not.toContainText('Initial content for auto-refresh testing');
   });
 
+  test('system-info panel shows Updated time after content change', async ({ page, request }) => {
+    await page.goto(`/${TEST_PAGE}/view`);
+    await expect(page.locator('#rendered')).toContainText('Initial content', { timeout: COMPONENT_LOAD_TIMEOUT_MS });
+
+    // Trigger a content change so lastRefreshTime gets set
+    const updateResp = await callPageAPI(request, 'UpdatePageContent', {
+      pageName: TEST_PAGE,
+      newContentMarkdown: '# Auto Refresh Test\n\nUpdated for system-info check.',
+    });
+    expect(updateResp.ok()).toBeTruthy();
+
+    // Wait for auto-refresh to pick up the change
+    await expect(page.locator('#rendered')).toContainText('Updated for system-info check', { timeout: 10000 });
+
+    // Expand the system-info panel
+    const systemPanel = page.locator('system-info');
+    await expect(systemPanel).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
+    await systemPanel.locator('.system-panel').click();
+
+    // The system-info-page component should show "Updated: Xs ago"
+    const pageInfo = systemPanel.locator('system-info-page');
+    await expect(pageInfo).toBeAttached({ timeout: 10000 });
+    const timeValue = pageInfo.locator('.time');
+    await expect(timeValue).toHaveText(/\d+s ago/, { timeout: 10000 });
+  });
+
   test('scroll position is preserved during auto-refresh', async ({ page, request }) => {
-    // Create a page with lots of content so it's scrollable
     const longContent = '# Long Page\n\n' + Array.from({ length: 50 }, (_, i) => `## Section ${i + 1}\n\nParagraph ${i + 1} with some content to make the page long enough to scroll.\n`).join('\n');
 
     await setupTestPage(request, longContent);

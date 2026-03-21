@@ -88,9 +88,8 @@ export class PageAutoRefresh extends LitElement {
         signal: this.streamSubscription.signal
       })) {
         if (!this.currentHash) {
-          // First response - just store the hash
+          // First response - just store the hash, no refresh time yet
           this.currentHash = response.versionHash;
-          this.lastRefreshTime = new Date();
           this.dispatchPageStatusEvent();
         } else if (this.currentHash !== response.versionHash) {
           // Hash changed - refresh the page content

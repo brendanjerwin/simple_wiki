@@ -16,12 +16,6 @@ export class SystemInfoPage extends LitElement {
       font-size: 10px;
     }
 
-    .page-info {
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
-    }
-
     .page-row {
       display: flex;
       align-items: center;
@@ -30,23 +24,6 @@ export class SystemInfoPage extends LitElement {
 
     .page-label {
       color: #666;
-      min-width: 45px;
-    }
-
-    .page-value {
-      color: #ccc;
-      font-weight: 500;
-    }
-
-    .watching-indicator {
-      color: #4a9eff;
-      font-size: 8px;
-    }
-
-    .hash {
-      font-family: monospace;
-      font-size: 9px;
-      color: #888;
     }
 
     .time {
@@ -76,31 +53,14 @@ export class SystemInfoPage extends LitElement {
   }
 
   override render() {
-    if (!this.pageStatus) {
+    if (!this.pageStatus?.lastRefreshTime) {
       return html``;
     }
 
-    const { pageName, versionHash, lastRefreshTime, isWatching } = this.pageStatus;
-
     return html`
-      <div class="page-info">
-        <div class="page-row">
-          <span class="page-label">Page:</span>
-          <span class="page-value">${pageName}</span>
-          ${isWatching ? html`<span class="watching-indicator">●</span>` : ''}
-        </div>
-        ${versionHash ? html`
-          <div class="page-row">
-            <span class="page-label">Hash:</span>
-            <span class="hash">${versionHash.substring(0, 8)}...</span>
-          </div>
-        ` : ''}
-        ${lastRefreshTime ? html`
-          <div class="page-row">
-            <span class="page-label">Updated:</span>
-            <span class="time">${this.formatTime(lastRefreshTime)}</span>
-          </div>
-        ` : ''}
+      <div class="page-row">
+        <span class="page-label">Updated:</span>
+        <span class="time">${this.formatTime(this.pageStatus.lastRefreshTime)}</span>
       </div>
     `;
   }
