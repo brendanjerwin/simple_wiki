@@ -133,7 +133,11 @@ export class PageAutoRefresh extends LitElement {
       // Fetch the updated page content
       const response = await fetch(window.location.href);
       if (!response.ok) {
-        console.error('Failed to fetch updated page content:', response.statusText);
+        this.dispatchEvent(new CustomEvent('page-watch-error', {
+          detail: { error: new Error(`Failed to fetch page: ${response.statusText}`) },
+          bubbles: true,
+          composed: true,
+        }));
         return;
       }
 

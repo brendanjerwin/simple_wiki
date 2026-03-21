@@ -103,7 +103,6 @@
 
                     {{ if .ViewPage }}
                         {{ .RenderedPage }}
-                        <page-auto-refresh page-name="{{ .Page }}"></page-auto-refresh>
                     {{ end }}
 
                     {{ if .ReadPage }}
@@ -154,6 +153,9 @@
         </article>
         {{ if not .EditPage }}
         <system-info></system-info>
+        {{ end }}
+        {{ if .ViewPage }}
+        <page-auto-refresh page-name="{{ .Page }}"></page-auto-refresh>
         {{ end }}
         <frontmatter-editor-dialog id="frontmatter-dialog"></frontmatter-editor-dialog>
         <inventory-add-item-dialog id="inventory-add-dialog"></inventory-add-item-dialog>
