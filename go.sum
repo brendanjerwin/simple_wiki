@@ -55,8 +55,8 @@ github.com/blevesearch/zap/v15 v15.0.3 h1:Ylj8Oe+mo0P25tr9iLPp33lN6d4qcztGjaIsP5
 github.com/blevesearch/zap/v15 v15.0.3/go.mod h1:iuwQrImsh1WjWJ0Ue2kBqY83a0rFtJTqfa9fp1rbVVU=
 github.com/brendanjerwin/usb v0.0.0-20231222144018-09a9b6ae5f52 h1:T66YSIOgK2BFYEhqQLKY5iHrBDqLzn6K/zW7EOhH5vw=
 github.com/brendanjerwin/usb v0.0.0-20231222144018-09a9b6ae5f52/go.mod h1:Od972xHfMJowv7NGVDiWVxk2zxnWgjLlJzE+F4F7AGU=
-github.com/buger/jsonparser v1.1.1 h1:2PnMjfWD7wBILjqQbt530v576A/cAbQvEW9gGIpYMUs=
-github.com/buger/jsonparser v1.1.1/go.mod h1:6RYKKt7H4d4+iWqouImQ9R2FZql3VbhNgx27UK13J/0=
+github.com/buger/jsonparser v1.1.2 h1:frqHqw7otoVbk5M8LlE/L7HTnIq2v9RX6EJ48i9AxJk=
+github.com/buger/jsonparser v1.1.2/go.mod h1:6RYKKt7H4d4+iWqouImQ9R2FZql3VbhNgx27UK13J/0=
 github.com/bytedance/sonic v1.14.0 h1:/OfKt8HFw0kh2rj8N0F6C/qPGRESq0BbaNZgcNXXzQQ=
 github.com/bytedance/sonic v1.14.0/go.mod h1:WoEbx8WTcFJfzCe0hbmyTGrfjt8PzNEBdxlNUO24NhA=
 github.com/bytedance/sonic/loader v0.3.0 h1:dskwH8edlzNMctoruo8FPTJDF3vLtDT0sXZwvZJyqeA=
