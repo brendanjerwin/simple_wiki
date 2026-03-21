@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -461,6 +462,64 @@ var _ = Describe("handleUploads Path Injection Prevention", func() {
 
 		It("should serve the file content", func() {
 			Expect(w.Body.String()).To(Equal("test content"))
+		})
+	})
+})
+
+var _ = Describe("handlePageRequest directory listing", func() {
+	var w *httptest.ResponseRecorder
+	var tmpDir string
+	var customSite *server.Site
+	var router *gin.Engine
+
+	BeforeEach(func() {
+		var err error
+		tmpDir, err = os.MkdirTemp("", "simple_wiki_ls_test")
+		Expect(err).NotTo(HaveOccurred())
+		logger := lumber.NewConsoleLogger(lumber.TRACE)
+		customSite, err = server.NewSite(tmpDir, "", "testpage", 0, "secret", true, 1024, 1024, logger)
+		Expect(err).NotTo(HaveOccurred())
+		router = customSite.GinRouter()
+		w = httptest.NewRecorder()
+	})
+
+	AfterEach(func() {
+		// Ensure directory is writable before removal
+		_ = os.Chmod(tmpDir, 0755)
+		_ = os.RemoveAll(tmpDir)
+	})
+
+	When("the data directory is unreadable when requesting /ls/view", func() {
+		var originalMode os.FileMode
+
+		BeforeEach(func() {
+			if runtime.GOOS == "windows" {
+				Skip("chmod permission semantics are not enforced on Windows")
+			}
+
+			// Pre-create the "ls" page so readOrInitPage succeeds later
+			preReq, _ := http.NewRequest(http.MethodGet, "/ls/view", nil)
+			preW := httptest.NewRecorder()
+			router.ServeHTTP(preW, preReq)
+
+			// Make the data directory execute-only: ReadPage can still access files
+			// by exact name (execute permission on dir allows path traversal) but
+			// os.ReadDir will fail (no read permission), triggering the DirectoryList error path.
+			info, err := os.Stat(customSite.PathToData)
+			Expect(err).NotTo(HaveOccurred())
+			originalMode = info.Mode()
+			Expect(os.Chmod(customSite.PathToData, 0100)).To(Succeed())
+
+			req, _ := http.NewRequest(http.MethodGet, "/ls/view", nil)
+			router.ServeHTTP(w, req)
+		})
+
+		AfterEach(func() {
+			_ = os.Chmod(customSite.PathToData, originalMode)
+		})
+
+		It("should return a 500 status code", func() {
+			Expect(w.Code).To(Equal(http.StatusInternalServerError))
 		})
 	})
 })

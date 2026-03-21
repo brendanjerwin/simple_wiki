@@ -10,7 +10,6 @@ import (
 	"mime"
 	"net/http"
 	"net/url"
-	"os"
 	"path"
 	"path/filepath"
 	"slices"
@@ -274,13 +273,13 @@ func (s *Site) renderPageContent(c *gin.Context, page, command string, p *wikipa
 		return
 	}
 
-	directoryEntries, command, err := s.getDirectoryEntries(page, command)
+	directoryListing, command, err := s.getDirectoryEntries(page, command)
 	if err != nil {
 		_ = c.AbortWithError(http.StatusInternalServerError, err)
 		return
 	}
 
-	templateData := s.buildTemplateData(page, command, directoryEntries, contentHTML, rawText, c)
+	templateData := s.buildTemplateData(page, command, directoryListing, contentHTML, rawText, c)
 	c.HTML(http.StatusOK, "index.tmpl", templateData)
 }
 
@@ -290,24 +289,28 @@ func (*Site) getPageContent(p *wikipage.Page) (rawText string, contentHTML []byt
 	return rawText, contentHTML
 }
 
-func (s *Site) getDirectoryEntries(page, command string) ([]os.FileInfo, string, error) {
-	var directoryEntries []os.FileInfo
+func (s *Site) getDirectoryEntries(page, command string) (DirectoryListing, string, error) {
+	var listing DirectoryListing
 	if page == "ls" {
 		command = "/view"
-		directoryEntries = s.DirectoryList()
+		var dirErr error
+		listing, dirErr = s.DirectoryList()
+		if dirErr != nil {
+			return DirectoryListing{}, command, dirErr
+		}
 	}
 	if page == uploadsPage {
 		command = "/view"
-		var err error
-		directoryEntries, err = s.UploadList()
+		entries, err := s.UploadList()
 		if err != nil {
-			return nil, command, err
+			return DirectoryListing{}, command, err
 		}
+		listing.Entries = entries
 	}
-	return directoryEntries, command, nil
+	return listing, command, nil
 }
 
-func (s *Site) buildTemplateData(page, command string, directoryEntries []os.FileInfo, contentHTML []byte, rawText string, c *gin.Context) gin.H {
+func (s *Site) buildTemplateData(page, command string, listing DirectoryListing, contentHTML []byte, rawText string, c *gin.Context) gin.H {
 	return gin.H{
 		"EditPage": command[0:2] == "/e", // /edit
 		"ViewPage": command[0:2] == "/v", // /view
@@ -318,7 +321,8 @@ func (s *Site) buildTemplateData(page, command string, directoryEntries []os.Fil
 			command[0:2] != "/r",
 		"DirectoryPage":    page == "ls" || page == uploadsPage,
 		"UploadPage":       page == uploadsPage,
-		"DirectoryEntries": directoryEntries,
+		"DirectoryEntries": listing.Entries,
+		"DirectoryErrors":  listing.ReadErrors,
 		"Page":             page,
 		"RenderedPage":     template.HTML([]byte(contentHTML)),
 		"RawPage":          rawText,

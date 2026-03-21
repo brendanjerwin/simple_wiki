@@ -204,15 +204,21 @@ func (s *Site) InitializeIndexing() error {
 	s.startMigrationJobs()
 
 	// Get all files that need to be indexed
-	files := s.DirectoryList()
-	if len(files) == 0 {
+	listing, err := s.DirectoryList()
+	if err != nil {
+		return fmt.Errorf("failed to list pages for indexing: %w", err)
+	}
+	for _, re := range listing.ReadErrors {
+		s.Logger.Error("Skipping page %q from indexing due to read error: %v", re.PageName, re.Err)
+	}
+	if len(listing.Entries) == 0 {
 		s.Logger.Info("No pages found to index.")
 		return nil
 	}
 
 	// Convert files to page identifiers
-	pageIdentifiers := make([]wikipage.PageIdentifier, len(files))
-	for i, file := range files {
+	pageIdentifiers := make([]wikipage.PageIdentifier, len(listing.Entries))
+	for i, file := range listing.Entries {
 		pageIdentifiers[i] = wikipage.PageIdentifier(file.Name())
 	}
 
@@ -235,7 +241,7 @@ func (s *Site) InitializeIndexing() error {
 		// This error means the bulk enqueue failed immediately - the callback won't run
 		s.Logger.Error("Failed to enqueue bulk indexing jobs: %v", err)
 	}
-	s.Logger.Info("Background indexing started for %d pages. Application is ready.", len(files))
+	s.Logger.Info("Background indexing started for %d pages. Application is ready.", len(listing.Entries))
 
 	return nil
 }
@@ -345,9 +351,7 @@ func (s *Site) applyMigrationsForPage(page *wikipage.Page, content []byte) ([]by
 
 	migratedContent, err := s.MigrationApplicator.ApplyMigrations(content)
 	if err != nil {
-		// Log migration failure but continue with original content
-		s.Logger.Warn("Migration failed, using original content: %v", err)
-		return content, nil
+		return nil, fmt.Errorf("failed to apply content migrations: %w", err)
 	}
 
 	// If migration was applied, save the migrated content
@@ -465,18 +469,38 @@ func (DirectoryEntry) Sys() any {
 	return nil
 }
 
-// DirectoryList returns a list of all wiki pages in the data directory.
-func (s *Site) DirectoryList() []os.FileInfo {
-	files, _ := os.ReadDir(s.PathToData)
-	entries := make([]os.FileInfo, len(files))
-	found := 0
+// PageReadError records a page identifier and the error encountered when reading that page during directory listing.
+type PageReadError struct {
+	PageName string
+	Err      error
+}
+
+// DirectoryListing holds the result of a directory listing operation, including
+// successfully read page entries and any per-page read errors collected during iteration.
+type DirectoryListing struct {
+	Entries    []os.FileInfo
+	ReadErrors []PageReadError
+}
+
+// DirectoryList returns a listing of all wiki pages in the data directory.
+// It returns a non-nil error only if the data directory itself cannot be read (e.g., directory is missing
+// or unreadable). Individual page read failures are collected in the returned DirectoryListing.ReadErrors
+// slice so that callers can inform the user which pages could not be loaded without aborting the entire listing.
+func (s *Site) DirectoryList() (DirectoryListing, error) {
+	files, err := os.ReadDir(s.PathToData)
+	if err != nil {
+		return DirectoryListing{}, fmt.Errorf("failed to read data directory: %w", err)
+	}
+	entries := make([]os.FileInfo, 0, len(files))
+	var readErrors []PageReadError
 	for _, f := range files {
 		if strings.HasSuffix(f.Name(), ".md") {
 			name := decodeFileName(f.Name())
 			// Each ReadPage() call will acquire its own read lock
 			p, err := s.ReadPage(wikipage.PageIdentifier(name))
 			if err != nil {
-				s.Logger.Warn("Failed to open page %s for directory listing: %v", name, err)
+				s.Logger.Error("Failed to read page %q for directory listing: %v", name, err)
+				readErrors = append(readErrors, PageReadError{PageName: name, Err: err})
 				continue
 			}
 
@@ -487,17 +511,15 @@ func (s *Site) DirectoryList() []os.FileInfo {
 				lastEdited = fileInfo.ModTime()
 			}
 
-			entries[found] = DirectoryEntry{
+			entries = append(entries, DirectoryEntry{
 				Path:       p.Identifier, // Use the actual Page.Identifier, not the decoded filename
 				Length:     len(p.Text),
 				LastEdited: lastEdited,
-			}
-			found = found + 1
+			})
 		}
 	}
-	entries = entries[:found]
 	sort.Slice(entries, func(i, j int) bool { return entries[i].ModTime().Before(entries[j].ModTime()) })
-	return entries
+	return DirectoryListing{Entries: entries, ReadErrors: readErrors}, nil
 }
 
 // UploadEntry represents an uploaded file entry.
