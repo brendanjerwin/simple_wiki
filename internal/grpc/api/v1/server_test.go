@@ -272,6 +272,48 @@ func (*MockJobStreamServer) RecvMsg(any) error {
 	return nil
 }
 
+// MockPageWatchStreamServer is a mock implementation of apiv1.PageManagementService_WatchPageServer for testing.
+type MockPageWatchStreamServer struct {
+	SentMessages []*apiv1.WatchPageResponse
+	SendErr      error
+	ContextDone  bool
+}
+
+func (m *MockPageWatchStreamServer) Send(response *apiv1.WatchPageResponse) error {
+	if m.SendErr != nil {
+		return m.SendErr
+	}
+	m.SentMessages = append(m.SentMessages, response)
+	return nil
+}
+
+func (m *MockPageWatchStreamServer) Context() context.Context {
+	if m.ContextDone {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		return ctx
+	}
+	return context.Background()
+}
+
+func (*MockPageWatchStreamServer) SetHeader(metadata.MD) error {
+	return nil
+}
+
+func (*MockPageWatchStreamServer) SendHeader(metadata.MD) error {
+	return nil
+}
+
+func (*MockPageWatchStreamServer) SetTrailer(metadata.MD) {}
+
+func (*MockPageWatchStreamServer) SendMsg(any) error {
+	return nil
+}
+
+func (*MockPageWatchStreamServer) RecvMsg(any) error {
+	return nil
+}
+
 // MockBleveIndexQueryer is a mock implementation of bleve.IQueryBleveIndex for testing.
 type MockBleveIndexQueryer struct {
 	Results []bleve.SearchResult
@@ -2218,6 +2260,94 @@ var _ = Describe("Server", func() {
 			Expect(streamServer.SentMessages).To(HaveLen(1))
 			Expect(firstMessage).NotTo(BeNil())
 			Expect(firstMessage.JobQueues).To(BeEmpty())
+		})
+	})
+
+	Describe("WatchPage", func() {
+		var (
+			req                   *apiv1.WatchPageRequest
+			streamServer          *MockPageWatchStreamServer
+			mockPageReaderMutator *MockPageReaderMutator
+		)
+
+		BeforeEach(func() {
+			req = &apiv1.WatchPageRequest{
+				PageName: "test-page",
+			}
+			streamServer = &MockPageWatchStreamServer{}
+			mockPageReaderMutator = &MockPageReaderMutator{}
+		})
+
+		When("page exists", func() {
+			var (
+				err          error
+				firstMessage *apiv1.WatchPageResponse
+			)
+
+			BeforeEach(func() {
+				// Set up mock to return valid content
+				mockPageReaderMutator.Markdown = wikipage.Markdown("# Test Content")
+				mockPageReaderMutator.MarkdownReadErr = nil
+
+				// Set up context that gets cancelled after initial send
+				streamServer.ContextDone = true
+
+				server = mustNewServer(mockPageReaderMutator, nil, nil)
+				err = server.WatchPage(req, streamServer)
+
+				if len(streamServer.SentMessages) > 0 {
+					firstMessage = streamServer.SentMessages[0]
+				}
+			})
+
+			It("should handle context cancellation", func() {
+				Expect(err).To(Equal(context.Canceled))
+			})
+
+			It("should send initial version hash", func() {
+				Expect(streamServer.SentMessages).To(HaveLen(1))
+				Expect(firstMessage).NotTo(BeNil())
+				Expect(firstMessage.VersionHash).NotTo(BeEmpty())
+			})
+
+			It("should send correct version hash for content", func() {
+				// Calculate expected hash
+				h := sha256.Sum256([]byte("# Test Content"))
+				expectedHash := hex.EncodeToString(h[:])
+				Expect(firstMessage.VersionHash).To(Equal(expectedHash))
+			})
+		})
+
+		When("page does not exist", func() {
+			var err error
+
+			BeforeEach(func() {
+				mockPageReaderMutator.MarkdownReadErr = os.ErrNotExist
+				server = mustNewServer(mockPageReaderMutator, nil, nil)
+				err = server.WatchPage(req, streamServer)
+			})
+
+			It("should return NotFound error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.NotFound, "test-page"))
+			})
+
+			It("should not send any messages", func() {
+				Expect(streamServer.SentMessages).To(BeEmpty())
+			})
+		})
+
+		When("page name is empty", func() {
+			var err error
+
+			BeforeEach(func() {
+				req.PageName = ""
+				server = mustNewServer(nil, nil, nil)
+				err = server.WatchPage(req, streamServer)
+			})
+
+			It("should return InvalidArgument error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "page_name is required"))
+			})
 		})
 	})
 
