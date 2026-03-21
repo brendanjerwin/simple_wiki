@@ -9,6 +9,8 @@ import { AugmentErrorService, type AugmentedError } from './augment-error-servic
 import './system-info-identity.js';
 import './system-info-indexing.js';
 import './system-info-version.js';
+import './system-info-page.js';
+import type { PageStatus } from './system-info-page.js';
 
 export class SystemInfo extends LitElement {
   static readonly DEBOUNCE_DELAY = 300;
@@ -138,10 +140,15 @@ export class SystemInfo extends LitElement {
 
   @state()
   declare expanded: boolean;
+
+  @state()
+  declare pageStatus?: PageStatus;
+
   private debounceTimer?: ReturnType<typeof setTimeout>;
   private refreshTimer?: ReturnType<typeof setInterval>;
   private streamSubscription?: AbortController;
   private _handleClickOutside: (event: MouseEvent) => void;
+  private _handlePageStatusChanged: (event: Event) => void;
 
   private client = createClient(SystemInfoService, getGrpcWebTransport());
 
@@ -151,12 +158,14 @@ export class SystemInfo extends LitElement {
     this.error = null;
     this.expanded = false;
     this._handleClickOutside = this.handleClickOutside.bind(this);
+    this._handlePageStatusChanged = this.handlePageStatusChanged.bind(this);
   }
 
   override connectedCallback(): void {
     super.connectedCallback();
     this.loadSystemInfo();
     document.addEventListener('click', this._handleClickOutside);
+    document.addEventListener('page-status-changed', this._handlePageStatusChanged);
   }
 
   override firstUpdated(): void {
@@ -178,7 +187,8 @@ export class SystemInfo extends LitElement {
     }
     // Remove click-outside listener
     document.removeEventListener('click', this._handleClickOutside);
-    
+    document.removeEventListener('page-status-changed', this._handlePageStatusChanged);
+
     // Remove hover event listener
     const overlay = this.shadowRoot?.querySelector('.hover-overlay');
     if (overlay) {
@@ -208,6 +218,32 @@ export class SystemInfo extends LitElement {
     if (this.expanded && !path.includes(this)) {
       this.expanded = false;
     }
+  }
+
+  private handlePageStatusChanged(event: Event): void {
+    if (!(event instanceof CustomEvent)) {
+      return;
+    }
+
+    const detail = event.detail;
+    if (this.isPageStatus(detail)) {
+      this.pageStatus = detail;
+      this.requestUpdate();
+    }
+  }
+
+  private isPageStatus(obj: unknown): obj is PageStatus {
+    if (!obj || typeof obj !== 'object') {
+      return false;
+    }
+    return (
+      'pageName' in obj &&
+      typeof (obj as { pageName: unknown }).pageName === 'string' &&
+      'isWatching' in obj &&
+      typeof (obj as { isWatching: unknown }).isWatching === 'boolean' &&
+      (!('versionHash' in obj) || typeof (obj as { versionHash: unknown }).versionHash === 'string') &&
+      (!('lastRefreshTime' in obj) || (obj as { lastRefreshTime: unknown }).lastRefreshTime instanceof Date)
+    );
   }
 
   private handleMouseEnter = (): void => {
@@ -331,8 +367,8 @@ export class SystemInfo extends LitElement {
 
   override render() {
     return html`
-      <div 
-        class="system-panel ${this.expanded ? 'expanded' : ''}" 
+      <div
+        class="system-panel ${this.expanded ? 'expanded' : ''}"
         role="button"
         tabindex="0"
         aria-expanded="${this.expanded}"
@@ -352,6 +388,12 @@ export class SystemInfo extends LitElement {
             <!-- Tailscale Identity (if available) -->
             <system-info-identity
               .identity="${this.version?.tailscaleIdentity}"></system-info-identity>
+
+            <!-- Page Status (if available) -->
+            ${this.pageStatus ? html`
+              <system-info-page
+                .pageStatus="${this.pageStatus}"></system-info-page>
+            ` : ''}
 
             <!-- Job Status Component -->
             <system-info-indexing

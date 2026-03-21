@@ -38,6 +38,12 @@ export class PageAutoRefresh extends LitElement {
   @state()
   private currentHash?: string;
 
+  @state()
+  private lastRefreshTime?: Date;
+
+  @state()
+  private isWatching = false;
+
   private client = createClient(PageManagementService, getGrpcWebTransport());
 
   override connectedCallback() {
@@ -69,6 +75,8 @@ export class PageAutoRefresh extends LitElement {
     this.stopWatching();
 
     this.streamSubscription = new AbortController();
+    this.isWatching = true;
+    this.dispatchPageStatusEvent();
 
     try {
       const request = create(WatchPageRequestSchema, {
@@ -82,6 +90,8 @@ export class PageAutoRefresh extends LitElement {
         if (!this.currentHash) {
           // First response - just store the hash
           this.currentHash = response.versionHash;
+          this.lastRefreshTime = new Date();
+          this.dispatchPageStatusEvent();
         } else if (this.currentHash !== response.versionHash) {
           // Hash changed - refresh the page content
           this.currentHash = response.versionHash;
@@ -95,6 +105,9 @@ export class PageAutoRefresh extends LitElement {
         // Stream ended unexpectedly, but don't show error to user
         // The page will continue to work, just without auto-refresh
       }
+    } finally {
+      this.isWatching = false;
+      this.dispatchPageStatusEvent();
     }
   }
 
@@ -103,6 +116,8 @@ export class PageAutoRefresh extends LitElement {
       this.streamSubscription.abort();
       delete this.streamSubscription;
     }
+    this.isWatching = false;
+    this.dispatchPageStatusEvent();
   }
 
   private async refreshPageContent(): Promise<void> {
@@ -137,10 +152,27 @@ export class PageAutoRefresh extends LitElement {
         if (window.hljs?.highlightAll) {
           window.hljs.highlightAll();
         }
+
+        // Update last refresh time
+        this.lastRefreshTime = new Date();
+        this.dispatchPageStatusEvent();
       }
     } catch (err) {
       console.error('Error refreshing page content:', err);
     }
+  }
+
+  private dispatchPageStatusEvent(): void {
+    this.dispatchEvent(new CustomEvent('page-status-changed', {
+      detail: {
+        pageName: this.pageName,
+        versionHash: this.currentHash,
+        lastRefreshTime: this.lastRefreshTime,
+        isWatching: this.isWatching,
+      },
+      bubbles: true,
+      composed: true,
+    }));
   }
 }
 
