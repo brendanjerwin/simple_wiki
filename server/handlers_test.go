@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -465,6 +466,64 @@ var _ = Describe("handleUploads Path Injection Prevention", func() {
 	})
 })
 
+var _ = Describe("handlePageRequest directory listing", func() {
+	var w *httptest.ResponseRecorder
+	var tmpDir string
+	var customSite *server.Site
+	var router *gin.Engine
+
+	BeforeEach(func() {
+		var err error
+		tmpDir, err = os.MkdirTemp("", "simple_wiki_ls_test")
+		Expect(err).NotTo(HaveOccurred())
+		logger := lumber.NewConsoleLogger(lumber.TRACE)
+		customSite, err = server.NewSite(tmpDir, "", "testpage", 0, "secret", true, 1024, 1024, logger)
+		Expect(err).NotTo(HaveOccurred())
+		router = customSite.GinRouter()
+		w = httptest.NewRecorder()
+	})
+
+	AfterEach(func() {
+		// Ensure directory is writable before removal
+		_ = os.Chmod(tmpDir, 0755)
+		_ = os.RemoveAll(tmpDir)
+	})
+
+	When("the data directory is unreadable when requesting /ls/view", func() {
+		var originalMode os.FileMode
+
+		BeforeEach(func() {
+			if runtime.GOOS == "windows" {
+				Skip("chmod permission semantics are not enforced on Windows")
+			}
+
+			// Pre-create the "ls" page so readOrInitPage succeeds later
+			preReq, _ := http.NewRequest(http.MethodGet, "/ls/view", nil)
+			preW := httptest.NewRecorder()
+			router.ServeHTTP(preW, preReq)
+
+			// Make the data directory execute-only: ReadPage can still access files
+			// by exact name (execute permission on dir allows path traversal) but
+			// os.ReadDir will fail (no read permission), triggering the DirectoryList error path.
+			info, err := os.Stat(customSite.PathToData)
+			Expect(err).NotTo(HaveOccurred())
+			originalMode = info.Mode()
+			Expect(os.Chmod(customSite.PathToData, 0100)).To(Succeed())
+
+			req, _ := http.NewRequest(http.MethodGet, "/ls/view", nil)
+			router.ServeHTTP(w, req)
+		})
+
+		AfterEach(func() {
+			_ = os.Chmod(customSite.PathToData, originalMode)
+		})
+
+		It("should return a 500 status code", func() {
+			Expect(w.Code).To(Equal(http.StatusInternalServerError))
+		})
+	})
+})
+
 var _ = Describe("handleUpload Audit Logging", func() {
 	var (
 		tmpDir    string
@@ -906,6 +965,120 @@ var _ = Describe("requestBaseURL", func() {
 	})
 })
 
+var _ = Describe("sanitizePageName", func() {
+	DescribeTable("strips leading slashes and backslashes to prevent open redirects",
+		func(input, expected string) {
+			Expect(server.SanitizePageNameForTesting(input)).To(Equal(expected))
+		},
+		Entry("normal page name is unchanged", "mypage", "mypage"),
+		Entry("single leading slash is stripped", "/evil.com", "evil.com"),
+		Entry("double leading slash is stripped", "//evil.com", "evil.com"),
+		Entry("triple leading slash is stripped", "///evil.com", "evil.com"),
+		Entry("leading backslash is stripped", `\evil.com`, "evil.com"),
+		Entry("double leading backslash is stripped", `\\evil.com`, "evil.com"),
+		Entry("mixed leading slash and backslash are stripped", `/\evil.com`, "evil.com"),
+		Entry("mixed leading backslash and slash are stripped", `\/evil.com`, "evil.com"),
+		Entry("empty string stays empty", "", ""),
+		Entry("only slashes become empty", "///", ""),
+		Entry("only backslashes become empty", `\\\`, ""),
+		Entry("slash in the middle is preserved", "some/path", "some/path"),
+		Entry("trailing slash is preserved (TrimLeft only affects the left)", "mypage/", "mypage/"),
+	)
+})
+
+var _ = Describe("Open redirect prevention", func() {
+	var site *server.Site
+	var router *gin.Engine
+	var w *httptest.ResponseRecorder
+	var tmpDir string
+
+	BeforeEach(func() {
+		var err error
+		tmpDir, err = os.MkdirTemp("", "simple_wiki_test")
+		Expect(err).NotTo(HaveOccurred())
+		logger := lumber.NewConsoleLogger(lumber.TRACE)
+		site, err = server.NewSite(tmpDir, "", "testpage", 0, "secret", true, 1024, 1024, logger)
+		Expect(err).NotTo(HaveOccurred())
+		router = site.GinRouter()
+		w = httptest.NewRecorder()
+	})
+
+	AfterEach(func() {
+		_ = os.RemoveAll(tmpDir)
+	})
+
+	When("the /:page route receives a normal page name", func() {
+		BeforeEach(func() {
+			req, _ := http.NewRequest(http.MethodGet, "/mypage", nil)
+			router.ServeHTTP(w, req)
+		})
+
+		It("should redirect", func() {
+			Expect(w.Code).To(Equal(http.StatusFound))
+		})
+
+		It("should redirect to a safe relative URL", func() {
+			location := w.Header().Get("Location")
+			Expect(location).To(HavePrefix("/mypage/view"))
+			Expect(location).NotTo(HavePrefix("//"))
+		})
+	})
+
+	When("the /:page/*command route receives an empty command (redirects to /view)", func() {
+		BeforeEach(func() {
+			req, _ := http.NewRequest(http.MethodGet, "/mypage/", nil)
+			router.ServeHTTP(w, req)
+		})
+
+		It("should redirect", func() {
+			Expect(w.Code).To(Equal(http.StatusFound))
+		})
+
+		It("should redirect to a safe relative URL", func() {
+			location := w.Header().Get("Location")
+			Expect(location).To(Equal("/mypage/view"))
+			Expect(location).NotTo(HavePrefix("//"))
+		})
+	})
+
+	When("the /:page route receives a URL-encoded backslash prefix (open redirect bypass attempt)", func() {
+		BeforeEach(func() {
+			// %5C is a URL-encoded backslash; Gin decodes it to '\' in c.Param("page").
+			// Without sanitization, "/"+"\evil.com"+"/view" = "/\evil.com/view", which
+			// some browsers treat as an external redirect to //evil.com/view.
+			req, _ := http.NewRequest(http.MethodGet, "/%5Cevil.com", nil)
+			router.ServeHTTP(w, req)
+		})
+
+		It("should redirect", func() {
+			Expect(w.Code).To(Equal(http.StatusFound))
+		})
+
+		It("should redirect to a safe relative URL with no leading backslash or double-slash", func() {
+			location := w.Header().Get("Location")
+			Expect(location).NotTo(HavePrefix("//"))
+			Expect(location).NotTo(MatchRegexp(`^/\\`))
+		})
+	})
+
+	When("the /:page/*command route receives a URL-encoded backslash prefix (open redirect bypass attempt)", func() {
+		BeforeEach(func() {
+			req, _ := http.NewRequest(http.MethodGet, "/%5Cevil.com/", nil)
+			router.ServeHTTP(w, req)
+		})
+
+		It("should redirect", func() {
+			Expect(w.Code).To(Equal(http.StatusFound))
+		})
+
+		It("should redirect to a safe relative URL with no leading backslash or double-slash", func() {
+			location := w.Header().Get("Location")
+			Expect(location).NotTo(HavePrefix("//"))
+			Expect(location).NotTo(MatchRegexp(`^/\\`))
+		})
+	})
+})
+
 var _ = Describe("contentTypeFromName", func() {
 	DescribeTable("returns correct MIME type",
 		func(filename, expectedType string) {
@@ -921,7 +1094,6 @@ var _ = Describe("contentTypeFromName", func() {
 		Entry("for unknown extensions", "file.xyz123unknown", "text/plain"),
 	)
 })
-
 // handlerTestWriteCloser wraps a buffer to implement io.WriteCloser for logger testing
 type handlerTestWriteCloser struct {
 	*bytes.Buffer

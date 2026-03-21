@@ -796,9 +796,23 @@ identifier = "test"
 
 			It("should index the test page", func() {
 				// The page should be indexed (we can verify by checking DirectoryList)
-				files := s.DirectoryList()
-				Expect(len(files)).To(BeNumerically(">", 0))
-				Expect(files[0].Name()).To(Equal("test"))
+				listing, err := s.DirectoryList()
+				Expect(err).ToNot(HaveOccurred())
+				Expect(len(listing.Entries)).To(BeNumerically(">", 0))
+				Expect(listing.Entries[0].Name()).To(Equal("test"))
+			})
+		})
+
+		When("the data directory does not exist", func() {
+			var err error
+
+			BeforeEach(func() {
+				s.PathToData = filepath.Join(tempDir, "nonexistent_subdir")
+				err = s.InitializeIndexing()
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
 			})
 		})
 	})
@@ -856,7 +870,8 @@ status = "published"
 				_, fm, err = s.ReadFrontMatter(pageIdentifier)
 				
 				// Read the saved content for verification
-				rawContent, readErr := os.ReadFile(pagePath)
+				var rawContent []byte
+				rawContent, readErr = os.ReadFile(pagePath)
 				if readErr == nil {
 					savedContent = string(rawContent)
 				}
@@ -909,7 +924,8 @@ title = "Clean Page"
 				_, fm, err = s.ReadFrontMatter(pageIdentifier)
 				
 				// Read the saved content for verification
-				rawContent, readErr := os.ReadFile(pagePath)
+				var rawContent []byte
+				rawContent, readErr = os.ReadFile(pagePath)
 				if readErr == nil {
 					savedContent = string(rawContent)
 				}
@@ -960,20 +976,20 @@ title = "Test Page"
 				_, fm, err = s.ReadFrontMatter(pageIdentifier)
 				
 				// Read the saved content for verification
-				rawContent, readErr := os.ReadFile(pagePath)
+				var rawContent []byte
+				rawContent, readErr = os.ReadFile(pagePath)
 				if readErr == nil {
 					savedContent = string(rawContent)
 				}
 			})
 
-			It("should not return an error", func() {
-				// lenientParse should handle migration failures gracefully
-				Expect(err).NotTo(HaveOccurred())
+			It("should return a migration error", func() {
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("mock migration failure"))
 			})
 
-			It("should fall back to original content", func() {
-				Expect(fm).To(HaveKey("title"))
-				Expect(fm["title"]).To(Equal("Test Page"))
+			It("should return nil frontmatter on failure", func() {
+				Expect(fm).To(BeNil())
 			})
 
 			It("should not modify the file on disk", func() {
