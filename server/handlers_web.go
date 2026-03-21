@@ -91,8 +91,12 @@ func (s *Site) registerRoutes(router *gin.Engine) {
 	router.GET("/extensions/:file", serveExtensionFile)
 
 	router.GET("/:page", func(c *gin.Context) {
-		page := c.Param("page")
-		c.Redirect(httpStatusFound, "/"+page+"/view?"+c.Request.URL.RawQuery)
+		page := sanitizePageName(c.Param("page"))
+		target := path.Join(rootPath, url.PathEscape(page), "view")
+		if q := c.Request.URL.RawQuery; q != "" {
+			target += "?" + q
+		}
+		c.Redirect(httpStatusFound, target)
 	})
 	router.GET("/:page/*command", s.handlePageRequest)
 	router.POST("/update", s.handlePageUpdate)
@@ -214,7 +218,7 @@ func getSetSessionID(c *gin.Context, logger *lumber.ConsoleLogger) (sid string) 
 }
 
 func (s *Site) handlePageRequest(c *gin.Context) {
-	page := c.Param("page")
+	page := sanitizePageName(c.Param("page"))
 	command := c.Param("command")
 
 	// Handle special pages (favicon, static, uploads)
@@ -223,7 +227,7 @@ func (s *Site) handlePageRequest(c *gin.Context) {
 	}
 
 	if len(command) < 2 {
-		c.Redirect(httpStatusFound, "/"+page+"/view")
+		c.Redirect(httpStatusFound, path.Join(rootPath, url.PathEscape(page), "view"))
 		return
 	}
 
@@ -549,6 +553,16 @@ func contentTypeFromName(filename string) string {
 	return mimeType
 }
 
+// sanitizePageName strips leading forward slashes and backslashes from a wiki
+// page name. This prevents path traversal and, as defense-in-depth, removes
+// characters that could produce a protocol-relative URL (e.g. "//evil.com") if
+// the sanitized name were ever used un-encoded in a URL. The primary open-redirect
+// defense in redirect URLs is url.PathEscape, which percent-encodes all special
+// characters so that no injected character can be interpreted as URL syntax.
+func sanitizePageName(page string) string {
+	return strings.TrimLeft(page, "/\\")
+}
+
 // requestBaseURL derives the base URL (scheme://host) from the request context.
 // It checks TLS state and the X-Forwarded-Proto header to determine the scheme.
 func requestBaseURL(c *gin.Context) string {
@@ -577,6 +591,11 @@ func GetRecentlyEditedForTesting(title string, c *gin.Context, logger *lumber.Co
 // RequestBaseURLForTesting exposes requestBaseURL for testing
 func RequestBaseURLForTesting(c *gin.Context) string {
 	return requestBaseURL(c)
+}
+
+// SanitizePageNameForTesting exposes sanitizePageName for testing
+func SanitizePageNameForTesting(page string) string {
+	return sanitizePageName(page)
 }
 
 // ContentTypeFromNameForTesting exposes contentTypeFromName for testing
