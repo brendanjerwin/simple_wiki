@@ -103,6 +103,7 @@
 
                     {{ if .ViewPage }}
                         {{ .RenderedPage }}
+                        <page-auto-refresh page-name="{{ .Page }}"></page-auto-refresh>
                     {{ end }}
 
                     {{ if .ReadPage }}

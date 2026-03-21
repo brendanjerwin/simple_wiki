@@ -1326,6 +1326,114 @@ func (x *TemplateInfo) GetDescription() string {
 	return ""
 }
 
+// Watch Page
+type WatchPageRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// The page identifier to watch for changes.
+	PageName string `protobuf:"bytes,1,opt,name=page_name,json=pageName,proto3" json:"page_name,omitempty"`
+	// Optional: interval in milliseconds for checking updates (default: 1000ms).
+	// Minimum 100ms to prevent excessive server load.
+	CheckIntervalMs *int32 `protobuf:"varint,2,opt,name=check_interval_ms,json=checkIntervalMs,proto3,oneof" json:"check_interval_ms,omitempty"`
+}
+
+func (x *WatchPageRequest) Reset() {
+	*x = WatchPageRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_api_v1_page_management_proto_msgTypes[22]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *WatchPageRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchPageRequest) ProtoMessage() {}
+
+func (x *WatchPageRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_page_management_proto_msgTypes[22]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchPageRequest.ProtoReflect.Descriptor instead.
+func (*WatchPageRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_page_management_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *WatchPageRequest) GetPageName() string {
+	if x != nil {
+		return x.PageName
+	}
+	return ""
+}
+
+func (x *WatchPageRequest) GetCheckIntervalMs() int32 {
+	if x != nil && x.CheckIntervalMs != nil {
+		return *x.CheckIntervalMs
+	}
+	return 0
+}
+
+type WatchPageResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	// The current version_hash of the page content.
+	// When this changes, the client should re-fetch the page.
+	VersionHash string `protobuf:"bytes,1,opt,name=version_hash,json=versionHash,proto3" json:"version_hash,omitempty"`
+}
+
+func (x *WatchPageResponse) Reset() {
+	*x = WatchPageResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_api_v1_page_management_proto_msgTypes[23]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *WatchPageResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WatchPageResponse) ProtoMessage() {}
+
+func (x *WatchPageResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_page_management_proto_msgTypes[23]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WatchPageResponse.ProtoReflect.Descriptor instead.
+func (*WatchPageResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_page_management_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *WatchPageResponse) GetVersionHash() string {
+	if x != nil {
+		return x.VersionHash
+	}
+	return ""
+}
+
 var File_api_v1_page_management_proto protoreflect.FileDescriptor
 
 var file_api_v1_page_management_proto_rawDesc = []byte{
@@ -1481,7 +1589,18 @@ var file_api_v1_page_management_proto_rawDesc = []byte{
 	0x6c, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x74, 0x69, 0x74, 0x6c, 0x65, 0x12,
 	0x20, 0x0a, 0x0b, 0x64, 0x65, 0x73, 0x63, 0x72, 0x69, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x18, 0x03,
 	0x20, 0x01, 0x28, 0x09, 0x52, 0x0b, 0x64, 0x65, 0x73, 0x63, 0x72, 0x69, 0x70, 0x74, 0x69, 0x6f,
-	0x6e, 0x32, 0x9a, 0x06, 0x0a, 0x15, 0x50, 0x61, 0x67, 0x65, 0x4d, 0x61, 0x6e, 0x61, 0x67, 0x65,
+	0x6e, 0x22, 0x76, 0x0a, 0x10, 0x57, 0x61, 0x74, 0x63, 0x68, 0x50, 0x61, 0x67, 0x65, 0x52, 0x65,
+	0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1b, 0x0a, 0x09, 0x70, 0x61, 0x67, 0x65, 0x5f, 0x6e, 0x61,
+	0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08, 0x70, 0x61, 0x67, 0x65, 0x4e, 0x61,
+	0x6d, 0x65, 0x12, 0x2f, 0x0a, 0x11, 0x63, 0x68, 0x65, 0x63, 0x6b, 0x5f, 0x69, 0x6e, 0x74, 0x65,
+	0x72, 0x76, 0x61, 0x6c, 0x5f, 0x6d, 0x73, 0x18, 0x02, 0x20, 0x01, 0x28, 0x05, 0x48, 0x00, 0x52,
+	0x0f, 0x63, 0x68, 0x65, 0x63, 0x6b, 0x49, 0x6e, 0x74, 0x65, 0x72, 0x76, 0x61, 0x6c, 0x4d, 0x73,
+	0x88, 0x01, 0x01, 0x42, 0x14, 0x0a, 0x12, 0x5f, 0x63, 0x68, 0x65, 0x63, 0x6b, 0x5f, 0x69, 0x6e,
+	0x74, 0x65, 0x72, 0x76, 0x61, 0x6c, 0x5f, 0x6d, 0x73, 0x22, 0x36, 0x0a, 0x11, 0x57, 0x61, 0x74,
+	0x63, 0x68, 0x50, 0x61, 0x67, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x21,
+	0x0a, 0x0c, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x5f, 0x68, 0x61, 0x73, 0x68, 0x18, 0x01,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x0b, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x48, 0x61, 0x73,
+	0x68, 0x32, 0xde, 0x06, 0x0a, 0x15, 0x50, 0x61, 0x67, 0x65, 0x4d, 0x61, 0x6e, 0x61, 0x67, 0x65,
 	0x6d, 0x65, 0x6e, 0x74, 0x53, 0x65, 0x72, 0x76, 0x69, 0x63, 0x65, 0x12, 0x43, 0x0a, 0x0a, 0x43,
 	0x72, 0x65, 0x61, 0x74, 0x65, 0x50, 0x61, 0x67, 0x65, 0x12, 0x19, 0x2e, 0x61, 0x70, 0x69, 0x2e,
 	0x76, 0x31, 0x2e, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x50, 0x61, 0x67, 0x65, 0x52, 0x65, 0x71,
@@ -1530,12 +1649,16 @@ var file_api_v1_page_management_proto_rawDesc = []byte{
 	0x73, 0x12, 0x1c, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x54,
 	0x65, 0x6d, 0x70, 0x6c, 0x61, 0x74, 0x65, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a,
 	0x1d, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x4c, 0x69, 0x73, 0x74, 0x54, 0x65, 0x6d,
-	0x70, 0x6c, 0x61, 0x74, 0x65, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x42, 0x3a,
-	0x5a, 0x38, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x62, 0x72, 0x65,
-	0x6e, 0x64, 0x61, 0x6e, 0x6a, 0x65, 0x72, 0x77, 0x69, 0x6e, 0x2f, 0x73, 0x69, 0x6d, 0x70, 0x6c,
-	0x65, 0x5f, 0x77, 0x69, 0x6b, 0x69, 0x2f, 0x67, 0x65, 0x6e, 0x2f, 0x67, 0x6f, 0x2f, 0x61, 0x70,
-	0x69, 0x2f, 0x76, 0x31, 0x3b, 0x61, 0x70, 0x69, 0x76, 0x31, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74,
-	0x6f, 0x33,
+	0x70, 0x6c, 0x61, 0x74, 0x65, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x42,
+	0x0a, 0x09, 0x57, 0x61, 0x74, 0x63, 0x68, 0x50, 0x61, 0x67, 0x65, 0x12, 0x18, 0x2e, 0x61, 0x70,
+	0x69, 0x2e, 0x76, 0x31, 0x2e, 0x57, 0x61, 0x74, 0x63, 0x68, 0x50, 0x61, 0x67, 0x65, 0x52, 0x65,
+	0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x19, 0x2e, 0x61, 0x70, 0x69, 0x2e, 0x76, 0x31, 0x2e, 0x57,
+	0x61, 0x74, 0x63, 0x68, 0x50, 0x61, 0x67, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
+	0x30, 0x01, 0x42, 0x3a, 0x5a, 0x38, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d,
+	0x2f, 0x62, 0x72, 0x65, 0x6e, 0x64, 0x61, 0x6e, 0x6a, 0x65, 0x72, 0x77, 0x69, 0x6e, 0x2f, 0x73,
+	0x69, 0x6d, 0x70, 0x6c, 0x65, 0x5f, 0x77, 0x69, 0x6b, 0x69, 0x2f, 0x67, 0x65, 0x6e, 0x2f, 0x67,
+	0x6f, 0x2f, 0x61, 0x70, 0x69, 0x2f, 0x76, 0x31, 0x3b, 0x61, 0x70, 0x69, 0x76, 0x31, 0x62, 0x06,
+	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -1550,7 +1673,7 @@ func file_api_v1_page_management_proto_rawDescGZIP() []byte {
 	return file_api_v1_page_management_proto_rawDescData
 }
 
-var file_api_v1_page_management_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
+var file_api_v1_page_management_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
 var file_api_v1_page_management_proto_goTypes = []interface{}{
 	(*CreatePageRequest)(nil),          // 0: api.v1.CreatePageRequest
 	(*CreatePageResponse)(nil),         // 1: api.v1.CreatePageResponse
@@ -1574,10 +1697,12 @@ var file_api_v1_page_management_proto_goTypes = []interface{}{
 	(*ListTemplatesRequest)(nil),       // 19: api.v1.ListTemplatesRequest
 	(*ListTemplatesResponse)(nil),      // 20: api.v1.ListTemplatesResponse
 	(*TemplateInfo)(nil),               // 21: api.v1.TemplateInfo
-	(*structpb.Struct)(nil),            // 22: google.protobuf.Struct
+	(*WatchPageRequest)(nil),           // 22: api.v1.WatchPageRequest
+	(*WatchPageResponse)(nil),          // 23: api.v1.WatchPageResponse
+	(*structpb.Struct)(nil),            // 24: google.protobuf.Struct
 }
 var file_api_v1_page_management_proto_depIdxs = []int32{
-	22, // 0: api.v1.CreatePageRequest.frontmatter:type_name -> google.protobuf.Struct
+	24, // 0: api.v1.CreatePageRequest.frontmatter:type_name -> google.protobuf.Struct
 	18, // 1: api.v1.GenerateIdentifierResponse.existing_page:type_name -> api.v1.ExistingPageInfo
 	21, // 2: api.v1.ListTemplatesResponse.templates:type_name -> api.v1.TemplateInfo
 	0,  // 3: api.v1.PageManagementService.CreatePage:input_type -> api.v1.CreatePageRequest
@@ -1590,18 +1715,20 @@ var file_api_v1_page_management_proto_depIdxs = []int32{
 	10, // 10: api.v1.PageManagementService.ClearPageContent:input_type -> api.v1.ClearPageContentRequest
 	16, // 11: api.v1.PageManagementService.GenerateIdentifier:input_type -> api.v1.GenerateIdentifierRequest
 	19, // 12: api.v1.PageManagementService.ListTemplates:input_type -> api.v1.ListTemplatesRequest
-	1,  // 13: api.v1.PageManagementService.CreatePage:output_type -> api.v1.CreatePageResponse
-	3,  // 14: api.v1.PageManagementService.ReadPage:output_type -> api.v1.ReadPageResponse
-	5,  // 15: api.v1.PageManagementService.RenderPage:output_type -> api.v1.RenderPageResponse
-	7,  // 16: api.v1.PageManagementService.UpdatePage:output_type -> api.v1.UpdatePageResponse
-	9,  // 17: api.v1.PageManagementService.UpdatePageContent:output_type -> api.v1.UpdatePageContentResponse
-	13, // 18: api.v1.PageManagementService.UpdateWholePage:output_type -> api.v1.UpdateWholePageResponse
-	15, // 19: api.v1.PageManagementService.DeletePage:output_type -> api.v1.DeletePageResponse
-	11, // 20: api.v1.PageManagementService.ClearPageContent:output_type -> api.v1.ClearPageContentResponse
-	17, // 21: api.v1.PageManagementService.GenerateIdentifier:output_type -> api.v1.GenerateIdentifierResponse
-	20, // 22: api.v1.PageManagementService.ListTemplates:output_type -> api.v1.ListTemplatesResponse
-	13, // [13:23] is the sub-list for method output_type
-	3,  // [3:13] is the sub-list for method input_type
+	22, // 13: api.v1.PageManagementService.WatchPage:input_type -> api.v1.WatchPageRequest
+	1,  // 14: api.v1.PageManagementService.CreatePage:output_type -> api.v1.CreatePageResponse
+	3,  // 15: api.v1.PageManagementService.ReadPage:output_type -> api.v1.ReadPageResponse
+	5,  // 16: api.v1.PageManagementService.RenderPage:output_type -> api.v1.RenderPageResponse
+	7,  // 17: api.v1.PageManagementService.UpdatePage:output_type -> api.v1.UpdatePageResponse
+	9,  // 18: api.v1.PageManagementService.UpdatePageContent:output_type -> api.v1.UpdatePageContentResponse
+	13, // 19: api.v1.PageManagementService.UpdateWholePage:output_type -> api.v1.UpdateWholePageResponse
+	15, // 20: api.v1.PageManagementService.DeletePage:output_type -> api.v1.DeletePageResponse
+	11, // 21: api.v1.PageManagementService.ClearPageContent:output_type -> api.v1.ClearPageContentResponse
+	17, // 22: api.v1.PageManagementService.GenerateIdentifier:output_type -> api.v1.GenerateIdentifierResponse
+	20, // 23: api.v1.PageManagementService.ListTemplates:output_type -> api.v1.ListTemplatesResponse
+	23, // 24: api.v1.PageManagementService.WatchPage:output_type -> api.v1.WatchPageResponse
+	14, // [14:25] is the sub-list for method output_type
+	3,  // [3:14] is the sub-list for method input_type
 	3,  // [3:3] is the sub-list for extension type_name
 	3,  // [3:3] is the sub-list for extension extendee
 	0,  // [0:3] is the sub-list for field type_name
@@ -1877,16 +2004,41 @@ func file_api_v1_page_management_proto_init() {
 				return nil
 			}
 		}
+		file_api_v1_page_management_proto_msgTypes[22].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*WatchPageRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_api_v1_page_management_proto_msgTypes[23].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*WatchPageResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
 	}
 	file_api_v1_page_management_proto_msgTypes[0].OneofWrappers = []interface{}{}
 	file_api_v1_page_management_proto_msgTypes[8].OneofWrappers = []interface{}{}
+	file_api_v1_page_management_proto_msgTypes[22].OneofWrappers = []interface{}{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_api_v1_page_management_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   22,
+			NumMessages:   24,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

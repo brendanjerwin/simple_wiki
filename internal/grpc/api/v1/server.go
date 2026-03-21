@@ -1294,6 +1294,80 @@ func (s *Server) ListTemplates(_ context.Context, req *apiv1.ListTemplatesReques
 	}, nil
 }
 
+// WatchPage implements the WatchPage RPC for real-time page content change notifications.
+// It streams the current version_hash of the page content when it changes.
+func (s *Server) WatchPage(req *apiv1.WatchPageRequest, stream apiv1.PageManagementService_WatchPageServer) error {
+	if req.PageName == "" {
+		return status.Error(codes.InvalidArgument, pageNameRequiredErr)
+	}
+
+	pageID := wikipage.PageIdentifier(req.PageName)
+
+	// Default to 1-second intervals, allow client to customize
+	interval := time.Duration(req.GetCheckIntervalMs()) * time.Millisecond
+	if interval == 0 {
+		interval = 1 * time.Second
+	}
+
+	// Minimum interval to prevent excessive server load
+	const minIntervalMs = 100
+	if interval < minIntervalMs*time.Millisecond {
+		interval = minIntervalMs * time.Millisecond
+	}
+
+	// Read initial content hash
+	_, markdown, err := s.pageReaderMutator.ReadMarkdown(pageID)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.PageName)
+		}
+		return status.Errorf(codes.Internal, "failed to read page: %v", err)
+	}
+
+	lastHash := computeContentHash(markdown)
+
+	// Send initial hash immediately
+	if err := stream.Send(&apiv1.WatchPageResponse{
+		VersionHash: lastHash,
+	}); err != nil {
+		return err
+	}
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	// Stream updates when content changes
+	for {
+		select {
+		case <-ticker.C:
+			// Read current content hash
+			_, markdown, err := s.pageReaderMutator.ReadMarkdown(pageID)
+			if err != nil {
+				if os.IsNotExist(err) {
+					// Page was deleted, terminate stream
+					return status.Errorf(codes.NotFound, "page deleted: %s", req.PageName)
+				}
+				// Log error but continue watching
+				continue
+			}
+
+			currentHash := computeContentHash(markdown)
+			if currentHash != lastHash {
+				// Content changed, send update
+				lastHash = currentHash
+				if err := stream.Send(&apiv1.WatchPageResponse{
+					VersionHash: currentHash,
+				}); err != nil {
+					return err
+				}
+			}
+
+		case <-stream.Context().Done():
+			return stream.Context().Err()
+		}
+	}
+}
+
 // serverPageExistenceChecker implements pageimport.PageExistenceChecker.
 type serverPageExistenceChecker struct {
 	reader wikipage.PageReader
