@@ -12,6 +12,10 @@ declare global {
       highlightAll(): void;
     };
   }
+
+  interface HTMLElementTagNameMap {
+    'page-auto-refresh': PageAutoRefresh;
+  }
 }
 
 /**
