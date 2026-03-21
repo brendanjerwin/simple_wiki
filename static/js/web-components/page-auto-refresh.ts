@@ -29,7 +29,7 @@ export class PageAutoRefresh extends LitElement {
     return this;
   }
 
-  @property({ type: String })
+  @property({ type: String, attribute: 'page-name' })
   declare pageName: string;
 
   @state()
@@ -99,11 +99,16 @@ export class PageAutoRefresh extends LitElement {
         }
       }
     } catch (err) {
+      // AbortError is expected when stopWatching() is called.
+      // Other errors mean the stream ended unexpectedly — the page
+      // continues to work, just without auto-refresh.
       const isAbortError = err instanceof Error && err.name === 'AbortError';
       if (!isAbortError) {
-        console.error('Page watch stream error:', err);
-        // Stream ended unexpectedly, but don't show error to user
-        // The page will continue to work, just without auto-refresh
+        this.dispatchEvent(new CustomEvent('page-watch-error', {
+          detail: { error: err },
+          bubbles: true,
+          composed: true,
+        }));
       }
     } finally {
       this.isWatching = false;
@@ -158,7 +163,11 @@ export class PageAutoRefresh extends LitElement {
         this.dispatchPageStatusEvent();
       }
     } catch (err) {
-      console.error('Error refreshing page content:', err);
+      this.dispatchEvent(new CustomEvent('page-watch-error', {
+        detail: { error: err },
+        bubbles: true,
+        composed: true,
+      }));
     }
   }
 
