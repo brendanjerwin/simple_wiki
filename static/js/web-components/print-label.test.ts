@@ -163,13 +163,18 @@ describe('printLabel', () => {
   describe('when window.simple_wiki is not set', () => {
     beforeEach(async () => {
       delete window.simple_wiki;
-      fetchStub.resolves(makeJsonResponse({ success: true, message: 'ok' }));
       await printLabel('my_template');
     });
 
-    it('should send empty string as data_identifier', () => {
-      const body = JSON.parse(fetchStub.firstCall.args[1].body as string) as Record<string, unknown>;
-      expect(body['data_identifier']).to.equal('');
+    it('should not make any fetch calls', () => {
+      expect(fetchStub.called).to.be.false;
+    });
+
+    it('should show an error toast about missing page name', () => {
+      const toast = getToast();
+      expect(toast).to.exist;
+      expect(toast!.type).to.equal('error');
+      expect(toast!.message).to.include('page name');
     });
   });
 });
@@ -228,6 +233,19 @@ describe('initPrintMenu', () => {
     it('should add a menu item for each label printer', () => {
       const items = document.querySelectorAll('.pure-menu-item');
       expect(items).to.have.lengthOf(2);
+    });
+
+    it('should insert printer items in the correct order (first API result first)', () => {
+      const links = document.querySelectorAll('.pure-menu-link');
+      expect(links[0]?.textContent).to.equal('Print Zebra 4x2');
+      expect(links[1]?.textContent).to.equal('Print Dymo Standard');
+    });
+
+    it('should set role="menuitem" on each link', () => {
+      const links = document.querySelectorAll('.pure-menu-link');
+      links.forEach(link => {
+        expect(link.getAttribute('role')).to.equal('menuitem');
+      });
     });
 
     it('should use the title for the menu item text', () => {

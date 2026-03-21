@@ -2,6 +2,10 @@ import { showToast } from './toast-message.js';
 
 export async function printLabel(templateIdentifier: string): Promise<void> {
   const dataIdentifier = window.simple_wiki?.pageName ?? '';
+  if (!dataIdentifier) {
+    showToast('Cannot print: page name is not available', 'error', 5);
+    return;
+  }
 
   try {
     const response = await fetch('/api/print_label', {
@@ -53,6 +57,7 @@ export function initPrintMenu(): void {
         return;
       }
 
+      let insertAfter: Element = utilitySection;
       ids.forEach(item => {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- extracting fields from unknown item
         const itemData = item as Record<string, unknown>;
@@ -68,13 +73,15 @@ export function initPrintMenu(): void {
         const link = document.createElement('a');
         link.href = '#';
         link.className = 'pure-menu-link';
+        link.setAttribute('role', 'menuitem');
         link.textContent = `Print ${typeof title === 'string' ? title : identifier}`;
         link.addEventListener('click', (e) => {
           e.preventDefault();
           void printLabel(identifier);
         });
         menuItem.appendChild(link);
-        utilitySection.insertAdjacentElement('afterend', menuItem);
+        insertAfter.insertAdjacentElement('afterend', menuItem);
+        insertAfter = menuItem;
       });
     })
     .catch(() => {

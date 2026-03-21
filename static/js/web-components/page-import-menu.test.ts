@@ -18,6 +18,41 @@ describe('initPageImportMenu', () => {
     sinon.restore();
   });
 
+  describe('when not on a ViewPage', () => {
+    beforeEach(() => {
+      document.body.classList.add('EditPage');
+      initPageImportMenu();
+    });
+
+    afterEach(() => {
+      document.body.classList.remove('EditPage');
+    });
+
+    it('should not inject any menu items on edit pages', () => {
+      expect(document.querySelectorAll('.pure-menu-item')).to.have.lengthOf(0);
+    });
+  });
+
+  describe('when on a ViewPage', () => {
+    beforeEach(() => {
+      document.body.classList.add('ViewPage');
+      initPageImportMenu();
+    });
+
+    afterEach(() => {
+      document.body.classList.remove('ViewPage');
+    });
+
+    it('should inject a menu item on view pages', () => {
+      expect(document.querySelectorAll('.pure-menu-item')).to.have.lengthOf(1);
+    });
+
+    it('should set role="menuitem" on the link', () => {
+      const link = document.getElementById('page-import-trigger');
+      expect(link?.getAttribute('role')).to.equal('menuitem');
+    });
+  });
+
   describe('when utilityMenuSection is absent', () => {
     beforeEach(() => {
       utilitySection.remove();
@@ -31,7 +66,12 @@ describe('initPageImportMenu', () => {
 
   describe('when utilityMenuSection is present', () => {
     beforeEach(() => {
+      document.body.classList.add('ViewPage');
       initPageImportMenu();
+    });
+
+    afterEach(() => {
+      document.body.classList.remove('ViewPage');
     });
 
     it('should inject a menu item', () => {
@@ -74,6 +114,7 @@ describe('initPageImportMenu', () => {
     let dialog: HTMLElement & { openDialog?: () => void };
 
     beforeEach(() => {
+      document.body.classList.add('ViewPage');
       // Add a mock page-import-dialog element
       dialog = document.createElement('div') as HTMLElement & { openDialog?: () => void };
       dialog.id = 'page-import-dialog';
@@ -87,6 +128,7 @@ describe('initPageImportMenu', () => {
     });
 
     afterEach(() => {
+      document.body.classList.remove('ViewPage');
       dialog.remove();
     });
 
@@ -97,12 +139,17 @@ describe('initPageImportMenu', () => {
 
   describe('when the import link is clicked and dialog is absent', () => {
     beforeEach(() => {
+      document.body.classList.add('ViewPage');
       // Ensure no dialog element exists
       document.getElementById('page-import-dialog')?.remove();
       initPageImportMenu();
       // Click should not throw even though dialog is absent
       const link = document.getElementById('page-import-trigger') as HTMLAnchorElement;
       link.click();
+    });
+
+    afterEach(() => {
+      document.body.classList.remove('ViewPage');
     });
 
     it('should not inject any additional menu items (menu was already built)', () => {
@@ -116,12 +163,17 @@ describe('initPageImportMenu', () => {
     let defaultPrevented: boolean;
 
     beforeEach(() => {
+      document.body.classList.add('ViewPage');
       initPageImportMenu();
       const link = document.getElementById('page-import-trigger') as HTMLAnchorElement;
       clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true });
       defaultPrevented = false;
       link.addEventListener('click', (e) => { defaultPrevented = e.defaultPrevented; }, { once: true });
       link.dispatchEvent(clickEvent);
+    });
+
+    afterEach(() => {
+      document.body.classList.remove('ViewPage');
     });
 
     it('should prevent the default link navigation', () => {

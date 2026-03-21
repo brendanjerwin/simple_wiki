@@ -485,8 +485,18 @@ describe('initInventoryMenu', () => {
       expect(document.getElementById('inventory-submenu-children')).to.exist;
     });
 
+    it('should set role="menu" on the children ul', () => {
+      const children = document.getElementById('inventory-submenu-children');
+      expect(children?.getAttribute('role')).to.equal('menu');
+    });
+
     it('should include the Add Item Here link', () => {
       expect(document.getElementById('inventory-add-item')).to.exist;
+    });
+
+    it('should set role="menuitem" on the Add Item Here link', () => {
+      const link = document.getElementById('inventory-add-item');
+      expect(link?.getAttribute('role')).to.equal('menuitem');
     });
 
     it('should not include the Move This Item link for a container page', () => {
@@ -516,6 +526,11 @@ describe('initInventoryMenu', () => {
 
     it('should include the Move This Item link', () => {
       expect(document.getElementById('inventory-move-item')).to.exist;
+    });
+
+    it('should set role="menuitem" on the Move This Item link', () => {
+      const link = document.getElementById('inventory-move-item');
+      expect(link?.getAttribute('role')).to.equal('menuitem');
     });
   });
 

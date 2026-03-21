@@ -60,6 +60,7 @@ function buildInventoryMenu(currentPage: string, frontmatter: unknown): void {
   const children = document.createElement('ul');
   children.className = 'pure-menu-children';
   children.id = 'inventory-submenu-children';
+  children.setAttribute('role', 'menu');
   submenu.appendChild(children);
 
   let addItemEl: HTMLAnchorElement | null = null;
@@ -72,6 +73,7 @@ function buildInventoryMenu(currentPage: string, frontmatter: unknown): void {
     addItemEl.href = '#';
     addItemEl.className = 'pure-menu-link';
     addItemEl.id = 'inventory-add-item';
+    addItemEl.setAttribute('role', 'menuitem');
     const addIcon = document.createElement('i');
     addIcon.className = 'fa-solid fa-plus';
     addItemEl.appendChild(addIcon);
@@ -87,6 +89,7 @@ function buildInventoryMenu(currentPage: string, frontmatter: unknown): void {
     moveItemEl.href = '#';
     moveItemEl.className = 'pure-menu-link';
     moveItemEl.id = 'inventory-move-item';
+    moveItemEl.setAttribute('role', 'menuitem');
     const moveIcon = document.createElement('i');
     moveIcon.className = 'fa-solid fa-arrows-up-down-left-right';
     moveItemEl.appendChild(moveIcon);

@@ -6,12 +6,17 @@ export function initPageImportMenu(): void {
     return;
   }
 
+  if (!document.body.classList.contains('ViewPage')) {
+    return;
+  }
+
   const menuItem = document.createElement('li');
   menuItem.className = 'pure-menu-item';
   const link = document.createElement('a');
   link.href = '#';
   link.className = 'pure-menu-link';
   link.id = 'page-import-trigger';
+  link.setAttribute('role', 'menuitem');
   const importIcon = document.createElement('i');
   importIcon.className = 'fa-solid fa-file-import';
   link.appendChild(importIcon);
