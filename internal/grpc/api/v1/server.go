@@ -17,6 +17,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/filestore"
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
 	"github.com/brendanjerwin/simple_wiki/pageimport"
+	"github.com/brendanjerwin/simple_wiki/pkg/chatbuffer"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
@@ -42,6 +43,18 @@ const (
 	pageNameRequiredErr            = "page_name is required"
 	maxUniqueIdentifierAttempts    = 1000
 )
+
+// ChatBufferManager defines the interface for managing chat message buffers.
+type ChatBufferManager interface {
+	AddUserMessage(page, content, senderName string) (string, error)
+	AddAssistantMessage(page, content, replyToID string) (string, error)
+	EditMessage(messageID, newContent string) error
+	AddReaction(messageID, emoji, reactor string) error
+	GetMessages(page string) []*chatbuffer.Message
+	SubscribeToPage(page string) (<-chan chatbuffer.Event, func())
+	SubscribeToChannel() (<-chan *chatbuffer.Message, func())
+	HasChannelSubscribers() bool
+}
 
 // computeContentHash computes a SHA256 hash of the given markdown content,
 // returned as a lowercase hex string. Used for optimistic concurrency control.
@@ -119,6 +132,7 @@ type Server struct {
 	apiv1.UnimplementedInventoryManagementServiceServer
 	apiv1.UnimplementedPageImportServiceServer
 	apiv1.UnimplementedFileStorageServiceServer
+	apiv1.UnimplementedChatServiceServer
 	commit                  string
 	buildTime               time.Time
 	pageReaderMutator       wikipage.PageReaderMutator
@@ -129,6 +143,7 @@ type Server struct {
 	templateExecutor        wikipage.IExecuteTemplate
 	frontmatterIndexQueryer wikipage.IQueryFrontmatterIndex
 	fileStorer              filestore.FileStorer
+	chatBufferManager       ChatBufferManager
 }
 
 // MergeFrontmatter implements the MergeFrontmatter RPC.
@@ -324,7 +339,7 @@ func removeAtPath(data any, path []*apiv1.PathComponent) (any, error) {
 }
 
 // NewServer creates a new gRPC server with the given dependencies.
-// Required dependencies: pageReaderMutator, bleveIndexQueryer, frontmatterIndexQueryer, logger.
+// Required dependencies: pageReaderMutator, bleveIndexQueryer, frontmatterIndexQueryer, logger, chatBufferManager.
 // Optional dependencies: jobQueueCoordinator, markdownRenderer, templateExecutor.
 func NewServer(
 	commit string,
@@ -337,6 +352,7 @@ func NewServer(
 	templateExecutor wikipage.IExecuteTemplate,
 	frontmatterIndexQueryer wikipage.IQueryFrontmatterIndex,
 	fileStorer filestore.FileStorer,
+	chatBufferManager ChatBufferManager,
 ) (*Server, error) {
 	if pageReaderMutator == nil {
 		return nil, errors.New("pageReaderMutator is required")
@@ -350,6 +366,9 @@ func NewServer(
 	if logger == nil {
 		return nil, errors.New("logger is required")
 	}
+	if chatBufferManager == nil {
+		return nil, errors.New("chatBufferManager is required")
+	}
 	return &Server{
 		commit:                  commit,
 		buildTime:               buildTime,
@@ -361,6 +380,7 @@ func NewServer(
 		templateExecutor:        templateExecutor,
 		frontmatterIndexQueryer: frontmatterIndexQueryer,
 		fileStorer:              fileStorer,
+		chatBufferManager:       chatBufferManager,
 	}, nil
 }
 
@@ -373,6 +393,7 @@ func (s *Server) RegisterWithServer(grpcServer *grpc.Server) {
 	apiv1.RegisterInventoryManagementServiceServer(grpcServer, s)
 	apiv1.RegisterPageImportServiceServer(grpcServer, s)
 	apiv1.RegisterFileStorageServiceServer(grpcServer, s)
+	apiv1.RegisterChatServiceServer(grpcServer, s)
 }
 
 // GetVersion implements the GetVersion RPC.

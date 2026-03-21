@@ -11,6 +11,7 @@ import (
 
 	grpcapi "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
 	wikimcp "github.com/brendanjerwin/simple_wiki/internal/mcp"
+	"github.com/brendanjerwin/simple_wiki/pkg/chatbuffer"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
 	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
@@ -60,6 +61,38 @@ func (noOpFrontmatterIndexQueryer) QueryExactMatchSortedBy(wikipage.DottedKeyPat
 	return nil
 }
 
+// noOpChatBufferManager satisfies grpcapi.ChatBufferManager for tests.
+type noOpChatBufferManager struct{}
+
+func (noOpChatBufferManager) AddUserMessage(string, string, string) (string, error) {
+	return "", nil
+}
+func (noOpChatBufferManager) AddAssistantMessage(string, string, string) (string, error) {
+	return "", nil
+}
+func (noOpChatBufferManager) EditMessage(string, string) error {
+	return nil
+}
+func (noOpChatBufferManager) AddReaction(string, string, string) error {
+	return nil
+}
+func (noOpChatBufferManager) GetMessages(string) []*chatbuffer.Message {
+	return nil
+}
+func (noOpChatBufferManager) SubscribeToPage(string) (<-chan chatbuffer.Event, func()) {
+	ch := make(chan chatbuffer.Event)
+	close(ch)
+	return ch, func() {}
+}
+func (noOpChatBufferManager) SubscribeToChannel() (<-chan *chatbuffer.Message, func()) {
+	ch := make(chan *chatbuffer.Message)
+	close(ch)
+	return ch, func() {}
+}
+func (noOpChatBufferManager) HasChannelSubscribers() bool {
+	return false
+}
+
 func mustNewAPIServer() *grpcapi.Server {
 	srv, err := grpcapi.NewServer(
 		"test-commit",
@@ -72,6 +105,7 @@ func mustNewAPIServer() *grpcapi.Server {
 		nil,
 		noOpFrontmatterIndexQueryer{},
 		nil,
+		noOpChatBufferManager{}, // chatBufferManager
 	)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred())
 	return srv
