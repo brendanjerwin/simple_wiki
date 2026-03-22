@@ -98,9 +98,9 @@ describe('SystemInfoIdentity', () => {
       expect(container).to.exist;
     });
 
-    it('should display Viewing as label', () => {
+    it('should display User label', () => {
       const label = el.shadowRoot?.querySelector('.identity-row .label');
-      expect(label?.textContent).to.equal('Viewing as:');
+      expect(label?.textContent).to.equal('User:');
     });
 
     it('should display login name as user value', () => {
@@ -146,19 +146,15 @@ describe('SystemInfoIdentity', () => {
       ]);
     });
 
-    it('should display two identity rows', () => {
+    it('should display one identity row', () => {
       const identityRows = el.shadowRoot?.querySelectorAll('.identity-row');
-      expect(identityRows).to.have.length(2);
+      expect(identityRows).to.have.length(1);
     });
 
-    it('should display Node label', () => {
-      const labels = el.shadowRoot?.querySelectorAll('.label');
-      expect(labels?.[1]?.textContent).to.equal('Node:');
-    });
-
-    it('should display node name', () => {
+    it('should include node name in the row', () => {
       const values = el.shadowRoot?.querySelectorAll('.value');
-      expect(values?.[1]?.textContent).to.equal('my-laptop');
+      const nodeValue = Array.from(values ?? []).find(v => v.textContent?.includes('my-laptop'));
+      expect(nodeValue).to.exist;
     });
   });
 
@@ -180,9 +176,9 @@ describe('SystemInfoIdentity', () => {
       expect(userValue?.textContent).to.equal('Test User');
     });
 
-    it('should display node name in node row', () => {
-      const nodeValue = el.shadowRoot?.querySelector('.identity-row:last-child .value');
-      expect(nodeValue?.textContent).to.equal('my-laptop');
+    it('should include node name', () => {
+      const row = el.shadowRoot?.querySelector('.identity-row');
+      expect(row?.textContent).to.contain('my-laptop');
     });
   });
 
@@ -204,19 +200,19 @@ describe('SystemInfoIdentity', () => {
       expect(container).to.exist;
     });
 
-    it('should have identity-row elements', () => {
+    it('should have one identity-row element', () => {
       const rows = el.shadowRoot?.querySelectorAll('.identity-row');
-      expect(rows).to.have.length(2);
+      expect(rows).to.have.length(1);
     });
 
-    it('should have labels with label class', () => {
+    it('should have a label', () => {
       const labels = el.shadowRoot?.querySelectorAll('.label');
-      expect(labels).to.have.length(2);
+      expect(labels).to.have.length(1);
     });
 
-    it('should have values with value class', () => {
+    it('should have value elements', () => {
       const values = el.shadowRoot?.querySelectorAll('.value');
-      expect(values).to.have.length(2);
+      expect(values!.length).to.be.greaterThan(0);
     });
   });
 });

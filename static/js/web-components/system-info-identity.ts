@@ -58,18 +58,14 @@ export class SystemInfoIdentity extends LitElement {
       return nothing;
     }
 
+    const name = this.identity.displayName || this.identity.loginName;
     return html`
       <div class="identity-info">
         <div class="identity-row">
-          <span class="label">Viewing as:</span>
-          <span class="value">${this.identity.displayName || this.identity.loginName}</span>
+          <span class="label">User:</span>
+          <span class="value">${name}</span>
+          ${this.identity.nodeName ? html`<span class="value"> · ${this.identity.nodeName}</span>` : nothing}
         </div>
-        ${this.identity.nodeName ? html`
-          <div class="identity-row">
-            <span class="label">Node:</span>
-            <span class="value">${this.identity.nodeName}</span>
-          </div>
-        ` : nothing}
       </div>
     `;
   }

@@ -7,7 +7,7 @@ import { SystemInfoService, GetVersionRequestSchema, GetJobStatusRequestSchema, 
 import { foundationCSS } from './shared-styles.js';
 import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
 import './system-info-identity.js';
-import './system-info-indexing.js';
+import './system-info-jobs.js';
 import './system-info-version.js';
 import './system-info-page.js';
 import type { PageStatus } from './system-info-page.js';
@@ -392,10 +392,10 @@ export class SystemInfo extends LitElement {
                 .loading="${this.loading}"
                 .error="${this.error}"></system-info-version>
 
-              <system-info-indexing
+              <system-info-jobs
                 .jobStatus="${this.jobStatus}"
                 .loading="${this.loading}"
-                .error="${this.error}"></system-info-indexing>
+                .error="${this.error}"></system-info-jobs>
             </div>
 
             <!-- Session -->
