@@ -119,7 +119,7 @@ export class SystemInfo extends LitElement {
       }
 
 
-      system-info-indexing {
+      .section-divider {
         border-top: 1px solid #404040;
         padding-top: 4px;
         margin-top: 2px;
@@ -379,26 +379,30 @@ export class SystemInfo extends LitElement {
         <div class="drawer-tab">INFO</div>
         <div class="panel-content system-font">
           <div class="system-content">
-            <!-- Page Status (most useful — info user doesn't have) -->
+            <!-- Page -->
             ${this.pageStatus ? html`
               <system-info-page
                 .pageStatus="${this.pageStatus}"></system-info-page>
             ` : ''}
 
-            <!-- System Info (commit, build, jobs) -->
-            <system-info-version
-              .version="${this.version}"
-              .loading="${this.loading}"
-              .error="${this.error}"></system-info-version>
+            <!-- System -->
+            <div class="section-divider">
+              <system-info-version
+                .version="${this.version}"
+                .loading="${this.loading}"
+                .error="${this.error}"></system-info-version>
 
-            <system-info-indexing
-              .jobStatus="${this.jobStatus}"
-              .loading="${this.loading}"
-              .error="${this.error}"></system-info-indexing>
+              <system-info-indexing
+                .jobStatus="${this.jobStatus}"
+                .loading="${this.loading}"
+                .error="${this.error}"></system-info-indexing>
+            </div>
 
-            <!-- Session Identity (least useful — user already knows this) -->
-            <system-info-identity
-              .identity="${this.version?.tailscaleIdentity}"></system-info-identity>
+            <!-- Session -->
+            <div class="section-divider">
+              <system-info-identity
+                .identity="${this.version?.tailscaleIdentity}"></system-info-identity>
+            </div>
           </div>
         </div>
       </div>

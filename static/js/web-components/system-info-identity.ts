@@ -18,9 +18,6 @@ export class SystemInfoIdentity extends LitElement {
         flex-direction: row;
         align-items: center;
         gap: 8px;
-        border-top: 1px solid #333;
-        padding-top: 4px;
-        margin-top: 2px;
       }
 
       .identity-row {
