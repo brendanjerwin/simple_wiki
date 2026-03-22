@@ -2492,7 +2492,7 @@ var _ = Describe("Server", func() {
 				}, 2*time.Second, 50*time.Millisecond).Should(Equal(1))
 
 				// Inject a transient read error
-				mockPageReaderMutator.Err = fmt.Errorf("transient error")
+				mockPageReaderMutator.Err = errors.New("transient error")
 
 				// Wait a couple of poll cycles, then clear the error
 				time.Sleep(200 * time.Millisecond)
