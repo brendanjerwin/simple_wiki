@@ -2,6 +2,7 @@ package v1
 
 import (
 	"context"
+	"errors"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/pkg/chatbuffer"
@@ -36,7 +37,7 @@ func (s *Server) SendMessage(ctx context.Context, req *apiv1.SendChatMessageRequ
 	// Add message to buffer and notify subscribers
 	messageID, err := s.chatBufferManager.AddUserMessage(req.Page, req.Content, senderName)
 	if err != nil {
-		if err == chatbuffer.ErrNoSubscribers {
+		if errors.Is(err, chatbuffer.ErrNoSubscribers) {
 			return nil, status.Error(codes.Unavailable, "Claude is not connected")
 		}
 		return nil, status.Errorf(codes.Internal, "failed to add message: %v", err)
@@ -110,6 +111,8 @@ func (s *Server) SubscribeChat(req *apiv1.SubscribeChatRequest, stream apiv1.Cha
 						},
 					},
 				}
+			default:
+				// Unknown event type — skip without sending
 			}
 
 			if protoEvent != nil {
@@ -184,7 +187,7 @@ func (s *Server) EditChatMessage(_ context.Context, req *apiv1.EditChatMessageRe
 
 	err := s.chatBufferManager.EditMessage(req.MessageId, req.NewContent)
 	if err != nil {
-		if err == chatbuffer.ErrMessageNotFound {
+		if errors.Is(err, chatbuffer.ErrMessageNotFound) {
 			return nil, status.Errorf(codes.NotFound, "message not found: %s", req.MessageId)
 		}
 		return nil, status.Errorf(codes.Internal, "failed to edit message: %v", err)
@@ -206,7 +209,7 @@ func (s *Server) ReactToMessage(_ context.Context, req *apiv1.ReactToMessageRequ
 	// Reactor is always "assistant" for Claude's reactions
 	err := s.chatBufferManager.AddReaction(req.MessageId, req.Emoji, "assistant")
 	if err != nil {
-		if err == chatbuffer.ErrMessageNotFound {
+		if errors.Is(err, chatbuffer.ErrMessageNotFound) {
 			return nil, status.Errorf(codes.NotFound, "message not found: %s", req.MessageId)
 		}
 		return nil, status.Errorf(codes.Internal, "failed to add reaction: %v", err)

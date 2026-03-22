@@ -153,7 +153,18 @@ func (m *Manager) getOrCreateBuffer(page string) *pageBuffer {
 }
 
 // AddUserMessage adds a user message to the buffer and notifies subscribers.
+// Returns ErrNoSubscribers if no channel subscribers are connected; in that case
+// the message is NOT stored and page subscribers are NOT notified.
 func (m *Manager) AddUserMessage(page, content, senderName string) (string, error) {
+	// Check for channel subscribers BEFORE writing to the buffer so that if
+	// ErrNoSubscribers is returned, the message was never stored and page
+	// subscribers were never notified.
+	m.channelSubscribersMu.RLock()
+	if len(m.channelSubscribers) == 0 {
+		m.channelSubscribersMu.RUnlock()
+		return "", ErrNoSubscribers
+	}
+
 	buf := m.getOrCreateBuffer(page)
 	buf.mu.Lock()
 	defer buf.mu.Unlock()
@@ -176,6 +187,7 @@ func (m *Manager) AddUserMessage(page, content, senderName string) (string, erro
 	// Add to ring buffer
 	buf.messages = append(buf.messages, msg)
 	if len(buf.messages) > MaxMessagesPerPage {
+		buf.messages[0] = nil         // Allow GC of evicted message
 		buf.messages = buf.messages[1:] // Evict oldest
 	}
 
@@ -192,14 +204,8 @@ func (m *Manager) AddUserMessage(page, content, senderName string) (string, erro
 		}
 	}
 
-	// Atomically check for subscribers and publish to channel subscribers (wiki-cli mcp)
-	// Hold lock through publish to guarantee delivery if we succeed
-	m.channelSubscribersMu.RLock()
-	if len(m.channelSubscribers) == 0 {
-		m.channelSubscribersMu.RUnlock()
-		return "", ErrNoSubscribers
-	}
-
+	// Publish to channel subscribers (wiki-cli mcp) — still holding the RLock
+	// acquired above so the subscriber list stays stable through the publish.
 	for _, subscriber := range m.channelSubscribers {
 		select {
 		case subscriber <- msg:

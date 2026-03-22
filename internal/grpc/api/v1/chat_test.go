@@ -7,7 +7,7 @@ import (
 	"time"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
-	v1 "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
+	"github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
 	"github.com/brendanjerwin/simple_wiki/pkg/chatbuffer"
 	"github.com/jcelliott/lumber"
 	. "github.com/onsi/ginkgo/v2"
@@ -262,11 +262,11 @@ func (m *mockChatStreamServer) Context() context.Context {
 	return context.Background()
 }
 
-func (m *mockChatStreamServer) SetHeader(metadata.MD) error   { return nil }
-func (m *mockChatStreamServer) SendHeader(metadata.MD) error  { return nil }
-func (m *mockChatStreamServer) SetTrailer(metadata.MD)        {}
-func (m *mockChatStreamServer) SendMsg(any) error             { return nil }
-func (m *mockChatStreamServer) RecvMsg(any) error             { return nil }
+func (_ *mockChatStreamServer) SetHeader(metadata.MD) error   { return nil }
+func (_ *mockChatStreamServer) SendHeader(metadata.MD) error  { return nil }
+func (_ *mockChatStreamServer) SetTrailer(metadata.MD)        {}
+func (_ *mockChatStreamServer) SendMsg(any) error             { return nil }
+func (_ *mockChatStreamServer) RecvMsg(any) error             { return nil }
 
 // mockChatMessagesStreamServer is a mock for testing SubscribeChatMessages.
 type mockChatMessagesStreamServer struct {
@@ -292,11 +292,11 @@ func (m *mockChatMessagesStreamServer) Context() context.Context {
 	return context.Background()
 }
 
-func (m *mockChatMessagesStreamServer) SetHeader(metadata.MD) error   { return nil }
-func (m *mockChatMessagesStreamServer) SendHeader(metadata.MD) error  { return nil }
-func (m *mockChatMessagesStreamServer) SetTrailer(metadata.MD)        {}
-func (m *mockChatMessagesStreamServer) SendMsg(any) error             { return nil }
-func (m *mockChatMessagesStreamServer) RecvMsg(any) error             { return nil }
+func (_ *mockChatMessagesStreamServer) SetHeader(metadata.MD) error   { return nil }
+func (_ *mockChatMessagesStreamServer) SendHeader(metadata.MD) error  { return nil }
+func (_ *mockChatMessagesStreamServer) SetTrailer(metadata.MD)        {}
+func (_ *mockChatMessagesStreamServer) SendMsg(any) error             { return nil }
+func (_ *mockChatMessagesStreamServer) RecvMsg(any) error             { return nil }
 
 var _ = Describe("ChatService", func() {
 	var (
