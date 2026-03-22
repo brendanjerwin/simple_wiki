@@ -99,9 +99,16 @@ export class PageAutoRefresh extends LitElement {
             if (response.lastModified) {
               this.lastRefreshTime = timestampDate(response.lastModified);
             }
-            await this.refreshPageContent();
-            // Only update hash after successful refresh to allow retry on failure
-            this.currentHash = response.versionHash;
+            try {
+              await this.refreshPageContent();
+              // Only update hash after successful refresh to allow retry on failure
+              this.currentHash = response.versionHash;
+            } catch {
+              // DOM fetch failed — gRPC stream is still healthy, keep iterating.
+              // refreshPageContent() already dispatched a page-watch-error event.
+              // The hash is NOT updated, so the next stream message with the same
+              // hash will trigger another refresh attempt.
+            }
           }
         }
 

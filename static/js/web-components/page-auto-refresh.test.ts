@@ -50,6 +50,49 @@ describe('PageAutoRefresh', () => {
     });
   });
 
+  describe('refreshPageContent', () => {
+    describe('when fetch throws a network error', () => {
+      let el: PageAutoRefresh;
+      let errorEvent: CustomEvent | undefined;
+
+      beforeEach(async () => {
+        fetchStub.rejects(new Error('Network error'));
+
+        el = await fixture<PageAutoRefresh>(
+          html`<page-auto-refresh page-name="my-page"></page-auto-refresh>`,
+        );
+
+        errorEvent = undefined;
+        const errorReceived = new Promise<void>(resolve => {
+          document.addEventListener('page-watch-error', (e: Event) => {
+            errorEvent = e as CustomEvent;
+            resolve();
+          }, { once: true });
+        });
+
+        // Call private method directly to test isolation from stream reconnect logic
+        const refreshPromise = (el as unknown as Record<string, () => Promise<void>>)['refreshPageContent']();
+        // refreshPageContent dispatches page-watch-error and re-throws — swallow the throw
+        await Promise.all([
+          refreshPromise.catch(() => { /* expected */ }),
+          errorReceived,
+        ]);
+      });
+
+      afterEach(() => {
+        el.remove();
+      });
+
+      it('should dispatch page-watch-error', () => {
+        expect(errorEvent).to.exist;
+      });
+
+      it('should include the error in the event detail', () => {
+        expect(errorEvent!.detail.error).to.be.instanceOf(Error);
+      });
+    });
+  });
+
   describe('when dispatching page-status-changed events', () => {
     let receivedEvents: CustomEvent[];
     let el: PageAutoRefresh;
