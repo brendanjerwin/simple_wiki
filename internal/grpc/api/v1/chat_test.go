@@ -262,11 +262,11 @@ func (m *mockChatStreamServer) Context() context.Context {
 	return context.Background()
 }
 
-func (_ *mockChatStreamServer) SetHeader(metadata.MD) error   { return nil }
-func (_ *mockChatStreamServer) SendHeader(metadata.MD) error  { return nil }
-func (_ *mockChatStreamServer) SetTrailer(metadata.MD)        {}
-func (_ *mockChatStreamServer) SendMsg(any) error             { return nil }
-func (_ *mockChatStreamServer) RecvMsg(any) error             { return nil }
+func (*mockChatStreamServer) SetHeader(metadata.MD) error   { return nil }
+func (*mockChatStreamServer) SendHeader(metadata.MD) error  { return nil }
+func (*mockChatStreamServer) SetTrailer(metadata.MD)        {}
+func (*mockChatStreamServer) SendMsg(any) error             { return nil }
+func (*mockChatStreamServer) RecvMsg(any) error             { return nil }
 
 // mockChatMessagesStreamServer is a mock for testing SubscribeChatMessages.
 type mockChatMessagesStreamServer struct {
@@ -292,11 +292,11 @@ func (m *mockChatMessagesStreamServer) Context() context.Context {
 	return context.Background()
 }
 
-func (_ *mockChatMessagesStreamServer) SetHeader(metadata.MD) error   { return nil }
-func (_ *mockChatMessagesStreamServer) SendHeader(metadata.MD) error  { return nil }
-func (_ *mockChatMessagesStreamServer) SetTrailer(metadata.MD)        {}
-func (_ *mockChatMessagesStreamServer) SendMsg(any) error             { return nil }
-func (_ *mockChatMessagesStreamServer) RecvMsg(any) error             { return nil }
+func (*mockChatMessagesStreamServer) SetHeader(metadata.MD) error   { return nil }
+func (*mockChatMessagesStreamServer) SendHeader(metadata.MD) error  { return nil }
+func (*mockChatMessagesStreamServer) SetTrailer(metadata.MD)        {}
+func (*mockChatMessagesStreamServer) SendMsg(any) error             { return nil }
+func (*mockChatMessagesStreamServer) RecvMsg(any) error             { return nil }
 
 var _ = Describe("ChatService", func() {
 	var (
