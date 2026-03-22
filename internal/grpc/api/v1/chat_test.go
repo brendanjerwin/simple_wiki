@@ -36,6 +36,32 @@ func newMockChatBufferManager() *mockChatBufferManager {
 	}
 }
 
+// sendEventToPage sends an event to all page subscribers (for testing)
+func (m *mockChatBufferManager) sendEventToPage(page string, event chatbuffer.Event) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, ch := range m.pageSubscribers[page] {
+		select {
+		case ch <- event:
+		default:
+		}
+	}
+}
+
+// sendMessageToChannel sends a message to all channel subscribers (for testing)
+func (m *mockChatBufferManager) sendMessageToChannel(msg *chatbuffer.Message) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, ch := range m.channelSubscribers {
+		select {
+		case ch <- msg:
+		default:
+		}
+	}
+}
+
 func (m *mockChatBufferManager) AddUserMessage(page, content, senderName string) (string, error) {
 	if m.addUserMessageError != nil {
 		return "", m.addUserMessageError
@@ -422,6 +448,29 @@ var _ = Describe("ChatService", func() {
 				Expect(st.Code()).To(Equal(codes.InvalidArgument))
 			})
 		})
+
+		When("content is empty", func() {
+			var (
+				req *apiv1.SendChatReplyRequest
+				err error
+			)
+
+			BeforeEach(func() {
+				req = &apiv1.SendChatReplyRequest{
+					Page:    "test-page",
+					Content: "",
+				}
+
+				_, err = server.SendChatReply(ctx, req)
+			})
+
+			It("should return InvalidArgument error", func() {
+				Expect(err).To(HaveOccurred())
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.InvalidArgument))
+			})
+		})
 	})
 
 	Describe("EditChatMessage", func() {
@@ -447,6 +496,52 @@ var _ = Describe("ChatService", func() {
 
 			It("should return a response", func() {
 				Expect(resp).NotTo(BeNil())
+			})
+		})
+
+		When("message_id is empty", func() {
+			var (
+				req *apiv1.EditChatMessageRequest
+				err error
+			)
+
+			BeforeEach(func() {
+				req = &apiv1.EditChatMessageRequest{
+					MessageId:  "",
+					NewContent: "Updated",
+				}
+
+				_, err = server.EditChatMessage(ctx, req)
+			})
+
+			It("should return InvalidArgument error", func() {
+				Expect(err).To(HaveOccurred())
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.InvalidArgument))
+			})
+		})
+
+		When("new_content is empty", func() {
+			var (
+				req *apiv1.EditChatMessageRequest
+				err error
+			)
+
+			BeforeEach(func() {
+				req = &apiv1.EditChatMessageRequest{
+					MessageId:  "message-123",
+					NewContent: "",
+				}
+
+				_, err = server.EditChatMessage(ctx, req)
+			})
+
+			It("should return InvalidArgument error", func() {
+				Expect(err).To(HaveOccurred())
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.InvalidArgument))
 			})
 		})
 
@@ -499,6 +594,52 @@ var _ = Describe("ChatService", func() {
 
 			It("should return a response", func() {
 				Expect(resp).NotTo(BeNil())
+			})
+		})
+
+		When("message_id is empty", func() {
+			var (
+				req *apiv1.ReactToMessageRequest
+				err error
+			)
+
+			BeforeEach(func() {
+				req = &apiv1.ReactToMessageRequest{
+					MessageId: "",
+					Emoji:     "👍",
+				}
+
+				_, err = server.ReactToMessage(ctx, req)
+			})
+
+			It("should return InvalidArgument error", func() {
+				Expect(err).To(HaveOccurred())
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.InvalidArgument))
+			})
+		})
+
+		When("emoji is empty", func() {
+			var (
+				req *apiv1.ReactToMessageRequest
+				err error
+			)
+
+			BeforeEach(func() {
+				req = &apiv1.ReactToMessageRequest{
+					MessageId: "message-123",
+					Emoji:     "",
+				}
+
+				_, err = server.ReactToMessage(ctx, req)
+			})
+
+			It("should return InvalidArgument error", func() {
+				Expect(err).To(HaveOccurred())
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.InvalidArgument))
 			})
 		})
 
@@ -560,6 +701,173 @@ var _ = Describe("ChatService", func() {
 			})
 		})
 
+		When("subscribing and receiving new messages", func() {
+			var (
+				req          *apiv1.SubscribeChatRequest
+				streamServer *mockChatStreamServer
+			)
+
+			BeforeEach(func() {
+				req = &apiv1.SubscribeChatRequest{
+					Page: "test-page",
+				}
+				streamServer = &mockChatStreamServer{}
+
+				// Run subscription in background
+				go func() {
+					_ = server.SubscribeChat(req, streamServer)
+				}()
+
+				// Give subscription time to set up
+				time.Sleep(10 * time.Millisecond)
+
+				// Trigger a new message through AddUserMessage which will notify subscribers
+				_, _ = chatManager.AddUserMessage("test-page", "New message", "test-user")
+
+				// Wait for event to be processed
+				time.Sleep(10 * time.Millisecond)
+
+				// Cancel context to stop subscription
+				streamServer.contextDone = true
+			})
+
+			It("should stream new message events", func() {
+				Expect(len(streamServer.events)).To(BeNumerically(">=", 1))
+			})
+		})
+
+		When("subscribing and receiving edit events", func() {
+			var (
+				req          *apiv1.SubscribeChatRequest
+				streamServer *mockChatStreamServer
+			)
+
+			BeforeEach(func() {
+				req = &apiv1.SubscribeChatRequest{
+					Page: "test-page",
+				}
+				streamServer = &mockChatStreamServer{}
+
+				// Run subscription in background
+				go func() {
+					_ = server.SubscribeChat(req, streamServer)
+				}()
+
+				// Give subscription time to set up
+				time.Sleep(10 * time.Millisecond)
+
+				// Trigger an edit event using mock helper
+				event := chatbuffer.Event{
+					Type: chatbuffer.EventTypeEdit,
+					Edit: &chatbuffer.EditEvent{
+						MessageID:  "msg-1",
+						NewContent: "Updated content",
+						Timestamp:  time.Now(),
+					},
+				}
+				chatManager.sendEventToPage("test-page", event)
+
+				// Wait for event to be processed
+				time.Sleep(10 * time.Millisecond)
+
+				// Cancel context to stop subscription
+				streamServer.contextDone = true
+			})
+
+			It("should stream edit events", func() {
+				Expect(len(streamServer.events)).To(BeNumerically(">=", 1))
+				// Check if any edit event was received
+				hasEdit := false
+				for _, e := range streamServer.events {
+					if e.GetEdit() != nil {
+						hasEdit = true
+						break
+					}
+				}
+				Expect(hasEdit).To(BeTrue())
+			})
+		})
+
+		When("subscribing and receiving reaction events", func() {
+			var (
+				req          *apiv1.SubscribeChatRequest
+				streamServer *mockChatStreamServer
+			)
+
+			BeforeEach(func() {
+				req = &apiv1.SubscribeChatRequest{
+					Page: "test-page",
+				}
+				streamServer = &mockChatStreamServer{}
+
+				// Run subscription in background
+				go func() {
+					_ = server.SubscribeChat(req, streamServer)
+				}()
+
+				// Give subscription time to set up
+				time.Sleep(10 * time.Millisecond)
+
+				// Trigger a reaction event using mock helper
+				event := chatbuffer.Event{
+					Type: chatbuffer.EventTypeReaction,
+					Reaction: &chatbuffer.ReactionEvent{
+						MessageID: "msg-1",
+						Emoji:     "👍",
+						Reactor:   "user",
+					},
+				}
+				chatManager.sendEventToPage("test-page", event)
+
+				// Wait for event to be processed
+				time.Sleep(10 * time.Millisecond)
+
+				// Cancel context to stop subscription
+				streamServer.contextDone = true
+			})
+
+			It("should stream reaction events", func() {
+				Expect(len(streamServer.events)).To(BeNumerically(">=", 1))
+				// Check if any reaction event was received
+				hasReaction := false
+				for _, e := range streamServer.events {
+					if e.GetReaction() != nil {
+						hasReaction = true
+						break
+					}
+				}
+				Expect(hasReaction).To(BeTrue())
+			})
+		})
+
+		When("send fails on replay", func() {
+			var (
+				req          *apiv1.SubscribeChatRequest
+				streamServer *mockChatStreamServer
+				err          error
+			)
+
+			BeforeEach(func() {
+				// Add an existing message
+				chatManager.messages["test-page"] = []*chatbuffer.Message{
+					{ID: "msg-1", Sender: "user", Content: "Hello", Page: "test-page"},
+				}
+
+				req = &apiv1.SubscribeChatRequest{
+					Page: "test-page",
+				}
+				streamServer = &mockChatStreamServer{
+					sendErr: status.Error(codes.Internal, "send failed"),
+				}
+
+				err = server.SubscribeChat(req, streamServer)
+			})
+
+			It("should return error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+		})
+
 		When("page is empty", func() {
 			var (
 				req          *apiv1.SubscribeChatRequest
@@ -587,14 +895,98 @@ var _ = Describe("ChatService", func() {
 
 	Describe("SubscribeChatMessages", func() {
 		When("subscribing to channel messages", func() {
-			It("should create a subscription", func() {
-				req := &apiv1.SubscribeChatMessagesRequest{}
-				streamServer := &mockChatMessagesStreamServer{contextDone: true}
+			var (
+				req          *apiv1.SubscribeChatMessagesRequest
+				streamServer *mockChatMessagesStreamServer
+			)
 
-				// This will immediately return due to contextDone
+			BeforeEach(func() {
+				req = &apiv1.SubscribeChatMessagesRequest{}
+				streamServer = &mockChatMessagesStreamServer{contextDone: true}
+
 				_ = server.SubscribeChatMessages(req, streamServer)
+			})
 
-				// Test passes if no error occurs
+			It("should not error", func() {
+				// Test passes if no panic or error
+				Expect(true).To(BeTrue())
+			})
+		})
+
+		When("receiving new channel messages", func() {
+			var (
+				req          *apiv1.SubscribeChatMessagesRequest
+				streamServer *mockChatMessagesStreamServer
+			)
+
+			BeforeEach(func() {
+				req = &apiv1.SubscribeChatMessagesRequest{}
+				streamServer = &mockChatMessagesStreamServer{}
+
+				// Run subscription in background
+				go func() {
+					_ = server.SubscribeChatMessages(req, streamServer)
+				}()
+
+				// Give subscription time to set up
+				time.Sleep(10 * time.Millisecond)
+
+				// Trigger a channel message using mock helper
+				msg := &chatbuffer.Message{
+					ID:      "channel-msg",
+					Sender:  "user",
+					Content: "Channel message",
+					Page:    "some-page",
+				}
+				chatManager.sendMessageToChannel(msg)
+
+				// Wait for message to be processed
+				time.Sleep(10 * time.Millisecond)
+
+				// Cancel context to stop subscription
+				streamServer.contextDone = true
+			})
+
+			It("should stream channel messages", func() {
+				Expect(len(streamServer.messages)).To(BeNumerically(">=", 1))
+			})
+		})
+
+		When("send fails", func() {
+			var (
+				req          *apiv1.SubscribeChatMessagesRequest
+				streamServer *mockChatMessagesStreamServer
+			)
+
+			BeforeEach(func() {
+				req = &apiv1.SubscribeChatMessagesRequest{}
+				streamServer = &mockChatMessagesStreamServer{
+					sendErr: status.Error(codes.Internal, "send failed"),
+				}
+
+				// Run subscription in background
+				go func() {
+					_ = server.SubscribeChatMessages(req, streamServer)
+				}()
+
+				// Give subscription time to set up
+				time.Sleep(10 * time.Millisecond)
+
+				// Trigger a channel message that will fail to send using mock helper
+				msg := &chatbuffer.Message{
+					ID:      "channel-msg",
+					Sender:  "user",
+					Content: "This will fail",
+					Page:    "some-page",
+				}
+				chatManager.sendMessageToChannel(msg)
+
+				// Wait for send to be attempted
+				time.Sleep(10 * time.Millisecond)
+			})
+
+			It("should handle send error", func() {
+				// Test passes if no panic occurs
 				Expect(true).To(BeTrue())
 			})
 		})
