@@ -18,6 +18,9 @@ export class SystemInfoIdentity extends LitElement {
         flex-direction: row;
         align-items: center;
         gap: 8px;
+        border-top: 1px solid #333;
+        padding-top: 4px;
+        margin-top: 2px;
       }
 
       .identity-row {
@@ -28,13 +31,13 @@ export class SystemInfoIdentity extends LitElement {
 
       .label {
         font-weight: bold;
-        color: white;
+        color: #888;
         margin-right: 4px;
       }
 
       .value {
         font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
-        color: #ccc;
+        color: #777;
         font-size: 10px;
       }
 
@@ -61,7 +64,7 @@ export class SystemInfoIdentity extends LitElement {
     return html`
       <div class="identity-info">
         <div class="identity-row">
-          <span class="label">User:</span>
+          <span class="label">Viewing as:</span>
           <span class="value">${this.identity.displayName || this.identity.loginName}</span>
         </div>
         ${this.identity.nodeName ? html`

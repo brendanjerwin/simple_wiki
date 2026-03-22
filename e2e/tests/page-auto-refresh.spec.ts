@@ -75,7 +75,7 @@ test.describe('Page auto-refresh and system-info page status', () => {
     await expect(page.locator('#rendered')).not.toContainText('Initial content for auto-refresh testing');
   });
 
-  test('system-info panel shows Updated time after content change', async ({ page, request }) => {
+  test('system-info panel shows page saved time after content change', async ({ page, request }) => {
     await page.goto(`/${TEST_PAGE}/view`);
     await expect(page.locator('#rendered')).toContainText('Initial content', { timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
@@ -94,7 +94,7 @@ test.describe('Page auto-refresh and system-info page status', () => {
     await expect(systemPanel).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
     await systemPanel.locator('.system-panel').click();
 
-    // The system-info-page component should show "Updated: Xs ago"
+    // The system-info-page component should show "Page saved: Xs ago"
     const pageInfo = systemPanel.locator('system-info-page');
     await expect(pageInfo).toBeAttached({ timeout: 10000 });
     const timeValue = pageInfo.locator('.time');

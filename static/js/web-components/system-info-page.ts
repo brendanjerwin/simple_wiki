@@ -84,7 +84,7 @@ export class SystemInfoPage extends LitElement {
 
     return html`
       <div class="updated-row">
-        <span class="label">Updated:</span>
+        <span class="label">Page saved:</span>
         <span class="value">${this.formatTimeAgo(this.pageStatus.lastRefreshTime)}</span>
       </div>
     `;

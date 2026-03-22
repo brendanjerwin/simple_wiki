@@ -98,9 +98,9 @@ describe('SystemInfoIdentity', () => {
       expect(container).to.exist;
     });
 
-    it('should display User label', () => {
+    it('should display Viewing as label', () => {
       const label = el.shadowRoot?.querySelector('.identity-row .label');
-      expect(label?.textContent).to.equal('User:');
+      expect(label?.textContent).to.equal('Viewing as:');
     });
 
     it('should display login name as user value', () => {

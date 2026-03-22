@@ -119,16 +119,6 @@ export class SystemInfo extends LitElement {
       }
 
 
-      .context-row {
-        display: flex;
-        flex-direction: row;
-        align-items: center;
-        gap: 12px;
-        border-top: 1px solid #404040;
-        padding-top: 4px;
-        margin-top: 2px;
-      }
-
       system-info-indexing {
         border-top: 1px solid #404040;
         padding-top: 4px;
@@ -389,27 +379,26 @@ export class SystemInfo extends LitElement {
         <div class="drawer-tab">INFO</div>
         <div class="panel-content system-font">
           <div class="system-content">
-            <!-- Version Info (Always Present) -->
+            <!-- Page Status (most useful — info user doesn't have) -->
+            ${this.pageStatus ? html`
+              <system-info-page
+                .pageStatus="${this.pageStatus}"></system-info-page>
+            ` : ''}
+
+            <!-- System Info (commit, build, jobs) -->
             <system-info-version
               .version="${this.version}"
               .loading="${this.loading}"
               .error="${this.error}"></system-info-version>
 
-            <!-- Identity and Page Status (shared row) -->
-            <div class="context-row">
-              <system-info-identity
-                .identity="${this.version?.tailscaleIdentity}"></system-info-identity>
-              ${this.pageStatus ? html`
-                <system-info-page
-                  .pageStatus="${this.pageStatus}"></system-info-page>
-              ` : ''}
-            </div>
-
-            <!-- Job Status Component -->
             <system-info-indexing
               .jobStatus="${this.jobStatus}"
               .loading="${this.loading}"
               .error="${this.error}"></system-info-indexing>
+
+            <!-- Session Identity (least useful — user already knows this) -->
+            <system-info-identity
+              .identity="${this.version?.tailscaleIdentity}"></system-info-identity>
           </div>
         </div>
       </div>
