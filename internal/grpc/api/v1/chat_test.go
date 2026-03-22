@@ -184,6 +184,32 @@ func (m *mockChatBufferManager) SubscribeToPage(page string) (<-chan chatbuffer.
 	return ch, unsubscribe
 }
 
+func (m *mockChatBufferManager) SubscribeToPageWithReplay(page string) ([]*chatbuffer.Message, <-chan chatbuffer.Event, func()) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Subscribe first
+	ch := make(chan chatbuffer.Event, 10)
+	m.pageSubscribers[page] = append(m.pageSubscribers[page], ch)
+
+	// Return existing messages
+	messages := m.messages[page]
+
+	unsubscribe := func() {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		for i, subscriber := range m.pageSubscribers[page] {
+			if subscriber == ch {
+				m.pageSubscribers[page] = append(m.pageSubscribers[page][:i], m.pageSubscribers[page][i+1:]...)
+				close(ch)
+				break
+			}
+		}
+	}
+
+	return messages, ch, unsubscribe
+}
+
 func (m *mockChatBufferManager) SubscribeToChannel() (<-chan *chatbuffer.Message, func()) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

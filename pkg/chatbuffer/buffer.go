@@ -106,6 +106,7 @@ func NewManager() *Manager {
 }
 
 // reclaimStaleBuffers periodically removes buffers that haven't been accessed recently.
+// Buffers with active listeners are never reclaimed to avoid breaking existing subscriptions.
 func (m *Manager) reclaimStaleBuffers() {
 	ticker := time.NewTicker(1 * time.Hour)
 	defer ticker.Stop()
@@ -116,9 +117,11 @@ func (m *Manager) reclaimStaleBuffers() {
 		for page, buf := range m.buffers {
 			buf.mu.RLock()
 			inactive := now.Sub(buf.lastAccess) > BufferInactivityTimeout
+			hasActiveListeners := len(buf.eventListeners) > 0
 			buf.mu.RUnlock()
 
-			if inactive {
+			// Only reclaim inactive buffers that have no active subscribers
+			if inactive && !hasActiveListeners {
 				delete(m.buffers, page)
 			}
 		}
@@ -151,15 +154,6 @@ func (m *Manager) getOrCreateBuffer(page string) *pageBuffer {
 
 // AddUserMessage adds a user message to the buffer and notifies subscribers.
 func (m *Manager) AddUserMessage(page, content, senderName string) (string, error) {
-	// Check if any channel subscribers are connected
-	m.channelSubscribersMu.RLock()
-	hasSubscribers := len(m.channelSubscribers) > 0
-	m.channelSubscribersMu.RUnlock()
-
-	if !hasSubscribers {
-		return "", ErrNoSubscribers
-	}
-
 	buf := m.getOrCreateBuffer(page)
 	buf.mu.Lock()
 	defer buf.mu.Unlock()
@@ -198,8 +192,14 @@ func (m *Manager) AddUserMessage(page, content, senderName string) (string, erro
 		}
 	}
 
-	// Notify channel subscribers (wiki-cli mcp)
+	// Atomically check for subscribers and publish to channel subscribers (wiki-cli mcp)
+	// Hold lock through publish to guarantee delivery if we succeed
 	m.channelSubscribersMu.RLock()
+	if len(m.channelSubscribers) == 0 {
+		m.channelSubscribersMu.RUnlock()
+		return "", ErrNoSubscribers
+	}
+
 	for _, subscriber := range m.channelSubscribers {
 		select {
 		case subscriber <- msg:
@@ -267,6 +267,7 @@ func (m *Manager) EditMessage(messageID, newContent string) error {
 		for _, msg := range buf.messages {
 			if msg.ID == messageID {
 				msg.Content = newContent
+				buf.lastAccess = time.Now() // Update lastAccess to prevent premature reclamation
 
 				// Notify page event listeners
 				event := Event{
@@ -320,6 +321,8 @@ func (m *Manager) AddReaction(messageID, emoji, reactor string) error {
 						Reactor: reactor,
 					})
 				}
+
+				buf.lastAccess = time.Now() // Update lastAccess to prevent premature reclamation
 
 				// Notify page event listeners
 				event := Event{
@@ -390,6 +393,43 @@ func (m *Manager) SubscribeToPage(page string) (<-chan Event, func()) {
 	}
 
 	return eventChan, unsubscribe
+}
+
+// SubscribeToPageWithReplay atomically subscribes to a page and returns existing messages
+// to prevent race conditions between GetMessages and SubscribeToPage.
+// Returns existing messages, event channel, and unsubscribe function.
+func (m *Manager) SubscribeToPageWithReplay(page string) ([]*Message, <-chan Event, func()) {
+	buf := m.getOrCreateBuffer(page)
+	buf.mu.Lock()
+	defer buf.mu.Unlock()
+
+	// Create subscription
+	eventChan := make(chan Event, 100) // Buffer events
+	buf.eventListeners = append(buf.eventListeners, eventChan)
+
+	// Copy existing messages under the same lock
+	messages := make([]*Message, len(buf.messages))
+	for i, msg := range buf.messages {
+		msgCopy := *msg
+		msgCopy.Reactions = make([]Reaction, len(msg.Reactions))
+		copy(msgCopy.Reactions, msg.Reactions)
+		messages[i] = &msgCopy
+	}
+
+	unsubscribe := func() {
+		buf.mu.Lock()
+		defer buf.mu.Unlock()
+
+		for i, listener := range buf.eventListeners {
+			if listener == eventChan {
+				buf.eventListeners = append(buf.eventListeners[:i], buf.eventListeners[i+1:]...)
+				close(eventChan)
+				break
+			}
+		}
+	}
+
+	return messages, eventChan, unsubscribe
 }
 
 // SubscribeToChannel subscribes to all user messages across all pages.

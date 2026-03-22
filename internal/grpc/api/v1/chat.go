@@ -23,7 +23,15 @@ func (s *Server) SendMessage(ctx context.Context, req *apiv1.SendChatMessageRequ
 
 	// Get sender name from Tailscale identity
 	identity := tailscale.IdentityFromContext(ctx)
-	senderName := identity.ForLog()
+	senderName := ""
+	if identity != nil {
+		// Use LoginName() for stable identity, fallback to DisplayName()
+		if name := identity.LoginName(); name != "" {
+			senderName = name
+		} else if name := identity.DisplayName(); name != "" {
+			senderName = name
+		}
+	}
 
 	// Add message to buffer and notify subscribers
 	messageID, err := s.chatBufferManager.AddUserMessage(req.Page, req.Content, senderName)
@@ -47,8 +55,11 @@ func (s *Server) SubscribeChat(req *apiv1.SubscribeChatRequest, stream apiv1.Cha
 		return status.Error(codes.InvalidArgument, "page is required")
 	}
 
-	// Get existing messages and replay them
-	existingMessages := s.chatBufferManager.GetMessages(req.Page)
+	// Atomically subscribe and get existing messages to prevent race conditions
+	existingMessages, eventChan, unsubscribe := s.chatBufferManager.SubscribeToPageWithReplay(req.Page)
+	defer unsubscribe()
+
+	// Replay existing messages
 	for _, msg := range existingMessages {
 		protoMsg := bufferMessageToProto(msg)
 		event := &apiv1.ChatEvent{
@@ -61,10 +72,6 @@ func (s *Server) SubscribeChat(req *apiv1.SubscribeChatRequest, stream apiv1.Cha
 			return err
 		}
 	}
-
-	// Subscribe to new events
-	eventChan, unsubscribe := s.chatBufferManager.SubscribeToPage(req.Page)
-	defer unsubscribe()
 
 	// Stream new events as they arrive
 	for {
@@ -211,10 +218,14 @@ func (s *Server) ReactToMessage(_ context.Context, req *apiv1.ReactToMessageRequ
 // bufferMessageToProto converts a chatbuffer.Message to a protobuf ChatMessage.
 func bufferMessageToProto(msg *chatbuffer.Message) *apiv1.ChatMessage {
 	var sender apiv1.Sender
-	if msg.Sender == "user" {
+	switch msg.Sender {
+	case "user":
 		sender = apiv1.Sender_USER
-	} else {
+	case "assistant":
 		sender = apiv1.Sender_ASSISTANT
+	default:
+		// Unknown sender values map to UNSPECIFIED to avoid silently misrepresenting data
+		sender = apiv1.Sender_SENDER_UNSPECIFIED
 	}
 
 	reactions := make([]*apiv1.Reaction, len(msg.Reactions))

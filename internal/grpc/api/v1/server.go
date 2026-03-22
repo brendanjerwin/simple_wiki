@@ -52,6 +52,7 @@ type ChatBufferManager interface {
 	AddReaction(messageID, emoji, reactor string) error
 	GetMessages(page string) []*chatbuffer.Message
 	SubscribeToPage(page string) (<-chan chatbuffer.Event, func())
+	SubscribeToPageWithReplay(page string) ([]*chatbuffer.Message, <-chan chatbuffer.Event, func())
 	SubscribeToChannel() (<-chan *chatbuffer.Message, func())
 	HasChannelSubscribers() bool
 }

@@ -84,6 +84,11 @@ func (noOpChatBufferManager) SubscribeToPage(string) (<-chan chatbuffer.Event, f
 	close(ch)
 	return ch, func() {}
 }
+func (noOpChatBufferManager) SubscribeToPageWithReplay(string) ([]*chatbuffer.Message, <-chan chatbuffer.Event, func()) {
+	ch := make(chan chatbuffer.Event)
+	close(ch)
+	return nil, ch, func() {}
+}
 func (noOpChatBufferManager) SubscribeToChannel() (<-chan *chatbuffer.Message, func()) {
 	ch := make(chan *chatbuffer.Message)
 	close(ch)
