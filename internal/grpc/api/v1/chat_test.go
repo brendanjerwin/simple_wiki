@@ -238,8 +238,21 @@ func (m *mockChatBufferManager) HasChannelSubscribers() bool {
 	return len(m.channelSubscribers) > 0
 }
 
+func (m *mockChatBufferManager) channelSubscriberCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.channelSubscribers)
+}
+
+func (m *mockChatBufferManager) pageSubscriberCount(page string) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.pageSubscribers[page])
+}
+
 // mockChatStreamServer is a mock for testing SubscribeChat.
 type mockChatStreamServer struct {
+	mu          sync.Mutex
 	events      []*apiv1.ChatEvent
 	sendErr     error
 	contextDone bool
@@ -249,8 +262,24 @@ func (m *mockChatStreamServer) Send(event *apiv1.ChatEvent) error {
 	if m.sendErr != nil {
 		return m.sendErr
 	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.events = append(m.events, event)
 	return nil
+}
+
+func (m *mockChatStreamServer) GetEventCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.events)
+}
+
+func (m *mockChatStreamServer) GetEvents() []*apiv1.ChatEvent {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	result := make([]*apiv1.ChatEvent, len(m.events))
+	copy(result, m.events)
+	return result
 }
 
 func (m *mockChatStreamServer) Context() context.Context {
@@ -270,6 +299,7 @@ func (*mockChatStreamServer) RecvMsg(any) error             { return nil }
 
 // mockChatMessagesStreamServer is a mock for testing SubscribeChatMessages.
 type mockChatMessagesStreamServer struct {
+	mu          sync.Mutex
 	messages    []*apiv1.ChatMessage
 	sendErr     error
 	contextDone bool
@@ -279,8 +309,16 @@ func (m *mockChatMessagesStreamServer) Send(msg *apiv1.ChatMessage) error {
 	if m.sendErr != nil {
 		return m.sendErr
 	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.messages = append(m.messages, msg)
 	return nil
+}
+
+func (m *mockChatMessagesStreamServer) GetMessageCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.messages)
 }
 
 func (m *mockChatMessagesStreamServer) Context() context.Context {
@@ -744,21 +782,21 @@ var _ = Describe("ChatService", func() {
 					_ = server.SubscribeChat(req, streamServer)
 				}()
 
-				// Give subscription time to set up
-				time.Sleep(10 * time.Millisecond)
+				// Wait for subscription to be registered before sending events
+				Eventually(func() int { return chatManager.pageSubscriberCount("test-page") }, "1s", "10ms").Should(BeNumerically(">=", 1))
 
 				// Trigger a new message through AddUserMessage which will notify subscribers
 				_, _ = chatManager.AddUserMessage("test-page", "New message", "test-user")
 
 				// Wait for event to be processed
-				time.Sleep(10 * time.Millisecond)
+				Eventually(streamServer.GetEventCount, "1s", "10ms").Should(BeNumerically(">=", 1))
 
 				// Cancel context to stop subscription
 				streamServer.contextDone = true
 			})
 
 			It("should stream new message events", func() {
-				Expect(len(streamServer.events)).To(BeNumerically(">=", 1))
+				Expect(streamServer.GetEventCount()).To(BeNumerically(">=", 1))
 			})
 		})
 
@@ -779,8 +817,8 @@ var _ = Describe("ChatService", func() {
 					_ = server.SubscribeChat(req, streamServer)
 				}()
 
-				// Give subscription time to set up
-				time.Sleep(10 * time.Millisecond)
+				// Wait for subscription to be registered before sending events
+				Eventually(func() int { return chatManager.pageSubscriberCount("test-page") }, "1s", "10ms").Should(BeNumerically(">=", 1))
 
 				// Trigger an edit event using mock helper
 				event := chatbuffer.Event{
@@ -794,17 +832,15 @@ var _ = Describe("ChatService", func() {
 				chatManager.sendEventToPage("test-page", event)
 
 				// Wait for event to be processed
-				time.Sleep(10 * time.Millisecond)
+				Eventually(streamServer.GetEventCount, "1s", "10ms").Should(BeNumerically(">=", 1))
 
 				// Cancel context to stop subscription
 				streamServer.contextDone = true
 			})
 
 			It("should stream edit events", func() {
-				Expect(len(streamServer.events)).To(BeNumerically(">=", 1))
-				// Check if any edit event was received
 				hasEdit := false
-				for _, e := range streamServer.events {
+				for _, e := range streamServer.GetEvents() {
 					if e.GetEdit() != nil {
 						hasEdit = true
 						break
@@ -831,8 +867,8 @@ var _ = Describe("ChatService", func() {
 					_ = server.SubscribeChat(req, streamServer)
 				}()
 
-				// Give subscription time to set up
-				time.Sleep(10 * time.Millisecond)
+				// Wait for subscription to be registered before sending events
+				Eventually(func() int { return chatManager.pageSubscriberCount("test-page") }, "1s", "10ms").Should(BeNumerically(">=", 1))
 
 				// Trigger a reaction event using mock helper
 				event := chatbuffer.Event{
@@ -846,17 +882,15 @@ var _ = Describe("ChatService", func() {
 				chatManager.sendEventToPage("test-page", event)
 
 				// Wait for event to be processed
-				time.Sleep(10 * time.Millisecond)
+				Eventually(streamServer.GetEventCount, "1s", "10ms").Should(BeNumerically(">=", 1))
 
 				// Cancel context to stop subscription
 				streamServer.contextDone = true
 			})
 
 			It("should stream reaction events", func() {
-				Expect(len(streamServer.events)).To(BeNumerically(">=", 1))
-				// Check if any reaction event was received
 				hasReaction := false
-				for _, e := range streamServer.events {
+				for _, e := range streamServer.GetEvents() {
 					if e.GetReaction() != nil {
 						hasReaction = true
 						break
@@ -954,8 +988,8 @@ var _ = Describe("ChatService", func() {
 					_ = server.SubscribeChatMessages(req, streamServer)
 				}()
 
-				// Give subscription time to set up
-				time.Sleep(10 * time.Millisecond)
+				// Wait for subscription to be registered before sending messages
+				Eventually(chatManager.channelSubscriberCount, "1s", "10ms").Should(BeNumerically(">=", 1))
 
 				// Trigger a channel message using mock helper
 				msg := &chatbuffer.Message{
@@ -967,14 +1001,14 @@ var _ = Describe("ChatService", func() {
 				chatManager.sendMessageToChannel(msg)
 
 				// Wait for message to be processed
-				time.Sleep(10 * time.Millisecond)
+				Eventually(streamServer.GetMessageCount, "1s", "10ms").Should(BeNumerically(">=", 1))
 
 				// Cancel context to stop subscription
 				streamServer.contextDone = true
 			})
 
 			It("should stream channel messages", func() {
-				Expect(len(streamServer.messages)).To(BeNumerically(">=", 1))
+				Expect(streamServer.GetMessageCount()).To(BeNumerically(">=", 1))
 			})
 		})
 
@@ -982,6 +1016,7 @@ var _ = Describe("ChatService", func() {
 			var (
 				req          *apiv1.SubscribeChatMessagesRequest
 				streamServer *mockChatMessagesStreamServer
+				doneCh       chan struct{}
 			)
 
 			BeforeEach(func() {
@@ -989,14 +1024,16 @@ var _ = Describe("ChatService", func() {
 				streamServer = &mockChatMessagesStreamServer{
 					sendErr: status.Error(codes.Internal, "send failed"),
 				}
+				doneCh = make(chan struct{})
 
-				// Run subscription in background
+				// Run subscription in background; close doneCh when it returns
 				go func() {
 					_ = server.SubscribeChatMessages(req, streamServer)
+					close(doneCh)
 				}()
 
-				// Give subscription time to set up
-				time.Sleep(10 * time.Millisecond)
+				// Wait for subscription to be registered before sending messages
+				Eventually(chatManager.channelSubscriberCount, "1s", "10ms").Should(BeNumerically(">=", 1))
 
 				// Trigger a channel message that will fail to send using mock helper
 				msg := &chatbuffer.Message{
@@ -1007,8 +1044,8 @@ var _ = Describe("ChatService", func() {
 				}
 				chatManager.sendMessageToChannel(msg)
 
-				// Wait for send to be attempted
-				time.Sleep(10 * time.Millisecond)
+				// Wait for the subscription goroutine to exit after the send error
+				Eventually(doneCh, "1s", "10ms").Should(BeClosed())
 			})
 
 			It("should handle send error", func() {

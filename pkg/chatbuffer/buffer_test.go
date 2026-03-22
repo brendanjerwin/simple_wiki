@@ -20,6 +20,7 @@ var _ = Describe("Manager", func() {
 
 	BeforeEach(func() {
 		manager = chatbuffer.NewManager()
+		DeferCleanup(manager.Close)
 	})
 
 	Describe("NewManager", func() {

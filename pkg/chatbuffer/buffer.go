@@ -90,6 +90,7 @@ type Manager struct {
 	mu                   sync.RWMutex
 	channelSubscribers   []chan *Message
 	channelSubscribersMu sync.RWMutex
+	done                 chan struct{}
 }
 
 // NewManager creates a new chat buffer manager.
@@ -97,6 +98,7 @@ func NewManager() *Manager {
 	m := &Manager{
 		buffers:            make(map[string]*pageBuffer),
 		channelSubscribers: make([]chan *Message, 0),
+		done:               make(chan struct{}),
 	}
 
 	// Start background goroutine to reclaim stale buffers
@@ -105,27 +107,37 @@ func NewManager() *Manager {
 	return m
 }
 
+// Close shuts down the Manager, stopping the background reclaim goroutine.
+func (m *Manager) Close() {
+	close(m.done)
+}
+
 // reclaimStaleBuffers periodically removes buffers that haven't been accessed recently.
 // Buffers with active listeners are never reclaimed to avoid breaking existing subscriptions.
 func (m *Manager) reclaimStaleBuffers() {
 	ticker := time.NewTicker(1 * time.Hour)
 	defer ticker.Stop()
 
-	for range ticker.C {
-		m.mu.Lock()
-		now := time.Now()
-		for page, buf := range m.buffers {
-			buf.mu.RLock()
-			inactive := now.Sub(buf.lastAccess) > BufferInactivityTimeout
-			hasActiveListeners := len(buf.eventListeners) > 0
-			buf.mu.RUnlock()
+	for {
+		select {
+		case <-m.done:
+			return
+		case <-ticker.C:
+			m.mu.Lock()
+			now := time.Now()
+			for page, buf := range m.buffers {
+				buf.mu.RLock()
+				inactive := now.Sub(buf.lastAccess) > BufferInactivityTimeout
+				hasActiveListeners := len(buf.eventListeners) > 0
+				buf.mu.RUnlock()
 
-			// Only reclaim inactive buffers that have no active subscribers
-			if inactive && !hasActiveListeners {
-				delete(m.buffers, page)
+				// Only reclaim inactive buffers that have no active subscribers
+				if inactive && !hasActiveListeners {
+					delete(m.buffers, page)
+				}
 			}
+			m.mu.Unlock()
 		}
-		m.mu.Unlock()
 	}
 }
 
@@ -164,10 +176,10 @@ func (m *Manager) AddUserMessage(page, content, senderName string) (string, erro
 		m.channelSubscribersMu.RUnlock()
 		return "", ErrNoSubscribers
 	}
+	m.channelSubscribersMu.RUnlock()
 
 	buf := m.getOrCreateBuffer(page)
 	buf.mu.Lock()
-	defer buf.mu.Unlock()
 
 	messageID := uuid.New().String()
 	sequence := buf.nextSequence
@@ -187,16 +199,24 @@ func (m *Manager) AddUserMessage(page, content, senderName string) (string, erro
 	// Add to ring buffer
 	buf.messages = append(buf.messages, msg)
 	if len(buf.messages) > MaxMessagesPerPage {
-		buf.messages[0] = nil         // Allow GC of evicted message
+		buf.messages[0] = nil          // Allow GC of evicted message
 		buf.messages = buf.messages[1:] // Evict oldest
 	}
 
-	// Notify page event listeners
+	// Capture listeners and a copy of the message before releasing the lock.
+	// Sending copies prevents callers of EditMessage/AddReaction from racing
+	// with consumers reading the message fields.
+	msgCopy := *msg
+	listeners := make([]chan Event, len(buf.eventListeners))
+	copy(listeners, buf.eventListeners)
+	buf.mu.Unlock()
+
+	// Notify page event listeners (buf.mu not held)
 	event := Event{
 		Type:    EventTypeNewMessage,
-		Message: msg,
+		Message: &msgCopy,
 	}
-	for _, listener := range buf.eventListeners {
+	for _, listener := range listeners {
 		select {
 		case listener <- event:
 		default:
@@ -204,11 +224,14 @@ func (m *Manager) AddUserMessage(page, content, senderName string) (string, erro
 		}
 	}
 
-	// Publish to channel subscribers (wiki-cli mcp) — still holding the RLock
-	// acquired above so the subscriber list stays stable through the publish.
+	// Publish to channel subscribers (wiki-cli mcp).
+	// Acquire channelSubscribersMu after releasing buf.mu to maintain
+	// a consistent lock ordering and avoid deadlock.
+	m.channelSubscribersMu.RLock()
+	msgCopy2 := *msg
 	for _, subscriber := range m.channelSubscribers {
 		select {
-		case subscriber <- msg:
+		case subscriber <- &msgCopy2:
 		default:
 			// Don't block if subscriber is slow
 		}
@@ -222,7 +245,6 @@ func (m *Manager) AddUserMessage(page, content, senderName string) (string, erro
 func (m *Manager) AddAssistantMessage(page, content, replyToID string) (string, error) {
 	buf := m.getOrCreateBuffer(page)
 	buf.mu.Lock()
-	defer buf.mu.Unlock()
 
 	messageID := uuid.New().String()
 	sequence := buf.nextSequence
@@ -243,15 +265,24 @@ func (m *Manager) AddAssistantMessage(page, content, replyToID string) (string, 
 	// Add to ring buffer
 	buf.messages = append(buf.messages, msg)
 	if len(buf.messages) > MaxMessagesPerPage {
+		buf.messages[0] = nil          // Allow GC of evicted message
 		buf.messages = buf.messages[1:] // Evict oldest
 	}
 
-	// Notify page event listeners
+	// Capture listeners and a copy of the message before releasing the lock.
+	// Sending copies prevents callers of EditMessage/AddReaction from racing
+	// with consumers reading the message fields.
+	msgCopy := *msg
+	listeners := make([]chan Event, len(buf.eventListeners))
+	copy(listeners, buf.eventListeners)
+	buf.mu.Unlock()
+
+	// Notify page event listeners (buf.mu not held)
 	event := Event{
 		Type:    EventTypeNewMessage,
-		Message: msg,
+		Message: &msgCopy,
 	}
-	for _, listener := range buf.eventListeners {
+	for _, listener := range listeners {
 		select {
 		case listener <- event:
 		default:
