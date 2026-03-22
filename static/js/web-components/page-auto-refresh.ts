@@ -2,6 +2,7 @@ import { LitElement } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import { createClient } from '@connectrpc/connect';
 import { create } from '@bufbuild/protobuf';
+import { timestampDate } from '@bufbuild/protobuf/wkt';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import { PageManagementService, WatchPageRequestSchema } from '../gen/api/v1/page_management_pb.js';
 
@@ -88,12 +89,18 @@ export class PageAutoRefresh extends LitElement {
         signal: this.streamSubscription.signal
       })) {
         if (!this.currentHash) {
-          // First response - just store the hash, no refresh time yet
+          // First response - store hash and file mod time
           this.currentHash = response.versionHash;
+          if (response.lastModified) {
+            this.lastRefreshTime = timestampDate(response.lastModified);
+          }
           this.dispatchPageStatusEvent();
         } else if (this.currentHash !== response.versionHash) {
           // Hash changed - refresh the page content
           this.currentHash = response.versionHash;
+          if (response.lastModified) {
+            this.lastRefreshTime = timestampDate(response.lastModified);
+          }
           await this.refreshPageContent();
         }
       }
@@ -161,8 +168,7 @@ export class PageAutoRefresh extends LitElement {
           window.hljs.highlightAll();
         }
 
-        // Update last refresh time
-        this.lastRefreshTime = new Date();
+        // Dispatch updated status (lastRefreshTime already set from server response)
         this.dispatchPageStatusEvent();
       }
     } catch (err) {

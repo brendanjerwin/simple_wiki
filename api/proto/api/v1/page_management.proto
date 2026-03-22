@@ -3,6 +3,7 @@ syntax = "proto3";
 package api.v1;
 
 import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
 
@@ -216,4 +217,7 @@ message WatchPageResponse {
   // The current version_hash of the page content.
   // When this changes, the client should re-fetch the page.
   string version_hash = 1;
+
+  // The file modification time of the page on disk.
+  google.protobuf.Timestamp last_modified = 2;
 }

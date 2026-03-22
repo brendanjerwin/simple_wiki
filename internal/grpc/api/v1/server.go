@@ -129,6 +129,7 @@ type Server struct {
 	templateExecutor        wikipage.IExecuteTemplate
 	frontmatterIndexQueryer wikipage.IQueryFrontmatterIndex
 	fileStorer              filestore.FileStorer
+	pageOpener              wikipage.PageOpener
 }
 
 // MergeFrontmatter implements the MergeFrontmatter RPC.
@@ -337,6 +338,7 @@ func NewServer(
 	templateExecutor wikipage.IExecuteTemplate,
 	frontmatterIndexQueryer wikipage.IQueryFrontmatterIndex,
 	fileStorer filestore.FileStorer,
+	pageOpener wikipage.PageOpener,
 ) (*Server, error) {
 	if pageReaderMutator == nil {
 		return nil, errors.New("pageReaderMutator is required")
@@ -350,6 +352,9 @@ func NewServer(
 	if logger == nil {
 		return nil, errors.New("logger is required")
 	}
+	if pageOpener == nil {
+		return nil, errors.New("pageOpener is required")
+	}
 	return &Server{
 		commit:                  commit,
 		buildTime:               buildTime,
@@ -361,6 +366,7 @@ func NewServer(
 		templateExecutor:        templateExecutor,
 		frontmatterIndexQueryer: frontmatterIndexQueryer,
 		fileStorer:              fileStorer,
+		pageOpener:              pageOpener,
 	}, nil
 }
 
@@ -1315,8 +1321,8 @@ func (s *Server) WatchPage(req *apiv1.WatchPageRequest, stream apiv1.PageManagem
 		interval = minIntervalMs * time.Millisecond
 	}
 
-	// Read initial content hash
-	_, markdown, err := s.pageReaderMutator.ReadMarkdown(pageID)
+	// Read initial content hash and mod time
+	hash, modTime, err := s.readPageHashAndModTime(pageID)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.PageName)
@@ -1324,11 +1330,12 @@ func (s *Server) WatchPage(req *apiv1.WatchPageRequest, stream apiv1.PageManagem
 		return status.Errorf(codes.Internal, "failed to read page: %v", err)
 	}
 
-	lastHash := computeContentHash(markdown)
+	lastHash := hash
 
-	// Send initial hash immediately
+	// Send initial hash and mod time immediately
 	if err := stream.Send(&apiv1.WatchPageResponse{
-		VersionHash: lastHash,
+		VersionHash:  lastHash,
+		LastModified: timestamppb.New(modTime),
 	}); err != nil {
 		return err
 	}
@@ -1340,23 +1347,19 @@ func (s *Server) WatchPage(req *apiv1.WatchPageRequest, stream apiv1.PageManagem
 	for {
 		select {
 		case <-ticker.C:
-			// Read current content hash
-			_, markdown, err := s.pageReaderMutator.ReadMarkdown(pageID)
+			currentHash, currentModTime, err := s.readPageHashAndModTime(pageID)
 			if err != nil {
 				if os.IsNotExist(err) {
-					// Page was deleted, terminate stream
 					return status.Errorf(codes.NotFound, "page deleted: %s", req.PageName)
 				}
-				// Log error but continue watching
 				continue
 			}
 
-			currentHash := computeContentHash(markdown)
 			if currentHash != lastHash {
-				// Content changed, send update
 				lastHash = currentHash
 				if err := stream.Send(&apiv1.WatchPageResponse{
-					VersionHash: currentHash,
+					VersionHash:  currentHash,
+					LastModified: timestamppb.New(currentModTime),
 				}); err != nil {
 					return err
 				}
@@ -1366,6 +1369,22 @@ func (s *Server) WatchPage(req *apiv1.WatchPageRequest, stream apiv1.PageManagem
 			return stream.Context().Err()
 		}
 	}
+}
+
+// readPageHashAndModTime reads a page's content hash and file modification time.
+func (s *Server) readPageHashAndModTime(pageID wikipage.PageIdentifier) (string, time.Time, error) {
+	page, err := s.pageOpener.ReadPage(pageID)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	if page.IsNew() {
+		return "", time.Time{}, os.ErrNotExist
+	}
+	markdown, err := page.GetMarkdown()
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	return computeContentHash(wikipage.Markdown(markdown)), page.ModTime, nil
 }
 
 // serverPageExistenceChecker implements pageimport.PageExistenceChecker.

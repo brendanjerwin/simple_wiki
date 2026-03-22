@@ -228,6 +228,22 @@ func (m *MockPageReaderMutator) DeletePage(identifier wikipage.PageIdentifier) e
 	return m.DeleteErr
 }
 
+// ReadPage satisfies wikipage.PageOpener, returning a Page built from the mock's Markdown and error fields.
+func (m *MockPageReaderMutator) ReadPage(identifier wikipage.PageIdentifier) (*wikipage.Page, error) {
+	readErr := m.MarkdownReadErr
+	if readErr == nil {
+		readErr = m.Err
+	}
+	if readErr != nil {
+		return nil, readErr
+	}
+	return &wikipage.Page{
+		Identifier:        string(identifier),
+		Text:              string(m.Markdown),
+		WasLoadedFromDisk: true,
+		ModTime:           time.Now(),
+	}, nil
+}
 
 // MockJobStreamServer is a mock implementation of apiv1.SystemInfoService_StreamJobStatusServer for testing.
 type MockJobStreamServer struct {
@@ -368,23 +384,29 @@ func (noOpPageReaderMutator) WriteMarkdown(wikipage.PageIdentifier, wikipage.Mar
 }
 func (noOpPageReaderMutator) DeletePage(wikipage.PageIdentifier) error { return nil }
 
+// noOpPageOpener is a minimal mock for tests that don't need full page reads.
+type noOpPageOpener struct{}
+
+func (noOpPageOpener) ReadPage(wikipage.PageIdentifier) (*wikipage.Page, error) {
+	return &wikipage.Page{}, nil
+}
+
 // mustNewServer creates a server with the given dependencies, failing the test if creation fails.
-// Use this for tests where server creation should not fail.
 func mustNewServer(
 	pageReaderMutator wikipage.PageReaderMutator,
 	bleveIndexQueryer bleve.IQueryBleveIndex,
 	frontmatterIndexQueryer wikipage.IQueryFrontmatterIndex,
 ) *v1.Server {
-	return mustNewServerWithJobCoordinator(pageReaderMutator, bleveIndexQueryer, frontmatterIndexQueryer, nil)
+	return mustNewServerFull(pageReaderMutator, bleveIndexQueryer, frontmatterIndexQueryer, nil, nil)
 }
 
-// mustNewServerWithJobCoordinator creates a server with the given dependencies including job coordinator.
-// Use this for tests that need to interact with the job queue.
-func mustNewServerWithJobCoordinator(
+// mustNewServerFull creates a server with all optional dependencies.
+func mustNewServerFull(
 	pageReaderMutator wikipage.PageReaderMutator,
 	bleveIndexQueryer bleve.IQueryBleveIndex,
 	frontmatterIndexQueryer wikipage.IQueryFrontmatterIndex,
 	jobCoordinator jobs.JobCoordinator,
+	pageOpener wikipage.PageOpener,
 ) *v1.Server {
 	if pageReaderMutator == nil {
 		pageReaderMutator = noOpPageReaderMutator{}
@@ -394,6 +416,9 @@ func mustNewServerWithJobCoordinator(
 	}
 	if frontmatterIndexQueryer == nil {
 		frontmatterIndexQueryer = noOpFrontmatterIndexQueryer{}
+	}
+	if pageOpener == nil {
+		pageOpener = noOpPageOpener{}
 	}
 	server, err := v1.NewServer(
 		"test-commit",
@@ -406,8 +431,9 @@ func mustNewServerWithJobCoordinator(
 		nil, // templateExecutor is optional
 		frontmatterIndexQueryer,
 		nil, // fileStorer — nil means uploads disabled
+		pageOpener,
 	)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "mustNewServerWithJobCoordinator failed")
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "mustNewServerFull failed")
 	return server
 }
 
@@ -438,6 +464,7 @@ func mustNewServerWithLogger(
 		nil,
 		noOpFrontmatterIndexQueryer{},
 		nil,
+		noOpPageOpener{},
 	)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "mustNewServerWithLogger failed")
 	return server
@@ -1428,6 +1455,7 @@ var _ = Describe("Server", func() {
 					nil, // templateExecutor
 					noOpFrontmatterIndexQueryer{},
 					nil,   // fileStorer
+					noOpPageOpener{},
 					)
 			})
 
@@ -2292,7 +2320,7 @@ var _ = Describe("Server", func() {
 				// Set up context that gets cancelled after initial send
 				streamServer.ContextDone = true
 
-				server = mustNewServer(mockPageReaderMutator, nil, nil)
+				server = mustNewServerFull(mockPageReaderMutator, nil, nil, nil, mockPageReaderMutator)
 				err = server.WatchPage(req, streamServer)
 
 				if len(streamServer.SentMessages) > 0 {
@@ -3091,6 +3119,7 @@ var _ = Describe("Server", func() {
 				mockTemplateExecutor,
 				mockFrontmatterIndexQueryer,
 				nil,   // fileStorer
+				noOpPageOpener{},
 			)
 			Expect(serverErr).NotTo(HaveOccurred())
 			resp, err = server.ReadPage(ctx, req)
@@ -3622,7 +3651,7 @@ var _ = Describe("Server", func() {
 			if mockJobCoordinator != nil {
 				coordinator = mockJobCoordinator.AsCoordinator()
 			}
-			server = mustNewServerWithJobCoordinator(mockPageReaderMutator, nil, nil, coordinator)
+			server = mustNewServerFull(mockPageReaderMutator, nil, nil, coordinator, nil)
 			resp, err = server.StartPageImportJob(ctx, req)
 		})
 
@@ -3761,6 +3790,7 @@ var _ = Describe("Server", func() {
 				nil,
 				noOpFrontmatterIndexQueryer{},
 				nil,   // fileStorer
+				noOpPageOpener{},
 			)
 			Expect(serverErr).NotTo(HaveOccurred())
 			resp, err = server.GenerateIdentifier(ctx, req)
@@ -3920,6 +3950,7 @@ var _ = Describe("Server", func() {
 				nil,
 				mockFrontmatterIndexQueryer,
 				nil,   // fileStorer
+				noOpPageOpener{},
 			)
 			Expect(err).NotTo(HaveOccurred())
 			resp, err = server.CreatePage(ctx, req)
@@ -4202,6 +4233,7 @@ var _ = Describe("Server", func() {
 				nil,
 				mockFrontmatterIndexQueryer,
 				nil,   // fileStorer
+				noOpPageOpener{},
 			)
 			Expect(err).NotTo(HaveOccurred())
 			resp, err = server.ListTemplates(ctx, req)
