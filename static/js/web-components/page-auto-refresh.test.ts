@@ -52,23 +52,32 @@ describe('PageAutoRefresh', () => {
 
   describe('when dispatching page-status-changed events', () => {
     let receivedEvents: CustomEvent[];
+    let el: PageAutoRefresh;
 
     beforeEach(async () => {
       receivedEvents = [];
 
-      const handler = (e: Event) => {
-        receivedEvents.push(e as CustomEvent);
-      };
-      document.addEventListener('page-status-changed', handler);
+      // Register listener before fixture so we catch synchronous dispatch during connectedCallback
+      const firstEventReceived = new Promise<void>(resolve => {
+        const handler = (e: Event) => {
+          receivedEvents.push(e as CustomEvent);
+          document.removeEventListener('page-status-changed', handler);
+          resolve();
+        };
+        document.addEventListener('page-status-changed', handler);
+      });
 
-      await fixture<PageAutoRefresh>(
+      el = await fixture<PageAutoRefresh>(
         html`<page-auto-refresh page-name="my-page"></page-auto-refresh>`,
       );
 
-      // Allow the stream to start and dispatch events
-      await new Promise(resolve => setTimeout(resolve, 200));
+      // Wait for the first status event (dispatched synchronously during connectedCallback)
+      await firstEventReceived;
+    });
 
-      document.removeEventListener('page-status-changed', handler);
+    afterEach(() => {
+      // Ensure any additional event listeners are cleaned up when el disconnects
+      el.remove();
     });
 
     it('should dispatch at least one event', () => {
@@ -77,6 +86,10 @@ describe('PageAutoRefresh', () => {
 
     it('should dispatch event with pageName from attribute', () => {
       expect(receivedEvents[0]!.detail.pageName).to.equal('my-page');
+    });
+
+    it('should dispatch event with isWatching true', () => {
+      expect(receivedEvents[0]!.detail.isWatching).to.be.true;
     });
   });
 });

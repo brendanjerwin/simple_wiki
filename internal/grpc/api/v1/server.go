@@ -1352,17 +1352,18 @@ func (s *Server) WatchPage(req *apiv1.WatchPageRequest, stream apiv1.PageManagem
 				if os.IsNotExist(err) {
 					return status.Errorf(codes.NotFound, "page deleted: %s", req.PageName)
 				}
+				s.logger.Warn("WatchPage: failed to read page content, continuing: %v", err)
 				continue
 			}
 
 			if currentHash != lastHash {
-				lastHash = currentHash
 				if err := stream.Send(&apiv1.WatchPageResponse{
 					VersionHash:  currentHash,
 					LastModified: timestamppb.New(currentModTime),
 				}); err != nil {
 					return err
 				}
+				lastHash = currentHash
 			}
 
 		case <-stream.Context().Done():

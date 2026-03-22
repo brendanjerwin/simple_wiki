@@ -228,7 +228,6 @@ export class SystemInfo extends LitElement {
     const detail = event.detail;
     if (this.isPageStatus(detail)) {
       this.pageStatus = detail;
-      this.requestUpdate();
     }
   }
 
@@ -241,8 +240,12 @@ export class SystemInfo extends LitElement {
       typeof (obj as { pageName: unknown }).pageName === 'string' &&
       'isWatching' in obj &&
       typeof (obj as { isWatching: unknown }).isWatching === 'boolean' &&
-      (!('versionHash' in obj) || typeof (obj as { versionHash: unknown }).versionHash === 'string') &&
-      (!('lastRefreshTime' in obj) || (obj as { lastRefreshTime: unknown }).lastRefreshTime instanceof Date)
+      (!('versionHash' in obj) ||
+        typeof (obj as { versionHash: unknown }).versionHash === 'undefined' ||
+        typeof (obj as { versionHash: unknown }).versionHash === 'string') &&
+      (!('lastRefreshTime' in obj) ||
+        (obj as { lastRefreshTime: unknown }).lastRefreshTime === undefined ||
+        (obj as { lastRefreshTime: unknown }).lastRefreshTime instanceof Date)
     );
   }
 

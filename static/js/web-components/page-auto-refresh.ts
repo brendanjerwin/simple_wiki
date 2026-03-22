@@ -1,5 +1,5 @@
 import { LitElement } from 'lit';
-import { property, state } from 'lit/decorators.js';
+import { property } from 'lit/decorators.js';
 import { createClient } from '@connectrpc/connect';
 import { create } from '@bufbuild/protobuf';
 import { timestampDate } from '@bufbuild/protobuf/wkt';
@@ -19,6 +19,9 @@ declare global {
   }
 }
 
+const INITIAL_RECONNECT_DELAY_MS = 1000;
+const MAX_RECONNECT_DELAY_MS = 30000;
+
 /**
  * A web component that watches a page for content changes and auto-refreshes the page.
  * Only active in view mode, not in edit mode.
@@ -33,16 +36,9 @@ export class PageAutoRefresh extends LitElement {
   @property({ type: String, attribute: 'page-name' })
   declare pageName: string;
 
-  @state()
-  private streamSubscription?: AbortController;
-
-  @state()
-  private currentHash?: string;
-
-  @state()
-  private lastRefreshTime?: Date;
-
-  @state()
+  private streamSubscription: AbortController | undefined;
+  private currentHash: string | undefined;
+  private lastRefreshTime: Date | undefined;
   private isWatching = false;
 
   private client = createClient(PageManagementService, getGrpcWebTransport());
@@ -79,56 +75,74 @@ export class PageAutoRefresh extends LitElement {
     this.isWatching = true;
     this.dispatchPageStatusEvent();
 
-    try {
-      const request = create(WatchPageRequestSchema, {
-        pageName: this.pageName,
-        checkIntervalMs: 1000, // Check every second
-      });
+    const signal = this.streamSubscription.signal;
+    let reconnectDelayMs = INITIAL_RECONNECT_DELAY_MS;
 
-      for await (const response of this.client.watchPage(request, {
-        signal: this.streamSubscription.signal
-      })) {
-        if (!this.currentHash) {
-          // First response - store hash and file mod time
-          this.currentHash = response.versionHash;
-          if (response.lastModified) {
-            this.lastRefreshTime = timestampDate(response.lastModified);
+    while (!signal.aborted) {
+      try {
+        const request = create(WatchPageRequestSchema, {
+          pageName: this.pageName,
+          checkIntervalMs: 1000, // Check every second
+        });
+
+        for await (const response of this.client.watchPage(request, { signal })) {
+          if (!this.currentHash) {
+            // First response - store hash and mod time
+            this.currentHash = response.versionHash;
+            this.dataset['versionHash'] = response.versionHash; // exposed for testability
+            if (response.lastModified) {
+              this.lastRefreshTime = timestampDate(response.lastModified);
+            }
+            this.dispatchPageStatusEvent();
+          } else if (this.currentHash !== response.versionHash) {
+            // Hash changed - refresh the page content
+            if (response.lastModified) {
+              this.lastRefreshTime = timestampDate(response.lastModified);
+            }
+            await this.refreshPageContent();
+            // Only update hash after successful refresh to allow retry on failure
+            this.currentHash = response.versionHash;
           }
-          this.dispatchPageStatusEvent();
-        } else if (this.currentHash !== response.versionHash) {
-          // Hash changed - refresh the page content
-          this.currentHash = response.versionHash;
-          if (response.lastModified) {
-            this.lastRefreshTime = timestampDate(response.lastModified);
-          }
-          await this.refreshPageContent();
         }
-      }
-    } catch (err) {
-      // AbortError is expected when stopWatching() is called.
-      // Other errors mean the stream ended unexpectedly — the page
-      // continues to work, just without auto-refresh.
-      const isAbortError = err instanceof Error && err.name === 'AbortError';
-      if (!isAbortError) {
+
+        // Stream ended cleanly — don't reconnect
+        break;
+      } catch (err) {
+        const isAbortError = err instanceof Error && err.name === 'AbortError';
+        if (isAbortError || signal.aborted) {
+          break;
+        }
+
+        // Stream dropped unexpectedly — reconnect with exponential backoff
         this.dispatchEvent(new CustomEvent('page-watch-error', {
           detail: { error: err },
           bubbles: true,
           composed: true,
         }));
+
+        await new Promise<void>(resolve => {
+          const timer = setTimeout(resolve, reconnectDelayMs);
+          signal.addEventListener('abort', () => {
+            clearTimeout(timer);
+            resolve();
+          }, { once: true });
+        });
+
+        reconnectDelayMs = Math.min(reconnectDelayMs * 2, MAX_RECONNECT_DELAY_MS);
       }
-    } finally {
-      this.isWatching = false;
-      this.dispatchPageStatusEvent();
     }
+
+    this.isWatching = false;
+    this.dispatchPageStatusEvent();
   }
 
   private stopWatching(): void {
     if (this.streamSubscription) {
       this.streamSubscription.abort();
-      delete this.streamSubscription;
+      this.streamSubscription = undefined;
+      this.isWatching = false;
+      this.dispatchPageStatusEvent();
     }
-    this.isWatching = false;
-    this.dispatchPageStatusEvent();
   }
 
   private async refreshPageContent(): Promise<void> {
@@ -168,7 +182,7 @@ export class PageAutoRefresh extends LitElement {
           window.hljs.highlightAll();
         }
 
-        // Dispatch updated status (lastRefreshTime already set from server response)
+        // Dispatch updated status
         this.dispatchPageStatusEvent();
       }
     } catch (err) {
@@ -177,6 +191,7 @@ export class PageAutoRefresh extends LitElement {
         bubbles: true,
         composed: true,
       }));
+      throw err; // Re-throw so caller knows the refresh failed
     }
   }
 

@@ -9,6 +9,8 @@ export interface PageStatus {
   isWatching: boolean;
 }
 
+const TIME_REFRESH_INTERVAL_MS = 5000;
+
 export class SystemInfoPage extends LitElement {
   static override styles = [
     foundationCSS,
@@ -31,7 +33,7 @@ export class SystemInfoPage extends LitElement {
         margin-right: 4px;
       }
 
-      .value {
+      .time {
         font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
         color: #ccc;
         font-size: 10px;
@@ -40,6 +42,25 @@ export class SystemInfoPage extends LitElement {
 
   @property({ type: Object })
   declare pageStatus?: PageStatus;
+
+  private timeRefreshTimer: ReturnType<typeof setInterval> | undefined;
+
+  override connectedCallback(): void {
+    super.connectedCallback();
+    this.timeRefreshTimer = setInterval(() => {
+      if (this.pageStatus?.lastRefreshTime) {
+        this.requestUpdate();
+      }
+    }, TIME_REFRESH_INTERVAL_MS);
+  }
+
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    if (this.timeRefreshTimer) {
+      clearInterval(this.timeRefreshTimer);
+      this.timeRefreshTimer = undefined;
+    }
+  }
 
   private formatTimeAgo(date: Date): string {
     const nowMs = Date.now();
@@ -85,7 +106,7 @@ export class SystemInfoPage extends LitElement {
     return html`
       <div class="updated-row">
         <span class="label">Page saved:</span>
-        <span class="value">${this.formatTimeAgo(this.pageStatus.lastRefreshTime)}</span>
+        <span class="time">${this.formatTimeAgo(this.pageStatus.lastRefreshTime)}</span>
       </div>
     `;
   }

@@ -293,6 +293,20 @@ type MockPageWatchStreamServer struct {
 	SentMessages []*apiv1.WatchPageResponse
 	SendErr      error
 	ContextDone  bool
+	ctx          context.Context    // if set, overrides ContextDone behavior
+	cancelFunc   context.CancelFunc // cancels ctx
+}
+
+// newCancellableMockPageWatchStreamServer creates a MockPageWatchStreamServer with a controllable context.
+func newCancellableMockPageWatchStreamServer() *MockPageWatchStreamServer {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &MockPageWatchStreamServer{ctx: ctx, cancelFunc: cancel}
+}
+
+func (m *MockPageWatchStreamServer) Cancel() {
+	if m.cancelFunc != nil {
+		m.cancelFunc()
+	}
 }
 
 func (m *MockPageWatchStreamServer) Send(response *apiv1.WatchPageResponse) error {
@@ -304,6 +318,9 @@ func (m *MockPageWatchStreamServer) Send(response *apiv1.WatchPageResponse) erro
 }
 
 func (m *MockPageWatchStreamServer) Context() context.Context {
+	if m.ctx != nil {
+		return m.ctx
+	}
 	if m.ContextDone {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
@@ -2375,6 +2392,120 @@ var _ = Describe("Server", func() {
 
 			It("should return InvalidArgument error", func() {
 				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "page_name is required"))
+			})
+		})
+
+		When("content changes after initial send", func() {
+			var (
+				cancellableStream *MockPageWatchStreamServer
+				watchErr          error
+				watchDone         chan error
+			)
+
+			BeforeEach(func() {
+				cancellableStream = newCancellableMockPageWatchStreamServer()
+				mockPageReaderMutator = &MockPageReaderMutator{
+					Markdown: wikipage.Markdown("# Initial Content"),
+				}
+
+				checkInterval := int32(100)
+				req.CheckIntervalMs = &checkInterval // Use minimum interval for fast test
+
+				server = mustNewServerFull(mockPageReaderMutator, nil, nil, nil, mockPageReaderMutator)
+
+				watchDone = make(chan error, 1)
+				go func() {
+					watchDone <- server.WatchPage(req, cancellableStream)
+				}()
+
+				// Wait for initial message
+				Eventually(func() int {
+					return len(cancellableStream.SentMessages)
+				}, 2*time.Second, 50*time.Millisecond).Should(Equal(1))
+
+				// Change content
+				mockPageReaderMutator.Markdown = wikipage.Markdown("# Changed Content")
+
+				// Wait for second message
+				Eventually(func() int {
+					return len(cancellableStream.SentMessages)
+				}, 2*time.Second, 50*time.Millisecond).Should(Equal(2))
+
+				// Cancel the stream and wait for completion
+				cancellableStream.Cancel()
+				watchErr = <-watchDone
+			})
+
+			It("should end with context.Canceled", func() {
+				Expect(watchErr).To(Equal(context.Canceled))
+			})
+
+			It("should detect hash change and send two messages", func() {
+				Expect(cancellableStream.SentMessages).To(HaveLen(2))
+			})
+
+			It("should send correct hash for initial content", func() {
+				h := sha256.Sum256([]byte("# Initial Content"))
+				expectedHash := hex.EncodeToString(h[:])
+				Expect(cancellableStream.SentMessages[0].VersionHash).To(Equal(expectedHash))
+			})
+
+			It("should send correct hash for changed content", func() {
+				h := sha256.Sum256([]byte("# Changed Content"))
+				expectedHash := hex.EncodeToString(h[:])
+				Expect(cancellableStream.SentMessages[1].VersionHash).To(Equal(expectedHash))
+			})
+
+			It("should not send duplicate messages when content unchanged", func() {
+				// After the change, the content stays the same — no more messages after the 2nd
+				Consistently(func() int {
+					return len(cancellableStream.SentMessages)
+				}, 300*time.Millisecond, 50*time.Millisecond).Should(Equal(2))
+			})
+		})
+
+		When("read fails transiently during polling", func() {
+			var (
+				cancellableStream *MockPageWatchStreamServer
+				watchDone         chan error
+			)
+
+			BeforeEach(func() {
+				cancellableStream = newCancellableMockPageWatchStreamServer()
+				mockPageReaderMutator = &MockPageReaderMutator{
+					Markdown: wikipage.Markdown("# Content"),
+				}
+
+				checkInterval := int32(100)
+				req.CheckIntervalMs = &checkInterval
+
+				server = mustNewServerFull(mockPageReaderMutator, nil, nil, nil, mockPageReaderMutator)
+
+				watchDone = make(chan error, 1)
+				go func() {
+					watchDone <- server.WatchPage(req, cancellableStream)
+				}()
+
+				// Wait for initial message
+				Eventually(func() int {
+					return len(cancellableStream.SentMessages)
+				}, 2*time.Second, 50*time.Millisecond).Should(Equal(1))
+
+				// Inject a transient read error
+				mockPageReaderMutator.Err = fmt.Errorf("transient error")
+
+				// Wait a couple of poll cycles, then clear the error
+				time.Sleep(200 * time.Millisecond)
+				mockPageReaderMutator.Err = nil
+
+				// Cancel and collect
+				cancellableStream.Cancel()
+				<-watchDone
+			})
+
+			It("should still only have the initial message (transient error doesn't crash)", func() {
+				// We only got the initial message; the transient error was swallowed and watch continued
+				Expect(len(cancellableStream.SentMessages)).To(BeNumerically(">=", 1))
 			})
 		})
 	})

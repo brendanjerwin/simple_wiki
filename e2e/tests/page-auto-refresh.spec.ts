@@ -1,9 +1,10 @@
-import { test, expect, type APIRequestContext } from '@playwright/test';
+import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
 
 const TEST_PAGE = 'e2e_auto_refresh_test';
 const INITIAL_MARKDOWN = '# Auto Refresh Test\n\nInitial content for auto-refresh testing.';
 
 const COMPONENT_LOAD_TIMEOUT_MS = 15000;
+const STREAM_ESTABLISH_TIMEOUT_MS = 15000;
 
 async function callPageAPI(
   request: APIRequestContext,
@@ -31,6 +32,18 @@ async function setupTestPage(request: APIRequestContext, markdown: string): Prom
     newContentMarkdown: markdown,
   });
   expect(resetResp.ok()).toBeTruthy();
+}
+
+/**
+ * Waits for the page-auto-refresh WatchPage stream to establish and receive its initial hash.
+ * This must be called before making content changes via API to ensure the stream will detect them.
+ */
+async function waitForStreamEstablished(page: Page): Promise<void> {
+  // The component sets data-version-hash once it receives the initial hash from the server
+  await page.locator('page-auto-refresh[data-version-hash]').waitFor({
+    state: 'attached',
+    timeout: STREAM_ESTABLISH_TIMEOUT_MS,
+  });
 }
 
 test.describe('Page auto-refresh and system-info page status', () => {
@@ -63,6 +76,9 @@ test.describe('Page auto-refresh and system-info page status', () => {
 
     await expect(page.locator('#rendered')).toContainText('Initial content for auto-refresh testing', { timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
+    // Wait for WatchPage stream to establish before making changes
+    await waitForStreamEstablished(page);
+
     // Update the page content via the API (simulating another user/session)
     const updateResp = await callPageAPI(request, 'UpdatePageContent', {
       pageName: TEST_PAGE,
@@ -78,6 +94,9 @@ test.describe('Page auto-refresh and system-info page status', () => {
   test('system-info panel shows page saved time after content change', async ({ page, request }) => {
     await page.goto(`/${TEST_PAGE}/view`);
     await expect(page.locator('#rendered')).toContainText('Initial content', { timeout: COMPONENT_LOAD_TIMEOUT_MS });
+
+    // Wait for WatchPage stream to establish before making changes
+    await waitForStreamEstablished(page);
 
     // Trigger a content change so lastRefreshTime gets set
     const updateResp = await callPageAPI(request, 'UpdatePageContent', {
@@ -108,6 +127,9 @@ test.describe('Page auto-refresh and system-info page status', () => {
     await page.goto(`/${TEST_PAGE}/view`);
 
     await expect(page.locator('#rendered')).toContainText('Section 1', { timeout: COMPONENT_LOAD_TIMEOUT_MS });
+
+    // Wait for WatchPage stream to establish before making changes
+    await waitForStreamEstablished(page);
 
     // Scroll down significantly
     await page.evaluate(() => window.scrollTo(0, 500));
