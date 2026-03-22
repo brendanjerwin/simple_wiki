@@ -18,9 +18,6 @@ export class SystemInfoIdentity extends LitElement {
         flex-direction: row;
         align-items: center;
         gap: 8px;
-        border-top: 1px solid #404040;
-        padding-top: 4px;
-        margin-top: 2px;
       }
 
       .identity-row {
@@ -37,7 +34,7 @@ export class SystemInfoIdentity extends LitElement {
 
       .value {
         font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
-        color: #7bed9f;
+        color: #ccc;
         font-size: 10px;
       }
 

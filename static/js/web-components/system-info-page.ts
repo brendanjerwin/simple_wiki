@@ -1,5 +1,6 @@
-import { html, css, LitElement } from 'lit';
+import { html, css, LitElement, nothing } from 'lit';
 import { property } from 'lit/decorators.js';
+import { foundationCSS } from './shared-styles.js';
 
 export interface PageStatus {
   pageName: string;
@@ -9,35 +10,44 @@ export interface PageStatus {
 }
 
 export class SystemInfoPage extends LitElement {
-  static override styles = css`
-    :host {
-      display: block;
-      color: #aaa;
-      font-size: 10px;
-    }
+  static override styles = [
+    foundationCSS,
+    css`
+      :host {
+        display: block;
+        font-size: 11px;
+        line-height: 1.2;
+      }
 
-    .page-row {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
+      .updated-row {
+        display: flex;
+        align-items: center;
+        white-space: nowrap;
+      }
 
-    .page-label {
-      color: #666;
-    }
+      .label {
+        font-weight: bold;
+        color: white;
+        margin-right: 4px;
+      }
 
-    .time {
-      color: #888;
-    }
-  `;
+      .value {
+        font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+        color: #ccc;
+        font-size: 10px;
+      }
+    `];
 
   @property({ type: Object })
   declare pageStatus?: PageStatus;
 
-  private formatTime(date: Date): string {
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffSec = Math.floor(diffMs / 1000);
+  private formatTimeAgo(date: Date): string {
+    const nowMs = Date.now();
+    const diffSec = Math.floor((nowMs - date.getTime()) / 1000);
+
+    if (diffSec < 0) {
+      return 'just now';
+    }
 
     if (diffSec < 60) {
       return `${diffSec}s ago`;
@@ -45,22 +55,37 @@ export class SystemInfoPage extends LitElement {
 
     const diffMin = Math.floor(diffSec / 60);
     if (diffMin < 60) {
-      return `${diffMin}m ago`;
+      return `~${diffMin}m ago`;
     }
 
     const diffHour = Math.floor(diffMin / 60);
-    return `${diffHour}h ago`;
+    if (diffHour < 24) {
+      return `~${diffHour}h ago`;
+    }
+
+    const diffDay = Math.floor(diffHour / 24);
+    if (diffDay < 30) {
+      return `~${diffDay}d ago`;
+    }
+
+    const diffMonth = Math.floor(diffDay / 30);
+    if (diffMonth < 12) {
+      return `~${diffMonth}mo ago`;
+    }
+
+    const diffYear = Math.floor(diffDay / 365);
+    return `~${diffYear}y ago`;
   }
 
   override render() {
     if (!this.pageStatus?.lastRefreshTime) {
-      return html``;
+      return nothing;
     }
 
     return html`
-      <div class="page-row">
-        <span class="page-label">Updated:</span>
-        <span class="time">${this.formatTime(this.pageStatus.lastRefreshTime)}</span>
+      <div class="updated-row">
+        <span class="label">Updated:</span>
+        <span class="value">${this.formatTimeAgo(this.pageStatus.lastRefreshTime)}</span>
       </div>
     `;
   }

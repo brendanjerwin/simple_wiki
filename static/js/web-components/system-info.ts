@@ -119,6 +119,16 @@ export class SystemInfo extends LitElement {
       }
 
 
+      .context-row {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 12px;
+        border-top: 1px solid #404040;
+        padding-top: 4px;
+        margin-top: 2px;
+      }
+
       system-info-indexing {
         border-top: 1px solid #404040;
         padding-top: 4px;
@@ -385,15 +395,15 @@ export class SystemInfo extends LitElement {
               .loading="${this.loading}"
               .error="${this.error}"></system-info-version>
 
-            <!-- Tailscale Identity (if available) -->
-            <system-info-identity
-              .identity="${this.version?.tailscaleIdentity}"></system-info-identity>
-
-            <!-- Page Status (if available) -->
-            ${this.pageStatus ? html`
-              <system-info-page
-                .pageStatus="${this.pageStatus}"></system-info-page>
-            ` : ''}
+            <!-- Identity and Page Status (shared row) -->
+            <div class="context-row">
+              <system-info-identity
+                .identity="${this.version?.tailscaleIdentity}"></system-info-identity>
+              ${this.pageStatus ? html`
+                <system-info-page
+                  .pageStatus="${this.pageStatus}"></system-info-page>
+              ` : ''}
+            </div>
 
             <!-- Job Status Component -->
             <system-info-indexing
