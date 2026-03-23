@@ -12,6 +12,7 @@ require (
 	github.com/gin-contrib/multitemplate v1.1.1
 	github.com/gin-contrib/sessions v1.0.4
 	github.com/gin-gonic/gin v1.11.0
+	github.com/google/uuid v1.6.0
 	github.com/gorilla/sessions v1.4.0
 	github.com/jcelliott/lumber v0.0.0-20160324203708-dd349441af25
 	github.com/k3a/html2text v1.3.0
@@ -26,7 +27,7 @@ require (
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/stoewer/go-strcase v1.3.1
 	github.com/tailscale/tscert v0.0.0-20251216020129-aea342f6d747
-	github.com/yuin/goldmark v1.7.13
+	github.com/yuin/goldmark v1.7.17
 	github.com/yuin/goldmark-emoji v1.0.6
 	go.abhg.dev/goldmark/mermaid v0.6.0
 	go.abhg.dev/goldmark/wikilink v0.6.0
@@ -89,7 +90,6 @@ require (
 	github.com/golang/snappy v1.0.0 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/pprof v0.0.0-20260115054156-294ebfa9ad83 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/context v1.1.2 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
 	github.com/gorilla/securecookie v1.1.2 // indirect
