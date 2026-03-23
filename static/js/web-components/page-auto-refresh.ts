@@ -40,11 +40,18 @@ export class PageAutoRefresh extends LitElement {
   private currentHash: string | undefined;
   private lastRefreshTime: Date | undefined;
   private isWatching = false;
+  private _handleVisibilityChange: () => void;
 
   private client = createClient(PageManagementService, getGrpcWebTransport());
 
+  constructor() {
+    super();
+    this._handleVisibilityChange = this.handleVisibilityChange.bind(this);
+  }
+
   override connectedCallback() {
     super.connectedCallback();
+    document.addEventListener('visibilitychange', this._handleVisibilityChange);
 
     // Only start watching if we have a page name
     if (this.pageName) {
@@ -54,6 +61,7 @@ export class PageAutoRefresh extends LitElement {
 
   override disconnectedCallback() {
     super.disconnectedCallback();
+    document.removeEventListener('visibilitychange', this._handleVisibilityChange);
     this.stopWatching();
   }
 
@@ -65,6 +73,13 @@ export class PageAutoRefresh extends LitElement {
       if (this.pageName) {
         this.startWatching();
       }
+    }
+  }
+
+  private handleVisibilityChange(): void {
+    if (document.visibilityState === 'visible' && this.pageName && !this.isWatching) {
+      // Tab woke up and stream is dead — restart
+      this.startWatching();
     }
   }
 
