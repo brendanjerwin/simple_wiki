@@ -12,9 +12,10 @@ require (
 	github.com/gin-contrib/multitemplate v1.1.1
 	github.com/gin-contrib/sessions v1.0.4
 	github.com/gin-gonic/gin v1.11.0
+	github.com/google/uuid v1.6.0
 	github.com/gorilla/sessions v1.4.0
 	github.com/jcelliott/lumber v0.0.0-20160324203708-dd349441af25
-	github.com/k3a/html2text v1.3.0
+	github.com/k3a/html2text v1.4.0
 	github.com/karalabe/usb v0.0.2
 	github.com/mark3labs/mcp-go v0.45.0
 	github.com/mborders/artifex v0.5.1
@@ -89,7 +90,6 @@ require (
 	github.com/golang/snappy v1.0.0 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/pprof v0.0.0-20260115054156-294ebfa9ad83 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/context v1.1.2 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
 	github.com/gorilla/securecookie v1.1.2 // indirect
