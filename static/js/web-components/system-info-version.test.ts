@@ -143,9 +143,9 @@ describe('SystemInfoVersion', () => {
         expect(commitValue?.textContent).to.equal('abcdef1');
       });
 
-      it('should display formatted build time', () => {
-        const buildTimeValue = el.shadowRoot?.querySelector('.version-row:last-child .value');
-        expect(buildTimeValue?.textContent).to.contain('Jun 15, 2023');
+      it('should display formatted build time in the same row', () => {
+        const row = el.shadowRoot?.querySelector('.version-row');
+        expect(row?.textContent).to.contain('Jun 15, 2023');
       });
 
       it('should not display loading state', () => {
@@ -231,9 +231,9 @@ describe('SystemInfoVersion', () => {
         ]);
       });
 
-      it('should display empty build time value', () => {
-        const buildTimeValue = el.shadowRoot?.querySelector('.version-row:last-child .value');
-        expect(buildTimeValue?.textContent).to.equal('');
+      it('should not include build time separator', () => {
+        const row = el.shadowRoot?.querySelector('.version-row');
+        expect(row?.textContent).to.not.contain('·');
       });
     });
   });
@@ -462,17 +462,15 @@ describe('SystemInfoVersion', () => {
       expect(versionInfo).to.exist;
     });
 
-    it('should have two version-row elements', () => {
+    it('should have one version-row element', () => {
       const versionRows = el.shadowRoot?.querySelectorAll('.version-row');
-      expect(versionRows).to.have.length(2);
+      expect(versionRows).to.have.length(1);
     });
 
-    it('should have labels with correct classes', () => {
-      const labels = el.shadowRoot?.querySelectorAll('.label');
-      expect(labels).to.have.length(2);
-      labels?.forEach(label => {
-        expect(label.classList.contains('label')).to.be.true;
-      });
+    it('should have a Server label', () => {
+      const label = el.shadowRoot?.querySelector('.label');
+      expect(label).to.exist;
+      expect(label?.textContent).to.equal('Server:');
     });
 
     it('should have values with correct classes', () => {

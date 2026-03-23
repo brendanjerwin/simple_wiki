@@ -36,6 +36,13 @@ func (noOpPageReaderMutator) WriteMarkdown(wikipage.PageIdentifier, wikipage.Mar
 }
 func (noOpPageReaderMutator) DeletePage(wikipage.PageIdentifier) error { return nil }
 
+// noOpPageOpener satisfies wikipage.PageOpener for tests.
+type noOpPageOpener struct{}
+
+func (noOpPageOpener) ReadPage(wikipage.PageIdentifier) (*wikipage.Page, error) {
+	return &wikipage.Page{}, nil
+}
+
 // noOpBleveIndexQueryer satisfies bleve.IQueryBleveIndex for tests.
 type noOpBleveIndexQueryer struct{}
 
@@ -72,6 +79,7 @@ func mustNewAPIServer() *grpcapi.Server {
 		nil,
 		noOpFrontmatterIndexQueryer{},
 		nil,
+		noOpPageOpener{},
 	)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred())
 	return srv

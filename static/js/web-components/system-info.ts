@@ -7,8 +7,10 @@ import { SystemInfoService, GetVersionRequestSchema, GetJobStatusRequestSchema, 
 import { foundationCSS } from './shared-styles.js';
 import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
 import './system-info-identity.js';
-import './system-info-indexing.js';
+import './system-info-jobs.js';
 import './system-info-version.js';
+import './system-info-page.js';
+import type { PageStatus } from './system-info-page.js';
 
 export class SystemInfo extends LitElement {
   static readonly DEBOUNCE_DELAY = 300;
@@ -117,7 +119,7 @@ export class SystemInfo extends LitElement {
       }
 
 
-      system-info-indexing {
+      .section-divider {
         border-top: 1px solid #404040;
         padding-top: 4px;
         margin-top: 2px;
@@ -138,10 +140,15 @@ export class SystemInfo extends LitElement {
 
   @state()
   declare expanded: boolean;
+
+  @state()
+  declare pageStatus?: PageStatus;
+
   private debounceTimer?: ReturnType<typeof setTimeout>;
   private refreshTimer?: ReturnType<typeof setInterval>;
   private streamSubscription?: AbortController;
   private _handleClickOutside: (event: MouseEvent) => void;
+  private _handlePageStatusChanged: (event: Event) => void;
 
   private client = createClient(SystemInfoService, getGrpcWebTransport());
 
@@ -151,12 +158,14 @@ export class SystemInfo extends LitElement {
     this.error = null;
     this.expanded = false;
     this._handleClickOutside = this.handleClickOutside.bind(this);
+    this._handlePageStatusChanged = this.handlePageStatusChanged.bind(this);
   }
 
   override connectedCallback(): void {
     super.connectedCallback();
     this.loadSystemInfo();
     document.addEventListener('click', this._handleClickOutside);
+    document.addEventListener('page-status-changed', this._handlePageStatusChanged);
   }
 
   override firstUpdated(): void {
@@ -178,7 +187,8 @@ export class SystemInfo extends LitElement {
     }
     // Remove click-outside listener
     document.removeEventListener('click', this._handleClickOutside);
-    
+    document.removeEventListener('page-status-changed', this._handlePageStatusChanged);
+
     // Remove hover event listener
     const overlay = this.shadowRoot?.querySelector('.hover-overlay');
     if (overlay) {
@@ -208,6 +218,35 @@ export class SystemInfo extends LitElement {
     if (this.expanded && !path.includes(this)) {
       this.expanded = false;
     }
+  }
+
+  private handlePageStatusChanged(event: Event): void {
+    if (!(event instanceof CustomEvent)) {
+      return;
+    }
+
+    const detail = event.detail;
+    if (this.isPageStatus(detail)) {
+      this.pageStatus = detail;
+    }
+  }
+
+  private isPageStatus(obj: unknown): obj is PageStatus {
+    if (!obj || typeof obj !== 'object') {
+      return false;
+    }
+    return (
+      'pageName' in obj &&
+      typeof (obj as { pageName: unknown }).pageName === 'string' &&
+      'isWatching' in obj &&
+      typeof (obj as { isWatching: unknown }).isWatching === 'boolean' &&
+      (!('versionHash' in obj) ||
+        typeof (obj as { versionHash: unknown }).versionHash === 'undefined' ||
+        typeof (obj as { versionHash: unknown }).versionHash === 'string') &&
+      (!('lastRefreshTime' in obj) ||
+        (obj as { lastRefreshTime: unknown }).lastRefreshTime === undefined ||
+        (obj as { lastRefreshTime: unknown }).lastRefreshTime instanceof Date)
+    );
   }
 
   private handleMouseEnter = (): void => {
@@ -331,8 +370,8 @@ export class SystemInfo extends LitElement {
 
   override render() {
     return html`
-      <div 
-        class="system-panel ${this.expanded ? 'expanded' : ''}" 
+      <div
+        class="system-panel ${this.expanded ? 'expanded' : ''}"
         role="button"
         tabindex="0"
         aria-expanded="${this.expanded}"
@@ -343,21 +382,30 @@ export class SystemInfo extends LitElement {
         <div class="drawer-tab">INFO</div>
         <div class="panel-content system-font">
           <div class="system-content">
-            <!-- Version Info (Always Present) -->
-            <system-info-version
-              .version="${this.version}"
-              .loading="${this.loading}"
-              .error="${this.error}"></system-info-version>
+            <!-- Page -->
+            ${this.pageStatus ? html`
+              <system-info-page
+                .pageStatus="${this.pageStatus}"></system-info-page>
+            ` : ''}
 
-            <!-- Tailscale Identity (if available) -->
-            <system-info-identity
-              .identity="${this.version?.tailscaleIdentity}"></system-info-identity>
+            <!-- System -->
+            <div class="section-divider">
+              <system-info-version
+                .version="${this.version}"
+                .loading="${this.loading}"
+                .error="${this.error}"></system-info-version>
 
-            <!-- Job Status Component -->
-            <system-info-indexing
-              .jobStatus="${this.jobStatus}"
-              .loading="${this.loading}"
-              .error="${this.error}"></system-info-indexing>
+              <system-info-jobs
+                .jobStatus="${this.jobStatus}"
+                .loading="${this.loading}"
+                .error="${this.error}"></system-info-jobs>
+            </div>
+
+            <!-- Session -->
+            <div class="section-divider">
+              <system-info-identity
+                .identity="${this.version?.tailscaleIdentity}"></system-info-identity>
+            </div>
           </div>
         </div>
       </div>

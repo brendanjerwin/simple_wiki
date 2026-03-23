@@ -29,6 +29,7 @@ const (
 	PageManagementService_ClearPageContent_FullMethodName   = "/api.v1.PageManagementService/ClearPageContent"
 	PageManagementService_GenerateIdentifier_FullMethodName = "/api.v1.PageManagementService/GenerateIdentifier"
 	PageManagementService_ListTemplates_FullMethodName      = "/api.v1.PageManagementService/ListTemplates"
+	PageManagementService_WatchPage_FullMethodName          = "/api.v1.PageManagementService/WatchPage"
 )
 
 // PageManagementServiceClient is the client API for PageManagementService service.
@@ -50,6 +51,10 @@ type PageManagementServiceClient interface {
 	GenerateIdentifier(ctx context.Context, in *GenerateIdentifierRequest, opts ...grpc.CallOption) (*GenerateIdentifierResponse, error)
 	// ListTemplates returns all pages marked as templates (with template: true frontmatter).
 	ListTemplates(ctx context.Context, in *ListTemplatesRequest, opts ...grpc.CallOption) (*ListTemplatesResponse, error)
+	// WatchPage provides real-time streaming updates when a page's content changes.
+	// Emits the current version_hash when the content changes on the server.
+	// Clients can use this to re-fetch and re-render the page content.
+	WatchPage(ctx context.Context, in *WatchPageRequest, opts ...grpc.CallOption) (PageManagementService_WatchPageClient, error)
 }
 
 type pageManagementServiceClient struct {
@@ -160,6 +165,39 @@ func (c *pageManagementServiceClient) ListTemplates(ctx context.Context, in *Lis
 	return out, nil
 }
 
+func (c *pageManagementServiceClient) WatchPage(ctx context.Context, in *WatchPageRequest, opts ...grpc.CallOption) (PageManagementService_WatchPageClient, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &PageManagementService_ServiceDesc.Streams[0], PageManagementService_WatchPage_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &pageManagementServiceWatchPageClient{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type PageManagementService_WatchPageClient interface {
+	Recv() (*WatchPageResponse, error)
+	grpc.ClientStream
+}
+
+type pageManagementServiceWatchPageClient struct {
+	grpc.ClientStream
+}
+
+func (x *pageManagementServiceWatchPageClient) Recv() (*WatchPageResponse, error) {
+	m := new(WatchPageResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // PageManagementServiceServer is the server API for PageManagementService service.
 // All implementations must embed UnimplementedPageManagementServiceServer
 // for forward compatibility
@@ -179,6 +217,10 @@ type PageManagementServiceServer interface {
 	GenerateIdentifier(context.Context, *GenerateIdentifierRequest) (*GenerateIdentifierResponse, error)
 	// ListTemplates returns all pages marked as templates (with template: true frontmatter).
 	ListTemplates(context.Context, *ListTemplatesRequest) (*ListTemplatesResponse, error)
+	// WatchPage provides real-time streaming updates when a page's content changes.
+	// Emits the current version_hash when the content changes on the server.
+	// Clients can use this to re-fetch and re-render the page content.
+	WatchPage(*WatchPageRequest, PageManagementService_WatchPageServer) error
 	mustEmbedUnimplementedPageManagementServiceServer()
 }
 
@@ -215,6 +257,9 @@ func (UnimplementedPageManagementServiceServer) GenerateIdentifier(context.Conte
 }
 func (UnimplementedPageManagementServiceServer) ListTemplates(context.Context, *ListTemplatesRequest) (*ListTemplatesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListTemplates not implemented")
+}
+func (UnimplementedPageManagementServiceServer) WatchPage(*WatchPageRequest, PageManagementService_WatchPageServer) error {
+	return status.Errorf(codes.Unimplemented, "method WatchPage not implemented")
 }
 func (UnimplementedPageManagementServiceServer) mustEmbedUnimplementedPageManagementServiceServer() {}
 
@@ -409,6 +454,27 @@ func _PageManagementService_ListTemplates_Handler(srv interface{}, ctx context.C
 	return interceptor(ctx, in, info, handler)
 }
 
+func _PageManagementService_WatchPage_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(WatchPageRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(PageManagementServiceServer).WatchPage(m, &pageManagementServiceWatchPageServer{ServerStream: stream})
+}
+
+type PageManagementService_WatchPageServer interface {
+	Send(*WatchPageResponse) error
+	grpc.ServerStream
+}
+
+type pageManagementServiceWatchPageServer struct {
+	grpc.ServerStream
+}
+
+func (x *pageManagementServiceWatchPageServer) Send(m *WatchPageResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 // PageManagementService_ServiceDesc is the grpc.ServiceDesc for PageManagementService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -457,6 +523,12 @@ var PageManagementService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _PageManagementService_ListTemplates_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "WatchPage",
+			Handler:       _PageManagementService_WatchPage_Handler,
+			ServerStreams: true,
+		},
+	},
 	Metadata: "api/v1/page_management.proto",
 }

@@ -5,7 +5,7 @@ import { foundationCSS } from './shared-styles.js';
 import type { AugmentedError } from './augment-error-service.js';
 import './error-display.js';
 
-export class SystemInfoIndexing extends LitElement {
+export class SystemInfoJobs extends LitElement {
 
   static override styles = [
     foundationCSS,
@@ -217,10 +217,10 @@ export class SystemInfoIndexing extends LitElement {
   }
 }
 
-customElements.define('system-info-indexing', SystemInfoIndexing);
+customElements.define('system-info-jobs', SystemInfoJobs);
 
 declare global {
   interface HTMLElementTagNameMap {
-    'system-info-indexing': SystemInfoIndexing;
+    'system-info-jobs': SystemInfoJobs;
   }
 }
