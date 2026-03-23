@@ -17,6 +17,7 @@ import (
 	"github.com/brendanjerwin/simple_wiki/filestore"
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
 	"github.com/brendanjerwin/simple_wiki/pageimport"
+	"github.com/brendanjerwin/simple_wiki/pkg/chatbuffer"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
@@ -42,6 +43,19 @@ const (
 	pageNameRequiredErr            = "page_name is required"
 	maxUniqueIdentifierAttempts    = 1000
 )
+
+// ChatBufferManager defines the interface for managing chat message buffers.
+type ChatBufferManager interface {
+	AddUserMessage(page, content, senderName string) (string, error)
+	AddAssistantMessage(page, content, replyToID string) (string, error)
+	EditMessage(messageID, newContent string) error
+	AddReaction(messageID, emoji, reactor string) error
+	GetMessages(page string) []*chatbuffer.Message
+	SubscribeToPage(page string) (<-chan chatbuffer.Event, func())
+	SubscribeToPageWithReplay(page string) ([]*chatbuffer.Message, <-chan chatbuffer.Event, func())
+	SubscribeToChannel() (<-chan *chatbuffer.Message, func())
+	HasChannelSubscribers() bool
+}
 
 // computeContentHash computes a SHA256 hash of the given markdown content,
 // returned as a lowercase hex string. Used for optimistic concurrency control.
@@ -119,6 +133,7 @@ type Server struct {
 	apiv1.UnimplementedInventoryManagementServiceServer
 	apiv1.UnimplementedPageImportServiceServer
 	apiv1.UnimplementedFileStorageServiceServer
+	apiv1.UnimplementedChatServiceServer
 	commit                  string
 	buildTime               time.Time
 	pageReaderMutator       wikipage.PageReaderMutator
@@ -129,6 +144,8 @@ type Server struct {
 	templateExecutor        wikipage.IExecuteTemplate
 	frontmatterIndexQueryer wikipage.IQueryFrontmatterIndex
 	fileStorer              filestore.FileStorer
+	chatBufferManager       ChatBufferManager
+	pageOpener              wikipage.PageOpener
 }
 
 // MergeFrontmatter implements the MergeFrontmatter RPC.
@@ -324,7 +341,7 @@ func removeAtPath(data any, path []*apiv1.PathComponent) (any, error) {
 }
 
 // NewServer creates a new gRPC server with the given dependencies.
-// Required dependencies: pageReaderMutator, bleveIndexQueryer, frontmatterIndexQueryer, logger.
+// Required dependencies: pageReaderMutator, bleveIndexQueryer, frontmatterIndexQueryer, logger, chatBufferManager.
 // Optional dependencies: jobQueueCoordinator, markdownRenderer, templateExecutor.
 func NewServer(
 	commit string,
@@ -337,6 +354,8 @@ func NewServer(
 	templateExecutor wikipage.IExecuteTemplate,
 	frontmatterIndexQueryer wikipage.IQueryFrontmatterIndex,
 	fileStorer filestore.FileStorer,
+	chatBufferManager ChatBufferManager,
+	pageOpener wikipage.PageOpener,
 ) (*Server, error) {
 	if pageReaderMutator == nil {
 		return nil, errors.New("pageReaderMutator is required")
@@ -350,6 +369,12 @@ func NewServer(
 	if logger == nil {
 		return nil, errors.New("logger is required")
 	}
+	if chatBufferManager == nil {
+		return nil, errors.New("chatBufferManager is required")
+	}
+	if pageOpener == nil {
+		return nil, errors.New("pageOpener is required")
+	}
 	return &Server{
 		commit:                  commit,
 		buildTime:               buildTime,
@@ -361,6 +386,8 @@ func NewServer(
 		templateExecutor:        templateExecutor,
 		frontmatterIndexQueryer: frontmatterIndexQueryer,
 		fileStorer:              fileStorer,
+		chatBufferManager:       chatBufferManager,
+		pageOpener:              pageOpener,
 	}, nil
 }
 
@@ -373,6 +400,7 @@ func (s *Server) RegisterWithServer(grpcServer *grpc.Server) {
 	apiv1.RegisterInventoryManagementServiceServer(grpcServer, s)
 	apiv1.RegisterPageImportServiceServer(grpcServer, s)
 	apiv1.RegisterFileStorageServiceServer(grpcServer, s)
+	apiv1.RegisterChatServiceServer(grpcServer, s)
 }
 
 // GetVersion implements the GetVersion RPC.
@@ -1292,6 +1320,94 @@ func (s *Server) ListTemplates(_ context.Context, req *apiv1.ListTemplatesReques
 	return &apiv1.ListTemplatesResponse{
 		Templates: templates,
 	}, nil
+}
+
+// WatchPage implements the WatchPage RPC for real-time page content change notifications.
+// It streams the current version_hash of the page content when it changes.
+func (s *Server) WatchPage(req *apiv1.WatchPageRequest, stream apiv1.PageManagementService_WatchPageServer) error {
+	if req.PageName == "" {
+		return status.Error(codes.InvalidArgument, pageNameRequiredErr)
+	}
+
+	pageID := wikipage.PageIdentifier(req.PageName)
+
+	// Default to 1-second intervals, allow client to customize
+	interval := time.Duration(req.GetCheckIntervalMs()) * time.Millisecond
+	if interval == 0 {
+		interval = 1 * time.Second
+	}
+
+	// Minimum interval to prevent excessive server load
+	const minIntervalMs = 100
+	if interval < minIntervalMs*time.Millisecond {
+		interval = minIntervalMs * time.Millisecond
+	}
+
+	// Read initial content hash and mod time
+	hash, modTime, err := s.readPageHashAndModTime(pageID)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.PageName)
+		}
+		return status.Errorf(codes.Internal, "failed to read page: %v", err)
+	}
+
+	lastHash := hash
+
+	// Send initial hash and mod time immediately
+	if err := stream.Send(&apiv1.WatchPageResponse{
+		VersionHash:  lastHash,
+		LastModified: timestamppb.New(modTime),
+	}); err != nil {
+		return err
+	}
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	// Stream updates when content changes
+	for {
+		select {
+		case <-ticker.C:
+			currentHash, currentModTime, err := s.readPageHashAndModTime(pageID)
+			if err != nil {
+				if os.IsNotExist(err) {
+					return status.Errorf(codes.NotFound, "page deleted: %s", req.PageName)
+				}
+				s.logger.Warn("WatchPage: failed to read page content, continuing: %v", err)
+				continue
+			}
+
+			if currentHash != lastHash {
+				if err := stream.Send(&apiv1.WatchPageResponse{
+					VersionHash:  currentHash,
+					LastModified: timestamppb.New(currentModTime),
+				}); err != nil {
+					return err
+				}
+				lastHash = currentHash
+			}
+
+		case <-stream.Context().Done():
+			return stream.Context().Err()
+		}
+	}
+}
+
+// readPageHashAndModTime reads a page's content hash and file modification time.
+func (s *Server) readPageHashAndModTime(pageID wikipage.PageIdentifier) (string, time.Time, error) {
+	page, err := s.pageOpener.ReadPage(pageID)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	if page.IsNew() {
+		return "", time.Time{}, os.ErrNotExist
+	}
+	markdown, err := page.GetMarkdown()
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	return computeContentHash(wikipage.Markdown(markdown)), page.ModTime, nil
 }
 
 // serverPageExistenceChecker implements pageimport.PageExistenceChecker.
