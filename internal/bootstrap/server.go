@@ -415,7 +415,7 @@ func setupGRPCServer(
 	grpcAPIServer, err := grpcapi.NewServer(
 		commit, buildTime, site, site.BleveIndexQueryer, site.GetJobQueueCoordinator(),
 		logger, site.MarkdownRenderer, server.TemplateExecutor{}, site.FrontmatterIndexQueryer,
-		site.FileStorer, chatBufferMgr,
+		site.FileStorer, chatBufferMgr, site,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create gRPC server: %w", err)

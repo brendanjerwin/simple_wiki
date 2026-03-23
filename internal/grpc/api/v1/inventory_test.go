@@ -57,6 +57,7 @@ var _ = Describe("InventoryManagementService", func() {
 				mockFrontmatterIndexQueryer,
 				nil,
 				noOpChatBufferManager{}, // chatBufferManager
+				noOpPageOpener{},
 			)
 			Expect(serverErr).NotTo(HaveOccurred())
 			resp, err = server.CreateInventoryItem(ctx, req)
@@ -283,6 +284,7 @@ var _ = Describe("InventoryManagementService", func() {
 				noOpFrontmatterIndexQueryer{},
 				nil,
 				noOpChatBufferManager{}, // chatBufferManager
+				noOpPageOpener{},
 			)
 			Expect(serverErr).NotTo(HaveOccurred())
 			resp, err = server.MoveInventoryItem(ctx, req)
@@ -715,6 +717,7 @@ var _ = Describe("InventoryManagementService", func() {
 				mockFrontmatterIndexQueryer,
 				nil,
 				noOpChatBufferManager{}, // chatBufferManager
+				noOpPageOpener{},
 			)
 			Expect(serverErr).NotTo(HaveOccurred())
 			resp, err = server.ListContainerContents(ctx, req)
@@ -814,6 +817,7 @@ var _ = Describe("InventoryManagementService", func() {
 					mockFrontmatterIndexQueryer,
 					nil,
 					noOpChatBufferManager{}, // chatBufferManager
+					noOpPageOpener{},
 				)
 				Expect(serverErr).NotTo(HaveOccurred())
 				resp, err = server.ListContainerContents(ctx, req)
@@ -858,6 +862,7 @@ var _ = Describe("InventoryManagementService", func() {
 					mockFrontmatterIndexQueryer,
 					nil,
 					noOpChatBufferManager{}, // chatBufferManager
+					noOpPageOpener{},
 				)
 				Expect(serverErr).NotTo(HaveOccurred())
 				resp, err = server.ListContainerContents(ctx, req)
@@ -904,6 +909,7 @@ var _ = Describe("InventoryManagementService", func() {
 				noOpFrontmatterIndexQueryer{},
 				nil,
 				noOpChatBufferManager{}, // chatBufferManager
+				noOpPageOpener{},
 			)
 			Expect(serverErr).NotTo(HaveOccurred())
 			resp, err = server.FindItemLocation(ctx, req)

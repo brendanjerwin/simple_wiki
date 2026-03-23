@@ -360,6 +360,7 @@ var _ = Describe("ChatService", func() {
 			noOpFrontmatterIndexQueryer{},
 			nil,
 			chatManager,
+			noOpPageOpener{},
 		)
 		Expect(err).NotTo(HaveOccurred())
 	})

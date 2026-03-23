@@ -1,7 +1,7 @@
 import { html, fixture, expect, assert } from '@open-wc/testing';
 import { stub } from 'sinon';
 import { create } from '@bufbuild/protobuf';
-import { SystemInfoIndexing } from './system-info-indexing.js';
+import { SystemInfoJobs } from './system-info-jobs.js';
 import { GetJobStatusResponseSchema, JobQueueStatusSchema, type JobQueueStatus } from '../gen/api/v1/system_info_pb.js';
 import { AugmentErrorService } from './augment-error-service.js';
 import type { ErrorDisplay } from './error-display.js';
@@ -12,8 +12,8 @@ function timeout(ms: number, message: string) {
   );
 }
 
-describe('SystemInfoIndexing', () => {
-  let el: SystemInfoIndexing;
+describe('SystemInfoJobs', () => {
+  let el: SystemInfoJobs;
   let fetchStub: ReturnType<typeof stub>;
 
   beforeEach(async () => {
@@ -23,9 +23,9 @@ describe('SystemInfoIndexing', () => {
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- fixture returns unknown when using Promise.race
     el = await Promise.race([
-      fixture<SystemInfoIndexing>(html`<system-info-indexing></system-info-indexing>`),
-      timeout(5000, "SystemInfoIndexing fixture timed out"),
-    ]) as SystemInfoIndexing;
+      fixture<SystemInfoJobs>(html`<system-info-jobs></system-info-jobs>`),
+      timeout(5000, "SystemInfoJobs fixture timed out"),
+    ]) as SystemInfoJobs;
   });
 
   afterEach(() => {
@@ -35,11 +35,11 @@ describe('SystemInfoIndexing', () => {
   });
 
   it('should exist', () => {
-    assert.instanceOf(el, SystemInfoIndexing);
+    assert.instanceOf(el, SystemInfoJobs);
   });
 
   it('should have the correct tag name', () => {
-    expect(el.tagName).to.equal('SYSTEM-INFO-INDEXING');
+    expect(el.tagName).to.equal('SYSTEM-INFO-JOBS');
   });
 
   it('should have default property values', () => {

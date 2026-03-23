@@ -16,6 +16,7 @@ import './web-components/blog-new-post-dialog.js';
 import './web-components/file-drop-zone.js';
 import './web-components/wiki-editor.js';
 import './web-components/wiki-table.js';
+import './web-components/page-auto-refresh.js';
 import { showStoredToast } from './web-components/toast-message.js';
 import { setupGlobalErrorHandler } from './web-components/global-error-handler.js';
 import { pageDeleteService } from './web-components/page-deletion-service.js';

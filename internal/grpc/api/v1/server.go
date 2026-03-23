@@ -145,6 +145,7 @@ type Server struct {
 	frontmatterIndexQueryer wikipage.IQueryFrontmatterIndex
 	fileStorer              filestore.FileStorer
 	chatBufferManager       ChatBufferManager
+	pageOpener              wikipage.PageOpener
 }
 
 // MergeFrontmatter implements the MergeFrontmatter RPC.
@@ -354,6 +355,7 @@ func NewServer(
 	frontmatterIndexQueryer wikipage.IQueryFrontmatterIndex,
 	fileStorer filestore.FileStorer,
 	chatBufferManager ChatBufferManager,
+	pageOpener wikipage.PageOpener,
 ) (*Server, error) {
 	if pageReaderMutator == nil {
 		return nil, errors.New("pageReaderMutator is required")
@@ -370,6 +372,9 @@ func NewServer(
 	if chatBufferManager == nil {
 		return nil, errors.New("chatBufferManager is required")
 	}
+	if pageOpener == nil {
+		return nil, errors.New("pageOpener is required")
+	}
 	return &Server{
 		commit:                  commit,
 		buildTime:               buildTime,
@@ -382,6 +387,7 @@ func NewServer(
 		frontmatterIndexQueryer: frontmatterIndexQueryer,
 		fileStorer:              fileStorer,
 		chatBufferManager:       chatBufferManager,
+		pageOpener:              pageOpener,
 	}, nil
 }
 
@@ -1314,6 +1320,94 @@ func (s *Server) ListTemplates(_ context.Context, req *apiv1.ListTemplatesReques
 	return &apiv1.ListTemplatesResponse{
 		Templates: templates,
 	}, nil
+}
+
+// WatchPage implements the WatchPage RPC for real-time page content change notifications.
+// It streams the current version_hash of the page content when it changes.
+func (s *Server) WatchPage(req *apiv1.WatchPageRequest, stream apiv1.PageManagementService_WatchPageServer) error {
+	if req.PageName == "" {
+		return status.Error(codes.InvalidArgument, pageNameRequiredErr)
+	}
+
+	pageID := wikipage.PageIdentifier(req.PageName)
+
+	// Default to 1-second intervals, allow client to customize
+	interval := time.Duration(req.GetCheckIntervalMs()) * time.Millisecond
+	if interval == 0 {
+		interval = 1 * time.Second
+	}
+
+	// Minimum interval to prevent excessive server load
+	const minIntervalMs = 100
+	if interval < minIntervalMs*time.Millisecond {
+		interval = minIntervalMs * time.Millisecond
+	}
+
+	// Read initial content hash and mod time
+	hash, modTime, err := s.readPageHashAndModTime(pageID)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return status.Errorf(codes.NotFound, pageNotFoundErrFmt, req.PageName)
+		}
+		return status.Errorf(codes.Internal, "failed to read page: %v", err)
+	}
+
+	lastHash := hash
+
+	// Send initial hash and mod time immediately
+	if err := stream.Send(&apiv1.WatchPageResponse{
+		VersionHash:  lastHash,
+		LastModified: timestamppb.New(modTime),
+	}); err != nil {
+		return err
+	}
+
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	// Stream updates when content changes
+	for {
+		select {
+		case <-ticker.C:
+			currentHash, currentModTime, err := s.readPageHashAndModTime(pageID)
+			if err != nil {
+				if os.IsNotExist(err) {
+					return status.Errorf(codes.NotFound, "page deleted: %s", req.PageName)
+				}
+				s.logger.Warn("WatchPage: failed to read page content, continuing: %v", err)
+				continue
+			}
+
+			if currentHash != lastHash {
+				if err := stream.Send(&apiv1.WatchPageResponse{
+					VersionHash:  currentHash,
+					LastModified: timestamppb.New(currentModTime),
+				}); err != nil {
+					return err
+				}
+				lastHash = currentHash
+			}
+
+		case <-stream.Context().Done():
+			return stream.Context().Err()
+		}
+	}
+}
+
+// readPageHashAndModTime reads a page's content hash and file modification time.
+func (s *Server) readPageHashAndModTime(pageID wikipage.PageIdentifier) (string, time.Time, error) {
+	page, err := s.pageOpener.ReadPage(pageID)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	if page.IsNew() {
+		return "", time.Time{}, os.ErrNotExist
+	}
+	markdown, err := page.GetMarkdown()
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	return computeContentHash(wikipage.Markdown(markdown)), page.ModTime, nil
 }
 
 // serverPageExistenceChecker implements pageimport.PageExistenceChecker.

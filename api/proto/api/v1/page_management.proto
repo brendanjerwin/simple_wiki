@@ -3,6 +3,7 @@ syntax = "proto3";
 package api.v1;
 
 import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
 
@@ -25,6 +26,11 @@ service PageManagementService {
 
   // ListTemplates returns all pages marked as templates (with template: true frontmatter).
   rpc ListTemplates(ListTemplatesRequest) returns (ListTemplatesResponse);
+
+  // WatchPage provides real-time streaming updates when a page's content changes.
+  // Emits the current version_hash when the content changes on the server.
+  // Clients can use this to re-fetch and re-render the page content.
+  rpc WatchPage(WatchPageRequest) returns (stream WatchPageResponse);
 }
 
 // Create Page
@@ -195,4 +201,23 @@ message TemplateInfo {
 
   // Optional description from frontmatter.
   string description = 3;
+}
+
+// Watch Page
+message WatchPageRequest {
+  // The page identifier to watch for changes.
+  string page_name = 1;
+
+  // Optional: interval in milliseconds for checking updates (default: 1000ms).
+  // Minimum 100ms to prevent excessive server load.
+  optional int32 check_interval_ms = 2;
+}
+
+message WatchPageResponse {
+  // The current version_hash of the page content.
+  // When this changes, the client should re-fetch the page.
+  string version_hash = 1;
+
+  // The file modification time of the page on disk.
+  google.protobuf.Timestamp last_modified = 2;
 }

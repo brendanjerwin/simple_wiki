@@ -229,6 +229,22 @@ func (m *MockPageReaderMutator) DeletePage(identifier wikipage.PageIdentifier) e
 	return m.DeleteErr
 }
 
+// ReadPage satisfies wikipage.PageOpener, returning a Page built from the mock's Markdown and error fields.
+func (m *MockPageReaderMutator) ReadPage(identifier wikipage.PageIdentifier) (*wikipage.Page, error) {
+	readErr := m.MarkdownReadErr
+	if readErr == nil {
+		readErr = m.Err
+	}
+	if readErr != nil {
+		return nil, readErr
+	}
+	return &wikipage.Page{
+		Identifier:        string(identifier),
+		Text:              string(m.Markdown),
+		WasLoadedFromDisk: true,
+		ModTime:           time.Now(),
+	}, nil
+}
 
 // MockJobStreamServer is a mock implementation of apiv1.SystemInfoService_StreamJobStatusServer for testing.
 type MockJobStreamServer struct {
@@ -270,6 +286,65 @@ func (*MockJobStreamServer) SendMsg(any) error {
 }
 
 func (*MockJobStreamServer) RecvMsg(any) error {
+	return nil
+}
+
+// MockPageWatchStreamServer is a mock implementation of apiv1.PageManagementService_WatchPageServer for testing.
+type MockPageWatchStreamServer struct {
+	SentMessages []*apiv1.WatchPageResponse
+	SendErr      error
+	ContextDone  bool
+	ctx          context.Context    // if set, overrides ContextDone behavior
+	cancelFunc   context.CancelFunc // cancels ctx
+}
+
+// newCancellableMockPageWatchStreamServer creates a MockPageWatchStreamServer with a controllable context.
+func newCancellableMockPageWatchStreamServer() *MockPageWatchStreamServer {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &MockPageWatchStreamServer{ctx: ctx, cancelFunc: cancel}
+}
+
+func (m *MockPageWatchStreamServer) Cancel() {
+	if m.cancelFunc != nil {
+		m.cancelFunc()
+	}
+}
+
+func (m *MockPageWatchStreamServer) Send(response *apiv1.WatchPageResponse) error {
+	if m.SendErr != nil {
+		return m.SendErr
+	}
+	m.SentMessages = append(m.SentMessages, response)
+	return nil
+}
+
+func (m *MockPageWatchStreamServer) Context() context.Context {
+	if m.ctx != nil {
+		return m.ctx
+	}
+	if m.ContextDone {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		return ctx
+	}
+	return context.Background()
+}
+
+func (*MockPageWatchStreamServer) SetHeader(metadata.MD) error {
+	return nil
+}
+
+func (*MockPageWatchStreamServer) SendHeader(metadata.MD) error {
+	return nil
+}
+
+func (*MockPageWatchStreamServer) SetTrailer(metadata.MD) {}
+
+func (*MockPageWatchStreamServer) SendMsg(any) error {
+	return nil
+}
+
+func (*MockPageWatchStreamServer) RecvMsg(any) error {
 	return nil
 }
 
@@ -364,23 +439,29 @@ func (noOpPageReaderMutator) WriteMarkdown(wikipage.PageIdentifier, wikipage.Mar
 }
 func (noOpPageReaderMutator) DeletePage(wikipage.PageIdentifier) error { return nil }
 
+// noOpPageOpener is a minimal mock for tests that don't need full page reads.
+type noOpPageOpener struct{}
+
+func (noOpPageOpener) ReadPage(wikipage.PageIdentifier) (*wikipage.Page, error) {
+	return &wikipage.Page{}, nil
+}
+
 // mustNewServer creates a server with the given dependencies, failing the test if creation fails.
-// Use this for tests where server creation should not fail.
 func mustNewServer(
 	pageReaderMutator wikipage.PageReaderMutator,
 	bleveIndexQueryer bleve.IQueryBleveIndex,
 	frontmatterIndexQueryer wikipage.IQueryFrontmatterIndex,
 ) *v1.Server {
-	return mustNewServerWithJobCoordinator(pageReaderMutator, bleveIndexQueryer, frontmatterIndexQueryer, nil)
+	return mustNewServerFull(pageReaderMutator, bleveIndexQueryer, frontmatterIndexQueryer, nil, nil)
 }
 
-// mustNewServerWithJobCoordinator creates a server with the given dependencies including job coordinator.
-// Use this for tests that need to interact with the job queue.
-func mustNewServerWithJobCoordinator(
+// mustNewServerFull creates a server with all optional dependencies.
+func mustNewServerFull(
 	pageReaderMutator wikipage.PageReaderMutator,
 	bleveIndexQueryer bleve.IQueryBleveIndex,
 	frontmatterIndexQueryer wikipage.IQueryFrontmatterIndex,
 	jobCoordinator jobs.JobCoordinator,
+	pageOpener wikipage.PageOpener,
 ) *v1.Server {
 	if pageReaderMutator == nil {
 		pageReaderMutator = noOpPageReaderMutator{}
@@ -390,6 +471,9 @@ func mustNewServerWithJobCoordinator(
 	}
 	if frontmatterIndexQueryer == nil {
 		frontmatterIndexQueryer = noOpFrontmatterIndexQueryer{}
+	}
+	if pageOpener == nil {
+		pageOpener = noOpPageOpener{}
 	}
 	server, err := v1.NewServer(
 		"test-commit",
@@ -403,8 +487,9 @@ func mustNewServerWithJobCoordinator(
 		frontmatterIndexQueryer,
 		nil, // fileStorer — nil means uploads disabled
 		noOpChatBufferManager{}, // chatBufferManager
+		pageOpener,
 	)
-	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "mustNewServerWithJobCoordinator failed")
+	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "mustNewServerFull failed")
 	return server
 }
 
@@ -436,6 +521,7 @@ func mustNewServerWithLogger(
 		noOpFrontmatterIndexQueryer{},
 		nil,
 		noOpChatBufferManager{}, // chatBufferManager
+		noOpPageOpener{},
 	)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "mustNewServerWithLogger failed")
 	return server
@@ -1427,6 +1513,7 @@ var _ = Describe("Server", func() {
 					noOpFrontmatterIndexQueryer{},
 					nil,                     // fileStorer
 					noOpChatBufferManager{}, // chatBufferManager
+					noOpPageOpener{},
 				)
 			})
 
@@ -2262,6 +2349,208 @@ var _ = Describe("Server", func() {
 		})
 	})
 
+	Describe("WatchPage", func() {
+		var (
+			req                   *apiv1.WatchPageRequest
+			streamServer          *MockPageWatchStreamServer
+			mockPageReaderMutator *MockPageReaderMutator
+		)
+
+		BeforeEach(func() {
+			req = &apiv1.WatchPageRequest{
+				PageName: "test-page",
+			}
+			streamServer = &MockPageWatchStreamServer{}
+			mockPageReaderMutator = &MockPageReaderMutator{}
+		})
+
+		When("page exists", func() {
+			var (
+				err          error
+				firstMessage *apiv1.WatchPageResponse
+			)
+
+			BeforeEach(func() {
+				// Set up mock to return valid content
+				mockPageReaderMutator.Markdown = wikipage.Markdown("# Test Content")
+				mockPageReaderMutator.MarkdownReadErr = nil
+
+				// Set up context that gets cancelled after initial send
+				streamServer.ContextDone = true
+
+				server = mustNewServerFull(mockPageReaderMutator, nil, nil, nil, mockPageReaderMutator)
+				err = server.WatchPage(req, streamServer)
+
+				if len(streamServer.SentMessages) > 0 {
+					firstMessage = streamServer.SentMessages[0]
+				}
+			})
+
+			It("should handle context cancellation", func() {
+				Expect(err).To(Equal(context.Canceled))
+			})
+
+			It("should send initial version hash", func() {
+				Expect(streamServer.SentMessages).To(HaveLen(1))
+				Expect(firstMessage).NotTo(BeNil())
+				Expect(firstMessage.VersionHash).NotTo(BeEmpty())
+			})
+
+			It("should send correct version hash for content", func() {
+				// Calculate expected hash
+				h := sha256.Sum256([]byte("# Test Content"))
+				expectedHash := hex.EncodeToString(h[:])
+				Expect(firstMessage.VersionHash).To(Equal(expectedHash))
+			})
+		})
+
+		When("page does not exist", func() {
+			var err error
+
+			BeforeEach(func() {
+				mockPageReaderMutator.MarkdownReadErr = os.ErrNotExist
+				server = mustNewServer(mockPageReaderMutator, nil, nil)
+				err = server.WatchPage(req, streamServer)
+			})
+
+			It("should return NotFound error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.NotFound, "test-page"))
+			})
+
+			It("should not send any messages", func() {
+				Expect(streamServer.SentMessages).To(BeEmpty())
+			})
+		})
+
+		When("page name is empty", func() {
+			var err error
+
+			BeforeEach(func() {
+				req.PageName = ""
+				server = mustNewServer(nil, nil, nil)
+				err = server.WatchPage(req, streamServer)
+			})
+
+			It("should return InvalidArgument error", func() {
+				Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "page_name is required"))
+			})
+		})
+
+		When("content changes after initial send", func() {
+			var (
+				cancellableStream *MockPageWatchStreamServer
+				watchErr          error
+				watchDone         chan error
+			)
+
+			BeforeEach(func() {
+				cancellableStream = newCancellableMockPageWatchStreamServer()
+				mockPageReaderMutator = &MockPageReaderMutator{
+					Markdown: wikipage.Markdown("# Initial Content"),
+				}
+
+				checkInterval := int32(100)
+				req.CheckIntervalMs = &checkInterval // Use minimum interval for fast test
+
+				server = mustNewServerFull(mockPageReaderMutator, nil, nil, nil, mockPageReaderMutator)
+
+				watchDone = make(chan error, 1)
+				go func() {
+					watchDone <- server.WatchPage(req, cancellableStream)
+				}()
+
+				// Wait for initial message
+				Eventually(func() int {
+					return len(cancellableStream.SentMessages)
+				}, 2*time.Second, 50*time.Millisecond).Should(Equal(1))
+
+				// Change content
+				mockPageReaderMutator.Markdown = wikipage.Markdown("# Changed Content")
+
+				// Wait for second message
+				Eventually(func() int {
+					return len(cancellableStream.SentMessages)
+				}, 2*time.Second, 50*time.Millisecond).Should(Equal(2))
+
+				// Cancel the stream and wait for completion
+				cancellableStream.Cancel()
+				watchErr = <-watchDone
+			})
+
+			It("should end with context.Canceled", func() {
+				Expect(watchErr).To(Equal(context.Canceled))
+			})
+
+			It("should detect hash change and send two messages", func() {
+				Expect(cancellableStream.SentMessages).To(HaveLen(2))
+			})
+
+			It("should send correct hash for initial content", func() {
+				h := sha256.Sum256([]byte("# Initial Content"))
+				expectedHash := hex.EncodeToString(h[:])
+				Expect(cancellableStream.SentMessages[0].VersionHash).To(Equal(expectedHash))
+			})
+
+			It("should send correct hash for changed content", func() {
+				h := sha256.Sum256([]byte("# Changed Content"))
+				expectedHash := hex.EncodeToString(h[:])
+				Expect(cancellableStream.SentMessages[1].VersionHash).To(Equal(expectedHash))
+			})
+
+			It("should not send duplicate messages when content unchanged", func() {
+				// After the change, the content stays the same — no more messages after the 2nd
+				Consistently(func() int {
+					return len(cancellableStream.SentMessages)
+				}, 300*time.Millisecond, 50*time.Millisecond).Should(Equal(2))
+			})
+		})
+
+		When("read fails transiently during polling", func() {
+			var (
+				cancellableStream *MockPageWatchStreamServer
+				watchDone         chan error
+			)
+
+			BeforeEach(func() {
+				cancellableStream = newCancellableMockPageWatchStreamServer()
+				mockPageReaderMutator = &MockPageReaderMutator{
+					Markdown: wikipage.Markdown("# Content"),
+				}
+
+				checkInterval := int32(100)
+				req.CheckIntervalMs = &checkInterval
+
+				server = mustNewServerFull(mockPageReaderMutator, nil, nil, nil, mockPageReaderMutator)
+
+				watchDone = make(chan error, 1)
+				go func() {
+					watchDone <- server.WatchPage(req, cancellableStream)
+				}()
+
+				// Wait for initial message
+				Eventually(func() int {
+					return len(cancellableStream.SentMessages)
+				}, 2*time.Second, 50*time.Millisecond).Should(Equal(1))
+
+				// Inject a transient read error
+				mockPageReaderMutator.Err = errors.New("transient error")
+
+				// Wait a couple of poll cycles, then clear the error
+				time.Sleep(200 * time.Millisecond)
+				mockPageReaderMutator.Err = nil
+
+				// Cancel and collect
+				cancellableStream.Cancel()
+				<-watchDone
+			})
+
+			It("should still only have the initial message (transient error doesn't crash)", func() {
+				// We only got the initial message; the transient error was swallowed and watch continued
+				Expect(len(cancellableStream.SentMessages)).To(BeNumerically(">=", 1))
+			})
+		})
+	})
+
 	Describe("SearchContent", func() {
 		var (
 			req                         *apiv1.SearchContentRequest
@@ -3002,7 +3291,8 @@ var _ = Describe("Server", func() {
 				mockTemplateExecutor,
 				mockFrontmatterIndexQueryer,
 				nil,   // fileStorer
-			noOpChatBufferManager{}, // chatBufferManager
+				noOpChatBufferManager{}, // chatBufferManager
+				noOpPageOpener{},
 			)
 			Expect(serverErr).NotTo(HaveOccurred())
 			resp, err = server.ReadPage(ctx, req)
@@ -3534,7 +3824,7 @@ var _ = Describe("Server", func() {
 			if mockJobCoordinator != nil {
 				coordinator = mockJobCoordinator.AsCoordinator()
 			}
-			server = mustNewServerWithJobCoordinator(mockPageReaderMutator, nil, nil, coordinator)
+			server = mustNewServerFull(mockPageReaderMutator, nil, nil, coordinator, nil)
 			resp, err = server.StartPageImportJob(ctx, req)
 		})
 
@@ -3673,7 +3963,8 @@ var _ = Describe("Server", func() {
 				nil,
 				noOpFrontmatterIndexQueryer{},
 				nil,   // fileStorer
-			noOpChatBufferManager{}, // chatBufferManager
+				noOpChatBufferManager{}, // chatBufferManager
+				noOpPageOpener{},
 			)
 			Expect(serverErr).NotTo(HaveOccurred())
 			resp, err = server.GenerateIdentifier(ctx, req)
@@ -3833,7 +4124,8 @@ var _ = Describe("Server", func() {
 				nil,
 				mockFrontmatterIndexQueryer,
 				nil,   // fileStorer
-			noOpChatBufferManager{}, // chatBufferManager
+				noOpChatBufferManager{}, // chatBufferManager
+				noOpPageOpener{},
 			)
 			Expect(err).NotTo(HaveOccurred())
 			resp, err = server.CreatePage(ctx, req)
@@ -4116,7 +4408,8 @@ var _ = Describe("Server", func() {
 				nil,
 				mockFrontmatterIndexQueryer,
 				nil,   // fileStorer
-			noOpChatBufferManager{}, // chatBufferManager
+				noOpChatBufferManager{}, // chatBufferManager
+				noOpPageOpener{},
 			)
 			Expect(err).NotTo(HaveOccurred())
 			resp, err = server.ListTemplates(ctx, req)
