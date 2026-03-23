@@ -17,6 +17,7 @@ import (
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/index/bleve"
 	"github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
+	"github.com/brendanjerwin/simple_wiki/pkg/chatbuffer"
 	"github.com/brendanjerwin/simple_wiki/pkg/jobs"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
@@ -384,6 +385,43 @@ type noOpBleveIndexQueryer struct{}
 
 func (noOpBleveIndexQueryer) Query(string) ([]bleve.SearchResult, error) { return nil, nil }
 
+// noOpChatBufferManager is a minimal mock for tests that don't need chat functionality.
+type noOpChatBufferManager struct{}
+
+func (noOpChatBufferManager) AddUserMessage(string, string, string) (string, error) {
+	return "", nil
+}
+func (noOpChatBufferManager) AddAssistantMessage(string, string, string) (string, error) {
+	return "", nil
+}
+func (noOpChatBufferManager) EditMessage(string, string) error {
+	return nil
+}
+func (noOpChatBufferManager) AddReaction(string, string, string) error {
+	return nil
+}
+func (noOpChatBufferManager) GetMessages(string) []*chatbuffer.Message {
+	return nil
+}
+func (noOpChatBufferManager) SubscribeToPage(string) (<-chan chatbuffer.Event, func()) {
+	ch := make(chan chatbuffer.Event)
+	close(ch)
+	return ch, func() {}
+}
+func (noOpChatBufferManager) SubscribeToPageWithReplay(string) ([]*chatbuffer.Message, <-chan chatbuffer.Event, func()) {
+	ch := make(chan chatbuffer.Event)
+	close(ch)
+	return nil, ch, func() {}
+}
+func (noOpChatBufferManager) SubscribeToChannel() (<-chan *chatbuffer.Message, func()) {
+	ch := make(chan *chatbuffer.Message)
+	close(ch)
+	return ch, func() {}
+}
+func (noOpChatBufferManager) HasChannelSubscribers() bool {
+	return false
+}
+
 // noOpPageReaderMutator is a minimal mock for tests that don't need page operations.
 type noOpPageReaderMutator struct{}
 
@@ -448,6 +486,7 @@ func mustNewServerFull(
 		nil, // templateExecutor is optional
 		frontmatterIndexQueryer,
 		nil, // fileStorer — nil means uploads disabled
+		noOpChatBufferManager{}, // chatBufferManager
 		pageOpener,
 	)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "mustNewServerFull failed")
@@ -481,6 +520,7 @@ func mustNewServerWithLogger(
 		nil,
 		noOpFrontmatterIndexQueryer{},
 		nil,
+		noOpChatBufferManager{}, // chatBufferManager
 		noOpPageOpener{},
 	)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "mustNewServerWithLogger failed")
@@ -1471,9 +1511,10 @@ var _ = Describe("Server", func() {
 					nil, // markdownRenderer
 					nil, // templateExecutor
 					noOpFrontmatterIndexQueryer{},
-					nil,   // fileStorer
+					nil,                     // fileStorer
+					noOpChatBufferManager{}, // chatBufferManager
 					noOpPageOpener{},
-					)
+				)
 			})
 
 			It("should return an error", func() {
@@ -3250,6 +3291,7 @@ var _ = Describe("Server", func() {
 				mockTemplateExecutor,
 				mockFrontmatterIndexQueryer,
 				nil,   // fileStorer
+				noOpChatBufferManager{}, // chatBufferManager
 				noOpPageOpener{},
 			)
 			Expect(serverErr).NotTo(HaveOccurred())
@@ -3921,6 +3963,7 @@ var _ = Describe("Server", func() {
 				nil,
 				noOpFrontmatterIndexQueryer{},
 				nil,   // fileStorer
+				noOpChatBufferManager{}, // chatBufferManager
 				noOpPageOpener{},
 			)
 			Expect(serverErr).NotTo(HaveOccurred())
@@ -4081,6 +4124,7 @@ var _ = Describe("Server", func() {
 				nil,
 				mockFrontmatterIndexQueryer,
 				nil,   // fileStorer
+				noOpChatBufferManager{}, // chatBufferManager
 				noOpPageOpener{},
 			)
 			Expect(err).NotTo(HaveOccurred())
@@ -4364,6 +4408,7 @@ var _ = Describe("Server", func() {
 				nil,
 				mockFrontmatterIndexQueryer,
 				nil,   // fileStorer
+				noOpChatBufferManager{}, // chatBufferManager
 				noOpPageOpener{},
 			)
 			Expect(err).NotTo(HaveOccurred())

@@ -56,6 +56,7 @@ var _ = Describe("InventoryManagementService", func() {
 				nil,
 				mockFrontmatterIndexQueryer,
 				nil,
+				noOpChatBufferManager{}, // chatBufferManager
 				noOpPageOpener{},
 			)
 			Expect(serverErr).NotTo(HaveOccurred())
@@ -282,6 +283,7 @@ var _ = Describe("InventoryManagementService", func() {
 				nil,
 				noOpFrontmatterIndexQueryer{},
 				nil,
+				noOpChatBufferManager{}, // chatBufferManager
 				noOpPageOpener{},
 			)
 			Expect(serverErr).NotTo(HaveOccurred())
@@ -714,6 +716,7 @@ var _ = Describe("InventoryManagementService", func() {
 				nil,
 				mockFrontmatterIndexQueryer,
 				nil,
+				noOpChatBufferManager{}, // chatBufferManager
 				noOpPageOpener{},
 			)
 			Expect(serverErr).NotTo(HaveOccurred())
@@ -813,6 +816,7 @@ var _ = Describe("InventoryManagementService", func() {
 					nil,
 					mockFrontmatterIndexQueryer,
 					nil,
+					noOpChatBufferManager{}, // chatBufferManager
 					noOpPageOpener{},
 				)
 				Expect(serverErr).NotTo(HaveOccurred())
@@ -857,6 +861,7 @@ var _ = Describe("InventoryManagementService", func() {
 					nil,
 					mockFrontmatterIndexQueryer,
 					nil,
+					noOpChatBufferManager{}, // chatBufferManager
 					noOpPageOpener{},
 				)
 				Expect(serverErr).NotTo(HaveOccurred())
@@ -903,6 +908,7 @@ var _ = Describe("InventoryManagementService", func() {
 				nil,
 				noOpFrontmatterIndexQueryer{},
 				nil,
+				noOpChatBufferManager{}, // chatBufferManager
 				noOpPageOpener{},
 			)
 			Expect(serverErr).NotTo(HaveOccurred())

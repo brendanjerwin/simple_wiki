@@ -13,6 +13,7 @@ import (
 	grpcapi "github.com/brendanjerwin/simple_wiki/internal/grpc/api/v1"
 	wikimcp "github.com/brendanjerwin/simple_wiki/internal/mcp"
 	"github.com/brendanjerwin/simple_wiki/internal/observability"
+	"github.com/brendanjerwin/simple_wiki/pkg/chatbuffer"
 	"github.com/brendanjerwin/simple_wiki/server"
 	"github.com/brendanjerwin/simple_wiki/tailscale"
 	"github.com/gin-gonic/gin"
@@ -361,6 +362,7 @@ func BuildVanguardTranscoder(grpcServer *grpc.Server, ginRouter http.Handler) (h
 
 	// Single source of truth for service names to avoid drift between Vanguard and reflection.
 	serviceNames := []string{
+		"api.v1.ChatService",
 		"api.v1.FileStorageService",
 		"api.v1.Frontmatter",
 		"api.v1.InventoryManagementService",
@@ -407,11 +409,13 @@ func setupGRPCServer(
 	counters observability.RequestCounter,
 	logger *lumber.ConsoleLogger,
 ) (*grpc.Server, *grpcapi.Server, error) {
+	// Create chat buffer manager for per-page chat message storage
+	chatBufferMgr := chatbuffer.NewManager()
+
 	grpcAPIServer, err := grpcapi.NewServer(
 		commit, buildTime, site, site.BleveIndexQueryer, site.GetJobQueueCoordinator(),
 		logger, site.MarkdownRenderer, server.TemplateExecutor{}, site.FrontmatterIndexQueryer,
-		site.FileStorer,
-		site,
+		site.FileStorer, chatBufferMgr, site,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create gRPC server: %w", err)
