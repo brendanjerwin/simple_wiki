@@ -1,7 +1,7 @@
 import { showToast } from './toast-message.js';
 
 export async function printLabel(templateIdentifier: string): Promise<void> {
-  const dataIdentifier = window.simple_wiki?.pageName ?? '';
+  const dataIdentifier = globalThis.simple_wiki?.pageName ?? '';
   if (!dataIdentifier) {
     showToast('Cannot print: page name is not available', 'error', 5);
     return;
@@ -80,7 +80,7 @@ export function initPrintMenu(): void {
           void printLabel(identifier);
         });
         menuItem.appendChild(link);
-        insertAfter.insertAdjacentElement('afterend', menuItem);
+        insertAfter.after(menuItem);
         insertAfter = menuItem;
       });
     })
