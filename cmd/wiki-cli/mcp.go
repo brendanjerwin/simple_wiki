@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"math"
+	"net/url"
 	"time"
 
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
@@ -13,6 +14,7 @@ import (
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	cli "gopkg.in/urfave/cli.v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
@@ -50,7 +52,7 @@ This command is designed to be spawned as a subprocess by Claude Code via:
 
 // runMCPServer starts the stdio MCP server with channel capability and maintains
 // a streaming subscription to the wiki's ChatService.
-func runMCPServer(baseURL string) error {
+func runMCPServer(baseURL string) (retErr error) {
 	// Add hook to inject claude/channel experimental capability
 	hooks := &mcpserver.Hooks{
 		OnAfterInitialize: []mcpserver.OnAfterInitializeFunc{
@@ -76,7 +78,11 @@ func runMCPServer(baseURL string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create gRPC connection: %w", err)
 	}
-	defer conn.Close()
+	defer func() {
+		if err := conn.Close(); err != nil && retErr == nil {
+			retErr = fmt.Errorf("failed to close gRPC connection: %w", err)
+		}
+	}()
 
 	// Create gRPC clients and register MCP tool handlers
 	clients := createAPIClients(conn)
@@ -93,20 +99,31 @@ func runMCPServer(baseURL string) error {
 }
 
 // createGRPCConn creates a gRPC connection to the wiki server.
+// For https:// URLs, TLS credentials are used. For http:// URLs, insecure credentials are used.
 func createGRPCConn(baseURL string) (*grpc.ClientConn, error) {
-	// Extract host from baseURL (strip https://)
-	host := baseURL
-	if len(host) > 8 && host[:8] == "https://" {
-		host = host[8:]
-	} else if len(host) > 7 && host[:7] == "http://" {
-		host = host[7:]
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid base URL: %w", err)
 	}
 
-	// Connect using gRPC with TLS (for Tailscale URLs)
-	return grpc.NewClient(
-		host+":443",
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
+	host := u.Host
+	var transportCreds grpc.DialOption
+	switch u.Scheme {
+	case "https":
+		if u.Port() == "" {
+			host += ":443"
+		}
+		transportCreds = grpc.WithTransportCredentials(credentials.NewClientTLSFromCert(nil, ""))
+	case "http":
+		if u.Port() == "" {
+			host += ":80"
+		}
+		transportCreds = grpc.WithTransportCredentials(insecure.NewCredentials())
+	default:
+		return nil, fmt.Errorf("unsupported URL scheme %q: must be http or https", u.Scheme)
+	}
+
+	return grpc.NewClient(host, transportCreds)
 }
 
 // apiClients holds gRPC clients for all wiki services.
