@@ -71,7 +71,7 @@ describe('PageAutoRefresh', () => {
         });
 
         // Call private method directly to test isolation from stream reconnect logic
-        const refreshPromise = (el as unknown as Record<string, () => Promise<void>>)['refreshPageContent']();
+        const refreshPromise = (el as unknown as { refreshPageContent: () => Promise<void> }).refreshPageContent();
         // refreshPageContent dispatches page-watch-error and re-throws — swallow the throw
         await Promise.all([
           refreshPromise.catch(() => { /* expected */ }),
