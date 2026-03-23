@@ -71,6 +71,10 @@ div.pure-menu-horizontal {
 
   display: flex;
   flex-direction: row;
+
+  /* Ensure menu appears above content on iOS Safari */
+  position: relative;
+  z-index: 10;
 }
 
 div.pure-menu-horizontal hr {
