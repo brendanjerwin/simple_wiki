@@ -165,6 +165,8 @@ func registerToolHandlers(s *mcpserver.MCPServer, clients *apiClients) {
 
 // maintainChatSubscription maintains a streaming gRPC subscription to SubscribeChatMessages.
 // It automatically reconnects with exponential backoff if the stream fails.
+// After a healthy long-running stream drops, the backoff resets to initialBackoffMs so
+// the next reconnect is fast. Rapid consecutive failures accumulate exponential backoff.
 func maintainChatSubscription(ctx context.Context, s *mcpserver.MCPServer, client apiv1.ChatServiceClient) {
 	backoffMs := initialBackoffMs
 
@@ -175,11 +177,19 @@ func maintainChatSubscription(ctx context.Context, s *mcpserver.MCPServer, clien
 		default:
 		}
 
+		start := time.Now()
+
 		// Try to subscribe
 		err := subscribeToChatMessages(ctx, s, client)
 		if err == nil {
 			// Clean disconnect (context cancelled)
 			return
+		}
+
+		// If the stream ran for a meaningful duration, the connection was healthy.
+		// Reset the backoff so the next reconnect starts quickly.
+		if time.Since(start) > time.Duration(initialBackoffMs)*time.Millisecond {
+			backoffMs = initialBackoffMs
 		}
 
 		// Log error and reconnect with backoff
@@ -191,7 +201,7 @@ func maintainChatSubscription(ctx context.Context, s *mcpserver.MCPServer, clien
 		case <-time.After(time.Duration(backoffMs) * time.Millisecond):
 		}
 
-		// Exponential backoff
+		// Exponential backoff for rapid consecutive failures
 		backoffMs = int(math.Min(float64(backoffMs)*backoffMultiplier, maxBackoffMs))
 	}
 }
