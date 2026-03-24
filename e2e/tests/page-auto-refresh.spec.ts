@@ -174,9 +174,9 @@ test.describe('Page auto-refresh and system-info page status', () => {
     });
     expect(updateResp.ok()).toBeTruthy();
 
-    // Wait longer than the WatchPage check interval (1s) to confirm the editor is not disrupted.
-    // An intentional pause is appropriate here: we are verifying a non-event (auto-refresh
-    // must NOT fire in edit mode), so we need time to pass before asserting nothing changed.
+    // Wait a few seconds to confirm the editor is not disrupted by any unexpected navigation,
+    // re-render, or auto-refresh behavior. This intentional pause lets us assert that nothing
+    // changes while the user is actively editing in a mode where auto-refresh is disabled.
     await page.waitForTimeout(3000);
 
     // The editor content must remain what the user typed, not the external update
