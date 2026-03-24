@@ -16,7 +16,7 @@ export function extractInventoryData(frontmatter: unknown): InventoryData {
     : null;
   const isContainer = !!(inventory && (Array.isArray(inventory.items) || inventory.items !== undefined));
   const isItem = !!(inventory && typeof inventory.container === 'string' && inventory.container !== '');
-  const currentContainer = (inventory && inventory.container) ?? '';
+  const currentContainer = inventory?.container ?? '';
 
   return { inventory, isContainer, isItem, currentContainer };
 }
@@ -98,7 +98,7 @@ function buildInventoryMenu(currentPage: string, frontmatter: unknown): void {
     children.appendChild(moveItem);
   }
 
-  utilitySection.insertAdjacentElement('afterend', submenu);
+  utilitySection.after(submenu);
 
   trigger.addEventListener('click', (e) => {
     e.preventDefault();
@@ -142,7 +142,7 @@ export function initInventoryMenu(): void {
     return;
   }
 
-  const currentPage = window.simple_wiki?.pageName ?? '';
+  const currentPage = globalThis.simple_wiki?.pageName ?? '';
   if (!currentPage) {
     return;
   }
