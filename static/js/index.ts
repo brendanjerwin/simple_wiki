@@ -28,16 +28,6 @@ import type { FrontmatterEditorDialog } from './web-components/frontmatter-edito
 // Set up global error handling to catch unhandled errors
 setupGlobalErrorHandler();
 
-declare global {
-  interface Window {
-    simple_wiki?: {
-      pageName?: string;
-      debounceMS?: number;
-      lastFetch?: number;
-    };
-  }
-}
-
 // Show any stored toast messages after page load
 document.addEventListener('DOMContentLoaded', () => {
   showStoredToast();
