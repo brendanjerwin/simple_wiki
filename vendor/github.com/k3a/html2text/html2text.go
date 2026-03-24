@@ -15,7 +15,7 @@ const (
 )
 
 var legacyLBR = WIN_LBR
-var badTagnamesRE = regexp.MustCompile(`^(head|script|style|a)($|\s+)`)
+var badTagnamesRE = regexp.MustCompile(`^(head|script|style|a)$`)
 var linkTagRE = regexp.MustCompile(`^(?i:a)(?:$|\s).*(?i:href)\s*=\s*('([^']*?)'|"([^"]*?)"|([^\s"'` + "`" + `=<>]+))`)
 var badLinkHrefRE = regexp.MustCompile(`javascript:`)
 var headersRE = regexp.MustCompile(`^(\/)?h[1-6]`)
@@ -31,7 +31,7 @@ type options struct {
 func newOptions() *options {
 	// apply defaults
 	return &options{
-		lbr: WIN_LBR,
+		lbr:        WIN_LBR,
 		keepSpaces: false,
 	}
 }
@@ -97,6 +97,15 @@ func parseHTMLEntity(entName string) (string, bool) {
 	}
 
 	return "", false
+}
+
+func firstWord(s string) string {
+	for i := 0; i < len(s); i++ {
+		if s[i] == ' ' {
+			return s[:i]
+		}
+	}
+	return s
 }
 
 // SetUnixLbr with argument true sets Unix-style line-breaks in output ("\n")
@@ -257,7 +266,8 @@ func HTML2TextWithOptions(html string, reqOpts ...Option) string {
 		case r == '>': // end of a tag
 			shouldOutput = true
 			tag := html[tagStart:i]
-			tagNameLowercase := strings.ToLower(tag)
+			tagContentLowercase := strings.ToLower(tag)
+			tagNameLowercase := firstWord(tagContentLowercase)
 
 			if tagNameLowercase == "/ul" || tagNameLowercase == "/ol" {
 				outBuf.WriteString(opts.lbr)
@@ -289,7 +299,7 @@ func HTML2TextWithOptions(html string, reqOpts ...Option) string {
 					outBuf.WriteString(">")
 					hrefs = hrefs[1:]
 				}
-			} else if opts.linksInnerText && linkTagRE.MatchString(tagNameLowercase) {
+			} else if opts.linksInnerText && linkTagRE.MatchString(tagContentLowercase) {
 				// parse link href
 				// add special handling for a tags
 				m := linkTagRE.FindStringSubmatch(tag)
