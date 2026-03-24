@@ -99,32 +99,50 @@ func runMCPServer(baseURL string) (retErr error) {
 	return mcpserver.ServeStdio(s)
 }
 
-// createGRPCConn creates a gRPC connection to the wiki server.
-// For https:// URLs, TLS credentials are used. For http:// URLs, insecure credentials are used.
-func createGRPCConn(baseURL string) (*grpc.ClientConn, error) {
-	u, err := url.Parse(baseURL)
-	if err != nil {
-		return nil, fmt.Errorf("invalid base URL: %w", err)
+// parseGRPCHost parses a wiki base URL and returns the gRPC target host:port and URL scheme.
+// For https:// URLs without an explicit port, :443 is appended.
+// For http:// URLs without an explicit port, :80 is appended.
+// Returns an error for invalid URLs or unsupported schemes.
+func parseGRPCHost(baseURL string) (host, scheme string, err error) {
+	u, parseErr := url.Parse(baseURL)
+	if parseErr != nil {
+		return "", "", fmt.Errorf("invalid base URL: %w", parseErr)
 	}
 
-	host := u.Host
-	var transportCreds grpc.DialOption
+	host = u.Host
 	switch u.Scheme {
 	case "https":
 		if u.Port() == "" {
 			host += ":443"
 		}
-		transportCreds = grpc.WithTransportCredentials(credentials.NewClientTLSFromCert(nil, ""))
 	case "http":
 		if u.Port() == "" {
 			host += ":80"
 		}
-		transportCreds = grpc.WithTransportCredentials(insecure.NewCredentials())
 	default:
-		return nil, fmt.Errorf("unsupported URL scheme %q: must be http or https", u.Scheme)
+		return "", "", fmt.Errorf("unsupported URL scheme %q: must be http or https", u.Scheme)
 	}
 
-	return grpc.NewClient(host, transportCreds)
+	return host, u.Scheme, nil
+}
+
+// createGRPCConn creates a gRPC connection to the wiki server.
+// For https:// URLs, TLS credentials are used. For http:// URLs, insecure credentials are used.
+func createGRPCConn(baseURL string) (*grpc.ClientConn, error) {
+	host, scheme, err := parseGRPCHost(baseURL)
+	if err != nil {
+		return nil, err
+	}
+
+	var transportCreds credentials.TransportCredentials
+	switch scheme {
+	case "https":
+		transportCreds = credentials.NewClientTLSFromCert(nil, "")
+	default: // "http" — scheme already validated by parseGRPCHost
+		transportCreds = insecure.NewCredentials()
+	}
+
+	return grpc.NewClient(host, grpc.WithTransportCredentials(transportCreds))
 }
 
 // apiClients holds gRPC clients for all wiki services.
@@ -164,6 +182,23 @@ func registerToolHandlers(s *mcpserver.MCPServer, clients *apiClients) {
 	apiv1mcp.ForwardToSystemInfoServiceClient(s, clients.systemInfo)
 }
 
+// computeBackoffAfterFailure returns the delay to wait before the next reconnect attempt
+// and the backoff value to carry into the following iteration.
+//
+// If streamDuration exceeds initialBackoffMs the connection is considered healthy and
+// the delay resets to initialBackoffMs (fast reconnect). Otherwise the current backoff
+// is kept, accumulating exponential growth on rapid consecutive failures. In both cases
+// the returned nextBackoffMs is the doubled value (capped at maxBackoffMs) ready for the
+// iteration after the next failure.
+func computeBackoffAfterFailure(currentBackoffMs int, streamDuration time.Duration) (delayMs, nextBackoffMs int) {
+	delayMs = currentBackoffMs
+	if streamDuration > time.Duration(initialBackoffMs)*time.Millisecond {
+		delayMs = initialBackoffMs
+	}
+	nextBackoffMs = int(math.Min(float64(delayMs)*backoffMultiplier, maxBackoffMs))
+	return delayMs, nextBackoffMs
+}
+
 // maintainChatSubscription maintains a streaming gRPC subscription to SubscribeChatMessages.
 // It automatically reconnects with exponential backoff if the stream fails.
 // After a healthy long-running stream drops, the backoff resets to initialBackoffMs so
@@ -187,23 +222,18 @@ func maintainChatSubscription(ctx context.Context, s *mcpserver.MCPServer, clien
 			return
 		}
 
-		// If the stream ran for a meaningful duration, the connection was healthy.
-		// Reset the backoff so the next reconnect starts quickly.
-		if time.Since(start) > time.Duration(initialBackoffMs)*time.Millisecond {
-			backoffMs = initialBackoffMs
-		}
+		delayMs, nextMs := computeBackoffAfterFailure(backoffMs, time.Since(start))
 
 		// Log error and reconnect with backoff
-		log.Printf("Chat subscription error: %v. Reconnecting in %dms...", err, backoffMs)
+		log.Printf("Chat subscription error: %v. Reconnecting in %dms...", err, delayMs)
 
 		select {
 		case <-ctx.Done():
 			return
-		case <-time.After(time.Duration(backoffMs) * time.Millisecond):
+		case <-time.After(time.Duration(delayMs) * time.Millisecond):
 		}
 
-		// Exponential backoff for rapid consecutive failures
-		backoffMs = int(math.Min(float64(backoffMs)*backoffMultiplier, maxBackoffMs))
+		backoffMs = nextMs
 	}
 }
 
