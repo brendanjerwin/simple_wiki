@@ -50,9 +50,9 @@ This command is designed to be spawned as a subprocess by Claude Code via:
 	}
 }
 
-// runMCPServer starts the stdio MCP server with channel capability and maintains
-// a streaming subscription to the wiki's ChatService.
-func runMCPServer(baseURL string) (retErr error) {
+// setupMCPServer creates the MCP server with channel capability and establishes
+// the gRPC connection. The caller is responsible for closing the returned conn.
+func setupMCPServer(baseURL string) (*mcpserver.MCPServer, *grpc.ClientConn, error) {
 	// Add hook to inject claude/channel experimental capability
 	hooks := &mcpserver.Hooks{
 		OnAfterInitialize: []mcpserver.OnAfterInitializeFunc{
@@ -77,7 +77,18 @@ func runMCPServer(baseURL string) (retErr error) {
 	// Create gRPC client connection
 	conn, err := createGRPCConn(baseURL)
 	if err != nil {
-		return fmt.Errorf("failed to create gRPC connection: %w", err)
+		return nil, nil, fmt.Errorf("failed to create gRPC connection: %w", err)
+	}
+
+	return s, conn, nil
+}
+
+// runMCPServer starts the stdio MCP server with channel capability and maintains
+// a streaming subscription to the wiki's ChatService.
+func runMCPServer(baseURL string) (retErr error) {
+	s, conn, err := setupMCPServer(baseURL)
+	if err != nil {
+		return err
 	}
 	defer func() {
 		if err := conn.Close(); err != nil && retErr == nil {

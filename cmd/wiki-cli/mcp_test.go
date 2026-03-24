@@ -10,6 +10,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"google.golang.org/grpc"
+	cli "gopkg.in/urfave/cli.v1"
 )
 
 // mockSubscribeChatMessagesStream implements apiv1.ChatService_SubscribeChatMessagesClient for testing.
@@ -32,6 +33,91 @@ type mockChatClient struct {
 func (m *mockChatClient) SubscribeChatMessages(ctx context.Context, in *apiv1.SubscribeChatMessagesRequest, opts ...grpc.CallOption) (apiv1.ChatService_SubscribeChatMessagesClient, error) {
 	return m.subscribeFn(ctx, in, opts...)
 }
+
+var _ = Describe("buildMCPCommand", func() {
+	var cmd cli.Command
+
+	BeforeEach(func() {
+		urlFlag := cli.StringFlag{
+			Name:  "url, u",
+			Usage: "wiki base URL",
+			Value: "http://localhost:8050",
+		}
+		cmd = buildMCPCommand(urlFlag)
+	})
+
+	It("should have name mcp", func() {
+		Expect(cmd.Name).To(Equal("mcp"))
+	})
+
+	It("should have a non-empty usage", func() {
+		Expect(cmd.Usage).NotTo(BeEmpty())
+	})
+
+	It("should include exactly one flag (the url flag)", func() {
+		Expect(cmd.Flags).To(HaveLen(1))
+	})
+
+	It("should have a non-nil action", func() {
+		Expect(cmd.Action).NotTo(BeNil())
+	})
+
+	When("the action is invoked with an unsupported URL scheme", func() {
+		var actionErr error
+
+		BeforeEach(func() {
+			app := cli.NewApp()
+			app.Commands = []cli.Command{cmd}
+			actionErr = app.Run([]string{"app", "mcp", "--url", "ftp://wiki.example.com"})
+		})
+
+		It("should return an error about the unsupported scheme", func() {
+			Expect(actionErr).To(MatchError(ContainSubstring("unsupported URL scheme")))
+		})
+	})
+})
+
+var _ = Describe("setupMCPServer", func() {
+	When("given a valid http URL", func() {
+		var s *mcpserver.MCPServer
+		var conn *grpc.ClientConn
+		var err error
+
+		BeforeEach(func() {
+			s, conn, err = setupMCPServer("http://localhost:1")
+		})
+
+		AfterEach(func() {
+			if conn != nil {
+				_ = conn.Close()
+			}
+		})
+
+		It("should not error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return a non-nil MCP server", func() {
+			Expect(s).NotTo(BeNil())
+		})
+
+		It("should return a non-nil gRPC connection", func() {
+			Expect(conn).NotTo(BeNil())
+		})
+	})
+
+	When("given an unsupported URL scheme", func() {
+		var err error
+
+		BeforeEach(func() {
+			_, _, err = setupMCPServer("ftp://wiki.example.com")
+		})
+
+		It("should return an error mentioning gRPC connection failure", func() {
+			Expect(err).To(MatchError(ContainSubstring("failed to create gRPC connection")))
+		})
+	})
+})
 
 var _ = Describe("parseGRPCHost", func() {
 	When("given an https URL without an explicit port", func() {
