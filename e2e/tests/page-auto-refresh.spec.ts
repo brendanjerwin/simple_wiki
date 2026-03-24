@@ -151,6 +151,40 @@ test.describe('Page auto-refresh and system-info page status', () => {
     expect(Math.abs(scrollAfter - scrollBefore)).toBeLessThan(50);
   });
 
+  test('auto-refresh does not disrupt active editing sessions', async ({ page, request }) => {
+    await page.goto(`/${TEST_PAGE}/edit`);
+
+    const textarea = page.locator('wiki-editor textarea');
+    await expect(textarea).toBeVisible({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
+
+    // Confirm the auto-refresh component is absent in edit mode
+    await expect(page.locator('page-auto-refresh')).not.toBeAttached();
+
+    // Type unique content and wait for auto-save to complete
+    const activeEditorContent = '# Active Editing\n\nUser is actively editing this content. Edits must not be overwritten.';
+    await textarea.fill(activeEditorContent);
+    await textarea.press('Space');
+    await expect(page.locator('wiki-editor .status-indicator')).toContainText('Saved', { timeout: 10000 });
+
+    // Simulate an external change via API (another user or session)
+    const externalContent = '# External Update\n\nThis content was changed externally while editing was active.';
+    const updateResp = await callPageAPI(request, 'UpdatePageContent', {
+      pageName: TEST_PAGE,
+      newContentMarkdown: externalContent,
+    });
+    expect(updateResp.ok()).toBeTruthy();
+
+    // Wait longer than the WatchPage check interval (1s) to confirm the editor is not disrupted.
+    // An intentional pause is appropriate here: we are verifying a non-event (auto-refresh
+    // must NOT fire in edit mode), so we need time to pass before asserting nothing changed.
+    await page.waitForTimeout(3000);
+
+    // The editor content must remain what the user typed, not the external update
+    const editorContent = await textarea.inputValue();
+    expect(editorContent).toContain('User is actively editing this content');
+    expect(editorContent).not.toContain('This content was changed externally');
+  });
+
   // Cleanup
   test('should clean up test page', async ({ request }) => {
     await callPageAPI(request, 'DeletePage', { pageName: TEST_PAGE });
