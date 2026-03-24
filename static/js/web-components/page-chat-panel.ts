@@ -219,7 +219,8 @@ export class PageChatPanel extends LitElement {
           left: 0;
           right: 0;
           width: 100%;
-          height: 60vh;
+          height: 60dvh;
+          max-height: var(--chat-panel-height, 60dvh);
           border-left: none;
           border-top: 1px solid var(--color-border-primary);
           border-radius: 12px 12px 0 0;
@@ -256,6 +257,7 @@ export class PageChatPanel extends LitElement {
   private chatClient: Client<typeof ChatService>;
   private markdownRenderer: ChatMarkdownRenderer;
   private _handleVisibilityChange: () => void;
+  private _handleViewportResize: () => void;
   private userHasScrolled = false;
 
   constructor() {
@@ -269,6 +271,7 @@ export class PageChatPanel extends LitElement {
     this.chatClient = createClient(ChatService, getGrpcWebTransport());
     this.markdownRenderer = new ChatMarkdownRenderer();
     this._handleVisibilityChange = this.handleVisibilityChange.bind(this);
+    this._handleViewportResize = this.handleViewportResize.bind(this);
 
     // Restore panel state from localStorage
     try {
@@ -281,6 +284,7 @@ export class PageChatPanel extends LitElement {
   override connectedCallback() {
     super.connectedCallback();
     document.addEventListener('visibilitychange', this._handleVisibilityChange);
+    window.visualViewport?.addEventListener('resize', this._handleViewportResize);
     if (this.page) {
       this.startStream();
     }
@@ -289,6 +293,7 @@ export class PageChatPanel extends LitElement {
   override disconnectedCallback() {
     super.disconnectedCallback();
     document.removeEventListener('visibilitychange', this._handleVisibilityChange);
+    window.visualViewport?.removeEventListener('resize', this._handleViewportResize);
     this.stopStream();
   }
 
@@ -458,6 +463,20 @@ export class PageChatPanel extends LitElement {
     }
 
     this.focusInput();
+  }
+
+  private handleViewportResize(): void {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+
+    // When the keyboard opens, visualViewport.height shrinks.
+    // Set a CSS custom property so the panel fits above the keyboard.
+    const panel = this.shadowRoot?.querySelector('.panel');
+    if (panel instanceof HTMLElement) {
+      const availableHeight = viewport.height;
+      panel.style.setProperty('--chat-panel-height', `${availableHeight * 0.9}px`);
+      panel.style.bottom = `${window.innerHeight - viewport.height - viewport.offsetTop}px`;
+    }
   }
 
   private handleVisibilityChange(): void {
