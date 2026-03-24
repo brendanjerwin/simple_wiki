@@ -117,6 +117,18 @@ const (
 	maxInventoryDepth        = 10               // Maximum depth for recursive inventory traversal
 	templateExecutionTimeout = 30 * time.Second // Timeout for template execution
 	timeoutMessage           = "  [Template execution timeout]"
+
+	// Template function name constants (used in FuncMaps and validation stubs)
+	funcNameShowInventory    = "ShowInventoryContentsOf"
+	funcNameLinkTo           = "LinkTo"
+	funcNameIsContainer      = "IsContainer"
+	funcNameFindBy           = "FindBy"
+	funcNameFindByPrefix     = "FindByPrefix"
+	funcNameFindByKeyExists  = "FindByKeyExistence"
+	funcNameChecklist        = "Checklist"
+	funcNameBlog             = "Blog"
+
+	templateTimeoutErrFmt = "template execution timed out after %v"
 )
 
 
@@ -468,6 +480,63 @@ func BuildIsContainer(query wikipage.IQueryFrontmatterIndex) func(string) bool {
 	}
 }
 
+// ExecuteChatTemplate executes a template string with a restricted set of macros
+// suitable for chat messages. Excludes interactive widget macros (Checklist, Blog)
+// that render web components inappropriate for chat bubbles. Includes timeout protection.
+func ExecuteChatTemplate(templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query wikipage.IQueryFrontmatterIndex) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), templateExecutionTimeout)
+	defer cancel()
+
+	return executeChatTemplateWorker(ctx, templateString, fm, site, query, make(map[string]bool))
+}
+
+func executeChatTemplateWorker(ctx context.Context, templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query wikipage.IQueryFrontmatterIndex, visited map[string]bool) ([]byte, error) {
+	select {
+	case <-ctx.Done():
+		return nil, fmt.Errorf(templateTimeoutErrFmt, templateExecutionTimeout)
+	default:
+	}
+
+	templateContext, err := ConstructTemplateContextFromFrontmatterWithVisited(fm, query, visited)
+	if err != nil {
+		return nil, fmt.Errorf("failed to construct template context: %w", err)
+	}
+
+	select {
+	case <-ctx.Done():
+		return nil, fmt.Errorf(templateTimeoutErrFmt, templateExecutionTimeout)
+	default:
+	}
+
+	tmpl, err := buildChatTemplateWithFunctions(ctx, templateString, site, query, templateContext)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build template: %w", err)
+	}
+
+	return executeTemplateInternal(ctx, tmpl, templateContext)
+}
+
+// buildChatTemplateWithFunctions creates a template with chat-safe functions only.
+// Excludes Checklist and Blog which render interactive web components.
+func buildChatTemplateWithFunctions(ctx context.Context, templateString string, site wikipage.PageReader, query wikipage.IQueryFrontmatterIndex, templateContext TemplateContext) (*template.Template, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+
+	funcs := template.FuncMap{
+		funcNameShowInventory:   BuildShowInventoryContentsOfWithContext(ctx, site, query, 0),
+		funcNameLinkTo:          BuildLinkTo(site, templateContext, query),
+		funcNameIsContainer:     BuildIsContainer(query),
+		funcNameFindBy:          query.QueryExactMatch,
+		funcNameFindByPrefix:    query.QueryPrefixMatch,
+		funcNameFindByKeyExists: query.QueryKeyExistence,
+	}
+
+	return template.New("page").Funcs(funcs).Parse(templateString)
+}
+
 // ExecuteTemplate executes a template string with the given frontmatter and site context.
 // Includes timeout protection to prevent infinite hangs.
 func ExecuteTemplate(templateString string, fm wikipage.FrontMatter, site wikipage.PageReader, query wikipage.IQueryFrontmatterIndex) ([]byte, error) {
@@ -489,7 +558,7 @@ func executeTemplateWorker(ctx context.Context, templateString string, fm wikipa
 	// Check context cancellation before starting
 	select {
 	case <-ctx.Done():
-		return nil, fmt.Errorf("template execution timed out after %v", templateExecutionTimeout)
+		return nil, fmt.Errorf(templateTimeoutErrFmt, templateExecutionTimeout)
 	default:
 	}
 
@@ -501,7 +570,7 @@ func executeTemplateWorker(ctx context.Context, templateString string, fm wikipa
 	// Check context cancellation after frontmatter construction
 	select {
 	case <-ctx.Done():
-		return nil, fmt.Errorf("template execution timed out after %v", templateExecutionTimeout)
+		return nil, fmt.Errorf(templateTimeoutErrFmt, templateExecutionTimeout)
 	default:
 	}
 
@@ -524,14 +593,14 @@ func buildTemplateWithFunctions(ctx context.Context, templateString string, site
 	}
 
 	funcs := template.FuncMap{
-		"ShowInventoryContentsOf": BuildShowInventoryContentsOfWithContext(ctx, site, query, 0),
-		"LinkTo":                  BuildLinkTo(site, templateContext, query),
-		"IsContainer":             BuildIsContainer(query),
-		"FindBy":                  query.QueryExactMatch,
-		"FindByPrefix":            query.QueryPrefixMatch,
-		"FindByKeyExistence":      query.QueryKeyExistence,
-		"Checklist":               BuildChecklist(templateContext),
-		"Blog":                    BuildBlog(templateContext, query, site),
+		funcNameShowInventory:   BuildShowInventoryContentsOfWithContext(ctx, site, query, 0),
+		funcNameLinkTo:          BuildLinkTo(site, templateContext, query),
+		funcNameIsContainer:     BuildIsContainer(query),
+		funcNameFindBy:          query.QueryExactMatch,
+		funcNameFindByPrefix:    query.QueryPrefixMatch,
+		funcNameFindByKeyExists: query.QueryKeyExistence,
+		funcNameChecklist:       BuildChecklist(templateContext),
+		funcNameBlog:            BuildBlog(templateContext, query, site),
 	}
 
 	return template.New("page").Funcs(funcs).Parse(templateString)
@@ -561,14 +630,14 @@ func executeTemplateInternal(ctx context.Context, tmpl *template.Template, templ
 // This map must be kept in sync with the runtime FuncMap in buildTemplateWithFunctions.
 func validationFuncMap() template.FuncMap {
 	return template.FuncMap{
-		"ShowInventoryContentsOf": func(string) string { return "" },
-		"LinkTo":                  func(string) string { return "" },
-		"IsContainer":             func(string) bool { return false },
-		"FindBy":                  func(string, string) []string { return nil },
-		"FindByPrefix":            func(string, string) []string { return nil },
-		"FindByKeyExistence":      func(string) []string { return nil },
-		"Checklist":               func(string) string { return "" },
-		"Blog":                    func(string, int) string { return "" },
+		funcNameShowInventory:   func(string) string { return "" },
+		funcNameLinkTo:          func(string) string { return "" },
+		funcNameIsContainer:     func(string) bool { return false },
+		funcNameFindBy:          func(string, string) []string { return nil },
+		funcNameFindByPrefix:    func(string, string) []string { return nil },
+		funcNameFindByKeyExists: func(string) []string { return nil },
+		funcNameChecklist:       func(string) string { return "" },
+		funcNameBlog:            func(string, int) string { return "" },
 	}
 }
 
