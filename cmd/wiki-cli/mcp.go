@@ -71,6 +71,7 @@ func runMCPServer(baseURL string) (retErr error) {
 		version,
 		mcpserver.WithInstructions(channelInstructions),
 		mcpserver.WithHooks(hooks),
+		mcpserver.WithToolCapabilities(false),
 	)
 
 	// Create gRPC client connection
