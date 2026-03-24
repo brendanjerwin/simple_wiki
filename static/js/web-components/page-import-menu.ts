@@ -28,5 +28,5 @@ export function initPageImportMenu(): void {
     dialog?.openDialog();
   });
   menuItem.appendChild(link);
-  utilitySection.insertAdjacentElement('afterend', menuItem);
+  utilitySection.after(menuItem);
 }
