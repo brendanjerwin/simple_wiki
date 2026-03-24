@@ -74,11 +74,6 @@ export class PageChatPanel extends LitElement {
         box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
       }
 
-      .fab.active {
-        color: var(--color-text-primary);
-        border-color: var(--color-text-muted);
-      }
-
       .panel {
         position: fixed;
         top: 0;
@@ -313,13 +308,15 @@ export class PageChatPanel extends LitElement {
   override render() {
     return html`
       ${sharedStyles}
-      <button
-        class="fab ${this.panelOpen ? 'active' : ''}"
-        @click=${this.togglePanel}
-        aria-label="Chat with Claude"
-      >
-        <i class="fa-solid ${this.panelOpen ? 'fa-xmark' : 'fa-robot'}"></i>
-      </button>
+      ${this.panelOpen ? nothing : html`
+        <button
+          class="fab"
+          @click=${this.togglePanel}
+          aria-label="Chat with Claude"
+        >
+          <i class="fa-solid fa-robot"></i>
+        </button>
+      `}
 
       <div class="panel ${this.panelOpen ? 'open' : ''}">
         <div class="panel-header">

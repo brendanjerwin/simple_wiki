@@ -61,14 +61,9 @@ describe('PageChatPanel', () => {
       expect(panel!.classList.contains('open')).to.be.true;
     });
 
-    it('should add active class to FAB', () => {
+    it('should hide the FAB', () => {
       const fab = el.shadowRoot!.querySelector('.fab');
-      expect(fab!.classList.contains('active')).to.be.true;
-    });
-
-    it('should show close icon instead of robot', () => {
-      const icon = el.shadowRoot!.querySelector('.fab i');
-      expect(icon!.classList.contains('fa-xmark')).to.be.true;
+      expect(fab).to.be.null;
     });
 
     it('should save state to localStorage', () => {
