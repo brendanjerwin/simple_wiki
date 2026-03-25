@@ -5,6 +5,7 @@ import type { PageChatPanel } from './page-chat-panel.js';
 
 // Stub localStorage before tests
 let localStorageStub: { getItem: SinonStub; setItem: SinonStub; removeItem: SinonStub };
+let fetchStub: SinonStub;
 
 describe('PageChatPanel', () => {
   beforeEach(() => {
@@ -13,12 +14,16 @@ describe('PageChatPanel', () => {
       setItem: stub(localStorage, 'setItem'),
       removeItem: stub(localStorage, 'removeItem'),
     };
+    // Stub fetch to prevent real network calls from pollChatStatus
+    fetchStub = stub(window, 'fetch');
+    fetchStub.resolves(new Response(new Uint8Array(0), { status: 200 }));
   });
 
   afterEach(() => {
     localStorageStub.getItem.restore();
     localStorageStub.setItem.restore();
     localStorageStub.removeItem.restore();
+    fetchStub.restore();
   });
 
   describe('when Claude is not connected', () => {
@@ -29,9 +34,15 @@ describe('PageChatPanel', () => {
       el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
     });
 
-    it('should not render the FAB', () => {
+    it('should render the FAB with disabled class', () => {
       const fab = el.shadowRoot!.querySelector('.fab');
-      expect(fab).to.be.null;
+      expect(fab).to.not.be.null;
+      expect(fab!.classList.contains('disabled')).to.be.true;
+    });
+
+    it('should have aria-disabled on the FAB', () => {
+      const fab = el.shadowRoot!.querySelector('.fab');
+      expect(fab!.getAttribute('aria-disabled')).to.equal('true');
     });
 
     it('should show disconnected banner when panel is open', async () => {
@@ -111,7 +122,7 @@ describe('PageChatPanel', () => {
     });
   });
 
-  describe('when FAB is clicked twice', () => {
+  describe('when FAB is clicked then close button is clicked', () => {
     let el: PageChatPanel;
 
     beforeEach(async () => {
@@ -122,7 +133,8 @@ describe('PageChatPanel', () => {
       const fab = el.shadowRoot!.querySelector('.fab') as HTMLElement;
       fab.click();
       await el.updateComplete;
-      fab.click();
+      const closeBtn = el.shadowRoot!.querySelector('.close-button') as HTMLElement;
+      closeBtn.click();
       await el.updateComplete;
     });
 
@@ -287,6 +299,134 @@ describe('PageChatPanel', () => {
         (call) => call.args[0] === 'visibilitychange',
       );
       expect(visibilityCalls.length).to.be.greaterThan(0);
+    });
+  });
+
+  describe('error banner', () => {
+    let el: PageChatPanel;
+
+    beforeEach(async () => {
+      localStorageStub.getItem.returns('true');
+      el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+      el.claudeConnected = true;
+      el.streamState = 'disconnected';
+      el.error = new Error('Connection lost');
+      await el.updateComplete;
+    });
+
+    it('should display the error banner', () => {
+      const banner = el.shadowRoot!.querySelector('.status-banner.disconnected');
+      expect(banner).to.not.be.null;
+    });
+
+    it('should show the error message', () => {
+      const banner = el.shadowRoot!.querySelector('.status-banner.disconnected');
+      expect(banner!.textContent).to.contain('Connection lost');
+    });
+  });
+
+  describe('thinking indicator', () => {
+    describe('when waiting for assistant', () => {
+      let el: PageChatPanel;
+
+      beforeEach(async () => {
+        localStorageStub.getItem.returns('true');
+        el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+        el.waitingForAssistant = true;
+        await el.updateComplete;
+      });
+
+      it('should show the thinking indicator', () => {
+        const indicator = el.shadowRoot!.querySelector('.thinking-indicator');
+        expect(indicator).to.not.be.null;
+      });
+
+      it('should contain thinking text', () => {
+        const indicator = el.shadowRoot!.querySelector('.thinking-indicator');
+        expect(indicator!.textContent).to.contain('Claude is thinking');
+      });
+    });
+
+    describe('when not waiting for assistant', () => {
+      let el: PageChatPanel;
+
+      beforeEach(async () => {
+        localStorageStub.getItem.returns('true');
+        el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+        el.waitingForAssistant = false;
+        await el.updateComplete;
+      });
+
+      it('should not show the thinking indicator', () => {
+        const indicator = el.shadowRoot!.querySelector('.thinking-indicator');
+        expect(indicator).to.be.null;
+      });
+    });
+  });
+
+  describe('when Claude is connected', () => {
+    let el: PageChatPanel;
+
+    beforeEach(async () => {
+      localStorageStub.getItem.returns('true');
+      el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+      el.claudeConnected = true;
+      await el.updateComplete;
+    });
+
+    it('should enable the textarea', () => {
+      const textarea = el.shadowRoot!.querySelector('textarea');
+      expect(textarea!.disabled).to.be.false;
+    });
+
+    it('should enable the send button', () => {
+      const btn = el.shadowRoot!.querySelector('.send-button') as HTMLButtonElement;
+      expect(btn.disabled).to.be.false;
+    });
+  });
+
+  describe('inert attribute on panel', () => {
+    let el: PageChatPanel;
+
+    beforeEach(async () => {
+      localStorageStub.getItem.returns(null);
+      el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+    });
+
+    describe('when panel is closed', () => {
+      it('should have inert attribute', () => {
+        const panel = el.shadowRoot!.querySelector('.panel');
+        expect(panel!.hasAttribute('inert')).to.be.true;
+      });
+    });
+
+    describe('when panel is open', () => {
+      beforeEach(async () => {
+        el.panelOpen = true;
+        await el.updateComplete;
+      });
+
+      it('should not have inert attribute', () => {
+        const panel = el.shadowRoot!.querySelector('.panel');
+        expect(panel!.hasAttribute('inert')).to.be.false;
+      });
+    });
+  });
+
+  describe('reconnecting state', () => {
+    let el: PageChatPanel;
+
+    beforeEach(async () => {
+      localStorageStub.getItem.returns('true');
+      el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+      el.streamState = 'reconnecting';
+      await el.updateComplete;
+    });
+
+    it('should show the reconnecting banner', () => {
+      const banner = el.shadowRoot!.querySelector('.status-banner.reconnecting');
+      expect(banner).to.not.be.null;
+      expect(banner!.textContent).to.contain('Reconnecting');
     });
   });
 

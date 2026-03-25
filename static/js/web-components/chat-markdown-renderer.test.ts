@@ -94,6 +94,33 @@ describe('ChatMarkdownRenderer', () => {
       });
     });
 
+    describe('when cache exceeds max size', () => {
+      beforeEach(async () => {
+        mockClient.renderMarkdown.resolves({ renderedHtml: '<p>result</p>' });
+        // Fill the cache beyond MAX_CACHE_SIZE (200)
+        for (let i = 0; i < 201; i++) {
+          await renderer.renderMarkdown(`content-${i}`);
+        }
+      });
+
+      it('should have called the RPC for each unique content', () => {
+        expect(mockClient.renderMarkdown.callCount).to.equal(201);
+      });
+
+      it('should evict the oldest entry and re-fetch it', async () => {
+        // content-0 was evicted; requesting it again should trigger another RPC call
+        await renderer.renderMarkdown('content-0');
+        expect(mockClient.renderMarkdown.callCount).to.equal(202);
+      });
+
+      it('should still cache recent entries', async () => {
+        // content-200 was the most recent; requesting it should use cache
+        await renderer.renderMarkdown('content-200');
+        // No additional RPC call
+        expect(mockClient.renderMarkdown.callCount).to.equal(201);
+      });
+    });
+
     describe('when the RPC fails', () => {
       let error: Error;
 

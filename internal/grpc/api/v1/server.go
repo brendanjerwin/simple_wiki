@@ -915,7 +915,13 @@ func (s *Server) ReadPage(_ context.Context, req *apiv1.ReadPageRequest) (*apiv1
 
 // RenderMarkdown implements the RenderMarkdown RPC.
 // Renders arbitrary markdown content to HTML with chat-safe template macros.
-func (s *Server) RenderMarkdown(_ context.Context, req *apiv1.RenderMarkdownRequest) (*apiv1.RenderMarkdownResponse, error) {
+func (s *Server) RenderMarkdown(ctx context.Context, req *apiv1.RenderMarkdownRequest) (*apiv1.RenderMarkdownResponse, error) {
+	select {
+	case <-ctx.Done():
+		return nil, status.FromContextError(ctx.Err()).Err()
+	default:
+	}
+
 	if req.Content == "" {
 		return &apiv1.RenderMarkdownResponse{RenderedHtml: ""}, nil
 	}
@@ -926,25 +932,25 @@ func (s *Server) RenderMarkdown(_ context.Context, req *apiv1.RenderMarkdownRequ
 
 	markdownBytes := []byte(req.Content)
 
-	// If a page context is provided, execute chat-safe template macros first
+	// Always execute chat-safe template macros, enriching with page frontmatter when available
+	frontmatter := make(wikipage.FrontMatter)
 	if req.Page != "" {
-		_, frontmatter, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))
+		_, pageFM, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))
 		if err != nil && !os.IsNotExist(err) {
 			return nil, status.Errorf(codes.Internal, "failed to read page frontmatter: %v", err)
 		}
-		if err != nil {
-			// Page doesn't exist — render without template context
-			frontmatter = make(wikipage.FrontMatter)
+		if err == nil {
+			frontmatter = pageFM
 		}
+	}
 
-		chatExecutor := server.ChatTemplateExecutor{}
-		expanded, err := chatExecutor.ExecuteTemplate(string(markdownBytes), frontmatter, s.pageReaderMutator, s.frontmatterIndexQueryer)
-		if err != nil {
-			// Template execution failed — render the raw markdown without macros
-			s.logger.Warn("chat template execution failed, rendering raw markdown: %v", err)
-		} else {
-			markdownBytes = expanded
-		}
+	chatExecutor := server.ChatTemplateExecutor{}
+	expanded, err := chatExecutor.ExecuteTemplate(string(markdownBytes), frontmatter, s.pageReaderMutator, s.frontmatterIndexQueryer)
+	if err != nil {
+		// Template execution failed — render the raw markdown without macros
+		s.logger.Warn("chat template execution failed, rendering raw markdown: %v", err)
+	} else {
+		markdownBytes = expanded
 	}
 
 	renderedHTML, err := wikipage.RenderMarkdownToHTML(markdownBytes, s.markdownRenderer)

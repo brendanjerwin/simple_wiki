@@ -532,6 +532,10 @@ func buildChatTemplateWithFunctions(ctx context.Context, templateString string, 
 		funcNameFindBy:          query.QueryExactMatch,
 		funcNameFindByPrefix:    query.QueryPrefixMatch,
 		funcNameFindByKeyExists: query.QueryKeyExistence,
+		// Stubs for interactive widget macros that are not supported in chat context.
+		// These prevent parse errors when messages contain Checklist or Blog macros.
+		funcNameChecklist: func(string) string { return "" },
+		funcNameBlog:      func(string, int) string { return "" },
 	}
 
 	return template.New("page").Funcs(funcs).Parse(templateString)

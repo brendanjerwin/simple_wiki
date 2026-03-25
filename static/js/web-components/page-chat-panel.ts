@@ -14,6 +14,7 @@ import {
 } from '../gen/api/v1/chat_pb.js';
 import { ChatMarkdownRenderer } from './chat-markdown-renderer.js';
 import { sharedStyles, colorCSS, typographyCSS } from './shared-styles.js';
+import type { Reaction } from '../gen/api/v1/chat_pb.js';
 import type { ReactionGroup, ScrollToMessageEventDetail } from './chat-message-bubble.js';
 import './chat-message-bubble.js';
 
@@ -71,14 +72,19 @@ export class PageChatPanel extends LitElement {
         transition: all 0.2s ease;
       }
 
-      .fab:hover {
+      .fab:hover:not(.disabled) {
         color: var(--color-text-primary);
         box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
       }
 
+      .fab.disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+
       .panel {
         position: fixed;
-        top: 0;
+        top: 48px;
         right: 0;
         bottom: 0;
         width: 350px;
@@ -259,14 +265,14 @@ export class PageChatPanel extends LitElement {
   @state()
   declare claudeConnected: boolean;
 
-  private messagesById = new Map<string, ChatMessageState>();
+  private readonly messagesById = new Map<string, ChatMessageState>();
   private streamSubscription: AbortController | undefined;
   private statusPollTimer: ReturnType<typeof setInterval> | undefined;
-  private chatClient: Client<typeof ChatService>;
-  private markdownRenderer: ChatMarkdownRenderer;
-  private _handleVisibilityChange: () => void;
-  private _handleViewportResize: () => void;
-  private _handleGlobalKeydown: (e: KeyboardEvent) => void;
+  private readonly chatClient: Client<typeof ChatService>;
+  private readonly markdownRenderer: ChatMarkdownRenderer;
+  private readonly _handleVisibilityChange: () => void;
+  private readonly _handleViewportResize: () => void;
+  private readonly _handleGlobalKeydown: (e: KeyboardEvent) => void;
   private userHasScrolled = false;
 
   constructor() {
@@ -332,17 +338,18 @@ export class PageChatPanel extends LitElement {
   override render() {
     return html`
       ${sharedStyles}
-      ${this.panelOpen || !this.claudeConnected ? nothing : html`
+      ${this.panelOpen ? nothing : html`
         <button
-          class="fab"
+          class="fab ${this.claudeConnected ? '' : 'disabled'}"
           @click=${this.togglePanel}
           aria-label="Chat with Claude"
+          aria-disabled=${!this.claudeConnected ? 'true' : 'false'}
         >
           <i class="fa-solid fa-robot"></i>
         </button>
       `}
 
-      <div class="panel ${this.panelOpen ? 'open' : ''}">
+      <div class="panel ${this.panelOpen ? 'open' : ''}" ?inert=${!this.panelOpen}>
         <div class="panel-header">
           <span class="panel-title">Claude</span>
           <button class="close-button" @click=${this.togglePanel} aria-label="Close chat">
@@ -376,8 +383,8 @@ export class PageChatPanel extends LitElement {
                     message-id=${msg.id}
                     .sender=${msg.sender}
                     sender-name=${msg.senderName}
-                    content=${msg.content}
-                    rendered-html=${msg.renderedHtml}
+                    .content=${msg.content}
+                    .renderedHtml=${msg.renderedHtml}
                     ?edited=${msg.edited}
                     reply-to-id=${msg.replyToId}
                     .reactions=${msg.reactions}
@@ -627,13 +634,20 @@ export class PageChatPanel extends LitElement {
       timestamp: msg.timestamp ? new Date(Number(msg.timestamp.seconds) * 1000) : new Date(),
       senderName: msg.senderName,
       replyToId: msg.replyToId,
-      reactions: [],
+      reactions: groupReactions(msg.reactions),
       edited: false,
       sequence: msg.sequence,
     };
 
-    this.messagesById.set(msg.id, msgState);
-    this.messages = [...this.messages, msgState];
+    const existing = this.messagesById.get(msg.id);
+    if (existing) {
+      // Update in-place for duplicate (replay) messages
+      Object.assign(existing, msgState);
+      this.messages = [...this.messages]; // trigger re-render
+    } else {
+      this.messagesById.set(msg.id, msgState);
+      this.messages = [...this.messages, msgState];
+    }
 
     await this.updateComplete;
     if (!this.userHasScrolled) {
@@ -685,6 +699,23 @@ export class PageChatPanel extends LitElement {
     const textarea = this.shadowRoot?.querySelector('textarea');
     textarea?.focus();
   }
+}
+
+function groupReactions(reactions: Reaction[]): ReactionGroup[] {
+  const groups = new Map<string, string[]>();
+  for (const r of reactions) {
+    const existing = groups.get(r.emoji);
+    if (existing) {
+      existing.push(r.reactor);
+    } else {
+      groups.set(r.emoji, [r.reactor]);
+    }
+  }
+  return Array.from(groups.entries()).map(([emoji, reactors]) => ({
+    emoji,
+    reactors,
+    count: reactors.length,
+  }));
 }
 
 customElements.define('page-chat-panel', PageChatPanel);

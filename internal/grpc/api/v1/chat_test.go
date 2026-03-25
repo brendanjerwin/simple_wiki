@@ -954,6 +954,50 @@ var _ = Describe("ChatService", func() {
 		})
 	})
 
+	Describe("GetChatStatus", func() {
+		When("Claude channel subscriber is connected", func() {
+			var (
+				resp *apiv1.GetChatStatusResponse
+				err  error
+			)
+
+			BeforeEach(func() {
+				// Subscribe to channel to simulate a connected Claude
+				_, unsubscribe := chatManager.SubscribeToChannel()
+				DeferCleanup(unsubscribe)
+
+				resp, err = server.GetChatStatus(ctx, &apiv1.GetChatStatusRequest{})
+			})
+
+			It("should not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return connected true", func() {
+				Expect(resp.Connected).To(BeTrue())
+			})
+		})
+
+		When("no Claude channel subscriber is connected", func() {
+			var (
+				resp *apiv1.GetChatStatusResponse
+				err  error
+			)
+
+			BeforeEach(func() {
+				resp, err = server.GetChatStatus(ctx, &apiv1.GetChatStatusRequest{})
+			})
+
+			It("should not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return connected false", func() {
+				Expect(resp.Connected).To(BeFalse())
+			})
+		})
+	})
+
 	Describe("SubscribeChatMessages", func() {
 		When("subscribing to channel messages", func() {
 			var (
