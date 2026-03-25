@@ -66,7 +66,7 @@ func setupMCPServer(_ string, onInitialized func()) (*mcpserver.MCPServer, *http
 				if result.Capabilities.Experimental == nil {
 					result.Capabilities.Experimental = make(map[string]any)
 				}
-				result.Capabilities.Experimental["claude/channel"] = true
+				result.Capabilities.Experimental["claude/channel"] = map[string]any{}
 
 				if onInitialized != nil {
 					onInitialized()
