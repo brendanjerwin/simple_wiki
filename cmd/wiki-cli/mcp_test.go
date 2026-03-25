@@ -4,18 +4,20 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"time"
 
 	"connectrpc.com/connect"
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/gen/go/api/v1/apiv1connect"
+	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	cli "gopkg.in/urfave/cli.v1"
 )
 
-// mockConnectChatStream implements a Connect streaming interface for testing.
+// mockConnectChatStream implements chatMessageReceiver for unit testing receiveChatMessages.
 type mockConnectChatStream struct {
 	messages []*apiv1.ChatMessage
 	index    int
@@ -41,7 +43,7 @@ func (m *mockConnectChatStream) Err() error {
 	return m.err
 }
 
-func (m *mockConnectChatStream) Close() error {
+func (*mockConnectChatStream) Close() error {
 	return nil
 }
 
@@ -639,6 +641,44 @@ var _ = Describe("maintainChatSubscription", func() {
 		})
 	})
 
+	When("subscribe fails and context is cancelled during the backoff sleep", func() {
+		var done chan struct{}
+		var callCount int
+
+		BeforeEach(func() {
+			ctx, cancel := context.WithCancel(context.Background())
+			callCount = 0
+
+			client := &mockChatClient{
+				subscribeFn: func(_ context.Context, _ *connect.Request[apiv1.SubscribeChatMessagesRequest]) (*connect.ServerStreamForClient[apiv1.ChatMessage], error) {
+					callCount++
+					// Return an error without cancelling context first,
+					// so the error propagates to maintainChatSubscription.
+					// Then cancel after a brief delay so it fires during the backoff sleep.
+					go func() {
+						time.Sleep(10 * time.Millisecond)
+						cancel()
+					}()
+					return nil, errors.New("connection refused")
+				},
+			}
+			done = make(chan struct{})
+			go func() {
+				maintainChatSubscription(ctx, s, client)
+				close(done)
+			}()
+		})
+
+		It("should return when the context is cancelled during backoff", func() {
+			Eventually(done, "2s").Should(BeClosed())
+		})
+
+		It("should have called subscribe once", func() {
+			Eventually(done, "2s").Should(BeClosed())
+			Expect(callCount).To(Equal(1))
+		})
+	})
+
 	When("subscribe fails once then reconnects after backoff and exits cleanly", func() {
 		var done chan struct{}
 		var callCount int
@@ -674,6 +714,216 @@ var _ = Describe("maintainChatSubscription", func() {
 		It("should have called subscribe twice", func() {
 			Eventually(done, "3s").Should(BeClosed())
 			Expect(callCount).To(Equal(2))
+		})
+	})
+})
+
+// testChatServiceHandler is a minimal ChatServiceHandler for use in test HTTP servers.
+type testChatServiceHandler struct {
+	apiv1connect.UnimplementedChatServiceHandler
+	subscribeFn func(context.Context, *connect.Request[apiv1.SubscribeChatMessagesRequest], *connect.ServerStream[apiv1.ChatMessage]) error
+}
+
+func (h *testChatServiceHandler) SubscribeChatMessages(
+	ctx context.Context,
+	req *connect.Request[apiv1.SubscribeChatMessagesRequest],
+	stream *connect.ServerStream[apiv1.ChatMessage],
+) error {
+	return h.subscribeFn(ctx, req, stream)
+}
+
+// newTestChatServer creates an httptest.Server that serves a single SubscribeChatMessages handler.
+func newTestChatServer(
+	subscribeFn func(context.Context, *connect.Request[apiv1.SubscribeChatMessagesRequest], *connect.ServerStream[apiv1.ChatMessage]) error,
+) *httptest.Server {
+	handler := &testChatServiceHandler{subscribeFn: subscribeFn}
+	mux := http.NewServeMux()
+	path, h := apiv1connect.NewChatServiceHandler(handler)
+	mux.Handle(path, h)
+	return httptest.NewServer(mux)
+}
+
+var _ = Describe("subscribeToChatMessages with a real Connect server", func() {
+	var s *mcpserver.MCPServer
+
+	BeforeEach(func() {
+		s = mcpserver.NewMCPServer("test", "1.0")
+	})
+
+	When("the server sends a USER message then closes the stream", func() {
+		var err error
+		var server *httptest.Server
+
+		BeforeEach(func() {
+			server = newTestChatServer(func(_ context.Context, _ *connect.Request[apiv1.SubscribeChatMessagesRequest], stream *connect.ServerStream[apiv1.ChatMessage]) error {
+				return stream.Send(&apiv1.ChatMessage{
+					Id:      "msg-1",
+					Content: "hello from user",
+					Sender:  apiv1.Sender_USER,
+					Page:    "test-page",
+				})
+			})
+
+			client := apiv1connect.NewChatServiceClient(server.Client(), server.URL)
+			err = subscribeToChatMessages(context.Background(), s, client)
+		})
+
+		AfterEach(func() {
+			server.Close()
+		})
+
+		It("should return a reconnect error because the server closed the stream", func() {
+			Expect(err).To(MatchError(ContainSubstring("stream closed by server")))
+		})
+	})
+
+	When("the server sends a non-USER message then closes the stream", func() {
+		var err error
+		var server *httptest.Server
+
+		BeforeEach(func() {
+			server = newTestChatServer(func(_ context.Context, _ *connect.Request[apiv1.SubscribeChatMessagesRequest], stream *connect.ServerStream[apiv1.ChatMessage]) error {
+				return stream.Send(&apiv1.ChatMessage{
+					Id:      "msg-2",
+					Content: "response from assistant",
+					Sender:  apiv1.Sender_ASSISTANT,
+					Page:    "test-page",
+				})
+			})
+
+			client := apiv1connect.NewChatServiceClient(server.Client(), server.URL)
+			err = subscribeToChatMessages(context.Background(), s, client)
+		})
+
+		AfterEach(func() {
+			server.Close()
+		})
+
+		It("should return a reconnect error because the server closed the stream", func() {
+			Expect(err).To(MatchError(ContainSubstring("stream closed by server")))
+		})
+	})
+
+	When("the server returns a connect error on the stream", func() {
+		var err error
+		var server *httptest.Server
+
+		BeforeEach(func() {
+			server = newTestChatServer(func(_ context.Context, _ *connect.Request[apiv1.SubscribeChatMessagesRequest], stream *connect.ServerStream[apiv1.ChatMessage]) error {
+				return connect.NewError(connect.CodeInternal, errors.New("server error"))
+			})
+
+			client := apiv1connect.NewChatServiceClient(server.Client(), server.URL)
+			err = subscribeToChatMessages(context.Background(), s, client)
+		})
+
+		AfterEach(func() {
+			server.Close()
+		})
+
+		It("should return a stream error", func() {
+			Expect(err).To(MatchError(ContainSubstring("stream error")))
+		})
+	})
+
+	When("the context is cancelled while the stream is open", func() {
+		var err error
+		var server *httptest.Server
+
+		BeforeEach(func() {
+			ctx, cancel := context.WithCancel(context.Background())
+
+			server = newTestChatServer(func(svcCtx context.Context, _ *connect.Request[apiv1.SubscribeChatMessagesRequest], stream *connect.ServerStream[apiv1.ChatMessage]) error {
+				// Cancel the client context, then block until the server context is done
+				cancel()
+				<-svcCtx.Done()
+				return svcCtx.Err()
+			})
+
+			client := apiv1connect.NewChatServiceClient(server.Client(), server.URL)
+			err = subscribeToChatMessages(ctx, s, client)
+		})
+
+		AfterEach(func() {
+			server.Close()
+		})
+
+		It("should return nil on context cancellation", func() {
+			Expect(err).To(BeNil())
+		})
+	})
+
+	When("a message is received and then context times out during streaming", func() {
+		var err error
+		var server *httptest.Server
+
+		BeforeEach(func() {
+			msgReceived := make(chan struct{})
+
+			server = newTestChatServer(func(svcCtx context.Context, _ *connect.Request[apiv1.SubscribeChatMessagesRequest], stream *connect.ServerStream[apiv1.ChatMessage]) error {
+				// Send one user message
+				_ = stream.Send(&apiv1.ChatMessage{
+					Id:      "msg-timeout",
+					Content: "message before timeout",
+					Sender:  apiv1.Sender_USER,
+					Page:    "test-page",
+				})
+				// Signal that the message was sent
+				close(msgReceived)
+				// Block until server context is done
+				<-svcCtx.Done()
+				return svcCtx.Err()
+			})
+
+			// Create a cancellable context
+			ctx, cancel := context.WithCancel(context.Background())
+
+			// Cancel the context once the message has been sent by the server
+			go func() {
+				<-msgReceived
+				// Small delay to allow the client to Receive the message
+				time.Sleep(50 * time.Millisecond)
+				cancel()
+			}()
+
+			client := apiv1connect.NewChatServiceClient(server.Client(), server.URL)
+			err = subscribeToChatMessages(ctx, s, client)
+		})
+
+		AfterEach(func() {
+			server.Close()
+		})
+
+		It("should return nil when the stream error is due to context cancellation", func() {
+			Expect(err).To(BeNil())
+		})
+	})
+})
+
+var _ = Describe("setupMCPServer experimental capability hook", func() {
+	When("an initialize request is handled", func() {
+		var response mcp.JSONRPCMessage
+
+		BeforeEach(func() {
+			s, _, err := setupMCPServer("http://localhost:1")
+			Expect(err).NotTo(HaveOccurred())
+
+			// Send a real initialize message to trigger the OnAfterInitialize hook
+			initMsg := []byte(`{
+				"jsonrpc": "2.0",
+				"id": 1,
+				"method": "initialize",
+				"params": {
+					"protocolVersion": "2024-11-05",
+					"capabilities": {},
+					"clientInfo": {"name": "test-client", "version": "1.0"}
+				}
+			}`)
+			response = s.HandleMessage(context.Background(), initMsg)
+		})
+
+		It("should return a non-nil response", func() {
+			Expect(response).NotTo(BeNil())
 		})
 	})
 })

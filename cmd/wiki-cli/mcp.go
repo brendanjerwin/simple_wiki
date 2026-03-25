@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -53,7 +54,7 @@ This command is designed to be spawned as a subprocess by Claude Code via:
 
 // setupMCPServer creates the MCP server with channel capability and establishes
 // the HTTP client for Connect protocol. The caller is responsible for managing the httpClient.
-func setupMCPServer(baseURL string) (*mcpserver.MCPServer, *http.Client, error) {
+func setupMCPServer(_ string) (*mcpserver.MCPServer, *http.Client, error) {
 	// Add hook to inject claude/channel experimental capability
 	hooks := &mcpserver.Hooks{
 		OnAfterInitialize: []mcpserver.OnAfterInitializeFunc{
@@ -247,7 +248,7 @@ func subscribeToChatMessages(ctx context.Context, s *mcpserver.MCPServer, client
 		}
 		return fmt.Errorf("failed to subscribe: %w", err)
 	}
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 
 	// Log successful connection
 	log.Println("Chat subscription established")
@@ -297,7 +298,7 @@ func receiveChatMessages(ctx context.Context, s *mcpserver.MCPServer, stream cha
 	if ctx.Err() != nil {
 		return nil
 	}
-	return fmt.Errorf("stream closed by server")
+	return errors.New("stream closed by server")
 }
 
 // channelInstructions are the server instructions passed to Claude Code.
