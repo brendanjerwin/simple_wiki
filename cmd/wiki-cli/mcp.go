@@ -7,6 +7,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -74,10 +75,10 @@ func setupMCPServer(baseURL string) (*mcpserver.MCPServer, *http.Client, error) 
 		mcpserver.WithToolCapabilities(false),
 	)
 
-	// Create HTTP client for Connect protocol
-	httpClient := &http.Client{
-		Timeout: 30 * time.Second,
-	}
+	// Create HTTP client for Connect protocol. No global Timeout is set here so
+	// long-lived streaming requests (e.g., chat subscriptions) are not forcibly
+	// cancelled by the client. Per-request contexts handle deadlines instead.
+	httpClient := &http.Client{}
 
 	return s, httpClient, nil
 }
@@ -125,8 +126,12 @@ func normalizeBaseURL(baseURL string) (string, error) {
 		return "", fmt.Errorf("unsupported URL scheme %q: must be http or https", u.Scheme)
 	}
 
-	// Ensure no trailing slash for Connect protocol
-	return baseURL, nil
+	if u.Host == "" {
+		return "", fmt.Errorf("invalid base URL: missing host in %q", baseURL)
+	}
+
+	// Trim trailing slashes for Connect protocol compatibility
+	return strings.TrimRight(u.String(), "/"), nil
 }
 
 // apiClients holds Connect protocol clients for all wiki services.
@@ -221,6 +226,15 @@ func maintainChatSubscription(ctx context.Context, s *mcpserver.MCPServer, clien
 	}
 }
 
+// chatMessageReceiver is the minimal interface for reading from a Connect server-streaming response.
+// It is satisfied by *connect.ServerStreamForClient[apiv1.ChatMessage].
+type chatMessageReceiver interface {
+	Receive() bool
+	Msg() *apiv1.ChatMessage
+	Err() error
+	Close() error
+}
+
 // subscribeToChatMessages establishes a streaming subscription to user messages using Connect protocol
 // and emits them as Claude Code channel notifications.
 func subscribeToChatMessages(ctx context.Context, s *mcpserver.MCPServer, client apiv1connect.ChatServiceClient) error {
@@ -233,11 +247,18 @@ func subscribeToChatMessages(ctx context.Context, s *mcpserver.MCPServer, client
 		}
 		return fmt.Errorf("failed to subscribe: %w", err)
 	}
+	defer stream.Close()
 
 	// Log successful connection
 	log.Println("Chat subscription established")
 
-	// Stream messages and emit as channel notifications
+	return receiveChatMessages(ctx, s, stream)
+}
+
+// receiveChatMessages reads messages from stream and emits USER messages as channel notifications.
+// Returns nil only when the context is cancelled; returns a non-nil error otherwise (including
+// on a clean server-side EOF) so that maintainChatSubscription can reconnect.
+func receiveChatMessages(ctx context.Context, s *mcpserver.MCPServer, stream chatMessageReceiver) error {
 	for stream.Receive() {
 		msg := stream.Msg()
 
@@ -261,7 +282,7 @@ func subscribeToChatMessages(ctx context.Context, s *mcpserver.MCPServer, client
 		)
 	}
 
-	// Check for stream error
+	// Check for stream error (nil means clean EOF from server)
 	if err := stream.Err(); err != nil {
 		// Context cancellation is not an error
 		if ctx.Err() != nil {
@@ -270,7 +291,13 @@ func subscribeToChatMessages(ctx context.Context, s *mcpserver.MCPServer, client
 		return fmt.Errorf("stream error: %w", err)
 	}
 
-	return nil
+	// Clean EOF: server closed the stream. If context is still active, signal
+	// reconnect by returning a non-nil error; maintainChatSubscription treats
+	// nil as a clean client-side shutdown.
+	if ctx.Err() != nil {
+		return nil
+	}
+	return fmt.Errorf("stream closed by server")
 }
 
 // channelInstructions are the server instructions passed to Claude Code.

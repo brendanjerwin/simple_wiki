@@ -169,15 +169,45 @@ var _ = Describe("normalizeBaseURL", func() {
 		})
 	})
 
-	When("given an invalid URL", func() {
+	When("given an unparseable URL", func() {
 		var err error
 
 		BeforeEach(func() {
-			_, err = normalizeBaseURL("not a url")
+			// "://invalid" has no scheme before "://" which causes url.Parse to fail
+			_, err = normalizeBaseURL("://invalid")
 		})
 
 		It("should return a parse error", func() {
-			Expect(err).To(HaveOccurred())
+			Expect(err).To(MatchError(ContainSubstring("invalid base URL")))
+		})
+	})
+
+	When("given a URL with a trailing slash", func() {
+		var normalized string
+		var err error
+
+		BeforeEach(func() {
+			normalized, err = normalizeBaseURL("https://wiki.example.com/")
+		})
+
+		It("should not error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return the URL without a trailing slash", func() {
+			Expect(normalized).To(Equal("https://wiki.example.com"))
+		})
+	})
+
+	When("given a URL with an empty host", func() {
+		var err error
+
+		BeforeEach(func() {
+			_, err = normalizeBaseURL("https://")
+		})
+
+		It("should return an error mentioning the missing host", func() {
+			Expect(err).To(MatchError(ContainSubstring("missing host")))
 		})
 	})
 })
@@ -411,6 +441,104 @@ var _ = Describe("subscribeToChatMessages", func() {
 		})
 
 		It("should return nil on context cancellation", func() {
+			Expect(err).To(BeNil())
+		})
+	})
+})
+
+var _ = Describe("receiveChatMessages", func() {
+	var s *mcpserver.MCPServer
+
+	BeforeEach(func() {
+		s = mcpserver.NewMCPServer("test", "1.0")
+	})
+
+	When("the stream delivers a USER message then closes cleanly", func() {
+		var err error
+
+		BeforeEach(func() {
+			stream := &mockConnectChatStream{
+				messages: []*apiv1.ChatMessage{
+					{Sender: apiv1.Sender_USER, Content: "hello", Page: "home", Id: "msg-1"},
+				},
+				err: nil,
+			}
+			err = receiveChatMessages(context.Background(), s, stream)
+		})
+
+		It("should return a reconnect error because the server closed the stream", func() {
+			Expect(err).To(MatchError(ContainSubstring("stream closed by server")))
+		})
+	})
+
+	When("the stream delivers a non-USER message then closes cleanly", func() {
+		var err error
+
+		BeforeEach(func() {
+			stream := &mockConnectChatStream{
+				messages: []*apiv1.ChatMessage{
+					{Sender: apiv1.Sender_ASSISTANT, Content: "response"},
+				},
+				err: nil,
+			}
+			err = receiveChatMessages(context.Background(), s, stream)
+		})
+
+		It("should return a reconnect error because the server closed the stream", func() {
+			Expect(err).To(MatchError(ContainSubstring("stream closed by server")))
+		})
+	})
+
+	When("the stream ends with an error", func() {
+		var err error
+
+		BeforeEach(func() {
+			stream := &mockConnectChatStream{
+				messages: []*apiv1.ChatMessage{},
+				err:      errors.New("network failure"),
+			}
+			err = receiveChatMessages(context.Background(), s, stream)
+		})
+
+		It("should return the stream error", func() {
+			Expect(err).To(MatchError(ContainSubstring("network failure")))
+		})
+	})
+
+	When("context is cancelled and stream ends with a context error", func() {
+		var err error
+
+		BeforeEach(func() {
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+
+			stream := &mockConnectChatStream{
+				messages: []*apiv1.ChatMessage{},
+				err:      context.Canceled,
+			}
+			err = receiveChatMessages(ctx, s, stream)
+		})
+
+		It("should return nil", func() {
+			Expect(err).To(BeNil())
+		})
+	})
+
+	When("context is cancelled and stream ends cleanly (EOF)", func() {
+		var err error
+
+		BeforeEach(func() {
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+
+			stream := &mockConnectChatStream{
+				messages: []*apiv1.ChatMessage{},
+				err:      nil,
+			}
+			err = receiveChatMessages(ctx, s, stream)
+		})
+
+		It("should return nil", func() {
 			Expect(err).To(BeNil())
 		})
 	})
