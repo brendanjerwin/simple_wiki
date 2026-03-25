@@ -479,7 +479,7 @@ describe('PageChatPanel', () => {
       });
 
       it('should add a new reaction group', () => {
-        const msg = el.messages[0];
+        const msg = el.messages[0]!;
         const group = msg.reactions.find((r) => r.emoji === '❤️');
         expect(group).to.not.be.undefined;
         expect(group!.count).to.equal(1);
@@ -487,7 +487,7 @@ describe('PageChatPanel', () => {
       });
 
       it('should preserve the existing reaction group', () => {
-        const msg = el.messages[0];
+        const msg = el.messages[0]!;
         const group = msg.reactions.find((r) => r.emoji === '👍');
         expect(group).to.not.be.undefined;
       });
@@ -497,19 +497,19 @@ describe('PageChatPanel', () => {
       let reactionsBefore: typeof el.messages[0]['reactions'];
 
       beforeEach(async () => {
-        reactionsBefore = el.messages[0].reactions;
+        reactionsBefore = el.messages[0]!.reactions;
         (el as unknown as { addReaction(id: string, emoji: string, reactor: string): void }).addReaction('msg-1', '👍', 'bob');
         await el.updateComplete;
       });
 
       it('should update the reactor count', () => {
-        const group = el.messages[0].reactions.find((r) => r.emoji === '👍');
+        const group = el.messages[0]!.reactions.find((r) => r.emoji === '👍');
         expect(group!.count).to.equal(2);
         expect(group!.reactors).to.include('bob');
       });
 
       it('should create a new reactions array reference for Lit reactivity', () => {
-        expect(el.messages[0].reactions).to.not.equal(reactionsBefore);
+        expect(el.messages[0]!.reactions).to.not.equal(reactionsBefore);
       });
     });
 
@@ -547,7 +547,7 @@ describe('PageChatPanel', () => {
 
       it('should add the message to messages array', () => {
         expect(el.messages).to.have.length(1);
-        expect(el.messages[0].id).to.equal('msg-1');
+        expect(el.messages[0]!.id).to.equal('msg-1');
       });
 
       it('should store the message in messagesById', () => {
@@ -579,7 +579,7 @@ describe('PageChatPanel', () => {
       });
 
       it('should update content in place', () => {
-        expect(el.messages[0].content).to.equal('Replayed');
+        expect(el.messages[0]!.content).to.equal('Replayed');
       });
     });
   });
@@ -615,11 +615,11 @@ describe('PageChatPanel', () => {
       });
 
       it('should update the message content', () => {
-        expect(el.messages[0].content).to.equal('Updated content');
+        expect(el.messages[0]!.content).to.equal('Updated content');
       });
 
       it('should mark the message as edited', () => {
-        expect(el.messages[0].edited).to.be.true;
+        expect(el.messages[0]!.edited).to.be.true;
       });
     });
 
