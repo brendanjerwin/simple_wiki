@@ -5,6 +5,7 @@ import { create } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import {
   ChatService,
+  GetChatStatusRequestSchema,
   SendChatMessageRequestSchema,
   SubscribeChatRequestSchema,
   Sender,
@@ -20,6 +21,7 @@ const STORAGE_KEY = 'chat-panel-open';
 const MAX_INPUT_LENGTH = 2000;
 const INITIAL_RECONNECT_DELAY_MS = 1000;
 const MAX_RECONNECT_DELAY_MS = 30000;
+const STATUS_POLL_INTERVAL_MS = 15000;
 
 export interface ChatMessageState {
   id: string;
@@ -252,8 +254,12 @@ export class PageChatPanel extends LitElement {
   @state()
   declare error: Error | null;
 
+  @state()
+  declare claudeConnected: boolean;
+
   private messagesById = new Map<string, ChatMessageState>();
   private streamSubscription: AbortController | undefined;
+  private statusPollTimer: ReturnType<typeof setInterval> | undefined;
   private chatClient: Client<typeof ChatService>;
   private markdownRenderer: ChatMarkdownRenderer;
   private _handleVisibilityChange: () => void;
@@ -268,6 +274,7 @@ export class PageChatPanel extends LitElement {
     this.streamState = 'disconnected';
     this.waitingForAssistant = false;
     this.error = null;
+    this.claudeConnected = false;
     this.chatClient = createClient(ChatService, getGrpcWebTransport());
     this.markdownRenderer = new ChatMarkdownRenderer();
     this._handleVisibilityChange = this.handleVisibilityChange.bind(this);
@@ -288,6 +295,8 @@ export class PageChatPanel extends LitElement {
     if (this.page) {
       this.startStream();
     }
+    this.pollChatStatus();
+    this.statusPollTimer = setInterval(() => this.pollChatStatus(), STATUS_POLL_INTERVAL_MS);
   }
 
   override disconnectedCallback() {
@@ -295,6 +304,10 @@ export class PageChatPanel extends LitElement {
     document.removeEventListener('visibilitychange', this._handleVisibilityChange);
     window.visualViewport?.removeEventListener('resize', this._handleViewportResize);
     this.stopStream();
+    if (this.statusPollTimer) {
+      clearInterval(this.statusPollTimer);
+      this.statusPollTimer = undefined;
+    }
   }
 
   override updated(changedProperties: Map<string, unknown>) {
@@ -313,7 +326,7 @@ export class PageChatPanel extends LitElement {
   override render() {
     return html`
       ${sharedStyles}
-      ${this.panelOpen ? nothing : html`
+      ${this.panelOpen || !this.claudeConnected ? nothing : html`
         <button
           class="fab"
           @click=${this.togglePanel}
@@ -334,13 +347,11 @@ export class PageChatPanel extends LitElement {
         ${this.streamState === 'reconnecting'
           ? html`<div class="status-banner reconnecting">Reconnecting...</div>`
           : nothing}
-        ${this.streamState === 'disconnected' && this.error
-          ? html`<div class="status-banner disconnected">
-              ${this.error instanceof ConnectError && this.error.code === Code.Unavailable
-                ? 'Claude is not connected'
-                : this.error.message}
-            </div>`
-          : nothing}
+        ${!this.claudeConnected
+          ? html`<div class="status-banner disconnected">Claude is not connected</div>`
+          : this.streamState === 'disconnected' && this.error
+            ? html`<div class="status-banner disconnected">${this.error.message}</div>`
+            : nothing}
 
         <div
           class="messages-container"
@@ -376,15 +387,16 @@ export class PageChatPanel extends LitElement {
 
         <div class="input-area">
           <textarea
-            placeholder="Type a message..."
+            placeholder="${this.claudeConnected ? 'Type a message...' : 'Claude is not connected'}"
             maxlength="${MAX_INPUT_LENGTH}"
             rows="1"
+            ?disabled=${!this.claudeConnected}
             @keydown=${this._handleKeydown}
           ></textarea>
           <button
             class="send-button"
             @click=${this._handleSendClick}
-            ?disabled=${false}
+            ?disabled=${!this.claudeConnected}
             aria-label="Send message"
           >
             Send
@@ -463,6 +475,22 @@ export class PageChatPanel extends LitElement {
     }
 
     this.focusInput();
+  }
+
+  private async pollChatStatus(): Promise<void> {
+    try {
+      const request = create(GetChatStatusRequestSchema, {});
+      const response = await this.chatClient.getChatStatus(request);
+      const wasConnected = this.claudeConnected;
+      this.claudeConnected = response.connected;
+
+      // If Claude just connected and panel was open, re-focus input
+      if (!wasConnected && response.connected && this.panelOpen) {
+        this.focusInput();
+      }
+    } catch {
+      this.claudeConnected = false;
+    }
   }
 
   private handleViewportResize(): void {

@@ -21,12 +21,50 @@ describe('PageChatPanel', () => {
     localStorageStub.removeItem.restore();
   });
 
+  describe('when Claude is not connected', () => {
+    let el: PageChatPanel;
+
+    beforeEach(async () => {
+      localStorageStub.getItem.returns(null);
+      el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+    });
+
+    it('should not render the FAB', () => {
+      const fab = el.shadowRoot!.querySelector('.fab');
+      expect(fab).to.be.null;
+    });
+
+    it('should show disconnected banner when panel is open', async () => {
+      el.panelOpen = true;
+      await el.updateComplete;
+      const banner = el.shadowRoot!.querySelector('.status-banner.disconnected');
+      expect(banner).to.not.be.null;
+      expect(banner!.textContent).to.contain('Claude is not connected');
+    });
+
+    it('should disable the textarea when panel is open', async () => {
+      el.panelOpen = true;
+      await el.updateComplete;
+      const textarea = el.shadowRoot!.querySelector('textarea');
+      expect(textarea!.disabled).to.be.true;
+    });
+
+    it('should disable the send button when panel is open', async () => {
+      el.panelOpen = true;
+      await el.updateComplete;
+      const btn = el.shadowRoot!.querySelector('.send-button') as HTMLButtonElement;
+      expect(btn.disabled).to.be.true;
+    });
+  });
+
   describe('FAB rendering', () => {
     let el: PageChatPanel;
 
     beforeEach(async () => {
       localStorageStub.getItem.returns(null);
       el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+      el.claudeConnected = true;
+      await el.updateComplete;
     });
 
     it('should render the FAB button', () => {
@@ -51,6 +89,8 @@ describe('PageChatPanel', () => {
     beforeEach(async () => {
       localStorageStub.getItem.returns(null);
       el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+      el.claudeConnected = true;
+      await el.updateComplete;
       const fab = el.shadowRoot!.querySelector('.fab') as HTMLElement;
       fab.click();
       await el.updateComplete;
@@ -77,6 +117,8 @@ describe('PageChatPanel', () => {
     beforeEach(async () => {
       localStorageStub.getItem.returns(null);
       el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+      el.claudeConnected = true;
+      await el.updateComplete;
       const fab = el.shadowRoot!.querySelector('.fab') as HTMLElement;
       fab.click();
       await el.updateComplete;

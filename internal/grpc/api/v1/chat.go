@@ -251,3 +251,11 @@ func bufferMessageToProto(msg *chatbuffer.Message) *apiv1.ChatMessage {
 		Reactions:  reactions,
 	}
 }
+
+// GetChatStatus implements the GetChatStatus RPC.
+// Returns whether a Claude channel subscriber is currently connected.
+func (s *Server) GetChatStatus(_ context.Context, _ *apiv1.GetChatStatusRequest) (*apiv1.GetChatStatusResponse, error) {
+	return &apiv1.GetChatStatusResponse{
+		Connected: s.chatBufferManager.HasChannelSubscribers(),
+	}, nil
+}
