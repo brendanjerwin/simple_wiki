@@ -158,7 +158,41 @@ export class PageChatPanel extends LitElement {
         padding: 8px 12px;
         font-size: 0.8rem;
         color: var(--color-text-muted);
-        font-style: italic;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      .thinking-dots {
+        display: inline-flex;
+        gap: 3px;
+      }
+
+      .thinking-dots span {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--color-text-muted);
+        animation: thinking-bounce 1.4s ease-in-out infinite;
+      }
+
+      .thinking-dots span:nth-child(2) {
+        animation-delay: 0.2s;
+      }
+
+      .thinking-dots span:nth-child(3) {
+        animation-delay: 0.4s;
+      }
+
+      @keyframes thinking-bounce {
+        0%, 80%, 100% {
+          opacity: 0.3;
+          transform: scale(0.8);
+        }
+        40% {
+          opacity: 1;
+          transform: scale(1);
+        }
       }
 
       .input-area {
@@ -247,6 +281,9 @@ export class PageChatPanel extends LitElement {
   @property({ type: String })
   declare page: string;
 
+  @property({ type: String })
+  declare persona: string;
+
   @state()
   declare panelOpen: boolean;
 
@@ -278,6 +315,7 @@ export class PageChatPanel extends LitElement {
   constructor() {
     super();
     this.page = '';
+    this.persona = 'Dorium';
     this.panelOpen = false;
     this.messages = [];
     this.streamState = 'disconnected';
@@ -342,7 +380,7 @@ export class PageChatPanel extends LitElement {
         <button
           class="fab ${this.claudeConnected ? '' : 'disabled'}"
           @click=${this.togglePanel}
-          aria-label="Chat with Claude"
+          aria-label="Chat with ${this.persona}"
           aria-disabled=${!this.claudeConnected ? 'true' : 'false'}
         >
           <i class="fa-solid fa-robot"></i>
@@ -351,7 +389,7 @@ export class PageChatPanel extends LitElement {
 
       <div class="panel ${this.panelOpen ? 'open' : ''}" ?inert=${!this.panelOpen}>
         <div class="panel-header">
-          <span class="panel-title">Claude</span>
+          <span class="panel-title">${this.persona}</span>
           <button class="close-button" @click=${this.togglePanel} aria-label="Close chat">
             <i class="fa-solid fa-xmark"></i>
           </button>
@@ -361,7 +399,7 @@ export class PageChatPanel extends LitElement {
           ? html`<div class="status-banner reconnecting">Reconnecting...</div>`
           : nothing}
         ${!this.claudeConnected
-          ? html`<div class="status-banner disconnected">Claude is not connected</div>`
+          ? html`<div class="status-banner disconnected">${this.persona} is not connected</div>`
           : this.streamState === 'disconnected' && this.error
             ? html`<div class="status-banner disconnected">${this.error.message}</div>`
             : nothing}
@@ -375,7 +413,7 @@ export class PageChatPanel extends LitElement {
         >
           ${this.messages.length === 0
             ? html`<div class="empty-state">
-                Send a message to start chatting with Claude about this page.
+                Send a message to start chatting with ${this.persona} about this page.
               </div>`
             : this.messages.map(
                 (msg) => html`
@@ -395,12 +433,17 @@ export class PageChatPanel extends LitElement {
         </div>
 
         ${this.waitingForAssistant
-          ? html`<div class="thinking-indicator">Claude is thinking...</div>`
+          ? html`<div class="thinking-indicator">
+              <span class="thinking-dots">
+                <span></span><span></span><span></span>
+              </span>
+              ${this.persona} is thinking
+            </div>`
           : nothing}
 
         <div class="input-area" @click=${this._focusTextarea}>
           <textarea
-            placeholder="${this.claudeConnected ? 'Type a message...' : 'Claude is not connected'}"
+            placeholder="${this.claudeConnected ? 'Type a message...' : `${this.persona} is not connected`}"
             maxlength="${MAX_INPUT_LENGTH}"
             rows="1"
             ?disabled=${!this.claudeConnected}

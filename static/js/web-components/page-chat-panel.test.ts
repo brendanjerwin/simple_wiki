@@ -50,7 +50,7 @@ describe('PageChatPanel', () => {
       await el.updateComplete;
       const banner = el.shadowRoot!.querySelector('.status-banner.disconnected');
       expect(banner).to.not.be.null;
-      expect(banner!.textContent).to.contain('Claude is not connected');
+      expect(banner!.textContent).to.contain('Dorium is not connected');
     });
 
     it('should disable the textarea when panel is open', async () => {
@@ -85,7 +85,7 @@ describe('PageChatPanel', () => {
 
     it('should have correct aria-label', () => {
       const fab = el.shadowRoot!.querySelector('.fab');
-      expect(fab!.getAttribute('aria-label')).to.equal('Chat with Claude');
+      expect(fab!.getAttribute('aria-label')).to.equal('Chat with Dorium');
     });
 
     it('should show robot icon when panel is closed', () => {
@@ -343,7 +343,7 @@ describe('PageChatPanel', () => {
 
       it('should contain thinking text', () => {
         const indicator = el.shadowRoot!.querySelector('.thinking-indicator');
-        expect(indicator!.textContent).to.contain('Claude is thinking');
+        expect(indicator!.textContent).to.contain('Dorium is thinking');
       });
     });
 
