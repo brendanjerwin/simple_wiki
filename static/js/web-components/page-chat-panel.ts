@@ -171,12 +171,14 @@ export class PageChatPanel extends LitElement {
         border-radius: 6px;
         background: rgba(255, 255, 255, 0.05);
         color: var(--color-text-primary);
-        padding: 8px;
-        font-size: 0.85rem;
+        padding: 12px;
+        font-size: 0.9rem;
         font-family: inherit;
-        min-height: 36px;
+        min-height: 44px;
         max-height: 120px;
         outline: none;
+        box-sizing: border-box;
+        -webkit-appearance: none;
       }
 
       .input-area textarea:focus {
@@ -385,7 +387,7 @@ export class PageChatPanel extends LitElement {
           ? html`<div class="thinking-indicator">Claude is thinking...</div>`
           : nothing}
 
-        <div class="input-area">
+        <div class="input-area" @click=${this._focusTextarea}>
           <textarea
             placeholder="${this.claudeConnected ? 'Type a message...' : 'Claude is not connected'}"
             maxlength="${MAX_INPUT_LENGTH}"
@@ -426,6 +428,11 @@ export class PageChatPanel extends LitElement {
       e.preventDefault();
       this.sendMessage();
     }
+  }
+
+  private _focusTextarea(e: Event) {
+    if (e.target instanceof HTMLButtonElement) return; // Don't steal focus from send button
+    this.focusInput();
   }
 
   private _handleSendClick() {
