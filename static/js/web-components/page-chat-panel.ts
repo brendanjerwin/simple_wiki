@@ -266,6 +266,7 @@ export class PageChatPanel extends LitElement {
   private markdownRenderer: ChatMarkdownRenderer;
   private _handleVisibilityChange: () => void;
   private _handleViewportResize: () => void;
+  private _handleGlobalKeydown: (e: KeyboardEvent) => void;
   private userHasScrolled = false;
 
   constructor() {
@@ -281,6 +282,7 @@ export class PageChatPanel extends LitElement {
     this.markdownRenderer = new ChatMarkdownRenderer();
     this._handleVisibilityChange = this.handleVisibilityChange.bind(this);
     this._handleViewportResize = this.handleViewportResize.bind(this);
+    this._handleGlobalKeydown = this.handleGlobalKeydown.bind(this);
 
     // Restore panel state from localStorage
     try {
@@ -293,6 +295,7 @@ export class PageChatPanel extends LitElement {
   override connectedCallback() {
     super.connectedCallback();
     document.addEventListener('visibilitychange', this._handleVisibilityChange);
+    document.addEventListener('keydown', this._handleGlobalKeydown);
     window.visualViewport?.addEventListener('resize', this._handleViewportResize);
     if (this.page) {
       this.startStream();
@@ -304,6 +307,7 @@ export class PageChatPanel extends LitElement {
   override disconnectedCallback() {
     super.disconnectedCallback();
     document.removeEventListener('visibilitychange', this._handleVisibilityChange);
+    document.removeEventListener('keydown', this._handleGlobalKeydown);
     window.visualViewport?.removeEventListener('resize', this._handleViewportResize);
     this.stopStream();
     if (this.statusPollTimer) {
@@ -482,6 +486,13 @@ export class PageChatPanel extends LitElement {
     }
 
     this.focusInput();
+  }
+
+  private handleGlobalKeydown(e: KeyboardEvent): void {
+    if (e.ctrlKey && e.code === 'Space') {
+      e.preventDefault();
+      this.togglePanel();
+    }
   }
 
   private async pollChatStatus(): Promise<void> {
