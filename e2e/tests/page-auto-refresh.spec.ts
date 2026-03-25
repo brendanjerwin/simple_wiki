@@ -159,9 +159,16 @@ test.describe('Page auto-refresh and system-info page status', () => {
     const textarea = page.locator('wiki-editor textarea');
     await expect(textarea).toBeVisible({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
+    // Preserve existing frontmatter — fill strips the entire textarea content, so we must
+    // re-include the TOML frontmatter that the auto-save (UpdateWholePage) requires.
+    const existingContent = await textarea.inputValue();
+    const frontmatterMatch = existingContent.match(/^\+\+\+[\s\S]*?\+\+\+/);
+    const minimalFrontmatter = `+++\nidentifier = "${TEST_PAGE}"\n+++`;
+    const frontmatter = frontmatterMatch ? frontmatterMatch[0] : minimalFrontmatter;
+
     // Type base content and wait for auto-save to complete (establishes a saved baseline)
     const baseContent = '# Active Editing\n\nUser is actively editing this content.';
-    await textarea.fill(baseContent);
+    await textarea.fill(`${frontmatter}\n\n${baseContent}`);
     await textarea.press('Space');
     await expect(page.locator('wiki-editor .status-indicator')).toContainText('Saved', { timeout: SAVE_TIMEOUT_MS });
 
