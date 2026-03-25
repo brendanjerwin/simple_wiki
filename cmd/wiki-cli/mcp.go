@@ -2,20 +2,22 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"math"
+	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
+	"connectrpc.com/connect"
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
+	"github.com/brendanjerwin/simple_wiki/gen/go/api/v1/apiv1connect"
 	"github.com/brendanjerwin/simple_wiki/gen/go/api/v1/apiv1mcp"
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	cli "gopkg.in/urfave/cli.v1"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 const (
@@ -51,8 +53,8 @@ This command is designed to be spawned as a subprocess by Claude Code via:
 }
 
 // setupMCPServer creates the MCP server with channel capability and establishes
-// the gRPC connection. The caller is responsible for closing the returned conn.
-func setupMCPServer(baseURL string) (*mcpserver.MCPServer, *grpc.ClientConn, error) {
+// the HTTP client for Connect protocol. The caller is responsible for managing the httpClient.
+func setupMCPServer(_ string) (*mcpserver.MCPServer, *http.Client, error) {
 	// Add hook to inject claude/channel experimental capability
 	hooks := &mcpserver.Hooks{
 		OnAfterInitialize: []mcpserver.OnAfterInitializeFunc{
@@ -74,30 +76,30 @@ func setupMCPServer(baseURL string) (*mcpserver.MCPServer, *grpc.ClientConn, err
 		mcpserver.WithToolCapabilities(false),
 	)
 
-	// Create gRPC client connection
-	conn, err := createGRPCConn(baseURL)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create gRPC connection: %w", err)
-	}
+	// Create HTTP client for Connect protocol. No global Timeout is set here so
+	// long-lived streaming requests (e.g., chat subscriptions) are not forcibly
+	// cancelled by the client. Per-request contexts handle deadlines instead.
+	httpClient := &http.Client{}
 
-	return s, conn, nil
+	return s, httpClient, nil
 }
 
 // runMCPServer starts the stdio MCP server with channel capability and maintains
 // a streaming subscription to the wiki's ChatService.
-func runMCPServer(baseURL string) (retErr error) {
-	s, conn, err := setupMCPServer(baseURL)
+func runMCPServer(baseURL string) error {
+	s, httpClient, err := setupMCPServer(baseURL)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if err := conn.Close(); err != nil && retErr == nil {
-			retErr = fmt.Errorf("failed to close gRPC connection: %w", err)
-		}
-	}()
 
-	// Create gRPC clients and register MCP tool handlers
-	clients := createAPIClients(conn)
+	// Validate and normalize base URL
+	normalizedURL, err := normalizeBaseURL(baseURL)
+	if err != nil {
+		return fmt.Errorf("invalid base URL: %w", err)
+	}
+
+	// Create Connect clients and register MCP tool handlers
+	clients := createAPIClients(httpClient, normalizedURL)
 	registerToolHandlers(s, clients)
 
 	// Start subscription to user messages in a goroutine
@@ -110,87 +112,64 @@ func runMCPServer(baseURL string) (retErr error) {
 	return mcpserver.ServeStdio(s)
 }
 
-// parseGRPCHost parses a wiki base URL and returns the gRPC target host:port and URL scheme.
-// For https:// URLs without an explicit port, :443 is appended.
-// For http:// URLs without an explicit port, :80 is appended.
+// normalizeBaseURL validates and normalizes a wiki base URL for Connect protocol.
 // Returns an error for invalid URLs or unsupported schemes.
-func parseGRPCHost(baseURL string) (host, scheme string, err error) {
+func normalizeBaseURL(baseURL string) (string, error) {
 	u, parseErr := url.Parse(baseURL)
 	if parseErr != nil {
-		return "", "", fmt.Errorf("invalid base URL: %w", parseErr)
+		return "", fmt.Errorf("invalid base URL: %w", parseErr)
 	}
 
-	host = u.Host
 	switch u.Scheme {
-	case "https":
-		if u.Port() == "" {
-			host += ":443"
-		}
-	case "http":
-		if u.Port() == "" {
-			host += ":80"
-		}
+	case "https", "http":
+		// Valid schemes
 	default:
-		return "", "", fmt.Errorf("unsupported URL scheme %q: must be http or https", u.Scheme)
+		return "", fmt.Errorf("unsupported URL scheme %q: must be http or https", u.Scheme)
 	}
 
-	return host, u.Scheme, nil
+	if u.Host == "" {
+		return "", fmt.Errorf("invalid base URL: missing host in %q", baseURL)
+	}
+
+	// Trim trailing slashes for Connect protocol compatibility
+	return strings.TrimRight(u.String(), "/"), nil
 }
 
-// createGRPCConn creates a gRPC connection to the wiki server.
-// For https:// URLs, TLS credentials are used. For http:// URLs, insecure credentials are used.
-func createGRPCConn(baseURL string) (*grpc.ClientConn, error) {
-	host, scheme, err := parseGRPCHost(baseURL)
-	if err != nil {
-		return nil, err
-	}
-
-	var transportCreds credentials.TransportCredentials
-	switch scheme {
-	case "https":
-		transportCreds = credentials.NewClientTLSFromCert(nil, "")
-	default: // "http" — scheme already validated by parseGRPCHost
-		transportCreds = insecure.NewCredentials()
-	}
-
-	return grpc.NewClient(host, grpc.WithTransportCredentials(transportCreds))
-}
-
-// apiClients holds gRPC clients for all wiki services.
+// apiClients holds Connect protocol clients for all wiki services.
 type apiClients struct {
-	chat           apiv1.ChatServiceClient
-	frontmatter    apiv1.FrontmatterClient
-	inventory      apiv1.InventoryManagementServiceClient
-	pageImport     apiv1.PageImportServiceClient
-	pageManagement apiv1.PageManagementServiceClient
-	search         apiv1.SearchServiceClient
-	systemInfo     apiv1.SystemInfoServiceClient
+	chat           apiv1connect.ChatServiceClient
+	frontmatter    apiv1connect.FrontmatterClient
+	inventory      apiv1connect.InventoryManagementServiceClient
+	pageImport     apiv1connect.PageImportServiceClient
+	pageManagement apiv1connect.PageManagementServiceClient
+	search         apiv1connect.SearchServiceClient
+	systemInfo     apiv1connect.SystemInfoServiceClient
 }
 
-// createAPIClients creates gRPC clients for all wiki services.
-func createAPIClients(conn *grpc.ClientConn) *apiClients {
+// createAPIClients creates Connect protocol clients for all wiki services.
+func createAPIClients(httpClient connect.HTTPClient, baseURL string) *apiClients {
 	return &apiClients{
-		chat:           apiv1.NewChatServiceClient(conn),
-		frontmatter:    apiv1.NewFrontmatterClient(conn),
-		inventory:      apiv1.NewInventoryManagementServiceClient(conn),
-		pageImport:     apiv1.NewPageImportServiceClient(conn),
-		pageManagement: apiv1.NewPageManagementServiceClient(conn),
-		search:         apiv1.NewSearchServiceClient(conn),
-		systemInfo:     apiv1.NewSystemInfoServiceClient(conn),
+		chat:           apiv1connect.NewChatServiceClient(httpClient, baseURL),
+		frontmatter:    apiv1connect.NewFrontmatterClient(httpClient, baseURL),
+		inventory:      apiv1connect.NewInventoryManagementServiceClient(httpClient, baseURL),
+		pageImport:     apiv1connect.NewPageImportServiceClient(httpClient, baseURL),
+		pageManagement: apiv1connect.NewPageManagementServiceClient(httpClient, baseURL),
+		search:         apiv1connect.NewSearchServiceClient(httpClient, baseURL),
+		systemInfo:     apiv1connect.NewSystemInfoServiceClient(httpClient, baseURL),
 	}
 }
 
-// registerToolHandlers registers all wiki API tools as MCP handlers.
+// registerToolHandlers registers all wiki API tools as MCP handlers using Connect protocol.
 func registerToolHandlers(s *mcpserver.MCPServer, clients *apiClients) {
 	// Register handlers for each service
-	// These forward MCP tool calls to the gRPC services
-	apiv1mcp.ForwardToChatServiceClient(s, clients.chat)
-	apiv1mcp.ForwardToFrontmatterClient(s, clients.frontmatter)
-	apiv1mcp.ForwardToInventoryManagementServiceClient(s, clients.inventory)
-	apiv1mcp.ForwardToPageImportServiceClient(s, clients.pageImport)
-	apiv1mcp.ForwardToPageManagementServiceClient(s, clients.pageManagement)
-	apiv1mcp.ForwardToSearchServiceClient(s, clients.search)
-	apiv1mcp.ForwardToSystemInfoServiceClient(s, clients.systemInfo)
+	// These forward MCP tool calls to the Connect protocol services
+	apiv1mcp.ForwardToConnectChatServiceClient(s, clients.chat)
+	apiv1mcp.ForwardToConnectFrontmatterClient(s, clients.frontmatter)
+	apiv1mcp.ForwardToConnectInventoryManagementServiceClient(s, clients.inventory)
+	apiv1mcp.ForwardToConnectPageImportServiceClient(s, clients.pageImport)
+	apiv1mcp.ForwardToConnectPageManagementServiceClient(s, clients.pageManagement)
+	apiv1mcp.ForwardToConnectSearchServiceClient(s, clients.search)
+	apiv1mcp.ForwardToConnectSystemInfoServiceClient(s, clients.systemInfo)
 }
 
 // computeBackoffAfterFailure returns the delay to wait before the next reconnect attempt
@@ -210,11 +189,11 @@ func computeBackoffAfterFailure(currentBackoffMs int, streamDuration time.Durati
 	return delayMs, nextBackoffMs
 }
 
-// maintainChatSubscription maintains a streaming gRPC subscription to SubscribeChatMessages.
+// maintainChatSubscription maintains a streaming Connect protocol subscription to SubscribeChatMessages.
 // It automatically reconnects with exponential backoff if the stream fails.
 // After a healthy long-running stream drops, the backoff resets to initialBackoffMs so
 // the next reconnect is fast. Rapid consecutive failures accumulate exponential backoff.
-func maintainChatSubscription(ctx context.Context, s *mcpserver.MCPServer, client apiv1.ChatServiceClient) {
+func maintainChatSubscription(ctx context.Context, s *mcpserver.MCPServer, client apiv1connect.ChatServiceClient) {
 	backoffMs := initialBackoffMs
 
 	for {
@@ -248,28 +227,41 @@ func maintainChatSubscription(ctx context.Context, s *mcpserver.MCPServer, clien
 	}
 }
 
-// subscribeToChatMessages establishes a streaming subscription to user messages
+// chatMessageReceiver is the minimal interface for reading from a Connect server-streaming response.
+// It is satisfied by *connect.ServerStreamForClient[apiv1.ChatMessage].
+type chatMessageReceiver interface {
+	Receive() bool
+	Msg() *apiv1.ChatMessage
+	Err() error
+	Close() error
+}
+
+// subscribeToChatMessages establishes a streaming subscription to user messages using Connect protocol
 // and emits them as Claude Code channel notifications.
-func subscribeToChatMessages(ctx context.Context, s *mcpserver.MCPServer, client apiv1.ChatServiceClient) error {
-	// Subscribe to chat messages (server streaming)
-	stream, err := client.SubscribeChatMessages(ctx, &apiv1.SubscribeChatMessagesRequest{})
+func subscribeToChatMessages(ctx context.Context, s *mcpserver.MCPServer, client apiv1connect.ChatServiceClient) error {
+	// Subscribe to chat messages (server streaming) using Connect protocol
+	stream, err := client.SubscribeChatMessages(ctx, connect.NewRequest(&apiv1.SubscribeChatMessagesRequest{}))
 	if err != nil {
+		// Context cancellation is not an error
+		if ctx.Err() != nil {
+			return nil
+		}
 		return fmt.Errorf("failed to subscribe: %w", err)
 	}
+	defer func() { _ = stream.Close() }()
 
 	// Log successful connection
 	log.Println("Chat subscription established")
 
-	// Stream messages and emit as channel notifications
-	for {
-		msg, err := stream.Recv()
-		if err != nil {
-			// Context cancellation is not an error
-			if ctx.Err() != nil {
-				return nil
-			}
-			return fmt.Errorf("stream error: %w", err)
-		}
+	return receiveChatMessages(ctx, s, stream)
+}
+
+// receiveChatMessages reads messages from stream and emits USER messages as channel notifications.
+// Returns nil only when the context is cancelled; returns a non-nil error otherwise (including
+// on a clean server-side EOF) so that maintainChatSubscription can reconnect.
+func receiveChatMessages(ctx context.Context, s *mcpserver.MCPServer, stream chatMessageReceiver) error {
+	for stream.Receive() {
+		msg := stream.Msg()
 
 		// Only emit user messages (assistant messages come from Claude itself)
 		if msg.Sender != apiv1.Sender_USER {
@@ -290,6 +282,23 @@ func subscribeToChatMessages(ctx context.Context, s *mcpserver.MCPServer, client
 			},
 		)
 	}
+
+	// Check for stream error (nil means clean EOF from server)
+	if err := stream.Err(); err != nil {
+		// Context cancellation is not an error
+		if ctx.Err() != nil {
+			return nil
+		}
+		return fmt.Errorf("stream error: %w", err)
+	}
+
+	// Clean EOF: server closed the stream. If context is still active, signal
+	// reconnect by returning a non-nil error; maintainChatSubscription treats
+	// nil as a clean client-side shutdown.
+	if ctx.Err() != nil {
+		return nil
+	}
+	return errors.New("stream closed by server")
 }
 
 // channelInstructions are the server instructions passed to Claude Code.
