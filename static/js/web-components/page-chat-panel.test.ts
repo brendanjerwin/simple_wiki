@@ -1,7 +1,8 @@
 import { expect, fixture, html } from '@open-wc/testing';
 import { stub, spy, type SinonStub, type SinonSpy } from 'sinon';
 import './page-chat-panel.js';
-import type { PageChatPanel } from './page-chat-panel.js';
+import type { PageChatPanel, ChatMessageState } from './page-chat-panel.js';
+import { Sender } from '../gen/api/v1/chat_pb.js';
 
 // Stub localStorage before tests
 let localStorageStub: { getItem: SinonStub; setItem: SinonStub; removeItem: SinonStub };
@@ -443,6 +444,227 @@ describe('PageChatPanel', () => {
 
     it('should close the panel', () => {
       expect(el.panelOpen).to.be.false;
+    });
+  });
+
+  describe('addReaction()', () => {
+    let el: PageChatPanel;
+
+    beforeEach(async () => {
+      localStorageStub.getItem.returns(null);
+      el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+
+      // Seed a message with one reaction group directly into state
+      const msgState: ChatMessageState = {
+        id: 'msg-1',
+        sender: Sender.USER,
+        content: 'Hello',
+        renderedHtml: '',
+        timestamp: new Date(),
+        senderName: 'User',
+        replyToId: '',
+        reactions: [{ emoji: '👍', reactors: ['alice'], count: 1 }],
+        edited: false,
+        sequence: 0n,
+      };
+      (el as unknown as { messagesById: Map<string, ChatMessageState> }).messagesById.set('msg-1', msgState);
+      el.messages = [msgState];
+      await el.updateComplete;
+    });
+
+    describe('when adding a reaction with a new emoji', () => {
+      beforeEach(async () => {
+        (el as unknown as { addReaction(id: string, emoji: string, reactor: string): void }).addReaction('msg-1', '❤️', 'bob');
+        await el.updateComplete;
+      });
+
+      it('should add a new reaction group', () => {
+        const msg = el.messages[0];
+        const group = msg.reactions.find((r) => r.emoji === '❤️');
+        expect(group).to.not.be.undefined;
+        expect(group!.count).to.equal(1);
+        expect(group!.reactors).to.include('bob');
+      });
+
+      it('should preserve the existing reaction group', () => {
+        const msg = el.messages[0];
+        const group = msg.reactions.find((r) => r.emoji === '👍');
+        expect(group).to.not.be.undefined;
+      });
+    });
+
+    describe('when adding a reaction with an existing emoji', () => {
+      let reactionsBefore: typeof el.messages[0]['reactions'];
+
+      beforeEach(async () => {
+        reactionsBefore = el.messages[0].reactions;
+        (el as unknown as { addReaction(id: string, emoji: string, reactor: string): void }).addReaction('msg-1', '👍', 'bob');
+        await el.updateComplete;
+      });
+
+      it('should update the reactor count', () => {
+        const group = el.messages[0].reactions.find((r) => r.emoji === '👍');
+        expect(group!.count).to.equal(2);
+        expect(group!.reactors).to.include('bob');
+      });
+
+      it('should create a new reactions array reference for Lit reactivity', () => {
+        expect(el.messages[0].reactions).to.not.equal(reactionsBefore);
+      });
+    });
+
+    describe('when adding a reaction to a non-existent message', () => {
+      it('should not throw', () => {
+        expect(() => {
+          (el as unknown as { addReaction(id: string, emoji: string, reactor: string): void }).addReaction('no-such-id', '👍', 'bob');
+        }).to.not.throw();
+      });
+    });
+  });
+
+  describe('addMessage()', () => {
+    let el: PageChatPanel;
+
+    beforeEach(async () => {
+      localStorageStub.getItem.returns(null);
+      el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+    });
+
+    describe('when adding a new user message', () => {
+      beforeEach(async () => {
+        await (el as unknown as { addMessage(msg: object): Promise<void> }).addMessage({
+          id: 'msg-1',
+          sender: Sender.USER,
+          content: 'Hello',
+          senderName: 'User',
+          replyToId: '',
+          reactions: [],
+          sequence: 0n,
+          timestamp: null,
+        });
+        await el.updateComplete;
+      });
+
+      it('should add the message to messages array', () => {
+        expect(el.messages).to.have.length(1);
+        expect(el.messages[0].id).to.equal('msg-1');
+      });
+
+      it('should store the message in messagesById', () => {
+        const stored = (el as unknown as { messagesById: Map<string, ChatMessageState> }).messagesById.get('msg-1');
+        expect(stored).to.not.be.undefined;
+      });
+    });
+
+    describe('when the same message is added twice (replay deduplication)', () => {
+      const msg = {
+        id: 'msg-dup',
+        sender: Sender.USER,
+        content: 'Original',
+        senderName: 'User',
+        replyToId: '',
+        reactions: [],
+        sequence: 0n,
+        timestamp: null,
+      };
+
+      beforeEach(async () => {
+        await (el as unknown as { addMessage(msg: object): Promise<void> }).addMessage(msg);
+        await (el as unknown as { addMessage(msg: object): Promise<void> }).addMessage({ ...msg, content: 'Replayed' });
+        await el.updateComplete;
+      });
+
+      it('should not add a duplicate entry', () => {
+        expect(el.messages).to.have.length(1);
+      });
+
+      it('should update content in place', () => {
+        expect(el.messages[0].content).to.equal('Replayed');
+      });
+    });
+  });
+
+  describe('editMessage()', () => {
+    let el: PageChatPanel;
+
+    beforeEach(async () => {
+      localStorageStub.getItem.returns(null);
+      el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+
+      const msgState: ChatMessageState = {
+        id: 'edit-msg',
+        sender: Sender.USER,
+        content: 'Original content',
+        renderedHtml: '',
+        timestamp: new Date(),
+        senderName: 'User',
+        replyToId: '',
+        reactions: [],
+        edited: false,
+        sequence: 0n,
+      };
+      (el as unknown as { messagesById: Map<string, ChatMessageState> }).messagesById.set('edit-msg', msgState);
+      el.messages = [msgState];
+      await el.updateComplete;
+    });
+
+    describe('when editing an existing message', () => {
+      beforeEach(async () => {
+        await (el as unknown as { editMessage(id: string, newContent: string): Promise<void> }).editMessage('edit-msg', 'Updated content');
+        await el.updateComplete;
+      });
+
+      it('should update the message content', () => {
+        expect(el.messages[0].content).to.equal('Updated content');
+      });
+
+      it('should mark the message as edited', () => {
+        expect(el.messages[0].edited).to.be.true;
+      });
+    });
+
+    describe('when editing a non-existent message', () => {
+      it('should not throw', async () => {
+        let threw = false;
+        try {
+          await (el as unknown as { editMessage(id: string, newContent: string): Promise<void> }).editMessage('no-such-id', 'New content');
+        } catch {
+          threw = true;
+        }
+        expect(threw).to.be.false;
+      });
+    });
+  });
+
+  describe('Ctrl+Space global keyboard shortcut', () => {
+    let el: PageChatPanel;
+
+    beforeEach(async () => {
+      localStorageStub.getItem.returns(null);
+      el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+      el.claudeConnected = true;
+      await el.updateComplete;
+    });
+
+    describe('when Ctrl+Space is pressed', () => {
+      let initialState: boolean;
+
+      beforeEach(async () => {
+        initialState = el.panelOpen;
+        const event = new KeyboardEvent('keydown', {
+          key: ' ',
+          code: 'Space',
+          ctrlKey: true,
+          cancelable: true,
+          bubbles: true,
+        });
+        document.dispatchEvent(event);
+        await el.updateComplete;
+      });
+
+      it('should toggle the panel open state', () => {
+        expect(el.panelOpen).to.not.equal(initialState);
+      });
     });
   });
 });

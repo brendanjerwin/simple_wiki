@@ -725,6 +725,7 @@ export class PageChatPanel extends LitElement {
     if (existing) {
       existing.reactors.push(reactor);
       existing.count = existing.reactors.length;
+      msg.reactions = [...msg.reactions]; // new reference so Lit detects the change
     } else {
       msg.reactions = [...msg.reactions, { emoji, reactors: [reactor], count: 1 }];
     }
