@@ -1145,8 +1145,7 @@ func checkContentVersionHash(currentMarkdown wikipage.Markdown, expectedHash *st
 	}
 
 	currentHash := computeContentHash(currentMarkdown)
-	if len(currentHash) != len(*expectedHash) ||
-		subtle.ConstantTimeCompare([]byte(currentHash), []byte(*expectedHash)) != 1 {
+	if subtle.ConstantTimeCompare([]byte(currentHash), []byte(*expectedHash)) != 1 {
 		return status.Error(codes.Aborted, "content version mismatch: page was modified since last read; re-read the page and retry")
 	}
 
