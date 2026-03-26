@@ -3455,6 +3455,144 @@ var _ = Describe("Server", func() {
 		})
 	})
 
+	Describe("RenderMarkdown", func() {
+		var (
+			req                         *apiv1.RenderMarkdownRequest
+			resp                        *apiv1.RenderMarkdownResponse
+			err                         error
+			mockMarkdownRenderer        *MockMarkdownRenderer
+			mockPageReaderMutator       *MockPageReaderMutator
+			mockFrontmatterIndexQueryer *MockFrontmatterIndexQueryer
+		)
+
+		BeforeEach(func() {
+			req = &apiv1.RenderMarkdownRequest{
+				Content: "# Hello World",
+			}
+			mockMarkdownRenderer = &MockMarkdownRenderer{
+				Result: []byte("<h1>Hello World</h1>"),
+			}
+			mockPageReaderMutator = &MockPageReaderMutator{}
+			mockFrontmatterIndexQueryer = &MockFrontmatterIndexQueryer{}
+		})
+
+		JustBeforeEach(func() {
+			var serverErr error
+			server, serverErr = v1.NewServer(
+				"commit",
+				time.Now(),
+				mockPageReaderMutator,
+				noOpBleveIndexQueryer{},
+				nil,
+				lumber.NewConsoleLogger(lumber.WARN),
+				mockMarkdownRenderer,
+				nil, // templateExecutor not used by RenderMarkdown
+				mockFrontmatterIndexQueryer,
+				nil, // fileStorer
+				noOpChatBufferManager{},
+				noOpPageOpener{},
+			)
+			Expect(serverErr).NotTo(HaveOccurred())
+			resp, err = server.RenderMarkdown(ctx, req)
+		})
+
+		When("content is empty", func() {
+			BeforeEach(func() {
+				req.Content = ""
+			})
+
+			It("should return empty HTML", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return an empty rendered_html", func() {
+				Expect(resp.RenderedHtml).To(Equal(""))
+			})
+		})
+
+		When("content is plain markdown without page context", func() {
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return rendered HTML", func() {
+				Expect(resp.RenderedHtml).To(Equal("<h1>Hello World</h1>"))
+			})
+		})
+
+		When("the markdown renderer is not available", func() {
+			BeforeEach(func() {
+				mockMarkdownRenderer.Result = nil
+				mockMarkdownRenderer.Err = nil
+			})
+
+			It("should return a FailedPrecondition error", func() {
+				// Create server without markdown renderer
+				noRendererServer, serverErr := v1.NewServer(
+					"commit",
+					time.Now(),
+					mockPageReaderMutator,
+					noOpBleveIndexQueryer{},
+					nil,
+					lumber.NewConsoleLogger(lumber.WARN),
+					nil, // no markdown renderer
+					nil,
+					mockFrontmatterIndexQueryer,
+					nil,
+					noOpChatBufferManager{},
+					noOpPageOpener{},
+				)
+				Expect(serverErr).NotTo(HaveOccurred())
+				_, noRendererErr := noRendererServer.RenderMarkdown(ctx, req)
+				Expect(noRendererErr).To(HaveGrpcStatus(codes.FailedPrecondition, "markdown renderer is not available"))
+			})
+		})
+
+		When("a page context is provided and the page exists", func() {
+			BeforeEach(func() {
+				req.Page = "test-page"
+				mockPageReaderMutator.Frontmatter = map[string]any{
+					"identifier": "test-page",
+					"title":      "Test Page",
+				}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return rendered HTML", func() {
+				Expect(resp.RenderedHtml).To(Equal("<h1>Hello World</h1>"))
+			})
+		})
+
+		When("a page context is provided but the page does not exist", func() {
+			BeforeEach(func() {
+				req.Page = "nonexistent-page"
+				mockPageReaderMutator.Err = os.ErrNotExist
+			})
+
+			It("should still render without error (falls back to empty context)", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return rendered HTML", func() {
+				Expect(resp.RenderedHtml).To(Equal("<h1>Hello World</h1>"))
+			})
+		})
+
+		When("the markdown renderer fails", func() {
+			BeforeEach(func() {
+				mockMarkdownRenderer.Result = nil
+				mockMarkdownRenderer.Err = errors.New("render failure")
+			})
+
+			It("should return an Internal error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to render markdown"))
+			})
+		})
+	})
+
 	Describe("ParseCSVPreview", func() {
 		var (
 			req                   *apiv1.ParseCSVPreviewRequest

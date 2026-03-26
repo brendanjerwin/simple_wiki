@@ -25,6 +25,7 @@ const (
 	ChatService_SendChatReply_FullMethodName         = "/api.v1.ChatService/SendChatReply"
 	ChatService_EditChatMessage_FullMethodName       = "/api.v1.ChatService/EditChatMessage"
 	ChatService_ReactToMessage_FullMethodName        = "/api.v1.ChatService/ReactToMessage"
+	ChatService_GetChatStatus_FullMethodName         = "/api.v1.ChatService/GetChatStatus"
 )
 
 // ChatServiceClient is the client API for ChatService service.
@@ -53,6 +54,9 @@ type ChatServiceClient interface {
 	// ReactToMessage is called by wiki-cli mcp when Claude uses the react tool.
 	// Adds an emoji reaction to a message.
 	ReactToMessage(ctx context.Context, in *ReactToMessageRequest, opts ...grpc.CallOption) (*ReactToMessageResponse, error)
+	// GetChatStatus returns whether Claude is currently connected (a channel subscriber exists).
+	// Used by the chat panel to disable the UI when Claude is unavailable.
+	GetChatStatus(ctx context.Context, in *GetChatStatusRequest, opts ...grpc.CallOption) (*GetChatStatusResponse, error)
 }
 
 type chatServiceClient struct {
@@ -169,6 +173,16 @@ func (c *chatServiceClient) ReactToMessage(ctx context.Context, in *ReactToMessa
 	return out, nil
 }
 
+func (c *chatServiceClient) GetChatStatus(ctx context.Context, in *GetChatStatusRequest, opts ...grpc.CallOption) (*GetChatStatusResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetChatStatusResponse)
+	err := c.cc.Invoke(ctx, ChatService_GetChatStatus_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ChatServiceServer is the server API for ChatService service.
 // All implementations must embed UnimplementedChatServiceServer
 // for forward compatibility
@@ -195,6 +209,9 @@ type ChatServiceServer interface {
 	// ReactToMessage is called by wiki-cli mcp when Claude uses the react tool.
 	// Adds an emoji reaction to a message.
 	ReactToMessage(context.Context, *ReactToMessageRequest) (*ReactToMessageResponse, error)
+	// GetChatStatus returns whether Claude is currently connected (a channel subscriber exists).
+	// Used by the chat panel to disable the UI when Claude is unavailable.
+	GetChatStatus(context.Context, *GetChatStatusRequest) (*GetChatStatusResponse, error)
 	mustEmbedUnimplementedChatServiceServer()
 }
 
@@ -219,6 +236,9 @@ func (UnimplementedChatServiceServer) EditChatMessage(context.Context, *EditChat
 }
 func (UnimplementedChatServiceServer) ReactToMessage(context.Context, *ReactToMessageRequest) (*ReactToMessageResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ReactToMessage not implemented")
+}
+func (UnimplementedChatServiceServer) GetChatStatus(context.Context, *GetChatStatusRequest) (*GetChatStatusResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetChatStatus not implemented")
 }
 func (UnimplementedChatServiceServer) mustEmbedUnimplementedChatServiceServer() {}
 
@@ -347,6 +367,24 @@ func _ChatService_ReactToMessage_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ChatService_GetChatStatus_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetChatStatusRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ChatServiceServer).GetChatStatus(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ChatService_GetChatStatus_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ChatServiceServer).GetChatStatus(ctx, req.(*GetChatStatusRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ChatService_ServiceDesc is the grpc.ServiceDesc for ChatService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -369,6 +407,10 @@ var ChatService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ReactToMessage",
 			Handler:    _ChatService_ReactToMessage_Handler,
+		},
+		{
+			MethodName: "GetChatStatus",
+			Handler:    _ChatService_GetChatStatus_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
