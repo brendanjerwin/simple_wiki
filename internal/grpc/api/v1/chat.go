@@ -12,11 +12,13 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+const errPageRequired = "page is required"
+
 // SendMessage implements the SendMessage RPC.
 // Receives a user message, assigns a UUID, writes it to the buffer, and pushes it to channel subscribers.
 func (s *Server) SendMessage(ctx context.Context, req *apiv1.SendChatMessageRequest) (*apiv1.SendChatMessageResponse, error) {
 	if req.Page == "" {
-		return nil, status.Error(codes.InvalidArgument, "page is required")
+		return nil, status.Error(codes.InvalidArgument, errPageRequired)
 	}
 	if req.Content == "" {
 		return nil, status.Error(codes.InvalidArgument, "content is required")
@@ -53,7 +55,7 @@ func (s *Server) SendMessage(ctx context.Context, req *apiv1.SendChatMessageRequ
 // then streams new events (messages, edits, reactions).
 func (s *Server) SubscribeChat(req *apiv1.SubscribeChatRequest, stream apiv1.ChatService_SubscribeChatServer) error {
 	if req.Page == "" {
-		return status.Error(codes.InvalidArgument, "page is required")
+		return status.Error(codes.InvalidArgument, errPageRequired)
 	}
 
 	// Atomically subscribe and get existing messages to prevent race conditions
@@ -159,7 +161,7 @@ func (s *Server) SubscribeChatMessages(_ *apiv1.SubscribeChatMessagesRequest, st
 // Called by wiki-cli mcp when Claude uses the reply tool.
 func (s *Server) SendChatReply(_ context.Context, req *apiv1.SendChatReplyRequest) (*apiv1.SendChatReplyResponse, error) {
 	if req.Page == "" {
-		return nil, status.Error(codes.InvalidArgument, "page is required")
+		return nil, status.Error(codes.InvalidArgument, errPageRequired)
 	}
 	if req.Content == "" {
 		return nil, status.Error(codes.InvalidArgument, "content is required")
