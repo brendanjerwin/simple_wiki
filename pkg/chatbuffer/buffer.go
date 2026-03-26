@@ -324,9 +324,11 @@ func (m *Manager) EditMessage(messageID, newContent string) error {
 					Timestamp:  time.Now(),
 				},
 			}
-			notifyEventListeners(buf.eventListeners, event)
-
+			listeners := make([]chan Event, len(buf.eventListeners))
+			copy(listeners, buf.eventListeners)
 			buf.mu.Unlock()
+
+			notifyEventListeners(listeners, event)
 			return nil
 		}
 		buf.mu.Unlock()
@@ -365,9 +367,11 @@ func (m *Manager) AddReaction(messageID, emoji, reactor string) error {
 					Reactor:   reactor,
 				},
 			}
-			notifyEventListeners(buf.eventListeners, event)
-
+			listeners := make([]chan Event, len(buf.eventListeners))
+			copy(listeners, buf.eventListeners)
 			buf.mu.Unlock()
+
+			notifyEventListeners(listeners, event)
 			return nil
 		}
 		buf.mu.Unlock()
