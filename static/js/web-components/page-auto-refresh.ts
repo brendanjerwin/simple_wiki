@@ -107,7 +107,7 @@ export class PageAutoRefresh extends LitElement {
         // Stream ended cleanly — don't reconnect
         break;
       } catch (err) {
-        if (this._isAbortError(err, signal)) {
+        if ((err instanceof Error && err.name === 'AbortError') || signal.aborted) {
           break;
         }
 
@@ -123,6 +123,10 @@ export class PageAutoRefresh extends LitElement {
   }
 
   private async _handleWatchResponse(response: WatchPageResponse): Promise<void> {
+    if (response.lastModified) {
+      this.lastRefreshTime = timestampDate(response.lastModified);
+    }
+
     if (!this.currentHash) {
       this._handleFirstResponse(response);
     } else if (this.currentHash !== response.versionHash) {
@@ -131,20 +135,14 @@ export class PageAutoRefresh extends LitElement {
   }
 
   private _handleFirstResponse(response: WatchPageResponse): void {
-    // First response - store hash and mod time
+    // First response - store hash
     this.currentHash = response.versionHash;
     this.dataset['versionHash'] = response.versionHash; // exposed for testability
-    if (response.lastModified) {
-      this.lastRefreshTime = timestampDate(response.lastModified);
-    }
     this.dispatchPageStatusEvent();
   }
 
   private async _handleHashChanged(response: WatchPageResponse): Promise<void> {
     // Hash changed - refresh the page content
-    if (response.lastModified) {
-      this.lastRefreshTime = timestampDate(response.lastModified);
-    }
     try {
       await this.refreshPageContent();
       // Only update hash after successful refresh to allow retry on failure
@@ -155,10 +153,6 @@ export class PageAutoRefresh extends LitElement {
       // The hash is NOT updated, so the next stream message with the same
       // hash will trigger another refresh attempt.
     }
-  }
-
-  private _isAbortError(err: unknown, signal: AbortSignal): boolean {
-    return (err instanceof Error && err.name === 'AbortError') || signal.aborted;
   }
 
   private async _waitForReconnect(signal: AbortSignal, delayMs: number): Promise<void> {
