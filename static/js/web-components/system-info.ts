@@ -147,10 +147,10 @@ export class SystemInfo extends LitElement {
   private debounceTimer?: ReturnType<typeof setTimeout>;
   private refreshTimer?: ReturnType<typeof setInterval>;
   private streamSubscription?: AbortController;
-  private _handleClickOutside: (event: MouseEvent) => void;
+  private readonly _handleClickOutside: (event: MouseEvent) => void;
   private readonly _handlePageStatusChanged: (event: Event) => void;
 
-  private client = createClient(SystemInfoService, getGrpcWebTransport());
+  private readonly client = createClient(SystemInfoService, getGrpcWebTransport());
 
   constructor() {
     super();
