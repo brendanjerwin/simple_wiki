@@ -31,6 +31,12 @@ service PageManagementService {
   // Emits the current version_hash when the content changes on the server.
   // Clients can use this to re-fetch and re-render the page content.
   rpc WatchPage(WatchPageRequest) returns (stream WatchPageResponse);
+
+  // RenderMarkdown renders arbitrary markdown content to HTML.
+  // Supports selective template macros (LinkTo, FindBy, etc.) but excludes
+  // interactive widget macros (Checklist, Blog) which render as literal text.
+  // Used by the chat panel to render assistant messages.
+  rpc RenderMarkdown(RenderMarkdownRequest) returns (RenderMarkdownResponse);
 }
 
 // Create Page
@@ -220,4 +226,19 @@ message WatchPageResponse {
 
   // The file modification time of the page on disk.
   google.protobuf.Timestamp last_modified = 2;
+}
+
+// Render Markdown
+message RenderMarkdownRequest {
+  // The raw markdown content to render.
+  string content = 1;
+
+  // Optional page identifier for macro context (e.g., LinkTo resolves relative to this page).
+  // Macros are always executed; when a page is provided its frontmatter enriches the context.
+  string page = 2;
+}
+
+message RenderMarkdownResponse {
+  // The rendered HTML content.
+  string rendered_html = 1;
 }

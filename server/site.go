@@ -44,6 +44,16 @@ func (TemplateExecutor) ExecuteTemplate(templateString string, fm wikipage.Front
 	return templating.ExecuteTemplate(templateString, fm, reader, query)
 }
 
+// ChatTemplateExecutor implements the wikipage.IExecuteTemplate interface with a
+// restricted set of macros suitable for chat messages. Excludes interactive widget
+// macros (Checklist, Blog) that render web components inappropriate for chat bubbles.
+type ChatTemplateExecutor struct{}
+
+// ExecuteTemplate executes a template using the chat-safe macro set.
+func (ChatTemplateExecutor) ExecuteTemplate(templateString string, fm wikipage.FrontMatter, reader wikipage.PageReader, query wikipage.IQueryFrontmatterIndex) ([]byte, error) {
+	return templating.ExecuteChatTemplate(templateString, fm, reader, query)
+}
+
 // Site represents the wiki site.
 type Site struct {
 	PathToData              string

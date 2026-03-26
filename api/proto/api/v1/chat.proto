@@ -33,6 +33,10 @@ service ChatService {
   // ReactToMessage is called by wiki-cli mcp when Claude uses the react tool.
   // Adds an emoji reaction to a message.
   rpc ReactToMessage(ReactToMessageRequest) returns (ReactToMessageResponse) {}
+
+  // GetChatStatus returns whether Claude is currently connected (a channel subscriber exists).
+  // Used by the chat panel to disable the UI when Claude is unavailable.
+  rpc GetChatStatus(GetChatStatusRequest) returns (GetChatStatusResponse) {}
 }
 
 // Sender identifies who sent a chat message.
@@ -132,3 +136,12 @@ message ReactToMessageRequest {
 
 // ReactToMessageResponse is the response for ReactToMessage.
 message ReactToMessageResponse {}
+
+// GetChatStatusRequest is the request for GetChatStatus.
+message GetChatStatusRequest {}
+
+// GetChatStatusResponse is the response for GetChatStatus.
+message GetChatStatusResponse {
+  // Whether a Claude channel subscriber is connected.
+  bool connected = 1;
+}
