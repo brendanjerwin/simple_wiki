@@ -156,6 +156,7 @@
         {{ end }}
         {{ if .ViewPage }}
         <page-auto-refresh page-name="{{ .Page }}"></page-auto-refresh>
+        <page-chat-panel page="{{ .Page }}"></page-chat-panel>
         {{ end }}
         <frontmatter-editor-dialog id="frontmatter-dialog"></frontmatter-editor-dialog>
         <inventory-add-item-dialog id="inventory-add-dialog"></inventory-add-item-dialog>

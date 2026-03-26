@@ -107,7 +107,7 @@ var _ = Describe("setupMCPServer", func() {
 		var err error
 
 		BeforeEach(func() {
-			s, httpClient, err = setupMCPServer("http://localhost:1")
+			s, httpClient, err = setupMCPServer("http://localhost:1", nil)
 		})
 
 		It("should not error", func() {
@@ -905,7 +905,7 @@ var _ = Describe("setupMCPServer experimental capability hook", func() {
 		var response mcp.JSONRPCMessage
 
 		BeforeEach(func() {
-			s, _, err := setupMCPServer("http://localhost:1")
+			s, _, err := setupMCPServer("http://localhost:1", nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			// Send a real initialize message to trigger the OnAfterInitialize hook
