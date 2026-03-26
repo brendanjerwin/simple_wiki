@@ -1218,6 +1218,38 @@ var _ = Describe("Server", func() {
 					Expect(resp.Frontmatter).To(Equal(expectedPb))
 				})
 			})
+
+			When("the last element from a slice", func() {
+				var expectedFm wikipage.FrontMatter
+				BeforeEach(func() {
+					mockPageReaderMutator.Frontmatter = wikipage.FrontMatter{
+						"a": "b",
+						"f": []any{"only-item"},
+					}
+					req.KeyPath = []*apiv1.PathComponent{
+						{Component: &apiv1.PathComponent_Key{Key: "f"}},
+						{Component: &apiv1.PathComponent_Index{Index: 0}},
+					}
+					expectedFm = wikipage.FrontMatter{
+						"a": "b",
+						"f": []any{},
+					}
+				})
+
+				It("should not return an error", func() {
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("should write an empty slice (not remove the key)", func() {
+					Expect(mockPageReaderMutator.WrittenFrontmatter).To(Equal(expectedFm))
+				})
+
+				It("should return the correctly modified frontmatter with an empty slice", func() {
+					expectedPb, err := structpb.NewStruct(expectedFm)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(resp.Frontmatter).To(Equal(expectedPb))
+				})
+			})
 		})
 
 		When("the path is invalid", func() {
@@ -1249,6 +1281,19 @@ var _ = Describe("Server", func() {
 				})
 				It("returns an out of range error and no response", func() {
 					Expect(err).To(HaveGrpcStatusWithSubstr(codes.OutOfRange, "index 99 is out of range"))
+					Expect(resp).To(BeNil())
+				})
+			})
+
+			When("a negative index is used", func() {
+				BeforeEach(func() {
+					req.KeyPath = []*apiv1.PathComponent{
+						{Component: &apiv1.PathComponent_Key{Key: "f"}},
+						{Component: &apiv1.PathComponent_Index{Index: -1}},
+					}
+				})
+				It("returns an out of range error and no response", func() {
+					Expect(err).To(HaveGrpcStatusWithSubstr(codes.OutOfRange, "index -1 is out of range"))
 					Expect(resp).To(BeNil())
 				})
 			})
