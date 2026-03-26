@@ -459,7 +459,7 @@ var _ = Describe("ChatService", func() {
 				st, ok := status.FromError(err)
 				Expect(ok).To(BeTrue())
 				Expect(st.Code()).To(Equal(codes.Unavailable))
-				Expect(st.Message()).To(ContainSubstring("Claude is not connected"))
+				Expect(st.Message()).To(ContainSubstring("no channel subscriber connected"))
 			})
 		})
 	})

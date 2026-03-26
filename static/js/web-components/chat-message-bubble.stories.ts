@@ -34,7 +34,7 @@ export const UserMessage: Story = {
       message-id="msg-1"
       .sender=${Sender.USER}
       sender-name="Brendan"
-      content="Hey Claude, can you help me with this page?"
+      content="Hey Dorium, can you help me with this page?"
     ></chat-message-bubble>
   `,
 };

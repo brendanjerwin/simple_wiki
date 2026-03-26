@@ -127,7 +127,7 @@ export const ErrorState: Story = {
     el.panelOpen = true;
     el.messages = [];
     el.streamState = 'disconnected';
-    el.error = new Error('Claude is not connected');
+    el.error = new Error('Dorium is not connected');
     return el;
   },
 };
