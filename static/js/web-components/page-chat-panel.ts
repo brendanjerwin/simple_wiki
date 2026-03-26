@@ -206,6 +206,8 @@ export class PageChatPanel extends LitElement {
 
       .input-area textarea {
         flex: 1;
+        min-width: 0;
+        width: 100%;
         resize: none;
         border: 1px solid var(--color-border-primary);
         border-radius: 6px;
@@ -219,6 +221,8 @@ export class PageChatPanel extends LitElement {
         outline: none;
         box-sizing: border-box;
         -webkit-appearance: none;
+        -webkit-tap-highlight-color: transparent;
+        touch-action: manipulation;
       }
 
       .input-area textarea:focus {
@@ -445,7 +449,7 @@ export class PageChatPanel extends LitElement {
           <textarea
             placeholder="${this.claudeConnected ? 'Type a message...' : `${this.persona} is not connected`}"
             maxlength="${MAX_INPUT_LENGTH}"
-            rows="1"
+            rows="2"
             ?disabled=${!this.claudeConnected}
             @keydown=${this._handleKeydown}
           ></textarea>
