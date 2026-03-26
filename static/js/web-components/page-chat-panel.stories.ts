@@ -82,7 +82,7 @@ export const PanelOpenWithMessages: Story = {
   render: () => {
     const el = document.createElement('page-chat-panel') as PageChatPanel;
     el.page = 'test-page';
-    el.panelOpen = true;
+    el.drawerOpen = true;
     el.messages = sampleMessages;
     return el;
   },
@@ -92,7 +92,7 @@ export const EmptyChat: Story = {
   render: () => {
     const el = document.createElement('page-chat-panel') as PageChatPanel;
     el.page = 'test-page';
-    el.panelOpen = true;
+    el.drawerOpen = true;
     el.messages = [];
     return el;
   },
@@ -102,7 +102,7 @@ export const ThinkingState: Story = {
   render: () => {
     const el = document.createElement('page-chat-panel') as PageChatPanel;
     el.page = 'test-page';
-    el.panelOpen = true;
+    el.drawerOpen = true;
     el.messages = sampleMessages.slice(0, 3);
     el.waitingForAssistant = true;
     return el;
@@ -113,7 +113,7 @@ export const ReconnectingState: Story = {
   render: () => {
     const el = document.createElement('page-chat-panel') as PageChatPanel;
     el.page = 'test-page';
-    el.panelOpen = true;
+    el.drawerOpen = true;
     el.messages = sampleMessages.slice(0, 2);
     el.streamState = 'reconnecting';
     return el;
@@ -124,7 +124,7 @@ export const ErrorState: Story = {
   render: () => {
     const el = document.createElement('page-chat-panel') as PageChatPanel;
     el.page = 'test-page';
-    el.panelOpen = true;
+    el.drawerOpen = true;
     el.messages = [];
     el.streamState = 'disconnected';
     el.error = new Error('Dorium is not connected');

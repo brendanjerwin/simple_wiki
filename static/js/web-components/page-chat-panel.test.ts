@@ -3,6 +3,7 @@ import { stub, spy, type SinonStub, type SinonSpy } from 'sinon';
 import './page-chat-panel.js';
 import type { PageChatPanel, ChatMessageState } from './page-chat-panel.js';
 import { Sender } from '../gen/api/v1/chat_pb.js';
+import { resetForTesting } from './drawer-coordinator.js';
 
 // Stub localStorage before tests
 let localStorageStub: { getItem: SinonStub; setItem: SinonStub; removeItem: SinonStub };
@@ -25,6 +26,7 @@ describe('PageChatPanel', () => {
     localStorageStub.setItem.restore();
     localStorageStub.removeItem.restore();
     fetchStub.restore();
+    resetForTesting();
   });
 
   describe('when Claude is not connected', () => {
@@ -47,7 +49,7 @@ describe('PageChatPanel', () => {
     });
 
     it('should show disconnected banner when panel is open', async () => {
-      el.panelOpen = true;
+      el.drawerOpen = true;
       await el.updateComplete;
       const banner = el.shadowRoot!.querySelector('.status-banner.disconnected');
       expect(banner).to.not.be.null;
@@ -55,14 +57,14 @@ describe('PageChatPanel', () => {
     });
 
     it('should disable the textarea when panel is open', async () => {
-      el.panelOpen = true;
+      el.drawerOpen = true;
       await el.updateComplete;
       const textarea = el.shadowRoot!.querySelector('textarea');
       expect(textarea!.disabled).to.be.true;
     });
 
     it('should disable the send button when panel is open', async () => {
-      el.panelOpen = true;
+      el.drawerOpen = true;
       await el.updateComplete;
       const btn = el.shadowRoot!.querySelector('.send-button') as HTMLButtonElement;
       expect(btn.disabled).to.be.true;
@@ -158,7 +160,7 @@ describe('PageChatPanel', () => {
     });
 
     it('should restore the open state', () => {
-      expect(el.panelOpen).to.be.true;
+      expect(el.drawerOpen).to.be.true;
     });
 
     it('should show the panel as open', () => {
@@ -403,7 +405,7 @@ describe('PageChatPanel', () => {
 
     describe('when panel is open', () => {
       beforeEach(async () => {
-        el.panelOpen = true;
+        el.drawerOpen = true;
         await el.updateComplete;
       });
 
@@ -443,7 +445,7 @@ describe('PageChatPanel', () => {
     });
 
     it('should close the panel', () => {
-      expect(el.panelOpen).to.be.false;
+      expect(el.drawerOpen).to.be.false;
     });
   });
 
@@ -650,7 +652,7 @@ describe('PageChatPanel', () => {
       let initialState: boolean;
 
       beforeEach(async () => {
-        initialState = el.panelOpen;
+        initialState = el.drawerOpen;
         const event = new KeyboardEvent('keydown', {
           key: ' ',
           code: 'Space',
@@ -663,7 +665,7 @@ describe('PageChatPanel', () => {
       });
 
       it('should toggle the panel open state', () => {
-        expect(el.panelOpen).to.not.equal(initialState);
+        expect(el.drawerOpen).to.not.equal(initialState);
       });
     });
   });

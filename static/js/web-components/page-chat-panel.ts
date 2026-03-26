@@ -13,7 +13,9 @@ import {
   type ChatEvent,
 } from '../gen/api/v1/chat_pb.js';
 import { ChatMarkdownRenderer } from './chat-markdown-renderer.js';
-import { sharedStyles, colorCSS, typographyCSS } from './shared-styles.js';
+import { sharedStyles, colorCSS, typographyCSS, zIndexCSS } from './shared-styles.js';
+import { DrawerMixin } from './drawer-mixin.js';
+import { registerAmbientCTA, type AmbientCTA } from './drawer-coordinator.js';
 import type { Reaction } from '../gen/api/v1/chat_pb.js';
 import type { ReactionGroup, ScrollToMessageEventDetail } from './chat-message-bubble.js';
 import './chat-message-bubble.js';
@@ -43,10 +45,13 @@ declare global {
   }
 }
 
-export class PageChatPanel extends LitElement {
+export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA {
+  override readonly drawerId = 'page-chat';
+
   static override styles = [
     colorCSS,
     typographyCSS,
+    zIndexCSS,
     css`
       :host {
         display: block;
@@ -62,7 +67,7 @@ export class PageChatPanel extends LitElement {
         background: var(--color-background-primary);
         border: 1px solid var(--color-border-primary);
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-        z-index: 999;
+        z-index: var(--z-ambient);
         cursor: pointer;
         display: flex;
         align-items: center;
@@ -92,7 +97,7 @@ export class PageChatPanel extends LitElement {
         border-left: 1px solid var(--color-border-primary);
         display: flex;
         flex-direction: column;
-        z-index: 998;
+        z-index: var(--z-drawer);
         transform: translateX(100%);
         transition: transform 0.3s ease;
       }
@@ -289,7 +294,7 @@ export class PageChatPanel extends LitElement {
   declare persona: string;
 
   @state()
-  declare panelOpen: boolean;
+  declare _fabVisible: boolean;
 
   @state()
   declare messages: ChatMessageState[];
@@ -316,11 +321,13 @@ export class PageChatPanel extends LitElement {
   private readonly _handleGlobalKeydown: (e: KeyboardEvent) => void;
   private userHasScrolled = false;
 
+  private _restoreOpen = false;
+
   constructor() {
     super();
     this.page = '';
     this.persona = 'Dorium';
-    this.panelOpen = false;
+    this._fabVisible = true;
     this.messages = [];
     this.streamState = 'disconnected';
     this.waitingForAssistant = false;
@@ -332,19 +339,26 @@ export class PageChatPanel extends LitElement {
     this._handleViewportResize = this.handleViewportResize.bind(this);
     this._handleGlobalKeydown = this.handleGlobalKeydown.bind(this);
 
-    // Restore panel state from localStorage
+    // Read localStorage flag; actual open deferred to connectedCallback
     try {
-      this.panelOpen = localStorage.getItem(STORAGE_KEY) === 'true';
+      this._restoreOpen = localStorage.getItem(STORAGE_KEY) === 'true';
     } catch {
       // localStorage unavailable
     }
   }
 
+  private _ctaCleanup: (() => void) | undefined;
+
   override connectedCallback() {
     super.connectedCallback();
+    this._ctaCleanup = registerAmbientCTA(this);
     document.addEventListener('visibilitychange', this._handleVisibilityChange);
     document.addEventListener('keydown', this._handleGlobalKeydown);
     window.visualViewport?.addEventListener('resize', this._handleViewportResize);
+    if (this._restoreOpen) {
+      this.openDrawer();
+      this._restoreOpen = false;
+    }
     if (this.page) {
       this.startStream();
     }
@@ -354,6 +368,8 @@ export class PageChatPanel extends LitElement {
 
   override disconnectedCallback() {
     super.disconnectedCallback();
+    this._ctaCleanup?.();
+    this._ctaCleanup = undefined;
     document.removeEventListener('visibilitychange', this._handleVisibilityChange);
     document.removeEventListener('keydown', this._handleGlobalKeydown);
     window.visualViewport?.removeEventListener('resize', this._handleViewportResize);
@@ -380,21 +396,21 @@ export class PageChatPanel extends LitElement {
   override render() {
     return html`
       ${sharedStyles}
-      ${this.panelOpen ? nothing : html`
+      ${this._fabVisible && !this.drawerOpen ? html`
         <button
           class="fab ${this.claudeConnected ? '' : 'disabled'}"
-          @click=${this.togglePanel}
+          @click=${this.toggleDrawer}
           aria-label="Chat with ${this.persona}"
           aria-disabled=${!this.claudeConnected ? 'true' : 'false'}
         >
           <i class="fa-solid fa-robot"></i>
         </button>
-      `}
+      ` : nothing}
 
-      <div class="panel ${this.panelOpen ? 'open' : ''}" ?inert=${!this.panelOpen}>
+      <div class="panel ${this.drawerOpen ? 'open' : ''}" ?inert=${!this.drawerOpen}>
         <div class="panel-header">
           <span class="panel-title">${this.persona}</span>
-          <button class="close-button" @click=${this.togglePanel} aria-label="Close chat">
+          <button class="close-button" @click=${this.closeDrawer} aria-label="Close chat">
             <i class="fa-solid fa-xmark"></i>
           </button>
         </div>
@@ -466,19 +482,22 @@ export class PageChatPanel extends LitElement {
     `;
   }
 
-  private togglePanel() {
-    this.panelOpen = !this.panelOpen;
-    try {
-      localStorage.setItem(STORAGE_KEY, String(this.panelOpen));
-    } catch {
-      // localStorage unavailable
-    }
-    if (this.panelOpen) {
-      this.updateComplete.then(() => {
-        this.scrollToBottom();
-        this.focusInput();
-      });
-    }
+  override openDrawer(): void {
+    super.openDrawer();
+    try { localStorage.setItem(STORAGE_KEY, 'true'); } catch { /* */ }
+    this.updateComplete.then(() => {
+      this.scrollToBottom();
+      this.focusInput();
+    });
+  }
+
+  override closeDrawer(): void {
+    super.closeDrawer();
+    try { localStorage.setItem(STORAGE_KEY, 'false'); } catch { /* */ }
+  }
+
+  setAmbientVisible(visible: boolean): void {
+    this._fabVisible = visible;
   }
 
   private _handleKeydown(e: KeyboardEvent) {
@@ -545,7 +564,7 @@ export class PageChatPanel extends LitElement {
   private handleGlobalKeydown(e: KeyboardEvent): void {
     if (e.ctrlKey && e.code === 'Space') {
       e.preventDefault();
-      this.togglePanel();
+      this.toggleDrawer();
     }
   }
 
@@ -557,7 +576,7 @@ export class PageChatPanel extends LitElement {
       this.claudeConnected = response.connected;
 
       // If Claude just connected and panel was open, re-focus input
-      if (!wasConnected && response.connected && this.panelOpen) {
+      if (!wasConnected && response.connected && this.drawerOpen) {
         this.focusInput();
       }
     } catch {
