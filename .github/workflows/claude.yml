@@ -25,19 +25,19 @@ jobs:
       pull-requests: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
           fetch-depth: 1
 
       - name: Install Devbox
-        uses: jetify-com/devbox-install-action@v0.14.0
+        uses: jetify-com/devbox-install-action@a0d2d53632934ae004f878c840055956d9f741b0 # v0.14.0
         with:
           enable-cache: "true"
 
       - name: Install Devbox dependencies
         run: devbox install
 
-      - uses: anthropics/claude-code-action@v1
+      - uses: anthropics/claude-code-action@0ee1beea589a67d33340072691a5d42abec7ae6b # v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           claude_args: "--allowedTools Bash Read Write Edit Glob Grep WebFetch WebSearch"
