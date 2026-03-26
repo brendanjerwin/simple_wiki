@@ -106,14 +106,13 @@ export class SystemInfoVersion extends LitElement {
   }
 
   private renderVersion() {
+    const commit = this.formatCommit(this.version?.commit || '');
+    const built = this.version?.buildTime ? this.formatTimestamp(this.version.buildTime) : '';
     return html`
       <div class="version-row">
-        <span class="label">Commit:</span>
-        <span class="value commit">${this.formatCommit(this.version?.commit || '')}</span>
-      </div>
-      <div class="version-row">
-        <span class="label">Built:</span>
-        <span class="value">${this.version?.buildTime ? this.formatTimestamp(this.version.buildTime) : ''}</span>
+        <span class="label">Server:</span>
+        <span class="value commit">${commit}</span>
+        ${built ? html`<span class="value"> · ${built}</span>` : ''}
       </div>
     `;
   }

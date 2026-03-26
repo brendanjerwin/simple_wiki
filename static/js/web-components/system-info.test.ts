@@ -153,19 +153,19 @@ describe('SystemInfo', () => {
     });
 
     it('should show job status component', () => {
-      const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing');
+      const indexingStatus = el.shadowRoot!.querySelector('system-info-jobs');
       expect(indexingStatus).to.exist;
     });
 
     it('should pass correct data to job status component', () => {
-      const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus: { jobQueues: unknown[] } }>('system-info-indexing');
+      const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus: { jobQueues: unknown[] } }>('system-info-jobs');
       expect(indexingStatus).to.exist;
       expect(indexingStatus!.jobStatus).to.exist;
       expect(indexingStatus!.jobStatus.jobQueues).to.have.lengthOf(1);
     });
 
     it('should pass correct job queue data', () => {
-      const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus?: { jobQueues: Array<{ name: string; jobsRemaining: number; isActive: boolean; highWaterMark: number }> } }>('system-info-indexing');
+      const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus?: { jobQueues: Array<{ name: string; jobsRemaining: number; isActive: boolean; highWaterMark: number }> } }>('system-info-jobs');
       const queue = indexingStatus?.jobStatus?.jobQueues[0];
       expect(queue).to.exist;
       expect(queue!.name).to.equal('Frontmatter');
@@ -175,7 +175,7 @@ describe('SystemInfo', () => {
 
 
     it('should pass high water mark data', () => {
-      const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus?: { jobQueues: Array<{ highWaterMark: number }> } }>('system-info-indexing');
+      const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus?: { jobQueues: Array<{ highWaterMark: number }> } }>('system-info-jobs');
       const queue = indexingStatus?.jobStatus?.jobQueues[0];
       expect(queue).to.exist;
       expect(queue!.highWaterMark).to.equal(100);
@@ -208,7 +208,7 @@ describe('SystemInfo', () => {
     });
 
     it('should show job status component even when idle', () => {
-      const indexingStatus = el.shadowRoot!.querySelector('system-info-indexing');
+      const indexingStatus = el.shadowRoot!.querySelector('system-info-jobs');
       expect(indexingStatus).to.exist;
     });
   });
@@ -273,7 +273,7 @@ describe('SystemInfo', () => {
       });
 
       it('should pass correct job count to indexing component', () => {
-        const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus?: { jobQueues: Array<{ jobsRemaining: number }> } }>('system-info-indexing');
+        const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus?: { jobQueues: Array<{ jobsRemaining: number }> } }>('system-info-jobs');
         const queue = indexingStatus?.jobStatus?.jobQueues[0];
         expect(queue).to.exist;
         expect(queue!.jobsRemaining).to.equal(1);
@@ -333,21 +333,21 @@ describe('SystemInfo', () => {
       });
 
       it('should pass correct job remaining count', () => {
-        const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus?: { jobQueues: Array<{ jobsRemaining: number }> } }>('system-info-indexing');
+        const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus?: { jobQueues: Array<{ jobsRemaining: number }> } }>('system-info-jobs');
         const queue = indexingStatus?.jobStatus?.jobQueues[0];
         expect(queue).to.exist;
         expect(queue!.jobsRemaining).to.equal(75);
       });
 
       it('should pass correct high water mark', () => {
-        const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus?: { jobQueues: Array<{ highWaterMark: number }> } }>('system-info-indexing');
+        const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus?: { jobQueues: Array<{ highWaterMark: number }> } }>('system-info-jobs');
         const queue = indexingStatus?.jobStatus?.jobQueues[0];
         expect(queue).to.exist;
         expect(queue!.highWaterMark).to.equal(200);
       });
 
       it('should pass correct queue name', () => {
-        const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus?: { jobQueues: Array<{ name: string }> } }>('system-info-indexing');
+        const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus?: { jobQueues: Array<{ name: string }> } }>('system-info-jobs');
         const queue = indexingStatus?.jobStatus?.jobQueues[0];
         expect(queue).to.exist;
         expect(queue!.name).to.equal('TestQueue');
@@ -606,6 +606,126 @@ describe('SystemInfo', () => {
         const versionComponent = el.shadowRoot!.querySelector('system-info-version');
         expect(versionComponent).to.exist;
         expect(versionComponent!.error).to.be.null;
+      });
+    });
+  });
+
+  describe('handlePageStatusChanged and isPageStatus', () => {
+    describe('when receiving a valid page-status-changed event with all fields', () => {
+      let statusDetail: { pageName: string; isWatching: boolean; versionHash: string; lastRefreshTime: Date };
+
+      beforeEach(async () => {
+        statusDetail = {
+          pageName: 'my-page',
+          isWatching: true,
+          versionHash: 'abc12345',
+          lastRefreshTime: new Date('2024-01-01T12:00:00Z'),
+        };
+
+        document.dispatchEvent(new CustomEvent('page-status-changed', {
+          detail: statusDetail,
+          bubbles: true,
+        }));
+
+        await el.updateComplete;
+      });
+
+      it('should set pageStatus on the component', () => {
+        expect(el.pageStatus).to.deep.equal(statusDetail);
+      });
+
+      it('should render the system-info-page component', () => {
+        const pageInfo = el.shadowRoot!.querySelector('system-info-page');
+        expect(pageInfo).to.exist;
+      });
+    });
+
+    describe('when receiving a page-status-changed event with undefined optional fields', () => {
+      beforeEach(async () => {
+        const statusDetail = {
+          pageName: 'my-page',
+          isWatching: true,
+          versionHash: undefined,
+          lastRefreshTime: undefined,
+        };
+
+        document.dispatchEvent(new CustomEvent('page-status-changed', {
+          detail: statusDetail,
+          bubbles: true,
+        }));
+
+        await el.updateComplete;
+      });
+
+      it('should still set pageStatus on the component', () => {
+        expect(el.pageStatus).to.exist;
+        expect(el.pageStatus!.pageName).to.equal('my-page');
+      });
+
+      it('should render the system-info-page component', () => {
+        const pageInfo = el.shadowRoot!.querySelector('system-info-page');
+        expect(pageInfo).to.exist;
+      });
+    });
+
+    describe('when receiving a page-status-changed event missing required fields', () => {
+      beforeEach(async () => {
+        document.dispatchEvent(new CustomEvent('page-status-changed', {
+          detail: { someOtherField: 'value' },
+          bubbles: true,
+        }));
+
+        await el.updateComplete;
+      });
+
+      it('should not set pageStatus on the component', () => {
+        expect(el.pageStatus).to.be.undefined;
+      });
+
+      it('should not render system-info-page component', () => {
+        const pageInfo = el.shadowRoot!.querySelector('system-info-page');
+        expect(pageInfo).not.to.exist;
+      });
+    });
+
+    describe('when receiving a non-CustomEvent page-status-changed event', () => {
+      beforeEach(async () => {
+        document.dispatchEvent(new Event('page-status-changed', { bubbles: true }));
+        await el.updateComplete;
+      });
+
+      it('should not set pageStatus on the component', () => {
+        expect(el.pageStatus).to.be.undefined;
+      });
+    });
+
+    describe('when receiving event with invalid types for required fields', () => {
+      beforeEach(async () => {
+        document.dispatchEvent(new CustomEvent('page-status-changed', {
+          detail: { pageName: 123, isWatching: 'yes' },
+          bubbles: true,
+        }));
+
+        await el.updateComplete;
+      });
+
+      it('should not set pageStatus on the component', () => {
+        expect(el.pageStatus).to.be.undefined;
+      });
+    });
+
+    describe('when receiving a page-status-changed event with null detail', () => {
+      beforeEach(async () => {
+        document.dispatchEvent(new CustomEvent('page-status-changed', {
+          detail: null,
+          bubbles: true,
+        }));
+
+        await el.updateComplete;
+      });
+
+      it('should not set pageStatus on the component', () => {
+        expect(el.pageStatus).to.be.undefined;
       });
     });
   });

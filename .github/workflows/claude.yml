@@ -23,6 +23,7 @@ jobs:
       contents: write
       issues: write
       pull-requests: write
+      id-token: write
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
@@ -39,4 +40,4 @@ jobs:
       - uses: anthropics/claude-code-action@ff9acae5886d41a99ed4ec14b7dc147d55834722 # v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          allowed_tools: "Bash,Read,Write,Edit,Glob,Grep,WebFetch,WebSearch"
+          claude_args: "--allowedTools Bash Read Write Edit Glob Grep WebFetch WebSearch"

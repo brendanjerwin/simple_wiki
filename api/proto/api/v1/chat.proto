@@ -1,0 +1,134 @@
+syntax = "proto3";
+
+package api.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/brendanjerwin/simple_wiki/gen/go/api/v1;apiv1";
+
+// ChatService brokers chat messages between browsers and the Claude Code channel.
+// Browsers send user messages and subscribe to chat events. The wiki-cli MCP server
+// subscribes to receive user messages and sends back assistant replies, edits, and reactions.
+service ChatService {
+  // SendMessage sends a user chat message in the context of a page.
+  // Returns the assigned message ID.
+  rpc SendMessage(SendChatMessageRequest) returns (SendChatMessageResponse) {}
+
+  // SubscribeChat subscribes to all chat events for a page.
+  // Replays existing buffer contents on connect, then streams new events.
+  rpc SubscribeChat(SubscribeChatRequest) returns (stream ChatEvent) {}
+
+  // SubscribeChatMessages is called by wiki-cli mcp at startup.
+  // Streams all new user messages (from all pages) as they arrive from browsers.
+  rpc SubscribeChatMessages(SubscribeChatMessagesRequest) returns (stream ChatMessage) {}
+
+  // SendChatReply is called by wiki-cli mcp when Claude uses the reply tool.
+  // Accepts optional reply_to message ID for threading.
+  rpc SendChatReply(SendChatReplyRequest) returns (SendChatReplyResponse) {}
+
+  // EditChatMessage is called by wiki-cli mcp when Claude uses the edit_message tool.
+  // Updates an existing message's content.
+  rpc EditChatMessage(EditChatMessageRequest) returns (EditChatMessageResponse) {}
+
+  // ReactToMessage is called by wiki-cli mcp when Claude uses the react tool.
+  // Adds an emoji reaction to a message.
+  rpc ReactToMessage(ReactToMessageRequest) returns (ReactToMessageResponse) {}
+}
+
+// Sender identifies who sent a chat message.
+enum Sender {
+  SENDER_UNSPECIFIED = 0;
+  USER = 1;
+  ASSISTANT = 2;
+}
+
+// ChatMessage represents a single chat message.
+message ChatMessage {
+  string id = 1;                          // UUID, stable identifier
+  Sender sender = 2;                      // USER or ASSISTANT
+  string content = 3;                     // markdown
+  google.protobuf.Timestamp timestamp = 4;
+  string page = 5;                        // page identifier
+  int64 sequence = 6;                     // monotonically increasing
+  string sender_name = 7;                 // optional, Tailscale identity
+  string reply_to_id = 8;                 // optional, parent message for threading
+  repeated Reaction reactions = 9;        // emoji reactions on this message
+}
+
+// Reaction represents an emoji reaction on a message.
+message Reaction {
+  string emoji = 1;
+  string reactor = 2;  // "assistant" or Tailscale identity
+}
+
+// ChatEvent is streamed by SubscribeChat.
+message ChatEvent {
+  oneof event {
+    ChatMessage new_message = 1;
+    ChatMessageEdit edit = 2;
+    ChatReaction reaction = 3;
+  }
+}
+
+// ChatMessageEdit represents an edit to an existing message.
+message ChatMessageEdit {
+  string message_id = 1;
+  string new_content = 2;
+  google.protobuf.Timestamp timestamp = 3;
+}
+
+// ChatReaction represents a reaction added to a message.
+message ChatReaction {
+  string message_id = 1;
+  string emoji = 2;
+  string reactor = 3;
+}
+
+// SendChatMessageRequest is the request for SendMessage.
+message SendChatMessageRequest {
+  string page = 1;     // page identifier
+  string content = 2;  // markdown content
+}
+
+// SendChatMessageResponse is the response for SendMessage.
+message SendChatMessageResponse {
+  string message_id = 1;  // assigned UUID
+}
+
+// SubscribeChatRequest is the request for SubscribeChat.
+message SubscribeChatRequest {
+  string page = 1;  // page identifier
+}
+
+// SubscribeChatMessagesRequest is the request for SubscribeChatMessages.
+message SubscribeChatMessagesRequest {}
+
+// SendChatReplyRequest is the request for SendChatReply.
+message SendChatReplyRequest {
+  string page = 1;          // page identifier
+  string content = 2;       // markdown content
+  string reply_to_id = 3;   // optional, parent message ID for threading
+}
+
+// SendChatReplyResponse is the response for SendChatReply.
+message SendChatReplyResponse {
+  string message_id = 1;  // assigned UUID
+}
+
+// EditChatMessageRequest is the request for EditChatMessage.
+message EditChatMessageRequest {
+  string message_id = 1;   // message to edit
+  string new_content = 2;  // new markdown content
+}
+
+// EditChatMessageResponse is the response for EditChatMessage.
+message EditChatMessageResponse {}
+
+// ReactToMessageRequest is the request for ReactToMessage.
+message ReactToMessageRequest {
+  string message_id = 1;  // message to react to
+  string emoji = 2;       // emoji reaction
+}
+
+// ReactToMessageResponse is the response for ReactToMessage.
+message ReactToMessageResponse {}

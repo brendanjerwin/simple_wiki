@@ -105,7 +105,7 @@ github.com/blevesearch/zap/v14
 # github.com/blevesearch/zap/v15 v15.0.3
 ## explicit; go 1.12
 github.com/blevesearch/zap/v15
-# github.com/buger/jsonparser v1.1.1
+# github.com/buger/jsonparser v1.1.2
 ## explicit; go 1.13
 github.com/buger/jsonparser
 # github.com/bytedance/sonic v1.14.0
@@ -314,7 +314,7 @@ github.com/jsimonetti/rtnetlink/internal/unix
 # github.com/json-iterator/go v1.1.12
 ## explicit; go 1.12
 github.com/json-iterator/go
-# github.com/k3a/html2text v1.3.0
+# github.com/k3a/html2text v1.4.0
 ## explicit; go 1.16
 github.com/k3a/html2text
 # github.com/karalabe/usb v0.0.2 => github.com/brendanjerwin/usb v0.0.0-20231222144018-09a9b6ae5f52
@@ -397,8 +397,8 @@ github.com/onsi/ginkgo/v2/internal/reporters
 github.com/onsi/ginkgo/v2/internal/testingtproxy
 github.com/onsi/ginkgo/v2/reporters
 github.com/onsi/ginkgo/v2/types
-# github.com/onsi/gomega v1.39.0
-## explicit; go 1.23.0
+# github.com/onsi/gomega v1.39.1
+## explicit; go 1.24.0
 github.com/onsi/gomega
 github.com/onsi/gomega/format
 github.com/onsi/gomega/internal
@@ -510,7 +510,7 @@ github.com/x448/float16
 # github.com/yosida95/uritemplate/v3 v3.0.2
 ## explicit; go 1.14
 github.com/yosida95/uritemplate/v3
-# github.com/yuin/goldmark v1.7.13
+# github.com/yuin/goldmark v1.7.17
 ## explicit; go 1.22
 github.com/yuin/goldmark
 github.com/yuin/goldmark/ast
@@ -858,7 +858,7 @@ gopkg.in/yaml.v2
 # gopkg.in/yaml.v3 v3.0.1
 ## explicit
 gopkg.in/yaml.v3
-# tailscale.com v1.96.1
+# tailscale.com v1.96.3
 ## explicit; go 1.26.1
 tailscale.com
 tailscale.com/atomicfile

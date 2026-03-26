@@ -12,21 +12,22 @@ require (
 	github.com/gin-contrib/multitemplate v1.1.1
 	github.com/gin-contrib/sessions v1.0.4
 	github.com/gin-gonic/gin v1.11.0
+	github.com/google/uuid v1.6.0
 	github.com/gorilla/sessions v1.4.0
 	github.com/jcelliott/lumber v0.0.0-20160324203708-dd349441af25
-	github.com/k3a/html2text v1.3.0
+	github.com/k3a/html2text v1.4.0
 	github.com/karalabe/usb v0.0.2
 	github.com/mark3labs/mcp-go v0.45.0
 	github.com/mborders/artifex v0.5.1
 	github.com/microcosm-cc/bluemonday v1.0.27
 	github.com/onsi/ginkgo/v2 v2.28.1
-	github.com/onsi/gomega v1.39.0
+	github.com/onsi/gomega v1.39.1
 	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/redpanda-data/protoc-gen-go-mcp v0.0.0-20250930092048-a98b94b5957a
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/stoewer/go-strcase v1.3.1
 	github.com/tailscale/tscert v0.0.0-20251216020129-aea342f6d747
-	github.com/yuin/goldmark v1.7.13
+	github.com/yuin/goldmark v1.7.17
 	github.com/yuin/goldmark-emoji v1.0.6
 	go.abhg.dev/goldmark/mermaid v0.6.0
 	go.abhg.dev/goldmark/wikilink v0.6.0
@@ -43,7 +44,7 @@ require (
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/urfave/cli.v1 v1.20.0
 	gopkg.in/yaml.v2 v2.4.0
-	tailscale.com v1.96.1
+	tailscale.com v1.96.3
 )
 
 require (
@@ -64,7 +65,7 @@ require (
 	github.com/blevesearch/zap/v13 v13.0.6 // indirect
 	github.com/blevesearch/zap/v14 v14.0.5 // indirect
 	github.com/blevesearch/zap/v15 v15.0.3 // indirect
-	github.com/buger/jsonparser v1.1.1 // indirect
+	github.com/buger/jsonparser v1.1.2 // indirect
 	github.com/bytedance/sonic v1.14.0 // indirect
 	github.com/bytedance/sonic/loader v0.3.0 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
@@ -89,7 +90,6 @@ require (
 	github.com/golang/snappy v1.0.0 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/pprof v0.0.0-20260115054156-294ebfa9ad83 // indirect
-	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/context v1.1.2 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
 	github.com/gorilla/securecookie v1.1.2 // indirect

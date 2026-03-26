@@ -56,6 +56,10 @@ func main() {
 		},
 	}
 	app.Before = func(c *cli.Context) error {
+		// Skip version check for mcp command (it needs to start quickly as a subprocess)
+		if c.Args().First() == "mcp" {
+			return nil
+		}
 		if err := checkVersionCompatibility(c.GlobalString("url")); err != nil {
 			// Print directly and exit to avoid urfave/cli dumping help text on error.
 			if _, writeErr := fmt.Fprintln(os.Stderr, err); writeErr != nil {
@@ -274,6 +278,7 @@ describe that type too to see its nested structure.`,
 			},
 		},
 		buildCallCommand(urlFlag),
+		buildMCPCommand(urlFlag),
 	}
 }
 

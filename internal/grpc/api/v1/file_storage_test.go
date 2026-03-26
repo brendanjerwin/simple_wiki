@@ -50,6 +50,8 @@ func mustNewServerWithFileStorer(
 		nil,
 		noOpFrontmatterIndexQueryer{},
 		fileStorer,
+		noOpChatBufferManager{}, // chatBufferManager
+		noOpPageOpener{},
 	)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred())
 	return server
