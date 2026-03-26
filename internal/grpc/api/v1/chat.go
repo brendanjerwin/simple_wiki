@@ -40,7 +40,7 @@ func (s *Server) SendMessage(ctx context.Context, req *apiv1.SendChatMessageRequ
 	messageID, err := s.chatBufferManager.AddUserMessage(req.Page, req.Content, senderName)
 	if err != nil {
 		if errors.Is(err, chatbuffer.ErrNoSubscribers) {
-			return nil, status.Error(codes.Unavailable, "Claude is not connected")
+			return nil, status.Error(codes.Unavailable, "no channel subscriber connected")
 		}
 		return nil, status.Errorf(codes.Internal, "failed to add message: %v", err)
 	}
@@ -131,7 +131,7 @@ func (s *Server) SubscribeChat(req *apiv1.SubscribeChatRequest, stream apiv1.Cha
 
 // SubscribeChatMessages implements the SubscribeChatMessages RPC.
 // Streams all new user messages across all pages to channel server subscribers.
-// This is how wiki-cli mcp receives messages to send to Claude.
+// This is how wiki-cli mcp receives messages to forward to the channel subscriber.
 func (s *Server) SubscribeChatMessages(_ *apiv1.SubscribeChatMessagesRequest, stream apiv1.ChatService_SubscribeChatMessagesServer) error {
 	// Subscribe to all user messages
 	msgChan, unsubscribe := s.chatBufferManager.SubscribeToChannel()
@@ -158,7 +158,7 @@ func (s *Server) SubscribeChatMessages(_ *apiv1.SubscribeChatMessagesRequest, st
 }
 
 // SendChatReply implements the SendChatReply RPC.
-// Called by wiki-cli mcp when Claude uses the reply tool.
+// Called by wiki-cli mcp when the assistant uses the reply tool.
 func (s *Server) SendChatReply(_ context.Context, req *apiv1.SendChatReplyRequest) (*apiv1.SendChatReplyResponse, error) {
 	if req.Page == "" {
 		return nil, status.Error(codes.InvalidArgument, errPageRequired)
@@ -178,7 +178,7 @@ func (s *Server) SendChatReply(_ context.Context, req *apiv1.SendChatReplyReques
 }
 
 // EditChatMessage implements the EditChatMessage RPC.
-// Called by wiki-cli mcp when Claude uses the edit_message tool.
+// Called by wiki-cli mcp when the assistant uses the edit_message tool.
 func (s *Server) EditChatMessage(_ context.Context, req *apiv1.EditChatMessageRequest) (*apiv1.EditChatMessageResponse, error) {
 	if req.MessageId == "" {
 		return nil, status.Error(codes.InvalidArgument, "message_id is required")
@@ -199,7 +199,7 @@ func (s *Server) EditChatMessage(_ context.Context, req *apiv1.EditChatMessageRe
 }
 
 // ReactToMessage implements the ReactToMessage RPC.
-// Called by wiki-cli mcp when Claude uses the react tool.
+// Called by wiki-cli mcp when the assistant uses the react tool.
 func (s *Server) ReactToMessage(_ context.Context, req *apiv1.ReactToMessageRequest) (*apiv1.ReactToMessageResponse, error) {
 	if req.MessageId == "" {
 		return nil, status.Error(codes.InvalidArgument, "message_id is required")
@@ -208,7 +208,7 @@ func (s *Server) ReactToMessage(_ context.Context, req *apiv1.ReactToMessageRequ
 		return nil, status.Error(codes.InvalidArgument, "emoji is required")
 	}
 
-	// Reactor is always "assistant" for Claude's reactions
+	// Reactor is always "assistant" for channel subscriber reactions
 	err := s.chatBufferManager.AddReaction(req.MessageId, req.Emoji, "assistant")
 	if err != nil {
 		if errors.Is(err, chatbuffer.ErrMessageNotFound) {
@@ -252,4 +252,12 @@ func bufferMessageToProto(msg *chatbuffer.Message) *apiv1.ChatMessage {
 		ReplyToId:  msg.ReplyToID,
 		Reactions:  reactions,
 	}
+}
+
+// GetChatStatus implements the GetChatStatus RPC.
+// Returns whether a Claude channel subscriber is currently connected.
+func (s *Server) GetChatStatus(_ context.Context, _ *apiv1.GetChatStatusRequest) (*apiv1.GetChatStatusResponse, error) {
+	return &apiv1.GetChatStatusResponse{
+		Connected: s.chatBufferManager.HasChannelSubscribers(),
+	}, nil
 }

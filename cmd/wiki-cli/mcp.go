@@ -7,6 +7,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"os"
 	"net/url"
 	"strings"
 	"time"
@@ -54,7 +55,10 @@ This command is designed to be spawned as a subprocess by Claude Code via:
 
 // setupMCPServer creates the MCP server with channel capability and establishes
 // the HTTP client for Connect protocol. The caller is responsible for managing the httpClient.
-func setupMCPServer(_ string) (*mcpserver.MCPServer, *http.Client, error) {
+// onInitialized is called after the MCP init handshake completes — use it to start
+// work that may write to stdout (e.g., channel notifications) so it doesn't race
+// with the init response.
+func setupMCPServer(_ string, onInitialized func()) (*mcpserver.MCPServer, *http.Client, error) {
 	// Add hook to inject claude/channel experimental capability
 	hooks := &mcpserver.Hooks{
 		OnAfterInitialize: []mcpserver.OnAfterInitializeFunc{
@@ -62,7 +66,11 @@ func setupMCPServer(_ string) (*mcpserver.MCPServer, *http.Client, error) {
 				if result.Capabilities.Experimental == nil {
 					result.Capabilities.Experimental = make(map[string]any)
 				}
-				result.Capabilities.Experimental["claude/channel"] = true
+				result.Capabilities.Experimental["claude/channel"] = map[string]any{}
+
+				if onInitialized != nil {
+					onInitialized()
+				}
 			},
 		},
 	}
@@ -87,7 +95,23 @@ func setupMCPServer(_ string) (*mcpserver.MCPServer, *http.Client, error) {
 // runMCPServer starts the stdio MCP server with channel capability and maintains
 // a streaming subscription to the wiki's ChatService.
 func runMCPServer(baseURL string) error {
-	s, httpClient, err := setupMCPServer(baseURL)
+	// Defer chat subscription until after MCP init handshake completes.
+	// Starting it earlier would send channel notifications to stdout before
+	// Claude Code has finished the init exchange, breaking the MCP protocol.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var (
+		mcpServer *mcpserver.MCPServer
+		clients   *apiClients
+	)
+	onInitialized := func() {
+		go maintainChatSubscription(ctx, mcpServer, clients.chat)
+	}
+
+	var httpClient *http.Client
+	var err error
+	mcpServer, httpClient, err = setupMCPServer(baseURL, onInitialized)
 	if err != nil {
 		return err
 	}
@@ -99,17 +123,15 @@ func runMCPServer(baseURL string) error {
 	}
 
 	// Create Connect clients and register MCP tool handlers
-	clients := createAPIClients(httpClient, normalizedURL)
-	registerToolHandlers(s, clients)
+	clients = createAPIClients(httpClient, normalizedURL)
+	registerToolHandlers(mcpServer, clients)
 
-	// Start subscription to user messages in a goroutine
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	go maintainChatSubscription(ctx, s, clients.chat)
+	// Redirect Go's default logger to stderr explicitly (it already defaults
+	// to stderr, but being explicit prevents future surprises with stdio MCP).
+	log.SetOutput(os.Stderr)
 
 	// Start stdio MCP server (blocks until stdin closes)
-	return mcpserver.ServeStdio(s)
+	return mcpserver.ServeStdio(mcpServer)
 }
 
 // normalizeBaseURL validates and normalizes a wiki base URL for Connect protocol.
