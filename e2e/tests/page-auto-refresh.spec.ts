@@ -5,6 +5,8 @@ const INITIAL_MARKDOWN = '# Auto Refresh Test\n\nInitial content for auto-refres
 
 const COMPONENT_LOAD_TIMEOUT_MS = 15000;
 const STREAM_ESTABLISH_TIMEOUT_MS = 15000;
+const SAVE_TIMEOUT_MS = 10000;
+const EDIT_STABILITY_WAIT_MS = 3000;
 
 async function callPageAPI(
   request: APIRequestContext,
@@ -149,6 +151,49 @@ test.describe('Page auto-refresh and system-info page status', () => {
     // Verify scroll position was preserved (within a small tolerance)
     const scrollAfter = await page.evaluate(() => window.scrollY);
     expect(Math.abs(scrollAfter - scrollBefore)).toBeLessThan(50);
+  });
+
+  test('auto-refresh does not disrupt active editing sessions', async ({ page, request }) => {
+    await page.goto(`/${TEST_PAGE}/edit`);
+
+    const textarea = page.locator('wiki-editor textarea');
+    await expect(textarea).toBeVisible({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
+
+    // Preserve existing frontmatter — fill strips the entire textarea content, so we must
+    // re-include the TOML frontmatter that the auto-save (UpdateWholePage) requires.
+    const existingContent = await textarea.inputValue();
+    const frontmatterMatch = existingContent.match(/^\+\+\+[\s\S]*?\+\+\+/);
+    const minimalFrontmatter = `+++\nidentifier = "${TEST_PAGE}"\n+++`;
+    const frontmatter = frontmatterMatch ? frontmatterMatch[0] : minimalFrontmatter;
+
+    // Type base content and wait for auto-save to complete (establishes a saved baseline)
+    const baseContent = '# Active Editing\n\nUser is actively editing this content.';
+    await textarea.fill(`${frontmatter}\n\n${baseContent}`);
+    await textarea.press('Space');
+    await expect(page.locator('wiki-editor .status-indicator')).toContainText('Saved', { timeout: SAVE_TIMEOUT_MS });
+
+    // Type additional content to put the editor in a dirty/unsaved state — this is the
+    // high-risk case where unsaved edits could be overwritten by an external update.
+    await textarea.press('End');
+    await textarea.type('\n\nThis line is unsaved and must not be overwritten.');
+
+    // Immediately simulate an external change via API while the editor is dirty
+    const externalContent = '# External Update\n\nThis content was changed externally while editing was active.';
+    const updateResp = await callPageAPI(request, 'UpdatePageContent', {
+      pageName: TEST_PAGE,
+      newContentMarkdown: externalContent,
+    });
+    expect(updateResp.ok()).toBeTruthy();
+
+    // Wait to confirm the editor is not disrupted by any unexpected navigation,
+    // re-render, or auto-refresh behavior. This intentional pause lets us assert that nothing
+    // changes while the user is actively editing in a mode where auto-refresh is disabled.
+    await page.waitForTimeout(EDIT_STABILITY_WAIT_MS);
+
+    // The editor must retain the user's unsaved content, not the external update
+    const editorContent = await textarea.inputValue();
+    expect(editorContent).toContain('This line is unsaved and must not be overwritten');
+    expect(editorContent).not.toContain('This content was changed externally');
   });
 
   // Cleanup
