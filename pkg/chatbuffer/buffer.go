@@ -212,17 +212,10 @@ func (m *Manager) AddUserMessage(page, content, senderName string) (string, erro
 	buf.mu.Unlock()
 
 	// Notify page event listeners (buf.mu not held)
-	event := Event{
+	notifyEventListeners(listeners, Event{
 		Type:    EventTypeNewMessage,
 		Message: &msgCopy,
-	}
-	for _, listener := range listeners {
-		select {
-		case listener <- event:
-		default:
-			// Don't block if listener is slow
-		}
-	}
+	})
 
 	// Publish to channel subscribers (wiki-cli mcp).
 	// Acquire channelSubscribersMu after releasing buf.mu to maintain
@@ -278,10 +271,16 @@ func (m *Manager) AddAssistantMessage(page, content, replyToID string) (string, 
 	buf.mu.Unlock()
 
 	// Notify page event listeners (buf.mu not held)
-	event := Event{
+	notifyEventListeners(listeners, Event{
 		Type:    EventTypeNewMessage,
 		Message: &msgCopy,
-	}
+	})
+
+	return messageID, nil
+}
+
+// notifyEventListeners sends an event to all listeners without blocking.
+func notifyEventListeners(listeners []chan Event, event Event) {
 	for _, listener := range listeners {
 		select {
 		case listener <- event:
@@ -289,8 +288,16 @@ func (m *Manager) AddAssistantMessage(page, content, replyToID string) (string, 
 			// Don't block if listener is slow
 		}
 	}
+}
 
-	return messageID, nil
+// hasReaction reports whether msg already has the given emoji reaction from reactor.
+func hasReaction(msg *Message, emoji, reactor string) bool {
+	for _, r := range msg.Reactions {
+		if r.Emoji == emoji && r.Reactor == reactor {
+			return true
+		}
+	}
+	return false
 }
 
 // EditMessage updates the content of an existing message.
@@ -302,30 +309,25 @@ func (m *Manager) EditMessage(messageID, newContent string) error {
 	for _, buf := range m.buffers {
 		buf.mu.Lock()
 		for _, msg := range buf.messages {
-			if msg.ID == messageID {
-				msg.Content = newContent
-				buf.lastAccess = time.Now() // Update lastAccess to prevent premature reclamation
-
-				// Notify page event listeners
-				event := Event{
-					Type: EventTypeEdit,
-					Edit: &EditEvent{
-						MessageID:  messageID,
-						NewContent: newContent,
-						Timestamp:  time.Now(),
-					},
-				}
-				for _, listener := range buf.eventListeners {
-					select {
-					case listener <- event:
-					default:
-						// Don't block if listener is slow
-					}
-				}
-
-				buf.mu.Unlock()
-				return nil
+			if msg.ID != messageID {
+				continue
 			}
+
+			msg.Content = newContent
+			buf.lastAccess = time.Now() // Update lastAccess to prevent premature reclamation
+
+			event := Event{
+				Type: EventTypeEdit,
+				Edit: &EditEvent{
+					MessageID:  messageID,
+					NewContent: newContent,
+					Timestamp:  time.Now(),
+				},
+			}
+			notifyEventListeners(buf.eventListeners, event)
+
+			buf.mu.Unlock()
+			return nil
 		}
 		buf.mu.Unlock()
 	}
@@ -342,45 +344,31 @@ func (m *Manager) AddReaction(messageID, emoji, reactor string) error {
 	for _, buf := range m.buffers {
 		buf.mu.Lock()
 		for _, msg := range buf.messages {
-			if msg.ID == messageID {
-				// Check if this reactor already has this reaction
-				found := false
-				for _, r := range msg.Reactions {
-					if r.Emoji == emoji && r.Reactor == reactor {
-						found = true
-						break
-					}
-				}
-
-				if !found {
-					msg.Reactions = append(msg.Reactions, Reaction{
-						Emoji:   emoji,
-						Reactor: reactor,
-					})
-				}
-
-				buf.lastAccess = time.Now() // Update lastAccess to prevent premature reclamation
-
-				// Notify page event listeners
-				event := Event{
-					Type: EventTypeReaction,
-					Reaction: &ReactionEvent{
-						MessageID: messageID,
-						Emoji:     emoji,
-						Reactor:   reactor,
-					},
-				}
-				for _, listener := range buf.eventListeners {
-					select {
-					case listener <- event:
-					default:
-						// Don't block if listener is slow
-					}
-				}
-
-				buf.mu.Unlock()
-				return nil
+			if msg.ID != messageID {
+				continue
 			}
+
+			if !hasReaction(msg, emoji, reactor) {
+				msg.Reactions = append(msg.Reactions, Reaction{
+					Emoji:   emoji,
+					Reactor: reactor,
+				})
+			}
+
+			buf.lastAccess = time.Now() // Update lastAccess to prevent premature reclamation
+
+			event := Event{
+				Type: EventTypeReaction,
+				Reaction: &ReactionEvent{
+					MessageID: messageID,
+					Emoji:     emoji,
+					Reactor:   reactor,
+				},
+			}
+			notifyEventListeners(buf.eventListeners, event)
+
+			buf.mu.Unlock()
+			return nil
 		}
 		buf.mu.Unlock()
 	}
