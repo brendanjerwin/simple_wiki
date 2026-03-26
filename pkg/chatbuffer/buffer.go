@@ -196,23 +196,13 @@ func (m *Manager) AddUserMessage(page, content, senderName string) (string, erro
 		Reactions:  make([]Reaction, 0),
 	}
 
-	// Add to ring buffer
-	buf.messages = append(buf.messages, msg)
-	if len(buf.messages) > MaxMessagesPerPage {
-		buf.messages[0] = nil          // Allow GC of evicted message
-		buf.messages = buf.messages[1:] // Evict oldest
-	}
+	buf.appendToRingBuffer(msg)
 
-	// Capture listeners and a copy of the message before releasing the lock.
+	// Capture a copy of the message before releasing the lock.
 	// Sending copies prevents callers of EditMessage/AddReaction from racing
 	// with consumers reading the message fields.
 	msgCopy := *msg
-	listeners := make([]chan Event, len(buf.eventListeners))
-	copy(listeners, buf.eventListeners)
-	buf.mu.Unlock()
-
-	// Notify page event listeners (buf.mu not held)
-	notifyEventListeners(listeners, Event{
+	buf.unlockAndNotify(Event{
 		Type:    EventTypeNewMessage,
 		Message: &msgCopy,
 	})
@@ -255,23 +245,13 @@ func (m *Manager) AddAssistantMessage(page, content, replyToID string) (string, 
 		Reactions:  make([]Reaction, 0),
 	}
 
-	// Add to ring buffer
-	buf.messages = append(buf.messages, msg)
-	if len(buf.messages) > MaxMessagesPerPage {
-		buf.messages[0] = nil          // Allow GC of evicted message
-		buf.messages = buf.messages[1:] // Evict oldest
-	}
+	buf.appendToRingBuffer(msg)
 
-	// Capture listeners and a copy of the message before releasing the lock.
+	// Capture a copy of the message before releasing the lock.
 	// Sending copies prevents callers of EditMessage/AddReaction from racing
 	// with consumers reading the message fields.
 	msgCopy := *msg
-	listeners := make([]chan Event, len(buf.eventListeners))
-	copy(listeners, buf.eventListeners)
-	buf.mu.Unlock()
-
-	// Notify page event listeners (buf.mu not held)
-	notifyEventListeners(listeners, Event{
+	buf.unlockAndNotify(Event{
 		Type:    EventTypeNewMessage,
 		Message: &msgCopy,
 	})
@@ -288,6 +268,48 @@ func notifyEventListeners(listeners []chan Event, event Event) {
 			// Don't block if listener is slow
 		}
 	}
+}
+
+// unlockAndNotify copies the event listeners, releases buf.mu, then notifies them.
+// MUST be called while holding buf.mu (write lock).
+func (buf *pageBuffer) unlockAndNotify(event Event) {
+	listeners := make([]chan Event, len(buf.eventListeners))
+	copy(listeners, buf.eventListeners)
+	buf.mu.Unlock()
+	notifyEventListeners(listeners, event)
+}
+
+// makeUnsubscribeFn returns a function that removes eventChan from buf.eventListeners and closes it.
+func (buf *pageBuffer) makeUnsubscribeFn(eventChan chan Event) func() {
+	return func() {
+		buf.mu.Lock()
+		defer buf.mu.Unlock()
+
+		for i, listener := range buf.eventListeners {
+			if listener == eventChan {
+				buf.eventListeners = append(buf.eventListeners[:i], buf.eventListeners[i+1:]...)
+				close(eventChan)
+				break
+			}
+		}
+	}
+}
+
+// appendToRingBuffer adds msg to the buffer, evicting the oldest message if full.
+func (buf *pageBuffer) appendToRingBuffer(msg *Message) {
+	buf.messages = append(buf.messages, msg)
+	if len(buf.messages) > MaxMessagesPerPage {
+		buf.messages[0] = nil          // Allow GC of evicted message
+		buf.messages = buf.messages[1:] // Evict oldest
+	}
+}
+
+// clone returns a deep copy of msg including its Reactions slice.
+func (msg *Message) clone() *Message {
+	msgCopy := *msg
+	msgCopy.Reactions = make([]Reaction, len(msg.Reactions))
+	copy(msgCopy.Reactions, msg.Reactions)
+	return &msgCopy
 }
 
 // hasReaction reports whether msg already has the given emoji reaction from reactor.
@@ -316,19 +338,14 @@ func (m *Manager) EditMessage(messageID, newContent string) error {
 			msg.Content = newContent
 			buf.lastAccess = time.Now() // Update lastAccess to prevent premature reclamation
 
-			event := Event{
+			buf.unlockAndNotify(Event{
 				Type: EventTypeEdit,
 				Edit: &EditEvent{
 					MessageID:  messageID,
 					NewContent: newContent,
 					Timestamp:  time.Now(),
 				},
-			}
-			listeners := make([]chan Event, len(buf.eventListeners))
-			copy(listeners, buf.eventListeners)
-			buf.mu.Unlock()
-
-			notifyEventListeners(listeners, event)
+			})
 			return nil
 		}
 		buf.mu.Unlock()
@@ -359,19 +376,14 @@ func (m *Manager) AddReaction(messageID, emoji, reactor string) error {
 
 			buf.lastAccess = time.Now() // Update lastAccess to prevent premature reclamation
 
-			event := Event{
+			buf.unlockAndNotify(Event{
 				Type: EventTypeReaction,
 				Reaction: &ReactionEvent{
 					MessageID: messageID,
 					Emoji:     emoji,
 					Reactor:   reactor,
 				},
-			}
-			listeners := make([]chan Event, len(buf.eventListeners))
-			copy(listeners, buf.eventListeners)
-			buf.mu.Unlock()
-
-			notifyEventListeners(listeners, event)
+			})
 			return nil
 		}
 		buf.mu.Unlock()
@@ -389,10 +401,7 @@ func (m *Manager) GetMessages(page string) []*Message {
 	// Return copies to prevent race conditions
 	messages := make([]*Message, len(buf.messages))
 	for i, msg := range buf.messages {
-		msgCopy := *msg
-		msgCopy.Reactions = make([]Reaction, len(msg.Reactions))
-		copy(msgCopy.Reactions, msg.Reactions)
-		messages[i] = &msgCopy
+		messages[i] = msg.clone()
 	}
 
 	return messages
@@ -408,20 +417,7 @@ func (m *Manager) SubscribeToPage(page string) (<-chan Event, func()) {
 	eventChan := make(chan Event, 100) // Buffer events
 	buf.eventListeners = append(buf.eventListeners, eventChan)
 
-	unsubscribe := func() {
-		buf.mu.Lock()
-		defer buf.mu.Unlock()
-
-		for i, listener := range buf.eventListeners {
-			if listener == eventChan {
-				buf.eventListeners = append(buf.eventListeners[:i], buf.eventListeners[i+1:]...)
-				close(eventChan)
-				break
-			}
-		}
-	}
-
-	return eventChan, unsubscribe
+	return eventChan, buf.makeUnsubscribeFn(eventChan)
 }
 
 // SubscribeToPageWithReplay atomically subscribes to a page and returns existing messages
@@ -439,26 +435,10 @@ func (m *Manager) SubscribeToPageWithReplay(page string) ([]*Message, <-chan Eve
 	// Copy existing messages under the same lock
 	messages := make([]*Message, len(buf.messages))
 	for i, msg := range buf.messages {
-		msgCopy := *msg
-		msgCopy.Reactions = make([]Reaction, len(msg.Reactions))
-		copy(msgCopy.Reactions, msg.Reactions)
-		messages[i] = &msgCopy
+		messages[i] = msg.clone()
 	}
 
-	unsubscribe := func() {
-		buf.mu.Lock()
-		defer buf.mu.Unlock()
-
-		for i, listener := range buf.eventListeners {
-			if listener == eventChan {
-				buf.eventListeners = append(buf.eventListeners[:i], buf.eventListeners[i+1:]...)
-				close(eventChan)
-				break
-			}
-		}
-	}
-
-	return messages, eventChan, unsubscribe
+	return messages, eventChan, buf.makeUnsubscribeFn(eventChan)
 }
 
 // SubscribeToChannel subscribes to all user messages across all pages.
@@ -503,11 +483,9 @@ func (m *Manager) GetMessageByID(messageID string) (*Message, error) {
 		buf.mu.RLock()
 		for _, msg := range buf.messages {
 			if msg.ID == messageID {
-				msgCopy := *msg
-				msgCopy.Reactions = make([]Reaction, len(msg.Reactions))
-				copy(msgCopy.Reactions, msg.Reactions)
+				msgCopy := msg.clone()
 				buf.mu.RUnlock()
-				return &msgCopy, nil
+				return msgCopy, nil
 			}
 		}
 		buf.mu.RUnlock()
