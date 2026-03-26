@@ -148,7 +148,7 @@ export class SystemInfo extends LitElement {
   private refreshTimer?: ReturnType<typeof setInterval>;
   private streamSubscription?: AbortController;
   private _handleClickOutside: (event: MouseEvent) => void;
-  private _handlePageStatusChanged: (event: Event) => void;
+  private readonly _handlePageStatusChanged: (event: Event) => void;
 
   private client = createClient(SystemInfoService, getGrpcWebTransport());
 
