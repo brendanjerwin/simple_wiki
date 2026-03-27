@@ -13,10 +13,12 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+const fileUploadsDisabledErr = "file uploads are disabled on this server"
+
 // UploadFile implements the UploadFile RPC.
 func (s *Server) UploadFile(_ context.Context, req *apiv1.UploadFileRequest) (*apiv1.UploadFileResponse, error) {
 	if s.fileStorer == nil {
-		return nil, status.Error(codes.FailedPrecondition, "file uploads are disabled on this server")
+		return nil, status.Error(codes.FailedPrecondition, fileUploadsDisabledErr)
 	}
 	if len(req.GetContent()) == 0 {
 		return nil, status.Error(codes.InvalidArgument, "content is required")
@@ -40,7 +42,7 @@ func (s *Server) UploadFile(_ context.Context, req *apiv1.UploadFileRequest) (*a
 // GetFileInfo implements the GetFileInfo RPC.
 func (s *Server) GetFileInfo(_ context.Context, req *apiv1.GetFileInfoRequest) (*apiv1.GetFileInfoResponse, error) {
 	if s.fileStorer == nil {
-		return nil, status.Error(codes.FailedPrecondition, "file uploads are disabled on this server")
+		return nil, status.Error(codes.FailedPrecondition, fileUploadsDisabledErr)
 	}
 	if req.GetHash() == "" {
 		return nil, status.Error(codes.InvalidArgument, "hash is required")
@@ -66,7 +68,7 @@ func (s *Server) GetFileInfo(_ context.Context, req *apiv1.GetFileInfoRequest) (
 // DeleteFile implements the DeleteFile RPC.
 func (s *Server) DeleteFile(_ context.Context, req *apiv1.DeleteFileRequest) (*apiv1.DeleteFileResponse, error) {
 	if s.fileStorer == nil {
-		return nil, status.Error(codes.FailedPrecondition, "file uploads are disabled on this server")
+		return nil, status.Error(codes.FailedPrecondition, fileUploadsDisabledErr)
 	}
 	if req.GetHash() == "" {
 		return nil, status.Error(codes.InvalidArgument, "hash is required")

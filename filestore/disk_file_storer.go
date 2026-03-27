@@ -12,6 +12,8 @@ import (
 	"github.com/brendanjerwin/simple_wiki/utils/base32tools"
 )
 
+const uploadFileExt = ".upload"
+
 // DiskFileStorer stores uploaded files on disk using SHA256 hashes as filenames.
 type DiskFileStorer struct {
 	dataDir string
@@ -38,7 +40,7 @@ func (s *DiskFileStorer) Store(content io.Reader) (FileInfo, error) {
 	}
 
 	hash := "sha256-" + base32tools.EncodeBytesToBase32(h.Sum(nil))
-	filePath := filepath.Join(s.dataDir, hash+".upload")
+	filePath := filepath.Join(s.dataDir, hash+uploadFileExt)
 
 	if err := os.WriteFile(filePath, buf, 0600); err != nil {
 		return FileInfo{}, fmt.Errorf("failed to write file: %w", err)
@@ -53,7 +55,7 @@ func (s *DiskFileStorer) GetInfo(hash string) (FileInfo, error) {
 		return FileInfo{}, err
 	}
 
-	filePath := filepath.Join(s.dataDir, hash+".upload")
+	filePath := filepath.Join(s.dataDir, hash+uploadFileExt)
 	fi, err := os.Stat(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -70,7 +72,7 @@ func (s *DiskFileStorer) Delete(hash string) error {
 		return err
 	}
 
-	filePath := filepath.Join(s.dataDir, hash+".upload")
+	filePath := filepath.Join(s.dataDir, hash+uploadFileExt)
 	if err := os.Remove(filePath); err != nil {
 		if os.IsNotExist(err) {
 			return os.ErrNotExist
