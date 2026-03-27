@@ -25,7 +25,6 @@ const MAX_INPUT_LENGTH = 2000;
 const INITIAL_RECONNECT_DELAY_MS = 1000;
 const MAX_RECONNECT_DELAY_MS = 30000;
 const STATUS_POLL_INTERVAL_MS = 15000;
-const KEYBOARD_DETECTION_THRESHOLD_PX = 50;
 
 export interface ChatMessageState {
   id: string;
@@ -268,16 +267,15 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
 
       @media (max-width: 768px) {
         .panel {
-          top: auto;
+          top: 0;
           bottom: 0;
           left: 0;
           right: 0;
           width: 100%;
-          height: 60dvh;
-          max-height: var(--chat-panel-height, 60dvh);
+          height: 100dvh;
+          max-height: none;
           border-left: none;
-          border-top: 1px solid var(--color-border-primary);
-          border-radius: 12px 12px 0 0;
+          border-radius: 0;
           transform: translateY(100%);
         }
 
@@ -589,25 +587,12 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     const viewport = window.visualViewport;
     if (!viewport) return;
 
-    // When the keyboard opens on mobile, visualViewport.height shrinks.
-    // Expand the panel to fill the entire available viewport above the keyboard.
+    // On mobile, when the keyboard opens, visualViewport.height shrinks but
+    // CSS 100dvh may not update immediately. Force the panel height to match
+    // the actual visual viewport so it doesn't extend behind the keyboard.
     const panel = this.shadowRoot?.querySelector('.panel');
     if (panel instanceof HTMLElement) {
-      const keyboardOffset = window.innerHeight - viewport.height - viewport.offsetTop;
-      if (keyboardOffset > KEYBOARD_DETECTION_THRESHOLD_PX) {
-        // Keyboard is open — fill viewport from top to keyboard
-        panel.style.setProperty('--chat-panel-height', `${viewport.height}px`);
-        panel.style.top = `${viewport.offsetTop}px`;
-        panel.style.bottom = `${keyboardOffset}px`;
-        panel.style.height = `${viewport.height}px`;
-        panel.style.borderRadius = '0';
-      } else {
-        // Keyboard closed — reset to default bottom sheet
-        const properties = ['--chat-panel-height', 'top', 'bottom', 'height', 'border-radius'];
-        for (const prop of properties) {
-          panel.style.removeProperty(prop);
-        }
-      }
+      panel.style.height = `${viewport.height}px`;
     }
   }
 
