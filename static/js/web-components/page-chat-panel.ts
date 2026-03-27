@@ -267,16 +267,15 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
 
       @media (max-width: 768px) {
         .panel {
-          top: auto;
+          top: 0;
           bottom: 0;
           left: 0;
           right: 0;
           width: 100%;
-          height: 60dvh;
-          max-height: var(--chat-panel-height, 60dvh);
+          height: 100dvh;
+          max-height: none;
           border-left: none;
-          border-top: 1px solid var(--color-border-primary);
-          border-radius: 12px 12px 0 0;
+          border-radius: 0;
           transform: translateY(100%);
         }
 
@@ -466,6 +465,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
             placeholder="${this.claudeConnected ? 'Type a message...' : `${this.persona} is not connected`}"
             maxlength="${MAX_INPUT_LENGTH}"
             rows="2"
+            enterkeyhint="send"
             ?disabled=${!this.claudeConnected}
             @keydown=${this._handleKeydown}
           ></textarea>
@@ -588,13 +588,12 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     const viewport = window.visualViewport;
     if (!viewport) return;
 
-    // When the keyboard opens, visualViewport.height shrinks.
-    // Set a CSS custom property so the panel fits above the keyboard.
+    // On mobile, when the keyboard opens, visualViewport.height shrinks but
+    // CSS 100dvh may not update immediately. Force the panel height to match
+    // the actual visual viewport so it doesn't extend behind the keyboard.
     const panel = this.shadowRoot?.querySelector('.panel');
     if (panel instanceof HTMLElement) {
-      const availableHeight = viewport.height;
-      panel.style.setProperty('--chat-panel-height', `${availableHeight * 0.9}px`);
-      panel.style.bottom = `${window.innerHeight - viewport.height - viewport.offsetTop}px`;
+      panel.style.height = `${viewport.height}px`;
     }
   }
 
