@@ -588,13 +588,26 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     const viewport = window.visualViewport;
     if (!viewport) return;
 
-    // When the keyboard opens, visualViewport.height shrinks.
-    // Set a CSS custom property so the panel fits above the keyboard.
+    // When the keyboard opens on mobile, visualViewport.height shrinks.
+    // Expand the panel to fill the entire available viewport above the keyboard.
     const panel = this.shadowRoot?.querySelector('.panel');
     if (panel instanceof HTMLElement) {
-      const availableHeight = viewport.height;
-      panel.style.setProperty('--chat-panel-height', `${availableHeight * 0.9}px`);
-      panel.style.bottom = `${window.innerHeight - viewport.height - viewport.offsetTop}px`;
+      const keyboardOffset = window.innerHeight - viewport.height - viewport.offsetTop;
+      if (keyboardOffset > 50) {
+        // Keyboard is open — fill viewport from top to keyboard
+        panel.style.setProperty('--chat-panel-height', `${viewport.height}px`);
+        panel.style.top = `${viewport.offsetTop}px`;
+        panel.style.bottom = `${keyboardOffset}px`;
+        panel.style.height = `${viewport.height}px`;
+        panel.style.borderRadius = '0';
+      } else {
+        // Keyboard closed — reset to default bottom sheet
+        panel.style.removeProperty('--chat-panel-height');
+        panel.style.removeProperty('top');
+        panel.style.removeProperty('bottom');
+        panel.style.removeProperty('height');
+        panel.style.removeProperty('border-radius');
+      }
     }
   }
 
