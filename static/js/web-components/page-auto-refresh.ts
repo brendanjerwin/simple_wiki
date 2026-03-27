@@ -40,9 +40,9 @@ export class PageAutoRefresh extends LitElement {
   private currentHash: string | undefined;
   private lastRefreshTime: Date | undefined;
   private isWatching = false;
-  private _handleVisibilityChange: () => void;
+  private readonly _handleVisibilityChange: () => void;
 
-  private client = createClient(PageManagementService, getGrpcWebTransport());
+  private readonly client = createClient(PageManagementService, getGrpcWebTransport());
 
   constructor() {
     super();

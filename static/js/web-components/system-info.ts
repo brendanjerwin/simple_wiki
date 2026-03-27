@@ -156,11 +156,11 @@ export class SystemInfo extends DrawerMixin(LitElement) implements AmbientCTA {
   private debounceTimer?: ReturnType<typeof setTimeout>;
   private refreshTimer?: ReturnType<typeof setInterval>;
   private streamSubscription?: AbortController;
-  private _handleClickOutside: (event: MouseEvent) => void;
-  private _handlePageStatusChanged: (event: Event) => void;
+  private readonly _handleClickOutside: (event: MouseEvent) => void;
+  private readonly _handlePageStatusChanged: (event: Event) => void;
 
   private _ambientCTACleanup: (() => void) | undefined;
-  private client = createClient(SystemInfoService, getGrpcWebTransport());
+  private readonly client = createClient(SystemInfoService, getGrpcWebTransport());
 
   constructor() {
     super();
