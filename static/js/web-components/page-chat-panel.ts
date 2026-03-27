@@ -25,6 +25,7 @@ const MAX_INPUT_LENGTH = 2000;
 const INITIAL_RECONNECT_DELAY_MS = 1000;
 const MAX_RECONNECT_DELAY_MS = 30000;
 const STATUS_POLL_INTERVAL_MS = 15000;
+const KEYBOARD_DETECTION_THRESHOLD_PX = 50;
 
 export interface ChatMessageState {
   id: string;
@@ -593,7 +594,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     const panel = this.shadowRoot?.querySelector('.panel');
     if (panel instanceof HTMLElement) {
       const keyboardOffset = window.innerHeight - viewport.height - viewport.offsetTop;
-      if (keyboardOffset > 50) {
+      if (keyboardOffset > KEYBOARD_DETECTION_THRESHOLD_PX) {
         // Keyboard is open — fill viewport from top to keyboard
         panel.style.setProperty('--chat-panel-height', `${viewport.height}px`);
         panel.style.top = `${viewport.offsetTop}px`;
@@ -602,11 +603,10 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         panel.style.borderRadius = '0';
       } else {
         // Keyboard closed — reset to default bottom sheet
-        panel.style.removeProperty('--chat-panel-height');
-        panel.style.removeProperty('top');
-        panel.style.removeProperty('bottom');
-        panel.style.removeProperty('height');
-        panel.style.removeProperty('border-radius');
+        const properties = ['--chat-panel-height', 'top', 'bottom', 'height', 'border-radius'];
+        for (const prop of properties) {
+          panel.style.removeProperty(prop);
+        }
       }
     }
   }
