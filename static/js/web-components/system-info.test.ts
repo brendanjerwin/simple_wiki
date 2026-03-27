@@ -6,6 +6,7 @@ import { create } from '@bufbuild/protobuf';
 import { TimestampSchema } from '@bufbuild/protobuf/wkt';
 import { stub, useFakeTimers, type SinonFakeTimers, type SinonStub } from 'sinon';
 import { AugmentErrorService, AugmentedError } from './augment-error-service.js';
+import { resetForTesting } from './drawer-coordinator.js';
 import './system-info.js';
 
 // Interface for testing private methods - accessed via unknown cast
@@ -37,6 +38,7 @@ describe('SystemInfo', () => {
 
   afterEach(() => {
     clock.restore();
+    resetForTesting();
     // Clean up DOM
     if (el.parentNode) {
       el.parentNode.removeChild(el);
@@ -295,11 +297,11 @@ describe('SystemInfo', () => {
       expect(cssText).to.include('right: 2px');
     });
 
-    it('should have high z-index', () => {
+    it('should use z-index variable for drawer layer', () => {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing static styles property for testing
       const styles = (el.constructor as typeof SystemInfo).styles as Array<{ cssText: string }>;
       const cssText = styles.map(s => s.cssText).join('');
-      expect(cssText).to.include('z-index: 1000');
+      expect(cssText).to.include('z-index: var(--z-drawer)');
     });
   });
 
@@ -394,8 +396,8 @@ describe('SystemInfo', () => {
       await el.updateComplete;
     });
 
-    it('should start with expanded state as false', () => {
-      expect(el.expanded).to.be.false;
+    it('should start with drawerOpen state as false', () => {
+      expect(el.drawerOpen).to.be.false;
     });
 
     it('should render drawer tab element', () => {
@@ -409,60 +411,60 @@ describe('SystemInfo', () => {
       expect(tab!.textContent).to.equal('INFO');
     });
 
-    it('should not have expanded class when collapsed', () => {
+    it('should not have drawerOpen class when collapsed', () => {
       const panel = el.shadowRoot!.querySelector('.system-panel');
-      expect(panel!.classList.contains('expanded')).to.be.false;
+      expect(panel!.classList.contains('drawerOpen')).to.be.false;
     });
 
-    it('should have expanded class when expanded', async () => {
-      el.expanded = true;
+    it('should have drawerOpen class when open', async () => {
+      el.drawerOpen = true;
       await el.updateComplete;
       
       const panel = el.shadowRoot!.querySelector('.system-panel');
-      expect(panel!.classList.contains('expanded')).to.be.true;
+      expect(panel!.classList.contains('drawerOpen')).to.be.true;
     });
 
-    it('should toggle expanded state on click', async () => {
+    it('should toggle drawerOpen state on click', async () => {
       const panel = el.shadowRoot!.querySelector<HTMLElement>('.system-panel');
-      expect(el.expanded).to.be.false;
+      expect(el.drawerOpen).to.be.false;
 
       panel!.click();
       await el.updateComplete;
 
-      expect(el.expanded).to.be.true;
+      expect(el.drawerOpen).to.be.true;
     });
 
-    it('should toggle expanded state on Enter key', async () => {
+    it('should toggle drawerOpen state on Enter key', async () => {
       const panel = el.shadowRoot!.querySelector<HTMLElement>('.system-panel');
-      expect(el.expanded).to.be.false;
+      expect(el.drawerOpen).to.be.false;
 
       const event = new KeyboardEvent('keydown', { key: 'Enter' });
       panel!.dispatchEvent(event);
       await el.updateComplete;
 
-      expect(el.expanded).to.be.true;
+      expect(el.drawerOpen).to.be.true;
     });
 
-    it('should toggle expanded state on Space key', async () => {
+    it('should toggle drawerOpen state on Space key', async () => {
       const panel = el.shadowRoot!.querySelector<HTMLElement>('.system-panel');
-      expect(el.expanded).to.be.false;
+      expect(el.drawerOpen).to.be.false;
 
       const event = new KeyboardEvent('keydown', { key: ' ' });
       panel!.dispatchEvent(event);
       await el.updateComplete;
 
-      expect(el.expanded).to.be.true;
+      expect(el.drawerOpen).to.be.true;
     });
 
     it('should not toggle on other keys', async () => {
       const panel = el.shadowRoot!.querySelector<HTMLElement>('.system-panel');
-      expect(el.expanded).to.be.false;
+      expect(el.drawerOpen).to.be.false;
 
       const event = new KeyboardEvent('keydown', { key: 'a' });
       panel!.dispatchEvent(event);
       await el.updateComplete;
 
-      expect(el.expanded).to.be.false;
+      expect(el.drawerOpen).to.be.false;
     });
 
     it('should have role="button"', () => {
@@ -484,7 +486,7 @@ describe('SystemInfo', () => {
       const panel = el.shadowRoot!.querySelector('.system-panel');
       expect(panel!.getAttribute('aria-expanded')).to.equal('false');
       
-      el.expanded = true;
+      el.drawerOpen = true;
       await el.updateComplete;
       
       expect(panel!.getAttribute('aria-expanded')).to.equal('true');
@@ -520,19 +522,19 @@ describe('SystemInfo', () => {
       await el.updateComplete;
     });
 
-    it('should collapse when clicking outside and expanded', async () => {
-      el.expanded = true;
+    it('should close drawer when clicking outside and open', async () => {
+      el.drawerOpen = true;
       await el.updateComplete;
 
       // Simulate click outside
       const outsideEvent = new MouseEvent('click', { bubbles: true });
       document.dispatchEvent(outsideEvent);
       
-      expect(el.expanded).to.be.false;
+      expect(el.drawerOpen).to.be.false;
     });
 
     it('should not collapse when clicking inside the panel', async () => {
-      el.expanded = true;
+      el.drawerOpen = true;
       await el.updateComplete;
 
       // Click on the panel itself (which stops propagation)
@@ -541,22 +543,22 @@ describe('SystemInfo', () => {
       await el.updateComplete;
 
       // Should toggle to collapsed then back to expanded
-      expect(el.expanded).to.be.false;
+      expect(el.drawerOpen).to.be.false;
     });
 
     it('should not change state when clicking outside while collapsed', async () => {
-      el.expanded = false;
+      el.drawerOpen = false;
       await el.updateComplete;
 
       // Simulate click outside
       const outsideEvent = new MouseEvent('click', { bubbles: true });
       document.dispatchEvent(outsideEvent);
 
-      expect(el.expanded).to.be.false;
+      expect(el.drawerOpen).to.be.false;
     });
 
     it('should handle click events with composed path correctly', async () => {
-      el.expanded = true;
+      el.drawerOpen = true;
       await el.updateComplete;
 
       // Create a mock event that doesn't include this element in composed path
@@ -568,7 +570,7 @@ describe('SystemInfo', () => {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
       (el as unknown as SystemInfoTestInterface)._handleClickOutside(mockEvent);
 
-      expect(el.expanded).to.be.false;
+      expect(el.drawerOpen).to.be.false;
     });
   });
 
@@ -729,6 +731,44 @@ describe('SystemInfo', () => {
       });
     });
   });
+
+  describe('ambient visibility', () => {
+    describe('when _ambientVisible is false and drawer is closed', () => {
+      beforeEach(async () => {
+        el._ambientVisible = false;
+        el.closeDrawer();
+        await el.updateComplete;
+      });
+
+      it('should have hidden attribute', () => {
+        expect(el.hasAttribute('hidden')).to.be.true;
+      });
+    });
+
+    describe('when _ambientVisible is false and drawer is open', () => {
+      beforeEach(async () => {
+        el._ambientVisible = false;
+        el.openDrawer();
+        await el.updateComplete;
+      });
+
+      it('should not have hidden attribute', () => {
+        expect(el.hasAttribute('hidden')).to.be.false;
+      });
+    });
+
+    describe('when _ambientVisible is true and drawer is closed', () => {
+      beforeEach(async () => {
+        el._ambientVisible = true;
+        el.closeDrawer();
+        await el.updateComplete;
+      });
+
+      it('should not have hidden attribute', () => {
+        expect(el.hasAttribute('hidden')).to.be.false;
+      });
+    });
+  });
 });
 
 /**
@@ -776,6 +816,7 @@ describe('SystemInfo error handling', () => {
 
   afterEach(() => {
     clock.restore();
+    resetForTesting();
     if (startAutoRefreshStub) startAutoRefreshStub.restore();
     if (stopAutoRefreshStub) stopAutoRefreshStub.restore();
     if (stopJobStreamStub) stopJobStreamStub.restore();

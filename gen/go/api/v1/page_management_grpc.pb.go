@@ -30,6 +30,7 @@ const (
 	PageManagementService_GenerateIdentifier_FullMethodName = "/api.v1.PageManagementService/GenerateIdentifier"
 	PageManagementService_ListTemplates_FullMethodName      = "/api.v1.PageManagementService/ListTemplates"
 	PageManagementService_WatchPage_FullMethodName          = "/api.v1.PageManagementService/WatchPage"
+	PageManagementService_RenderMarkdown_FullMethodName     = "/api.v1.PageManagementService/RenderMarkdown"
 )
 
 // PageManagementServiceClient is the client API for PageManagementService service.
@@ -55,6 +56,11 @@ type PageManagementServiceClient interface {
 	// Emits the current version_hash when the content changes on the server.
 	// Clients can use this to re-fetch and re-render the page content.
 	WatchPage(ctx context.Context, in *WatchPageRequest, opts ...grpc.CallOption) (PageManagementService_WatchPageClient, error)
+	// RenderMarkdown renders arbitrary markdown content to HTML.
+	// Supports selective template macros (LinkTo, FindBy, etc.) but excludes
+	// interactive widget macros (Checklist, Blog) which render as literal text.
+	// Used by the chat panel to render assistant messages.
+	RenderMarkdown(ctx context.Context, in *RenderMarkdownRequest, opts ...grpc.CallOption) (*RenderMarkdownResponse, error)
 }
 
 type pageManagementServiceClient struct {
@@ -198,6 +204,16 @@ func (x *pageManagementServiceWatchPageClient) Recv() (*WatchPageResponse, error
 	return m, nil
 }
 
+func (c *pageManagementServiceClient) RenderMarkdown(ctx context.Context, in *RenderMarkdownRequest, opts ...grpc.CallOption) (*RenderMarkdownResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RenderMarkdownResponse)
+	err := c.cc.Invoke(ctx, PageManagementService_RenderMarkdown_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // PageManagementServiceServer is the server API for PageManagementService service.
 // All implementations must embed UnimplementedPageManagementServiceServer
 // for forward compatibility
@@ -221,6 +237,11 @@ type PageManagementServiceServer interface {
 	// Emits the current version_hash when the content changes on the server.
 	// Clients can use this to re-fetch and re-render the page content.
 	WatchPage(*WatchPageRequest, PageManagementService_WatchPageServer) error
+	// RenderMarkdown renders arbitrary markdown content to HTML.
+	// Supports selective template macros (LinkTo, FindBy, etc.) but excludes
+	// interactive widget macros (Checklist, Blog) which render as literal text.
+	// Used by the chat panel to render assistant messages.
+	RenderMarkdown(context.Context, *RenderMarkdownRequest) (*RenderMarkdownResponse, error)
 	mustEmbedUnimplementedPageManagementServiceServer()
 }
 
@@ -260,6 +281,9 @@ func (UnimplementedPageManagementServiceServer) ListTemplates(context.Context, *
 }
 func (UnimplementedPageManagementServiceServer) WatchPage(*WatchPageRequest, PageManagementService_WatchPageServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchPage not implemented")
+}
+func (UnimplementedPageManagementServiceServer) RenderMarkdown(context.Context, *RenderMarkdownRequest) (*RenderMarkdownResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RenderMarkdown not implemented")
 }
 func (UnimplementedPageManagementServiceServer) mustEmbedUnimplementedPageManagementServiceServer() {}
 
@@ -475,6 +499,24 @@ func (x *pageManagementServiceWatchPageServer) Send(m *WatchPageResponse) error 
 	return x.ServerStream.SendMsg(m)
 }
 
+func _PageManagementService_RenderMarkdown_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RenderMarkdownRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PageManagementServiceServer).RenderMarkdown(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PageManagementService_RenderMarkdown_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PageManagementServiceServer).RenderMarkdown(ctx, req.(*RenderMarkdownRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // PageManagementService_ServiceDesc is the grpc.ServiceDesc for PageManagementService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -521,6 +563,10 @@ var PageManagementService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListTemplates",
 			Handler:    _PageManagementService_ListTemplates_Handler,
+		},
+		{
+			MethodName: "RenderMarkdown",
+			Handler:    _PageManagementService_RenderMarkdown_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

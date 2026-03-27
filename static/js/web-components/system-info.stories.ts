@@ -591,7 +591,7 @@ export const DrawerTabCollapsed: Story = {
     });
 
     el.loading = false;
-    el.expanded = false; // Explicitly set to collapsed
+    el.drawerOpen = false; // Explicitly set to collapsed
     el.version = create(GetVersionResponseSchema, {
       commit: 'abc123def456',
       buildTime: mockTimestamp
@@ -650,7 +650,7 @@ export const DrawerTabExpanded: Story = {
     });
 
     el.loading = false;
-    el.expanded = true; // Explicitly set to expanded
+    el.drawerOpen = true; // Explicitly set to expanded
     el.version = create(GetVersionResponseSchema, {
       commit: 'abc123def456',
       buildTime: mockTimestamp

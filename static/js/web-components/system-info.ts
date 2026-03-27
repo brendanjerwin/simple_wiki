@@ -4,29 +4,37 @@ import { createClient } from '@connectrpc/connect';
 import { create } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import { SystemInfoService, GetVersionRequestSchema, GetJobStatusRequestSchema, StreamJobStatusRequestSchema, type GetVersionResponse, type GetJobStatusResponse } from '../gen/api/v1/system_info_pb.js';
-import { foundationCSS } from './shared-styles.js';
+import { foundationCSS, zIndexCSS } from './shared-styles.js';
 import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
+import { DrawerMixin } from './drawer-mixin.js';
+import { registerAmbientCTA, type AmbientCTA } from './drawer-coordinator.js';
 import './system-info-identity.js';
 import './system-info-jobs.js';
 import './system-info-version.js';
 import './system-info-page.js';
 import type { PageStatus } from './system-info-page.js';
 
-export class SystemInfo extends LitElement {
+export class SystemInfo extends DrawerMixin(LitElement) implements AmbientCTA {
+  override readonly drawerId = 'system-info';
   static readonly DEBOUNCE_DELAY = 300;
   static readonly REFRESH_INTERVAL = 2000; // 2 seconds when indexing active
   static readonly IDLE_REFRESH_INTERVAL = 10000; // 10 seconds when idle
 
   static override styles = [
     foundationCSS,
+    zIndexCSS,
     css`
       :host {
         position: fixed;
         bottom: 2px;
         right: 2px;
-        z-index: 1000;
+        z-index: var(--z-drawer);
         font-size: 11px;
         line-height: 1.2;
+      }
+
+      :host([hidden]) {
+        display: none;
       }
 
       .system-panel {
@@ -45,7 +53,7 @@ export class SystemInfo extends LitElement {
         outline-offset: 2px;
       }
 
-      .system-panel.expanded {
+      .system-panel.drawerOpen {
         transform: translateX(0);
       }
 
@@ -69,6 +77,7 @@ export class SystemInfo extends LitElement {
         flex-shrink: 0;
         opacity: 0.3;
         transition: opacity 0.3s ease, color 0.3s ease;
+        z-index: var(--z-ambient);
       }
 
       .system-panel:hover .drawer-tab,
@@ -77,7 +86,7 @@ export class SystemInfo extends LitElement {
         color: #aaa;
       }
 
-      .system-panel.expanded .drawer-tab {
+      .system-panel.drawerOpen .drawer-tab {
         opacity: 0.9;
         color: #ccc;
       }
@@ -92,7 +101,7 @@ export class SystemInfo extends LitElement {
         transition: opacity 0.3s ease;
       }
 
-      .system-panel.expanded .panel-content {
+      .system-panel.drawerOpen .panel-content {
         opacity: 0.9;
       }
 
@@ -139,7 +148,7 @@ export class SystemInfo extends LitElement {
   declare error: AugmentedError | null;
 
   @state()
-  declare expanded: boolean;
+  declare _ambientVisible: boolean;
 
   @state()
   declare pageStatus?: PageStatus;
@@ -150,19 +159,25 @@ export class SystemInfo extends LitElement {
   private readonly _handleClickOutside: (event: MouseEvent) => void;
   private readonly _handlePageStatusChanged: (event: Event) => void;
 
+  private _ambientCTACleanup: (() => void) | undefined;
   private readonly client = createClient(SystemInfoService, getGrpcWebTransport());
 
   constructor() {
     super();
     this.loading = true;
     this.error = null;
-    this.expanded = false;
+    this._ambientVisible = true;
     this._handleClickOutside = this.handleClickOutside.bind(this);
     this._handlePageStatusChanged = this.handlePageStatusChanged.bind(this);
   }
 
+  setAmbientVisible(visible: boolean): void {
+    this._ambientVisible = visible;
+  }
+
   override connectedCallback(): void {
     super.connectedCallback();
+    this._ambientCTACleanup = registerAmbientCTA(this);
     this.loadSystemInfo();
     document.addEventListener('click', this._handleClickOutside);
     document.addEventListener('page-status-changed', this._handlePageStatusChanged);
@@ -178,6 +193,8 @@ export class SystemInfo extends LitElement {
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
+    this._ambientCTACleanup?.();
+    this._ambientCTACleanup = undefined;
     this.stopJobStream();
     this.stopAutoRefresh();
     // Clean up debounce timer
@@ -199,8 +216,7 @@ export class SystemInfo extends LitElement {
   private handlePanelClick = (event: Event): void => {
     // Stop propagation to prevent click-outside from firing
     event.stopPropagation();
-    // Toggle expansion state
-    this.expanded = !this.expanded;
+    this.toggleDrawer();
   };
 
   private handlePanelKeydown = (event: KeyboardEvent): void => {
@@ -208,15 +224,15 @@ export class SystemInfo extends LitElement {
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
       event.stopPropagation();
-      this.expanded = !this.expanded;
+      this.toggleDrawer();
     }
   };
 
   private handleClickOutside(event: MouseEvent): void {
-    // Close when an expanded panel receives a click outside this component
+    // Close when an open drawer receives a click outside this component
     const path = event.composedPath();
-    if (this.expanded && !path.includes(this)) {
-      this.expanded = false;
+    if (this.drawerOpen && !path.includes(this)) {
+      this.closeDrawer();
     }
   }
 
@@ -368,17 +384,25 @@ export class SystemInfo extends LitElement {
 
 
 
+  override updated(changedProperties: Map<PropertyKey, unknown>): void {
+    super.updated(changedProperties);
+    // Reflect hidden attribute based on ambient visibility and drawer state
+    if (changedProperties.has('_ambientVisible') || changedProperties.has('drawerOpen')) {
+      this.toggleAttribute('hidden', !this._ambientVisible && !this.drawerOpen);
+    }
+  }
+
   override render() {
     return html`
       <div
-        class="system-panel ${this.expanded ? 'expanded' : ''}"
+        class="system-panel ${this.drawerOpen ? 'drawerOpen' : ''}"
         role="button"
         tabindex="0"
-        aria-expanded="${this.expanded}"
+        aria-expanded="${this.drawerOpen}"
         aria-label="System information panel"
         @click="${this.handlePanelClick}"
         @keydown="${this.handlePanelKeydown}">
-        ${this.expanded ? html`<div class="hover-overlay"></div>` : ''}
+        ${this.drawerOpen ? html`<div class="hover-overlay"></div>` : ''}
         <div class="drawer-tab">INFO</div>
         <div class="panel-content system-font">
           <div class="system-content">

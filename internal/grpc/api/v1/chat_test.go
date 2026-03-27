@@ -459,7 +459,7 @@ var _ = Describe("ChatService", func() {
 				st, ok := status.FromError(err)
 				Expect(ok).To(BeTrue())
 				Expect(st.Code()).To(Equal(codes.Unavailable))
-				Expect(st.Message()).To(ContainSubstring("Claude is not connected"))
+				Expect(st.Message()).To(ContainSubstring("no channel subscriber connected"))
 			})
 		})
 	})
@@ -950,6 +950,50 @@ var _ = Describe("ChatService", func() {
 				st, ok := status.FromError(err)
 				Expect(ok).To(BeTrue())
 				Expect(st.Code()).To(Equal(codes.InvalidArgument))
+			})
+		})
+	})
+
+	Describe("GetChatStatus", func() {
+		When("Claude channel subscriber is connected", func() {
+			var (
+				resp *apiv1.GetChatStatusResponse
+				err  error
+			)
+
+			BeforeEach(func() {
+				// Subscribe to channel to simulate a connected Claude
+				_, unsubscribe := chatManager.SubscribeToChannel()
+				DeferCleanup(unsubscribe)
+
+				resp, err = server.GetChatStatus(ctx, &apiv1.GetChatStatusRequest{})
+			})
+
+			It("should not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return connected true", func() {
+				Expect(resp.Connected).To(BeTrue())
+			})
+		})
+
+		When("no Claude channel subscriber is connected", func() {
+			var (
+				resp *apiv1.GetChatStatusResponse
+				err  error
+			)
+
+			BeforeEach(func() {
+				resp, err = server.GetChatStatus(ctx, &apiv1.GetChatStatusRequest{})
+			})
+
+			It("should not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return connected false", func() {
+				Expect(resp.Connected).To(BeFalse())
 			})
 		})
 	})

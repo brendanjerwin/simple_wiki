@@ -913,6 +913,54 @@ func (s *Server) ReadPage(_ context.Context, req *apiv1.ReadPageRequest) (*apiv1
 	}, nil
 }
 
+// RenderMarkdown implements the RenderMarkdown RPC.
+// Renders arbitrary markdown content to HTML with chat-safe template macros.
+func (s *Server) RenderMarkdown(ctx context.Context, req *apiv1.RenderMarkdownRequest) (*apiv1.RenderMarkdownResponse, error) {
+	select {
+	case <-ctx.Done():
+		return nil, status.FromContextError(ctx.Err()).Err()
+	default:
+	}
+
+	if req.Content == "" {
+		return &apiv1.RenderMarkdownResponse{RenderedHtml: ""}, nil
+	}
+
+	if s.markdownRenderer == nil {
+		return nil, status.Error(codes.FailedPrecondition, "markdown renderer is not available")
+	}
+
+	markdownBytes := []byte(req.Content)
+
+	// Always execute chat-safe template macros, enriching with page frontmatter when available
+	frontmatter := make(wikipage.FrontMatter)
+	if req.Page != "" {
+		_, pageFM, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(req.Page))
+		if err != nil && !os.IsNotExist(err) {
+			return nil, status.Errorf(codes.Internal, "failed to read page frontmatter: %v", err)
+		}
+		if err == nil {
+			frontmatter = pageFM
+		}
+	}
+
+	chatExecutor := server.ChatTemplateExecutor{}
+	expanded, err := chatExecutor.ExecuteTemplate(string(markdownBytes), frontmatter, s.pageReaderMutator, s.frontmatterIndexQueryer)
+	if err != nil {
+		// Template execution failed — render the raw markdown without macros
+		s.logger.Warn("chat template execution failed, rendering raw markdown: %v", err)
+	} else {
+		markdownBytes = expanded
+	}
+
+	renderedHTML, err := wikipage.RenderMarkdownToHTML(markdownBytes, s.markdownRenderer)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to render markdown: %v", err)
+	}
+
+	return &apiv1.RenderMarkdownResponse{RenderedHtml: string(renderedHTML)}, nil
+}
+
 // GenerateIdentifier implements the GenerateIdentifier RPC.
 // Converts text to wiki identifier format and checks if it's available.
 func (s *Server) GenerateIdentifier(_ context.Context, req *apiv1.GenerateIdentifierRequest) (*apiv1.GenerateIdentifierResponse, error) {
@@ -1104,12 +1152,8 @@ func (s *Server) UpdatePageContent(_ context.Context, req *apiv1.UpdatePageConte
 
 	// NOTE: There is a narrow TOCTOU race between this hash check and the subsequent
 	// WriteMarkdown call. True atomicity would require file-level locking at the storage layer.
-	if req.ExpectedVersionHash != nil {
-		currentHash := computeContentHash(originalMarkdown)
-		if len(currentHash) != len(*req.ExpectedVersionHash) ||
-			subtle.ConstantTimeCompare([]byte(currentHash), []byte(*req.ExpectedVersionHash)) != 1 {
-			return nil, status.Error(codes.Aborted, "content version mismatch: page was modified since last read; re-read the page and retry")
-		}
+	if err := checkContentVersionHash(originalMarkdown, req.ExpectedVersionHash); err != nil {
+		return nil, err
 	}
 
 	if err := templating.ValidateTemplate(req.NewContentMarkdown); err != nil {
@@ -1118,15 +1162,9 @@ func (s *Server) UpdatePageContent(_ context.Context, req *apiv1.UpdatePageConte
 
 	// Compute the markdown to write: find-and-replace when old_content_markdown is set,
 	// otherwise replace the entire page content.
-	var markdownToWrite wikipage.Markdown
-	if req.OldContentMarkdown != nil {
-		oldContent := *req.OldContentMarkdown
-		if !strings.Contains(string(originalMarkdown), oldContent) {
-			return nil, status.Error(codes.NotFound, "old_content_markdown not found in current page content")
-		}
-		markdownToWrite = wikipage.Markdown(strings.Replace(string(originalMarkdown), oldContent, req.NewContentMarkdown, 1))
-	} else {
-		markdownToWrite = wikipage.Markdown(req.NewContentMarkdown)
+	markdownToWrite, err := resolveMarkdownContent(originalMarkdown, req.OldContentMarkdown, req.NewContentMarkdown)
+	if err != nil {
+		return nil, err
 	}
 
 	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(req.PageName), markdownToWrite); err != nil {
@@ -1136,19 +1174,60 @@ func (s *Server) UpdatePageContent(_ context.Context, req *apiv1.UpdatePageConte
 	// Invariant check: read back the stored content to ensure the write did not blank the page.
 	// If the content is missing or empty after a successful write, attempt to restore the
 	// original content to prevent data loss.
-	_, storedMarkdown, readBackErr := s.pageReaderMutator.ReadMarkdown(wikipage.PageIdentifier(req.PageName))
-	if readBackErr != nil || strings.TrimSpace(string(storedMarkdown)) == "" {
-		_ = s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(req.PageName), originalMarkdown)
-		if readBackErr != nil {
-			return nil, status.Errorf(codes.Internal, "failed to verify stored content after write: %v", readBackErr)
-		}
-		return nil, status.Error(codes.Internal, "invariant violation: write resulted in empty content; original content has been restored")
+	storedMarkdown, err := s.verifyStoredContent(wikipage.PageIdentifier(req.PageName), originalMarkdown)
+	if err != nil {
+		return nil, err
 	}
 
 	return &apiv1.UpdatePageContentResponse{
 		Success:     true,
 		VersionHash: computeContentHash(storedMarkdown),
 	}, nil
+}
+
+// checkContentVersionHash verifies that the current page content matches the expected version hash.
+// Returns an error if there is a version mismatch; returns nil if expectedHash is nil (no check requested).
+func checkContentVersionHash(currentMarkdown wikipage.Markdown, expectedHash *string) error {
+	if expectedHash == nil {
+		return nil
+	}
+
+	currentHash := computeContentHash(currentMarkdown)
+	if subtle.ConstantTimeCompare([]byte(currentHash), []byte(*expectedHash)) != 1 {
+		return status.Error(codes.Aborted, "content version mismatch: page was modified since last read; re-read the page and retry")
+	}
+
+	return nil
+}
+
+// resolveMarkdownContent computes the markdown to write.
+// When oldContentMarkdown is provided, performs a find-and-replace within originalMarkdown.
+// Otherwise returns newContentMarkdown as the full replacement.
+func resolveMarkdownContent(originalMarkdown wikipage.Markdown, oldContentMarkdown *string, newContentMarkdown string) (wikipage.Markdown, error) {
+	if oldContentMarkdown == nil {
+		return wikipage.Markdown(newContentMarkdown), nil
+	}
+
+	if !strings.Contains(string(originalMarkdown), *oldContentMarkdown) {
+		return "", status.Error(codes.NotFound, "old_content_markdown not found in current page content")
+	}
+
+	return wikipage.Markdown(strings.Replace(string(originalMarkdown), *oldContentMarkdown, newContentMarkdown, 1)), nil
+}
+
+// verifyStoredContent reads back the page after a write to confirm the content is non-empty.
+// If the stored content is empty or unreadable, it attempts to restore the original content.
+func (s *Server) verifyStoredContent(pageID wikipage.PageIdentifier, originalMarkdown wikipage.Markdown) (wikipage.Markdown, error) {
+	_, storedMarkdown, readBackErr := s.pageReaderMutator.ReadMarkdown(pageID)
+	if readBackErr != nil || strings.TrimSpace(string(storedMarkdown)) == "" {
+		_ = s.pageReaderMutator.WriteMarkdown(pageID, originalMarkdown)
+		if readBackErr != nil {
+			return "", status.Errorf(codes.Internal, "failed to verify stored content after write: %v", readBackErr)
+		}
+		return "", status.Error(codes.Internal, "invariant violation: write resulted in empty content; original content has been restored")
+	}
+
+	return storedMarkdown, nil
 }
 
 // ClearPageContent implements the ClearPageContent RPC.
@@ -1330,18 +1409,7 @@ func (s *Server) WatchPage(req *apiv1.WatchPageRequest, stream apiv1.PageManagem
 	}
 
 	pageID := wikipage.PageIdentifier(req.PageName)
-
-	// Default to 1-second intervals, allow client to customize
-	interval := time.Duration(req.GetCheckIntervalMs()) * time.Millisecond
-	if interval == 0 {
-		interval = 1 * time.Second
-	}
-
-	// Minimum interval to prevent excessive server load
-	const minIntervalMs = 100
-	if interval < minIntervalMs*time.Millisecond {
-		interval = minIntervalMs * time.Millisecond
-	}
+	interval := resolveCheckInterval(req.GetCheckIntervalMs())
 
 	// Read initial content hash and mod time
 	hash, modTime, err := s.readPageHashAndModTime(pageID)
@@ -1369,29 +1437,61 @@ func (s *Server) WatchPage(req *apiv1.WatchPageRequest, stream apiv1.PageManagem
 	for {
 		select {
 		case <-ticker.C:
-			currentHash, currentModTime, err := s.readPageHashAndModTime(pageID)
+			newHash, err := s.sendPageUpdateIfChanged(stream, pageID, lastHash)
 			if err != nil {
-				if os.IsNotExist(err) {
-					return status.Errorf(codes.NotFound, "page deleted: %s", req.PageName)
-				}
-				s.logger.Warn("WatchPage: failed to read page content, continuing: %v", err)
-				continue
+				return err
 			}
-
-			if currentHash != lastHash {
-				if err := stream.Send(&apiv1.WatchPageResponse{
-					VersionHash:  currentHash,
-					LastModified: timestamppb.New(currentModTime),
-				}); err != nil {
-					return err
-				}
-				lastHash = currentHash
-			}
+			lastHash = newHash
 
 		case <-stream.Context().Done():
 			return stream.Context().Err()
 		}
 	}
+}
+
+// resolveCheckInterval returns the polling interval for WatchPage.
+// Defaults to 1 second when not specified; enforces a 100ms minimum to protect the server.
+func resolveCheckInterval(requestedIntervalMs int32) time.Duration {
+	const defaultInterval = 1 * time.Second
+	const minIntervalMs = 100
+
+	interval := time.Duration(requestedIntervalMs) * time.Millisecond
+	if interval == 0 {
+		interval = defaultInterval
+	}
+
+	if interval < minIntervalMs*time.Millisecond {
+		interval = minIntervalMs * time.Millisecond
+	}
+
+	return interval
+}
+
+// sendPageUpdateIfChanged checks whether the page content has changed since lastHash and,
+// if so, sends a WatchPageResponse on the stream. Returns the current hash (updated or unchanged).
+// On a transient read error it logs and returns the previous hash so the caller can retry.
+func (s *Server) sendPageUpdateIfChanged(stream apiv1.PageManagementService_WatchPageServer, pageID wikipage.PageIdentifier, lastHash string) (string, error) {
+	currentHash, currentModTime, err := s.readPageHashAndModTime(pageID)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", status.Errorf(codes.NotFound, "page deleted: %s", string(pageID))
+		}
+		s.logger.Warn("WatchPage: failed to read page content, continuing: %v", err)
+		return lastHash, nil
+	}
+
+	if currentHash == lastHash {
+		return lastHash, nil
+	}
+
+	if err := stream.Send(&apiv1.WatchPageResponse{
+		VersionHash:  currentHash,
+		LastModified: timestamppb.New(currentModTime),
+	}); err != nil {
+		return "", err
+	}
+
+	return currentHash, nil
 }
 
 // readPageHashAndModTime reads a page's content hash and file modification time.
