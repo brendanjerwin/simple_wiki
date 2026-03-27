@@ -465,6 +465,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
             placeholder="${this.claudeConnected ? 'Type a message...' : `${this.persona} is not connected`}"
             maxlength="${MAX_INPUT_LENGTH}"
             rows="2"
+            enterkeyhint="send"
             ?disabled=${!this.claudeConnected}
             @keydown=${this._handleKeydown}
           ></textarea>
