@@ -35,10 +35,11 @@ const (
 	maxContentLength  = 3
 
 	// String constants
-	rootPath             = "/"
-	uploadFailureMessage = "Failed to upload: %s"
-	uploadsPage          = "uploads"
-	mimeTextPlain        = "text/plain"
+	rootPath                  = "/"
+	uploadFailureMessage      = "Failed to upload: %s"
+	uploadsPage               = "uploads"
+	mimeTextPlain             = "text/plain"
+	contentDispositionHeader  = "Content-Disposition"
 )
 
 var (
@@ -122,7 +123,7 @@ func serveCLIBinary(c *gin.Context) {
 		c.Status(http.StatusNotFound)
 		return
 	}
-	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, binary))
+	c.Header(contentDispositionHeader, fmt.Sprintf(`attachment; filename="%s"`, binary))
 	c.Data(http.StatusOK, "application/octet-stream", data)
 }
 
@@ -139,7 +140,7 @@ func serveExtensionFile(c *gin.Context) {
 			c.Status(http.StatusNotFound)
 			return
 		}
-		c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, file))
+		c.Header(contentDispositionHeader, fmt.Sprintf(`attachment; filename="%s"`, file))
 		c.Data(http.StatusOK, "application/x-xpinstall", data)
 
 	case "updates.json":
@@ -493,7 +494,7 @@ func (s *Site) handleUploads(c *gin.Context, command string) {
 		}
 
 		c.Header(
-			"Content-Disposition",
+			contentDispositionHeader,
 			"inline; filename=\""+c.DefaultQuery("filename", "upload")+"\"",
 		)
 		c.File(pathname)
