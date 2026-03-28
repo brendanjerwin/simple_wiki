@@ -13,61 +13,63 @@ import (
 // Special parameters that shouldn't be in frontmatter (like "tmpl") are filtered out.
 func BuildFrontmatterFromURLParams(identifier string, params url.Values) (wikipage.FrontMatter, error) {
 	frontmatter := make(wikipage.FrontMatter)
-	
-	// Always include the identifier
 	frontmatter["identifier"] = identifier
-	
-	// List of parameters to skip
+
 	skipParams := map[string]bool{
 		"tmpl": true,
-		// Add other special parameters here as needed
 	}
-	
-	// Process each parameter
+
 	for key, values := range params {
-		// Skip special parameters
-		if skipParams[key] {
+		if shouldSkipURLParam(key, skipParams) {
 			continue
 		}
-		
-		// Skip parameters starting with underscore
-		if len(key) > 0 && key[0] == '_' {
+
+		value, ok := resolveParamValue(values)
+		if !ok {
 			continue
 		}
-		
-		// Skip identifier parameter (we already set it from the function argument)
-		if key == "identifier" {
-			continue
-		}
-		
-		// Determine the value to use
-		var value any
-		if len(values) == 1 {
-			value = values[0]
-		} else if len(values) > 1 {
-			value = values
-		} else {
-			continue // Skip empty values
-		}
-		
-		// Handle dotted keys
+
 		if strings.Contains(key, ".") {
 			if err := setNestedValue(frontmatter, key, value); err != nil {
 				return nil, err
 			}
 		} else {
-			// Check if this key already exists as a nested structure
-			if existing, exists := frontmatter[key]; exists {
-				if _, isMap := existing.(map[string]any); isMap {
-					// Cannot set simple value on key that already has nested structure
-					return nil, fmt.Errorf("parameter '%s' cannot be both a value and a table", key)
-				}
+			if err := setFlatValue(frontmatter, key, value); err != nil {
+				return nil, err
 			}
-			frontmatter[key] = value
 		}
 	}
-	
+
 	return frontmatter, nil
+}
+
+// shouldSkipURLParam returns true if the parameter should be excluded from frontmatter.
+func shouldSkipURLParam(key string, skipParams map[string]bool) bool {
+	return skipParams[key] || (len(key) > 0 && key[0] == '_') || key == "identifier"
+}
+
+// resolveParamValue returns the value to use for a parameter and whether it's valid.
+func resolveParamValue(values []string) (any, bool) {
+	switch len(values) {
+	case 1:
+		return values[0], true
+	case 0:
+		return nil, false
+	default:
+		return values, true
+	}
+}
+
+// setFlatValue sets a simple (non-dotted) key in the frontmatter map, returning an error
+// if the key already exists as a nested table structure.
+func setFlatValue(frontmatter map[string]any, key string, value any) error {
+	if existing, exists := frontmatter[key]; exists {
+		if _, isMap := existing.(map[string]any); isMap {
+			return fmt.Errorf("parameter '%s' cannot be both a value and a table", key)
+		}
+	}
+	frontmatter[key] = value
+	return nil
 }
 
 // setNestedValue sets a value in a nested map structure based on a dotted key path.

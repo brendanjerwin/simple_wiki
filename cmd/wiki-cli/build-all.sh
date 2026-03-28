@@ -22,7 +22,7 @@ platforms=(
 for platform in "${platforms[@]}"; do
   IFS='/' read -r goos goarch <<< "$platform"
   binary="wiki-cli-${goos}-${goarch}"
-  if [ "$goos" = "windows" ]; then
+  if [[ "$goos" = "windows" ]]; then
     binary="${binary}.exe"
   fi
   echo "Building ${binary} (commit: ${COMMIT})..."

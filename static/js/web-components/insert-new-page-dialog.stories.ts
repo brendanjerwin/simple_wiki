@@ -99,15 +99,19 @@ function setupMocks(dialog: InsertNewPageDialog, options: {
   sinon.stub(pageCreator, 'showSuccess');
 }
 
+function createOpenDialogHandler(): () => Promise<void> {
+  return async () => {
+    const dialog = document.querySelector('insert-new-page-dialog') as InsertNewPageDialog;
+    if (dialog) {
+      setupMocks(dialog);
+      await dialog.openDialog();
+    }
+  };
+}
+
 export const Default: Story = {
   render: () => {
-    const openDialog = async () => {
-      const dialog = document.querySelector('insert-new-page-dialog') as InsertNewPageDialog;
-      if (dialog) {
-        setupMocks(dialog);
-        await dialog.openDialog();
-      }
-    };
+    const openDialog = createOpenDialogHandler();
 
     setTimeout(openDialog, 100);
 
@@ -263,13 +267,7 @@ export const TemplateSelected: Story = {
 
 export const InteractiveTesting: Story = {
   render: () => {
-    const openDialog = async () => {
-      const dialog = document.querySelector('insert-new-page-dialog') as InsertNewPageDialog;
-      if (dialog) {
-        setupMocks(dialog);
-        await dialog.openDialog();
-      }
-    };
+    const openDialog = createOpenDialogHandler();
 
     return html`
       <div style="padding: 20px; background: #f0f8ff;">

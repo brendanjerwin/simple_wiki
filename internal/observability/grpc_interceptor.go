@@ -108,7 +108,7 @@ func (g *GRPCInstrumentation) StreamServerInterceptor() grpc.StreamServerInterce
 		// Create a wrapped stream with the new context
 		wrappedStream := &serverStreamWithContext{
 			ServerStream: ss,
-			ctx:          ctx,
+			getContext:   func() context.Context { return ctx },
 		}
 
 		// Call the handler
@@ -148,10 +148,10 @@ func (g *GRPCInstrumentation) StreamServerInterceptor() grpc.StreamServerInterce
 // serverStreamWithContext wraps a grpc.ServerStream to provide a custom context.
 type serverStreamWithContext struct {
 	grpc.ServerStream
-	ctx context.Context
+	getContext func() context.Context
 }
 
 // Context returns the wrapped context.
 func (s *serverStreamWithContext) Context() context.Context {
-	return s.ctx
+	return s.getContext()
 }

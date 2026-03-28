@@ -111,12 +111,12 @@ export class EditorUploadService {
 
       input.addEventListener('change', () => {
         const file = input.files?.[0];
-        document.body.removeChild(input);
+        input.remove();
         resolve(file);
       });
 
       input.addEventListener('cancel', () => {
-        document.body.removeChild(input);
+        input.remove();
         resolve(undefined);
       });
 
@@ -132,7 +132,7 @@ export class EditorUploadService {
     } catch {
       // Fallback: try to extract from query string manually
       const match = location.match(/filename=([^&]+)/);
-      if (match && match[1]) {
+      if (match?.[1]) {
         return decodeURIComponent(match[1]);
       }
       return 'upload';

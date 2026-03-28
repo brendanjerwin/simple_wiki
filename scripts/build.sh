@@ -52,20 +52,20 @@ compare_semver() {
     # Compare base versions (major.minor.patch) using version sort
     local base_cmp=$(printf '%s\n%s\n' "$v1_base" "$v2_base" | sort -V | head -1)
 
-    if [ "$v1_base" != "$v2_base" ]; then
+    if [[ "$v1_base" != "$v2_base" ]]; then
         # Different base versions, use version sort result
-        if [ "$base_cmp" = "$v1_base" ]; then
+        if [[ "$base_cmp" = "$v1_base" ]]; then
             echo "$tag2"  # v2 is higher
         else
             echo "$tag1"  # v1 is higher
         fi
     else
         # Same base version, check prerelease
-        if [ -z "$v1_pre" ] && [ -z "$v2_pre" ]; then
+        if [[ -z "$v1_pre" && -z "$v2_pre" ]]; then
             echo "$tag1"  # Both are release versions, same
-        elif [ -z "$v1_pre" ]; then
+        elif [[ -z "$v1_pre" ]]; then
             echo "$tag1"  # v1 is release, v2 is prerelease - v1 is higher
-        elif [ -z "$v2_pre" ]; then
+        elif [[ -z "$v2_pre" ]]; then
             echo "$tag2"  # v2 is release, v1 is prerelease - v2 is higher
         else
             # Both are prereleases, compare prerelease identifiers using proper semver rules
@@ -78,6 +78,7 @@ compare_semver() {
             fi
         fi
     fi
+    return 0
 }
 
 # Get the highest semver tag pointing to current commit
@@ -133,7 +134,7 @@ if [ "$SKIP_GENERATE" != "true" ]; then
 
     # Derive extension version from git tag if available
     # Firefox requires 1-4 dot-separated integers, so strip 'v' prefix and pre-release suffix
-    if [ -n "$TAG" ]; then
+    if [[ -n "$TAG" ]]; then
         EXT_VER="${TAG#v}"
         EXT_VER="${EXT_VER%%-*}"
         if [[ "$EXT_VER" =~ ^[0-9]+(\.[0-9]+){0,3}$ ]]; then
