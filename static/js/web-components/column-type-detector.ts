@@ -5,7 +5,8 @@ export interface ColumnTypeInfo {
   confidenceRatio: number;
 }
 
-const currencyPattern = /^(?:-?[$€£¥]\s?[\d,]+\.?\d*|[$€£¥]\s?-[\d,]+\.?\d*)$/;
+const currencyLeadNegativePattern = /^-?[$€£¥]\s?[\d,]+\.?\d*$/;
+const currencyMidNegativePattern = /^[$€£¥]\s?-[\d,]+\.?\d*$/;
 const percentagePattern = /^-?\d+\.?\d*%$/;
 const numberPattern = /^-?[\d,]+\.?\d*$/;
 const integerPattern = /^-?[\d,]+$/;
@@ -16,7 +17,8 @@ const humanDatePattern = /^[A-Z][a-z]{2}\s+\d{1,2},?\s+\d{4}$/;
 const confidenceThreshold = 0.7;
 
 function isCurrency(text: string): boolean {
-  return currencyPattern.test(text.trim());
+  const trimmed = text.trim();
+  return currencyLeadNegativePattern.test(trimmed) || currencyMidNegativePattern.test(trimmed);
 }
 
 function isPercentage(text: string): boolean {
@@ -119,7 +121,10 @@ export function parseCurrencyValue(text: string): number {
   const cleaned = trimmed.replace(/^-?\s*[$€£¥]\s?-?/, '').replace(/,/g, '');
   if (cleaned === '') return NaN;
   const value = Number(cleaned);
-  return Number.isNaN(value) ? NaN : (negative ? -value : value);
+  if (Number.isNaN(value)) {
+    return NaN;
+  }
+  return negative ? -value : value;
 }
 
 export function parsePercentageValue(text: string): number {
