@@ -558,6 +558,54 @@ describe('PageChatPanel', () => {
       });
     });
 
+    describe('when adding an assistant message with no senderName', () => {
+      beforeEach(async () => {
+        await (el as unknown as { addMessage(msg: object): Promise<void> }).addMessage({
+          id: 'msg-assistant-1',
+          sender: Sender.ASSISTANT,
+          content: 'Hello from the assistant',
+          senderName: '',
+          replyToId: '',
+          reactions: [],
+          sequence: 0n,
+          timestamp: null,
+        });
+        await el.updateComplete;
+      });
+
+      it('should substitute the persona name as senderName', () => {
+        expect(el.messages[0]!.senderName).to.equal('Dorium');
+      });
+
+      it('should render the persona name in the chat bubble', () => {
+        const bubble = el.shadowRoot!.querySelector('chat-message-bubble');
+        expect(bubble).to.not.be.null;
+        const senderDiv = bubble!.shadowRoot!.querySelector('.sender-name');
+        expect(senderDiv).to.not.be.null;
+        expect(senderDiv!.textContent).to.equal('Dorium');
+      });
+    });
+
+    describe('when adding an assistant message with an explicit senderName', () => {
+      beforeEach(async () => {
+        await (el as unknown as { addMessage(msg: object): Promise<void> }).addMessage({
+          id: 'msg-assistant-2',
+          sender: Sender.ASSISTANT,
+          content: 'Hello from a named assistant',
+          senderName: 'CustomBot',
+          replyToId: '',
+          reactions: [],
+          sequence: 0n,
+          timestamp: null,
+        });
+        await el.updateComplete;
+      });
+
+      it('should keep the explicit senderName', () => {
+        expect(el.messages[0]!.senderName).to.equal('CustomBot');
+      });
+    });
+
     describe('when the same message is added twice (replay deduplication)', () => {
       const msg = {
         id: 'msg-dup',

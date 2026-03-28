@@ -50,6 +50,9 @@ const (
 	// ChatServiceReactToMessageProcedure is the fully-qualified name of the ChatService's
 	// ReactToMessage RPC.
 	ChatServiceReactToMessageProcedure = "/api.v1.ChatService/ReactToMessage"
+	// ChatServiceGetChatStatusProcedure is the fully-qualified name of the ChatService's GetChatStatus
+	// RPC.
+	ChatServiceGetChatStatusProcedure = "/api.v1.ChatService/GetChatStatus"
 )
 
 // These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
@@ -61,6 +64,7 @@ var (
 	chatServiceSendChatReplyMethodDescriptor         = chatServiceServiceDescriptor.Methods().ByName("SendChatReply")
 	chatServiceEditChatMessageMethodDescriptor       = chatServiceServiceDescriptor.Methods().ByName("EditChatMessage")
 	chatServiceReactToMessageMethodDescriptor        = chatServiceServiceDescriptor.Methods().ByName("ReactToMessage")
+	chatServiceGetChatStatusMethodDescriptor         = chatServiceServiceDescriptor.Methods().ByName("GetChatStatus")
 )
 
 // ChatServiceClient is a client for the api.v1.ChatService service.
@@ -83,6 +87,9 @@ type ChatServiceClient interface {
 	// ReactToMessage is called by wiki-cli mcp when Claude uses the react tool.
 	// Adds an emoji reaction to a message.
 	ReactToMessage(context.Context, *connect.Request[v1.ReactToMessageRequest]) (*connect.Response[v1.ReactToMessageResponse], error)
+	// GetChatStatus returns whether Claude is currently connected (a channel subscriber exists).
+	// Used by the chat panel to disable the UI when Claude is unavailable.
+	GetChatStatus(context.Context, *connect.Request[v1.GetChatStatusRequest]) (*connect.Response[v1.GetChatStatusResponse], error)
 }
 
 // NewChatServiceClient constructs a client for the api.v1.ChatService service. By default, it uses
@@ -131,6 +138,12 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(chatServiceReactToMessageMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		getChatStatus: connect.NewClient[v1.GetChatStatusRequest, v1.GetChatStatusResponse](
+			httpClient,
+			baseURL+ChatServiceGetChatStatusProcedure,
+			connect.WithSchema(chatServiceGetChatStatusMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -142,6 +155,7 @@ type chatServiceClient struct {
 	sendChatReply         *connect.Client[v1.SendChatReplyRequest, v1.SendChatReplyResponse]
 	editChatMessage       *connect.Client[v1.EditChatMessageRequest, v1.EditChatMessageResponse]
 	reactToMessage        *connect.Client[v1.ReactToMessageRequest, v1.ReactToMessageResponse]
+	getChatStatus         *connect.Client[v1.GetChatStatusRequest, v1.GetChatStatusResponse]
 }
 
 // SendMessage calls api.v1.ChatService.SendMessage.
@@ -174,6 +188,11 @@ func (c *chatServiceClient) ReactToMessage(ctx context.Context, req *connect.Req
 	return c.reactToMessage.CallUnary(ctx, req)
 }
 
+// GetChatStatus calls api.v1.ChatService.GetChatStatus.
+func (c *chatServiceClient) GetChatStatus(ctx context.Context, req *connect.Request[v1.GetChatStatusRequest]) (*connect.Response[v1.GetChatStatusResponse], error) {
+	return c.getChatStatus.CallUnary(ctx, req)
+}
+
 // ChatServiceHandler is an implementation of the api.v1.ChatService service.
 type ChatServiceHandler interface {
 	// SendMessage sends a user chat message in the context of a page.
@@ -194,6 +213,9 @@ type ChatServiceHandler interface {
 	// ReactToMessage is called by wiki-cli mcp when Claude uses the react tool.
 	// Adds an emoji reaction to a message.
 	ReactToMessage(context.Context, *connect.Request[v1.ReactToMessageRequest]) (*connect.Response[v1.ReactToMessageResponse], error)
+	// GetChatStatus returns whether Claude is currently connected (a channel subscriber exists).
+	// Used by the chat panel to disable the UI when Claude is unavailable.
+	GetChatStatus(context.Context, *connect.Request[v1.GetChatStatusRequest]) (*connect.Response[v1.GetChatStatusResponse], error)
 }
 
 // NewChatServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -238,6 +260,12 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(chatServiceReactToMessageMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	chatServiceGetChatStatusHandler := connect.NewUnaryHandler(
+		ChatServiceGetChatStatusProcedure,
+		svc.GetChatStatus,
+		connect.WithSchema(chatServiceGetChatStatusMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/api.v1.ChatService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ChatServiceSendMessageProcedure:
@@ -252,6 +280,8 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 			chatServiceEditChatMessageHandler.ServeHTTP(w, r)
 		case ChatServiceReactToMessageProcedure:
 			chatServiceReactToMessageHandler.ServeHTTP(w, r)
+		case ChatServiceGetChatStatusProcedure:
+			chatServiceGetChatStatusHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -283,4 +313,8 @@ func (UnimplementedChatServiceHandler) EditChatMessage(context.Context, *connect
 
 func (UnimplementedChatServiceHandler) ReactToMessage(context.Context, *connect.Request[v1.ReactToMessageRequest]) (*connect.Response[v1.ReactToMessageResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ChatService.ReactToMessage is not implemented"))
+}
+
+func (UnimplementedChatServiceHandler) GetChatStatus(context.Context, *connect.Request[v1.GetChatStatusRequest]) (*connect.Response[v1.GetChatStatusResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ChatService.GetChatStatus is not implemented"))
 }
