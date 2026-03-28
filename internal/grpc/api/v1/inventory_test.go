@@ -46,17 +46,12 @@ var _ = Describe("InventoryManagementService", func() {
 		JustBeforeEach(func() {
 			var serverErr error
 			server, serverErr = v1.NewServer(
-				"commit",
-				time.Now(),
+				v1.BuildInfo{Commit: "commit", BuildTime: time.Now()},
 				mockPageReaderMutator,
 				noOpBleveIndexQueryer{},
-				nil,
-				lumber.NewConsoleLogger(lumber.WARN),
-				nil,
-				nil,
 				mockFrontmatterIndexQueryer,
-				nil,
-				noOpChatBufferManager{}, // chatBufferManager
+				lumber.NewConsoleLogger(lumber.WARN),
+				noOpChatBufferManager{},
 				noOpPageOpener{},
 			)
 			Expect(serverErr).NotTo(HaveOccurred())
@@ -273,17 +268,12 @@ var _ = Describe("InventoryManagementService", func() {
 		JustBeforeEach(func() {
 			var serverErr error
 			server, serverErr = v1.NewServer(
-				"commit",
-				time.Now(),
+				v1.BuildInfo{Commit: "commit", BuildTime: time.Now()},
 				mockPageReaderMutator,
 				noOpBleveIndexQueryer{},
-				nil,
-				lumber.NewConsoleLogger(lumber.WARN),
-				nil,
-				nil,
 				noOpFrontmatterIndexQueryer{},
-				nil,
-				noOpChatBufferManager{}, // chatBufferManager
+				lumber.NewConsoleLogger(lumber.WARN),
+				noOpChatBufferManager{},
 				noOpPageOpener{},
 			)
 			Expect(serverErr).NotTo(HaveOccurred())
@@ -706,17 +696,12 @@ var _ = Describe("InventoryManagementService", func() {
 		JustBeforeEach(func() {
 			var serverErr error
 			server, serverErr = v1.NewServer(
-				"commit",
-				time.Now(),
+				v1.BuildInfo{Commit: "commit", BuildTime: time.Now()},
 				noOpPageReaderMutator{},
 				noOpBleveIndexQueryer{},
-				nil,
-				lumber.NewConsoleLogger(lumber.WARN),
-				nil,
-				nil,
 				mockFrontmatterIndexQueryer,
-				nil,
-				noOpChatBufferManager{}, // chatBufferManager
+				lumber.NewConsoleLogger(lumber.WARN),
+				noOpChatBufferManager{},
 				noOpPageOpener{},
 			)
 			Expect(serverErr).NotTo(HaveOccurred())
@@ -806,17 +791,12 @@ var _ = Describe("InventoryManagementService", func() {
 			JustBeforeEach(func() {
 				var serverErr error
 				server, serverErr = v1.NewServer(
-					"commit",
-					time.Now(),
+					v1.BuildInfo{Commit: "commit", BuildTime: time.Now()},
 					mockPageReaderMutator,
 					noOpBleveIndexQueryer{},
-					nil,
-					lumber.NewConsoleLogger(lumber.WARN),
-					nil,
-					nil,
 					mockFrontmatterIndexQueryer,
-					nil,
-					noOpChatBufferManager{}, // chatBufferManager
+					lumber.NewConsoleLogger(lumber.WARN),
+					noOpChatBufferManager{},
 					noOpPageOpener{},
 				)
 				Expect(serverErr).NotTo(HaveOccurred())
@@ -851,17 +831,12 @@ var _ = Describe("InventoryManagementService", func() {
 			JustBeforeEach(func() {
 				var serverErr error
 				server, serverErr = v1.NewServer(
-					"commit",
-					time.Now(),
+					v1.BuildInfo{Commit: "commit", BuildTime: time.Now()},
 					mockPageReaderMutator,
 					noOpBleveIndexQueryer{},
-					nil,
-					lumber.NewConsoleLogger(lumber.WARN),
-					nil,
-					nil,
 					mockFrontmatterIndexQueryer,
-					nil,
-					noOpChatBufferManager{}, // chatBufferManager
+					lumber.NewConsoleLogger(lumber.WARN),
+					noOpChatBufferManager{},
 					noOpPageOpener{},
 				)
 				Expect(serverErr).NotTo(HaveOccurred())
@@ -898,17 +873,12 @@ var _ = Describe("InventoryManagementService", func() {
 		JustBeforeEach(func() {
 			var serverErr error
 			server, serverErr = v1.NewServer(
-				"commit",
-				time.Now(),
+				v1.BuildInfo{Commit: "commit", BuildTime: time.Now()},
 				mockPageReaderMutator,
 				noOpBleveIndexQueryer{},
-				nil,
-				lumber.NewConsoleLogger(lumber.WARN),
-				nil,
-				nil,
 				noOpFrontmatterIndexQueryer{},
-				nil,
-				noOpChatBufferManager{}, // chatBufferManager
+				lumber.NewConsoleLogger(lumber.WARN),
+				noOpChatBufferManager{},
 				noOpPageOpener{},
 			)
 			Expect(serverErr).NotTo(HaveOccurred())

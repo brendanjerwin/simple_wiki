@@ -476,20 +476,18 @@ func mustNewServerFull(
 		pageOpener = noOpPageOpener{}
 	}
 	server, err := v1.NewServer(
-		"test-commit",
-		time.Now(),
+		v1.BuildInfo{Commit: "test-commit", BuildTime: time.Now()},
 		pageReaderMutator,
 		bleveIndexQueryer,
-		jobCoordinator,
-		lumber.NewConsoleLogger(lumber.WARN),
-		nil, // markdownRenderer is optional
-		nil, // templateExecutor is optional
 		frontmatterIndexQueryer,
-		nil, // fileStorer — nil means uploads disabled
-		noOpChatBufferManager{}, // chatBufferManager
+		lumber.NewConsoleLogger(lumber.WARN),
+		noOpChatBufferManager{},
 		pageOpener,
 	)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "mustNewServerFull failed")
+	if jobCoordinator != nil {
+		server.WithJobQueueCoordinator(jobCoordinator)
+	}
 	return server
 }
 
@@ -510,20 +508,18 @@ func mustNewServerWithLogger(
 		pageReaderMutator = noOpPageReaderMutator{}
 	}
 	server, err := v1.NewServer(
-		"test-commit",
-		time.Now(),
+		v1.BuildInfo{Commit: "test-commit", BuildTime: time.Now()},
 		pageReaderMutator,
 		noOpBleveIndexQueryer{},
-		jobCoordinator,
-		logger,
-		nil,
-		nil,
 		noOpFrontmatterIndexQueryer{},
-		nil,
-		noOpChatBufferManager{}, // chatBufferManager
+		logger,
+		noOpChatBufferManager{},
 		noOpPageOpener{},
 	)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "mustNewServerWithLogger failed")
+	if jobCoordinator != nil {
+		server.WithJobQueueCoordinator(jobCoordinator)
+	}
 	return server
 }
 
@@ -1547,17 +1543,12 @@ var _ = Describe("Server", func() {
 			BeforeEach(func() {
 				// Create a server with nil logger - should fail since logger is required
 				_, serverErr = v1.NewServer(
-					"test-commit",
-					time.Now(),
+					v1.BuildInfo{Commit: "test-commit", BuildTime: time.Now()},
 					noOpPageReaderMutator{},
 					noOpBleveIndexQueryer{},
-					nil, // jobProgressProvider
-					nil, // logger is nil - this should cause an error
-					nil, // markdownRenderer
-					nil, // templateExecutor
 					noOpFrontmatterIndexQueryer{},
-					nil,                     // fileStorer
-					noOpChatBufferManager{}, // chatBufferManager
+					nil, // logger is nil - this should cause an error
+					noOpChatBufferManager{},
 					noOpPageOpener{},
 				)
 			})
@@ -3326,20 +3317,16 @@ var _ = Describe("Server", func() {
 		JustBeforeEach(func() {
 			var serverErr error
 			server, serverErr = v1.NewServer(
-				"commit",
-				time.Now(),
+				v1.BuildInfo{Commit: "commit", BuildTime: time.Now()},
 				mockPageReaderMutator,
 				noOpBleveIndexQueryer{},
-				nil,
-				lumber.NewConsoleLogger(lumber.WARN),
-				mockMarkdownRenderer,
-				mockTemplateExecutor,
 				mockFrontmatterIndexQueryer,
-				nil,   // fileStorer
-				noOpChatBufferManager{}, // chatBufferManager
+				lumber.NewConsoleLogger(lumber.WARN),
+				noOpChatBufferManager{},
 				noOpPageOpener{},
 			)
 			Expect(serverErr).NotTo(HaveOccurred())
+			server = server.WithMarkdownRenderer(mockMarkdownRenderer).WithTemplateExecutor(mockTemplateExecutor)
 			resp, err = server.ReadPage(ctx, req)
 		})
 
@@ -3479,20 +3466,16 @@ var _ = Describe("Server", func() {
 		JustBeforeEach(func() {
 			var serverErr error
 			server, serverErr = v1.NewServer(
-				"commit",
-				time.Now(),
+				v1.BuildInfo{Commit: "commit", BuildTime: time.Now()},
 				mockPageReaderMutator,
 				noOpBleveIndexQueryer{},
-				nil,
-				lumber.NewConsoleLogger(lumber.WARN),
-				mockMarkdownRenderer,
-				nil, // templateExecutor not used by RenderMarkdown
 				mockFrontmatterIndexQueryer,
-				nil, // fileStorer
+				lumber.NewConsoleLogger(lumber.WARN),
 				noOpChatBufferManager{},
 				noOpPageOpener{},
 			)
 			Expect(serverErr).NotTo(HaveOccurred())
+			server = server.WithMarkdownRenderer(mockMarkdownRenderer)
 			resp, err = server.RenderMarkdown(ctx, req)
 		})
 
@@ -3529,16 +3512,11 @@ var _ = Describe("Server", func() {
 			It("should return a FailedPrecondition error", func() {
 				// Create server without markdown renderer
 				noRendererServer, serverErr := v1.NewServer(
-					"commit",
-					time.Now(),
+					v1.BuildInfo{Commit: "commit", BuildTime: time.Now()},
 					mockPageReaderMutator,
 					noOpBleveIndexQueryer{},
-					nil,
-					lumber.NewConsoleLogger(lumber.WARN),
-					nil, // no markdown renderer
-					nil,
 					mockFrontmatterIndexQueryer,
-					nil,
+					lumber.NewConsoleLogger(lumber.WARN),
 					noOpChatBufferManager{},
 					noOpPageOpener{},
 				)
@@ -4136,17 +4114,12 @@ var _ = Describe("Server", func() {
 		JustBeforeEach(func() {
 			var serverErr error
 			server, serverErr = v1.NewServer(
-				"commit",
-				time.Now(),
+				v1.BuildInfo{Commit: "commit", BuildTime: time.Now()},
 				mockPageReaderMutator,
 				noOpBleveIndexQueryer{},
-				nil,
-				lumber.NewConsoleLogger(lumber.WARN),
-				nil,
-				nil,
 				noOpFrontmatterIndexQueryer{},
-				nil,   // fileStorer
-				noOpChatBufferManager{}, // chatBufferManager
+				lumber.NewConsoleLogger(lumber.WARN),
+				noOpChatBufferManager{},
 				noOpPageOpener{},
 			)
 			Expect(serverErr).NotTo(HaveOccurred())
@@ -4297,17 +4270,12 @@ var _ = Describe("Server", func() {
 
 		JustBeforeEach(func() {
 			server, err = v1.NewServer(
-				"commit",
-				time.Now(),
+				v1.BuildInfo{Commit: "commit", BuildTime: time.Now()},
 				mockPageReaderMutator,
 				noOpBleveIndexQueryer{},
-				nil,
-				lumber.NewConsoleLogger(lumber.WARN),
-				nil,
-				nil,
 				mockFrontmatterIndexQueryer,
-				nil,   // fileStorer
-				noOpChatBufferManager{}, // chatBufferManager
+				lumber.NewConsoleLogger(lumber.WARN),
+				noOpChatBufferManager{},
 				noOpPageOpener{},
 			)
 			Expect(err).NotTo(HaveOccurred())
@@ -4581,17 +4549,12 @@ var _ = Describe("Server", func() {
 
 		JustBeforeEach(func() {
 			server, err = v1.NewServer(
-				"commit",
-				time.Now(),
+				v1.BuildInfo{Commit: "commit", BuildTime: time.Now()},
 				mockPageReaderMutator,
 				noOpBleveIndexQueryer{},
-				nil,
-				lumber.NewConsoleLogger(lumber.WARN),
-				nil,
-				nil,
 				mockFrontmatterIndexQueryer,
-				nil,   // fileStorer
-				noOpChatBufferManager{}, // chatBufferManager
+				lumber.NewConsoleLogger(lumber.WARN),
+				noOpChatBufferManager{},
 				noOpPageOpener{},
 			)
 			Expect(err).NotTo(HaveOccurred())
