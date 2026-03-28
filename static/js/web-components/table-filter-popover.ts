@@ -304,8 +304,8 @@ export class TableFilterPopover extends LitElement {
   @state()
   declare _pendingSortDirection: SortDirection;
 
-  private _handleClickOutside: (event: Event) => void;
-  private _handleKeydown: (event: KeyboardEvent) => void;
+  private readonly _handleClickOutside: (event: Event) => void;
+  private readonly _handleKeydown: (event: KeyboardEvent) => void;
   private _pendingTimerId: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
