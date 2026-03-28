@@ -42,6 +42,7 @@ const (
 	failedToBuildPageTextErrFmt    = "failed to build page text: %v"
 	pageNameRequiredErr            = "page_name is required"
 	maxUniqueIdentifierAttempts    = 1000
+	invalidTemplateErrFmt          = "invalid template in page content: %v"
 )
 
 // ChatBufferManager defines the interface for managing chat message buffers.
@@ -634,20 +635,7 @@ func (s *Server) ListPagesByFrontmatter(_ context.Context, req *apiv1.ListPagesB
 			fmValues[key] = s.frontmatterIndexQueryer.GetValue(id, key)
 		}
 
-		var contentExcerpt string
-		if req.ContentExcerptMaxChars > 0 {
-			_, markdown, err := s.pageReaderMutator.ReadMarkdown(id)
-			if err == nil && len(markdown) > 0 {
-				content := string(markdown)
-				maxChars := int(req.ContentExcerptMaxChars)
-				runes := []rune(content)
-				if len(runes) > maxChars {
-					contentExcerpt = string(runes[:maxChars])
-				} else {
-					contentExcerpt = content
-				}
-			}
-		}
+		contentExcerpt := s.readContentExcerpt(id, req.ContentExcerptMaxChars)
 
 		results = append(results, &apiv1.FrontmatterQueryResult{
 			Identifier:        string(id),
@@ -659,6 +647,24 @@ func (s *Server) ListPagesByFrontmatter(_ context.Context, req *apiv1.ListPagesB
 	return &apiv1.ListPagesByFrontmatterResponse{
 		Results: results,
 	}, nil
+}
+
+// readContentExcerpt reads up to maxChars runes of markdown content for the given page.
+// Returns an empty string when maxChars is 0, the page cannot be read, or the content is empty.
+func (s *Server) readContentExcerpt(id wikipage.PageIdentifier, maxChars int32) string {
+	if maxChars <= 0 {
+		return ""
+	}
+	_, markdown, err := s.pageReaderMutator.ReadMarkdown(id)
+	if err != nil || len(markdown) == 0 {
+		return ""
+	}
+	content := string(markdown)
+	runes := []rune(content)
+	if int32(len(runes)) > maxChars {
+		return string(runes[:maxChars])
+	}
+	return content
 }
 
 // validateSearchRequest validates the search request.
@@ -800,13 +806,13 @@ func (s *Server) buildInventoryContext(itemID wikipage.PageIdentifier) (*apiv1.I
 // buildContainerPath recursively builds the full container path from root to the given container.
 func (s *Server) buildContainerPath(containerID string) ([]*apiv1.ContainerPathElement, error) {
 	const maxDepth = 20 // Prevent infinite loops
-	var path []*apiv1.ContainerPathElement
+	var reversed []*apiv1.ContainerPathElement
 	visited := make(map[string]bool)
 
 	currentID := containerID
 
-	// Build path from immediate container up to root
-	for currentID != "" && len(path) < maxDepth {
+	// Collect elements from immediate container up to root (in reverse order)
+	for currentID != "" && len(reversed) < maxDepth {
 		if visited[currentID] {
 			// Circular reference detected, break
 			break
@@ -820,25 +826,54 @@ func (s *Server) buildContainerPath(containerID string) ([]*apiv1.ContainerPathE
 		mungedID := wikipage.PageIdentifier(mungedIDStr)
 		title := s.frontmatterIndexQueryer.GetValue(mungedID, "title")
 
-		element := &apiv1.ContainerPathElement{
+		reversed = append(reversed, &apiv1.ContainerPathElement{
 			Identifier: currentID,
 			Title:      title,
 			// Depth will be set after we know the total path length
-		}
-
-		// Prepend to path (we're going from immediate container to root)
-		path = append([]*apiv1.ContainerPathElement{element}, path...)
+		})
 
 		// Get the parent container
 		currentID = s.frontmatterIndexQueryer.GetValue(mungedID, "inventory.container")
 	}
 
-	// Now assign depth values: root=0, each child +1
-	for i := range path {
-		path[i].Depth = int32(i)
+	// Reverse to get root-first order, then assign depth values
+	path := make([]*apiv1.ContainerPathElement, len(reversed))
+	for i, el := range reversed {
+		j := len(reversed) - 1 - i
+		el.Depth = int32(j)
+		path[j] = el
 	}
 
 	return path, nil
+}
+
+// buildPageText assembles the full wiki page text by prepending TOML frontmatter
+// (enclosed in +++ delimiters) to the markdown body.
+func buildPageText(frontmatter map[string]any, frontmatterToml []byte, markdown wikipage.Markdown) (string, error) {
+	var b strings.Builder
+
+	if len(frontmatter) > 0 {
+		if _, err := b.WriteString("+++\n"); err != nil {
+			return "", err
+		}
+		if _, err := b.Write(frontmatterToml); err != nil {
+			return "", err
+		}
+		if !bytes.HasSuffix(frontmatterToml, []byte("\n")) {
+			if _, err := b.WriteString("\n"); err != nil {
+				return "", err
+			}
+		}
+		if _, err := b.WriteString("+++\n"); err != nil {
+			return "", err
+		}
+	}
+
+	if _, err := b.WriteString(string(markdown)); err != nil {
+		return "", err
+	}
+
+	return b.String(), nil
 }
 
 // ReadPage implements the ReadPage RPC.
@@ -863,32 +898,15 @@ func (s *Server) ReadPage(_ context.Context, req *apiv1.ReadPageRequest) (*apiv1
 		return nil, status.Errorf(codes.Internal, "failed to marshal frontmatter: %v", err)
 	}
 
-	// Build the page text with frontmatter
-	var pageTextBuilder strings.Builder
-	if len(frontmatter) > 0 {
-		if _, err := pageTextBuilder.WriteString("+++\n"); err != nil {
-			return nil, status.Errorf(codes.Internal, failedToBuildPageTextErrFmt, err)
-		}
-		if _, err := pageTextBuilder.Write(frontmatterToml); err != nil {
-			return nil, status.Errorf(codes.Internal, failedToBuildPageTextErrFmt, err)
-		}
-		if !bytes.HasSuffix(frontmatterToml, []byte("\n")) {
-			if _, err := pageTextBuilder.WriteString("\n"); err != nil {
-				return nil, status.Errorf(codes.Internal, failedToBuildPageTextErrFmt, err)
-			}
-		}
-		if _, err := pageTextBuilder.WriteString("+++\n"); err != nil {
-			return nil, status.Errorf(codes.Internal, failedToBuildPageTextErrFmt, err)
-		}
-	}
-	if _, err := pageTextBuilder.WriteString(string(markdown)); err != nil {
+	pageText, err := buildPageText(frontmatter, frontmatterToml, markdown)
+	if err != nil {
 		return nil, status.Errorf(codes.Internal, failedToBuildPageTextErrFmt, err)
 	}
 
 	// Create a Page object and render it
 	page := &wikipage.Page{
 		Identifier: req.PageName,
-		Text:       pageTextBuilder.String(),
+		Text:       pageText,
 	}
 
 	// Render the page if rendering dependencies are available
@@ -1075,7 +1093,7 @@ func (s *Server) CreatePage(_ context.Context, req *apiv1.CreatePageRequest) (*a
 	if err := templating.ValidateTemplate(string(markdown)); err != nil {
 		return &apiv1.CreatePageResponse{
 			Success: false,
-			Error:   fmt.Sprintf("invalid template in page content: %v", err),
+			Error:   fmt.Sprintf(invalidTemplateErrFmt, err),
 		}, nil
 	}
 
@@ -1157,7 +1175,7 @@ func (s *Server) UpdatePageContent(_ context.Context, req *apiv1.UpdatePageConte
 	}
 
 	if err := templating.ValidateTemplate(req.NewContentMarkdown); err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid template in page content: %v", err)
+		return nil, status.Errorf(codes.InvalidArgument, invalidTemplateErrFmt, err)
 	}
 
 	// Compute the markdown to write: find-and-replace when old_content_markdown is set,
@@ -1292,7 +1310,7 @@ func (s *Server) UpdateWholePage(_ context.Context, req *apiv1.UpdateWholePageRe
 	}
 
 	if err := templating.ValidateTemplate(string(md)); err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid template in page content: %v", err)
+		return nil, status.Errorf(codes.InvalidArgument, invalidTemplateErrFmt, err)
 	}
 
 	// Preserve the page identifier in frontmatter
@@ -1597,21 +1615,7 @@ func (s *Server) ParseCSVPreview(_ context.Context, req *apiv1.ParseCSVPreviewRe
 		record.PageExists = pageExists
 
 		// Validate template if specified (skip the built-in inv_item template)
-		if parsed.Template != "" && !parsed.HasErrors() && parsed.Template != pageimport.InvItemTemplate {
-			_, templateFm, templateErr := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(parsed.Template))
-			if templateErr != nil {
-				if os.IsNotExist(templateErr) {
-					record.ValidationErrors = append(record.ValidationErrors,
-						fmt.Sprintf("template '%s' does not exist", parsed.Template))
-				} else {
-					record.ValidationErrors = append(record.ValidationErrors,
-						fmt.Sprintf("failed to read template '%s': %v", parsed.Template, templateErr))
-				}
-			} else if !isTemplatePage(templateFm) {
-				record.ValidationErrors = append(record.ValidationErrors,
-					fmt.Sprintf("page '%s' is not a template (missing template: true)", parsed.Template))
-			}
-		}
+		record.ValidationErrors = append(record.ValidationErrors, s.validateRecordTemplate(parsed)...)
 
 		// Count errors, updates, and creates
 		if len(record.ValidationErrors) > 0 {
@@ -1632,6 +1636,25 @@ func (s *Server) ParseCSVPreview(_ context.Context, req *apiv1.ParseCSVPreviewRe
 		UpdateCount:  updateCount,
 		CreateCount:  createCount,
 	}, nil
+}
+
+// validateRecordTemplate validates the template referenced by a parsed record.
+// Returns any validation error strings; returns nil when no validation is needed.
+func (s *Server) validateRecordTemplate(parsed pageimport.ParsedRecord) []string {
+	if parsed.Template == "" || parsed.HasErrors() || parsed.Template == pageimport.InvItemTemplate {
+		return nil
+	}
+	_, templateFm, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(parsed.Template))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []string{fmt.Sprintf("template '%s' does not exist", parsed.Template)}
+		}
+		return []string{fmt.Sprintf("failed to read template '%s': %v", parsed.Template, err)}
+	}
+	if !isTemplatePage(templateFm) {
+		return []string{fmt.Sprintf("page '%s' is not a template (missing template: true)", parsed.Template)}
+	}
+	return nil
 }
 
 // convertParsedRecordToProto converts a pageimport.ParsedRecord to apiv1.PageImportRecord.

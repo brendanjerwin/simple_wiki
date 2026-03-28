@@ -273,18 +273,15 @@ func (*SinglePageImportJob) deleteField(fm map[string]any, fieldPath string) {
 	delete(current, parts[len(parts)-1])
 }
 
-// applyArrayOperation applies an array operation to frontmatter.
-func (*SinglePageImportJob) applyArrayOperation(fm map[string]any, op pageimport.ArrayOperation) error {
-	parts := strings.Split(op.FieldPath, ".")
+// navigateToParentMap traverses fm following the dotted-path segments, creating
+// intermediate maps as needed, and returns the map that holds the final key.
+func navigateToParentMap(fm map[string]any, parts []string) (map[string]any, error) {
 	current := fm
-
-	// Navigate to parent, creating nested maps as needed
-	for i := 0; i < len(parts)-1; i++ {
-		part := parts[i]
+	for _, part := range parts {
 		if existing, exists := current[part]; exists {
 			nested, ok := existing.(map[string]any)
 			if !ok {
-				return fmt.Errorf("cannot navigate through non-map value at '%s'", part)
+				return nil, fmt.Errorf("cannot navigate through non-map value at '%s'", part)
 			}
 			current = nested
 		} else {
@@ -293,51 +290,73 @@ func (*SinglePageImportJob) applyArrayOperation(fm map[string]any, op pageimport
 			current = newNested
 		}
 	}
+	return current, nil
+}
 
+// coerceToAnySlice returns the existing value at fieldName as a []any slice,
+// converting []string if necessary. Returns nil when the field is absent.
+func coerceToAnySlice(current map[string]any, fieldName string) ([]any, error) {
+	existing, exists := current[fieldName]
+	if !exists {
+		return nil, nil
+	}
+	switch v := existing.(type) {
+	case []any:
+		return v, nil
+	case []string:
+		arr := make([]any, len(v))
+		for i, s := range v {
+			arr[i] = s
+		}
+		return arr, nil
+	default:
+		return nil, fmt.Errorf("field '%s' is not an array", fieldName)
+	}
+}
+
+// ensureValueInArray returns arr with value appended if not already present.
+func ensureValueInArray(arr []any, value string) []any {
+	for _, item := range arr {
+		if s, ok := item.(string); ok && s == value {
+			return arr // already present
+		}
+	}
+	return append(arr, value)
+}
+
+// removeValueFromArray returns a new slice with all occurrences of value removed.
+func removeValueFromArray(arr []any, value string) []any {
+	result := make([]any, 0, len(arr))
+	for _, item := range arr {
+		if s, ok := item.(string); ok && s == value {
+			continue
+		}
+		result = append(result, item)
+	}
+	return result
+}
+
+// applyArrayOperation applies an array operation to frontmatter.
+func (*SinglePageImportJob) applyArrayOperation(fm map[string]any, op pageimport.ArrayOperation) error {
+	parts := strings.Split(op.FieldPath, ".")
+	parentParts := parts[:len(parts)-1]
 	fieldName := parts[len(parts)-1]
 
-	// Get or create the array
-	var arr []any
-	if existing, exists := current[fieldName]; exists {
-		switch v := existing.(type) {
-		case []any:
-			arr = v
-		case []string:
-			// Convert []string to []any
-			arr = make([]any, len(v))
-			for i, s := range v {
-				arr[i] = s
-			}
-		default:
-			return fmt.Errorf("field '%s' is not an array", fieldName)
-		}
+	current, err := navigateToParentMap(fm, parentParts)
+	if err != nil {
+		return err
+	}
+
+	arr, err := coerceToAnySlice(current, fieldName)
+	if err != nil {
+		return err
 	}
 
 	switch op.Operation {
 	case pageimport.EnsureExists:
-		// Add value if not already present
-		found := false
-		for _, item := range arr {
-			if s, ok := item.(string); ok && s == op.Value {
-				found = true
-				break
-			}
-		}
-		if !found {
-			arr = append(arr, op.Value)
-		}
-
+		arr = ensureValueInArray(arr, op.Value)
 	case pageimport.DeleteValue:
-		// Remove value if present
-		newArr := make([]any, 0, len(arr))
-		for _, item := range arr {
-			if s, ok := item.(string); ok && s == op.Value {
-				continue // Skip this value
-			}
-			newArr = append(newArr, item)
-		}
-		arr = newArr
-
+		arr = removeValueFromArray(arr, op.Value)
 	default:
 		return fmt.Errorf("unknown array operation type: %d", op.Operation)
 	}
