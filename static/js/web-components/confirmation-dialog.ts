@@ -343,6 +343,7 @@ export class ConfirmationDialog extends LitElement {
     const config = this.config;
     const iconClass = config.confirmVariant === 'danger' ? 'warning' : 'info';
     const confirmButtonClass = `button button-${config.confirmVariant || 'danger'}`;
+    const descriptionIrreversibleClass = config.irreversible ? 'irreversible' : '';
     
     return html`
       <div class="overlay" @click=${this.handleOverlayClick}>
@@ -357,7 +358,7 @@ export class ConfirmationDialog extends LitElement {
             </div>
 
             ${config.description ? html`
-              <div class="dialog-description text-muted font-mono text-sm ${config.irreversible ? 'irreversible' : ''}">
+              <div class="dialog-description text-muted font-mono text-sm ${descriptionIrreversibleClass}">
                 ${config.description}
               </div>
             ` : ''}

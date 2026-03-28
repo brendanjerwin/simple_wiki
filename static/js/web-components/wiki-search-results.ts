@@ -349,10 +349,11 @@ class WikiSearchResults extends LitElement {
   }
 
   override render() {
-    const hiddenResultsCount = this.inventoryOnly 
+    const hiddenResultsCount = this.inventoryOnly
       ? Math.max(0, this.totalUnfilteredCount - this.results.length)
       : 0;
-    
+    const hiddenResultsSuffix = hiddenResultsCount === 1 ? '' : 's';
+
     return html`
             ${sharedStyles}
             <div class="popover border-radius-large box-shadow-light" @click="${this.handlePopoverClick}">
@@ -370,33 +371,35 @@ class WikiSearchResults extends LitElement {
                 ${hiddenResultsCount > 0 ? html`
                     <div class="filter-warning">
                         <i class="fa-solid fa-triangle-exclamation"></i>
-                        <span>${hiddenResultsCount} other result${hiddenResultsCount === 1 ? '' : 's'} not shown.</span>
+                        <span>${hiddenResultsCount} other result${hiddenResultsSuffix} not shown.</span>
                     </div>
                 ` : ''}
                 <div id="results">
                 ${this.results.length === 0
                   ? html`<div class="no-results">No results found</div>`
-                  : this.results.map(result => html`
+                  : this.results.map(result => {
+                    const inventoryPathContent = (result.inventoryContext?.path && result.inventoryContext.path.length > 0)
+                      ? this.processContainerPath(result.inventoryContext.path).map((element, index) => html`
+                          ${index > 0 ? html`<span class="path-separator">›</span>` : ''}
+                          ${element.isEllipsis
+                            ? html`<span class="path-ellipsis">...</span>`
+                            : html`<a href="/${element.identifier}">${element.title || element.identifier}</a>`
+                          }
+                        `)
+                      : '';
+                    return html`
                     <a href="/${result.identifier}" class="border-radius-small">${result.title}</a>
                     <div class="item_content border-radius-small">
                         ${result.inventoryContext?.isInventoryRelated
                           ? html`<div class="found-in">
                               <strong>In:</strong>
-                              ${result.inventoryContext.path && result.inventoryContext.path.length > 0
-                                ? this.processContainerPath(result.inventoryContext.path).map((element, index) => html`
-                                    ${index > 0 ? html`<span class="path-separator">›</span>` : ''}
-                                    ${element.isEllipsis
-                                      ? html`<span class="path-ellipsis">...</span>`
-                                      : html`<a href="/${element.identifier}">${element.title || element.identifier}</a>`
-                                    }
-                                  `)
-                                : ''
-                              }
+                              ${inventoryPathContent}
                             </div>`
                           : ''}
                         ${this.renderFragment(result.fragment, result.highlights)}
                     </div>
-                `)}
+                  `;
+                  })}
                 </div>
             </div>
         `;
