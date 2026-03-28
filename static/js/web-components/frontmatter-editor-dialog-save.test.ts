@@ -6,15 +6,14 @@ import { ReplaceFrontmatterResponseSchema } from '../gen/api/v1/frontmatter_pb.j
 import sinon from 'sinon';
 import './frontmatter-editor-dialog.js';
 
-// Skipped: Browser hangs - see https://github.com/brendanjerwin/simple_wiki/issues/229
-describe.skip('FrontmatterEditorDialog - Save Functionality', () => {
+describe('FrontmatterEditorDialog - Save Functionality', () => {
   let el: FrontmatterEditorDialog;
   let clientStub: sinon.SinonStub;
   let sessionStorageStub: sinon.SinonStub;
   let refreshPageStub: sinon.SinonStub;
 
   function timeout(ms: number, message: string): Promise<never> {
-    return new Promise((_, reject) => 
+    return new Promise((_, reject) =>
       setTimeout(() => reject(new Error(message)), ms)
     );
   }
@@ -24,20 +23,27 @@ describe.skip('FrontmatterEditorDialog - Save Functionality', () => {
       fixture<FrontmatterEditorDialog>(html`<frontmatter-editor-dialog></frontmatter-editor-dialog>`),
       timeout(5000, 'Component fixture timed out')
     ]);
-    
+
     // Stub the loadFrontmatter method to prevent network calls
     sinon.stub(el, 'loadFrontmatter').resolves();
-    
-    // Stub the client replaceFrontmatter method
-    clientStub = sinon.stub(el['client'], 'replaceFrontmatter');
-    
+
+    // Create a mock client and stub getClient to return it.
+    // With lazy init, el['client'] is null until first use, so we must stub getClient() instead.
+    const mockClient = {
+      replaceFrontmatter: sinon.stub(),
+      getFrontmatter: sinon.stub(),
+    };
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+    sinon.stub(el, 'getClient' as keyof FrontmatterEditorDialog).returns(mockClient);
+    clientStub = mockClient.replaceFrontmatter;
+
     // Stub sessionStorage.setItem to test toast storage
     sessionStorageStub = sinon.stub(sessionStorage, 'setItem');
-    
+
     // Stub the refreshPage method to prevent actual page refresh
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
     refreshPageStub = sinon.stub(el, 'refreshPage' as keyof FrontmatterEditorDialog);
-    
+
     await el.updateComplete;
   });
 
