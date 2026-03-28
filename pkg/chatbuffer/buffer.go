@@ -240,7 +240,7 @@ func (m *Manager) AddAssistantMessage(page, content, replyToID string) (string, 
 		Timestamp:  time.Now(),
 		Page:       page,
 		Sequence:   sequence,
-		SenderName: "Claude",
+		SenderName: "",
 		ReplyToID:  replyToID,
 		Reactions:  make([]Reaction, 0),
 	}
