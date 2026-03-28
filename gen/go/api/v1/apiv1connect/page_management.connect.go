@@ -66,6 +66,9 @@ const (
 	// PageManagementServiceWatchPageProcedure is the fully-qualified name of the
 	// PageManagementService's WatchPage RPC.
 	PageManagementServiceWatchPageProcedure = "/api.v1.PageManagementService/WatchPage"
+	// PageManagementServiceRenderMarkdownProcedure is the fully-qualified name of the
+	// PageManagementService's RenderMarkdown RPC.
+	PageManagementServiceRenderMarkdownProcedure = "/api.v1.PageManagementService/RenderMarkdown"
 )
 
 // These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
@@ -82,6 +85,7 @@ var (
 	pageManagementServiceGenerateIdentifierMethodDescriptor = pageManagementServiceServiceDescriptor.Methods().ByName("GenerateIdentifier")
 	pageManagementServiceListTemplatesMethodDescriptor      = pageManagementServiceServiceDescriptor.Methods().ByName("ListTemplates")
 	pageManagementServiceWatchPageMethodDescriptor          = pageManagementServiceServiceDescriptor.Methods().ByName("WatchPage")
+	pageManagementServiceRenderMarkdownMethodDescriptor     = pageManagementServiceServiceDescriptor.Methods().ByName("RenderMarkdown")
 )
 
 // PageManagementServiceClient is a client for the api.v1.PageManagementService service.
@@ -105,6 +109,11 @@ type PageManagementServiceClient interface {
 	// Emits the current version_hash when the content changes on the server.
 	// Clients can use this to re-fetch and re-render the page content.
 	WatchPage(context.Context, *connect.Request[v1.WatchPageRequest]) (*connect.ServerStreamForClient[v1.WatchPageResponse], error)
+	// RenderMarkdown renders arbitrary markdown content to HTML.
+	// Supports selective template macros (LinkTo, FindBy, etc.) but excludes
+	// interactive widget macros (Checklist, Blog) which render as literal text.
+	// Used by the chat panel to render assistant messages.
+	RenderMarkdown(context.Context, *connect.Request[v1.RenderMarkdownRequest]) (*connect.Response[v1.RenderMarkdownResponse], error)
 }
 
 // NewPageManagementServiceClient constructs a client for the api.v1.PageManagementService service.
@@ -183,6 +192,12 @@ func NewPageManagementServiceClient(httpClient connect.HTTPClient, baseURL strin
 			connect.WithSchema(pageManagementServiceWatchPageMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		renderMarkdown: connect.NewClient[v1.RenderMarkdownRequest, v1.RenderMarkdownResponse](
+			httpClient,
+			baseURL+PageManagementServiceRenderMarkdownProcedure,
+			connect.WithSchema(pageManagementServiceRenderMarkdownMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -199,6 +214,7 @@ type pageManagementServiceClient struct {
 	generateIdentifier *connect.Client[v1.GenerateIdentifierRequest, v1.GenerateIdentifierResponse]
 	listTemplates      *connect.Client[v1.ListTemplatesRequest, v1.ListTemplatesResponse]
 	watchPage          *connect.Client[v1.WatchPageRequest, v1.WatchPageResponse]
+	renderMarkdown     *connect.Client[v1.RenderMarkdownRequest, v1.RenderMarkdownResponse]
 }
 
 // CreatePage calls api.v1.PageManagementService.CreatePage.
@@ -256,6 +272,11 @@ func (c *pageManagementServiceClient) WatchPage(ctx context.Context, req *connec
 	return c.watchPage.CallServerStream(ctx, req)
 }
 
+// RenderMarkdown calls api.v1.PageManagementService.RenderMarkdown.
+func (c *pageManagementServiceClient) RenderMarkdown(ctx context.Context, req *connect.Request[v1.RenderMarkdownRequest]) (*connect.Response[v1.RenderMarkdownResponse], error) {
+	return c.renderMarkdown.CallUnary(ctx, req)
+}
+
 // PageManagementServiceHandler is an implementation of the api.v1.PageManagementService service.
 type PageManagementServiceHandler interface {
 	CreatePage(context.Context, *connect.Request[v1.CreatePageRequest]) (*connect.Response[v1.CreatePageResponse], error)
@@ -277,6 +298,11 @@ type PageManagementServiceHandler interface {
 	// Emits the current version_hash when the content changes on the server.
 	// Clients can use this to re-fetch and re-render the page content.
 	WatchPage(context.Context, *connect.Request[v1.WatchPageRequest], *connect.ServerStream[v1.WatchPageResponse]) error
+	// RenderMarkdown renders arbitrary markdown content to HTML.
+	// Supports selective template macros (LinkTo, FindBy, etc.) but excludes
+	// interactive widget macros (Checklist, Blog) which render as literal text.
+	// Used by the chat panel to render assistant messages.
+	RenderMarkdown(context.Context, *connect.Request[v1.RenderMarkdownRequest]) (*connect.Response[v1.RenderMarkdownResponse], error)
 }
 
 // NewPageManagementServiceHandler builds an HTTP handler from the service implementation. It
@@ -351,6 +377,12 @@ func NewPageManagementServiceHandler(svc PageManagementServiceHandler, opts ...c
 		connect.WithSchema(pageManagementServiceWatchPageMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	pageManagementServiceRenderMarkdownHandler := connect.NewUnaryHandler(
+		PageManagementServiceRenderMarkdownProcedure,
+		svc.RenderMarkdown,
+		connect.WithSchema(pageManagementServiceRenderMarkdownMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/api.v1.PageManagementService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case PageManagementServiceCreatePageProcedure:
@@ -375,6 +407,8 @@ func NewPageManagementServiceHandler(svc PageManagementServiceHandler, opts ...c
 			pageManagementServiceListTemplatesHandler.ServeHTTP(w, r)
 		case PageManagementServiceWatchPageProcedure:
 			pageManagementServiceWatchPageHandler.ServeHTTP(w, r)
+		case PageManagementServiceRenderMarkdownProcedure:
+			pageManagementServiceRenderMarkdownHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -426,4 +460,8 @@ func (UnimplementedPageManagementServiceHandler) ListTemplates(context.Context, 
 
 func (UnimplementedPageManagementServiceHandler) WatchPage(context.Context, *connect.Request[v1.WatchPageRequest], *connect.ServerStream[v1.WatchPageResponse]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.PageManagementService.WatchPage is not implemented"))
+}
+
+func (UnimplementedPageManagementServiceHandler) RenderMarkdown(context.Context, *connect.Request[v1.RenderMarkdownRequest]) (*connect.Response[v1.RenderMarkdownResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.PageManagementService.RenderMarkdown is not implemented"))
 }
