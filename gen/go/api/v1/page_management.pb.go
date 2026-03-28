@@ -1453,7 +1453,7 @@ type RenderMarkdownRequest struct {
 	// The raw markdown content to render.
 	Content string `protobuf:"bytes,1,opt,name=content,proto3" json:"content,omitempty"`
 	// Optional page identifier for macro context (e.g., LinkTo resolves relative to this page).
-	// If omitted, macros that need page context will use a minimal default context.
+	// Macros are always executed; when a page is provided its frontmatter enriches the context.
 	Page string `protobuf:"bytes,2,opt,name=page,proto3" json:"page,omitempty"`
 }
 
