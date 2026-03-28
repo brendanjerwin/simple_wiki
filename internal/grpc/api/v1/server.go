@@ -39,7 +39,6 @@ const (
 	pageNotFoundErrFmt             = "page not found: %s"
 	failedToReadFrontmatterErrFmt  = "failed to read frontmatter: %v"
 	failedToWriteFrontmatterErrFmt = "failed to write frontmatter: %v"
-	failedToBuildPageTextErrFmt    = "failed to build page text: %v"
 	pageNameRequiredErr            = "page_name is required"
 	maxUniqueIdentifierAttempts    = 1000
 	invalidTemplateErrFmt          = "invalid template in page content: %v"
@@ -849,31 +848,21 @@ func (s *Server) buildContainerPath(containerID string) ([]*apiv1.ContainerPathE
 
 // buildPageText assembles the full wiki page text by prepending TOML frontmatter
 // (enclosed in +++ delimiters) to the markdown body.
-func buildPageText(frontmatter map[string]any, frontmatterToml []byte, markdown wikipage.Markdown) (string, error) {
+func buildPageText(frontmatter map[string]any, frontmatterToml []byte, markdown wikipage.Markdown) string {
 	var b strings.Builder
 
 	if len(frontmatter) > 0 {
-		if _, err := b.WriteString("+++\n"); err != nil {
-			return "", err
-		}
-		if _, err := b.Write(frontmatterToml); err != nil {
-			return "", err
-		}
+		_, _ = b.WriteString("+++\n") // WriteString on strings.Builder never fails
+		_, _ = b.Write(frontmatterToml) // Write on strings.Builder never fails
 		if !bytes.HasSuffix(frontmatterToml, []byte("\n")) {
-			if _, err := b.WriteString("\n"); err != nil {
-				return "", err
-			}
+			_, _ = b.WriteString("\n") // WriteString on strings.Builder never fails
 		}
-		if _, err := b.WriteString("+++\n"); err != nil {
-			return "", err
-		}
+		_, _ = b.WriteString("+++\n") // WriteString on strings.Builder never fails
 	}
 
-	if _, err := b.WriteString(string(markdown)); err != nil {
-		return "", err
-	}
+	_, _ = b.WriteString(string(markdown)) // WriteString on strings.Builder never fails
 
-	return b.String(), nil
+	return b.String()
 }
 
 // ReadPage implements the ReadPage RPC.
@@ -898,10 +887,7 @@ func (s *Server) ReadPage(_ context.Context, req *apiv1.ReadPageRequest) (*apiv1
 		return nil, status.Errorf(codes.Internal, "failed to marshal frontmatter: %v", err)
 	}
 
-	pageText, err := buildPageText(frontmatter, frontmatterToml, markdown)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, failedToBuildPageTextErrFmt, err)
-	}
+	pageText := buildPageText(frontmatter, frontmatterToml, markdown)
 
 	// Create a Page object and render it
 	page := &wikipage.Page{
