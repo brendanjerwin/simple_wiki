@@ -1000,6 +1000,7 @@ export class PageImportDialog extends LitElement {
     const filtered = this.filteredRecords;
     const record = this.currentRecord;
     const label = this.showErrorsOnly ? 'Error' : 'Record';
+    const emptyStateText = this.showErrorsOnly ? 'No errors to display' : 'No records to display';
 
     return html`
       ${this.parsingErrors.length > 0
@@ -1070,7 +1071,7 @@ export class PageImportDialog extends LitElement {
         : html`
             <div class="loading-container">
               <div class="loading-text">
-                ${this.showErrorsOnly ? 'No errors to display' : 'No records to display'}
+                ${emptyStateText}
               </div>
             </div>
           `}
@@ -1083,6 +1084,40 @@ export class PageImportDialog extends LitElement {
 
   private _renderImportingState() {
     const status = this.jobQueueStatus;
+    const statusActiveClass = status?.isActive ? 'active' : 'inactive';
+    const statusActiveLabel = status?.isActive ? 'Active' : 'Idle';
+
+    let jobStatusContent;
+    if (this.streamingDisconnected) {
+      jobStatusContent = html`
+        <div class="job-status-disconnected">
+          Live status unavailable. Import continues in background.
+        </div>
+      `;
+    } else if (status) {
+      jobStatusContent = html`
+        <div class="job-status-row">
+          <span class="job-status-label">Status</span>
+          <span class="job-status-value ${statusActiveClass}">
+            ${statusActiveLabel}
+          </span>
+        </div>
+        <div class="job-status-row">
+          <span class="job-status-label">Jobs Remaining</span>
+          <span class="job-status-value">${status.jobsRemaining}</span>
+        </div>
+        <div class="job-status-row">
+          <span class="job-status-label">Total Jobs</span>
+          <span class="job-status-value">${status.highWaterMark}</span>
+        </div>
+      `;
+    } else {
+      jobStatusContent = html`
+        <div class="job-status-waiting">
+          <i class="fas fa-spinner fa-spin"></i> Waiting for job status...
+        </div>
+      `;
+    }
 
     return html`
       <div class="importing-container">
@@ -1105,34 +1140,7 @@ export class PageImportDialog extends LitElement {
 
         <div class="job-status-section">
           <div class="job-status-title">Job Queue Status</div>
-          ${this.streamingDisconnected
-            ? html`
-                <div class="job-status-disconnected">
-                  Live status unavailable. Import continues in background.
-                </div>
-              `
-            : status
-              ? html`
-                  <div class="job-status-row">
-                    <span class="job-status-label">Status</span>
-                    <span class="job-status-value ${status.isActive ? 'active' : 'inactive'}">
-                      ${status.isActive ? 'Active' : 'Idle'}
-                    </span>
-                  </div>
-                  <div class="job-status-row">
-                    <span class="job-status-label">Jobs Remaining</span>
-                    <span class="job-status-value">${status.jobsRemaining}</span>
-                  </div>
-                  <div class="job-status-row">
-                    <span class="job-status-label">Total Jobs</span>
-                    <span class="job-status-value">${status.highWaterMark}</span>
-                  </div>
-                `
-              : html`
-                  <div class="job-status-waiting">
-                    <i class="fas fa-spinner fa-spin"></i> Waiting for job status...
-                  </div>
-                `}
+          ${jobStatusContent}
         </div>
       </div>
     `;
