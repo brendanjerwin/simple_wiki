@@ -13,7 +13,10 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-const testFileTimestamp = 1609459200 // 2021-01-01 Unix timestamp
+const (
+	testFileTimestamp     = 1609459200 // 2021-01-01 Unix timestamp
+	tomlIdentifierPrefix = "+++\nidentifier = '"
+)
 
 // MockMigrationDeps provides a simple mock implementation for testing migrations
 type MockMigrationDeps struct {
@@ -156,7 +159,7 @@ func CreatePascalCasePage(dir, identifier, content string) {
 	mdPath := filepath.Join(dir, base32tools.EncodeToBase32(strings.ToLower(identifier))+".md")
 
 	// Build page with frontmatter containing the identifier
-	fullContent := "+++\nidentifier = '" + identifier + "'\n+++\n\n" + content
+	fullContent := tomlIdentifierPrefix + identifier + "'\n+++\n\n" + content
 	_ = os.WriteFile(mdPath, []byte(fullContent), 0644)
 }
 
@@ -195,7 +198,7 @@ func CreateMDFileWithFrontmatterNoIdentifier(dir, identifier, frontmatter, conte
 // Must be called from within a Ginkgo test context.
 func CreateMDFileWithInvalidIdentifier(dir, filename, identifier string) {
 	mdPath := filepath.Join(dir, base32tools.EncodeToBase32(strings.ToLower(filename))+".md")
-	fullContent := "+++\nidentifier = '" + identifier + "'\n+++\n\n# Content"
+	fullContent := tomlIdentifierPrefix + identifier + "'\n+++\n\n# Content"
 	err := os.WriteFile(mdPath, []byte(fullContent), 0644)
 	Expect(err).NotTo(HaveOccurred(), "failed to create MD file with invalid identifier: %s", mdPath)
 }
@@ -282,7 +285,7 @@ func (m *MockDataDirScanner) AddFile(filename string, content []byte) {
 // AddPascalCasePage adds a PascalCase page with TOML frontmatter to the mock
 func (m *MockDataDirScanner) AddPascalCasePage(identifier, markdownContent string) {
 	base32Name := base32tools.EncodeToBase32(strings.ToLower(identifier))
-	fullContent := "+++\nidentifier = '" + identifier + "'\n+++\n\n" + markdownContent
+	fullContent := tomlIdentifierPrefix + identifier + "'\n+++\n\n" + markdownContent
 	m.files[base32Name+".md"] = []byte(fullContent)
 }
 
