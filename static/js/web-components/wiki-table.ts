@@ -397,6 +397,9 @@ export class WikiTable extends LitElement {
     this._sourceTable = table as HTMLTableElement;
     this._sourceTable.style.display = 'none';
     this.extractedData = extractTableData(this._sourceTable);
+    for (const row of this.extractedData.rows) {
+      row.htmlCells = row.htmlCells.map(cell => DOMPurify.sanitize(cell));
+    }
 
     const headerTexts = this.extractedData.columns.map(c => c.headerText);
     const cellValues = this.extractedData.rows.map(r => r.cells.map(String));
@@ -691,7 +694,7 @@ export class WikiTable extends LitElement {
               <tr><td colspan="${this.extractedData!.columns.length}" class="no-results">No matching rows</td></tr>
             ` : processedRows.map(row => html`
               <tr>
-                ${row.htmlCells.map(cell => html`<td>${unsafeHTML(DOMPurify.sanitize(cell))}</td>`)}
+                ${row.htmlCells.map(cell => html`<td>${unsafeHTML(cell)}</td>`)}
               </tr>
             `)}
           </tbody>
@@ -713,7 +716,7 @@ export class WikiTable extends LitElement {
             ${this.extractedData!.columns.map((col, i) => html`
               <div class="card-row">
                 <span class="card-label">${col.headerText}</span>
-                <span class="card-value">${unsafeHTML(DOMPurify.sanitize(row.htmlCells[i] ?? ''))}</span>
+                <span class="card-value">${unsafeHTML(row.htmlCells[i] ?? '')}</span>
               </div>
             `)}
           </div>

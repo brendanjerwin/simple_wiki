@@ -1237,30 +1237,21 @@ describe('WikiTable', () => {
       let el: WikiTable;
 
       beforeEach(async () => {
-        const container = document.createElement('div');
-        // We build the table programmatically to avoid the browser immediately
-        // stripping script tags from innerHTML
-        const table = document.createElement('table');
-        const thead = table.createTHead();
+        const sourceTable = document.createElement('table');
+        const thead = sourceTable.createTHead();
         const headerRow = thead.insertRow();
         headerRow.insertCell().textContent = 'Name';
-
-        const tbody = table.createTBody();
+        const tbody = sourceTable.createTBody();
         const dataRow = tbody.insertRow();
         const cell = dataRow.insertCell();
-        // Manually set up extractedData with injected script tag HTML
-        // to simulate what would happen if the server sent malicious content
-        cell.textContent = 'safe text';
+        cell.innerHTML = 'safe text<script>window.__xss_executed = true</script>';
 
-        container.innerHTML = '<wiki-table></wiki-table>';
+        el = document.createElement('wiki-table') as WikiTable;
+        el.appendChild(sourceTable);
+
+        const container = document.createElement('div');
+        container.appendChild(el);
         document.body.appendChild(container);
-        el = container.querySelector('wiki-table') as WikiTable;
-
-        // Directly set extractedData with malicious htmlCells to test sanitization
-        el.extractedData = {
-          columns: [{ headerText: 'Name', typeInfo: { detectedType: 'text', confidenceRatio: 1 }, columnIndex: 0 }],
-          rows: [{ cells: ['safe text'], htmlCells: ['safe text<script>window.__xss_executed = true</script>'], originalIndex: 0 }],
-        };
         await el.updateComplete;
       });
 
@@ -1280,15 +1271,21 @@ describe('WikiTable', () => {
       let el: WikiTable;
 
       beforeEach(async () => {
-        const container = document.createElement('div');
-        container.innerHTML = '<wiki-table></wiki-table>';
-        document.body.appendChild(container);
-        el = container.querySelector('wiki-table') as WikiTable;
+        const sourceTable = document.createElement('table');
+        const thead = sourceTable.createTHead();
+        const headerRow = thead.insertRow();
+        headerRow.insertCell().textContent = 'Name';
+        const tbody = sourceTable.createTBody();
+        const dataRow = tbody.insertRow();
+        const cell = dataRow.insertCell();
+        cell.innerHTML = '<span onerror="window.__onerror_executed=true" onclick="window.__onclick_executed=true">click me</span>';
 
-        el.extractedData = {
-          columns: [{ headerText: 'Name', typeInfo: { detectedType: 'text', confidenceRatio: 1 }, columnIndex: 0 }],
-          rows: [{ cells: ['click me'], htmlCells: ['<span onerror="window.__onerror_executed=true" onclick="window.__onclick_executed=true">click me</span>'], originalIndex: 0 }],
-        };
+        el = document.createElement('wiki-table') as WikiTable;
+        el.appendChild(sourceTable);
+
+        const container = document.createElement('div');
+        container.appendChild(el);
+        document.body.appendChild(container);
         await el.updateComplete;
       });
 
@@ -1312,16 +1309,22 @@ describe('WikiTable', () => {
       let el: WikiTable;
 
       beforeEach(async () => {
-        const container = document.createElement('div');
-        container.innerHTML = '<wiki-table></wiki-table>';
-        document.body.appendChild(container);
-        el = container.querySelector('wiki-table') as WikiTable;
-        el.cardViewActive = true;
+        const sourceTable = document.createElement('table');
+        const thead = sourceTable.createTHead();
+        const headerRow = thead.insertRow();
+        headerRow.insertCell().textContent = 'Name';
+        const tbody = sourceTable.createTBody();
+        const dataRow = tbody.insertRow();
+        const cell = dataRow.insertCell();
+        cell.innerHTML = 'safe<script>window.__card_xss=true</script>';
 
-        el.extractedData = {
-          columns: [{ headerText: 'Name', typeInfo: { detectedType: 'text', confidenceRatio: 1 }, columnIndex: 0 }],
-          rows: [{ cells: ['safe'], htmlCells: ['safe<script>window.__card_xss=true</script>'], originalIndex: 0 }],
-        };
+        el = document.createElement('wiki-table') as WikiTable;
+        el.appendChild(sourceTable);
+
+        const container = document.createElement('div');
+        container.appendChild(el);
+        document.body.appendChild(container);
+        el.cardViewActive = true;
         await el.updateComplete;
       });
 
