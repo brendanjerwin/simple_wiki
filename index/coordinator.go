@@ -77,10 +77,8 @@ func (c *IndexCoordinator) BulkEnqueuePagesWithCompletion(
 		// Enqueue frontmatter job with completion tracking
 		frontmatterJob := NewFrontmatterIndexJob(c.frontmatterIndex, pageID, operation)
 		if err := c.coordinator.EnqueueJobWithCompletion(frontmatterJob, func(_ error) {
-			if atomic.AddInt32(&remaining, -1) == 0 {
-				if onAllComplete != nil {
-					onAllComplete()
-				}
+			if atomic.AddInt32(&remaining, -1) == 0 && onAllComplete != nil {
+				onAllComplete()
 			}
 		}); err != nil {
 			return err
