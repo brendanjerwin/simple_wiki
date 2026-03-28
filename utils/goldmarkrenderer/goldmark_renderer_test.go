@@ -308,5 +308,127 @@ var _ = Describe("GoldmarkRenderer", func() {
 				Expect(string(output)).To(ContainSubstring("href=\"/my_page?title=My+Page\""))
 			})
 		})
+
+		When("rendering markdown with a collapsible heading (#^ syntax)", func() {
+			BeforeEach(func() {
+				source = []byte("#^ My Section")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should render a collapsible-heading element", func() {
+				Expect(string(output)).To(ContainSubstring("<collapsible-heading heading-level=\"1\">"))
+			})
+
+			It("should render the heading with slot attribute", func() {
+				Expect(string(output)).To(ContainSubstring(`slot="heading"`))
+			})
+
+			It("should render the heading with auto-generated id", func() {
+				Expect(string(output)).To(ContainSubstring(`id="my-section"`))
+			})
+
+			It("should render the heading text", func() {
+				Expect(string(output)).To(ContainSubstring("My Section"))
+			})
+
+			It("should close the collapsible-heading element", func() {
+				Expect(string(output)).To(ContainSubstring("</collapsible-heading>"))
+			})
+		})
+
+		When("rendering markdown with a level-2 collapsible heading (##^ syntax)", func() {
+			BeforeEach(func() {
+				source = []byte("##^ Subsection")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should render a collapsible-heading element with level 2", func() {
+				Expect(string(output)).To(ContainSubstring("<collapsible-heading heading-level=\"2\">"))
+			})
+
+			It("should render an h2 element with slot attribute", func() {
+				Expect(string(output)).To(ContainSubstring("<h2 slot=\"heading\""))
+			})
+		})
+
+		When("rendering markdown with a collapsible heading and following content", func() {
+			BeforeEach(func() {
+				source = []byte("#^ My Section\n\nSome content here.\n\nMore content.")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should wrap the content inside the collapsible-heading element", func() {
+				Expect(string(output)).To(ContainSubstring("<collapsible-heading heading-level=\"1\">"))
+				Expect(string(output)).To(ContainSubstring("Some content here."))
+				Expect(string(output)).To(ContainSubstring("More content."))
+				Expect(string(output)).To(ContainSubstring("</collapsible-heading>"))
+			})
+
+			It("should put the content before the closing tag", func() {
+				result := string(output)
+				closingIdx := len(result) - len("</collapsible-heading>\n")
+				Expect(result[closingIdx:]).To(Equal("</collapsible-heading>\n"))
+				Expect(result[:closingIdx]).To(ContainSubstring("Some content here."))
+			})
+		})
+
+		When("rendering markdown with a collapsible heading followed by a same-level heading", func() {
+			BeforeEach(func() {
+				source = []byte("#^ Section A\n\nContent A.\n\n# Section B\n\nContent B.")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should wrap only Section A content in the collapsible element", func() {
+				result := string(output)
+				Expect(result).To(ContainSubstring("Content A."))
+				Expect(result).To(ContainSubstring("<h1 id=\"section-b\">Section B</h1>"))
+				// Section B should be outside the collapsible-heading element
+				closingIdx := len(result) - len("<h1 id=\"section-b\">Section B</h1>\n<p>Content B.</p>\n")
+				Expect(result[closingIdx:]).To(ContainSubstring("Section B"))
+				Expect(result[closingIdx:]).NotTo(ContainSubstring("collapsible-heading"))
+			})
+		})
+
+		When("rendering markdown with a regular heading (no ^ marker)", func() {
+			BeforeEach(func() {
+				source = []byte("# Regular Heading")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should render as a normal heading without collapsible wrapper", func() {
+				Expect(string(output)).NotTo(ContainSubstring("collapsible-heading"))
+				Expect(string(output)).To(ContainSubstring("<h1"))
+			})
+		})
+
+		When("rendering markdown with all collapsible heading levels", func() {
+			BeforeEach(func() {
+				source = []byte("######^ Deep Section")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should render a level-6 collapsible heading", func() {
+				Expect(string(output)).To(ContainSubstring("<collapsible-heading heading-level=\"6\">"))
+				Expect(string(output)).To(ContainSubstring("<h6 slot=\"heading\""))
+			})
+		})
 	})
 })
