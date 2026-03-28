@@ -89,22 +89,31 @@ export class CollapsibleHeading extends LitElement {
     this._loadState();
   }
 
-  private _storageKey(): string {
+  private _storageKey(): string | null {
     // Query light DOM directly — accessible immediately at connectedCallback time
     const headingEl = this.querySelector('[slot="heading"]');
-    const headingId = headingEl?.id ?? '';
+    const headingId = headingEl?.id;
+    if (!headingId) {
+      return null;
+    }
     const pageName = globalThis.simple_wiki?.pageName ?? '';
     return `collapsible-heading-${pageName}-${headingId}`;
   }
 
   private _loadState(): void {
-    const stored = localStorage.getItem(this._storageKey());
-    this.collapsed = stored !== STATE_EXPANDED;
+    const key = this._storageKey();
+    if (key) {
+      const stored = localStorage.getItem(key);
+      this.collapsed = stored !== STATE_EXPANDED;
+    }
   }
 
   private _saveState(): void {
-    const value = this.collapsed ? STATE_COLLAPSED : STATE_EXPANDED;
-    localStorage.setItem(this._storageKey(), value);
+    const key = this._storageKey();
+    if (key) {
+      const value = this.collapsed ? STATE_COLLAPSED : STATE_EXPANDED;
+      localStorage.setItem(key, value);
+    }
   }
 
   _handleToggle(): void {

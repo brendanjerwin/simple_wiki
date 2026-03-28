@@ -230,4 +230,31 @@ describe('CollapsibleHeading', () => {
       expect(button?.getAttribute('aria-expanded')).to.equal('false');
     });
   });
+
+  describe('when the heading has no id', () => {
+    let el: CollapsibleHeading;
+    let localStorageSetStub: SinonStub;
+
+    beforeEach(async () => {
+      sinon.stub(Storage.prototype, 'getItem').returns(null);
+      localStorageSetStub = sinon.stub(Storage.prototype, 'setItem');
+      el = await fixture<CollapsibleHeading>(html`
+        <collapsible-heading heading-level="1">
+          <h1 slot="heading">No ID Here</h1>
+          <p>Content</p>
+        </collapsible-heading>
+      `);
+    });
+
+    it('should not call localStorage.setItem on toggle', async () => {
+      const button = el.shadowRoot?.querySelector<HTMLButtonElement>('.ch-toggle');
+      button?.click();
+      await el.updateComplete;
+      expect(localStorageSetStub).not.to.have.been.called;
+    });
+
+    it('should not call localStorage.getItem for state loading', () => {
+      expect(Storage.prototype.getItem).not.to.have.been.called;
+    });
+  });
 });
