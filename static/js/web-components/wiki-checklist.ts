@@ -900,14 +900,7 @@ export class WikiChecklist extends LitElement {
     e.preventDefault();
     this._moveGhost(touch.clientX, touch.clientY);
 
-    // Hide ghost temporarily so elementFromPoint can see the row beneath
-    if (this._touchGhostEl) {
-      this._touchGhostEl.style.display = 'none';
-    }
     const elementUnderFinger = this.shadowRoot?.elementFromPoint(touch.clientX, touch.clientY);
-    if (this._touchGhostEl) {
-      this._touchGhostEl.style.display = '';
-    }
 
     // Walk up to find the .item-row and read data-index
     const row = elementUnderFinger?.closest('.item-row');
