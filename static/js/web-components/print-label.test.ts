@@ -324,6 +324,68 @@ describe('initPrintMenu', () => {
     });
   });
 
+  describe('when API returns an item with an identifier containing single quotes', () => {
+    // Regression guard: the old simple_wiki.js used onclick="printLabel('${identifier}')"
+    // which would break or allow injection when identifier contains single quotes.
+    // The fix uses addEventListener with a closure, so the identifier is never interpolated.
+    const identifierWithQuotes = "it's-a-tricky'identifier";
+
+    beforeEach(async () => {
+      fetchStub.resolves(makeJsonResponse({
+        ids: [{ identifier: identifierWithQuotes, title: 'Tricky Printer' }],
+      }));
+      initPrintMenu();
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+
+    it('should still create a menu item', () => {
+      const items = document.querySelectorAll('.pure-menu-item');
+      expect(items).to.have.lengthOf(1);
+    });
+
+    it('should not set an onclick attribute on the link (uses addEventListener instead)', () => {
+      const link = document.querySelector('.pure-menu-link');
+      expect(link?.getAttribute('onclick')).to.be.null;
+    });
+
+    it('should use the title as link text, not the identifier', () => {
+      const link = document.querySelector('.pure-menu-link');
+      expect(link?.textContent).to.equal('Print Tricky Printer');
+    });
+
+    it('should not put the identifier into any HTML attribute', () => {
+      const link = document.querySelector('.pure-menu-link');
+      expect(link?.outerHTML).to.not.include(identifierWithQuotes);
+    });
+  });
+
+  describe('when clicking a menu item with a special-character identifier', () => {
+    const specialIdentifier = "it's-a-tricky'identifier";
+
+    beforeEach(async () => {
+      fetchStub.onFirstCall().resolves(makeJsonResponse({
+        ids: [{ identifier: specialIdentifier, title: 'Tricky Printer' }],
+      }));
+      fetchStub.onSecondCall().resolves(makeJsonResponse({ success: true, message: 'Printed' }));
+      initPrintMenu();
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      const link = document.querySelector<HTMLAnchorElement>('.pure-menu-link');
+      link?.click();
+      await new Promise(resolve => setTimeout(resolve, 50));
+    });
+
+    afterEach(() => {
+      document.querySelectorAll('toast-message').forEach(el => el.remove());
+    });
+
+    it('should pass the exact identifier (including special characters) to the print API', () => {
+      expect(fetchStub.calledTwice).to.be.true;
+      const requestBody = JSON.parse((fetchStub.secondCall.args[1] as RequestInit).body as string) as Record<string, unknown>;
+      expect(requestBody['template_identifier']).to.equal(specialIdentifier);
+    });
+  });
+
   describe('when clicking a menu item', () => {
     beforeEach(async () => {
       // First call: find_by_key_existence returns one item
