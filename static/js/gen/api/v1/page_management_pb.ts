@@ -680,7 +680,7 @@ export type RenderMarkdownRequest = Message<"api.v1.RenderMarkdownRequest"> & {
 
   /**
    * Optional page identifier for macro context (e.g., LinkTo resolves relative to this page).
-   * If omitted, macros that need page context will use a minimal default context.
+   * Macros are always executed; when a page is provided its frontmatter enriches the context.
    *
    * @generated from field: string page = 2;
    */

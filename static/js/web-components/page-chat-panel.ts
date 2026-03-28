@@ -439,7 +439,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
                   <chat-message-bubble
                     message-id=${msg.id}
                     .sender=${msg.sender}
-                    sender-name=${msg.senderName}
+                    .senderName=${msg.senderName}
                     .content=${msg.content}
                     .renderedHtml=${msg.renderedHtml}
                     ?edited=${msg.edited}
@@ -697,7 +697,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
       content: msg.content,
       renderedHtml,
       timestamp: msg.timestamp ? new Date(Number(msg.timestamp.seconds) * 1000) : new Date(),
-      senderName: msg.senderName,
+      senderName: msg.senderName || (msg.sender === Sender.ASSISTANT ? this.persona : ''),
       replyToId: msg.replyToId,
       reactions: groupReactions(msg.reactions),
       edited: false,

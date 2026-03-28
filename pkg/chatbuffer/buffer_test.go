@@ -163,7 +163,7 @@ var _ = Describe("Manager", func() {
 				Expect(messages).To(HaveLen(1))
 				Expect(messages[0].Content).To(Equal("Hi there!"))
 				Expect(messages[0].Sender).To(Equal("assistant"))
-				Expect(messages[0].SenderName).To(Equal("Claude"))
+				Expect(messages[0].SenderName).To(BeEmpty())
 			})
 		})
 
