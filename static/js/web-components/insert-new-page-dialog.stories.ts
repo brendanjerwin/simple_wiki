@@ -99,13 +99,17 @@ function setupMocks(dialog: InsertNewPageDialog, options: {
   sinon.stub(pageCreator, 'showSuccess');
 }
 
-async function openDialogWithDefaultMocks() {
+async function openDialogWithMocks(options?: Parameters<typeof setupMocks>[1]): Promise<InsertNewPageDialog | null> {
   const dialog = document.querySelector('insert-new-page-dialog') as InsertNewPageDialog;
   if (dialog) {
-    setupMocks(dialog);
+    setupMocks(dialog, options);
     await dialog.openDialog();
+    return dialog;
   }
+  return null;
 }
+
+const openDialogWithDefaultMocks = () => openDialogWithMocks();
 
 export const Default: Story = {
   render: () => {
@@ -136,13 +140,7 @@ export const Default: Story = {
 
 export const NoTemplatesAvailable: Story = {
   render: () => {
-    const openDialog = async () => {
-      const dialog = document.querySelector('insert-new-page-dialog') as InsertNewPageDialog;
-      if (dialog) {
-        setupMocks(dialog, { templates: [] });
-        await dialog.openDialog();
-      }
-    };
+    const openDialog = () => openDialogWithMocks({ templates: [] });
 
     setTimeout(openDialog, 100);
 
@@ -172,21 +170,19 @@ export const NoTemplatesAvailable: Story = {
 export const IdentifierConflict: Story = {
   render: () => {
     const openDialog = async () => {
-      const dialog = document.querySelector('insert-new-page-dialog') as InsertNewPageDialog;
-      if (dialog) {
-        setupMocks(dialog, {
-          generateIdentifierResponse: {
+      const dialog = await openDialogWithMocks({
+        generateIdentifierResponse: {
+          identifier: 'existing_page',
+          isUnique: false,
+          existingPage: {
             identifier: 'existing_page',
-            isUnique: false,
-            existingPage: {
-              identifier: 'existing_page',
-              title: 'Existing Page Title',
-            },
+            title: 'Existing Page Title',
           },
-        });
-        await dialog.openDialog();
+        },
+      });
 
-        // Pre-fill with conflicting identifier
+      // Pre-fill with conflicting identifier
+      if (dialog) {
         setTimeout(() => {
           dialog.pageTitle = 'Existing Page';
           dialog.pageIdentifier = 'existing_page';
@@ -223,12 +219,10 @@ export const IdentifierConflict: Story = {
 export const TemplateSelected: Story = {
   render: () => {
     const openDialog = async () => {
-      const dialog = document.querySelector('insert-new-page-dialog') as InsertNewPageDialog;
-      if (dialog) {
-        setupMocks(dialog);
-        await dialog.openDialog();
+      const dialog = await openDialogWithMocks();
 
-        // Simulate template selection
+      // Simulate template selection
+      if (dialog) {
         setTimeout(() => {
           dialog.selectedTemplate = 'article_template';
           dialog.templateLocked = true;
