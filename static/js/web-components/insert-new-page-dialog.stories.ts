@@ -99,23 +99,23 @@ function setupMocks(dialog: InsertNewPageDialog, options: {
   sinon.stub(pageCreator, 'showSuccess');
 }
 
+async function openDialogWithDefaultMocks() {
+  const dialog = document.querySelector('insert-new-page-dialog') as InsertNewPageDialog;
+  if (dialog) {
+    setupMocks(dialog);
+    await dialog.openDialog();
+  }
+}
+
 export const Default: Story = {
   render: () => {
-    const openDialog = async () => {
-      const dialog = document.querySelector('insert-new-page-dialog') as InsertNewPageDialog;
-      if (dialog) {
-        setupMocks(dialog);
-        await dialog.openDialog();
-      }
-    };
-
-    setTimeout(openDialog, 100);
+    setTimeout(openDialogWithDefaultMocks, 100);
 
     return html`
       <div style="padding: 20px; background: #f0f8ff;">
         <h3>Insert New Page Dialog</h3>
         <p>Dialog with title-first workflow and template support.</p>
-        <button @click=${openDialog}>Open Dialog</button>
+        <button @click=${openDialogWithDefaultMocks}>Open Dialog</button>
         <insert-new-page-dialog
           @page-created=${action('page-created')}
         ></insert-new-page-dialog>
@@ -263,14 +263,6 @@ export const TemplateSelected: Story = {
 
 export const InteractiveTesting: Story = {
   render: () => {
-    const openDialog = async () => {
-      const dialog = document.querySelector('insert-new-page-dialog') as InsertNewPageDialog;
-      if (dialog) {
-        setupMocks(dialog);
-        await dialog.openDialog();
-      }
-    };
-
     return html`
       <div style="padding: 20px; background: #f0f8ff;">
         <h3>Interactive Testing</h3>
@@ -284,7 +276,7 @@ export const InteractiveTesting: Story = {
           <li>Click Create Page to see the page-created event</li>
         </ul>
 
-        <button @click=${openDialog} style="margin: 15px 0; padding: 10px 20px;">
+        <button @click=${openDialogWithDefaultMocks} style="margin: 15px 0; padding: 10px 20px;">
           Open Dialog
         </button>
 
