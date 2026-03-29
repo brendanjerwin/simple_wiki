@@ -79,41 +79,41 @@ func (j *FileShadowingMigrationScanJob) FindPascalCaseIdentifiers() ([]string, e
 	identifiersFound := make(map[string]bool)
 
 	for _, filename := range files {
-		identifier, err := j.extractIdentifierFromMD(filename)
-		if err != nil {
-			// Log but continue - individual file errors shouldn't stop the scan
-			continue
-		}
-		if identifier == "" {
-			continue
-		}
-
-		// Skip if we've already processed this identifier
-		if identifiersFound[identifier] {
-			continue
-		}
-		identifiersFound[identifier] = true
-
-		// Check if this identifier needs munging by comparing with its munged version
-		mungedVersion, err := wikiidentifiers.MungeIdentifier(identifier)
-		if err != nil || mungedVersion == "" {
-			continue // Skip invalid identifiers
-		}
-		if identifier != mungedVersion {
-			// Additional check: ensure that migration wouldn't cause file conflicts
-			// by checking if the base32 encodings would be different
-			originalBase32 := base32tools.EncodeToBase32(strings.ToLower(identifier))
-			mungedBase32 := base32tools.EncodeToBase32(strings.ToLower(mungedVersion))
-
-			if originalBase32 != mungedBase32 {
-				// This identifier needs migration
-				pascalIdentifiers = append(pascalIdentifiers, identifier)
-			}
-			// If base32 encodings are the same, skip this identifier to avoid file conflicts
+		if id := j.candidateIdentifierForMigration(filename, identifiersFound); id != "" {
+			pascalIdentifiers = append(pascalIdentifiers, id)
 		}
 	}
 
 	return pascalIdentifiers, nil
+}
+
+// candidateIdentifierForMigration returns the identifier from a file if it needs migration,
+// or empty string if the file should be skipped (error, no identifier, already seen, or no migration needed).
+func (j *FileShadowingMigrationScanJob) candidateIdentifierForMigration(filename string, identifiersFound map[string]bool) string {
+	identifier, err := j.extractIdentifierFromMD(filename)
+	if err != nil || identifier == "" {
+		return ""
+	}
+
+	if identifiersFound[identifier] {
+		return ""
+	}
+	identifiersFound[identifier] = true
+
+	mungedVersion, err := wikiidentifiers.MungeIdentifier(identifier)
+	if err != nil || mungedVersion == "" || identifier == mungedVersion {
+		return ""
+	}
+
+	// Additional check: ensure that migration wouldn't cause file conflicts
+	// by checking if the base32 encodings would be different
+	originalBase32 := base32tools.EncodeToBase32(strings.ToLower(identifier))
+	mungedBase32 := base32tools.EncodeToBase32(strings.ToLower(mungedVersion))
+	if originalBase32 == mungedBase32 {
+		return "" // Same encoding, skip to avoid file conflicts
+	}
+
+	return identifier
 }
 
 // tomlFrontmatterParts is the expected number of parts when splitting TOML frontmatter by "+++".

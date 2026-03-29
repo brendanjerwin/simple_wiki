@@ -184,7 +184,7 @@ export class InsertNewPageDialog extends LitElement {
   @state()
   declare frontmatterDirty: boolean;
 
-  private pageCreator = new PageCreator();
+  private readonly pageCreator = new PageCreator();
 
   constructor() {
     super();
@@ -212,7 +212,7 @@ export class InsertNewPageDialog extends LitElement {
     document.removeEventListener('keydown', this._handleKeydown);
   }
 
-  private _handleKeydown = (event: KeyboardEvent): void => {
+  private readonly _handleKeydown = (event: KeyboardEvent): void => {
     if (event.key === 'Escape' && this.open) {
       this.close();
     }
@@ -260,11 +260,11 @@ export class InsertNewPageDialog extends LitElement {
     }
   }
 
-  private _handleBackdropClick = (): void => {
+  private readonly _handleBackdropClick = (): void => {
     this.close();
   };
 
-  private _handleDialogClick = (event: Event): void => {
+  private readonly _handleDialogClick = (event: Event): void => {
     event.stopPropagation();
   };
 
@@ -272,7 +272,7 @@ export class InsertNewPageDialog extends LitElement {
    * Adapter function to call PageCreator.generateIdentifier
    * in the format expected by AutomagicIdentifierInput.
    */
-  private _generateIdentifier = async (text: string): Promise<GenerateIdentifierResult> => {
+  private readonly _generateIdentifier = async (text: string): Promise<GenerateIdentifierResult> => {
     const result = await this.pageCreator.generateIdentifier(text);
     const generateResult: GenerateIdentifierResult = {
       identifier: result.identifier,
@@ -287,16 +287,16 @@ export class InsertNewPageDialog extends LitElement {
     return generateResult;
   };
 
-  private _handleTitleChange = (event: CustomEvent<TitleChangeEventDetail>): void => {
+  private readonly _handleTitleChange = (event: CustomEvent<TitleChangeEventDetail>): void => {
     this.pageTitle = event.detail.title;
   };
 
-  private _handleIdentifierChange = (event: CustomEvent<IdentifierChangeEventDetail>): void => {
+  private readonly _handleIdentifierChange = (event: CustomEvent<IdentifierChangeEventDetail>): void => {
     this.pageIdentifier = event.detail.identifier;
     this.isUnique = event.detail.isUnique;
   };
 
-  private _handleTemplateChange = async (event: Event): Promise<void> => {
+  private readonly _handleTemplateChange = async (event: Event): Promise<void> => {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
     const select = event.target as HTMLSelectElement;
     const newTemplate = select.value;
@@ -337,7 +337,7 @@ export class InsertNewPageDialog extends LitElement {
     return true;
   }
 
-  private _handleFrontmatterChange = (event: CustomEvent<SectionChangeEventDetail>): void => {
+  private readonly _handleFrontmatterChange = (event: CustomEvent<SectionChangeEventDetail>): void => {
     this.frontmatter = event.detail.newFields;
     this.frontmatterDirty = true;
 
@@ -347,7 +347,7 @@ export class InsertNewPageDialog extends LitElement {
     }
   };
 
-  private _handleChangeTemplateConfirmed = (): void => {
+  private readonly _handleChangeTemplateConfirmed = (): void => {
     // Clear frontmatter and unlock dropdown
     this.frontmatter = {};
     this.frontmatterDirty = false;
@@ -355,7 +355,7 @@ export class InsertNewPageDialog extends LitElement {
     this.selectedTemplate = NONE_TEMPLATE_VALUE;
   };
 
-  private _handleCancel = (): void => {
+  private readonly _handleCancel = (): void => {
     this.close();
   };
 
@@ -367,7 +367,7 @@ export class InsertNewPageDialog extends LitElement {
     );
   }
 
-  private _handleSubmit = async (): Promise<void> => {
+  private readonly _handleSubmit = async (): Promise<void> => {
     if (!this._canSubmit) return;
 
     this.loading = true;
