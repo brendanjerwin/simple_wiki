@@ -117,53 +117,51 @@ func (v *InventoryValidator) ValidateContainerExistence(records []ParsedRecord) 
 
 // DetectCircularReferences detects cycles in container relationships.
 func (v *InventoryValidator) DetectCircularReferences(records []ParsedRecord) {
-	// Build container graph from import records (munged identifiers)
-	// Key: munged identifier, Value: munged container
+	importGraph := buildImportGraph(records)
+
+	for i := range records {
+		record := &records[i]
+		if record.Identifier == "" || record.HasErrors() {
+			continue
+		}
+		if getInventoryContainer(record) == "" {
+			continue
+		}
+		mungedID, err := wikiidentifiers.MungeIdentifier(record.Identifier)
+		if err != nil {
+			continue
+		}
+		if cycle := v.findCycle(mungedID, importGraph); len(cycle) > 0 {
+			record.ValidationErrors = append(record.ValidationErrors,
+				fmt.Sprintf("circular reference detected: %s", strings.Join(cycle, " -> ")))
+		}
+	}
+}
+
+// buildImportGraph builds a container graph from import records (munged identifiers).
+// Key: munged identifier, Value: munged container.
+func buildImportGraph(records []ParsedRecord) map[string]string {
 	importGraph := make(map[string]string)
 	for i := range records {
 		record := &records[i]
 		if record.Identifier == "" || record.HasErrors() {
 			continue
 		}
-
 		mungedID, err := wikiidentifiers.MungeIdentifier(record.Identifier)
 		if err != nil {
 			continue
 		}
-
-		containerValue := getInventoryContainer(record)
-		if containerValue != "" {
-			mungedContainer, err := wikiidentifiers.MungeIdentifier(containerValue)
-			if err != nil {
-				continue
-			}
-			importGraph[mungedID] = mungedContainer
-		}
-	}
-
-	// For each record in import, check for cycles
-	for i := range records {
-		record := &records[i]
-		if record.Identifier == "" || record.HasErrors() {
-			continue
-		}
-
 		containerValue := getInventoryContainer(record)
 		if containerValue == "" {
 			continue
 		}
-
-		mungedID, err := wikiidentifiers.MungeIdentifier(record.Identifier)
+		mungedContainer, err := wikiidentifiers.MungeIdentifier(containerValue)
 		if err != nil {
 			continue
 		}
-
-		// DFS to detect cycle
-		if cycle := v.findCycle(mungedID, importGraph); len(cycle) > 0 {
-			record.ValidationErrors = append(record.ValidationErrors,
-				fmt.Sprintf("circular reference detected: %s", strings.Join(cycle, " -> ")))
-		}
+		importGraph[mungedID] = mungedContainer
 	}
+	return importGraph
 }
 
 // findCycle performs DFS to find a cycle starting from startID.
@@ -174,34 +172,40 @@ func (v *InventoryValidator) findCycle(startID string, importGraph map[string]st
 	current := startID
 	for {
 		if visited[current] {
-			// Found cycle - extract cycle portion of path
-			for i, id := range path {
-				if id == current {
-					cycle := make([]string, len(path[i:])+1)
-					copy(cycle, path[i:])
-					cycle[len(cycle)-1] = current
-					return cycle
-				}
-			}
-			return nil
+			return extractCycle(path, current)
 		}
-
 		visited[current] = true
 		path = append(path, current)
-
-		// Get next container (from import graph or existing pages)
-		var nextContainer string
-		if container, inImport := importGraph[current]; inImport {
-			nextContainer = container
-		} else if v.containerGetter != nil {
-			nextContainer = v.containerGetter.GetContainerReference(current)
-		}
-
-		if nextContainer == "" {
+		current = v.resolveNextContainer(current, importGraph)
+		if current == "" {
 			return nil // No cycle - chain ends
 		}
-		current = nextContainer
 	}
+}
+
+// resolveNextContainer returns the next container in the chain for a given ID,
+// checking the import graph first, then falling back to existing pages.
+func (v *InventoryValidator) resolveNextContainer(current string, importGraph map[string]string) string {
+	if container, inImport := importGraph[current]; inImport {
+		return container
+	}
+	if v.containerGetter != nil {
+		return v.containerGetter.GetContainerReference(current)
+	}
+	return ""
+}
+
+// extractCycle returns the cycle portion of a DFS path starting at the repeated node.
+func extractCycle(path []string, current string) []string {
+	for i, id := range path {
+		if id == current {
+			cycle := make([]string, len(path[i:])+1)
+			copy(cycle, path[i:])
+			cycle[len(cycle)-1] = current
+			return cycle
+		}
+	}
+	return nil
 }
 
 // getInventoryContainer extracts the inventory.container value from a record's frontmatter.
