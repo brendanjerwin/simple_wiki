@@ -439,6 +439,14 @@ export class TableFilterPopover extends LitElement {
     }
   }
 
+  private _checkboxFiltersEqual(newFilter: { excludedValues: Set<string> }, oldFilter: { excludedValues: Set<string> }): boolean {
+    if (newFilter.excludedValues.size !== oldFilter.excludedValues.size) return false;
+    for (const v of newFilter.excludedValues) {
+      if (!oldFilter.excludedValues.has(v)) return false;
+    }
+    return true;
+  }
+
   private _filtersChanged(): boolean {
     const newFilter = this._buildCurrentFilter();
     const oldFilter = this.currentFilter;
@@ -448,17 +456,11 @@ export class TableFilterPopover extends LitElement {
     if (newFilter.kind !== oldFilter.kind) return true;
 
     if (newFilter.kind === 'checkbox' && oldFilter.kind === 'checkbox') {
-      if (newFilter.excludedValues.size !== oldFilter.excludedValues.size) return true;
-      for (const v of newFilter.excludedValues) {
-        if (!oldFilter.excludedValues.has(v)) return true;
-      }
-      return false;
+      return !this._checkboxFiltersEqual(newFilter, oldFilter);
     }
-
     if (newFilter.kind === 'range' && oldFilter.kind === 'range') {
       return newFilter.min !== oldFilter.min || newFilter.max !== oldFilter.max;
     }
-
     if (newFilter.kind === 'text-search' && oldFilter.kind === 'text-search') {
       return newFilter.searchText !== oldFilter.searchText;
     }
