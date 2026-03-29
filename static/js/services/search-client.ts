@@ -9,7 +9,7 @@ import type { SearchResult } from '../gen/api/v1/search_pb.js';
  */
 export class SearchClient {
   private client: Client<typeof SearchService> | null = null;
-  private baseUrl: string;
+  private readonly baseUrl: string;
 
   constructor(baseUrl: string = '') {
     this.baseUrl = baseUrl;
