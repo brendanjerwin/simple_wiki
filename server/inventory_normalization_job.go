@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -545,13 +546,34 @@ func (j *InventoryNormalizationJob) generateAuditReport(anomalies []InventoryAno
 }
 
 // writeGroupedAnomalies writes anomalies grouped by type into the report buffer.
+// Anomaly types and items within each type are sorted for deterministic output.
 func writeGroupedAnomalies(report *bytes.Buffer, anomalies []InventoryAnomaly) {
 	byType := make(map[string][]InventoryAnomaly)
 	for _, a := range anomalies {
 		byType[a.Type] = append(byType[a.Type], a)
 	}
 
-	for anomalyType, items := range byType {
+	// Sort anomaly types for deterministic output
+	anomalyTypes := make([]string, 0, len(byType))
+	for t := range byType {
+		anomalyTypes = append(anomalyTypes, t)
+	}
+	sort.Strings(anomalyTypes)
+
+	for _, anomalyType := range anomalyTypes {
+		items := byType[anomalyType]
+
+		// Sort items within each type by ItemID for deterministic output
+		slices.SortFunc(items, func(a, b InventoryAnomaly) int {
+			if a.ItemID < b.ItemID {
+				return -1
+			}
+			if a.ItemID > b.ItemID {
+				return 1
+			}
+			return 0
+		})
+
 		_, _ = fmt.Fprintf(report, "### %s"+newlineDelim+newlineDelim, formatAnomalyType(anomalyType))
 		for _, a := range items {
 			severity := "⚠️"
