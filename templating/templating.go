@@ -286,7 +286,7 @@ func buildNewContainerPageLink(identifierToLink string, containerIdentifier stri
 	urlEncodedTitle := url.QueryEscape(titleCasedTitle)
 	mungedIdentifier, err := wikiidentifiers.MungeIdentifier(identifierToLink)
 	if err != nil {
-		return fmt.Sprintf("[ERROR: LinkTo new page, munging %q: %v]", identifierToLink, err)
+		return fmt.Sprintf("[ERROR: LinkTo new inventory item, munging %q: %v]", identifierToLink, err)
 	}
 	return "[" + titleCasedTitle + "](/" + mungedIdentifier + "?tmpl=inv_item&inventory.container=" + containerIdentifier + "&title=" + urlEncodedTitle + ")"
 }
