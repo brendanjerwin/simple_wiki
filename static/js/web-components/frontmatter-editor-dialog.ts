@@ -9,6 +9,7 @@ import './frontmatter-value-section.js';
 import { showToastAfter } from './toast-message.js';
 import './error-display.js';
 import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
+import type { SectionChangeEventDetail } from './event-types.js';
 
 /**
  * FrontmatterEditorDialog - A modal dialog for editing page frontmatter metadata
@@ -191,7 +192,7 @@ export class FrontmatterEditorDialog extends LitElement {
     }
   }
 
-  private _handleSectionChange = (event: CustomEvent): void => {
+  private _handleSectionChange = (event: CustomEvent<SectionChangeEventDetail>): void => {
     const { newFields } = event.detail;
     this.workingFrontmatter = newFields;
     this.requestUpdate();
