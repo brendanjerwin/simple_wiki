@@ -23,7 +23,7 @@ cd static/js || exit 1
 
 echo "Installing dependencies..." | tee -a "$LOG_FILE"
 bun install 2>&1 | tee -a "$LOG_FILE"
-install_exit=$?
+install_exit=${PIPESTATUS[0]}
 if [[ $install_exit -ne 0 ]]; then
   echo "bun install failed with exit code $install_exit" | tee -a "$LOG_FILE"
   echo "Log saved to: $LOG_FILE"
