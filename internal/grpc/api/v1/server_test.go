@@ -4975,6 +4975,232 @@ var _ = Describe("Checklist gRPC round-trip", func() {
 	})
 })
 
+var _ = Describe("NewServer", func() {
+	var buildInfo v1.BuildInfo
+
+	BeforeEach(func() {
+		buildInfo = v1.BuildInfo{Commit: "test-commit", BuildTime: time.Now()}
+	})
+
+	When("pageReaderMutator is nil", func() {
+		var err error
+
+		BeforeEach(func() {
+			_, err = v1.NewServer(
+				buildInfo,
+				nil,
+				noOpBleveIndexQueryer{},
+				noOpFrontmatterIndexQueryer{},
+				lumber.NewConsoleLogger(lumber.WARN),
+				noOpChatBufferManager{},
+				noOpPageOpener{},
+			)
+		})
+
+		It("should return an error", func() {
+			Expect(err).To(MatchError("pageReaderMutator is required"))
+		})
+	})
+
+	When("bleveIndexQueryer is nil", func() {
+		var err error
+
+		BeforeEach(func() {
+			_, err = v1.NewServer(
+				buildInfo,
+				noOpPageReaderMutator{},
+				nil,
+				noOpFrontmatterIndexQueryer{},
+				lumber.NewConsoleLogger(lumber.WARN),
+				noOpChatBufferManager{},
+				noOpPageOpener{},
+			)
+		})
+
+		It("should return an error", func() {
+			Expect(err).To(MatchError("bleveIndexQueryer is required"))
+		})
+	})
+
+	When("frontmatterIndexQueryer is nil", func() {
+		var err error
+
+		BeforeEach(func() {
+			_, err = v1.NewServer(
+				buildInfo,
+				noOpPageReaderMutator{},
+				noOpBleveIndexQueryer{},
+				nil,
+				lumber.NewConsoleLogger(lumber.WARN),
+				noOpChatBufferManager{},
+				noOpPageOpener{},
+			)
+		})
+
+		It("should return an error", func() {
+			Expect(err).To(MatchError("frontmatterIndexQueryer is required"))
+		})
+	})
+
+	When("chatBufferManager is nil", func() {
+		var err error
+
+		BeforeEach(func() {
+			_, err = v1.NewServer(
+				buildInfo,
+				noOpPageReaderMutator{},
+				noOpBleveIndexQueryer{},
+				noOpFrontmatterIndexQueryer{},
+				lumber.NewConsoleLogger(lumber.WARN),
+				nil,
+				noOpPageOpener{},
+			)
+		})
+
+		It("should return an error", func() {
+			Expect(err).To(MatchError("chatBufferManager is required"))
+		})
+	})
+
+	When("pageOpener is nil", func() {
+		var err error
+
+		BeforeEach(func() {
+			_, err = v1.NewServer(
+				buildInfo,
+				noOpPageReaderMutator{},
+				noOpBleveIndexQueryer{},
+				noOpFrontmatterIndexQueryer{},
+				lumber.NewConsoleLogger(lumber.WARN),
+				noOpChatBufferManager{},
+				nil,
+			)
+		})
+
+		It("should return an error", func() {
+			Expect(err).To(MatchError("pageOpener is required"))
+		})
+	})
+
+	When("all required dependencies are provided", func() {
+		var (
+			server *v1.Server
+			err    error
+		)
+
+		BeforeEach(func() {
+			server, err = v1.NewServer(
+				buildInfo,
+				noOpPageReaderMutator{},
+				noOpBleveIndexQueryer{},
+				noOpFrontmatterIndexQueryer{},
+				lumber.NewConsoleLogger(lumber.WARN),
+				noOpChatBufferManager{},
+				noOpPageOpener{},
+			)
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return a non-nil server", func() {
+			Expect(server).NotTo(BeNil())
+		})
+	})
+})
+
+var _ = Describe("Server builder methods", func() {
+	var (
+		ctx    context.Context
+		server *v1.Server
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		var err error
+		server, err = v1.NewServer(
+			v1.BuildInfo{Commit: "test-commit", BuildTime: time.Now()},
+			noOpPageReaderMutator{},
+			noOpBleveIndexQueryer{},
+			noOpFrontmatterIndexQueryer{},
+			lumber.NewConsoleLogger(lumber.WARN),
+			noOpChatBufferManager{},
+			noOpPageOpener{},
+		)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	Describe("WithJobQueueCoordinator", func() {
+		When("called with a job coordinator", func() {
+			var result *v1.Server
+
+			BeforeEach(func() {
+				coordinator := (&MockJobQueueCoordinator{}).AsCoordinator()
+				result = server.WithJobQueueCoordinator(coordinator)
+			})
+
+			It("should return the same server for chaining", func() {
+				Expect(result).To(BeIdenticalTo(server))
+			})
+
+			It("should enable job queue operations (StartPageImportJob no longer returns unavailable)", func() {
+				_, err := result.StartPageImportJob(ctx, &apiv1.StartPageImportJobRequest{
+					CsvContent: "identifier,title\ntest_page,Test Page",
+				})
+				Expect(err).NotTo(HaveGrpcStatus(codes.Unavailable, "job queue coordinator not available"))
+			})
+		})
+	})
+
+	Describe("WithMarkdownRenderer", func() {
+		When("called with a markdown renderer", func() {
+			var result *v1.Server
+
+			BeforeEach(func() {
+				result = server.WithMarkdownRenderer(&MockMarkdownRenderer{Result: []byte("<p>test</p>")})
+			})
+
+			It("should return the same server for chaining", func() {
+				Expect(result).To(BeIdenticalTo(server))
+			})
+
+			It("should enable markdown rendering (RenderMarkdown no longer returns failed precondition)", func() {
+				_, err := result.RenderMarkdown(ctx, &apiv1.RenderMarkdownRequest{Content: "# Hello"})
+				Expect(err).NotTo(HaveGrpcStatus(codes.FailedPrecondition, "markdown renderer is not available"))
+			})
+		})
+	})
+
+	Describe("WithTemplateExecutor", func() {
+		When("called with a template executor", func() {
+			var result *v1.Server
+
+			BeforeEach(func() {
+				result = server.WithTemplateExecutor(&MockTemplateExecutor{})
+			})
+
+			It("should return the same server for chaining", func() {
+				Expect(result).To(BeIdenticalTo(server))
+			})
+		})
+	})
+
+	Describe("WithFileStorer", func() {
+		When("called with a file storer mock", func() {
+			var result *v1.Server
+
+			BeforeEach(func() {
+				result = server.WithFileStorer(&mockFileStorer{})
+			})
+
+			It("should return the same server for chaining", func() {
+				Expect(result).To(BeIdenticalTo(server))
+			})
+		})
+	})
+})
+
 // MockMarkdownRenderer is a mock implementation of wikipage.IRenderMarkdownToHTML
 type MockMarkdownRenderer struct {
 	Result []byte
