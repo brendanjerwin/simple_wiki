@@ -1199,6 +1199,43 @@ export class WikiChecklist extends LitElement {
   }
 
   override render() {
+    let checklistItemsContent;
+    if (this.loading) {
+      checklistItemsContent = html`
+        <div class="loading" role="status" aria-live="polite">
+          <i class="fas fa-spinner fa-spin" aria-hidden="true"></i>
+          Loading checklist\u2026
+        </div>
+      `;
+    } else if (this.error) {
+      checklistItemsContent = html`
+        <div class="error-wrapper">
+          <error-display
+            .augmentedError="${this.error}"
+            .action="${{
+              label: 'Retry',
+              onClick: () => {
+                this.error = null;
+                this.loading = true;
+                void this.fetchData();
+              },
+            }}"
+          ></error-display>
+        </div>
+      `;
+    } else {
+      const itemsListContent = this.items.length === 0
+        ? html`<div class="empty-state">No items yet. Add one below!</div>`
+        : html`
+            ${this._renderTagFilterBar()}
+            ${this._renderItems()}
+          `;
+      checklistItemsContent = html`
+        ${itemsListContent}
+        ${this._renderAddItem()}
+      `;
+    }
+
     return html`
       ${sharedStyles}
       <div class="checklist-container system-font">
@@ -1223,38 +1260,7 @@ export class WikiChecklist extends LitElement {
           </div>
         </div>
 
-        ${this.loading
-          ? html`
-              <div class="loading" role="status" aria-live="polite">
-                <i class="fas fa-spinner fa-spin" aria-hidden="true"></i>
-                Loading checklist\u2026
-              </div>
-            `
-          : this.error
-            ? html`
-                <div class="error-wrapper">
-                  <error-display
-                    .augmentedError="${this.error}"
-                    .action="${{
-                      label: 'Retry',
-                      onClick: () => {
-                        this.error = null;
-                        this.loading = true;
-                        void this.fetchData();
-                      },
-                    }}"
-                  ></error-display>
-                </div>
-              `
-            : html`
-                ${this.items.length === 0
-                  ? html`<div class="empty-state">No items yet. Add one below!</div>`
-                  : html`
-                      ${this._renderTagFilterBar()}
-                      ${this._renderItems()}
-                    `}
-                ${this._renderAddItem()}
-              `}
+        ${checklistItemsContent}
       </div>
     `;
   }

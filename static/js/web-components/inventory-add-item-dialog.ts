@@ -368,12 +368,14 @@ export class InventoryAddItemDialog extends LitElement {
       return nothing;
     }
 
+    const resultCountSuffix = this.searchResults.length === 1 ? '' : 's';
+
     return html`
       <div class="search-results">
         <div class="search-results-header">
           ${this.searchLoading
             ? 'Searching...'
-            : `${this.searchResults.length} similar item${this.searchResults.length === 1 ? '' : 's'} found`}
+            : `${this.searchResults.length} similar item${resultCountSuffix} found`}
         </div>
         ${this.searchResults.map(
           result => html`
