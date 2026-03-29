@@ -1,7 +1,6 @@
 import { html, css, LitElement } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import { createClient, type Client } from '@connectrpc/connect';
-import { createGrpcWebTransport } from '@connectrpc/connect-web';
 import { create } from '@bufbuild/protobuf';
 import { sharedStyles } from './shared-styles.js';
 import './wiki-search-results.js';
@@ -10,6 +9,7 @@ import type { SearchResult } from '../gen/api/v1/search_pb.js';
 import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
 import './error-display.js';
 import type { InventoryFilterChangedEventDetail } from './event-types.js';
+import { getGrpcWebTransport } from './grpc-transport.js';
 
 const INVENTORY_ONLY_STORAGE_KEY = 'wiki-search-inventory-only';
 
@@ -18,9 +18,7 @@ export class WikiSearch extends LitElement {
 
   private getClient(): Client<typeof SearchService> {
     if (!this.client) {
-      this.client = createClient(SearchService, createGrpcWebTransport({
-        baseUrl: window.location.origin,
-      }));
+      this.client = createClient(SearchService, getGrpcWebTransport());
     }
     return this.client;
   }
