@@ -28,6 +28,13 @@ const wikiImageRendererPriority = 100
 // and the last registration wins.
 const wikiTableRendererPriority = 400
 
+// collapsibleHeadingParserPriority must be lower than the ATX heading parser (600)
+// so the collapsible heading parser runs first and intercepts #^ syntax.
+const collapsibleHeadingParserPriority = 550
+
+// collapsibleSectionRendererPriority for the custom collapsible section renderer.
+const collapsibleSectionRendererPriority = 100
+
 type GoldmarkRenderer struct{}
 
 // Render renders the input markdown to HTML.
@@ -43,6 +50,12 @@ func (GoldmarkRenderer) Render(input []byte) ([]byte, error) {
 		),
 		goldmark.WithParserOptions(
 			parser.WithAutoHeadingID(),
+			parser.WithBlockParsers(
+				util.Prioritized(NewCollapsibleHeadingBlockParser(), collapsibleHeadingParserPriority),
+			),
+			parser.WithASTTransformers(
+				util.Prioritized(NewCollapsibleSectionTransformer(), collapsibleSectionRendererPriority),
+			),
 		),
 		goldmark.WithRendererOptions(
 			html.WithHardWraps(),
@@ -51,6 +64,7 @@ func (GoldmarkRenderer) Render(input []byte) ([]byte, error) {
 			renderer.WithNodeRenderers(
 				util.Prioritized(NewWikiImageRenderer(html.WithUnsafe()), wikiImageRendererPriority),
 				util.Prioritized(NewWikiTableRenderer(html.WithUnsafe()), wikiTableRendererPriority),
+				util.Prioritized(NewCollapsibleSectionRenderer(html.WithUnsafe()), collapsibleSectionRendererPriority),
 			),
 		),
 	)
@@ -75,6 +89,11 @@ func (GoldmarkRenderer) Render(input []byte) ([]byte, error) {
 	// Allow wiki-blog custom element and its server-rendered fallback children
 	p.AllowElements("wiki-blog")
 	p.AllowAttrs("blog-id", "max-articles", "page", "hide-new-post").OnElements("wiki-blog")
+	// Allow collapsible-heading custom element for #^ syntax
+	p.AllowElements("collapsible-heading")
+	p.AllowAttrs("heading-level").OnElements("collapsible-heading")
+	// Allow slot attribute on heading elements for the collapsible-heading named slot
+	p.AllowAttrs("slot").OnElements("h1", "h2", "h3", "h4", "h5", "h6")
 	p.AllowAttrs("class").OnElements("span", "a")
 	return p.SanitizeBytes(buf.Bytes()), nil
 }
