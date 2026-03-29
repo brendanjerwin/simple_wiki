@@ -6,7 +6,7 @@ const chromiumPath = process.env.CHROMIUM_BIN;
 console.log('WTR Config - CHROMIUM_BIN:', chromiumPath);
 
 export default {
-  files: './web-components/**/*.test.ts',
+  files: ['./{web-components,services}/**/*.test.ts'],
   base: '/static/js/',
   nodeResolve: true,
   reporters: [summaryReporter()],

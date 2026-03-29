@@ -5,10 +5,10 @@ export interface ColumnTypeInfo {
   confidenceRatio: number;
 }
 
-const currencyStandardPattern = /^-?[$€£¥]\s?[\d,]+\.?\d*$/;
-const currencySymbolNegativePattern = /^[$€£¥]\s?-[\d,]+\.?\d*$/;
-const percentagePattern = /^-?\d+\.?\d*%$/;
-const numberPattern = /^-?[\d,]+\.?\d*$/;
+const currencyStandardPattern = /^-?[$€£¥]\s?[\d,]+(?:\.\d+)?$/;
+const currencySymbolNegativePattern = /^[$€£¥]\s?-[\d,]+(?:\.\d+)?$/;
+const percentagePattern = /^-?\d+(?:\.\d+)?%$/;
+const numberPattern = /^-?[\d,]+(?:\.\d+)?$/;
 const integerPattern = /^-?[\d,]+$/;
 const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
 const usDatePattern = /^\d{1,2}\/\d{1,2}\/\d{4}$/;

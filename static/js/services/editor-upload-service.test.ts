@@ -166,6 +166,44 @@ describe('EditorUploadService', () => {
     });
   });
 
+  describe('openFilePicker (via selectAndUploadFile)', () => {
+    let clickStub: SinonStub;
+
+    afterEach(() => {
+      clickStub?.restore();
+    });
+
+    describe('when the cancel event fires', () => {
+      let result: UploadResult | undefined;
+
+      beforeEach(async () => {
+        clickStub = stub(HTMLInputElement.prototype, 'click').callsFake(function(this: HTMLInputElement) {
+          this.dispatchEvent(new Event('cancel'));
+        });
+        result = await service.selectAndUploadFile();
+      });
+
+      it('should return undefined', () => {
+        expect(result).to.be.undefined;
+      });
+    });
+
+    describe('when the change event fires with no file selected', () => {
+      let result: UploadResult | undefined;
+
+      beforeEach(async () => {
+        clickStub = stub(HTMLInputElement.prototype, 'click').callsFake(function(this: HTMLInputElement) {
+          this.dispatchEvent(new Event('change'));
+        });
+        result = await service.selectAndUploadFile();
+      });
+
+      it('should return undefined', () => {
+        expect(result).to.be.undefined;
+      });
+    });
+  });
+
   describe('extractFilename', () => {
     // Type interface for accessing private method in tests
     interface ServiceWithPrivateMethods {
