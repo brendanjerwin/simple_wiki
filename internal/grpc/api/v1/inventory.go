@@ -29,6 +29,9 @@ const (
 	titleKey            = "title"
 	descriptionKey      = "description"
 	defaultMaxRecursion = 10
+
+	errMsgItemIdentifierRequired     = "item_identifier is required"
+	errMsgInvalidContainerIdentifier = "invalid container identifier: %v"
 )
 
 // InvalidItemTypeError is returned when an item in the items array has an unexpected type.
@@ -48,7 +51,7 @@ func (e *InvalidItemTypeError) Error() string {
 //revive:disable:function-length
 func (s *Server) CreateInventoryItem(_ context.Context, req *apiv1.CreateInventoryItemRequest) (*apiv1.CreateInventoryItemResponse, error) {
 	if req.ItemIdentifier == "" {
-		return nil, status.Error(codes.InvalidArgument, "item_identifier is required")
+		return nil, status.Error(codes.InvalidArgument, errMsgItemIdentifierRequired)
 	}
 
 	// Munge the identifier to ensure consistency
@@ -96,7 +99,7 @@ func (s *Server) CreateInventoryItem(_ context.Context, req *apiv1.CreateInvento
 	if req.Container != "" {
 		mungedContainer, err := wikiidentifiers.MungeIdentifier(req.Container)
 		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, "invalid container identifier: %v", err)
+			return nil, status.Errorf(codes.InvalidArgument, errMsgInvalidContainerIdentifier, err)
 		}
 		container = mungedContainer
 		inventoryData[containerKey] = container
@@ -132,7 +135,7 @@ func (s *Server) CreateInventoryItem(_ context.Context, req *apiv1.CreateInvento
 //revive:disable:function-length
 func (s *Server) MoveInventoryItem(_ context.Context, req *apiv1.MoveInventoryItemRequest) (*apiv1.MoveInventoryItemResponse, error) {
 	if req.ItemIdentifier == "" {
-		return nil, status.Error(codes.InvalidArgument, "item_identifier is required")
+		return nil, status.Error(codes.InvalidArgument, errMsgItemIdentifierRequired)
 	}
 
 	identifier, err := wikiidentifiers.MungeIdentifier(req.ItemIdentifier)
@@ -141,7 +144,7 @@ func (s *Server) MoveInventoryItem(_ context.Context, req *apiv1.MoveInventoryIt
 	}
 	newContainer, err := mungeOptionalContainer(req.NewContainer)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid container identifier: %v", err)
+		return nil, status.Errorf(codes.InvalidArgument, errMsgInvalidContainerIdentifier, err)
 	}
 
 	// Read the item's current frontmatter
@@ -287,7 +290,7 @@ func (s *Server) ListContainerContents(_ context.Context, req *apiv1.ListContain
 
 	containerID, err := wikiidentifiers.MungeIdentifier(req.ContainerIdentifier)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid container identifier: %v", err)
+		return nil, status.Errorf(codes.InvalidArgument, errMsgInvalidContainerIdentifier, err)
 	}
 	maxDepth := int(req.MaxDepth)
 	if maxDepth == 0 {
@@ -441,7 +444,7 @@ func (s *Server) buildInventoryItem(itemID, containerID string) *apiv1.Inventory
 // FindItemLocation implements the FindItemLocation RPC.
 func (s *Server) FindItemLocation(_ context.Context, req *apiv1.FindItemLocationRequest) (*apiv1.FindItemLocationResponse, error) {
 	if req.ItemIdentifier == "" {
-		return nil, status.Error(codes.InvalidArgument, "item_identifier is required")
+		return nil, status.Error(codes.InvalidArgument, errMsgItemIdentifierRequired)
 	}
 
 	itemID, err := wikiidentifiers.MungeIdentifier(req.ItemIdentifier)

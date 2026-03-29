@@ -520,27 +520,10 @@ func (j *InventoryNormalizationJob) generateAuditReport(anomalies []InventoryAno
 	}
 
 	// Anomalies
+	_, _ = report.WriteString("## Anomalies" + newlineDelim + newlineDelim)
 	if len(anomalies) > 0 {
-		_, _ = report.WriteString("## Anomalies" + newlineDelim + newlineDelim)
-
-		// Group by type
-		byType := make(map[string][]InventoryAnomaly)
-		for _, a := range anomalies {
-			byType[a.Type] = append(byType[a.Type], a)
-		}
-
-		for anomalyType, items := range byType {
-			_, _ = fmt.Fprintf(&report, "### %s"+newlineDelim+newlineDelim, formatAnomalyType(anomalyType))
-			for _, a := range items {
-				severity := "⚠️"
-				if a.Severity == "error" {
-					severity = "❌"
-				}
-				_, _ = fmt.Fprintf(&report, "%s **%s**: %s"+newlineDelim+newlineDelim, severity, a.ItemID, a.Description)
-			}
-		}
+		writeGroupedAnomalies(&report, anomalies)
 	} else {
-		_, _ = report.WriteString("## Anomalies" + newlineDelim + newlineDelim)
 		_, _ = report.WriteString("✅ No anomalies detected." + newlineDelim + newlineDelim)
 	}
 
@@ -559,6 +542,25 @@ func (j *InventoryNormalizationJob) generateAuditReport(anomalies []InventoryAno
 	}
 
 	return nil
+}
+
+// writeGroupedAnomalies writes anomalies grouped by type into the report buffer.
+func writeGroupedAnomalies(report *bytes.Buffer, anomalies []InventoryAnomaly) {
+	byType := make(map[string][]InventoryAnomaly)
+	for _, a := range anomalies {
+		byType[a.Type] = append(byType[a.Type], a)
+	}
+
+	for anomalyType, items := range byType {
+		_, _ = fmt.Fprintf(report, "### %s"+newlineDelim+newlineDelim, formatAnomalyType(anomalyType))
+		for _, a := range items {
+			severity := "⚠️"
+			if a.Severity == "error" {
+				severity = "❌"
+			}
+			_, _ = fmt.Fprintf(report, "%s **%s**: %s"+newlineDelim+newlineDelim, severity, a.ItemID, a.Description)
+		}
+	}
 }
 
 // formatAnomalyType converts anomaly type to human-readable format.
