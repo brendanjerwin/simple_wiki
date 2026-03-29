@@ -531,8 +531,9 @@ func (s *Server) buildContainerHierarchy(containerID string) []string {
 
 // filterItemsExcluding returns a new slice with all items except the specified itemID.
 // Handles both []string and []any typed raw values. Returns nil for unknown types.
-func filterItemsExcluding(itemsRaw any, itemID string) ([]string, bool) {
-	var newItems []string
+// Non-string elements in []any slices are preserved as-is.
+func filterItemsExcluding(itemsRaw any, itemID string) ([]any, bool) {
+	var newItems []any
 	switch items := itemsRaw.(type) {
 	case []string:
 		for _, item := range items {
@@ -542,9 +543,10 @@ func filterItemsExcluding(itemsRaw any, itemID string) ([]string, bool) {
 		}
 	case []any:
 		for _, item := range items {
-			if itemStr, ok := item.(string); ok && itemStr != itemID {
-				newItems = append(newItems, itemStr)
+			if itemStr, ok := item.(string); ok && itemStr == itemID {
+				continue // Skip the item to be removed
 			}
+			newItems = append(newItems, item) // Keep all other items (strings and non-strings)
 		}
 	default:
 		return nil, false // Unknown type, skip
