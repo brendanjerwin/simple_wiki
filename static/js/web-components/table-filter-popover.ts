@@ -304,9 +304,23 @@ export class TableFilterPopover extends LitElement {
   @state()
   declare _pendingSortDirection: SortDirection;
 
-  private readonly _handleClickOutside: (event: Event) => void;
-  private readonly _handleKeydown: (event: KeyboardEvent) => void;
   private _pendingTimerId: ReturnType<typeof setTimeout> | null = null;
+
+  public readonly _handleClickOutside = (event: Event): void => {
+    const path = event.composedPath();
+    const popover = this.shadowRoot?.querySelector('.popover');
+
+    if (this.open && popover && !path.includes(popover)) {
+      this._cancel();
+    }
+  };
+
+  public readonly _handleKeydown = (event: KeyboardEvent): void => {
+    if (this.open && event.key === 'Escape') {
+      event.preventDefault();
+      this._cancel();
+    }
+  };
 
   constructor() {
     super();
@@ -321,8 +335,6 @@ export class TableFilterPopover extends LitElement {
     this._rangeMax = null;
     this._searchText = '';
     this._pendingSortDirection = 'none';
-    this._handleClickOutside = this.handleClickOutside.bind(this);
-    this._handleKeydown = this.handleKeydown.bind(this);
   }
 
   override disconnectedCallback(): void {
@@ -387,22 +399,6 @@ export class TableFilterPopover extends LitElement {
     if (this.uniqueValues.length <= CHECKBOX_THRESHOLD) return 'checkbox';
     if (this.numericRange !== null) return 'range';
     return 'text-search';
-  }
-
-  handleClickOutside(event: Event): void {
-    const path = event.composedPath();
-    const popover = this.shadowRoot?.querySelector('.popover');
-
-    if (this.open && popover && !path.includes(popover)) {
-      this._cancel();
-    }
-  }
-
-  handleKeydown(event: KeyboardEvent): void {
-    if (this.open && event.key === 'Escape') {
-      event.preventDefault();
-      this._cancel();
-    }
   }
 
   private _cancel(): void {
