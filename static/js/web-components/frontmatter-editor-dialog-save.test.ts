@@ -1,10 +1,9 @@
 import { html, fixture, expect } from '@open-wc/testing';
-import type { FrontmatterEditorDialog } from './frontmatter-editor-dialog.js';
+import { FrontmatterEditorDialog } from './frontmatter-editor-dialog.js';
 import { create, type JsonObject } from '@bufbuild/protobuf';
 import type { GetFrontmatterResponseSchema} from '../gen/api/v1/frontmatter_pb.js';
 import { ReplaceFrontmatterResponseSchema } from '../gen/api/v1/frontmatter_pb.js';
 import sinon from 'sinon';
-import './frontmatter-editor-dialog.js';
 
 describe('FrontmatterEditorDialog - Save Functionality', () => {
   let el: FrontmatterEditorDialog;
@@ -19,30 +18,32 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
   }
 
   beforeEach(async () => {
-    el = await Promise.race([
-      fixture<FrontmatterEditorDialog>(html`<frontmatter-editor-dialog></frontmatter-editor-dialog>`),
-      timeout(5000, 'Component fixture timed out')
-    ]);
-
-    // Stub the loadFrontmatter method to prevent network calls
-    sinon.stub(el, 'loadFrontmatter').resolves();
-
-    // Create a mock client and stub getClient to return it.
-    // With lazy init, el['client'] is null until first use, so we must stub getClient() instead.
+    // Create mock client before fixture creation
     const mockClient = {
       replaceFrontmatter: sinon.stub(),
       getFrontmatter: sinon.stub(),
     };
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
-    sinon.stub(el, 'getClient' as keyof FrontmatterEditorDialog).returns(mockClient);
     clientStub = mockClient.replaceFrontmatter;
+
+    // Stub ALL prototype methods BEFORE fixture creation.
+    // This prevents any real methods from firing during element initialization
+    // or during async operations before instance-level stubs could be applied.
+    // Critical: refreshPage calls window.location.reload() which disconnects the browser.
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private/public methods for testing
+    sinon.stub(FrontmatterEditorDialog.prototype as unknown as { loadFrontmatter: () => Promise<void> }, 'loadFrontmatter').resolves();
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+    sinon.stub(FrontmatterEditorDialog.prototype as unknown as { getClient: () => typeof mockClient }, 'getClient').returns(mockClient);
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+    refreshPageStub = sinon.stub(FrontmatterEditorDialog.prototype as unknown as { refreshPage: () => void }, 'refreshPage');
 
     // Stub sessionStorage.setItem to test toast storage
     sessionStorageStub = sinon.stub(sessionStorage, 'setItem');
 
-    // Stub the refreshPage method to prevent actual page refresh
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
-    refreshPageStub = sinon.stub(el, 'refreshPage' as keyof FrontmatterEditorDialog);
+    // NOW create the fixture — all stubs are in place before the element connects to DOM
+    el = await Promise.race([
+      fixture<FrontmatterEditorDialog>(html`<frontmatter-editor-dialog></frontmatter-editor-dialog>`),
+      timeout(5000, 'Component fixture timed out')
+    ]);
 
     await el.updateComplete;
   });
@@ -76,10 +77,10 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
           identifier: 'test-page',
           tags: ['modified', 'test']
         };
-        
+
         mockResponse = create(ReplaceFrontmatterResponseSchema, { frontmatter: responseJson });
         clientStub.resolves(mockResponse);
-        
+
         // Execute the save action
         await el['_handleSaveClick']();
       });
@@ -89,7 +90,7 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
         const callArgs = clientStub.getCall(0).args[0];
         expect(callArgs.page).to.equal('test-page');
         expect(callArgs.frontmatter).to.be.an('object');
-        
+
         // Verify the frontmatter content - it's already a JsonObject in v2
         const frontmatterData = callArgs.frontmatter;
         expect(frontmatterData).to.deep.equal({
@@ -128,11 +129,11 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
           // Reset the stub to prepare for a new save operation
           clientStub.reset();
           clientStub.resolves(mockResponse);
-          
+
           // Start the save operation and capture saving state
           savePromise = el['_handleSaveClick']();
           savingStateDuringOperation = el.saving;
-          
+
           // Wait for completion
           await savePromise;
         });
@@ -148,7 +149,7 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
           clientStub.reset();
           clientStub.resolves(mockResponse);
           el.open = true;
-          
+
           await el['_handleSaveClick']();
         });
 
@@ -167,7 +168,7 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
             (await import('./augment-error-service.js')).ErrorKind.ERROR,
             'error'
           );
-          
+
           await el['_handleSaveClick']();
         });
 
@@ -183,14 +184,14 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
           // Reset and setup for testing frontmatter update
           clientStub.reset();
           clientStub.resolves(mockResponse);
-          
+
           // Stub the close method to capture the frontmatter before it's cleared
           const originalClose = el.close;
           sinon.stub(el, 'close').callsFake(() => {
             frontmatterBeforeClose = el.frontmatter;
             originalClose.call(el);
           });
-          
+
           await el['_handleSaveClick']();
         });
 
@@ -207,7 +208,7 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
       beforeEach(async () => {
         mockError = new Error('Failed to save frontmatter');
         clientStub.rejects(mockError);
-        
+
         // Execute the save action
         await el['_handleSaveClick']();
       });
@@ -235,7 +236,7 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
           clientStub.reset();
           clientStub.rejects(mockError);
           el.open = true;
-          
+
           await el['_handleSaveClick']();
         });
 
@@ -247,9 +248,9 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
 
     describe('when a non-Error exception is raised', () => {
       beforeEach(async () => {
-        // Use a rejected promise with a string directly 
+        // Use a rejected promise with a string directly
         clientStub.returns(Promise.reject('String error'));
-        
+
         // Execute the save action
         await el['_handleSaveClick']();
       });
@@ -264,7 +265,7 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
     describe('when page is not set', () => {
       beforeEach(async () => {
         el.page = '';
-        
+
         // Execute the save action
         await el['_handleSaveClick']();
       });
