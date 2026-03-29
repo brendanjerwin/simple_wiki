@@ -17,7 +17,7 @@ export interface UploadResult {
  * EditorUploadService handles file uploads and markdown insertion for the editor.
  */
 export class EditorUploadService {
-  private client: Client<typeof FileStorageService>;
+  private readonly client: Client<typeof FileStorageService>;
 
   constructor(client?: Client<typeof FileStorageService>) {
     this.client = client ?? createClient(FileStorageService, getGrpcWebTransport());
