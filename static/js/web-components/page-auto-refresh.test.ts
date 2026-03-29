@@ -244,13 +244,18 @@ describe('PageAutoRefresh', () => {
       receivedEvents = [];
 
       el = document.createElement('page-auto-refresh') as PageAutoRefresh;
+      const privateEl = el as unknown as {
+        isWatching: boolean;
+        dispatchPageStatusEvent: () => void;
+        startWatching: () => void;
+      };
 
       // Stub startWatching before connecting to DOM to prevent real gRPC calls.
       // The fake simulates the initial status dispatch that startWatching performs.
-      sinon.stub(el as unknown as { startWatching: () => void }, 'startWatching')
+      sinon.stub(privateEl, 'startWatching')
         .callsFake(() => {
-          (el as unknown as { isWatching: boolean }).isWatching = true;
-          (el as unknown as { dispatchPageStatusEvent: () => void }).dispatchPageStatusEvent();
+          privateEl.isWatching = true;
+          privateEl.dispatchPageStatusEvent();
         });
 
       const firstEventReceived = new Promise<void>((resolve, reject) => {
