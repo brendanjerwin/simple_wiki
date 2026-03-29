@@ -67,17 +67,20 @@ test.describe('Collapsible Headings', () => {
       await textarea.fill(`+++\nidentifier = "${TEST_PAGE}"\n+++`);
       await textarea.press('Space');
       await expect(page.locator('wiki-editor .status-indicator')).toContainText('Saved', { timeout: SAVE_TIMEOUT_MS });
-    } catch {
-      // Ignore cleanup failures — test data is non-critical
+    } catch (e) {
+      // Ignore cleanup failures — test data is non-critical, but log for debugging.
+      console.warn('Collapsible headings E2E test cleanup failed:', e);
     }
 
     await ctx.close();
   });
 
-  test('heading with ^ marker renders with a toggle control', async ({ page }) => {
+  test.beforeEach(async ({ page }) => {
     await page.goto(`/${TEST_PAGE}/view`);
     await expect(page.locator('#rendered')).toBeAttached({ timeout: PAGE_LOAD_TIMEOUT_MS });
+  });
 
+  test('heading with ^ marker renders with a toggle control', async ({ page }) => {
     const firstCollapsible = page.locator('collapsible-heading').first();
     await expect(firstCollapsible).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
@@ -88,9 +91,6 @@ test.describe('Collapsible Headings', () => {
   });
 
   test('collapsible heading is collapsed by default', async ({ page }) => {
-    await page.goto(`/${TEST_PAGE}/view`);
-    await expect(page.locator('#rendered')).toBeAttached({ timeout: PAGE_LOAD_TIMEOUT_MS });
-
     const firstCollapsible = page.locator('collapsible-heading').first();
     await expect(firstCollapsible).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
@@ -102,9 +102,6 @@ test.describe('Collapsible Headings', () => {
   });
 
   test('clicking toggle expands the content under the heading', async ({ page }) => {
-    await page.goto(`/${TEST_PAGE}/view`);
-    await expect(page.locator('#rendered')).toBeAttached({ timeout: PAGE_LOAD_TIMEOUT_MS });
-
     const firstCollapsible = page.locator('collapsible-heading').first();
     await expect(firstCollapsible).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
@@ -123,9 +120,6 @@ test.describe('Collapsible Headings', () => {
   });
 
   test('clicking toggle again collapses the expanded content', async ({ page }) => {
-    await page.goto(`/${TEST_PAGE}/view`);
-    await expect(page.locator('#rendered')).toBeAttached({ timeout: PAGE_LOAD_TIMEOUT_MS });
-
     const firstCollapsible = page.locator('collapsible-heading').first();
     await expect(firstCollapsible).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
@@ -144,9 +138,6 @@ test.describe('Collapsible Headings', () => {
   });
 
   test('collapsed content has the hidden attribute for screen reader accessibility', async ({ page }) => {
-    await page.goto(`/${TEST_PAGE}/view`);
-    await expect(page.locator('#rendered')).toBeAttached({ timeout: PAGE_LOAD_TIMEOUT_MS });
-
     const firstCollapsible = page.locator('collapsible-heading').first();
     await expect(firstCollapsible).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
@@ -157,9 +148,6 @@ test.describe('Collapsible Headings', () => {
   });
 
   test('toggle button is focusable via keyboard (Tab)', async ({ page }) => {
-    await page.goto(`/${TEST_PAGE}/view`);
-    await expect(page.locator('#rendered')).toBeAttached({ timeout: PAGE_LOAD_TIMEOUT_MS });
-
     const firstCollapsible = page.locator('collapsible-heading').first();
     await expect(firstCollapsible).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
@@ -170,9 +158,6 @@ test.describe('Collapsible Headings', () => {
   });
 
   test('toggle can be activated with the Space key', async ({ page }) => {
-    await page.goto(`/${TEST_PAGE}/view`);
-    await expect(page.locator('#rendered')).toBeAttached({ timeout: PAGE_LOAD_TIMEOUT_MS });
-
     const firstCollapsible = page.locator('collapsible-heading').first();
     await expect(firstCollapsible).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
@@ -187,9 +172,6 @@ test.describe('Collapsible Headings', () => {
   });
 
   test('toggle can be activated with the Enter key', async ({ page }) => {
-    await page.goto(`/${TEST_PAGE}/view`);
-    await expect(page.locator('#rendered')).toBeAttached({ timeout: PAGE_LOAD_TIMEOUT_MS });
-
     const firstCollapsible = page.locator('collapsible-heading').first();
     await expect(firstCollapsible).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
@@ -204,9 +186,6 @@ test.describe('Collapsible Headings', () => {
   });
 
   test('expanded state persists across a page reload', async ({ page }) => {
-    await page.goto(`/${TEST_PAGE}/view`);
-    await expect(page.locator('#rendered')).toBeAttached({ timeout: PAGE_LOAD_TIMEOUT_MS });
-
     const firstCollapsible = page.locator('collapsible-heading').first();
     await expect(firstCollapsible).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
@@ -225,9 +204,6 @@ test.describe('Collapsible Headings', () => {
   });
 
   test('nested collapsible headings collapse and expand independently', async ({ page }) => {
-    await page.goto(`/${TEST_PAGE}/view`);
-    await expect(page.locator('#rendered')).toBeAttached({ timeout: PAGE_LOAD_TIMEOUT_MS });
-
     // Section One is the first top-level collapsible heading; expand it to reveal nested content
     const sectionOne = page.locator('collapsible-heading[heading-level="1"]').first();
     await expect(sectionOne).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
@@ -258,9 +234,6 @@ test.describe('Collapsible Headings', () => {
   });
 
   test('multiple top-level collapsible headings expand and collapse independently', async ({ page }) => {
-    await page.goto(`/${TEST_PAGE}/view`);
-    await expect(page.locator('#rendered')).toBeAttached({ timeout: PAGE_LOAD_TIMEOUT_MS });
-
     const topLevel = page.locator('collapsible-heading[heading-level="1"]');
     await expect(topLevel.first()).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
@@ -289,9 +262,6 @@ test.describe('Collapsible Headings', () => {
   });
 
   test('regular headings without ^ marker are not wrapped in collapsible-heading', async ({ page }) => {
-    await page.goto(`/${TEST_PAGE}/view`);
-    await expect(page.locator('#rendered')).toBeAttached({ timeout: PAGE_LOAD_TIMEOUT_MS });
-
     // The "# Regular Heading" in the test content is a plain <h1> — not inside a
     // collapsible-heading component. Elements used as heading slots carry slot="heading";
     // regular headings do not have that attribute.
