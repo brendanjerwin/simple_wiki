@@ -325,6 +325,35 @@ export class WikiBlog extends LitElement {
   }
 
   override render() {
+    const loadMoreSection = this.hasMore
+      ? html`<div class="load-more">
+          <button class="load-more-btn" @click=${this._loadMore}>
+            Load older posts
+          </button>
+        </div>`
+      : nothing;
+
+    let postsListContent;
+    if (this.loading) {
+      postsListContent = html`<div class="loading"><i class="fa-solid fa-spinner fa-spin"></i> Loading blog posts...</div>`;
+    } else if (this.error) {
+      postsListContent = html`<error-display
+          .augmentedError="${this.error}"
+          .action=${{ label: 'Retry', onClick: () => { this.error = null; this.loading = true; void this.fetchPosts(this.displayCount); } }}
+        ></error-display>`;
+    } else if (this.posts.length === 0) {
+      postsListContent = html`<div class="empty-state">No posts yet.</div>`;
+    } else {
+      postsListContent = html`
+        <div class="blog-list-scroll" style="${this.scrollStyle}">
+          <ul class="blog-list">
+            ${this.posts.map((post, i) => this._renderPost(post, i))}
+          </ul>
+        </div>
+        ${loadMoreSection}
+      `;
+    }
+
     return html`
       ${sharedStyles}
       <div class="blog-container system-font">
@@ -335,29 +364,7 @@ export class WikiBlog extends LitElement {
             </button>
           </div>
         `}
-        ${this.loading
-          ? html`<div class="loading"><i class="fa-solid fa-spinner fa-spin"></i> Loading blog posts...</div>`
-          : this.error
-            ? html`<error-display
-                .augmentedError="${this.error}"
-                .action=${{ label: 'Retry', onClick: () => { this.error = null; this.loading = true; void this.fetchPosts(this.displayCount); } }}
-              ></error-display>`
-            : this.posts.length === 0
-              ? html`<div class="empty-state">No posts yet.</div>`
-              : html`
-                  <div class="blog-list-scroll" style="${this.scrollStyle}">
-                    <ul class="blog-list">
-                      ${this.posts.map((post, i) => this._renderPost(post, i))}
-                    </ul>
-                  </div>
-                  ${this.hasMore
-                    ? html`<div class="load-more">
-                        <button class="load-more-btn" @click=${this._loadMore}>
-                          Load older posts
-                        </button>
-                      </div>`
-                    : nothing}
-                `}
+        ${postsListContent}
       </div>
       ${this.hideNewPost ? nothing : html`
         <blog-new-post-dialog
