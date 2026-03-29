@@ -235,6 +235,13 @@ export class InventoryQrScanner extends LitElement {
   };
 
   override render() {
+    const validatingIndicator = this.validating ? html`
+      <div class="validating">
+        <i class="fa-solid fa-spinner fa-spin"></i>
+        Validating scanned page...
+      </div>
+    ` : nothing;
+
     return html`
       ${sharedStyles}
       <div class="scanner-container">
@@ -255,12 +262,7 @@ export class InventoryQrScanner extends LitElement {
             embedded
             @qr-scanned=${this._handleQrScanned}
           ></qr-scanner>
-          ${this.validating ? html`
-            <div class="validating">
-              <i class="fa-solid fa-spinner fa-spin"></i>
-              Validating scanned page...
-            </div>
-          ` : nothing}
+          ${validatingIndicator}
         `}
       </div>
     `;

@@ -412,6 +412,7 @@ export class InsertNewPageDialog extends LitElement {
   private _renderTemplateSelector() {
     const hasTemplates = this.templates.length > 0;
     const isDisabled = this.templatesLoading || this.templateLocked || !hasTemplates;
+    const noTemplateOptionLabel = !hasTemplates ? '(none - no templates defined)' : '(none)';
 
     return html`
       <div class="form-group">
@@ -425,11 +426,7 @@ export class InsertNewPageDialog extends LitElement {
             ?disabled=${isDisabled}
           >
             <option value="">
-              ${this.templatesLoading
-                ? 'Loading templates...'
-                : !hasTemplates
-                  ? '(none - no templates defined)'
-                  : '(none)'}
+              ${this.templatesLoading ? 'Loading templates...' : noTemplateOptionLabel}
             </option>
             ${this.templates.map(
               template => html`
