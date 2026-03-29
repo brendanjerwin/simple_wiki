@@ -486,7 +486,7 @@ func mustNewServerFull(
 	)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "mustNewServerFull failed")
 	if jobCoordinator != nil {
-		server.WithJobQueueCoordinator(jobCoordinator)
+		server = server.WithJobQueueCoordinator(jobCoordinator)
 	}
 	return server
 }
@@ -518,7 +518,7 @@ func mustNewServerWithLogger(
 	)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "mustNewServerWithLogger failed")
 	if jobCoordinator != nil {
-		server.WithJobQueueCoordinator(jobCoordinator)
+		server = server.WithJobQueueCoordinator(jobCoordinator)
 	}
 	return server
 }

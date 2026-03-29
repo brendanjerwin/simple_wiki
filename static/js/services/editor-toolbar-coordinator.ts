@@ -12,10 +12,10 @@ import { TextFormattingService } from './text-formatting-service.js';
  * and dispatches formatting, upload, and insert-new-page actions.
  */
 export class EditorToolbarCoordinator {
-  private textarea: HTMLTextAreaElement;
-  private toolbar: EditorToolbar;
-  private uploadService: EditorUploadService;
-  private formattingService: TextFormattingService;
+  private readonly textarea: HTMLTextAreaElement;
+  private readonly toolbar: EditorToolbar;
+  private readonly uploadService: EditorUploadService;
+  private readonly formattingService: TextFormattingService;
   private insertNewPageDialog: InsertNewPageDialog | null = null;
 
   // Selection state for restoration
@@ -67,7 +67,7 @@ export class EditorToolbarCoordinator {
     }
   }
 
-  private _handleToolbarInteractionStart = (): void => {
+  private readonly _handleToolbarInteractionStart = (): void => {
     // Save selection before toolbar button steals focus
     this.saveSelection();
   };
@@ -83,7 +83,7 @@ export class EditorToolbarCoordinator {
     this.textarea.selectionEnd = this.savedSelectionEnd;
   }
 
-  private _handleUploadImage = async (): Promise<void> => {
+  private readonly _handleUploadImage = async (): Promise<void> => {
     this.restoreSelection();
     const result = await this.uploadService.selectAndUploadImage();
     if (result) {
@@ -91,7 +91,7 @@ export class EditorToolbarCoordinator {
     }
   };
 
-  private _handleUploadFile = async (): Promise<void> => {
+  private readonly _handleUploadFile = async (): Promise<void> => {
     this.restoreSelection();
     const result = await this.uploadService.selectAndUploadFile();
     if (result) {
@@ -99,7 +99,7 @@ export class EditorToolbarCoordinator {
     }
   };
 
-  private _handleBold = (): void => {
+  private readonly _handleBold = (): void => {
     this.restoreSelection();
     if (this.savedSelectionStart === this.savedSelectionEnd) return;
     const result = this.formattingService.wrapBold(
@@ -110,7 +110,7 @@ export class EditorToolbarCoordinator {
     this.applyFormattingResult(result);
   };
 
-  private _handleItalic = (): void => {
+  private readonly _handleItalic = (): void => {
     this.restoreSelection();
     if (this.savedSelectionStart === this.savedSelectionEnd) return;
     const result = this.formattingService.wrapItalic(
@@ -121,7 +121,7 @@ export class EditorToolbarCoordinator {
     this.applyFormattingResult(result);
   };
 
-  private _handleInsertLink = (): void => {
+  private readonly _handleInsertLink = (): void => {
     this.restoreSelection();
     if (this.savedSelectionStart === this.savedSelectionEnd) return;
     const result = this.formattingService.insertLink(
@@ -141,7 +141,7 @@ export class EditorToolbarCoordinator {
     this.textarea.dispatchEvent(new Event('keyup', { bubbles: true }));
   }
 
-  private _handleInsertNewPage = async (): Promise<void> => {
+  private readonly _handleInsertNewPage = async (): Promise<void> => {
     // Create or get the dialog
     if (!this.insertNewPageDialog) {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
@@ -156,7 +156,7 @@ export class EditorToolbarCoordinator {
     await this.insertNewPageDialog.openDialog();
   };
 
-  private _handlePageCreated = (event: CustomEvent<PageCreatedEventDetail>): void => {
+  private readonly _handlePageCreated = (event: CustomEvent<PageCreatedEventDetail>): void => {
     const { markdownLink } = event.detail;
 
     // Restore selection and insert the markdown link

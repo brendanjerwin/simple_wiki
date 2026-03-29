@@ -472,6 +472,36 @@ export class WikiChecklist extends LitElement {
   }
 
   /**
+   * Extract tags from a raw checklist item record.
+   * Prefers new `tags` array format; falls back to old `tag` string.
+   */
+  private _parseItemTags(r: Record<string, unknown>): string[] {
+    if (Array.isArray(r['tags'])) {
+      return r['tags'].filter(
+        (t): t is string => typeof t === 'string' && t !== ''
+      );
+    }
+    if (typeof r['tag'] === 'string' && r['tag']) {
+      return [r['tag']];
+    }
+    return [];
+  }
+
+  /**
+   * Parse a single raw checklist item into a ChecklistItem, or return null if invalid.
+   */
+  private _parseChecklistItem(raw: unknown): ChecklistItem | null {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- narrowed above: non-null, non-array object
+    const r = raw as Record<string, unknown>;
+    return {
+      text: typeof r['text'] === 'string' ? r['text'] : '',
+      checked: Boolean(r['checked']),
+      tags: this._parseItemTags(r),
+    };
+  }
+
+  /**
    * Extract ChecklistData from the raw frontmatter object.
    * Backward-compatible: reads both `tag` (old string) and `tags` (new array).
    */
@@ -480,11 +510,7 @@ export class WikiChecklist extends LitElement {
     listName: string
   ): ChecklistData {
     const checklists = frontmatter['checklists'];
-    if (
-      !checklists ||
-      typeof checklists !== 'object' ||
-      Array.isArray(checklists)
-    ) {
+    if (!checklists || typeof checklists !== 'object' || Array.isArray(checklists)) {
       return { items: [] };
     }
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- narrowed above: non-null, non-array object
@@ -496,28 +522,12 @@ export class WikiChecklist extends LitElement {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- narrowed above: non-null, non-array object
     const listObj = listData as Record<string, unknown>;
     const rawItems = listObj['items'];
+    if (!Array.isArray(rawItems)) return { items: [] };
+
     const items: ChecklistItem[] = [];
-    if (Array.isArray(rawItems)) {
-      for (const raw of rawItems) {
-        if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- narrowed above: non-null, non-array object
-          const r = raw as Record<string, unknown>;
-          const item: ChecklistItem = {
-            text: typeof r['text'] === 'string' ? r['text'] : '',
-            checked: Boolean(r['checked']),
-            tags: [],
-          };
-          // Prefer new `tags` array format, fall back to old `tag` string
-          if (Array.isArray(r['tags'])) {
-            item.tags = r['tags'].filter(
-              (t): t is string => typeof t === 'string' && t !== ''
-            );
-          } else if (typeof r['tag'] === 'string' && r['tag']) {
-            item.tags = [r['tag']];
-          }
-          items.push(item);
-        }
-      }
+    for (const raw of rawItems) {
+      const item = this._parseChecklistItem(raw);
+      if (item) items.push(item);
     }
     return { items };
   }
@@ -873,7 +883,7 @@ export class WikiChecklist extends LitElement {
 
     // Register document-level listeners for move/end/cancel
     this._boundTouchMove = (ev: TouchEvent) => this._handleTouchMove(ev);
-    this._boundTouchEnd = (ev: TouchEvent) => this._handleTouchEnd(ev);
+    this._boundTouchEnd = () => this._handleTouchEnd();
     this._boundTouchCancel = () => this._handleTouchCancel();
     document.addEventListener('touchmove', this._boundTouchMove, { passive: false });
     document.addEventListener('touchend', this._boundTouchEnd);
@@ -885,51 +895,50 @@ export class WikiChecklist extends LitElement {
     }, LONG_PRESS_DELAY_MS);
   }
 
+  private _handleActiveDragTouchMove(e: TouchEvent, touch: Touch): void {
+    // Active drag: prevent scrolling, move ghost, compute drop target
+    e.preventDefault();
+    this._moveGhost(touch.clientX, touch.clientY);
+
+    const elementUnderFinger = this.shadowRoot?.elementFromPoint(touch.clientX, touch.clientY);
+
+    // Walk up to find the .item-row and read data-index
+    const row = elementUnderFinger?.closest('.item-row');
+    if (!(row instanceof HTMLElement)) return;
+
+    const indexAttr = row.getAttribute('data-index');
+    if (indexAttr === null) return;
+
+    const targetIndex = parseInt(indexAttr, 10);
+    const rect = row.getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    this._dragOverItemIndex = targetIndex;
+    this._dragOverItemPosition = touch.clientY < midY ? 'before' : 'after';
+  }
+
+  private _handlePreDragTouchMove(touch: Touch): void {
+    // Pre-drag: check if finger moved beyond threshold (user is scrolling)
+    const dx = touch.clientX - this._touchStartX;
+    const dy = touch.clientY - this._touchStartY;
+    const distancePx = Math.sqrt(dx * dx + dy * dy);
+    if (distancePx > LONG_PRESS_MOVE_THRESHOLD_PX) {
+      this._cancelLongPress();
+      this._removeDocumentTouchListeners();
+    }
+  }
+
   private _handleTouchMove(e: TouchEvent): void {
     const touch = e.changedTouches[0];
     if (!touch) return;
 
     if (this._touchDragActive) {
-      // Active drag: prevent scrolling, move ghost, compute drop target
-      e.preventDefault();
-      this._moveGhost(touch.clientX, touch.clientY);
-
-      // Hide ghost temporarily so elementFromPoint can see the row beneath
-      if (this._touchGhostEl) {
-        this._touchGhostEl.style.display = 'none';
-      }
-      const elementUnderFinger = this.shadowRoot?.elementFromPoint(touch.clientX, touch.clientY);
-      if (this._touchGhostEl) {
-        this._touchGhostEl.style.display = '';
-      }
-
-      // Walk up to find the .item-row and read data-index
-      const row = elementUnderFinger?.closest('.item-row');
-      if (row instanceof HTMLElement) {
-        const indexAttr = row.getAttribute('data-index');
-        if (indexAttr !== null) {
-          const targetIndex = parseInt(indexAttr, 10);
-          const rect = row.getBoundingClientRect();
-          const midY = rect.top + rect.height / 2;
-          this._dragOverItemIndex = targetIndex;
-          this._dragOverItemPosition = touch.clientY < midY ? 'before' : 'after';
-        }
-      }
+      this._handleActiveDragTouchMove(e, touch);
     } else if (this._longPressTimerId !== null) {
-      // Pre-drag: check if finger moved beyond threshold (user is scrolling)
-      const dx = touch.clientX - this._touchStartX;
-      const dy = touch.clientY - this._touchStartY;
-      const distancePx = Math.sqrt(dx * dx + dy * dy);
-      if (distancePx > LONG_PRESS_MOVE_THRESHOLD_PX) {
-        this._cancelLongPress();
-        this._removeDocumentTouchListeners();
-      }
+      this._handlePreDragTouchMove(touch);
     }
   }
 
-  private _handleTouchEnd(e: TouchEvent): void {
-    void e;
-
+  private _handleTouchEnd(): void {
     if (this._touchDragActive) {
       // Commit the reorder
       const sourceIndex = this._dragSourceItemIndex;
@@ -1190,6 +1199,43 @@ export class WikiChecklist extends LitElement {
   }
 
   override render() {
+    let checklistItemsContent;
+    if (this.loading) {
+      checklistItemsContent = html`
+        <div class="loading" role="status" aria-live="polite">
+          <i class="fas fa-spinner fa-spin" aria-hidden="true"></i>
+          Loading checklist\u2026
+        </div>
+      `;
+    } else if (this.error) {
+      checklistItemsContent = html`
+        <div class="error-wrapper">
+          <error-display
+            .augmentedError="${this.error}"
+            .action="${{
+              label: 'Retry',
+              onClick: () => {
+                this.error = null;
+                this.loading = true;
+                void this.fetchData();
+              },
+            }}"
+          ></error-display>
+        </div>
+      `;
+    } else {
+      const itemsListContent = this.items.length === 0
+        ? html`<div class="empty-state">No items yet. Add one below!</div>`
+        : html`
+            ${this._renderTagFilterBar()}
+            ${this._renderItems()}
+          `;
+      checklistItemsContent = html`
+        ${itemsListContent}
+        ${this._renderAddItem()}
+      `;
+    }
+
     return html`
       ${sharedStyles}
       <div class="checklist-container system-font">
@@ -1214,38 +1260,7 @@ export class WikiChecklist extends LitElement {
           </div>
         </div>
 
-        ${this.loading
-          ? html`
-              <div class="loading" role="status" aria-live="polite">
-                <i class="fas fa-spinner fa-spin" aria-hidden="true"></i>
-                Loading checklist\u2026
-              </div>
-            `
-          : this.error
-            ? html`
-                <div class="error-wrapper">
-                  <error-display
-                    .augmentedError="${this.error}"
-                    .action="${{
-                      label: 'Retry',
-                      onClick: () => {
-                        this.error = null;
-                        this.loading = true;
-                        void this.fetchData();
-                      },
-                    }}"
-                  ></error-display>
-                </div>
-              `
-            : html`
-                ${this.items.length === 0
-                  ? html`<div class="empty-state">No items yet. Add one below!</div>`
-                  : html`
-                      ${this._renderTagFilterBar()}
-                      ${this._renderItems()}
-                    `}
-                ${this._renderAddItem()}
-              `}
+        ${checklistItemsContent}
       </div>
     `;
   }

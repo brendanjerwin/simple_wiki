@@ -232,30 +232,32 @@ func parseRow(rowNum int, row []string, columns []ColumnInfo) ParsedRecord {
 		}
 
 		if col.IsArray {
-			// Array column handling
 			parseArrayCell(&record, col, value, arrayValues)
 		} else {
-			// Scalar column handling
 			parseScalarCell(&record, col, value)
 		}
 	}
 
-	// Validate identifier
+	validateRecordIdentifier(&record)
+	return record
+}
+
+// validateRecordIdentifier validates the identifier field of a parsed record.
+func validateRecordIdentifier(record *ParsedRecord) {
 	if record.Identifier == "" {
 		record.ValidationErrors = append(record.ValidationErrors, "identifier cannot be empty")
-	} else {
-		// Check if identifier is valid format
-		munged, err := wikiidentifiers.MungeIdentifier(record.Identifier)
-		if err != nil {
-			record.ValidationErrors = append(record.ValidationErrors,
-				fmt.Sprintf("identifier '%s' is invalid: %v", record.Identifier, err))
-		} else if munged != record.Identifier {
-			record.ValidationErrors = append(record.ValidationErrors,
-				fmt.Sprintf("identifier '%s' contains invalid characters (would be normalized to '%s')", record.Identifier, munged))
-		}
+		return
 	}
-
-	return record
+	munged, err := wikiidentifiers.MungeIdentifier(record.Identifier)
+	if err != nil {
+		record.ValidationErrors = append(record.ValidationErrors,
+			fmt.Sprintf("identifier '%s' is invalid: %v", record.Identifier, err))
+		return
+	}
+	if munged != record.Identifier {
+		record.ValidationErrors = append(record.ValidationErrors,
+			fmt.Sprintf("identifier '%s' contains invalid characters (would be normalized to '%s')", record.Identifier, munged))
+	}
 }
 
 // parseScalarCell handles a scalar (non-array) column value.
@@ -292,20 +294,11 @@ func parseArrayCell(record *ParsedRecord, col ColumnInfo, value string, arrayVal
 	// Check for [[DELETE(value)]]
 	if matches := deleteValueRegex.FindStringSubmatch(value); matches != nil {
 		deleteValue := matches[1]
-
-		// Check for duplicate in this row
-		if arrayValues[col.FieldPath] != nil && arrayValues[col.FieldPath][deleteValue] {
+		if !trackArrayValue(arrayValues, col.FieldPath, deleteValue) {
 			record.ValidationErrors = append(record.ValidationErrors,
 				fmt.Sprintf("duplicate value '%s' for %s[]", deleteValue, col.FieldPath))
 			return
 		}
-
-		// Track this value
-		if arrayValues[col.FieldPath] == nil {
-			arrayValues[col.FieldPath] = make(map[string]bool)
-		}
-		arrayValues[col.FieldPath][deleteValue] = true
-
 		record.ArrayOps = append(record.ArrayOps, ArrayOperation{
 			FieldPath: col.FieldPath,
 			Operation: DeleteValue,
@@ -315,24 +308,29 @@ func parseArrayCell(record *ParsedRecord, col ColumnInfo, value string, arrayVal
 	}
 
 	// Regular value - ensure exists in array
-	// Check for duplicate in this row
-	if arrayValues[col.FieldPath] != nil && arrayValues[col.FieldPath][value] {
+	if !trackArrayValue(arrayValues, col.FieldPath, value) {
 		record.ValidationErrors = append(record.ValidationErrors,
 			fmt.Sprintf("duplicate value '%s' for %s[]", value, col.FieldPath))
 		return
 	}
-
-	// Track this value
-	if arrayValues[col.FieldPath] == nil {
-		arrayValues[col.FieldPath] = make(map[string]bool)
-	}
-	arrayValues[col.FieldPath][value] = true
-
 	record.ArrayOps = append(record.ArrayOps, ArrayOperation{
 		FieldPath: col.FieldPath,
 		Operation: EnsureExists,
 		Value:     value,
 	})
+}
+
+// trackArrayValue records a value for a field in the deduplication map.
+// Returns false if the value was already tracked (duplicate), true otherwise.
+func trackArrayValue(arrayValues map[string]map[string]bool, fieldPath, value string) bool {
+	if arrayValues[fieldPath] != nil && arrayValues[fieldPath][value] {
+		return false
+	}
+	if arrayValues[fieldPath] == nil {
+		arrayValues[fieldPath] = make(map[string]bool)
+	}
+	arrayValues[fieldPath][value] = true
+	return true
 }
 
 // setNestedValue sets a value in a nested map structure based on a dotted key path.

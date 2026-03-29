@@ -420,7 +420,7 @@ func setupGRPCServer(
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create gRPC server: %w", err)
 	}
-	grpcAPIServer.
+	grpcAPIServer = grpcAPIServer.
 		WithJobQueueCoordinator(site.GetJobQueueCoordinator()).
 		WithMarkdownRenderer(site.MarkdownRenderer).
 		WithTemplateExecutor(server.TemplateExecutor{}).
