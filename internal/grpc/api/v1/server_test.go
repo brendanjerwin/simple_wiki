@@ -5042,6 +5042,26 @@ var _ = Describe("NewServer", func() {
 		})
 	})
 
+	When("logger is nil", func() {
+		var err error
+
+		BeforeEach(func() {
+			_, err = v1.NewServer(
+				buildInfo,
+				noOpPageReaderMutator{},
+				noOpBleveIndexQueryer{},
+				noOpFrontmatterIndexQueryer{},
+				nil,
+				noOpChatBufferManager{},
+				noOpPageOpener{},
+			)
+		})
+
+		It("should return an error", func() {
+			Expect(err).To(MatchError("logger is required"))
+		})
+	})
+
 	When("chatBufferManager is nil", func() {
 		var err error
 
@@ -5237,6 +5257,8 @@ type MockFrontmatterIndexQueryer struct {
 	KeyExistsResultsMap map[string][]wikipage.PageIdentifier
 	PrefixMatchResults  []wikipage.PageIdentifier
 	GetValueResult      string
+	SortedByResults     []wikipage.PageIdentifier
+	GetValueResultMap   map[string]map[string]string // identifier -> key -> value
 }
 
 func (m *MockFrontmatterIndexQueryer) QueryExactMatch(dottedKeyPath wikipage.DottedKeyPath, value wikipage.Value) []wikipage.PageIdentifier {
@@ -5259,11 +5281,17 @@ func (m *MockFrontmatterIndexQueryer) QueryPrefixMatch(dottedKeyPath wikipage.Do
 }
 
 func (m *MockFrontmatterIndexQueryer) GetValue(identifier wikipage.PageIdentifier, dottedKeyPath wikipage.DottedKeyPath) wikipage.Value {
+	if m.GetValueResultMap != nil {
+		if idMap, ok := m.GetValueResultMap[string(identifier)]; ok {
+			return idMap[string(dottedKeyPath)]
+		}
+		return ""
+	}
 	return m.GetValueResult
 }
 
-func (*MockFrontmatterIndexQueryer) QueryExactMatchSortedBy(_ wikipage.DottedKeyPath, _ wikipage.Value, _ wikipage.DottedKeyPath, _ bool, _ int) []wikipage.PageIdentifier {
-	return nil
+func (m *MockFrontmatterIndexQueryer) QueryExactMatchSortedBy(_ wikipage.DottedKeyPath, _ wikipage.Value, _ wikipage.DottedKeyPath, _ bool, _ int) []wikipage.PageIdentifier {
+	return m.SortedByResults
 }
 
 // MockJobQueueCoordinator is a mock implementation for testing job queue interactions.
@@ -5290,3 +5318,199 @@ func (*noOpDispatcher) Start() {}
 func (*noOpDispatcher) Dispatch(_ func()) error {
 	return nil
 }
+
+var _ = Describe("ListPagesByFrontmatter", func() {
+	var (
+		ctx    context.Context
+		server *v1.Server
+		req    *apiv1.ListPagesByFrontmatterRequest
+		resp   *apiv1.ListPagesByFrontmatterResponse
+		err    error
+
+		mockFrontmatterIndexQueryer *MockFrontmatterIndexQueryer
+		mockPageReaderMutator       *MockPageReaderMutator
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		mockFrontmatterIndexQueryer = &MockFrontmatterIndexQueryer{}
+		mockPageReaderMutator = &MockPageReaderMutator{}
+		req = &apiv1.ListPagesByFrontmatterRequest{
+			MatchKey:  "status",
+			SortByKey: "title",
+		}
+	})
+
+	JustBeforeEach(func() {
+		server = mustNewServer(mockPageReaderMutator, nil, mockFrontmatterIndexQueryer)
+		resp, err = server.ListPagesByFrontmatter(ctx, req)
+	})
+
+	When("match_key is empty", func() {
+		BeforeEach(func() {
+			req.MatchKey = ""
+		})
+
+		It("should return an invalid argument error", func() {
+			Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "match_key is required"))
+		})
+
+		It("should return no response", func() {
+			Expect(resp).To(BeNil())
+		})
+	})
+
+	When("sort_by_key is empty", func() {
+		BeforeEach(func() {
+			req.SortByKey = ""
+		})
+
+		It("should return an invalid argument error", func() {
+			Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "sort_by_key is required"))
+		})
+
+		It("should return no response", func() {
+			Expect(resp).To(BeNil())
+		})
+	})
+
+	When("max_results is negative", func() {
+		BeforeEach(func() {
+			req.MaxResults = -1
+		})
+
+		It("should return an invalid argument error", func() {
+			Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "max_results must be >= 0"))
+		})
+
+		It("should return no response", func() {
+			Expect(resp).To(BeNil())
+		})
+	})
+
+	When("content_excerpt_max_chars is negative", func() {
+		BeforeEach(func() {
+			req.ContentExcerptMaxChars = -1
+		})
+
+		It("should return an invalid argument error", func() {
+			Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "content_excerpt_max_chars must be >= 0"))
+		})
+
+		It("should return no response", func() {
+			Expect(resp).To(BeNil())
+		})
+	})
+
+	When("no pages match the frontmatter query", func() {
+		BeforeEach(func() {
+			mockFrontmatterIndexQueryer.SortedByResults = nil
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return an empty results list", func() {
+			Expect(resp.Results).To(BeEmpty())
+		})
+	})
+
+	When("pages match the frontmatter query", func() {
+		BeforeEach(func() {
+			mockFrontmatterIndexQueryer.SortedByResults = []wikipage.PageIdentifier{"page_one", "page_two"}
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return the correct number of results", func() {
+			Expect(resp.Results).To(HaveLen(2))
+		})
+
+		It("should include page identifiers in results", func() {
+			ids := []string{resp.Results[0].Identifier, resp.Results[1].Identifier}
+			Expect(ids).To(ConsistOf("page_one", "page_two"))
+		})
+	})
+
+	When("frontmatter keys are requested and pages match", func() {
+		BeforeEach(func() {
+			mockFrontmatterIndexQueryer.SortedByResults = []wikipage.PageIdentifier{"article_one"}
+			mockFrontmatterIndexQueryer.GetValueResultMap = map[string]map[string]string{
+				"article_one": {
+					"title":  "My Article",
+					"author": "Bob",
+				},
+			}
+			req.FrontmatterKeysToReturn = []string{"title", "author"}
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should include the requested frontmatter values", func() {
+			Expect(resp.Results[0].FrontmatterValues["title"]).To(Equal("My Article"))
+			Expect(resp.Results[0].FrontmatterValues["author"]).To(Equal("Bob"))
+		})
+	})
+
+	When("content excerpts are requested and the page has content", func() {
+		BeforeEach(func() {
+			mockFrontmatterIndexQueryer.SortedByResults = []wikipage.PageIdentifier{"content_page"}
+			mockPageReaderMutator.Markdown = "Hello, this is the page content that is longer than ten chars."
+			req.ContentExcerptMaxChars = 10
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should truncate the content to the specified number of characters", func() {
+			Expect(resp.Results[0].ContentExcerpt).To(Equal("Hello, thi"))
+		})
+	})
+
+	When("content excerpts are requested but max chars is zero", func() {
+		BeforeEach(func() {
+			mockFrontmatterIndexQueryer.SortedByResults = []wikipage.PageIdentifier{"content_page"}
+			mockPageReaderMutator.Markdown = "Some content here."
+			req.ContentExcerptMaxChars = 0
+		})
+
+		It("should return an empty content excerpt", func() {
+			Expect(resp.Results[0].ContentExcerpt).To(BeEmpty())
+		})
+	})
+
+	When("content excerpts are requested but the page has no content", func() {
+		BeforeEach(func() {
+			mockFrontmatterIndexQueryer.SortedByResults = []wikipage.PageIdentifier{"empty_page"}
+			mockPageReaderMutator.MarkdownReadErr = os.ErrNotExist
+			req.ContentExcerptMaxChars = 100
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return an empty content excerpt", func() {
+			Expect(resp.Results[0].ContentExcerpt).To(BeEmpty())
+		})
+	})
+
+	When("content is shorter than max chars", func() {
+		BeforeEach(func() {
+			mockFrontmatterIndexQueryer.SortedByResults = []wikipage.PageIdentifier{"short_page"}
+			mockPageReaderMutator.Markdown = "Short."
+			req.ContentExcerptMaxChars = 1000
+		})
+
+		It("should return the full content", func() {
+			Expect(resp.Results[0].ContentExcerpt).To(Equal("Short."))
+		})
+	})
+})
+
