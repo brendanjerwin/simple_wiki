@@ -392,19 +392,36 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     }
   }
 
+  private _renderFab() {
+    if (!this._fabVisible || this.drawerOpen) return nothing;
+    const fabClass = this.claudeConnected ? 'fab' : 'fab disabled';
+    const ariaDisabled = this.claudeConnected ? 'false' : 'true';
+    return html`
+      <button
+        class="${fabClass}"
+        @click=${this.toggleDrawer}
+        aria-label="Chat with ${this.persona}"
+        aria-disabled=${ariaDisabled}
+      >
+        <i class="fa-solid fa-robot"></i>
+      </button>
+    `;
+  }
+
+  private _renderDisconnectedBanner() {
+    if (!this.claudeConnected) {
+      return html`<div class="status-banner disconnected">${this.persona} is not connected</div>`;
+    }
+    if (this.streamState === 'disconnected' && this.error) {
+      return html`<div class="status-banner disconnected">${this.error.message}</div>`;
+    }
+    return nothing;
+  }
+
   override render() {
     return html`
       ${sharedStyles}
-      ${this._fabVisible && !this.drawerOpen ? html`
-        <button
-          class="fab ${this.claudeConnected ? '' : 'disabled'}"
-          @click=${this.toggleDrawer}
-          aria-label="Chat with ${this.persona}"
-          aria-disabled=${!this.claudeConnected ? 'true' : 'false'}
-        >
-          <i class="fa-solid fa-robot"></i>
-        </button>
-      ` : nothing}
+      ${this._renderFab()}
 
       <div class="panel ${this.drawerOpen ? 'open' : ''}" ?inert=${!this.drawerOpen}>
         <div class="panel-header">
@@ -417,11 +434,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         ${this.streamState === 'reconnecting'
           ? html`<div class="status-banner reconnecting">Reconnecting...</div>`
           : nothing}
-        ${!this.claudeConnected
-          ? html`<div class="status-banner disconnected">${this.persona} is not connected</div>`
-          : this.streamState === 'disconnected' && this.error
-            ? html`<div class="status-banner disconnected">${this.error.message}</div>`
-            : nothing}
+        ${this._renderDisconnectedBanner()}
 
         <div
           class="messages-container"
@@ -607,6 +620,16 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     }
   }
 
+  private _createReconnectDelay(signal: AbortSignal, delayMs: number): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, delayMs);
+      signal.addEventListener('abort', () => {
+        clearTimeout(timer);
+        resolve();
+      }, { once: true });
+    });
+  }
+
   private async startStream(): Promise<void> {
     this.stopStream();
     this.streamSubscription = new AbortController();
@@ -633,18 +656,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         this.streamState = 'reconnecting';
         this.error = err instanceof Error ? err : new Error(String(err));
 
-        await new Promise<void>((resolve) => {
-          const timer = setTimeout(resolve, reconnectDelayMs);
-          signal.addEventListener(
-            'abort',
-            () => {
-              clearTimeout(timer);
-              resolve();
-            },
-            { once: true },
-          );
-        });
-
+        await this._createReconnectDelay(signal, reconnectDelayMs);
         reconnectDelayMs = Math.min(reconnectDelayMs * 2, MAX_RECONNECT_DELAY_MS);
       }
     }
