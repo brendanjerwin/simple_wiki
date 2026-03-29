@@ -13,7 +13,9 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-const testFileTimestamp = 1609459200 // 2021-01-01 Unix timestamp
+const (
+	testFileTimestamp = 1609459200 // 2021-01-01 Unix timestamp
+)
 
 // MockMigrationDeps provides a simple mock implementation for testing migrations
 type MockMigrationDeps struct {

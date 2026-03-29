@@ -30,7 +30,8 @@ const (
 	descriptionKey      = "description"
 	defaultMaxRecursion = 10
 
-	errMsgItemIdentifierRequired     = "item_identifier is required"
+	errItemIdentifierRequired        = "item_identifier is required"
+	errFmtInvalidItemIdentifier      = "invalid item identifier: %v"
 	errFmtInvalidContainerIdentifier = "invalid container identifier: %v"
 )
 
@@ -51,13 +52,13 @@ func (e *InvalidItemTypeError) Error() string {
 //revive:disable:function-length
 func (s *Server) CreateInventoryItem(_ context.Context, req *apiv1.CreateInventoryItemRequest) (*apiv1.CreateInventoryItemResponse, error) {
 	if req.ItemIdentifier == "" {
-		return nil, status.Error(codes.InvalidArgument, errMsgItemIdentifierRequired)
+		return nil, status.Error(codes.InvalidArgument, errItemIdentifierRequired)
 	}
 
 	// Munge the identifier to ensure consistency
 	identifier, err := wikiidentifiers.MungeIdentifier(req.ItemIdentifier)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid item identifier: %v", err)
+		return nil, status.Errorf(codes.InvalidArgument, errFmtInvalidItemIdentifier, err)
 	}
 
 	// Check if page already exists
@@ -135,12 +136,12 @@ func (s *Server) CreateInventoryItem(_ context.Context, req *apiv1.CreateInvento
 //revive:disable:function-length
 func (s *Server) MoveInventoryItem(_ context.Context, req *apiv1.MoveInventoryItemRequest) (*apiv1.MoveInventoryItemResponse, error) {
 	if req.ItemIdentifier == "" {
-		return nil, status.Error(codes.InvalidArgument, errMsgItemIdentifierRequired)
+		return nil, status.Error(codes.InvalidArgument, errItemIdentifierRequired)
 	}
 
 	identifier, err := wikiidentifiers.MungeIdentifier(req.ItemIdentifier)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid item identifier: %v", err)
+		return nil, status.Errorf(codes.InvalidArgument, errFmtInvalidItemIdentifier, err)
 	}
 	newContainer, err := mungeOptionalContainer(req.NewContainer)
 	if err != nil {
@@ -444,12 +445,12 @@ func (s *Server) buildInventoryItem(itemID, containerID string) *apiv1.Inventory
 // FindItemLocation implements the FindItemLocation RPC.
 func (s *Server) FindItemLocation(_ context.Context, req *apiv1.FindItemLocationRequest) (*apiv1.FindItemLocationResponse, error) {
 	if req.ItemIdentifier == "" {
-		return nil, status.Error(codes.InvalidArgument, errMsgItemIdentifierRequired)
+		return nil, status.Error(codes.InvalidArgument, errItemIdentifierRequired)
 	}
 
 	itemID, err := wikiidentifiers.MungeIdentifier(req.ItemIdentifier)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, "invalid item identifier: %v", err)
+		return nil, status.Errorf(codes.InvalidArgument, errFmtInvalidItemIdentifier, err)
 	}
 
 	// Read the item's frontmatter
@@ -528,31 +529,11 @@ func (s *Server) buildContainerHierarchy(containerID string) []string {
 	return path
 }
 
-// removeItemFromContainerList removes an item from a container's inventory.items list.
-func (s *Server) removeItemFromContainerList(containerID, itemID string) error {
-	_, containerFm, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(containerID))
-	if err != nil {
-		if os.IsNotExist(err) {
-			// Container doesn't exist, nothing to update
-			return nil
-		}
-		return fmt.Errorf("failed to read container frontmatter: %w", err)
-	}
-
-	inv, ok := containerFm[inventory.FrontmatterKey].(map[string]any)
-	if !ok {
-		// No inventory section, nothing to update
-		return nil
-	}
-
-	itemsRaw, ok := inv[itemsKey]
-	if !ok {
-		// No items list, nothing to update
-		return nil
-	}
-
-	// Handle both []string and []any types
-	var newItems []string
+// filterItemsExcluding returns a new slice with all items except the specified itemID.
+// Handles both []string and []any typed raw values. Returns nil for unknown types.
+// Non-string elements in []any slices are preserved as-is.
+func filterItemsExcluding(itemsRaw any, itemID string) ([]any, bool) {
+	var newItems []any
 	switch items := itemsRaw.(type) {
 	case []string:
 		for _, item := range items {
@@ -562,11 +543,39 @@ func (s *Server) removeItemFromContainerList(containerID, itemID string) error {
 		}
 	case []any:
 		for _, item := range items {
-			if itemStr, ok := item.(string); ok && itemStr != itemID {
-				newItems = append(newItems, itemStr)
+			if itemStr, ok := item.(string); ok && itemStr == itemID {
+				continue // Skip the item to be removed
 			}
+			newItems = append(newItems, item) // Keep all other items (strings and non-strings)
 		}
 	default:
+		return nil, false // Unknown type, skip
+	}
+	return newItems, true
+}
+
+// removeItemFromContainerList removes an item from a container's inventory.items list.
+func (s *Server) removeItemFromContainerList(containerID, itemID string) error {
+	_, containerFm, err := s.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(containerID))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to read container frontmatter: %w", err)
+	}
+
+	inv, ok := containerFm[inventory.FrontmatterKey].(map[string]any)
+	if !ok {
+		return nil // No inventory section, nothing to update
+	}
+
+	itemsRaw, ok := inv[itemsKey]
+	if !ok {
+		return nil // No items list, nothing to update
+	}
+
+	newItems, ok := filterItemsExcluding(itemsRaw, itemID)
+	if !ok {
 		return nil // Unknown type, skip
 	}
 
