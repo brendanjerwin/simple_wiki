@@ -357,11 +357,11 @@ export class WikiTable extends LitElement {
     this._scrollContainer?.removeEventListener('scroll', this._handleScroll);
   }
 
-  private _handleMediaChange = (e: MediaQueryListEvent): void => {
+  private readonly _handleMediaChange = (e: MediaQueryListEvent): void => {
     this.cardViewActive = e.matches;
   };
 
-  private _handleScroll = (): void => {
+  private readonly _handleScroll = (): void => {
     if (!this._scrollContainer) return;
     const { scrollLeft, scrollWidth, clientWidth } = this._scrollContainer;
     const atStart = scrollLeft <= 1;
