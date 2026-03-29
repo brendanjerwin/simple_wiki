@@ -206,7 +206,7 @@ export class ConfirmationInterlockButton extends LitElement {
     }
   }
 
-  private _handleBackdropClick = (): void => {
+  private readonly _handleBackdropClick = (): void => {
     this.disarm();
   };
 
@@ -316,17 +316,17 @@ export class ConfirmationInterlockButton extends LitElement {
     }
   }
 
-  private _handleTriggerClick = (): void => {
+  private readonly _handleTriggerClick = (): void => {
     this.arm();
   };
 
-  private _handleYesClick = (): void => {
+  private readonly _handleYesClick = (): void => {
     this._clearDisarmTimer();
     this.armed = false;
     this.dispatchEvent(new CustomEvent('confirmed', { bubbles: true, composed: true }));
   };
 
-  private _handleNoClick = (): void => {
+  private readonly _handleNoClick = (): void => {
     this.disarm();
     this.dispatchEvent(new CustomEvent('cancelled', { bubbles: true, composed: true }));
   };
