@@ -604,6 +604,27 @@ export class QrScanner extends LitElement {
   }
 
   override render() {
+    const toggleAriaLabel = this.expanded ? 'Close QR code scanner' : 'Open QR code scanner';
+    const toggleButtonLabel = this.expanded ? 'Close Scanner' : 'Scan QR Code';
+    const cameraSelectSection = this.cameras.length > 1
+      ? html`
+          <div class="camera-select">
+            <label for="camera-select">Camera</label>
+            <select
+              id="camera-select"
+              .value=${this.selectedCameraId || ''}
+              @change=${this._handleCameraChange}
+            >
+              ${this.cameras.map(
+                camera => html`
+                  <option value=${camera.id}>${camera.label}</option>
+                `
+              )}
+            </select>
+          </div>
+        `
+      : nothing;
+
     return html`
       ${sharedStyles}
       <div class="scanner-container">
@@ -614,10 +635,10 @@ export class QrScanner extends LitElement {
                 part="toggle"
                 @click=${this.toggle}
                 ?disabled=${this.loading}
-                aria-label=${this.expanded ? 'Close QR code scanner' : 'Open QR code scanner'}
+                aria-label=${toggleAriaLabel}
               >
                 <span class="icon"><i class="fa-solid fa-qrcode"></i></span>
-                ${this.expanded ? 'Close Scanner' : 'Scan QR Code'}
+                ${toggleButtonLabel}
               </button>
             `
           : nothing}
@@ -640,24 +661,7 @@ export class QrScanner extends LitElement {
 
           ${!this.embedded
             ? html`
-                ${this.cameras.length > 1
-                  ? html`
-                      <div class="camera-select">
-                        <label for="camera-select">Camera</label>
-                        <select
-                          id="camera-select"
-                          .value=${this.selectedCameraId || ''}
-                          @change=${this._handleCameraChange}
-                        >
-                          ${this.cameras.map(
-                            camera => html`
-                              <option value=${camera.id}>${camera.label}</option>
-                            `
-                          )}
-                        </select>
-                      </div>
-                    `
-                  : nothing}
+                ${cameraSelectSection}
 
                 <div class="scanner-controls">
                   <button class="stop-button" @click=${this._handleStopClick}>
