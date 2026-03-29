@@ -167,20 +167,32 @@ describe('EditorUploadService', () => {
   });
 
   describe('openFilePicker (via selectAndUploadFile)', () => {
-    let clickStub: SinonStub;
-
-    afterEach(() => {
-      clickStub?.restore();
-    });
+    function waitForInputAppended(): Promise<HTMLInputElement> {
+      return new Promise<HTMLInputElement>((resolve) => {
+        const observer = new MutationObserver((mutations) => {
+          for (const mutation of mutations) {
+            for (const node of mutation.addedNodes) {
+              if (node instanceof HTMLInputElement) {
+                observer.disconnect();
+                resolve(node);
+                return;
+              }
+            }
+          }
+        });
+        observer.observe(document.body, { childList: true });
+      });
+    }
 
     describe('when the cancel event fires', () => {
       let result: UploadResult | undefined;
 
       beforeEach(async () => {
-        clickStub = stub(HTMLInputElement.prototype, 'click').callsFake(function(this: HTMLInputElement) {
-          this.dispatchEvent(new Event('cancel'));
-        });
-        result = await service.selectAndUploadFile();
+        const inputAddedPromise = waitForInputAppended();
+        const resultPromise = service.selectAndUploadFile();
+        const input = await inputAddedPromise;
+        input.dispatchEvent(new Event('cancel'));
+        result = await resultPromise;
       });
 
       it('should return undefined', () => {
@@ -192,10 +204,11 @@ describe('EditorUploadService', () => {
       let result: UploadResult | undefined;
 
       beforeEach(async () => {
-        clickStub = stub(HTMLInputElement.prototype, 'click').callsFake(function(this: HTMLInputElement) {
-          this.dispatchEvent(new Event('change'));
-        });
-        result = await service.selectAndUploadFile();
+        const inputAddedPromise = waitForInputAppended();
+        const resultPromise = service.selectAndUploadFile();
+        const input = await inputAddedPromise;
+        input.dispatchEvent(new Event('change'));
+        result = await resultPromise;
       });
 
       it('should return undefined', () => {
