@@ -192,7 +192,7 @@ export class FrontmatterEditorDialog extends LitElement {
     }
   }
 
-  private _handleSectionChange = (event: CustomEvent<SectionChangeEventDetail>): void => {
+  private readonly _handleSectionChange = (event: CustomEvent<SectionChangeEventDetail>): void => {
     const { newFields } = event.detail;
     this.workingFrontmatter = newFields;
     this.requestUpdate();
