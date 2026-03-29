@@ -249,7 +249,10 @@ func BuildLinkToWithVisited(site wikipage.PageReader, currentPageTemplateContext
 
 		resolvedIdentifier, frontmatterForLinkedPage, err := site.ReadFrontMatter(wikipage.PageIdentifier(identifierToLink))
 		if err != nil {
-			return buildNewPageLink(identifierToLink, isContainer(currentPageTemplateContext.Identifier), currentPageTemplateContext.Identifier)
+			if isContainer(currentPageTemplateContext.Identifier) {
+				return buildNewContainerPageLink(identifierToLink, currentPageTemplateContext.Identifier)
+			}
+			return buildNewPageLink(identifierToLink)
 		}
 
 		return buildExistingPageLink(string(resolvedIdentifier), frontmatterForLinkedPage)
@@ -266,7 +269,7 @@ func buildCircularReferenceLink(identifierToLink string) string {
 	return "[" + titleCasedTitle + " (circular reference)](/" + mungedIdentifier + ")"
 }
 
-func buildNewPageLink(identifierToLink string, isContainerPage bool, containerIdentifier string) string {
+func buildNewPageLink(identifierToLink string) string {
 	titleCaser := cases.Title(language.AmericanEnglish)
 	titleCasedTitle := titleCaser.String(strings.ReplaceAll(strcase.SnakeCase(identifierToLink), "_", singleSpace))
 	urlEncodedTitle := url.QueryEscape(titleCasedTitle)
@@ -274,10 +277,18 @@ func buildNewPageLink(identifierToLink string, isContainerPage bool, containerId
 	if err != nil {
 		return fmt.Sprintf("[ERROR: LinkTo new page, munging %q: %v]", identifierToLink, err)
 	}
-	if isContainerPage {
-		return "[" + titleCasedTitle + "](/" + mungedIdentifier + "?tmpl=inv_item&inventory.container=" + containerIdentifier + "&title=" + urlEncodedTitle + ")"
-	}
 	return "[" + titleCasedTitle + "](/" + mungedIdentifier + "?title=" + urlEncodedTitle + ")"
+}
+
+func buildNewContainerPageLink(identifierToLink string, containerIdentifier string) string {
+	titleCaser := cases.Title(language.AmericanEnglish)
+	titleCasedTitle := titleCaser.String(strings.ReplaceAll(strcase.SnakeCase(identifierToLink), "_", singleSpace))
+	urlEncodedTitle := url.QueryEscape(titleCasedTitle)
+	mungedIdentifier, err := wikiidentifiers.MungeIdentifier(identifierToLink)
+	if err != nil {
+		return fmt.Sprintf("[ERROR: LinkTo new page, munging %q: %v]", identifierToLink, err)
+	}
+	return "[" + titleCasedTitle + "](/" + mungedIdentifier + "?tmpl=inv_item&inventory.container=" + containerIdentifier + "&title=" + urlEncodedTitle + ")"
 }
 
 func buildExistingPageLink(resolvedIdentifier string, frontmatter wikipage.FrontMatter) string {

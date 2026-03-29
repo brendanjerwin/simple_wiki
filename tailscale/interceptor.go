@@ -42,7 +42,7 @@ func IdentityStreamInterceptor(resolver IdentityResolver, logger *lumber.Console
 		ctx := resolveIdentityToContext(ss.Context(), resolver, logger)
 		wrappedStream := &serverStreamWithContext{
 			ServerStream: ss,
-			getContext:   func() context.Context { return ctx },
+			ctx:          ctx,
 		}
 		return handler(srv, wrappedStream)
 	}, nil
@@ -51,12 +51,12 @@ func IdentityStreamInterceptor(resolver IdentityResolver, logger *lumber.Console
 // serverStreamWithContext wraps a grpc.ServerStream to provide a custom context.
 type serverStreamWithContext struct {
 	grpc.ServerStream
-	getContext func() context.Context
+	ctx context.Context
 }
 
 // Context returns the wrapped context with identity.
 func (s *serverStreamWithContext) Context() context.Context {
-	return s.getContext()
+	return s.ctx
 }
 
 // resolveIdentityToContext extracts Tailscale identity and returns a context with it.
