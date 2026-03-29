@@ -133,7 +133,7 @@ if [ "$SKIP_GENERATE" != "true" ]; then
 
     # Derive extension version from git tag if available
     # Firefox requires 1-4 dot-separated integers, so strip 'v' prefix and pre-release suffix
-    if [ -n "$TAG" ]; then
+    if [[ -n "$TAG" ]]; then
         EXT_VER="${TAG#v}"
         EXT_VER="${EXT_VER%%-*}"
         if [[ "$EXT_VER" =~ ^[0-9]+(\.[0-9]+){0,3}$ ]]; then
