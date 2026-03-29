@@ -25,12 +25,12 @@ interface StorageEnvelope {
 export function computeTableHash(headerTexts: string[], cellValues: string[][]): string {
   const content = headerTexts.join('\0') + '\0\0' +
     cellValues.map(row => row.join('\0')).join('\n');
-  let hash = 0;
+  const buf = new Int32Array(1);
   for (let i = 0; i < content.length; i++) {
     const char = content.charCodeAt(i);
-    hash = Math.trunc((hash << 5) - hash + char);
+    buf[0] = (buf[0] << 5) - buf[0] + char;
   }
-  return (hash >>> 0).toString(36);
+  return (buf[0] >>> 0).toString(36);
 }
 
 export function serializeFilter(filter: ColumnFilterState): SerializedFilterState {
