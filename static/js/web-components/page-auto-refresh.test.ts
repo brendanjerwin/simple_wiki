@@ -27,10 +27,10 @@ describe('PageAutoRefresh', () => {
   describe('page-name attribute mapping', () => {
     let el: PageAutoRefresh;
 
-    beforeEach(async () => {
-      el = await fixture<PageAutoRefresh>(
-        html`<page-auto-refresh page-name="test-page"></page-auto-refresh>`,
-      );
+    beforeEach(() => {
+      // Create without appending to DOM — prevents connectedCallback from calling startWatching
+      el = document.createElement('page-auto-refresh') as PageAutoRefresh;
+      el.setAttribute('page-name', 'test-page');
     });
 
     it('should map page-name attribute to pageName property', () => {
@@ -60,13 +60,19 @@ describe('PageAutoRefresh', () => {
       beforeEach(async () => {
         fetchStub.rejects(new Error('Network error'));
 
-        el = await fixture<PageAutoRefresh>(
-          html`<page-auto-refresh page-name="my-page"></page-auto-refresh>`,
-        );
+        // Stub startWatching before connecting to prevent gRPC reconnect loop from
+        // racing with refreshPageContent and capturing the page-watch-error event first
+        el = document.createElement('page-auto-refresh') as PageAutoRefresh;
+        sinon.stub(el as unknown as { startWatching: () => void }, 'startWatching');
+        el.setAttribute('page-name', 'my-page');
+        document.body.appendChild(el);
+        await el.updateComplete;
 
         errorEvent = undefined;
-        const errorReceived = new Promise<void>(resolve => {
+        const errorReceived = new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(() => reject(new Error('page-watch-error event timed out')), 3000);
           document.addEventListener('page-watch-error', (e: Event) => {
+            clearTimeout(timeout);
             errorEvent = e as CustomEvent;
             resolve();
           }, { once: true });
@@ -83,6 +89,7 @@ describe('PageAutoRefresh', () => {
 
       afterEach(() => {
         el.remove();
+        sinon.restore();
       });
 
       it('should dispatch page-watch-error', () => {
@@ -236,9 +243,25 @@ describe('PageAutoRefresh', () => {
     beforeEach(async () => {
       receivedEvents = [];
 
-      // Register listener before fixture so we catch synchronous dispatch during connectedCallback
-      const firstEventReceived = new Promise<void>(resolve => {
+      el = document.createElement('page-auto-refresh') as PageAutoRefresh;
+      const privateEl = el as unknown as {
+        isWatching: boolean;
+        dispatchPageStatusEvent: () => void;
+        startWatching: () => void;
+      };
+
+      // Stub startWatching before connecting to DOM to prevent real gRPC calls.
+      // The fake simulates the initial status dispatch that startWatching performs.
+      sinon.stub(privateEl, 'startWatching')
+        .callsFake(() => {
+          privateEl.isWatching = true;
+          privateEl.dispatchPageStatusEvent();
+        });
+
+      const firstEventReceived = new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('page-status-changed event timed out')), 3000);
         const handler = (e: Event) => {
+          clearTimeout(timeout);
           receivedEvents.push(e as CustomEvent);
           document.removeEventListener('page-status-changed', handler);
           resolve();
@@ -246,17 +269,19 @@ describe('PageAutoRefresh', () => {
         document.addEventListener('page-status-changed', handler);
       });
 
-      el = await fixture<PageAutoRefresh>(
-        html`<page-auto-refresh page-name="my-page"></page-auto-refresh>`,
-      );
+      // Append first (without pageName), then set pageName to trigger the updated() lifecycle path
+      document.body.appendChild(el);
+      await el.updateComplete;
 
-      // Wait for the first status event (dispatched synchronously during connectedCallback)
+      el.pageName = 'my-page';
+      await el.updateComplete;
+
       await firstEventReceived;
     });
 
     afterEach(() => {
-      // Ensure any additional event listeners are cleaned up when el disconnects
       el.remove();
+      sinon.restore();
     });
 
     it('should dispatch at least one event', () => {
