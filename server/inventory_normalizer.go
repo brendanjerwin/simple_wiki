@@ -144,7 +144,13 @@ func (n *InventoryNormalizer) GetContainerItems(containerID wikipage.PageIdentif
 		return nil, nil // No items array
 	}
 
-	// Handle both []string and []any - munge all identifiers for consistency
+	return mungeItemIdentifiers(itemsRaw, containerID)
+}
+
+// mungeItemIdentifiers munges all item identifiers from a raw items value.
+// Handles both []string and []any typed values.
+// Returns an error if any item identifier is invalid.
+func mungeItemIdentifiers(itemsRaw any, containerID wikipage.PageIdentifier) ([]string, error) {
 	var items []string
 	switch v := itemsRaw.(type) {
 	case []string:
@@ -166,7 +172,6 @@ func (n *InventoryNormalizer) GetContainerItems(containerID wikipage.PageIdentif
 			}
 		}
 	}
-
 	return items, nil
 }
 

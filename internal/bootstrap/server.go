@@ -30,6 +30,9 @@ const (
 	// Format: second minute hour day-of-month month day-of-week
 	// This runs every 5 seconds.
 	metricsFlushCronExpression = "*/5 * * * * *"
+
+	errCreateHandlerFmt  = "failed to create handler: %w"
+	errCreateListenerFmt = "failed to create HTTP listener: %w"
 )
 
 // ServerResult holds the created server and listener.
@@ -66,12 +69,12 @@ func SetupPlainHTTP(
 
 	handler, metricsCleanup, err := createMultiplexedHandler(site, logger, commit, buildTime, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create handler: %w", err)
+		return nil, fmt.Errorf(errCreateHandlerFmt, err)
 	}
 
 	httpListener, err := net.Listen(networkTCP, httpAddr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create HTTP listener: %w", err)
+		return nil, fmt.Errorf(errCreateListenerFmt, err)
 	}
 
 	return &ServerResult{
@@ -102,12 +105,12 @@ func SetupTailscaleServe(
 	identityResolver := tailscale.NewIdentityResolver()
 	handler, metricsCleanup, err := createMultiplexedHandler(site, logger, commit, buildTime, identityResolver)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create handler: %w", err)
+		return nil, fmt.Errorf(errCreateHandlerFmt, err)
 	}
 
 	httpListener, err := net.Listen(networkTCP, httpAddr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create HTTP listener: %w", err)
+		return nil, fmt.Errorf(errCreateListenerFmt, err)
 	}
 
 	finalHandler := h2c.NewHandler(handler, &http2.Server{})
@@ -145,7 +148,7 @@ func SetupFullTLS(
 	identityResolver := tailscale.NewIdentityResolver()
 	handler, metricsCleanup, err := createMultiplexedHandler(site, logger, commit, buildTime, identityResolver)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create handler: %w", err)
+		return nil, fmt.Errorf(errCreateHandlerFmt, err)
 	}
 
 	// Parse host from httpAddr
@@ -178,7 +181,7 @@ func SetupFullTLS(
 		if closeErr := tlsListener.Close(); closeErr != nil {
 			logger.Error("failed to close TLS listener: %v", closeErr)
 		}
-		return nil, fmt.Errorf("failed to create HTTP listener: %w", err)
+		return nil, fmt.Errorf(errCreateListenerFmt, err)
 	}
 
 	logger.Info("HTTP server listening on %s (redirects tailnet, serves others)", httpAddr)
@@ -326,7 +329,9 @@ func setupWikiMetrics(site *server.Site, logger *lumber.ConsoleLogger) (observab
 	)
 	if err != nil {
 		logger.Warn("Failed to create wiki metrics recorder, metrics disabled: %v", err)
-		return observability.NewCompositeRequestCounter(), func() {}
+		return observability.NewCompositeRequestCounter(), func() {
+			// intentionally empty — no metrics to clean up when recorder creation fails
+		}
 	}
 
 	counters := observability.NewCompositeRequestCounter(wikiRecorder)
