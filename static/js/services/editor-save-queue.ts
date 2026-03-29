@@ -14,9 +14,9 @@ export type StatusCallback = (status: SaveStatus, error?: Error) => void;
  * queues another save if content changes while a save is in progress.
  */
 export class EditorSaveQueue {
-  private debounceMs: number;
-  private saveFn: SaveFunction;
-  private onStatusChange: StatusCallback;
+  private readonly debounceMs: number;
+  private readonly saveFn: SaveFunction;
+  private readonly onStatusChange: StatusCallback;
   private timerId: ReturnType<typeof setTimeout> | null = null;
   private saving = false;
   private pendingContent: string | null = null;
