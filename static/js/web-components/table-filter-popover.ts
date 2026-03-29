@@ -2,7 +2,7 @@ import type { TemplateResult } from 'lit';
 import { html, css, LitElement, nothing } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import type { TableColumnDefinition } from './table-data-extractor.js';
-import type { SortDirection, ColumnFilterState } from './table-sorter-filterer.js';
+import type { SortDirection, ColumnFilterState, CheckboxFilterState } from './table-sorter-filterer.js';
 
 const CHECKBOX_THRESHOLD = 15;
 
@@ -439,12 +439,12 @@ export class TableFilterPopover extends LitElement {
     }
   }
 
-  private _checkboxFiltersEqual(newFilter: { excludedValues: Set<string> }, oldFilter: { excludedValues: Set<string> }): boolean {
-    if (newFilter.excludedValues.size !== oldFilter.excludedValues.size) return false;
+  private _checkboxFiltersChanged(newFilter: CheckboxFilterState, oldFilter: CheckboxFilterState): boolean {
+    if (newFilter.excludedValues.size !== oldFilter.excludedValues.size) return true;
     for (const v of newFilter.excludedValues) {
-      if (!oldFilter.excludedValues.has(v)) return false;
+      if (!oldFilter.excludedValues.has(v)) return true;
     }
-    return true;
+    return false;
   }
 
   private _filtersChanged(): boolean {
@@ -456,7 +456,7 @@ export class TableFilterPopover extends LitElement {
     if (newFilter.kind !== oldFilter.kind) return true;
 
     if (newFilter.kind === 'checkbox' && oldFilter.kind === 'checkbox') {
-      return !this._checkboxFiltersEqual(newFilter, oldFilter);
+      return this._checkboxFiltersChanged(newFilter, oldFilter);
     }
     if (newFilter.kind === 'range' && oldFilter.kind === 'range') {
       return newFilter.min !== oldFilter.min || newFilter.max !== oldFilter.max;
