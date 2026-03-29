@@ -12,7 +12,7 @@ const numberPattern = /^-?[\d,]+\.?\d*$/;
 const integerPattern = /^-?[\d,]+$/;
 const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
 const usDatePattern = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
-const humanDatePattern = /^[A-Z][a-z]{2}\s+\d{1,2},?\s+\d{4}$/;
+const humanDatePattern = /^[A-Z][a-z]{2}\s{1,10}\d{1,2},?\s{1,10}\d{4}$/;
 
 const confidenceThreshold = 0.7;
 
@@ -117,8 +117,8 @@ export function parseDateValue(text: string): number {
 export function parseCurrencyValue(text: string): number {
   const trimmed = text.trim();
   if (trimmed === '') return NaN;
-  const negative = trimmed.startsWith('-') || /^[$€£¥]\s*-/.test(trimmed);
-  const cleaned = trimmed.replace(/^-?\s*[$€£¥]\s*-?/, '').replace(/,/g, '');
+  const negative = trimmed.startsWith('-') || /^[$€£¥]\s{0,10}-/.test(trimmed);
+  const cleaned = trimmed.replace(/^-?\s{0,10}[$€£¥]\s{0,10}-?/, '').replace(/,/g, '');
   if (cleaned === '') return NaN;
   const value = Number(cleaned);
   if (Number.isNaN(value)) {
