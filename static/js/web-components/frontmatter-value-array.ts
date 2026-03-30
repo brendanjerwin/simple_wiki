@@ -91,22 +91,19 @@ export class FrontmatterValueArray extends LitElement {
     
     this.values = newArray;
     this._dispatchArrayChange(oldArray, newArray);
-    this.requestUpdate();
   };
 
   private readonly _handleRemoveItem = (index: number): void => {
     const oldArray = [...this.values];
     const newArray = this.values.filter((_, i) => i !== index);
-    
+
     this.values = newArray;
     this._dispatchArrayChange(oldArray, newArray);
-    this.requestUpdate();
   };
 
   private readonly _handleItemChange = (event: CustomEvent, index: number): void => {
     const oldArray = [...this.values];
-    const newArray = [...this.values];
-    newArray[index] = event.detail.newValue;
+    const newArray = this.values.map((value, i) => (i === index ? event.detail.newValue : value));
     
     this.values = newArray;
     this._dispatchArrayChange(oldArray, newArray);

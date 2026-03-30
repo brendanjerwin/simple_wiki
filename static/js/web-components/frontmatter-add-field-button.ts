@@ -52,18 +52,8 @@ export class FrontmatterAddFieldButton extends LitElement {
     }
   };
 
-  private readonly _handleAddField = (): void => {
-    this._dispatchAddEvent('field');
-    this.open = false;
-  };
-
-  private readonly _handleAddArray = (): void => {
-    this._dispatchAddEvent('array');
-    this.open = false;
-  };
-
-  private readonly _handleAddSection = (): void => {
-    this._dispatchAddEvent('section');
+  private readonly _handleAdd = (type: 'field' | 'array' | 'section'): void => {
+    this._dispatchAddEvent(type);
     this.open = false;
   };
 
@@ -86,9 +76,9 @@ export class FrontmatterAddFieldButton extends LitElement {
       </button>
       ${this.open ? html`
         <div class="dropdown-menu border-radius">
-          <button class="dropdown-item" @click="${this._handleAddField}">Add Field</button>
-          <button class="dropdown-item" @click="${this._handleAddArray}">Add Array</button>
-          <button class="dropdown-item" @click="${this._handleAddSection}">Add Section</button>
+          <button class="dropdown-item" @click="${() => this._handleAdd('field')}">Add Field</button>
+          <button class="dropdown-item" @click="${() => this._handleAdd('array')}">Add Array</button>
+          <button class="dropdown-item" @click="${() => this._handleAdd('section')}">Add Section</button>
         </div>
       ` : ''}
     `;
