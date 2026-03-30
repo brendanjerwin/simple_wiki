@@ -217,7 +217,7 @@ export class WikiImage extends LitElement {
     document.removeEventListener('click', this._handleDocumentClick);
   }
 
-  private _handleDocumentClick = (e: Event): void => {
+  private readonly _handleDocumentClick = (e: Event): void => {
     const path = e.composedPath();
 
     // Check if click was on a tool button or close button - let them handle themselves

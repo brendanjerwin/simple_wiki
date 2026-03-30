@@ -614,27 +614,27 @@ export class PageImportDialog extends LitElement {
     this._streamAbortController = null;
   }
 
-  private _handleBackdropClick = (): void => {
+  private readonly _handleBackdropClick = (): void => {
     this.closeDialog();
   };
 
-  private _handleDialogClick = (event: Event): void => {
+  private readonly _handleDialogClick = (event: Event): void => {
     event.stopPropagation();
   };
 
-  private _handleDragOver = (event: DragEvent): void => {
+  private readonly _handleDragOver = (event: DragEvent): void => {
     event.preventDefault();
     event.stopPropagation();
     this.dragOver = true;
   };
 
-  private _handleDragLeave = (event: DragEvent): void => {
+  private readonly _handleDragLeave = (event: DragEvent): void => {
     event.preventDefault();
     event.stopPropagation();
     this.dragOver = false;
   };
 
-  private _handleDrop = (event: DragEvent): void => {
+  private readonly _handleDrop = (event: DragEvent): void => {
     event.preventDefault();
     event.stopPropagation();
     this.dragOver = false;
@@ -646,7 +646,7 @@ export class PageImportDialog extends LitElement {
     }
   };
 
-  private _handleFileInputChange = (event: Event): void => {
+  private readonly _handleFileInputChange = (event: Event): void => {
     if (!(event.target instanceof HTMLInputElement)) {
       return;
     }
@@ -672,7 +672,7 @@ export class PageImportDialog extends LitElement {
     this._handleParse();
   }
 
-  private _handleSelectFileClick = (): void => {
+  private readonly _handleSelectFileClick = (): void => {
     const input = this.shadowRoot?.querySelector<HTMLInputElement>('.file-input');
     input?.click();
   };
@@ -804,19 +804,19 @@ export class PageImportDialog extends LitElement {
     return this.stats.errors === 0 && this.stats.total > 0;
   }
 
-  private _handlePrevRecord = (): void => {
+  private readonly _handlePrevRecord = (): void => {
     if (this.currentRecordIndex > 0) {
       this.currentRecordIndex--;
     }
   };
 
-  private _handleNextRecord = (): void => {
+  private readonly _handleNextRecord = (): void => {
     if (this.currentRecordIndex < this.filteredRecords.length - 1) {
       this.currentRecordIndex++;
     }
   };
 
-  private _handleShowErrorsOnlyChange = (event: Event): void => {
+  private readonly _handleShowErrorsOnlyChange = (event: Event): void => {
     if (!(event.target instanceof HTMLInputElement)) {
       return;
     }

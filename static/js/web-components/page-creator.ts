@@ -33,8 +33,8 @@ const ERROR_TOAST_DURATION_SECONDS = 8;
  * ```
  */
 export class PageCreator {
-  private pageManagementClient = createClient(PageManagementService, getGrpcWebTransport());
-  private frontmatterClient = createClient(Frontmatter, getGrpcWebTransport());
+  private readonly pageManagementClient = createClient(PageManagementService, getGrpcWebTransport());
+  private readonly frontmatterClient = createClient(Frontmatter, getGrpcWebTransport());
 
   /**
    * Lists all available page templates
