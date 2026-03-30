@@ -7,7 +7,7 @@ vi.mock('./components/settings-panel.js', () => ({ SettingsPanel: class {} }));
 
 async function importPopup(): Promise<void> {
   await import('./popup.js');
-  // Wait a microtask for the loadPendingOrders promise to settle
+  // Yield to the event loop for the loadPendingOrders promise to settle
   await new Promise<void>(resolve => { setTimeout(resolve, 0); });
 }
 
