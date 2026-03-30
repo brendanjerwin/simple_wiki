@@ -133,21 +133,6 @@ body.EditPage div#wrap {
   }
 }
 
-/*
-@media (min-width: 50em) {
-
-  div#rendered {
-    padding-left: 10%;
-    padding-right: 10%;
-  }
-
-  .pure-menu-disabled,
-  .pure-menu-heading,
-  .pure-menu-link {
-    padding: 0.5em 1em;
-  }
-}
-*/
 @media (min-width: 70em) {
 
   div#rendered {

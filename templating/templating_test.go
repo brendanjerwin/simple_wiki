@@ -1493,43 +1493,86 @@ var _ = Describe("BuildChecklist", func() {
 	var (
 		templateContext templating.TemplateContext
 		checklistFunc   func(string) string
+		result          string
 	)
 
 	BeforeEach(func() {
 		templateContext = templating.TemplateContext{
-			Identifier: "my_page_id",
+			Identifier: "my_page",
 			Title:      "My Page",
 		}
 		checklistFunc = templating.BuildChecklist(templateContext)
 	})
 
-	It("should return a wiki-checklist tag", func() {
-		result := checklistFunc("grocery_list")
-		Expect(result).To(ContainSubstring("<wiki-checklist"))
-		Expect(result).To(ContainSubstring("</wiki-checklist>"))
+	When("rendering a checklist", func() {
+		BeforeEach(func() {
+			result = checklistFunc("my-list")
+		})
+
+		It("should produce the correct wiki-checklist element", func() {
+			Expect(result).To(Equal(`<wiki-checklist list-name="my-list" page="my_page"></wiki-checklist>`))
+		})
 	})
 
-	It("should include the list-name attribute matching the argument", func() {
-		result := checklistFunc("grocery_list")
-		Expect(result).To(ContainSubstring(`list-name="grocery_list"`))
+	When("rendering a checklist for a different page identifier", func() {
+		BeforeEach(func() {
+			otherContext := templating.TemplateContext{
+				Identifier: "other_page",
+				Title:      "Other Page",
+			}
+			otherChecklistFunc := templating.BuildChecklist(otherContext)
+			result = otherChecklistFunc("my-list")
+		})
+
+		It("should use the correct page identifier in the output", func() {
+			Expect(result).To(Equal(`<wiki-checklist list-name="my-list" page="other_page"></wiki-checklist>`))
+		})
 	})
 
-	It("should include the page attribute matching the page identifier", func() {
-		result := checklistFunc("grocery_list")
-		Expect(result).To(ContainSubstring(`page="my_page_id"`))
+	When("list name contains special characters", func() {
+		BeforeEach(func() {
+			result = checklistFunc(`<script>alert("xss")</script>`)
+		})
+
+		It("should properly escape the list-name attribute", func() {
+			Expect(result).NotTo(ContainSubstring("<script>"))
+			Expect(result).To(ContainSubstring(`list-name="&lt;script&gt;alert(&#34;xss&#34;)&lt;/script&gt;"`))
+		})
 	})
 
-	It("should use different list names correctly", func() {
-		result := checklistFunc("todo_list")
-		Expect(result).To(ContainSubstring(`list-name="todo_list"`))
-		Expect(result).To(ContainSubstring(`page="my_page_id"`))
-	})
+	When("used in full template execution", func() {
+		var (
+			mockSite   *mockPageReader
+			mockIndex  *mockFrontmatterIndex
+			execResult []byte
+			execErr    error
+		)
 
-	It("should use a different page identifier correctly", func() {
-		otherContext := templating.TemplateContext{Identifier: "other_page"}
-		otherFunc := templating.BuildChecklist(otherContext)
-		result := otherFunc("my_list")
-		Expect(result).To(ContainSubstring(`page="other_page"`))
+		BeforeEach(func() {
+			mockSite = &mockPageReader{
+				pages: map[string]wikipage.FrontMatter{},
+			}
+			mockIndex = &mockFrontmatterIndex{
+				index:  map[string]map[string][]wikipage.PageIdentifier{},
+				values: map[string]map[string]string{},
+			}
+
+			templateString := `{{ Checklist "my-list" }}`
+			frontmatter := wikipage.FrontMatter{
+				identifierKey: "test_page",
+				titleKey:      "Test Page",
+			}
+
+			execResult, execErr = templating.ExecuteTemplate(templateString, frontmatter, mockSite, mockIndex)
+		})
+
+		It("should not return an error", func() {
+			Expect(execErr).NotTo(HaveOccurred())
+		})
+
+		It("should render the correct wiki-checklist element", func() {
+			Expect(string(execResult)).To(Equal(`<wiki-checklist list-name="my-list" page="test_page"></wiki-checklist>`))
+		})
 	})
 
 	Describe("when frontmatter has checklist items", func() {

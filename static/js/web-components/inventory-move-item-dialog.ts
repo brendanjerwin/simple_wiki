@@ -265,10 +265,10 @@ export class InventoryMoveItemDialog extends LitElement {
   @state()
   declare scanError: AugmentedError | null;
 
-  private _searchDebounceTimeoutMs = 300;
+  private readonly _searchDebounceTimeoutMs = 300;
   private _searchDebounceTimer?: ReturnType<typeof setTimeout>;
-  private searchClient = createClient(SearchService, getGrpcWebTransport());
-  private inventoryItemCreatorMover = new InventoryItemCreatorMover();
+  private readonly searchClient = createClient(SearchService, getGrpcWebTransport());
+  private readonly inventoryItemCreatorMover = new InventoryItemCreatorMover();
 
   constructor() {
     super();
@@ -305,7 +305,7 @@ export class InventoryMoveItemDialog extends LitElement {
     }
   }
 
-  private _handleKeydown = (event: KeyboardEvent): void => {
+  private readonly _handleKeydown = (event: KeyboardEvent): void => {
     if (event.key === 'Escape' && this.open) {
       this.close();
     }
@@ -348,17 +348,17 @@ export class InventoryMoveItemDialog extends LitElement {
     this.scanError = null;
   }
 
-  private _handleBackdropClick = (): void => {
+  private readonly _handleBackdropClick = (): void => {
     if (!this.movingTo) {
       this.close();
     }
   };
 
-  private _handleDialogClick = (event: Event): void => {
+  private readonly _handleDialogClick = (event: Event): void => {
     event.stopPropagation();
   };
 
-  private _handleSearchInput = (event: Event): void => {
+  private readonly _handleSearchInput = (event: Event): void => {
     if (!(event.target instanceof HTMLInputElement)) {
       return;
     }
@@ -410,7 +410,7 @@ export class InventoryMoveItemDialog extends LitElement {
     }
   }
 
-  private _handleCancel = (): void => {
+  private readonly _handleCancel = (): void => {
     if (!this.movingTo) {
       this.close();
     }
@@ -419,7 +419,7 @@ export class InventoryMoveItemDialog extends LitElement {
   /**
    * Handle item scanned from inventory-qr-scanner
    */
-  private _handleItemScanned = (event: CustomEvent<ItemScannedEventDetail>): void => {
+  private readonly _handleItemScanned = (event: CustomEvent<ItemScannedEventDetail>): void => {
     const { item } = event.detail;
 
     // Clear any previous scan state
@@ -456,14 +456,14 @@ export class InventoryMoveItemDialog extends LitElement {
   /**
    * Handle cancelled event from inventory-qr-scanner
    */
-  private _handleScannerCancelled = (): void => {
+  private readonly _handleScannerCancelled = (): void => {
     this._exitScannerMode();
   };
 
   /**
    * Clear the scanned result
    */
-  private _clearScannedResult = (): void => {
+  private readonly _clearScannedResult = (): void => {
     this.scannedDestination = null;
     this.scannedResult = null;
     this.scanError = null;
@@ -472,7 +472,7 @@ export class InventoryMoveItemDialog extends LitElement {
   /**
    * Enter scanner mode - replaces search UI with scanner component
    */
-  private _enterScannerMode = (): void => {
+  private readonly _enterScannerMode = (): void => {
     this.scannerMode = true;
     this._clearScannedResult();
     // Clear search state when switching to scanner mode
@@ -490,20 +490,20 @@ export class InventoryMoveItemDialog extends LitElement {
   /**
    * Exit scanner mode - returns to search UI
    */
-  private _exitScannerMode = (): void => {
+  private readonly _exitScannerMode = (): void => {
     this.scannerMode = false;
   };
 
   /**
    * Handle "Scan Again" button click
    */
-  private _handleScanAgain = (): void => {
+  private readonly _handleScanAgain = (): void => {
     this.scanError = null;
     // Re-enter scanner mode
     this._enterScannerMode();
   };
 
-  private _handleMoveToClick = async (containerIdentifier: string): Promise<void> => {
+  private readonly _handleMoveToClick = async (containerIdentifier: string): Promise<void> => {
     if (this.movingTo) return;
 
     this.movingTo = containerIdentifier;

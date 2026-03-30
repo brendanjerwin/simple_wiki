@@ -163,7 +163,7 @@ export class AutomagicIdentifierInput extends LitElement {
   @state()
   declare automagicError: AugmentedError | null;
 
-  private _debounceTimeoutMs = 300;
+  private readonly _debounceTimeoutMs = 300;
   private _titleDebounceTimer?: ReturnType<typeof setTimeout>;
   private _identifierDebounceTimer?: ReturnType<typeof setTimeout>;
 
@@ -217,7 +217,7 @@ export class AutomagicIdentifierInput extends LitElement {
     this.automagicError = null;
   }
 
-  private _handleTitleInput = (): void => {
+  private readonly _handleTitleInput = (): void => {
     const titleInput = this.shadowRoot?.querySelector<TitleInput>('title-input');
     if (!titleInput) return;
     this.title = titleInput.value;
@@ -275,7 +275,7 @@ export class AutomagicIdentifierInput extends LitElement {
     }
   }
 
-  private _handleIdentifierInput = (event: Event): void => {
+  private readonly _handleIdentifierInput = (event: Event): void => {
     // Only allow editing in manual mode (not automagic)
     if (this.automagicMode) return;
 
@@ -333,7 +333,7 @@ export class AutomagicIdentifierInput extends LitElement {
     );
   }
 
-  private _handleAutomagicToggle = (): void => {
+  private readonly _handleAutomagicToggle = (): void => {
     this.automagicMode = !this.automagicMode;
 
     // If switching back to automagic, regenerate identifier from title
@@ -342,7 +342,7 @@ export class AutomagicIdentifierInput extends LitElement {
     }
   };
 
-  private _handleSwitchToManual = (): void => {
+  private readonly _handleSwitchToManual = (): void => {
     this.automagicMode = false;
     this.automagicError = null;
     this.identifier = '';
