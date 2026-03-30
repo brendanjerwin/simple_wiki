@@ -23,7 +23,7 @@ import { type ConfirmationConfig } from './confirmation-dialog.js';
  * ```
  */
 export class PageDeleter {
-  private client = createClient(PageManagementService, getGrpcWebTransport());
+  private readonly client = createClient(PageManagementService, getGrpcWebTransport());
   // Definite assignment assertion: ensureDialogExists() called in constructor guarantees initialization
   private dialog!: HTMLElement & {
     openDialog: (config: ConfirmationConfig) => void;
@@ -35,12 +35,11 @@ export class PageDeleter {
     dataset: { pageName?: string };
     id: string;
     hidden: boolean;
-    parentNode?: { removeChild: (node: HTMLElement) => void };
   };
 
   // Store bound event handlers for proper cleanup
-  private boundHandleConfirm: (event: Event) => void;
-  private boundHandleCancel: (event: Event) => void;
+  private readonly boundHandleConfirm: (event: Event) => void;
+  private readonly boundHandleCancel: (event: Event) => void;
 
   constructor() {
     // Bind event handlers once to ensure proper cleanup
@@ -168,9 +167,7 @@ export class PageDeleter {
       this.dialog.removeEventListener('confirm', this.boundHandleConfirm);
       this.dialog.removeEventListener('cancel', this.boundHandleCancel);
       
-      if (this.dialog.parentNode) {
-        this.dialog.parentNode.removeChild(this.dialog);
-      }
+      this.dialog.remove();
     }
   }
 }
