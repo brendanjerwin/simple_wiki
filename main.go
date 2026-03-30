@@ -111,11 +111,6 @@ func createSite(c *cli.Context) (*server.Site, error) {
 		logger.Warn("No --cookie-secret provided; a random secret was generated. Sessions will not persist across restarts. Set --cookie-secret to a persistent value to maintain sessions across restarts.")
 	}
 
-	customCSS, err := server.LoadCustomCSS(c.GlobalString("css"))
-	if err != nil {
-		return nil, err
-	}
-
 	site, err := server.NewSite(
 		pathToData,
 		c.GlobalString("default-page"),
@@ -127,7 +122,10 @@ func createSite(c *cli.Context) (*server.Site, error) {
 		return nil, err
 	}
 
-	site.CSS = customCSS
+	if err := site.LoadCustomCSS(c.GlobalString("css")); err != nil {
+		return nil, err
+	}
+
 	site.Fileuploads = !c.GlobalBool("block-file-uploads")
 	site.MaxUploadSize = c.GlobalUint("max-upload-mb")
 	site.MaxDocumentSize = c.GlobalUint("max-document-length")

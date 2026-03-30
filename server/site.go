@@ -76,23 +76,23 @@ type Site struct {
 	saveMut                 sync.RWMutex
 }
 
-// LoadCustomCSS reads custom CSS from the given file path and returns its content.
-// Returns nil if cssFile is empty. The caller is responsible for assigning the result
-// to site.CSS after creating the site with NewSite.
-func LoadCustomCSS(cssFile string) ([]byte, error) {
+// LoadCustomCSS reads custom CSS from the given file path and assigns it to s.CSS.
+// Does nothing if cssFile is empty.
+func (s *Site) LoadCustomCSS(cssFile string) error {
 	if len(cssFile) == 0 {
-		return nil, nil
+		return nil
 	}
 	customCSS, err := os.ReadFile(cssFile)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read CSS file %s: %w", cssFile, err)
+		return fmt.Errorf("failed to read CSS file %s: %w", cssFile, err)
 	}
 	_, _ = fmt.Printf("Loaded CSS file, %d bytes\n", len(customCSS))
-	return customCSS, nil
+	s.CSS = customCSS
+	return nil
 }
 
 // NewSite creates and initializes a new Site instance.
-// To configure custom CSS, set site.CSS after creation (use LoadCustomCSS to read from a file).
+// To configure custom CSS, call site.LoadCustomCSS after creation.
 // To configure file uploads, set site.Fileuploads, site.MaxUploadSize, and site.MaxDocumentSize after creation.
 func NewSite(
 	filepathToData string,

@@ -152,6 +152,23 @@ var _ = Describe("Handlers", func() {
 			})
 		})
 
+		When("MaxDocumentSize is zero", func() {
+			BeforeEach(func() {
+				site.MaxDocumentSize = 0
+				body, _ := json.Marshal(map[string]any{
+					"page":     "test-update",
+					"new_text": string(make([]byte, 2048)),
+				})
+				req, _ := http.NewRequest(http.MethodPost, "/update", bytes.NewBuffer(body))
+				req.Header.Set("Content-Type", "application/json")
+				router.ServeHTTP(w, req)
+			})
+
+			It("should allow updates of any size", func() {
+				Expect(w.Code).To(Equal(http.StatusOK))
+			})
+		})
+
 		PWhen("the page update fails due to save error", func() {
 			var response map[string]any
 			var pageName string
