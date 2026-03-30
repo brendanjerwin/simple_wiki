@@ -24,8 +24,19 @@ module.exports = {
 
   create(context) {
     const customElementsDefines = [];
-    let hasTagNameMapDeclaration = false;
     const declaredTagNames = new Set();
+
+    function extractDeclaredTagNames(node) {
+      for (const member of node.body?.body ?? []) {
+        if (member.type === 'TSPropertySignature' && member.key) {
+          if (member.key.type === 'Literal') {
+            declaredTagNames.add(member.key.value);
+          } else if (member.key.type === 'Identifier') {
+            declaredTagNames.add(member.key.name);
+          }
+        }
+      }
+    }
 
     return {
       // Track customElements.define() calls
@@ -52,19 +63,7 @@ module.exports = {
       // Track HTMLElementTagNameMap declarations
       TSInterfaceDeclaration(node) {
         if (node.id.name === 'HTMLElementTagNameMap') {
-          hasTagNameMapDeclaration = true;
-          // Extract declared tag names
-          if (node.body && node.body.body) {
-            for (const member of node.body.body) {
-              if (member.type === 'TSPropertySignature' && member.key) {
-                if (member.key.type === 'Literal') {
-                  declaredTagNames.add(member.key.value);
-                } else if (member.key.type === 'Identifier') {
-                  declaredTagNames.add(member.key.name);
-                }
-              }
-            }
-          }
+          extractDeclaredTagNames(node);
         }
       },
 

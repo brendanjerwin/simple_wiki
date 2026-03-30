@@ -8,7 +8,8 @@ console.log('WTR Config - CHROMIUM_BIN:', chromiumPath);
 console.log('WTR Config - Coverage enabled:', ciCoverage);
 
 export default {
-  files: './web-components/**/*.test.ts',
+  files: ['./{web-components,services}/**/*.test.ts'],
+  concurrency: 1,
   base: '/static/js/',
   nodeResolve: true,
   reporters: [summaryReporter()],
