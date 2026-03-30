@@ -289,6 +289,25 @@ var _ = Describe("BuildFrontmatterFromURLParams", func() {
 		})
 	})
 
+	Describe("when params contain a key with an empty values slice", func() {
+		BeforeEach(func() {
+			params["empty_key"] = []string{}
+			params.Set("title", "Has Title")
+		})
+
+		It("should skip the key with empty values", func() {
+			Expect(result).NotTo(HaveKey("empty_key"))
+		})
+
+		It("should include other non-empty params", func() {
+			Expect(result).To(HaveKeyWithValue("title", "Has Title"))
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
 	Describe("when nested structure exists before simple value assignment", func() {
 		// Another variation to increase coverage of conflict detection paths.
 		BeforeEach(func() {
