@@ -57,45 +57,57 @@ func (r *WikiImageRenderer) renderImage(w util.BufWriter, source []byte, node as
 		return ast.WalkContinue, nil
 	}
 
-	// Write opening tag with src attribute
-	if _, err := w.WriteString(`<wiki-image src="`); err != nil {
+	if err := writeImageSrc(w, r, n); err != nil {
 		return ast.WalkStop, err
 	}
-	if r.Unsafe || !html.IsDangerousURL(n.Destination) {
-		if _, err := w.Write(util.EscapeHTML(util.URLEscape(n.Destination, true))); err != nil {
-			return ast.WalkStop, err
-		}
-	}
-
-	// Write alt attribute
-	if _, err := w.WriteString(`" alt="`); err != nil {
+	if err := writeImageAlt(w, n, source); err != nil {
 		return ast.WalkStop, err
 	}
-	// Use collectText to properly handle complex alt text (emphasis, bold, etc.)
-	altText := collectText(n, source)
-	if _, err := w.Write(util.EscapeHTML(altText)); err != nil {
+	if err := r.writeImageTitle(w, n); err != nil {
 		return ast.WalkStop, err
 	}
-	if err := w.WriteByte('"'); err != nil {
-		return ast.WalkStop, err
-	}
-
-	// Write title attribute if present
-	if n.Title != nil {
-		if _, err := w.WriteString(` title="`); err != nil {
-			return ast.WalkStop, err
-		}
-		// Writer.Write doesn't return an error per goldmark interface
-		r.Writer.Write(w, n.Title)
-		if err := w.WriteByte('"'); err != nil {
-			return ast.WalkStop, err
-		}
-	}
-
-	// Close tag
 	if _, err := w.WriteString(`></wiki-image>`); err != nil {
 		return ast.WalkStop, err
 	}
 
 	return ast.WalkSkipChildren, nil
+}
+
+// writeImageSrc writes the opening tag and src attribute of the wiki-image element.
+func writeImageSrc(w util.BufWriter, r *WikiImageRenderer, n *ast.Image) error {
+	if _, err := w.WriteString(`<wiki-image src="`); err != nil {
+		return err
+	}
+	if r.Unsafe || !html.IsDangerousURL(n.Destination) {
+		if _, err := w.Write(util.EscapeHTML(util.URLEscape(n.Destination, true))); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// writeImageAlt writes the alt attribute of the wiki-image element.
+func writeImageAlt(w util.BufWriter, n *ast.Image, source []byte) error {
+	if _, err := w.WriteString(`" alt="`); err != nil {
+		return err
+	}
+	// Use collectText to properly handle complex alt text (emphasis, bold, etc.)
+	altText := collectText(n, source)
+	if _, err := w.Write(util.EscapeHTML(altText)); err != nil {
+		return err
+	}
+	return w.WriteByte('"')
+}
+
+// writeImageTitle writes the optional title attribute of the wiki-image element.
+func (r *WikiImageRenderer) writeImageTitle(w util.BufWriter, n *ast.Image) error {
+	if n.Title == nil {
+		return nil
+	}
+	if _, err := w.WriteString(` title="`); err != nil {
+		return err
+	}
+	// Writer.Write doesn't return an error per goldmark interface
+	r.Writer.Write(w, n.Title)
+	return w.WriteByte('"')
 }
