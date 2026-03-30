@@ -81,7 +81,7 @@ export class FrontmatterValueSection extends LitElement {
     return newKey;
   }
 
-  private _handleAddField = (event: CustomEvent): void => {
+  private readonly _handleAddField = (event: CustomEvent): void => {
     const { type } = event.detail;
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- spread preserves JsonObject structure
     const oldFields = { ...this.fields } as JsonObject;
@@ -114,7 +114,7 @@ export class FrontmatterValueSection extends LitElement {
     this.requestUpdate();
   };
 
-  private _handleRemoveField = (key: string): void => {
+  private readonly _handleRemoveField = (key: string): void => {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- spread preserves JsonObject structure
     const oldFields = { ...this.fields } as JsonObject;
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- spread preserves JsonObject structure
@@ -127,7 +127,7 @@ export class FrontmatterValueSection extends LitElement {
     this.requestUpdate();
   };
 
-  private _handleKeyChange = (event: CustomEvent): void => {
+  private readonly _handleKeyChange = (event: CustomEvent): void => {
     const { oldKey, newKey } = event.detail;
 
     if (oldKey === newKey || !newKey.trim()) return;
@@ -154,7 +154,7 @@ export class FrontmatterValueSection extends LitElement {
     this.requestUpdate();
   };
 
-  private _handleValueChange = (event: CustomEvent, key: string): void => {
+  private readonly _handleValueChange = (event: CustomEvent, key: string): void => {
     const { newValue } = event.detail;
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- spread preserves JsonObject structure
@@ -223,7 +223,7 @@ export class FrontmatterValueSection extends LitElement {
   }
 
   // Cache for memoized sorting results
-  private _sortedEntriesCache = new Map<string, [string, unknown][]>();
+  private readonly _sortedEntriesCache = new Map<string, [string, unknown][]>();
   private _fieldsHashCache = '';
 
   private _clearSortingCache(): void {
