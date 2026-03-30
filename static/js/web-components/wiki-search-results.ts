@@ -188,8 +188,20 @@ class WikiSearchResults extends LitElement {
   @property({ type: Number })
   declare totalUnfilteredCount: number;
 
-  private _handleClickOutside: (event: Event) => void;
-  private _handleKeydown: (event: KeyboardEvent) => void;
+  public readonly _handleClickOutside = (event: Event): void => {
+    const path = (event as Event & { composedPath(): EventTarget[] }).composedPath();
+    const popover = this.shadowRoot!.querySelector('.popover');
+    if (this.open && popover && !path.includes(popover)) {
+      this.close();
+    }
+  };
+
+  public readonly _handleKeydown = (event: KeyboardEvent): void => {
+    if (this.open && event.key === 'Escape') {
+      event.preventDefault();
+      this.close();
+    }
+  };
 
   constructor() {
     super();
@@ -197,8 +209,6 @@ class WikiSearchResults extends LitElement {
     this.open = false;
     this.inventoryOnly = false;
     this.totalUnfilteredCount = 0;
-    this._handleClickOutside = this.handleClickOutside.bind(this);
-    this._handleKeydown = this.handleKeydown.bind(this);
   }
 
   override connectedCallback() {
@@ -211,21 +221,6 @@ class WikiSearchResults extends LitElement {
     document.removeEventListener('click', this._handleClickOutside);
     document.removeEventListener('keydown', this._handleKeydown);
     super.disconnectedCallback();
-  }
-
-  handleKeydown(event: KeyboardEvent) {
-    if (this.open && event.key === 'Escape') {
-      event.preventDefault();
-      this.close();
-    }
-  }
-
-  handleClickOutside(event: Event) {
-    const path = (event as Event & { composedPath(): EventTarget[] }).composedPath();
-    const popover = this.shadowRoot!.querySelector('.popover');
-    if (this.open && popover && !path.includes(popover)) {
-      this.close();
-    }
   }
 
   close() {

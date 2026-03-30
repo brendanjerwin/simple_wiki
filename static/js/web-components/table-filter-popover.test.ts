@@ -882,7 +882,7 @@ describe('TableFilterPopover', () => {
         el.addEventListener('popover-closed', closedSpy);
         el.addEventListener('filter-changed', filterSpy);
 
-        el.handleClickOutside(new Event('click'));
+        el._handleClickOutside(new Event('click'));
       });
 
       it('should emit popover-closed event', () => {
@@ -913,7 +913,7 @@ describe('TableFilterPopover', () => {
         const mockEvent = {
           composedPath: () => [popover],
         } as unknown as Event;
-        el.handleClickOutside(mockEvent);
+        el._handleClickOutside(mockEvent);
       });
 
       it('should not emit popover-closed event', () => {
@@ -940,7 +940,7 @@ describe('TableFilterPopover', () => {
         el.addEventListener('popover-closed', closedSpy);
 
         const event = new KeyboardEvent('keydown', { key: 'Escape' });
-        el.handleKeydown(event);
+        el._handleKeydown(event);
       });
 
       it('should emit popover-closed event', () => {
@@ -964,7 +964,7 @@ describe('TableFilterPopover', () => {
         el.addEventListener('popover-closed', closedSpy);
 
         const event = new KeyboardEvent('keydown', { key: 'Escape' });
-        el.handleKeydown(event);
+        el._handleKeydown(event);
       });
 
       it('should not emit popover-closed event', () => {

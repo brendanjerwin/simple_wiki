@@ -173,7 +173,7 @@ describe('InventoryAddItemDialog', () => {
       beforeEach(() => {
         closeSpy = sinon.spy(el, 'close');
         el.openDialog('drawer_kitchen');
-        el._handleKeydown(new KeyboardEvent('keydown', { key: 'Escape' }));
+        (el as unknown as { _handleKeydown: (event: KeyboardEvent) => void })._handleKeydown(new KeyboardEvent('keydown', { key: 'Escape' }));
       });
 
       it('should close the dialog', () => {
@@ -186,7 +186,7 @@ describe('InventoryAddItemDialog', () => {
 
       beforeEach(() => {
         closeSpy = sinon.spy(el, 'close');
-        el._handleKeydown(new KeyboardEvent('keydown', { key: 'Escape' }));
+        (el as unknown as { _handleKeydown: (event: KeyboardEvent) => void })._handleKeydown(new KeyboardEvent('keydown', { key: 'Escape' }));
       });
 
       it('should not close the dialog', () => {
@@ -475,7 +475,7 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should add keydown event listener', () => {
-        expect(addEventListenerSpy).to.have.been.calledWith('keydown', el._handleKeydown);
+        expect(addEventListenerSpy).to.have.been.calledWith('keydown', (el as unknown as { _handleKeydown: (event: KeyboardEvent) => void })._handleKeydown);
       });
     });
 
@@ -490,7 +490,7 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should remove keydown event listener', () => {
-        expect(removeEventListenerSpy).to.have.been.calledWith('keydown', el._handleKeydown);
+        expect(removeEventListenerSpy).to.have.been.calledWith('keydown', (el as unknown as { _handleKeydown: (event: KeyboardEvent) => void })._handleKeydown);
       });
     });
   });
