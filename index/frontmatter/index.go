@@ -95,39 +95,12 @@ func (f *Index) recursiveAddFrontmatter(identifier wikipage.PageIdentifier, keyP
 	case wikipage.FrontMatter:
 		return f.recursiveAddFrontmatter(identifier, keyPath, map[string]any(v))
 	case map[string]any:
-		for key, val := range v {
-			newKeyPath := keyPath
-			if newKeyPath != "" {
-				newKeyPath += "."
-			}
-			newKeyPath += key
-
-			if _, isMap := val.(map[string]any); isMap {
-				f.saveToIndex(identifier, newKeyPath, "") // This ensures that the QueryKeyExistence function works for all keys in the hierarchy
-			}
-			if err := f.recursiveAddFrontmatter(identifier, newKeyPath, val); err != nil {
-				return err
-			}
-		}
+		return f.indexMap(identifier, keyPath, v)
 	case string:
 		f.saveToIndex(identifier, keyPath, v)
 	case []any:
-		// Save empty string to ensure QueryKeyExistence works for empty arrays
-		if len(v) == 0 {
-			f.saveToIndex(identifier, keyPath, "")
-		}
-		for _, array := range v {
-			switch str := array.(type) {
-			case string:
-				f.saveToIndex(identifier, keyPath, str)
-			default:
-				// Skip complex types (e.g., maps in arrays from checklists).
-				// These are application data, not indexable strings.
-				continue
-			}
-		}
+		f.indexArray(identifier, keyPath, v)
 	case bool:
-		// Only index true values - we rely on key existence for filtering containers
 		if v {
 			f.saveToIndex(identifier, keyPath, "true")
 		}
@@ -139,6 +112,40 @@ func (f *Index) recursiveAddFrontmatter(identifier wikipage.PageIdentifier, keyP
 		return fmt.Errorf("frontmatter indexer: invalid value type for page %q key %q (type: %T)", identifier, keyPath, v)
 	}
 	return nil
+}
+
+func buildKeyPath(currentPath, key string) string {
+	if currentPath == "" {
+		return key
+	}
+	return currentPath + "." + key
+}
+
+func (f *Index) indexMap(identifier wikipage.PageIdentifier, keyPath string, m map[string]any) error {
+	for key, val := range m {
+		newKeyPath := buildKeyPath(keyPath, key)
+		if _, isMap := val.(map[string]any); isMap {
+			f.saveToIndex(identifier, newKeyPath, "") // Ensures QueryKeyExistence works for all keys in the hierarchy
+		}
+		if err := f.recursiveAddFrontmatter(identifier, newKeyPath, val); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (f *Index) indexArray(identifier wikipage.PageIdentifier, keyPath string, arr []any) {
+	if len(arr) == 0 {
+		f.saveToIndex(identifier, keyPath, "")
+		return
+	}
+	for _, item := range arr {
+		if str, ok := item.(string); ok {
+			f.saveToIndex(identifier, keyPath, str)
+		}
+		// Skip complex types (e.g., maps in arrays from checklists).
+		// These are application data, not indexable strings.
+	}
 }
 
 // RemovePageFromIndex removes a page's frontmatter from the index.
