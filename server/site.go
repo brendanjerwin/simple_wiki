@@ -76,29 +76,31 @@ type Site struct {
 	saveMut                 sync.RWMutex
 }
 
+// LoadCustomCSS reads custom CSS from the given file path and returns its content.
+// Returns nil if cssFile is empty. The caller is responsible for assigning the result
+// to site.CSS after creating the site with NewSite.
+func LoadCustomCSS(cssFile string) ([]byte, error) {
+	if len(cssFile) == 0 {
+		return nil, nil
+	}
+	customCSS, err := os.ReadFile(cssFile)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read CSS file %s: %w", cssFile, err)
+	}
+	_, _ = fmt.Printf("Loaded CSS file, %d bytes\n", len(customCSS))
+	return customCSS, nil
+}
+
 // NewSite creates and initializes a new Site instance.
+// To configure custom CSS, set site.CSS after creation (use LoadCustomCSS to read from a file).
+// To configure file uploads, set site.Fileuploads, site.MaxUploadSize, and site.MaxDocumentSize after creation.
 func NewSite(
 	filepathToData string,
-	cssFile string,
 	defaultPage string,
 	debounce int,
 	secret string,
-	fileuploads bool,
-	maxUploadSize uint,
-	maxDocumentSize uint,
 	logger *lumber.ConsoleLogger,
 ) (*Site, error) {
-	var customCSS []byte
-	// collect custom CSS
-	if len(cssFile) > 0 {
-		var errRead error
-		customCSS, errRead = os.ReadFile(cssFile)
-		if errRead != nil {
-			return nil, fmt.Errorf("failed to read CSS file %s: %w", cssFile, errRead)
-		}
-		_, _ = fmt.Printf("Loaded CSS file, %d bytes\n", len(customCSS))
-	}
-
 	logger.Info("Initializing simple_wiki site...")
 
 	// Set up migration applicator with default migrations
@@ -107,13 +109,9 @@ func NewSite(
 
 	site := &Site{
 		PathToData:          filepathToData,
-		CSS:                 customCSS,
 		DefaultPage:         defaultPage,
 		Debounce:            debounce,
 		SessionStore:        cookie.NewStore([]byte(secret)),
-		Fileuploads:         fileuploads,
-		MaxUploadSize:       maxUploadSize,
-		MaxDocumentSize:     maxDocumentSize,
 		Logger:              logger,
 		MigrationApplicator: applicator,
 		MarkdownRenderer:    &goldmarkrenderer.GoldmarkRenderer{},
@@ -378,6 +376,71 @@ func (s *Site) applyMigrationsForPage(page *wikipage.Page, content []byte) ([]by
 	return migratedContent, nil
 }
 
+// buildInitialPageText constructs the initial text content for a new page, including
+// TOML frontmatter delimiters and a default title heading. For inv_item templates,
+// an inventory contents section is appended.
+func buildInitialPageText(fm wikipage.FrontMatter, tmpl string) (string, error) {
+	fmBytes, err := toml.Marshal(fm)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal frontmatter to TOML: %w", err)
+	}
+
+	initialText := ""
+	if len(fmBytes) > 0 {
+		initialText = tomlDelimiter + string(fmBytes)
+		if !bytes.HasSuffix(fmBytes, []byte(newline)) {
+			initialText += newline
+		}
+		initialText += tomlDelimiter
+	}
+
+	initialText += `
+# {{or .Title .Identifier}}
+`
+	if tmpl == "inv_item" {
+		initialText += `
+{{if IsContainer .Identifier }}
+## Contents
+{{ ShowInventoryContentsOf .Identifier }}
+{{ end }}
+`
+	}
+
+	return initialText, nil
+}
+
+// initializeNewPage sets up the initial content and saves a newly created page.
+func (s *Site) initializeNewPage(p *wikipage.Page, req *http.Request) error {
+	prams := req.URL.Query()
+	tmpl := prams.Get("tmpl")
+
+	// Build frontmatter from URL parameters
+	fm, err := BuildFrontmatterFromURLParams(p.Identifier, prams)
+	if err != nil {
+		return fmt.Errorf("failed to build frontmatter from URL params: %w", err)
+	}
+
+	// Add inventory structure for inv_item template
+	if tmpl == "inv_item" {
+		EnsureInventoryFrontmatterStructure(fm)
+	}
+
+	initialText, err := buildInitialPageText(fm, tmpl)
+	if err != nil {
+		return err
+	}
+
+	p.Text = initialText
+	if renderErr := p.Render(s, s.MarkdownRenderer, TemplateExecutor{}, s.FrontmatterIndexQueryer); renderErr != nil {
+		s.Logger.Error("Error rendering new page: %v", renderErr)
+	}
+	if err := s.savePageAndIndex(p); err != nil {
+		s.Logger.Error("Failed to save new page '%s': %v", p.Identifier, err)
+		return fmt.Errorf("failed to save new page '%s': %w", p.Identifier, err)
+	}
+	return nil
+}
+
 // readOrInitPage opens a page or initializes a new one if it doesn't exist.
 // Returns an error if page initialization fails to save.
 func (s *Site) readOrInitPage(requestedIdentifier string, req *http.Request) (*wikipage.Page, error) {
@@ -386,54 +449,8 @@ func (s *Site) readOrInitPage(requestedIdentifier string, req *http.Request) (*w
 		return nil, fmt.Errorf(failedToOpenPageErrFmt, requestedIdentifier, err)
 	}
 	if p.IsNew() {
-		prams := req.URL.Query()
-		tmpl := prams.Get("tmpl")
-
-		// Build frontmatter from URL parameters
-		fm, err := BuildFrontmatterFromURLParams(p.Identifier, prams)
-		if err != nil {
-			return nil, fmt.Errorf("failed to build frontmatter from URL params: %w", err)
-		}
-
-		// Add inventory structure for inv_item template
-		if tmpl == "inv_item" {
-			EnsureInventoryFrontmatterStructure(fm)
-		}
-
-		// Convert frontmatter to TOML
-		fmBytes, err := toml.Marshal(fm)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal frontmatter to TOML: %w", err)
-		}
-
-		initialText := ""
-		if len(fmBytes) > 0 {
-			initialText = tomlDelimiter + string(fmBytes)
-			if !bytes.HasSuffix(fmBytes, []byte(newline)) {
-				initialText += newline
-			}
-			initialText += tomlDelimiter
-		}
-
-		initialText += `
-# {{or .Title .Identifier}}
-`
-		if tmpl == "inv_item" {
-			initialText += `
-{{if IsContainer .Identifier }}
-## Contents
-{{ ShowInventoryContentsOf .Identifier }}
-{{ end }}
-`
-		}
-
-		p.Text = initialText
-		if renderErr := p.Render(s, s.MarkdownRenderer, TemplateExecutor{}, s.FrontmatterIndexQueryer); renderErr != nil {
-			s.Logger.Error("Error rendering new page: %v", renderErr)
-		}
-		if err := s.savePageAndIndex(p); err != nil {
-			s.Logger.Error("Failed to save new page '%s': %v", p.Identifier, err)
-			return nil, fmt.Errorf("failed to save new page '%s': %w", p.Identifier, err)
+		if err := s.initializeNewPage(p, req); err != nil {
+			return nil, err
 		}
 	}
 	if renderErr := p.Render(s, s.MarkdownRenderer, TemplateExecutor{}, s.FrontmatterIndexQueryer); renderErr != nil {

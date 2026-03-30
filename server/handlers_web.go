@@ -391,7 +391,7 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Wrong JSON"})
 		return
 	}
-	if uint(len(json.NewText)) > s.MaxDocumentSize {
+	if s.MaxDocumentSize > 0 && uint(len(json.NewText)) > s.MaxDocumentSize {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Too much"})
 		return
 	}

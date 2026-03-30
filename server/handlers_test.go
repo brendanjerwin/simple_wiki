@@ -45,7 +45,7 @@ var _ = Describe("Handlers", func() {
 		tmpDir, err = os.MkdirTemp("", "simple_wiki_test")
 		Expect(err).NotTo(HaveOccurred())
 		logger := lumber.NewConsoleLogger(lumber.TRACE)
-		site, err = server.NewSite(tmpDir, "", "testpage", 0, "secret", true, 1024, 1024, logger)
+		site, err = server.NewSite(tmpDir, "testpage", 0, "secret", logger)
 		Expect(err).NotTo(HaveOccurred())
 		router = site.GinRouter()
 		w = httptest.NewRecorder()
@@ -137,6 +137,7 @@ var _ = Describe("Handlers", func() {
 
 		When("the document is too large", func() {
 			BeforeEach(func() {
+				site.MaxDocumentSize = 1024
 				body, _ := json.Marshal(map[string]any{
 					"page":     "test-update",
 					"new_text": string(make([]byte, 2048)),
@@ -168,7 +169,7 @@ var _ = Describe("Handlers", func() {
 				logBuffer = &bytes.Buffer{}
 				customLogger := lumber.NewBasicLogger(&writeCloserBuffer{logBuffer}, lumber.TRACE)
 				var err error
-				customSite, err = server.NewSite(tmpDir, "", "testpage", 0, "secret", true, 1024, 1024, customLogger)
+				customSite, err = server.NewSite(tmpDir, "testpage", 0, "secret", customLogger)
 				Expect(err).NotTo(HaveOccurred())
 				customRouter = customSite.GinRouter()
 
@@ -400,7 +401,7 @@ var _ = Describe("handleUploads Path Injection Prevention", func() {
 		tmpDir, err = os.MkdirTemp("", "simple_wiki_test")
 		Expect(err).NotTo(HaveOccurred())
 		logger := lumber.NewConsoleLogger(lumber.TRACE)
-		site, err := server.NewSite(tmpDir, "", "testpage", 0, "secret", true, 1024, 1024, logger)
+		site, err := server.NewSite(tmpDir, "testpage", 0, "secret", logger)
 		Expect(err).NotTo(HaveOccurred())
 		router = site.GinRouter()
 		w = httptest.NewRecorder()
@@ -477,7 +478,7 @@ var _ = Describe("handlePageRequest directory listing", func() {
 		tmpDir, err = os.MkdirTemp("", "simple_wiki_ls_test")
 		Expect(err).NotTo(HaveOccurred())
 		logger := lumber.NewConsoleLogger(lumber.TRACE)
-		customSite, err = server.NewSite(tmpDir, "", "testpage", 0, "secret", true, 1024, 1024, logger)
+		customSite, err = server.NewSite(tmpDir, "testpage", 0, "secret", logger)
 		Expect(err).NotTo(HaveOccurred())
 		router = customSite.GinRouter()
 		w = httptest.NewRecorder()
@@ -538,8 +539,10 @@ var _ = Describe("handleUpload Audit Logging", func() {
 
 		logBuffer = &bytes.Buffer{}
 		logger := lumber.NewBasicLogger(&handlerTestWriteCloser{logBuffer}, lumber.TRACE)
-		site, err := server.NewSite(tmpDir, "", "testpage", 0, "secret", true, 1024, 1024, logger)
+		site, err := server.NewSite(tmpDir, "testpage", 0, "secret", logger)
 		Expect(err).NotTo(HaveOccurred())
+		site.Fileuploads = true
+		site.MaxUploadSize = 1024
 		router = site.GinRouter()
 	})
 
@@ -631,7 +634,7 @@ var _ = Describe("Session Logging Functions", func() {
 		logBuffer = &bytes.Buffer{}
 		logger = lumber.NewBasicLogger(&handlerTestWriteCloser{logBuffer}, lumber.ERROR)
 
-		site, err = server.NewSite(tmpDir, "", "testpage", 0, "secret", true, 1024, 1024, logger)
+		site, err = server.NewSite(tmpDir, "testpage", 0, "secret", logger)
 		Expect(err).NotTo(HaveOccurred())
 		router = site.GinRouter()
 	})
@@ -997,7 +1000,7 @@ var _ = Describe("Open redirect prevention", func() {
 		tmpDir, err = os.MkdirTemp("", "simple_wiki_test")
 		Expect(err).NotTo(HaveOccurred())
 		logger := lumber.NewConsoleLogger(lumber.TRACE)
-		site, err = server.NewSite(tmpDir, "", "testpage", 0, "secret", true, 1024, 1024, logger)
+		site, err = server.NewSite(tmpDir, "testpage", 0, "secret", logger)
 		Expect(err).NotTo(HaveOccurred())
 		router = site.GinRouter()
 		w = httptest.NewRecorder()
