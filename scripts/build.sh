@@ -44,13 +44,18 @@ compare_semver() {
     local ver2="${tag2#v}"
 
     # Split on dots and dashes to get major.minor.patch and prerelease
-    local v1_base=$(echo "$ver1" | cut -d'-' -f1)
-    local v1_pre=$(echo "$ver1" | cut -d'-' -f2- -s)
-    local v2_base=$(echo "$ver2" | cut -d'-' -f1)
-    local v2_pre=$(echo "$ver2" | cut -d'-' -f2- -s)
+    local v1_base
+    v1_base=$(echo "$ver1" | cut -d'-' -f1)
+    local v1_pre
+    v1_pre=$(echo "$ver1" | cut -d'-' -f2- -s)
+    local v2_base
+    v2_base=$(echo "$ver2" | cut -d'-' -f1)
+    local v2_pre
+    v2_pre=$(echo "$ver2" | cut -d'-' -f2- -s)
 
     # Compare base versions (major.minor.patch) using version sort
-    local base_cmp=$(printf '%s\n%s\n' "$v1_base" "$v2_base" | sort -V | head -1)
+    local base_cmp
+    base_cmp=$(printf '%s\n%s\n' "$v1_base" "$v2_base" | sort -V | head -1)
 
     if [ "$v1_base" != "$v2_base" ]; then
         # Different base versions, use version sort result
@@ -70,7 +75,8 @@ compare_semver() {
         else
             # Both are prereleases, compare prerelease identifiers using proper semver rules
             # For prereleases, we need to compare according to semver precedence rules
-            local pre_cmp=$(printf '%s\n%s\n' "$v1_pre" "$v2_pre" | sort -V | head -1)
+            local pre_cmp
+            pre_cmp=$(printf '%s\n%s\n' "$v1_pre" "$v2_pre" | sort -V | head -1)
             if [ "$pre_cmp" = "$v1_pre" ]; then
                 echo "$tag2"  # v1_pre comes first in sort, so v2_pre is higher
             else
@@ -82,7 +88,8 @@ compare_semver() {
 
 # Get the highest semver tag pointing to current commit
 get_highest_tag() {
-    local tags=$(git tag --points-at HEAD 2>/dev/null)
+    local tags
+    tags=$(git tag --points-at HEAD 2>/dev/null)
 
     if [ -z "$tags" ]; then
         echo ""
@@ -234,4 +241,4 @@ echo "Build complete: $BINARY_NAME"
 exit_code=${PIPESTATUS[0]}
 echo ""
 echo "Log saved to: $LOG_FILE"
-exit $exit_code
+exit "$exit_code"
