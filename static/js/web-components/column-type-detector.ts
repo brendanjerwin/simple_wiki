@@ -5,18 +5,20 @@ export interface ColumnTypeInfo {
   confidenceRatio: number;
 }
 
-const currencyPattern = /^(?:-?[$€£¥]\s?[\d,]+\.?\d*|[$€£¥]\s?-[\d,]+\.?\d*)$/;
+const currencyLeadNegativePattern = /^-?[$€£¥]\s{0,10}[\d,]+(\.\d+)?$/;
+const currencyMidNegativePattern = /^[$€£¥]\s{0,10}-[\d,]+(\.\d+)?$/;
 const percentagePattern = /^-?\d+\.?\d*%$/;
 const numberPattern = /^-?[\d,]+\.?\d*$/;
 const integerPattern = /^-?[\d,]+$/;
 const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
 const usDatePattern = /^\d{1,2}\/\d{1,2}\/\d{4}$/;
-const humanDatePattern = /^[A-Z][a-z]{2}\s+\d{1,2},?\s+\d{4}$/;
+const humanDatePattern = /^[A-Z][a-z]{2}\s{1,10}\d{1,2},?\s{1,10}\d{4}$/;
 
 const confidenceThreshold = 0.7;
 
 function isCurrency(text: string): boolean {
-  return currencyPattern.test(text.trim());
+  const trimmed = text.trim();
+  return currencyLeadNegativePattern.test(trimmed) || currencyMidNegativePattern.test(trimmed);
 }
 
 function isPercentage(text: string): boolean {
@@ -115,11 +117,14 @@ export function parseDateValue(text: string): number {
 export function parseCurrencyValue(text: string): number {
   const trimmed = text.trim();
   if (trimmed === '') return NaN;
-  const negative = trimmed.startsWith('-') || /^[$€£¥]\s?-/.test(trimmed);
-  const cleaned = trimmed.replace(/^-?\s*[$€£¥]\s?-?/, '').replace(/,/g, '');
+  const negative = trimmed.startsWith('-') || /^[$€£¥]\s{0,10}-/.test(trimmed);
+  const cleaned = trimmed.replace(/^-?\s{0,10}[$€£¥]\s{0,10}-?/, '').replace(/,/g, '');
   if (cleaned === '') return NaN;
   const value = Number(cleaned);
-  return Number.isNaN(value) ? NaN : (negative ? -value : value);
+  if (Number.isNaN(value)) {
+    return NaN;
+  }
+  return negative ? -value : value;
 }
 
 export function parsePercentageValue(text: string): number {
