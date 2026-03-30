@@ -162,22 +162,9 @@ func (j *SinglePageImportJob) GetRecord() pageimport.ParsedRecord {
 func (j *SinglePageImportJob) processRecord(record pageimport.ParsedRecord) error {
 	identifier := record.Identifier
 
-	// Check if page exists
-	_, existingFm, err := j.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(identifier))
-	var isNewPage bool
+	fm, isNewPage, err := j.readOrInitFrontmatter(identifier)
 	if err != nil {
-		if !os.IsNotExist(err) {
-			return fmt.Errorf("failed to read existing frontmatter for %s: %w", identifier, err)
-		}
-		isNewPage = true
-	}
-
-	var fm map[string]any
-	if isNewPage {
-		fm = make(map[string]any)
-		fm["identifier"] = identifier
-	} else {
-		fm = existingFm
+		return err
 	}
 
 	// Apply template logic for inv_item
@@ -202,20 +189,47 @@ func (j *SinglePageImportJob) processRecord(record pageimport.ParsedRecord) erro
 		}
 	}
 
-	// Write frontmatter
+	if err := j.writePageContent(identifier, isNewPage, record.Template, fm); err != nil {
+		return err
+	}
+
+	j.trackResult(identifier, isNewPage)
+	return nil
+}
+
+// readOrInitFrontmatter reads existing frontmatter for the page or initialises a
+// fresh map for a brand-new page. Returns the map, whether the page is new, and
+// any unexpected error.
+func (j *SinglePageImportJob) readOrInitFrontmatter(identifier string) (map[string]any, bool, error) {
+	_, existingFm, err := j.pageReaderMutator.ReadFrontMatter(wikipage.PageIdentifier(identifier))
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return nil, false, fmt.Errorf("failed to read existing frontmatter for %s: %w", identifier, err)
+		}
+		fm := make(map[string]any)
+		fm["identifier"] = identifier
+		return fm, true, nil
+	}
+	return existingFm, false, nil
+}
+
+// writePageContent persists the frontmatter and, for new inv_item pages, the
+// inventory markdown template.
+func (j *SinglePageImportJob) writePageContent(identifier string, isNewPage bool, template string, fm map[string]any) error {
 	if err := j.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(identifier), fm); err != nil {
 		return fmt.Errorf("failed to write frontmatter: %w", err)
 	}
-
-	// For new pages with inv_item template, also write the inventory markdown
-	if isNewPage && record.Template == pageimport.InvItemTemplate {
+	if isNewPage && template == pageimport.InvItemTemplate {
 		markdown := inventory.BuildItemMarkdown()
 		if err := j.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(identifier), wikipage.Markdown(markdown)); err != nil {
 			return fmt.Errorf("failed to write markdown: %w", err)
 		}
 	}
+	return nil
+}
 
-	// Track result
+// trackResult records the outcome of a page import in the accumulator and logs it.
+func (j *SinglePageImportJob) trackResult(identifier string, isNewPage bool) {
 	if isNewPage {
 		j.resultAccumulator.RecordCreated(identifier)
 		j.logger.Info("Created page: %s", identifier)
@@ -223,35 +237,36 @@ func (j *SinglePageImportJob) processRecord(record pageimport.ParsedRecord) erro
 		j.resultAccumulator.RecordUpdated(identifier)
 		j.logger.Info("Updated page: %s", identifier)
 	}
-
-	return nil
 }
 
 // mergeFrontmatter merges source frontmatter into target (upsert semantics).
 func (j *SinglePageImportJob) mergeFrontmatter(target, source map[string]any) error {
 	for key, value := range source {
 		if nestedSource, ok := value.(map[string]any); ok {
-			// Handle nested maps
-			if existing, exists := target[key]; exists {
-				if nestedTarget, ok := existing.(map[string]any); ok {
-					// Recursively merge nested maps
-					if err := j.mergeFrontmatter(nestedTarget, nestedSource); err != nil {
-						return err
-					}
-					continue
-				}
-			}
-			// Create new nested map
-			newNested := make(map[string]any)
-			if err := j.mergeFrontmatter(newNested, nestedSource); err != nil {
+			if err := j.mergeNestedMapEntry(target, key, nestedSource); err != nil {
 				return err
 			}
-			target[key] = newNested
 		} else {
 			// Scalar value - overwrite
 			target[key] = value
 		}
 	}
+	return nil
+}
+
+// mergeNestedMapEntry merges a nested map value into target[key], recursing into
+// an existing nested map or creating a new one.
+func (j *SinglePageImportJob) mergeNestedMapEntry(target map[string]any, key string, nestedSource map[string]any) error {
+	if existing, exists := target[key]; exists {
+		if nestedTarget, ok := existing.(map[string]any); ok {
+			return j.mergeFrontmatter(nestedTarget, nestedSource)
+		}
+	}
+	newNested := make(map[string]any)
+	if err := j.mergeFrontmatter(newNested, nestedSource); err != nil {
+		return err
+	}
+	target[key] = newNested
 	return nil
 }
 
