@@ -197,7 +197,7 @@ export class InventoryAddItemDialog extends LitElement {
     }
   }
 
-  public _handleKeydown = (event: KeyboardEvent): void => {
+  private readonly _handleKeydown = (event: KeyboardEvent): void => {
     if (event.key === 'Escape' && this.open) {
       this.close();
     }

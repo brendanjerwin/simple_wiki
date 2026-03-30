@@ -247,7 +247,7 @@ export class BlogNewPostDialog extends LitElement {
   @state()
   declare subtitle: string;
 
-  private pageCreator = new PageCreator();
+  private readonly pageCreator = new PageCreator();
 
   private get identifierPreview(): string {
     if (!this.blogId || !this.date || !this.title.trim()) return '';
@@ -311,7 +311,7 @@ export class BlogNewPostDialog extends LitElement {
     }
   }
 
-  private _handleKeydown = (e: KeyboardEvent): void => {
+  private readonly _handleKeydown = (e: KeyboardEvent): void => {
     if (e.key === 'Escape' && this.open) {
       this._close();
     }

@@ -30,9 +30,9 @@ const (
 	descriptionKey      = "description"
 	defaultMaxRecursion = 10
 
-	errItemIdentifierRequired = "item_identifier is required"
-	errInvalidItemIdentifier  = "invalid item identifier: %v"
-	errInvalidContainerID     = "invalid container identifier: %v"
+	errItemIdentifierRequired        = "item_identifier is required"
+	errFmtInvalidItemIdentifier      = "invalid item identifier: %v"
+	errFmtInvalidContainerIdentifier = "invalid container identifier: %v"
 )
 
 // InvalidItemTypeError is returned when an item in the items array has an unexpected type.
@@ -58,7 +58,7 @@ func (s *Server) CreateInventoryItem(_ context.Context, req *apiv1.CreateInvento
 	// Munge the identifier to ensure consistency
 	identifier, err := wikiidentifiers.MungeIdentifier(req.ItemIdentifier)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, errInvalidItemIdentifier, err)
+		return nil, status.Errorf(codes.InvalidArgument, errFmtInvalidItemIdentifier, err)
 	}
 
 	// Check if page already exists
@@ -100,7 +100,7 @@ func (s *Server) CreateInventoryItem(_ context.Context, req *apiv1.CreateInvento
 	if req.Container != "" {
 		mungedContainer, err := wikiidentifiers.MungeIdentifier(req.Container)
 		if err != nil {
-			return nil, status.Errorf(codes.InvalidArgument, errInvalidContainerID, err)
+			return nil, status.Errorf(codes.InvalidArgument, errFmtInvalidContainerIdentifier, err)
 		}
 		container = mungedContainer
 		inventoryData[containerKey] = container
@@ -141,11 +141,11 @@ func (s *Server) MoveInventoryItem(_ context.Context, req *apiv1.MoveInventoryIt
 
 	identifier, err := wikiidentifiers.MungeIdentifier(req.ItemIdentifier)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, errInvalidItemIdentifier, err)
+		return nil, status.Errorf(codes.InvalidArgument, errFmtInvalidItemIdentifier, err)
 	}
 	newContainer, err := mungeOptionalContainer(req.NewContainer)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, errInvalidContainerID, err)
+		return nil, status.Errorf(codes.InvalidArgument, errFmtInvalidContainerIdentifier, err)
 	}
 
 	// Read the item's current frontmatter
@@ -291,7 +291,7 @@ func (s *Server) ListContainerContents(_ context.Context, req *apiv1.ListContain
 
 	containerID, err := wikiidentifiers.MungeIdentifier(req.ContainerIdentifier)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, errInvalidContainerID, err)
+		return nil, status.Errorf(codes.InvalidArgument, errFmtInvalidContainerIdentifier, err)
 	}
 	maxDepth := int(req.MaxDepth)
 	if maxDepth == 0 {
@@ -450,7 +450,7 @@ func (s *Server) FindItemLocation(_ context.Context, req *apiv1.FindItemLocation
 
 	itemID, err := wikiidentifiers.MungeIdentifier(req.ItemIdentifier)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, errInvalidItemIdentifier, err)
+		return nil, status.Errorf(codes.InvalidArgument, errFmtInvalidItemIdentifier, err)
 	}
 
 	// Read the item's frontmatter

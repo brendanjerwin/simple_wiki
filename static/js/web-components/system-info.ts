@@ -213,13 +213,13 @@ export class SystemInfo extends DrawerMixin(LitElement) implements AmbientCTA {
     }
   }
 
-  private handlePanelClick = (event: Event): void => {
+  private readonly handlePanelClick = (event: Event): void => {
     // Stop propagation to prevent click-outside from firing
     event.stopPropagation();
     this.toggleDrawer();
   };
 
-  private handlePanelKeydown = (event: KeyboardEvent): void => {
+  private readonly handlePanelKeydown = (event: KeyboardEvent): void => {
     // Support keyboard activation with Enter or Space
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
@@ -265,7 +265,7 @@ export class SystemInfo extends DrawerMixin(LitElement) implements AmbientCTA {
     );
   }
 
-  private handleMouseEnter = (): void => {
+  private readonly handleMouseEnter = (): void => {
     // Clear any existing debounce timer
     if (this.debounceTimer) {
       clearTimeout(this.debounceTimer);

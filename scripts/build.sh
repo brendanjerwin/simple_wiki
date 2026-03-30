@@ -52,26 +52,26 @@ compare_semver() {
     # Compare base versions (major.minor.patch) using version sort
     local base_cmp=$(printf '%s\n%s\n' "$v1_base" "$v2_base" | sort -V | head -1)
 
-    if [ "$v1_base" != "$v2_base" ]; then
+    if [[ "$v1_base" != "$v2_base" ]]; then
         # Different base versions, use version sort result
-        if [ "$base_cmp" = "$v1_base" ]; then
+        if [[ "$base_cmp" = "$v1_base" ]]; then
             echo "$tag2"  # v2 is higher
         else
             echo "$tag1"  # v1 is higher
         fi
     else
         # Same base version, check prerelease
-        if [ -z "$v1_pre" ] && [ -z "$v2_pre" ]; then
+        if [[ -z "$v1_pre" && -z "$v2_pre" ]]; then
             echo "$tag1"  # Both are release versions, same
-        elif [ -z "$v1_pre" ]; then
+        elif [[ -z "$v1_pre" ]]; then
             echo "$tag1"  # v1 is release, v2 is prerelease - v1 is higher
-        elif [ -z "$v2_pre" ]; then
+        elif [[ -z "$v2_pre" ]]; then
             echo "$tag2"  # v2 is release, v1 is prerelease - v2 is higher
         else
             # Both are prereleases, compare prerelease identifiers using proper semver rules
             # For prereleases, we need to compare according to semver precedence rules
             local pre_cmp=$(printf '%s\n%s\n' "$v1_pre" "$v2_pre" | sort -V | head -1)
-            if [ "$pre_cmp" = "$v1_pre" ]; then
+            if [[ "$pre_cmp" = "$v1_pre" ]]; then
                 echo "$tag2"  # v1_pre comes first in sort, so v2_pre is higher
             else
                 echo "$tag1"  # v2_pre comes first in sort, so v1_pre is higher
@@ -84,14 +84,14 @@ compare_semver() {
 get_highest_tag() {
     local tags=$(git tag --points-at HEAD 2>/dev/null)
 
-    if [ -z "$tags" ]; then
+    if [[ -z "$tags" ]]; then
         echo ""
         return
     fi
 
     local highest=""
     while IFS= read -r tag; do
-        if [ -z "$highest" ]; then
+        if [[ -z "$highest" ]]; then
             highest="$tag"
         else
             highest=$(compare_semver "$highest" "$tag")
@@ -103,7 +103,7 @@ get_highest_tag() {
 
 # Check if current commit is tagged and format commit accordingly
 TAG=$(get_highest_tag)
-if [ -n "$TAG" ]; then
+if [[ -n "$TAG" ]]; then
     COMMIT="$TAG ($SHORT_COMMIT)"
 else
     COMMIT="$COMMIT_HASH"
@@ -111,7 +111,7 @@ fi
 
 # Binary name with platform suffix
 BINARY_NAME="simple_wiki-${TARGET_OS}-${TARGET_ARCH}"
-if [ "$TARGET_OS" = "windows" ]; then
+if [[ "$TARGET_OS" = "windows" ]]; then
     BINARY_NAME="${BINARY_NAME}.exe"
 fi
 
@@ -119,7 +119,7 @@ echo "Building simple_wiki for ${TARGET_OS}/${TARGET_ARCH}"
 echo "Output: ${BINARY_NAME}"
 
 # Generate frontend and protos (unless explicitly skipped)
-if [ "$SKIP_GENERATE" != "true" ]; then
+if [[ "$SKIP_GENERATE" != "true" ]]; then
     # Only run buf generate if proto files have changed (avoids needing protoc plugins in CI)
     # Use merge-base to detect changes across the entire branch, not just the last commit
     MERGE_BASE=$(git merge-base HEAD origin/main 2>/dev/null || echo "HEAD~1")
@@ -133,7 +133,7 @@ if [ "$SKIP_GENERATE" != "true" ]; then
 
     # Derive extension version from git tag if available
     # Firefox requires 1-4 dot-separated integers, so strip 'v' prefix and pre-release suffix
-    if [ -n "$TAG" ]; then
+    if [[ -n "$TAG" ]]; then
         EXT_VER="${TAG#v}"
         EXT_VER="${EXT_VER%%-*}"
         if [[ "$EXT_VER" =~ ^[0-9]+(\.[0-9]+){0,3}$ ]]; then
