@@ -655,6 +655,111 @@ var _ = Describe("Index", func() {
 				Expect(results).To(ContainElement(wikipage.PageIdentifier("container_page")))
 			})
 		})
+
+		Describe("when frontmatter has boolean true values", func() {
+			var err error
+
+			BeforeEach(func() {
+				mockReader.AddPage("bool-page", wikipage.FrontMatter{
+					"identifier":   "bool-page",
+					"is_container": true,
+				})
+				err = index.AddPageToIndex("bool-page")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should index true boolean values as the string 'true'", func() {
+				results := index.QueryExactMatch("is_container", "true")
+				Expect(results).To(ContainElement(wikipage.PageIdentifier("bool_page")))
+			})
+		})
+
+		Describe("when frontmatter has boolean false values", func() {
+			var err error
+
+			BeforeEach(func() {
+				mockReader.AddPage("false-bool-page", wikipage.FrontMatter{
+					"identifier": "false-bool-page",
+					"archived":   false,
+				})
+				err = index.AddPageToIndex("false-bool-page")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should not index false boolean values", func() {
+				results := index.QueryExactMatch("archived", "false")
+				Expect(results).NotTo(ContainElement(wikipage.PageIdentifier("false_bool_page")))
+			})
+		})
+
+		Describe("when frontmatter has integer values", func() {
+			var err error
+
+			BeforeEach(func() {
+				mockReader.AddPage("int-page", wikipage.FrontMatter{
+					"identifier": "int-page",
+					"count":      int64(42),
+				})
+				err = index.AddPageToIndex("int-page")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should index integer values as decimal strings", func() {
+				results := index.QueryExactMatch("count", "42")
+				Expect(results).To(ContainElement(wikipage.PageIdentifier("int_page")))
+			})
+		})
+
+		Describe("when frontmatter has float values", func() {
+			var err error
+
+			BeforeEach(func() {
+				mockReader.AddPage("float-page", wikipage.FrontMatter{
+					"identifier": "float-page",
+					"price":      float64(9.99),
+				})
+				err = index.AddPageToIndex("float-page")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should index float values as strings", func() {
+				results := index.QueryExactMatch("price", "9.99")
+				Expect(results).To(ContainElement(wikipage.PageIdentifier("float_page")))
+			})
+		})
+
+		Describe("when frontmatter contains an unrecognized value type", func() {
+			var err error
+
+			BeforeEach(func() {
+				// Use a struct type which is not handled by recursiveAddFrontmatter
+				type unsupportedType struct{ X int }
+				mockReader.AddPage("bad-type-page", wikipage.FrontMatter{
+					"identifier":   "bad-type-page",
+					"bad_field": map[string]any{
+						"nested": unsupportedType{X: 1},
+					},
+				})
+				err = index.AddPageToIndex("bad-type-page")
+			})
+
+			It("should return an error describing the invalid type", func() {
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("invalid value type"))
+			})
+		})
 	})
 })
 
