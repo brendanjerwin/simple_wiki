@@ -92,6 +92,31 @@ var _ = Describe("Index", func() {
 			})
 		})
 
+		Describe("when adding a page with an empty-string key containing a nested map", func() {
+			var err error
+
+			BeforeEach(func() {
+				// An empty-string key with a map value exercises the buildKeyPath("", key) branch
+				// in indexMap, where the empty current path is replaced by the child key directly.
+				mockReader.AddPage("empty-key-page", wikipage.FrontMatter{
+					"identifier": "empty-key-page",
+					"": map[string]any{
+						"nested": "value",
+					},
+				})
+				err = index.AddPageToIndex("empty-key-page")
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should index the nested value under its key", func() {
+				results := index.QueryExactMatch("nested", "value")
+				Expect(results).To(ContainElement(wikipage.PageIdentifier("empty_key_page")))
+			})
+		})
+
 		Describe("when adding a page with nested TOML frontmatter", func() {
 			var err error
 

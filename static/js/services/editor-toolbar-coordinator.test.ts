@@ -2,9 +2,8 @@ import { expect, fixture, html } from '@open-wc/testing';
 import type { SinonStub, SinonSpy } from 'sinon';
 import { stub, spy } from 'sinon';
 import '../web-components/editor-toolbar.js';
-import '../web-components/insert-new-page-dialog.js';
+import { InsertNewPageDialog } from '../web-components/insert-new-page-dialog.js';
 import type { EditorToolbar } from '../web-components/editor-toolbar.js';
-import type { InsertNewPageDialog } from '../web-components/insert-new-page-dialog.js';
 import { EditorToolbarCoordinator } from './editor-toolbar-coordinator.js';
 import { EditorUploadService } from './editor-upload-service.js';
 import { TextFormattingService } from './text-formatting-service.js';
@@ -212,8 +211,11 @@ describe('EditorToolbarCoordinator', () => {
 
   describe('when Insert New Page toolbar button is clicked', () => {
     let insertedDialog: InsertNewPageDialog | null;
+    let openDialogStub: SinonStub;
 
     beforeEach(async () => {
+      openDialogStub = stub(InsertNewPageDialog.prototype, 'openDialog').resolves();
+
       textarea.value = 'Some existing text';
       textarea.selectionStart = 5;
       textarea.selectionEnd = 5;
@@ -228,6 +230,8 @@ describe('EditorToolbarCoordinator', () => {
     });
 
     afterEach(() => {
+      openDialogStub.restore();
+
       if (insertedDialog) {
         insertedDialog.remove();
       }
