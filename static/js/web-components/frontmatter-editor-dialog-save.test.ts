@@ -10,6 +10,7 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
   let clientStub: sinon.SinonStub;
   let sessionStorageStub: sinon.SinonStub;
   let refreshPageStub: sinon.SinonStub;
+  let clock: sinon.SinonFakeTimers;
 
   function timeout(ms: number, message: string): Promise<never> {
     return new Promise((_, reject) =>
@@ -18,6 +19,10 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
   }
 
   beforeEach(async () => {
+    // Install fake timers before anything else to prevent the 100ms setTimeout in
+    // showToastAfter() from firing after sinon.restore() tears down stubs in afterEach.
+    clock = sinon.useFakeTimers();
+
     // Create mock client before fixture creation
     const mockClient = {
       replaceFrontmatter: sinon.stub(),
@@ -83,6 +88,8 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
 
         // Execute the save action
         await el['_handleSaveClick']();
+        // Flush the 100ms setTimeout in showToastAfter() before afterEach teardown
+        clock.tick(200);
       });
 
       it('should call replaceFrontmatter with correct parameters', () => {
@@ -136,6 +143,8 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
 
           // Wait for completion
           await savePromise;
+          // Flush the 100ms setTimeout in showToastAfter()
+          clock.tick(200);
         });
 
         it('should set saving state during operation', () => {
@@ -151,6 +160,7 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
           el.open = true;
 
           await el['_handleSaveClick']();
+          clock.tick(200);
         });
 
         it('should close the dialog', () => {
@@ -170,6 +180,7 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
           );
 
           await el['_handleSaveClick']();
+          clock.tick(200);
         });
 
         it('should clear the error', () => {
@@ -193,6 +204,7 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
           });
 
           await el['_handleSaveClick']();
+          clock.tick(200);
         });
 
         it('should update frontmatter data with server response', () => {
@@ -211,6 +223,7 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
 
         // Execute the save action
         await el['_handleSaveClick']();
+        clock.tick(200);
       });
 
       it('should set augmented error', () => {
@@ -238,6 +251,7 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
           el.open = true;
 
           await el['_handleSaveClick']();
+          clock.tick(200);
         });
 
         it('should not close dialog', () => {
@@ -253,6 +267,7 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
 
         // Execute the save action
         await el['_handleSaveClick']();
+        clock.tick(200);
       });
 
       it('should handle non-Error exceptions', () => {
@@ -268,6 +283,7 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
 
         // Execute the save action
         await el['_handleSaveClick']();
+        clock.tick(200);
       });
 
       it('should not make network call', () => {
@@ -281,6 +297,7 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
 
         // Execute the save action
         await el['_handleSaveClick']();
+        clock.tick(200);
       });
 
       it('should not make network call', () => {
