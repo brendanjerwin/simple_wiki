@@ -68,6 +68,7 @@ func (*JSONArchiveMigrationScanJob) GetName() string {
 type JSONArchiveMigrationJob struct {
 	dataDir      string
 	jsonFilename string
+	clockFn      func() time.Time
 }
 
 // NewJSONArchiveMigrationJob creates a new archive job for a specific JSON file
@@ -75,6 +76,7 @@ func NewJSONArchiveMigrationJob(dataDir string, jsonFilename string) *JSONArchiv
 	return &JSONArchiveMigrationJob{
 		dataDir:      dataDir,
 		jsonFilename: jsonFilename,
+		clockFn:      time.Now,
 	}
 }
 
@@ -89,7 +91,7 @@ func (j *JSONArchiveMigrationJob) Execute() error {
 	}
 
 	// Create timestamp for the archive directory
-	timestamp := time.Now().Format("20060102_150405")
+	timestamp := j.clockFn().Format("20060102_150405")
 	deletedDir := filepath.Join(j.dataDir, "__deleted__", timestamp)
 
 	// Create the timestamped deleted directory

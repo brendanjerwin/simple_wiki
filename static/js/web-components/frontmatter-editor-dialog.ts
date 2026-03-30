@@ -1,6 +1,6 @@
 import { html, css, LitElement } from 'lit';
 import { property, state } from 'lit/decorators.js';
-import { createClient } from '@connectrpc/connect';
+import { createClient, type Client } from '@connectrpc/connect';
 import { create, type JsonObject } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import { Frontmatter, GetFrontmatterRequestSchema, GetFrontmatterResponseSchema, ReplaceFrontmatterRequestSchema, type GetFrontmatterResponse } from '../gen/api/v1/frontmatter_pb.js';
@@ -172,7 +172,14 @@ export class FrontmatterEditorDialog extends LitElement {
   @state()
   declare workingFrontmatter?: JsonObject;
 
-  private client = createClient(Frontmatter, getGrpcWebTransport());
+  private client: Client<typeof Frontmatter> | null = null;
+
+  private getClient(): Client<typeof Frontmatter> {
+    if (!this.client) {
+      this.client = createClient(Frontmatter, getGrpcWebTransport());
+    }
+    return this.client;
+  }
 
   constructor() {
     super();
@@ -240,7 +247,7 @@ export class FrontmatterEditorDialog extends LitElement {
       this.requestUpdate();
 
       const request = create(GetFrontmatterRequestSchema, { page: this.page });
-      const response = await this.client.getFrontmatter(request);
+      const response = await this.getClient().getFrontmatter(request);
       this.frontmatter = response;
       this.updateWorkingFrontmatter();
     } catch (err) {
@@ -272,7 +279,7 @@ export class FrontmatterEditorDialog extends LitElement {
         frontmatter: this.workingFrontmatter
       });
 
-      const response = await this.client.replaceFrontmatter(request);
+      const response = await this.getClient().replaceFrontmatter(request);
 
       // Update the stored frontmatter with the response to reflect any server-side changes
       if (response.frontmatter) {

@@ -292,13 +292,14 @@ var _ = Describe("JSONArchiveMigrationJob", func() {
 			BeforeEach(func() {
 				jsonFilename := base32tools.EncodeToBase32("duplicate") + ".json"
 				originalJSONPath = filepath.Join(tempDir, jsonFilename)
-				
+
 				// Create original JSON file
 				err := os.WriteFile(originalJSONPath, []byte(`{"test": "original"}`), 0644)
 				Expect(err).NotTo(HaveOccurred())
 
-				// Create a pre-existing deleted directory with the same filename
-				timestamp := time.Now().Format("20060102_150405")
+				// Use a fixed time to avoid timestamp race between test setup and Execute()
+				fixedTime := time.Date(2024, 1, 15, 10, 30, 45, 0, time.UTC)
+				timestamp := fixedTime.Format("20060102_150405")
 				deletedDir := filepath.Join(tempDir, "__deleted__", timestamp)
 				err = os.MkdirAll(deletedDir, 0755)
 				Expect(err).NotTo(HaveOccurred())
@@ -307,8 +308,9 @@ var _ = Describe("JSONArchiveMigrationJob", func() {
 				err = os.WriteFile(existingPath, []byte(`{"test": "existing"}`), 0644)
 				Expect(err).NotTo(HaveOccurred())
 
-				// Execute the migration
+				// Execute the migration with the same fixed clock
 				job = NewJSONArchiveMigrationJob(tempDir, jsonFilename)
+				job.clockFn = func() time.Time { return fixedTime }
 				executeErr = job.Execute()
 
 				// Check what files exist in the deleted directory
@@ -352,19 +354,20 @@ var _ = Describe("JSONArchiveMigrationJob", func() {
 			BeforeEach(func() {
 				jsonFilename := base32tools.EncodeToBase32("multidup") + ".json"
 				originalJSONPath = filepath.Join(tempDir, jsonFilename)
-				
+
 				// Create original JSON file
 				err := os.WriteFile(originalJSONPath, []byte(`{"test": "original"}`), 0644)
 				Expect(err).NotTo(HaveOccurred())
 
-				// Create a pre-existing deleted directory with multiple incremented files
-				timestamp := time.Now().Format("20060102_150405")
+				// Use a fixed time to avoid timestamp race between test setup and Execute()
+				fixedTime := time.Date(2024, 1, 15, 10, 30, 45, 0, time.UTC)
+				timestamp := fixedTime.Format("20060102_150405")
 				deletedDir := filepath.Join(tempDir, "__deleted__", timestamp)
 				err = os.MkdirAll(deletedDir, 0755)
 				Expect(err).NotTo(HaveOccurred())
 
 				baseName := base32tools.EncodeToBase32("multidup")
-				
+
 				// Create base file
 				existingPath := filepath.Join(deletedDir, baseName+".json")
 				err = os.WriteFile(existingPath, []byte(`{"test": "existing"}`), 0644)
@@ -375,8 +378,9 @@ var _ = Describe("JSONArchiveMigrationJob", func() {
 				err = os.WriteFile(existing1Path, []byte(`{"test": "existing1"}`), 0644)
 				Expect(err).NotTo(HaveOccurred())
 
-				// Execute the migration
+				// Execute the migration with the same fixed clock
 				job = NewJSONArchiveMigrationJob(tempDir, jsonFilename)
+				job.clockFn = func() time.Time { return fixedTime }
 				executeErr = job.Execute()
 
 				// Check what files exist in the deleted directory
