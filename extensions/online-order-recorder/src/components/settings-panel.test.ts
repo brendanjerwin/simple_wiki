@@ -93,7 +93,7 @@ describe('SettingsPanel', () => {
       mockGet.mockResolvedValue({});
       el = createSettingsPanel();
       await el.updateComplete;
-      document.body.removeChild(el);
+      el.remove();
     });
 
     it('should remove the storage change listener', () => {
