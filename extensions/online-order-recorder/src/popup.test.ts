@@ -99,8 +99,7 @@ describe('popup', () => {
       });
 
       it('should set orderListEl.orders from response', () => {
-        expect(orderListEl.orders).toHaveLength(1);
-        expect(orderListEl.orders[0]!.merchant).to.equal('TestMerchant');
+        expect(orderListEl.orders).toStrictEqual([makeOrder()]);
       });
     });
 

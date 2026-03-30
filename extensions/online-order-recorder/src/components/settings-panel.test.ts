@@ -52,15 +52,15 @@ describe('SettingsPanel', () => {
     });
 
     it('should default showSaved to false', () => {
-      expect(el.showSaved).to.equal(false);
+      expect(el.showSaved).toBeFalsy();
     });
 
     it('should default isManuallySet to false', () => {
-      expect(el.isManuallySet).to.equal(false);
+      expect(el.isManuallySet).toBeFalsy();
     });
 
     it('should default showAutoDetected to false', () => {
-      expect(el.showAutoDetected).to.equal(false);
+      expect(el.showAutoDetected).toBeFalsy();
     });
   });
 
@@ -130,7 +130,7 @@ describe('SettingsPanel', () => {
       });
 
       it('should set isManuallySet to true', () => {
-        expect(el.isManuallySet).to.equal(true);
+        expect(el.isManuallySet).toBeTruthy();
       });
     });
 
@@ -150,7 +150,7 @@ describe('SettingsPanel', () => {
       });
 
       it('should set isManuallySet to false', () => {
-        expect(el.isManuallySet).to.equal(false);
+        expect(el.isManuallySet).toBeFalsy();
       });
     });
 
@@ -170,7 +170,7 @@ describe('SettingsPanel', () => {
       });
 
       it('should set isManuallySet to false since the value is not true', () => {
-        expect(el.isManuallySet).to.equal(false);
+        expect(el.isManuallySet).toBeFalsy();
       });
     });
   });
@@ -214,11 +214,11 @@ describe('SettingsPanel', () => {
     });
 
     it('should set isManuallySet to true', () => {
-      expect(el.isManuallySet).to.equal(true);
+      expect(el.isManuallySet).toBeTruthy();
     });
 
     it('should set showSaved to true', () => {
-      expect(el.showSaved).to.equal(true);
+      expect(el.showSaved).toBeTruthy();
     });
 
     describe('when 2 seconds have passed', () => {
@@ -229,7 +229,7 @@ describe('SettingsPanel', () => {
       });
 
       it('should clear showSaved', () => {
-        expect(el.showSaved).to.equal(false);
+        expect(el.showSaved).toBeFalsy();
       });
     });
   });
@@ -243,7 +243,7 @@ describe('SettingsPanel', () => {
       el = createSettingsPanel();
       await el.updateComplete;
       await vi.waitFor(() => {
-        expect(el.isManuallySet).to.equal(true);
+        expect(el.isManuallySet).toBeTruthy();
       });
       await el.updateComplete;
 
@@ -261,7 +261,7 @@ describe('SettingsPanel', () => {
     });
 
     it('should set isManuallySet to false', () => {
-      expect(el.isManuallySet).to.equal(false);
+      expect(el.isManuallySet).toBeFalsy();
     });
   });
 
@@ -325,7 +325,7 @@ describe('SettingsPanel', () => {
       });
 
       it('should set showAutoDetected to true', () => {
-        expect(el.showAutoDetected).to.equal(true);
+        expect(el.showAutoDetected).toBeTruthy();
       });
 
       describe('when 3 seconds have passed', () => {
@@ -336,7 +336,7 @@ describe('SettingsPanel', () => {
         });
 
         it('should clear showAutoDetected', () => {
-          expect(el.showAutoDetected).to.equal(false);
+          expect(el.showAutoDetected).toBeFalsy();
         });
       });
     });
@@ -350,7 +350,7 @@ describe('SettingsPanel', () => {
         el = createSettingsPanel();
         await el.updateComplete;
         await vi.waitFor(() => {
-          expect(el.isManuallySet).to.equal(true);
+          expect(el.isManuallySet).toBeTruthy();
         });
         storageListener = mockAddListener.mock.calls[0]![0] as typeof storageListener;
 
@@ -363,7 +363,7 @@ describe('SettingsPanel', () => {
       });
 
       it('should not set showAutoDetected', () => {
-        expect(el.showAutoDetected).to.equal(false);
+        expect(el.showAutoDetected).toBeFalsy();
       });
     });
 
@@ -382,7 +382,7 @@ describe('SettingsPanel', () => {
       });
 
       it('should update isManuallySet', () => {
-        expect(el.isManuallySet).to.equal(true);
+        expect(el.isManuallySet).toBeTruthy();
       });
     });
   });
@@ -482,7 +482,7 @@ describe('SettingsPanel', () => {
         el = createSettingsPanel();
         await el.updateComplete;
         await vi.waitFor(() => {
-          expect(el.isManuallySet).to.equal(true);
+          expect(el.isManuallySet).toBeTruthy();
         });
         await el.updateComplete;
       });
