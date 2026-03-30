@@ -132,7 +132,7 @@ export class EditorUploadService {
     } catch {
       // Fallback: try to extract from query string manually
       const match = location.match(/filename=([^&]+)/);
-      if (match?.[1]) {
+      if (match && match[1]) {
         return decodeURIComponent(match[1]);
       }
       return 'upload';
