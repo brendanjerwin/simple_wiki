@@ -23,7 +23,7 @@ cd static/js || exit 1
 
 echo "Installing dependencies..." | tee -a "$LOG_FILE"
 bun install 2>&1 | tee -a "$LOG_FILE"
-install_exit=$?
+install_exit=${PIPESTATUS[0]}
 if [[ $install_exit -ne 0 ]]; then
   echo "bun install failed with exit code $install_exit" | tee -a "$LOG_FILE"
   echo "Log saved to: $LOG_FILE"
@@ -31,16 +31,16 @@ if [[ $install_exit -ne 0 ]]; then
 fi
 
 echo "" | tee -a "$LOG_FILE"
-echo "Running tests with 5 minute timeout..." | tee -a "$LOG_FILE"
+echo "Running tests with 10 minute timeout..." | tee -a "$LOG_FILE"
 echo "" | tee -a "$LOG_FILE"
 
 # Run tests with timeout, capturing both stdout and stderr
-timeout 300 bun run test:wtr ${CI_COVERAGE:+--coverage} "${processed_paths[@]}" 2>&1 | tee -a "$LOG_FILE"
+timeout 600 bun run test:wtr ${CI_COVERAGE:+--coverage} "${processed_paths[@]}" 2>&1 | tee -a "$LOG_FILE"
 test_exit=${PIPESTATUS[0]}
 
 echo "" | tee -a "$LOG_FILE"
 if [[ $test_exit -eq 124 ]]; then
-  echo "TIMEOUT: Tests exceeded 5 minute limit" | tee -a "$LOG_FILE"
+  echo "TIMEOUT: Tests exceeded 10 minute limit" | tee -a "$LOG_FILE"
 elif [[ $test_exit -ne 0 ]]; then
   echo "Tests failed with exit code: $test_exit" | tee -a "$LOG_FILE"
 else

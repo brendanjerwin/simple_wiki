@@ -297,9 +297,10 @@ export class InsertNewPageDialog extends LitElement {
   };
 
   private readonly _handleTemplateChange = async (event: Event): Promise<void> => {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
-    const select = event.target as HTMLSelectElement;
-    const newTemplate = select.value;
+    if (!(event.target instanceof HTMLSelectElement)) {
+      return;
+    }
+    const newTemplate = event.target.value;
 
     this.selectedTemplate = newTemplate;
 

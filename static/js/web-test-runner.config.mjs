@@ -3,7 +3,9 @@ import { esbuildPlugin } from '@web/dev-server-esbuild';
 import { summaryReporter } from '@web/test-runner';
 
 const chromiumPath = process.env.CHROMIUM_BIN;
+const ciCoverage = Boolean(process.env.CI_COVERAGE);
 console.log('WTR Config - CHROMIUM_BIN:', chromiumPath);
+console.log('WTR Config - Coverage enabled:', ciCoverage);
 
 export default {
   files: ['./{web-components,services}/**/*.test.ts'],
@@ -22,7 +24,7 @@ export default {
       tsconfig: './tsconfig.json',
     }),
   ],
-  coverage: true,
+  coverage: ciCoverage,
   coverageConfig: {
     report: true,
     reportDir: 'coverage',
@@ -34,7 +36,7 @@ export default {
       timeout: '10000', // 10 seconds
     },
   },
-  testsFinishTimeout: 300000, // 5 minutes,
+  testsFinishTimeout: 540000, // 9 minutes (allows coverage collection to complete within the 10-minute CI timeout),
   filterBrowserLogs(log) {
     // This is the full message that Lit logs to the console.
     const litDevModeMessage = 'Lit is in dev mode. Not recommended for production! See https://lit.dev/msg/dev-mode for more information.';
