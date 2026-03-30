@@ -433,11 +433,15 @@ func setupGRPCServer(
 		return nil, nil, err
 	}
 
-	grpcServer := grpc.NewServer(
+	grpcOpts := []grpc.ServerOption{
 		grpc.ChainUnaryInterceptor(unaryInterceptors...),
 		grpc.ChainStreamInterceptor(streamInterceptors...),
-		grpc.MaxRecvMsgSize(int(site.MaxUploadSize)*1024*1024),
-	)
+	}
+	// MaxUploadSize == 0 means no limit; only apply a cap when explicitly set.
+	if site.MaxUploadSize > 0 {
+		grpcOpts = append(grpcOpts, grpc.MaxRecvMsgSize(int(site.MaxUploadSize)*1024*1024))
+	}
+	grpcServer := grpc.NewServer(grpcOpts...)
 	grpcAPIServer.RegisterWithServer(grpcServer)
 
 	return grpcServer, grpcAPIServer, nil
