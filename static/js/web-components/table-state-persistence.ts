@@ -28,9 +28,10 @@ export function computeTableHash(headerTexts: string[], cellValues: string[][]):
   const buf = new Int32Array(1);
   for (let i = 0; i < content.length; i++) {
     const char = content.charCodeAt(i);
-    buf[0] = (buf[0] << 5) - buf[0] + char;
+    const prev = buf[0] ?? 0;
+    buf[0] = (prev << 5) - prev + char;
   }
-  return (buf[0] >>> 0).toString(36);
+  return ((buf[0] ?? 0) >>> 0).toString(36);
 }
 
 export function serializeFilter(filter: ColumnFilterState): SerializedFilterState {
