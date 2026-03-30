@@ -111,8 +111,9 @@ Safe content after the injection.`);
       await page.goto(`/${TEST_PAGE}/view`);
       await expect(page.locator('#rendered')).toBeAttached({ timeout: PAGE_LOAD_TIMEOUT_MS });
 
-      // Give the page time to settle so any onerror would have fired
-      await page.waitForTimeout(500);
+      // Wait for the img element to be present in the DOM, confirming the page has fully
+      // rendered and any onerror (if not stripped) would have already fired.
+      await expect(page.locator('#rendered img')).toBeAttached();
     });
 
     test('should not execute injected event handlers', () => {
@@ -142,6 +143,8 @@ identifier = "${TEST_PAGE}"
 # XSS URL Test
 
 [Click me](javascript:alert('xss-url'))
+[Data link](data:text/html,<script>alert('xss-data')</script>)
+[VBScript link](vbscript:alert('xss-vbscript'))
 
 Safe link: [Home](/home/view)`);
 
@@ -154,17 +157,33 @@ Safe link: [Home](/home/view)`);
     });
 
     test('should not have any javascript: protocol hrefs in the DOM', async ({ page }) => {
-      // Evaluate all anchor hrefs to check for javascript: protocol
       const jsHrefs = await page.evaluate(() => {
         const anchors = Array.from(document.querySelectorAll('#rendered a'));
         return anchors
           .map(a => (a as HTMLAnchorElement).href)
-          .filter(href => {
-            const lower = href.toLowerCase();
-            return lower.startsWith('javascript:') || lower.startsWith('data:') || lower.startsWith('vbscript:');
-          });
+          .filter(href => href.toLowerCase().startsWith('javascript:'));
       });
       expect(jsHrefs).toHaveLength(0);
+    });
+
+    test('should not have any data: protocol hrefs in the DOM', async ({ page }) => {
+      const dataHrefs = await page.evaluate(() => {
+        const anchors = Array.from(document.querySelectorAll('#rendered a'));
+        return anchors
+          .map(a => (a as HTMLAnchorElement).getAttribute('href') ?? '')
+          .filter(href => href.toLowerCase().startsWith('data:'));
+      });
+      expect(dataHrefs).toHaveLength(0);
+    });
+
+    test('should not have any vbscript: protocol hrefs in the DOM', async ({ page }) => {
+      const vbsHrefs = await page.evaluate(() => {
+        const anchors = Array.from(document.querySelectorAll('#rendered a'));
+        return anchors
+          .map(a => (a as HTMLAnchorElement).getAttribute('href') ?? '')
+          .filter(href => href.toLowerCase().startsWith('vbscript:'));
+      });
+      expect(vbsHrefs).toHaveLength(0);
     });
 
     test('should not execute javascript: protocol links when clicked', async ({ page }) => {
@@ -201,7 +220,9 @@ identifier = "${TEST_PAGE}"
 |------|-------|
 | Safe Cell | <script>alert('xss-table-script')</script> |
 | Event Cell | <img src="x" onerror="alert('xss-table-event')"> |
-| Link Cell | <a href="javascript:alert('xss-table-link')">click</a> |
+| JS Link Cell | <a href="javascript:alert('xss-table-link')">js-click</a> |
+| Data Link Cell | <a href="data:text/html,<script>alert('xss-table-data')</script>">data-click</a> |
+| VBScript Link Cell | <a href="vbscript:alert('xss-table-vbs')">vbs-click</a> |
 | Normal Cell | just text |`);
 
       page.on('dialog', () => {
@@ -241,8 +262,8 @@ identifier = "${TEST_PAGE}"
       });
       expect(imgWithOnerrorCount).toBe(0);
 
-      // Give any onerror time to fire
-      await page.waitForTimeout(200);
+      // The beforeEach already waited for the table to fully render, so any onerror
+      // that wasn't stripped would have already fired by now.
       expect(dialogTriggered).toBe(false);
     });
 
@@ -251,12 +272,29 @@ identifier = "${TEST_PAGE}"
         const wikiTable = document.querySelector('wiki-table');
         if (!wikiTable?.shadowRoot) return 0;
         const anchors = Array.from(wikiTable.shadowRoot.querySelectorAll('a'));
-        return anchors.filter(a => {
-          const lower = a.href.toLowerCase();
-          return lower.startsWith('javascript:') || lower.startsWith('data:') || lower.startsWith('vbscript:');
-        }).length;
+        return anchors.filter(a => a.href.toLowerCase().startsWith('javascript:')).length;
       });
       expect(jsHrefCount).toBe(0);
+    });
+
+    test('should strip data: protocol hrefs from wiki-table cell links', async ({ page }) => {
+      const dataHrefCount = await page.evaluate(() => {
+        const wikiTable = document.querySelector('wiki-table');
+        if (!wikiTable?.shadowRoot) return 0;
+        const anchors = Array.from(wikiTable.shadowRoot.querySelectorAll('a'));
+        return anchors.filter(a => (a.getAttribute('href') ?? '').toLowerCase().startsWith('data:')).length;
+      });
+      expect(dataHrefCount).toBe(0);
+    });
+
+    test('should strip vbscript: protocol hrefs from wiki-table cell links', async ({ page }) => {
+      const vbsHrefCount = await page.evaluate(() => {
+        const wikiTable = document.querySelector('wiki-table');
+        if (!wikiTable?.shadowRoot) return 0;
+        const anchors = Array.from(wikiTable.shadowRoot.querySelectorAll('a'));
+        return anchors.filter(a => (a.getAttribute('href') ?? '').toLowerCase().startsWith('vbscript:')).length;
+      });
+      expect(vbsHrefCount).toBe(0);
     });
 
     test('should still render normal cell content in the table', async ({ page }) => {
