@@ -215,7 +215,7 @@ describe('ErrorDisplay', () => {
     describe('when error has no stack', () => {
       beforeEach(async () => {
         const originalError = new Error('Test error');
-        originalError.stack = undefined;
+        delete originalError.stack;
         el.augmentedError = new AugmentedError(originalError, ErrorKind.ERROR, 'error');
 
         await Promise.race([

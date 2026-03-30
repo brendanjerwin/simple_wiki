@@ -19,6 +19,9 @@ export default {
   browsers: [
     chromeLauncher({
       executablePath: chromiumPath,
+      launchOptions: {
+        args: ['--no-sandbox', '--disable-dev-shm-usage'],
+      },
     }),
   ],
   plugins: [
@@ -40,6 +43,7 @@ export default {
       timeout: '10000', // 10 seconds
     },
   },
+  concurrency: 1,
   testsFinishTimeout: 540000, // 9 minutes (allows coverage collection to complete within the 10-minute CI timeout),
   filterBrowserLogs(log) {
     // This is the full message that Lit logs to the console.
