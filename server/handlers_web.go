@@ -40,11 +40,6 @@ const (
 	uploadsPage               = "uploads"
 	mimeTextPlain             = "text/plain"
 	contentDispositionHeader  = "Content-Disposition"
-
-	// JSON response keys
-	jsonKeySuccess  = "success"
-	jsonKeyMessage  = "message"
-	jsonKeyUnixTime = "unix_time"
 )
 
 var (
@@ -393,37 +388,37 @@ func (s *Site) handlePageUpdate(c *gin.Context) {
 	err := c.BindJSON(&json)
 	if err != nil {
 		s.Logger.Trace("Failed to bind JSON in handlePageUpdate: %v", err)
-		c.JSON(http.StatusBadRequest, gin.H{jsonKeySuccess: false, jsonKeyMessage: "Wrong JSON"})
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Wrong JSON"})
 		return
 	}
 	if uint(len(json.NewText)) > s.MaxDocumentSize {
-		c.JSON(http.StatusBadRequest, gin.H{jsonKeySuccess: false, jsonKeyMessage: "Too much"})
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Too much"})
 		return
 	}
 	if len(json.Page) == 0 {
-		c.JSON(http.StatusBadRequest, gin.H{jsonKeySuccess: false, jsonKeyMessage: "Must specify `page`"})
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "Must specify `page`"})
 		return
 	}
 	s.Logger.Trace("Update: %v", json)
 	p, err := s.ReadPage(wikipage.PageIdentifier(json.Page))
 	if err != nil {
 		s.Logger.Error("Failed to open page %s for update: %v", json.Page, err)
-		c.JSON(http.StatusInternalServerError, gin.H{jsonKeySuccess: false, jsonKeyMessage: "Failed to open page"})
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": "Failed to open page"})
 		return
 	}
 	unixTime := time.Now().Unix()
 	if json.FetchedAt > 0 && p.IsModifiedSince(json.FetchedAt) {
-		c.JSON(http.StatusConflict, gin.H{jsonKeySuccess: false, jsonKeyMessage: "Refusing to overwrite others' work", jsonKeyUnixTime: unixTime})
+		c.JSON(http.StatusConflict, gin.H{"success": false, "message": "Refusing to overwrite others' work", "unix_time": unixTime})
 		return
 	}
 
 	p.Text = json.NewText
 	err = s.savePageAndIndex(p)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{jsonKeySuccess: false, jsonKeyMessage: err.Error(), jsonKeyUnixTime: unixTime})
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": err.Error(), "unix_time": unixTime})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{jsonKeySuccess: true, jsonKeyMessage: "Saved", jsonKeyUnixTime: unixTime})
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Saved", "unix_time": unixTime})
 }
 
 
