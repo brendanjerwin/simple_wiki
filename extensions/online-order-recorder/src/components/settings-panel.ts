@@ -79,7 +79,7 @@ export class SettingsPanel extends LitElement {
   @state()
   declare showAutoDetected: boolean;
 
-  private _storageListener = this._handleStorageChanged.bind(this);
+  private readonly _storageListener = this._handleStorageChanged.bind(this);
 
   constructor() {
     super();

@@ -24,31 +24,9 @@ func (*TOMLTableSpacingMigration) AppliesTo(content []byte) bool {
 	lines := strings.Split(frontmatter, newlineChar)
 	tableRegex := regexp.MustCompile(`^\[([^\]]+)\]`)
 
-	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		
-		// Skip empty lines and comments
-		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
-			continue
-		}
-
-		// Check if this is a table header
-		if tableRegex.MatchString(trimmed) {
-			// Check if it's the first line (no blank line needed)
-			if i == 0 {
-				continue
-			}
-
-			// Check if previous line is blank
-			prevLineIndex := i - 1
-			for prevLineIndex >= 0 && strings.TrimSpace(lines[prevLineIndex]) == "" {
-				prevLineIndex--
-			}
-
-			// If we found a non-empty line immediately before the table header
-			if prevLineIndex >= 0 && prevLineIndex == i-1 {
-				return true
-			}
+	for i := range lines {
+		if tableHeaderNeedsBlankLineBefore(lines, i, tableRegex) {
+			return true
 		}
 	}
 
@@ -70,28 +48,37 @@ func (*TOMLTableSpacingMigration) Apply(content []byte) ([]byte, error) {
 	return []byte(result), nil
 }
 
+// needsBlankLineBefore returns true if there is a non-blank line immediately before line i.
+func needsBlankLineBefore(lines []string, i int) bool {
+	if i == 0 {
+		return false
+	}
+	prevLineIndex := i - 1
+	for prevLineIndex >= 0 && strings.TrimSpace(lines[prevLineIndex]) == "" {
+		prevLineIndex--
+	}
+	return prevLineIndex >= 0 && prevLineIndex == i-1
+}
+
+// tableHeaderNeedsBlankLineBefore returns true if line i is a TOML table header
+// that has a non-blank line immediately before it (i.e., it needs a blank line inserted).
+func tableHeaderNeedsBlankLineBefore(lines []string, i int, tableRegex *regexp.Regexp) bool {
+	trimmed := strings.TrimSpace(lines[i])
+	if !tableRegex.MatchString(trimmed) {
+		return false
+	}
+	return needsBlankLineBefore(lines, i)
+}
+
 func addBlankLinesBeforeTables(frontmatter string) string {
 	lines := strings.Split(frontmatter, newlineChar)
 	var result []string
 	tableRegex := regexp.MustCompile(`^\[([^\]]+)\]`)
 
 	for i, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		
-		// Check if this is a table header and not the first line
-		if tableRegex.MatchString(trimmed) && i > 0 {
-			// Check if previous line is not blank
-			prevLineIndex := i - 1
-			for prevLineIndex >= 0 && strings.TrimSpace(lines[prevLineIndex]) == "" {
-				prevLineIndex--
-			}
-
-			// If we found a non-empty line immediately before the table header, add blank line
-			if prevLineIndex >= 0 && prevLineIndex == i-1 {
-				result = append(result, "")
-			}
+		if tableHeaderNeedsBlankLineBefore(lines, i, tableRegex) {
+			result = append(result, "")
 		}
-
 		result = append(result, line)
 	}
 

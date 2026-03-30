@@ -24,8 +24,8 @@ const ERROR_TOAST_DURATION_SECONDS = 8;
  * ```
  */
 export class InventoryItemCreatorMover {
-  private inventoryClient = createClient(InventoryManagementService, getGrpcWebTransport());
-  private pageManagementClient = createClient(PageManagementService, getGrpcWebTransport());
+  private readonly inventoryClient = createClient(InventoryManagementService, getGrpcWebTransport());
+  private readonly pageManagementClient = createClient(PageManagementService, getGrpcWebTransport());
 
   /**
    * Creates a new inventory item in a container

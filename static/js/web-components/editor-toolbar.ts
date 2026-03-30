@@ -212,7 +212,7 @@ export class EditorToolbar extends LitElement {
     document.removeEventListener('click', this._handleDocumentClick);
   }
 
-  private _handleDocumentClick = (event: Event): void => {
+  private readonly _handleDocumentClick = (event: Event): void => {
     // Close dropdown if clicking outside (composedPath handles shadow DOM)
     if (this._uploadMenuOpen && !event.composedPath().includes(this)) {
       this._uploadMenuOpen = false;
@@ -226,37 +226,37 @@ export class EditorToolbar extends LitElement {
     }));
   }
 
-  private _handleBold = (): void => {
+  private readonly _handleBold = (): void => {
     this._dispatchEvent('format-bold-requested');
   };
 
-  private _handleItalic = (): void => {
+  private readonly _handleItalic = (): void => {
     this._dispatchEvent('format-italic-requested');
   };
 
-  private _handleLink = (): void => {
+  private readonly _handleLink = (): void => {
     this._dispatchEvent('insert-link-requested');
   };
 
-  private _handleUploadImage = (): void => {
+  private readonly _handleUploadImage = (): void => {
     this._uploadMenuOpen = false;
     this._dispatchEvent('upload-image-requested');
   };
 
-  private _handleUploadFile = (): void => {
+  private readonly _handleUploadFile = (): void => {
     this._uploadMenuOpen = false;
     this._dispatchEvent('upload-file-requested');
   };
 
-  private _handleToggleUploadMenu = (): void => {
+  private readonly _handleToggleUploadMenu = (): void => {
     this._uploadMenuOpen = !this._uploadMenuOpen;
   };
 
-  private _handleNewPage = (): void => {
+  private readonly _handleNewPage = (): void => {
     this._dispatchEvent('insert-new-page-requested');
   };
 
-  private _handleExit = (): void => {
+  private readonly _handleExit = (): void => {
     this._dispatchEvent('exit-requested');
   };
 
