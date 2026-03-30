@@ -84,6 +84,44 @@ func (f *Index) saveToIndex(identifier wikipage.PageIdentifier, keyPath DottedKe
 	f.PageKeyMap[identifier][keyPath][value] = true
 }
 
+// addMapToIndex indexes each key-value pair from a map into the inverted index,
+// recursing into nested maps as needed.
+func (f *Index) addMapToIndex(identifier wikipage.PageIdentifier, keyPath string, v map[string]any) error {
+	for key, val := range v {
+		newKeyPath := keyPath
+		if newKeyPath != "" {
+			newKeyPath += "."
+		}
+		newKeyPath += key
+
+		if _, isMap := val.(map[string]any); isMap {
+			f.saveToIndex(identifier, newKeyPath, "") // This ensures that the QueryKeyExistence function works for all keys in the hierarchy
+		}
+		if err := f.recursiveAddFrontmatter(identifier, newKeyPath, val); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// addArrayToIndex indexes each string element of an array into the inverted index.
+// Non-string elements (e.g., maps from checklists) are skipped as they are application
+// data rather than indexable strings. An empty array is indexed with an empty string to
+// ensure QueryKeyExistence works.
+func (f *Index) addArrayToIndex(identifier wikipage.PageIdentifier, keyPath string, v []any) {
+	if len(v) == 0 {
+		f.saveToIndex(identifier, keyPath, "")
+		return
+	}
+	for _, array := range v {
+		if str, ok := array.(string); ok {
+			f.saveToIndex(identifier, keyPath, str)
+		}
+		// Skip complex types (e.g., maps in arrays from checklists).
+		// These are application data, not indexable strings.
+	}
+}
+
 func (f *Index) recursiveAddFrontmatter(identifier wikipage.PageIdentifier, keyPath string, value any) error {
 	if keyPath == "identifier" {
 		return nil
@@ -95,37 +133,11 @@ func (f *Index) recursiveAddFrontmatter(identifier wikipage.PageIdentifier, keyP
 	case wikipage.FrontMatter:
 		return f.recursiveAddFrontmatter(identifier, keyPath, map[string]any(v))
 	case map[string]any:
-		for key, val := range v {
-			newKeyPath := keyPath
-			if newKeyPath != "" {
-				newKeyPath += "."
-			}
-			newKeyPath += key
-
-			if _, isMap := val.(map[string]any); isMap {
-				f.saveToIndex(identifier, newKeyPath, "") // This ensures that the QueryKeyExistence function works for all keys in the hierarchy
-			}
-			if err := f.recursiveAddFrontmatter(identifier, newKeyPath, val); err != nil {
-				return err
-			}
-		}
+		return f.addMapToIndex(identifier, keyPath, v)
 	case string:
 		f.saveToIndex(identifier, keyPath, v)
 	case []any:
-		// Save empty string to ensure QueryKeyExistence works for empty arrays
-		if len(v) == 0 {
-			f.saveToIndex(identifier, keyPath, "")
-		}
-		for _, array := range v {
-			switch str := array.(type) {
-			case string:
-				f.saveToIndex(identifier, keyPath, str)
-			default:
-				// Skip complex types (e.g., maps in arrays from checklists).
-				// These are application data, not indexable strings.
-				continue
-			}
-		}
+		f.addArrayToIndex(identifier, keyPath, v)
 	case bool:
 		// Only index true values - we rely on key existence for filtering containers
 		if v {
