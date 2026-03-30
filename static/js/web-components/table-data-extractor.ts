@@ -71,7 +71,7 @@ export function getUniqueColumnValues(rows: TableRowData[], columnIndex: number)
       seen.add(value);
     }
   }
-  return Array.from(seen).sort((a, b) => a.localeCompare(b));
+  return Array.from(seen).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }) || a.localeCompare(b));
 }
 
 export function getColumnNumericRange(

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -39,6 +40,8 @@ const (
 	inventoryItemsKeyPath       = "inventory.items"
 	inventoryIsContainerKeyPath = "inventory.is_container"
 	newlineDelim                = "\n"
+
+	errGetContainerItemsFmt = "Failed to get container items for %s: %v"
 )
 
 // InventoryNormalizationDependencies defines the interfaces needed for the normalization job.
@@ -147,7 +150,7 @@ func (j *InventoryNormalizationJob) createMissingItemPages(containers []string) 
 	for _, containerID := range containers {
 		items, err := j.normalizer.GetContainerItems(wikipage.PageIdentifier(containerID))
 		if err != nil {
-			j.logger.Error("Failed to get container items for %s: %v", containerID, err)
+			j.logger.Error(errGetContainerItemsFmt, containerID, err)
 			anomalies = append(anomalies, InventoryAnomaly{
 				Type:        "invalid_item_identifier",
 				ItemID:      containerID,
@@ -219,7 +222,7 @@ func (j *InventoryNormalizationJob) buildItemContainerMap(containers []string) m
 		// Source 2: Items listed in this container's inventory.items array
 		containerItems, err := j.normalizer.GetContainerItems(wikipage.PageIdentifier(containerID))
 		if err != nil {
-			j.logger.Error("Failed to get container items for %s: %v", containerID, err)
+			j.logger.Error(errGetContainerItemsFmt, containerID, err)
 			continue
 		}
 		for _, itemID := range containerItems {
@@ -348,10 +351,9 @@ func (j *InventoryNormalizationJob) migrateContainersToIsContainerField() int {
 	// Also include pages that have non-empty inventory.items arrays
 	pagesWithItems := j.fmIndex.QueryKeyExistence(inventoryItemsKeyPath)
 	for _, pageID := range pagesWithItems {
-		// Check if the page has actual items in its inventory.items array
 		items, err := j.normalizer.GetContainerItems(pageID)
 		if err != nil {
-			j.logger.Error("Failed to get container items for %s: %v", pageID, err)
+			j.logger.Error(errGetContainerItemsFmt, pageID, err)
 			continue
 		}
 		if len(items) > 0 {
@@ -359,45 +361,47 @@ func (j *InventoryNormalizationJob) migrateContainersToIsContainerField() int {
 		}
 	}
 
-	// For each identified container, check if it needs migration
 	for containerID := range containerSet {
-		// Read frontmatter to check current state
-		_, fm, err := j.deps.ReadFrontMatter(wikipage.PageIdentifier(containerID))
-		if err != nil {
-			j.logger.Error("Failed to read frontmatter for container %s during migration: %v", containerID, err)
-			continue
+		if j.migrateContainerIfNeeded(containerID) {
+			migratedCount++
 		}
-
-		// Check if is_container is already set to true
-		alreadySet, err := isContainerAlreadySet(fm)
-		if err != nil {
-			j.logger.Warn("Container %s has unexpected is_container type: %v", containerID, err)
-			// Treat unexpected type as not set - will be overwritten with boolean true
-		}
-		if alreadySet {
-			continue
-		}
-
-		// Ensure inventory map exists
-		inv, ok := fm[inventory.FrontmatterKey].(map[string]any)
-		if !ok {
-			inv = make(map[string]any)
-			fm[inventory.FrontmatterKey] = inv
-		}
-
-		// Set is_container = true
-		inv["is_container"] = true
-
-		// Write back frontmatter
-		if err := j.deps.WriteFrontMatter(wikipage.PageIdentifier(containerID), fm); err != nil {
-			j.logger.Error("Failed to write frontmatter for container %s during migration: %v", containerID, err)
-			continue
-		}
-
-		migratedCount++
 	}
 
 	return migratedCount
+}
+
+// migrateContainerIfNeeded sets is_container = true on a container if not already set.
+// Returns true if the container was migrated.
+func (j *InventoryNormalizationJob) migrateContainerIfNeeded(containerID string) bool {
+	_, fm, err := j.deps.ReadFrontMatter(wikipage.PageIdentifier(containerID))
+	if err != nil {
+		j.logger.Error("Failed to read frontmatter for container %s during migration: %v", containerID, err)
+		return false
+	}
+
+	alreadySet, err := isContainerAlreadySet(fm)
+	if err != nil {
+		j.logger.Warn("Container %s has unexpected is_container type: %v", containerID, err)
+		// Treat unexpected type as not set - will be overwritten with boolean true
+	}
+	if alreadySet {
+		return false
+	}
+
+	inv, ok := fm[inventory.FrontmatterKey].(map[string]any)
+	if !ok {
+		inv = make(map[string]any)
+		fm[inventory.FrontmatterKey] = inv
+	}
+
+	inv["is_container"] = true
+
+	if err := j.deps.WriteFrontMatter(wikipage.PageIdentifier(containerID), fm); err != nil {
+		j.logger.Error("Failed to write frontmatter for container %s during migration: %v", containerID, err)
+		return false
+	}
+
+	return true
 }
 
 // isContainerAlreadySet checks if is_container is already set to true.
@@ -505,52 +509,18 @@ func (j *InventoryNormalizationJob) generateAuditReport(anomalies []InventoryAno
 	_, _ = report.WriteString("# Inventory Audit Report" + newlineDelim + newlineDelim)
 	_, _ = fmt.Fprintf(&report, "*Last updated: %s*"+newlineDelim+newlineDelim, time.Now().Format(time.RFC3339))
 
-	// Summary
 	_, _ = report.WriteString("## Summary" + newlineDelim + newlineDelim)
 	_, _ = fmt.Fprintf(&report, "- **Pages created this run:** %d"+newlineDelim, len(createdPages))
 	_, _ = fmt.Fprintf(&report, "- **Anomalies detected:** %d"+newlineDelim+newlineDelim, len(anomalies))
 
-	// Created Pages
-	if len(createdPages) > 0 {
-		_, _ = report.WriteString("## Pages Created" + newlineDelim + newlineDelim)
-		for _, pageID := range createdPages {
-			_, _ = fmt.Fprintf(&report, "- [[%s]]"+newlineDelim, pageID)
-		}
-		_, _ = report.WriteString(newlineDelim)
-	}
+	writeCreatedPagesSection(&report, createdPages)
+	writeAnomaliesSection(&report, anomalies)
 
-	// Anomalies
-	if len(anomalies) > 0 {
-		_, _ = report.WriteString("## Anomalies" + newlineDelim + newlineDelim)
-
-		// Group by type
-		byType := make(map[string][]InventoryAnomaly)
-		for _, a := range anomalies {
-			byType[a.Type] = append(byType[a.Type], a)
-		}
-
-		for anomalyType, items := range byType {
-			_, _ = fmt.Fprintf(&report, "### %s"+newlineDelim+newlineDelim, formatAnomalyType(anomalyType))
-			for _, a := range items {
-				severity := "⚠️"
-				if a.Severity == "error" {
-					severity = "❌"
-				}
-				_, _ = fmt.Fprintf(&report, "%s **%s**: %s"+newlineDelim+newlineDelim, severity, a.ItemID, a.Description)
-			}
-		}
-	} else {
-		_, _ = report.WriteString("## Anomalies" + newlineDelim + newlineDelim)
-		_, _ = report.WriteString("✅ No anomalies detected." + newlineDelim + newlineDelim)
-	}
-
-	// Build frontmatter
 	fm := map[string]any{
 		"identifier": AuditReportPage,
 		"title":      "Inventory Audit Report",
 	}
 
-	// Write frontmatter and markdown
 	if err := j.deps.WriteFrontMatter(wikipage.PageIdentifier(AuditReportPage), fm); err != nil {
 		return fmt.Errorf("failed to write audit report frontmatter: %w", err)
 	}
@@ -559,6 +529,74 @@ func (j *InventoryNormalizationJob) generateAuditReport(anomalies []InventoryAno
 	}
 
 	return nil
+}
+
+// writeCreatedPagesSection writes the created pages section to the report buffer if there are any.
+func writeCreatedPagesSection(report *bytes.Buffer, createdPages []string) {
+	if len(createdPages) == 0 {
+		return
+	}
+	_, _ = report.WriteString("## Pages Created" + newlineDelim + newlineDelim)
+	for _, pageID := range createdPages {
+		_, _ = fmt.Fprintf(report, "- [[%s]]"+newlineDelim, pageID)
+	}
+	_, _ = report.WriteString(newlineDelim)
+}
+
+// writeAnomaliesSection writes the anomalies section to the report buffer.
+func writeAnomaliesSection(report *bytes.Buffer, anomalies []InventoryAnomaly) {
+	_, _ = report.WriteString("## Anomalies" + newlineDelim + newlineDelim)
+
+	if len(anomalies) == 0 {
+		_, _ = report.WriteString("✅ No anomalies detected." + newlineDelim + newlineDelim)
+		return
+	}
+
+	writeGroupedAnomalies(report, anomalies)
+}
+
+// writeGroupedAnomalies writes anomalies grouped by type into the report buffer.
+// Anomaly types and items within each type are sorted for deterministic output.
+func writeGroupedAnomalies(report *bytes.Buffer, anomalies []InventoryAnomaly) {
+	byType := make(map[string][]InventoryAnomaly)
+	for _, a := range anomalies {
+		byType[a.Type] = append(byType[a.Type], a)
+	}
+
+	// Sort anomaly types for deterministic output
+	anomalyTypes := make([]string, 0, len(byType))
+	for t := range byType {
+		anomalyTypes = append(anomalyTypes, t)
+	}
+	sort.Strings(anomalyTypes)
+
+	for _, anomalyType := range anomalyTypes {
+		items := byType[anomalyType]
+
+		// Sort items within each type by ItemID for deterministic output
+		slices.SortFunc(items, func(a, b InventoryAnomaly) int {
+			if a.ItemID < b.ItemID {
+				return -1
+			}
+			if a.ItemID > b.ItemID {
+				return 1
+			}
+			return 0
+		})
+
+		_, _ = fmt.Fprintf(report, "### %s"+newlineDelim+newlineDelim, formatAnomalyType(anomalyType))
+		for _, a := range items {
+			_, _ = fmt.Fprintf(report, "%s **%s**: %s"+newlineDelim+newlineDelim, anomalySeverityIcon(a.Severity), a.ItemID, a.Description)
+		}
+	}
+}
+
+// anomalySeverityIcon returns the icon string for a given anomaly severity.
+func anomalySeverityIcon(severity string) string {
+	if severity == "error" {
+		return "❌"
+	}
+	return "⚠️"
 }
 
 // formatAnomalyType converts anomaly type to human-readable format.

@@ -2,6 +2,7 @@ import type { TemplateResult } from 'lit';
 import { html, css, LitElement, nothing } from 'lit';
 import { state } from 'lit/decorators.js';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
+import DOMPurify from 'dompurify';
 import { extractTableData, getUniqueColumnValues, getColumnNumericRange } from './table-data-extractor.js';
 import { sortRows, applyAllFilters, hasActiveFilters, isFilterActive } from './table-sorter-filterer.js';
 import { computeTableHash, saveTableState, loadTableState, deserializeFilter } from './table-state-persistence.js';
@@ -356,11 +357,11 @@ export class WikiTable extends LitElement {
     this._scrollContainer?.removeEventListener('scroll', this._handleScroll);
   }
 
-  private _handleMediaChange = (e: MediaQueryListEvent): void => {
+  private readonly _handleMediaChange = (e: MediaQueryListEvent): void => {
     this.cardViewActive = e.matches;
   };
 
-  private _handleScroll = (): void => {
+  private readonly _handleScroll = (): void => {
     if (!this._scrollContainer) return;
     const { scrollLeft, scrollWidth, clientWidth } = this._scrollContainer;
     const atStart = scrollLeft <= 1;
@@ -396,6 +397,9 @@ export class WikiTable extends LitElement {
     this._sourceTable = table as HTMLTableElement;
     this._sourceTable.style.display = 'none';
     this.extractedData = extractTableData(this._sourceTable);
+    for (const row of this.extractedData.rows) {
+      row.htmlCells = row.htmlCells.map(cell => DOMPurify.sanitize(cell));
+    }
 
     const headerTexts = this.extractedData.columns.map(c => c.headerText);
     const cellValues = this.extractedData.rows.map(r => r.cells.map(String));
@@ -712,7 +716,7 @@ export class WikiTable extends LitElement {
             ${this.extractedData!.columns.map((col, i) => html`
               <div class="card-row">
                 <span class="card-label">${col.headerText}</span>
-                <span class="card-value">${unsafeHTML(row.htmlCells[i])}</span>
+                <span class="card-value">${unsafeHTML(row.htmlCells[i] ?? '')}</span>
               </div>
             `)}
           </div>

@@ -620,13 +620,18 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     }
   }
 
-  private _createReconnectDelay(signal: AbortSignal, delayMs: number): Promise<void> {
-    return new Promise<void>((resolve) => {
+  private async waitForReconnectDelay(signal: AbortSignal, delayMs: number): Promise<void> {
+    if (signal.aborted) return;
+    await new Promise<void>((resolve) => {
       const timer = setTimeout(resolve, delayMs);
-      signal.addEventListener('abort', () => {
-        clearTimeout(timer);
-        resolve();
-      }, { once: true });
+      signal.addEventListener(
+        'abort',
+        () => {
+          clearTimeout(timer);
+          resolve();
+        },
+        { once: true },
+      );
     });
   }
 
@@ -656,7 +661,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         this.streamState = 'reconnecting';
         this.error = err instanceof Error ? err : new Error(String(err));
 
-        await this._createReconnectDelay(signal, reconnectDelayMs);
+        await this.waitForReconnectDelay(signal, reconnectDelayMs);
         reconnectDelayMs = Math.min(reconnectDelayMs * 2, MAX_RECONNECT_DELAY_MS);
       }
     }

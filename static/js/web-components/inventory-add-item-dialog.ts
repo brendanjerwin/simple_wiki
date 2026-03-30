@@ -161,9 +161,9 @@ export class InventoryAddItemDialog extends LitElement {
   declare searchLoading: boolean;
 
   private _searchDebounceTimer?: ReturnType<typeof setTimeout>;
-  private _debounceTimeoutMs = 300;
-  private searchClient = createClient(SearchService, getGrpcWebTransport());
-  private inventoryItemCreatorMover = new InventoryItemCreatorMover();
+  private readonly _debounceTimeoutMs = 300;
+  private readonly searchClient = createClient(SearchService, getGrpcWebTransport());
+  private readonly inventoryItemCreatorMover = new InventoryItemCreatorMover();
 
   constructor() {
     super();
@@ -197,7 +197,7 @@ export class InventoryAddItemDialog extends LitElement {
     }
   }
 
-  public _handleKeydown = (event: KeyboardEvent): void => {
+  private readonly _handleKeydown = (event: KeyboardEvent): void => {
     if (event.key === 'Escape' && this.open) {
       this.close();
     }
@@ -236,11 +236,11 @@ export class InventoryAddItemDialog extends LitElement {
     this.searchLoading = false;
   }
 
-  private _handleBackdropClick = (): void => {
+  private readonly _handleBackdropClick = (): void => {
     this.close();
   };
 
-  private _handleDialogClick = (event: Event): void => {
+  private readonly _handleDialogClick = (event: Event): void => {
     event.stopPropagation();
   };
 
@@ -248,7 +248,7 @@ export class InventoryAddItemDialog extends LitElement {
    * Adapter function to call InventoryItemCreatorMover.generateIdentifier
    * in the format expected by AutomagicIdentifierInput.
    */
-  private _generateIdentifier = async (text: string): Promise<GenerateIdentifierResult> => {
+  private readonly _generateIdentifier = async (text: string): Promise<GenerateIdentifierResult> => {
     const result = await this.inventoryItemCreatorMover.generateIdentifier(text);
     const generateResult: GenerateIdentifierResult = {
       identifier: result.identifier,
@@ -263,7 +263,7 @@ export class InventoryAddItemDialog extends LitElement {
     return generateResult;
   };
 
-  private _handleTitleChange = (event: CustomEvent<TitleChangeEventDetail>): void => {
+  private readonly _handleTitleChange = (event: CustomEvent<TitleChangeEventDetail>): void => {
     this.itemTitle = event.detail.title;
 
     // Debounce search
@@ -282,12 +282,12 @@ export class InventoryAddItemDialog extends LitElement {
     }, this._debounceTimeoutMs);
   };
 
-  private _handleIdentifierChange = (event: CustomEvent<IdentifierChangeEventDetail>): void => {
+  private readonly _handleIdentifierChange = (event: CustomEvent<IdentifierChangeEventDetail>): void => {
     this.itemIdentifier = event.detail.identifier;
     this.isUnique = event.detail.isUnique;
   };
 
-  private _handleDescriptionInput = (event: Event): void => {
+  private readonly _handleDescriptionInput = (event: Event): void => {
     if (!(event.target instanceof HTMLTextAreaElement)) {
       return;
     }
@@ -321,7 +321,7 @@ export class InventoryAddItemDialog extends LitElement {
     }
   }
 
-  private _handleCancel = (): void => {
+  private readonly _handleCancel = (): void => {
     this.close();
   };
 
@@ -334,7 +334,7 @@ export class InventoryAddItemDialog extends LitElement {
     );
   }
 
-  private _handleSubmit = async (): Promise<void> => {
+  private readonly _handleSubmit = async (): Promise<void> => {
     if (!this.canSubmit) return;
 
     this.loading = true;

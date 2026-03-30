@@ -108,7 +108,7 @@ export class InventoryQrScanner extends LitElement {
   @state()
   declare private validating: boolean;
 
-  private frontmatterClient = createClient(Frontmatter, getGrpcWebTransport());
+  private readonly frontmatterClient = createClient(Frontmatter, getGrpcWebTransport());
 
   constructor() {
     super();
@@ -148,7 +148,7 @@ export class InventoryQrScanner extends LitElement {
   /**
    * Handle Cancel button click
    */
-  private _handleCancel = async (): Promise<void> => {
+  private readonly _handleCancel = async (): Promise<void> => {
     await this.collapse();
     this.dispatchEvent(new CustomEvent('cancelled', {
       bubbles: true,
@@ -159,7 +159,7 @@ export class InventoryQrScanner extends LitElement {
   /**
    * Handle QR code scanned from inner qr-scanner.
    */
-  private _handleQrScanned = async (event: CustomEvent<QrScannedEventDetail>): Promise<void> => {
+  private readonly _handleQrScanned = async (event: CustomEvent<QrScannedEventDetail>): Promise<void> => {
     const rawValue = event.detail.rawValue;
 
     // Clear previous error
@@ -229,7 +229,7 @@ export class InventoryQrScanner extends LitElement {
   /**
    * Handle "Scan Again" button click
    */
-  private _handleScanAgain = async (): Promise<void> => {
+  private readonly _handleScanAgain = async (): Promise<void> => {
     this.augmentedError = null;
     await this.expand();
   };
