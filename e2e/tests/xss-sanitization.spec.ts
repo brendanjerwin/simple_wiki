@@ -159,7 +159,10 @@ Safe link: [Home](/home/view)`);
         const anchors = Array.from(document.querySelectorAll('#rendered a'));
         return anchors
           .map(a => (a as HTMLAnchorElement).href)
-          .filter(href => href.toLowerCase().startsWith('javascript:'));
+          .filter(href => {
+            const lower = href.toLowerCase();
+            return lower.startsWith('javascript:') || lower.startsWith('data:') || lower.startsWith('vbscript:');
+          });
       });
       expect(jsHrefs).toHaveLength(0);
     });
@@ -210,7 +213,7 @@ identifier = "${TEST_PAGE}"
 
       // Wait for wiki-table to initialize and render (it hides the original table
       // and renders its own shadow DOM version)
-      await page.waitForTimeout(500);
+      await expect(page.locator('wiki-table').locator('.table-wrapper, .card-view')).toBeVisible();
     });
 
     test('should not execute scripts injected into table cells', () => {
@@ -248,7 +251,10 @@ identifier = "${TEST_PAGE}"
         const wikiTable = document.querySelector('wiki-table');
         if (!wikiTable?.shadowRoot) return 0;
         const anchors = Array.from(wikiTable.shadowRoot.querySelectorAll('a'));
-        return anchors.filter(a => a.href.toLowerCase().startsWith('javascript:')).length;
+        return anchors.filter(a => {
+          const lower = a.href.toLowerCase();
+          return lower.startsWith('javascript:') || lower.startsWith('data:') || lower.startsWith('vbscript:');
+        }).length;
       });
       expect(jsHrefCount).toBe(0);
     });
