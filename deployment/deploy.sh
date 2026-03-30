@@ -79,7 +79,7 @@ if sudo systemctl is-active --quiet simple_wiki; then
 else
   echo "❌ Service failed to start" >&2
   echo "Service status:" >&2
-  sudo systemctl status simple_wiki --no-pager >&2
+  sudo systemctl status simple_wiki --no-pager >&2 || true
 
   echo "Attempting rollback..." >&2
   if [[ -f /srv/wiki/bin/simple_wiki.backup ]]; then
