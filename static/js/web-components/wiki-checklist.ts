@@ -490,10 +490,18 @@ export class WikiChecklist extends LitElement {
   /**
    * Parse a single raw checklist item into a ChecklistItem, or return null if invalid.
    */
-  private _parseChecklistItem(raw: unknown): ChecklistItem | null {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  /**
+   * Narrow `value` to a non-null, non-array object, or return null.
+   */
+  private _asRecord(value: unknown): Record<string, unknown> | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- narrowed above: non-null, non-array object
-    const r = raw as Record<string, unknown>;
+    return value as Record<string, unknown>;
+  }
+
+  private _parseChecklistItem(raw: unknown): ChecklistItem | null {
+    const r = this._asRecord(raw);
+    if (!r) return null;
     return {
       text: typeof r['text'] === 'string' ? r['text'] : '',
       checked: Boolean(r['checked']),
@@ -509,18 +517,12 @@ export class WikiChecklist extends LitElement {
     frontmatter: JsonObject,
     listName: string
   ): ChecklistData {
-    const checklists = frontmatter['checklists'];
-    if (!checklists || typeof checklists !== 'object' || Array.isArray(checklists)) {
-      return { items: [] };
-    }
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- narrowed above: non-null, non-array object
-    const checklistsObj = checklists as Record<string, unknown>;
-    const listData = checklistsObj[listName];
-    if (!listData || typeof listData !== 'object' || Array.isArray(listData)) {
-      return { items: [] };
-    }
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- narrowed above: non-null, non-array object
-    const listObj = listData as Record<string, unknown>;
+    const checklistsObj = this._asRecord(frontmatter['checklists']);
+    if (!checklistsObj) return { items: [] };
+
+    const listObj = this._asRecord(checklistsObj[listName]);
+    if (!listObj) return { items: [] };
+
     const rawItems = listObj['items'];
     if (!Array.isArray(rawItems)) return { items: [] };
 
