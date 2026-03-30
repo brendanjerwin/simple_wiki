@@ -40,7 +40,7 @@ fi
 
 # Prevent accidental deployment of main branch
 if [[ "$REF_TO_DEPLOY" == "main" ]]; then
-    echo "❌ ERROR: Direct deployment of 'main' branch is not allowed"
+    echo "❌ ERROR: Direct deployment of 'main' branch is not allowed" >&2
     echo ""
     echo "📋 To deploy to production, use a tagged release instead:"
     echo "   devbox run deploy v3.3.X"
@@ -88,7 +88,7 @@ sleep 5
 # Get the most recent run and watch it
 echo "👀 Finding and watching deployment..."
 RUN_ID=$(gh run list --workflow=deploy.yml --limit=1 --json databaseId -q '.[0].databaseId')
-if [ -n "$RUN_ID" ]; then
+if [[ -n "$RUN_ID" ]]; then
     echo "📺 Watching run ID: $RUN_ID"
     gh run watch "$RUN_ID"
 else
