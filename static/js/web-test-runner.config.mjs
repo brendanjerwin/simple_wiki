@@ -9,6 +9,9 @@ console.log('WTR Config - Coverage enabled:', ciCoverage);
 
 export default {
   files: ['./{web-components,services}/**/*.test.ts'],
+  // Run test files sequentially: editor-toolbar-coordinator.test.ts calls openDialog()
+  // which makes real gRPC network requests that interfere with concurrently running
+  // Chrome test pages, causing flaky failures.
   concurrency: 1,
   base: '/static/js/',
   nodeResolve: true,
