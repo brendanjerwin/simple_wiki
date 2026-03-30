@@ -40,20 +40,18 @@ func mustNewServerWithFileStorer(
 	fileStorer filestore.FileStorer,
 ) *v1.Server {
 	server, err := v1.NewServer(
-		"commit",
-		time.Now(),
+		v1.BuildInfo{Commit: "commit", BuildTime: time.Now()},
 		noOpPageReaderMutator{},
 		noOpBleveIndexQueryer{},
-		nil,
-		lumber.NewConsoleLogger(lumber.WARN),
-		nil,
-		nil,
 		noOpFrontmatterIndexQueryer{},
-		fileStorer,
-		noOpChatBufferManager{}, // chatBufferManager
+		lumber.NewConsoleLogger(lumber.WARN),
+		noOpChatBufferManager{},
 		noOpPageOpener{},
 	)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred())
+	if fileStorer != nil {
+		server = server.WithFileStorer(fileStorer)
+	}
 	return server
 }
 

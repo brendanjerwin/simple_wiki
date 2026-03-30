@@ -42,6 +42,7 @@ const (
 	pageNameRequiredErr            = "page_name is required"
 	maxUniqueIdentifierAttempts    = 1000
 	invalidTemplateErrFmt          = "invalid template in page content: %v"
+	failedToWriteMarkdownErrFmt    = "failed to write markdown: %v"
 )
 
 // ChatBufferManager defines the interface for managing chat message buffers.
@@ -122,6 +123,12 @@ func isIdentifierKeyPath(path []*apiv1.PathComponent) bool {
 	}
 
 	return keyComp.Key == identifierKey
+}
+
+// BuildInfo contains version and build metadata for the server.
+type BuildInfo struct {
+	Commit    string
+	BuildTime time.Time
 }
 
 // Server is the implementation of the gRPC services.
@@ -341,19 +348,14 @@ func removeAtPath(data any, path []*apiv1.PathComponent) (any, error) {
 }
 
 // NewServer creates a new gRPC server with the given dependencies.
-// Required dependencies: pageReaderMutator, bleveIndexQueryer, frontmatterIndexQueryer, logger, chatBufferManager.
-// Optional dependencies: jobQueueCoordinator, markdownRenderer, templateExecutor.
+// Required dependencies: pageReaderMutator, bleveIndexQueryer, frontmatterIndexQueryer, logger, chatBufferManager, pageOpener.
+// Optional dependencies can be set via WithJobQueueCoordinator, WithMarkdownRenderer, WithTemplateExecutor, WithFileStorer.
 func NewServer(
-	commit string,
-	buildTime time.Time,
+	buildInfo BuildInfo,
 	pageReaderMutator wikipage.PageReaderMutator,
 	bleveIndexQueryer bleve.IQueryBleveIndex,
-	jobQueueCoordinator jobs.JobCoordinator,
-	logger *lumber.ConsoleLogger,
-	markdownRenderer wikipage.IRenderMarkdownToHTML,
-	templateExecutor wikipage.IExecuteTemplate,
 	frontmatterIndexQueryer wikipage.IQueryFrontmatterIndex,
-	fileStorer filestore.FileStorer,
+	logger *lumber.ConsoleLogger,
 	chatBufferManager ChatBufferManager,
 	pageOpener wikipage.PageOpener,
 ) (*Server, error) {
@@ -376,19 +378,39 @@ func NewServer(
 		return nil, errors.New("pageOpener is required")
 	}
 	return &Server{
-		commit:                  commit,
-		buildTime:               buildTime,
+		commit:                  buildInfo.Commit,
+		buildTime:               buildInfo.BuildTime,
 		pageReaderMutator:       pageReaderMutator,
 		bleveIndexQueryer:       bleveIndexQueryer,
-		jobQueueCoordinator:     jobQueueCoordinator,
-		logger:                  logger,
-		markdownRenderer:        markdownRenderer,
-		templateExecutor:        templateExecutor,
 		frontmatterIndexQueryer: frontmatterIndexQueryer,
-		fileStorer:              fileStorer,
+		logger:                  logger,
 		chatBufferManager:       chatBufferManager,
 		pageOpener:              pageOpener,
 	}, nil
+}
+
+// WithJobQueueCoordinator sets the optional job queue coordinator and returns the server for chaining.
+func (s *Server) WithJobQueueCoordinator(jqc jobs.JobCoordinator) *Server {
+	s.jobQueueCoordinator = jqc
+	return s
+}
+
+// WithMarkdownRenderer sets the optional markdown renderer and returns the server for chaining.
+func (s *Server) WithMarkdownRenderer(r wikipage.IRenderMarkdownToHTML) *Server {
+	s.markdownRenderer = r
+	return s
+}
+
+// WithTemplateExecutor sets the optional template executor and returns the server for chaining.
+func (s *Server) WithTemplateExecutor(e wikipage.IExecuteTemplate) *Server {
+	s.templateExecutor = e
+	return s
+}
+
+// WithFileStorer sets the optional file storer and returns the server for chaining.
+func (s *Server) WithFileStorer(fs filestore.FileStorer) *Server {
+	s.fileStorer = fs
+	return s
 }
 
 // RegisterWithServer registers the gRPC services with the given gRPC server.
@@ -639,7 +661,7 @@ func (s *Server) ListPagesByFrontmatter(_ context.Context, req *apiv1.ListPagesB
 		results = append(results, &apiv1.FrontmatterQueryResult{
 			Identifier:        string(id),
 			FrontmatterValues: fmValues,
-			ContentExcerpt:   contentExcerpt,
+			ContentExcerpt:    contentExcerpt,
 		})
 	}
 
@@ -1088,7 +1110,7 @@ func (s *Server) CreatePage(_ context.Context, req *apiv1.CreatePageRequest) (*a
 	}
 
 	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(identifier), wikipage.Markdown(markdown)); err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to write markdown: %v", err)
+		return nil, status.Errorf(codes.Internal, failedToWriteMarkdownErrFmt, err)
 	}
 
 	return &apiv1.CreatePageResponse{
@@ -1106,22 +1128,34 @@ func (s *Server) buildNewPageFrontmatter(identifier string, template *string, fr
 		if err != nil {
 			return nil, err
 		}
-		for k, v := range templateFm {
-			if k != identifierKey && k != "template" {
-				fm[k] = v
-			}
-		}
+		applyTemplateFrontmatter(fm, templateFm)
 	}
 
-	if frontmatter != nil {
-		for k, v := range frontmatter.AsMap() {
-			if k != identifierKey {
-				fm[k] = v
-			}
-		}
-	}
-
+	applyProvidedFrontmatter(fm, frontmatter)
 	return fm, nil
+}
+
+// applyTemplateFrontmatter copies template frontmatter keys to dest,
+// excluding the identifier and template keys.
+func applyTemplateFrontmatter(dest, src map[string]any) {
+	for k, v := range src {
+		if k != identifierKey && k != "template" {
+			dest[k] = v
+		}
+	}
+}
+
+// applyProvidedFrontmatter copies user-provided frontmatter keys to dest,
+// excluding the identifier key.
+func applyProvidedFrontmatter(dest map[string]any, frontmatter *structpb.Struct) {
+	if frontmatter == nil {
+		return
+	}
+	for k, v := range frontmatter.AsMap() {
+		if k != identifierKey {
+			dest[k] = v
+		}
+	}
 }
 
 // UpdatePageContent implements the UpdatePageContent RPC.
@@ -1172,7 +1206,7 @@ func (s *Server) UpdatePageContent(_ context.Context, req *apiv1.UpdatePageConte
 	}
 
 	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(req.PageName), markdownToWrite); err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to write markdown: %v", err)
+		return nil, status.Errorf(codes.Internal, failedToWriteMarkdownErrFmt, err)
 	}
 
 	// Invariant check: read back the stored content to ensure the write did not blank the page.
@@ -1716,33 +1750,8 @@ func (s *Server) StartPageImportJob(ctx context.Context, req *apiv1.StartPageImp
 	// Create a shared result accumulator for all jobs
 	resultAccumulator := server.NewPageImportResultAccumulator()
 
-	// Create and enqueue a job for each record
-	for i, record := range allRecords {
-		job, err := server.NewSinglePageImportJob(record, s.pageReaderMutator, s.logger, resultAccumulator)
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "failed to create import job for record %d: %v", i+1, err)
-		}
-
-		// For the last job, use completion callback to trigger report generation
-		if i == len(allRecords)-1 {
-			err = s.jobQueueCoordinator.EnqueueJobWithCompletion(job, func(_ error) {
-				// All jobs complete when this runs (queue processes in order)
-				reportJob, createErr := server.NewPageImportReportJob(s.pageReaderMutator, s.logger, resultAccumulator)
-				if createErr != nil {
-					s.logger.Error("Failed to create report job: %v", createErr)
-					return
-				}
-				if enqueueErr := s.jobQueueCoordinator.EnqueueJob(reportJob); enqueueErr != nil {
-					s.logger.Error("Failed to enqueue report job: %v", enqueueErr)
-				}
-			})
-		} else {
-			err = s.jobQueueCoordinator.EnqueueJob(job)
-		}
-
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "failed to enqueue import job for record %d: %v", i+1, err)
-		}
+	if err := s.enqueueImportJobs(allRecords, resultAccumulator); err != nil {
+		return nil, err
 	}
 
 	identity := tailscale.IdentityFromContext(ctx)
@@ -1753,4 +1762,43 @@ func (s *Server) StartPageImportJob(ctx context.Context, req *apiv1.StartPageImp
 		JobId:       server.PageImportJobName,
 		RecordCount: int32(len(allRecords)),
 	}, nil
+}
+
+// makeReportJobCallback creates a completion callback that enqueues a report generation job
+// after all import jobs have completed.
+func (s *Server) makeReportJobCallback(resultAccumulator *server.PageImportResultAccumulator) func(error) {
+	return func(_ error) {
+		// All jobs complete when this runs (queue processes in order)
+		reportJob, createErr := server.NewPageImportReportJob(s.pageReaderMutator, s.logger, resultAccumulator)
+		if createErr != nil {
+			s.logger.Error("Failed to create report job: %v", createErr)
+			return
+		}
+		if enqueueErr := s.jobQueueCoordinator.EnqueueJob(reportJob); enqueueErr != nil {
+			s.logger.Error("Failed to enqueue report job: %v", enqueueErr)
+		}
+	}
+}
+
+// enqueueImportJobs creates and enqueues a job for each import record.
+// The last record's job is enqueued with a completion callback to trigger report generation.
+func (s *Server) enqueueImportJobs(allRecords []pageimport.ParsedRecord, resultAccumulator *server.PageImportResultAccumulator) error {
+	for i, record := range allRecords {
+		job, err := server.NewSinglePageImportJob(record, s.pageReaderMutator, s.logger, resultAccumulator)
+		if err != nil {
+			return status.Errorf(codes.Internal, "failed to create import job for record %d: %v", i+1, err)
+		}
+
+		// For the last job, use completion callback to trigger report generation
+		if i == len(allRecords)-1 {
+			err = s.jobQueueCoordinator.EnqueueJobWithCompletion(job, s.makeReportJobCallback(resultAccumulator))
+		} else {
+			err = s.jobQueueCoordinator.EnqueueJob(job)
+		}
+
+		if err != nil {
+			return status.Errorf(codes.Internal, "failed to enqueue import job for record %d: %v", i+1, err)
+		}
+	}
+	return nil
 }

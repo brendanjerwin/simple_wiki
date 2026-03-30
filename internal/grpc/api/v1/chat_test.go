@@ -349,16 +349,11 @@ var _ = Describe("ChatService", func() {
 
 		var err error
 		server, err = v1.NewServer(
-			"test-commit",
-			time.Now(),
+			v1.BuildInfo{Commit: "test-commit", BuildTime: time.Now()},
 			noOpPageReaderMutator{},
 			noOpBleveIndexQueryer{},
-			nil,
-			lumber.NewConsoleLogger(lumber.WARN),
-			nil,
-			nil,
 			noOpFrontmatterIndexQueryer{},
-			nil,
+			lumber.NewConsoleLogger(lumber.WARN),
 			chatManager,
 			noOpPageOpener{},
 		)
