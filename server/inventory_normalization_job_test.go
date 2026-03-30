@@ -2,8 +2,10 @@
 package server
 
 import (
+	"bytes"
 	"errors"
 	"os"
+	"strings"
 
 	"github.com/brendanjerwin/simple_wiki/pkg/logging"
 	"github.com/brendanjerwin/simple_wiki/wikipage"
@@ -2282,3 +2284,97 @@ func (m *mockNormalizationDepsWithFailure) WriteMarkdown(id wikipage.PageIdentif
 	}
 	return m.mockNormalizationDeps.WriteMarkdown(id, md)
 }
+
+var _ = Describe("writeGroupedAnomalies", func() {
+	var report bytes.Buffer
+
+	BeforeEach(func() {
+		report.Reset()
+	})
+
+	When("anomalies have multiple types in non-alphabetical order", func() {
+		var output string
+
+		BeforeEach(func() {
+			anomalies := []InventoryAnomaly{
+				{
+					Type:        "orphan",
+					ItemID:      "item_a",
+					Description: "Orphan description",
+					Severity:    "warning",
+				},
+				{
+					Type:        "circular_reference",
+					ItemID:      "item_b",
+					Description: "Circular ref description",
+					Severity:    "error",
+				},
+			}
+			writeGroupedAnomalies(&report, anomalies)
+			output = report.String()
+		})
+
+		It("should output circular_reference section before orphan section", func() {
+			circularPos := strings.Index(output, "Circular References")
+			orphanPos := strings.Index(output, "Orphaned Items")
+			Expect(circularPos).To(BeNumerically("<", orphanPos))
+		})
+	})
+
+	When("same anomaly type has two items where the first ItemID sorts after the second", func() {
+		var output string
+
+		BeforeEach(func() {
+			anomalies := []InventoryAnomaly{
+				{
+					Type:        "orphan",
+					ItemID:      "item_zebra",
+					Description: "Zebra orphan",
+					Severity:    "warning",
+				},
+				{
+					Type:        "orphan",
+					ItemID:      "item_apple",
+					Description: "Apple orphan",
+					Severity:    "warning",
+				},
+			}
+			writeGroupedAnomalies(&report, anomalies)
+			output = report.String()
+		})
+
+		It("should output item_apple before item_zebra", func() {
+			applePos := strings.Index(output, "item_apple")
+			zebraPos := strings.Index(output, "item_zebra")
+			Expect(applePos).To(BeNumerically("<", zebraPos))
+		})
+	})
+
+	When("same anomaly type has two items with equal ItemIDs", func() {
+		var output string
+
+		BeforeEach(func() {
+			anomalies := []InventoryAnomaly{
+				{
+					Type:        "orphan",
+					ItemID:      "item_same",
+					Description: "First description",
+					Severity:    "warning",
+				},
+				{
+					Type:        "orphan",
+					ItemID:      "item_same",
+					Description: "Second description",
+					Severity:    "warning",
+				},
+			}
+			writeGroupedAnomalies(&report, anomalies)
+			output = report.String()
+		})
+
+		It("should include both anomaly descriptions", func() {
+			Expect(output).To(ContainSubstring("First description"))
+			Expect(output).To(ContainSubstring("Second description"))
+		})
+	})
+})

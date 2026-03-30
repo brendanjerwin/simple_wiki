@@ -1198,4 +1198,148 @@ describe('WikiTable', () => {
       expect(removeListenerSpy).to.have.been.calledOnce;
     });
   });
+
+  describe('XSS sanitization in table view', () => {
+
+    describe('when cells contain safe HTML like links and formatting', () => {
+      let el: WikiTable;
+
+      beforeEach(async () => {
+        const container = document.createElement('div');
+        container.innerHTML = `
+          <wiki-table>
+            <table>
+              <thead><tr><th>Name</th><th>Link</th></tr></thead>
+              <tbody>
+                <tr><td><strong>Widget</strong></td><td><a href="/page">Details</a></td></tr>
+              </tbody>
+            </table>
+          </wiki-table>
+        `;
+        document.body.appendChild(container);
+        el = container.querySelector('wiki-table') as WikiTable;
+        await el.updateComplete;
+      });
+
+      it('should preserve bold formatting', () => {
+        const cells = el.shadowRoot?.querySelectorAll('tbody td');
+        expect(cells?.[0]?.querySelector('strong')).to.exist;
+      });
+
+      it('should preserve link elements', () => {
+        const cells = el.shadowRoot?.querySelectorAll('tbody td');
+        expect(cells?.[1]?.querySelector('a')).to.exist;
+      });
+
+    });
+
+    describe('when cells contain script tags', () => {
+      let el: WikiTable;
+
+      beforeEach(async () => {
+        const sourceTable = document.createElement('table');
+        const thead = sourceTable.createTHead();
+        const headerRow = thead.insertRow();
+        headerRow.insertCell().textContent = 'Name';
+        const tbody = sourceTable.createTBody();
+        const dataRow = tbody.insertRow();
+        const cell = dataRow.insertCell();
+        cell.innerHTML = 'safe text<script>window.__xss_executed = true</script>';
+
+        el = document.createElement('wiki-table') as WikiTable;
+        el.appendChild(sourceTable);
+
+        const container = document.createElement('div');
+        container.appendChild(el);
+        document.body.appendChild(container);
+        await el.updateComplete;
+      });
+
+      it('should strip script tags from rendered output', () => {
+        const cells = el.shadowRoot?.querySelectorAll('tbody td');
+        expect(cells?.[0]?.querySelector('script')).to.not.exist;
+      });
+
+      it('should not execute injected scripts', () => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- intentional cast for XSS test verification
+        expect((window as unknown as Record<string, unknown>)['__xss_executed']).to.be.undefined;
+      });
+
+    });
+
+    describe('when cells contain event handler attributes', () => {
+      let el: WikiTable;
+
+      beforeEach(async () => {
+        const sourceTable = document.createElement('table');
+        const thead = sourceTable.createTHead();
+        const headerRow = thead.insertRow();
+        headerRow.insertCell().textContent = 'Name';
+        const tbody = sourceTable.createTBody();
+        const dataRow = tbody.insertRow();
+        const cell = dataRow.insertCell();
+        cell.innerHTML = '<span onerror="window.__onerror_executed=true" onclick="window.__onclick_executed=true">click me</span>';
+
+        el = document.createElement('wiki-table') as WikiTable;
+        el.appendChild(sourceTable);
+
+        const container = document.createElement('div');
+        container.appendChild(el);
+        document.body.appendChild(container);
+        await el.updateComplete;
+      });
+
+      it('should strip onerror event handler attributes', () => {
+        const spans = el.shadowRoot?.querySelectorAll('tbody td span');
+        expect(spans?.[0]?.getAttribute('onerror')).to.be.null;
+      });
+
+      it('should strip onclick event handler attributes', () => {
+        const spans = el.shadowRoot?.querySelectorAll('tbody td span');
+        expect(spans?.[0]?.getAttribute('onclick')).to.be.null;
+      });
+
+    });
+
+  });
+
+  describe('XSS sanitization in card view', () => {
+
+    describe('when card cells contain script tags', () => {
+      let el: WikiTable;
+
+      beforeEach(async () => {
+        const sourceTable = document.createElement('table');
+        const thead = sourceTable.createTHead();
+        const headerRow = thead.insertRow();
+        headerRow.insertCell().textContent = 'Name';
+        const tbody = sourceTable.createTBody();
+        const dataRow = tbody.insertRow();
+        const cell = dataRow.insertCell();
+        cell.innerHTML = 'safe<script>window.__card_xss=true</script>';
+
+        el = document.createElement('wiki-table') as WikiTable;
+        el.appendChild(sourceTable);
+
+        const container = document.createElement('div');
+        container.appendChild(el);
+        document.body.appendChild(container);
+        el.cardViewActive = true;
+        await el.updateComplete;
+      });
+
+      it('should strip script tags from card view rendered output', () => {
+        const cardValues = el.shadowRoot?.querySelectorAll('.card-value');
+        expect(cardValues?.[0]?.querySelector('script')).to.not.exist;
+      });
+
+      it('should not execute injected scripts in card view', () => {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- intentional cast for XSS test verification
+        expect((window as unknown as Record<string, unknown>)['__card_xss']).to.be.undefined;
+      });
+
+    });
+
+  });
+
 });
