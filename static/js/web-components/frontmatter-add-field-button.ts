@@ -37,7 +37,7 @@ export class FrontmatterAddFieldButton extends LitElement {
     document.removeEventListener('click', this._handleClickOutside);
   }
 
-  private _handleClickOutside = (event: Event): void => {
+  private readonly _handleClickOutside = (event: Event): void => {
     if (!this.open) return;
 
     if (event.target instanceof Node && !this.contains(event.target)) {
@@ -45,24 +45,24 @@ export class FrontmatterAddFieldButton extends LitElement {
     }
   };
 
-  private _handleToggleDropdown = (event: Event): void => {
+  private readonly _handleToggleDropdown = (event: Event): void => {
     event.stopPropagation();
     if (!this.disabled) {
       this.open = !this.open;
     }
   };
 
-  private _handleAddField = (): void => {
+  private readonly _handleAddField = (): void => {
     this._dispatchAddEvent('field');
     this.open = false;
   };
 
-  private _handleAddArray = (): void => {
+  private readonly _handleAddArray = (): void => {
     this._dispatchAddEvent('array');
     this.open = false;
   };
 
-  private _handleAddSection = (): void => {
+  private readonly _handleAddSection = (): void => {
     this._dispatchAddEvent('section');
     this.open = false;
   };
