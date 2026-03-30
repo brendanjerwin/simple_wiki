@@ -11,6 +11,7 @@ import (
 	"maps"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -2346,6 +2347,34 @@ var _ = Describe("Server", func() {
 			Expect(res).NotTo(BeNil())
 			Expect(res.JobQueues).To(BeEmpty())
 		})
+
+		When("coordinator has enqueued jobs", func() {
+			BeforeEach(func() {
+				coordinator := (&MockJobQueueCoordinator{}).AsCoordinator()
+				importPageReaderMutator := &MockPageReaderMutator{Err: os.ErrNotExist}
+				server = mustNewServerFull(importPageReaderMutator, nil, nil, coordinator, nil)
+
+				startReq := &apiv1.StartPageImportJobRequest{
+					CsvContent: "identifier,title\ntest_page,Test Page",
+				}
+				_, _ = server.StartPageImportJob(ctx, startReq)
+
+				res, err = server.GetJobStatus(ctx, req)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return non-empty job queues", func() {
+				Expect(res).NotTo(BeNil())
+				Expect(res.JobQueues).NotTo(BeEmpty())
+			})
+
+			It("should report the page import queue name", func() {
+				Expect(res.JobQueues[0].Name).To(Equal("PageImportJob"))
+			})
+		})
 	})
 
 	Describe("StreamJobStatus", func() {
@@ -3961,6 +3990,84 @@ var _ = Describe("Server", func() {
 				Expect(resp.Records[0].ValidationErrors).NotTo(BeEmpty())
 			})
 		})
+
+		When("csv references an inventory container that exists but has no inventory key", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,inventory.container\nitem_a,box_b"
+				mockPageReaderMutator = &MockPageReaderMutator{
+					FrontmatterByID: map[string]map[string]any{
+						"box_b": {"title": "Box B"},
+					},
+				}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should have no validation errors for item_a", func() {
+				Expect(resp.Records[0].ValidationErrors).To(BeEmpty())
+			})
+		})
+
+		When("csv references an inventory container that has inventory but no container field", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,inventory.container\nitem_a,box_b"
+				mockPageReaderMutator = &MockPageReaderMutator{
+					FrontmatterByID: map[string]map[string]any{
+						"box_b": {"inventory": map[string]any{}},
+					},
+				}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should have no validation errors for item_a", func() {
+				Expect(resp.Records[0].ValidationErrors).To(BeEmpty())
+			})
+		})
+
+		When("csv references an inventory container that itself points back creating a cycle", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,inventory.container\nitem_a,box_b"
+				mockPageReaderMutator = &MockPageReaderMutator{
+					FrontmatterByID: map[string]map[string]any{
+						"box_b": {"inventory": map[string]any{"container": "item_a"}},
+					},
+				}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should detect the circular reference via existing page lookup", func() {
+				Expect(resp.Records[0].ValidationErrors).To(ContainElement(ContainSubstring("circular reference detected")))
+			})
+		})
+
+		When("csv has two records where the second has a missing container triggering GetContainerReference on the first", func() {
+			BeforeEach(func() {
+				// item_a references item_b (in CSV), item_b references item_c (not in CSV, not existing)
+				// item_b gets a validation error (item_c missing), so it is excluded from importGraph
+				// during cycle detection for item_a, GetContainerReference(item_b) is called (returns "" due to error)
+				req.CsvContent = "identifier,inventory.container\nitem_a,item_b\nitem_b,item_c"
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should have a validation error on item_b for missing container", func() {
+				Expect(resp.Records[1].ValidationErrors).To(ContainElement(ContainSubstring("non-existent page")))
+			})
+
+			It("should have no validation errors on item_a", func() {
+				Expect(resp.Records[0].ValidationErrors).To(BeEmpty())
+			})
+		})
 	})
 
 	Describe("StartPageImportJob", func() {
@@ -4090,6 +4197,31 @@ var _ = Describe("Server", func() {
 				// All records are now processed as individual jobs
 				// Invalid records will fail individually and be reported
 				Expect(resp.RecordCount).To(Equal(int32(3)))
+			})
+		})
+
+		When("dispatcher fails to enqueue the import job", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,title\ntest_page,Test Page"
+				mockJobCoordinator = nil // prevent outer JustBeforeEach from using no-op mock coordinator
+			})
+
+			JustBeforeEach(func() {
+				failingFactory := jobs.FailingDispatcherFactory(errors.New("queue is full"))
+				failingCoordinator := jobs.NewJobQueueCoordinatorWithFactory(
+					lumber.NewConsoleLogger(lumber.WARN),
+					failingFactory,
+				)
+				server = mustNewServerFull(mockPageReaderMutator, nil, nil, failingCoordinator, nil)
+				resp, err = server.StartPageImportJob(ctx, req)
+			})
+
+			It("should return an internal error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to enqueue import job"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
 			})
 		})
 	})
@@ -5511,6 +5643,75 @@ var _ = Describe("ListPagesByFrontmatter", func() {
 		It("should return the full content", func() {
 			Expect(resp.Results[0].ContentExcerpt).To(Equal("Short."))
 		})
+	})
+})
+
+// callbackObservingMutator is a thread-safe PageReaderMutator for observing async callback execution.
+// It reports new pages as not-existing and tracks when the page_import_report page is written.
+type callbackObservingMutator struct {
+	mu            sync.Mutex
+	reportWritten bool
+}
+
+func (*callbackObservingMutator) ReadFrontMatter(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
+	return id, nil, os.ErrNotExist
+}
+
+func (m *callbackObservingMutator) WriteFrontMatter(id wikipage.PageIdentifier, _ wikipage.FrontMatter) error {
+	if string(id) == "page_import_report" {
+		m.mu.Lock()
+		m.reportWritten = true
+		m.mu.Unlock()
+	}
+	return nil
+}
+
+func (*callbackObservingMutator) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Markdown) error {
+	return nil
+}
+
+func (*callbackObservingMutator) ReadMarkdown(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
+	return id, "", os.ErrNotExist
+}
+
+func (*callbackObservingMutator) DeletePage(_ wikipage.PageIdentifier) error {
+	return nil
+}
+
+func (m *callbackObservingMutator) isReportWritten() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.reportWritten
+}
+
+var _ = Describe("makeReportJobCallback execution", func() {
+	var (
+		ctx             context.Context
+		observingMutator *callbackObservingMutator
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		observingMutator = &callbackObservingMutator{}
+
+		// Use MockDispatcher which runs jobs in goroutines (async execution)
+		mockDispatcherFactory := func(_, _ int) jobs.Dispatcher {
+			return jobs.NewMockDispatcher()
+		}
+		coordinator := jobs.NewJobQueueCoordinatorWithFactory(
+			lumber.NewConsoleLogger(lumber.WARN),
+			mockDispatcherFactory,
+		)
+		server := mustNewServerFull(observingMutator, nil, nil, coordinator, nil)
+
+		startReq := &apiv1.StartPageImportJobRequest{
+			CsvContent: "identifier\ntest_page",
+		}
+		_, _ = server.StartPageImportJob(ctx, startReq)
+	})
+
+	It("should eventually invoke the callback and write the import report", func() {
+		Eventually(observingMutator.isReportWritten, "2s", "10ms").Should(BeTrue())
 	})
 })
 
