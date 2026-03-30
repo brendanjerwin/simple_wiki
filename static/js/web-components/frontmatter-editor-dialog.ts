@@ -199,7 +199,7 @@ export class FrontmatterEditorDialog extends LitElement {
     }
   }
 
-  private _handleSectionChange = (event: CustomEvent<SectionChangeEventDetail>): void => {
+  private readonly _handleSectionChange = (event: CustomEvent<SectionChangeEventDetail>): void => {
     const { newFields } = event.detail;
     this.workingFrontmatter = newFields;
     this.requestUpdate();
@@ -216,7 +216,7 @@ export class FrontmatterEditorDialog extends LitElement {
     document.removeEventListener('keydown', this._handleKeydown);
   }
 
-  public _handleKeydown = (event: KeyboardEvent): void => {
+  public readonly _handleKeydown = (event: KeyboardEvent): void => {
     if (event.key === 'Escape' && this.open) {
       this._handleCancel();
     }
@@ -258,7 +258,7 @@ export class FrontmatterEditorDialog extends LitElement {
     }
   }
 
-  private _handleCancel = (): void => {
+  private readonly _handleCancel = (): void => {
     this.close();
   };
 
@@ -266,7 +266,7 @@ export class FrontmatterEditorDialog extends LitElement {
     window.location.reload();
   }
 
-  private _handleSaveClick = async (): Promise<void> => {
+  private readonly _handleSaveClick = async (): Promise<void> => {
     if (!this.page || !this.workingFrontmatter) return;
 
     try {
