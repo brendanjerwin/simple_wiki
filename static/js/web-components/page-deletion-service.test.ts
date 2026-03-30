@@ -217,8 +217,11 @@ describe('PageDeleter', () => {
         service.destroy();
       });
 
-      it('should remove event listeners', () => {
+      it('should remove confirm event listener', () => {
         expect(mockDialog.removeEventListener).to.have.been.calledWith('confirm', sinon.match.func);
+      });
+
+      it('should remove cancel event listener', () => {
         expect(mockDialog.removeEventListener).to.have.been.calledWith('cancel', sinon.match.func);
       });
 
