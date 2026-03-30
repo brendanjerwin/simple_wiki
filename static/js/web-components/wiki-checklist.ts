@@ -906,8 +906,8 @@ export class WikiChecklist extends LitElement {
     const row = elementUnderFinger?.closest('.item-row');
     if (!(row instanceof HTMLElement)) return;
 
-    const indexAttr = row.getAttribute('data-index');
-    if (indexAttr === null) return;
+    const indexAttr = row.dataset['index'];
+    if (indexAttr === undefined) return;
 
     const targetIndex = parseInt(indexAttr, 10);
     const rect = row.getBoundingClientRect();
@@ -938,7 +938,7 @@ export class WikiChecklist extends LitElement {
     }
   }
 
-  private _handleTouchEnd(): void {
+  private async _handleTouchEnd(): Promise<void> {
     if (this._touchDragActive) {
       // Commit the reorder
       const sourceIndex = this._dragSourceItemIndex;
@@ -951,7 +951,7 @@ export class WikiChecklist extends LitElement {
         const insertIndex = position === 'before' ? targetIndex : targetIndex + 1;
         const newItems = this.reorderItems(this.items, sourceIndex, insertIndex);
         this.items = newItems;
-        void this.persistData(newItems);
+        await this.persistData(newItems);
       }
     } else {
       // Touch ended before long-press fired
@@ -1041,6 +1041,42 @@ export class WikiChecklist extends LitElement {
     el.style.top = `${clientY - 20}px`;
   }
 
+  private _renderItemEditInput(index: number) {
+    return html`
+      <input
+        type="text"
+        class="item-text"
+        aria-label="Edit item text and tags"
+        @blur="${(e: FocusEvent) => {
+          if (!(e.target instanceof HTMLInputElement)) return;
+          void this._handleItemTextBlur(index, e.target.value);
+        }}"
+        @keydown="${(e: KeyboardEvent) => {
+          if (!(e.currentTarget instanceof HTMLInputElement)) return;
+          this._handleItemTextKeydown(index, e.currentTarget.value, e);
+        }}"
+      />`;
+  }
+
+  private _renderItemDisplayText(item: ChecklistItem, index: number) {
+    return html`
+      <span
+        class="item-display-text"
+        role="button"
+        tabindex="0"
+        @click="${() => void this._enterEditMode(index)}"
+        @keydown="${(e: KeyboardEvent) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            void this._enterEditMode(index);
+          }
+        }}"
+      >${item.text}</span>
+      ${item.tags.map(
+        tag => html`<span class="item-tag-badge">${tag}</span>`
+      )}`;
+  }
+
   private _renderItem(
     item: ChecklistItem,
     index: number
@@ -1078,36 +1114,8 @@ export class WikiChecklist extends LitElement {
         />
         <span class="item-content">
           ${this.editingIndex === index
-            ? html`
-              <input
-                type="text"
-                class="item-text"
-                aria-label="Edit item text and tags"
-                @blur="${(e: FocusEvent) => {
-                  if (!(e.target instanceof HTMLInputElement)) return;
-                  void this._handleItemTextBlur(index, e.target.value);
-                }}"
-                @keydown="${(e: KeyboardEvent) => {
-                  if (!(e.currentTarget instanceof HTMLInputElement)) return;
-                  this._handleItemTextKeydown(index, e.currentTarget.value, e);
-                }}"
-              />`
-            : html`
-              <span
-                class="item-display-text"
-                role="button"
-                tabindex="0"
-                @click="${() => void this._enterEditMode(index)}"
-                @keydown="${(e: KeyboardEvent) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    void this._enterEditMode(index);
-                  }
-                }}"
-              >${item.text}</span>
-              ${item.tags.map(
-                tag => html`<span class="item-tag-badge">${tag}</span>`
-              )}`}
+            ? this._renderItemEditInput(index)
+            : this._renderItemDisplayText(item, index)}
         </span>
         <button
           class="remove-btn"
