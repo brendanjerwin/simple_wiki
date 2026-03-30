@@ -202,7 +202,7 @@ export class ErrorDisplay extends LitElement {
 
   private _renderDetails(hasDetails: boolean) {
     if (!hasDetails) {
-      return '';
+      return nothing;
     }
 
     const expandLabel = this.expanded ? 'Hide' : 'Show';
