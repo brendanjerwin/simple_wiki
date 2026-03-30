@@ -68,7 +68,7 @@ export class FrontmatterKey extends LitElement {
     this.placeholder = '';
   }
 
-  private _handleKeyInput = (event: Event): void => {
+  private readonly _handleKeyInput = (event: Event): void => {
     if (!(event.target instanceof HTMLInputElement)) {
       return;
     }
