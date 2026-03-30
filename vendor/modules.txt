@@ -869,7 +869,7 @@ gopkg.in/yaml.v2
 # gopkg.in/yaml.v3 v3.0.1
 ## explicit
 gopkg.in/yaml.v3
-# tailscale.com v1.96.3
+# tailscale.com v1.96.5
 ## explicit; go 1.26.1
 tailscale.com
 tailscale.com/atomicfile
