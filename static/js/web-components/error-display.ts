@@ -200,6 +200,36 @@ export class ErrorDisplay extends LitElement {
     }
   }
 
+  private _renderDetails(hasDetails: boolean) {
+    if (!hasDetails) {
+      return '';
+    }
+
+    const expandLabel = this.expanded ? 'Hide' : 'Show';
+    const expandIconClass = this.expanded ? 'expand-icon expanded' : 'expand-icon';
+
+    return html`
+      <button
+        class="expand-button text-error font-mono text-xs"
+        @click="${this._handleExpandToggle}"
+        @keydown="${this._handleKeydown}"
+        aria-expanded="${this.expanded}"
+        aria-controls="error-details"
+      >
+        ${expandLabel} details
+        <span class="${expandIconClass}" aria-hidden="true">▼</span>
+      </button>
+
+      <div
+        id="error-details"
+        class="error-details"
+        aria-hidden="${!this.expanded}"
+      >
+        <div class="error-details-content text-muted font-mono text-xs">${this.augmentedError!.stack}</div>
+      </div>
+    `;
+  }
+
   private _renderAction() {
     if (!this.action) {
       return nothing;
@@ -224,7 +254,7 @@ export class ErrorDisplay extends LitElement {
     }
 
     const displayIcon = AugmentErrorService.getIconString(this.augmentedError.icon);
-    const hasDetails = Boolean(this.augmentedError.stack && this.augmentedError.stack.trim());
+    const hasDetails = Boolean(this.augmentedError.stack?.trim());
 
     return html`
       <div class="container container-embedded panel gap-sm">
@@ -240,26 +270,7 @@ export class ErrorDisplay extends LitElement {
           : html`${this.augmentedError.message}`}
             </div>
             
-            ${hasDetails ? html`
-              <button
-                class="expand-button text-error font-mono text-xs"
-                @click="${this._handleExpandToggle}"
-                @keydown="${this._handleKeydown}"
-                aria-expanded="${this.expanded}"
-                aria-controls="error-details"
-              >
-                ${this.expanded ? 'Hide' : 'Show'} details
-                <span class="expand-icon ${this.expanded ? 'expanded' : ''}" aria-hidden="true">▼</span>
-              </button>
-              
-              <div
-                id="error-details"
-                class="error-details"
-                aria-hidden="${!this.expanded}"
-              >
-                <div class="error-details-content text-muted font-mono text-xs">${this.augmentedError.stack}</div>
-              </div>
-            ` : ''}
+            ${this._renderDetails(hasDetails)}
 
             ${this._renderAction()}
           </div>
