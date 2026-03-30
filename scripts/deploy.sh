@@ -40,7 +40,7 @@ fi
 
 # Prevent accidental deployment of main branch
 if [[ "$REF_TO_DEPLOY" == "main" ]]; then
-    echo "❌ ERROR: Direct deployment of 'main' branch is not allowed"
+    echo "❌ ERROR: Direct deployment of 'main' branch is not allowed" >&2
     echo ""
     echo "📋 To deploy to production, use a tagged release instead:"
     echo "   devbox run deploy v3.3.X"

@@ -54,7 +54,7 @@ export class SystemInfoIdentity extends LitElement {
 
   override render() {
     // Don't render anything if no identity
-    if (!this.identity || !this.identity.loginName) {
+    if (!this.identity?.loginName) {
       return nothing;
     }
 
