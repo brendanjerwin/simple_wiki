@@ -85,26 +85,24 @@ export class FrontmatterValueSection extends LitElement {
     const { type } = event.detail;
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- spread preserves JsonObject structure
     const oldFields = { ...this.fields } as JsonObject;
-    const newKey = this._generateUniqueKey(
-      type === 'field' ? 'new_field' :
-        type === 'array' ? 'new_array' :
-          'new_section'
-    );
 
+    let baseKey: string;
     let newValue: unknown;
-    switch (type) {
-      case 'field':
-        newValue = '';
-        break;
-      case 'array':
-        newValue = [];
-        break;
-      case 'section':
-        newValue = {};
-        break;
-      default:
-        return;
+
+    if (type === 'field') {
+      baseKey = 'new_field';
+      newValue = '';
+    } else if (type === 'array') {
+      baseKey = 'new_array';
+      newValue = [];
+    } else if (type === 'section') {
+      baseKey = 'new_section';
+      newValue = {};
+    } else {
+      return;
     }
+
+    const newKey = this._generateUniqueKey(baseKey);
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- spread preserves JsonObject structure
     const newFields = { ...this.fields, [newKey]: newValue } as JsonObject;
@@ -207,9 +205,7 @@ export class FrontmatterValueSection extends LitElement {
           // If not found, check for nested components (like in arrays or sections)
           if (!valueInput) {
             const stringComponent = valueComponent.shadowRoot?.querySelector('frontmatter-value-string');
-            if (stringComponent) {
-              valueInput = stringComponent.shadowRoot?.querySelector('input, textarea');
-            }
+            valueInput = stringComponent?.shadowRoot?.querySelector('input, textarea');
           }
 
           if (valueInput instanceof HTMLElement) {
