@@ -81,33 +81,23 @@ export class FrontmatterValueSection extends LitElement {
     return newKey;
   }
 
-  private readonly _handleAddField = (event: CustomEvent): void => {
+  private readonly _handleAddField = (event: CustomEvent<{ type: 'field' | 'array' | 'section' }>): void => {
     const { type } = event.detail;
+
+    const typeConfig: Record<string, { baseKey: string; value: unknown }> = {
+      field: { baseKey: 'new_field', value: '' },
+      array: { baseKey: 'new_array', value: [] },
+      section: { baseKey: 'new_section', value: {} },
+    };
+
+    const config = typeConfig[type];
+    if (!config) return;
+
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- spread preserves JsonObject structure
     const oldFields = { ...this.fields } as JsonObject;
-    const newKey = this._generateUniqueKey(
-      type === 'field' ? 'new_field' :
-        type === 'array' ? 'new_array' :
-          'new_section'
-    );
-
-    let newValue: unknown;
-    switch (type) {
-      case 'field':
-        newValue = '';
-        break;
-      case 'array':
-        newValue = [];
-        break;
-      case 'section':
-        newValue = {};
-        break;
-      default:
-        return;
-    }
-
+    const newKey = this._generateUniqueKey(config.baseKey);
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- spread preserves JsonObject structure
-    const newFields = { ...this.fields, [newKey]: newValue } as JsonObject;
+    const newFields = { ...this.fields, [newKey]: config.value } as JsonObject;
     this.fields = newFields;
     this._clearSortingCache();
     this._dispatchSectionChange(oldFields, newFields);
