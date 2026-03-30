@@ -240,14 +240,7 @@ func BuildLinkToWithVisited(site wikipage.PageReader, currentPageTemplateContext
 
 		// Check for circular reference to prevent infinite recursion
 		if visited[identifierToLink] {
-			// Return a safe fallback link without triggering template execution - use munged identifier for URL
-			titleCaser := cases.Title(language.AmericanEnglish)
-			titleCasedTitle := titleCaser.String(strings.ReplaceAll(strcase.SnakeCase(identifierToLink), "_", singleSpace))
-			mungedIdentifier, err := wikiidentifiers.MungeIdentifier(identifierToLink)
-			if err != nil {
-				return fmt.Sprintf("[ERROR: LinkTo circular reference, munging %q: %v]", identifierToLink, err)
-			}
-			return "[" + titleCasedTitle + " (circular reference)](/" + mungedIdentifier + ")"
+			return buildCircularReferenceLink(identifierToLink)
 		}
 
 		// Mark this page as visited to prevent recursion
@@ -257,49 +250,66 @@ func BuildLinkToWithVisited(site wikipage.PageReader, currentPageTemplateContext
 		}()
 
 		resolvedIdentifier, frontmatterForLinkedPage, err := site.ReadFrontMatter(wikipage.PageIdentifier(identifierToLink))
-		resolvedIdentifierStr := string(resolvedIdentifier)
 		if err != nil {
-			titleCaser := cases.Title(language.AmericanEnglish)
-			titleCasedTitle := titleCaser.String(strings.ReplaceAll(strcase.SnakeCase(identifierToLink), "_", singleSpace))
-			urlEncodedTitle := url.QueryEscape(titleCasedTitle)
-			// Doesnt look like it exists yet, return a link.
-			// It'll render and let the page get created.
-			if isContainer(currentPageTemplateContext.Identifier) {
-				// special inventory item link with attributes - use munged identifier for URL
-				mungedIdentifier, mungeErr := wikiidentifiers.MungeIdentifier(identifierToLink)
-				if mungeErr != nil {
-					return fmt.Sprintf("[ERROR: LinkTo new inventory item, munging %q: %v]", identifierToLink, mungeErr)
-				}
-				return "[" + titleCasedTitle + "](/" + mungedIdentifier + "?tmpl=inv_item&inventory.container=" + currentPageTemplateContext.Identifier + "&title=" + urlEncodedTitle + ")"
-			}
-
-			// Use munged identifier for URL
-			mungedIdentifier, mungeErr := wikiidentifiers.MungeIdentifier(identifierToLink)
-			if mungeErr != nil {
-				return fmt.Sprintf("[ERROR: LinkTo new page, munging %q: %v]", identifierToLink, mungeErr)
-			}
-			return "[" + titleCasedTitle + "](/" + mungedIdentifier + "?title=" + urlEncodedTitle + ")"
+			return buildLinkForNewPage(currentPageTemplateContext.Identifier, identifierToLink, isContainer)
 		}
 
-		// Linked Page Exists - use munged identifier for URL
-		mungedIdentifier, mungeErr := wikiidentifiers.MungeIdentifier(resolvedIdentifierStr)
-		if mungeErr != nil {
-			return fmt.Sprintf("[ERROR: LinkTo existing page, munging %q: %v]", resolvedIdentifierStr, mungeErr)
-		}
-		tmplString := "{{if index . \"title\"}}[{{ index . \"title\" }}](/" + mungedIdentifier + "){{else}}[{{ index . \"identifier\" }}](/" + mungedIdentifier + "){{end}}"
-		tmpl, err := template.New("content").Parse(tmplString)
-		if err != nil {
-			return err.Error()
-		}
-
-		buf := &bytes.Buffer{}
-		err = tmpl.Execute(buf, frontmatterForLinkedPage)
-		if err != nil {
-			return err.Error()
-		}
-
-		return buf.String()
+		return buildLinkForExistingPage(string(resolvedIdentifier), frontmatterForLinkedPage)
 	}
+}
+
+// buildCircularReferenceLink returns a safe fallback link for circular references.
+func buildCircularReferenceLink(identifierToLink string) string {
+	titleCaser := cases.Title(language.AmericanEnglish)
+	titleCasedTitle := titleCaser.String(strings.ReplaceAll(strcase.SnakeCase(identifierToLink), "_", singleSpace))
+	mungedIdentifier, err := wikiidentifiers.MungeIdentifier(identifierToLink)
+	if err != nil {
+		return fmt.Sprintf("[ERROR: LinkTo circular reference, munging %q: %v]", identifierToLink, err)
+	}
+	return "[" + titleCasedTitle + " (circular reference)](/" + mungedIdentifier + ")"
+}
+
+// buildLinkForNewPage returns a link for a page that doesn't exist yet.
+// Doesnt look like it exists yet, return a link. It'll render and let the page get created.
+func buildLinkForNewPage(currentPageIdentifier string, identifierToLink string, isContainer func(string) bool) string {
+	titleCaser := cases.Title(language.AmericanEnglish)
+	titleCasedTitle := titleCaser.String(strings.ReplaceAll(strcase.SnakeCase(identifierToLink), "_", singleSpace))
+	urlEncodedTitle := url.QueryEscape(titleCasedTitle)
+	if isContainer(currentPageIdentifier) {
+		return buildNewInventoryItemLink(titleCasedTitle, urlEncodedTitle, currentPageIdentifier, identifierToLink)
+	}
+	mungedIdentifier, mungeErr := wikiidentifiers.MungeIdentifier(identifierToLink)
+	if mungeErr != nil {
+		return fmt.Sprintf("[ERROR: LinkTo new page, munging %q: %v]", identifierToLink, mungeErr)
+	}
+	return "[" + titleCasedTitle + "](/" + mungedIdentifier + "?title=" + urlEncodedTitle + ")"
+}
+
+// buildNewInventoryItemLink returns a special inventory item link with container attributes.
+func buildNewInventoryItemLink(titleCasedTitle, urlEncodedTitle, currentPageIdentifier, identifierToLink string) string {
+	mungedIdentifier, mungeErr := wikiidentifiers.MungeIdentifier(identifierToLink)
+	if mungeErr != nil {
+		return fmt.Sprintf("[ERROR: LinkTo new inventory item, munging %q: %v]", identifierToLink, mungeErr)
+	}
+	return "[" + titleCasedTitle + "](/" + mungedIdentifier + "?tmpl=inv_item&inventory.container=" + currentPageIdentifier + "&title=" + urlEncodedTitle + ")"
+}
+
+// buildLinkForExistingPage returns a link for a page that already exists.
+func buildLinkForExistingPage(resolvedIdentifierStr string, frontmatterForLinkedPage wikipage.FrontMatter) string {
+	mungedIdentifier, mungeErr := wikiidentifiers.MungeIdentifier(resolvedIdentifierStr)
+	if mungeErr != nil {
+		return fmt.Sprintf("[ERROR: LinkTo existing page, munging %q: %v]", resolvedIdentifierStr, mungeErr)
+	}
+	tmplString := "{{if index . \"title\"}}[{{ index . \"title\" }}](/" + mungedIdentifier + "){{else}}[{{ index . \"identifier\" }}](/" + mungedIdentifier + "){{end}}"
+	tmpl, err := template.New("content").Parse(tmplString)
+	if err != nil {
+		return err.Error()
+	}
+	buf := &bytes.Buffer{}
+	if err = tmpl.Execute(buf, frontmatterForLinkedPage); err != nil {
+		return err.Error()
+	}
+	return buf.String()
 }
 
 // BuildChecklist returns a template function that renders a wiki-checklist custom element
