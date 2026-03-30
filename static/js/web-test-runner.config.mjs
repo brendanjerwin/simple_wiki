@@ -9,6 +9,7 @@ console.log('WTR Config - Coverage enabled:', ciCoverage);
 
 export default {
   files: ['./{web-components,services}/**/*.test.ts'],
+  concurrency: 1,
   base: '/static/js/',
   nodeResolve: true,
   reporters: [summaryReporter()],
