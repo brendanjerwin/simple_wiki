@@ -15,7 +15,7 @@ if ! command -v nix &> /dev/null; then
 fi
 
 # ALWAYS load Nix into the current shell context
-if [ -f /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh ]; then
+if [[ -f /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh ]]; then
     . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
 fi
 

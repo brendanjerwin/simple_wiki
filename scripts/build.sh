@@ -78,6 +78,7 @@ compare_semver() {
             fi
         fi
     fi
+    return 0
 }
 
 # Get the highest semver tag pointing to current commit
