@@ -85,7 +85,7 @@ export class FrontmatterValueArray extends LitElement {
     this.placeholder = '';
   }
 
-  private _handleAddItem = (): void => {
+  private readonly _handleAddItem = (): void => {
     const oldArray = [...this.values];
     const newArray = [...this.values, ''];
     
@@ -94,7 +94,7 @@ export class FrontmatterValueArray extends LitElement {
     this.requestUpdate();
   };
 
-  private _handleRemoveItem = (index: number): void => {
+  private readonly _handleRemoveItem = (index: number): void => {
     const oldArray = [...this.values];
     const newArray = this.values.filter((_, i) => i !== index);
     
@@ -103,7 +103,7 @@ export class FrontmatterValueArray extends LitElement {
     this.requestUpdate();
   };
 
-  private _handleItemChange = (event: CustomEvent, index: number): void => {
+  private readonly _handleItemChange = (event: CustomEvent, index: number): void => {
     const oldArray = [...this.values];
     const newArray = [...this.values];
     newArray[index] = event.detail.newValue;
