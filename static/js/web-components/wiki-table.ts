@@ -394,7 +394,7 @@ export class WikiTable extends LitElement {
   private _parseSourceTable(): void {
     const table = this.querySelector('table');
     if (!table) return;
-    this._sourceTable = table as HTMLTableElement;
+    this._sourceTable = table;
     this._sourceTable.style.display = 'none';
     this.extractedData = extractTableData(this._sourceTable);
     for (const row of this.extractedData.rows) {
