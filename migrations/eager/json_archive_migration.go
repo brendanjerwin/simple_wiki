@@ -71,7 +71,7 @@ type JSONArchiveMigrationJob struct {
 }
 
 // NewJSONArchiveMigrationJob creates a new archive job for a specific JSON file
-func NewJSONArchiveMigrationJob(dataDir string, jsonFilename string) *JSONArchiveMigrationJob {
+func NewJSONArchiveMigrationJob(dataDir, jsonFilename string) *JSONArchiveMigrationJob {
 	return &JSONArchiveMigrationJob{
 		dataDir:      dataDir,
 		jsonFilename: jsonFilename,

@@ -144,11 +144,11 @@ type Server struct {
 	commit                  string
 	buildTime               time.Time
 	pageReaderMutator       wikipage.PageReaderMutator
-	bleveIndexQueryer       bleve.IQueryBleveIndex
+	bleveIndexQueryer       bleve.BleveIndexQuerier
 	jobQueueCoordinator     jobs.JobCoordinator
 	logger                  *lumber.ConsoleLogger
-	markdownRenderer        wikipage.IRenderMarkdownToHTML
-	templateExecutor        wikipage.IExecuteTemplate
+	markdownRenderer        wikipage.MarkdownToHTMLRenderer
+	templateExecutor        wikipage.TemplateExecutor
 	frontmatterIndexQueryer wikipage.IQueryFrontmatterIndex
 	fileStorer              filestore.FileStorer
 	chatBufferManager       ChatBufferManager
@@ -361,7 +361,7 @@ func removeAtPathFromSlice(v []any, component *apiv1.PathComponent, remainingPat
 func NewServer(
 	buildInfo BuildInfo,
 	pageReaderMutator wikipage.PageReaderMutator,
-	bleveIndexQueryer bleve.IQueryBleveIndex,
+	bleveIndexQueryer bleve.BleveIndexQuerier,
 	frontmatterIndexQueryer wikipage.IQueryFrontmatterIndex,
 	logger *lumber.ConsoleLogger,
 	chatBufferManager ChatBufferManager,
@@ -404,13 +404,13 @@ func (s *Server) WithJobQueueCoordinator(jqc jobs.JobCoordinator) *Server {
 }
 
 // WithMarkdownRenderer sets the optional markdown renderer and returns the server for chaining.
-func (s *Server) WithMarkdownRenderer(r wikipage.IRenderMarkdownToHTML) *Server {
+func (s *Server) WithMarkdownRenderer(r wikipage.MarkdownToHTMLRenderer) *Server {
 	s.markdownRenderer = r
 	return s
 }
 
 // WithTemplateExecutor sets the optional template executor and returns the server for chaining.
-func (s *Server) WithTemplateExecutor(e wikipage.IExecuteTemplate) *Server {
+func (s *Server) WithTemplateExecutor(e wikipage.TemplateExecutor) *Server {
 	s.templateExecutor = e
 	return s
 }

@@ -33,10 +33,10 @@ import (
 	"github.com/pelletier/go-toml/v2"
 )
 
-// IRenderMarkdownToHTML is an interface that abstracts the rendering process
-type IRenderMarkdownToHTML = wikipage.IRenderMarkdownToHTML
+// MarkdownToHTMLRenderer is a type alias for the rendering interface
+type MarkdownToHTMLRenderer = wikipage.MarkdownToHTMLRenderer
 
-// TemplateExecutor implements the wikipage.IExecuteTemplate interface using the templating package
+// TemplateExecutor implements the wikipage.TemplateExecutor interface using the templating package
 type TemplateExecutor struct{}
 
 // ExecuteTemplate executes a template using the templating package
@@ -44,7 +44,7 @@ func (TemplateExecutor) ExecuteTemplate(templateString string, fm wikipage.Front
 	return templating.ExecuteTemplate(templateString, fm, reader, query)
 }
 
-// ChatTemplateExecutor implements the wikipage.IExecuteTemplate interface with a
+// ChatTemplateExecutor implements the wikipage.TemplateExecutor interface with a
 // restricted set of macros suitable for chat messages. Excludes interactive widget
 // macros (Checklist, Blog) that render web components inappropriate for chat bubbles.
 type ChatTemplateExecutor struct{}
@@ -66,12 +66,12 @@ type Site struct {
 	MaxDocumentSize         uint // in runes; about a 10mb limit by default
 	FileStorer              filestore.FileStorer
 	Logger                  *lumber.ConsoleLogger
-	MarkdownRenderer        IRenderMarkdownToHTML
+	MarkdownRenderer        MarkdownToHTMLRenderer
 	IndexCoordinator        *index.IndexCoordinator
 	JobQueueCoordinator     *jobs.JobQueueCoordinator
 	CronScheduler           *jobs.CronScheduler
 	FrontmatterIndexQueryer frontmatter.IQueryFrontmatterIndex
-	BleveIndexQueryer       bleve.IQueryBleveIndex
+	BleveIndexQueryer       bleve.BleveIndexQuerier
 	MigrationApplicator     lazy.FrontmatterMigrationApplicator
 	saveMut                 sync.RWMutex
 }

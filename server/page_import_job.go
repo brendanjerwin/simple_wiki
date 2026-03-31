@@ -232,7 +232,7 @@ func (j *SinglePageImportJob) writeFrontmatter(identifier string, fm map[string]
 }
 
 // finalizeNewPage writes any additional content needed for a newly created page.
-func (j *SinglePageImportJob) finalizeNewPage(identifier string, template string) error {
+func (j *SinglePageImportJob) finalizeNewPage(identifier, template string) error {
 	if template == pageimport.InvItemTemplate {
 		markdown := inventory.BuildItemMarkdown()
 		if err := j.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(identifier), wikipage.Markdown(markdown)); err != nil {

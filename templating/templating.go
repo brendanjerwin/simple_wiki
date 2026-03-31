@@ -280,7 +280,7 @@ func buildNewPageLink(identifierToLink string) string {
 	return "[" + titleCasedTitle + "](/" + mungedIdentifier + "?title=" + urlEncodedTitle + ")"
 }
 
-func buildNewContainerPageLink(identifierToLink string, containerIdentifier string) string {
+func buildNewContainerPageLink(identifierToLink, containerIdentifier string) string {
 	titleCaser := cases.Title(language.AmericanEnglish)
 	titleCasedTitle := titleCaser.String(strings.ReplaceAll(strcase.SnakeCase(identifierToLink), "_", singleSpace))
 	urlEncodedTitle := url.QueryEscape(titleCasedTitle)
