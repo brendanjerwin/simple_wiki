@@ -17,7 +17,7 @@ import { AugmentErrorService } from './augment-error-service.js';
  * @property {boolean} toolsOpen - Whether the tools panel is open (for mobile tap)
  */
 export class WikiImage extends LitElement {
-  static readonly override styles = css`
+  static override readonly styles = css`
     :host {
       display: block;
       text-align: center;

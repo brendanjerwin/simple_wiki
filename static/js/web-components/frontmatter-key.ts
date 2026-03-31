@@ -2,7 +2,7 @@ import { html, css, LitElement } from 'lit';
 import { property } from 'lit/decorators.js';
 
 export class FrontmatterKey extends LitElement {
-  static readonly override styles = css`
+  static override readonly styles = css`
     :host {
       display: inline-block;
     }
