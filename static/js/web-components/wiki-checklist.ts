@@ -622,13 +622,7 @@ export class WikiChecklist extends LitElement {
       };
 
       // Update the checklists key
-      const checklistsValue = currentFrontmatter['checklists'];
-      const existingChecklists =
-        typeof checklistsValue === 'object' &&
-        !Array.isArray(checklistsValue) &&
-        checklistsValue !== null
-          ? checklistsValue
-          : {};
+      const existingChecklists = this._asRecord(currentFrontmatter['checklists']) ?? {};
       const updatedChecklists: JsonObject = {
         ...existingChecklists,
         [this.listName]: checklistData,
