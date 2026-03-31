@@ -8,7 +8,7 @@ import './frontmatter-add-field-button.js';
 import './kernel-panic.js';
 import { showKernelPanic } from './kernel-panic.js';
 import { AugmentErrorService } from './augment-error-service.js';
-import type { SectionChangeEventDetail } from './event-types.js';
+import type { SectionChangeEventDetail, AddFieldEventDetail } from './event-types.js';
 
 export class FrontmatterValueSection extends LitElement {
   static override styles = [
@@ -81,7 +81,7 @@ export class FrontmatterValueSection extends LitElement {
     return newKey;
   }
 
-  private readonly _handleAddField = (event: CustomEvent<{ type: 'field' | 'array' | 'section' }>): void => {
+  private readonly _handleAddField = (event: CustomEvent<AddFieldEventDetail>): void => {
     const { type } = event.detail;
 
     const typeConfig: Record<string, { baseKey: string; value: unknown }> = {
