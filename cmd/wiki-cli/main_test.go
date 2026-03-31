@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -272,6 +275,71 @@ var _ = Describe("checkVersionCompatibility", func() {
 				ContainSubstring("UNREACHABLE"),
 				ContainSubstring("invalid version response"),
 			)))
+		})
+	})
+})
+
+var _ = Describe("printResponseBody", func() {
+	var (
+		savedStdout *os.File
+		pipeReader  *os.File
+		pipeWriter  *os.File
+	)
+
+	BeforeEach(func() {
+		var pipeErr error
+		pipeReader, pipeWriter, pipeErr = os.Pipe()
+		Expect(pipeErr).NotTo(HaveOccurred())
+		savedStdout = os.Stdout
+		os.Stdout = pipeWriter
+	})
+
+	AfterEach(func() {
+		os.Stdout = savedStdout
+		_ = pipeWriter.Close()
+		_ = pipeReader.Close()
+	})
+
+	captureAndClose := func() string {
+		_ = pipeWriter.Close()
+		var buf bytes.Buffer
+		_, _ = io.Copy(&buf, pipeReader)
+		return buf.String()
+	}
+
+	When("the body is valid JSON", func() {
+		var returnErr error
+		var output string
+
+		BeforeEach(func() {
+			returnErr = printResponseBody([]byte(`{"key":"value"}`))
+			output = captureAndClose()
+		})
+
+		It("should return nil", func() {
+			Expect(returnErr).NotTo(HaveOccurred())
+		})
+
+		It("should pretty-print the JSON", func() {
+			Expect(output).To(ContainSubstring(`"key": "value"`))
+		})
+	})
+
+	When("the body is not valid JSON", func() {
+		var returnErr error
+		var output string
+
+		BeforeEach(func() {
+			returnErr = printResponseBody([]byte("plain text response"))
+			output = captureAndClose()
+		})
+
+		It("should return nil", func() {
+			Expect(returnErr).NotTo(HaveOccurred())
+		})
+
+		It("should print the raw text", func() {
+			Expect(output).To(ContainSubstring("plain text response"))
 		})
 	})
 })
