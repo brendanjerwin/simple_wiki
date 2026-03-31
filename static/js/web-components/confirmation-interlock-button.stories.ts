@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/web-components-vite';
 import { action } from 'storybook/actions';
 import { html } from 'lit';
+import { createRef, ref } from 'lit/directives/ref.js';
 import './confirmation-interlock-button.js';
 import type { ConfirmationInterlockButton } from './confirmation-interlock-button.js';
 
@@ -273,6 +274,7 @@ export const InFormContext: Story = {
 
 export const InteractiveTesting: Story = {
   render: () => {
+    const btnRef = createRef<ConfirmationInterlockButton>();
     return html`
       <div style="padding: 20px;">
         <h3>Interactive Testing</h3>
@@ -286,21 +288,15 @@ export const InteractiveTesting: Story = {
 
         <div style="display: flex; gap: 12px; align-items: center; margin: 20px 0;">
           <confirmation-interlock-button
-            id="test-button"
+            ${ref(btnRef)}
             label="Test Me"
             @confirmed=${action('confirmed-test')}
             @cancelled=${action('cancelled-test')}
           ></confirmation-interlock-button>
 
-          <button @click=${() => {
-            const btn = document.querySelector('#test-button') as ConfirmationInterlockButton;
-            btn?.arm();
-          }} style="padding: 8px 16px;">Arm</button>
+          <button @click=${() => btnRef.value?.arm()} style="padding: 8px 16px;">Arm</button>
 
-          <button @click=${() => {
-            const btn = document.querySelector('#test-button') as ConfirmationInterlockButton;
-            btn?.disarm();
-          }} style="padding: 8px 16px;">Disarm</button>
+          <button @click=${() => btnRef.value?.disarm()} style="padding: 8px 16px;">Disarm</button>
         </div>
 
         <div style="margin-top: 20px; padding: 15px; background: #fff3cd; border-radius: 4px;">
