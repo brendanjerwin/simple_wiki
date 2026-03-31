@@ -3,7 +3,7 @@ import { customElement, state } from 'lit/decorators.js';
 
 @customElement('settings-panel')
 export class SettingsPanel extends LitElement {
-  static override styles = css`
+  static override readonly styles = css`
     :host {
       display: block;
       margin-bottom: 12px;

@@ -10,7 +10,7 @@ function formatCentsDisplay(cents: number): string {
 
 @customElement('order-list')
 export class OrderList extends LitElement {
-  static override styles = css`
+  static override readonly styles = css`
     :host {
       display: block;
     }

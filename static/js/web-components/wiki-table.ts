@@ -13,7 +13,7 @@ import type { ExtractedTableData } from './table-data-extractor.js';
 import type { SortDirection, TableFilterState } from './table-sorter-filterer.js';
 
 export class WikiTable extends LitElement {
-  static override styles = [
+  static override readonly styles = [
     pillCSS,
     css`
       :host {

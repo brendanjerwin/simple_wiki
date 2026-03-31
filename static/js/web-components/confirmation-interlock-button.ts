@@ -53,7 +53,7 @@ export const defaultTimerProvider: TimerProvider = {
  * ```
  */
 export class ConfirmationInterlockButton extends LitElement {
-  static override styles = [
+  static override readonly styles = [
     foundationCSS,
     buttonCSS,
     css`
