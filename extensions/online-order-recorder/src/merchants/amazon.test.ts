@@ -11,13 +11,14 @@ const fixtureHtml = readFileSync(
 );
 
 describe('parseOrders', () => {
-  describe('when given an Amazon order history page', () => {
-    let orders: Order[];
+  let orders: Order[];
 
-    beforeEach(() => {
-      const dom = new JSDOM(fixtureHtml);
-      orders = parseOrders(dom.window.document);
-    });
+  beforeEach(() => {
+    const dom = new JSDOM(fixtureHtml);
+    orders = parseOrders(dom.window.document);
+  });
+
+  describe('when given an Amazon order history page', () => {
 
     it('should return 3 orders', () => {
       expect(orders).to.have.length(3);
@@ -67,8 +68,6 @@ describe('parseOrders', () => {
     let order: Order;
 
     beforeEach(() => {
-      const dom = new JSDOM(fixtureHtml);
-      const orders = parseOrders(dom.window.document);
       order = orders[0]!;
     });
 
@@ -113,8 +112,6 @@ describe('parseOrders', () => {
     let order: Order;
 
     beforeEach(() => {
-      const dom = new JSDOM(fixtureHtml);
-      const orders = parseOrders(dom.window.document);
       order = orders[1]!;
     });
 
@@ -147,8 +144,6 @@ describe('parseOrders', () => {
     let order: Order;
 
     beforeEach(() => {
-      const dom = new JSDOM(fixtureHtml);
-      const orders = parseOrders(dom.window.document);
       order = orders[2]!;
     });
 
@@ -174,15 +169,15 @@ describe('parseOrders', () => {
   });
 
   describe('when given a non-Amazon page', () => {
-    let orders: Order[];
+    let nonAmazonOrders: Order[];
 
     beforeEach(() => {
       const dom = new JSDOM('<html><body><p>Not an Amazon page</p></body></html>');
-      orders = parseOrders(dom.window.document);
+      nonAmazonOrders = parseOrders(dom.window.document);
     });
 
     it('should return an empty array', () => {
-      expect(orders).to.have.length(0);
+      expect(nonAmazonOrders).to.have.length(0);
     });
   });
 });
