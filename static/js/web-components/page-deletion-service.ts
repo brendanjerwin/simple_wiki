@@ -7,15 +7,27 @@ import { showToastAfter } from './toast-message.js';
 import './confirmation-dialog.js';
 import { type ConfirmationConfig } from './confirmation-dialog.js';
 
+type ConfirmationDialogElement = HTMLElement & {
+  openDialog: (config: ConfirmationConfig) => void;
+  setLoading: (loading: boolean) => void;
+  showError: (error: AugmentedError) => void;
+  closeDialog: () => void;
+  addEventListener: (type: string, listener: (event: Event) => void) => void;
+  removeEventListener: (type: string, listener: (event: Event) => void) => void;
+  dataset: { pageName?: string };
+  id: string;
+  hidden: boolean;
+};
+
 /**
  * PageDeleter - Handles page deletion workflow using the generic confirmation dialog
- * 
+ *
  * This service manages the complete page deletion flow:
  * 1. Shows confirmation dialog with page-specific messaging
  * 2. Handles the gRPC delete operation
  * 3. Manages success and error states
  * 4. Redirects user after successful deletion
- * 
+ *
  * Usage:
  * ```typescript
  * const service = new PageDeleter();
@@ -24,18 +36,7 @@ import { type ConfirmationConfig } from './confirmation-dialog.js';
  */
 export class PageDeleter {
   private readonly client = createClient(PageManagementService, getGrpcWebTransport());
-  // Definite assignment assertion: ensureDialogExists() called in constructor guarantees initialization
-  private dialog!: HTMLElement & {
-    openDialog: (config: ConfirmationConfig) => void;
-    setLoading: (loading: boolean) => void;
-    showError: (error: AugmentedError) => void;
-    closeDialog: () => void;
-    addEventListener: (type: string, listener: (event: Event) => void) => void;
-    removeEventListener: (type: string, listener: (event: Event) => void) => void;
-    dataset: { pageName?: string };
-    id: string;
-    hidden: boolean;
-  };
+  private dialog: ConfirmationDialogElement;
 
   // Store bound event handlers for proper cleanup
   private readonly boundHandleConfirm: (event: Event) => void;
@@ -45,8 +46,8 @@ export class PageDeleter {
     // Bind event handlers once to ensure proper cleanup
     this.boundHandleConfirm = () => { void this.handleConfirm(); };
     this.boundHandleCancel = this.handleCancel.bind(this);
-    
-    this.ensureDialogExists();
+
+    this.dialog = this.ensureDialogExists();
     this.setupEventListeners();
   }
 
@@ -74,22 +75,22 @@ export class PageDeleter {
   }
 
   /**
-   * Ensures the confirmation dialog element exists in the DOM
+   * Ensures the confirmation dialog element exists in the DOM and returns it.
    */
-  private ensureDialogExists() {
+  private ensureDialogExists(): ConfirmationDialogElement {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- custom element has known interface
-    const existing = document.querySelector('confirmation-dialog') as typeof this.dialog | null;
+    const existing = document.querySelector('confirmation-dialog') as ConfirmationDialogElement | null;
 
     if (existing) {
-      this.dialog = existing;
-    } else {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- custom element has known interface
-      const newDialog = document.createElement('confirmation-dialog') as typeof this.dialog;
-      newDialog.id = 'page-deletion-dialog';
-      newDialog.hidden = true;
-      document.body.appendChild(newDialog);
-      this.dialog = newDialog;
+      return existing;
     }
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- custom element has known interface
+    const newDialog = document.createElement('confirmation-dialog') as ConfirmationDialogElement;
+    newDialog.id = 'page-deletion-dialog';
+    newDialog.hidden = true;
+    document.body.appendChild(newDialog);
+    return newDialog;
   }
 
   /**
