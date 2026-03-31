@@ -41,7 +41,7 @@ function parsePriceCents(priceText: string): number {
     return 0;
   }
 
-  const dollars = parseInt((match[1] ?? '').replace(/,/g, ''), 10);
+  const dollars = parseInt((match[1] ?? '0').replace(/,/g, ''), 10);
   const cents = parseInt(match[2] ?? '0', 10);
   return dollars * 100 + cents;
 }
