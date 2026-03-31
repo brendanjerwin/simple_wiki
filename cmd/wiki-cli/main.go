@@ -536,7 +536,7 @@ func runCall(ctx context.Context, baseURL, method, rawInput string) error {
 // printResponseBody pretty-prints JSON response body, or prints raw text if not valid JSON.
 func printResponseBody(body []byte) error {
 	var v any
-	if jsonErr := json.Unmarshal(body, &v); jsonErr == nil {
+	if json.Unmarshal(body, &v) == nil {
 		out, _ := json.MarshalIndent(v, "", "  ")
 		if _, err := fmt.Println(string(out)); err != nil {
 			return fmt.Errorf(writeErrTemplate, err)

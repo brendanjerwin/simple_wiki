@@ -309,7 +309,7 @@ Content`
 			markdown         []byte
 			frontmatter      map[string]any
 			reader           wikipage.PageReader
-			templateExecutor wikipage.IExecuteTemplate
+			templateExecutor wikipage.TemplateExecutor
 			query            wikipage.IQueryFrontmatterIndex
 			result           []byte
 			err              error
@@ -398,7 +398,7 @@ Content`
 	Describe("RenderMarkdownToHTML", func() {
 		var (
 			markdown []byte
-			renderer wikipage.IRenderMarkdownToHTML
+			renderer wikipage.MarkdownToHTMLRenderer
 			result   []byte
 			err      error
 		)
@@ -456,8 +456,8 @@ Content`
 		var (
 			content          string
 			reader           wikipage.PageReader
-			renderer         wikipage.IRenderMarkdownToHTML
-			templateExecutor wikipage.IExecuteTemplate
+			renderer         wikipage.MarkdownToHTMLRenderer
+			templateExecutor wikipage.TemplateExecutor
 			query            wikipage.IQueryFrontmatterIndex
 			result           wikipage.RenderingResult
 			err              error
@@ -759,8 +759,8 @@ var _ = Describe("Page.Render", func() {
 	var (
 		page             *wikipage.Page
 		reader           wikipage.PageReader
-		renderer         wikipage.IRenderMarkdownToHTML
-		templateExecutor wikipage.IExecuteTemplate
+		renderer         wikipage.MarkdownToHTMLRenderer
+		templateExecutor wikipage.TemplateExecutor
 		query            wikipage.IQueryFrontmatterIndex
 		err              error
 	)

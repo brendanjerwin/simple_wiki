@@ -374,7 +374,7 @@ func (*MockPageWatchStreamServer) RecvMsg(any) error {
 	return nil
 }
 
-// MockBleveIndexQueryer is a mock implementation of bleve.IQueryBleveIndex for testing.
+// MockBleveIndexQueryer is a mock implementation of bleve.BleveIndexQueryer for testing.
 type MockBleveIndexQueryer struct {
 	Results []bleve.SearchResult
 	Err     error
@@ -475,7 +475,7 @@ func (noOpPageOpener) ReadPage(wikipage.PageIdentifier) (*wikipage.Page, error) 
 // mustNewServer creates a server with the given dependencies, failing the test if creation fails.
 func mustNewServer(
 	pageReaderMutator wikipage.PageReaderMutator,
-	bleveIndexQueryer bleve.IQueryBleveIndex,
+	bleveIndexQueryer bleve.BleveIndexQueryer,
 	frontmatterIndexQueryer wikipage.IQueryFrontmatterIndex,
 ) *v1.Server {
 	return mustNewServerFull(pageReaderMutator, bleveIndexQueryer, frontmatterIndexQueryer, nil, nil)
@@ -484,7 +484,7 @@ func mustNewServer(
 // mustNewServerFull creates a server with all optional dependencies.
 func mustNewServerFull(
 	pageReaderMutator wikipage.PageReaderMutator,
-	bleveIndexQueryer bleve.IQueryBleveIndex,
+	bleveIndexQueryer bleve.BleveIndexQueryer,
 	frontmatterIndexQueryer wikipage.IQueryFrontmatterIndex,
 	jobCoordinator jobs.JobCoordinator,
 	pageOpener wikipage.PageOpener,
@@ -1717,7 +1717,7 @@ var _ = Describe("Server", func() {
 
 				// Capture the panic
 				defer func() {
-					if r := recover(); r != nil {
+					if recover() != nil {
 						err = status.Error(codes.Internal, "panic occurred")
 					}
 				}()
@@ -5961,7 +5961,7 @@ var _ = Describe("Server builder methods", func() {
 	})
 })
 
-// MockMarkdownRenderer is a mock implementation of wikipage.IRenderMarkdownToHTML
+// MockMarkdownRenderer is a mock implementation of wikipage.MarkdownToHTMLRenderer
 type MockMarkdownRenderer struct {
 	Result []byte
 	Err    error
@@ -5974,7 +5974,7 @@ func (m *MockMarkdownRenderer) Render(input []byte) ([]byte, error) {
 	return m.Result, nil
 }
 
-// MockTemplateExecutor is a mock implementation of wikipage.IExecuteTemplate
+// MockTemplateExecutor is a mock implementation of wikipage.TemplateExecutor
 type MockTemplateExecutor struct {
 	Result []byte
 	Err    error

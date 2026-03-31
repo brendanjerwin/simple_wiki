@@ -79,13 +79,13 @@ func (p *Page) GetMarkdown() (Markdown, error) {
 	return md, err
 }
 
-// IRenderMarkdownToHTML is an interface that abstracts the rendering process
-type IRenderMarkdownToHTML interface {
+// MarkdownToHTMLRenderer is an interface that abstracts the rendering process
+type MarkdownToHTMLRenderer interface {
 	Render(input []byte) ([]byte, error)
 }
 
-// IExecuteTemplate is an interface that abstracts template execution
-type IExecuteTemplate interface {
+// TemplateExecutor is an interface that abstracts template execution
+type TemplateExecutor interface {
 	ExecuteTemplate(templateString string, fm FrontMatter, reader PageReader, query IQueryFrontmatterIndex) ([]byte, error)
 }
 
@@ -133,7 +133,7 @@ func ParseFrontmatterAndMarkdown(content string) ([]byte, map[string]any, error)
 // ExecuteTemplatesOnMarkdown executes templates within markdown content using the provided
 // frontmatter, page reader, template executor, and query interface.
 // It returns the template-expanded markdown.
-func ExecuteTemplatesOnMarkdown(markdown []byte, frontmatter map[string]any, reader PageReader, templateExecutor IExecuteTemplate, query IQueryFrontmatterIndex) ([]byte, error) {
+func ExecuteTemplatesOnMarkdown(markdown []byte, frontmatter map[string]any, reader PageReader, templateExecutor TemplateExecutor, query IQueryFrontmatterIndex) ([]byte, error) {
 	if templateExecutor == nil {
 		return nil, errors.New("template executor is not initialized")
 	}
@@ -153,7 +153,7 @@ func ExecuteTemplatesOnMarkdown(markdown []byte, frontmatter map[string]any, rea
 
 // RenderMarkdownToHTML converts markdown content to HTML using the provided renderer.
 // It returns the HTML output.
-func RenderMarkdownToHTML(markdown []byte, renderer IRenderMarkdownToHTML) ([]byte, error) {
+func RenderMarkdownToHTML(markdown []byte, renderer MarkdownToHTMLRenderer) ([]byte, error) {
 	if renderer == nil {
 		return nil, errors.New("renderer is not initialized")
 	}
@@ -169,7 +169,7 @@ func RenderMarkdownToHTML(markdown []byte, renderer IRenderMarkdownToHTML) ([]by
 // and converting the result to HTML. It composes ParseFrontmatterAndMarkdown, ExecuteTemplatesOnMarkdown,
 // and RenderMarkdownToHTML to create a complete rendering pipeline.
 // It returns both the HTML, the template-expanded markdown, and the frontmatter JSON.
-func RenderPageWithTemplates(content string, reader PageReader, renderer IRenderMarkdownToHTML, templateExecutor IExecuteTemplate, query IQueryFrontmatterIndex) (RenderingResult, error) {
+func RenderPageWithTemplates(content string, reader PageReader, renderer MarkdownToHTMLRenderer, templateExecutor TemplateExecutor, query IQueryFrontmatterIndex) (RenderingResult, error) {
 	var result RenderingResult
 
 	// Validate required dependencies
@@ -217,7 +217,7 @@ func RenderPageWithTemplates(content string, reader PageReader, renderer IRender
 }
 
 // Render renders the page content to HTML
-func (p *Page) Render(reader PageReader, renderer IRenderMarkdownToHTML, templateExecutor IExecuteTemplate, query IQueryFrontmatterIndex) error {
+func (p *Page) Render(reader PageReader, renderer MarkdownToHTMLRenderer, templateExecutor TemplateExecutor, query IQueryFrontmatterIndex) error {
 	result, err := RenderPageWithTemplates(p.Text, reader, renderer, templateExecutor, query)
 	if err != nil {
 		return fmt.Errorf("error rendering page: %w", err)
