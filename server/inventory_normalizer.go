@@ -151,28 +151,44 @@ func (n *InventoryNormalizer) GetContainerItems(containerID wikipage.PageIdentif
 // Handles both []string and []any typed values.
 // Returns an error if any item identifier is invalid.
 func mungeItemIdentifiers(itemsRaw any, containerID wikipage.PageIdentifier) ([]string, error) {
-	var items []string
 	switch v := itemsRaw.(type) {
 	case []string:
-		for _, s := range v {
-			munged, err := wikiidentifiers.MungeIdentifier(s)
-			if err != nil {
-				return nil, fmt.Errorf("invalid item identifier %q in container %s: %w", s, containerID, err)
-			}
-			items = append(items, munged)
-		}
+		return mungeStringSliceItems(v, containerID)
 	case []any:
-		for _, item := range v {
-			if s, ok := item.(string); ok {
-				munged, err := wikiidentifiers.MungeIdentifier(s)
-				if err != nil {
-					return nil, fmt.Errorf("invalid item identifier %q in container %s: %w", s, containerID, err)
-				}
-				items = append(items, munged)
-			}
-		}
+		return mungeAnySliceItems(v, containerID)
+	default:
+		return nil, nil
 	}
-	return items, nil
+}
+
+// mungeStringSliceItems munges identifiers from a []string items array.
+func mungeStringSliceItems(items []string, containerID wikipage.PageIdentifier) ([]string, error) {
+	result := make([]string, 0, len(items))
+	for _, s := range items {
+		munged, err := wikiidentifiers.MungeIdentifier(s)
+		if err != nil {
+			return nil, fmt.Errorf("invalid item identifier %q in container %s: %w", s, containerID, err)
+		}
+		result = append(result, munged)
+	}
+	return result, nil
+}
+
+// mungeAnySliceItems munges identifiers from a []any items array, skipping non-string entries.
+func mungeAnySliceItems(items []any, containerID wikipage.PageIdentifier) ([]string, error) {
+	var result []string
+	for _, item := range items {
+		s, ok := item.(string)
+		if !ok {
+			continue
+		}
+		munged, err := wikiidentifiers.MungeIdentifier(s)
+		if err != nil {
+			return nil, fmt.Errorf("invalid item identifier %q in container %s: %w", s, containerID, err)
+		}
+		result = append(result, munged)
+	}
+	return result, nil
 }
 
 // CreateItemPage creates a new inventory item page.
