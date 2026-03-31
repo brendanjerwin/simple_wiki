@@ -59,7 +59,7 @@ export interface ConfirmationConfig {
  * ```
  */
 export class ConfirmationDialog extends LitElement {
-  static override styles = [
+  static override readonly styles = [
     colorCSS,
     typographyCSS,
     themeCSS,

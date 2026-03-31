@@ -134,4 +134,31 @@ var _ = Describe("createSite", func() {
 			Expect(site.PathToData).To(Equal(tmpDir))
 		})
 	})
+
+	When("the CSS file does not exist", func() {
+		var err error
+
+		BeforeEach(func() {
+			flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+			flagSet.String("data", tmpDir, "")
+			flagSet.String("cookie-secret", "test-secret", "")
+			flagSet.String("css", "/nonexistent/path/custom.css", "")
+			flagSet.String("default-page", "home", "")
+			flagSet.Int("debounce", 0, "")
+			flagSet.Bool("debug", false, "")
+			flagSet.Bool("block-file-uploads", false, "")
+			flagSet.Uint("max-upload-mb", 10, "")
+			flagSet.Uint("max-document-length", 10000, "")
+			ctx := cli.NewContext(nil, flagSet, nil)
+			_, err = createSite(ctx)
+		})
+
+		It("should return an error", func() {
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should mention the CSS file in the error", func() {
+			Expect(err.Error()).To(ContainSubstring("custom.css"))
+		})
+	})
 })

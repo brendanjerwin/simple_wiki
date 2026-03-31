@@ -516,7 +516,7 @@ export class InventoryMoveItemDialog extends LitElement {
 
     if (result.success) {
       this.inventoryItemCreatorMover.showSuccess(
-        result.summary || `Moved ${this.itemIdentifier} to ${containerIdentifier}`,
+        result.summary ?? `Moved ${this.itemIdentifier} to ${containerIdentifier}`,
         () => window.location.reload()
       );
       this.close();
@@ -559,7 +559,7 @@ export class InventoryMoveItemDialog extends LitElement {
             <div class="search-result-item">
               <div class="result-info">
                 <div class="result-title">${result.title || result.identifier}</div>
-                ${result.frontmatter?.['inventory.container']
+                ${result.frontmatter['inventory.container']
                   ? html`<div class="result-container">Found In: ${result.frontmatter['inventory.container']}</div>`
                   : ''}
               </div>

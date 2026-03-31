@@ -197,9 +197,7 @@ export class FrontmatterValueSection extends LitElement {
           // If not found, check for nested components (like in arrays or sections)
           if (!valueInput) {
             const stringComponent = valueComponent.shadowRoot?.querySelector('frontmatter-value-string');
-            if (stringComponent) {
-              valueInput = stringComponent.shadowRoot?.querySelector('input, textarea');
-            }
+            valueInput = stringComponent?.shadowRoot?.querySelector('input, textarea');
           }
 
           if (valueInput instanceof HTMLElement) {
@@ -239,7 +237,7 @@ export class FrontmatterValueSection extends LitElement {
     // Create a hash of the fields to check if we can use cached results
     const fieldsHash = JSON.stringify(entries);
     
-    if (this._fieldsHashCache === fieldsHash && this._sortedEntriesCache.has(fieldsHash)) {
+    if (this._fieldsHashCache === fieldsHash) {
       return this._sortedEntriesCache.get(fieldsHash)!;
     }
 

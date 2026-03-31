@@ -296,10 +296,31 @@ export class FrontmatterEditorDialog extends LitElement {
     }
   };
 
+  private _renderContent(): unknown {
+    if (this.loading) {
+      return html`
+        <div class="loading">
+          <i class="fas fa-spinner fa-spin"></i>
+          Loading frontmatter...
+        </div>
+      `;
+    }
+    if (this.augmentedError) {
+      return html`
+        <error-display
+          .augmentedError=${this.augmentedError}>
+        </error-display>
+      `;
+    }
+    return html`
+      ${this.renderFrontmatterEditor()}
+    `;
+  }
+
   private renderFrontmatterEditor(): unknown {
     return html`
       <frontmatter-value-section
-        .fields="${this.workingFrontmatter || {}}"
+        .fields="${this.workingFrontmatter ?? {}}"
         .isRoot="${true}"
         @section-change="${this._handleSectionChange}"
       ></frontmatter-value-section>
@@ -315,18 +336,7 @@ export class FrontmatterEditorDialog extends LitElement {
           <h2 class="dialog-title">Edit Frontmatter</h2>
         </div>
         <div class="content">
-          ${this.loading ? html`
-            <div class="loading">
-              <i class="fas fa-spinner fa-spin"></i>
-              Loading frontmatter...
-            </div>
-          ` : this.augmentedError ? html`
-            <error-display 
-              .augmentedError=${this.augmentedError}>
-            </error-display>
-          ` : html`
-            ${this.renderFrontmatterEditor()}
-          `}
+          ${this._renderContent()}
         </div>
         <div class="footer">
           <button class="button-base button-secondary button-large border-radius-small" @click="${this._handleCancel}" ?disabled="${this.saving}">

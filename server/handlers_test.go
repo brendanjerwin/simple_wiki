@@ -45,7 +45,7 @@ var _ = Describe("Handlers", func() {
 		tmpDir, err = os.MkdirTemp("", "simple_wiki_test")
 		Expect(err).NotTo(HaveOccurred())
 		logger := lumber.NewConsoleLogger(lumber.TRACE)
-		site, err = server.NewSite(tmpDir, "", "testpage", 0, "secret", true, 1024, 1024, logger)
+		site, err = server.NewSite(tmpDir, "testpage", 0, "secret", logger)
 		Expect(err).NotTo(HaveOccurred())
 		router = site.GinRouter()
 		w = httptest.NewRecorder()
@@ -137,8 +137,9 @@ var _ = Describe("Handlers", func() {
 
 		When("the document is too large", func() {
 			BeforeEach(func() {
+				site.MaxDocumentSize = 1024
 				body, _ := json.Marshal(map[string]any{
-					"page":     "test-update",
+					"page":     "test_update",
 					"new_text": string(make([]byte, 2048)),
 				})
 				req, _ := http.NewRequest(http.MethodPost, "/update", bytes.NewBuffer(body))
@@ -148,6 +149,23 @@ var _ = Describe("Handlers", func() {
 
 			It("should return a 400 error", func() {
 				Expect(w.Code).To(Equal(http.StatusBadRequest))
+			})
+		})
+
+		When("MaxDocumentSize is zero", func() {
+			BeforeEach(func() {
+				site.MaxDocumentSize = 0
+				body, _ := json.Marshal(map[string]any{
+					"page":     "test_update",
+					"new_text": string(make([]byte, 2048)),
+				})
+				req, _ := http.NewRequest(http.MethodPost, "/update", bytes.NewBuffer(body))
+				req.Header.Set("Content-Type", "application/json")
+				router.ServeHTTP(w, req)
+			})
+
+			It("should allow updates of any size", func() {
+				Expect(w.Code).To(Equal(http.StatusOK))
 			})
 		})
 
@@ -161,14 +179,14 @@ var _ = Describe("Handlers", func() {
 			var logOutput string
 
 			BeforeEach(func() {
-				pageName = "test-update-fail"
+				pageName = "test_update_fail"
 				newText := "new content"
 
 				// Create a custom logger that writes to a buffer for this test
 				logBuffer = &bytes.Buffer{}
 				customLogger := lumber.NewBasicLogger(&writeCloserBuffer{logBuffer}, lumber.TRACE)
 				var err error
-				customSite, err = server.NewSite(tmpDir, "", "testpage", 0, "secret", true, 1024, 1024, customLogger)
+				customSite, err = server.NewSite(tmpDir, "testpage", 0, "secret", customLogger)
 				Expect(err).NotTo(HaveOccurred())
 				customRouter = customSite.GinRouter()
 
@@ -210,7 +228,7 @@ var _ = Describe("Handlers", func() {
 			})
 
 			It("should log the error", func() {
-				Expect(logOutput).To(ContainSubstring("Failed to save page 'test-update-fail'"))
+				Expect(logOutput).To(ContainSubstring("Failed to save page 'test_update_fail'"))
 				Expect(logOutput).To(ContainSubstring("ERROR"))
 			})
 		})
@@ -220,7 +238,7 @@ var _ = Describe("Handlers", func() {
 			var pageName string
 
 			BeforeEach(func() {
-				pageName = "test-conflict"
+				pageName = "test_conflict"
 				p, err := site.ReadPage(wikipage.PageIdentifier(pageName))
 				Expect(err).NotTo(HaveOccurred())
 				err = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "some content")
@@ -257,7 +275,7 @@ var _ = Describe("Handlers", func() {
 			var newText string
 
 			BeforeEach(func() {
-				pageName = "test-update"
+				pageName = "test_update"
 				newText = "new content"
 				p, err := site.ReadPage(wikipage.PageIdentifier(pageName))
 				Expect(err).NotTo(HaveOccurred())
@@ -346,7 +364,7 @@ var _ = Describe("Handlers", func() {
 			var originalDataPath string
 
 			BeforeEach(func() {
-				pageName = "test-update-fail"
+				pageName = "test_update_fail"
 				newText = "new content"
 				p, err := site.ReadPage(wikipage.PageIdentifier(pageName))
 				Expect(err).NotTo(HaveOccurred())
@@ -400,7 +418,7 @@ var _ = Describe("handleUploads Path Injection Prevention", func() {
 		tmpDir, err = os.MkdirTemp("", "simple_wiki_test")
 		Expect(err).NotTo(HaveOccurred())
 		logger := lumber.NewConsoleLogger(lumber.TRACE)
-		site, err := server.NewSite(tmpDir, "", "testpage", 0, "secret", true, 1024, 1024, logger)
+		site, err := server.NewSite(tmpDir, "testpage", 0, "secret", logger)
 		Expect(err).NotTo(HaveOccurred())
 		router = site.GinRouter()
 		w = httptest.NewRecorder()
@@ -477,7 +495,7 @@ var _ = Describe("handlePageRequest directory listing", func() {
 		tmpDir, err = os.MkdirTemp("", "simple_wiki_ls_test")
 		Expect(err).NotTo(HaveOccurred())
 		logger := lumber.NewConsoleLogger(lumber.TRACE)
-		customSite, err = server.NewSite(tmpDir, "", "testpage", 0, "secret", true, 1024, 1024, logger)
+		customSite, err = server.NewSite(tmpDir, "testpage", 0, "secret", logger)
 		Expect(err).NotTo(HaveOccurred())
 		router = customSite.GinRouter()
 		w = httptest.NewRecorder()
@@ -538,8 +556,10 @@ var _ = Describe("handleUpload Audit Logging", func() {
 
 		logBuffer = &bytes.Buffer{}
 		logger := lumber.NewBasicLogger(&handlerTestWriteCloser{logBuffer}, lumber.TRACE)
-		site, err := server.NewSite(tmpDir, "", "testpage", 0, "secret", true, 1024, 1024, logger)
+		site, err := server.NewSite(tmpDir, "testpage", 0, "secret", logger)
 		Expect(err).NotTo(HaveOccurred())
+		site.Fileuploads = true
+		site.MaxUploadSize = 1024
 		router = site.GinRouter()
 	})
 
@@ -631,7 +651,7 @@ var _ = Describe("Session Logging Functions", func() {
 		logBuffer = &bytes.Buffer{}
 		logger = lumber.NewBasicLogger(&handlerTestWriteCloser{logBuffer}, lumber.ERROR)
 
-		site, err = server.NewSite(tmpDir, "", "testpage", 0, "secret", true, 1024, 1024, logger)
+		site, err = server.NewSite(tmpDir, "testpage", 0, "secret", logger)
 		Expect(err).NotTo(HaveOccurred())
 		router = site.GinRouter()
 	})
@@ -887,14 +907,14 @@ var _ = Describe("Session Logging Functions", func() {
 				w = httptest.NewRecorder()
 
 				// Create a page to work with
-				p, err := site.ReadPage("test-integration")
+				p, err := site.ReadPage("test_integration")
 				Expect(err).NotTo(HaveOccurred())
 				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), "test content")
 				_ = site.UpdatePageContent(wikipage.PageIdentifier(p.Identifier), p.Text)
 			})
 
 			It("should pass logger to session functions in handlePageRequest", func() {
-				req, _ := http.NewRequest(http.MethodGet, "/test-integration", nil)
+				req, _ := http.NewRequest(http.MethodGet, "/test_integration", nil)
 				router.ServeHTTP(w, req)
 
 				// Should return either 200 or 302 (redirect to edit if new page)
@@ -997,7 +1017,7 @@ var _ = Describe("Open redirect prevention", func() {
 		tmpDir, err = os.MkdirTemp("", "simple_wiki_test")
 		Expect(err).NotTo(HaveOccurred())
 		logger := lumber.NewConsoleLogger(lumber.TRACE)
-		site, err = server.NewSite(tmpDir, "", "testpage", 0, "secret", true, 1024, 1024, logger)
+		site, err = server.NewSite(tmpDir, "testpage", 0, "secret", logger)
 		Expect(err).NotTo(HaveOccurred())
 		router = site.GinRouter()
 		w = httptest.NewRecorder()
@@ -1126,3 +1146,77 @@ func (f *failingSessionStore) New(r *http.Request, name string) (*gorillasession
 func (*failingSessionStore) Save(r *http.Request, w http.ResponseWriter, s *gorillasessions.Session) error {
 	return errors.New("session save failed")
 }
+
+var _ = Describe("ReadOrInitPageForTesting", func() {
+	var tmpDir string
+	var site *server.Site
+
+	BeforeEach(func() {
+		var err error
+		tmpDir, err = os.MkdirTemp("", "simple_wiki_init_test")
+		Expect(err).NotTo(HaveOccurred())
+		logger := lumber.NewConsoleLogger(lumber.WARN)
+		site, err = server.NewSite(tmpDir, "testpage", 0, "secret", logger)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	AfterEach(func() {
+		_ = os.RemoveAll(tmpDir)
+	})
+
+	When("URL params have conflicting keys (value and nested table with same prefix)", func() {
+		var page *wikipage.Page
+		var err error
+
+		BeforeEach(func() {
+			// "a=value" sets frontmatter["a"]="value"; "a.b=conflict" then tries to navigate
+			// frontmatter["a"] as a nested map, but it's a string — causing an error.
+			req, reqErr := http.NewRequest(http.MethodGet, "/conflict-page/view?a=value&a.b=conflict", nil)
+			Expect(reqErr).NotTo(HaveOccurred())
+			page, err = site.ReadOrInitPageForTesting("conflict-page", req)
+		})
+
+		It("should return an error", func() {
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should return a nil page", func() {
+			Expect(page).To(BeNil())
+		})
+	})
+
+	When("saving a new page fails because the data directory is read-only", func() {
+		var page *wikipage.Page
+		var err error
+		var readOnlyDir string
+		var originalPath string
+
+		BeforeEach(func() {
+			var mkdirErr error
+			readOnlyDir, mkdirErr = os.MkdirTemp("", "readonly_init_test")
+			Expect(mkdirErr).NotTo(HaveOccurred())
+			Expect(os.Chmod(readOnlyDir, 0555)).To(Succeed()) // read + execute, no write
+
+			originalPath = site.PathToData
+			site.PathToData = readOnlyDir
+
+			req, reqErr := http.NewRequest(http.MethodGet, "/new-page/view", nil)
+			Expect(reqErr).NotTo(HaveOccurred())
+			page, err = site.ReadOrInitPageForTesting("new-page", req)
+		})
+
+		AfterEach(func() {
+			site.PathToData = originalPath
+			_ = os.Chmod(readOnlyDir, 0755)
+			_ = os.RemoveAll(readOnlyDir)
+		})
+
+		It("should return an error", func() {
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should return a nil page", func() {
+			Expect(page).To(BeNil())
+		})
+	})
+})

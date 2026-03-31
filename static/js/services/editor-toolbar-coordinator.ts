@@ -30,8 +30,8 @@ export class EditorToolbarCoordinator {
   ) {
     this.textarea = textarea;
     this.toolbar = toolbar;
-    this.uploadService = uploadService || new EditorUploadService();
-    this.formattingService = formattingService || new TextFormattingService();
+    this.uploadService = uploadService ?? new EditorUploadService();
+    this.formattingService = formattingService ?? new TextFormattingService();
 
     this.attachEventListeners();
   }
