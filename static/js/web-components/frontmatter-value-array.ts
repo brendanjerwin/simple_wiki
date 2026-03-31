@@ -4,7 +4,7 @@ import { buttonCSS, foundationCSS } from './shared-styles.js';
 import './frontmatter-value-string.js';
 
 export class FrontmatterValueArray extends LitElement {
-  static override styles = [
+  static readonly override styles = [
     foundationCSS,
     buttonCSS,
     css`

@@ -11,7 +11,7 @@ interface DisplayPathElement extends Partial<ContainerPathElement> {
 }
 
 class WikiSearchResults extends LitElement {
-  static override styles = [
+  static readonly override styles = [
     foundationCSS,
     css`
       :host {

@@ -19,7 +19,7 @@ export function coercePrimitive(value: unknown): unknown {
 }
 
 export class FrontmatterValue extends LitElement {
-  static override styles = css`
+  static readonly override styles = css`
     :host {
       display: block;
     }
