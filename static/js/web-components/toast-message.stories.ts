@@ -48,32 +48,18 @@ showToast('Operation completed', 'success', 3);
 export default meta;
 type Story = StoryObj;
 
-function createResponsiveSuccessToast(): any {
-  const success = document.createElement('toast-message') as any;
-  success.message = 'Build completed: 1.2s';
-  success.type = 'success';
-  success.visible = true;
-  success.autoClose = false;
-  success.style.position = 'relative';
-  success.style.display = 'block';
-  success.style.margin = '10px 0';
-  success.style.transform = 'none';
-  success.style.opacity = '1';
-  return success;
-}
-
-function createResponsiveWarningToast(): any {
-  const warning = document.createElement('toast-message') as any;
-  warning.message = 'Queue depth: 156 items';
-  warning.type = 'warning';
-  warning.visible = true;
-  warning.autoClose = false;
-  warning.style.position = 'relative';
-  warning.style.display = 'block';
-  warning.style.margin = '10px 0';
-  warning.style.transform = 'none';
-  warning.style.opacity = '1';
-  return warning;
+function createResponsiveToast(message: string, type: string): any {
+  const el = document.createElement('toast-message') as any;
+  el.message = message;
+  el.type = type;
+  el.visible = true;
+  el.autoClose = false;
+  el.style.position = 'relative';
+  el.style.display = 'block';
+  el.style.margin = '10px 0';
+  el.style.transform = 'none';
+  el.style.opacity = '1';
+  return el;
 }
 
 const systemInfoNotifications = [
@@ -309,9 +295,9 @@ export const ResponsiveDesignDemo: Story = {
           <li><strong>Typography:</strong> Scales from 11px to 10px on mobile</li>
         </ul>
         
-        ${createResponsiveSuccessToast()}
+        ${createResponsiveToast('Build completed: 1.2s', 'success')}
 
-        ${createResponsiveWarningToast()}
+        ${createResponsiveToast('Queue depth: 156 items', 'warning')}
         
         <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
           Resize browser window to test responsive breakpoints at 768px.
