@@ -374,7 +374,7 @@ func (*MockPageWatchStreamServer) RecvMsg(any) error {
 	return nil
 }
 
-// MockBleveIndexQueryer is a mock implementation of bleve.BleveIndexQuerier for testing.
+// MockBleveIndexQueryer is a mock implementation of bleve.BleveIndexQueryer for testing.
 type MockBleveIndexQueryer struct {
 	Results []bleve.SearchResult
 	Err     error
@@ -475,7 +475,7 @@ func (noOpPageOpener) ReadPage(wikipage.PageIdentifier) (*wikipage.Page, error) 
 // mustNewServer creates a server with the given dependencies, failing the test if creation fails.
 func mustNewServer(
 	pageReaderMutator wikipage.PageReaderMutator,
-	bleveIndexQueryer bleve.BleveIndexQuerier,
+	bleveIndexQueryer bleve.BleveIndexQueryer,
 	frontmatterIndexQueryer wikipage.IQueryFrontmatterIndex,
 ) *v1.Server {
 	return mustNewServerFull(pageReaderMutator, bleveIndexQueryer, frontmatterIndexQueryer, nil, nil)
@@ -484,7 +484,7 @@ func mustNewServer(
 // mustNewServerFull creates a server with all optional dependencies.
 func mustNewServerFull(
 	pageReaderMutator wikipage.PageReaderMutator,
-	bleveIndexQueryer bleve.BleveIndexQuerier,
+	bleveIndexQueryer bleve.BleveIndexQueryer,
 	frontmatterIndexQueryer wikipage.IQueryFrontmatterIndex,
 	jobCoordinator jobs.JobCoordinator,
 	pageOpener wikipage.PageOpener,

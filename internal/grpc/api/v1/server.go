@@ -144,7 +144,7 @@ type Server struct {
 	commit                  string
 	buildTime               time.Time
 	pageReaderMutator       wikipage.PageReaderMutator
-	bleveIndexQueryer       bleve.BleveIndexQuerier
+	bleveIndexQueryer       bleve.BleveIndexQueryer
 	jobQueueCoordinator     jobs.JobCoordinator
 	logger                  *lumber.ConsoleLogger
 	markdownRenderer        wikipage.MarkdownToHTMLRenderer
@@ -361,7 +361,7 @@ func removeAtPathFromSlice(v []any, component *apiv1.PathComponent, remainingPat
 func NewServer(
 	buildInfo BuildInfo,
 	pageReaderMutator wikipage.PageReaderMutator,
-	bleveIndexQueryer bleve.BleveIndexQuerier,
+	bleveIndexQueryer bleve.BleveIndexQueryer,
 	frontmatterIndexQueryer wikipage.IQueryFrontmatterIndex,
 	logger *lumber.ConsoleLogger,
 	chatBufferManager ChatBufferManager,

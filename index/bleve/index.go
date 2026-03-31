@@ -28,8 +28,8 @@ type Index struct {
 	mu                 sync.RWMutex // Protects concurrent access to bleve operations
 }
 
-// BleveIndexQuerier defines the interface for querying the Bleve index.
-type BleveIndexQuerier interface {
+// BleveIndexQueryer defines the interface for querying the Bleve index.
+type BleveIndexQueryer interface {
 	Query(query string) ([]SearchResult, error)
 }
 

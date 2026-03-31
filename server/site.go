@@ -71,7 +71,7 @@ type Site struct {
 	JobQueueCoordinator     *jobs.JobQueueCoordinator
 	CronScheduler           *jobs.CronScheduler
 	FrontmatterIndexQueryer frontmatter.IQueryFrontmatterIndex
-	BleveIndexQueryer       bleve.BleveIndexQuerier
+	BleveIndexQueryer       bleve.BleveIndexQueryer
 	MigrationApplicator     lazy.FrontmatterMigrationApplicator
 	saveMut                 sync.RWMutex
 }

@@ -44,7 +44,7 @@ func (noOpPageOpener) ReadPage(wikipage.PageIdentifier) (*wikipage.Page, error) 
 	return &wikipage.Page{}, nil
 }
 
-// noOpBleveIndexQueryer satisfies bleve.BleveIndexQuerier for tests.
+// noOpBleveIndexQueryer satisfies bleve.BleveIndexQueryer for tests.
 type noOpBleveIndexQueryer struct{}
 
 func (noOpBleveIndexQueryer) Query(string) ([]bleve.SearchResult, error) { return nil, nil }
