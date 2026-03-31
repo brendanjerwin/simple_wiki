@@ -32,7 +32,7 @@ export class FrontmatterValueString extends LitElement {
     this.disabled = false;
   }
 
-  private _handleValueInput = (event: Event): void => {
+  private readonly _handleValueInput = (event: Event): void => {
     if (!(event.target instanceof HTMLInputElement)) {
       return;
     }

@@ -172,7 +172,7 @@ export class FrontmatterEditorDialog extends LitElement {
   @state()
   declare workingFrontmatter?: JsonObject;
 
-  private client = createClient(Frontmatter, getGrpcWebTransport());
+  private readonly client = createClient(Frontmatter, getGrpcWebTransport());
 
   constructor() {
     super();
