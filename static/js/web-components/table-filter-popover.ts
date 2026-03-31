@@ -539,7 +539,10 @@ export class TableFilterPopover extends LitElement {
   }
 
   private _renderContent(): TemplateResult {
-    const col = this.columnDefinition!;
+    if (!this.columnDefinition) {
+      throw new Error('_renderContent called without columnDefinition — programming bug');
+    }
+    const col = this.columnDefinition;
     const filterKind = this._getFilterKind();
 
     return html`

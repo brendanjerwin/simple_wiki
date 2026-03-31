@@ -12,7 +12,7 @@ export interface PageStatus {
 const TIME_REFRESH_INTERVAL_MS = 5000;
 
 export class SystemInfoPage extends LitElement {
-  static override styles = [
+  static override readonly styles = [
     foundationCSS,
     css`
       :host {

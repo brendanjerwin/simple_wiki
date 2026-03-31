@@ -7,7 +7,7 @@ import type { AugmentedError } from './augment-error-service.js';
 import './error-display.js';
 
 export class SystemInfoVersion extends LitElement {
-  static override styles = [
+  static override readonly styles = [
     foundationCSS,
     css`
       :host {

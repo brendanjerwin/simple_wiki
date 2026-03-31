@@ -4,6 +4,11 @@ import sinon from 'sinon';
 import type { SinonSpy } from 'sinon';
 import './table-filter-popover.js';
 import type { TableFilterPopover } from './table-filter-popover.js';
+
+interface TestableTableFilterPopover {
+  columnDefinition: unknown;
+  _renderContent: () => unknown;
+}
 import type { TableColumnDefinition } from './table-data-extractor.js';
 import type { ColumnFilterState, SortDirection } from './table-sorter-filterer.js';
 
@@ -1171,4 +1176,33 @@ describe('TableFilterPopover', () => {
       });
     });
   });
+
+  describe('_renderContent', () => {
+
+    describe('when called without columnDefinition (programming error guard)', () => {
+      let thrownError: Error | null;
+
+      beforeEach(async () => {
+        thrownError = null;
+        const el = await fixture(html`<table-filter-popover></table-filter-popover>`);
+        const testable = el as unknown as TestableTableFilterPopover;
+        testable.columnDefinition = null;
+        try {
+          testable._renderContent();
+        } catch (e) {
+          thrownError = e instanceof Error ? e : null;
+        }
+      });
+
+      it('should throw an error', () => {
+        expect(thrownError).to.exist;
+      });
+
+      it('should include columnDefinition in the error message', () => {
+        expect(thrownError?.message).to.include('columnDefinition');
+      });
+    });
+
+  });
+
 });

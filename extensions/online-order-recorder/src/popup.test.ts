@@ -2,8 +2,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 import { Order } from './merchants/types.js';
 
-vi.mock('./components/order-list.js', () => ({ OrderList: class {} }));
-vi.mock('./components/settings-panel.js', () => ({ SettingsPanel: class {} }));
+vi.mock('./components/order-list.js', () => ({ OrderList: class { /* mock */ } }));
+vi.mock('./components/settings-panel.js', () => ({ SettingsPanel: class { /* mock */ } }));
 
 async function importPopup(): Promise<void> {
   await import('./popup.js');
@@ -37,8 +37,8 @@ describe('popup', () => {
   beforeEach(async () => {
     vi.resetModules();
 
-    vi.doMock('./components/order-list.js', () => ({ OrderList: class {} }));
-    vi.doMock('./components/settings-panel.js', () => ({ SettingsPanel: class {} }));
+    vi.doMock('./components/order-list.js', () => ({ OrderList: class { /* mock */ } }));
+    vi.doMock('./components/settings-panel.js', () => ({ SettingsPanel: class { /* mock */ } }));
 
     dom = new JSDOM('<!DOCTYPE html><html><body><div id="status"></div><order-list></order-list></body></html>');
 

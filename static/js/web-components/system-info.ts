@@ -20,7 +20,7 @@ export class SystemInfo extends DrawerMixin(LitElement) implements AmbientCTA {
   static readonly REFRESH_INTERVAL = 2000; // 2 seconds when indexing active
   static readonly IDLE_REFRESH_INTERVAL = 10000; // 10 seconds when idle
 
-  static override styles = [
+  static override readonly styles = [
     foundationCSS,
     zIndexCSS,
     css`

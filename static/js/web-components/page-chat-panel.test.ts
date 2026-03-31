@@ -1,13 +1,16 @@
 import { expect, fixture, html } from '@open-wc/testing';
-import { stub, spy, type SinonStub, type SinonSpy } from 'sinon';
-import './page-chat-panel.js';
-import type { PageChatPanel, ChatMessageState } from './page-chat-panel.js';
+import { stub, spy, useFakeTimers, type SinonStub, type SinonSpy, type SinonFakeTimers } from 'sinon';
+import { ConnectError, Code } from '@connectrpc/connect';
+import { PageChatPanel } from './page-chat-panel.js';
+import type { ChatMessageState } from './page-chat-panel.js';
 import { Sender } from '../gen/api/v1/chat_pb.js';
 import { resetForTesting } from './drawer-coordinator.js';
 
 // Stub localStorage before tests
 let localStorageStub: { getItem: SinonStub; setItem: SinonStub; removeItem: SinonStub };
 let fetchStub: SinonStub;
+let startStreamStub: SinonStub;
+let pollChatStatusStub: SinonStub;
 
 describe('PageChatPanel', () => {
   beforeEach(() => {
@@ -16,9 +19,16 @@ describe('PageChatPanel', () => {
       setItem: stub(localStorage, 'setItem'),
       removeItem: stub(localStorage, 'removeItem'),
     };
-    // Stub fetch to prevent real network calls from pollChatStatus
+    // Stub fetch to prevent real network calls (e.g., from sendMessage)
     fetchStub = stub(window, 'fetch');
     fetchStub.resolves(new Response(new Uint8Array(0), { status: 200 }));
+    // Stub startStream and pollChatStatus on the prototype to prevent background
+    // gRPC streaming calls and reconnect loops that crash the browser during tests.
+    // These are private methods accessed via prototype for testing purposes.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- stubbing private methods for testing
+    startStreamStub = stub(PageChatPanel.prototype as any, 'startStream').resolves();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- stubbing private methods for testing
+    pollChatStatusStub = stub(PageChatPanel.prototype as any, 'pollChatStatus').resolves();
   });
 
   afterEach(() => {
@@ -26,6 +36,8 @@ describe('PageChatPanel', () => {
     localStorageStub.setItem.restore();
     localStorageStub.removeItem.restore();
     fetchStub.restore();
+    startStreamStub.restore();
+    pollChatStatusStub.restore();
     resetForTesting();
   });
 
@@ -686,6 +698,36 @@ describe('PageChatPanel', () => {
     });
   });
 
+  describe('error clearing after reconnect', () => {
+    let el: PageChatPanel;
+
+    beforeEach(async () => {
+      localStorageStub.getItem.returns('true');
+      el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+      el.claudeConnected = true;
+      el.streamState = 'disconnected';
+      el.error = new Error('Connection lost');
+      await el.updateComplete;
+    });
+
+    describe('when the stream reconnects and error is cleared', () => {
+      beforeEach(async () => {
+        el.streamState = 'connected';
+        el.error = null;
+        await el.updateComplete;
+      });
+
+      it('should not show the error banner', () => {
+        const banner = el.shadowRoot!.querySelector('.status-banner.disconnected');
+        expect(banner).to.be.null;
+      });
+
+      it('should have null error state', () => {
+        expect(el.error).to.be.null;
+      });
+    });
+  });
+
   describe('Ctrl+Space global keyboard shortcut', () => {
     let el: PageChatPanel;
 
@@ -714,6 +756,767 @@ describe('PageChatPanel', () => {
 
       it('should toggle the panel open state', () => {
         expect(el.drawerOpen).to.not.equal(initialState);
+      });
+    });
+  });
+});
+
+// Separate describe block for testing stream iteration methods directly.
+// Does NOT stub startStream on the prototype — creates fixtures without a `page`
+// attribute so connectedCallback doesn't auto-invoke startStream.
+describe('PageChatPanel stream methods', () => {
+  let el: PageChatPanel;
+  let localStorageGetItemStub: SinonStub;
+  let localStorageSetItemStub: SinonStub;
+  let localStorageRemoveItemStub: SinonStub;
+  let fetchStubInner: SinonStub;
+  let pollChatStatusInnerStub: SinonStub;
+
+  beforeEach(async () => {
+    localStorageGetItemStub = stub(localStorage, 'getItem').returns(null);
+    localStorageSetItemStub = stub(localStorage, 'setItem');
+    localStorageRemoveItemStub = stub(localStorage, 'removeItem');
+    fetchStubInner = stub(window, 'fetch').resolves(new Response(new Uint8Array(0), { status: 200 }));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- stubbing private method for testing
+    pollChatStatusInnerStub = stub(PageChatPanel.prototype as any, 'pollChatStatus').resolves();
+    // No page attribute → connectedCallback skips startStream
+    el = await fixture(html`<page-chat-panel></page-chat-panel>`);
+  });
+
+  afterEach(() => {
+    localStorageGetItemStub.restore();
+    localStorageSetItemStub.restore();
+    localStorageRemoveItemStub.restore();
+    fetchStubInner.restore();
+    pollChatStatusInnerStub.restore();
+    resetForTesting();
+  });
+
+  describe('runStreamIteration()', () => {
+
+    describe('when subscribeChat yields events and completes', () => {
+      let onResetDelayCallCount: number;
+
+      beforeEach(async () => {
+        onResetDelayCallCount = 0;
+        const controller = new AbortController();
+        // Do NOT set el.page via the property — that would trigger updated() → startStream()
+        el.error = new Error('old error');
+        el.streamState = 'reconnecting';
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
+        (el as any).chatClient = {
+          subscribeChat: async function* () {
+            yield { event: { case: undefined } };
+            yield { event: { case: undefined } };
+          },
+        };
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        await (el as any).runStreamIteration(controller.signal, () => { onResetDelayCallCount++; });
+        await el.updateComplete;
+      });
+
+      it('should set streamState to connected', () => {
+        expect(el.streamState).to.equal('connected');
+      });
+
+      it('should clear the error', () => {
+        expect(el.error).to.be.null;
+      });
+
+      it('should call onResetDelay for each event', () => {
+        expect(onResetDelayCallCount).to.equal(2);
+      });
+    });
+
+    describe('when subscribeChat completes immediately with no events', () => {
+
+      beforeEach(async () => {
+        const controller = new AbortController();
+        // Do NOT set el.page via the property — that would trigger updated() → startStream()
+        el.error = new Error('stale error');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
+        (el as any).chatClient = {
+          subscribeChat: async function* () { /* empty */ },
+        };
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        await (el as any).runStreamIteration(controller.signal, () => { /* noop */ });
+        await el.updateComplete;
+      });
+
+      it('should set streamState to connected', () => {
+        expect(el.streamState).to.equal('connected');
+      });
+
+      it('should clear the error', () => {
+        expect(el.error).to.be.null;
+      });
+    });
+  });
+
+  describe('prepareStreamReconnect()', () => {
+
+    describe('when called with an already-aborted signal', () => {
+      let returnedDelay: number;
+      const testError = new Error('stream error');
+
+      beforeEach(async () => {
+        const controller = new AbortController();
+        controller.abort(); // Pre-abort so waitForReconnectDelay resolves immediately
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        returnedDelay = await (el as any).prepareStreamReconnect(testError, controller.signal, 1000);
+        await el.updateComplete;
+      });
+
+      it('should set streamState to reconnecting', () => {
+        expect(el.streamState).to.equal('reconnecting');
+      });
+
+      it('should set the error from the caught error', () => {
+        expect(el.error).to.equal(testError);
+      });
+
+      it('should return the doubled delay', () => {
+        expect(returnedDelay).to.equal(2000);
+      });
+    });
+
+    describe('when delay would exceed the maximum', () => {
+      let returnedDelay: number;
+
+      beforeEach(async () => {
+        const controller = new AbortController();
+        controller.abort();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        returnedDelay = await (el as any).prepareStreamReconnect(new Error('err'), controller.signal, 20000);
+      });
+
+      it('should cap the delay at 30000ms', () => {
+        expect(returnedDelay).to.equal(30000);
+      });
+    });
+
+    describe('when the error is not an Error instance', () => {
+
+      beforeEach(async () => {
+        const controller = new AbortController();
+        controller.abort();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        await (el as any).prepareStreamReconnect('string error', controller.signal, 1000);
+        await el.updateComplete;
+      });
+
+      it('should wrap the value in an Error object', () => {
+        expect(el.error).to.be.instanceof(Error);
+        expect(el.error!.message).to.equal('string error');
+      });
+    });
+  });
+
+  describe('waitForReconnectDelay()', () => {
+    let clock: SinonFakeTimers;
+
+    beforeEach(() => {
+      clock = useFakeTimers();
+    });
+
+    afterEach(() => {
+      clock.restore();
+    });
+
+    describe('when signal is already aborted', () => {
+      let resolved: boolean;
+
+      beforeEach(async () => {
+        resolved = false;
+        const controller = new AbortController();
+        controller.abort();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        (el as any).waitForReconnectDelay(controller.signal, 5000).then(() => {
+          resolved = true;
+        });
+        await clock.tickAsync(0);
+      });
+
+      it('should resolve immediately without waiting', () => {
+        expect(resolved).to.be.true;
+      });
+    });
+
+    describe('when the delay has not yet elapsed', () => {
+      let resolved: boolean;
+
+      beforeEach(async () => {
+        resolved = false;
+        const controller = new AbortController();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        (el as any).waitForReconnectDelay(controller.signal, 2000).then(() => {
+          resolved = true;
+        });
+        await clock.tickAsync(1999);
+      });
+
+      it('should not resolve before the delay elapses', () => {
+        expect(resolved).to.be.false;
+      });
+
+      describe('after the delay elapses', () => {
+
+        beforeEach(async () => {
+          await clock.tickAsync(1);
+        });
+
+        it('should resolve', () => {
+          expect(resolved).to.be.true;
+        });
+      });
+    });
+
+    describe('when signal is aborted mid-delay', () => {
+      let resolved: boolean;
+
+      beforeEach(async () => {
+        resolved = false;
+        const controller = new AbortController();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        (el as any).waitForReconnectDelay(controller.signal, 5000).then(() => {
+          resolved = true;
+        });
+        await clock.tickAsync(1000);
+        controller.abort();
+        await clock.tickAsync(0);
+      });
+
+      it('should resolve early when signal is aborted', () => {
+        expect(resolved).to.be.true;
+      });
+    });
+  });
+
+  describe('startStream()', () => {
+    // Note: We do NOT set el.page via the property in these tests — doing so would trigger
+    // Lit's updated() lifecycle which auto-calls startStream() and interferes with our test.
+    // The mock subscribeChat ignores the page value in the request, so el.page can be empty.
+
+    describe('when subscribeChat completes cleanly with no events', () => {
+
+      beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
+        (el as any).chatClient = {
+          subscribeChat: async function* () { /* empty — clean end */ },
+        };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        await (el as any).startStream();
+        await el.updateComplete;
+      });
+
+      it('should end in disconnected state', () => {
+        expect(el.streamState).to.equal('disconnected');
+      });
+    });
+
+    describe('when subscribeChat throws an AbortError', () => {
+
+      beforeEach(async () => {
+        const abortError = new Error('The operation was aborted');
+        abortError.name = 'AbortError';
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
+        (el as any).chatClient = {
+          subscribeChat: async function* () {
+            yield* [];
+            throw abortError;
+          },
+        };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        await (el as any).startStream();
+        await el.updateComplete;
+      });
+
+      it('should exit without reconnecting and end in disconnected state', () => {
+        expect(el.streamState).to.equal('disconnected');
+      });
+    });
+
+    describe('when subscribeChat throws a non-abort error', () => {
+
+      beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
+        (el as any).chatClient = {
+          subscribeChat: async function* () {
+            yield* [];
+            throw new Error('network error');
+          },
+        };
+        // Stub prepareStreamReconnect to abort the stream immediately and prevent real delays
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- stubbing private method for testing
+        stub(el as any, 'prepareStreamReconnect').callsFake(async () => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private field for testing
+          (el as any).streamSubscription?.abort();
+          return 2000;
+        });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        await (el as any).startStream();
+        await el.updateComplete;
+      });
+
+      it('should attempt reconnect and end in disconnected state', () => {
+        expect(el.streamState).to.equal('disconnected');
+      });
+    });
+  });
+
+  describe('stopStream()', () => {
+
+    describe('when there is an active stream subscription', () => {
+      let abortSpy: SinonSpy;
+
+      beforeEach(() => {
+        const controller = new AbortController();
+        abortSpy = spy(controller, 'abort');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private field for testing
+        (el as any).streamSubscription = controller;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        (el as any).stopStream();
+      });
+
+      it('should abort the subscription', () => {
+        expect(abortSpy).to.have.been.calledOnce;
+      });
+
+      it('should set streamState to disconnected', () => {
+        expect(el.streamState).to.equal('disconnected');
+      });
+
+      it('should clear streamSubscription', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private field for testing
+        expect((el as any).streamSubscription).to.be.undefined;
+      });
+    });
+
+    describe('when there is no active stream subscription', () => {
+
+      it('should not throw', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        expect(() => (el as any).stopStream()).to.not.throw();
+      });
+    });
+  });
+
+  describe('handleChatEvent()', () => {
+
+    describe('when event is newMessage', () => {
+
+      beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        await (el as any).handleChatEvent({
+          event: {
+            case: 'newMessage',
+            value: {
+              id: 'evt-msg-1',
+              sender: Sender.USER,
+              content: 'Hello from event',
+              senderName: 'User',
+              replyToId: '',
+              reactions: [],
+              sequence: 0n,
+              timestamp: null,
+            },
+          },
+        });
+        await el.updateComplete;
+      });
+
+      it('should add the message', () => {
+        expect(el.messages).to.have.length(1);
+        expect(el.messages[0]!.id).to.equal('evt-msg-1');
+      });
+    });
+
+    describe('when event is edit', () => {
+
+      beforeEach(async () => {
+        const msgState: ChatMessageState = {
+          id: 'edit-evt-msg',
+          sender: Sender.USER,
+          content: 'Original',
+          renderedHtml: '',
+          timestamp: new Date(),
+          senderName: 'User',
+          replyToId: '',
+          reactions: [],
+          edited: false,
+          sequence: 0n,
+        };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private field for testing
+        (el as any).messagesById.set('edit-evt-msg', msgState);
+        el.messages = [msgState];
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        await (el as any).handleChatEvent({
+          event: {
+            case: 'edit',
+            value: { messageId: 'edit-evt-msg', newContent: 'Edited content' },
+          },
+        });
+        await el.updateComplete;
+      });
+
+      it('should update the message content', () => {
+        expect(el.messages[0]!.content).to.equal('Edited content');
+      });
+
+      it('should mark the message as edited', () => {
+        expect(el.messages[0]!.edited).to.be.true;
+      });
+    });
+
+    describe('when event is reaction', () => {
+
+      beforeEach(async () => {
+        const msgState: ChatMessageState = {
+          id: 'reaction-evt-msg',
+          sender: Sender.USER,
+          content: 'React to me',
+          renderedHtml: '',
+          timestamp: new Date(),
+          senderName: 'User',
+          replyToId: '',
+          reactions: [],
+          edited: false,
+          sequence: 0n,
+        };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private field for testing
+        (el as any).messagesById.set('reaction-evt-msg', msgState);
+        el.messages = [msgState];
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        await (el as any).handleChatEvent({
+          event: {
+            case: 'reaction',
+            value: { messageId: 'reaction-evt-msg', emoji: '👍', reactor: 'alice' },
+          },
+        });
+        await el.updateComplete;
+      });
+
+      it('should add the reaction', () => {
+        const reactions = el.messages[0]!.reactions;
+        expect(reactions).to.have.length(1);
+        expect(reactions[0]!.emoji).to.equal('👍');
+      });
+    });
+
+    describe('when event case is undefined', () => {
+
+      it('should not throw', async () => {
+        let threw = false;
+        try {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+          await (el as any).handleChatEvent({ event: { case: undefined } });
+        } catch {
+          threw = true;
+        }
+        expect(threw).to.be.false;
+      });
+    });
+  });
+
+  describe('handleVisibilityChange()', () => {
+    let startStreamSpy: SinonStub;
+
+    beforeEach(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- stubbing private method for testing
+      startStreamSpy = stub(el as any, 'startStream').resolves();
+    });
+
+    describe('when document becomes visible and stream is not connected and page is set', () => {
+
+      beforeEach(() => {
+        el.page = 'test-page';
+        el.streamState = 'disconnected';
+        Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        (el as any).handleVisibilityChange();
+      });
+
+      afterEach(() => {
+        Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+      });
+
+      it('should call startStream', () => {
+        expect(startStreamSpy).to.have.been.calledOnce;
+      });
+    });
+
+    describe('when document becomes visible but stream is already connected', () => {
+
+      beforeEach(() => {
+        el.page = 'test-page';
+        el.streamState = 'connected';
+        Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        (el as any).handleVisibilityChange();
+      });
+
+      it('should not call startStream', () => {
+        expect(startStreamSpy).to.not.have.been.called;
+      });
+    });
+
+    describe('when document is hidden', () => {
+
+      beforeEach(() => {
+        el.page = 'test-page';
+        el.streamState = 'disconnected';
+        Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        (el as any).handleVisibilityChange();
+      });
+
+      afterEach(() => {
+        Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+      });
+
+      it('should not call startStream', () => {
+        expect(startStreamSpy).to.not.have.been.called;
+      });
+    });
+
+    describe('when page is not set', () => {
+
+      beforeEach(() => {
+        el.page = '';
+        el.streamState = 'disconnected';
+        Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        (el as any).handleVisibilityChange();
+      });
+
+      it('should not call startStream', () => {
+        expect(startStreamSpy).to.not.have.been.called;
+      });
+    });
+  });
+});
+
+// Separate describe block for pollChatStatus and sendMessage.
+// Does NOT stub pollChatStatus on the prototype so we can test the real implementation.
+describe('PageChatPanel pollChatStatus and sendMessage', () => {
+  let el: PageChatPanel;
+  let localStorageGetItemStub: SinonStub;
+  let localStorageSetItemStub: SinonStub;
+  let localStorageRemoveItemStub: SinonStub;
+  let fetchStubInner: SinonStub;
+  let startStreamInnerStub: SinonStub;
+
+  beforeEach(async () => {
+    localStorageGetItemStub = stub(localStorage, 'getItem').returns(null);
+    localStorageSetItemStub = stub(localStorage, 'setItem');
+    localStorageRemoveItemStub = stub(localStorage, 'removeItem');
+    fetchStubInner = stub(window, 'fetch').resolves(new Response(new Uint8Array(0), { status: 200 }));
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- stubbing private method for testing
+    startStreamInnerStub = stub(PageChatPanel.prototype as any, 'startStream').resolves();
+    // No page attribute → connectedCallback skips startStream
+    el = await fixture(html`<page-chat-panel></page-chat-panel>`);
+    // Replace chatClient with a safe mock to prevent real network calls
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
+    (el as any).chatClient = {
+      getChatStatus: stub().resolves({ connected: false }),
+      sendMessage: stub().resolves(),
+      subscribeChat: async function* () { /* empty */ },
+    };
+  });
+
+  afterEach(() => {
+    localStorageGetItemStub.restore();
+    localStorageSetItemStub.restore();
+    localStorageRemoveItemStub.restore();
+    fetchStubInner.restore();
+    startStreamInnerStub.restore();
+    resetForTesting();
+  });
+
+  describe('pollChatStatus()', () => {
+
+    describe('when getChatStatus returns connected=true', () => {
+
+      beforeEach(async () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
+        (el as any).chatClient = {
+          getChatStatus: stub().resolves({ connected: true }),
+        };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        await (el as any).pollChatStatus();
+        await el.updateComplete;
+      });
+
+      it('should set claudeConnected to true', () => {
+        expect(el.claudeConnected).to.be.true;
+      });
+    });
+
+    describe('when getChatStatus returns connected=false', () => {
+
+      beforeEach(async () => {
+        el.claudeConnected = true;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
+        (el as any).chatClient = {
+          getChatStatus: stub().resolves({ connected: false }),
+        };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        await (el as any).pollChatStatus();
+        await el.updateComplete;
+      });
+
+      it('should set claudeConnected to false', () => {
+        expect(el.claudeConnected).to.be.false;
+      });
+    });
+
+    describe('when getChatStatus throws', () => {
+
+      beforeEach(async () => {
+        el.claudeConnected = true;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
+        (el as any).chatClient = {
+          getChatStatus: stub().rejects(new Error('network error')),
+        };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        await (el as any).pollChatStatus();
+        await el.updateComplete;
+      });
+
+      it('should set claudeConnected to false', () => {
+        expect(el.claudeConnected).to.be.false;
+      });
+    });
+
+    describe('when Claude just connected while panel is open', () => {
+      let focusInputSpy: SinonSpy;
+
+      beforeEach(async () => {
+        el.claudeConnected = false;
+        el.drawerOpen = true;
+        await el.updateComplete;
+        focusInputSpy = spy(el as unknown as { focusInput: () => void }, 'focusInput');
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
+        (el as any).chatClient = {
+          getChatStatus: stub().resolves({ connected: true }),
+        };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        await (el as any).pollChatStatus();
+        await el.updateComplete;
+      });
+
+      it('should call focusInput', () => {
+        expect(focusInputSpy).to.have.been.called;
+      });
+    });
+  });
+
+  describe('sendMessage()', () => {
+
+    describe('when textarea is empty', () => {
+      let sendMessageStub: SinonStub;
+
+      beforeEach(async () => {
+        el.page = 'test-page';
+        el.claudeConnected = true;
+        el.drawerOpen = true;
+        await el.updateComplete;
+        sendMessageStub = stub().resolves();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
+        (el as any).chatClient = { sendMessage: sendMessageStub };
+        const textarea = el.shadowRoot!.querySelector('textarea')!;
+        textarea.value = '';
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        await (el as any).sendMessage();
+      });
+
+      it('should not call chatClient.sendMessage', () => {
+        expect(sendMessageStub).to.not.have.been.called;
+      });
+    });
+
+    describe('when message is sent successfully', () => {
+      let sendMessageStub: SinonStub;
+
+      beforeEach(async () => {
+        el.page = 'test-page';
+        el.claudeConnected = true;
+        el.drawerOpen = true;
+        await el.updateComplete;
+        sendMessageStub = stub().resolves();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
+        (el as any).chatClient = { sendMessage: sendMessageStub };
+        const textarea = el.shadowRoot!.querySelector('textarea')!;
+        textarea.value = 'Hello!';
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        await (el as any).sendMessage();
+        await el.updateComplete;
+      });
+
+      it('should call chatClient.sendMessage', () => {
+        expect(sendMessageStub).to.have.been.calledOnce;
+      });
+
+      it('should clear the textarea', () => {
+        const textarea = el.shadowRoot!.querySelector('textarea')!;
+        expect(textarea.value).to.equal('');
+      });
+    });
+
+    describe('when sendMessage throws a ConnectError Unavailable', () => {
+
+      beforeEach(async () => {
+        el.page = 'test-page';
+        el.claudeConnected = true;
+        el.drawerOpen = true;
+        await el.updateComplete;
+        const connectError = new ConnectError('service unavailable', Code.Unavailable);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
+        (el as any).chatClient = { sendMessage: stub().rejects(connectError) };
+        const textarea = el.shadowRoot!.querySelector('textarea')!;
+        textarea.value = 'Hello!';
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        await (el as any).sendMessage();
+        await el.updateComplete;
+      });
+
+      it('should set the error', () => {
+        expect(el.error).to.not.be.null;
+        expect(el.error).to.be.instanceof(ConnectError);
+      });
+
+      it('should reset waitingForAssistant', () => {
+        expect(el.waitingForAssistant).to.be.false;
+      });
+    });
+
+    describe('when sendMessage throws a generic Error', () => {
+
+      beforeEach(async () => {
+        el.page = 'test-page';
+        el.claudeConnected = true;
+        el.drawerOpen = true;
+        await el.updateComplete;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
+        (el as any).chatClient = { sendMessage: stub().rejects(new Error('generic network error')) };
+        const textarea = el.shadowRoot!.querySelector('textarea')!;
+        textarea.value = 'Hello!';
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        await (el as any).sendMessage();
+        await el.updateComplete;
+      });
+
+      it('should set error with the original message', () => {
+        expect(el.error).to.not.be.null;
+        expect(el.error!.message).to.equal('generic network error');
+      });
+
+      it('should reset waitingForAssistant', () => {
+        expect(el.waitingForAssistant).to.be.false;
       });
     });
   });
