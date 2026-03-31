@@ -11,6 +11,7 @@ import (
 	"maps"
 	"os"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -248,13 +249,32 @@ func (m *MockPageReaderMutator) ReadPage(identifier wikipage.PageIdentifier) (*w
 
 // MockJobStreamServer is a mock implementation of apiv1.SystemInfoService_StreamJobStatusServer for testing.
 type MockJobStreamServer struct {
-	SentMessages []*apiv1.GetJobStatusResponse
-	SendErr      error
-	ContextDone  bool
+	SentMessages      []*apiv1.GetJobStatusResponse
+	SendErr           error
+	SendErrAfterCount int // if > 0, returns SendErr only after this many successful sends
+	ContextDone       bool
+	ctx               context.Context
+	cancelFunc        context.CancelFunc
+}
+
+// newCancellableMockJobStreamServer creates a MockJobStreamServer with a controllable context.
+func newCancellableMockJobStreamServer() *MockJobStreamServer {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &MockJobStreamServer{ctx: ctx, cancelFunc: cancel}
+}
+
+// Cancel cancels the stream context.
+func (m *MockJobStreamServer) Cancel() {
+	if m.cancelFunc != nil {
+		m.cancelFunc()
+	}
 }
 
 func (m *MockJobStreamServer) Send(response *apiv1.GetJobStatusResponse) error {
-	if m.SendErr != nil {
+	if m.SendErrAfterCount > 0 && len(m.SentMessages) >= m.SendErrAfterCount {
+		return m.SendErr
+	}
+	if m.SendErr != nil && m.SendErrAfterCount == 0 {
 		return m.SendErr
 	}
 	m.SentMessages = append(m.SentMessages, response)
@@ -262,6 +282,9 @@ func (m *MockJobStreamServer) Send(response *apiv1.GetJobStatusResponse) error {
 }
 
 func (m *MockJobStreamServer) Context() context.Context {
+	if m.ctx != nil {
+		return m.ctx
+	}
 	if m.ContextDone {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
@@ -291,11 +314,12 @@ func (*MockJobStreamServer) RecvMsg(any) error {
 
 // MockPageWatchStreamServer is a mock implementation of apiv1.PageManagementService_WatchPageServer for testing.
 type MockPageWatchStreamServer struct {
-	SentMessages []*apiv1.WatchPageResponse
-	SendErr      error
-	ContextDone  bool
-	ctx          context.Context    // if set, overrides ContextDone behavior
-	cancelFunc   context.CancelFunc // cancels ctx
+	SentMessages       []*apiv1.WatchPageResponse
+	SendErr            error
+	SendErrAfterCount  int // if > 0, returns SendErr only after this many successful sends
+	ContextDone        bool
+	ctx                context.Context    // if set, overrides ContextDone behavior
+	cancelFunc         context.CancelFunc // cancels ctx
 }
 
 // newCancellableMockPageWatchStreamServer creates a MockPageWatchStreamServer with a controllable context.
@@ -312,7 +336,9 @@ func (m *MockPageWatchStreamServer) Cancel() {
 
 func (m *MockPageWatchStreamServer) Send(response *apiv1.WatchPageResponse) error {
 	if m.SendErr != nil {
-		return m.SendErr
+		if m.SendErrAfterCount <= 0 || len(m.SentMessages) >= m.SendErrAfterCount {
+			return m.SendErr
+		}
 	}
 	m.SentMessages = append(m.SentMessages, response)
 	return nil
@@ -476,20 +502,18 @@ func mustNewServerFull(
 		pageOpener = noOpPageOpener{}
 	}
 	server, err := v1.NewServer(
-		"test-commit",
-		time.Now(),
+		v1.BuildInfo{Commit: "test-commit", BuildTime: time.Now()},
 		pageReaderMutator,
 		bleveIndexQueryer,
-		jobCoordinator,
-		lumber.NewConsoleLogger(lumber.WARN),
-		nil, // markdownRenderer is optional
-		nil, // templateExecutor is optional
 		frontmatterIndexQueryer,
-		nil, // fileStorer — nil means uploads disabled
-		noOpChatBufferManager{}, // chatBufferManager
+		lumber.NewConsoleLogger(lumber.WARN),
+		noOpChatBufferManager{},
 		pageOpener,
 	)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "mustNewServerFull failed")
+	if jobCoordinator != nil {
+		server = server.WithJobQueueCoordinator(jobCoordinator)
+	}
 	return server
 }
 
@@ -510,20 +534,18 @@ func mustNewServerWithLogger(
 		pageReaderMutator = noOpPageReaderMutator{}
 	}
 	server, err := v1.NewServer(
-		"test-commit",
-		time.Now(),
+		v1.BuildInfo{Commit: "test-commit", BuildTime: time.Now()},
 		pageReaderMutator,
 		noOpBleveIndexQueryer{},
-		jobCoordinator,
-		logger,
-		nil,
-		nil,
 		noOpFrontmatterIndexQueryer{},
-		nil,
-		noOpChatBufferManager{}, // chatBufferManager
+		logger,
+		noOpChatBufferManager{},
 		noOpPageOpener{},
 	)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred(), "mustNewServerWithLogger failed")
+	if jobCoordinator != nil {
+		server = server.WithJobQueueCoordinator(jobCoordinator)
+	}
 	return server
 }
 
@@ -604,6 +626,22 @@ var _ = Describe("Server", func() {
 			It("should return the page's frontmatter", func() {
 				Expect(res).NotTo(BeNil())
 				Expect(res.Frontmatter).To(Equal(expectedStruct))
+			})
+		})
+
+		When("the requested page exists but has nil frontmatter", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Frontmatter = nil
+				mockPageReaderMutator.Err = nil
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a response with empty frontmatter", func() {
+				Expect(res).NotTo(BeNil())
+				Expect(res.Frontmatter).NotTo(BeNil())
 			})
 		})
 
@@ -1117,7 +1155,32 @@ var _ = Describe("Server", func() {
 			})
 		})
 
-		When("removing a key successfully", func() {
+		When("reading the frontmatter fails with a generic error", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = errors.New("disk error")
+				req.KeyPath = []*apiv1.PathComponent{{Component: &apiv1.PathComponent_Key{Key: "a"}}}
+			})
+
+			It("should return an internal error and no response", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to read frontmatter"))
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("writing the frontmatter fails", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Frontmatter = wikipage.FrontMatter{"a": "b"}
+				mockPageReaderMutator.WriteErr = errors.New("write error")
+				req.KeyPath = []*apiv1.PathComponent{{Component: &apiv1.PathComponent_Key{Key: "a"}}}
+			})
+
+			It("should return an internal error and no response", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to write frontmatter"))
+				Expect(resp).To(BeNil())
+			})
+		})
+
+				When("removing a key successfully", func() {
 			var initialFm wikipage.FrontMatter
 			BeforeEach(func() {
 				initialFm = wikipage.FrontMatter{
@@ -1201,6 +1264,41 @@ var _ = Describe("Server", func() {
 							"d": "e",
 						},
 						"f": []any{"g", map[string]any{"i": "j"}},
+					}
+				})
+
+				It("should not return an error", func() {
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("should write the correctly modified frontmatter", func() {
+					Expect(mockPageReaderMutator.WrittenFrontmatter).To(Equal(expectedFm))
+				})
+
+				It("should return the correctly modified frontmatter", func() {
+					expectedPb, err := structpb.NewStruct(expectedFm)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(resp.Frontmatter).To(Equal(expectedPb))
+				})
+			})
+
+
+			When("a nested key within a slice element", func() {
+				var expectedFm wikipage.FrontMatter
+
+				BeforeEach(func() {
+					// frontmatter: {"f": [{"a": "b", "c": "d"}, "other"]}
+					// removing path: f[0].a (key "f" -> index 0 -> key "a")
+					mockPageReaderMutator.Frontmatter = wikipage.FrontMatter{
+						"f": []any{map[string]any{"a": "b", "c": "d"}, "other"},
+					}
+					req.KeyPath = []*apiv1.PathComponent{
+						{Component: &apiv1.PathComponent_Key{Key: "f"}},
+						{Component: &apiv1.PathComponent_Index{Index: 0}},
+						{Component: &apiv1.PathComponent_Key{Key: "a"}},
+					}
+					expectedFm = wikipage.FrontMatter{
+						"f": []any{map[string]any{"c": "d"}, "other"},
 					}
 				})
 
@@ -1323,7 +1421,22 @@ var _ = Describe("Server", func() {
 				})
 			})
 
-			When("traversing through a primitive value", func() {
+			When("a path traverses deeper than a primitive value within a slice element", func() {
+				BeforeEach(func() {
+					// f[0] is "g" (a string), but we try to access a key "x" on it
+					req.KeyPath = []*apiv1.PathComponent{
+						{Component: &apiv1.PathComponent_Key{Key: "f"}},
+						{Component: &apiv1.PathComponent_Index{Index: 0}},
+						{Component: &apiv1.PathComponent_Key{Key: "x"}},
+					}
+				})
+				It("returns an invalid argument error and no response", func() {
+					Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "path is deeper than data structure"))
+					Expect(resp).To(BeNil())
+				})
+			})
+
+						When("traversing through a primitive value", func() {
 				BeforeEach(func() {
 					req.KeyPath = []*apiv1.PathComponent{
 						{Component: &apiv1.PathComponent_Key{Key: "a"}},
@@ -1445,6 +1558,82 @@ var _ = Describe("Server", func() {
 		})
 	})
 
+	Describe("RegisterWithServer", func() {
+		var grpcServer *grpc.Server
+
+		BeforeEach(func() {
+			grpcServer = grpc.NewServer()
+			server = mustNewServer(nil, nil, nil)
+		})
+
+		It("should register all services without panic", func() {
+			Expect(func() { server.RegisterWithServer(grpcServer) }).NotTo(Panic())
+		})
+	})
+
+	Describe("GetVersion", func() {
+		var (
+			req  *apiv1.GetVersionRequest
+			resp *apiv1.GetVersionResponse
+			err  error
+		)
+
+		BeforeEach(func() {
+			req = &apiv1.GetVersionRequest{}
+			server = mustNewServer(nil, nil, nil)
+		})
+
+		When("identity is anonymous", func() {
+			BeforeEach(func() {
+				resp, err = server.GetVersion(ctx, req)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a version response", func() {
+				Expect(resp).NotTo(BeNil())
+			})
+
+			It("should not include tailscale identity", func() {
+				Expect(resp.TailscaleIdentity).To(BeNil())
+			})
+		})
+
+		When("identity is a tailscale user", func() {
+			BeforeEach(func() {
+				identity := tailscale.NewIdentity("user@example.com", "User Name", "device-name")
+				identCtx := tailscale.ContextWithIdentity(ctx, identity)
+				resp, err = server.GetVersion(identCtx, req)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a version response", func() {
+				Expect(resp).NotTo(BeNil())
+			})
+
+			It("should include tailscale identity", func() {
+				Expect(resp.TailscaleIdentity).NotTo(BeNil())
+			})
+
+			It("should include the login name", func() {
+				Expect(resp.TailscaleIdentity.LoginName).To(HaveValue(Equal("user@example.com")))
+			})
+
+			It("should include the display name", func() {
+				Expect(resp.TailscaleIdentity.DisplayName).To(HaveValue(Equal("User Name")))
+			})
+
+			It("should include the node name", func() {
+				Expect(resp.TailscaleIdentity.NodeName).To(HaveValue(Equal("device-name")))
+			})
+		})
+	})
+
 	Describe("LoggingInterceptor", func() {
 		var (
 			server  *v1.Server
@@ -1547,17 +1736,12 @@ var _ = Describe("Server", func() {
 			BeforeEach(func() {
 				// Create a server with nil logger - should fail since logger is required
 				_, serverErr = v1.NewServer(
-					"test-commit",
-					time.Now(),
+					v1.BuildInfo{Commit: "test-commit", BuildTime: time.Now()},
 					noOpPageReaderMutator{},
 					noOpBleveIndexQueryer{},
-					nil, // jobProgressProvider
-					nil, // logger is nil - this should cause an error
-					nil, // markdownRenderer
-					nil, // templateExecutor
 					noOpFrontmatterIndexQueryer{},
-					nil,                     // fileStorer
-					noOpChatBufferManager{}, // chatBufferManager
+					nil, // logger is nil - this should cause an error
+					noOpChatBufferManager{},
 					noOpPageOpener{},
 				)
 			})
@@ -2355,6 +2539,34 @@ var _ = Describe("Server", func() {
 			Expect(res).NotTo(BeNil())
 			Expect(res.JobQueues).To(BeEmpty())
 		})
+
+		When("coordinator has enqueued jobs", func() {
+			BeforeEach(func() {
+				coordinator := (&MockJobQueueCoordinator{}).AsCoordinator()
+				importPageReaderMutator := &MockPageReaderMutator{Err: os.ErrNotExist}
+				server = mustNewServerFull(importPageReaderMutator, nil, nil, coordinator, nil)
+
+				startReq := &apiv1.StartPageImportJobRequest{
+					CsvContent: "identifier,title\ntest_page,Test Page",
+				}
+				_, _ = server.StartPageImportJob(ctx, startReq)
+
+				res, err = server.GetJobStatus(ctx, req)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return non-empty job queues", func() {
+				Expect(res).NotTo(BeNil())
+				Expect(res.JobQueues).NotTo(BeEmpty())
+			})
+
+			It("should report the page import queue name", func() {
+				Expect(res.JobQueues[0].Name).To(Equal("PageImportJob"))
+			})
+		})
 	})
 
 	Describe("StreamJobStatus", func() {
@@ -2369,28 +2581,90 @@ var _ = Describe("Server", func() {
 			server = mustNewServer(nil, nil, nil)
 		})
 
-		var (
-			err          error
-			firstMessage *apiv1.GetJobStatusResponse
-		)
+		When("context is cancelled immediately after initial send", func() {
+			var (
+				err          error
+				firstMessage *apiv1.GetJobStatusResponse
+			)
 
-		BeforeEach(func() {
-			// Set up context that gets cancelled after initial send
-			streamServer.ContextDone = true
-			err = server.StreamJobStatus(req, streamServer)
-			if len(streamServer.SentMessages) > 0 {
-				firstMessage = streamServer.SentMessages[0]
-			}
+			BeforeEach(func() {
+				streamServer.ContextDone = true
+				err = server.StreamJobStatus(req, streamServer)
+				if len(streamServer.SentMessages) > 0 {
+					firstMessage = streamServer.SentMessages[0]
+				}
+			})
+
+			It("should handle context cancellation", func() {
+				Expect(err).To(Equal(context.Canceled))
+			})
+
+			It("should send initial empty response", func() {
+				Expect(streamServer.SentMessages).To(HaveLen(1))
+				Expect(firstMessage).NotTo(BeNil())
+				Expect(firstMessage.JobQueues).To(BeEmpty())
+			})
 		})
 
-		It("should handle context cancellation", func() {
-			Expect(err).To(Equal(context.Canceled))
+		When("initial send fails", func() {
+			var err error
+
+			BeforeEach(func() {
+				streamServer.SendErr = errors.New("stream broken")
+				err = server.StreamJobStatus(req, streamServer)
+			})
+
+			It("should return the send error", func() {
+				Expect(err).To(MatchError("stream broken"))
+			})
+
+			It("should not record any sent messages", func() {
+				Expect(streamServer.SentMessages).To(BeEmpty())
+			})
 		})
 
-		It("should send initial empty response", func() {
-			Expect(streamServer.SentMessages).To(HaveLen(1))
-			Expect(firstMessage).NotTo(BeNil())
-			Expect(firstMessage.JobQueues).To(BeEmpty())
+		When("the minimum interval clamp is applied", func() {
+			var err error
+
+			BeforeEach(func() {
+				// Request an interval below the 100ms minimum
+				intervalMs := int32(50)
+				req.UpdateIntervalMs = &intervalMs
+				streamServer = newCancellableMockJobStreamServer()
+				// Fail on the 2nd send to trigger ticker path then exit
+				streamServer.SendErrAfterCount = 1
+				streamServer.SendErr = errors.New("stop after first tick")
+				err = server.StreamJobStatus(req, streamServer)
+			})
+
+			It("should return after ticker fires and send fails", func() {
+				Expect(err).To(MatchError("stop after first tick"))
+			})
+
+			It("should have sent the initial message before the ticker", func() {
+				Expect(len(streamServer.SentMessages)).To(BeNumerically(">=", 1))
+			})
+		})
+
+		When("send fails on ticker update", func() {
+			var err error
+
+			BeforeEach(func() {
+				intervalMs := int32(100)
+				req.UpdateIntervalMs = &intervalMs
+				streamServer = newCancellableMockJobStreamServer()
+				streamServer.SendErrAfterCount = 1
+				streamServer.SendErr = errors.New("ticker send failed")
+				err = server.StreamJobStatus(req, streamServer)
+			})
+
+			It("should return the ticker send error", func() {
+				Expect(err).To(MatchError("ticker send failed"))
+			})
+
+			It("should have sent exactly one initial message", func() {
+				Expect(streamServer.SentMessages).To(HaveLen(1))
+			})
 		})
 	})
 
@@ -2592,6 +2866,188 @@ var _ = Describe("Server", func() {
 			It("should still only have the initial message (transient error doesn't crash)", func() {
 				// We only got the initial message; the transient error was swallowed and watch continued
 				Expect(len(cancellableStream.SentMessages)).To(BeNumerically(">=", 1))
+			})
+		})
+		When("initial stream.Send returns an error", func() {
+			var err error
+
+			BeforeEach(func() {
+				mockPageReaderMutator = &MockPageReaderMutator{
+					Markdown: wikipage.Markdown("# Test Content"),
+				}
+				streamServer = &MockPageWatchStreamServer{
+					SendErr: errors.New("stream closed"),
+				}
+				server = mustNewServerFull(mockPageReaderMutator, nil, nil, nil, mockPageReaderMutator)
+				err = server.WatchPage(req, streamServer)
+			})
+
+			It("should return the stream error", func() {
+				Expect(err).To(MatchError("stream closed"))
+			})
+
+			It("should not append the failed message", func() {
+				Expect(streamServer.SentMessages).To(BeEmpty())
+			})
+		})
+
+		When("check_interval_ms is below the 100ms minimum", func() {
+			var (
+				cancellableStream *MockPageWatchStreamServer
+				watchErr          error
+				watchDone         chan error
+			)
+
+			BeforeEach(func() {
+				cancellableStream = newCancellableMockPageWatchStreamServer()
+				mockPageReaderMutator = &MockPageReaderMutator{
+					Markdown: wikipage.Markdown("# Content"),
+				}
+
+				belowMin := int32(10) // 10ms, below the 100ms minimum
+				req.CheckIntervalMs = &belowMin
+
+				server = mustNewServerFull(mockPageReaderMutator, nil, nil, nil, mockPageReaderMutator)
+				watchDone = make(chan error, 1)
+				go func() {
+					watchDone <- server.WatchPage(req, cancellableStream)
+				}()
+
+				Eventually(func() int {
+					return len(cancellableStream.SentMessages)
+				}, 2*time.Second, 50*time.Millisecond).Should(Equal(1))
+
+				cancellableStream.Cancel()
+				watchErr = <-watchDone
+			})
+
+			It("should clamp interval and still work", func() {
+				Expect(watchErr).To(Equal(context.Canceled))
+			})
+
+			It("should send the initial message", func() {
+				Expect(cancellableStream.SentMessages).To(HaveLen(1))
+			})
+		})
+
+		When("page is deleted during polling", func() {
+			var (
+				cancellableStream *MockPageWatchStreamServer
+				watchErr          error
+				watchDone         chan error
+			)
+
+			BeforeEach(func() {
+				cancellableStream = newCancellableMockPageWatchStreamServer()
+				mockPageReaderMutator = &MockPageReaderMutator{
+					Markdown: wikipage.Markdown("# Content"),
+				}
+
+				checkInterval := int32(100)
+				req.CheckIntervalMs = &checkInterval
+
+				server = mustNewServerFull(mockPageReaderMutator, nil, nil, nil, mockPageReaderMutator)
+				watchDone = make(chan error, 1)
+				go func() {
+					watchDone <- server.WatchPage(req, cancellableStream)
+				}()
+
+				Eventually(func() int {
+					return len(cancellableStream.SentMessages)
+				}, 2*time.Second, 50*time.Millisecond).Should(Equal(1))
+
+				// Simulate page deletion during polling
+				mockPageReaderMutator.MarkdownReadErr = os.ErrNotExist
+				watchErr = <-watchDone
+			})
+
+			It("should return a NotFound error indicating the page was deleted", func() {
+				Expect(watchErr).To(HaveGrpcStatusWithSubstr(codes.NotFound, "page deleted"))
+			})
+		})
+
+		When("page content does not change during polling", func() {
+			var (
+				cancellableStream *MockPageWatchStreamServer
+				watchErr          error
+				watchDone         chan error
+			)
+
+			BeforeEach(func() {
+				cancellableStream = newCancellableMockPageWatchStreamServer()
+				mockPageReaderMutator = &MockPageReaderMutator{
+					Markdown: wikipage.Markdown("# Stable Content"),
+				}
+
+				checkInterval := int32(100)
+				req.CheckIntervalMs = &checkInterval
+
+				server = mustNewServerFull(mockPageReaderMutator, nil, nil, nil, mockPageReaderMutator)
+				watchDone = make(chan error, 1)
+				go func() {
+					watchDone <- server.WatchPage(req, cancellableStream)
+				}()
+
+				Eventually(func() int {
+					return len(cancellableStream.SentMessages)
+				}, 2*time.Second, 50*time.Millisecond).Should(Equal(1))
+
+				// Wait for at least one full poll cycle so sendPageUpdateIfChanged runs with same hash
+				time.Sleep(250 * time.Millisecond)
+
+				cancellableStream.Cancel()
+				watchErr = <-watchDone
+			})
+
+			It("should end with context.Canceled", func() {
+				Expect(watchErr).To(Equal(context.Canceled))
+			})
+
+			It("should only send the initial message", func() {
+				Expect(cancellableStream.SentMessages).To(HaveLen(1))
+			})
+		})
+
+		When("stream.Send fails during polling after content changes", func() {
+			var (
+				cancellableStream *MockPageWatchStreamServer
+				watchErr          error
+				watchDone         chan error
+			)
+
+			BeforeEach(func() {
+				watchCtx, watchCancel := context.WithCancel(context.Background())
+				DeferCleanup(watchCancel)
+				cancellableStream = &MockPageWatchStreamServer{
+					SendErr:           errors.New("stream closed during polling"),
+					SendErrAfterCount: 1, // succeed on first send, fail on second
+					ctx:               watchCtx,
+					cancelFunc:        watchCancel,
+				}
+				mockPageReaderMutator = &MockPageReaderMutator{
+					Markdown: wikipage.Markdown("# Initial Content"),
+				}
+
+				checkInterval := int32(100)
+				req.CheckIntervalMs = &checkInterval
+
+				server = mustNewServerFull(mockPageReaderMutator, nil, nil, nil, mockPageReaderMutator)
+				watchDone = make(chan error, 1)
+				go func() {
+					watchDone <- server.WatchPage(req, cancellableStream)
+				}()
+
+				Eventually(func() int {
+					return len(cancellableStream.SentMessages)
+				}, 2*time.Second, 50*time.Millisecond).Should(Equal(1))
+
+				// Change content so sendPageUpdateIfChanged tries to send again
+				mockPageReaderMutator.Markdown = wikipage.Markdown("# Changed Content")
+				watchErr = <-watchDone
+			})
+
+			It("should return the stream send error", func() {
+				Expect(watchErr).To(MatchError("stream closed during polling"))
 			})
 		})
 	})
@@ -3326,20 +3782,16 @@ var _ = Describe("Server", func() {
 		JustBeforeEach(func() {
 			var serverErr error
 			server, serverErr = v1.NewServer(
-				"commit",
-				time.Now(),
+				v1.BuildInfo{Commit: "commit", BuildTime: time.Now()},
 				mockPageReaderMutator,
 				noOpBleveIndexQueryer{},
-				nil,
-				lumber.NewConsoleLogger(lumber.WARN),
-				mockMarkdownRenderer,
-				mockTemplateExecutor,
 				mockFrontmatterIndexQueryer,
-				nil,   // fileStorer
-				noOpChatBufferManager{}, // chatBufferManager
+				lumber.NewConsoleLogger(lumber.WARN),
+				noOpChatBufferManager{},
 				noOpPageOpener{},
 			)
 			Expect(serverErr).NotTo(HaveOccurred())
+			server = server.WithMarkdownRenderer(mockMarkdownRenderer).WithTemplateExecutor(mockTemplateExecutor)
 			resp, err = server.ReadPage(ctx, req)
 		})
 
@@ -3479,20 +3931,16 @@ var _ = Describe("Server", func() {
 		JustBeforeEach(func() {
 			var serverErr error
 			server, serverErr = v1.NewServer(
-				"commit",
-				time.Now(),
+				v1.BuildInfo{Commit: "commit", BuildTime: time.Now()},
 				mockPageReaderMutator,
 				noOpBleveIndexQueryer{},
-				nil,
-				lumber.NewConsoleLogger(lumber.WARN),
-				mockMarkdownRenderer,
-				nil, // templateExecutor not used by RenderMarkdown
 				mockFrontmatterIndexQueryer,
-				nil, // fileStorer
+				lumber.NewConsoleLogger(lumber.WARN),
 				noOpChatBufferManager{},
 				noOpPageOpener{},
 			)
 			Expect(serverErr).NotTo(HaveOccurred())
+			server = server.WithMarkdownRenderer(mockMarkdownRenderer)
 			resp, err = server.RenderMarkdown(ctx, req)
 		})
 
@@ -3529,16 +3977,11 @@ var _ = Describe("Server", func() {
 			It("should return a FailedPrecondition error", func() {
 				// Create server without markdown renderer
 				noRendererServer, serverErr := v1.NewServer(
-					"commit",
-					time.Now(),
+					v1.BuildInfo{Commit: "commit", BuildTime: time.Now()},
 					mockPageReaderMutator,
 					noOpBleveIndexQueryer{},
-					nil,
-					lumber.NewConsoleLogger(lumber.WARN),
-					nil, // no markdown renderer
-					nil,
 					mockFrontmatterIndexQueryer,
-					nil,
+					lumber.NewConsoleLogger(lumber.WARN),
 					noOpChatBufferManager{},
 					noOpPageOpener{},
 				)
@@ -3983,6 +4426,228 @@ var _ = Describe("Server", func() {
 				Expect(resp.Records[0].ValidationErrors).NotTo(BeEmpty())
 			})
 		})
+
+		When("csv references an inventory container that exists but has no inventory key", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,inventory.container\nitem_a,box_b"
+				mockPageReaderMutator = &MockPageReaderMutator{
+					FrontmatterByID: map[string]map[string]any{
+						"box_b": {"title": "Box B"},
+					},
+				}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should have no validation errors for item_a", func() {
+				Expect(resp.Records[0].ValidationErrors).To(BeEmpty())
+			})
+		})
+
+		When("csv references an inventory container that has inventory but no container field", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,inventory.container\nitem_a,box_b"
+				mockPageReaderMutator = &MockPageReaderMutator{
+					FrontmatterByID: map[string]map[string]any{
+						"box_b": {"inventory": map[string]any{}},
+					},
+				}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should have no validation errors for item_a", func() {
+				Expect(resp.Records[0].ValidationErrors).To(BeEmpty())
+			})
+		})
+
+		When("csv references an inventory container that itself points back creating a cycle", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,inventory.container\nitem_a,box_b"
+				mockPageReaderMutator = &MockPageReaderMutator{
+					FrontmatterByID: map[string]map[string]any{
+						"box_b": {"inventory": map[string]any{"container": "item_a"}},
+					},
+				}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should detect the circular reference via existing page lookup", func() {
+				Expect(resp.Records[0].ValidationErrors).To(ContainElement(ContainSubstring("circular reference detected")))
+			})
+		})
+
+		When("csv has two records where the second has a missing container triggering GetContainerReference on the first", func() {
+			BeforeEach(func() {
+				// item_a references item_b (in CSV), item_b references item_c (not in CSV, not existing)
+				// item_b gets a validation error (item_c missing), so it is excluded from importGraph
+				// during cycle detection for item_a, GetContainerReference(item_b) is called (returns "" due to error)
+				req.CsvContent = "identifier,inventory.container\nitem_a,item_b\nitem_b,item_c"
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should have a validation error on item_b for missing container", func() {
+				Expect(resp.Records[1].ValidationErrors).To(ContainElement(ContainSubstring("non-existent page")))
+			})
+
+			It("should have no validation errors on item_a", func() {
+				Expect(resp.Records[0].ValidationErrors).To(BeEmpty())
+			})
+		})
+
+		When("csv_content references a template with template field as string 'true'", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,template,title\ntest_page,string_template,Test Item"
+				mockPageReaderMutator = &MockPageReaderMutator{
+					FrontmatterByID: map[string]map[string]any{
+						"string_template": {
+							"title":    "String Template",
+							"template": "true", // string case
+						},
+					},
+					ErrByID: map[string]error{
+						"test_page": os.ErrNotExist,
+					},
+				}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should not add validation errors for the template reference", func() {
+				Expect(resp.Records[0].ValidationErrors).To(BeEmpty())
+			})
+		})
+
+		When("csv_content references a template with template field as int64 nonzero", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,template,title\ntest_page,int_template,Test Item"
+				mockPageReaderMutator = &MockPageReaderMutator{
+					FrontmatterByID: map[string]map[string]any{
+						"int_template": {
+							"title":    "Int Template",
+							"template": int64(1), // int64 nonzero = true
+						},
+					},
+					ErrByID: map[string]error{
+						"test_page": os.ErrNotExist,
+					},
+				}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should not add validation errors for the template reference", func() {
+				Expect(resp.Records[0].ValidationErrors).To(BeEmpty())
+			})
+		})
+
+		When("csv_content references a page with template field as int64 zero", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,template,title\ntest_page,zero_template,Test Item"
+				mockPageReaderMutator = &MockPageReaderMutator{
+					FrontmatterByID: map[string]map[string]any{
+						"zero_template": {
+							"title":    "Zero Template",
+							"template": int64(0), // int64 zero = false
+						},
+					},
+					ErrByID: map[string]error{
+						"test_page": os.ErrNotExist,
+					},
+				}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should add validation error because page is not a template", func() {
+				Expect(resp.Records[0].ValidationErrors).To(ContainElement(ContainSubstring("is not a template")))
+			})
+		})
+
+		When("csv_content references a template with template field as float64 nonzero", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,template,title\ntest_page,float_template,Test Item"
+				mockPageReaderMutator = &MockPageReaderMutator{
+					FrontmatterByID: map[string]map[string]any{
+						"float_template": {
+							"title":    "Float Template",
+							"template": float64(1.0), // float64 nonzero = true
+						},
+					},
+					ErrByID: map[string]error{
+						"test_page": os.ErrNotExist,
+					},
+				}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should not add validation errors for the template reference", func() {
+				Expect(resp.Records[0].ValidationErrors).To(BeEmpty())
+			})
+		})
+
+		When("csv_content references a page with template field of an unrecognized type", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,template,title\ntest_page,unknown_template,Test Item"
+				mockPageReaderMutator = &MockPageReaderMutator{
+					FrontmatterByID: map[string]map[string]any{
+						"unknown_template": {
+							"title":    "Unknown Template",
+							"template": []string{"true"}, // default case: not bool/string/int64/float64
+						},
+					},
+					ErrByID: map[string]error{
+						"test_page": os.ErrNotExist,
+					},
+				}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should add validation error because page is not a template", func() {
+				Expect(resp.Records[0].ValidationErrors).To(ContainElement(ContainSubstring("is not a template")))
+			})
+		})
+
+		When("csv_content has DELETE array value sentinel", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,tags[]\ntest_page,[[DELETE(old-tag)]]"
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should parse the DELETE array operation with correct type", func() {
+				Expect(resp.Records[0].ArrayOps).To(HaveLen(1))
+				Expect(resp.Records[0].ArrayOps[0].Operation).To(Equal(apiv1.ArrayOpType_ARRAY_OP_TYPE_DELETE_VALUE))
+			})
+
+			It("should include the value to delete", func() {
+				Expect(resp.Records[0].ArrayOps[0].Value).To(Equal("old-tag"))
+			})
+		})
 	})
 
 	Describe("StartPageImportJob", func() {
@@ -4040,12 +4705,40 @@ var _ = Describe("Server", func() {
 			})
 		})
 
-		When("csv_content has parsing errors", func() {
+		When("csv_content has parsing errors (missing identifier column)", func() {
 			BeforeEach(func() {
 				req.CsvContent = "title,description\nTest,A test page"
 			})
 
 			It("should return an invalid argument error with parsing error details", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "CSV has parsing errors"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("csv_content is syntactically malformed", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier\n\"unclosed quote"
+			})
+
+			It("should return an invalid argument error for failed CSV parse", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "failed to parse CSV"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("csv_content has a header but no data rows", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,title"
+			})
+
+			It("should return an invalid argument error for empty CSV", func() {
 				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "CSV has parsing errors"))
 			})
 
@@ -4114,6 +4807,31 @@ var _ = Describe("Server", func() {
 				Expect(resp.RecordCount).To(Equal(int32(3)))
 			})
 		})
+
+		When("dispatcher fails to enqueue the import job", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,title\ntest_page,Test Page"
+				mockJobCoordinator = nil // prevent outer JustBeforeEach from using no-op mock coordinator
+			})
+
+			JustBeforeEach(func() {
+				failingFactory := jobs.FailingDispatcherFactory(errors.New("queue is full"))
+				failingCoordinator := jobs.NewJobQueueCoordinatorWithFactory(
+					lumber.NewConsoleLogger(lumber.WARN),
+					failingFactory,
+				)
+				server = mustNewServerFull(mockPageReaderMutator, nil, nil, failingCoordinator, nil)
+				resp, err = server.StartPageImportJob(ctx, req)
+			})
+
+			It("should return an internal error", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to enqueue import job"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
 	})
 
 	Describe("GenerateIdentifier", func() {
@@ -4136,17 +4854,12 @@ var _ = Describe("Server", func() {
 		JustBeforeEach(func() {
 			var serverErr error
 			server, serverErr = v1.NewServer(
-				"commit",
-				time.Now(),
+				v1.BuildInfo{Commit: "commit", BuildTime: time.Now()},
 				mockPageReaderMutator,
 				noOpBleveIndexQueryer{},
-				nil,
-				lumber.NewConsoleLogger(lumber.WARN),
-				nil,
-				nil,
 				noOpFrontmatterIndexQueryer{},
-				nil,   // fileStorer
-				noOpChatBufferManager{}, // chatBufferManager
+				lumber.NewConsoleLogger(lumber.WARN),
+				noOpChatBufferManager{},
 				noOpPageOpener{},
 			)
 			Expect(serverErr).NotTo(HaveOccurred())
@@ -4297,17 +5010,12 @@ var _ = Describe("Server", func() {
 
 		JustBeforeEach(func() {
 			server, err = v1.NewServer(
-				"commit",
-				time.Now(),
+				v1.BuildInfo{Commit: "commit", BuildTime: time.Now()},
 				mockPageReaderMutator,
 				noOpBleveIndexQueryer{},
-				nil,
-				lumber.NewConsoleLogger(lumber.WARN),
-				nil,
-				nil,
 				mockFrontmatterIndexQueryer,
-				nil,   // fileStorer
-				noOpChatBufferManager{}, // chatBufferManager
+				lumber.NewConsoleLogger(lumber.WARN),
+				noOpChatBufferManager{},
 				noOpPageOpener{},
 			)
 			Expect(err).NotTo(HaveOccurred())
@@ -4581,17 +5289,12 @@ var _ = Describe("Server", func() {
 
 		JustBeforeEach(func() {
 			server, err = v1.NewServer(
-				"commit",
-				time.Now(),
+				v1.BuildInfo{Commit: "commit", BuildTime: time.Now()},
 				mockPageReaderMutator,
 				noOpBleveIndexQueryer{},
-				nil,
-				lumber.NewConsoleLogger(lumber.WARN),
-				nil,
-				nil,
 				mockFrontmatterIndexQueryer,
-				nil,   // fileStorer
-				noOpChatBufferManager{}, // chatBufferManager
+				lumber.NewConsoleLogger(lumber.WARN),
+				noOpChatBufferManager{},
 				noOpPageOpener{},
 			)
 			Expect(err).NotTo(HaveOccurred())
@@ -5012,6 +5715,252 @@ var _ = Describe("Checklist gRPC round-trip", func() {
 	})
 })
 
+var _ = Describe("NewServer", func() {
+	var buildInfo v1.BuildInfo
+
+	BeforeEach(func() {
+		buildInfo = v1.BuildInfo{Commit: "test-commit", BuildTime: time.Now()}
+	})
+
+	When("pageReaderMutator is nil", func() {
+		var err error
+
+		BeforeEach(func() {
+			_, err = v1.NewServer(
+				buildInfo,
+				nil,
+				noOpBleveIndexQueryer{},
+				noOpFrontmatterIndexQueryer{},
+				lumber.NewConsoleLogger(lumber.WARN),
+				noOpChatBufferManager{},
+				noOpPageOpener{},
+			)
+		})
+
+		It("should return an error", func() {
+			Expect(err).To(MatchError("pageReaderMutator is required"))
+		})
+	})
+
+	When("bleveIndexQueryer is nil", func() {
+		var err error
+
+		BeforeEach(func() {
+			_, err = v1.NewServer(
+				buildInfo,
+				noOpPageReaderMutator{},
+				nil,
+				noOpFrontmatterIndexQueryer{},
+				lumber.NewConsoleLogger(lumber.WARN),
+				noOpChatBufferManager{},
+				noOpPageOpener{},
+			)
+		})
+
+		It("should return an error", func() {
+			Expect(err).To(MatchError("bleveIndexQueryer is required"))
+		})
+	})
+
+	When("frontmatterIndexQueryer is nil", func() {
+		var err error
+
+		BeforeEach(func() {
+			_, err = v1.NewServer(
+				buildInfo,
+				noOpPageReaderMutator{},
+				noOpBleveIndexQueryer{},
+				nil,
+				lumber.NewConsoleLogger(lumber.WARN),
+				noOpChatBufferManager{},
+				noOpPageOpener{},
+			)
+		})
+
+		It("should return an error", func() {
+			Expect(err).To(MatchError("frontmatterIndexQueryer is required"))
+		})
+	})
+
+	When("logger is nil", func() {
+		var err error
+
+		BeforeEach(func() {
+			_, err = v1.NewServer(
+				buildInfo,
+				noOpPageReaderMutator{},
+				noOpBleveIndexQueryer{},
+				noOpFrontmatterIndexQueryer{},
+				nil,
+				noOpChatBufferManager{},
+				noOpPageOpener{},
+			)
+		})
+
+		It("should return an error", func() {
+			Expect(err).To(MatchError("logger is required"))
+		})
+	})
+
+	When("chatBufferManager is nil", func() {
+		var err error
+
+		BeforeEach(func() {
+			_, err = v1.NewServer(
+				buildInfo,
+				noOpPageReaderMutator{},
+				noOpBleveIndexQueryer{},
+				noOpFrontmatterIndexQueryer{},
+				lumber.NewConsoleLogger(lumber.WARN),
+				nil,
+				noOpPageOpener{},
+			)
+		})
+
+		It("should return an error", func() {
+			Expect(err).To(MatchError("chatBufferManager is required"))
+		})
+	})
+
+	When("pageOpener is nil", func() {
+		var err error
+
+		BeforeEach(func() {
+			_, err = v1.NewServer(
+				buildInfo,
+				noOpPageReaderMutator{},
+				noOpBleveIndexQueryer{},
+				noOpFrontmatterIndexQueryer{},
+				lumber.NewConsoleLogger(lumber.WARN),
+				noOpChatBufferManager{},
+				nil,
+			)
+		})
+
+		It("should return an error", func() {
+			Expect(err).To(MatchError("pageOpener is required"))
+		})
+	})
+
+	When("all required dependencies are provided", func() {
+		var (
+			server *v1.Server
+			err    error
+		)
+
+		BeforeEach(func() {
+			server, err = v1.NewServer(
+				buildInfo,
+				noOpPageReaderMutator{},
+				noOpBleveIndexQueryer{},
+				noOpFrontmatterIndexQueryer{},
+				lumber.NewConsoleLogger(lumber.WARN),
+				noOpChatBufferManager{},
+				noOpPageOpener{},
+			)
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return a non-nil server", func() {
+			Expect(server).NotTo(BeNil())
+		})
+	})
+})
+
+var _ = Describe("Server builder methods", func() {
+	var (
+		ctx    context.Context
+		server *v1.Server
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		var err error
+		server, err = v1.NewServer(
+			v1.BuildInfo{Commit: "test-commit", BuildTime: time.Now()},
+			noOpPageReaderMutator{},
+			noOpBleveIndexQueryer{},
+			noOpFrontmatterIndexQueryer{},
+			lumber.NewConsoleLogger(lumber.WARN),
+			noOpChatBufferManager{},
+			noOpPageOpener{},
+		)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	Describe("WithJobQueueCoordinator", func() {
+		When("called with a job coordinator", func() {
+			var result *v1.Server
+
+			BeforeEach(func() {
+				coordinator := (&MockJobQueueCoordinator{}).AsCoordinator()
+				result = server.WithJobQueueCoordinator(coordinator)
+			})
+
+			It("should return the same server for chaining", func() {
+				Expect(result).To(BeIdenticalTo(server))
+			})
+
+			It("should enable job queue operations (StartPageImportJob no longer returns unavailable)", func() {
+				_, err := result.StartPageImportJob(ctx, &apiv1.StartPageImportJobRequest{
+					CsvContent: "identifier,title\ntest_page,Test Page",
+				})
+				Expect(err).NotTo(HaveGrpcStatus(codes.Unavailable, "job queue coordinator not available"))
+			})
+		})
+	})
+
+	Describe("WithMarkdownRenderer", func() {
+		When("called with a markdown renderer", func() {
+			var result *v1.Server
+
+			BeforeEach(func() {
+				result = server.WithMarkdownRenderer(&MockMarkdownRenderer{Result: []byte("<p>test</p>")})
+			})
+
+			It("should return the same server for chaining", func() {
+				Expect(result).To(BeIdenticalTo(server))
+			})
+
+			It("should enable markdown rendering (RenderMarkdown no longer returns failed precondition)", func() {
+				_, err := result.RenderMarkdown(ctx, &apiv1.RenderMarkdownRequest{Content: "# Hello"})
+				Expect(err).NotTo(HaveGrpcStatus(codes.FailedPrecondition, "markdown renderer is not available"))
+			})
+		})
+	})
+
+	Describe("WithTemplateExecutor", func() {
+		When("called with a template executor", func() {
+			var result *v1.Server
+
+			BeforeEach(func() {
+				result = server.WithTemplateExecutor(&MockTemplateExecutor{})
+			})
+
+			It("should return the same server for chaining", func() {
+				Expect(result).To(BeIdenticalTo(server))
+			})
+		})
+	})
+
+	Describe("WithFileStorer", func() {
+		When("called with a file storer mock", func() {
+			var result *v1.Server
+
+			BeforeEach(func() {
+				result = server.WithFileStorer(&mockFileStorer{})
+			})
+
+			It("should return the same server for chaining", func() {
+				Expect(result).To(BeIdenticalTo(server))
+			})
+		})
+	})
+})
+
 // MockMarkdownRenderer is a mock implementation of wikipage.IRenderMarkdownToHTML
 type MockMarkdownRenderer struct {
 	Result []byte
@@ -5048,6 +5997,8 @@ type MockFrontmatterIndexQueryer struct {
 	KeyExistsResultsMap map[string][]wikipage.PageIdentifier
 	PrefixMatchResults  []wikipage.PageIdentifier
 	GetValueResult      string
+	SortedByResults     []wikipage.PageIdentifier
+	GetValueResultMap   map[string]map[string]string // identifier -> key -> value
 }
 
 func (m *MockFrontmatterIndexQueryer) QueryExactMatch(dottedKeyPath wikipage.DottedKeyPath, value wikipage.Value) []wikipage.PageIdentifier {
@@ -5070,11 +6021,17 @@ func (m *MockFrontmatterIndexQueryer) QueryPrefixMatch(dottedKeyPath wikipage.Do
 }
 
 func (m *MockFrontmatterIndexQueryer) GetValue(identifier wikipage.PageIdentifier, dottedKeyPath wikipage.DottedKeyPath) wikipage.Value {
+	if m.GetValueResultMap != nil {
+		if idMap, ok := m.GetValueResultMap[string(identifier)]; ok {
+			return idMap[string(dottedKeyPath)]
+		}
+		return ""
+	}
 	return m.GetValueResult
 }
 
-func (*MockFrontmatterIndexQueryer) QueryExactMatchSortedBy(_ wikipage.DottedKeyPath, _ wikipage.Value, _ wikipage.DottedKeyPath, _ bool, _ int) []wikipage.PageIdentifier {
-	return nil
+func (m *MockFrontmatterIndexQueryer) QueryExactMatchSortedBy(_ wikipage.DottedKeyPath, _ wikipage.Value, _ wikipage.DottedKeyPath, _ bool, _ int) []wikipage.PageIdentifier {
+	return m.SortedByResults
 }
 
 // MockJobQueueCoordinator is a mock implementation for testing job queue interactions.
@@ -5101,3 +6058,326 @@ func (*noOpDispatcher) Start() {}
 func (*noOpDispatcher) Dispatch(_ func()) error {
 	return nil
 }
+
+var _ = Describe("ListPagesByFrontmatter", func() {
+	var (
+		ctx    context.Context
+		server *v1.Server
+		req    *apiv1.ListPagesByFrontmatterRequest
+		resp   *apiv1.ListPagesByFrontmatterResponse
+		err    error
+
+		mockFrontmatterIndexQueryer *MockFrontmatterIndexQueryer
+		mockPageReaderMutator       *MockPageReaderMutator
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		mockFrontmatterIndexQueryer = &MockFrontmatterIndexQueryer{}
+		mockPageReaderMutator = &MockPageReaderMutator{}
+		req = &apiv1.ListPagesByFrontmatterRequest{
+			MatchKey:  "status",
+			SortByKey: "title",
+		}
+	})
+
+	JustBeforeEach(func() {
+		server = mustNewServer(mockPageReaderMutator, nil, mockFrontmatterIndexQueryer)
+		resp, err = server.ListPagesByFrontmatter(ctx, req)
+	})
+
+	When("match_key is empty", func() {
+		BeforeEach(func() {
+			req.MatchKey = ""
+		})
+
+		It("should return an invalid argument error", func() {
+			Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "match_key is required"))
+		})
+
+		It("should return no response", func() {
+			Expect(resp).To(BeNil())
+		})
+	})
+
+	When("sort_by_key is empty", func() {
+		BeforeEach(func() {
+			req.SortByKey = ""
+		})
+
+		It("should return an invalid argument error", func() {
+			Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "sort_by_key is required"))
+		})
+
+		It("should return no response", func() {
+			Expect(resp).To(BeNil())
+		})
+	})
+
+	When("max_results is negative", func() {
+		BeforeEach(func() {
+			req.MaxResults = -1
+		})
+
+		It("should return an invalid argument error", func() {
+			Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "max_results must be >= 0"))
+		})
+
+		It("should return no response", func() {
+			Expect(resp).To(BeNil())
+		})
+	})
+
+	When("content_excerpt_max_chars is negative", func() {
+		BeforeEach(func() {
+			req.ContentExcerptMaxChars = -1
+		})
+
+		It("should return an invalid argument error", func() {
+			Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "content_excerpt_max_chars must be >= 0"))
+		})
+
+		It("should return no response", func() {
+			Expect(resp).To(BeNil())
+		})
+	})
+
+	When("no pages match the frontmatter query", func() {
+		BeforeEach(func() {
+			mockFrontmatterIndexQueryer.SortedByResults = nil
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return an empty results list", func() {
+			Expect(resp.Results).To(BeEmpty())
+		})
+	})
+
+	When("pages match the frontmatter query", func() {
+		BeforeEach(func() {
+			mockFrontmatterIndexQueryer.SortedByResults = []wikipage.PageIdentifier{"page_one", "page_two"}
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return the correct number of results", func() {
+			Expect(resp.Results).To(HaveLen(2))
+		})
+
+		It("should include page identifiers in results", func() {
+			ids := []string{resp.Results[0].Identifier, resp.Results[1].Identifier}
+			Expect(ids).To(ConsistOf("page_one", "page_two"))
+		})
+	})
+
+	When("frontmatter keys are requested and pages match", func() {
+		BeforeEach(func() {
+			mockFrontmatterIndexQueryer.SortedByResults = []wikipage.PageIdentifier{"article_one"}
+			mockFrontmatterIndexQueryer.GetValueResultMap = map[string]map[string]string{
+				"article_one": {
+					"title":  "My Article",
+					"author": "Bob",
+				},
+			}
+			req.FrontmatterKeysToReturn = []string{"title", "author"}
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should include the requested frontmatter values", func() {
+			Expect(resp.Results[0].FrontmatterValues["title"]).To(Equal("My Article"))
+			Expect(resp.Results[0].FrontmatterValues["author"]).To(Equal("Bob"))
+		})
+	})
+
+	When("content excerpts are requested and the page has content", func() {
+		BeforeEach(func() {
+			mockFrontmatterIndexQueryer.SortedByResults = []wikipage.PageIdentifier{"content_page"}
+			mockPageReaderMutator.Markdown = "Hello, this is the page content that is longer than ten chars."
+			req.ContentExcerptMaxChars = 10
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should truncate the content to the specified number of characters", func() {
+			Expect(resp.Results[0].ContentExcerpt).To(Equal("Hello, thi"))
+		})
+	})
+
+	When("content excerpts are requested but max chars is zero", func() {
+		BeforeEach(func() {
+			mockFrontmatterIndexQueryer.SortedByResults = []wikipage.PageIdentifier{"content_page"}
+			mockPageReaderMutator.Markdown = "Some content here."
+			req.ContentExcerptMaxChars = 0
+		})
+
+		It("should return an empty content excerpt", func() {
+			Expect(resp.Results[0].ContentExcerpt).To(BeEmpty())
+		})
+	})
+
+	When("content excerpts are requested but the page has no content", func() {
+		BeforeEach(func() {
+			mockFrontmatterIndexQueryer.SortedByResults = []wikipage.PageIdentifier{"empty_page"}
+			mockPageReaderMutator.MarkdownReadErr = os.ErrNotExist
+			req.ContentExcerptMaxChars = 100
+		})
+
+		It("should not return an error", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return an empty content excerpt", func() {
+			Expect(resp.Results[0].ContentExcerpt).To(BeEmpty())
+		})
+	})
+
+	When("content is shorter than max chars", func() {
+		BeforeEach(func() {
+			mockFrontmatterIndexQueryer.SortedByResults = []wikipage.PageIdentifier{"short_page"}
+			mockPageReaderMutator.Markdown = "Short."
+			req.ContentExcerptMaxChars = 1000
+		})
+
+		It("should return the full content", func() {
+			Expect(resp.Results[0].ContentExcerpt).To(Equal("Short."))
+		})
+	})
+})
+
+// callbackObservingMutator is a thread-safe PageReaderMutator for observing async callback execution.
+// It reports new pages as not-existing and tracks when the page_import_report page is written.
+type callbackObservingMutator struct {
+	mu            sync.Mutex
+	reportWritten bool
+}
+
+func (*callbackObservingMutator) ReadFrontMatter(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.FrontMatter, error) {
+	return id, nil, os.ErrNotExist
+}
+
+func (m *callbackObservingMutator) WriteFrontMatter(id wikipage.PageIdentifier, _ wikipage.FrontMatter) error {
+	if string(id) == "page_import_report" {
+		m.mu.Lock()
+		m.reportWritten = true
+		m.mu.Unlock()
+	}
+	return nil
+}
+
+func (*callbackObservingMutator) WriteMarkdown(_ wikipage.PageIdentifier, _ wikipage.Markdown) error {
+	return nil
+}
+
+func (*callbackObservingMutator) ReadMarkdown(id wikipage.PageIdentifier) (wikipage.PageIdentifier, wikipage.Markdown, error) {
+	return id, "", os.ErrNotExist
+}
+
+func (*callbackObservingMutator) DeletePage(_ wikipage.PageIdentifier) error {
+	return nil
+}
+
+func (m *callbackObservingMutator) isReportWritten() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.reportWritten
+}
+
+var _ = Describe("makeReportJobCallback execution", func() {
+	var (
+		ctx             context.Context
+		observingMutator *callbackObservingMutator
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		observingMutator = &callbackObservingMutator{}
+
+		// Use MockDispatcher which runs jobs in goroutines (async execution)
+		mockDispatcherFactory := func(_, _ int) jobs.Dispatcher {
+			return jobs.NewMockDispatcher()
+		}
+		coordinator := jobs.NewJobQueueCoordinatorWithFactory(
+			lumber.NewConsoleLogger(lumber.WARN),
+			mockDispatcherFactory,
+		)
+		server := mustNewServerFull(observingMutator, nil, nil, coordinator, nil)
+
+		startReq := &apiv1.StartPageImportJobRequest{
+			CsvContent: "identifier\ntest_page",
+		}
+		_, _ = server.StartPageImportJob(ctx, startReq)
+	})
+
+	It("should eventually invoke the callback and write the import report", func() {
+		Eventually(observingMutator.isReportWritten, "2s", "10ms").Should(BeTrue())
+	})
+})
+
+// synchronousCompletingCoordinator executes jobs and their completion callbacks synchronously.
+// EnqueueJob always returns an error — used to test error handling in makeReportJobCallback
+// when the report job cannot be enqueued.
+type synchronousCompletingCoordinator struct {
+	enqueueJobCallCount int
+}
+
+func (*synchronousCompletingCoordinator) GetJobProgress() jobs.JobProgress {
+	return jobs.JobProgress{}
+}
+
+func (*synchronousCompletingCoordinator) EnqueueJobWithCompletion(job jobs.Job, callback jobs.CompletionCallback) error {
+	// Execute the import job synchronously so the callback fires inline.
+	jobErr := job.Execute()
+	if callback != nil {
+		callback(jobErr)
+	}
+	return nil
+}
+
+func (c *synchronousCompletingCoordinator) EnqueueJob(_ jobs.Job) error {
+	c.enqueueJobCallCount++
+	return errors.New("report job enqueue rejected for testing")
+}
+
+var _ = Describe("makeReportJobCallback", func() {
+	Describe("when the report job cannot be enqueued", func() {
+		var (
+			ctx         context.Context
+			coordinator *synchronousCompletingCoordinator
+			resp        *apiv1.StartPageImportJobResponse
+			err         error
+		)
+
+		BeforeEach(func() {
+			ctx = context.Background()
+			coordinator = &synchronousCompletingCoordinator{}
+			server := mustNewServerFull(nil, nil, nil, coordinator, nil)
+
+			resp, err = server.StartPageImportJob(ctx, &apiv1.StartPageImportJobRequest{
+				CsvContent: "identifier\ntest_page",
+			})
+		})
+
+		It("should not return an error to the caller", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return a successful response", func() {
+			Expect(resp.Success).To(BeTrue())
+		})
+
+		It("should have attempted to enqueue the report job", func() {
+			Expect(coordinator.enqueueJobCallCount).To(Equal(1))
+		})
+	})
+})
+

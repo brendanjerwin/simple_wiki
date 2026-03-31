@@ -107,17 +107,12 @@ func (noOpChatBufferManager) HasChannelSubscribers() bool {
 
 func mustNewAPIServer() *grpcapi.Server {
 	srv, err := grpcapi.NewServer(
-		"test-commit",
-		time.Now(),
+		grpcapi.BuildInfo{Commit: "test-commit", BuildTime: time.Now()},
 		noOpPageReaderMutator{},
 		noOpBleveIndexQueryer{},
-		nil,
-		lumber.NewConsoleLogger(lumber.WARN),
-		nil,
-		nil,
 		noOpFrontmatterIndexQueryer{},
-		nil,
-		noOpChatBufferManager{}, // chatBufferManager
+		lumber.NewConsoleLogger(lumber.WARN),
+		noOpChatBufferManager{},
 		noOpPageOpener{},
 	)
 	ExpectWithOffset(1, err).NotTo(HaveOccurred())

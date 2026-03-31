@@ -418,13 +418,18 @@ func setupGRPCServer(
 	chatBufferMgr := chatbuffer.NewManager()
 
 	grpcAPIServer, err := grpcapi.NewServer(
-		commit, buildTime, site, site.BleveIndexQueryer, site.GetJobQueueCoordinator(),
-		logger, site.MarkdownRenderer, server.TemplateExecutor{}, site.FrontmatterIndexQueryer,
-		site.FileStorer, chatBufferMgr, site,
+		grpcapi.BuildInfo{Commit: commit, BuildTime: buildTime},
+		site, site.BleveIndexQueryer, site.FrontmatterIndexQueryer,
+		logger, chatBufferMgr, site,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create gRPC server: %w", err)
 	}
+	grpcAPIServer = grpcAPIServer.
+		WithJobQueueCoordinator(site.GetJobQueueCoordinator()).
+		WithMarkdownRenderer(site.MarkdownRenderer).
+		WithTemplateExecutor(server.TemplateExecutor{}).
+		WithFileStorer(site.FileStorer)
 
 	unaryInterceptors, streamInterceptors, err := buildGRPCInterceptors(
 		identityResolver, grpcAPIServer.LoggingInterceptor(), counters, logger,
