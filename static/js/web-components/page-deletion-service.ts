@@ -59,7 +59,7 @@ export class PageDeleter {
     });
 
     // Store the page name for the deletion operation
-    this.dialog.dataset.pageName = pageName;
+    this.dialog.dataset['pageName'] = pageName;
   }
 
   /**
@@ -93,7 +93,7 @@ export class PageDeleter {
    * Handles the confirm action - performs the actual page deletion
    */
   private async handleConfirm() {
-    const pageName = this.dialog.dataset.pageName;
+    const pageName = this.dialog.dataset['pageName'];
 
     if (!pageName) {
       const error = new Error('PageDeleter: No page name found for deletion');
@@ -142,7 +142,7 @@ export class PageDeleter {
    */
   private handleCancel() {
     // Clean up the stored page name
-    delete this.dialog.dataset.pageName;
+    delete this.dialog.dataset['pageName'];
     
     // The dialog handles closing itself for cancel events
   }
