@@ -37,7 +37,7 @@ describe('FrontmatterKey', () => {
     });
 
     it('should not be editable by default', () => {
-      expect(el.editable).to.be.false;
+      expect(el.editable).to.equal(false);
     });
 
     it('should have empty placeholder by default', () => {
@@ -147,7 +147,7 @@ describe('FrontmatterKey', () => {
     });
 
     it('should not dispatch key-change event', () => {
-      expect(keyChangeEvent).to.be.null;
+      expect(keyChangeEvent).to.equal(null);
     });
 
     it('should revert the input value to original key', () => {
@@ -179,7 +179,7 @@ describe('FrontmatterKey', () => {
     });
 
     it('should not dispatch key-change event', () => {
-      expect(keyChangeEvent).to.be.null;
+      expect(keyChangeEvent).to.equal(null);
     });
 
     it('should revert the input value to original key', () => {
@@ -211,7 +211,7 @@ describe('FrontmatterKey', () => {
     });
 
     it('should not dispatch key-change event', () => {
-      expect(keyChangeEvent).to.be.null;
+      expect(keyChangeEvent).to.equal(null);
     });
 
     it('should not update the key property unnecessarily', () => {

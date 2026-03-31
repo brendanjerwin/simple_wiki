@@ -75,7 +75,7 @@ describe('FrontmatterValueSection', () => {
     });
 
     it('should not be disabled by default', () => {
-      expect(el.disabled).to.be.false;
+      expect(el.disabled).to.equal(false);
     });
   });
 
@@ -387,26 +387,26 @@ describe('FrontmatterValueSection', () => {
     it('should disable all key components', () => {
       const keyComponents = el.shadowRoot?.querySelectorAll<HTMLElement & { editable: boolean }>('frontmatter-key');
       keyComponents!.forEach(component => {
-        expect(component.editable).to.be.false;
+        expect(component.editable).to.equal(false);
       });
     });
 
     it('should disable all value components', () => {
       const valueComponents = el.shadowRoot?.querySelectorAll<HTMLElement & { disabled: boolean }>('frontmatter-value-string');
       valueComponents!.forEach(component => {
-        expect(component.disabled).to.be.true;
+        expect(component.disabled).to.equal(true);
       });
     });
 
     it('should disable the add field button', () => {
       const addButton = el.shadowRoot?.querySelector<HTMLElement & { disabled: boolean }>('frontmatter-add-field-button');
-      expect(addButton?.disabled).to.be.true;
+      expect(addButton?.disabled).to.equal(true);
     });
 
     it('should disable all remove buttons', () => {
       const removeButtons = el.shadowRoot?.querySelectorAll<HTMLButtonElement>('.remove-field-button');
       removeButtons!.forEach(button => {
-        expect(button.disabled).to.be.true;
+        expect(button.disabled).to.equal(true);
       });
     });
   });

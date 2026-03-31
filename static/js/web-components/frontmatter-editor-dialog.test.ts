@@ -47,7 +47,7 @@ describe('FrontmatterEditorDialog', () => {
 
   describe('when component is initialized', () => {
     it('should not be open by default', () => {
-      expect(el.open).to.be.false;
+      expect(el.open).to.equal(false);
     });
 
     it('should have empty page by default', () => {
@@ -55,11 +55,11 @@ describe('FrontmatterEditorDialog', () => {
     });
 
     it('should not be loading by default', () => {
-      expect(el.loading).to.be.false;
+      expect(el.loading).to.equal(false);
     });
 
     it('should have no error by default', () => {
-      expect(el.augmentedError).to.be.undefined;
+      expect(el.augmentedError).to.equal(undefined);
     });
   });
 

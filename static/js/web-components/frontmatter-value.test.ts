@@ -74,11 +74,11 @@ describe('FrontmatterValue', () => {
     });
 
     it('should have null value by default', () => {
-      expect(el.value).to.be.null;
+      expect(el.value).to.equal(null);
     });
 
     it('should not be disabled by default', () => {
-      expect(el.disabled).to.be.false;
+      expect(el.disabled).to.equal(false);
     });
 
     it('should have empty placeholder by default', () => {
@@ -126,7 +126,7 @@ describe('FrontmatterValue', () => {
 
       it('should pass disabled state to string component', () => {
         const stringComponent = el.shadowRoot?.querySelector<HTMLElement & { disabled: boolean }>('frontmatter-value-string');
-        expect(stringComponent!.disabled).to.be.true;
+        expect(stringComponent!.disabled).to.equal(true);
       });
     });
   });
@@ -171,7 +171,7 @@ describe('FrontmatterValue', () => {
 
       it('should pass disabled state to array component', () => {
         const arrayComponent = el.shadowRoot?.querySelector<HTMLElement & { disabled: boolean }>('frontmatter-value-array');
-        expect(arrayComponent!.disabled).to.be.true;
+        expect(arrayComponent!.disabled).to.equal(true);
       });
     });
   });
@@ -205,7 +205,7 @@ describe('FrontmatterValue', () => {
 
       it('should pass disabled state to section component', () => {
         const sectionComponent = el.shadowRoot?.querySelector<HTMLElement & { disabled: boolean }>('frontmatter-value-section');
-        expect(sectionComponent!.disabled).to.be.true;
+        expect(sectionComponent!.disabled).to.equal(true);
       });
     });
   });

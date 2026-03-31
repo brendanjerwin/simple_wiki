@@ -94,7 +94,7 @@ describe.skip('FrontmatterEditorDialog - Save Functionality', () => {
       });
 
       it('should clear saving state', () => {
-        expect(el.saving).to.be.false;
+        expect(el.saving).to.equal(false);
       });
 
       it('should store success toast message', () => {
@@ -107,11 +107,11 @@ describe.skip('FrontmatterEditorDialog - Save Functionality', () => {
       });
 
       it('should close the dialog', () => {
-        expect(el.open).to.be.false;
+        expect(el.open).to.equal(false);
       });
 
       it('should clear any previous error', () => {
-        expect(el.augmentedError).to.be.undefined;
+        expect(el.augmentedError).to.equal(undefined);
       });
 
       describe('when saving state is observed during operation', () => {
@@ -132,7 +132,7 @@ describe.skip('FrontmatterEditorDialog - Save Functionality', () => {
         });
 
         it('should set saving state during operation', () => {
-          expect(savingStateDuringOperation).to.be.true;
+          expect(savingStateDuringOperation).to.equal(true);
         });
       });
 
@@ -147,7 +147,7 @@ describe.skip('FrontmatterEditorDialog - Save Functionality', () => {
         });
 
         it('should close the dialog', () => {
-          expect(el.open).to.be.false;
+          expect(el.open).to.equal(false);
         });
       });
 
@@ -166,7 +166,7 @@ describe.skip('FrontmatterEditorDialog - Save Functionality', () => {
         });
 
         it('should clear the error', () => {
-          expect(el.augmentedError).to.be.undefined;
+          expect(el.augmentedError).to.equal(undefined);
         });
       });
 
@@ -212,7 +212,7 @@ describe.skip('FrontmatterEditorDialog - Save Functionality', () => {
       });
 
       it('should clear saving state', () => {
-        expect(el.saving).to.be.false;
+        expect(el.saving).to.equal(false);
       });
 
       it('should not refresh page', () => {
@@ -234,7 +234,7 @@ describe.skip('FrontmatterEditorDialog - Save Functionality', () => {
         });
 
         it('should not close dialog', () => {
-          expect(el.open).to.be.true;
+          expect(el.open).to.equal(true);
         });
       });
     });
@@ -297,13 +297,13 @@ describe.skip('FrontmatterEditorDialog - Save Functionality', () => {
 
       it('should disable save button', () => {
         const saveButton = el.shadowRoot!.querySelector<HTMLButtonElement>('.footer button:last-child');
-        expect(saveButton!.disabled).to.be.true;
+        expect(saveButton!.disabled).to.equal(true);
         expect(saveButton!.textContent!.trim()).to.equal('Saving...');
       });
 
       it('should disable cancel button', () => {
         const cancelButton = el.shadowRoot!.querySelector<HTMLButtonElement>('.footer button:first-child');
-        expect(cancelButton!.disabled).to.be.true;
+        expect(cancelButton!.disabled).to.equal(true);
       });
     });
 
@@ -315,7 +315,7 @@ describe.skip('FrontmatterEditorDialog - Save Functionality', () => {
 
       it('should disable save button', () => {
         const saveButton = el.shadowRoot!.querySelector<HTMLButtonElement>('.footer button:last-child');
-        expect(saveButton!.disabled).to.be.true;
+        expect(saveButton!.disabled).to.equal(true);
       });
     });
 
@@ -328,7 +328,7 @@ describe.skip('FrontmatterEditorDialog - Save Functionality', () => {
 
       it('should enable save button', () => {
         const saveButton = el.shadowRoot!.querySelector<HTMLButtonElement>('.footer button:last-child');
-        expect(saveButton!.disabled).to.be.false;
+        expect(saveButton!.disabled).to.equal(false);
         expect(saveButton!.textContent!.trim()).to.equal('Save');
       });
     });

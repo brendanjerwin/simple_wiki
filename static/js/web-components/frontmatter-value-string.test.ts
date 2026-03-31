@@ -37,7 +37,7 @@ describe('FrontmatterValueString', () => {
     });
 
     it('should not be disabled by default', () => {
-      expect(el.disabled).to.be.false;
+      expect(el.disabled).to.equal(false);
     });
 
     it('should have empty placeholder by default', () => {
