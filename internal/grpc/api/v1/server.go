@@ -43,7 +43,6 @@ const (
 	pageNameRequiredErr            = "page_name is required"
 	maxUniqueIdentifierAttempts    = 1000
 	invalidTemplateErrFmt          = "invalid template in page content: %v"
-	failedToWriteMarkdownErrFmt    = "failed to write markdown: %v"
 )
 
 // ChatBufferManager defines the interface for managing chat message buffers.
