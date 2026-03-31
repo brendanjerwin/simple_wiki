@@ -3,10 +3,12 @@ package server
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
@@ -244,6 +246,188 @@ var _ = Describe("Site Page Operations", func() {
 				// The migration should have been applied and saved during Open()
 				Expect(finalContent).To(ContainSubstring("# Migration applied"))
 				Expect(finalContent).NotTo(Equal(originalDiskContent))
+			})
+		})
+	})
+
+	Describe("Site.WriteFrontMatter", func() {
+		When("the page does not exist on disk", func() {
+			var err error
+
+			BeforeEach(func() {
+				err = s.WriteFrontMatter("brand-new-page", wikipage.FrontMatter{"title": "Created"})
+			})
+
+			It("should succeed", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			When("the page is read back", func() {
+				var (
+					page    *wikipage.Page
+					readErr error
+				)
+
+				BeforeEach(func() {
+					page, readErr = s.ReadPage("brand-new-page")
+					Expect(readErr).NotTo(HaveOccurred())
+				})
+
+				It("should contain the new frontmatter", func() {
+					Expect(page.Text).To(ContainSubstring("Created"))
+				})
+
+				It("should have been loaded from disk", func() {
+					Expect(page.WasLoadedFromDisk).To(BeTrue())
+				})
+			})
+		})
+
+		When("the page has malformed TOML frontmatter", func() {
+			var err error
+
+			BeforeEach(func() {
+				pageIdentifier := "malformed-fm-write"
+				// Content with invalid TOML that also fails YAML parsing as a fallback.
+				// 'title = [invalid' is an unclosed array — invalid for both TOML and YAML.
+				malformedContent := "+++\ntitle = [invalid\n+++\n# Content"
+				filePath := filepath.Join(pathToData, base32tools.EncodeToBase32(strings.ToLower(pageIdentifier))+".md")
+				Expect(os.WriteFile(filePath, []byte(malformedContent), 0644)).To(Succeed())
+
+				err = s.WriteFrontMatter(wikipage.PageIdentifier(pageIdentifier), wikipage.FrontMatter{"title": "new title"})
+			})
+
+			It("should return a parse error", func() {
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("failed to parse markdown for frontmatter write"))
+			})
+		})
+	})
+
+	Describe("Site.ModifyMarkdown", func() {
+		When("the modifier returns an error", func() {
+			var (
+				modifyErr   error
+				modifierErr = errors.New("modifier refused change")
+			)
+
+			BeforeEach(func() {
+				modifyErr = s.ModifyMarkdown("some-modify-page", func(_ wikipage.Markdown) (wikipage.Markdown, error) {
+					return "", modifierErr
+				})
+			})
+
+			It("should propagate the modifier error", func() {
+				Expect(modifyErr).To(MatchError(modifierErr))
+			})
+
+			It("should not create any page file", func() {
+				page, readErr := s.ReadPage("some-modify-page")
+				Expect(readErr).NotTo(HaveOccurred())
+				Expect(page.IsNew()).To(BeTrue())
+			})
+		})
+
+		When("the page has malformed TOML frontmatter", func() {
+			var err error
+
+			BeforeEach(func() {
+				pageIdentifier := "malformed-fm-modify"
+				malformedContent := "+++\ntitle = [invalid\n+++\n# Content"
+				filePath := filepath.Join(pathToData, base32tools.EncodeToBase32(strings.ToLower(pageIdentifier))+".md")
+				Expect(os.WriteFile(filePath, []byte(malformedContent), 0644)).To(Succeed())
+
+				err = s.ModifyMarkdown(wikipage.PageIdentifier(pageIdentifier), func(md wikipage.Markdown) (wikipage.Markdown, error) {
+					return md + " extra", nil
+				})
+			})
+
+			It("should return a parse error", func() {
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("failed to parse markdown for modification"))
+			})
+		})
+
+		When("the page does not exist on disk", func() {
+			var err error
+
+			BeforeEach(func() {
+				err = s.ModifyMarkdown("nonexistent-modify-page", func(_ wikipage.Markdown) (wikipage.Markdown, error) {
+					return "# New Content", nil
+				})
+			})
+
+			It("should succeed and create the page", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			When("the page is read back", func() {
+				var (
+					page    *wikipage.Page
+					readErr error
+				)
+
+				BeforeEach(func() {
+					page, readErr = s.ReadPage("nonexistent-modify-page")
+					Expect(readErr).NotTo(HaveOccurred())
+				})
+
+				It("should contain the written markdown", func() {
+					Expect(page.Text).To(ContainSubstring("# New Content"))
+				})
+			})
+		})
+	})
+
+	Describe("Atomic write safety", func() {
+		// These tests verify that concurrent writes to different sections of a page
+		// (frontmatter vs. markdown) do not lose each other's updates.
+		// Without atomic read-modify-write, a concurrent WriteFrontMatter and WriteMarkdown
+		// can both read the same stale state, and whichever writes last silently discards
+		// the other's change.
+		When("WriteFrontMatter and WriteMarkdown are called concurrently on the same page", func() {
+			const iterations = 200
+
+			BeforeEach(func() {
+				// Create the page with initial state containing both frontmatter and markdown.
+				initialText := "+++\ntitle = \"old title\"\n+++\n\nold content\n"
+				err := s.UpdatePageContent("atomic_test_page", initialText)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should preserve both writes — neither update should be lost", func() {
+				for i := 0; i < iterations; i++ {
+					// Reset to known state before each iteration.
+					initialText := "+++\ntitle = \"old title\"\n+++\n\nold content\n"
+					Expect(s.UpdatePageContent("atomic_test_page", initialText)).To(Succeed())
+
+					var wg sync.WaitGroup
+					wg.Add(2)
+
+					go func() {
+						defer wg.Done()
+						_ = s.WriteFrontMatter("atomic_test_page", wikipage.FrontMatter{"title": "new title"})
+					}()
+
+					go func() {
+						defer wg.Done()
+						_ = s.WriteMarkdown("atomic_test_page", "\nnew content\n")
+					}()
+
+					wg.Wait()
+
+					_, fm, fmErr := s.ReadFrontMatter("atomic_test_page")
+					Expect(fmErr).NotTo(HaveOccurred())
+
+					_, md, mdErr := s.ReadMarkdown("atomic_test_page")
+					Expect(mdErr).NotTo(HaveOccurred())
+
+					// Both updates must be visible — neither should overwrite the other.
+					Expect(fm["title"]).To(Equal("new title"),
+						"iteration %d: frontmatter title update was lost", i)
+					Expect(string(md)).To(ContainSubstring("new content"),
+						"iteration %d: markdown update was lost", i)
+				}
 			})
 		})
 	})

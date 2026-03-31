@@ -36,6 +36,10 @@ func (noOpPageReaderMutator) WriteMarkdown(wikipage.PageIdentifier, wikipage.Mar
 	return nil
 }
 func (noOpPageReaderMutator) DeletePage(wikipage.PageIdentifier) error { return nil }
+func (noOpPageReaderMutator) ModifyMarkdown(_ wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error)) error {
+	_, err := modifier("")
+	return err
+}
 
 // noOpPageOpener satisfies wikipage.PageOpener for tests.
 type noOpPageOpener struct{}
