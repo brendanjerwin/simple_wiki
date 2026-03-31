@@ -1,7 +1,7 @@
 import { FullConfig } from '@playwright/test';
-import fs from 'fs';
-import path from 'path';
-import { execSync } from 'child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import { execSync } from 'node:child_process';
 
 async function globalSetup(config: FullConfig) {
   console.log('[E2E Setup] Preparing test environment...');
