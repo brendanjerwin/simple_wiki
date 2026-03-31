@@ -1,13 +1,15 @@
 import { expect, fixture, html } from '@open-wc/testing';
 import { stub, spy, type SinonStub, type SinonSpy } from 'sinon';
-import './page-chat-panel.js';
-import type { PageChatPanel, ChatMessageState } from './page-chat-panel.js';
+import { PageChatPanel } from './page-chat-panel.js';
+import type { ChatMessageState } from './page-chat-panel.js';
 import { Sender } from '../gen/api/v1/chat_pb.js';
 import { resetForTesting } from './drawer-coordinator.js';
 
 // Stub localStorage before tests
 let localStorageStub: { getItem: SinonStub; setItem: SinonStub; removeItem: SinonStub };
 let fetchStub: SinonStub;
+let startStreamStub: SinonStub;
+let pollChatStatusStub: SinonStub;
 
 describe('PageChatPanel', () => {
   beforeEach(() => {
@@ -16,9 +18,16 @@ describe('PageChatPanel', () => {
       setItem: stub(localStorage, 'setItem'),
       removeItem: stub(localStorage, 'removeItem'),
     };
-    // Stub fetch to prevent real network calls from pollChatStatus
+    // Stub fetch to prevent real network calls (e.g., from sendMessage)
     fetchStub = stub(window, 'fetch');
     fetchStub.resolves(new Response(new Uint8Array(0), { status: 200 }));
+    // Stub startStream and pollChatStatus on the prototype to prevent background
+    // gRPC streaming calls and reconnect loops that crash the browser during tests.
+    // These are private methods accessed via prototype for testing purposes.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- stubbing private methods for testing
+    startStreamStub = stub(PageChatPanel.prototype as any, 'startStream').resolves();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- stubbing private methods for testing
+    pollChatStatusStub = stub(PageChatPanel.prototype as any, 'pollChatStatus').resolves();
   });
 
   afterEach(() => {
@@ -26,6 +35,8 @@ describe('PageChatPanel', () => {
     localStorageStub.setItem.restore();
     localStorageStub.removeItem.restore();
     fetchStub.restore();
+    startStreamStub.restore();
+    pollChatStatusStub.restore();
     resetForTesting();
   });
 
