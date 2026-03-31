@@ -376,10 +376,58 @@ func (s *Site) applyMigrationsForPage(page *wikipage.Page, content []byte) ([]by
 	return migratedContent, nil
 }
 
-// buildInitialPageText constructs the initial text content for a new page, including
-// TOML frontmatter delimiters and a default title heading. For inv_item templates,
-// an inventory contents section is appended.
-func buildInitialPageText(fm wikipage.FrontMatter, tmpl string) (string, error) {
+// readOrInitPage opens a page or initializes a new one if it doesn't exist.
+// Returns an error if page initialization fails to save.
+func (s *Site) readOrInitPage(requestedIdentifier string, req *http.Request) (*wikipage.Page, error) {
+	p, err := s.ReadPage(wikipage.PageIdentifier(requestedIdentifier))
+	if err != nil {
+		return nil, fmt.Errorf(failedToOpenPageErrFmt, requestedIdentifier, err)
+	}
+
+	if p.IsNew() {
+		if err := s.initNewPage(p, req); err != nil {
+			return nil, err
+		}
+	}
+
+	if renderErr := p.Render(s, s.MarkdownRenderer, TemplateExecutor{}, s.FrontmatterIndexQueryer); renderErr != nil {
+		s.Logger.Error("Error rendering page: %v", renderErr)
+	}
+	return p, nil
+}
+
+// initNewPage initializes a newly created page with frontmatter and template content.
+func (s *Site) initNewPage(p *wikipage.Page, req *http.Request) error {
+	prams := req.URL.Query()
+	tmpl := prams.Get("tmpl")
+
+	fm, err := BuildFrontmatterFromURLParams(p.Identifier, prams)
+	if err != nil {
+		return fmt.Errorf("failed to build frontmatter from URL params: %w", err)
+	}
+
+	if tmpl == "inv_item" {
+		EnsureInventoryFrontmatterStructure(fm)
+	}
+
+	initialText, err := buildInitialPageText(fm, tmpl)
+	if err != nil {
+		return err
+	}
+
+	p.Text = initialText
+	if renderErr := p.Render(s, s.MarkdownRenderer, TemplateExecutor{}, s.FrontmatterIndexQueryer); renderErr != nil {
+		s.Logger.Error("Error rendering new page: %v", renderErr)
+	}
+	if err := s.savePageAndIndex(p); err != nil {
+		s.Logger.Error("Failed to save new page '%s': %v", p.Identifier, err)
+		return fmt.Errorf("failed to save new page '%s': %w", p.Identifier, err)
+	}
+	return nil
+}
+
+// buildInitialPageText constructs the initial markdown content for a new page.
+func buildInitialPageText(fm map[string]any, tmpl string) (string, error) {
 	fmBytes, err := toml.Marshal(fm)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal frontmatter to TOML: %w", err)
@@ -405,58 +453,7 @@ func buildInitialPageText(fm wikipage.FrontMatter, tmpl string) (string, error) 
 {{ end }}
 `
 	}
-
 	return initialText, nil
-}
-
-// initializeNewPage sets up the initial content and saves a newly created page.
-func (s *Site) initializeNewPage(p *wikipage.Page, req *http.Request) error {
-	prams := req.URL.Query()
-	tmpl := prams.Get("tmpl")
-
-	// Build frontmatter from URL parameters
-	fm, err := BuildFrontmatterFromURLParams(p.Identifier, prams)
-	if err != nil {
-		return fmt.Errorf("failed to build frontmatter from URL params: %w", err)
-	}
-
-	// Add inventory structure for inv_item template
-	if tmpl == "inv_item" {
-		EnsureInventoryFrontmatterStructure(fm)
-	}
-
-	initialText, err := buildInitialPageText(fm, tmpl)
-	if err != nil {
-		return err
-	}
-
-	p.Text = initialText
-	if renderErr := p.Render(s, s.MarkdownRenderer, TemplateExecutor{}, s.FrontmatterIndexQueryer); renderErr != nil {
-		s.Logger.Error("Error rendering new page: %v", renderErr)
-	}
-	if err := s.savePageAndIndex(p); err != nil {
-		s.Logger.Error("Failed to save new page '%s': %v", p.Identifier, err)
-		return fmt.Errorf("failed to save new page '%s': %w", p.Identifier, err)
-	}
-	return nil
-}
-
-// readOrInitPage opens a page or initializes a new one if it doesn't exist.
-// Returns an error if page initialization fails to save.
-func (s *Site) readOrInitPage(requestedIdentifier string, req *http.Request) (*wikipage.Page, error) {
-	p, err := s.ReadPage(wikipage.PageIdentifier(requestedIdentifier))
-	if err != nil {
-		return nil, fmt.Errorf(failedToOpenPageErrFmt, requestedIdentifier, err)
-	}
-	if p.IsNew() {
-		if err := s.initializeNewPage(p, req); err != nil {
-			return nil, err
-		}
-	}
-	if renderErr := p.Render(s, s.MarkdownRenderer, TemplateExecutor{}, s.FrontmatterIndexQueryer); renderErr != nil {
-		s.Logger.Error("Error rendering page: %v", renderErr)
-	}
-	return p, nil
 }
 
 // DirectoryEntry represents an entry in the wiki directory.

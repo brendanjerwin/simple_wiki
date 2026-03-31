@@ -105,10 +105,10 @@ func (g *GRPCInstrumentation) StreamServerInterceptor() grpc.StreamServerInterce
 			g.metrics.RequestStarted(ctx, info.FullMethod)
 		}
 
-		// Create a wrapped stream with the new context
+		// Create a wrapped stream with the span to override Context()
 		wrappedStream := &serverStreamWithContext{
 			ServerStream: ss,
-			ctx:          ctx,
+			span:         span,
 		}
 
 		// Call the handler
@@ -145,13 +145,13 @@ func (g *GRPCInstrumentation) StreamServerInterceptor() grpc.StreamServerInterce
 	}
 }
 
-// serverStreamWithContext wraps a grpc.ServerStream to provide a custom context.
+// serverStreamWithContext wraps a grpc.ServerStream to inject a span into its context.
 type serverStreamWithContext struct {
 	grpc.ServerStream
-	ctx context.Context
+	span trace.Span
 }
 
-// Context returns the wrapped context.
+// Context returns the stream's context with the span injected.
 func (s *serverStreamWithContext) Context() context.Context {
-	return s.ctx
+	return trace.ContextWithSpan(s.ServerStream.Context(), s.span)
 }

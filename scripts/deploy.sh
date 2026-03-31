@@ -22,8 +22,8 @@ if [[ -z "$TAG_OR_BRANCH" ]]; then
     # No parameter provided, use current branch
     CURRENT_BRANCH=$(git branch --show-current)
     if [[ -z "$CURRENT_BRANCH" ]]; then
-        echo "❌ Not on a branch and no tag/branch specified"
-        echo "Usage: devbox run deploy [tag_or_branch] [server_host] [username]"
+        echo "❌ Not on a branch and no tag/branch specified" >&2
+        echo "Usage: devbox run deploy [tag_or_branch] [server_host] [username]" >&2
         exit 1
     fi
     REF_TO_DEPLOY="$CURRENT_BRANCH"
@@ -41,12 +41,12 @@ fi
 # Prevent accidental deployment of main branch
 if [[ "$REF_TO_DEPLOY" == "main" ]]; then
     echo "❌ ERROR: Direct deployment of 'main' branch is not allowed" >&2
-    echo ""
-    echo "📋 To deploy to production, use a tagged release instead:"
-    echo "   devbox run deploy v3.3.X"
-    echo ""
-    echo "💡 This ensures you're deploying tested, versioned releases"
-    echo "   rather than potentially unstable branch code."
+    echo "" >&2
+    echo "📋 To deploy to production, use a tagged release instead:" >&2
+    echo "   devbox run deploy v3.3.X" >&2
+    echo "" >&2
+    echo "💡 This ensures you're deploying tested, versioned releases" >&2
+    echo "   rather than potentially unstable branch code." >&2
     exit 1
 fi
 
@@ -57,9 +57,9 @@ echo "📍 Target: $USERNAME@$SERVER_HOST"
 if [[ "$DEPLOY_TYPE" == "branch" ]]; then
     # Check if there are uncommitted changes
     if ! git diff-index --quiet HEAD --; then
-        echo "⚠️  You have uncommitted changes. Please commit or stash them first."
-        echo "Uncommitted files:"
-        git status --porcelain
+        echo "⚠️  You have uncommitted changes. Please commit or stash them first." >&2
+        echo "Uncommitted files:" >&2
+        git status --porcelain >&2
         exit 1
     fi
 
@@ -88,7 +88,7 @@ sleep 5
 # Get the most recent run and watch it
 echo "👀 Finding and watching deployment..."
 RUN_ID=$(gh run list --workflow=deploy.yml --limit=1 --json databaseId -q '.[0].databaseId')
-if [ -n "$RUN_ID" ]; then
+if [[ -n "$RUN_ID" ]]; then
     echo "📺 Watching run ID: $RUN_ID"
     gh run watch "$RUN_ID"
 else
