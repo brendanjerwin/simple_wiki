@@ -19,7 +19,7 @@ import './title-input.js';
  * @fires post-created - Dispatched when a blog post is successfully created.
  */
 export class BlogNewPostDialog extends LitElement {
-  static override styles = dialogStyles(css`
+  static override readonly styles = dialogStyles(css`
     :host {
       position: fixed;
       top: 0;
@@ -249,6 +249,10 @@ export class BlogNewPostDialog extends LitElement {
 
   private readonly pageCreator = new PageCreator();
 
+  private _keydownController: AbortController | undefined = undefined;
+
+  private _pendingFocusRaf: number | undefined = undefined;
+
   private get identifierPreview(): string {
     if (!this.blogId || !this.date || !this.title.trim()) return '';
     const slug = this.title.trim()
@@ -304,27 +308,32 @@ export class BlogNewPostDialog extends LitElement {
   override updated(changed: Map<string, unknown>): void {
     if (changed.has('open') && this.open) {
       // Focus the title input when dialog opens
-      requestAnimationFrame(() => {
+      this._pendingFocusRaf = requestAnimationFrame(() => {
+        this._pendingFocusRaf = undefined;
         const titleInput = this.shadowRoot?.querySelector<HTMLElement>('title-input');
         titleInput?.focus();
       });
     }
   }
 
-  private readonly _handleKeydown = (e: KeyboardEvent): void => {
-    if (e.key === 'Escape' && this.open) {
-      this._close();
-    }
-  };
-
   override connectedCallback(): void {
     super.connectedCallback();
-    document.addEventListener('keydown', this._handleKeydown);
+    this._keydownController = new AbortController();
+    document.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && this.open) {
+        this._close();
+      }
+    }, { signal: this._keydownController.signal });
   }
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
-    document.removeEventListener('keydown', this._handleKeydown);
+    if (this._pendingFocusRaf !== undefined) {
+      cancelAnimationFrame(this._pendingFocusRaf);
+      this._pendingFocusRaf = undefined;
+    }
+    this._keydownController?.abort();
+    this._keydownController = undefined;
   }
 
   private _close(): void {

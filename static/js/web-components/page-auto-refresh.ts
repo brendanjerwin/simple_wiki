@@ -155,13 +155,11 @@ export class PageAutoRefresh extends LitElement {
     }
   }
 
-  private async _waitForReconnect(signal: AbortSignal, delayMs: number): Promise<void> {
+  private _waitForReconnect(signal: AbortSignal, delayMs: number): Promise<void> {
+    const combined = AbortSignal.any([signal, AbortSignal.timeout(delayMs)]);
+    if (combined.aborted) return Promise.resolve();
     return new Promise<void>(resolve => {
-      const timer = setTimeout(resolve, delayMs);
-      signal.addEventListener('abort', () => {
-        clearTimeout(timer);
-        resolve();
-      }, { once: true });
+      combined.addEventListener('abort', resolve, { once: true });
     });
   }
 
