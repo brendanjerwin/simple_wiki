@@ -228,9 +228,8 @@ describe('WikiSearch', () => {
 
       beforeEach(() => {
         const searchInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[type="search"]');
-        if (searchInput) {
-          searchInputSelectSpy = sinon.spy(searchInput, 'select');
-        }
+        expect(searchInput).to.exist;
+        searchInputSelectSpy = sinon.spy(searchInput!, 'select');
 
         divElement = document.createElement('div');
         document.body.appendChild(divElement);
