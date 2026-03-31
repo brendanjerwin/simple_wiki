@@ -392,7 +392,8 @@ describe('FrontmatterValueSection', () => {
     });
 
     it('should disable all value components', () => {
-      const valueComponents = el.shadowRoot?.querySelectorAll<HTMLElement & { disabled: boolean }>('frontmatter-value-string');
+      const valueComponents = el.shadowRoot?.querySelectorAll<HTMLElement & { disabled: boolean }>('frontmatter-value');
+      expect(valueComponents!.length).to.be.greaterThan(0);
       valueComponents!.forEach(component => {
         expect(component.disabled).to.be.true;
       });

@@ -86,12 +86,12 @@ describe('FrontmatterEditorDialog', () => {
 
       it('should not render error-display', () => {
         const errorDisplay = el.shadowRoot?.querySelector('error-display');
-        expect(errorDisplay).to.equal(null);
+        expect(errorDisplay).to.be.null;
       });
 
       it('should not render frontmatter editor', () => {
         const editor = el.shadowRoot?.querySelector('frontmatter-value-section');
-        expect(editor).to.equal(null);
+        expect(editor).to.be.null;
       });
     });
 
@@ -112,12 +112,12 @@ describe('FrontmatterEditorDialog', () => {
 
       it('should not render loading indicator', () => {
         const loadingEl = el.shadowRoot?.querySelector('.loading');
-        expect(loadingEl).to.equal(null);
+        expect(loadingEl).to.be.null;
       });
 
       it('should not render frontmatter editor', () => {
         const editor = el.shadowRoot?.querySelector('frontmatter-value-section');
-        expect(editor).to.equal(null);
+        expect(editor).to.be.null;
       });
     });
 
@@ -141,12 +141,12 @@ describe('FrontmatterEditorDialog', () => {
 
       it('should not render loading indicator', () => {
         const loadingEl = el.shadowRoot?.querySelector('.loading');
-        expect(loadingEl).to.equal(null);
+        expect(loadingEl).to.be.null;
       });
 
       it('should not render error-display', () => {
         const errorDisplay = el.shadowRoot?.querySelector('error-display');
-        expect(errorDisplay).to.equal(null);
+        expect(errorDisplay).to.be.null;
       });
     });
   });
