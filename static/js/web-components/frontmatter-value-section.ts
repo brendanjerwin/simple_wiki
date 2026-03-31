@@ -237,8 +237,11 @@ export class FrontmatterValueSection extends LitElement {
     // Create a hash of the fields to check if we can use cached results
     const fieldsHash = JSON.stringify(entries);
     
-    if (this._fieldsHashCache === fieldsHash && this._sortedEntriesCache.has(fieldsHash)) {
-      return this._sortedEntriesCache.get(fieldsHash)!;
+    if (this._fieldsHashCache === fieldsHash) {
+      const cached = this._sortedEntriesCache.get(fieldsHash);
+      if (cached !== undefined) {
+        return cached;
+      }
     }
 
     const sortedEntries = [...entries].sort(([keyA, valueA], [keyB, valueB]) => {

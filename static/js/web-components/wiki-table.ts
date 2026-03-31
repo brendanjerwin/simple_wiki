@@ -643,11 +643,14 @@ export class WikiTable extends LitElement {
   }
 
   private _renderColumnPicker(): TemplateResult {
+    if (!this.extractedData) {
+      throw new Error('_renderColumnPicker called without extractedData — programming bug');
+    }
     return html`
       <div class="column-picker-overlay" @click=${this._handleColumnPickerOverlayClick}>
         <div class="column-picker">
           <div class="column-picker-title">Select column</div>
-          ${this.extractedData!.columns.map(col => html`
+          ${this.extractedData.columns.map(col => html`
             <button
               type="button"
               class="column-picker-item"
@@ -660,13 +663,16 @@ export class WikiTable extends LitElement {
   }
 
   private _renderTableView(processedRows: ReturnType<typeof this._getProcessedRows>): TemplateResult {
+    if (!this.extractedData) {
+      throw new Error('_renderTableView called without extractedData — programming bug');
+    }
     return html`
       <div class="table-wrapper">
       <div class="table-scroll-container">
         <table>
           <thead>
             <tr>
-              ${this.extractedData!.columns.map((col, i) => html`
+              ${this.extractedData.columns.map((col, i) => html`
                 <th
                   class="${this.sortColumnIndex === i ? 'sorted' : ''}"
                   title="Detected type: ${col.typeInfo.detectedType}"
@@ -691,7 +697,7 @@ export class WikiTable extends LitElement {
           </thead>
           <tbody>
             ${processedRows.length === 0 ? html`
-              <tr><td colspan="${this.extractedData!.columns.length}" class="no-results">No matching rows</td></tr>
+              <tr><td colspan="${this.extractedData.columns.length}" class="no-results">No matching rows</td></tr>
             ` : processedRows.map(row => html`
               <tr>
                 ${row.htmlCells.map(cell => html`<td>${unsafeHTML(cell)}</td>`)}
@@ -705,6 +711,9 @@ export class WikiTable extends LitElement {
   }
 
   private _renderCardView(processedRows: ReturnType<typeof this._getProcessedRows>): TemplateResult {
+    if (!this.extractedData) {
+      throw new Error('_renderCardView called without extractedData — programming bug');
+    }
     if (processedRows.length === 0) {
       return html`<div class="no-results">No matching rows</div>`;
     }
@@ -713,7 +722,7 @@ export class WikiTable extends LitElement {
       <div class="card-view">
         ${processedRows.map(row => html`
           <div class="card">
-            ${this.extractedData!.columns.map((col, i) => html`
+            ${this.extractedData.columns.map((col, i) => html`
               <div class="card-row">
                 <span class="card-label">${col.headerText}</span>
                 <span class="card-value">${unsafeHTML(row.htmlCells[i] ?? '')}</span>

@@ -102,7 +102,10 @@ export function parseDateValue(text: string): number {
 
   if (usDatePattern.test(trimmed)) {
     const [month, day, year] = trimmed.split('/');
-    const isoStr = `${year}-${month!.padStart(2, '0')}-${day!.padStart(2, '0')}T00:00:00Z`;
+    if (!month || !day || !year) {
+      return NaN;
+    }
+    const isoStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T00:00:00Z`;
     const epochMs = Date.parse(isoStr);
     return Number.isNaN(epochMs) ? NaN : epochMs;
   }
