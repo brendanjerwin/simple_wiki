@@ -419,6 +419,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
   }
 
   override render() {
+    const placeholder = this.claudeConnected ? 'Type a message...' : `${this.persona} is not connected`;
     return html`
       ${sharedStyles}
       ${this._renderFab()}
@@ -475,7 +476,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
 
         <div class="input-area" @click=${this._focusTextarea}>
           <textarea
-            placeholder="${this.claudeConnected ? 'Type a message...' : `${this.persona} is not connected`}"
+            placeholder="${placeholder}"
             maxlength="${MAX_INPUT_LENGTH}"
             rows="2"
             enterkeyhint="send"
@@ -708,13 +709,17 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
       this.waitingForAssistant = false;
     }
 
+    const timestamp = msg.timestamp ? new Date(Number(msg.timestamp.seconds) * 1000) : new Date();
+    const fallbackSenderName = msg.sender === Sender.ASSISTANT ? this.persona : '';
+    const senderName = msg.senderName || fallbackSenderName;
+
     const msgState: ChatMessageState = {
       id: msg.id,
       sender: msg.sender,
       content: msg.content,
       renderedHtml,
-      timestamp: msg.timestamp ? new Date(Number(msg.timestamp.seconds) * 1000) : new Date(),
-      senderName: msg.senderName || (msg.sender === Sender.ASSISTANT ? this.persona : ''),
+      timestamp,
+      senderName,
       replyToId: msg.replyToId,
       reactions: groupReactions(msg.reactions),
       edited: false,

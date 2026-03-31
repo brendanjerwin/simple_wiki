@@ -12,10 +12,10 @@ describe('PageDeleter', () => {
     closeDialog: sinon.SinonSpy;
     addEventListener: sinon.SinonSpy;
     removeEventListener: sinon.SinonSpy;
+    remove: sinon.SinonSpy;
     dataset: { pageName?: string };
     hidden: boolean;
     id: string;
-    parentNode?: { removeChild: sinon.SinonSpy } | null;
   };
   let createElementStub: sinon.SinonStub;
   let appendChildStub: sinon.SinonStub;
@@ -29,10 +29,10 @@ describe('PageDeleter', () => {
       closeDialog: sinon.spy(),
       addEventListener: sinon.spy(),
       removeEventListener: sinon.spy(),
+      remove: sinon.spy(),
       dataset: {},
       hidden: true,
-      id: '',
-      parentNode: null
+      id: ''
     };
 
     // Stub document methods
@@ -81,8 +81,8 @@ describe('PageDeleter', () => {
       openDialog: sinon.SinonSpy;
       addEventListener: sinon.SinonSpy;
       removeEventListener: sinon.SinonSpy;
+      remove: sinon.SinonSpy;
       dataset: Record<string, string>;
-      parentNode: null;
     };
 
     beforeEach(() => {
@@ -92,8 +92,8 @@ describe('PageDeleter', () => {
         openDialog: sinon.spy(),
         addEventListener: sinon.spy(),
         removeEventListener: sinon.spy(),
-        dataset: {},
-        parentNode: null
+        remove: sinon.spy(),
+        dataset: {}
       };
       
       // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock dialog for testing
@@ -212,40 +212,21 @@ describe('PageDeleter', () => {
   });
 
   describe('destroy method', () => {
-    describe('when dialog has parent node', () => {
+    describe('when destroy is called', () => {
       beforeEach(() => {
-        // Set up a parent node for the dialog
-        mockDialog.parentNode = { removeChild: sinon.spy() };
-
         service.destroy();
       });
 
-      it('should remove event listeners', () => {
+      it('should remove confirm event listener', () => {
         expect(mockDialog.removeEventListener).to.have.been.calledWith('confirm', sinon.match.func);
+      });
+
+      it('should remove cancel event listener', () => {
         expect(mockDialog.removeEventListener).to.have.been.calledWith('cancel', sinon.match.func);
       });
 
       it('should remove dialog from DOM', () => {
-        // parentNode is set in beforeEach, non-null assertion is safe here
-        expect(mockDialog.parentNode!.removeChild).to.have.been.calledWith(mockDialog);
-      });
-    });
-
-    describe('when dialog has no parent node', () => {
-      beforeEach(() => {
-        mockDialog.parentNode = null;
-
-        service.destroy();
-      });
-
-      it('should remove event listeners', () => {
-        expect(mockDialog.removeEventListener).to.have.been.calledWith('confirm', sinon.match.func);
-        expect(mockDialog.removeEventListener).to.have.been.calledWith('cancel', sinon.match.func);
-      });
-
-      it('should not attempt to remove dialog from DOM', () => {
-        // No error should occur when parentNode is null
-        expect(service).to.exist;
+        expect(mockDialog.remove).to.have.been.called;
       });
     });
   });

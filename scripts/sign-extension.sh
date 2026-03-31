@@ -76,7 +76,7 @@ if ! web-ext sign \
     --api-key "$AMO_API_KEY" \
     --api-secret "$AMO_API_SECRET" \
     --channel unlisted; then
-    echo "AMO signing failed"
+    echo "AMO signing failed" >&2
     rm -rf "$SIGN_DIR"
     exit 1
 fi
