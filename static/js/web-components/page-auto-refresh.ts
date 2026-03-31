@@ -162,7 +162,7 @@ export class PageAutoRefresh extends LitElement {
     const combined = AbortSignal.any([signal, AbortSignal.timeout(delayMs)]);
     if (combined.aborted) return Promise.resolve();
     return new Promise<void>(resolve => {
-      combined.addEventListener('abort', resolve, { once: true });
+      combined.addEventListener('abort', () => resolve(), { once: true });
     });
   }
 
