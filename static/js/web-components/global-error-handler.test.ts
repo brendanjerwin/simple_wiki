@@ -1,6 +1,7 @@
 import { expect } from '@open-wc/testing';
 import { stub, restore, match, type SinonStub } from 'sinon';
 import { setupGlobalErrorHandler, teardownGlobalErrorHandler } from './global-error-handler.js';
+import type { KernelPanic } from './kernel-panic.js';
 
 describe('Global Error Handler', () => {
   let addEventListenerStub: SinonStub;
@@ -13,6 +14,7 @@ describe('Global Error Handler', () => {
   });
 
   afterEach(() => {
+    teardownGlobalErrorHandler();
     restore();
     document.querySelectorAll('kernel-panic').forEach(el => el.remove());
   });
@@ -63,6 +65,7 @@ describe('Global Error Handler', () => {
     describe('when handling error events with error object', () => {
       let mockError: Error;
       let mockErrorEvent: ErrorEvent;
+      let panicEl: KernelPanic | null;
 
       beforeEach(() => {
         mockError = new Error('Test error message');
@@ -76,15 +79,21 @@ describe('Global Error Handler', () => {
         } as ErrorEvent;
 
         errorHandler(mockErrorEvent);
+        panicEl = document.querySelector('kernel-panic');
       });
 
       it('should show kernel panic', () => {
-        expect(document.querySelector('kernel-panic')).to.exist;
+        expect(panicEl).to.exist;
+      });
+
+      it('should display the error message', () => {
+        expect(panicEl?.augmentedError?.message).to.equal('Test error message');
       });
     });
 
     describe('when handling errors without error object', () => {
       let mockErrorEvent: ErrorEvent;
+      let panicEl: KernelPanic | null;
 
       beforeEach(() => {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock event for testing
@@ -97,10 +106,15 @@ describe('Global Error Handler', () => {
         } as ErrorEvent;
 
         errorHandler(mockErrorEvent);
+        panicEl = document.querySelector('kernel-panic');
       });
 
       it('should show kernel panic', () => {
-        expect(document.querySelector('kernel-panic')).to.exist;
+        expect(panicEl).to.exist;
+      });
+
+      it('should display the fallback error message', () => {
+        expect(panicEl?.augmentedError?.message).to.equal('Script error');
       });
     });
   });
@@ -123,6 +137,7 @@ describe('Global Error Handler', () => {
     let mockError: Error;
     let preventDefaultStub: SinonStub;
     let mockRejectionEvent: PromiseRejectionEvent;
+    let panicEl: KernelPanic | null;
 
     beforeEach(() => {
       mockError = new Error('Promise rejection error');
@@ -134,10 +149,15 @@ describe('Global Error Handler', () => {
       } as unknown as PromiseRejectionEvent;
 
       rejectionHandler(mockRejectionEvent);
+      panicEl = document.querySelector('kernel-panic');
     });
 
     it('should show kernel panic', () => {
-      expect(document.querySelector('kernel-panic')).to.exist;
+      expect(panicEl).to.exist;
+    });
+
+    it('should display the promise rejection error message', () => {
+      expect(panicEl?.augmentedError?.message).to.equal('Promise rejection error');
     });
 
     it('should prevent default', () => {
