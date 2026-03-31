@@ -225,7 +225,7 @@ export class ErrorDisplay extends LitElement {
         class="error-details"
         aria-hidden="${!this.expanded}"
       >
-        <div class="error-details-content text-muted font-mono text-xs">${this.augmentedError!.stack}</div>
+        <div class="error-details-content text-muted font-mono text-xs">${this.augmentedError?.stack}</div>
       </div>
     `;
   }
