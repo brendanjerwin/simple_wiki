@@ -516,7 +516,7 @@ export class InventoryMoveItemDialog extends LitElement {
 
     if (result.success) {
       this.inventoryItemCreatorMover.showSuccess(
-        result.summary || `Moved ${this.itemIdentifier} to ${containerIdentifier}`,
+        result.summary ?? `Moved ${this.itemIdentifier} to ${containerIdentifier}`,
         () => window.location.reload()
       );
       this.close();

@@ -320,7 +320,7 @@ export class FrontmatterEditorDialog extends LitElement {
   private renderFrontmatterEditor(): unknown {
     return html`
       <frontmatter-value-section
-        .fields="${this.workingFrontmatter || {}}"
+        .fields="${this.workingFrontmatter ?? {}}"
         .isRoot="${true}"
         @section-change="${this._handleSectionChange}"
       ></frontmatter-value-section>
