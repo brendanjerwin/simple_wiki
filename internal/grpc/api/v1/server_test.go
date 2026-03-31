@@ -629,6 +629,22 @@ var _ = Describe("Server", func() {
 			})
 		})
 
+		When("the requested page exists but has nil frontmatter", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Frontmatter = nil
+				mockPageReaderMutator.Err = nil
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a response with empty frontmatter", func() {
+				Expect(res).NotTo(BeNil())
+				Expect(res.Frontmatter).NotTo(BeNil())
+			})
+		})
+
 		When("the requested page has frontmatter with identifier key", func() {
 			var frontmatterWithIdentifier map[string]any
 			var expectedFilteredFm map[string]any
@@ -1139,7 +1155,32 @@ var _ = Describe("Server", func() {
 			})
 		})
 
-		When("removing a key successfully", func() {
+		When("reading the frontmatter fails with a generic error", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = errors.New("disk error")
+				req.KeyPath = []*apiv1.PathComponent{{Component: &apiv1.PathComponent_Key{Key: "a"}}}
+			})
+
+			It("should return an internal error and no response", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to read frontmatter"))
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("writing the frontmatter fails", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Frontmatter = wikipage.FrontMatter{"a": "b"}
+				mockPageReaderMutator.WriteErr = errors.New("write error")
+				req.KeyPath = []*apiv1.PathComponent{{Component: &apiv1.PathComponent_Key{Key: "a"}}}
+			})
+
+			It("should return an internal error and no response", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Internal, "failed to write frontmatter"))
+				Expect(resp).To(BeNil())
+			})
+		})
+
+				When("removing a key successfully", func() {
 			var initialFm wikipage.FrontMatter
 			BeforeEach(func() {
 				initialFm = wikipage.FrontMatter{
@@ -1223,6 +1264,41 @@ var _ = Describe("Server", func() {
 							"d": "e",
 						},
 						"f": []any{"g", map[string]any{"i": "j"}},
+					}
+				})
+
+				It("should not return an error", func() {
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("should write the correctly modified frontmatter", func() {
+					Expect(mockPageReaderMutator.WrittenFrontmatter).To(Equal(expectedFm))
+				})
+
+				It("should return the correctly modified frontmatter", func() {
+					expectedPb, err := structpb.NewStruct(expectedFm)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(resp.Frontmatter).To(Equal(expectedPb))
+				})
+			})
+
+
+			When("a nested key within a slice element", func() {
+				var expectedFm wikipage.FrontMatter
+
+				BeforeEach(func() {
+					// frontmatter: {"f": [{"a": "b", "c": "d"}, "other"]}
+					// removing path: f[0].a (key "f" -> index 0 -> key "a")
+					mockPageReaderMutator.Frontmatter = wikipage.FrontMatter{
+						"f": []any{map[string]any{"a": "b", "c": "d"}, "other"},
+					}
+					req.KeyPath = []*apiv1.PathComponent{
+						{Component: &apiv1.PathComponent_Key{Key: "f"}},
+						{Component: &apiv1.PathComponent_Index{Index: 0}},
+						{Component: &apiv1.PathComponent_Key{Key: "a"}},
+					}
+					expectedFm = wikipage.FrontMatter{
+						"f": []any{map[string]any{"c": "d"}, "other"},
 					}
 				})
 
@@ -1345,7 +1421,22 @@ var _ = Describe("Server", func() {
 				})
 			})
 
-			When("traversing through a primitive value", func() {
+			When("a path traverses deeper than a primitive value within a slice element", func() {
+				BeforeEach(func() {
+					// f[0] is "g" (a string), but we try to access a key "x" on it
+					req.KeyPath = []*apiv1.PathComponent{
+						{Component: &apiv1.PathComponent_Key{Key: "f"}},
+						{Component: &apiv1.PathComponent_Index{Index: 0}},
+						{Component: &apiv1.PathComponent_Key{Key: "x"}},
+					}
+				})
+				It("returns an invalid argument error and no response", func() {
+					Expect(err).To(HaveGrpcStatus(codes.InvalidArgument, "path is deeper than data structure"))
+					Expect(resp).To(BeNil())
+				})
+			})
+
+						When("traversing through a primitive value", func() {
 				BeforeEach(func() {
 					req.KeyPath = []*apiv1.PathComponent{
 						{Component: &apiv1.PathComponent_Key{Key: "a"}},
@@ -4635,6 +4726,20 @@ var _ = Describe("Server", func() {
 
 			It("should return an invalid argument error for failed CSV parse", func() {
 				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "failed to parse CSV"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("csv_content has a header but no data rows", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,title"
+			})
+
+			It("should return an invalid argument error for empty CSV", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "CSV has parsing errors"))
 			})
 
 			It("should return no response", func() {
