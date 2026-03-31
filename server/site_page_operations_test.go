@@ -3,6 +3,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -245,6 +246,135 @@ var _ = Describe("Site Page Operations", func() {
 				// The migration should have been applied and saved during Open()
 				Expect(finalContent).To(ContainSubstring("# Migration applied"))
 				Expect(finalContent).NotTo(Equal(originalDiskContent))
+			})
+		})
+	})
+
+	Describe("Site.WriteFrontMatter", func() {
+		When("the page does not exist on disk", func() {
+			var err error
+
+			BeforeEach(func() {
+				err = s.WriteFrontMatter("brand-new-page", wikipage.FrontMatter{"title": "Created"})
+			})
+
+			It("should succeed", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			When("the page is read back", func() {
+				var (
+					page    *wikipage.Page
+					readErr error
+				)
+
+				BeforeEach(func() {
+					page, readErr = s.ReadPage("brand-new-page")
+					Expect(readErr).NotTo(HaveOccurred())
+				})
+
+				It("should contain the new frontmatter", func() {
+					Expect(page.Text).To(ContainSubstring("Created"))
+				})
+
+				It("should have been loaded from disk", func() {
+					Expect(page.WasLoadedFromDisk).To(BeTrue())
+				})
+			})
+		})
+
+		When("the page has malformed TOML frontmatter", func() {
+			var err error
+
+			BeforeEach(func() {
+				pageIdentifier := "malformed-fm-write"
+				// Content with invalid TOML that also fails YAML parsing as a fallback.
+				// 'title = [invalid' is an unclosed array — invalid for both TOML and YAML.
+				malformedContent := "+++\ntitle = [invalid\n+++\n# Content"
+				filePath := filepath.Join(pathToData, base32tools.EncodeToBase32(strings.ToLower(pageIdentifier))+".md")
+				Expect(os.WriteFile(filePath, []byte(malformedContent), 0644)).To(Succeed())
+
+				err = s.WriteFrontMatter(wikipage.PageIdentifier(pageIdentifier), wikipage.FrontMatter{"title": "new title"})
+			})
+
+			It("should return a parse error", func() {
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("failed to parse markdown for frontmatter write"))
+			})
+		})
+	})
+
+	Describe("Site.ModifyMarkdown", func() {
+		When("the modifier returns an error", func() {
+			var (
+				modifyErr   error
+				modifierErr = errors.New("modifier refused change")
+			)
+
+			BeforeEach(func() {
+				modifyErr = s.ModifyMarkdown("some-modify-page", func(_ wikipage.Markdown) (wikipage.Markdown, error) {
+					return "", modifierErr
+				})
+			})
+
+			It("should propagate the modifier error", func() {
+				Expect(modifyErr).To(MatchError(modifierErr))
+			})
+
+			It("should not create any page file", func() {
+				page, readErr := s.ReadPage("some-modify-page")
+				Expect(readErr).NotTo(HaveOccurred())
+				Expect(page.IsNew()).To(BeTrue())
+			})
+		})
+
+		When("the page has malformed TOML frontmatter", func() {
+			var err error
+
+			BeforeEach(func() {
+				pageIdentifier := "malformed-fm-modify"
+				malformedContent := "+++\ntitle = [invalid\n+++\n# Content"
+				filePath := filepath.Join(pathToData, base32tools.EncodeToBase32(strings.ToLower(pageIdentifier))+".md")
+				Expect(os.WriteFile(filePath, []byte(malformedContent), 0644)).To(Succeed())
+
+				err = s.ModifyMarkdown(wikipage.PageIdentifier(pageIdentifier), func(md wikipage.Markdown) (wikipage.Markdown, error) {
+					return md + " extra", nil
+				})
+			})
+
+			It("should return a parse error", func() {
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("failed to parse markdown for modification"))
+			})
+		})
+
+		When("the page does not exist on disk", func() {
+			var err error
+
+			BeforeEach(func() {
+				err = s.ModifyMarkdown("nonexistent-modify-page", func(_ wikipage.Markdown) (wikipage.Markdown, error) {
+					return "# New Content", nil
+				})
+			})
+
+			It("should succeed and create the page", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			When("the page is read back", func() {
+				var (
+					page    *wikipage.Page
+					readErr error
+				)
+
+				BeforeEach(func() {
+					page, readErr = s.ReadPage("nonexistent-modify-page")
+					Expect(readErr).NotTo(HaveOccurred())
+				})
+
+				It("should contain the written markdown", func() {
+					Expect(page.Text).To(ContainSubstring("# New Content"))
+				})
 			})
 		})
 	})
