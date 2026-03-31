@@ -61,10 +61,11 @@ export function detectColumnType(cellTexts: string[]): ColumnTypeInfo {
     }
   }
 
-  const numberMatchCount = nonEmpty.filter(t => isNumber(t)).length;
+  const numberMatches = nonEmpty.filter(isNumber);
+  const numberMatchCount = numberMatches.length;
   const numberRatio = numberMatchCount / nonEmpty.length;
   if (numberRatio >= confidenceThreshold) {
-    const allIntegers = nonEmpty.filter(t => isNumber(t)).every(t => isInteger(t));
+    const allIntegers = numberMatches.every(isInteger);
     return {
       detectedType: allIntegers ? 'integer' : 'decimal',
       confidenceRatio: numberRatio,

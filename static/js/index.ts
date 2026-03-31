@@ -30,44 +30,44 @@ import type { FrontmatterEditorDialog } from './web-components/frontmatter-edito
 // Set up global error handling to catch unhandled errors
 setupGlobalErrorHandler();
 
-// Show any stored toast messages after page load
-document.addEventListener('DOMContentLoaded', () => {
-  showStoredToast();
+// Show any stored toast messages after page load.
+// This module script is loaded with type="module" which defers execution until after
+// the DOM is parsed, so no DOMContentLoaded listener is needed.
+showStoredToast();
 
-  // Handle page deletion
-  const erasePageEl = document.getElementById('erasePage');
-  erasePageEl?.addEventListener('click', (e) => {
-    e.preventDefault();
-    const pageName = window.simple_wiki?.pageName;
-    if (pageName) {
-      pageDeleteService.confirmAndDeletePage(pageName);
-    }
-  });
-
-  // Handle frontmatter editing
-  const editFrontmatterEl = document.getElementById('editFrontmatter');
-  editFrontmatterEl?.addEventListener('click', (e) => {
-    e.preventDefault();
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- frontmatter-editor-dialog is registered in HTMLElementTagNameMap
-    const dialog = document.getElementById('frontmatter-dialog') as FrontmatterEditorDialog | null;
-    dialog?.openDialog(window.simple_wiki?.pageName ?? '');
-  });
-
-  // Initialize dynamic menu items
-  initPrintMenu();
-  initInventoryMenu();
-  initPageImportMenu();
-
-  // Handle editor exit button (toolbar is inside wiki-editor shadow DOM)
-  const wikiEditor = document.querySelector('wiki-editor');
-  if (wikiEditor) {
-    wikiEditor.addEventListener('exit-requested', () => {
-      const pageName = window.simple_wiki?.pageName;
-      if (pageName) {
-        window.location.href = `/${pageName}/view`;
-      } else {
-        window.location.href = '/';
-      }
-    });
+// Handle page deletion
+const erasePageEl = document.getElementById('erasePage');
+erasePageEl?.addEventListener('click', (e) => {
+  e.preventDefault();
+  const pageName = window.simple_wiki?.pageName;
+  if (pageName) {
+    pageDeleteService.confirmAndDeletePage(pageName);
   }
 });
+
+// Handle frontmatter editing
+const editFrontmatterEl = document.getElementById('editFrontmatter');
+editFrontmatterEl?.addEventListener('click', (e) => {
+  e.preventDefault();
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- frontmatter-editor-dialog is registered in HTMLElementTagNameMap
+  const dialog = document.getElementById('frontmatter-dialog') as FrontmatterEditorDialog | null;
+  dialog?.openDialog(window.simple_wiki?.pageName ?? '');
+});
+
+// Initialize dynamic menu items
+initPrintMenu();
+initInventoryMenu();
+initPageImportMenu();
+
+// Handle editor exit button (toolbar is inside wiki-editor shadow DOM)
+const wikiEditor = document.querySelector('wiki-editor');
+if (wikiEditor) {
+  wikiEditor.addEventListener('exit-requested', () => {
+    const pageName = window.simple_wiki?.pageName;
+    if (pageName) {
+      window.location.href = `/${pageName}/view`;
+    } else {
+      window.location.href = '/';
+    }
+  });
+}
