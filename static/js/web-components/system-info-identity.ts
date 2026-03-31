@@ -4,7 +4,7 @@ import type { TailscaleIdentity } from '../gen/api/v1/system_info_pb.js';
 import { foundationCSS } from './shared-styles.js';
 
 export class SystemInfoIdentity extends LitElement {
-  static override styles = [
+  static override readonly styles = [
     foundationCSS,
     css`
       :host {

@@ -5,7 +5,7 @@ import './error-display.js';
 import type { AugmentedError } from './augment-error-service.js';
 
 export class KernelPanic extends LitElement {
-  static override styles = [
+  static override readonly styles = [
     foundationCSS,
     css`
       :host {
