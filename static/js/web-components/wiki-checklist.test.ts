@@ -28,7 +28,7 @@ interface WikiChecklistInternal {
   // Touch drag internals
   _handleTouchStart(e: TouchEvent, index: number): void;
   _handleTouchMove(e: TouchEvent): void;
-  _handleTouchEnd(e: TouchEvent): void;
+  _handleTouchEnd(): Promise<void>;
   _handleTouchCancel(): void;
   _startTouchDrag(index: number, touch: Touch): void;
   _cancelLongPress(): void;
@@ -2358,10 +2358,9 @@ describe('WikiChecklist', () => {
         internal._dragOverItemIndex = 0;
         internal._dragOverItemPosition = 'before';
 
-        const endEvent = makeTouchEvent('touchend', 100, 100);
-        internal._handleTouchEnd(endEvent);
+        await internal._handleTouchEnd();
 
-        // Wait for persistData's async call to complete
+        // Wait for Lit to re-render after state changes
         await el.updateComplete;
       });
 
@@ -2413,13 +2412,12 @@ describe('WikiChecklist', () => {
     });
 
     describe('when touch ends before long-press fires', () => {
-      beforeEach(() => {
+      beforeEach(async () => {
         const touchEvent = makeTouchEvent('touchstart', 100, 200);
         internal._handleTouchStart(touchEvent, 1);
 
         // End before the 400ms fires — no active drag
-        const endEvent = makeTouchEvent('touchend', 100, 200);
-        internal._handleTouchEnd(endEvent);
+        await internal._handleTouchEnd();
       });
 
       it('should cancel long-press timer', () => {

@@ -8,7 +8,7 @@ import './frontmatter-add-field-button.js';
 import './kernel-panic.js';
 import { showKernelPanic } from './kernel-panic.js';
 import { AugmentErrorService } from './augment-error-service.js';
-import type { SectionChangeEventDetail } from './event-types.js';
+import type { SectionChangeEventDetail, AddFieldEventDetail } from './event-types.js';
 
 export class FrontmatterValueSection extends LitElement {
   static override styles = [
@@ -81,40 +81,30 @@ export class FrontmatterValueSection extends LitElement {
     return newKey;
   }
 
-  private _handleAddField = (event: CustomEvent): void => {
+  private readonly _handleAddField = (event: CustomEvent<AddFieldEventDetail>): void => {
     const { type } = event.detail;
+
+    const typeConfig: Record<string, { baseKey: string; value: unknown }> = {
+      field: { baseKey: 'new_field', value: '' },
+      array: { baseKey: 'new_array', value: [] },
+      section: { baseKey: 'new_section', value: {} },
+    };
+
+    const config = typeConfig[type];
+    if (!config) return;
+
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- spread preserves JsonObject structure
     const oldFields = { ...this.fields } as JsonObject;
-    const newKey = this._generateUniqueKey(
-      type === 'field' ? 'new_field' :
-        type === 'array' ? 'new_array' :
-          'new_section'
-    );
-
-    let newValue: unknown;
-    switch (type) {
-      case 'field':
-        newValue = '';
-        break;
-      case 'array':
-        newValue = [];
-        break;
-      case 'section':
-        newValue = {};
-        break;
-      default:
-        return;
-    }
-
+    const newKey = this._generateUniqueKey(config.baseKey);
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- spread preserves JsonObject structure
-    const newFields = { ...this.fields, [newKey]: newValue } as JsonObject;
+    const newFields = { ...this.fields, [newKey]: config.value } as JsonObject;
     this.fields = newFields;
     this._clearSortingCache();
     this._dispatchSectionChange(oldFields, newFields);
     this.requestUpdate();
   };
 
-  private _handleRemoveField = (key: string): void => {
+  private readonly _handleRemoveField = (key: string): void => {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- spread preserves JsonObject structure
     const oldFields = { ...this.fields } as JsonObject;
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- spread preserves JsonObject structure
@@ -127,7 +117,7 @@ export class FrontmatterValueSection extends LitElement {
     this.requestUpdate();
   };
 
-  private _handleKeyChange = (event: CustomEvent): void => {
+  private readonly _handleKeyChange = (event: CustomEvent): void => {
     const { oldKey, newKey } = event.detail;
 
     if (oldKey === newKey || !newKey.trim()) return;
@@ -154,7 +144,7 @@ export class FrontmatterValueSection extends LitElement {
     this.requestUpdate();
   };
 
-  private _handleValueChange = (event: CustomEvent, key: string): void => {
+  private readonly _handleValueChange = (event: CustomEvent, key: string): void => {
     const { newValue } = event.detail;
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- spread preserves JsonObject structure
@@ -223,7 +213,7 @@ export class FrontmatterValueSection extends LitElement {
   }
 
   // Cache for memoized sorting results
-  private _sortedEntriesCache = new Map<string, [string, unknown][]>();
+  private readonly _sortedEntriesCache = new Map<string, [string, unknown][]>();
   private _fieldsHashCache = '';
 
   private _clearSortingCache(): void {

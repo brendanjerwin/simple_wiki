@@ -50,7 +50,7 @@ export class FrontmatterValue extends LitElement {
     this.placeholder = '';
   }
 
-  private _handleValueChange = (event: CustomEvent): void => {
+  private readonly _handleValueChange = (event: CustomEvent): void => {
     const oldValue = this.value;
     let newValue: unknown;
 
