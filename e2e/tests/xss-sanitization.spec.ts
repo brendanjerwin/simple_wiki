@@ -156,34 +156,18 @@ Safe link: [Home](/home/view)`);
       await expect(page.locator('#rendered')).toBeAttached({ timeout: PAGE_LOAD_TIMEOUT_MS });
     });
 
-    test('should not have any javascript: protocol hrefs in the DOM', async ({ page }) => {
-      const jsHrefs = await page.evaluate(() => {
+    test('should not have any dangerous protocol hrefs in the DOM', async ({ page }) => {
+      const dangerousHrefs = await page.evaluate(() => {
         const anchors = Array.from(document.querySelectorAll('#rendered a'));
-        return anchors
-          .map(a => (a as HTMLAnchorElement).href)
-          .filter(href => href.toLowerCase().startsWith('javascript:'));
-      });
-      expect(jsHrefs).toHaveLength(0);
-    });
-
-    test('should not have any data: protocol hrefs in the DOM', async ({ page }) => {
-      const dataHrefs = await page.evaluate(() => {
-        const anchors = Array.from(document.querySelectorAll('#rendered a'));
+        const dangerousSchemes = ['javascript:', 'data:', 'vbscript:'];
         return anchors
           .map(a => (a as HTMLAnchorElement).getAttribute('href') ?? '')
-          .filter(href => href.toLowerCase().startsWith('data:'));
+          .filter(href => {
+            const lower = href.toLowerCase();
+            return dangerousSchemes.some(scheme => lower.startsWith(scheme));
+          });
       });
-      expect(dataHrefs).toHaveLength(0);
-    });
-
-    test('should not have any vbscript: protocol hrefs in the DOM', async ({ page }) => {
-      const vbsHrefs = await page.evaluate(() => {
-        const anchors = Array.from(document.querySelectorAll('#rendered a'));
-        return anchors
-          .map(a => (a as HTMLAnchorElement).getAttribute('href') ?? '')
-          .filter(href => href.toLowerCase().startsWith('vbscript:'));
-      });
-      expect(vbsHrefs).toHaveLength(0);
+      expect(dangerousHrefs).toHaveLength(0);
     });
 
     test('should not execute javascript: protocol links when clicked', async ({ page }) => {
@@ -267,34 +251,18 @@ identifier = "${TEST_PAGE}"
       expect(dialogTriggered).toBe(false);
     });
 
-    test('should strip javascript: protocol hrefs from wiki-table cell links', async ({ page }) => {
-      const jsHrefCount = await page.evaluate(() => {
+    test('should strip dangerous protocol hrefs from wiki-table cell links', async ({ page }) => {
+      const dangerousHrefCount = await page.evaluate(() => {
         const wikiTable = document.querySelector('wiki-table');
         if (!wikiTable?.shadowRoot) return 0;
         const anchors = Array.from(wikiTable.shadowRoot.querySelectorAll('a'));
-        return anchors.filter(a => a.href.toLowerCase().startsWith('javascript:')).length;
+        const dangerousSchemes = ['javascript:', 'data:', 'vbscript:'];
+        return anchors.filter(a => {
+          const href = (a.getAttribute('href') ?? '').toLowerCase();
+          return dangerousSchemes.some(scheme => href.startsWith(scheme));
+        }).length;
       });
-      expect(jsHrefCount).toBe(0);
-    });
-
-    test('should strip data: protocol hrefs from wiki-table cell links', async ({ page }) => {
-      const dataHrefCount = await page.evaluate(() => {
-        const wikiTable = document.querySelector('wiki-table');
-        if (!wikiTable?.shadowRoot) return 0;
-        const anchors = Array.from(wikiTable.shadowRoot.querySelectorAll('a'));
-        return anchors.filter(a => (a.getAttribute('href') ?? '').toLowerCase().startsWith('data:')).length;
-      });
-      expect(dataHrefCount).toBe(0);
-    });
-
-    test('should strip vbscript: protocol hrefs from wiki-table cell links', async ({ page }) => {
-      const vbsHrefCount = await page.evaluate(() => {
-        const wikiTable = document.querySelector('wiki-table');
-        if (!wikiTable?.shadowRoot) return 0;
-        const anchors = Array.from(wikiTable.shadowRoot.querySelectorAll('a'));
-        return anchors.filter(a => (a.getAttribute('href') ?? '').toLowerCase().startsWith('vbscript:')).length;
-      });
-      expect(vbsHrefCount).toBe(0);
+      expect(dangerousHrefCount).toBe(0);
     });
 
     test('should still render normal cell content in the table', async ({ page }) => {
