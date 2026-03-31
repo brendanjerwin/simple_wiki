@@ -135,6 +135,20 @@ func (m *MockMigrationDeps) UpdatePageContent(identifier wikipage.PageIdentifier
 	return nil
 }
 
+func (m *MockMigrationDeps) ModifyMarkdown(identifier wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error)) error {
+	_, currentMD, err := m.ReadMarkdown(identifier)
+	if err != nil {
+		return err
+	}
+
+	newMD, err := modifier(currentMD)
+	if err != nil {
+		return err
+	}
+
+	return m.WriteMarkdown(identifier, newMD)
+}
+
 func (m *MockMigrationDeps) DeletePage(identifier wikipage.PageIdentifier) error {
 	if m.deletePageErr != nil {
 		return m.deletePageErr

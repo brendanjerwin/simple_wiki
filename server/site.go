@@ -610,38 +610,120 @@ func combineFrontmatterAndMarkdown(fm wikipage.FrontMatter, md wikipage.Markdown
 	return content.String(), nil
 }
 
-// WriteFrontMatter writes the frontmatter for a page.
-func (s *Site) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
-	// Use the PageReaderMutator interface to get the current markdown content.
-	_, md, err := s.ReadMarkdown(identifier)
-	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("could not read markdown to write frontmatter: %w", err)
+// readRawTextLocked reads the raw .md file content for the given identifier without acquiring
+// saveMut. The caller must hold at least a read lock (or write lock) on s.saveMut.
+func (s *Site) readRawTextLocked(identifierStr string) (string, error) {
+	mungedPath, originalPath, _ := s.getFilePathsForIdentifier(identifierStr, mdExtension)
+	if b, err := os.ReadFile(mungedPath); err == nil {
+		return string(b), nil
 	}
-
-	newText, err := combineFrontmatterAndMarkdown(fm, md)
+	b, err := os.ReadFile(originalPath)
 	if err != nil {
-		return fmt.Errorf("failed to combine frontmatter and markdown: %w", err)
+		return "", err
 	}
-
-	// Use UpdatePageContent to save current content
-	return s.UpdatePageContent(identifier, newText)
+	return string(b), nil
 }
 
-// WriteMarkdown writes the markdown content for a page.
+// writeRawTextLocked writes text to the .md file for the given identifier without acquiring
+// saveMut. The caller must hold the write lock on s.saveMut.
+func (s *Site) writeRawTextLocked(identifierStr, text string) error {
+	filePath := path.Join(s.PathToData, base32tools.EncodeToBase32(strings.ToLower(identifierStr))+".md")
+	if err := os.WriteFile(filePath, []byte(text), 0644); err != nil {
+		return fmt.Errorf("failed to save page %s: %w", identifierStr, err)
+	}
+	return nil
+}
+
+// modifyOrCreatePage atomically reads, modifies, and writes a page's full raw text.
+// The write lock is held for the entire read-modify-write cycle, preventing TOCTOU races.
+// If the page does not exist on disk, modifier is called with an empty string (creating the page).
+// Async indexing jobs are enqueued after the lock is released.
+func (s *Site) modifyOrCreatePage(identifierStr string, modifier func(currentText string) (string, error)) error {
+	s.saveMut.Lock()
+
+	currentText, readErr := s.readRawTextLocked(identifierStr)
+	if readErr != nil && !os.IsNotExist(readErr) {
+		s.saveMut.Unlock()
+		return fmt.Errorf("failed to read page %s for modification: %w", identifierStr, readErr)
+	}
+	// If readErr is os.ErrNotExist, currentText is "" — modifier creates from scratch.
+
+	newText, modErr := modifier(currentText)
+	if modErr != nil {
+		s.saveMut.Unlock()
+		return modErr
+	}
+
+	writeErr := s.writeRawTextLocked(identifierStr, newText)
+	s.saveMut.Unlock()
+
+	if writeErr != nil {
+		return writeErr
+	}
+
+	// Enqueue async indexing jobs after releasing the lock.
+	identifier := wikipage.PageIdentifier(identifierStr)
+	if s.IndexCoordinator != nil {
+		if err := s.IndexCoordinator.EnqueueIndexJob(identifier, index.Add); err != nil {
+			s.Logger.Error("Failed to enqueue index job for %s: %v", identifierStr, err)
+		}
+	}
+	if s.JobQueueCoordinator != nil {
+		normJob := NewPageInventoryNormalizationJob(identifier, s, s.Logger)
+		if err := s.JobQueueCoordinator.EnqueueJob(normJob); err != nil {
+			s.Logger.Error("Failed to enqueue per-page inventory normalization job for %s: %v", identifierStr, err)
+		}
+	}
+
+	return nil
+}
+
+// ModifyMarkdown atomically reads the markdown section, calls modifier, and writes the result
+// back while preserving the existing frontmatter. The entire cycle is held under the write lock.
+func (s *Site) ModifyMarkdown(identifier wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error)) error {
+	return s.modifyOrCreatePage(string(identifier), func(currentText string) (string, error) {
+		p := &wikipage.Page{Text: currentText}
+
+		currentMD, err := p.GetMarkdown()
+		if err != nil {
+			return "", fmt.Errorf("failed to parse markdown for modification: %w", err)
+		}
+
+		newMD, err := modifier(currentMD)
+		if err != nil {
+			return "", err
+		}
+
+		currentFM, err := p.GetFrontMatter()
+		if err != nil {
+			return "", fmt.Errorf("failed to parse frontmatter during markdown modification: %w", err)
+		}
+
+		return combineFrontmatterAndMarkdown(currentFM, newMD)
+	})
+}
+
+// WriteFrontMatter atomically reads the current markdown, combines it with the new frontmatter,
+// and writes the result — all under a single write lock to prevent concurrent write races.
+func (s *Site) WriteFrontMatter(identifier wikipage.PageIdentifier, fm wikipage.FrontMatter) error {
+	return s.modifyOrCreatePage(string(identifier), func(currentText string) (string, error) {
+		p := &wikipage.Page{Text: currentText}
+
+		md, err := p.GetMarkdown()
+		if err != nil {
+			return "", fmt.Errorf("failed to parse markdown for frontmatter write: %w", err)
+		}
+
+		return combineFrontmatterAndMarkdown(fm, md)
+	})
+}
+
+// WriteMarkdown atomically reads the current frontmatter, combines it with the new markdown,
+// and writes the result — all under a single write lock to prevent concurrent write races.
 func (s *Site) WriteMarkdown(identifier wikipage.PageIdentifier, md wikipage.Markdown) error {
-	// Use the PageReaderMutator interface to get the current frontmatter.
-	_, fm, err := s.ReadFrontMatter(identifier)
-	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("could not read frontmatter to write markdown: %w", err)
-	}
-
-	newText, err := combineFrontmatterAndMarkdown(fm, md)
-	if err != nil {
-		return fmt.Errorf("failed to combine frontmatter and markdown: %w", err)
-	}
-
-	// Use UpdatePageContent to save current content
-	return s.UpdatePageContent(identifier, newText)
+	return s.ModifyMarkdown(identifier, func(_ wikipage.Markdown) (wikipage.Markdown, error) {
+		return md, nil
+	})
 }
 
 // ReadFrontMatter reads the frontmatter for a page.

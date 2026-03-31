@@ -37,9 +37,21 @@ type PageOpener interface {
 	ReadPage(identifier PageIdentifier) (*Page, error)
 }
 
-// PageReaderMutator is an interface that combines PageReader, PageWriter, and PageDeleter.
+// PageModifier provides atomic read-modify-write semantics for page content.
+// Implementations must hold a write lock for the duration of the modifier call
+// to prevent TOCTOU races between concurrent writers.
+type PageModifier interface {
+	// ModifyMarkdown atomically reads the markdown section, calls modifier with it,
+	// and writes the result back (preserving the existing frontmatter).
+	// The entire read-modify-write cycle is held under a write lock.
+	// If modifier returns an error, the page is not written.
+	ModifyMarkdown(identifier PageIdentifier, modifier func(Markdown) (Markdown, error)) error
+}
+
+// PageReaderMutator is an interface that combines PageReader, PageWriter, PageDeleter, and PageModifier.
 type PageReaderMutator interface {
 	PageReader
 	PageWriter
 	PageDeleter
+	PageModifier
 }

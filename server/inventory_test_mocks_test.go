@@ -134,6 +134,28 @@ func (m *mockPageReaderMutator) DeletePage(id wikipage.PageIdentifier) error {
 	return nil
 }
 
+func (m *mockPageReaderMutator) ModifyMarkdown(id wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error)) error {
+	var currentMD wikipage.Markdown
+	if page, ok := m.pages[string(id)]; ok {
+		currentMD = wikipage.Markdown(page.markdown)
+	}
+
+	newMD, err := modifier(currentMD)
+	if err != nil {
+		return err
+	}
+
+	if m.writeMarkdownErr != nil {
+		return m.writeMarkdownErr
+	}
+
+	if m.pages[string(id)] == nil {
+		m.pages[string(id)] = &mockPage{}
+	}
+	m.pages[string(id)].markdown = string(newMD)
+	return nil
+}
+
 // getFrontmatter returns the frontmatter for a page (for test assertions).
 func (m *mockPageReaderMutator) getFrontmatter(id string) map[string]any {
 	if page, ok := m.pages[id]; ok {

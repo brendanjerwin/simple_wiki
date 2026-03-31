@@ -75,6 +75,24 @@ func (m *mockNormalizationDeps) DeletePage(id wikipage.PageIdentifier) error {
 	return nil
 }
 
+func (m *mockNormalizationDeps) ModifyMarkdown(id wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error)) error {
+	var currentMD wikipage.Markdown
+	if page, ok := m.pages[string(id)]; ok {
+		currentMD = wikipage.Markdown(page.markdown)
+	}
+
+	newMD, err := modifier(currentMD)
+	if err != nil {
+		return err
+	}
+
+	if m.writtenPages[string(id)] == nil {
+		m.writtenPages[string(id)] = &mockPageData{}
+	}
+	m.writtenPages[string(id)].markdown = string(newMD)
+	return nil
+}
+
 var _ = Describe("InventoryNormalizationJob", func() {
 	var (
 		job      *InventoryNormalizationJob

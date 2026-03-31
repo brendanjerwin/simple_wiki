@@ -151,6 +151,11 @@ type MockPageReaderMutator struct {
 	// PostWriteMarkdown, when non-nil, overrides what ReadMarkdown returns after a successful
 	// WriteMarkdown. Use this to simulate an invariant violation (e.g. blank content after write).
 	PostWriteMarkdown *wikipage.Markdown
+	// ConcurrentModificationMarkdown, when non-nil, is what ModifyMarkdown presents to its modifier
+	// as the current content — overriding m.Markdown. Use this to simulate a concurrent write that
+	// happens between ReadMarkdown and ModifyMarkdown, verifying that the atomic hash check inside
+	// ModifyMarkdown detects the TOCTOU race.
+	ConcurrentModificationMarkdown *wikipage.Markdown
 	// markdownWritten tracks whether WriteMarkdown has been called successfully.
 	markdownWritten bool
 }
@@ -228,6 +233,42 @@ func (m *MockPageReaderMutator) ReadMarkdown(identifier wikipage.PageIdentifier)
 func (m *MockPageReaderMutator) DeletePage(identifier wikipage.PageIdentifier) error {
 	m.DeletedIdentifier = identifier
 	return m.DeleteErr
+}
+
+// ModifyMarkdown atomically reads the markdown, calls modifier, and writes the result.
+// Simulates the read-error, modifier, and write-error fields in sequence.
+// If ConcurrentModificationMarkdown is set, the modifier sees that content instead of
+// m.Markdown — simulating a concurrent write that happened between ReadMarkdown and the
+// atomic write, so the hash check inside the modifier can detect the TOCTOU race.
+func (m *MockPageReaderMutator) ModifyMarkdown(identifier wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error)) error {
+	if m.MarkdownReadErr != nil {
+		return m.MarkdownReadErr
+	}
+	if m.Err != nil {
+		return m.Err
+	}
+
+	// Allow tests to simulate a concurrent modification that happened between ReadMarkdown
+	// and ModifyMarkdown.
+	currentMD := m.Markdown
+	if m.ConcurrentModificationMarkdown != nil {
+		currentMD = *m.ConcurrentModificationMarkdown
+	}
+
+	newMD, err := modifier(currentMD)
+	if err != nil {
+		return err
+	}
+
+	if m.MarkdownWriteErr != nil {
+		return m.MarkdownWriteErr
+	}
+
+	m.WrittenIdentifier = identifier
+	m.WrittenMarkdown = newMD
+	m.Markdown = newMD
+	m.markdownWritten = true
+	return nil
 }
 
 // ReadPage satisfies wikipage.PageOpener, returning a Page built from the mock's Markdown and error fields.
@@ -464,6 +505,10 @@ func (noOpPageReaderMutator) WriteMarkdown(wikipage.PageIdentifier, wikipage.Mar
 	return nil
 }
 func (noOpPageReaderMutator) DeletePage(wikipage.PageIdentifier) error { return nil }
+func (noOpPageReaderMutator) ModifyMarkdown(_ wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error)) error {
+	_, err := modifier("")
+	return err
+}
 
 // noOpPageOpener is a minimal mock for tests that don't need full page reads.
 type noOpPageOpener struct{}
@@ -2236,6 +2281,38 @@ var _ = Describe("Server", func() {
 
 			It("should not return a response", func() {
 				Expect(resp).To(BeNil())
+			})
+		})
+
+		// TOCTOU fix verification: the hash check is now inside ModifyMarkdown (atomic with the
+		// write), so a concurrent modification that happens between the pre-read and the write is
+		// detected — rather than silently overwriting the concurrent writer's changes.
+		When("the page is concurrently modified between the pre-read and the atomic write", func() {
+			BeforeEach(func() {
+				originalContent := wikipage.Markdown("# Original Content")
+				concurrentContent := wikipage.Markdown("# Concurrently Modified Content")
+
+				mockPageReaderMutator.Markdown = originalContent
+				originalHash := fmt.Sprintf("%x", sha256.Sum256([]byte(originalContent)))
+				req.ExpectedVersionHash = &originalHash
+				req.NewContentMarkdown = "# My New Content"
+
+				// Simulate a concurrent write: ReadMarkdown returns the original, but
+				// ModifyMarkdown sees the concurrently-modified version when it re-reads
+				// the content under the write lock.
+				mockPageReaderMutator.ConcurrentModificationMarkdown = &concurrentContent
+			})
+
+			It("should detect the version mismatch and return Aborted", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.Aborted, "content version mismatch"))
+			})
+
+			It("should not return a response", func() {
+				Expect(resp).To(BeNil())
+			})
+
+			It("should not overwrite the concurrently modified content", func() {
+				Expect(mockPageReaderMutator.WrittenMarkdown).To(BeEmpty())
 			})
 		})
 	})
@@ -6284,6 +6361,11 @@ func (*callbackObservingMutator) ReadMarkdown(id wikipage.PageIdentifier) (wikip
 
 func (*callbackObservingMutator) DeletePage(_ wikipage.PageIdentifier) error {
 	return nil
+}
+
+func (*callbackObservingMutator) ModifyMarkdown(_ wikipage.PageIdentifier, modifier func(wikipage.Markdown) (wikipage.Markdown, error)) error {
+	_, err := modifier("")
+	return err
 }
 
 func (m *callbackObservingMutator) isReportWritten() bool {

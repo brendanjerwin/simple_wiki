@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/brendanjerwin/simple_wiki/migrations/lazy"
@@ -244,6 +245,59 @@ var _ = Describe("Site Page Operations", func() {
 				// The migration should have been applied and saved during Open()
 				Expect(finalContent).To(ContainSubstring("# Migration applied"))
 				Expect(finalContent).NotTo(Equal(originalDiskContent))
+			})
+		})
+	})
+
+	Describe("Atomic write safety", func() {
+		// These tests verify that concurrent writes to different sections of a page
+		// (frontmatter vs. markdown) do not lose each other's updates.
+		// Without atomic read-modify-write, a concurrent WriteFrontMatter and WriteMarkdown
+		// can both read the same stale state, and whichever writes last silently discards
+		// the other's change.
+		When("WriteFrontMatter and WriteMarkdown are called concurrently on the same page", func() {
+			const iterations = 200
+
+			BeforeEach(func() {
+				// Create the page with initial state containing both frontmatter and markdown.
+				initialText := "+++\ntitle = \"old title\"\n+++\n\nold content\n"
+				err := s.UpdatePageContent("atomic_test_page", initialText)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should preserve both writes — neither update should be lost", func() {
+				for i := 0; i < iterations; i++ {
+					// Reset to known state before each iteration.
+					initialText := "+++\ntitle = \"old title\"\n+++\n\nold content\n"
+					Expect(s.UpdatePageContent("atomic_test_page", initialText)).To(Succeed())
+
+					var wg sync.WaitGroup
+					wg.Add(2)
+
+					go func() {
+						defer wg.Done()
+						_ = s.WriteFrontMatter("atomic_test_page", wikipage.FrontMatter{"title": "new title"})
+					}()
+
+					go func() {
+						defer wg.Done()
+						_ = s.WriteMarkdown("atomic_test_page", "\nnew content\n")
+					}()
+
+					wg.Wait()
+
+					_, fm, fmErr := s.ReadFrontMatter("atomic_test_page")
+					Expect(fmErr).NotTo(HaveOccurred())
+
+					_, md, mdErr := s.ReadMarkdown("atomic_test_page")
+					Expect(mdErr).NotTo(HaveOccurred())
+
+					// Both updates must be visible — neither should overwrite the other.
+					Expect(fm["title"]).To(Equal("new title"),
+						"iteration %d: frontmatter title update was lost", i)
+					Expect(string(md)).To(ContainSubstring("new content"),
+						"iteration %d: markdown update was lost", i)
+				}
 			})
 		})
 	})

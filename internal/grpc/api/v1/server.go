@@ -1186,8 +1186,8 @@ func (s *Server) UpdatePageContent(_ context.Context, req *apiv1.UpdatePageConte
 		return nil, status.Error(codes.InvalidArgument, "old_content_markdown cannot be empty when provided")
 	}
 
-	// Read current content for: (1) page existence check, (2) version hash verification
-	// if requested, and (3) rollback data if the post-write invariant check fails.
+	// Read current content for: (1) page existence check, and (2) rollback data if the
+	// post-write invariant check fails.
 	_, originalMarkdown, err := s.pageReaderMutator.ReadMarkdown(wikipage.PageIdentifier(req.PageName))
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -1196,25 +1196,30 @@ func (s *Server) UpdatePageContent(_ context.Context, req *apiv1.UpdatePageConte
 		return nil, status.Errorf(codes.Internal, "failed to read current content: %v", err)
 	}
 
-	// NOTE: There is a narrow TOCTOU race between this hash check and the subsequent
-	// WriteMarkdown call. True atomicity would require file-level locking at the storage layer.
-	if err := checkContentVersionHash(originalMarkdown, req.ExpectedVersionHash); err != nil {
-		return nil, err
-	}
+	// ModifyMarkdown holds the write lock for the entire hash-check + write cycle,
+	// eliminating the TOCTOU race that existed when these were separate operations.
+	modifyErr := s.pageReaderMutator.ModifyMarkdown(
+		wikipage.PageIdentifier(req.PageName),
+		func(currentMarkdown wikipage.Markdown) (wikipage.Markdown, error) {
+			// Version hash check is now atomic with the write — no TOCTOU window.
+			if err := checkContentVersionHash(currentMarkdown, req.ExpectedVersionHash); err != nil {
+				return "", err
+			}
 
-	if err := templating.ValidateTemplate(req.NewContentMarkdown); err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, invalidTemplateErrFmt, err)
-	}
+			if err := templating.ValidateTemplate(req.NewContentMarkdown); err != nil {
+				return "", status.Errorf(codes.InvalidArgument, invalidTemplateErrFmt, err)
+			}
 
-	// Compute the markdown to write: find-and-replace when old_content_markdown is set,
-	// otherwise replace the entire page content.
-	markdownToWrite, err := resolveMarkdownContent(originalMarkdown, req.OldContentMarkdown, req.NewContentMarkdown)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(req.PageName), markdownToWrite); err != nil {
-		return nil, status.Errorf(codes.Internal, failedToWriteMarkdownErrFmt, err)
+			// Compute the markdown to write: find-and-replace when old_content_markdown is set,
+			// otherwise replace the entire page content.
+			return resolveMarkdownContent(currentMarkdown, req.OldContentMarkdown, req.NewContentMarkdown)
+		},
+	)
+	if modifyErr != nil {
+		if _, ok := status.FromError(modifyErr); ok {
+			return nil, modifyErr
+		}
+		return nil, status.Errorf(codes.Internal, failedToWriteMarkdownErrFmt, modifyErr)
 	}
 
 	// Invariant check: read back the stored content to ensure the write did not blank the page.
