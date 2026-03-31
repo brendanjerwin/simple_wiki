@@ -153,7 +153,7 @@ export class KernelPanic extends LitElement {
     this.augmentedError = null;
   }
 
-  private _handleRefresh = (): void => {
+  private readonly _handleRefresh = (): void => {
     window.location.reload();
   };
 
