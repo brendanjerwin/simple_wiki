@@ -292,11 +292,12 @@ func (*MockJobStreamServer) RecvMsg(any) error {
 
 // MockPageWatchStreamServer is a mock implementation of apiv1.PageManagementService_WatchPageServer for testing.
 type MockPageWatchStreamServer struct {
-	SentMessages []*apiv1.WatchPageResponse
-	SendErr      error
-	ContextDone  bool
-	ctx          context.Context    // if set, overrides ContextDone behavior
-	cancelFunc   context.CancelFunc // cancels ctx
+	SentMessages       []*apiv1.WatchPageResponse
+	SendErr            error
+	SendErrAfterCount  int // if > 0, returns SendErr only after this many successful sends
+	ContextDone        bool
+	ctx                context.Context    // if set, overrides ContextDone behavior
+	cancelFunc         context.CancelFunc // cancels ctx
 }
 
 // newCancellableMockPageWatchStreamServer creates a MockPageWatchStreamServer with a controllable context.
@@ -313,7 +314,9 @@ func (m *MockPageWatchStreamServer) Cancel() {
 
 func (m *MockPageWatchStreamServer) Send(response *apiv1.WatchPageResponse) error {
 	if m.SendErr != nil {
-		return m.SendErr
+		if m.SendErrAfterCount <= 0 || len(m.SentMessages) >= m.SendErrAfterCount {
+			return m.SendErr
+		}
 	}
 	m.SentMessages = append(m.SentMessages, response)
 	return nil
@@ -2614,6 +2617,188 @@ var _ = Describe("Server", func() {
 				Expect(len(cancellableStream.SentMessages)).To(BeNumerically(">=", 1))
 			})
 		})
+		When("initial stream.Send returns an error", func() {
+			var err error
+
+			BeforeEach(func() {
+				mockPageReaderMutator = &MockPageReaderMutator{
+					Markdown: wikipage.Markdown("# Test Content"),
+				}
+				streamServer = &MockPageWatchStreamServer{
+					SendErr: errors.New("stream closed"),
+				}
+				server = mustNewServerFull(mockPageReaderMutator, nil, nil, nil, mockPageReaderMutator)
+				err = server.WatchPage(req, streamServer)
+			})
+
+			It("should return the stream error", func() {
+				Expect(err).To(MatchError("stream closed"))
+			})
+
+			It("should not append the failed message", func() {
+				Expect(streamServer.SentMessages).To(BeEmpty())
+			})
+		})
+
+		When("check_interval_ms is below the 100ms minimum", func() {
+			var (
+				cancellableStream *MockPageWatchStreamServer
+				watchErr          error
+				watchDone         chan error
+			)
+
+			BeforeEach(func() {
+				cancellableStream = newCancellableMockPageWatchStreamServer()
+				mockPageReaderMutator = &MockPageReaderMutator{
+					Markdown: wikipage.Markdown("# Content"),
+				}
+
+				belowMin := int32(10) // 10ms, below the 100ms minimum
+				req.CheckIntervalMs = &belowMin
+
+				server = mustNewServerFull(mockPageReaderMutator, nil, nil, nil, mockPageReaderMutator)
+				watchDone = make(chan error, 1)
+				go func() {
+					watchDone <- server.WatchPage(req, cancellableStream)
+				}()
+
+				Eventually(func() int {
+					return len(cancellableStream.SentMessages)
+				}, 2*time.Second, 50*time.Millisecond).Should(Equal(1))
+
+				cancellableStream.Cancel()
+				watchErr = <-watchDone
+			})
+
+			It("should clamp interval and still work", func() {
+				Expect(watchErr).To(Equal(context.Canceled))
+			})
+
+			It("should send the initial message", func() {
+				Expect(cancellableStream.SentMessages).To(HaveLen(1))
+			})
+		})
+
+		When("page is deleted during polling", func() {
+			var (
+				cancellableStream *MockPageWatchStreamServer
+				watchErr          error
+				watchDone         chan error
+			)
+
+			BeforeEach(func() {
+				cancellableStream = newCancellableMockPageWatchStreamServer()
+				mockPageReaderMutator = &MockPageReaderMutator{
+					Markdown: wikipage.Markdown("# Content"),
+				}
+
+				checkInterval := int32(100)
+				req.CheckIntervalMs = &checkInterval
+
+				server = mustNewServerFull(mockPageReaderMutator, nil, nil, nil, mockPageReaderMutator)
+				watchDone = make(chan error, 1)
+				go func() {
+					watchDone <- server.WatchPage(req, cancellableStream)
+				}()
+
+				Eventually(func() int {
+					return len(cancellableStream.SentMessages)
+				}, 2*time.Second, 50*time.Millisecond).Should(Equal(1))
+
+				// Simulate page deletion during polling
+				mockPageReaderMutator.MarkdownReadErr = os.ErrNotExist
+				watchErr = <-watchDone
+			})
+
+			It("should return a NotFound error indicating the page was deleted", func() {
+				Expect(watchErr).To(HaveGrpcStatusWithSubstr(codes.NotFound, "page deleted"))
+			})
+		})
+
+		When("page content does not change during polling", func() {
+			var (
+				cancellableStream *MockPageWatchStreamServer
+				watchErr          error
+				watchDone         chan error
+			)
+
+			BeforeEach(func() {
+				cancellableStream = newCancellableMockPageWatchStreamServer()
+				mockPageReaderMutator = &MockPageReaderMutator{
+					Markdown: wikipage.Markdown("# Stable Content"),
+				}
+
+				checkInterval := int32(100)
+				req.CheckIntervalMs = &checkInterval
+
+				server = mustNewServerFull(mockPageReaderMutator, nil, nil, nil, mockPageReaderMutator)
+				watchDone = make(chan error, 1)
+				go func() {
+					watchDone <- server.WatchPage(req, cancellableStream)
+				}()
+
+				Eventually(func() int {
+					return len(cancellableStream.SentMessages)
+				}, 2*time.Second, 50*time.Millisecond).Should(Equal(1))
+
+				// Wait for at least one full poll cycle so sendPageUpdateIfChanged runs with same hash
+				time.Sleep(250 * time.Millisecond)
+
+				cancellableStream.Cancel()
+				watchErr = <-watchDone
+			})
+
+			It("should end with context.Canceled", func() {
+				Expect(watchErr).To(Equal(context.Canceled))
+			})
+
+			It("should only send the initial message", func() {
+				Expect(cancellableStream.SentMessages).To(HaveLen(1))
+			})
+		})
+
+		When("stream.Send fails during polling after content changes", func() {
+			var (
+				cancellableStream *MockPageWatchStreamServer
+				watchErr          error
+				watchDone         chan error
+			)
+
+			BeforeEach(func() {
+				watchCtx, watchCancel := context.WithCancel(context.Background())
+				DeferCleanup(watchCancel)
+				cancellableStream = &MockPageWatchStreamServer{
+					SendErr:           errors.New("stream closed during polling"),
+					SendErrAfterCount: 1, // succeed on first send, fail on second
+					ctx:               watchCtx,
+					cancelFunc:        watchCancel,
+				}
+				mockPageReaderMutator = &MockPageReaderMutator{
+					Markdown: wikipage.Markdown("# Initial Content"),
+				}
+
+				checkInterval := int32(100)
+				req.CheckIntervalMs = &checkInterval
+
+				server = mustNewServerFull(mockPageReaderMutator, nil, nil, nil, mockPageReaderMutator)
+				watchDone = make(chan error, 1)
+				go func() {
+					watchDone <- server.WatchPage(req, cancellableStream)
+				}()
+
+				Eventually(func() int {
+					return len(cancellableStream.SentMessages)
+				}, 2*time.Second, 50*time.Millisecond).Should(Equal(1))
+
+				// Change content so sendPageUpdateIfChanged tries to send again
+				mockPageReaderMutator.Markdown = wikipage.Markdown("# Changed Content")
+				watchErr = <-watchDone
+			})
+
+			It("should return the stream send error", func() {
+				Expect(watchErr).To(MatchError("stream closed during polling"))
+			})
+		})
 	})
 
 	Describe("SearchContent", func() {
@@ -4066,6 +4251,150 @@ var _ = Describe("Server", func() {
 
 			It("should have no validation errors on item_a", func() {
 				Expect(resp.Records[0].ValidationErrors).To(BeEmpty())
+			})
+		})
+
+		When("csv_content references a template with template field as string 'true'", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,template,title\ntest_page,string_template,Test Item"
+				mockPageReaderMutator = &MockPageReaderMutator{
+					FrontmatterByID: map[string]map[string]any{
+						"string_template": {
+							"title":    "String Template",
+							"template": "true", // string case
+						},
+					},
+					ErrByID: map[string]error{
+						"test_page": os.ErrNotExist,
+					},
+				}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should not add validation errors for the template reference", func() {
+				Expect(resp.Records[0].ValidationErrors).To(BeEmpty())
+			})
+		})
+
+		When("csv_content references a template with template field as int64 nonzero", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,template,title\ntest_page,int_template,Test Item"
+				mockPageReaderMutator = &MockPageReaderMutator{
+					FrontmatterByID: map[string]map[string]any{
+						"int_template": {
+							"title":    "Int Template",
+							"template": int64(1), // int64 nonzero = true
+						},
+					},
+					ErrByID: map[string]error{
+						"test_page": os.ErrNotExist,
+					},
+				}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should not add validation errors for the template reference", func() {
+				Expect(resp.Records[0].ValidationErrors).To(BeEmpty())
+			})
+		})
+
+		When("csv_content references a page with template field as int64 zero", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,template,title\ntest_page,zero_template,Test Item"
+				mockPageReaderMutator = &MockPageReaderMutator{
+					FrontmatterByID: map[string]map[string]any{
+						"zero_template": {
+							"title":    "Zero Template",
+							"template": int64(0), // int64 zero = false
+						},
+					},
+					ErrByID: map[string]error{
+						"test_page": os.ErrNotExist,
+					},
+				}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should add validation error because page is not a template", func() {
+				Expect(resp.Records[0].ValidationErrors).To(ContainElement(ContainSubstring("is not a template")))
+			})
+		})
+
+		When("csv_content references a template with template field as float64 nonzero", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,template,title\ntest_page,float_template,Test Item"
+				mockPageReaderMutator = &MockPageReaderMutator{
+					FrontmatterByID: map[string]map[string]any{
+						"float_template": {
+							"title":    "Float Template",
+							"template": float64(1.0), // float64 nonzero = true
+						},
+					},
+					ErrByID: map[string]error{
+						"test_page": os.ErrNotExist,
+					},
+				}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should not add validation errors for the template reference", func() {
+				Expect(resp.Records[0].ValidationErrors).To(BeEmpty())
+			})
+		})
+
+		When("csv_content references a page with template field of an unrecognized type", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,template,title\ntest_page,unknown_template,Test Item"
+				mockPageReaderMutator = &MockPageReaderMutator{
+					FrontmatterByID: map[string]map[string]any{
+						"unknown_template": {
+							"title":    "Unknown Template",
+							"template": []string{"true"}, // default case: not bool/string/int64/float64
+						},
+					},
+					ErrByID: map[string]error{
+						"test_page": os.ErrNotExist,
+					},
+				}
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should add validation error because page is not a template", func() {
+				Expect(resp.Records[0].ValidationErrors).To(ContainElement(ContainSubstring("is not a template")))
+			})
+		})
+
+		When("csv_content has DELETE array value sentinel", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier,tags[]\ntest_page,[[DELETE(old-tag)]]"
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should parse the DELETE array operation with correct type", func() {
+				Expect(resp.Records[0].ArrayOps).To(HaveLen(1))
+				Expect(resp.Records[0].ArrayOps[0].Operation).To(Equal(apiv1.ArrayOpType_ARRAY_OP_TYPE_DELETE_VALUE))
+			})
+
+			It("should include the value to delete", func() {
+				Expect(resp.Records[0].ArrayOps[0].Value).To(Equal("old-tag"))
 			})
 		})
 	})
