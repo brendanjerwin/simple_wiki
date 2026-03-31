@@ -53,7 +53,7 @@ function isFileUploadedDetail(value: unknown): value is FileUploadedDetail {
  * @property {number} debounceMs - Debounce delay in ms for auto-save
  */
 export class WikiEditor extends LitElement {
-  static override styles = [
+  static override readonly styles = [
     foundationCSS,
     css`
       :host {

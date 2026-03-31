@@ -49,7 +49,7 @@ export interface ChecklistData {
  * <wiki-checklist list-name="grocery_list" page="my-page"></wiki-checklist>
  */
 export class WikiChecklist extends LitElement {
-  static override styles = [
+  static override readonly styles = [
     foundationCSS,
     buttonCSS,
     inputCSS,

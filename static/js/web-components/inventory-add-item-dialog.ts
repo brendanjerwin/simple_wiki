@@ -21,7 +21,7 @@ import type { AutomagicIdentifierInput, GenerateIdentifierResult } from './autom
  * field and inline search results to help find existing items.
  */
 export class InventoryAddItemDialog extends LitElement {
-  static override styles = dialogStyles(css`
+  static override readonly styles = dialogStyles(css`
     :host {
       position: fixed;
       top: 0;

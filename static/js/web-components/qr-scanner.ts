@@ -125,7 +125,7 @@ class QrScannerCameraProvider implements CameraProvider {
  * ```
  */
 export class QrScanner extends LitElement {
-  static override styles = [
+  static override readonly styles = [
     foundationCSS,
     buttonCSS,
     responsiveCSS,

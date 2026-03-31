@@ -43,7 +43,7 @@ export interface ItemScannedEventDetail {
  * @fires cancelled - Fired when user clicks Cancel button
  */
 export class InventoryQrScanner extends LitElement {
-  static override styles = [
+  static override readonly styles = [
     foundationCSS,
     buttonCSS,
     css`
