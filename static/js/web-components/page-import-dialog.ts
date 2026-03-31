@@ -1119,7 +1119,7 @@ export class PageImportDialog extends LitElement {
       <div class="importing-container">
         <div class="importing-explainer">
           <p>
-            Your import of ${this.importedCount} page${this.importedCount !== 1 ? 's' : ''} has been
+            Your import of ${this.importedCount} page${this.importedCount === 1 ? '' : 's'} has been
             started. The pages are being created or updated in the background.
           </p>
           <p>
@@ -1197,7 +1197,7 @@ export class PageImportDialog extends LitElement {
             @click=${this._handleImport}
             ?disabled=${!this.canImport}
           >
-            Import ${this.validRecordCount} page${this.validRecordCount !== 1 ? 's' : ''}
+            Import ${this.validRecordCount} page${this.validRecordCount === 1 ? '' : 's'}
           </button>
         `;
     }

@@ -676,7 +676,7 @@ export class InventoryMoveItemDialog extends LitElement {
           </div>
 
           ${this._renderScannedResult()}
-          ${!this.scannedResult ? this._renderSearchResults() : nothing}
+          ${this.scannedResult ? nothing : this._renderSearchResults()}
         </div>
 
         <div class="footer">

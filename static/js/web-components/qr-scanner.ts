@@ -625,8 +625,9 @@ export class QrScanner extends LitElement {
     return html`
       ${sharedStyles}
       <div class="scanner-container">
-        ${!this.embedded
-          ? html`
+        ${this.embedded
+          ? nothing
+          : html`
               <button
                 class="scanner-toggle"
                 part="toggle"
@@ -637,8 +638,7 @@ export class QrScanner extends LitElement {
                 <span class="icon"><i class="fa-solid fa-qrcode"></i></span>
                 ${toggleButtonLabel}
               </button>
-            `
-          : nothing}
+            `}
 
         ${this.error
           ? html`<error-display
