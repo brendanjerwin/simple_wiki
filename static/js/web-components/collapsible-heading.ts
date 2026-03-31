@@ -20,7 +20,7 @@ const STATE_COLLAPSED = 'collapsed';
  * </collapsible-heading>
  */
 export class CollapsibleHeading extends LitElement {
-  static override styles = css`
+  static override readonly styles = css`
     :host {
       display: block;
     }
