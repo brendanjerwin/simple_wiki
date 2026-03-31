@@ -336,9 +336,8 @@ export class QrScanner extends LitElement {
         c.label.toLowerCase().includes('rear') ||
         c.label.toLowerCase().includes('environment')
       );
-      // cameras[0] guaranteed to exist since we checked length > 0 above
-      const firstCamera = this.cameras[0]!;
-      this.selectedCameraId = backCamera?.id ?? firstCamera.id;
+      const firstCamera = this.cameras.at(0);
+      this.selectedCameraId = backCamera?.id ?? firstCamera?.id;
 
       // Wait for DOM update before starting scanner
       await this.updateComplete;

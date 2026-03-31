@@ -190,7 +190,7 @@ class WikiSearchResults extends LitElement {
 
   public readonly _handleClickOutside = (event: Event): void => {
     const path = (event as Event & { composedPath(): EventTarget[] }).composedPath();
-    const popover = this.shadowRoot!.querySelector('.popover');
+    const popover = this.shadowRoot?.querySelector('.popover');
     if (this.open && popover && !path.includes(popover)) {
       this.close();
     }
@@ -250,7 +250,7 @@ class WikiSearchResults extends LitElement {
 
   override updated(changedProperties: Map<PropertyKey, unknown>) {
     if (changedProperties.has('results') && this.results.length > 0) {
-      const firstLink = this.shadowRoot!.querySelector('a');
+      const firstLink = this.shadowRoot?.querySelector('a');
       if (firstLink) {
         firstLink.focus();
       }
