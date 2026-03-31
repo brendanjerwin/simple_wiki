@@ -413,7 +413,7 @@ export class InsertNewPageDialog extends LitElement {
   private _renderTemplateSelector() {
     const hasTemplates = this.templates.length > 0;
     const isDisabled = this.templatesLoading || this.templateLocked || !hasTemplates;
-    const noTemplateOptionLabel = !hasTemplates ? '(none - no templates defined)' : '(none)';
+    const noTemplateOptionLabel = hasTemplates ? '(none)' : '(none - no templates defined)';
 
     return html`
       <div class="form-group">

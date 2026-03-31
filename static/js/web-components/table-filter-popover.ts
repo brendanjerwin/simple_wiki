@@ -570,14 +570,14 @@ export class TableFilterPopover extends LitElement {
             @click=${() => this._handleSortClick('descending')}
             aria-label="Sort descending"
           >\u2193 Descending</button>
-          ${this._pendingSortDirection !== 'none' ? html`
+          ${this._pendingSortDirection === 'none' ? nothing : html`
             <button
               type="button"
               class="sort-pill"
               @click=${() => this._handleSortClick(this._pendingSortDirection)}
               aria-label="Clear sort"
             >\u2715</button>
-          ` : nothing}
+          `}
         </div>
 
         <hr class="divider" />
@@ -665,7 +665,7 @@ export class TableFilterPopover extends LitElement {
             type="number"
             class="range-input"
             placeholder="Min"
-            .value=${this._rangeMin !== null ? String(this._rangeMin) : ''}
+            .value=${this._rangeMin ?? ''}
             @input=${(e: Event) => {
               if (!(e.target instanceof HTMLInputElement)) return;
               this._handleRangeMinChange(e.target.value);
@@ -677,7 +677,7 @@ export class TableFilterPopover extends LitElement {
             type="number"
             class="range-input"
             placeholder="Max"
-            .value=${this._rangeMax !== null ? String(this._rangeMax) : ''}
+            .value=${this._rangeMax ?? ''}
             @input=${(e: Event) => {
               if (!(e.target instanceof HTMLInputElement)) return;
               this._handleRangeMaxChange(e.target.value);

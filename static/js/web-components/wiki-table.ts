@@ -592,7 +592,7 @@ export class WikiTable extends LitElement {
             aria-label="View mode"
             @click=${this._toggleCardView}
           >
-            <span class="view-toggle-option ${!this.cardViewActive ? 'view-toggle-active' : ''}">\u25A4<span class="view-toggle-text"> table</span></span>
+            <span class="view-toggle-option ${this.cardViewActive ? '' : 'view-toggle-active'}">\u25A4<span class="view-toggle-text"> table</span></span>
             <span class="view-toggle-option ${this.cardViewActive ? 'view-toggle-active' : ''}">\u229E<span class="view-toggle-text"> cards</span></span>
           </div>
         </div>
