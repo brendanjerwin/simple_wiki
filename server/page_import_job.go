@@ -189,11 +189,20 @@ func (j *SinglePageImportJob) processRecord(record pageimport.ParsedRecord) erro
 		}
 	}
 
-	if err := j.writePageContent(identifier, isNewPage, record.Template, fm); err != nil {
+	if err := j.writeFrontmatter(identifier, fm); err != nil {
 		return err
 	}
 
-	j.trackResult(identifier, isNewPage)
+	if isNewPage {
+		if err := j.finalizeNewPage(identifier, record.Template); err != nil {
+			return err
+		}
+
+		j.trackCreated(identifier)
+	} else {
+		j.trackUpdated(identifier)
+	}
+
 	return nil
 }
 
@@ -213,30 +222,37 @@ func (j *SinglePageImportJob) readOrInitFrontmatter(identifier string) (map[stri
 	return existingFm, false, nil
 }
 
-// writePageContent persists the frontmatter and, for new inv_item pages, the
-// inventory markdown template.
-func (j *SinglePageImportJob) writePageContent(identifier string, isNewPage bool, template string, fm map[string]any) error {
+// writeFrontmatter persists the frontmatter for a page.
+func (j *SinglePageImportJob) writeFrontmatter(identifier string, fm map[string]any) error {
 	if err := j.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(identifier), fm); err != nil {
 		return fmt.Errorf("failed to write frontmatter: %w", err)
 	}
-	if isNewPage && template == pageimport.InvItemTemplate {
+
+	return nil
+}
+
+// finalizeNewPage writes any additional content needed for a newly created page.
+func (j *SinglePageImportJob) finalizeNewPage(identifier string, template string) error {
+	if template == pageimport.InvItemTemplate {
 		markdown := inventory.BuildItemMarkdown()
 		if err := j.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(identifier), wikipage.Markdown(markdown)); err != nil {
 			return fmt.Errorf("failed to write markdown: %w", err)
 		}
 	}
+
 	return nil
 }
 
-// trackResult records the outcome of a page import in the accumulator and logs it.
-func (j *SinglePageImportJob) trackResult(identifier string, isNewPage bool) {
-	if isNewPage {
-		j.resultAccumulator.RecordCreated(identifier)
-		j.logger.Info("Created page: %s", identifier)
-	} else {
-		j.resultAccumulator.RecordUpdated(identifier)
-		j.logger.Info("Updated page: %s", identifier)
-	}
+// trackCreated records the creation of a page in the accumulator and logs it.
+func (j *SinglePageImportJob) trackCreated(identifier string) {
+	j.resultAccumulator.RecordCreated(identifier)
+	j.logger.Info("Created page: %s", identifier)
+}
+
+// trackUpdated records the update of a page in the accumulator and logs it.
+func (j *SinglePageImportJob) trackUpdated(identifier string) {
+	j.resultAccumulator.RecordUpdated(identifier)
+	j.logger.Info("Updated page: %s", identifier)
 }
 
 // mergeFrontmatter merges source frontmatter into target (upsert semantics).
