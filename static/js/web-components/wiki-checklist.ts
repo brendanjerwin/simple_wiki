@@ -885,7 +885,7 @@ export class WikiChecklist extends LitElement {
 
     // Register document-level listeners for move/end/cancel
     this._boundTouchMove = (ev: TouchEvent) => this._handleTouchMove(ev);
-    this._boundTouchEnd = () => this._handleTouchEnd();
+    this._boundTouchEnd = () => { void this._handleTouchEnd(); };
     this._boundTouchCancel = () => this._handleTouchCancel();
     document.addEventListener('touchmove', this._boundTouchMove, { passive: false });
     document.addEventListener('touchend', this._boundTouchEnd);
@@ -941,24 +941,28 @@ export class WikiChecklist extends LitElement {
   }
 
   private async _handleTouchEnd(): Promise<void> {
-    if (this._touchDragActive) {
-      // Commit the reorder
-      const sourceIndex = this._dragSourceItemIndex;
-      const targetIndex = this._dragOverItemIndex;
-      const position = this._dragOverItemPosition;
+    try {
+      if (this._touchDragActive) {
+        // Commit the reorder
+        const sourceIndex = this._dragSourceItemIndex;
+        const targetIndex = this._dragOverItemIndex;
+        const position = this._dragOverItemPosition;
 
-      this._cleanupTouchDrag();
+        this._cleanupTouchDrag();
 
-      if (sourceIndex !== null && targetIndex !== null) {
-        const insertIndex = position === 'before' ? targetIndex : targetIndex + 1;
-        const newItems = this.reorderItems(this.items, sourceIndex, insertIndex);
-        this.items = newItems;
-        await this.persistData(newItems);
+        if (sourceIndex !== null && targetIndex !== null) {
+          const insertIndex = position === 'before' ? targetIndex : targetIndex + 1;
+          const newItems = this.reorderItems(this.items, sourceIndex, insertIndex);
+          this.items = newItems;
+          await this.persistData(newItems);
+        }
+      } else {
+        // Touch ended before long-press fired
+        this._cancelLongPress();
+        this._removeDocumentTouchListeners();
       }
-    } else {
-      // Touch ended before long-press fired
-      this._cancelLongPress();
-      this._removeDocumentTouchListeners();
+    } catch (err) {
+      this.error = AugmentErrorService.augmentError(err, 'touch reorder');
     }
   }
 
