@@ -256,12 +256,12 @@ export class ToastMessage extends LitElement {
     }
   }
 
-  private _handleCloseClick = (event: Event): void => {
+  private readonly _handleCloseClick = (event: Event): void => {
     event.stopPropagation();
     this.hide();
   };
 
-  private _handleToastClick = (event: Event): void => {
+  private readonly _handleToastClick = (event: Event): void => {
     // Don't dismiss if clicking on error-display component or its children
     const target = event.target;
     if (!(target instanceof Element)) {
