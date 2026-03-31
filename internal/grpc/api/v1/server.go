@@ -290,61 +290,68 @@ func removeAtPath(data any, path []*apiv1.PathComponent) (any, error) {
 
 	switch v := data.(type) {
 	case map[string]any:
-		keyComp, ok := component.Component.(*apiv1.PathComponent_Key)
-		if !ok {
-			return nil, status.Errorf(codes.InvalidArgument, "path component is not a key for a map: %T", component.Component)
-		}
-		key := keyComp.Key
-
-		value, exists := v[key]
-		if !exists {
-			return nil, status.Errorf(codes.NotFound, "key '%s' not found", key)
-		}
-
-		if len(remainingPath) == 0 {
-			// Base case: remove key from map
-			delete(v, key)
-			return v, nil // return modified map
-		}
-
-		// Recursive step
-		newValue, err := removeAtPath(value, remainingPath)
-		if err != nil {
-			return nil, err
-		}
-		v[key] = newValue // Update map with potentially modified child.
-		return v, nil
-
+		return removeAtPathFromMap(v, component, remainingPath)
 	case []any:
-		indexComp, ok := component.Component.(*apiv1.PathComponent_Index)
-		if !ok {
-			return nil, status.Errorf(codes.InvalidArgument, "path component is not an index for a slice: %T", component.Component)
-		}
-		idx := int(indexComp.Index)
-
-		if idx < 0 || idx >= len(v) {
-			return nil, status.Errorf(codes.OutOfRange, "index %d is out of range for slice of length %d", idx, len(v))
-		}
-
-		if len(remainingPath) == 0 {
-			// Base case: remove item from slice
-			newSlice := append(v[:idx], v[idx+1:]...)
-			return newSlice, nil // Return the new slice
-		}
-
-		// Recursive step
-		value := v[idx]
-		newValue, err := removeAtPath(value, remainingPath)
-		if err != nil {
-			return nil, err
-		}
-		v[idx] = newValue // Update slice with potentially modified child.
-		return v, nil
-
+		return removeAtPathFromSlice(v, component, remainingPath)
 	default:
 		// Trying to traverse deeper, but `data` is a primitive.
 		return nil, status.Error(codes.InvalidArgument, "path is deeper than data structure")
 	}
+}
+
+// removeAtPathFromMap handles the map case for removeAtPath.
+func removeAtPathFromMap(v map[string]any, component *apiv1.PathComponent, remainingPath []*apiv1.PathComponent) (any, error) {
+	keyComp, ok := component.Component.(*apiv1.PathComponent_Key)
+	if !ok {
+		return nil, status.Errorf(codes.InvalidArgument, "path component is not a key for a map: %T", component.Component)
+	}
+	key := keyComp.Key
+
+	value, exists := v[key]
+	if !exists {
+		return nil, status.Errorf(codes.NotFound, "key '%s' not found", key)
+	}
+
+	if len(remainingPath) == 0 {
+		// Base case: remove key from map
+		delete(v, key)
+		return v, nil
+	}
+
+	// Recursive step
+	newValue, err := removeAtPath(value, remainingPath)
+	if err != nil {
+		return nil, err
+	}
+	v[key] = newValue
+	return v, nil
+}
+
+// removeAtPathFromSlice handles the slice case for removeAtPath.
+func removeAtPathFromSlice(v []any, component *apiv1.PathComponent, remainingPath []*apiv1.PathComponent) (any, error) {
+	indexComp, ok := component.Component.(*apiv1.PathComponent_Index)
+	if !ok {
+		return nil, status.Errorf(codes.InvalidArgument, "path component is not an index for a slice: %T", component.Component)
+	}
+	idx := int(indexComp.Index)
+
+	if idx < 0 || idx >= len(v) {
+		return nil, status.Errorf(codes.OutOfRange, "index %d is out of range for slice of length %d", idx, len(v))
+	}
+
+	if len(remainingPath) == 0 {
+		// Base case: remove item from slice
+		newSlice := append(v[:idx], v[idx+1:]...)
+		return newSlice, nil
+	}
+
+	// Recursive step
+	newValue, err := removeAtPath(v[idx], remainingPath)
+	if err != nil {
+		return nil, err
+	}
+	v[idx] = newValue
+	return v, nil
 }
 
 // NewServer creates a new gRPC server with the given dependencies.

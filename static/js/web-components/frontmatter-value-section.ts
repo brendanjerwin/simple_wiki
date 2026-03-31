@@ -186,7 +186,7 @@ export class FrontmatterValueSection extends LitElement {
       // Find the index of the key in the sorted order
       const keyIndex = sortedEntries.findIndex(([k]) => k === key);
 
-      if (keyIndex !== -1 && fieldRows && fieldRows[keyIndex]) {
+      if (keyIndex !== -1 && fieldRows?.[keyIndex]) {
         const fieldRow = fieldRows[keyIndex];
         const valueComponent = fieldRow.querySelector('frontmatter-value');
 
