@@ -10,7 +10,7 @@ import './frontmatter-value-section.js';
  * to strings; this restores the original type on save so TOML serialization
  * preserves `true` (boolean) rather than `"true"` (string).
  */
-export function coercePrimitive(value: unknown): unknown {
+export function coercePrimitive(value: unknown) {
   if (typeof value !== 'string') return value;
   if (value === 'true') return true;
   if (value === 'false') return false;
