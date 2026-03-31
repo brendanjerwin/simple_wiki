@@ -340,9 +340,10 @@ func removeAtPathFromSlice(v []any, component *apiv1.PathComponent, remainingPat
 	}
 
 	if len(remainingPath) == 0 {
-		// Base case: remove item from slice
-		newSlice := append(v[:idx], v[idx+1:]...)
-		return newSlice, nil
+		// Base case: remove item from slice, zeroing the vacated slot to prevent memory leaks.
+		copy(v[idx:], v[idx+1:])
+		v[len(v)-1] = nil
+		return v[:len(v)-1], nil
 	}
 
 	// Recursive step
