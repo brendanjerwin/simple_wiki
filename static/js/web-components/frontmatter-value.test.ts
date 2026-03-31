@@ -18,11 +18,11 @@ async function createFixtureWithTimeout(template: TemplateResult, timeoutMs = 50
 
 describe('coercePrimitive', () => {
   it('should convert "true" to boolean true', () => {
-    expect(coercePrimitive('true')).to.equal(true);
+    expect(coercePrimitive('true')).to.be.true;
   });
 
   it('should convert "false" to boolean false', () => {
-    expect(coercePrimitive('false')).to.equal(false);
+    expect(coercePrimitive('false')).to.be.false;
   });
 
   it('should convert numeric strings to numbers', () => {
@@ -37,9 +37,9 @@ describe('coercePrimitive', () => {
   });
 
   it('should leave non-string values unchanged', () => {
-    expect(coercePrimitive(true)).to.equal(true);
+    expect(coercePrimitive(true)).to.be.true;
     expect(coercePrimitive(42)).to.equal(42);
-    expect(coercePrimitive(null)).to.equal(null);
+    expect(coercePrimitive(null)).to.be.null;
   });
 });
 
@@ -74,11 +74,11 @@ describe('FrontmatterValue', () => {
     });
 
     it('should have null value by default', () => {
-      expect(el.value).to.equal(null);
+      expect(el.value).to.be.null;
     });
 
     it('should not be disabled by default', () => {
-      expect(el.disabled).to.equal(false);
+      expect(el.disabled).to.be.false;
     });
 
     it('should have empty placeholder by default', () => {
@@ -126,7 +126,7 @@ describe('FrontmatterValue', () => {
 
       it('should pass disabled state to string component', () => {
         const stringComponent = el.shadowRoot?.querySelector<HTMLElement & { disabled: boolean }>('frontmatter-value-string');
-        expect(stringComponent!.disabled).to.equal(true);
+        expect(stringComponent!.disabled).to.be.true;
       });
     });
   });
@@ -171,7 +171,7 @@ describe('FrontmatterValue', () => {
 
       it('should pass disabled state to array component', () => {
         const arrayComponent = el.shadowRoot?.querySelector<HTMLElement & { disabled: boolean }>('frontmatter-value-array');
-        expect(arrayComponent!.disabled).to.equal(true);
+        expect(arrayComponent!.disabled).to.be.true;
       });
     });
   });
@@ -205,7 +205,7 @@ describe('FrontmatterValue', () => {
 
       it('should pass disabled state to section component', () => {
         const sectionComponent = el.shadowRoot?.querySelector<HTMLElement & { disabled: boolean }>('frontmatter-value-section');
-        expect(sectionComponent!.disabled).to.equal(true);
+        expect(sectionComponent!.disabled).to.be.true;
       });
     });
   });
@@ -325,11 +325,11 @@ describe('FrontmatterValue', () => {
       });
 
       it('should coerce "true" back to boolean true', () => {
-        expect(valueChangeEvent?.detail.newValue).to.equal(true);
+        expect(valueChangeEvent?.detail.newValue).to.be.true;
       });
 
       it('should update the value property as boolean', () => {
-        expect(el.value).to.equal(true);
+        expect(el.value).to.be.true;
       });
     });
 
@@ -354,7 +354,7 @@ describe('FrontmatterValue', () => {
       });
 
       it('should coerce "false" back to boolean false', () => {
-        expect(valueChangeEvent?.detail.newValue).to.equal(false);
+        expect(valueChangeEvent?.detail.newValue).to.be.false;
       });
     });
 

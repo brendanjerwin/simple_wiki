@@ -51,7 +51,7 @@ describe('FrontmatterValueArray', () => {
     });
 
     it('should not be disabled by default', () => {
-      expect(el.disabled).to.equal(false);
+      expect(el.disabled).to.be.false;
     });
 
     it('should have empty placeholder by default', () => {
@@ -255,19 +255,19 @@ describe('FrontmatterValueArray', () => {
     it('should disable all string components', () => {
       const stringComponents = el.shadowRoot?.querySelectorAll<HTMLElement & { disabled: boolean }>('frontmatter-value-string');
       stringComponents!.forEach(component => {
-        expect(component.disabled).to.equal(true);
+        expect(component.disabled).to.be.true;
       });
     });
 
     it('should disable the add button', () => {
       const addButton = el.shadowRoot?.querySelector<HTMLButtonElement>('.add-item-button');
-      expect(addButton!.disabled).to.equal(true);
+      expect(addButton!.disabled).to.be.true;
     });
 
     it('should disable all remove buttons', () => {
       const removeButtons = el.shadowRoot?.querySelectorAll<HTMLButtonElement>('.remove-item-button');
       removeButtons!.forEach(button => {
-        expect(button.disabled).to.equal(true);
+        expect(button.disabled).to.be.true;
       });
     });
   });

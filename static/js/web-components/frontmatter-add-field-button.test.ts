@@ -32,11 +32,11 @@ describe('FrontmatterAddFieldButton', () => {
     });
 
     it('should not be open by default', () => {
-      expect(el.open).to.equal(false);
+      expect(el.open).to.be.false;
     });
 
     it('should not be disabled by default', () => {
-      expect(el.disabled).to.equal(false);
+      expect(el.disabled).to.be.false;
     });
 
     it('should render dropdown button', () => {
@@ -64,7 +64,7 @@ describe('FrontmatterAddFieldButton', () => {
     });
 
     it('should open the dropdown', () => {
-      expect(el.open).to.equal(true);
+      expect(el.open).to.be.true;
     });
 
     it('should render dropdown menu', () => {
@@ -99,7 +99,7 @@ describe('FrontmatterAddFieldButton', () => {
       });
 
       it('should close the dropdown', () => {
-        expect(el.open).to.equal(false);
+        expect(el.open).to.be.false;
       });
 
       it('should not render dropdown menu', () => {
@@ -131,7 +131,7 @@ describe('FrontmatterAddFieldButton', () => {
     });
 
     it('should close the dropdown', () => {
-      expect(el.open).to.equal(false);
+      expect(el.open).to.be.false;
     });
   });
 
@@ -163,7 +163,7 @@ describe('FrontmatterAddFieldButton', () => {
     });
 
     it('should close the dropdown', () => {
-      expect(el.open).to.equal(false);
+      expect(el.open).to.be.false;
     });
   });
 
@@ -197,7 +197,7 @@ describe('FrontmatterAddFieldButton', () => {
     });
 
     it('should close the dropdown', () => {
-      expect(el.open).to.equal(false);
+      expect(el.open).to.be.false;
     });
   });
 
@@ -231,7 +231,7 @@ describe('FrontmatterAddFieldButton', () => {
     });
 
     it('should close the dropdown', () => {
-      expect(el.open).to.equal(false);
+      expect(el.open).to.be.false;
     });
   });
 
@@ -244,7 +244,7 @@ describe('FrontmatterAddFieldButton', () => {
 
     it('should have disabled attribute on button', () => {
       const button = el.shadowRoot?.querySelector<HTMLButtonElement>('button');
-      expect(button?.disabled).to.equal(true);
+      expect(button?.disabled).to.be.true;
     });
 
     describe('when disabled button is clicked', () => {
@@ -255,7 +255,7 @@ describe('FrontmatterAddFieldButton', () => {
       });
 
       it('should not open the dropdown', () => {
-        expect(el.open).to.equal(false);
+        expect(el.open).to.be.false;
       });
     });
   });
