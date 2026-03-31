@@ -40,6 +40,7 @@ const (
 	uploadsPage               = "uploads"
 	mimeTextPlain             = "text/plain"
 	contentDispositionHeader  = "Content-Disposition"
+	indexTemplateName         = "index.tmpl"
 )
 
 var (
@@ -175,14 +176,14 @@ func serveExtensionFile(c *gin.Context) {
 func (s *Site) loadTemplate() multitemplate.Render {
 	r := multitemplate.New()
 
-	tmplMessage, err := template.New("index.tmpl").Funcs(template.FuncMap{
+	tmplMessage, err := template.New(indexTemplateName).Funcs(template.FuncMap{
 		"sniffContentType": s.sniffContentType,
 	}).Parse(string(static.IndexTemplate))
 	if err != nil {
 		panic(err)
 	}
 
-	r.Add("index.tmpl", tmplMessage)
+	r.Add(indexTemplateName, tmplMessage)
 
 	return r
 }
@@ -281,7 +282,7 @@ func (s *Site) renderPageContent(c *gin.Context, page, command string, p *wikipa
 	}
 
 	templateData := s.buildTemplateData(page, command, directoryListing, contentHTML, rawText, c)
-	c.HTML(http.StatusOK, "index.tmpl", templateData)
+	c.HTML(http.StatusOK, indexTemplateName, templateData)
 }
 
 func (*Site) getPageContent(p *wikipage.Page) (rawText string, contentHTML []byte) {

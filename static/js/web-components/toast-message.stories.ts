@@ -48,6 +48,57 @@ showToast('Operation completed', 'success', 3);
 export default meta;
 type Story = StoryObj;
 
+function createResponsiveSuccessToast(): any {
+  const success = document.createElement('toast-message') as any;
+  success.message = 'Build completed: 1.2s';
+  success.type = 'success';
+  success.visible = true;
+  success.autoClose = false;
+  success.style.position = 'relative';
+  success.style.display = 'block';
+  success.style.margin = '10px 0';
+  success.style.transform = 'none';
+  success.style.opacity = '1';
+  return success;
+}
+
+function createResponsiveWarningToast(): any {
+  const warning = document.createElement('toast-message') as any;
+  warning.message = 'Queue depth: 156 items';
+  warning.type = 'warning';
+  warning.visible = true;
+  warning.autoClose = false;
+  warning.style.position = 'relative';
+  warning.style.display = 'block';
+  warning.style.margin = '10px 0';
+  warning.style.transform = 'none';
+  warning.style.opacity = '1';
+  return warning;
+}
+
+const systemInfoNotifications = [
+  { message: 'Index: 450/500 complete', type: 'info', delay: 0 },
+  { message: 'Rate: 25.3/s', type: 'success', delay: 500 },
+  { message: 'Queue: 127 pending', type: 'warning', delay: 1000 },
+  { message: 'Connection timeout', type: 'error', delay: 1500 },
+];
+
+function triggerSystemNotifications(): void {
+  systemInfoNotifications.forEach(({ message, type, delay }) => {
+    setTimeout(() => {
+      const el = document.createElement('toast-message') as any;
+      el.message = message;
+      el.type = type;
+      el.visible = false;
+      el.autoClose = type !== 'error';
+      el.timeoutSeconds = 3;
+
+      document.body.appendChild(el);
+      requestAnimationFrame(() => el.show());
+    }, delay);
+  });
+}
+
 export const CompactSuccess: Story = {
   render: () => {
     const el = document.createElement('toast-message') as any;
@@ -258,33 +309,9 @@ export const ResponsiveDesignDemo: Story = {
           <li><strong>Typography:</strong> Scales from 11px to 10px on mobile</li>
         </ul>
         
-        ${(() => {
-          const success = document.createElement('toast-message') as any;
-          success.message = 'Build completed: 1.2s';
-          success.type = 'success';
-          success.visible = true;
-          success.autoClose = false;
-          success.style.position = 'relative';
-          success.style.display = 'block';
-          success.style.margin = '10px 0';
-          success.style.transform = 'none';
-          success.style.opacity = '1';
-          return success;
-        })()}
-        
-        ${(() => {
-          const warning = document.createElement('toast-message') as any;
-          warning.message = 'Queue depth: 156 items';
-          warning.type = 'warning';
-          warning.visible = true;
-          warning.autoClose = false;
-          warning.style.position = 'relative';
-          warning.style.display = 'block';
-          warning.style.margin = '10px 0';
-          warning.style.transform = 'none';
-          warning.style.opacity = '1';
-          return warning;
-        })()}
+        ${createResponsiveSuccessToast()}
+
+        ${createResponsiveWarningToast()}
         
         <p style="margin-top: 15px; font-size: 0.9em; color: #666;">
           Resize browser window to test responsive breakpoints at 768px.
@@ -303,33 +330,11 @@ export const ResponsiveDesignDemo: Story = {
 
 export const SystemInfoIntegrationDemo: Story = {
   render: () => {
-    // Simulate multiple system-style notifications
-    const notifications = [
-      { message: 'Index: 450/500 complete', type: 'info', delay: 0 },
-      { message: 'Rate: 25.3/s', type: 'success', delay: 500 },
-      { message: 'Queue: 127 pending', type: 'warning', delay: 1000 },
-      { message: 'Connection timeout', type: 'error', delay: 1500 },
-    ];
-
     return html`
       <div style="padding: 20px; background: #f0f8ff; min-height: 300px; position: relative;">
         <h3>System-Info Integration Demo</h3>
         <p>Multiple toasts demonstrating system-info design consistency:</p>
-        <button @click=${() => {
-          notifications.forEach(({ message, type, delay }) => {
-            setTimeout(() => {
-              const el = document.createElement('toast-message') as any;
-              el.message = message;
-              el.type = type;
-              el.visible = false;
-              el.autoClose = type !== 'error';
-              el.timeoutSeconds = 3;
-              
-              document.body.appendChild(el);
-              requestAnimationFrame(() => el.show());
-            }, delay);
-          });
-        }}>
+        <button @click=${triggerSystemNotifications}>
           Trigger System Notifications
         </button>
         
