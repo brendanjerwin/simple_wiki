@@ -20,8 +20,10 @@ const orders = detectAndParse();
 
 if (orders.length > 0) {
   console.debug('[Simple Wiki Companion] Sending', orders.length, 'orders to background script');
-  browser.runtime.sendMessage({
-    type: 'ORDERS_DETECTED',
-    orders,
-  });
+  void (async () => {
+    await browser.runtime.sendMessage({
+      type: 'ORDERS_DETECTED',
+      orders,
+    });
+  })();
 }

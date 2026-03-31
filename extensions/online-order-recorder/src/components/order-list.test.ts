@@ -217,7 +217,7 @@ describe('OrderList', () => {
       });
 
       it('should render all checkboxes as checked', () => {
-        const checkboxes = shadowRoot(el).querySelectorAll('input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
+        const checkboxes = shadowRoot(el).querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
         expect(checkboxes.length).to.equal(3);
         for (const cb of checkboxes) {
           expect(cb.checked).to.be.true;
@@ -254,7 +254,7 @@ describe('OrderList', () => {
         await el.updateComplete;
 
         // Uncheck the first checkbox
-        const checkboxes = shadowRoot(el).querySelectorAll('input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
+        const checkboxes = shadowRoot(el).querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
         checkboxes[0]!.checked = false;
         checkboxes[0]!.dispatchEvent(new Event('change'));
         await el.updateComplete;
@@ -277,13 +277,13 @@ describe('OrderList', () => {
         await el.updateComplete;
 
         // Uncheck first
-        const checkboxes = shadowRoot(el).querySelectorAll('input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
+        const checkboxes = shadowRoot(el).querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
         checkboxes[0]!.checked = false;
         checkboxes[0]!.dispatchEvent(new Event('change'));
         await el.updateComplete;
 
         // Re-check
-        const checkboxesAfter = shadowRoot(el).querySelectorAll('input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
+        const checkboxesAfter = shadowRoot(el).querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
         checkboxesAfter[0]!.checked = true;
         checkboxesAfter[0]!.dispatchEvent(new Event('change'));
         await el.updateComplete;
@@ -320,8 +320,8 @@ describe('OrderList', () => {
           receivedEvent = e as CustomEvent;
         }) as EventListener);
 
-        const saveButton = shadowRoot(el).querySelector('button.primary') as HTMLButtonElement;
-        saveButton.click();
+        const saveButton = shadowRoot(el).querySelector<HTMLButtonElement>('button.primary');
+        saveButton!.click();
       });
 
       it('should dispatch orders-selected event', () => {
@@ -361,7 +361,7 @@ describe('OrderList', () => {
         await el.updateComplete;
 
         // Uncheck the second order (index 1)
-        const checkboxes = shadowRoot(el).querySelectorAll('input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
+        const checkboxes = shadowRoot(el).querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
         checkboxes[1]!.checked = false;
         checkboxes[1]!.dispatchEvent(new Event('change'));
         await el.updateComplete;
@@ -370,8 +370,8 @@ describe('OrderList', () => {
           receivedEvent = e as CustomEvent;
         }) as EventListener);
 
-        const saveButton = shadowRoot(el).querySelector('button.primary') as HTMLButtonElement;
-        saveButton.click();
+        const saveButton = shadowRoot(el).querySelector<HTMLButtonElement>('button.primary');
+        saveButton!.click();
       });
 
       it('should only include checked orders', () => {
@@ -401,9 +401,8 @@ describe('OrderList', () => {
           receivedEvent = e as CustomEvent;
         }) as EventListener);
 
-        const buttons = shadowRoot(el).querySelectorAll('button');
-        const dismissButton = buttons[1] as HTMLButtonElement;
-        dismissButton.click();
+        const buttons = shadowRoot(el).querySelectorAll<HTMLButtonElement>('button');
+        buttons[1]!.click();
       });
 
       it('should dispatch orders-dismissed event', () => {
@@ -434,23 +433,22 @@ describe('OrderList', () => {
       });
 
       it('should disable the save button', () => {
-        const saveButton = shadowRoot(el).querySelector('button.primary') as HTMLButtonElement;
-        expect(saveButton.disabled).to.be.true;
+        const saveButton = shadowRoot(el).querySelector<HTMLButtonElement>('button.primary');
+        expect(saveButton!.disabled).to.be.true;
       });
 
       it('should show Saving... text on the save button', () => {
-        const saveButton = shadowRoot(el).querySelector('button.primary') as HTMLButtonElement;
-        expect(saveButton.textContent!.trim()).to.equal('Saving...');
+        const saveButton = shadowRoot(el).querySelector<HTMLButtonElement>('button.primary');
+        expect(saveButton!.textContent!.trim()).to.equal('Saving...');
       });
 
       it('should disable the dismiss button', () => {
-        const buttons = shadowRoot(el).querySelectorAll('button');
-        const dismissButton = buttons[1] as HTMLButtonElement;
-        expect(dismissButton.disabled).to.be.true;
+        const buttons = shadowRoot(el).querySelectorAll<HTMLButtonElement>('button');
+        expect(buttons[1]!.disabled).to.be.true;
       });
 
       it('should disable all checkboxes', () => {
-        const checkboxes = shadowRoot(el).querySelectorAll('input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
+        const checkboxes = shadowRoot(el).querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
         for (const cb of checkboxes) {
           expect(cb.disabled).to.be.true;
         }
@@ -466,23 +464,22 @@ describe('OrderList', () => {
       });
 
       it('should not disable the save button', () => {
-        const saveButton = shadowRoot(el).querySelector('button.primary') as HTMLButtonElement;
-        expect(saveButton.disabled).to.be.false;
+        const saveButton = shadowRoot(el).querySelector<HTMLButtonElement>('button.primary');
+        expect(saveButton!.disabled).to.be.false;
       });
 
       it('should show Save to Wiki text on the save button', () => {
-        const saveButton = shadowRoot(el).querySelector('button.primary') as HTMLButtonElement;
-        expect(saveButton.textContent!.trim()).to.equal('Save to Wiki');
+        const saveButton = shadowRoot(el).querySelector<HTMLButtonElement>('button.primary');
+        expect(saveButton!.textContent!.trim()).to.equal('Save to Wiki');
       });
 
       it('should not disable the dismiss button', () => {
-        const buttons = shadowRoot(el).querySelectorAll('button');
-        const dismissButton = buttons[1] as HTMLButtonElement;
-        expect(dismissButton.disabled).to.be.false;
+        const buttons = shadowRoot(el).querySelectorAll<HTMLButtonElement>('button');
+        expect(buttons[1]!.disabled).to.be.false;
       });
 
       it('should not disable checkboxes', () => {
-        const checkboxes = shadowRoot(el).querySelectorAll('input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
+        const checkboxes = shadowRoot(el).querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
         for (const cb of checkboxes) {
           expect(cb.disabled).to.be.false;
         }
@@ -500,15 +497,15 @@ describe('OrderList', () => {
         await el.updateComplete;
 
         // Uncheck the only order
-        const checkboxes = shadowRoot(el).querySelectorAll('input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
+        const checkboxes = shadowRoot(el).querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
         checkboxes[0]!.checked = false;
         checkboxes[0]!.dispatchEvent(new Event('change'));
         await el.updateComplete;
       });
 
       it('should disable the save button', () => {
-        const saveButton = shadowRoot(el).querySelector('button.primary') as HTMLButtonElement;
-        expect(saveButton.disabled).to.be.true;
+        const saveButton = shadowRoot(el).querySelector<HTMLButtonElement>('button.primary');
+        expect(saveButton!.disabled).to.be.true;
       });
     });
   });

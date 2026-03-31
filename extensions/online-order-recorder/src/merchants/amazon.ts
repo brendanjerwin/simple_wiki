@@ -1,6 +1,6 @@
 import { Order, OrderItem } from './types.js';
 
-const ORDER_NUMBER_PATTERN = /\d{3}-\d{7}-\d{7}/;
+const ORDER_NUMBER_PATTERN = /\d{3}-\d{7}-\d{7}/g;
 
 const MONTH_MAP: Record<string, string> = {
   'January': '01',
@@ -18,11 +18,12 @@ const MONTH_MAP: Record<string, string> = {
 };
 
 function parseAmazonDate(dateText: string): string {
-  const match = dateText.trim().match(/^(\w+)\s+(\d{1,2}),\s+(\d{4})$/);
-  if (!match) {
+  const matches = Array.from(dateText.trim().matchAll(/^(\w+)\s+(\d{1,2}),\s+(\d{4})$/g));
+  if (matches.length === 0) {
     return '';
   }
 
+  const match = matches[0]!;
   const monthName = match[1]!;
   const day = match[2]!;
   const year = match[3]!;
@@ -36,11 +37,12 @@ function parseAmazonDate(dateText: string): string {
 }
 
 function parsePriceCents(priceText: string): number {
-  const match = priceText.trim().match(/\$(\d+(?:,\d{3})*)\.(\d{2})/);
-  if (!match) {
+  const matches = Array.from(priceText.trim().matchAll(/\$(\d+(?:,\d{3})*)\.(\d{2})/g));
+  if (matches.length === 0) {
     return 0;
   }
 
+  const match = matches[0]!;
   const dollars = parseInt(match[1]!.replace(/,/g, ''), 10);
   const cents = parseInt(match[2]!, 10);
   return dollars * 100 + cents;
@@ -71,11 +73,11 @@ function parseOrderCard(card: Element): Order | null {
   }
 
   const orderIdText = orderIdEl.textContent?.trim() ?? '';
-  const orderNumberMatch = orderIdText.match(ORDER_NUMBER_PATTERN);
-  if (!orderNumberMatch) {
+  const orderNumberMatches = Array.from(orderIdText.matchAll(ORDER_NUMBER_PATTERN));
+  if (orderNumberMatches.length === 0) {
     return null;
   }
-  const orderNumber = orderNumberMatch[0];
+  const orderNumber = orderNumberMatches[0]![0];
 
   const orderDate = parseAmazonDate(findHeaderValue(card, 'order placed'));
   const totalCents = parsePriceCents(findHeaderValue(card, 'total'));
