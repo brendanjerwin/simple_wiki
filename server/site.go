@@ -76,29 +76,31 @@ type Site struct {
 	saveMut                 sync.RWMutex
 }
 
+// LoadCustomCSS reads custom CSS from the given file path and assigns it to s.CSS.
+// Does nothing if cssFile is empty.
+func (s *Site) LoadCustomCSS(cssFile string) error {
+	if len(cssFile) == 0 {
+		return nil
+	}
+	customCSS, err := os.ReadFile(cssFile)
+	if err != nil {
+		return fmt.Errorf("failed to read CSS file %s: %w", cssFile, err)
+	}
+	_, _ = fmt.Printf("Loaded CSS file, %d bytes\n", len(customCSS))
+	s.CSS = customCSS
+	return nil
+}
+
 // NewSite creates and initializes a new Site instance.
+// To configure custom CSS, call site.LoadCustomCSS after creation.
+// To configure file uploads, set site.Fileuploads, site.MaxUploadSize, and site.MaxDocumentSize after creation.
 func NewSite(
 	filepathToData string,
-	cssFile string,
 	defaultPage string,
 	debounce int,
 	secret string,
-	fileuploads bool,
-	maxUploadSize uint,
-	maxDocumentSize uint,
 	logger *lumber.ConsoleLogger,
 ) (*Site, error) {
-	var customCSS []byte
-	// collect custom CSS
-	if len(cssFile) > 0 {
-		var errRead error
-		customCSS, errRead = os.ReadFile(cssFile)
-		if errRead != nil {
-			return nil, fmt.Errorf("failed to read CSS file %s: %w", cssFile, errRead)
-		}
-		_, _ = fmt.Printf("Loaded CSS file, %d bytes\n", len(customCSS))
-	}
-
 	logger.Info("Initializing simple_wiki site...")
 
 	// Set up migration applicator with default migrations
@@ -107,13 +109,9 @@ func NewSite(
 
 	site := &Site{
 		PathToData:          filepathToData,
-		CSS:                 customCSS,
 		DefaultPage:         defaultPage,
 		Debounce:            debounce,
 		SessionStore:        cookie.NewStore([]byte(secret)),
-		Fileuploads:         fileuploads,
-		MaxUploadSize:       maxUploadSize,
-		MaxDocumentSize:     maxDocumentSize,
 		Logger:              logger,
 		MigrationApplicator: applicator,
 		MarkdownRenderer:    &goldmarkrenderer.GoldmarkRenderer{},
@@ -571,19 +569,19 @@ func (s *Site) UploadList() ([]os.FileInfo, error) {
 
 // --- PageReaderMutator implementation ---
 
-func writeFrontmatterToBuffer(content *bytes.Buffer, fmBytes []byte) error {
-	if _, err := content.WriteString(tomlDelimiter); err != nil {
+func writeFrontmatterToBuffer(content io.Writer, fmBytes []byte) error {
+	if _, err := io.WriteString(content, tomlDelimiter); err != nil {
 		return err
 	}
 	if _, err := content.Write(fmBytes); err != nil {
 		return err
 	}
 	if !bytes.HasSuffix(fmBytes, []byte(newline)) {
-		if _, err := content.WriteString(newline); err != nil {
+		if _, err := io.WriteString(content, newline); err != nil {
 			return err
 		}
 	}
-	if _, err := content.WriteString(tomlDelimiter); err != nil {
+	if _, err := io.WriteString(content, tomlDelimiter); err != nil {
 		return err
 	}
 	return nil

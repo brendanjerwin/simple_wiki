@@ -337,10 +337,7 @@ export class QrScanner extends LitElement {
         c.label.toLowerCase().includes('environment')
       );
       // cameras[0] guaranteed to exist since we checked length > 0 above
-      const firstCamera = this.cameras[0];
-      if (!firstCamera) {
-        throw new NoCameraError();
-      }
+      const firstCamera = this.cameras[0]!;
       this.selectedCameraId = backCamera?.id ?? firstCamera.id;
 
       // Wait for DOM update before starting scanner
@@ -612,7 +609,7 @@ export class QrScanner extends LitElement {
             <label for="camera-select">Camera</label>
             <select
               id="camera-select"
-              .value=${this.selectedCameraId || ''}
+              .value=${this.selectedCameraId ?? ''}
               @change=${this._handleCameraChange}
             >
               ${this.cameras.map(

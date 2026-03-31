@@ -21,7 +21,7 @@ declare global {
 }
 
 export class ChatMessageBubble extends LitElement {
-  static override styles = [
+  static override readonly styles = [
     colorCSS,
     typographyCSS,
     css`

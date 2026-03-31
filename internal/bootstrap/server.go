@@ -433,14 +433,23 @@ func setupGRPCServer(
 		return nil, nil, err
 	}
 
-	grpcServer := grpc.NewServer(
-		grpc.ChainUnaryInterceptor(unaryInterceptors...),
-		grpc.ChainStreamInterceptor(streamInterceptors...),
-		grpc.MaxRecvMsgSize(int(site.MaxUploadSize)*1024*1024),
-	)
+	grpcServer := grpc.NewServer(buildGRPCServerOptions(site.MaxUploadSize, unaryInterceptors, streamInterceptors)...)
 	grpcAPIServer.RegisterWithServer(grpcServer)
 
 	return grpcServer, grpcAPIServer, nil
+}
+
+// buildGRPCServerOptions constructs the slice of grpc.ServerOption for the gRPC server.
+// MaxUploadSize == 0 means no limit; the MaxRecvMsgSize option is omitted in that case.
+func buildGRPCServerOptions(maxUploadSizeMB uint, unaryInterceptors []grpc.UnaryServerInterceptor, streamInterceptors []grpc.StreamServerInterceptor) []grpc.ServerOption {
+	opts := []grpc.ServerOption{
+		grpc.ChainUnaryInterceptor(unaryInterceptors...),
+		grpc.ChainStreamInterceptor(streamInterceptors...),
+	}
+	if maxUploadSizeMB > 0 {
+		opts = append(opts, grpc.MaxRecvMsgSize(int(maxUploadSizeMB)*1024*1024))
+	}
+	return opts
 }
 
 // metricsPersistJob triggers async metrics persistence via the job queue.
