@@ -582,6 +582,8 @@ export class InventoryMoveItemDialog extends LitElement {
       return nothing;
     }
 
+    const scannedResult = this.scannedResult;
+
     return html`
       <div class="scanned-result">
         <div class="scanned-result-header">
@@ -597,7 +599,7 @@ export class InventoryMoveItemDialog extends LitElement {
           </div>
           <button
             class="move-to-button"
-            @click=${() => this._handleMoveToClick(this.scannedResult!.identifier)}
+            @click=${() => this._handleMoveToClick(scannedResult.identifier)}
             ?disabled=${this.movingTo !== null}
           >
             ${this.movingTo === this.scannedResult.identifier ? 'Moving...' : 'Move To'}
