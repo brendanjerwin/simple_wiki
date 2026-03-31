@@ -14,6 +14,7 @@ describe('Global Error Handler', () => {
 
   afterEach(() => {
     restore();
+    document.querySelectorAll('kernel-panic').forEach(el => el.remove());
   });
 
   describe('setupGlobalErrorHandler', () => {
@@ -77,9 +78,8 @@ describe('Global Error Handler', () => {
         errorHandler(mockErrorEvent);
       });
 
-      it('should not throw', () => {
-        // If we get here, errorHandler didn't throw
-        expect(true).to.be.true;
+      it('should show kernel panic', () => {
+        expect(document.querySelector('kernel-panic')).to.exist;
       });
     });
 
@@ -99,9 +99,8 @@ describe('Global Error Handler', () => {
         errorHandler(mockErrorEvent);
       });
 
-      it('should not throw', () => {
-        // If we get here, errorHandler didn't throw
-        expect(true).to.be.true;
+      it('should show kernel panic', () => {
+        expect(document.querySelector('kernel-panic')).to.exist;
       });
     });
   });
@@ -137,9 +136,8 @@ describe('Global Error Handler', () => {
       rejectionHandler(mockRejectionEvent);
     });
 
-    it('should not throw', () => {
-      // If we get here, rejectionHandler didn't throw
-      expect(true).to.be.true;
+    it('should show kernel panic', () => {
+      expect(document.querySelector('kernel-panic')).to.exist;
     });
 
     it('should prevent default', () => {
