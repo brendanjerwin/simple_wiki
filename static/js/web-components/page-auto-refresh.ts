@@ -155,6 +155,9 @@ export class PageAutoRefresh extends LitElement {
     }
   }
 
+  // Note: AbortSignal.any() and AbortSignal.timeout() require Chrome 116+,
+  // Firefox 115+, Safari 17+ (Baseline 2023). This is intentional — the
+  // project targets modern browsers.
   private _waitForReconnect(signal: AbortSignal, delayMs: number): Promise<void> {
     const combined = AbortSignal.any([signal, AbortSignal.timeout(delayMs)]);
     if (combined.aborted) return Promise.resolve();

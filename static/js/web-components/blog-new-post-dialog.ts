@@ -307,11 +307,17 @@ export class BlogNewPostDialog extends LitElement {
 
   override updated(changed: Map<string, unknown>): void {
     if (changed.has('open') && this.open) {
+      // Cancel any pending focus RAF before starting a new one to prevent
+      // race conditions or focusing elements in a closed dialog.
+      if (this._pendingFocusRaf !== undefined) {
+        cancelAnimationFrame(this._pendingFocusRaf);
+      }
       // Focus the title input when dialog opens
       this._pendingFocusRaf = requestAnimationFrame(() => {
         this._pendingFocusRaf = undefined;
-        const titleInput = this.shadowRoot?.querySelector<HTMLElement>('title-input');
-        titleInput?.focus();
+        if (this.open) {
+          this.shadowRoot?.querySelector<HTMLElement>('title-input')?.focus();
+        }
       });
     }
   }
