@@ -12,11 +12,6 @@ type ConfirmationDialogElement = HTMLElement & {
   setLoading: (loading: boolean) => void;
   showError: (error: AugmentedError) => void;
   closeDialog: () => void;
-  addEventListener: (type: string, listener: (event: Event) => void) => void;
-  removeEventListener: (type: string, listener: (event: Event) => void) => void;
-  dataset: { pageName?: string };
-  id: string;
-  hidden: boolean;
 };
 
 /**

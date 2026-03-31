@@ -293,12 +293,12 @@ export const InteractiveTesting: Story = {
           ></confirmation-interlock-button>
 
           <button @click=${() => {
-            const btn = document.querySelector('#test-button') as ConfirmationInterlockButton;
+            const btn = document.getElementById('test-button') as ConfirmationInterlockButton;
             btn?.arm();
           }} style="padding: 8px 16px;">Arm</button>
 
           <button @click=${() => {
-            const btn = document.querySelector('#test-button') as ConfirmationInterlockButton;
+            const btn = document.getElementById('test-button') as ConfirmationInterlockButton;
             btn?.disarm();
           }} style="padding: 8px 16px;">Disarm</button>
         </div>
