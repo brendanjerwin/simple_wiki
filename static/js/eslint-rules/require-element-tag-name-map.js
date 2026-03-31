@@ -28,7 +28,7 @@ module.exports = {
 
     function collectDeclaredTagNames(node) {
       for (const member of node.body?.body ?? []) {
-        if (member.type !== 'TSPropertySignature' || !member.key) {
+        if (member.type !== 'TSPropertySignature' || member.computed) {
           continue;
         }
         if (member.key.type === 'Literal' && typeof member.key.value === 'string') {
