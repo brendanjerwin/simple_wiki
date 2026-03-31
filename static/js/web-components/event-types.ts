@@ -53,3 +53,11 @@ export interface SectionChangeEventDetail {
 export interface InventoryFilterChangedEventDetail {
   inventoryOnly: boolean;
 }
+
+/**
+ * Event detail for add-field event from FrontmatterAddFieldButton.
+ * @fires add-field - Dispatched when the user selects a field type to add.
+ */
+export interface AddFieldEventDetail {
+  type: 'field' | 'array' | 'section';
+}
