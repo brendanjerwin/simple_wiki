@@ -714,6 +714,7 @@ export class WikiTable extends LitElement {
     if (!this.extractedData) {
       throw new Error('_renderCardView called without extractedData — programming bug');
     }
+    const { extractedData } = this;
     if (processedRows.length === 0) {
       return html`<div class="no-results">No matching rows</div>`;
     }
@@ -722,7 +723,7 @@ export class WikiTable extends LitElement {
       <div class="card-view">
         ${processedRows.map(row => html`
           <div class="card">
-            ${this.extractedData.columns.map((col, i) => html`
+            ${extractedData.columns.map((col, i) => html`
               <div class="card-row">
                 <span class="card-label">${col.headerText}</span>
                 <span class="card-value">${unsafeHTML(row.htmlCells[i] ?? '')}</span>
