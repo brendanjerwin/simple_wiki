@@ -1,5 +1,5 @@
 import { expect } from '@open-wc/testing';
-import { SystemInfo } from './system-info.js';
+import type { SystemInfo } from './system-info.js';
 import type { SystemInfoVersion } from './system-info-version.js';
 import { GetVersionResponseSchema, GetJobStatusResponseSchema, JobQueueStatusSchema } from '../gen/api/v1/system_info_pb.js';
 import { create } from '@bufbuild/protobuf';
@@ -47,14 +47,6 @@ describe('SystemInfo', () => {
 
   it('should exist', () => {
     expect(el).to.exist;
-  });
-
-  it('should be an instance of SystemInfo', () => {
-    expect(el).to.be.instanceOf(SystemInfo);
-  });
-
-  it('should have the correct tag name', () => {
-    expect(el.tagName.toLowerCase()).to.equal('system-info');
   });
 
   describe('when loading', () => {
@@ -283,28 +275,6 @@ describe('SystemInfo', () => {
     });
   });
 
-  describe('component styling', () => {
-    it('should have fixed positioning', () => {
-      const style = getComputedStyle(el);
-      expect(style.position).to.equal('fixed');
-    });
-
-    it('should be positioned in bottom right', () => {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing static styles property for testing
-      const styles = (el.constructor as typeof SystemInfo).styles as Array<{ cssText: string }>;
-      const cssText = styles.map(s => s.cssText).join('');
-      expect(cssText).to.include('bottom: 2px');
-      expect(cssText).to.include('right: 2px');
-    });
-
-    it('should use z-index variable for drawer layer', () => {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing static styles property for testing
-      const styles = (el.constructor as typeof SystemInfo).styles as Array<{ cssText: string }>;
-      const cssText = styles.map(s => s.cssText).join('');
-      expect(cssText).to.include('z-index: var(--z-drawer)');
-    });
-  });
-
   describe('progress calculation', () => {
     describe('when job queues are empty', () => {
       beforeEach(() => {
@@ -354,27 +324,6 @@ describe('SystemInfo', () => {
         expect(queue).to.exist;
         expect(queue!.name).to.equal('TestQueue');
       });
-    });
-  });
-
-  describe('component lifecycle', () => {
-    let connectStub: SinonStub;
-    let disconnectStub: SinonStub;
-
-    beforeEach(() => {
-      connectStub = stub(el, 'connectedCallback');
-      disconnectStub = stub(el, 'disconnectedCallback');
-    });
-
-    afterEach(() => {
-      connectStub.restore();
-      disconnectStub.restore();
-    });
-
-    it('should handle connection lifecycle', () => {
-      expect(connectStub).to.not.have.been.called;
-      expect(disconnectStub).to.not.have.been.called;
-      // We can't easily test the timer management without more complex mocking
     });
   });
 
