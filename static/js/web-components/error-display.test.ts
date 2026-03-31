@@ -210,4 +210,150 @@ describe('ErrorDisplay', () => {
       });
     });
   });
+
+  describe('_renderDetails', () => {
+    describe('when error has no stack', () => {
+      beforeEach(async () => {
+        const originalError = new Error('Test error');
+        delete originalError.stack;
+        el.augmentedError = new AugmentedError(originalError, ErrorKind.ERROR, 'error');
+
+        await Promise.race([
+          el.updateComplete,
+          timeout(5000, "Component update timed out"),
+        ]);
+      });
+
+      it('should not display expand button', () => {
+        const expandButton = el.shadowRoot?.querySelector('.expand-button');
+        expect(expandButton).to.equal(null);
+      });
+
+      it('should not display details section', () => {
+        const detailsSection = el.shadowRoot?.querySelector('.error-details');
+        expect(detailsSection).to.equal(null);
+      });
+    });
+
+    describe('when error has stack', () => {
+      beforeEach(async () => {
+        const originalError = new Error('Test error');
+        originalError.stack = 'Error: Test error\n    at Object.<anonymous> (test.js:1:1)';
+        el.augmentedError = new AugmentedError(originalError, ErrorKind.ERROR, 'error');
+
+        await Promise.race([
+          el.updateComplete,
+          timeout(5000, "Component update timed out"),
+        ]);
+      });
+
+      it('should display expand button', () => {
+        const expandButton = el.shadowRoot?.querySelector('.expand-button');
+        expect(expandButton).to.not.equal(null);
+      });
+
+      it('should show "Show details" label initially', () => {
+        const expandButton = el.shadowRoot?.querySelector('.expand-button');
+        expect(expandButton?.textContent?.trim()).to.include('Show details');
+      });
+
+      it('should have details hidden initially', () => {
+        const detailsSection = el.shadowRoot?.querySelector('.error-details');
+        expect(detailsSection?.getAttribute('aria-hidden')).to.equal('true');
+      });
+
+      it('should set aria-expanded to false on button initially', () => {
+        const expandButton = el.shadowRoot?.querySelector('.expand-button');
+        expect(expandButton?.getAttribute('aria-expanded')).to.equal('false');
+      });
+
+      describe('when expand button is clicked', () => {
+        beforeEach(async () => {
+          const expandButton = el.shadowRoot?.querySelector<HTMLButtonElement>('.expand-button');
+          expandButton?.click();
+
+          await Promise.race([
+            el.updateComplete,
+            timeout(5000, "Component update after click timed out"),
+          ]);
+        });
+
+        it('should show details', () => {
+          const detailsSection = el.shadowRoot?.querySelector('.error-details');
+          expect(detailsSection?.getAttribute('aria-hidden')).to.equal('false');
+        });
+
+        it('should change label to "Hide details"', () => {
+          const expandButton = el.shadowRoot?.querySelector('.expand-button');
+          expect(expandButton?.textContent?.trim()).to.include('Hide details');
+        });
+
+        it('should set aria-expanded to true on button', () => {
+          const expandButton = el.shadowRoot?.querySelector('.expand-button');
+          expect(expandButton?.getAttribute('aria-expanded')).to.equal('true');
+        });
+
+        it('should apply expanded class to expand icon', () => {
+          const expandIcon = el.shadowRoot?.querySelector('.expand-icon');
+          expect(expandIcon?.classList.contains('expanded')).to.equal(true);
+        });
+
+        describe('when expand button is clicked again', () => {
+          beforeEach(async () => {
+            const expandButton = el.shadowRoot?.querySelector<HTMLButtonElement>('.expand-button');
+            expandButton?.click();
+
+            await Promise.race([
+              el.updateComplete,
+              timeout(5000, "Component update after second click timed out"),
+            ]);
+          });
+
+          it('should hide details again', () => {
+            const detailsSection = el.shadowRoot?.querySelector('.error-details');
+            expect(detailsSection?.getAttribute('aria-hidden')).to.equal('true');
+          });
+
+          it('should revert label to "Show details"', () => {
+            const expandButton = el.shadowRoot?.querySelector('.expand-button');
+            expect(expandButton?.textContent?.trim()).to.include('Show details');
+          });
+        });
+      });
+
+      describe('when Enter key is pressed on expand button', () => {
+        beforeEach(async () => {
+          const expandButton = el.shadowRoot?.querySelector<HTMLButtonElement>('.expand-button');
+          expandButton?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+          await Promise.race([
+            el.updateComplete,
+            timeout(5000, "Component update timed out"),
+          ]);
+        });
+
+        it('should expand details', () => {
+          const detailsSection = el.shadowRoot?.querySelector('.error-details');
+          expect(detailsSection?.getAttribute('aria-hidden')).to.equal('false');
+        });
+      });
+
+      describe('when Space key is pressed on expand button', () => {
+        beforeEach(async () => {
+          const expandButton = el.shadowRoot?.querySelector<HTMLButtonElement>('.expand-button');
+          expandButton?.dispatchEvent(new KeyboardEvent('keydown', { key: ' ', bubbles: true }));
+
+          await Promise.race([
+            el.updateComplete,
+            timeout(5000, "Component update timed out"),
+          ]);
+        });
+
+        it('should expand details', () => {
+          const detailsSection = el.shadowRoot?.querySelector('.error-details');
+          expect(detailsSection?.getAttribute('aria-hidden')).to.equal('false');
+        });
+      });
+    });
+  });
 });

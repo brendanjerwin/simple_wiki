@@ -19,6 +19,9 @@ export default {
   browsers: [
     chromeLauncher({
       executablePath: chromiumPath,
+      launchOptions: {
+        args: ['--no-sandbox', '--disable-dev-shm-usage'],
+      },
     }),
   ],
   plugins: [
