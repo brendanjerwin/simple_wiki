@@ -237,7 +237,7 @@ export class FrontmatterValueSection extends LitElement {
     // Create a hash of the fields to check if we can use cached results
     const fieldsHash = JSON.stringify(entries);
     
-    if (this._fieldsHashCache === fieldsHash && this._sortedEntriesCache.has(fieldsHash)) {
+    if (this._fieldsHashCache === fieldsHash) {
       return this._sortedEntriesCache.get(fieldsHash)!;
     }
 

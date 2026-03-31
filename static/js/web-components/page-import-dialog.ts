@@ -559,16 +559,12 @@ export class PageImportDialog extends LitElement {
   private _streamAbortController: AbortController | null = null;
 
   private get pageImportClient(): ReturnType<typeof createClient<typeof PageImportService>> {
-    if (!this._pageImportClient) {
-      this._pageImportClient = createClient(PageImportService, getGrpcWebTransport());
-    }
+    this._pageImportClient ??= createClient(PageImportService, getGrpcWebTransport());
     return this._pageImportClient;
   }
 
   private get systemInfoClient(): ReturnType<typeof createClient<typeof SystemInfoService>> {
-    if (!this._systemInfoClient) {
-      this._systemInfoClient = createClient(SystemInfoService, getGrpcWebTransport());
-    }
+    this._systemInfoClient ??= createClient(SystemInfoService, getGrpcWebTransport());
     return this._systemInfoClient;
   }
 
