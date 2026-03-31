@@ -43,12 +43,12 @@ export function toTitleCase(text: string): string {
  * @fires input - Standard input event, value is title-cased.
  */
 export class TitleInput extends LitElement {
-  static override shadowRootOptions: ShadowRootInit = {
+  static override readonly shadowRootOptions: ShadowRootInit = {
     ...LitElement.shadowRootOptions,
     delegatesFocus: true,
   };
 
-  static override styles = [
+  static override readonly styles = [
     dialogCSS,
     css`
       :host {

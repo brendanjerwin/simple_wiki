@@ -111,17 +111,25 @@ func createSite(c *cli.Context) (*server.Site, error) {
 		logger.Warn("No --cookie-secret provided; a random secret was generated. Sessions will not persist across restarts. Set --cookie-secret to a persistent value to maintain sessions across restarts.")
 	}
 
-	return server.NewSite(
+	site, err := server.NewSite(
 		pathToData,
-		c.GlobalString("css"),
 		c.GlobalString("default-page"),
 		c.GlobalInt("debounce"),
 		cookieSecret,
-		!c.GlobalBool("block-file-uploads"),
-		c.GlobalUint("max-upload-mb"),
-		c.GlobalUint("max-document-length"),
 		logger,
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := site.LoadCustomCSS(c.GlobalString("css")); err != nil {
+		return nil, err
+	}
+
+	site.Fileuploads = !c.GlobalBool("block-file-uploads")
+	site.MaxUploadSize = c.GlobalUint("max-upload-mb")
+	site.MaxDocumentSize = c.GlobalUint("max-document-length")
+	return site, nil
 }
 
 func detectTailscale(ctx context.Context) *tailscale.Status {
