@@ -224,8 +224,14 @@ describe('WikiSearch', () => {
 
     describe('when target is not an HTMLInputElement', () => {
       let divElement: HTMLDivElement;
+      let searchInputSelectSpy: sinon.SinonSpy;
 
       beforeEach(() => {
+        const searchInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[type="search"]');
+        if (searchInput) {
+          searchInputSelectSpy = sinon.spy(searchInput, 'select');
+        }
+
         divElement = document.createElement('div');
         document.body.appendChild(divElement);
 
@@ -238,8 +244,8 @@ describe('WikiSearch', () => {
         divElement.remove();
       });
 
-      it('should not throw', () => {
-        expect(true).to.be.true;
+      it('should not select the search input text', () => {
+        expect(searchInputSelectSpy).to.not.have.been.called;
       });
     });
   });
