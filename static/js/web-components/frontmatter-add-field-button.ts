@@ -37,7 +37,7 @@ export class FrontmatterAddFieldButton extends LitElement {
     document.removeEventListener('click', this._handleClickOutside);
   }
 
-  private _handleClickOutside = (event: Event): void => {
+  private readonly _handleClickOutside = (event: Event): void => {
     if (!this.open) return;
 
     if (event.target instanceof Node && !this.contains(event.target)) {
@@ -45,25 +45,15 @@ export class FrontmatterAddFieldButton extends LitElement {
     }
   };
 
-  private _handleToggleDropdown = (event: Event): void => {
+  private readonly _handleToggleDropdown = (event: Event): void => {
     event.stopPropagation();
     if (!this.disabled) {
       this.open = !this.open;
     }
   };
 
-  private _handleAddField = (): void => {
-    this._dispatchAddEvent('field');
-    this.open = false;
-  };
-
-  private _handleAddArray = (): void => {
-    this._dispatchAddEvent('array');
-    this.open = false;
-  };
-
-  private _handleAddSection = (): void => {
-    this._dispatchAddEvent('section');
+  private readonly _handleAdd = (type: 'field' | 'array' | 'section'): void => {
+    this._dispatchAddEvent(type);
     this.open = false;
   };
 
@@ -86,9 +76,9 @@ export class FrontmatterAddFieldButton extends LitElement {
       </button>
       ${this.open ? html`
         <div class="dropdown-menu border-radius">
-          <button class="dropdown-item" @click="${this._handleAddField}">Add Field</button>
-          <button class="dropdown-item" @click="${this._handleAddArray}">Add Array</button>
-          <button class="dropdown-item" @click="${this._handleAddSection}">Add Section</button>
+          <button class="dropdown-item" @click="${() => this._handleAdd('field')}">Add Field</button>
+          <button class="dropdown-item" @click="${() => this._handleAdd('array')}">Add Array</button>
+          <button class="dropdown-item" @click="${() => this._handleAdd('section')}">Add Section</button>
         </div>
       ` : ''}
     `;
