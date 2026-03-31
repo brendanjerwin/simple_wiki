@@ -14,7 +14,8 @@ import (
 )
 
 const (
-	testFileTimestamp = 1609459200 // 2021-01-01 Unix timestamp
+	testFileTimestamp    = 1609459200 // 2021-01-01 Unix timestamp
+	frontmatterDelimiter = "+++"
 )
 
 // MockMigrationDeps provides a simple mock implementation for testing migrations
@@ -158,7 +159,7 @@ func CreatePascalCasePage(dir, identifier, content string) {
 	mdPath := filepath.Join(dir, base32tools.EncodeToBase32(strings.ToLower(identifier))+".md")
 
 	// Build page with frontmatter containing the identifier
-	fullContent := "+++\nidentifier = '" + identifier + "'\n+++\n\n" + content
+	fullContent := frontmatterDelimiter + "\nidentifier = '" + identifier + "'\n" + frontmatterDelimiter + "\n\n" + content
 	_ = os.WriteFile(mdPath, []byte(fullContent), 0644)
 }
 
