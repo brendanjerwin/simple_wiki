@@ -75,7 +75,7 @@ describe('WikiTable', () => {
     });
 
     it('should extract data from the table', () => {
-      expect(el.extractedData).to.not.be.null;
+      expect(el.extractedData).to.exist;
       expect(el.extractedData!.columns).to.have.length(3);
       expect(el.extractedData!.rows).to.have.length(3);
     });
@@ -128,12 +128,12 @@ describe('WikiTable', () => {
 
       it('should not show row count as filtered', () => {
         const filtered = el.shadowRoot?.querySelector('.row-count-filtered');
-        expect(filtered).to.not.exist;
+        expect(filtered).to.equal(null);
       });
 
       it('should not show clear all button', () => {
         const clearAll = el.shadowRoot?.querySelector('[aria-label="Clear all filters"]');
-        expect(clearAll).to.not.exist;
+        expect(clearAll).to.equal(null);
       });
 
       it('should show the view toggle', () => {
@@ -213,7 +213,7 @@ describe('WikiTable', () => {
       });
 
       it('should activate card view', () => {
-        expect(el.cardViewActive).to.be.true;
+        expect(el.cardViewActive).to.equal(true);
       });
 
       it('should render cards instead of table', () => {
@@ -245,7 +245,7 @@ describe('WikiTable', () => {
         el.cardViewActive = false;
         await el.updateComplete;
         const sortFilterPill = el.shadowRoot?.querySelector('[aria-label="Sort and filter"]');
-        expect(sortFilterPill).to.not.exist;
+        expect(sortFilterPill).to.equal(null);
       });
     });
   });
@@ -265,7 +265,7 @@ describe('WikiTable', () => {
       });
 
       it('should open column picker', () => {
-        expect(el.columnPickerOpen).to.be.true;
+        expect(el.columnPickerOpen).to.equal(true);
       });
 
       it('should show select column title', () => {
@@ -288,7 +288,7 @@ describe('WikiTable', () => {
       });
 
       it('should close the column picker', () => {
-        expect(el.columnPickerOpen).to.be.false;
+        expect(el.columnPickerOpen).to.equal(false);
       });
 
       it('should open the popover for the selected column', () => {
@@ -374,7 +374,7 @@ describe('WikiTable', () => {
       });
 
       it('should reset sort column index', () => {
-        expect(el.sortColumnIndex).to.be.null;
+        expect(el.sortColumnIndex).to.equal(null);
       });
     });
   });
@@ -420,7 +420,7 @@ describe('WikiTable', () => {
       });
 
       it('should close the popover', () => {
-        expect(el.popoverColumnIndex).to.be.null;
+        expect(el.popoverColumnIndex).to.equal(null);
       });
     });
 
@@ -438,7 +438,7 @@ describe('WikiTable', () => {
       });
 
       it('should close the popover', () => {
-        expect(el.popoverColumnIndex).to.be.null;
+        expect(el.popoverColumnIndex).to.equal(null);
       });
     });
   });
@@ -463,7 +463,7 @@ describe('WikiTable', () => {
       });
 
       it('should update tableFilters', () => {
-        expect(el.tableFilters.has(0)).to.be.true;
+        expect(el.tableFilters.has(0)).to.equal(true);
       });
 
       it('should filter the rows', () => {
@@ -579,7 +579,7 @@ describe('WikiTable', () => {
 
       it('should not render a table element', () => {
         const table = el.shadowRoot?.querySelector('table');
-        expect(table).to.not.exist;
+        expect(table).to.equal(null);
       });
     });
   });
@@ -621,7 +621,7 @@ describe('WikiTable', () => {
       });
 
       it('should close the column picker', () => {
-        expect(el.columnPickerOpen).to.be.false;
+        expect(el.columnPickerOpen).to.equal(false);
       });
 
       it('should open the popover for the selected column', () => {
@@ -649,7 +649,7 @@ describe('WikiTable', () => {
     });
 
     it('should start in card view on narrow screens', () => {
-      expect(el.cardViewActive).to.be.true;
+      expect(el.cardViewActive).to.equal(true);
     });
   });
 
@@ -681,7 +681,7 @@ describe('WikiTable', () => {
     });
 
     it('should not extract data', () => {
-      expect(el.extractedData).to.be.null;
+      expect(el.extractedData).to.equal(null);
     });
 
     it('should render a slot for the content', () => {
@@ -856,7 +856,7 @@ describe('WikiTable', () => {
       it('should show the previously excluded value still unchecked', () => {
         const popover = el.shadowRoot?.querySelector('table-filter-popover');
         const checkboxes = popover?.shadowRoot?.querySelectorAll('.checkbox-item input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
-        expect(checkboxes[0]!.checked).to.be.false;
+        expect(checkboxes[0]!.checked).to.equal(false);
       });
 
       it('should still show the filtered rows', () => {
@@ -1011,7 +1011,7 @@ describe('WikiTable', () => {
       });
 
       it('should close the column picker', () => {
-        expect(el.columnPickerOpen).to.be.false;
+        expect(el.columnPickerOpen).to.equal(false);
       });
     });
   });
@@ -1202,7 +1202,7 @@ describe('WikiTable', () => {
     });
 
     it('should remove media query listener on disconnect', () => {
-      expect(removeListenerSpy).to.have.been.calledOnce;
+      expect(removeListenerSpy.callCount).to.equal(1);
     });
   });
 
@@ -1264,12 +1264,12 @@ describe('WikiTable', () => {
 
       it('should strip script tags from rendered output', () => {
         const cells = el.shadowRoot?.querySelectorAll('tbody td');
-        expect(cells?.[0]?.querySelector('script')).to.not.exist;
+        expect(cells?.[0]?.querySelector('script')).to.equal(null);
       });
 
       it('should not execute injected scripts', () => {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- intentional cast for XSS test verification
-        expect((window as unknown as Record<string, unknown>)['__xss_executed']).to.be.undefined;
+        expect((window as unknown as Record<string, unknown>)['__xss_executed']).to.equal(undefined);
       });
 
     });
@@ -1298,12 +1298,12 @@ describe('WikiTable', () => {
 
       it('should strip onerror event handler attributes', () => {
         const spans = el.shadowRoot?.querySelectorAll('tbody td span');
-        expect(spans?.[0]?.getAttribute('onerror')).to.be.null;
+        expect(spans?.[0]?.getAttribute('onerror')).to.equal(null);
       });
 
       it('should strip onclick event handler attributes', () => {
         const spans = el.shadowRoot?.querySelectorAll('tbody td span');
-        expect(spans?.[0]?.getAttribute('onclick')).to.be.null;
+        expect(spans?.[0]?.getAttribute('onclick')).to.equal(null);
       });
 
     });
@@ -1415,12 +1415,12 @@ describe('WikiTable', () => {
 
       it('should strip script tags from card view rendered output', () => {
         const cardValues = el.shadowRoot?.querySelectorAll('.card-value');
-        expect(cardValues?.[0]?.querySelector('script')).to.not.exist;
+        expect(cardValues?.[0]?.querySelector('script')).to.equal(null);
       });
 
       it('should not execute injected scripts in card view', () => {
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- intentional cast for XSS test verification
-        expect((window as unknown as Record<string, unknown>)['__card_xss']).to.be.undefined;
+        expect((window as unknown as Record<string, unknown>)['__card_xss']).to.equal(undefined);
       });
 
     });

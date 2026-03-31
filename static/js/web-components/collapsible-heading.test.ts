@@ -62,7 +62,7 @@ describe('CollapsibleHeading', () => {
     });
 
     it('should be collapsed by default', () => {
-      expect(el.collapsed).to.be.true;
+      expect(el.collapsed).to.equal(true);
     });
 
     it('should show collapsed indicator in toggle button', () => {
@@ -72,7 +72,7 @@ describe('CollapsibleHeading', () => {
 
     it('should have section content hidden', () => {
       const content = el.shadowRoot?.querySelector('.ch-content');
-      expect(content?.hasAttribute('hidden')).to.be.true;
+      expect(content?.hasAttribute('hidden')).to.equal(true);
     });
   });
 
@@ -90,7 +90,7 @@ describe('CollapsibleHeading', () => {
     });
 
     it('should be expanded', () => {
-      expect(el.collapsed).to.be.false;
+      expect(el.collapsed).to.equal(false);
     });
 
     it('should show expanded indicator in toggle button', () => {
@@ -100,7 +100,7 @@ describe('CollapsibleHeading', () => {
 
     it('should have section content visible', () => {
       const content = el.shadowRoot?.querySelector('.ch-content');
-      expect(content?.hasAttribute('hidden')).to.be.false;
+      expect(content?.hasAttribute('hidden')).to.equal(false);
     });
   });
 
@@ -123,7 +123,7 @@ describe('CollapsibleHeading', () => {
     });
 
     it('should become expanded', () => {
-      expect(el.collapsed).to.be.false;
+      expect(el.collapsed).to.equal(false);
     });
 
     it('should show expanded indicator', () => {
@@ -140,7 +140,7 @@ describe('CollapsibleHeading', () => {
 
     it('should show section content', () => {
       const content = el.shadowRoot?.querySelector('.ch-content');
-      expect(content?.hasAttribute('hidden')).to.be.false;
+      expect(content?.hasAttribute('hidden')).to.equal(false);
     });
   });
 
@@ -163,7 +163,7 @@ describe('CollapsibleHeading', () => {
     });
 
     it('should become collapsed', () => {
-      expect(el.collapsed).to.be.true;
+      expect(el.collapsed).to.equal(true);
     });
 
     it('should show collapsed indicator', () => {
@@ -180,7 +180,7 @@ describe('CollapsibleHeading', () => {
 
     it('should hide section content', () => {
       const content = el.shadowRoot?.querySelector('.ch-content');
-      expect(content?.hasAttribute('hidden')).to.be.true;
+      expect(content?.hasAttribute('hidden')).to.equal(true);
     });
   });
 
@@ -234,9 +234,10 @@ describe('CollapsibleHeading', () => {
   describe('when the heading has no id', () => {
     let el: CollapsibleHeading;
     let localStorageSetStub: SinonStub;
+    let getItemStub: SinonStub;
 
     beforeEach(async () => {
-      sinon.stub(Storage.prototype, 'getItem').returns(null);
+      getItemStub = sinon.stub(Storage.prototype, 'getItem').returns(null);
       localStorageSetStub = sinon.stub(Storage.prototype, 'setItem');
       el = await fixture<CollapsibleHeading>(html`
         <collapsible-heading heading-level="1">
@@ -250,11 +251,11 @@ describe('CollapsibleHeading', () => {
       const button = el.shadowRoot?.querySelector<HTMLButtonElement>('.ch-toggle');
       button?.click();
       await el.updateComplete;
-      expect(localStorageSetStub).not.to.have.been.called;
+      expect(localStorageSetStub.callCount).to.equal(0);
     });
 
     it('should not call localStorage.getItem for state loading', () => {
-      expect(Storage.prototype.getItem).not.to.have.been.called;
+      expect(getItemStub.callCount).to.equal(0);
     });
   });
 });

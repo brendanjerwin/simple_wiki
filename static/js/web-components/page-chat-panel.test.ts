@@ -51,8 +51,8 @@ describe('PageChatPanel', () => {
 
     it('should render the FAB with disabled class', () => {
       const fab = el.shadowRoot!.querySelector('.fab');
-      expect(fab).to.not.be.null;
-      expect(fab!.classList.contains('disabled')).to.be.true;
+      expect(fab).to.exist;
+      expect(fab!.classList.contains('disabled')).to.equal(true);
     });
 
     it('should have aria-disabled on the FAB', () => {
@@ -64,7 +64,7 @@ describe('PageChatPanel', () => {
       el.drawerOpen = true;
       await el.updateComplete;
       const banner = el.shadowRoot!.querySelector('.status-banner.disconnected');
-      expect(banner).to.not.be.null;
+      expect(banner).to.exist;
       expect(banner!.textContent).to.contain('Dorium is not connected');
     });
 
@@ -72,14 +72,14 @@ describe('PageChatPanel', () => {
       el.drawerOpen = true;
       await el.updateComplete;
       const textarea = el.shadowRoot!.querySelector('textarea');
-      expect(textarea!.disabled).to.be.true;
+      expect(textarea!.disabled).to.equal(true);
     });
 
     it('should disable the send button when panel is open', async () => {
       el.drawerOpen = true;
       await el.updateComplete;
       const btn = el.shadowRoot!.querySelector('.send-button') as HTMLButtonElement;
-      expect(btn.disabled).to.be.true;
+      expect(btn.disabled).to.equal(true);
     });
   });
 
@@ -95,7 +95,7 @@ describe('PageChatPanel', () => {
 
     it('should render the FAB button', () => {
       const fab = el.shadowRoot!.querySelector('.fab');
-      expect(fab).to.not.be.null;
+      expect(fab).to.exist;
     });
 
     it('should have correct aria-label', () => {
@@ -105,7 +105,7 @@ describe('PageChatPanel', () => {
 
     it('should show robot icon when panel is closed', () => {
       const icon = el.shadowRoot!.querySelector('.fab i');
-      expect(icon!.classList.contains('fa-robot')).to.be.true;
+      expect(icon!.classList.contains('fa-robot')).to.equal(true);
     });
   });
 
@@ -124,16 +124,16 @@ describe('PageChatPanel', () => {
 
     it('should open the panel', () => {
       const panel = el.shadowRoot!.querySelector('.panel');
-      expect(panel!.classList.contains('open')).to.be.true;
+      expect(panel!.classList.contains('open')).to.equal(true);
     });
 
     it('should hide the FAB', () => {
       const fab = el.shadowRoot!.querySelector('.fab');
-      expect(fab).to.be.null;
+      expect(fab).to.equal(null);
     });
 
     it('should save state to localStorage', () => {
-      expect(localStorageStub.setItem.calledWith('chat-panel-open', 'true')).to.be.true;
+      expect(localStorageStub.setItem.calledWith('chat-panel-open', 'true')).to.equal(true);
     });
   });
 
@@ -155,11 +155,11 @@ describe('PageChatPanel', () => {
 
     it('should close the panel', () => {
       const panel = el.shadowRoot!.querySelector('.panel');
-      expect(panel!.classList.contains('open')).to.be.false;
+      expect(panel!.classList.contains('open')).to.equal(false);
     });
 
     it('should save closed state to localStorage', () => {
-      expect(localStorageStub.setItem.calledWith('chat-panel-open', 'false')).to.be.true;
+      expect(localStorageStub.setItem.calledWith('chat-panel-open', 'false')).to.equal(true);
     });
   });
 
@@ -172,12 +172,12 @@ describe('PageChatPanel', () => {
     });
 
     it('should restore the open state', () => {
-      expect(el.drawerOpen).to.be.true;
+      expect(el.drawerOpen).to.equal(true);
     });
 
     it('should show the panel as open', () => {
       const panel = el.shadowRoot!.querySelector('.panel');
-      expect(panel!.classList.contains('open')).to.be.true;
+      expect(panel!.classList.contains('open')).to.equal(true);
     });
   });
 
@@ -215,7 +215,7 @@ describe('PageChatPanel', () => {
 
     it('should have a textarea', () => {
       const textarea = el.shadowRoot!.querySelector('textarea');
-      expect(textarea).to.not.be.null;
+      expect(textarea).to.exist;
     });
 
     it('should have maxlength of 2000', () => {
@@ -225,7 +225,7 @@ describe('PageChatPanel', () => {
 
     it('should have a send button', () => {
       const btn = el.shadowRoot!.querySelector('.send-button');
-      expect(btn).to.not.be.null;
+      expect(btn).to.exist;
     });
   });
 
@@ -250,7 +250,7 @@ describe('PageChatPanel', () => {
     });
 
     it('should prevent default (no newline)', () => {
-      expect(sendSpy.calledOnce).to.be.true;
+      expect(sendSpy.calledOnce).to.equal(true);
     });
   });
 
@@ -277,7 +277,7 @@ describe('PageChatPanel', () => {
     });
 
     it('should not prevent default (allows newline)', () => {
-      expect(preventDefaultCalled).to.be.false;
+      expect(preventDefaultCalled).to.equal(false);
     });
   });
 
@@ -291,7 +291,7 @@ describe('PageChatPanel', () => {
 
     it('should show empty state message when no messages', () => {
       const empty = el.shadowRoot!.querySelector('.empty-state');
-      expect(empty).to.not.be.null;
+      expect(empty).to.exist;
       expect(empty!.textContent).to.contain('Send a message');
     });
   });
@@ -331,7 +331,7 @@ describe('PageChatPanel', () => {
 
     it('should display the error banner', () => {
       const banner = el.shadowRoot!.querySelector('.status-banner.disconnected');
-      expect(banner).to.not.be.null;
+      expect(banner).to.exist;
     });
 
     it('should show the error message', () => {
@@ -353,7 +353,7 @@ describe('PageChatPanel', () => {
 
       it('should show the thinking indicator', () => {
         const indicator = el.shadowRoot!.querySelector('.thinking-indicator');
-        expect(indicator).to.not.be.null;
+        expect(indicator).to.exist;
       });
 
       it('should contain thinking text', () => {
@@ -374,7 +374,7 @@ describe('PageChatPanel', () => {
 
       it('should not show the thinking indicator', () => {
         const indicator = el.shadowRoot!.querySelector('.thinking-indicator');
-        expect(indicator).to.be.null;
+        expect(indicator).to.equal(null);
       });
     });
   });
@@ -391,12 +391,12 @@ describe('PageChatPanel', () => {
 
     it('should enable the textarea', () => {
       const textarea = el.shadowRoot!.querySelector('textarea');
-      expect(textarea!.disabled).to.be.false;
+      expect(textarea!.disabled).to.equal(false);
     });
 
     it('should enable the send button', () => {
       const btn = el.shadowRoot!.querySelector('.send-button') as HTMLButtonElement;
-      expect(btn.disabled).to.be.false;
+      expect(btn.disabled).to.equal(false);
     });
   });
 
@@ -411,7 +411,7 @@ describe('PageChatPanel', () => {
     describe('when panel is closed', () => {
       it('should have inert attribute', () => {
         const panel = el.shadowRoot!.querySelector('.panel');
-        expect(panel!.hasAttribute('inert')).to.be.true;
+        expect(panel!.hasAttribute('inert')).to.equal(true);
       });
     });
 
@@ -423,7 +423,7 @@ describe('PageChatPanel', () => {
 
       it('should not have inert attribute', () => {
         const panel = el.shadowRoot!.querySelector('.panel');
-        expect(panel!.hasAttribute('inert')).to.be.false;
+        expect(panel!.hasAttribute('inert')).to.equal(false);
       });
     });
   });
@@ -440,7 +440,7 @@ describe('PageChatPanel', () => {
 
     it('should show the reconnecting banner', () => {
       const banner = el.shadowRoot!.querySelector('.status-banner.reconnecting');
-      expect(banner).to.not.be.null;
+      expect(banner).to.exist;
       expect(banner!.textContent).to.contain('Reconnecting');
     });
   });
@@ -457,7 +457,7 @@ describe('PageChatPanel', () => {
     });
 
     it('should close the panel', () => {
-      expect(el.drawerOpen).to.be.false;
+      expect(el.drawerOpen).to.equal(false);
     });
   });
 
@@ -495,7 +495,7 @@ describe('PageChatPanel', () => {
       it('should add a new reaction group', () => {
         const msg = el.messages[0]!;
         const group = msg.reactions.find((r) => r.emoji === '❤️');
-        expect(group).to.not.be.undefined;
+        expect(group).to.not.equal(undefined);
         expect(group!.count).to.equal(1);
         expect(group!.reactors).to.include('bob');
       });
@@ -503,7 +503,7 @@ describe('PageChatPanel', () => {
       it('should preserve the existing reaction group', () => {
         const msg = el.messages[0]!;
         const group = msg.reactions.find((r) => r.emoji === '👍');
-        expect(group).to.not.be.undefined;
+        expect(group).to.not.equal(undefined);
       });
     });
 
@@ -566,7 +566,7 @@ describe('PageChatPanel', () => {
 
       it('should store the message in messagesById', () => {
         const stored = (el as unknown as { messagesById: Map<string, ChatMessageState> }).messagesById.get('msg-1');
-        expect(stored).to.not.be.undefined;
+        expect(stored).to.not.equal(undefined);
       });
     });
 
@@ -591,9 +591,9 @@ describe('PageChatPanel', () => {
 
       it('should render the persona name in the chat bubble', () => {
         const bubble = el.shadowRoot!.querySelector('chat-message-bubble');
-        expect(bubble).to.not.be.null;
+        expect(bubble).to.exist;
         const senderDiv = bubble!.shadowRoot!.querySelector('.sender-name');
-        expect(senderDiv).to.not.be.null;
+        expect(senderDiv).to.exist;
         expect(senderDiv!.textContent).to.equal('Dorium');
       });
     });
@@ -681,7 +681,7 @@ describe('PageChatPanel', () => {
       });
 
       it('should mark the message as edited', () => {
-        expect(el.messages[0]!.edited).to.be.true;
+        expect(el.messages[0]!.edited).to.equal(true);
       });
     });
 
@@ -693,7 +693,7 @@ describe('PageChatPanel', () => {
         } catch {
           threw = true;
         }
-        expect(threw).to.be.false;
+        expect(threw).to.equal(false);
       });
     });
   });
@@ -719,11 +719,11 @@ describe('PageChatPanel', () => {
 
       it('should not show the error banner', () => {
         const banner = el.shadowRoot!.querySelector('.status-banner.disconnected');
-        expect(banner).to.be.null;
+        expect(banner).to.equal(null);
       });
 
       it('should have null error state', () => {
-        expect(el.error).to.be.null;
+        expect(el.error).to.equal(null);
       });
     });
   });
@@ -821,7 +821,7 @@ describe('PageChatPanel stream methods', () => {
       });
 
       it('should clear the error', () => {
-        expect(el.error).to.be.null;
+        expect(el.error).to.equal(null);
       });
 
       it('should call onResetDelay for each event', () => {
@@ -850,7 +850,7 @@ describe('PageChatPanel stream methods', () => {
       });
 
       it('should clear the error', () => {
-        expect(el.error).to.be.null;
+        expect(el.error).to.equal(null);
       });
     });
   });
@@ -940,7 +940,7 @@ describe('PageChatPanel stream methods', () => {
       });
 
       it('should resolve immediately without waiting', () => {
-        expect(resolved).to.be.true;
+        expect(resolved).to.equal(true);
       });
     });
 
@@ -958,7 +958,7 @@ describe('PageChatPanel stream methods', () => {
       });
 
       it('should not resolve before the delay elapses', () => {
-        expect(resolved).to.be.false;
+        expect(resolved).to.equal(false);
       });
 
       describe('after the delay elapses', () => {
@@ -968,7 +968,7 @@ describe('PageChatPanel stream methods', () => {
         });
 
         it('should resolve', () => {
-          expect(resolved).to.be.true;
+          expect(resolved).to.equal(true);
         });
       });
     });
@@ -989,7 +989,7 @@ describe('PageChatPanel stream methods', () => {
       });
 
       it('should resolve early when signal is aborted', () => {
-        expect(resolved).to.be.true;
+        expect(resolved).to.equal(true);
       });
     });
   });
@@ -1081,7 +1081,7 @@ describe('PageChatPanel stream methods', () => {
       });
 
       it('should abort the subscription', () => {
-        expect(abortSpy).to.have.been.calledOnce;
+        expect(abortSpy.callCount).to.equal(1);
       });
 
       it('should set streamState to disconnected', () => {
@@ -1090,7 +1090,7 @@ describe('PageChatPanel stream methods', () => {
 
       it('should clear streamSubscription', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private field for testing
-        expect((el as any).streamSubscription).to.be.undefined;
+        expect((el as any).streamSubscription).to.equal(undefined);
       });
     });
 
@@ -1167,7 +1167,7 @@ describe('PageChatPanel stream methods', () => {
       });
 
       it('should mark the message as edited', () => {
-        expect(el.messages[0]!.edited).to.be.true;
+        expect(el.messages[0]!.edited).to.equal(true);
       });
     });
 
@@ -1217,7 +1217,7 @@ describe('PageChatPanel stream methods', () => {
         } catch {
           threw = true;
         }
-        expect(threw).to.be.false;
+        expect(threw).to.equal(false);
       });
     });
   });
@@ -1245,7 +1245,7 @@ describe('PageChatPanel stream methods', () => {
       });
 
       it('should call startStream', () => {
-        expect(startStreamSpy).to.have.been.calledOnce;
+        expect(startStreamSpy.callCount).to.equal(1);
       });
     });
 
@@ -1260,7 +1260,7 @@ describe('PageChatPanel stream methods', () => {
       });
 
       it('should not call startStream', () => {
-        expect(startStreamSpy).to.not.have.been.called;
+        expect(startStreamSpy.callCount).to.equal(0);
       });
     });
 
@@ -1279,7 +1279,7 @@ describe('PageChatPanel stream methods', () => {
       });
 
       it('should not call startStream', () => {
-        expect(startStreamSpy).to.not.have.been.called;
+        expect(startStreamSpy.callCount).to.equal(0);
       });
     });
 
@@ -1294,7 +1294,7 @@ describe('PageChatPanel stream methods', () => {
       });
 
       it('should not call startStream', () => {
-        expect(startStreamSpy).to.not.have.been.called;
+        expect(startStreamSpy.callCount).to.equal(0);
       });
     });
   });
@@ -1352,7 +1352,7 @@ describe('PageChatPanel pollChatStatus and sendMessage', () => {
       });
 
       it('should set claudeConnected to true', () => {
-        expect(el.claudeConnected).to.be.true;
+        expect(el.claudeConnected).to.equal(true);
       });
     });
 
@@ -1370,7 +1370,7 @@ describe('PageChatPanel pollChatStatus and sendMessage', () => {
       });
 
       it('should set claudeConnected to false', () => {
-        expect(el.claudeConnected).to.be.false;
+        expect(el.claudeConnected).to.equal(false);
       });
     });
 
@@ -1388,7 +1388,7 @@ describe('PageChatPanel pollChatStatus and sendMessage', () => {
       });
 
       it('should set claudeConnected to false', () => {
-        expect(el.claudeConnected).to.be.false;
+        expect(el.claudeConnected).to.equal(false);
       });
     });
 
@@ -1410,7 +1410,7 @@ describe('PageChatPanel pollChatStatus and sendMessage', () => {
       });
 
       it('should call focusInput', () => {
-        expect(focusInputSpy).to.have.been.called;
+        expect(focusInputSpy.called).to.equal(true);
       });
     });
   });
@@ -1435,7 +1435,7 @@ describe('PageChatPanel pollChatStatus and sendMessage', () => {
       });
 
       it('should not call chatClient.sendMessage', () => {
-        expect(sendMessageStub).to.not.have.been.called;
+        expect(sendMessageStub.callCount).to.equal(0);
       });
     });
 
@@ -1458,7 +1458,7 @@ describe('PageChatPanel pollChatStatus and sendMessage', () => {
       });
 
       it('should call chatClient.sendMessage', () => {
-        expect(sendMessageStub).to.have.been.calledOnce;
+        expect(sendMessageStub.callCount).to.equal(1);
       });
 
       it('should clear the textarea', () => {
@@ -1485,12 +1485,12 @@ describe('PageChatPanel pollChatStatus and sendMessage', () => {
       });
 
       it('should set the error', () => {
-        expect(el.error).to.not.be.null;
+        expect(el.error).to.exist;
         expect(el.error).to.be.instanceof(ConnectError);
       });
 
       it('should reset waitingForAssistant', () => {
-        expect(el.waitingForAssistant).to.be.false;
+        expect(el.waitingForAssistant).to.equal(false);
       });
     });
 
@@ -1511,12 +1511,12 @@ describe('PageChatPanel pollChatStatus and sendMessage', () => {
       });
 
       it('should set error with the original message', () => {
-        expect(el.error).to.not.be.null;
+        expect(el.error).to.exist;
         expect(el.error!.message).to.equal('generic network error');
       });
 
       it('should reset waitingForAssistant', () => {
-        expect(el.waitingForAssistant).to.be.false;
+        expect(el.waitingForAssistant).to.equal(false);
       });
     });
   });
