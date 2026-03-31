@@ -7,17 +7,17 @@ set -e
 VERSION="$1"
 
 # Validate version argument
-if [ -z "$VERSION" ]; then
-    echo "❌ ERROR: Version argument is required"
-    echo "Usage: $0 <version>"
+if [[ -z "$VERSION" ]]; then
+    echo "❌ ERROR: Version argument is required" >&2
+    echo "Usage: $0 <version>" >&2
     exit 1
 fi
 
 echo "=== Starting deployment of $VERSION ==="
 
 # Verify deployment directory exists
-if [ ! -d "/srv/wiki" ]; then
-    echo "❌ ERROR: Deployment directory /srv/wiki does not exist"
+if [[ ! -d "/srv/wiki" ]]; then
+    echo "❌ ERROR: Deployment directory /srv/wiki does not exist" >&2
     exit 1
 fi
 
@@ -73,23 +73,23 @@ if sudo systemctl is-active --quiet simple_wiki; then
     echo "✅ HTTP health check passed"
     echo "🎉 Deployment of $VERSION completed successfully!"
   else
-    echo "❌ HTTP health check failed"
+    echo "❌ HTTP health check failed" >&2
     exit 1
   fi
 else
-  echo "❌ Service failed to start"
-  echo "Service status:"
-  sudo systemctl status simple_wiki --no-pager
-  
-  echo "Attempting rollback..."
-  if [ -f /srv/wiki/bin/simple_wiki.backup ]; then
+  echo "❌ Service failed to start" >&2
+  echo "Service status:" >&2
+  sudo systemctl status simple_wiki --no-pager >&2 || true
+
+  echo "Attempting rollback..." >&2
+  if [[ -f /srv/wiki/bin/simple_wiki.backup ]]; then
     echo "Restoring from backup: simple_wiki.backup"
     sudo cp /srv/wiki/bin/simple_wiki.backup /srv/wiki/bin/simple_wiki
     sudo systemctl start simple_wiki
     echo "Rollback completed - previous version restored"
   else
-    echo "❌ ERROR: No backup binary found at /srv/wiki/bin/simple_wiki.backup"
-    echo "Manual intervention required to restore service"
+    echo "❌ ERROR: No backup binary found at /srv/wiki/bin/simple_wiki.backup" >&2
+    echo "Manual intervention required to restore service" >&2
   fi
   exit 1
 fi

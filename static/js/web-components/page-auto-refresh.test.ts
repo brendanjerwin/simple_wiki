@@ -1,6 +1,6 @@
 import { expect } from '@open-wc/testing';
 import { fixture, html } from '@open-wc/testing-helpers';
-import sinon, { type SinonStub, type SinonSpy, type SinonFakeTimers, useFakeTimers } from 'sinon';
+import sinon, { type SinonStub, type SinonSpy } from 'sinon';
 import { create } from '@bufbuild/protobuf';
 import { TimestampSchema } from '@bufbuild/protobuf/wkt';
 import { PageAutoRefresh } from './page-auto-refresh.js';
@@ -749,10 +749,8 @@ describe('PageAutoRefresh', () => {
 
   describe('_waitForReconnect', () => {
     let el: PageAutoRefresh;
-    let clock: SinonFakeTimers;
 
     beforeEach(async () => {
-      clock = useFakeTimers();
       el = document.createElement('page-auto-refresh') as PageAutoRefresh;
       sinon.stub(el as unknown as { startWatching: () => void }, 'startWatching');
       document.body.appendChild(el);
@@ -760,7 +758,6 @@ describe('PageAutoRefresh', () => {
     });
 
     afterEach(() => {
-      clock.restore();
       el.remove();
       sinon.restore();
     });
@@ -771,12 +768,11 @@ describe('PageAutoRefresh', () => {
       beforeEach(async () => {
         resolved = false;
         const controller = new AbortController();
-        const promise = (el as unknown as { _waitForReconnect: (s: AbortSignal, ms: number) => Promise<void> })
-          ._waitForReconnect(controller.signal, 5000)
+        // Use a very short real delay (10ms) to avoid fake timers which interfere
+        // with web-test-runner's WebSocket keepalive mechanism and cause browser disconnects.
+        await (el as unknown as { _waitForReconnect: (s: AbortSignal, ms: number) => Promise<void> })
+          ._waitForReconnect(controller.signal, 10)
           .then(() => { resolved = true; });
-
-        await clock.tickAsync(5000);
-        await promise;
       });
 
       it('should resolve after the delay', () => {
@@ -791,11 +787,11 @@ describe('PageAutoRefresh', () => {
         resolved = false;
         const controller = new AbortController();
         const promise = (el as unknown as { _waitForReconnect: (s: AbortSignal, ms: number) => Promise<void> })
-          ._waitForReconnect(controller.signal, 10000)
+          ._waitForReconnect(controller.signal, 60000)
           .then(() => { resolved = true; });
 
+        // Abort immediately — the promise should resolve without waiting for the timeout
         controller.abort();
-        await clock.tickAsync(100);
         await promise;
       });
 
