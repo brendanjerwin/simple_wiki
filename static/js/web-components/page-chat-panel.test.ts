@@ -1024,6 +1024,7 @@ describe('PageChatPanel stream methods', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
         (el as any).chatClient = {
           subscribeChat: async function* () {
+            yield* [];
             throw abortError;
           },
         };
@@ -1043,12 +1044,13 @@ describe('PageChatPanel stream methods', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
         (el as any).chatClient = {
           subscribeChat: async function* () {
+            yield* [];
             throw new Error('network error');
           },
         };
         // Stub prepareStreamReconnect to abort the stream immediately and prevent real delays
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- stubbing private method for testing
-        stub(el as any, 'prepareStreamReconnect').callsFake(async (_err: unknown, _signal: unknown) => {
+        stub(el as any, 'prepareStreamReconnect').callsFake(async () => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private field for testing
           (el as any).streamSubscription?.abort();
           return 2000;
@@ -1397,7 +1399,7 @@ describe('PageChatPanel pollChatStatus and sendMessage', () => {
         el.claudeConnected = false;
         el.drawerOpen = true;
         await el.updateComplete;
-        focusInputSpy = spy(el as any, 'focusInput');
+        focusInputSpy = spy(el as unknown as { focusInput: () => void }, 'focusInput');
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
         (el as any).chatClient = {
           getChatStatus: stub().resolves({ connected: true }),
