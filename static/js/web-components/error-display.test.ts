@@ -226,12 +226,12 @@ describe('ErrorDisplay', () => {
 
       it('should not display expand button', () => {
         const expandButton = el.shadowRoot?.querySelector('.expand-button');
-        expect(expandButton).to.not.exist;
+        expect(expandButton).to.equal(null);
       });
 
       it('should not display details section', () => {
         const detailsSection = el.shadowRoot?.querySelector('.error-details');
-        expect(detailsSection).to.not.exist;
+        expect(detailsSection).to.equal(null);
       });
     });
 
@@ -249,7 +249,7 @@ describe('ErrorDisplay', () => {
 
       it('should display expand button', () => {
         const expandButton = el.shadowRoot?.querySelector('.expand-button');
-        expect(expandButton).to.exist;
+        expect(expandButton).to.not.equal(null);
       });
 
       it('should show "Show details" label initially', () => {
@@ -295,7 +295,7 @@ describe('ErrorDisplay', () => {
 
         it('should apply expanded class to expand icon', () => {
           const expandIcon = el.shadowRoot?.querySelector('.expand-icon');
-          expect(expandIcon?.classList.contains('expanded')).to.be.true;
+          expect(expandIcon?.classList.contains('expanded')).to.equal(true);
         });
 
         describe('when expand button is clicked again', () => {
