@@ -13,6 +13,7 @@ interface TestableFrontmatterValueSection {
   fields: Record<string, unknown>;
   _typePriorityCompare: (typeA: string, typeB: string) => number;
   _generateUniqueKey: (baseKey: string) => string;
+  _sortFieldEntries: (entries: [string, unknown][]) => [string, unknown][];
 }
 
 async function createFixtureWithTimeout(template: TemplateResult, timeoutMs = 5000): Promise<FrontmatterValueSection> {
@@ -451,6 +452,33 @@ describe('FrontmatterValueSection', () => {
         expect(result).to.equal(2);
       });
     });
+  });
+
+  describe('_sortFieldEntries', () => {
+
+    describe('when called twice with identical entries (cache hit path)', () => {
+      let firstResult: [string, unknown][];
+      let secondResult: [string, unknown][];
+
+      beforeEach(async () => {
+        const testableComponent = await createTestableFixture(
+          html`<frontmatter-value-section></frontmatter-value-section>`
+        );
+        const entries: [string, unknown][] = [['b', 'val2'], ['a', 'val1']];
+        firstResult = testableComponent._sortFieldEntries(entries);
+        secondResult = testableComponent._sortFieldEntries(entries);
+      });
+
+      it('should return the cached array reference on second call', () => {
+        expect(secondResult).to.equal(firstResult);
+      });
+
+      it('should return sorted entries', () => {
+        expect(firstResult[0]![0]).to.equal('a');
+        expect(firstResult[1]![0]).to.equal('b');
+      });
+    });
+
   });
 
   describe('_generateUniqueKey', () => {
