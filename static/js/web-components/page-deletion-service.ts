@@ -24,7 +24,7 @@ import type { ConfirmationDialog } from './confirmation-dialog.js';
  */
 export class PageDeleter {
   private readonly client = createClient(PageManagementService, getGrpcWebTransport());
-  private dialog: ConfirmationDialog;
+  private readonly dialog: ConfirmationDialog;
 
   // Store bound event handlers for proper cleanup
   private readonly boundHandleConfirm: (event: Event) => void;

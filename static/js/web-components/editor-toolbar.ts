@@ -23,7 +23,7 @@ export class EditorToolbar extends LitElement {
     this._uploadMenuOpen = false;
   }
 
-  static override styles = [
+  static override readonly styles = [
     foundationCSS,
     buttonCSS,
     css`

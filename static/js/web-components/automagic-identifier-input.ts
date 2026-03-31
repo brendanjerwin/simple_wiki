@@ -36,7 +36,7 @@ export type IdentifierGenerator = (text: string) => Promise<GenerateIdentifierRe
  * @fires identifier-change - When the identifier changes. Detail: { identifier: string, isUnique: boolean, existingPage?: ExistingPageInfo }
  */
 export class AutomagicIdentifierInput extends LitElement {
-  static override styles = [
+  static override readonly styles = [
     dialogCSS,
     css`
       :host {

@@ -15,7 +15,7 @@ export interface FilterChangedEventDetail {
 }
 
 export class TableFilterPopover extends LitElement {
-  static override styles = [
+  static override readonly styles = [
     css`
       :host {
         display: block;
