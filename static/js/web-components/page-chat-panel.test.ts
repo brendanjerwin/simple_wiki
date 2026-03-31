@@ -1048,7 +1048,7 @@ describe('PageChatPanel stream methods', () => {
         };
         // Stub prepareStreamReconnect to abort the stream immediately and prevent real delays
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- stubbing private method for testing
-        stub(el as any, 'prepareStreamReconnect').callsFake(async (_err: unknown, _signal: AbortSignal) => {
+        stub(el as any, 'prepareStreamReconnect').callsFake(async (_err: unknown, _signal: unknown) => {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private field for testing
           (el as any).streamSubscription?.abort();
           return 2000;
