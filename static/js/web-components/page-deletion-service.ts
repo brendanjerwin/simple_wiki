@@ -2,22 +2,10 @@ import { createClient } from '@connectrpc/connect';
 import { create } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import { PageManagementService, DeletePageRequestSchema } from '../gen/api/v1/page_management_pb.js';
-import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
+import { AugmentErrorService } from './augment-error-service.js';
 import { showToastAfter } from './toast-message.js';
 import './confirmation-dialog.js';
-import { type ConfirmationConfig } from './confirmation-dialog.js';
-
-type ConfirmationDialogElement = HTMLElement & {
-  openDialog: (config: ConfirmationConfig) => void;
-  setLoading: (loading: boolean) => void;
-  showError: (error: AugmentedError) => void;
-  closeDialog: () => void;
-  addEventListener: (type: string, listener: (event: Event) => void) => void;
-  removeEventListener: (type: string, listener: (event: Event) => void) => void;
-  dataset: { pageName?: string };
-  id: string;
-  hidden: boolean;
-};
+import type { ConfirmationDialog } from './confirmation-dialog.js';
 
 /**
  * PageDeleter - Handles page deletion workflow using the generic confirmation dialog
@@ -36,7 +24,7 @@ type ConfirmationDialogElement = HTMLElement & {
  */
 export class PageDeleter {
   private readonly client = createClient(PageManagementService, getGrpcWebTransport());
-  private dialog: ConfirmationDialogElement;
+  private dialog: ConfirmationDialog;
 
   // Store bound event handlers for proper cleanup
   private readonly boundHandleConfirm: (event: Event) => void;
@@ -71,22 +59,22 @@ export class PageDeleter {
     });
 
     // Store the page name for the deletion operation
-    this.dialog.dataset.pageName = pageName;
+    this.dialog.dataset['pageName'] = pageName;
   }
 
   /**
    * Ensures the confirmation dialog element exists in the DOM and returns it.
    */
-  private ensureDialogExists(): ConfirmationDialogElement {
+  private ensureDialogExists(): ConfirmationDialog {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- custom element has known interface
-    const existing = document.querySelector('confirmation-dialog') as ConfirmationDialogElement | null;
+    const existing = document.querySelector('confirmation-dialog') as ConfirmationDialog | null;
 
     if (existing) {
       return existing;
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- custom element has known interface
-    const newDialog = document.createElement('confirmation-dialog') as ConfirmationDialogElement;
+    const newDialog = document.createElement('confirmation-dialog') as ConfirmationDialog;
     newDialog.id = 'page-deletion-dialog';
     newDialog.hidden = true;
     document.body.appendChild(newDialog);
@@ -105,7 +93,7 @@ export class PageDeleter {
    * Handles the confirm action - performs the actual page deletion
    */
   private async handleConfirm() {
-    const pageName = this.dialog.dataset.pageName;
+    const pageName = this.dialog.dataset['pageName'];
 
     if (!pageName) {
       const error = new Error('PageDeleter: No page name found for deletion');
@@ -154,7 +142,7 @@ export class PageDeleter {
    */
   private handleCancel() {
     // Clean up the stored page name
-    delete this.dialog.dataset.pageName;
+    delete this.dialog.dataset['pageName'];
     
     // The dialog handles closing itself for cancel events
   }
