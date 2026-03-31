@@ -3,7 +3,7 @@ import { property, state } from 'lit/decorators.js';
 import { buttonCSS, foundationCSS, menuCSS } from './shared-styles.js';
 
 export class FrontmatterAddFieldButton extends LitElement {
-  static override styles = [
+  static override readonly styles = [
     foundationCSS,
     buttonCSS,
     menuCSS,

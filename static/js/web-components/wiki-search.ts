@@ -38,7 +38,7 @@ export class WikiSearch extends LitElement {
       totalUnfilteredCount: response.totalUnfilteredCount
     };
   }
-  static override styles = css`
+  static override readonly styles = css`
     div#container {
         position: relative;
         display: inline-block;

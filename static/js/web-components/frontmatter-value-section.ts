@@ -11,7 +11,7 @@ import { AugmentErrorService } from './augment-error-service.js';
 import type { SectionChangeEventDetail, AddFieldEventDetail } from './event-types.js';
 
 export class FrontmatterValueSection extends LitElement {
-  static override styles = [
+  static override readonly styles = [
     foundationCSS,
     buttonCSS,
     layoutCSS,

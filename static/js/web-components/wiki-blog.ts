@@ -38,7 +38,7 @@ function blogPostFromResult(result: FrontmatterQueryResult): BlogPost {
 }
 
 export class WikiBlog extends LitElement {
-  static override styles = [
+  static override readonly styles = [
     foundationCSS,
     buttonCSS,
     css`

@@ -3,7 +3,7 @@ import { property } from 'lit/decorators.js';
 import { inputCSS } from './shared-styles.js';
 
 export class FrontmatterValueString extends LitElement {
-  static override styles = [
+  static override readonly styles = [
     inputCSS,
     css`
       :host {
