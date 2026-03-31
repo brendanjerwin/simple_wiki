@@ -21,7 +21,9 @@ describe('FrontmatterEditorDialog - Save Functionality', () => {
   beforeEach(async () => {
     // Install fake timers before anything else to prevent the 100ms setTimeout in
     // showToastAfter() from firing after sinon.restore() tears down stubs in afterEach.
-    clock = sinon.useFakeTimers();
+    // Only fake setTimeout/clearTimeout — leaving requestAnimationFrame real so that
+    // @open-wc/testing fixture() can advance frames and complete element initialization.
+    clock = sinon.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 
     // Create mock client before fixture creation
     const mockClient = {
