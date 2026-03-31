@@ -9,7 +9,7 @@ require (
 	github.com/adrg/frontmatter v0.2.0
 	github.com/blevesearch/bleve v1.0.14
 	github.com/gabriel-vasile/mimetype v1.4.13
-	github.com/gin-contrib/multitemplate v1.1.1
+	github.com/gin-contrib/multitemplate v1.1.2
 	github.com/gin-contrib/sessions v1.1.0
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/uuid v1.6.0
