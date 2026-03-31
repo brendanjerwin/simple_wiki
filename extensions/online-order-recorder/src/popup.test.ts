@@ -5,6 +5,12 @@ import { Order } from './merchants/types.js';
 vi.mock('./components/order-list.js', () => ({ OrderList: class {} }));
 vi.mock('./components/settings-panel.js', () => ({ SettingsPanel: class {} }));
 
+async function importPopup(): Promise<void> {
+  await import('./popup.js');
+  // Yield to the event loop for the loadPendingOrders promise to settle
+  await new Promise<void>(resolve => { setTimeout(resolve, 0); });
+}
+
 function makeOrder(overrides: Partial<Order> = {}): Order {
   return {
     merchant: 'TestMerchant',
@@ -27,12 +33,6 @@ describe('popup', () => {
   let orderListEl: MockOrderListEl;
   let dom: JSDOM;
   let statusEl: HTMLElement;
-
-  async function importPopup(): Promise<void> {
-    await import('./popup.js');
-    // Wait a microtask for the loadPendingOrders promise to settle
-    await new Promise<void>(resolve => { setTimeout(resolve, 0); });
-  }
 
   beforeEach(async () => {
     vi.resetModules();
@@ -99,8 +99,7 @@ describe('popup', () => {
       });
 
       it('should set orderListEl.orders from response', () => {
-        expect(orderListEl.orders).toHaveLength(1);
-        expect(orderListEl.orders[0]!.merchant).to.equal('TestMerchant');
+        expect(orderListEl.orders).toStrictEqual([makeOrder()]);
       });
     });
 

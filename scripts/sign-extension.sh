@@ -18,7 +18,7 @@
 set -euo pipefail
 
 if [[ -z "${AMO_API_KEY:-}" || -z "${AMO_API_SECRET:-}" ]]; then
-    echo "ERROR: AMO_API_KEY and AMO_API_SECRET must be set"
+    echo "ERROR: AMO_API_KEY and AMO_API_SECRET must be set" >&2
     exit 1
 fi
 
@@ -76,7 +76,7 @@ if ! web-ext sign \
     --api-key "$AMO_API_KEY" \
     --api-secret "$AMO_API_SECRET" \
     --channel unlisted; then
-    echo "AMO signing failed"
+    echo "AMO signing failed" >&2
     rm -rf "$SIGN_DIR"
     exit 1
 fi
@@ -86,7 +86,7 @@ rm -rf "$SIGN_DIR"
 # Copy signed XPI to output
 SIGNED_FILES=("$EXTENSION_DIR"/signed/*.xpi)
 if [[ ! -s "${SIGNED_FILES[0]}" ]]; then
-    echo "ERROR: No signed XPI file produced"
+    echo "ERROR: No signed XPI file produced" >&2
     exit 1
 fi
 cp "${SIGNED_FILES[0]}" signed-xpi-artifact/simple-wiki-companion.xpi
