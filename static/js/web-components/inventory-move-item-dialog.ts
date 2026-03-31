@@ -23,7 +23,7 @@ export type ScannedResultInfo = ScannedItemInfo;
  * results appear as "Move To" buttons that execute the move on click.
  */
 export class InventoryMoveItemDialog extends LitElement {
-  static override styles = dialogStyles(css`
+  static override readonly styles = dialogStyles(css`
       :host {
         position: fixed;
         top: 0;

@@ -50,7 +50,7 @@ export class PageImportDialog extends LitElement {
   // Must match server.PageImportJobName in server/page_import_job.go
   private static readonly PAGE_IMPORT_QUEUE_NAME = 'PageImportJob';
 
-  static override styles = dialogStyles(css`
+  static override readonly styles = dialogStyles(css`
       :host {
         position: fixed;
         top: 0;

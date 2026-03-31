@@ -36,7 +36,7 @@ const ANIMATION_DURATION_MS = 300;
  * - Follows existing component patterns and styling
  */
 export class ToastMessage extends LitElement {
-  static override styles = [
+  static override readonly styles = [
     colorCSS,
     typographyCSS,
     themeCSS,

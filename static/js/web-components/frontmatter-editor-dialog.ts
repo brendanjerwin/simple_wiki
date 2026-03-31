@@ -43,7 +43,7 @@ import type { SectionChangeEventDetail } from './event-types.js';
  * This separation allows for clean state management, proper event bubbling, and maintainable code.
  */
 export class FrontmatterEditorDialog extends LitElement {
-  static override styles = dialogStyles(css`
+  static override readonly styles = dialogStyles(css`
       :host {
         position: fixed;
         top: 0;

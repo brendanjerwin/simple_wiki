@@ -32,7 +32,7 @@ const NONE_TEMPLATE_VALUE = '';
  * @fires page-created - Dispatched when page is created. Detail: { identifier, title, markdownLink }
  */
 export class InsertNewPageDialog extends LitElement {
-  static override styles = dialogStyles(css`
+  static override readonly styles = dialogStyles(css`
     :host {
       position: fixed;
       top: 0;
