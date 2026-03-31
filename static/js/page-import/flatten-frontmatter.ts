@@ -26,7 +26,7 @@ export function flattenFrontmatter(
 
     if (typeof value === 'object') {
       // Recurse into nested objects
-      result.push(...flattenFrontmatter(value as JsonObject, fullKey));
+      result.push(...flattenFrontmatter(value, fullKey));
     } else {
       result.push([fullKey, String(value)]);
     }

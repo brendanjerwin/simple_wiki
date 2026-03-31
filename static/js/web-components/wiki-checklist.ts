@@ -622,12 +622,12 @@ export class WikiChecklist extends LitElement {
       };
 
       // Update the checklists key
+      const checklistsValue = currentFrontmatter['checklists'];
       const existingChecklists =
-        typeof currentFrontmatter['checklists'] === 'object' &&
-        !Array.isArray(currentFrontmatter['checklists']) &&
-        currentFrontmatter['checklists'] !== null
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- narrowed above: non-null, non-array object matching JsonObject structure
-          ? (currentFrontmatter['checklists'] as JsonObject)
+        typeof checklistsValue === 'object' &&
+        !Array.isArray(checklistsValue) &&
+        checklistsValue !== null
+          ? checklistsValue
           : {};
       const updatedChecklists: JsonObject = {
         ...existingChecklists,

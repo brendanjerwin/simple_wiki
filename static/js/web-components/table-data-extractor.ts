@@ -39,7 +39,7 @@ export function extractTableData(tableElement: HTMLTableElement): ExtractedTable
     headerCells = firstRow
       ? Array.from(firstRow.querySelectorAll('th, td')).map(cell => cell.textContent?.trim() ?? '')
       : [];
-    dataRows = allRows.slice(1) as HTMLTableRowElement[];
+    dataRows = allRows.slice(1);
   }
 
   const rows: TableRowData[] = dataRows.map((row, index) => {
