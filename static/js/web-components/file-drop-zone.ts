@@ -28,7 +28,7 @@ const MB_TO_BYTES = 1024 * 1024;
  *   detail: { uploadUrl: string, filename: string, isImage: boolean }
  */
 export class FileDropZone extends LitElement {
-  static override styles = [
+  static override readonly styles = [
     foundationCSS,
     css`
       :host {

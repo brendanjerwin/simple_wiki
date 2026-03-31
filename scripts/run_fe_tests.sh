@@ -17,6 +17,8 @@ for p in "$@"; do
   processed_paths+=("${p#static/js/}")
 done
 
+PROJECT_ROOT="$(pwd)"
+
 # Navigate to the frontend directory
 export CHROMIUM_BIN=$(which chromium)
 cd static/js || exit 1
@@ -45,6 +47,40 @@ elif [[ $test_exit -ne 0 ]]; then
   echo "Tests failed with exit code: $test_exit" | tee -a "$LOG_FILE"
 else
   echo "Tests completed successfully" | tee -a "$LOG_FILE"
+fi
+
+# When running all tests (no specific paths), also run extension tests.
+# This ensures coverage data is generated for SonarCloud.
+if [[ ${#processed_paths[@]} -eq 0 ]]; then
+  echo "" | tee -a "$LOG_FILE"
+  echo "Running extension tests..." | tee -a "$LOG_FILE"
+  echo "" | tee -a "$LOG_FILE"
+
+  cd "$PROJECT_ROOT/extensions/online-order-recorder" || exit 1
+
+  bun install 2>&1 | tee -a "$LOG_FILE"
+  ext_install_exit=${PIPESTATUS[0]}
+  if [[ $ext_install_exit -ne 0 ]]; then
+    echo "Extension bun install failed with exit code $ext_install_exit" | tee -a "$LOG_FILE"
+    echo "Log saved to: $LOG_FILE"
+    exit $ext_install_exit
+  fi
+
+  timeout 300 bun run vitest run ${CI_COVERAGE:+--coverage} 2>&1 | tee -a "$LOG_FILE"
+  ext_exit=${PIPESTATUS[0]}
+
+  if [[ $ext_exit -eq 124 ]]; then
+    echo "TIMEOUT: Extension tests exceeded 5 minute limit" | tee -a "$LOG_FILE"
+  elif [[ $ext_exit -ne 0 ]]; then
+    echo "Extension tests failed with exit code: $ext_exit" | tee -a "$LOG_FILE"
+  else
+    echo "Extension tests completed successfully" | tee -a "$LOG_FILE"
+  fi
+
+  # Use the worst exit code
+  if [[ $ext_exit -ne 0 && $test_exit -eq 0 ]]; then
+    test_exit=$ext_exit
+  fi
 fi
 
 echo "Finished at $(date)" | tee -a "$LOG_FILE"
