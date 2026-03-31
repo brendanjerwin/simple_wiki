@@ -20,7 +20,7 @@ export interface ErrorAction {
  * Supports optional CTA button for error recovery actions.
  */
 export class ErrorDisplay extends LitElement {
-  static override styles = [
+  static override readonly styles = [
     colorCSS,
     typographyCSS,
     themeCSS,

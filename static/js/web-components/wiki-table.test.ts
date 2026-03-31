@@ -4,6 +4,13 @@ import type { SinonStub } from 'sinon';
 import './wiki-table.js';
 import type { WikiTable } from './wiki-table.js';
 
+interface TestableWikiTable {
+  extractedData: unknown;
+  _renderColumnPicker: () => unknown;
+  _renderTableView: (rows: unknown[]) => unknown;
+  _renderCardView: (rows: unknown[]) => unknown;
+}
+
 async function createBasicFixture(): Promise<WikiTable> {
   const container = document.createElement('div');
   container.innerHTML = `
@@ -1299,6 +1306,84 @@ describe('WikiTable', () => {
         expect(spans?.[0]?.getAttribute('onclick')).to.be.null;
       });
 
+    });
+
+  });
+
+  describe('programming error guards in private render methods', () => {
+    let el: WikiTable;
+
+    beforeEach(async () => {
+      el = await createBasicFixture();
+    });
+
+    describe('_renderColumnPicker when extractedData is null', () => {
+      let thrownError: Error | null;
+
+      beforeEach(() => {
+        thrownError = null;
+        const testable = el as unknown as TestableWikiTable;
+        testable.extractedData = null;
+        try {
+          testable._renderColumnPicker();
+        } catch (e) {
+          thrownError = e instanceof Error ? e : null;
+        }
+      });
+
+      it('should throw an error', () => {
+        expect(thrownError).to.exist;
+      });
+
+      it('should include _renderColumnPicker in the error message', () => {
+        expect(thrownError?.message).to.include('_renderColumnPicker');
+      });
+    });
+
+    describe('_renderTableView when extractedData is null', () => {
+      let thrownError: Error | null;
+
+      beforeEach(() => {
+        thrownError = null;
+        const testable = el as unknown as TestableWikiTable;
+        testable.extractedData = null;
+        try {
+          testable._renderTableView([]);
+        } catch (e) {
+          thrownError = e instanceof Error ? e : null;
+        }
+      });
+
+      it('should throw an error', () => {
+        expect(thrownError).to.exist;
+      });
+
+      it('should include _renderTableView in the error message', () => {
+        expect(thrownError?.message).to.include('_renderTableView');
+      });
+    });
+
+    describe('_renderCardView when extractedData is null', () => {
+      let thrownError: Error | null;
+
+      beforeEach(() => {
+        thrownError = null;
+        const testable = el as unknown as TestableWikiTable;
+        testable.extractedData = null;
+        try {
+          testable._renderCardView([]);
+        } catch (e) {
+          thrownError = e instanceof Error ? e : null;
+        }
+      });
+
+      it('should throw an error', () => {
+        expect(thrownError).to.exist;
+      });
+
+      it('should include _renderCardView in the error message', () => {
+        expect(thrownError?.message).to.include('_renderCardView');
+      });
     });
 
   });

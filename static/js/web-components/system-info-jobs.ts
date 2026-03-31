@@ -7,7 +7,7 @@ import './error-display.js';
 
 export class SystemInfoJobs extends LitElement {
 
-  static override styles = [
+  static override readonly styles = [
     foundationCSS,
     css`
       :host {
