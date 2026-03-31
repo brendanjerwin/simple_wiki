@@ -51,7 +51,7 @@ describe('PageChatPanel', () => {
 
     it('should render the FAB with disabled class', () => {
       const fab = el.shadowRoot!.querySelector('.fab');
-      expect(fab).to.not.equal(null);
+      expect(fab).to.exist;
       expect(fab!.classList.contains('disabled')).to.equal(true);
     });
 
@@ -64,7 +64,7 @@ describe('PageChatPanel', () => {
       el.drawerOpen = true;
       await el.updateComplete;
       const banner = el.shadowRoot!.querySelector('.status-banner.disconnected');
-      expect(banner).to.not.equal(null);
+      expect(banner).to.exist;
       expect(banner!.textContent).to.contain('Dorium is not connected');
     });
 
@@ -95,7 +95,7 @@ describe('PageChatPanel', () => {
 
     it('should render the FAB button', () => {
       const fab = el.shadowRoot!.querySelector('.fab');
-      expect(fab).to.not.equal(null);
+      expect(fab).to.exist;
     });
 
     it('should have correct aria-label', () => {
@@ -215,7 +215,7 @@ describe('PageChatPanel', () => {
 
     it('should have a textarea', () => {
       const textarea = el.shadowRoot!.querySelector('textarea');
-      expect(textarea).to.not.equal(null);
+      expect(textarea).to.exist;
     });
 
     it('should have maxlength of 2000', () => {
@@ -225,7 +225,7 @@ describe('PageChatPanel', () => {
 
     it('should have a send button', () => {
       const btn = el.shadowRoot!.querySelector('.send-button');
-      expect(btn).to.not.equal(null);
+      expect(btn).to.exist;
     });
   });
 
@@ -291,7 +291,7 @@ describe('PageChatPanel', () => {
 
     it('should show empty state message when no messages', () => {
       const empty = el.shadowRoot!.querySelector('.empty-state');
-      expect(empty).to.not.equal(null);
+      expect(empty).to.exist;
       expect(empty!.textContent).to.contain('Send a message');
     });
   });
@@ -331,7 +331,7 @@ describe('PageChatPanel', () => {
 
     it('should display the error banner', () => {
       const banner = el.shadowRoot!.querySelector('.status-banner.disconnected');
-      expect(banner).to.not.equal(null);
+      expect(banner).to.exist;
     });
 
     it('should show the error message', () => {
@@ -353,7 +353,7 @@ describe('PageChatPanel', () => {
 
       it('should show the thinking indicator', () => {
         const indicator = el.shadowRoot!.querySelector('.thinking-indicator');
-        expect(indicator).to.not.equal(null);
+        expect(indicator).to.exist;
       });
 
       it('should contain thinking text', () => {
@@ -440,7 +440,7 @@ describe('PageChatPanel', () => {
 
     it('should show the reconnecting banner', () => {
       const banner = el.shadowRoot!.querySelector('.status-banner.reconnecting');
-      expect(banner).to.not.equal(null);
+      expect(banner).to.exist;
       expect(banner!.textContent).to.contain('Reconnecting');
     });
   });
@@ -591,9 +591,9 @@ describe('PageChatPanel', () => {
 
       it('should render the persona name in the chat bubble', () => {
         const bubble = el.shadowRoot!.querySelector('chat-message-bubble');
-        expect(bubble).to.not.equal(null);
+        expect(bubble).to.exist;
         const senderDiv = bubble!.shadowRoot!.querySelector('.sender-name');
-        expect(senderDiv).to.not.equal(null);
+        expect(senderDiv).to.exist;
         expect(senderDiv!.textContent).to.equal('Dorium');
       });
     });
@@ -1485,7 +1485,7 @@ describe('PageChatPanel pollChatStatus and sendMessage', () => {
       });
 
       it('should set the error', () => {
-        expect(el.error).to.not.equal(null);
+        expect(el.error).to.exist;
         expect(el.error).to.be.instanceof(ConnectError);
       });
 
@@ -1511,7 +1511,7 @@ describe('PageChatPanel pollChatStatus and sendMessage', () => {
       });
 
       it('should set error with the original message', () => {
-        expect(el.error).to.not.equal(null);
+        expect(el.error).to.exist;
         expect(el.error!.message).to.equal('generic network error');
       });
 
