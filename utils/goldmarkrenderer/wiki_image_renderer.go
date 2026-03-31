@@ -82,11 +82,11 @@ func (r *WikiImageRenderer) writeSrcAttribute(w util.BufWriter, n *ast.Image) er
 			return err
 		}
 	}
-	return nil
+	return w.WriteByte('"')
 }
 
 func writeAltAttribute(w util.BufWriter, source []byte, n *ast.Image) error {
-	if _, err := w.WriteString(`" alt="`); err != nil {
+	if _, err := w.WriteString(` alt="`); err != nil {
 		return err
 	}
 	altText := collectText(n, source)

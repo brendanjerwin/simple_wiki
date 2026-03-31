@@ -385,61 +385,77 @@ func (s *Site) readOrInitPage(requestedIdentifier string, req *http.Request) (*w
 	if err != nil {
 		return nil, fmt.Errorf(failedToOpenPageErrFmt, requestedIdentifier, err)
 	}
+
 	if p.IsNew() {
-		prams := req.URL.Query()
-		tmpl := prams.Get("tmpl")
-
-		// Build frontmatter from URL parameters
-		fm, err := BuildFrontmatterFromURLParams(p.Identifier, prams)
-		if err != nil {
-			return nil, fmt.Errorf("failed to build frontmatter from URL params: %w", err)
+		if err := s.initNewPage(p, req); err != nil {
+			return nil, err
 		}
+	}
 
-		// Add inventory structure for inv_item template
-		if tmpl == "inv_item" {
-			EnsureInventoryFrontmatterStructure(fm)
+	if renderErr := p.Render(s, s.MarkdownRenderer, TemplateExecutor{}, s.FrontmatterIndexQueryer); renderErr != nil {
+		s.Logger.Error("Error rendering page: %v", renderErr)
+	}
+	return p, nil
+}
+
+// initNewPage initializes a newly created page with frontmatter and template content.
+func (s *Site) initNewPage(p *wikipage.Page, req *http.Request) error {
+	prams := req.URL.Query()
+	tmpl := prams.Get("tmpl")
+
+	fm, err := BuildFrontmatterFromURLParams(p.Identifier, prams)
+	if err != nil {
+		return fmt.Errorf("failed to build frontmatter from URL params: %w", err)
+	}
+
+	if tmpl == "inv_item" {
+		EnsureInventoryFrontmatterStructure(fm)
+	}
+
+	initialText, err := buildInitialPageText(fm, tmpl)
+	if err != nil {
+		return err
+	}
+
+	p.Text = initialText
+	if renderErr := p.Render(s, s.MarkdownRenderer, TemplateExecutor{}, s.FrontmatterIndexQueryer); renderErr != nil {
+		s.Logger.Error("Error rendering new page: %v", renderErr)
+	}
+	if err := s.savePageAndIndex(p); err != nil {
+		s.Logger.Error("Failed to save new page '%s': %v", p.Identifier, err)
+		return fmt.Errorf("failed to save new page '%s': %w", p.Identifier, err)
+	}
+	return nil
+}
+
+// buildInitialPageText constructs the initial markdown content for a new page.
+func buildInitialPageText(fm map[string]any, tmpl string) (string, error) {
+	fmBytes, err := toml.Marshal(fm)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal frontmatter to TOML: %w", err)
+	}
+
+	initialText := ""
+	if len(fmBytes) > 0 {
+		initialText = tomlDelimiter + string(fmBytes)
+		if !bytes.HasSuffix(fmBytes, []byte(newline)) {
+			initialText += newline
 		}
+		initialText += tomlDelimiter
+	}
 
-		// Convert frontmatter to TOML
-		fmBytes, err := toml.Marshal(fm)
-		if err != nil {
-			return nil, fmt.Errorf("failed to marshal frontmatter to TOML: %w", err)
-		}
-
-		initialText := ""
-		if len(fmBytes) > 0 {
-			initialText = tomlDelimiter + string(fmBytes)
-			if !bytes.HasSuffix(fmBytes, []byte(newline)) {
-				initialText += newline
-			}
-			initialText += tomlDelimiter
-		}
-
-		initialText += `
+	initialText += `
 # {{or .Title .Identifier}}
 `
-		if tmpl == "inv_item" {
-			initialText += `
+	if tmpl == "inv_item" {
+		initialText += `
 {{if IsContainer .Identifier }}
 ## Contents
 {{ ShowInventoryContentsOf .Identifier }}
 {{ end }}
 `
-		}
-
-		p.Text = initialText
-		if renderErr := p.Render(s, s.MarkdownRenderer, TemplateExecutor{}, s.FrontmatterIndexQueryer); renderErr != nil {
-			s.Logger.Error("Error rendering new page: %v", renderErr)
-		}
-		if err := s.savePageAndIndex(p); err != nil {
-			s.Logger.Error("Failed to save new page '%s': %v", p.Identifier, err)
-			return nil, fmt.Errorf("failed to save new page '%s': %w", p.Identifier, err)
-		}
 	}
-	if renderErr := p.Render(s, s.MarkdownRenderer, TemplateExecutor{}, s.FrontmatterIndexQueryer); renderErr != nil {
-		s.Logger.Error("Error rendering page: %v", renderErr)
-	}
-	return p, nil
+	return initialText, nil
 }
 
 // DirectoryEntry represents an entry in the wiki directory.

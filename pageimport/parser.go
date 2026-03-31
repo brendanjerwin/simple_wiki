@@ -99,14 +99,7 @@ func ParseCSV(csvContent string) (*ParseResult, error) {
 	}
 
 	// Check for identifier column
-	hasIdentifier := false
-	for _, col := range columns {
-		if strings.EqualFold(col.FieldPath, "identifier") && !col.IsArray {
-			hasIdentifier = true
-			break
-		}
-	}
-	if !hasIdentifier {
+	if !hasIdentifierColumn(columns) {
 		result.ParsingErrors = append(result.ParsingErrors, "CSV must have 'identifier' column")
 		return result, nil
 	}
@@ -129,17 +122,7 @@ func ParseCSV(csvContent string) (*ParseResult, error) {
 	for i, row := range dataRows {
 		rowNum := i + 1 // 1-indexed
 		record := parseRow(rowNum, row, columns)
-
-		// Check for duplicate identifiers
-		if record.Identifier != "" {
-			if firstRow, seen := seenIdentifiers[record.Identifier]; seen {
-				record.ValidationErrors = append(record.ValidationErrors,
-					fmt.Sprintf("duplicate identifier '%s' (also in row %d)", record.Identifier, firstRow))
-			} else {
-				seenIdentifiers[record.Identifier] = rowNum
-			}
-		}
-
+		trackDuplicateIdentifier(&record, seenIdentifiers, rowNum)
 		result.Records = append(result.Records, record)
 	}
 
@@ -365,6 +348,29 @@ func setNestedValue(m map[string]any, dottedKey string, value any) error {
 	finalKey := parts[len(parts)-1]
 	current[finalKey] = value
 	return nil
+}
+
+// hasIdentifierColumn returns true if the columns contain a non-array identifier column.
+func hasIdentifierColumn(columns []ColumnInfo) bool {
+	for _, col := range columns {
+		if strings.EqualFold(col.FieldPath, "identifier") && !col.IsArray {
+			return true
+		}
+	}
+	return false
+}
+
+// trackDuplicateIdentifier checks for duplicate identifiers and appends a validation error if found.
+func trackDuplicateIdentifier(record *ParsedRecord, seenIdentifiers map[string]int, rowNum int) {
+	if record.Identifier == "" {
+		return
+	}
+	if firstRow, seen := seenIdentifiers[record.Identifier]; seen {
+		record.ValidationErrors = append(record.ValidationErrors,
+			fmt.Sprintf("duplicate identifier '%s' (also in row %d)", record.Identifier, firstRow))
+	} else {
+		seenIdentifiers[record.Identifier] = rowNum
+	}
 }
 
 // HasErrors returns true if the record has any validation errors.

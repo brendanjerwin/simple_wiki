@@ -39,6 +39,7 @@ const (
 	pageNotFoundErrFmt             = "page not found: %s"
 	failedToReadFrontmatterErrFmt  = "failed to read frontmatter: %v"
 	failedToWriteFrontmatterErrFmt = "failed to write frontmatter: %v"
+	failedToWriteMarkdownErrFmt    = "failed to write markdown: %v"
 	pageNameRequiredErr            = "page_name is required"
 	maxUniqueIdentifierAttempts    = 1000
 	invalidTemplateErrFmt          = "invalid template in page content: %v"
@@ -1088,7 +1089,7 @@ func (s *Server) CreatePage(_ context.Context, req *apiv1.CreatePageRequest) (*a
 	}
 
 	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(identifier), wikipage.Markdown(markdown)); err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to write markdown: %v", err)
+		return nil, status.Errorf(codes.Internal, failedToWriteMarkdownErrFmt, err)
 	}
 
 	return &apiv1.CreatePageResponse{
@@ -1172,7 +1173,7 @@ func (s *Server) UpdatePageContent(_ context.Context, req *apiv1.UpdatePageConte
 	}
 
 	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(req.PageName), markdownToWrite); err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to write markdown: %v", err)
+		return nil, status.Errorf(codes.Internal, failedToWriteMarkdownErrFmt, err)
 	}
 
 	// Invariant check: read back the stored content to ensure the write did not blank the page.
@@ -1306,7 +1307,7 @@ func (s *Server) UpdateWholePage(_ context.Context, req *apiv1.UpdateWholePageRe
 	fm[identifierKey] = req.PageName
 
 	if err := s.pageReaderMutator.WriteMarkdown(wikipage.PageIdentifier(req.PageName), md); err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to write markdown: %v", err)
+		return nil, status.Errorf(codes.Internal, failedToWriteMarkdownErrFmt, err)
 	}
 
 	if err := s.pageReaderMutator.WriteFrontMatter(wikipage.PageIdentifier(req.PageName), fm); err != nil {
