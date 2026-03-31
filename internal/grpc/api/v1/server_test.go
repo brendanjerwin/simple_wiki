@@ -249,13 +249,32 @@ func (m *MockPageReaderMutator) ReadPage(identifier wikipage.PageIdentifier) (*w
 
 // MockJobStreamServer is a mock implementation of apiv1.SystemInfoService_StreamJobStatusServer for testing.
 type MockJobStreamServer struct {
-	SentMessages []*apiv1.GetJobStatusResponse
-	SendErr      error
-	ContextDone  bool
+	SentMessages      []*apiv1.GetJobStatusResponse
+	SendErr           error
+	SendErrAfterCount int // if > 0, returns SendErr only after this many successful sends
+	ContextDone       bool
+	ctx               context.Context
+	cancelFunc        context.CancelFunc
+}
+
+// newCancellableMockJobStreamServer creates a MockJobStreamServer with a controllable context.
+func newCancellableMockJobStreamServer() *MockJobStreamServer {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &MockJobStreamServer{ctx: ctx, cancelFunc: cancel}
+}
+
+// Cancel cancels the stream context.
+func (m *MockJobStreamServer) Cancel() {
+	if m.cancelFunc != nil {
+		m.cancelFunc()
+	}
 }
 
 func (m *MockJobStreamServer) Send(response *apiv1.GetJobStatusResponse) error {
-	if m.SendErr != nil {
+	if m.SendErrAfterCount > 0 && len(m.SentMessages) >= m.SendErrAfterCount {
+		return m.SendErr
+	}
+	if m.SendErr != nil && m.SendErrAfterCount == 0 {
 		return m.SendErr
 	}
 	m.SentMessages = append(m.SentMessages, response)
@@ -263,6 +282,9 @@ func (m *MockJobStreamServer) Send(response *apiv1.GetJobStatusResponse) error {
 }
 
 func (m *MockJobStreamServer) Context() context.Context {
+	if m.ctx != nil {
+		return m.ctx
+	}
 	if m.ContextDone {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
@@ -1445,6 +1467,82 @@ var _ = Describe("Server", func() {
 		})
 	})
 
+	Describe("RegisterWithServer", func() {
+		var grpcServer *grpc.Server
+
+		BeforeEach(func() {
+			grpcServer = grpc.NewServer()
+			server = mustNewServer(nil, nil, nil)
+		})
+
+		It("should register all services without panic", func() {
+			Expect(func() { server.RegisterWithServer(grpcServer) }).NotTo(Panic())
+		})
+	})
+
+	Describe("GetVersion", func() {
+		var (
+			req  *apiv1.GetVersionRequest
+			resp *apiv1.GetVersionResponse
+			err  error
+		)
+
+		BeforeEach(func() {
+			req = &apiv1.GetVersionRequest{}
+			server = mustNewServer(nil, nil, nil)
+		})
+
+		When("identity is anonymous", func() {
+			BeforeEach(func() {
+				resp, err = server.GetVersion(ctx, req)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a version response", func() {
+				Expect(resp).NotTo(BeNil())
+			})
+
+			It("should not include tailscale identity", func() {
+				Expect(resp.TailscaleIdentity).To(BeNil())
+			})
+		})
+
+		When("identity is a tailscale user", func() {
+			BeforeEach(func() {
+				identity := tailscale.NewIdentity("user@example.com", "User Name", "device-name")
+				identCtx := tailscale.ContextWithIdentity(ctx, identity)
+				resp, err = server.GetVersion(identCtx, req)
+			})
+
+			It("should not return an error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return a version response", func() {
+				Expect(resp).NotTo(BeNil())
+			})
+
+			It("should include tailscale identity", func() {
+				Expect(resp.TailscaleIdentity).NotTo(BeNil())
+			})
+
+			It("should include the login name", func() {
+				Expect(resp.TailscaleIdentity.LoginName).To(HaveValue(Equal("user@example.com")))
+			})
+
+			It("should include the display name", func() {
+				Expect(resp.TailscaleIdentity.DisplayName).To(HaveValue(Equal("User Name")))
+			})
+
+			It("should include the node name", func() {
+				Expect(resp.TailscaleIdentity.NodeName).To(HaveValue(Equal("device-name")))
+			})
+		})
+	})
+
 	Describe("LoggingInterceptor", func() {
 		var (
 			server  *v1.Server
@@ -2392,28 +2490,90 @@ var _ = Describe("Server", func() {
 			server = mustNewServer(nil, nil, nil)
 		})
 
-		var (
-			err          error
-			firstMessage *apiv1.GetJobStatusResponse
-		)
+		When("context is cancelled immediately after initial send", func() {
+			var (
+				err          error
+				firstMessage *apiv1.GetJobStatusResponse
+			)
 
-		BeforeEach(func() {
-			// Set up context that gets cancelled after initial send
-			streamServer.ContextDone = true
-			err = server.StreamJobStatus(req, streamServer)
-			if len(streamServer.SentMessages) > 0 {
-				firstMessage = streamServer.SentMessages[0]
-			}
+			BeforeEach(func() {
+				streamServer.ContextDone = true
+				err = server.StreamJobStatus(req, streamServer)
+				if len(streamServer.SentMessages) > 0 {
+					firstMessage = streamServer.SentMessages[0]
+				}
+			})
+
+			It("should handle context cancellation", func() {
+				Expect(err).To(Equal(context.Canceled))
+			})
+
+			It("should send initial empty response", func() {
+				Expect(streamServer.SentMessages).To(HaveLen(1))
+				Expect(firstMessage).NotTo(BeNil())
+				Expect(firstMessage.JobQueues).To(BeEmpty())
+			})
 		})
 
-		It("should handle context cancellation", func() {
-			Expect(err).To(Equal(context.Canceled))
+		When("initial send fails", func() {
+			var err error
+
+			BeforeEach(func() {
+				streamServer.SendErr = errors.New("stream broken")
+				err = server.StreamJobStatus(req, streamServer)
+			})
+
+			It("should return the send error", func() {
+				Expect(err).To(MatchError("stream broken"))
+			})
+
+			It("should not record any sent messages", func() {
+				Expect(streamServer.SentMessages).To(BeEmpty())
+			})
 		})
 
-		It("should send initial empty response", func() {
-			Expect(streamServer.SentMessages).To(HaveLen(1))
-			Expect(firstMessage).NotTo(BeNil())
-			Expect(firstMessage.JobQueues).To(BeEmpty())
+		When("the minimum interval clamp is applied", func() {
+			var err error
+
+			BeforeEach(func() {
+				// Request an interval below the 100ms minimum
+				intervalMs := int32(50)
+				req.UpdateIntervalMs = &intervalMs
+				streamServer = newCancellableMockJobStreamServer()
+				// Fail on the 2nd send to trigger ticker path then exit
+				streamServer.SendErrAfterCount = 1
+				streamServer.SendErr = errors.New("stop after first tick")
+				err = server.StreamJobStatus(req, streamServer)
+			})
+
+			It("should return after ticker fires and send fails", func() {
+				Expect(err).To(MatchError("stop after first tick"))
+			})
+
+			It("should have sent the initial message before the ticker", func() {
+				Expect(len(streamServer.SentMessages)).To(BeNumerically(">=", 1))
+			})
+		})
+
+		When("send fails on ticker update", func() {
+			var err error
+
+			BeforeEach(func() {
+				intervalMs := int32(100)
+				req.UpdateIntervalMs = &intervalMs
+				streamServer = newCancellableMockJobStreamServer()
+				streamServer.SendErrAfterCount = 1
+				streamServer.SendErr = errors.New("ticker send failed")
+				err = server.StreamJobStatus(req, streamServer)
+			})
+
+			It("should return the ticker send error", func() {
+				Expect(err).To(MatchError("ticker send failed"))
+			})
+
+			It("should have sent exactly one initial message", func() {
+				Expect(streamServer.SentMessages).To(HaveLen(1))
+			})
 		})
 	})
 
@@ -4454,13 +4614,27 @@ var _ = Describe("Server", func() {
 			})
 		})
 
-		When("csv_content has parsing errors", func() {
+		When("csv_content has parsing errors (missing identifier column)", func() {
 			BeforeEach(func() {
 				req.CsvContent = "title,description\nTest,A test page"
 			})
 
 			It("should return an invalid argument error with parsing error details", func() {
 				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "CSV has parsing errors"))
+			})
+
+			It("should return no response", func() {
+				Expect(resp).To(BeNil())
+			})
+		})
+
+		When("csv_content is syntactically malformed", func() {
+			BeforeEach(func() {
+				req.CsvContent = "identifier\n\"unclosed quote"
+			})
+
+			It("should return an invalid argument error for failed CSV parse", func() {
+				Expect(err).To(HaveGrpcStatusWithSubstr(codes.InvalidArgument, "failed to parse CSV"))
 			})
 
 			It("should return no response", func() {
