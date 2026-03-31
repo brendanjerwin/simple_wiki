@@ -48,7 +48,7 @@ declare global {
 export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA {
   override readonly drawerId = 'page-chat';
 
-  static override styles = [
+  static override readonly styles = [
     colorCSS,
     typographyCSS,
     zIndexCSS,
@@ -605,8 +605,8 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     // On mobile, when the keyboard opens, visualViewport.height shrinks but
     // CSS 100dvh may not update immediately. Force the panel height to match
     // the actual visual viewport so it doesn't extend behind the keyboard.
-    const panel = this.shadowRoot?.querySelector('.panel');
-    if (panel instanceof HTMLElement) {
+    const panel = this.shadowRoot?.querySelector<HTMLElement>('.panel');
+    if (panel) {
       panel.style.height = `${viewport.height}px`;
     }
   }
@@ -644,32 +644,42 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
 
     while (!signal.aborted) {
       try {
-        const request = create(SubscribeChatRequestSchema, { page: this.page });
-        this.streamState = 'connected';
-        this.error = null;
-
-        for await (const event of this.chatClient.subscribeChat(request, { signal })) {
-          await this.handleChatEvent(event);
-          reconnectDelayMs = INITIAL_RECONNECT_DELAY_MS;
-        }
-
-        // Stream ended cleanly
-        break;
+        await this.runStreamIteration(signal, () => { reconnectDelayMs = INITIAL_RECONNECT_DELAY_MS; });
+        break; // Stream ended cleanly
       } catch (err) {
-        if (err instanceof Error && err.name === 'AbortError') break;
-        if (signal.aborted) break;
-
-        this.streamState = 'reconnecting';
-        this.error = err instanceof Error ? err : new Error(String(err));
-
-        await this.waitForReconnectDelay(signal, reconnectDelayMs);
-        reconnectDelayMs = Math.min(reconnectDelayMs * 2, MAX_RECONNECT_DELAY_MS);
+        if (isAbortError(err) || signal.aborted) break;
+        reconnectDelayMs = await this.prepareStreamReconnect(err, signal, reconnectDelayMs);
       }
     }
 
     if (this.streamState !== 'disconnected') {
       this.streamState = 'disconnected';
     }
+  }
+
+  private async runStreamIteration(
+    signal: AbortSignal,
+    onResetDelay: () => void,
+  ): Promise<void> {
+    const request = create(SubscribeChatRequestSchema, { page: this.page });
+    this.streamState = 'connected';
+    this.error = null;
+
+    for await (const event of this.chatClient.subscribeChat(request, { signal })) {
+      await this.handleChatEvent(event);
+      onResetDelay();
+    }
+  }
+
+  private async prepareStreamReconnect(
+    err: unknown,
+    signal: AbortSignal,
+    reconnectDelayMs: number,
+  ): Promise<number> {
+    this.streamState = 'reconnecting';
+    this.error = err instanceof Error ? err : new Error(String(err));
+    await this.waitForReconnectDelay(signal, reconnectDelayMs);
+    return Math.min(reconnectDelayMs * 2, MAX_RECONNECT_DELAY_MS);
   }
 
   private stopStream(): void {
@@ -787,6 +797,10 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     const textarea = this.shadowRoot?.querySelector('textarea');
     textarea?.focus();
   }
+}
+
+function isAbortError(err: unknown): boolean {
+  return err instanceof Error && err.name === 'AbortError';
 }
 
 function groupReactions(reactions: Reaction[]): ReactionGroup[] {
