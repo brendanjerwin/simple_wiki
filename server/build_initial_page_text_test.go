@@ -96,4 +96,24 @@ var _ = Describe("buildInitialPageText", func() {
 			Expect(result).NotTo(ContainSubstring("ShowInventoryContentsOf"))
 		})
 	})
+
+	When("frontmatter contains an unmarshalable value", func() {
+		var result string
+		var err error
+
+		BeforeEach(func() {
+			fm := wikipage.FrontMatter{
+				"bad": make(chan int), // channels cannot be TOML-serialized
+			}
+			result, err = buildInitialPageText(fm, "")
+		})
+
+		It("should return an error", func() {
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should return an empty string", func() {
+			Expect(result).To(BeEmpty())
+		})
+	})
 })

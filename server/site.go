@@ -572,19 +572,19 @@ func (s *Site) UploadList() ([]os.FileInfo, error) {
 
 // --- PageReaderMutator implementation ---
 
-func writeFrontmatterToBuffer(content *bytes.Buffer, fmBytes []byte) error {
-	if _, err := content.WriteString(tomlDelimiter); err != nil {
+func writeFrontmatterToBuffer(content io.Writer, fmBytes []byte) error {
+	if _, err := io.WriteString(content, tomlDelimiter); err != nil {
 		return err
 	}
 	if _, err := content.Write(fmBytes); err != nil {
 		return err
 	}
 	if !bytes.HasSuffix(fmBytes, []byte(newline)) {
-		if _, err := content.WriteString(newline); err != nil {
+		if _, err := io.WriteString(content, newline); err != nil {
 			return err
 		}
 	}
-	if _, err := content.WriteString(tomlDelimiter); err != nil {
+	if _, err := io.WriteString(content, tomlDelimiter); err != nil {
 		return err
 	}
 	return nil

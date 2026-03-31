@@ -1146,3 +1146,77 @@ func (f *failingSessionStore) New(r *http.Request, name string) (*gorillasession
 func (*failingSessionStore) Save(r *http.Request, w http.ResponseWriter, s *gorillasessions.Session) error {
 	return errors.New("session save failed")
 }
+
+var _ = Describe("ReadOrInitPageForTesting", func() {
+	var tmpDir string
+	var site *server.Site
+
+	BeforeEach(func() {
+		var err error
+		tmpDir, err = os.MkdirTemp("", "simple_wiki_init_test")
+		Expect(err).NotTo(HaveOccurred())
+		logger := lumber.NewConsoleLogger(lumber.WARN)
+		site, err = server.NewSite(tmpDir, "testpage", 0, "secret", logger)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	AfterEach(func() {
+		_ = os.RemoveAll(tmpDir)
+	})
+
+	When("URL params have conflicting keys (value and nested table with same prefix)", func() {
+		var page *wikipage.Page
+		var err error
+
+		BeforeEach(func() {
+			// "a=value" sets frontmatter["a"]="value"; "a.b=conflict" then tries to navigate
+			// frontmatter["a"] as a nested map, but it's a string — causing an error.
+			req, reqErr := http.NewRequest(http.MethodGet, "/conflict-page/view?a=value&a.b=conflict", nil)
+			Expect(reqErr).NotTo(HaveOccurred())
+			page, err = site.ReadOrInitPageForTesting("conflict-page", req)
+		})
+
+		It("should return an error", func() {
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should return a nil page", func() {
+			Expect(page).To(BeNil())
+		})
+	})
+
+	When("saving a new page fails because the data directory is read-only", func() {
+		var page *wikipage.Page
+		var err error
+		var readOnlyDir string
+		var originalPath string
+
+		BeforeEach(func() {
+			var mkdirErr error
+			readOnlyDir, mkdirErr = os.MkdirTemp("", "readonly_init_test")
+			Expect(mkdirErr).NotTo(HaveOccurred())
+			Expect(os.Chmod(readOnlyDir, 0555)).To(Succeed()) // read + execute, no write
+
+			originalPath = site.PathToData
+			site.PathToData = readOnlyDir
+
+			req, reqErr := http.NewRequest(http.MethodGet, "/new-page/view", nil)
+			Expect(reqErr).NotTo(HaveOccurred())
+			page, err = site.ReadOrInitPageForTesting("new-page", req)
+		})
+
+		AfterEach(func() {
+			site.PathToData = originalPath
+			_ = os.Chmod(readOnlyDir, 0755)
+			_ = os.RemoveAll(readOnlyDir)
+		})
+
+		It("should return an error", func() {
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("should return a nil page", func() {
+			Expect(page).To(BeNil())
+		})
+	})
+})
