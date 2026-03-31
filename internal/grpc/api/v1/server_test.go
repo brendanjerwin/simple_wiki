@@ -5715,3 +5715,61 @@ var _ = Describe("makeReportJobCallback execution", func() {
 	})
 })
 
+// synchronousCompletingCoordinator executes jobs and their completion callbacks synchronously.
+// EnqueueJob always returns an error — used to test error handling in makeReportJobCallback
+// when the report job cannot be enqueued.
+type synchronousCompletingCoordinator struct {
+	enqueueJobCallCount int
+}
+
+func (*synchronousCompletingCoordinator) GetJobProgress() jobs.JobProgress {
+	return jobs.JobProgress{}
+}
+
+func (*synchronousCompletingCoordinator) EnqueueJobWithCompletion(job jobs.Job, callback jobs.CompletionCallback) error {
+	// Execute the import job synchronously so the callback fires inline.
+	jobErr := job.Execute()
+	if callback != nil {
+		callback(jobErr)
+	}
+	return nil
+}
+
+func (c *synchronousCompletingCoordinator) EnqueueJob(_ jobs.Job) error {
+	c.enqueueJobCallCount++
+	return errors.New("report job enqueue rejected for testing")
+}
+
+var _ = Describe("makeReportJobCallback", func() {
+	Describe("when the report job cannot be enqueued", func() {
+		var (
+			ctx         context.Context
+			coordinator *synchronousCompletingCoordinator
+			resp        *apiv1.StartPageImportJobResponse
+			err         error
+		)
+
+		BeforeEach(func() {
+			ctx = context.Background()
+			coordinator = &synchronousCompletingCoordinator{}
+			server := mustNewServerFull(nil, nil, nil, coordinator, nil)
+
+			resp, err = server.StartPageImportJob(ctx, &apiv1.StartPageImportJobRequest{
+				CsvContent: "identifier\ntest_page",
+			})
+		})
+
+		It("should not return an error to the caller", func() {
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("should return a successful response", func() {
+			Expect(resp.Success).To(BeTrue())
+		})
+
+		It("should have attempted to enqueue the report job", func() {
+			Expect(coordinator.enqueueJobCallCount).To(Equal(1))
+		})
+	})
+})
+
