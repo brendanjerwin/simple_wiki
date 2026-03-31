@@ -622,7 +622,8 @@ export class WikiChecklist extends LitElement {
       };
 
       // Update the checklists key
-      const existingChecklists = this._asRecord(currentFrontmatter['checklists']) ?? {};
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- _asRecord narrows to non-null object; values originate from parsed JSON and are valid JsonValues
+      const existingChecklists = (this._asRecord(currentFrontmatter['checklists']) ?? {}) as JsonObject;
       const updatedChecklists: JsonObject = {
         ...existingChecklists,
         [this.listName]: checklistData,
