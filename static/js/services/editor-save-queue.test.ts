@@ -44,7 +44,7 @@ describe('EditorSaveQueue', () => {
       });
 
       it('should call the save function with the content', () => {
-        expect(saveFn).to.have.been.calledOnce;
+        expect(saveFn.callCount).to.equal(1);
         expect(saveFn).to.have.been.calledWith('hello');
       });
 
@@ -69,7 +69,7 @@ describe('EditorSaveQueue', () => {
     });
 
     it('should only call save once with the latest content', () => {
-      expect(saveFn).to.have.been.calledOnce;
+      expect(saveFn.callCount).to.equal(1);
       expect(saveFn).to.have.been.calledWith('hel');
     });
   });
@@ -136,7 +136,7 @@ describe('EditorSaveQueue', () => {
     });
 
     it('should not call save again while first is in flight', () => {
-      expect(saveFn).to.have.been.calledOnce;
+      expect(saveFn.callCount).to.equal(1);
     });
 
     describe('when the first save completes', () => {
@@ -147,7 +147,7 @@ describe('EditorSaveQueue', () => {
       });
 
       it('should immediately save the queued content', () => {
-        expect(saveFn).to.have.been.calledTwice;
+        expect(saveFn.callCount).to.equal(2);
         expect(saveFn.secondCall).to.have.been.calledWith('second');
       });
 
@@ -165,15 +165,25 @@ describe('EditorSaveQueue', () => {
       queue.destroy();
     });
 
-    it('should cancel pending debounced save', async () => {
-      await clock.tickAsync(500);
-      expect(saveFn).to.not.have.been.called;
+    describe('after debounce period elapses', () => {
+      beforeEach(async () => {
+        await clock.tickAsync(500);
+      });
+
+      it('should cancel pending debounced save', () => {
+        expect(saveFn.callCount).to.equal(0);
+      });
     });
 
-    it('should not process further content changes', async () => {
-      queue.contentChanged('after destroy');
-      await clock.tickAsync(500);
-      expect(saveFn).to.not.have.been.called;
+    describe('when content changes and debounce period elapses', () => {
+      beforeEach(async () => {
+        queue.contentChanged('after destroy');
+        await clock.tickAsync(500);
+      });
+
+      it('should not process further content changes', () => {
+        expect(saveFn.callCount).to.equal(0);
+      });
     });
   });
 });

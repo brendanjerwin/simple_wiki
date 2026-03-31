@@ -28,7 +28,7 @@ describe('EditorToolbarCoordinator', () => {
   });
 
   it('should exist', () => {
-    expect(coordinator).to.exist;
+    expect(coordinator).to.be.instanceOf(EditorToolbarCoordinator);
   });
 
   describe('when Bold toolbar button is clicked', () => {
@@ -51,7 +51,7 @@ describe('EditorToolbarCoordinator', () => {
     });
 
     it('should trigger keyup for auto-save', () => {
-      expect(keyupSpy).to.have.been.called;
+      expect(keyupSpy.callCount).to.equal(1);
     });
   });
 
@@ -109,7 +109,7 @@ describe('EditorToolbarCoordinator', () => {
     });
 
     it('should call selectAndUploadImage', () => {
-      expect(selectAndUploadImageStub).to.have.been.calledOnce;
+      expect(selectAndUploadImageStub.callCount).to.equal(1);
     });
 
     it('should insert markdown at cursor position', () => {
@@ -238,7 +238,7 @@ describe('EditorToolbarCoordinator', () => {
     });
 
     it('should create the dialog element', () => {
-      expect(insertedDialog).to.exist;
+      expect(insertedDialog).to.be.instanceOf(InsertNewPageDialog);
     });
 
     it('should have openDialog as a function', () => {

@@ -10,7 +10,7 @@ describe('TextFormattingService', () => {
   });
 
   it('should exist', () => {
-    expect(service).to.exist;
+    expect(service).to.be.instanceOf(TextFormattingService);
   });
 
   describe('wrapBold', () => {

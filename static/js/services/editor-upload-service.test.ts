@@ -21,7 +21,7 @@ describe('EditorUploadService', () => {
   });
 
   it('should exist', () => {
-    expect(service).to.exist;
+    expect(service).to.be.instanceOf(EditorUploadService);
   });
 
   describe('uploadFile', () => {
@@ -38,7 +38,7 @@ describe('EditorUploadService', () => {
       });
 
       it('should call gRPC uploadFile', () => {
-        expect(uploadFileStub).to.have.been.calledOnce;
+        expect(uploadFileStub.callCount).to.equal(1);
       });
 
       it('should send file content and filename in the request', () => {
@@ -124,7 +124,7 @@ describe('EditorUploadService', () => {
       });
 
       it('should trigger keyup event for auto-save', () => {
-        expect(keyupSpy).to.have.been.calledOnce;
+        expect(keyupSpy.callCount).to.equal(1);
       });
     });
 
@@ -196,7 +196,7 @@ describe('EditorUploadService', () => {
       });
 
       it('should return undefined', () => {
-        expect(result).to.be.undefined;
+        expect(result).to.equal(undefined);
       });
     });
 
@@ -212,7 +212,7 @@ describe('EditorUploadService', () => {
       });
 
       it('should return undefined', () => {
-        expect(result).to.be.undefined;
+        expect(result).to.equal(undefined);
       });
     });
   });
