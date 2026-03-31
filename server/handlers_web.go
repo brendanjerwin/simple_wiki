@@ -282,7 +282,7 @@ func (s *Site) renderPageContent(c *gin.Context, page, command string, p *wikipa
 	}
 
 	templateData := s.buildTemplateData(page, command, directoryListing, contentHTML, rawText, c)
-	c.HTML(http.StatusOK, "index.tmpl", templateData)
+	c.HTML(http.StatusOK, indexTemplateName, templateData)
 }
 
 func (*Site) getPageContent(p *wikipage.Page) (rawText string, contentHTML []byte) {

@@ -5,7 +5,7 @@ import { colorCSS, typographyCSS, themeCSS } from './shared-styles.js';
 
 // Demo component for showing the design system
 class DesignSystemDemo extends LitElement {
-  static override readonly styles = [
+  static override styles = [
     colorCSS,
     typographyCSS, 
     themeCSS,
@@ -526,7 +526,7 @@ export const UsageExamples: Story = {
         <pre class="code-snippet"><code>import { colorCSS, typographyCSS, themeCSS } from './shared-styles.js';
 
 export class MyComponent extends LitElement {
-  static override readonly styles = [
+  static override styles = [
     colorCSS,
     typographyCSS,
     themeCSS,

@@ -14,8 +14,10 @@ import (
 )
 
 const (
-	testFileTimestamp    = 1609459200 // 2021-01-01 Unix timestamp
-	frontmatterDelimiter = "+++"
+	testFileTimestamp              = 1609459200 // 2021-01-01 Unix timestamp
+	frontmatterDelimiter           = "+++"
+	tomlFrontmatterIdentifierOpen  = frontmatterDelimiter + "\nidentifier = '"
+	tomlFrontmatterIdentifierClose = "'\n" + frontmatterDelimiter + "\n\n"
 )
 
 // MockMigrationDeps provides a simple mock implementation for testing migrations
@@ -159,7 +161,7 @@ func CreatePascalCasePage(dir, identifier, content string) {
 	mdPath := filepath.Join(dir, base32tools.EncodeToBase32(strings.ToLower(identifier))+".md")
 
 	// Build page with frontmatter containing the identifier
-	fullContent := frontmatterDelimiter + "\nidentifier = '" + identifier + "'\n" + frontmatterDelimiter + "\n\n" + content
+	fullContent := tomlFrontmatterIdentifierOpen + identifier + tomlFrontmatterIdentifierClose + content
 	_ = os.WriteFile(mdPath, []byte(fullContent), 0644)
 }
 
@@ -189,7 +191,7 @@ func CreateMDFileWithoutFrontmatter(dir, identifier, content string) {
 // Must be called from within a Ginkgo test context.
 func CreateMDFileWithFrontmatterNoIdentifier(dir, identifier, frontmatter, content string) {
 	mdPath := filepath.Join(dir, base32tools.EncodeToBase32(strings.ToLower(identifier))+".md")
-	fullContent := "+++\n" + frontmatter + "\n+++\n\n" + content
+	fullContent := frontmatterDelimiter + "\n" + frontmatter + "\n" + frontmatterDelimiter + "\n\n" + content
 	err := os.WriteFile(mdPath, []byte(fullContent), 0644)
 	Expect(err).NotTo(HaveOccurred(), "failed to create MD file with frontmatter: %s", mdPath)
 }
@@ -198,7 +200,7 @@ func CreateMDFileWithFrontmatterNoIdentifier(dir, identifier, frontmatter, conte
 // Must be called from within a Ginkgo test context.
 func CreateMDFileWithInvalidIdentifier(dir, filename, identifier string) {
 	mdPath := filepath.Join(dir, base32tools.EncodeToBase32(strings.ToLower(filename))+".md")
-	fullContent := "+++\nidentifier = '" + identifier + "'\n+++\n\n# Content"
+	fullContent := tomlFrontmatterIdentifierOpen + identifier + tomlFrontmatterIdentifierClose + "# Content"
 	err := os.WriteFile(mdPath, []byte(fullContent), 0644)
 	Expect(err).NotTo(HaveOccurred(), "failed to create MD file with invalid identifier: %s", mdPath)
 }
@@ -285,7 +287,7 @@ func (m *MockDataDirScanner) AddFile(filename string, content []byte) {
 // AddPascalCasePage adds a PascalCase page with TOML frontmatter to the mock
 func (m *MockDataDirScanner) AddPascalCasePage(identifier, markdownContent string) {
 	base32Name := base32tools.EncodeToBase32(strings.ToLower(identifier))
-	fullContent := "+++\nidentifier = '" + identifier + "'\n+++\n\n" + markdownContent
+	fullContent := tomlFrontmatterIdentifierOpen + identifier + tomlFrontmatterIdentifierClose + markdownContent
 	m.files[base32Name+".md"] = []byte(fullContent)
 }
 
