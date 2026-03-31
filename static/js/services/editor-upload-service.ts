@@ -131,7 +131,7 @@ export class EditorUploadService {
       return url.searchParams.get('filename') || 'upload';
     } catch {
       // Fallback: try to extract from query string manually
-      const match = location.match(/filename=([^&]+)/);
+      const match = /filename=([^&]+)/.exec(location);
       if (match?.[1]) {
         return decodeURIComponent(match[1]);
       }

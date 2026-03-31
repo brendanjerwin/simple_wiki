@@ -18,7 +18,7 @@ const MONTH_MAP: Record<string, string> = {
 };
 
 function parseAmazonDate(dateText: string): string {
-  const match = dateText.trim().match(/^(\w+)\s+(\d{1,2}),\s+(\d{4})$/);
+  const match = /^(\w+)\s+(\d{1,2}),\s+(\d{4})$/.exec(dateText.trim());
   if (!match) {
     return '';
   }
@@ -36,7 +36,7 @@ function parseAmazonDate(dateText: string): string {
 }
 
 function parsePriceCents(priceText: string): number {
-  const match = priceText.trim().match(/\$(\d+(?:,\d{3})*)\.(\d{2})/);
+  const match = /\$(\d+(?:,\d{3})*)\.(\d{2})/.exec(priceText.trim());
   if (!match) {
     return 0;
   }
@@ -71,7 +71,7 @@ function parseOrderCard(card: Element): Order | null {
   }
 
   const orderIdText = orderIdEl.textContent?.trim() ?? '';
-  const orderNumberMatch = orderIdText.match(ORDER_NUMBER_PATTERN);
+  const orderNumberMatch = ORDER_NUMBER_PATTERN.exec(orderIdText);
   if (!orderNumberMatch) {
     return null;
   }
