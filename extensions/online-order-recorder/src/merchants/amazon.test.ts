@@ -180,4 +180,285 @@ describe('parseOrders', () => {
       expect(nonAmazonOrders).to.have.length(0);
     });
   });
+
+  describe('when a card is missing the order ID element', () => {
+    let result: Order[];
+
+    beforeEach(() => {
+      const html = `
+        <div class="order-card js-order-card">
+          <div class="a-box a-color-offset-background order-header">
+            <ul class="order-header__header-list">
+              <li>
+                <span class="a-color-secondary">Order placed</span>
+                <span class="a-text-bold">March 5, 2026</span>
+              </li>
+              <li>
+                <span class="a-color-secondary">Total</span>
+                <span class="a-text-bold">$10.00</span>
+              </li>
+            </ul>
+          </div>
+          <div class="delivery-box">
+            <span class="delivery-box__primary-text">Delivered</span>
+            <div class="item-box">
+              <div class="yohtmlc-product-title">Widget</div>
+            </div>
+          </div>
+        </div>`;
+      const dom = new JSDOM(html);
+      result = parseOrders(dom.window.document);
+    });
+
+    it('should skip the card and return empty array', () => {
+      expect(result).to.have.length(0);
+    });
+  });
+
+  describe('when a card has an order ID that does not match the order number pattern', () => {
+    let result: Order[];
+
+    beforeEach(() => {
+      const html = `
+        <div class="order-card js-order-card">
+          <div class="a-box a-color-offset-background order-header">
+            <ul class="order-header__header-list">
+              <li>
+                <span class="a-color-secondary">Order placed</span>
+                <span class="a-text-bold">March 5, 2026</span>
+              </li>
+              <li>
+                <span class="a-color-secondary">Total</span>
+                <span class="a-text-bold">$10.00</span>
+              </li>
+              <li>
+                <div class="yohtmlc-order-id">
+                  <span dir="ltr">NOT-A-VALID-ORDER-NUMBER</span>
+                </div>
+              </li>
+            </ul>
+          </div>
+          <div class="delivery-box">
+            <span class="delivery-box__primary-text">Delivered</span>
+            <div class="item-box">
+              <div class="yohtmlc-product-title">Widget</div>
+            </div>
+          </div>
+        </div>`;
+      const dom = new JSDOM(html);
+      result = parseOrders(dom.window.document);
+    });
+
+    it('should skip the card and return empty array', () => {
+      expect(result).to.have.length(0);
+    });
+  });
+
+  describe('when a card has no items', () => {
+    let result: Order[];
+
+    beforeEach(() => {
+      const html = `
+        <div class="order-card js-order-card">
+          <div class="a-box a-color-offset-background order-header">
+            <ul class="order-header__header-list">
+              <li>
+                <span class="a-color-secondary">Order placed</span>
+                <span class="a-text-bold">March 5, 2026</span>
+              </li>
+              <li>
+                <span class="a-color-secondary">Total</span>
+                <span class="a-text-bold">$10.00</span>
+              </li>
+              <li>
+                <div class="yohtmlc-order-id">
+                  <span dir="ltr">111-2345678-9012345</span>
+                </div>
+              </li>
+            </ul>
+          </div>
+          <div class="delivery-box">
+            <span class="delivery-box__primary-text">Delivered</span>
+          </div>
+        </div>`;
+      const dom = new JSDOM(html);
+      result = parseOrders(dom.window.document);
+    });
+
+    it('should skip the card and return empty array', () => {
+      expect(result).to.have.length(0);
+    });
+  });
+
+  describe('when a card has an invalid date format', () => {
+    let order: Order;
+
+    beforeEach(() => {
+      const html = `
+        <div class="order-card js-order-card">
+          <div class="a-box a-color-offset-background order-header">
+            <ul class="order-header__header-list">
+              <li>
+                <span class="a-color-secondary">Order placed</span>
+                <span class="a-text-bold">not a date</span>
+              </li>
+              <li>
+                <span class="a-color-secondary">Total</span>
+                <span class="a-text-bold">$10.00</span>
+              </li>
+              <li>
+                <div class="yohtmlc-order-id">
+                  <span dir="ltr">111-2345678-9012345</span>
+                </div>
+              </li>
+            </ul>
+          </div>
+          <div class="delivery-box">
+            <span class="delivery-box__primary-text">Delivered</span>
+            <div class="item-box">
+              <div class="yohtmlc-product-title">Widget</div>
+            </div>
+          </div>
+        </div>`;
+      const dom = new JSDOM(html);
+      const orders = parseOrders(dom.window.document);
+      order = orders[0]!;
+    });
+
+    it('should parse the card successfully', () => {
+      expect(order).to.exist;
+    });
+
+    it('should return an empty string for the order date', () => {
+      expect(order.orderDate).to.equal('');
+    });
+  });
+
+  describe('when a card has an unrecognized month name', () => {
+    let order: Order;
+
+    beforeEach(() => {
+      const html = `
+        <div class="order-card js-order-card">
+          <div class="a-box a-color-offset-background order-header">
+            <ul class="order-header__header-list">
+              <li>
+                <span class="a-color-secondary">Order placed</span>
+                <span class="a-text-bold">Julember 5, 2026</span>
+              </li>
+              <li>
+                <span class="a-color-secondary">Total</span>
+                <span class="a-text-bold">$10.00</span>
+              </li>
+              <li>
+                <div class="yohtmlc-order-id">
+                  <span dir="ltr">111-2345678-9012345</span>
+                </div>
+              </li>
+            </ul>
+          </div>
+          <div class="delivery-box">
+            <span class="delivery-box__primary-text">Delivered</span>
+            <div class="item-box">
+              <div class="yohtmlc-product-title">Widget</div>
+            </div>
+          </div>
+        </div>`;
+      const dom = new JSDOM(html);
+      const orders = parseOrders(dom.window.document);
+      order = orders[0]!;
+    });
+
+    it('should parse the card successfully', () => {
+      expect(order).to.exist;
+    });
+
+    it('should return an empty string for the order date', () => {
+      expect(order.orderDate).to.equal('');
+    });
+  });
+
+  describe('when a card has an invalid price format', () => {
+    let order: Order;
+
+    beforeEach(() => {
+      const html = `
+        <div class="order-card js-order-card">
+          <div class="a-box a-color-offset-background order-header">
+            <ul class="order-header__header-list">
+              <li>
+                <span class="a-color-secondary">Order placed</span>
+                <span class="a-text-bold">March 5, 2026</span>
+              </li>
+              <li>
+                <span class="a-color-secondary">Total</span>
+                <span class="a-text-bold">not a price</span>
+              </li>
+              <li>
+                <div class="yohtmlc-order-id">
+                  <span dir="ltr">111-2345678-9012345</span>
+                </div>
+              </li>
+            </ul>
+          </div>
+          <div class="delivery-box">
+            <span class="delivery-box__primary-text">Delivered</span>
+            <div class="item-box">
+              <div class="yohtmlc-product-title">Widget</div>
+            </div>
+          </div>
+        </div>`;
+      const dom = new JSDOM(html);
+      const orders = parseOrders(dom.window.document);
+      order = orders[0]!;
+    });
+
+    it('should parse the card successfully', () => {
+      expect(order).to.exist;
+    });
+
+    it('should return 0 for totalCents', () => {
+      expect(order.totalCents).to.equal(0);
+    });
+  });
+
+  describe('when a card has a price with comma-separated thousands', () => {
+    let order: Order;
+
+    beforeEach(() => {
+      const html = `
+        <div class="order-card js-order-card">
+          <div class="a-box a-color-offset-background order-header">
+            <ul class="order-header__header-list">
+              <li>
+                <span class="a-color-secondary">Order placed</span>
+                <span class="a-text-bold">March 5, 2026</span>
+              </li>
+              <li>
+                <span class="a-color-secondary">Total</span>
+                <span class="a-text-bold">$1,234.56</span>
+              </li>
+              <li>
+                <div class="yohtmlc-order-id">
+                  <span dir="ltr">111-2345678-9012345</span>
+                </div>
+              </li>
+            </ul>
+          </div>
+          <div class="delivery-box">
+            <span class="delivery-box__primary-text">Delivered</span>
+            <div class="item-box">
+              <div class="yohtmlc-product-title">Expensive Item</div>
+            </div>
+          </div>
+        </div>`;
+      const dom = new JSDOM(html);
+      const orders = parseOrders(dom.window.document);
+      order = orders[0]!;
+    });
+
+    it('should parse the price correctly', () => {
+      expect(order.totalCents).to.equal(123456);
+    });
+  });
 });

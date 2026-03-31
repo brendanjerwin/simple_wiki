@@ -49,5 +49,30 @@ fi
 
 echo "Finished at $(date)" | tee -a "$LOG_FILE"
 echo "" | tee -a "$LOG_FILE"
+
+# Run extension tests (only when no specific paths are passed — extension tests are separate)
+if [[ ${#processed_paths[@]} -eq 0 ]]; then
+  echo "Running online-order-recorder extension tests..." | tee -a "$LOG_FILE"
+  cd ../../extensions/online-order-recorder || exit 1
+
+  bun install 2>&1 | tee -a "$LOG_FILE"
+  ext_install_exit=${PIPESTATUS[0]}
+  if [[ $ext_install_exit -ne 0 ]]; then
+    echo "Extension bun install failed with exit code $ext_install_exit" | tee -a "$LOG_FILE"
+    echo "Log saved to: $LOG_FILE"
+    exit $ext_install_exit
+  fi
+
+  timeout 120 bun run test ${CI_COVERAGE:+--coverage} 2>&1 | tee -a "$LOG_FILE"
+  ext_test_exit=${PIPESTATUS[0]}
+
+  if [[ $ext_test_exit -ne 0 ]]; then
+    echo "Extension tests failed with exit code: $ext_test_exit" | tee -a "$LOG_FILE"
+    test_exit=$ext_test_exit
+  else
+    echo "Extension tests completed successfully" | tee -a "$LOG_FILE"
+  fi
+fi
+
 echo "Log saved to: $LOG_FILE"
 exit $test_exit
