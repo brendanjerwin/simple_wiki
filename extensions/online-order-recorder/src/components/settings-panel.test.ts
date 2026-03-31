@@ -114,19 +114,19 @@ describe('SettingsPanel', () => {
       beforeEach(async () => {
         vi.clearAllMocks();
         mockGet.mockResolvedValue({
-          wikiUrl: 'http://custom-wiki:9090',
+          wikiUrl: 'https://custom-wiki:9090',
           wikiUrlManuallySet: true,
         });
         el = createSettingsPanel();
         await el.updateComplete;
         // Wait for the async _loadSettings to complete
         await vi.waitFor(() => {
-          expect(el.wikiUrl).to.equal('http://custom-wiki:9090');
+          expect(el.wikiUrl).to.equal('https://custom-wiki:9090');
         });
       });
 
       it('should set wikiUrl from storage', () => {
-        expect(el.wikiUrl).to.equal('http://custom-wiki:9090');
+        expect(el.wikiUrl).to.equal('https://custom-wiki:9090');
       });
 
       it('should set isManuallySet to true', () => {
@@ -159,13 +159,13 @@ describe('SettingsPanel', () => {
       beforeEach(async () => {
         vi.clearAllMocks();
         mockGet.mockResolvedValue({
-          wikiUrl: 'http://some-wiki:8050',
+          wikiUrl: 'https://some-wiki:8050',
           wikiUrlManuallySet: false,
         });
         el = createSettingsPanel();
         await el.updateComplete;
         await vi.waitFor(() => {
-          expect(el.wikiUrl).to.equal('http://some-wiki:8050');
+          expect(el.wikiUrl).to.equal('https://some-wiki:8050');
         });
       });
 
@@ -184,7 +184,7 @@ describe('SettingsPanel', () => {
       mockSet.mockResolvedValue(undefined);
       el = createSettingsPanel();
       await el.updateComplete;
-      el.wikiUrl = 'http://my-wiki:3000';
+      el.wikiUrl = 'https://my-wiki:3000';
       await el.updateComplete;
 
       // Click the Save button
@@ -203,7 +203,7 @@ describe('SettingsPanel', () => {
 
     it('should write the wikiUrl to storage', () => {
       expect(mockSet).toHaveBeenCalledWith(
-        expect.objectContaining({ wikiUrl: 'http://my-wiki:3000' }),
+        expect.objectContaining({ wikiUrl: 'https://my-wiki:3000' }),
       );
     });
 
@@ -238,7 +238,7 @@ describe('SettingsPanel', () => {
 
     beforeEach(async () => {
       vi.clearAllMocks();
-      mockGet.mockResolvedValue({ wikiUrl: 'http://custom:8050', wikiUrlManuallySet: true });
+      mockGet.mockResolvedValue({ wikiUrl: 'https://custom:8050', wikiUrlManuallySet: true });
       mockRemove.mockResolvedValue(undefined);
       el = createSettingsPanel();
       await el.updateComplete;
@@ -277,7 +277,7 @@ describe('SettingsPanel', () => {
         await el.updateComplete;
         storageListener = mockAddListener.mock.calls[0]![0] as typeof storageListener;
 
-        storageListener({ wikiUrl: { newValue: 'http://ignored:8050' } }, 'sync');
+        storageListener({ wikiUrl: { newValue: 'https://ignored:8050' } }, 'sync');
         await el.updateComplete;
       });
 
@@ -296,12 +296,12 @@ describe('SettingsPanel', () => {
         await el.updateComplete;
         storageListener = mockAddListener.mock.calls[0]![0] as typeof storageListener;
 
-        storageListener({ wikiUrl: { newValue: 'http://new-wiki:8050' } }, 'local');
+        storageListener({ wikiUrl: { newValue: 'https://new-wiki:8050' } }, 'local');
         await el.updateComplete;
       });
 
       it('should update wikiUrl', () => {
-        expect(el.wikiUrl).to.equal('http://new-wiki:8050');
+        expect(el.wikiUrl).to.equal('https://new-wiki:8050');
       });
     });
 
@@ -316,7 +316,7 @@ describe('SettingsPanel', () => {
         await el.updateComplete;
         storageListener = mockAddListener.mock.calls[0]![0] as typeof storageListener;
 
-        storageListener({ wikiUrl: { newValue: 'http://auto-wiki:8050' } }, 'local');
+        storageListener({ wikiUrl: { newValue: 'https://auto-wiki:8050' } }, 'local');
         await el.updateComplete;
       });
 
@@ -346,7 +346,7 @@ describe('SettingsPanel', () => {
 
       beforeEach(async () => {
         vi.clearAllMocks();
-        mockGet.mockResolvedValue({ wikiUrl: 'http://manual:8050', wikiUrlManuallySet: true });
+        mockGet.mockResolvedValue({ wikiUrl: 'https://manual:8050', wikiUrlManuallySet: true });
         el = createSettingsPanel();
         await el.updateComplete;
         await vi.waitFor(() => {
@@ -354,12 +354,12 @@ describe('SettingsPanel', () => {
         });
         storageListener = mockAddListener.mock.calls[0]![0] as typeof storageListener;
 
-        storageListener({ wikiUrl: { newValue: 'http://updated:8050' } }, 'local');
+        storageListener({ wikiUrl: { newValue: 'https://updated:8050' } }, 'local');
         await el.updateComplete;
       });
 
       it('should update wikiUrl', () => {
-        expect(el.wikiUrl).to.equal('http://updated:8050');
+        expect(el.wikiUrl).to.equal('https://updated:8050');
       });
 
       it('should not set showAutoDetected', () => {
@@ -396,13 +396,13 @@ describe('SettingsPanel', () => {
       await el.updateComplete;
 
       const input = el.shadowRoot!.querySelector('input')!;
-      input.value = 'http://typed-url:8080';
+      input.value = 'https://typed-url:8080';
       input.dispatchEvent(new Event('input'));
       await el.updateComplete;
     });
 
     it('should update wikiUrl from input value', () => {
-      expect(el.wikiUrl).to.equal('http://typed-url:8080');
+      expect(el.wikiUrl).to.equal('https://typed-url:8080');
     });
   });
 
@@ -478,7 +478,7 @@ describe('SettingsPanel', () => {
 
       beforeEach(async () => {
         vi.clearAllMocks();
-        mockGet.mockResolvedValue({ wikiUrl: 'http://test:8050', wikiUrlManuallySet: true });
+        mockGet.mockResolvedValue({ wikiUrl: 'https://test:8050', wikiUrlManuallySet: true });
         el = createSettingsPanel();
         await el.updateComplete;
         await vi.waitFor(() => {
