@@ -114,7 +114,7 @@ describe('handleWikiUrlDetected (via message listener)', () => {
   describe('when no URL is stored', () => {
     beforeEach(async () => {
       messageListener(
-        { type: 'WIKI_URL_DETECTED', wikiUrl: 'http://wiki.local:8050' },
+        { type: 'WIKI_URL_DETECTED', wikiUrl: 'https://wiki.local:8050' },
         {},
         vi.fn()
       );
@@ -124,15 +124,15 @@ describe('handleWikiUrlDetected (via message listener)', () => {
     });
 
     it('should save the detected URL', () => {
-      expect(storageData['wikiUrl']).to.equal('http://wiki.local:8050');
+      expect(storageData['wikiUrl']).to.equal('https://wiki.local:8050');
     });
   });
 
   describe('when the same URL is already stored', () => {
     beforeEach(async () => {
-      storageData = { wikiUrl: 'http://wiki.local:8050' };
+      storageData = { wikiUrl: 'https://wiki.local:8050' };
       messageListener(
-        { type: 'WIKI_URL_DETECTED', wikiUrl: 'http://wiki.local:8050' },
+        { type: 'WIKI_URL_DETECTED', wikiUrl: 'https://wiki.local:8050' },
         {},
         vi.fn()
       );
@@ -146,9 +146,9 @@ describe('handleWikiUrlDetected (via message listener)', () => {
 
   describe('when a different URL is stored but not manually set', () => {
     beforeEach(async () => {
-      storageData = { wikiUrl: 'http://old-wiki:8050' };
+      storageData = { wikiUrl: 'https://old-wiki:8050' };
       messageListener(
-        { type: 'WIKI_URL_DETECTED', wikiUrl: 'http://new-wiki:8050' },
+        { type: 'WIKI_URL_DETECTED', wikiUrl: 'https://new-wiki:8050' },
         {},
         vi.fn()
       );
@@ -158,15 +158,15 @@ describe('handleWikiUrlDetected (via message listener)', () => {
     });
 
     it('should update to the new URL', () => {
-      expect(storageData['wikiUrl']).to.equal('http://new-wiki:8050');
+      expect(storageData['wikiUrl']).to.equal('https://new-wiki:8050');
     });
   });
 
   describe('when wikiUrlManuallySet is true', () => {
     beforeEach(async () => {
-      storageData = { wikiUrl: 'http://manual-wiki:8050', wikiUrlManuallySet: true };
+      storageData = { wikiUrl: 'https://manual-wiki:8050', wikiUrlManuallySet: true };
       messageListener(
-        { type: 'WIKI_URL_DETECTED', wikiUrl: 'http://auto-wiki:8050' },
+        { type: 'WIKI_URL_DETECTED', wikiUrl: 'https://auto-wiki:8050' },
         {},
         vi.fn()
       );
@@ -174,7 +174,7 @@ describe('handleWikiUrlDetected (via message listener)', () => {
     });
 
     it('should not update the URL', () => {
-      expect(storageData['wikiUrl']).to.equal('http://manual-wiki:8050');
+      expect(storageData['wikiUrl']).to.equal('https://manual-wiki:8050');
     });
 
     it('should not call set', () => {

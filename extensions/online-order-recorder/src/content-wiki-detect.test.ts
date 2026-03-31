@@ -25,7 +25,7 @@ describe('content-wiki-detect', () => {
   describe('when meta tag with simple-wiki-url exists', () => {
     beforeEach(async () => {
       const dom = new JSDOM(
-        '<!DOCTYPE html><html><head><meta name="simple-wiki-url" content="http://wiki.local:8050"></head><body></body></html>'
+        '<!DOCTYPE html><html><head><meta name="simple-wiki-url" content="https://wiki.local:8050"></head><body></body></html>'
       );
 
       (globalThis as Record<string, unknown>)['document'] = dom.window.document;
@@ -37,14 +37,14 @@ describe('content-wiki-detect', () => {
     it('should send WIKI_URL_DETECTED message with the URL', () => {
       expect(sendMessageMock).toHaveBeenCalledWith({
         type: 'WIKI_URL_DETECTED',
-        wikiUrl: 'http://wiki.local:8050',
+        wikiUrl: 'https://wiki.local:8050',
       });
     });
 
     it('should log the detected URL', () => {
       expect(debugMock).toHaveBeenCalledWith(
         '[Simple Wiki Companion] Wiki URL detected:',
-        'http://wiki.local:8050'
+        'https://wiki.local:8050'
       );
     });
   });
