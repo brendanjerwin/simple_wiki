@@ -15,8 +15,9 @@ import (
 
 const (
 	testFileTimestamp              = 1609459200 // 2021-01-01 Unix timestamp
-	tomlFrontmatterIdentifierOpen  = "+++\nidentifier = '"
-	tomlFrontmatterIdentifierClose = "'\n+++\n\n"
+	frontmatterDelimiter           = "+++"
+	tomlFrontmatterIdentifierOpen  = frontmatterDelimiter + "\nidentifier = '"
+	tomlFrontmatterIdentifierClose = "'\n" + frontmatterDelimiter + "\n\n"
 )
 
 // MockMigrationDeps provides a simple mock implementation for testing migrations
@@ -190,7 +191,7 @@ func CreateMDFileWithoutFrontmatter(dir, identifier, content string) {
 // Must be called from within a Ginkgo test context.
 func CreateMDFileWithFrontmatterNoIdentifier(dir, identifier, frontmatter, content string) {
 	mdPath := filepath.Join(dir, base32tools.EncodeToBase32(strings.ToLower(identifier))+".md")
-	fullContent := "+++\n" + frontmatter + "\n+++\n\n" + content
+	fullContent := frontmatterDelimiter + "\n" + frontmatter + "\n" + frontmatterDelimiter + "\n\n" + content
 	err := os.WriteFile(mdPath, []byte(fullContent), 0644)
 	Expect(err).NotTo(HaveOccurred(), "failed to create MD file with frontmatter: %s", mdPath)
 }
