@@ -644,7 +644,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
 
     while (!signal.aborted) {
       try {
-        await this.runStreamIteration(signal, (delay) => { reconnectDelayMs = delay; });
+        await this.runStreamIteration(signal, () => { reconnectDelayMs = INITIAL_RECONNECT_DELAY_MS; });
         break; // Stream ended cleanly
       } catch (err) {
         if (isAbortError(err) || signal.aborted) break;
@@ -659,7 +659,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
 
   private async runStreamIteration(
     signal: AbortSignal,
-    onResetDelay: (delay: number) => void,
+    onResetDelay: () => void,
   ): Promise<void> {
     const request = create(SubscribeChatRequestSchema, { page: this.page });
     this.streamState = 'connected';
@@ -667,7 +667,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
 
     for await (const event of this.chatClient.subscribeChat(request, { signal })) {
       await this.handleChatEvent(event);
-      onResetDelay(INITIAL_RECONNECT_DELAY_MS);
+      onResetDelay();
     }
   }
 

@@ -686,6 +686,36 @@ describe('PageChatPanel', () => {
     });
   });
 
+  describe('error clearing after reconnect', () => {
+    let el: PageChatPanel;
+
+    beforeEach(async () => {
+      localStorageStub.getItem.returns('true');
+      el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+      el.claudeConnected = true;
+      el.streamState = 'disconnected';
+      el.error = new Error('Connection lost');
+      await el.updateComplete;
+    });
+
+    describe('when the stream reconnects and error is cleared', () => {
+      beforeEach(async () => {
+        el.streamState = 'connected';
+        el.error = null;
+        await el.updateComplete;
+      });
+
+      it('should not show the error banner', () => {
+        const banner = el.shadowRoot!.querySelector('.status-banner.disconnected');
+        expect(banner).to.be.null;
+      });
+
+      it('should have null error state', () => {
+        expect(el.error).to.be.null;
+      });
+    });
+  });
+
   describe('Ctrl+Space global keyboard shortcut', () => {
     let el: PageChatPanel;
 
