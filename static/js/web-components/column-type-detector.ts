@@ -16,24 +16,24 @@ const humanDatePattern = /^[A-Z][a-z]{2}\s{1,10}\d{1,2},?\s{1,10}\d{4}$/;
 
 const confidenceThreshold = 0.7;
 
-function isCurrency(text: string): boolean {
+function isCurrency(text: string) {
   const trimmed = text.trim();
   return currencyLeadNegativePattern.test(trimmed) || currencyMidNegativePattern.test(trimmed);
 }
 
-function isPercentage(text: string): boolean {
+function isPercentage(text: string) {
   return percentagePattern.test(text.trim());
 }
 
-function isNumber(text: string): boolean {
+function isNumber(text: string) {
   return numberPattern.test(text.trim());
 }
 
-function isInteger(text: string): boolean {
+function isInteger(text: string) {
   return integerPattern.test(text.trim());
 }
 
-function isDate(text: string): boolean {
+function isDate(text: string) {
   const trimmed = text.trim();
   return isoDatePattern.test(trimmed) || usDatePattern.test(trimmed) || humanDatePattern.test(trimmed);
 }
@@ -75,7 +75,7 @@ export function detectColumnType(cellTexts: string[]): ColumnTypeInfo {
   return { detectedType: 'text', confidenceRatio: 1 };
 }
 
-export function parseForType(text: string, columnType: ColumnDataType): number {
+export function parseForType(text: string, columnType: ColumnDataType) {
   switch (columnType) {
     case 'integer':
     case 'decimal': return parseNumericValue(text);
@@ -86,13 +86,13 @@ export function parseForType(text: string, columnType: ColumnDataType): number {
   }
 }
 
-export function parseNumericValue(text: string): number {
+export function parseNumericValue(text: string) {
   const cleaned = text.trim().replace(/,/g, '');
   if (cleaned === '') return NaN;
   return Number(cleaned);
 }
 
-export function parseDateValue(text: string): number {
+export function parseDateValue(text: string) {
   const trimmed = text.trim();
 
   if (isoDatePattern.test(trimmed)) {
@@ -118,7 +118,7 @@ export function parseDateValue(text: string): number {
   return NaN;
 }
 
-export function parseCurrencyValue(text: string): number {
+export function parseCurrencyValue(text: string) {
   const trimmed = text.trim();
   if (trimmed === '') return NaN;
   const negative = trimmed.startsWith('-') || /^[$€£¥]\s{0,10}-/.test(trimmed);
@@ -131,7 +131,7 @@ export function parseCurrencyValue(text: string): number {
   return negative ? -value : value;
 }
 
-export function parsePercentageValue(text: string): number {
+export function parsePercentageValue(text: string) {
   const trimmed = text.trim();
   if (!trimmed.endsWith('%')) {
     return NaN;

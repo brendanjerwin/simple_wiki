@@ -727,7 +727,7 @@ export class WikiChecklist extends LitElement {
    *   "buy :dairy milk"      -> { tags: ["dairy"], text: "buy milk" }
    *   "just milk"            -> { tags: [], text: "just milk" }
    */
-  parseTaggedInput(input: string): { tags: string[]; text: string } {
+  parseTaggedInput(input: string) {
     const tags: string[] = [];
     let text = input;
     const tagPattern = /:(\S+)/g;
