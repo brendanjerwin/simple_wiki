@@ -238,7 +238,10 @@ export class FrontmatterValueSection extends LitElement {
     const fieldsHash = JSON.stringify(entries);
     
     if (this._fieldsHashCache === fieldsHash) {
-      return this._sortedEntriesCache.get(fieldsHash)!;
+      const cached = this._sortedEntriesCache.get(fieldsHash);
+      if (cached !== undefined) {
+        return cached;
+      }
     }
 
     const sortedEntries = [...entries].sort(([keyA, valueA], [keyB, valueB]) => {
