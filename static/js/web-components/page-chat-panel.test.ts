@@ -46,7 +46,7 @@ describe('PageChatPanel', () => {
 
     beforeEach(async () => {
       localStorageStub.getItem.returns(null);
-      el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+      el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
     });
 
     it('should render the FAB with disabled class', () => {
@@ -65,7 +65,7 @@ describe('PageChatPanel', () => {
       await el.updateComplete;
       const banner = el.shadowRoot!.querySelector('.status-banner.disconnected');
       expect(banner).to.exist;
-      expect(banner!.textContent).to.contain('Dorium is not connected');
+      expect(banner!.textContent).to.contain('TestPersona is not connected');
     });
 
     it('should disable the textarea when panel is open', async () => {
@@ -88,7 +88,7 @@ describe('PageChatPanel', () => {
 
     beforeEach(async () => {
       localStorageStub.getItem.returns(null);
-      el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+      el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
       el.claudeConnected = true;
       await el.updateComplete;
     });
@@ -100,7 +100,7 @@ describe('PageChatPanel', () => {
 
     it('should have correct aria-label', () => {
       const fab = el.shadowRoot!.querySelector('.fab');
-      expect(fab!.getAttribute('aria-label')).to.equal('Chat with Dorium');
+      expect(fab!.getAttribute('aria-label')).to.equal('Chat with TestPersona');
     });
 
     it('should show robot icon when panel is closed', () => {
@@ -114,7 +114,7 @@ describe('PageChatPanel', () => {
 
     beforeEach(async () => {
       localStorageStub.getItem.returns(null);
-      el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+      el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
       el.claudeConnected = true;
       await el.updateComplete;
       const fab = el.shadowRoot!.querySelector('.fab') as HTMLElement;
@@ -142,7 +142,7 @@ describe('PageChatPanel', () => {
 
     beforeEach(async () => {
       localStorageStub.getItem.returns(null);
-      el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+      el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
       el.claudeConnected = true;
       await el.updateComplete;
       const fab = el.shadowRoot!.querySelector('.fab') as HTMLElement;
@@ -168,7 +168,7 @@ describe('PageChatPanel', () => {
 
     beforeEach(async () => {
       localStorageStub.getItem.returns('true');
-      el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+      el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
     });
 
     it('should restore the open state', () => {
@@ -186,7 +186,7 @@ describe('PageChatPanel', () => {
 
     beforeEach(async () => {
       localStorageStub.getItem.returns(null);
-      el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+      el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
     });
 
     it('should have role="log" on messages container', () => {
@@ -210,7 +210,7 @@ describe('PageChatPanel', () => {
 
     beforeEach(async () => {
       localStorageStub.getItem.returns('true');
-      el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+      el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
     });
 
     it('should have a textarea', () => {
@@ -235,7 +235,7 @@ describe('PageChatPanel', () => {
 
     beforeEach(async () => {
       localStorageStub.getItem.returns('true');
-      el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+      el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
       // We can't easily spy on the private sendMessage method, but we can test
       // that Enter doesn't insert a newline (default prevented)
       const textarea = el.shadowRoot!.querySelector('textarea')!;
@@ -260,7 +260,7 @@ describe('PageChatPanel', () => {
 
     beforeEach(async () => {
       localStorageStub.getItem.returns('true');
-      el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+      el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
       const textarea = el.shadowRoot!.querySelector('textarea')!;
       textarea.value = 'test message';
       const event = new KeyboardEvent('keydown', {
@@ -286,7 +286,7 @@ describe('PageChatPanel', () => {
 
     beforeEach(async () => {
       localStorageStub.getItem.returns('true');
-      el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+      el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
     });
 
     it('should show empty state message when no messages', () => {
@@ -302,7 +302,7 @@ describe('PageChatPanel', () => {
     beforeEach(async () => {
       localStorageStub.getItem.returns(null);
       addEventListenerSpy = spy(document, 'addEventListener');
-      await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+      await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
     });
 
     afterEach(() => {
@@ -322,7 +322,7 @@ describe('PageChatPanel', () => {
 
     beforeEach(async () => {
       localStorageStub.getItem.returns('true');
-      el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+      el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
       el.claudeConnected = true;
       el.streamState = 'disconnected';
       el.error = new Error('Connection lost');
@@ -346,7 +346,7 @@ describe('PageChatPanel', () => {
 
       beforeEach(async () => {
         localStorageStub.getItem.returns('true');
-        el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+        el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
         el.waitingForAssistant = true;
         await el.updateComplete;
       });
@@ -358,7 +358,7 @@ describe('PageChatPanel', () => {
 
       it('should contain thinking text', () => {
         const indicator = el.shadowRoot!.querySelector('.thinking-indicator');
-        expect(indicator!.textContent).to.contain('Dorium is thinking');
+        expect(indicator!.textContent).to.contain('TestPersona is thinking');
       });
     });
 
@@ -367,7 +367,7 @@ describe('PageChatPanel', () => {
 
       beforeEach(async () => {
         localStorageStub.getItem.returns('true');
-        el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+        el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
         el.waitingForAssistant = false;
         await el.updateComplete;
       });
@@ -384,7 +384,7 @@ describe('PageChatPanel', () => {
 
     beforeEach(async () => {
       localStorageStub.getItem.returns('true');
-      el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+      el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
       el.claudeConnected = true;
       await el.updateComplete;
     });
@@ -405,7 +405,7 @@ describe('PageChatPanel', () => {
 
     beforeEach(async () => {
       localStorageStub.getItem.returns(null);
-      el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+      el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
     });
 
     describe('when panel is closed', () => {
@@ -433,7 +433,7 @@ describe('PageChatPanel', () => {
 
     beforeEach(async () => {
       localStorageStub.getItem.returns('true');
-      el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+      el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
       el.streamState = 'reconnecting';
       await el.updateComplete;
     });
@@ -450,7 +450,7 @@ describe('PageChatPanel', () => {
 
     beforeEach(async () => {
       localStorageStub.getItem.returns('true');
-      el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+      el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
       const closeBtn = el.shadowRoot!.querySelector('.close-button') as HTMLElement;
       closeBtn.click();
       await el.updateComplete;
@@ -466,7 +466,7 @@ describe('PageChatPanel', () => {
 
     beforeEach(async () => {
       localStorageStub.getItem.returns(null);
-      el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+      el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
 
       // Seed a message with one reaction group directly into state
       const msgState: ChatMessageState = {
@@ -541,7 +541,7 @@ describe('PageChatPanel', () => {
 
     beforeEach(async () => {
       localStorageStub.getItem.returns(null);
-      el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+      el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
     });
 
     describe('when adding a new user message', () => {
@@ -586,7 +586,7 @@ describe('PageChatPanel', () => {
       });
 
       it('should substitute the persona name as senderName', () => {
-        expect(el.messages[0]!.senderName).to.equal('Dorium');
+        expect(el.messages[0]!.senderName).to.equal('TestPersona');
       });
 
       it('should render the persona name in the chat bubble', () => {
@@ -594,7 +594,7 @@ describe('PageChatPanel', () => {
         expect(bubble).to.exist;
         const senderDiv = bubble!.shadowRoot!.querySelector('.sender-name');
         expect(senderDiv).to.exist;
-        expect(senderDiv!.textContent).to.equal('Dorium');
+        expect(senderDiv!.textContent).to.equal('TestPersona');
       });
     });
 
@@ -651,7 +651,7 @@ describe('PageChatPanel', () => {
 
     beforeEach(async () => {
       localStorageStub.getItem.returns(null);
-      el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+      el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
 
       const msgState: ChatMessageState = {
         id: 'edit-msg',
@@ -703,7 +703,7 @@ describe('PageChatPanel', () => {
 
     beforeEach(async () => {
       localStorageStub.getItem.returns('true');
-      el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+      el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
       el.claudeConnected = true;
       el.streamState = 'disconnected';
       el.error = new Error('Connection lost');
@@ -733,7 +733,7 @@ describe('PageChatPanel', () => {
 
     beforeEach(async () => {
       localStorageStub.getItem.returns(null);
-      el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+      el = await fixture(html`<page-chat-panel page="test-page" persona="TestPersona"></page-chat-panel>`);
       el.claudeConnected = true;
       await el.updateComplete;
     });

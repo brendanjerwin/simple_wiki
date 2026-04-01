@@ -1220,3 +1220,60 @@ var _ = Describe("ReadOrInitPageForTesting", func() {
 		})
 	})
 })
+
+var _ = Describe("page-chat-panel template rendering", func() {
+	var tmpDir string
+	var site *server.Site
+	var router *gin.Engine
+	var w *httptest.ResponseRecorder
+
+	BeforeEach(func() {
+		var err error
+		tmpDir, err = os.MkdirTemp("", "simple_wiki_persona_test")
+		Expect(err).NotTo(HaveOccurred())
+		logger := lumber.NewConsoleLogger(lumber.TRACE)
+		site, err = server.NewSite(tmpDir, "testpage", 0, "secret", logger)
+		Expect(err).NotTo(HaveOccurred())
+		w = httptest.NewRecorder()
+	})
+
+	AfterEach(func() {
+		_ = os.RemoveAll(tmpDir)
+	})
+
+	Describe("persona attribute", func() {
+		When("ChatPersona is set on the site", func() {
+			var responseBody string
+
+			BeforeEach(func() {
+				site.ChatPersona = "TestPersona"
+				router = site.GinRouter()
+				req, err := http.NewRequest(http.MethodGet, "/testpage/view", nil)
+				Expect(err).NotTo(HaveOccurred())
+				router.ServeHTTP(w, req)
+				responseBody = w.Body.String()
+			})
+
+			It("should render page-chat-panel with the persona attribute", func() {
+				Expect(responseBody).To(ContainSubstring(`persona="TestPersona"`))
+			})
+		})
+
+		When("ChatPersona is empty", func() {
+			var responseBody string
+
+			BeforeEach(func() {
+				site.ChatPersona = ""
+				router = site.GinRouter()
+				req, err := http.NewRequest(http.MethodGet, "/testpage/view", nil)
+				Expect(err).NotTo(HaveOccurred())
+				router.ServeHTTP(w, req)
+				responseBody = w.Body.String()
+			})
+
+			It("should render page-chat-panel with an empty persona attribute", func() {
+				Expect(responseBody).To(ContainSubstring(`persona=""`))
+			})
+		})
+	})
+})

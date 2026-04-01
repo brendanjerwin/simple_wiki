@@ -60,6 +60,7 @@ type Site struct {
 	CSS                     []byte
 	DefaultPage             string
 	Debounce                int
+	ChatPersona             string
 	SessionStore            cookie.Store
 	Fileuploads             bool
 	MaxUploadSize           uint

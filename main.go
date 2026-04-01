@@ -129,6 +129,7 @@ func createSite(c *cli.Context) (*server.Site, error) {
 	site.Fileuploads = !c.GlobalBool("block-file-uploads")
 	site.MaxUploadSize = c.GlobalUint("max-upload-mb")
 	site.MaxDocumentSize = c.GlobalUint("max-document-length")
+	site.ChatPersona = c.GlobalString("chat-persona")
 	return site, nil
 }
 
@@ -336,6 +337,11 @@ func getFlags() []cli.Flag {
 			Name:  "debounce",
 			Value: defaultDebounce,
 			Usage: "debounce time for saving data, in milliseconds",
+		},
+		cli.StringFlag{
+			Name:   "chat-persona",
+			EnvVar: "WIKI_CHAT_PERSONA",
+			Usage:  "display name for the chat AI persona",
 		},
 		cli.BoolFlag{
 			Name:  "debug, d",

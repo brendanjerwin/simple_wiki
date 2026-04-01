@@ -325,7 +325,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
   constructor() {
     super();
     this.page = '';
-    this.persona = 'Dorium';
+    this.persona = '';
     this._fabVisible = true;
     this.messages = [];
     this.streamState = 'disconnected';
