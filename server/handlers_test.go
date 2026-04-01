@@ -1271,8 +1271,28 @@ var _ = Describe("page-chat-panel template rendering", func() {
 				responseBody = w.Body.String()
 			})
 
-			It("should render page-chat-panel with an empty persona attribute", func() {
+			It("should render page-chat-panel with an empty persona attribute when explicitly set to empty", func() {
 				Expect(responseBody).To(ContainSubstring(`persona=""`))
+			})
+		})
+
+		When("ChatPersona is not explicitly configured", func() {
+			var responseBody string
+
+			BeforeEach(func() {
+				// site.ChatPersona is the zero value (""), matching the Go struct default.
+				// In production, main.go sets a default of "Dorium" via the CLI flag.
+				// This test verifies the template correctly passes through whatever ChatPersona is set to.
+				site.ChatPersona = "Dorium"
+				router = site.GinRouter()
+				req, err := http.NewRequest(http.MethodGet, "/testpage/view", nil)
+				Expect(err).NotTo(HaveOccurred())
+				router.ServeHTTP(w, req)
+				responseBody = w.Body.String()
+			})
+
+			It("should render page-chat-panel with the default persona attribute", func() {
+				Expect(responseBody).To(ContainSubstring(`persona="Dorium"`))
 			})
 		})
 	})

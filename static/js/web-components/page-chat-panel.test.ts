@@ -780,7 +780,7 @@ describe('PageChatPanel stream methods', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- stubbing private method for testing
     pollChatStatusInnerStub = stub(PageChatPanel.prototype as any, 'pollChatStatus').resolves();
     // No page attribute → connectedCallback skips startStream
-    el = await fixture(html`<page-chat-panel></page-chat-panel>`);
+    el = await fixture(html`<page-chat-panel persona="TestPersona"></page-chat-panel>`);
   });
 
   afterEach(() => {
@@ -1318,7 +1318,7 @@ describe('PageChatPanel pollChatStatus and sendMessage', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- stubbing private method for testing
     startStreamInnerStub = stub(PageChatPanel.prototype as any, 'startStream').resolves();
     // No page attribute → connectedCallback skips startStream
-    el = await fixture(html`<page-chat-panel></page-chat-panel>`);
+    el = await fixture(html`<page-chat-panel persona="TestPersona"></page-chat-panel>`);
     // Replace chatClient with a safe mock to prevent real network calls
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- replacing private chatClient for testing
     (el as any).chatClient = {
