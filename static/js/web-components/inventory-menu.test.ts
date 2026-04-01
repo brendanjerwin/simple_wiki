@@ -546,8 +546,11 @@ describe('initInventoryMenu', () => {
       await new Promise(resolve => setTimeout(resolve, 50));
     });
 
-    it('should include both Add Item Here and Move This Item links', () => {
+    it('should include the Add Item Here link', () => {
       expect(document.getElementById('inventory-add-item')).to.exist;
+    });
+
+    it('should include the Move This Item link', () => {
       expect(document.getElementById('inventory-move-item')).to.exist;
     });
   });
