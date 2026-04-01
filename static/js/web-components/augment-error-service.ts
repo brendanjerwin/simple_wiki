@@ -28,16 +28,17 @@ export function coerceThirdPartyError(err: unknown, errorContext: string): Error
 /**
  * Standard error kinds for categorizing different types of errors
  */
-export enum ErrorKind {
-  WARNING = 'warning',          // General warnings and errors
-  ERROR = 'error',              // Critical errors and failures  
-  NETWORK = 'network',          // Network and connectivity errors
-  PERMISSION = 'permission',    // Permission and authorization errors
-  TIMEOUT = 'timeout',          // Timeout and performance errors
-  NOT_FOUND = 'not-found',      // Missing files or resources
-  VALIDATION = 'validation',    // Input validation errors
-  SERVER = 'server',            // Server and system errors
-}
+export const ErrorKind = {
+  WARNING: 'warning',           // General warnings and errors
+  ERROR: 'error',               // Critical errors and failures
+  NETWORK: 'network',           // Network and connectivity errors
+  PERMISSION: 'permission',     // Permission and authorization errors
+  TIMEOUT: 'timeout',           // Timeout and performance errors
+  NOT_FOUND: 'not-found',       // Missing files or resources
+  VALIDATION: 'validation',     // Input validation errors
+  SERVER: 'server',             // Server and system errors
+} as const;
+export type ErrorKind = typeof ErrorKind[keyof typeof ErrorKind];
 
 /**
  * Standard error icons for common error types

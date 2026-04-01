@@ -3,7 +3,6 @@ import './web-components/wiki-search.js';
 import './web-components/system-info.js';
 import './web-components/frontmatter-editor-dialog.js';
 import './web-components/confirmation-dialog.js';
-import './web-components/toast-message.js';
 import './web-components/kernel-panic.js'; // Import to register the component
 import './web-components/inventory-add-item-dialog.js';
 import './web-components/inventory-move-item-dialog.js';
