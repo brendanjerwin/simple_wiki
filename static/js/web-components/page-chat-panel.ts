@@ -325,7 +325,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
   constructor() {
     super();
     this.page = '';
-    this.persona = 'Dorium';
+    this.persona = '';
     this._fabVisible = true;
     this.messages = [];
     this.streamState = 'disconnected';
@@ -400,7 +400,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
       <button
         class="${fabClass}"
         @click=${this.toggleDrawer}
-        aria-label="Chat with ${this.persona}"
+        aria-label=${this.persona ? `Chat with ${this.persona}` : 'Open chat'}
         aria-disabled=${ariaDisabled}
       >
         <i class="fa-solid fa-robot"></i>
@@ -410,7 +410,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
 
   private _renderDisconnectedBanner() {
     if (!this.claudeConnected) {
-      return html`<div class="status-banner disconnected">${this.persona} is not connected</div>`;
+      return html`<div class="status-banner disconnected">${this.persona ? `${this.persona} is not connected` : 'Not connected'}</div>`;
     }
     if (this.streamState === 'disconnected' && this.error) {
       return html`<div class="status-banner disconnected">${this.error.message}</div>`;
@@ -419,7 +419,9 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
   }
 
   override render() {
-    const placeholder = this.claudeConnected ? 'Type a message...' : `${this.persona} is not connected`;
+    const placeholder = this.claudeConnected
+      ? 'Type a message...'
+      : this.persona ? `${this.persona} is not connected` : 'Not connected';
     return html`
       ${sharedStyles}
       ${this._renderFab()}
@@ -446,7 +448,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         >
           ${this.messages.length === 0
             ? html`<div class="empty-state">
-                Send a message to start chatting with ${this.persona} about this page.
+                ${this.persona ? `Send a message to start chatting with ${this.persona} about this page.` : 'Send a message to start chatting about this page.'}
               </div>`
             : this.messages.map(
                 (msg) => html`
@@ -470,7 +472,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
               <span class="thinking-dots">
                 <span></span><span></span><span></span>
               </span>
-              ${this.persona} is thinking
+              ${this.persona ? `${this.persona} is thinking` : 'Thinking...'}
             </div>`
           : nothing}
 
