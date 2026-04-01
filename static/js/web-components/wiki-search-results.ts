@@ -1,6 +1,6 @@
 import { html, css, LitElement } from 'lit';
 import { property } from 'lit/decorators.js';
-import { sharedStyles, foundationCSS } from './shared-styles.js';
+import { sharedStyles, foundationCSS, zIndexCSS } from './shared-styles.js';
 import type { SearchResult, HighlightSpan, ContainerPathElement } from '../gen/api/v1/search_pb.js';
 
 /**
@@ -13,6 +13,7 @@ interface DisplayPathElement extends Partial<ContainerPathElement> {
 class WikiSearchResults extends LitElement {
   static override readonly styles = [
     foundationCSS,
+    zIndexCSS,
     css`
       :host {
         display: block;
@@ -28,7 +29,7 @@ class WikiSearchResults extends LitElement {
         max-height: 95%;
         width: 400px;
         max-width: 97%;
-        z-index: 9999;
+        z-index: var(--z-popover);
         background-color: white;
       }
       :host([open]) .popover {

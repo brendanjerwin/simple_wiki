@@ -1,6 +1,6 @@
 import { html, css, LitElement } from 'lit';
 import { state } from 'lit/decorators.js';
-import { colorCSS, typographyCSS, themeCSS, foundationCSS, dialogCSS, responsiveCSS, buttonCSS } from './shared-styles.js';
+import { colorCSS, typographyCSS, themeCSS, foundationCSS, dialogCSS, responsiveCSS, buttonCSS, zIndexCSS } from './shared-styles.js';
 import './error-display.js';
 import { type AugmentedError, type ErrorIcon, AugmentErrorService } from './augment-error-service.js';
 
@@ -67,6 +67,7 @@ export class ConfirmationDialog extends LitElement {
     dialogCSS,
     responsiveCSS,
     buttonCSS,
+    zIndexCSS,
     css`
       :host {
         display: none;

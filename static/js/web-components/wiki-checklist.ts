@@ -14,6 +14,7 @@ import {
   inputCSS,
   pillCSS,
   sharedStyles,
+  zIndexCSS,
 } from './shared-styles.js';
 import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
 import './error-display.js';
@@ -54,6 +55,7 @@ export class WikiChecklist extends LitElement {
     buttonCSS,
     inputCSS,
     pillCSS,
+    zIndexCSS,
     css`
       :host {
         display: block;
@@ -270,7 +272,7 @@ export class WikiChecklist extends LitElement {
 
       .touch-drag-ghost {
         position: fixed;
-        z-index: 9999;
+        z-index: var(--z-modal);
         pointer-events: none;
         opacity: 0.85;
         background: #fff;

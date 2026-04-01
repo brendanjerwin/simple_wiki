@@ -1,12 +1,13 @@
 import { html, css, LitElement } from 'lit';
 import { property } from 'lit/decorators.js';
-import { foundationCSS } from './shared-styles.js';
+import { foundationCSS, zIndexCSS } from './shared-styles.js';
 import './error-display.js';
 import type { AugmentedError } from './augment-error-service.js';
 
 export class KernelPanic extends LitElement {
   static override readonly styles = [
     foundationCSS,
+    zIndexCSS,
     css`
       :host {
         position: fixed;
@@ -14,7 +15,7 @@ export class KernelPanic extends LitElement {
         left: 0;
         right: 0;
         bottom: 0;
-        z-index: 10000;
+        z-index: var(--z-blocker);
         background: #000;
         color: #fff;
         font-size: 14px;

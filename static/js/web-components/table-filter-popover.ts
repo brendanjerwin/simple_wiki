@@ -3,6 +3,7 @@ import { html, css, LitElement, nothing } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import type { TableColumnDefinition } from './table-data-extractor.js';
 import type { SortDirection, ColumnFilterState, CheckboxFilterState } from './table-sorter-filterer.js';
+import { zIndexCSS } from './shared-styles.js';
 
 const CHECKBOX_THRESHOLD = 15;
 
@@ -16,6 +17,7 @@ export interface FilterChangedEventDetail {
 
 export class TableFilterPopover extends LitElement {
   static override readonly styles = [
+    zIndexCSS,
     css`
       :host {
         display: block;
@@ -32,7 +34,7 @@ export class TableFilterPopover extends LitElement {
         max-width: 320px;
         max-height: 80vh;
         width: 90vw;
-        z-index: 9999;
+        z-index: var(--z-popover);
         background: white;
         border-radius: 8px;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);

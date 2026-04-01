@@ -185,7 +185,7 @@ export const themeCSS = css`
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
+    z-index: var(--z-modal);
     backdrop-filter: blur(4px);
   }
 
@@ -737,6 +737,6 @@ export const pillCSS = css`
  * ```
  */
 export function dialogStyles(...componentStyles: CSSResult[]): CSSResult[] {
-  return [foundationCSS, dialogCSS, buttonCSS, animationCSS, ...componentStyles, responsiveCSS];
+  return [foundationCSS, zIndexCSS, dialogCSS, buttonCSS, animationCSS, ...componentStyles, responsiveCSS];
 }
 
