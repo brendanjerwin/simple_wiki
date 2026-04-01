@@ -7,6 +7,14 @@ import sinon from 'sinon';
 import './frontmatter-editor-dialog.js';
 
 // Skipped: Browser hangs - see https://github.com/brendanjerwin/simple_wiki/issues/229
+// Investigation shows the test hangs during fixture creation or early test execution.
+// The component itself works correctly (basic and integration tests pass).
+// Attempted fixes:
+// - Stubbing window.fetch before fixture (didn't resolve)
+// - Stubbing window.location.reload (not configurable)
+// - Using fake timers before/after fixture creation (didn't resolve)
+// - Stubbing refreshPage method (already done, didn't resolve)
+// Root cause appears to be related to test environment setup, not component code.
 describe.skip('FrontmatterEditorDialog - Save Functionality', () => {
   let el: FrontmatterEditorDialog;
   let clientStub: sinon.SinonStub;
@@ -14,30 +22,27 @@ describe.skip('FrontmatterEditorDialog - Save Functionality', () => {
   let refreshPageStub: sinon.SinonStub;
 
   function timeout(ms: number, message: string): Promise<never> {
-    return new Promise((_, reject) => 
+    return new Promise((_, reject) =>
       setTimeout(() => reject(new Error(message)), ms)
     );
   }
 
   beforeEach(async () => {
-    el = await Promise.race([
-      fixture<FrontmatterEditorDialog>(html`<frontmatter-editor-dialog></frontmatter-editor-dialog>`),
-      timeout(5000, 'Component fixture timed out')
-    ]);
-    
+    el = await fixture<FrontmatterEditorDialog>(html`<frontmatter-editor-dialog></frontmatter-editor-dialog>`);
+
     // Stub the loadFrontmatter method to prevent network calls
     sinon.stub(el, 'loadFrontmatter').resolves();
-    
+
     // Stub the client replaceFrontmatter method
     clientStub = sinon.stub(el['client'], 'replaceFrontmatter');
-    
+
     // Stub sessionStorage.setItem to test toast storage
     sessionStorageStub = sinon.stub(sessionStorage, 'setItem');
-    
+
     // Stub the refreshPage method to prevent actual page refresh
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
     refreshPageStub = sinon.stub(el, 'refreshPage' as keyof FrontmatterEditorDialog);
-    
+
     await el.updateComplete;
   });
 
