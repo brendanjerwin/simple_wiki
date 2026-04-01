@@ -381,7 +381,7 @@ export function showStoredToast(): void {
     sessionStorage.removeItem(STORAGE_KEYS.TIMEOUT);
     
     // Create and show the toast immediately
-    const toast = document.createElement('toast-message') as ToastMessage;
+    const toast = document.createElement('toast-message');
     toast.message = storedMessage;
     toast.type = storedType;
     toast.timeoutSeconds = storedTimeout;

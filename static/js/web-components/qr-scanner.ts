@@ -655,8 +655,9 @@ export class QrScanner extends LitElement {
             <!-- Video element is portaled to document.body to avoid Shadow DOM issues -->
           </div>
 
-          ${!this.embedded
-            ? html`
+          ${this.embedded
+            ? nothing
+            : html`
                 ${cameraSelectSection}
 
                 <div class="scanner-controls">
@@ -664,8 +665,7 @@ export class QrScanner extends LitElement {
                     Stop Scanning
                   </button>
                 </div>
-              `
-            : nothing}
+              `}
         </div>
       </div>
     `;

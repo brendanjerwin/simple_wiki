@@ -102,9 +102,7 @@ export class FileDropZone extends LitElement {
   private _client: Client<typeof FileStorageService> | null = null;
 
   private get client(): Client<typeof FileStorageService> {
-    if (!this._client) {
-      this._client = createClient(FileStorageService, getGrpcWebTransport());
-    }
+    this._client ??= createClient(FileStorageService, getGrpcWebTransport());
     return this._client;
   }
 

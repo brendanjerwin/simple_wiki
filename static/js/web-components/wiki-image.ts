@@ -317,7 +317,7 @@ export class WikiImage extends LitElement {
 
   private _canCopyToClipboard(): boolean {
     return window.isSecureContext &&
-           typeof navigator.clipboard !== 'undefined' &&
+           navigator.clipboard !== undefined &&
            'write' in navigator.clipboard;
   }
 
