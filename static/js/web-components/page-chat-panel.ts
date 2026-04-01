@@ -382,11 +382,12 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
 
     if (changedProperties.has('page')) {
       const oldPage = changedProperties.get('page');
-      if (oldPage) {
-        // Navigating from one page to another: reset messages and restart the stream.
-        // When oldPage is empty this is the initial render — openDrawer() handles the stream
-        // start if the panel was restored open, and the stream will start when the panel is
-        // first opened otherwise.
+      if (oldPage !== undefined && oldPage !== this.page) {
+        // Navigating between pages or setting the page after initial render:
+        // reset messages and restart the stream if the panel has ever been opened.
+        // On true initial render (oldPage === undefined), openDrawer() handles starting
+        // the stream when the panel is restored open; otherwise the stream starts the
+        // first time the panel is opened.
         this.stopStream();
         this.messages = [];
         this.messagesById.clear();

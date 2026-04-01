@@ -797,6 +797,25 @@ describe('PageChatPanel', () => {
       });
     });
 
+    describe('when page transitions from empty string to a real value and panel is already open', () => {
+      let el: PageChatPanel;
+      let startStreamCallCountBeforeChange: number;
+
+      beforeEach(async () => {
+        localStorageStub.getItem.returns(null);
+        el = await fixture(html`<page-chat-panel page=""></page-chat-panel>`);
+        el.openDrawer();
+        await el.updateComplete;
+        startStreamCallCountBeforeChange = startStreamStub.callCount;
+        el.page = 'new-page';
+        await el.updateComplete;
+      });
+
+      it('should call startStream', () => {
+        expect(startStreamStub.callCount).to.equal(startStreamCallCountBeforeChange + 1);
+      });
+    });
+
     describe('when localStorage restores panel as open', () => {
       let startStreamCallCount: number;
 
