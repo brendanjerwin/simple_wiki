@@ -22,8 +22,8 @@ export interface TimerProvider {
  * Default timer provider using browser's native setTimeout/clearTimeout.
  */
 export const defaultTimerProvider: TimerProvider = {
-  setTimeout: (callback, delayMs) => window.setTimeout(callback, delayMs),
-  clearTimeout: (id) => window.clearTimeout(id),
+  setTimeout: (callback, delayMs) => globalThis.setTimeout(callback, delayMs),
+  clearTimeout: (id) => globalThis.clearTimeout(id),
 };
 
 /**
@@ -238,7 +238,7 @@ export class ConfirmationInterlockButton extends LitElement {
     }
 
     // Fall back to viewport
-    return new DOMRect(0, 0, window.innerWidth, window.innerHeight);
+    return new DOMRect(0, 0, globalThis.innerWidth, globalThis.innerHeight);
   }
 
   /**

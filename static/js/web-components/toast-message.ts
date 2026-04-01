@@ -228,8 +228,8 @@ export class ToastMessage extends LitElement {
     this.visible = true;
     
     // Disable auto-close by default for error types, unless explicitly enabled
-    const shouldAutoClose = this.type === 'error' 
-      ? this.autoClose === true 
+    const shouldAutoClose = this.type === 'error'
+      ? this.autoClose
       : this.autoClose;
     
     if (shouldAutoClose && this.timeoutSeconds > 0) {
@@ -374,7 +374,7 @@ export function showStoredToast(): void {
   if (storedMessage) {
     // Validate the stored type against valid types using type guard
     const storedType = isToastType(storedTypeRaw) ? storedTypeRaw : 'info';
-    const storedTimeoutParsed = storedTimeoutRaw !== null ? Number.parseInt(storedTimeoutRaw, 10) : NaN;
+    const storedTimeoutParsed = storedTimeoutRaw !== null ? Number.parseInt(storedTimeoutRaw, 10) : Number.NaN;
     const storedTimeout = Number.isFinite(storedTimeoutParsed) && storedTimeoutParsed >= 0 ? storedTimeoutParsed : 5;
     
     sessionStorage.removeItem(STORAGE_KEYS.MESSAGE);

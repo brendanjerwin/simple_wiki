@@ -234,8 +234,8 @@ export class AugmentErrorService {
       try {
         message = JSON.stringify(error);
       } catch {
-        // If JSON.stringify fails, use toString or fallback
-        message = error.toString?.() || 'An unknown error occurred';
+        // If JSON.stringify fails (e.g. circular reference), use a generic message
+        message = 'An unknown error occurred';
       }
     } else {
       message = 'An unknown error occurred';
