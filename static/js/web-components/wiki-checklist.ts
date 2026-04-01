@@ -908,7 +908,7 @@ export class WikiChecklist extends LitElement {
     const indexAttr = row.dataset['index'];
     if (indexAttr === undefined) return;
 
-    const targetIndex = parseInt(indexAttr, 10);
+    const targetIndex = Number.parseInt(indexAttr, 10);
     const rect = row.getBoundingClientRect();
     const midY = rect.top + rect.height / 2;
     this._dragOverItemIndex = targetIndex;

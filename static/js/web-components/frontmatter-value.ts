@@ -14,7 +14,8 @@ export function coercePrimitive(value: unknown) {
   if (typeof value !== 'string') return value;
   if (value === 'true') return true;
   if (value === 'false') return false;
-  if (value !== '' && !isNaN(Number(value))) return Number(value);
+  const n = Number(value);
+  if (value !== '' && !Number.isNaN(n)) return n;
   return value;
 }
 
