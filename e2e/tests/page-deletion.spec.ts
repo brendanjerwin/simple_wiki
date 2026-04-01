@@ -106,8 +106,9 @@ identifier = "${TEST_PAGE_FOR_DELETION.toLowerCase()}"
     // Navigate to the "deleted" page's view mode
     await page.goto(`/${TEST_PAGE_FOR_DELETION.toLowerCase()}/view`);
 
-    // The page should load but show minimal content
-    await expect(page.locator('#rendered')).toBeVisible({ timeout: PAGE_LOAD_TIMEOUT_MS });
+    // The page should load but show minimal content (empty body = zero-height #rendered,
+    // so check it's in the DOM rather than visually present)
+    await expect(page.locator('#rendered')).toBeAttached({ timeout: PAGE_LOAD_TIMEOUT_MS });
 
     // Verify it doesn't show the original content
     await expect(page.locator('body')).not.toContainText('This page will be deleted');

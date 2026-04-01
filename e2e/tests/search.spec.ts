@@ -144,15 +144,14 @@ identifier = "${TEST_PAGE_2.toLowerCase()}"
     // Submit search
     await searchButton.click();
 
-    // Wait for results component to appear
+    // Wait for results component to open (host has zero height due to position:fixed popover,
+    // so check open attribute rather than visibility)
     const resultsComponent = searchComponent.locator('wiki-search-results');
-    await expect(resultsComponent).toBeVisible({ timeout: SEARCH_TIMEOUT_MS });
+    await expect(resultsComponent).toHaveAttribute('open', '', { timeout: SEARCH_TIMEOUT_MS });
 
-    // Verify results are displayed
-    // The results component should show our test pages
-    await expect(resultsComponent).toContainText('Search Test Page', {
-      timeout: SEARCH_TIMEOUT_MS,
-    });
+    // Verify results are displayed — pierce into shadow DOM via sub-locator
+    const resultLink = resultsComponent.locator('a', { hasText: 'Search Test Page' });
+    await expect(resultLink.first()).toBeVisible({ timeout: SEARCH_TIMEOUT_MS });
   });
 
   test('should navigate to page when clicking search result', async ({ page }) => {
@@ -168,7 +167,7 @@ identifier = "${TEST_PAGE_2.toLowerCase()}"
 
     // Wait for results
     const resultsComponent = searchComponent.locator('wiki-search-results');
-    await expect(resultsComponent).toBeVisible({ timeout: SEARCH_TIMEOUT_MS });
+    await expect(resultsComponent).toHaveAttribute('open', '', { timeout: SEARCH_TIMEOUT_MS });
 
     // Click the first result link
     const firstResult = resultsComponent.locator('a').first();
@@ -198,13 +197,13 @@ identifier = "${TEST_PAGE_2.toLowerCase()}"
     await searchInput.fill(nonExistentTerm);
     await searchButton.click();
 
-    // Wait for results component to appear
+    // Wait for results component to open
     const resultsComponent = searchComponent.locator('wiki-search-results');
-    await expect(resultsComponent).toBeVisible({ timeout: SEARCH_TIMEOUT_MS });
+    await expect(resultsComponent).toHaveAttribute('open', '', { timeout: SEARCH_TIMEOUT_MS });
 
-    // Verify it shows no results state
-    // The component should indicate no results were found
-    await expect(resultsComponent).toContainText('No results', { timeout: SEARCH_TIMEOUT_MS });
+    // Verify it shows no results state — pierce into shadow DOM via sub-locator
+    const noResultsDiv = resultsComponent.locator('.no-results');
+    await expect(noResultsDiv).toContainText('No results', { timeout: SEARCH_TIMEOUT_MS });
   });
 
   test('should handle empty search gracefully', async ({ page }) => {
@@ -225,8 +224,8 @@ identifier = "${TEST_PAGE_2.toLowerCase()}"
     // Wait a moment to ensure nothing happens
     await page.waitForTimeout(1000);
 
-    // Results component should not be visible
-    await expect(resultsComponent).not.toBeVisible();
+    // Results component should not be open
+    await expect(resultsComponent).not.toHaveAttribute('open');
   });
 
   test('should show loading state during search', async ({ page }) => {
@@ -246,7 +245,7 @@ identifier = "${TEST_PAGE_2.toLowerCase()}"
     // The component should show some indication of loading
     // This might be brief, so we just verify the search completes successfully
     const resultsComponent = searchComponent.locator('wiki-search-results');
-    await expect(resultsComponent).toBeVisible({ timeout: SEARCH_TIMEOUT_MS });
+    await expect(resultsComponent).toHaveAttribute('open', '', { timeout: SEARCH_TIMEOUT_MS });
   });
 
   test('should persist search term in input after search', async ({ page }) => {
@@ -262,7 +261,7 @@ identifier = "${TEST_PAGE_2.toLowerCase()}"
 
     // Wait for results
     const resultsComponent = searchComponent.locator('wiki-search-results');
-    await expect(resultsComponent).toBeVisible({ timeout: SEARCH_TIMEOUT_MS });
+    await expect(resultsComponent).toHaveAttribute('open', '', { timeout: SEARCH_TIMEOUT_MS });
 
     // Verify the search term is still in the input
     await expect(searchInput).toHaveValue(UNIQUE_SEARCH_TERM);
