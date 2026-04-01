@@ -432,7 +432,7 @@ describe('AugmentedError', () => {
       });
 
       it('should return undefined for cause', () => {
-        expect(augmented.cause).to.be.undefined;
+        expect(augmented.cause).to.equal(undefined);
       });
     });
   });

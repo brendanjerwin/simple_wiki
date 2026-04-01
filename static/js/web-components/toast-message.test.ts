@@ -1,4 +1,4 @@
-import { html, fixture, expect, assert } from '@open-wc/testing';
+import { html, fixture, expect } from '@open-wc/testing';
 import sinon from 'sinon';
 import { ToastMessage, showToast, showStoredToast, showToastAfter } from './toast-message.js';
 import { AugmentedError, ErrorKind } from './augment-error-service.js';
@@ -11,15 +11,15 @@ describe('ToastMessage', () => {
   });
 
   it('should exist', () => {
-    assert.instanceOf(el, ToastMessage);
+    expect(el).to.be.instanceOf(ToastMessage);
   });
 
   it('should have default properties', () => {
-    expect(el.message).to.be.undefined;
-    expect(el.type).to.be.undefined;
-    expect(el.visible).to.be.undefined;
-    expect(el.timeoutSeconds).to.be.undefined;
-    expect(el.autoClose).to.be.undefined;
+    expect(el.message).to.equal(undefined);
+    expect(el.type).to.equal(undefined);
+    expect(el.visible).to.equal(undefined);
+    expect(el.timeoutSeconds).to.equal(undefined);
+    expect(el.autoClose).to.equal(undefined);
   });
 
   describe('when showing a message', () => {
@@ -36,7 +36,7 @@ describe('ToastMessage', () => {
 
     it('should have correct type class', () => {
       const toastElement = el.shadowRoot?.querySelector('.toast');
-      expect(toastElement?.classList.contains('success')).to.be.true;
+      expect(toastElement?.classList.contains('success')).to.equal(true);
     });
 
     it('should show correct icon for success type', () => {
@@ -80,7 +80,7 @@ describe('ToastMessage', () => {
 
     it('should embed error-display component', () => {
       const errorDisplayElement = el.shadowRoot?.querySelector('error-display');
-      expect(errorDisplayElement).to.exist;
+      expect(errorDisplayElement).to.not.equal(null);
     });
 
     it('should pass augmentedError to error-display component', () => {
@@ -91,7 +91,7 @@ describe('ToastMessage', () => {
 
     it('should not display simple message text', () => {
       const messageElement = el.shadowRoot?.querySelector('.message');
-      expect(messageElement).to.not.exist;
+      expect(messageElement).to.equal(null);
     });
   });
 
@@ -104,12 +104,12 @@ describe('ToastMessage', () => {
 
     it('should not embed error-display component', () => {
       const errorDisplayElement = el.shadowRoot?.querySelector('error-display');
-      expect(errorDisplayElement).to.not.exist;
+      expect(errorDisplayElement).to.equal(null);
     });
 
     it('should display simple message text', () => {
       const messageElement = el.shadowRoot?.querySelector('.message');
-      expect(messageElement).to.exist;
+      expect(messageElement).to.not.equal(null);
       expect(messageElement?.textContent).to.equal('Simple text message');
     });
   });
@@ -130,7 +130,7 @@ describe('ToastMessage', () => {
 
     it('should set visible to true', () => {
       el.show();
-      expect(el.visible).to.be.true;
+      expect(el.visible).to.equal(true);
     });
 
     describe('when autoClose is true', () => {
@@ -139,11 +139,11 @@ describe('ToastMessage', () => {
       });
 
       it('should auto-hide after timeout', () => {
-        expect(el.visible).to.be.true;
+        expect(el.visible).to.equal(true);
         
         clock.tick(1000);
         
-        expect(el.visible).to.be.false;
+        expect(el.visible).to.equal(false);
       });
     });
 
@@ -155,7 +155,7 @@ describe('ToastMessage', () => {
       });
 
       it('should not auto-hide', () => {
-        expect(el.visible).to.be.true;
+        expect(el.visible).to.equal(true);
       });
     });
 
@@ -167,7 +167,7 @@ describe('ToastMessage', () => {
       });
 
       it('should not auto-hide', () => {
-        expect(el.visible).to.be.true;
+        expect(el.visible).to.equal(true);
       });
     });
 
@@ -185,7 +185,7 @@ describe('ToastMessage', () => {
         });
 
         it('should not auto-hide', () => {
-          expect(el.visible).to.be.true;
+          expect(el.visible).to.equal(true);
         });
       });
 
@@ -197,7 +197,7 @@ describe('ToastMessage', () => {
         });
 
         it('should auto-hide when explicitly enabled', () => {
-          expect(el.visible).to.be.false;
+          expect(el.visible).to.equal(false);
         });
       });
 
@@ -209,7 +209,7 @@ describe('ToastMessage', () => {
         });
 
         it('should not auto-hide when explicitly disabled', () => {
-          expect(el.visible).to.be.true;
+          expect(el.visible).to.equal(true);
         });
       });
     });
@@ -224,7 +224,7 @@ describe('ToastMessage', () => {
       });
 
       it('should maintain existing auto-close behavior', () => {
-        expect(el.visible).to.be.false;
+        expect(el.visible).to.equal(false);
       });
     });
   });
@@ -236,7 +236,7 @@ describe('ToastMessage', () => {
 
     it('should set visible to false', () => {
       el.hide();
-      expect(el.visible).to.be.false;
+      expect(el.visible).to.equal(false);
     });
   });
 
@@ -248,12 +248,12 @@ describe('ToastMessage', () => {
 
     it('should hide the toast', async () => {
       const toastElement = el.shadowRoot?.querySelector<HTMLElement>('.toast');
-      expect(toastElement).to.exist;
+      expect(toastElement).to.not.equal(null);
 
       toastElement!.click();
       await el.updateComplete;
 
-      expect(el.visible).to.be.false;
+      expect(el.visible).to.equal(false);
     });
 
     describe('when clicking on error-display component', () => {
@@ -271,12 +271,12 @@ describe('ToastMessage', () => {
 
       it('should not hide the toast', async () => {
         const errorDisplay = el.shadowRoot?.querySelector<HTMLElement>('error-display');
-        expect(errorDisplay).to.exist;
+        expect(errorDisplay).to.not.equal(null);
 
         errorDisplay!.click();
         await el.updateComplete;
 
-        expect(el.visible).to.be.true;
+        expect(el.visible).to.equal(true);
       });
     });
   });
@@ -289,17 +289,17 @@ describe('ToastMessage', () => {
 
     it('should hide the toast', async () => {
       const closeButton = el.shadowRoot?.querySelector<HTMLElement>('.close-button');
-      expect(closeButton).to.exist;
+      expect(closeButton).to.not.equal(null);
 
       closeButton!.click();
       await el.updateComplete;
 
-      expect(el.visible).to.be.false;
+      expect(el.visible).to.equal(false);
     });
 
     it('should have proper accessibility attributes', () => {
       const closeButton = el.shadowRoot?.querySelector<HTMLElement>('.close-button');
-      expect(closeButton).to.exist;
+      expect(closeButton).to.not.equal(null);
       expect(closeButton!.getAttribute('aria-label')).to.equal('Close notification');
       expect(closeButton!.getAttribute('title')).to.equal('Close notification');
     });
@@ -324,7 +324,7 @@ describe('showToast utility function', () => {
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- querying for custom element
     const toast = document.querySelector('toast-message') as ToastMessage;
-    expect(toast).to.exist;
+    expect(toast).to.not.equal(null);
     expect(toast.message).to.equal('Test message');
     expect(toast.type).to.equal('success');
   });
@@ -358,19 +358,19 @@ describe('showToastAfter utility function', () => {
       functionExecuted = true;
     });
     
-    expect(functionExecuted).to.be.true;
+    expect(functionExecuted).to.equal(true);
     
     // Wait for the delayed showStoredToast call
     await new Promise(resolve => setTimeout(resolve, 150));
     
     // sessionStorage should be cleared after showStoredToast is called
-    expect(sessionStorage.getItem('toast-message')).to.be.null;
-    expect(sessionStorage.getItem('toast-type')).to.be.null;
+    expect(sessionStorage.getItem('toast-message')).to.equal(null);
+    expect(sessionStorage.getItem('toast-type')).to.equal(null);
     
     // But the toast should be displayed
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- querying for custom element
     const toast = document.querySelector('toast-message') as ToastMessage;
-    expect(toast).to.exist;
+    expect(toast).to.not.equal(null);
     expect(toast.message).to.equal('Test message');
     expect(toast.type).to.equal('success');
   });
@@ -385,7 +385,7 @@ describe('showToastAfter utility function', () => {
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- querying for custom element
     const toast = document.querySelector('toast-message') as ToastMessage;
-    expect(toast).to.exist;
+    expect(toast).to.not.equal(null);
     expect(toast.message).to.equal('Test message');
     expect(toast.type).to.equal('warning');
   });
@@ -411,13 +411,13 @@ describe('sessionStorage toast functions', () => {
       showStoredToast();
       
       // Should clear from sessionStorage
-      expect(sessionStorage.getItem('toast-message')).to.be.null;
-      expect(sessionStorage.getItem('toast-type')).to.be.null;
+      expect(sessionStorage.getItem('toast-message')).to.equal(null);
+      expect(sessionStorage.getItem('toast-type')).to.equal(null);
       
       // Should create toast element
       // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- querying for custom element
       const toast = document.querySelector('toast-message') as ToastMessage;
-      expect(toast).to.exist;
+      expect(toast).to.not.equal(null);
       expect(toast.message).to.equal('Stored message');
       expect(toast.type).to.equal('warning');
     });
@@ -426,7 +426,7 @@ describe('sessionStorage toast functions', () => {
       showStoredToast();
 
       const toast = document.querySelector('toast-message');
-      expect(toast).to.be.null;
+      expect(toast).to.equal(null);
     });
 
     it('should use default type if stored type is invalid', () => {
@@ -437,7 +437,7 @@ describe('sessionStorage toast functions', () => {
 
       // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- querying for custom element
       const toast = document.querySelector('toast-message') as ToastMessage;
-      expect(toast).to.exist;
+      expect(toast).to.not.equal(null);
       expect(toast.type).to.equal('info');
     });
   });

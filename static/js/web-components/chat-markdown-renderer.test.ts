@@ -34,7 +34,7 @@ describe('ChatMarkdownRenderer', () => {
       });
 
       it('should not call the RPC', () => {
-        expect(mockClient.renderMarkdown.called).to.be.false;
+        expect(mockClient.renderMarkdown.called).to.equal(false);
       });
     });
 
@@ -51,7 +51,7 @@ describe('ChatMarkdownRenderer', () => {
       });
 
       it('should call the RPC with the content', () => {
-        expect(mockClient.renderMarkdown.calledOnce).to.be.true;
+        expect(mockClient.renderMarkdown.calledOnce).to.equal(true);
         const arg = mockClient.renderMarkdown.firstCall.args[0] as { content: string; page: string };
         expect(arg.content).to.equal('# Hello');
       });
@@ -65,7 +65,7 @@ describe('ChatMarkdownRenderer', () => {
       });
 
       it('should call the RPC only once (cache hit)', () => {
-        expect(mockClient.renderMarkdown.calledOnce).to.be.true;
+        expect(mockClient.renderMarkdown.calledOnce).to.equal(true);
       });
     });
 
@@ -78,7 +78,7 @@ describe('ChatMarkdownRenderer', () => {
       });
 
       it('should call the RPC twice', () => {
-        expect(mockClient.renderMarkdown.calledTwice).to.be.true;
+        expect(mockClient.renderMarkdown.calledTwice).to.equal(true);
       });
     });
 

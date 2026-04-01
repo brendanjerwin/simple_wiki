@@ -1,4 +1,4 @@
-import { html, fixture, expect, assert } from '@open-wc/testing';
+import { html, fixture, expect } from '@open-wc/testing';
 import { stub } from 'sinon';
 import { create } from '@bufbuild/protobuf';
 import { SystemInfoIdentity } from './system-info-identity.js';
@@ -34,7 +34,7 @@ describe('SystemInfoIdentity', () => {
   });
 
   it('should exist', () => {
-    assert.instanceOf(el, SystemInfoIdentity);
+    expect(el).to.be.instanceOf(SystemInfoIdentity);
   });
 
   it('should have the correct tag name', () => {
@@ -42,7 +42,7 @@ describe('SystemInfoIdentity', () => {
   });
 
   it('should have undefined identity initially', () => {
-    expect(el.identity).to.be.undefined;
+    expect(el.identity).to.equal(undefined);
   });
 
   describe('when no identity is provided', () => {
@@ -57,7 +57,7 @@ describe('SystemInfoIdentity', () => {
     it('should render nothing', () => {
       // The component should render nothing (empty shadow root content)
       const content = el.shadowRoot?.querySelector('.identity-info');
-      expect(content).to.not.exist;
+      expect(content).to.equal(null);
     });
   });
 
@@ -76,7 +76,7 @@ describe('SystemInfoIdentity', () => {
 
     it('should render nothing', () => {
       const content = el.shadowRoot?.querySelector('.identity-info');
-      expect(content).to.not.exist;
+      expect(content).to.equal(null);
     });
   });
 
@@ -95,7 +95,7 @@ describe('SystemInfoIdentity', () => {
 
     it('should display identity info container', () => {
       const container = el.shadowRoot?.querySelector('.identity-info');
-      expect(container).to.exist;
+      expect(container).to.not.equal(null);
     });
 
     it('should display User label', () => {
@@ -154,7 +154,7 @@ describe('SystemInfoIdentity', () => {
     it('should include node name in the row', () => {
       const values = el.shadowRoot?.querySelectorAll('.value');
       const nodeValue = Array.from(values ?? []).find(v => v.textContent?.includes('my-laptop'));
-      expect(nodeValue).to.exist;
+      expect(nodeValue).to.not.equal(null);
     });
   });
 
@@ -197,7 +197,7 @@ describe('SystemInfoIdentity', () => {
 
     it('should have identity-info container with correct structure', () => {
       const container = el.shadowRoot?.querySelector('.identity-info');
-      expect(container).to.exist;
+      expect(container).to.not.equal(null);
     });
 
     it('should have one identity-row element', () => {

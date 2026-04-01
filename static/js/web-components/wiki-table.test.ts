@@ -66,7 +66,7 @@ describe('WikiTable', () => {
     });
 
     it('should exist', () => {
-      expect(el).to.exist;
+      expect(el).to.not.equal(null);
     });
 
     it('should hide the original table', () => {
@@ -82,7 +82,7 @@ describe('WikiTable', () => {
 
     it('should render an enhanced table in shadow DOM', () => {
       const shadowTable = el.shadowRoot?.querySelector('table');
-      expect(shadowTable).to.exist;
+      expect(shadowTable).to.not.equal(null);
     });
 
     it('should render column headers', () => {
@@ -118,7 +118,7 @@ describe('WikiTable', () => {
 
       it('should render the status bar', () => {
         const statusBar = el.shadowRoot?.querySelector('.status-bar');
-        expect(statusBar).to.exist;
+        expect(statusBar).to.not.equal(null);
       });
 
       it('should display total row count', () => {
@@ -138,7 +138,7 @@ describe('WikiTable', () => {
 
       it('should show the view toggle', () => {
         const viewToggle = el.shadowRoot?.querySelector('[aria-label="View mode"]');
-        expect(viewToggle).to.exist;
+        expect(viewToggle).to.not.equal(null);
       });
     });
 
@@ -160,12 +160,12 @@ describe('WikiTable', () => {
 
       it('should show row count with filtered styling', () => {
         const filtered = el.shadowRoot?.querySelector('.row-count-filtered');
-        expect(filtered).to.exist;
+        expect(filtered).to.not.equal(null);
       });
 
       it('should show clear all button', () => {
         const clearAll = el.shadowRoot?.querySelector('[aria-label="Clear all filters"]');
-        expect(clearAll).to.exist;
+        expect(clearAll).to.not.equal(null);
       });
     });
 
@@ -218,7 +218,7 @@ describe('WikiTable', () => {
 
       it('should render cards instead of table', () => {
         const cardView = el.shadowRoot?.querySelector('.card-view');
-        expect(cardView).to.exist;
+        expect(cardView).to.not.equal(null);
       });
     });
 
@@ -238,7 +238,7 @@ describe('WikiTable', () => {
 
       it('should show sort/filter pill', () => {
         const sortFilterPill = el.shadowRoot?.querySelector('[aria-label="Sort and filter"]');
-        expect(sortFilterPill).to.exist;
+        expect(sortFilterPill).to.not.equal(null);
       });
 
       it('should not show sort/filter pill in table view', async () => {
@@ -397,12 +397,12 @@ describe('WikiTable', () => {
 
       it('should render the filter popover', () => {
         const popover = el.shadowRoot?.querySelector('table-filter-popover');
-        expect(popover).to.exist;
+        expect(popover).to.not.equal(null);
       });
 
       it('should render a popover overlay backdrop', () => {
         const overlay = el.shadowRoot?.querySelector('.popover-overlay');
-        expect(overlay).to.exist;
+        expect(overlay).to.not.equal(null);
       });
     });
 
@@ -562,7 +562,7 @@ describe('WikiTable', () => {
 
       it('should render cards instead of table', () => {
         const cardView = el.shadowRoot?.querySelector('.card-view');
-        expect(cardView).to.exist;
+        expect(cardView).to.not.equal(null);
       });
 
       it('should render one card per row', () => {
@@ -598,7 +598,7 @@ describe('WikiTable', () => {
 
       it('should render column picker overlay', () => {
         const overlay = el.shadowRoot?.querySelector('.column-picker-overlay');
-        expect(overlay).to.exist;
+        expect(overlay).to.not.equal(null);
       });
 
       it('should list all columns', () => {
@@ -664,7 +664,7 @@ describe('WikiTable', () => {
 
       it('should still contain the original table in light DOM', () => {
         const lightTable = el.querySelector('table');
-        expect(lightTable).to.exist;
+        expect(lightTable).to.not.equal(null);
       });
     });
   });
@@ -686,7 +686,7 @@ describe('WikiTable', () => {
 
     it('should render a slot for the content', () => {
       const slot = el.shadowRoot?.querySelector('slot');
-      expect(slot).to.exist;
+      expect(slot).to.not.equal(null);
     });
   });
 
@@ -705,7 +705,7 @@ describe('WikiTable', () => {
       it('should render checkbox filter for text column with few values', () => {
         const popover = el.shadowRoot?.querySelector('table-filter-popover');
         const checkboxList = popover?.shadowRoot?.querySelector('.checkbox-list');
-        expect(checkboxList).to.exist;
+        expect(checkboxList).to.not.equal(null);
       });
 
       it('should show checkboxes for each unique value', () => {
@@ -728,7 +728,7 @@ describe('WikiTable', () => {
       it('should render checkbox filter for currency column with few values', () => {
         const popover = el.shadowRoot?.querySelector('table-filter-popover');
         const checkboxList = popover?.shadowRoot?.querySelector('.checkbox-list');
-        expect(checkboxList).to.exist;
+        expect(checkboxList).to.not.equal(null);
       });
     });
 
@@ -826,7 +826,7 @@ describe('WikiTable', () => {
 
       it('should show ascending sort indicator on the column', () => {
         const sortedTh = el.shadowRoot?.querySelector('th.sorted');
-        expect(sortedTh).to.exist;
+        expect(sortedTh).to.not.equal(null);
       });
     });
 
@@ -915,13 +915,13 @@ describe('WikiTable', () => {
 
       it('should open the popover', () => {
         const popover = el.shadowRoot?.querySelector('table-filter-popover');
-        expect(popover).to.exist;
+        expect(popover).to.not.equal(null);
       });
 
       it('should show checkbox filter in the popover', () => {
         const popover = el.shadowRoot?.querySelector('table-filter-popover');
         const checkboxList = popover?.shadowRoot?.querySelector('.checkbox-list');
-        expect(checkboxList).to.exist;
+        expect(checkboxList).to.not.equal(null);
       });
     });
 
@@ -1230,12 +1230,12 @@ describe('WikiTable', () => {
 
       it('should preserve bold formatting', () => {
         const cells = el.shadowRoot?.querySelectorAll('tbody td');
-        expect(cells?.[0]?.querySelector('strong')).to.exist;
+        expect(cells?.[0]?.querySelector('strong')).to.not.equal(null);
       });
 
       it('should preserve link elements', () => {
         const cells = el.shadowRoot?.querySelectorAll('tbody td');
-        expect(cells?.[1]?.querySelector('a')).to.exist;
+        expect(cells?.[1]?.querySelector('a')).to.not.equal(null);
       });
 
     });
@@ -1332,7 +1332,7 @@ describe('WikiTable', () => {
       });
 
       it('should throw an error', () => {
-        expect(thrownError).to.exist;
+        expect(thrownError).to.not.equal(null);
       });
 
       it('should include _renderColumnPicker in the error message', () => {
@@ -1355,7 +1355,7 @@ describe('WikiTable', () => {
       });
 
       it('should throw an error', () => {
-        expect(thrownError).to.exist;
+        expect(thrownError).to.not.equal(null);
       });
 
       it('should include _renderTableView in the error message', () => {
@@ -1378,7 +1378,7 @@ describe('WikiTable', () => {
       });
 
       it('should throw an error', () => {
-        expect(thrownError).to.exist;
+        expect(thrownError).to.not.equal(null);
       });
 
       it('should include _renderCardView in the error message', () => {

@@ -49,7 +49,7 @@ describe('DrawerMixin', () => {
     });
 
     it('should start with drawer closed', () => {
-      expect(el.drawerOpen).to.be.false;
+      expect(el.drawerOpen).to.equal(false);
     });
   });
 
@@ -62,7 +62,7 @@ describe('DrawerMixin', () => {
     });
 
     it('should set drawerOpen to true', () => {
-      expect(el.drawerOpen).to.be.true;
+      expect(el.drawerOpen).to.equal(true);
     });
   });
 
@@ -76,7 +76,7 @@ describe('DrawerMixin', () => {
     });
 
     it('should set drawerOpen to false', () => {
-      expect(el.drawerOpen).to.be.false;
+      expect(el.drawerOpen).to.equal(false);
     });
   });
 
@@ -94,11 +94,11 @@ describe('DrawerMixin', () => {
     });
 
     it('should not throw', () => {
-      expect(closeCalled).to.be.true;
+      expect(closeCalled).to.equal(true);
     });
 
     it('should remain closed', () => {
-      expect(el.drawerOpen).to.be.false;
+      expect(el.drawerOpen).to.equal(false);
     });
   });
 
@@ -115,7 +115,7 @@ describe('DrawerMixin', () => {
       });
 
       it('should open the drawer', () => {
-        expect(el.drawerOpen).to.be.true;
+        expect(el.drawerOpen).to.equal(true);
       });
     });
 
@@ -126,7 +126,7 @@ describe('DrawerMixin', () => {
       });
 
       it('should close the drawer', () => {
-        expect(el.drawerOpen).to.be.false;
+        expect(el.drawerOpen).to.equal(false);
       });
     });
   });
@@ -143,11 +143,11 @@ describe('DrawerMixin', () => {
     });
 
     it('should close drawer A when drawer B opens', () => {
-      expect(drawerA.drawerOpen).to.be.false;
+      expect(drawerA.drawerOpen).to.equal(false);
     });
 
     it('should keep drawer B open', () => {
-      expect(drawerB.drawerOpen).to.be.true;
+      expect(drawerB.drawerOpen).to.equal(true);
     });
   });
 
@@ -172,7 +172,7 @@ describe('DrawerMixin', () => {
     it('should not receive closeDrawer after removal', () => {
       // el was deregistered, so opening 'external' should not call el.closeDrawer
       // We can't directly test this without spying, but el.drawerOpen should still be false
-      expect(el.drawerOpen).to.be.false;
+      expect(el.drawerOpen).to.equal(false);
     });
   });
 });

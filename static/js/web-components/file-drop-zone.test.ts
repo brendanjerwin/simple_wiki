@@ -47,11 +47,11 @@ describe('FileDropZone', () => {
     });
 
     it('should exist', () => {
-      expect(el).to.exist;
+      expect(el).to.not.equal(null);
     });
 
     it('should have allowUploads false by default', () => {
-      expect(el.allowUploads).to.be.false;
+      expect(el.allowUploads).to.equal(false);
     });
 
     it('should have maxUploadMb of 10 by default', () => {
@@ -59,15 +59,15 @@ describe('FileDropZone', () => {
     });
 
     it('should not be dragging', () => {
-      expect(el.dragging).to.be.false;
+      expect(el.dragging).to.equal(false);
     });
 
     it('should not be uploading', () => {
-      expect(el.uploading).to.be.false;
+      expect(el.uploading).to.equal(false);
     });
 
     it('should have no error', () => {
-      expect(el.error).to.be.null;
+      expect(el.error).to.equal(null);
     });
   });
 
@@ -79,7 +79,7 @@ describe('FileDropZone', () => {
     });
 
     it('should have allowUploads true', () => {
-      expect(el.allowUploads).to.be.true;
+      expect(el.allowUploads).to.equal(true);
     });
 
     it('should have maxUploadMb of 25', () => {
@@ -98,7 +98,7 @@ describe('FileDropZone', () => {
 
     it('should render a slot element', () => {
       const slot = el.shadowRoot?.querySelector('slot');
-      expect(slot).to.exist;
+      expect(slot).to.not.equal(null);
     });
 
     it('should project the slotted content', () => {
@@ -122,7 +122,7 @@ describe('FileDropZone', () => {
       });
 
       it('should not set dragging to true', () => {
-        expect(el.dragging).to.be.false;
+        expect(el.dragging).to.equal(false);
       });
     });
 
@@ -147,7 +147,7 @@ describe('FileDropZone', () => {
       });
 
       it('should not call uploadFile', () => {
-        expect(stubClient.uploadFile).to.not.have.been.called;
+        expect(stubClient.uploadFile.called).to.equal(false);
       });
     });
   });
@@ -168,12 +168,12 @@ describe('FileDropZone', () => {
       });
 
       it('should set dragging to true', () => {
-        expect(el.dragging).to.be.true;
+        expect(el.dragging).to.equal(true);
       });
 
       it('should show the drop overlay', () => {
         const overlay = el.shadowRoot?.querySelector('.drop-overlay');
-        expect(overlay).to.exist;
+        expect(overlay).to.not.equal(null);
       });
 
       it('should display the upload indicator text', () => {
@@ -197,12 +197,12 @@ describe('FileDropZone', () => {
       });
 
       it('should set dragging to false', () => {
-        expect(el.dragging).to.be.false;
+        expect(el.dragging).to.equal(false);
       });
 
       it('should hide the drop overlay', () => {
         const overlay = el.shadowRoot?.querySelector('.drop-overlay');
-        expect(overlay).to.not.exist;
+        expect(overlay).to.equal(null);
       });
     });
 
@@ -256,11 +256,11 @@ describe('FileDropZone', () => {
       });
 
       it('should call uploadFile on the client', () => {
-        expect(stubClient.uploadFile).to.have.been.calledOnce;
+        expect(stubClient.uploadFile.callCount).to.equal(1);
       });
 
       it('should dispatch file-uploaded event', () => {
-        expect(uploadedEvent).to.not.be.null;
+        expect(uploadedEvent).to.not.equal(null);
       });
 
       it('should include uploadUrl in event detail', () => {
@@ -274,15 +274,15 @@ describe('FileDropZone', () => {
       });
 
       it('should include isImage false for text file', () => {
-        expect(uploadedEvent?.detail.isImage).to.be.false;
+        expect(uploadedEvent?.detail.isImage).to.equal(false);
       });
 
       it('should reset uploading to false', () => {
-        expect(el.uploading).to.be.false;
+        expect(el.uploading).to.equal(false);
       });
 
       it('should reset dragging to false', () => {
-        expect(el.dragging).to.be.false;
+        expect(el.dragging).to.equal(false);
       });
     });
 
@@ -317,7 +317,7 @@ describe('FileDropZone', () => {
       });
 
       it('should include isImage true for image file', () => {
-        expect(uploadedEvent?.detail.isImage).to.be.true;
+        expect(uploadedEvent?.detail.isImage).to.equal(true);
       });
     });
 
@@ -346,12 +346,12 @@ describe('FileDropZone', () => {
       });
 
       it('should set uploading to true', () => {
-        expect(el.uploading).to.be.true;
+        expect(el.uploading).to.equal(true);
       });
 
       it('should show the upload overlay', () => {
         const overlay = el.shadowRoot?.querySelector('.upload-overlay');
-        expect(overlay).to.exist;
+        expect(overlay).to.not.equal(null);
       });
 
       it('should display uploading text', () => {
@@ -403,16 +403,16 @@ describe('FileDropZone', () => {
       });
 
       it('should not call uploadFile', () => {
-        expect(stubClient.uploadFile).to.not.have.been.called;
+        expect(stubClient.uploadFile.called).to.equal(false);
       });
 
       it('should not set uploading to true', () => {
-        expect(el.uploading).to.be.false;
+        expect(el.uploading).to.equal(false);
       });
 
       it('should render error-display component', () => {
         const errorDisplay = el.shadowRoot?.querySelector('error-display');
-        expect(errorDisplay).to.exist;
+        expect(errorDisplay).to.not.equal(null);
       });
     });
 
@@ -443,11 +443,11 @@ describe('FileDropZone', () => {
       });
 
       it('should call uploadFile', () => {
-        expect(stubClient.uploadFile).to.have.been.calledOnce;
+        expect(stubClient.uploadFile.callCount).to.equal(1);
       });
 
       it('should not set error', () => {
-        expect(el.error).to.be.null;
+        expect(el.error).to.equal(null);
       });
     });
   });
@@ -487,12 +487,12 @@ describe('FileDropZone', () => {
     });
 
     it('should reset uploading to false', () => {
-      expect(el.uploading).to.be.false;
+      expect(el.uploading).to.equal(false);
     });
 
     it('should render error-display component', () => {
       const errorDisplay = el.shadowRoot?.querySelector('error-display');
-      expect(errorDisplay).to.exist;
+      expect(errorDisplay).to.not.equal(null);
     });
   });
 
@@ -519,7 +519,7 @@ describe('FileDropZone', () => {
     });
 
     it('should not call uploadFile', () => {
-      expect(stubClient.uploadFile).to.not.have.been.called;
+      expect(stubClient.uploadFile.called).to.equal(false);
     });
   });
 
@@ -560,11 +560,11 @@ describe('FileDropZone', () => {
     });
 
     it('should bubble the event', () => {
-      expect(uploadedEvent).to.not.be.null;
+      expect(uploadedEvent).to.not.equal(null);
     });
 
     it('should have composed true', () => {
-      expect(uploadedEvent?.composed).to.be.true;
+      expect(uploadedEvent?.composed).to.equal(true);
     });
   });
 });

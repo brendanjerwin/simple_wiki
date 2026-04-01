@@ -12,7 +12,7 @@ describe('EditorToolbar', () => {
   });
 
   it('should exist', () => {
-    expect(toolbar).to.exist;
+    expect(toolbar).to.not.equal(null);
   });
 
   it('should have the correct tag name', () => {
@@ -35,23 +35,23 @@ describe('EditorToolbar', () => {
     });
 
     it('should disable the bold button', () => {
-      expect(boldBtn?.disabled).to.be.true;
+      expect(boldBtn?.disabled).to.equal(true);
     });
 
     it('should disable the italic button', () => {
-      expect(italicBtn?.disabled).to.be.true;
+      expect(italicBtn?.disabled).to.equal(true);
     });
 
     it('should disable the link button', () => {
-      expect(linkBtn?.disabled).to.be.true;
+      expect(linkBtn?.disabled).to.equal(true);
     });
 
     it('should not disable the exit button', () => {
-      expect(exitBtn?.disabled).to.be.false;
+      expect(exitBtn?.disabled).to.equal(false);
     });
 
     it('should not disable the new page button', () => {
-      expect(newPageBtn?.disabled).to.be.false;
+      expect(newPageBtn?.disabled).to.equal(false);
     });
   });
 
@@ -69,52 +69,52 @@ describe('EditorToolbar', () => {
     });
 
     it('should enable the bold button', () => {
-      expect(boldBtn?.disabled).to.be.false;
+      expect(boldBtn?.disabled).to.equal(false);
     });
 
     it('should enable the italic button', () => {
-      expect(italicBtn?.disabled).to.be.false;
+      expect(italicBtn?.disabled).to.equal(false);
     });
 
     it('should enable the link button', () => {
-      expect(linkBtn?.disabled).to.be.false;
+      expect(linkBtn?.disabled).to.equal(false);
     });
   });
 
   describe('when rendered', () => {
     it('should display bold button', () => {
       const boldBtn = toolbar.shadowRoot?.querySelector('[data-action="bold"]');
-      expect(boldBtn).to.exist;
+      expect(boldBtn).to.not.equal(null);
     });
 
     it('should display italic button', () => {
       const italicBtn = toolbar.shadowRoot?.querySelector('[data-action="italic"]');
-      expect(italicBtn).to.exist;
+      expect(italicBtn).to.not.equal(null);
     });
 
     it('should display link button', () => {
       const linkBtn = toolbar.shadowRoot?.querySelector('[data-action="link"]');
-      expect(linkBtn).to.exist;
+      expect(linkBtn).to.not.equal(null);
     });
 
     it('should display upload image button', () => {
       const uploadBtn = toolbar.shadowRoot?.querySelector('[data-action="upload-image"]');
-      expect(uploadBtn).to.exist;
+      expect(uploadBtn).to.not.equal(null);
     });
 
     it('should display upload dropdown toggle', () => {
       const toggleBtn = toolbar.shadowRoot?.querySelector('.upload-btn-toggle');
-      expect(toggleBtn).to.exist;
+      expect(toggleBtn).to.not.equal(null);
     });
 
     it('should display exit button', () => {
       const exitBtn = toolbar.shadowRoot?.querySelector('[data-action="exit"]');
-      expect(exitBtn).to.exist;
+      expect(exitBtn).to.not.equal(null);
     });
 
     it('should display new page button', () => {
       const newPageBtn = toolbar.shadowRoot?.querySelector('[data-action="new-page"]');
-      expect(newPageBtn).to.exist;
+      expect(newPageBtn).to.not.equal(null);
     });
   });
 
@@ -131,7 +131,7 @@ describe('EditorToolbar', () => {
     });
 
     it('should dispatch format-bold-requested event', () => {
-      expect(eventSpy).to.have.been.calledOnce;
+      expect(eventSpy.callCount).to.equal(1);
     });
   });
 
@@ -148,7 +148,7 @@ describe('EditorToolbar', () => {
     });
 
     it('should dispatch format-italic-requested event', () => {
-      expect(eventSpy).to.have.been.calledOnce;
+      expect(eventSpy.callCount).to.equal(1);
     });
   });
 
@@ -165,7 +165,7 @@ describe('EditorToolbar', () => {
     });
 
     it('should dispatch insert-link-requested event', () => {
-      expect(eventSpy).to.have.been.calledOnce;
+      expect(eventSpy.callCount).to.equal(1);
     });
   });
 
@@ -180,7 +180,7 @@ describe('EditorToolbar', () => {
     });
 
     it('should dispatch upload-image-requested event', () => {
-      expect(eventSpy).to.have.been.calledOnce;
+      expect(eventSpy.callCount).to.equal(1);
     });
   });
 
@@ -202,7 +202,7 @@ describe('EditorToolbar', () => {
     });
 
     it('should dispatch upload-file-requested event', () => {
-      expect(eventSpy).to.have.been.calledOnce;
+      expect(eventSpy.callCount).to.equal(1);
     });
   });
 
@@ -216,12 +216,12 @@ describe('EditorToolbar', () => {
 
       it('should show upload file option in dropdown', () => {
         const fileBtn = toolbar.shadowRoot?.querySelector('[data-action="upload-file"]');
-        expect(fileBtn).to.exist;
+        expect(fileBtn).to.not.equal(null);
       });
 
       it('should show dropdown menu', () => {
         const menu = toolbar.shadowRoot?.querySelector('.upload-dropdown-menu');
-        expect(menu).to.exist;
+        expect(menu).to.not.equal(null);
       });
     });
 
@@ -240,7 +240,7 @@ describe('EditorToolbar', () => {
 
       it('should close the dropdown', () => {
         const menu = toolbar.shadowRoot?.querySelector('.upload-dropdown-menu');
-        expect(menu).to.not.exist;
+        expect(menu).to.equal(null);
       });
     });
   });
@@ -256,7 +256,7 @@ describe('EditorToolbar', () => {
     });
 
     it('should dispatch exit-requested event', () => {
-      expect(eventSpy).to.have.been.calledOnce;
+      expect(eventSpy.callCount).to.equal(1);
     });
   });
 
@@ -271,7 +271,7 @@ describe('EditorToolbar', () => {
     });
 
     it('should dispatch insert-new-page-requested event', () => {
-      expect(eventSpy).to.have.been.calledOnce;
+      expect(eventSpy.callCount).to.equal(1);
     });
   });
 });

@@ -17,15 +17,15 @@ describe('InsertNewPageDialog', () => {
     });
 
     it('should exist', () => {
-      expect(el).to.exist;
+      expect(el).to.not.equal(null);
     });
 
     it('should not be open initially', () => {
-      expect(el.open).to.be.false;
+      expect(el.open).to.equal(false);
     });
 
     it('should not display dialog when not open', () => {
-      expect(el.shadowRoot?.querySelector('.dialog')).to.exist;
+      expect(el.shadowRoot?.querySelector('.dialog')).to.not.equal(null);
       // :host display: none is handled by CSS
     });
   });
@@ -52,11 +52,11 @@ describe('InsertNewPageDialog', () => {
     });
 
     it('should set open to true', () => {
-      expect(el.open).to.be.true;
+      expect(el.open).to.equal(true);
     });
 
     it('should load templates', () => {
-      expect(listTemplatesStub).to.have.been.calledOnce;
+      expect(listTemplatesStub.callCount).to.equal(1);
     });
 
     it('should exclude inv_item template', () => {
@@ -71,12 +71,12 @@ describe('InsertNewPageDialog', () => {
 
     it('should render automagic identifier input', () => {
       const input = el.shadowRoot?.querySelector('automagic-identifier-input');
-      expect(input).to.exist;
+      expect(input).to.not.equal(null);
     });
 
     it('should render template selector', () => {
       const select = el.shadowRoot?.querySelector('select[name="template"]');
-      expect(select).to.exist;
+      expect(select).to.not.equal(null);
     });
 
     it('should populate template options', () => {
@@ -86,7 +86,7 @@ describe('InsertNewPageDialog', () => {
 
     it('should render frontmatter section', () => {
       const section = el.shadowRoot?.querySelector('.frontmatter-section');
-      expect(section).to.exist;
+      expect(section).to.not.equal(null);
     });
 
     it('should render cancel button', () => {
@@ -115,7 +115,7 @@ describe('InsertNewPageDialog', () => {
     });
 
     it('should set open to false', () => {
-      expect(el.open).to.be.false;
+      expect(el.open).to.equal(false);
     });
 
     it('should reset pageTitle', () => {
@@ -131,7 +131,7 @@ describe('InsertNewPageDialog', () => {
     });
 
     it('should reset templateLocked', () => {
-      expect(el.templateLocked).to.be.false;
+      expect(el.templateLocked).to.equal(false);
     });
   });
 
@@ -152,7 +152,7 @@ describe('InsertNewPageDialog', () => {
     });
 
     it('should close dialog', () => {
-      expect(el.open).to.be.false;
+      expect(el.open).to.equal(false);
     });
   });
 
@@ -172,7 +172,7 @@ describe('InsertNewPageDialog', () => {
     });
 
     it('should close dialog', () => {
-      expect(el.open).to.be.false;
+      expect(el.open).to.equal(false);
     });
   });
 
@@ -217,17 +217,17 @@ describe('InsertNewPageDialog', () => {
       });
 
       it('should lock template dropdown', () => {
-        expect(el.templateLocked).to.be.true;
+        expect(el.templateLocked).to.equal(true);
       });
 
       it('should disable template dropdown', () => {
         const select = el.shadowRoot?.querySelector('select[name="template"]') as HTMLSelectElement;
-        expect(select.disabled).to.be.true;
+        expect(select.disabled).to.equal(true);
       });
 
       it('should show change button', () => {
         const changeButton = el.shadowRoot?.querySelector('confirmation-interlock-button');
-        expect(changeButton).to.exist;
+        expect(changeButton).to.not.equal(null);
       });
 
       it('should call getTemplateFrontmatter', () => {
@@ -271,11 +271,11 @@ describe('InsertNewPageDialog', () => {
       });
 
       it('should set error for display', () => {
-        expect(el.error).to.exist;
+        expect(el.error).to.not.equal(null);
       });
 
       it('should unlock template dropdown so user can try different template', () => {
-        expect(el.templateLocked).to.be.false;
+        expect(el.templateLocked).to.equal(false);
       });
 
       it('should clear selected template', () => {
@@ -318,7 +318,7 @@ describe('InsertNewPageDialog', () => {
       });
 
       it('should unlock template dropdown', () => {
-        expect(el.templateLocked).to.be.false;
+        expect(el.templateLocked).to.equal(false);
       });
 
       it('should clear selected template', () => {
@@ -331,7 +331,7 @@ describe('InsertNewPageDialog', () => {
 
       it('should enable template dropdown', () => {
         const select = el.shadowRoot?.querySelector('select[name="template"]') as HTMLSelectElement;
-        expect(select.disabled).to.be.false;
+        expect(select.disabled).to.equal(false);
       });
     });
   });
@@ -351,7 +351,7 @@ describe('InsertNewPageDialog', () => {
     describe('when identifier is empty', () => {
       it('should disable create button', () => {
         const button = el.shadowRoot?.querySelector('.button-primary') as HTMLButtonElement;
-        expect(button.disabled).to.be.true;
+        expect(button.disabled).to.equal(true);
       });
     });
 
@@ -364,7 +364,7 @@ describe('InsertNewPageDialog', () => {
 
       it('should enable create button', () => {
         const button = el.shadowRoot?.querySelector('.button-primary') as HTMLButtonElement;
-        expect(button.disabled).to.be.false;
+        expect(button.disabled).to.equal(false);
       });
     });
 
@@ -377,7 +377,7 @@ describe('InsertNewPageDialog', () => {
 
       it('should disable create button', () => {
         const button = el.shadowRoot?.querySelector('.button-primary') as HTMLButtonElement;
-        expect(button.disabled).to.be.true;
+        expect(button.disabled).to.equal(true);
       });
     });
   });
@@ -424,13 +424,13 @@ describe('InsertNewPageDialog', () => {
       });
 
       it('should call createPage with identifier', () => {
-        expect(createPageStub).to.have.been.calledOnce;
+        expect(createPageStub.callCount).to.equal(1);
         const args = createPageStub.firstCall.args;
         expect(args[0]).to.equal('my_article');
       });
 
       it('should dispatch page-created event', () => {
-        expect(pageCreatedHandler).to.have.been.calledOnce;
+        expect(pageCreatedHandler.callCount).to.equal(1);
       });
 
       it('should include identifier in event detail', () => {
@@ -449,11 +449,11 @@ describe('InsertNewPageDialog', () => {
       });
 
       it('should show success toast', () => {
-        expect(showSuccessStub).to.have.been.calledOnce;
+        expect(showSuccessStub.callCount).to.equal(1);
       });
 
       it('should close dialog', () => {
-        expect(el.open).to.be.false;
+        expect(el.open).to.equal(false);
       });
     });
 
@@ -471,20 +471,20 @@ describe('InsertNewPageDialog', () => {
       });
 
       it('should not dispatch page-created event', () => {
-        expect(pageCreatedHandler).to.not.have.been.called;
+        expect(pageCreatedHandler.called).to.equal(false);
       });
 
       it('should set error state', () => {
-        expect(el.error).to.exist;
+        expect(el.error).to.not.equal(null);
       });
 
       it('should display error', () => {
         const errorDisplay = el.shadowRoot?.querySelector('error-display');
-        expect(errorDisplay).to.exist;
+        expect(errorDisplay).to.not.equal(null);
       });
 
       it('should keep dialog open', () => {
-        expect(el.open).to.be.true;
+        expect(el.open).to.equal(true);
       });
     });
   });
@@ -539,7 +539,7 @@ describe('InsertNewPageDialog', () => {
 
     it('should show disabled dropdown with note', () => {
       const select = el.shadowRoot?.querySelector('select[name="template"]') as HTMLSelectElement;
-      expect(select.disabled).to.be.true;
+      expect(select.disabled).to.equal(true);
     });
 
     it('should show "no templates defined" in option', () => {

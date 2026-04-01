@@ -14,7 +14,7 @@ describe('PageCreator', () => {
   });
 
   it('should exist', () => {
-    expect(service).to.exist;
+    expect(service).to.not.equal(null);
   });
 
   describe('listTemplates', () => {
@@ -52,11 +52,11 @@ describe('PageCreator', () => {
       });
 
       it('should not have error', () => {
-        expect(result.error).to.be.undefined;
+        expect(result.error).to.equal(undefined);
       });
 
       it('should call client with empty excludeIdentifiers', () => {
-        expect(clientStub).to.have.been.calledOnce;
+        expect(clientStub.callCount).to.equal(1);
         const request = clientStub.firstCall.args[0];
         expect(request.excludeIdentifiers).to.deep.equal([]);
       });
@@ -99,7 +99,7 @@ describe('PageCreator', () => {
       });
 
       it('should not have error', () => {
-        expect(result.error).to.be.undefined;
+        expect(result.error).to.equal(undefined);
       });
     });
 
@@ -119,7 +119,7 @@ describe('PageCreator', () => {
       });
 
       it('should return error', () => {
-        expect(result.error).to.exist;
+        expect(result.error).to.not.equal(null);
       });
     });
   });
@@ -154,11 +154,11 @@ describe('PageCreator', () => {
       });
 
       it('should not have error', () => {
-        expect(result.error).to.be.undefined;
+        expect(result.error).to.equal(undefined);
       });
 
       it('should call client with correct page identifier', () => {
-        expect(clientStub).to.have.been.calledOnce;
+        expect(clientStub.callCount).to.equal(1);
         const request = clientStub.firstCall.args[0];
         expect(request.page).to.equal('article_template');
       });
@@ -182,7 +182,7 @@ describe('PageCreator', () => {
       });
 
       it('should not have error', () => {
-        expect(result.error).to.be.undefined;
+        expect(result.error).to.equal(undefined);
       });
     });
 
@@ -202,7 +202,7 @@ describe('PageCreator', () => {
       });
 
       it('should return error', () => {
-        expect(result.error).to.exist;
+        expect(result.error).to.not.equal(null);
       });
     });
   });
@@ -220,7 +220,7 @@ describe('PageCreator', () => {
       });
 
       it('should return isUnique true', () => {
-        expect(result.isUnique).to.be.true;
+        expect(result.isUnique).to.equal(true);
       });
     });
 
@@ -245,18 +245,18 @@ describe('PageCreator', () => {
       });
 
       it('should return isUnique true', () => {
-        expect(result.isUnique).to.be.true;
+        expect(result.isUnique).to.equal(true);
       });
 
       it('should not have existingPage', () => {
-        expect(result.existingPage).to.be.undefined;
+        expect(result.existingPage).to.equal(undefined);
       });
 
       it('should call client with correct request', () => {
-        expect(clientStub).to.have.been.calledOnce;
+        expect(clientStub.callCount).to.equal(1);
         const request = clientStub.firstCall.args[0];
         expect(request.text).to.equal('My New Article');
-        expect(request.ensureUnique).to.be.false;
+        expect(request.ensureUnique).to.equal(false);
       });
     });
 
@@ -283,7 +283,7 @@ describe('PageCreator', () => {
       });
 
       it('should return isUnique false', () => {
-        expect(result.isUnique).to.be.false;
+        expect(result.isUnique).to.equal(false);
       });
 
       it('should return existingPage with identifier', () => {
@@ -312,7 +312,7 @@ describe('PageCreator', () => {
 
       it('should call client with ensureUnique true', () => {
         const request = clientStub.firstCall.args[0];
-        expect(request.ensureUnique).to.be.true;
+        expect(request.ensureUnique).to.equal(true);
       });
     });
 
@@ -332,11 +332,11 @@ describe('PageCreator', () => {
       });
 
       it('should return isUnique true', () => {
-        expect(result.isUnique).to.be.true;
+        expect(result.isUnique).to.equal(true);
       });
 
       it('should return error', () => {
-        expect(result.error).to.exist;
+        expect(result.error).to.not.equal(null);
       });
     });
   });
@@ -350,7 +350,7 @@ describe('PageCreator', () => {
       });
 
       it('should return success false', () => {
-        expect(result.success).to.be.false;
+        expect(result.success).to.equal(false);
       });
 
       it('should return validation error as Error object', () => {
@@ -374,19 +374,19 @@ describe('PageCreator', () => {
       });
 
       it('should return success true', () => {
-        expect(result.success).to.be.true;
+        expect(result.success).to.equal(true);
       });
 
       it('should not have error', () => {
-        expect(result.error).to.be.undefined;
+        expect(result.error).to.equal(undefined);
       });
 
       it('should call client with correct request', () => {
-        expect(clientStub).to.have.been.calledOnce;
+        expect(clientStub.callCount).to.equal(1);
         const request = clientStub.firstCall.args[0];
         expect(request.pageName).to.equal('my_new_page');
         expect(request.contentMarkdown).to.equal('');
-        expect(request.frontmatter).to.be.undefined;
+        expect(request.frontmatter).to.equal(undefined);
       });
     });
 
@@ -484,7 +484,7 @@ describe('PageCreator', () => {
       });
 
       it('should return success false', () => {
-        expect(result.success).to.be.false;
+        expect(result.success).to.equal(false);
       });
 
       it('should return the error as Error object', () => {
@@ -508,7 +508,7 @@ describe('PageCreator', () => {
       });
 
       it('should return success false', () => {
-        expect(result.success).to.be.false;
+        expect(result.success).to.equal(false);
       });
 
       it('should return default error message', () => {
@@ -529,11 +529,11 @@ describe('PageCreator', () => {
       });
 
       it('should return success false', () => {
-        expect(result.success).to.be.false;
+        expect(result.success).to.equal(false);
       });
 
       it('should return error', () => {
-        expect(result.error).to.exist;
+        expect(result.error).to.not.equal(null);
       });
     });
   });

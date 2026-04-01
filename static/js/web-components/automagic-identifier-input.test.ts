@@ -35,27 +35,27 @@ describe('AutomagicIdentifierInput', () => {
     });
 
     it('should be in automagic mode by default', () => {
-      expect(element.automagicMode).to.be.true;
+      expect(element.automagicMode).to.equal(true);
     });
 
     it('should indicate identifier is unique', () => {
-      expect(element.isUnique).to.be.true;
+      expect(element.isUnique).to.equal(true);
     });
 
     it('should render title input', () => {
       const titleInput = element.shadowRoot?.querySelector('title-input');
-      expect(titleInput).to.exist;
+      expect(titleInput).to.not.equal(null);
     });
 
     it('should render identifier input', () => {
       const identifierInput = element.shadowRoot?.querySelector('input[name="identifier"]');
-      expect(identifierInput).to.exist;
+      expect(identifierInput).to.not.equal(null);
     });
 
     it('should render automagic toggle button with sparkle icon', () => {
       const button = element.shadowRoot?.querySelector('.automagic-button');
-      expect(button).to.exist;
-      expect(button?.querySelector('.fa-wand-magic-sparkles')).to.exist;
+      expect(button).to.not.equal(null);
+      expect(button?.querySelector('.fa-wand-magic-sparkles')).to.not.equal(null);
     });
   });
 
@@ -120,17 +120,17 @@ describe('AutomagicIdentifierInput', () => {
     });
 
     it('should switch to manual mode', () => {
-      expect(element.automagicMode).to.be.false;
+      expect(element.automagicMode).to.equal(false);
     });
 
     it('should show pen icon in button', () => {
       const button = element.shadowRoot?.querySelector('.automagic-button');
-      expect(button?.querySelector('.fa-pen')).to.exist;
+      expect(button?.querySelector('.fa-pen')).to.not.equal(null);
     });
 
     it('should allow identifier input to be editable', () => {
       const identifierInput = element.shadowRoot?.querySelector<HTMLInputElement>('input[name="identifier"]');
-      expect(identifierInput?.readOnly).to.be.false;
+      expect(identifierInput?.readOnly).to.equal(false);
     });
   });
 
@@ -155,7 +155,7 @@ describe('AutomagicIdentifierInput', () => {
 
     it('should display conflict warning', () => {
       const warning = element.shadowRoot?.querySelector('.conflict-warning');
-      expect(warning).to.exist;
+      expect(warning).to.not.equal(null);
     });
 
     it('should show link to existing page', () => {
@@ -220,17 +220,17 @@ describe('AutomagicIdentifierInput', () => {
 
     it('should disable title input', () => {
       const titleInput = element.shadowRoot?.querySelector<TitleInput>('title-input');
-      expect(titleInput?.disabled).to.be.true;
+      expect(titleInput?.disabled).to.equal(true);
     });
 
     it('should disable identifier input', () => {
       const identifierInput = element.shadowRoot?.querySelector<HTMLInputElement>('input[name="identifier"]');
-      expect(identifierInput?.disabled).to.be.true;
+      expect(identifierInput?.disabled).to.equal(true);
     });
 
     it('should disable automagic button', () => {
       const button = element.shadowRoot?.querySelector<HTMLButtonElement>('.automagic-button');
-      expect(button?.disabled).to.be.true;
+      expect(button?.disabled).to.equal(true);
     });
   });
 
@@ -255,7 +255,7 @@ describe('AutomagicIdentifierInput', () => {
       });
 
       it('should dispatch title-change event', () => {
-        expect(eventSpy).to.have.been.called;
+        expect(eventSpy.called).to.equal(true);
       });
 
       it('should include new title in event detail', () => {
@@ -298,7 +298,7 @@ describe('AutomagicIdentifierInput', () => {
       });
 
       it('should dispatch identifier-change event', () => {
-        expect(eventSpy).to.have.been.called;
+        expect(eventSpy.called).to.equal(true);
       });
 
       it('should include new identifier in event detail', () => {
@@ -339,11 +339,11 @@ describe('AutomagicIdentifierInput', () => {
 
     it('should display an error message', () => {
       const errorDisplay = element.shadowRoot?.querySelector('error-display');
-      expect(errorDisplay).to.exist;
+      expect(errorDisplay).to.not.equal(null);
     });
 
     it('should set the automagicError property', () => {
-      expect(element.automagicError).to.exist;
+      expect(element.automagicError).to.not.equal(null);
     });
 
     it('should preserve the error message', () => {

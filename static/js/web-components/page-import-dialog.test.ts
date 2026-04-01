@@ -30,16 +30,16 @@ describe('PageImportDialog', () => {
   });
 
   it('should exist', () => {
-    expect(el).to.exist;
+    expect(el).to.not.equal(null);
   });
 
   describe('when component is initialized', () => {
     it('should not be open by default', () => {
-      expect(el.open).to.be.false;
+      expect(el.open).to.equal(false);
     });
 
     it('should not have open attribute by default', () => {
-      expect(el.hasAttribute('open')).to.be.false;
+      expect(el.hasAttribute('open')).to.equal(false);
     });
   });
 
@@ -51,11 +51,11 @@ describe('PageImportDialog', () => {
       });
 
       it('should set open to true', () => {
-        expect(el.open).to.be.true;
+        expect(el.open).to.equal(true);
       });
 
       it('should have open attribute', () => {
-        expect(el.hasAttribute('open')).to.be.true;
+        expect(el.hasAttribute('open')).to.equal(true);
       });
     });
 
@@ -79,12 +79,12 @@ describe('PageImportDialog', () => {
 
       it('should clear any previous file', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        expect((el as any).file).to.be.null;
+        expect((el as any).file).to.equal(null);
       });
 
       it('should clear any previous error', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        expect((el as any).error).to.be.null;
+        expect((el as any).error).to.equal(null);
       });
     });
   });
@@ -98,11 +98,11 @@ describe('PageImportDialog', () => {
       });
 
       it('should set open to false', () => {
-        expect(el.open).to.be.false;
+        expect(el.open).to.equal(false);
       });
 
       it('should remove open attribute', () => {
-        expect(el.hasAttribute('open')).to.be.false;
+        expect(el.hasAttribute('open')).to.equal(false);
       });
     });
   });
@@ -116,7 +116,7 @@ describe('PageImportDialog', () => {
       });
 
       it('should close the dialog', () => {
-        expect(el.open).to.be.false;
+        expect(el.open).to.equal(false);
       });
     });
 
@@ -126,7 +126,7 @@ describe('PageImportDialog', () => {
       });
 
       it('should remain closed', () => {
-        expect(el.open).to.be.false;
+        expect(el.open).to.equal(false);
       });
     });
 
@@ -138,7 +138,7 @@ describe('PageImportDialog', () => {
       });
 
       it('should not close the dialog', () => {
-        expect(el.open).to.be.true;
+        expect(el.open).to.equal(true);
       });
     });
   });
@@ -152,12 +152,12 @@ describe('PageImportDialog', () => {
         el.openDialog();
         await el.updateComplete;
         const backdrop = el.shadowRoot?.querySelector<HTMLElement>('.backdrop');
-        expect(backdrop).to.exist;
+        expect(backdrop).to.not.equal(null);
         backdrop!.click();
       });
 
       it('should close the dialog', () => {
-        expect(closeDialogSpy).to.have.been.calledOnce;
+        expect(closeDialogSpy.callCount).to.equal(1);
       });
     });
   });
@@ -171,12 +171,12 @@ describe('PageImportDialog', () => {
         el.openDialog();
         await el.updateComplete;
         const dialog = el.shadowRoot?.querySelector<HTMLElement>('.dialog');
-        expect(dialog).to.exist;
+        expect(dialog).to.not.equal(null);
         dialog!.click();
       });
 
       it('should not close the dialog', () => {
-        expect(closeDialogSpy).to.not.have.been.called;
+        expect(closeDialogSpy.called).to.equal(false);
       });
     });
   });
@@ -233,12 +233,12 @@ describe('PageImportDialog', () => {
 
       it('should not store the file', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        expect((el as any).file).to.be.null;
+        expect((el as any).file).to.equal(null);
       });
 
       it('should show error', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        expect((el as any).error).to.exist;
+        expect((el as any).error).to.not.equal(null);
       });
 
       it('should have correct error message', () => {
@@ -306,7 +306,7 @@ describe('PageImportDialog', () => {
 
     it('should show loading spinner', () => {
       const spinner = el.shadowRoot?.querySelector('.loading-spinner');
-      expect(spinner).to.exist;
+      expect(spinner).to.not.equal(null);
     });
 
     it('should show parsing message', () => {
@@ -316,7 +316,7 @@ describe('PageImportDialog', () => {
 
     it('should disable cancel button', () => {
       const cancelBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.footer .button-secondary');
-      expect(cancelBtn?.disabled).to.be.true;
+      expect(cancelBtn?.disabled).to.equal(true);
     });
   });
 
@@ -332,30 +332,30 @@ describe('PageImportDialog', () => {
 
     it('should show importing container', () => {
       const container = el.shadowRoot?.querySelector('.importing-container');
-      expect(container).to.exist;
+      expect(container).to.not.equal(null);
     });
 
     it('should show explainer text', () => {
       const explainer = el.shadowRoot?.querySelector('.importing-explainer');
-      expect(explainer).to.exist;
+      expect(explainer).to.not.equal(null);
       expect(explainer?.textContent).to.contain('import');
     });
 
     it('should show link to report page', () => {
       const reportLink = el.shadowRoot?.querySelector<HTMLAnchorElement>('.report-link');
-      expect(reportLink).to.exist;
+      expect(reportLink).to.not.equal(null);
       expect(reportLink?.href).to.contain('page_import_report');
     });
 
     it('should show job status section', () => {
       const statusSection = el.shadowRoot?.querySelector('.job-status-section');
-      expect(statusSection).to.exist;
+      expect(statusSection).to.not.equal(null);
     });
 
     it('should show Close button that is enabled', () => {
       const closeBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.footer .button-secondary');
       expect(closeBtn?.textContent?.trim()).to.equal('Close');
-      expect(closeBtn?.disabled).to.be.false;
+      expect(closeBtn?.disabled).to.equal(false);
     });
 
     describe('when job queue status is available', () => {
@@ -394,7 +394,7 @@ describe('PageImportDialog', () => {
 
       it('should show waiting message', () => {
         const waiting = el.shadowRoot?.querySelector('.job-status-waiting');
-        expect(waiting).to.exist;
+        expect(waiting).to.not.equal(null);
       });
     });
 
@@ -407,7 +407,7 @@ describe('PageImportDialog', () => {
 
       it('should show disconnected message', () => {
         const disconnected = el.shadowRoot?.querySelector('.job-status-disconnected');
-        expect(disconnected).to.exist;
+        expect(disconnected).to.not.equal(null);
       });
 
       it('should indicate import continues in background', () => {
@@ -430,7 +430,7 @@ describe('PageImportDialog', () => {
 
       it('should disable the import button', () => {
         const importBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.footer .button-primary');
-        expect(importBtn?.disabled).to.be.true;
+        expect(importBtn?.disabled).to.equal(true);
       });
     });
 
@@ -446,7 +446,7 @@ describe('PageImportDialog', () => {
 
       it('should enable the import button', () => {
         const importBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.footer .button-primary');
-        expect(importBtn?.disabled).to.be.false;
+        expect(importBtn?.disabled).to.equal(false);
       });
     });
   });
@@ -461,12 +461,12 @@ describe('PageImportDialog', () => {
         await el.updateComplete;
         // Use .footer selector to avoid matching the "Select CSV File" button
         const cancelBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.footer .button-secondary');
-        expect(cancelBtn).to.exist;
+        expect(cancelBtn).to.not.equal(null);
         cancelBtn!.click();
       });
 
       it('should close the dialog', () => {
-        expect(closeDialogSpy).to.have.been.calledOnce;
+        expect(closeDialogSpy.callCount).to.equal(1);
       });
     });
   });
@@ -484,12 +484,12 @@ describe('PageImportDialog', () => {
 
       it('should set dragOver to true', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        expect((el as any).dragOver).to.be.true;
+        expect((el as any).dragOver).to.equal(true);
       });
 
       it('should add drag-over class to drop zone', () => {
         const dropZone = el.shadowRoot?.querySelector('.drop-zone');
-        expect(dropZone?.classList.contains('drag-over')).to.be.true;
+        expect(dropZone?.classList.contains('drag-over')).to.equal(true);
       });
     });
 
@@ -508,7 +508,7 @@ describe('PageImportDialog', () => {
 
       it('should set dragOver to false', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        expect((el as any).dragOver).to.be.false;
+        expect((el as any).dragOver).to.equal(false);
       });
     });
 
@@ -531,7 +531,7 @@ describe('PageImportDialog', () => {
 
       it('should process the file', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        expect((el as any).file).to.exist;
+        expect((el as any).file).to.not.equal(null);
       });
 
       it('should transition to validating state', () => {
@@ -559,12 +559,12 @@ describe('PageImportDialog', () => {
 
       it('should not store the file', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        expect((el as any).file).to.be.null;
+        expect((el as any).file).to.equal(null);
       });
 
       it('should show error', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        expect((el as any).error).to.exist;
+        expect((el as any).error).to.not.equal(null);
       });
     });
   });
@@ -627,7 +627,7 @@ describe('PageImportDialog', () => {
       describe('when at first record', () => {
         it('should disable prev button', () => {
           const prevBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.navigation button:first-child');
-          expect(prevBtn?.disabled).to.be.true;
+          expect(prevBtn?.disabled).to.equal(true);
         });
       });
 
@@ -641,7 +641,7 @@ describe('PageImportDialog', () => {
 
         it('should disable next button', () => {
           const nextBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.navigation button:last-child');
-          expect(nextBtn?.disabled).to.be.true;
+          expect(nextBtn?.disabled).to.equal(true);
         });
       });
     });
@@ -704,7 +704,7 @@ describe('PageImportDialog', () => {
 
       it('should update showErrorsOnly', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        expect((el as any).showErrorsOnly).to.be.true;
+        expect((el as any).showErrorsOnly).to.equal(true);
       });
 
       it('should reset to first record', () => {
@@ -748,7 +748,7 @@ describe('PageImportDialog', () => {
       it('should show NEW badge for new pages', () => {
         const badge = el.shadowRoot?.querySelector('.badge');
         expect(badge?.textContent?.trim()).to.equal('NEW');
-        expect(badge?.classList.contains('badge-new')).to.be.true;
+        expect(badge?.classList.contains('badge-new')).to.equal(true);
       });
 
       it('should show template section', () => {
@@ -758,13 +758,13 @@ describe('PageImportDialog', () => {
 
       it('should show warnings section', () => {
         const warning = el.shadowRoot?.querySelector('.warning-item');
-        expect(warning).to.exist;
+        expect(warning).to.not.equal(null);
         expect(warning?.textContent).to.contain('This is a warning');
       });
 
       it('should show fields to delete', () => {
         const deleteField = el.shadowRoot?.querySelector('.field-delete');
-        expect(deleteField).to.exist;
+        expect(deleteField).to.not.equal(null);
         expect(deleteField?.textContent).to.contain('DELETE');
       });
     });
@@ -796,7 +796,7 @@ describe('PageImportDialog', () => {
       it('should show UPDATE badge for existing pages', () => {
         const badge = el.shadowRoot?.querySelector('.badge');
         expect(badge?.textContent?.trim()).to.equal('UPDATE');
-        expect(badge?.classList.contains('badge-update')).to.be.true;
+        expect(badge?.classList.contains('badge-update')).to.equal(true);
       });
     });
 
@@ -846,7 +846,7 @@ describe('PageImportDialog', () => {
 
       it('should show parsing errors section', () => {
         const parsingErrors = el.shadowRoot?.querySelector('.parsing-errors');
-        expect(parsingErrors).to.exist;
+        expect(parsingErrors).to.not.equal(null);
       });
 
       it('should show parsing error content', () => {

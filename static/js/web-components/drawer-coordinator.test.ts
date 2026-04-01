@@ -36,11 +36,11 @@ describe('DrawerCoordinator', () => {
     });
 
     it('should close all other drawers', () => {
-      expect(drawerB.closeDrawer.calledOnce).to.be.true;
+      expect(drawerB.closeDrawer.calledOnce).to.equal(true);
     });
 
     it('should not close the opening drawer', () => {
-      expect(drawerA.closeDrawer.called).to.be.false;
+      expect(drawerA.closeDrawer.called).to.equal(false);
     });
   });
 
@@ -58,11 +58,11 @@ describe('DrawerCoordinator', () => {
     });
 
     it('should hide all CTAs', () => {
-      expect(cta1.setAmbientVisible.calledWith(false)).to.be.true;
+      expect(cta1.setAmbientVisible.calledWith(false)).to.equal(true);
     });
 
     it('should hide the second CTA too', () => {
-      expect(cta2.setAmbientVisible.calledWith(false)).to.be.true;
+      expect(cta2.setAmbientVisible.calledWith(false)).to.equal(true);
     });
   });
 
@@ -79,7 +79,7 @@ describe('DrawerCoordinator', () => {
     });
 
     it('should show all CTAs', () => {
-      expect(cta.setAmbientVisible.calledWith(true)).to.be.true;
+      expect(cta.setAmbientVisible.calledWith(true)).to.equal(true);
     });
   });
 
@@ -98,7 +98,7 @@ describe('DrawerCoordinator', () => {
     });
 
     it('should not show CTAs', () => {
-      expect(cta.setAmbientVisible.called).to.be.false;
+      expect(cta.setAmbientVisible.called).to.equal(false);
     });
   });
 
@@ -113,7 +113,7 @@ describe('DrawerCoordinator', () => {
     });
 
     it('should not receive closeDrawer calls', () => {
-      expect(drawer.closeDrawer.called).to.be.false;
+      expect(drawer.closeDrawer.called).to.equal(false);
     });
   });
 
@@ -129,7 +129,7 @@ describe('DrawerCoordinator', () => {
     });
 
     it('should not receive setAmbientVisible calls', () => {
-      expect(cta.setAmbientVisible.called).to.be.false;
+      expect(cta.setAmbientVisible.called).to.equal(false);
     });
   });
 
@@ -148,11 +148,11 @@ describe('DrawerCoordinator', () => {
     });
 
     it('should close drawer A when drawer B opens', () => {
-      expect(drawerA.closeDrawer.calledOnce).to.be.true;
+      expect(drawerA.closeDrawer.calledOnce).to.equal(true);
     });
 
     it('should not close the newly opening drawer B', () => {
-      expect(drawerB.closeDrawer.called).to.be.false;
+      expect(drawerB.closeDrawer.called).to.equal(false);
     });
   });
 });

@@ -6,7 +6,7 @@ describe('grpc-transport', () => {
   describe('getGrpcWebTransport', () => {
     it('should return a transport instance', () => {
       const transport = getGrpcWebTransport();
-      expect(transport).to.exist;
+      expect(transport).to.not.equal(null);
     });
 
     describe('singleton behavior', () => {
@@ -36,7 +36,7 @@ describe('grpc-transport', () => {
         expect(window.location.origin).to.not.be.empty;
 
         const transport = getGrpcWebTransport();
-        expect(transport).to.exist;
+        expect(transport).to.not.equal(null);
       });
     });
   });

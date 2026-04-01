@@ -1,4 +1,4 @@
-import { html, fixture, expect, assert } from '@open-wc/testing';
+import { html, fixture, expect } from '@open-wc/testing';
 import { stub } from 'sinon';
 import { SystemInfoVersion } from './system-info-version.js';
 import { GetVersionResponseSchema } from '../gen/api/v1/system_info_pb.js';
@@ -36,7 +36,7 @@ describe('SystemInfoVersion', () => {
   });
 
   it('should exist', () => {
-    assert.instanceOf(el, SystemInfoVersion);
+    expect(el).to.be.instanceOf(SystemInfoVersion);
   });
 
   it('should have the correct tag name', () => {
@@ -44,15 +44,15 @@ describe('SystemInfoVersion', () => {
   });
 
   it('should have initial loading state as false', () => {
-    expect(el.loading).to.be.false;
+    expect(el.loading).to.equal(false);
   });
 
   it('should have undefined version initially', () => {
-    expect(el.version).to.be.undefined;
+    expect(el.version).to.equal(undefined);
   });
 
   it('should have null error initially', () => {
-    expect(el.error).to.be.null;
+    expect(el.error).to.equal(null);
   });
 
   describe('when in loading state without version data', () => {
@@ -155,7 +155,7 @@ describe('SystemInfoVersion', () => {
 
       it('should not display error state', () => {
         const errorElement = el.shadowRoot?.querySelector('error-display');
-        expect(errorElement).to.not.exist;
+        expect(errorElement).to.equal(null);
       });
     });
 
@@ -459,7 +459,7 @@ describe('SystemInfoVersion', () => {
 
     it('should have version-info container', () => {
       const versionInfo = el.shadowRoot?.querySelector('.version-info');
-      expect(versionInfo).to.exist;
+      expect(versionInfo).to.not.equal(null);
     });
 
     it('should have one version-row element', () => {
@@ -469,7 +469,7 @@ describe('SystemInfoVersion', () => {
 
     it('should have a Server label', () => {
       const label = el.shadowRoot?.querySelector('.label');
-      expect(label).to.exist;
+      expect(label).to.not.equal(null);
       expect(label?.textContent).to.equal('Server:');
     });
 
@@ -477,13 +477,13 @@ describe('SystemInfoVersion', () => {
       const values = el.shadowRoot?.querySelectorAll('.value');
       expect(values).to.have.length(2);
       values?.forEach(value => {
-        expect(value.classList.contains('value')).to.be.true;
+        expect(value.classList.contains('value')).to.equal(true);
       });
     });
 
     it('should have commit value with commit class', () => {
       const commitValue = el.shadowRoot?.querySelector('.version-row:first-child .value');
-      expect(commitValue?.classList.contains('commit')).to.be.true;
+      expect(commitValue?.classList.contains('commit')).to.equal(true);
     });
   });
 
@@ -546,7 +546,7 @@ describe('SystemInfoVersion', () => {
         expect(commitValue?.textContent).to.equal('abcdef1');
 
         const errorElement = el.shadowRoot?.querySelector('error-display');
-        expect(errorElement).to.not.exist;
+        expect(errorElement).to.equal(null);
       });
     });
   });

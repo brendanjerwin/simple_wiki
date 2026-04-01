@@ -13,7 +13,7 @@ describe('WikiImage', () => {
     });
 
     it('should exist', () => {
-      expect(el).to.exist;
+      expect(el).to.not.equal(null);
     });
   });
 
@@ -26,7 +26,7 @@ describe('WikiImage', () => {
 
     it('should render an img element', () => {
       const img = el.shadowRoot?.querySelector('img');
-      expect(img).to.exist;
+      expect(img).to.not.equal(null);
     });
 
     it('should set the src attribute', () => {
@@ -66,7 +66,7 @@ describe('WikiImage', () => {
 
     it('should render a tools panel', () => {
       const toolsPanel = el.shadowRoot?.querySelector('.tools-panel');
-      expect(toolsPanel).to.exist;
+      expect(toolsPanel).to.not.equal(null);
     });
 
     it('should have at least 2 tool buttons', () => {
@@ -76,12 +76,12 @@ describe('WikiImage', () => {
 
     it('should have open in new tab button with aria-label', () => {
       const openBtn = el.shadowRoot?.querySelector('.tool-btn[aria-label="Open in new tab"]');
-      expect(openBtn).to.exist;
+      expect(openBtn).to.not.equal(null);
     });
 
     it('should have download button with aria-label', () => {
       const downloadBtn = el.shadowRoot?.querySelector('.tool-btn[aria-label="Download"]');
-      expect(downloadBtn).to.exist;
+      expect(downloadBtn).to.not.equal(null);
     });
 
     it('should have toolbar role for accessibility', () => {
@@ -123,7 +123,7 @@ describe('WikiImage', () => {
       });
 
       it('should render the copy button', () => {
-        expect(copyBtn).to.exist;
+        expect(copyBtn).to.not.equal(null);
       });
     });
 
@@ -138,7 +138,7 @@ describe('WikiImage', () => {
       });
 
       it('should not render the copy button', () => {
-        expect(copyBtn).to.not.exist;
+        expect(copyBtn).to.equal(null);
       });
     });
 
@@ -157,7 +157,7 @@ describe('WikiImage', () => {
       });
 
       it('should not render the copy button', () => {
-        expect(copyBtn).to.not.exist;
+        expect(copyBtn).to.equal(null);
       });
     });
   });
@@ -170,7 +170,7 @@ describe('WikiImage', () => {
     });
 
     it('should be false by default', () => {
-      expect(el.toolsOpen).to.be.false;
+      expect(el.toolsOpen).to.equal(false);
     });
 
     describe('when set to true', () => {
@@ -180,7 +180,7 @@ describe('WikiImage', () => {
       });
 
       it('should reflect to attribute', () => {
-        expect(el.hasAttribute('tools-open')).to.be.true;
+        expect(el.hasAttribute('tools-open')).to.equal(true);
       });
     });
   });
@@ -236,8 +236,8 @@ describe('WikiImage', () => {
     });
 
     it('should trigger a download', () => {
-      expect(createdLink).to.exist;
-      expect(createdLink?.click).to.have.been.calledOnce;
+      expect(createdLink).to.not.equal(null);
+      expect(createdLink?.click.callCount).to.equal(1);
     });
 
     it('should set the download filename', () => {
@@ -282,7 +282,7 @@ describe('WikiImage', () => {
       });
 
       it('should write to clipboard', () => {
-        expect(clipboardWriteStub).to.have.been.calledOnce;
+        expect(clipboardWriteStub.callCount).to.equal(1);
       });
     });
   });
@@ -300,7 +300,7 @@ describe('WikiImage', () => {
       });
 
       it('should open toolsOpen', () => {
-        expect(el.toolsOpen).to.be.true;
+        expect(el.toolsOpen).to.equal(true);
       });
     });
 
@@ -311,7 +311,7 @@ describe('WikiImage', () => {
       });
 
       it('should keep toolsOpen true (no toggle)', () => {
-        expect(el.toolsOpen).to.be.true;
+        expect(el.toolsOpen).to.equal(true);
       });
     });
 
@@ -322,7 +322,7 @@ describe('WikiImage', () => {
       });
 
       it('should open toolsOpen', () => {
-        expect(el.toolsOpen).to.be.true;
+        expect(el.toolsOpen).to.equal(true);
       });
     });
   });
@@ -356,7 +356,7 @@ describe('WikiImage', () => {
       });
 
       it('should open the tools panel', () => {
-        expect(el.toolsOpen).to.be.true;
+        expect(el.toolsOpen).to.equal(true);
       });
     });
 
@@ -367,7 +367,7 @@ describe('WikiImage', () => {
       });
 
       it('should open the tools panel', () => {
-        expect(el.toolsOpen).to.be.true;
+        expect(el.toolsOpen).to.equal(true);
       });
     });
 
@@ -378,7 +378,7 @@ describe('WikiImage', () => {
       });
 
       it('should not open the tools panel', () => {
-        expect(el.toolsOpen).to.be.false;
+        expect(el.toolsOpen).to.equal(false);
       });
     });
   });
@@ -394,12 +394,12 @@ describe('WikiImage', () => {
 
     it('should render a close bar', () => {
       const closeBar = el.shadowRoot?.querySelector('.close-bar');
-      expect(closeBar).to.exist;
+      expect(closeBar).to.not.equal(null);
     });
 
     it('should have close button with aria-label', () => {
       const closeBtn = el.shadowRoot?.querySelector('.close-btn[aria-label="Close tools"]');
-      expect(closeBtn).to.exist;
+      expect(closeBtn).to.not.equal(null);
     });
 
     describe('when clicking close button', () => {
@@ -409,7 +409,7 @@ describe('WikiImage', () => {
       });
 
       it('should close the tools panel', () => {
-        expect(el.toolsOpen).to.be.false;
+        expect(el.toolsOpen).to.equal(false);
       });
     });
   });
@@ -429,7 +429,7 @@ describe('WikiImage', () => {
       });
 
       it('should close the tools panel', () => {
-        expect(el.toolsOpen).to.be.false;
+        expect(el.toolsOpen).to.equal(false);
       });
     });
   });

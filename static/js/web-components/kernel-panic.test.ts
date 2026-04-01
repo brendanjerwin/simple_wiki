@@ -16,7 +16,7 @@ describe('KernelPanic', () => {
     });
 
     it('should exist', () => {
-      expect(el).to.exist;
+      expect(el).to.not.equal(null);
     });
 
     it('should be an instance of KernelPanic', () => {
@@ -34,7 +34,7 @@ describe('KernelPanic', () => {
     });
 
     it('should have no augmentedError by default', () => {
-      expect(el.augmentedError).to.be.null;
+      expect(el.augmentedError).to.equal(null);
     });
 
     it('should render header with skull and title', () => {
@@ -42,19 +42,19 @@ describe('KernelPanic', () => {
       const skull = header?.querySelector('.skull');
       const title = header?.querySelector('.title');
       
-      expect(header).to.exist;
+      expect(header).to.not.equal(null);
       expect(skull?.textContent).to.equal('💀');
       expect(title?.textContent).to.equal('Kernel Panic');
     });
 
     it('should render instructions', () => {
       const instructions = el.shadowRoot?.querySelector('.instructions');
-      expect(instructions).to.exist;
+      expect(instructions).to.not.equal(null);
     });
 
     it('should render refresh button', () => {
       const button = el.shadowRoot?.querySelector('.refresh-button');
-      expect(button).to.exist;
+      expect(button).to.not.equal(null);
       expect(button?.textContent?.trim()).to.equal('Refresh Page');
     });
   });
@@ -72,11 +72,11 @@ describe('KernelPanic', () => {
 
     it('should render button with click handler', () => {
       const button = el.shadowRoot?.querySelector<HTMLButtonElement>('.refresh-button');
-      expect(button).to.exist;
+      expect(button).to.not.equal(null);
       expect(button!.textContent?.trim()).to.equal('Refresh Page');
 
       // Verify button is clickable
-      expect(button!.disabled).to.be.false;
+      expect(button!.disabled).to.equal(false);
     });
   });
 
@@ -93,14 +93,14 @@ describe('KernelPanic', () => {
     });
 
     it('should have augmentedError property', () => {
-      expect(el.augmentedError).to.exist;
+      expect(el.augmentedError).to.not.equal(null);
       expect(el.augmentedError?.message).to.equal('System failure detected');
     });
 
     it('should display the error using error-display component', () => {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing custom element property for testing
       const errorDisplay = el.shadowRoot?.querySelector('error-display') as (Element & { augmentedError: AugmentedError }) | null;
-      expect(errorDisplay).to.exist;
+      expect(errorDisplay).to.not.equal(null);
       expect(errorDisplay?.augmentedError).to.equal(el.augmentedError);
     });
   });
@@ -112,7 +112,7 @@ describe('KernelPanic', () => {
 
     it('should not render error-display component', () => {
       const errorDisplay = el.shadowRoot?.querySelector('error-display');
-      expect(errorDisplay).to.not.exist;
+      expect(errorDisplay).to.equal(null);
     });
   });
 });
@@ -137,12 +137,12 @@ describe('showKernelPanic function', () => {
 
     it('should create a kernel-panic element in document body', () => {
       const kernelPanicElement = document.querySelector('kernel-panic');
-      expect(kernelPanicElement).to.exist;
+      expect(kernelPanicElement).to.not.equal(null);
     });
 
     it('should set augmentedError on the created element', () => {
       const kernelPanicElement = document.querySelector<HTMLElement & { augmentedError: AugmentedError }>('kernel-panic');
-      expect(kernelPanicElement!.augmentedError).to.exist;
+      expect(kernelPanicElement!.augmentedError).to.not.equal(null);
       expect(kernelPanicElement!.augmentedError.message).to.equal('Test system error');
     });
   });

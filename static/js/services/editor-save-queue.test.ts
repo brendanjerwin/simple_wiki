@@ -86,7 +86,7 @@ describe('EditorSaveQueue', () => {
 
     it('should emit error status with the error', () => {
       const errorStatus = statusChanges.find((s) => s.status === 'error');
-      expect(errorStatus).to.exist;
+      expect(errorStatus).to.not.equal(null);
       expect(errorStatus!.error).to.equal(saveError);
     });
 
@@ -111,7 +111,7 @@ describe('EditorSaveQueue', () => {
 
     it('should emit error status with the thrown error', () => {
       const errorStatus = statusChanges.find((s) => s.status === 'error');
-      expect(errorStatus).to.exist;
+      expect(errorStatus).to.not.equal(null);
       expect(errorStatus!.error).to.equal(thrownError);
     });
   });

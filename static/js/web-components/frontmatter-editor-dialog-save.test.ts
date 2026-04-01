@@ -79,7 +79,7 @@ describe.skip('FrontmatterEditorDialog - Save Functionality', () => {
       });
 
       it('should call replaceFrontmatter with correct parameters', () => {
-        expect(clientStub).to.have.been.calledOnce;
+        expect(clientStub.callCount).to.equal(1);
         const callArgs = clientStub.getCall(0).args[0];
         expect(callArgs.page).to.equal('test-page');
         expect(callArgs.frontmatter).to.be.an('object');
@@ -94,7 +94,7 @@ describe.skip('FrontmatterEditorDialog - Save Functionality', () => {
       });
 
       it('should clear saving state', () => {
-        expect(el.saving).to.be.false;
+        expect(el.saving).to.equal(false);
       });
 
       it('should store success toast message', () => {
@@ -103,15 +103,15 @@ describe.skip('FrontmatterEditorDialog - Save Functionality', () => {
       });
 
       it('should trigger page refresh', () => {
-        expect(refreshPageStub).to.have.been.calledOnce;
+        expect(refreshPageStub.callCount).to.equal(1);
       });
 
       it('should close the dialog', () => {
-        expect(el.open).to.be.false;
+        expect(el.open).to.equal(false);
       });
 
       it('should clear any previous error', () => {
-        expect(el.augmentedError).to.be.undefined;
+        expect(el.augmentedError).to.equal(undefined);
       });
 
       describe('when saving state is observed during operation', () => {
@@ -132,7 +132,7 @@ describe.skip('FrontmatterEditorDialog - Save Functionality', () => {
         });
 
         it('should set saving state during operation', () => {
-          expect(savingStateDuringOperation).to.be.true;
+          expect(savingStateDuringOperation).to.equal(true);
         });
       });
 
@@ -147,7 +147,7 @@ describe.skip('FrontmatterEditorDialog - Save Functionality', () => {
         });
 
         it('should close the dialog', () => {
-          expect(el.open).to.be.false;
+          expect(el.open).to.equal(false);
         });
       });
 
@@ -166,7 +166,7 @@ describe.skip('FrontmatterEditorDialog - Save Functionality', () => {
         });
 
         it('should clear the error', () => {
-          expect(el.augmentedError).to.be.undefined;
+          expect(el.augmentedError).to.equal(undefined);
         });
       });
 
@@ -189,7 +189,7 @@ describe.skip('FrontmatterEditorDialog - Save Functionality', () => {
         });
 
         it('should update frontmatter data with server response', () => {
-          expect(frontmatterBeforeClose).to.exist;
+          expect(frontmatterBeforeClose).to.not.equal(null);
           expect(frontmatterBeforeClose!.frontmatter).to.equal(mockResponse.frontmatter);
         });
       });
@@ -207,20 +207,20 @@ describe.skip('FrontmatterEditorDialog - Save Functionality', () => {
       });
 
       it('should set augmented error', () => {
-        expect(el.augmentedError).to.exist;
+        expect(el.augmentedError).to.not.equal(null);
         expect(el.augmentedError?.message).to.include('Failed to save frontmatter');
       });
 
       it('should clear saving state', () => {
-        expect(el.saving).to.be.false;
+        expect(el.saving).to.equal(false);
       });
 
       it('should not refresh page', () => {
-        expect(refreshPageStub).not.to.have.been.called;
+        expect(refreshPageStub.called).to.equal(false);
       });
 
       it('should not store toast message', () => {
-        expect(sessionStorageStub).not.to.have.been.called;
+        expect(sessionStorageStub.called).to.equal(false);
       });
 
       describe('when dialog was open before save failure', () => {
@@ -234,7 +234,7 @@ describe.skip('FrontmatterEditorDialog - Save Functionality', () => {
         });
 
         it('should not close dialog', () => {
-          expect(el.open).to.be.true;
+          expect(el.open).to.equal(true);
         });
       });
     });
@@ -249,7 +249,7 @@ describe.skip('FrontmatterEditorDialog - Save Functionality', () => {
       });
 
       it('should handle non-Error exceptions', () => {
-        expect(el.augmentedError).to.exist;
+        expect(el.augmentedError).to.not.equal(null);
         expect(el.augmentedError?.message).to.equal('String error');
         expect(el.augmentedError?.originalError).to.be.instanceOf(Error);
       });
@@ -264,7 +264,7 @@ describe.skip('FrontmatterEditorDialog - Save Functionality', () => {
       });
 
       it('should not make network call', () => {
-        expect(clientStub).not.to.have.been.called;
+        expect(clientStub.called).to.equal(false);
       });
     });
 
@@ -277,7 +277,7 @@ describe.skip('FrontmatterEditorDialog - Save Functionality', () => {
       });
 
       it('should not make network call', () => {
-        expect(clientStub).not.to.have.been.called;
+        expect(clientStub.called).to.equal(false);
       });
     });
   });
@@ -297,13 +297,13 @@ describe.skip('FrontmatterEditorDialog - Save Functionality', () => {
 
       it('should disable save button', () => {
         const saveButton = el.shadowRoot!.querySelector<HTMLButtonElement>('.footer button:last-child');
-        expect(saveButton!.disabled).to.be.true;
+        expect(saveButton!.disabled).to.equal(true);
         expect(saveButton!.textContent!.trim()).to.equal('Saving...');
       });
 
       it('should disable cancel button', () => {
         const cancelButton = el.shadowRoot!.querySelector<HTMLButtonElement>('.footer button:first-child');
-        expect(cancelButton!.disabled).to.be.true;
+        expect(cancelButton!.disabled).to.equal(true);
       });
     });
 
@@ -315,7 +315,7 @@ describe.skip('FrontmatterEditorDialog - Save Functionality', () => {
 
       it('should disable save button', () => {
         const saveButton = el.shadowRoot!.querySelector<HTMLButtonElement>('.footer button:last-child');
-        expect(saveButton!.disabled).to.be.true;
+        expect(saveButton!.disabled).to.equal(true);
       });
     });
 
@@ -328,7 +328,7 @@ describe.skip('FrontmatterEditorDialog - Save Functionality', () => {
 
       it('should enable save button', () => {
         const saveButton = el.shadowRoot!.querySelector<HTMLButtonElement>('.footer button:last-child');
-        expect(saveButton!.disabled).to.be.false;
+        expect(saveButton!.disabled).to.equal(false);
         expect(saveButton!.textContent!.trim()).to.equal('Save');
       });
     });

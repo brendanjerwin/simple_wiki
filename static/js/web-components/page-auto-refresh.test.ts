@@ -48,7 +48,7 @@ describe('PageAutoRefresh', () => {
     });
 
     it('should not have pageName set', () => {
-      expect(el.pageName).to.be.undefined;
+      expect(el.pageName).to.equal(undefined);
     });
   });
 
@@ -93,7 +93,7 @@ describe('PageAutoRefresh', () => {
       });
 
       it('should dispatch page-watch-error', () => {
-        expect(errorEvent).to.exist;
+        expect(errorEvent).to.not.equal(null);
       });
 
       it('should include the error in the event detail', () => {
@@ -139,7 +139,7 @@ describe('PageAutoRefresh', () => {
       });
 
       it('should not throw', () => {
-        expect(didThrow).to.be.false;
+        expect(didThrow).to.equal(false);
       });
     });
 
@@ -185,7 +185,7 @@ describe('PageAutoRefresh', () => {
       });
 
       it('should restore scroll position', () => {
-        expect(scrollToSpy).to.have.been.called;
+        expect(scrollToSpy.called).to.equal(true);
       });
 
       it('should dispatch page-status-changed event', () => {
@@ -293,7 +293,7 @@ describe('PageAutoRefresh', () => {
     });
 
     it('should dispatch event with isWatching true', () => {
-      expect(receivedEvents[0]!.detail.isWatching).to.be.true;
+      expect(receivedEvents[0]!.detail.isWatching).to.equal(true);
     });
   });
 
@@ -381,11 +381,11 @@ describe('PageAutoRefresh', () => {
     });
 
     it('should call stopWatching', () => {
-      expect(stopWatchingStub).to.have.been.calledOnce;
+      expect(stopWatchingStub.callCount).to.equal(1);
     });
 
     it('should call startWatching', () => {
-      expect(startWatchingStub).to.have.been.calledOnce;
+      expect(startWatchingStub.callCount).to.equal(1);
     });
 
     describe('when pageName is subsequently cleared', () => {
@@ -398,11 +398,11 @@ describe('PageAutoRefresh', () => {
       });
 
       it('should call stopWatching', () => {
-        expect(stopWatchingStub).to.have.been.calledOnce;
+        expect(stopWatchingStub.callCount).to.equal(1);
       });
 
       it('should not call startWatching', () => {
-        expect(startWatchingStub).not.to.have.been.called;
+        expect(startWatchingStub.called).to.equal(false);
       });
     });
   });
@@ -436,7 +436,7 @@ describe('PageAutoRefresh', () => {
       });
 
       it('should call startWatching', () => {
-        expect(startWatchingStub).to.have.been.calledOnce;
+        expect(startWatchingStub.callCount).to.equal(1);
       });
     });
 
@@ -447,7 +447,7 @@ describe('PageAutoRefresh', () => {
       });
 
       it('should not call startWatching', () => {
-        expect(startWatchingStub).not.to.have.been.called;
+        expect(startWatchingStub.called).to.equal(false);
       });
     });
   });
@@ -482,15 +482,15 @@ describe('PageAutoRefresh', () => {
       });
 
       it('should abort the stream subscription', () => {
-        expect(controller.signal.aborted).to.be.true;
+        expect(controller.signal.aborted).to.equal(true);
       });
 
       it('should clear streamSubscription', () => {
-        expect((el as unknown as { streamSubscription: AbortController | undefined }).streamSubscription).to.be.undefined;
+        expect((el as unknown as { streamSubscription: AbortController | undefined }).streamSubscription).to.equal(undefined);
       });
 
       it('should set isWatching to false', () => {
-        expect((el as unknown as { isWatching: boolean }).isWatching).to.be.false;
+        expect((el as unknown as { isWatching: boolean }).isWatching).to.equal(false);
       });
 
       it('should dispatch page-status-changed event', () => {
@@ -599,7 +599,7 @@ describe('PageAutoRefresh', () => {
       });
 
       it('should not set lastRefreshTime', () => {
-        expect((el as unknown as { lastRefreshTime: Date | undefined }).lastRefreshTime).to.be.undefined;
+        expect((el as unknown as { lastRefreshTime: Date | undefined }).lastRefreshTime).to.equal(undefined);
       });
     });
 
@@ -617,7 +617,7 @@ describe('PageAutoRefresh', () => {
       });
 
       it('should call _handleFirstResponse', () => {
-        expect(handleFirstResponseStub).to.have.been.calledOnce;
+        expect(handleFirstResponseStub.callCount).to.equal(1);
       });
     });
 
@@ -636,7 +636,7 @@ describe('PageAutoRefresh', () => {
       });
 
       it('should not call _handleHashChanged', () => {
-        expect(handleHashChangedStub).not.to.have.been.called;
+        expect(handleHashChangedStub.called).to.equal(false);
       });
     });
 
@@ -655,7 +655,7 @@ describe('PageAutoRefresh', () => {
       });
 
       it('should call _handleHashChanged', () => {
-        expect(handleHashChangedStub).to.have.been.calledOnce;
+        expect(handleHashChangedStub.callCount).to.equal(1);
       });
     });
   });
@@ -776,7 +776,7 @@ describe('PageAutoRefresh', () => {
       });
 
       it('should resolve after the delay', () => {
-        expect(resolved).to.be.true;
+        expect(resolved).to.equal(true);
       });
     });
 
@@ -796,7 +796,7 @@ describe('PageAutoRefresh', () => {
       });
 
       it('should resolve early when aborted', () => {
-        expect(resolved).to.be.true;
+        expect(resolved).to.equal(true);
       });
     });
   });

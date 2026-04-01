@@ -37,6 +37,7 @@
     "eslint": "^8.0.0",
     "eslint-plugin-lit": "^1.0.0",
     "eslint-plugin-local": "file:./eslint-rules",
+    "eslint-plugin-sonarjs": "^4.0.2",
     "eslint-plugin-storybook": "9.0.18",
     "sinon": "^21.0.0",
     "storybook": "^9.0.18",

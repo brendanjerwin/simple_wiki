@@ -194,7 +194,7 @@ describe('FrontmatterEditorDialog - Component Integration', () => {
       it('should create a string field by default', () => {
         const keys = Object.keys(el.workingFrontmatter ?? {});
         const firstKey = keys[0];
-        expect(firstKey).to.exist;
+        expect(firstKey).to.not.equal(null);
         expect(typeof el.workingFrontmatter?.[firstKey!]).to.equal('string');
       });
 

@@ -32,17 +32,17 @@ describe('QrScanner', () => {
     });
 
     it('should be collapsed by default', () => {
-      expect(el.expanded).to.be.false;
+      expect(el.expanded).to.equal(false);
     });
 
     it('should show the toggle button', () => {
       const button = el.shadowRoot?.querySelector('.scanner-toggle');
-      expect(button).to.exist;
+      expect(button).to.not.equal(null);
     });
 
     it('should have scanner area hidden', () => {
       const area = el.shadowRoot?.querySelector('.scanner-area');
-      expect(area?.classList.contains('collapsed')).to.be.true;
+      expect(area?.classList.contains('collapsed')).to.equal(true);
     });
 
     it('should show "Scan QR Code" text', () => {
@@ -72,15 +72,15 @@ describe('QrScanner', () => {
       });
 
       it('should set expanded to true', () => {
-        expect(el.expanded).to.be.true;
+        expect(el.expanded).to.equal(true);
       });
 
       it('should request camera list', () => {
-        expect(mockProvider.getCameras).to.have.been.called;
+        expect(mockProvider.getCameras.called).to.equal(true);
       });
 
       it('should start scanning', () => {
-        expect(mockProvider.start).to.have.been.called;
+        expect(mockProvider.start.called).to.equal(true);
       });
 
       it('should prefer back camera', () => {
@@ -90,7 +90,7 @@ describe('QrScanner', () => {
 
       it('should show scanner area', () => {
         const area = el.shadowRoot?.querySelector('.scanner-area');
-        expect(area?.classList.contains('collapsed')).to.be.false;
+        expect(area?.classList.contains('collapsed')).to.equal(false);
       });
 
       it('should show "Close Scanner" text', () => {
@@ -116,13 +116,13 @@ describe('QrScanner', () => {
 
       it('should show error message', () => {
         const errorDisplay = el.shadowRoot?.querySelector<ErrorDisplay>('error-display');
-        expect(errorDisplay).to.exist;
+        expect(errorDisplay).to.not.equal(null);
         expect(errorDisplay?.augmentedError).to.be.instanceOf(AugmentedError);
         expect(errorDisplay?.augmentedError?.message).to.include('No camera');
       });
 
       it('should not start scanning', () => {
-        expect(mockProvider.start).to.not.have.been.called;
+        expect(mockProvider.start.called).to.equal(false);
       });
     });
 
@@ -146,17 +146,17 @@ describe('QrScanner', () => {
 
       it('should show permission error message', () => {
         const errorDisplay = el.shadowRoot?.querySelector<ErrorDisplay>('error-display');
-        expect(errorDisplay).to.exist;
+        expect(errorDisplay).to.not.equal(null);
         expect(errorDisplay?.augmentedError).to.be.instanceOf(AugmentedError);
         expect(errorDisplay?.augmentedError?.message).to.include('denied');
       });
 
       it('should emit scanner-error event', () => {
-        expect(errorSpy).to.have.been.calledOnce;
+        expect(errorSpy.callCount).to.equal(1);
       });
 
       it('should not start scanning', () => {
-        expect(mockProvider.start).to.not.have.been.called;
+        expect(mockProvider.start.called).to.equal(false);
       });
     });
   });
@@ -182,16 +182,16 @@ describe('QrScanner', () => {
       });
 
       it('should set expanded to false', () => {
-        expect(el.expanded).to.be.false;
+        expect(el.expanded).to.equal(false);
       });
 
       it('should call stop on camera provider', () => {
-        expect(mockProvider.stop).to.have.been.called;
+        expect(mockProvider.stop.called).to.equal(true);
       });
 
       it('should hide scanner area', () => {
         const area = el.shadowRoot?.querySelector('.scanner-area');
-        expect(area?.classList.contains('collapsed')).to.be.true;
+        expect(area?.classList.contains('collapsed')).to.equal(true);
       });
     });
   });
@@ -213,7 +213,7 @@ describe('QrScanner', () => {
       });
 
       it('should expand', () => {
-        expect(el.expanded).to.be.true;
+        expect(el.expanded).to.equal(true);
       });
     });
 
@@ -236,7 +236,7 @@ describe('QrScanner', () => {
       });
 
       it('should collapse', () => {
-        expect(el.expanded).to.be.false;
+        expect(el.expanded).to.equal(false);
       });
     });
   });
@@ -273,7 +273,7 @@ describe('QrScanner', () => {
       });
 
       it('should dispatch qr-scanned event', () => {
-        expect(scannedSpy).to.have.been.calledOnce;
+        expect(scannedSpy.callCount).to.equal(1);
       });
 
       it('should include raw value in event detail', () => {
@@ -283,7 +283,7 @@ describe('QrScanner', () => {
       });
 
       it('should auto-collapse after scan', () => {
-        expect(el.expanded).to.be.false;
+        expect(el.expanded).to.equal(false);
       });
     });
   });
@@ -309,7 +309,7 @@ describe('QrScanner', () => {
       });
 
       it('should collapse the scanner', () => {
-        expect(el.expanded).to.be.false;
+        expect(el.expanded).to.equal(false);
       });
     });
   });
@@ -336,7 +336,7 @@ describe('QrScanner', () => {
 
       it('should show camera select dropdown', () => {
         const select = el.shadowRoot?.querySelector('#camera-select');
-        expect(select).to.exist;
+        expect(select).to.not.equal(null);
       });
 
       it('should have options for each camera', () => {
@@ -362,7 +362,7 @@ describe('QrScanner', () => {
 
       it('should not show camera select dropdown', () => {
         const select = el.shadowRoot?.querySelector('#camera-select');
-        expect(select).to.not.exist;
+        expect(select).to.equal(null);
       });
     });
   });
@@ -389,13 +389,13 @@ describe('QrScanner', () => {
 
       it('should show the string as error message', () => {
         const errorDisplay = el.shadowRoot?.querySelector<ErrorDisplay>('error-display');
-        expect(errorDisplay).to.exist;
+        expect(errorDisplay).to.not.equal(null);
         expect(errorDisplay?.augmentedError).to.be.instanceOf(AugmentedError);
         expect(errorDisplay?.augmentedError?.message).to.include('String error from library');
       });
 
       it('should emit scanner-error event', () => {
-        expect(errorSpy).to.have.been.calledOnce;
+        expect(errorSpy.callCount).to.equal(1);
       });
 
       it('should wrap string in Error object', () => {
@@ -427,13 +427,13 @@ describe('QrScanner', () => {
 
       it('should show unknown error message', () => {
         const errorDisplay = el.shadowRoot?.querySelector<ErrorDisplay>('error-display');
-        expect(errorDisplay).to.exist;
+        expect(errorDisplay).to.not.equal(null);
         expect(errorDisplay?.augmentedError).to.be.instanceOf(AugmentedError);
         expect(errorDisplay?.augmentedError?.message).to.include('Unknown error (null or undefined)');
       });
 
       it('should emit scanner-error event with Error object', () => {
-        expect(errorSpy).to.have.been.calledOnce;
+        expect(errorSpy.callCount).to.equal(1);
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing CustomEvent from spy
         const event = errorSpy.firstCall.args[0] as CustomEvent<ScannerErrorEventDetail>;
         expect(event.detail.error).to.be.instanceOf(Error);
@@ -461,13 +461,13 @@ describe('QrScanner', () => {
 
       it('should show unknown error message', () => {
         const errorDisplay = el.shadowRoot?.querySelector<ErrorDisplay>('error-display');
-        expect(errorDisplay).to.exist;
+        expect(errorDisplay).to.not.equal(null);
         expect(errorDisplay?.augmentedError).to.be.instanceOf(AugmentedError);
         expect(errorDisplay?.augmentedError?.message).to.include('Unknown error (null or undefined)');
       });
 
       it('should emit scanner-error event with Error object', () => {
-        expect(errorSpy).to.have.been.calledOnce;
+        expect(errorSpy.callCount).to.equal(1);
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing CustomEvent from spy
         const event = errorSpy.firstCall.args[0] as CustomEvent<ScannerErrorEventDetail>;
         expect(event.detail.error).to.be.instanceOf(Error);
@@ -495,14 +495,14 @@ describe('QrScanner', () => {
 
       it('should show unknown error message with object type', () => {
         const errorDisplay = el.shadowRoot?.querySelector<ErrorDisplay>('error-display');
-        expect(errorDisplay).to.exist;
+        expect(errorDisplay).to.not.equal(null);
         expect(errorDisplay?.augmentedError).to.be.instanceOf(AugmentedError);
         expect(errorDisplay?.augmentedError?.message).to.include('Unknown error:');
         expect(errorDisplay?.augmentedError?.message).to.include('[object Object]');
       });
 
       it('should emit scanner-error event with Error object', () => {
-        expect(errorSpy).to.have.been.calledOnce;
+        expect(errorSpy.callCount).to.equal(1);
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing CustomEvent from spy
         const event = errorSpy.firstCall.args[0] as CustomEvent<ScannerErrorEventDetail>;
         expect(event.detail.error).to.be.instanceOf(Error);
@@ -536,13 +536,13 @@ describe('QrScanner', () => {
 
       it('should show unknown error message with stringified value', () => {
         const errorDisplay = el.shadowRoot?.querySelector<ErrorDisplay>('error-display');
-        expect(errorDisplay).to.exist;
+        expect(errorDisplay).to.not.equal(null);
         expect(errorDisplay?.augmentedError).to.be.instanceOf(AugmentedError);
         expect(errorDisplay?.augmentedError?.message).to.include('Unknown error: 42');
       });
 
       it('should emit scanner-error event with Error object', () => {
-        expect(errorSpy).to.have.been.calledOnce;
+        expect(errorSpy.callCount).to.equal(1);
         // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing CustomEvent from spy
         const event = errorSpy.firstCall.args[0] as CustomEvent<ScannerErrorEventDetail>;
         expect(event.detail.error).to.be.instanceOf(Error);
@@ -569,13 +569,13 @@ describe('QrScanner', () => {
 
       it('should show camera permission error message', () => {
         const errorDisplay = el.shadowRoot?.querySelector<ErrorDisplay>('error-display');
-        expect(errorDisplay).to.exist;
+        expect(errorDisplay).to.not.equal(null);
         expect(errorDisplay?.augmentedError).to.be.instanceOf(AugmentedError);
         expect(errorDisplay?.augmentedError?.message).to.include('denied');
       });
 
       it('should emit scanner-error event', () => {
-        expect(errorSpy).to.have.been.calledOnce;
+        expect(errorSpy.callCount).to.equal(1);
       });
     });
   });
@@ -614,7 +614,7 @@ describe('QrScanner', () => {
       });
 
       it('should not restart scanning', () => {
-        expect(mockProvider.start).to.not.have.been.called;
+        expect(mockProvider.start.called).to.equal(false);
       });
     });
   });
@@ -635,12 +635,12 @@ describe('QrScanner', () => {
 
       it('should not show toggle button', () => {
         const button = el.shadowRoot?.querySelector('.scanner-toggle');
-        expect(button).to.not.exist;
+        expect(button).to.equal(null);
       });
 
       it('should show scanner area by default', () => {
         const area = el.shadowRoot?.querySelector('.scanner-area');
-        expect(area?.classList.contains('collapsed')).to.be.false;
+        expect(area?.classList.contains('collapsed')).to.equal(false);
       });
     });
 
@@ -664,12 +664,12 @@ describe('QrScanner', () => {
 
       it('should not show camera select dropdown', () => {
         const select = el.shadowRoot?.querySelector('#camera-select');
-        expect(select).to.not.exist;
+        expect(select).to.equal(null);
       });
 
       it('should not show stop button', () => {
         const stopButton = el.shadowRoot?.querySelector('.stop-button');
-        expect(stopButton).to.not.exist;
+        expect(stopButton).to.equal(null);
       });
     });
   });
@@ -697,7 +697,7 @@ describe('QrScanner', () => {
         await el.collapse();
         await el.updateComplete;
 
-        expect(el.expanded).to.be.false;
+        expect(el.expanded).to.equal(false);
       });
     });
   });

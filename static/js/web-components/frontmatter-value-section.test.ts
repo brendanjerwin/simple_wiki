@@ -53,7 +53,7 @@ describe('FrontmatterValueSection', () => {
     });
 
     it('should exist', () => {
-      expect(el).to.exist;
+      expect(el).to.not.equal(null);
     });
 
     it('should be an instance of FrontmatterValueSection', () => {
@@ -75,7 +75,7 @@ describe('FrontmatterValueSection', () => {
     });
 
     it('should not be disabled by default', () => {
-      expect(el.disabled).to.be.false;
+      expect(el.disabled).to.equal(false);
     });
   });
 
@@ -128,7 +128,7 @@ describe('FrontmatterValueSection', () => {
 
     it('should display empty section message', () => {
       const emptyMessage = el.shadowRoot?.querySelector('.empty-section-message');
-      expect(emptyMessage).to.exist;
+      expect(emptyMessage).to.not.equal(null);
       expect(emptyMessage?.textContent?.trim()).to.equal('No fields in section');
     });
 
@@ -163,7 +163,7 @@ describe('FrontmatterValueSection', () => {
     });
 
     it('should dispatch section-change event', () => {
-      expect(sectionChangeEvent).to.exist;
+      expect(sectionChangeEvent).to.not.equal(null);
     });
 
     it('should include the new fields in event detail', () => {
@@ -216,7 +216,7 @@ describe('FrontmatterValueSection', () => {
     });
 
     it('should dispatch section-change event', () => {
-      expect(sectionChangeEvent).to.exist;
+      expect(sectionChangeEvent).to.not.equal(null);
     });
 
     it('should include the new fields with field removed', () => {
@@ -266,7 +266,7 @@ describe('FrontmatterValueSection', () => {
     });
 
     it('should dispatch section-change event', () => {
-      expect(sectionChangeEvent).to.exist;
+      expect(sectionChangeEvent).to.not.equal(null);
     });
 
     it('should include the updated fields with new key', () => {
@@ -307,7 +307,7 @@ describe('FrontmatterValueSection', () => {
     });
 
     it('should dispatch section-change event', () => {
-      expect(sectionChangeEvent).to.exist;
+      expect(sectionChangeEvent).to.not.equal(null);
     });
 
     it('should include the updated fields with new value', () => {
@@ -367,15 +367,15 @@ describe('FrontmatterValueSection', () => {
 
       // Check first field (apple_field - string)
       const firstValueComponent = firstRow.querySelector<HTMLElement>('frontmatter-value');
-      expect(firstValueComponent!.shadowRoot?.querySelector('frontmatter-value-string')).to.exist;
+      expect(firstValueComponent!.shadowRoot?.querySelector('frontmatter-value-string')).to.not.equal(null);
 
       // Check third field (delta_array - array)
       const thirdValueComponent = thirdRow.querySelector<HTMLElement>('frontmatter-value');
-      expect(thirdValueComponent!.shadowRoot?.querySelector('frontmatter-value-array')).to.exist;
+      expect(thirdValueComponent!.shadowRoot?.querySelector('frontmatter-value-array')).to.not.equal(null);
 
       // Check last field (zebra_section - object)
       const lastValueComponent = lastRow.querySelector<HTMLElement>('frontmatter-value');
-      expect(lastValueComponent!.shadowRoot?.querySelector('frontmatter-value-section')).to.exist;
+      expect(lastValueComponent!.shadowRoot?.querySelector('frontmatter-value-section')).to.not.equal(null);
     });
   });
 
@@ -387,7 +387,7 @@ describe('FrontmatterValueSection', () => {
     it('should disable all key components', () => {
       const keyComponents = el.shadowRoot?.querySelectorAll<HTMLElement & { editable: boolean }>('frontmatter-key');
       keyComponents!.forEach(component => {
-        expect(component.editable).to.be.false;
+        expect(component.editable).to.equal(false);
       });
     });
 
@@ -395,19 +395,19 @@ describe('FrontmatterValueSection', () => {
       const valueComponents = el.shadowRoot?.querySelectorAll<HTMLElement & { disabled: boolean }>('frontmatter-value');
       expect(valueComponents!.length).to.be.greaterThan(0);
       valueComponents!.forEach(component => {
-        expect(component.disabled).to.be.true;
+        expect(component.disabled).to.equal(true);
       });
     });
 
     it('should disable the add field button', () => {
       const addButton = el.shadowRoot?.querySelector<HTMLElement & { disabled: boolean }>('frontmatter-add-field-button');
-      expect(addButton?.disabled).to.be.true;
+      expect(addButton?.disabled).to.equal(true);
     });
 
     it('should disable all remove buttons', () => {
       const removeButtons = el.shadowRoot?.querySelectorAll<HTMLButtonElement>('.remove-field-button');
       removeButtons!.forEach(button => {
-        expect(button.disabled).to.be.true;
+        expect(button.disabled).to.equal(true);
       });
     });
   });
@@ -516,13 +516,13 @@ describe('FrontmatterValueSection', () => {
 
       it('should create kernel-panic element with augmented error', () => {
         const kernelPanicElement = document.querySelector<HTMLElement & { augmentedError: AugmentedError }>('kernel-panic');
-        expect(kernelPanicElement).to.exist;
-        expect(kernelPanicElement!.augmentedError).to.exist;
+        expect(kernelPanicElement).to.not.equal(null);
+        expect(kernelPanicElement!.augmentedError).to.not.equal(null);
         expect(kernelPanicElement!.augmentedError.failedGoalDescription).to.equal('generating unique key');
       });
 
       it('should throw an error with descriptive message', () => {
-        expect(thrownError).to.exist;
+        expect(thrownError).to.not.equal(null);
         expect(thrownError?.message).to.include('Maximum iteration limit exceeded');
         expect(thrownError?.message).to.include('test_key');
       });

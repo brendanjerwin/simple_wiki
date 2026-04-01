@@ -17,7 +17,7 @@ describe('WikiUrlParser', () => {
       });
 
       it('should return success true', () => {
-        expect(result.success).to.be.true;
+        expect(result.success).to.equal(true);
       });
 
       it('should extract the page identifier', () => {
@@ -35,7 +35,7 @@ describe('WikiUrlParser', () => {
       });
 
       it('should return success true', () => {
-        expect(result.success).to.be.true;
+        expect(result.success).to.equal(true);
       });
 
       it('should extract the page identifier', () => {
@@ -53,7 +53,7 @@ describe('WikiUrlParser', () => {
       });
 
       it('should return success true', () => {
-        expect(result.success).to.be.true;
+        expect(result.success).to.equal(true);
       });
 
       it('should extract the page identifier', () => {
@@ -71,7 +71,7 @@ describe('WikiUrlParser', () => {
       });
 
       it('should return success true', () => {
-        expect(result.success).to.be.true;
+        expect(result.success).to.equal(true);
       });
 
       it('should extract the page identifier', () => {
@@ -89,7 +89,7 @@ describe('WikiUrlParser', () => {
       });
 
       it('should return success true', () => {
-        expect(result.success).to.be.true;
+        expect(result.success).to.equal(true);
       });
 
       it('should return the identifier as-is', () => {
@@ -151,11 +151,11 @@ describe('WikiUrlParser', () => {
       });
 
       it('should return success false', () => {
-        expect(result.success).to.be.false;
+        expect(result.success).to.equal(false);
       });
 
       it('should include an error message', () => {
-        expect(result.error).to.exist;
+        expect(result.error).to.not.equal(null);
       });
     });
 
@@ -169,11 +169,11 @@ describe('WikiUrlParser', () => {
       });
 
       it('should return success false', () => {
-        expect(result.success).to.be.false;
+        expect(result.success).to.equal(false);
       });
 
       it('should include an error message', () => {
-        expect(result.error).to.exist;
+        expect(result.error).to.not.equal(null);
       });
     });
 
@@ -187,7 +187,7 @@ describe('WikiUrlParser', () => {
       });
 
       it('should return success true', () => {
-        expect(result.success).to.be.true;
+        expect(result.success).to.equal(true);
       });
 
       it('should still parse the path portion', () => {
@@ -206,7 +206,7 @@ describe('WikiUrlParser', () => {
         });
 
         it('should return success true', () => {
-          expect(result.success).to.be.true;
+          expect(result.success).to.equal(true);
         });
 
         it('should extract the page identifier', () => {
@@ -224,7 +224,7 @@ describe('WikiUrlParser', () => {
         });
 
         it('should return success true', () => {
-          expect(result.success).to.be.true;
+          expect(result.success).to.equal(true);
         });
 
         it('should extract the page identifier', () => {
@@ -242,7 +242,7 @@ describe('WikiUrlParser', () => {
         });
 
         it('should return success true', () => {
-          expect(result.success).to.be.true;
+          expect(result.success).to.equal(true);
         });
 
         it('should extract the page identifier', () => {
@@ -261,7 +261,7 @@ describe('WikiUrlParser', () => {
       });
 
       it('should return success true', () => {
-        expect(result.success).to.be.true;
+        expect(result.success).to.equal(true);
       });
 
       it('should extract the full identifier', () => {
@@ -279,7 +279,7 @@ describe('WikiUrlParser', () => {
       });
 
       it('should return success true', () => {
-        expect(result.success).to.be.true;
+        expect(result.success).to.equal(true);
       });
 
       it('should extract the page identifier ignoring query params', () => {
@@ -297,7 +297,7 @@ describe('WikiUrlParser', () => {
       });
 
       it('should return success true', () => {
-        expect(result.success).to.be.true;
+        expect(result.success).to.equal(true);
       });
 
       it('should extract the page identifier', () => {
@@ -315,11 +315,11 @@ describe('WikiUrlParser', () => {
       });
 
       it('should return success false', () => {
-        expect(result.success).to.be.false;
+        expect(result.success).to.equal(false);
       });
 
       it('should include an error message', () => {
-        expect(result.error).to.exist;
+        expect(result.error).to.not.equal(null);
       });
     });
 
@@ -333,7 +333,7 @@ describe('WikiUrlParser', () => {
       });
 
       it('should return success false', () => {
-        expect(result.success).to.be.false;
+        expect(result.success).to.equal(false);
       });
 
       it('should include invalid URL format error', () => {
@@ -351,7 +351,7 @@ describe('WikiUrlParser', () => {
       });
 
       it('should return success false', () => {
-        expect(result.success).to.be.false;
+        expect(result.success).to.equal(false);
       });
 
       it('should include invalid page identifier error', () => {
@@ -363,88 +363,88 @@ describe('WikiUrlParser', () => {
   describe('isValidPageIdentifier', () => {
     describe('when given a valid snake_case identifier', () => {
       it('should return true for simple identifier', () => {
-        expect(WikiUrlParser.isValidPageIdentifier('my_page')).to.be.true;
+        expect(WikiUrlParser.isValidPageIdentifier('my_page')).to.equal(true);
       });
 
       it('should return true for identifier with numbers', () => {
-        expect(WikiUrlParser.isValidPageIdentifier('tool_box_123')).to.be.true;
+        expect(WikiUrlParser.isValidPageIdentifier('tool_box_123')).to.equal(true);
       });
 
       it('should return true for single word', () => {
-        expect(WikiUrlParser.isValidPageIdentifier('toolbox')).to.be.true;
+        expect(WikiUrlParser.isValidPageIdentifier('toolbox')).to.equal(true);
       });
     });
 
     describe('when given an invalid identifier', () => {
       it('should return false for empty string', () => {
-        expect(WikiUrlParser.isValidPageIdentifier('')).to.be.false;
+        expect(WikiUrlParser.isValidPageIdentifier('')).to.equal(false);
       });
 
       it('should return false for identifier with spaces', () => {
-        expect(WikiUrlParser.isValidPageIdentifier('my page')).to.be.false;
+        expect(WikiUrlParser.isValidPageIdentifier('my page')).to.equal(false);
       });
 
       it('should return false for identifier with special characters', () => {
-        expect(WikiUrlParser.isValidPageIdentifier('my@page')).to.be.false;
+        expect(WikiUrlParser.isValidPageIdentifier('my@page')).to.equal(false);
       });
 
       it('should return false for identifier starting with number', () => {
-        expect(WikiUrlParser.isValidPageIdentifier('123_page')).to.be.false;
+        expect(WikiUrlParser.isValidPageIdentifier('123_page')).to.equal(false);
       });
     });
 
     describe('when given identifiers with allowed characters', () => {
       it('should return true for identifier with hyphens', () => {
         // Hyphens are common in URLs, should be allowed
-        expect(WikiUrlParser.isValidPageIdentifier('my-page')).to.be.true;
+        expect(WikiUrlParser.isValidPageIdentifier('my-page')).to.equal(true);
       });
 
       it('should return true for uppercase letters', () => {
         // URLs can have uppercase, will be normalized by backend
-        expect(WikiUrlParser.isValidPageIdentifier('MyPage')).to.be.true;
+        expect(WikiUrlParser.isValidPageIdentifier('MyPage')).to.equal(true);
       });
     });
 
     describe('when given Unicode identifiers', () => {
       it('should return true for Japanese hiragana', () => {
-        expect(WikiUrlParser.isValidPageIdentifier('こんにちは')).to.be.true;
+        expect(WikiUrlParser.isValidPageIdentifier('こんにちは')).to.equal(true);
       });
 
       it('should return true for Chinese characters', () => {
-        expect(WikiUrlParser.isValidPageIdentifier('北京市')).to.be.true;
+        expect(WikiUrlParser.isValidPageIdentifier('北京市')).to.equal(true);
       });
 
       it('should return true for Arabic text', () => {
-        expect(WikiUrlParser.isValidPageIdentifier('مرحبا')).to.be.true;
+        expect(WikiUrlParser.isValidPageIdentifier('مرحبا')).to.equal(true);
       });
 
       it('should return true for Greek letters', () => {
-        expect(WikiUrlParser.isValidPageIdentifier('αβγδ')).to.be.true;
+        expect(WikiUrlParser.isValidPageIdentifier('αβγδ')).to.equal(true);
       });
 
       it('should return true for Cyrillic text', () => {
-        expect(WikiUrlParser.isValidPageIdentifier('москва')).to.be.true;
+        expect(WikiUrlParser.isValidPageIdentifier('москва')).to.equal(true);
       });
 
       it('should return true for mixed scripts', () => {
-        expect(WikiUrlParser.isValidPageIdentifier('hello世界')).to.be.true;
+        expect(WikiUrlParser.isValidPageIdentifier('hello世界')).to.equal(true);
       });
 
       it('should return true for Unicode with underscores', () => {
-        expect(WikiUrlParser.isValidPageIdentifier('東京_駅')).to.be.true;
+        expect(WikiUrlParser.isValidPageIdentifier('東京_駅')).to.equal(true);
       });
 
       it('should return true for Arabic-Indic digits after letter', () => {
-        expect(WikiUrlParser.isValidPageIdentifier('عربي٠١٢٣')).to.be.true;
+        expect(WikiUrlParser.isValidPageIdentifier('عربي٠١٢٣')).to.equal(true);
       });
 
       it('should return true for accented characters', () => {
-        expect(WikiUrlParser.isValidPageIdentifier('café')).to.be.true;
+        expect(WikiUrlParser.isValidPageIdentifier('café')).to.equal(true);
       });
 
       it('should return false for identifier starting with number (any numeral system)', () => {
         // Arabic-Indic digits are numbers, so shouldn't start an identifier
-        expect(WikiUrlParser.isValidPageIdentifier('٠١٢٣')).to.be.false;
+        expect(WikiUrlParser.isValidPageIdentifier('٠١٢٣')).to.equal(false);
       });
     });
   });

@@ -43,7 +43,7 @@ describe('WikiSearch', () => {
   });
 
   it('should exist', () => {
-    expect(el).to.exist;
+    expect(el).to.not.equal(null);
   });
 
   describe('when component is initialized', () => {
@@ -57,12 +57,12 @@ describe('WikiSearch', () => {
 
     it('should have a search input', () => {
       const searchInput = el.shadowRoot?.querySelector('input[type="search"]');
-      expect(searchInput).to.exist;
+      expect(searchInput).to.not.equal(null);
     });
 
     it('should have a submit button', () => {
       const submitButton = el.shadowRoot?.querySelector('button[type="submit"]');
-      expect(submitButton).to.exist;
+      expect(submitButton).to.not.equal(null);
     });
 
     it('should have the performSearch method', () => {
@@ -92,11 +92,11 @@ describe('WikiSearch', () => {
     });
 
     it('should prevent default behavior', () => {
-      expect(mockEvent.defaultPrevented).to.be.true;
+      expect(mockEvent.defaultPrevented).to.equal(true);
     });
 
     it('should focus the search input', () => {
-      expect(focusSpy).to.have.been.calledOnce;
+      expect(focusSpy.callCount).to.equal(1);
     });
   });
 
@@ -122,11 +122,11 @@ describe('WikiSearch', () => {
     });
 
     it('should prevent default behavior', () => {
-      expect(mockEvent.defaultPrevented).to.be.true;
+      expect(mockEvent.defaultPrevented).to.equal(true);
     });
 
     it('should focus the search input', () => {
-      expect(focusSpy).to.have.been.calledOnce;
+      expect(focusSpy.callCount).to.equal(1);
     });
   });
 
@@ -152,11 +152,11 @@ describe('WikiSearch', () => {
     });
 
     it('should not prevent default behavior', () => {
-      expect(mockEvent.defaultPrevented).to.be.false;
+      expect(mockEvent.defaultPrevented).to.equal(false);
     });
 
     it('should not focus the search input', () => {
-      expect(focusSpy).to.not.have.been.called;
+      expect(focusSpy.called).to.equal(false);
     });
   });
 
@@ -218,7 +218,7 @@ describe('WikiSearch', () => {
       });
 
       it('should select the input text', () => {
-        expect(selectSpy).to.have.been.calledOnce;
+        expect(selectSpy.callCount).to.equal(1);
       });
     });
 
@@ -244,7 +244,7 @@ describe('WikiSearch', () => {
       });
 
       it('should not select the search input text', () => {
-        expect(searchInputSelectSpy).to.not.have.been.called;
+        expect(searchInputSelectSpy.called).to.equal(false);
       });
     });
   });
@@ -272,11 +272,11 @@ describe('WikiSearch', () => {
         const preventDefaultSpy = sinon.spy(submitEvent, 'preventDefault');
 
         form?.dispatchEvent(submitEvent);
-        expect(preventDefaultSpy).to.have.been.calledOnce;
+        expect(preventDefaultSpy.callCount).to.equal(1);
       });
 
       it('should set loading state during search', () => {
-        expect(el.loading).to.be.true;
+        expect(el.loading).to.equal(true);
       });
     });
 
@@ -288,7 +288,7 @@ describe('WikiSearch', () => {
       });
 
       it('should not perform search', () => {
-        expect(el.loading).to.be.false;
+        expect(el.loading).to.equal(false);
       });
     });
 
@@ -316,11 +316,11 @@ describe('WikiSearch', () => {
       });
 
       it('should not perform search', () => {
-        expect(performSearchStub).to.not.have.been.called;
+        expect(performSearchStub.called).to.equal(false);
       });
 
       it('should not set loading state', () => {
-        expect(el.loading).to.be.false;
+        expect(el.loading).to.equal(false);
       });
     });
 
@@ -344,7 +344,7 @@ describe('WikiSearch', () => {
       });
 
       it('should set noResults to true', () => {
-        expect(el.noResults).to.be.true;
+        expect(el.noResults).to.equal(true);
       });
 
       it('should have empty results', () => {
@@ -373,7 +373,7 @@ describe('WikiSearch', () => {
       });
 
       it('should set noResults to false', () => {
-        expect(el.noResults).to.be.false;
+        expect(el.noResults).to.equal(false);
       });
 
       it('should populate results', () => {
@@ -507,11 +507,11 @@ describe('WikiSearch', () => {
     });
 
     it('should set noResults to false', () => {
-      expect(el.noResults).to.be.false;
+      expect(el.noResults).to.equal(false);
     });
 
     it('should focus the search input', () => {
-      expect(focusSpy).to.have.been.calledOnce;
+      expect(focusSpy.callCount).to.equal(1);
     });
   });
 
@@ -581,7 +581,7 @@ describe('WikiSearch', () => {
       });
 
       it('should not perform a search', () => {
-        expect(stubPerformSearch).to.not.have.been.called;
+        expect(stubPerformSearch.called).to.equal(false);
       });
     });
 

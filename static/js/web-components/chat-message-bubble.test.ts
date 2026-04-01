@@ -19,7 +19,7 @@ describe('ChatMessageBubble', () => {
 
     it('should render with user class', () => {
       const bubble = el.shadowRoot!.querySelector('.bubble');
-      expect(bubble!.classList.contains('user')).to.be.true;
+      expect(bubble!.classList.contains('user')).to.equal(true);
     });
 
     it('should display the content as text', () => {
@@ -43,12 +43,12 @@ describe('ChatMessageBubble', () => {
 
     it('should render with assistant class', () => {
       const bubble = el.shadowRoot!.querySelector('.bubble');
-      expect(bubble!.classList.contains('assistant')).to.be.true;
+      expect(bubble!.classList.contains('assistant')).to.equal(true);
     });
 
     it('should render HTML content', () => {
       const strong = el.shadowRoot!.querySelector('.content strong');
-      expect(strong).to.not.be.null;
+      expect(strong).to.not.equal(null);
       expect(strong!.textContent).to.equal('world');
     });
   });
@@ -69,7 +69,7 @@ describe('ChatMessageBubble', () => {
 
     it('should show the edited indicator', () => {
       const edited = el.shadowRoot!.querySelector('.edited-indicator');
-      expect(edited).to.not.be.null;
+      expect(edited).to.not.equal(null);
       expect(edited!.textContent).to.contain('(edited)');
     });
   });
@@ -89,7 +89,7 @@ describe('ChatMessageBubble', () => {
 
     it('should not show the edited indicator', () => {
       const edited = el.shadowRoot!.querySelector('.edited-indicator');
-      expect(edited).to.be.null;
+      expect(edited).to.equal(null);
     });
   });
 
@@ -138,7 +138,7 @@ describe('ChatMessageBubble', () => {
 
     it('should not render the reactions container', () => {
       const reactions = el.shadowRoot!.querySelector('.reactions');
-      expect(reactions).to.be.null;
+      expect(reactions).to.equal(null);
     });
   });
 
@@ -163,7 +163,7 @@ describe('ChatMessageBubble', () => {
 
     it('should render the reply link', () => {
       const replyLink = el.shadowRoot!.querySelector('.reply-link');
-      expect(replyLink).to.not.be.null;
+      expect(replyLink).to.not.equal(null);
     });
 
     describe('when the reply link is clicked', () => {
@@ -173,7 +173,7 @@ describe('ChatMessageBubble', () => {
       });
 
       it('should dispatch scroll-to-message event', () => {
-        expect(eventDetail).to.not.be.null;
+        expect(eventDetail).to.not.equal(null);
       });
 
       it('should include the parent message ID in the event', () => {
@@ -197,7 +197,7 @@ describe('ChatMessageBubble', () => {
 
     it('should not render the reply link', () => {
       const replyLink = el.shadowRoot!.querySelector('.reply-link');
-      expect(replyLink).to.be.null;
+      expect(replyLink).to.equal(null);
     });
   });
 
@@ -217,7 +217,7 @@ describe('ChatMessageBubble', () => {
 
     it('should display the sender name', () => {
       const name = el.shadowRoot!.querySelector('.sender-name');
-      expect(name).to.not.be.null;
+      expect(name).to.not.equal(null);
       expect(name!.textContent).to.equal('Alice');
     });
   });

@@ -4,7 +4,7 @@ module.exports = {
     project: './tsconfig.json',
     tsconfigRootDir: __dirname,
   },
-  plugins: ['@typescript-eslint', 'lit', 'local'],
+  plugins: ['@typescript-eslint', 'lit', 'local', 'sonarjs'],
   extends: ['eslint:recommended', 'plugin:@typescript-eslint/recommended', 'plugin:lit/recommended', 'plugin:storybook/recommended'],
   root: true,
   rules: {
@@ -36,6 +36,12 @@ module.exports = {
         // Tests need to access private methods via typed interfaces and work with mocks
         // that require type assertions from unknown. This is expected in test code.
         '@typescript-eslint/no-unsafe-type-assertion': 'off',
+      },
+    },
+    {
+      files: ['**/*.test.ts', '**/*.test.js', '**/*.spec.ts', '**/*.spec.js'],
+      rules: {
+        'sonarjs/assertions-in-tests': 'error',
       },
     },
   ],

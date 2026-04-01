@@ -97,7 +97,7 @@ describe('WikiChecklist', () => {
   });
 
   it('should exist', () => {
-    expect(el).to.exist;
+    expect(el).to.not.equal(null);
   });
 
   it('should have the correct tag name', () => {
@@ -125,11 +125,11 @@ describe('WikiChecklist', () => {
 
   describe('after initial successful fetch', () => {
     it('should not be in loading state', () => {
-      expect(el.loading).to.be.false;
+      expect(el.loading).to.equal(false);
     });
 
     it('should have no error', () => {
-      expect(el.error).to.be.null;
+      expect(el.error).to.equal(null);
     });
   });
 
@@ -619,7 +619,7 @@ describe('WikiChecklist', () => {
       });
 
       it('should render loading indicator', () => {
-        expect(loadingEl).to.exist;
+        expect(loadingEl).to.not.equal(null);
       });
     });
 
@@ -633,7 +633,7 @@ describe('WikiChecklist', () => {
       });
 
       it('should render error-display component', () => {
-        expect(errorEl).to.exist;
+        expect(errorEl).to.not.equal(null);
       });
     });
 
@@ -668,7 +668,7 @@ describe('WikiChecklist', () => {
       });
 
       it('should apply checked styling to the item', () => {
-        expect(checkedItem).to.exist;
+        expect(checkedItem).to.not.equal(null);
       });
     });
 
@@ -684,7 +684,7 @@ describe('WikiChecklist', () => {
       });
 
       it('should render empty state message', () => {
-        expect(emptyState).to.exist;
+        expect(emptyState).to.not.equal(null);
       });
     });
 
@@ -699,7 +699,7 @@ describe('WikiChecklist', () => {
       });
 
       it('should always render the add-item input', () => {
-        expect(addInput).to.exist;
+        expect(addInput).to.not.equal(null);
       });
     });
 
@@ -736,8 +736,8 @@ describe('WikiChecklist', () => {
         it('should render a span for item text, not an input', () => {
           const span = el.shadowRoot?.querySelector('.item-display-text');
           const input = el.shadowRoot?.querySelector('.item-text');
-          expect(span).to.exist;
-          expect(input).to.be.null;
+          expect(span).to.not.equal(null);
+          expect(input).to.equal(null);
         });
 
         it('should display the item text in the span', () => {
@@ -764,7 +764,7 @@ describe('WikiChecklist', () => {
         });
 
         it('should switch to an input for editing', () => {
-          expect(textInput).to.exist;
+          expect(textInput).to.not.equal(null);
         });
 
         it('should show composed tagged text in the input', () => {
@@ -778,7 +778,7 @@ describe('WikiChecklist', () => {
 
         it('should hide the display span while editing', () => {
           const displaySpan = el.shadowRoot?.querySelector('.item-display-text');
-          expect(displaySpan).to.be.null;
+          expect(displaySpan).to.equal(null);
         });
       });
 
@@ -808,8 +808,8 @@ describe('WikiChecklist', () => {
         it('should switch back to a span', () => {
           const span = el.shadowRoot?.querySelector('.item-display-text');
           const input = el.shadowRoot?.querySelector('.item-text');
-          expect(span).to.exist;
-          expect(input).to.be.null;
+          expect(span).to.not.equal(null);
+          expect(input).to.equal(null);
         });
       });
 
@@ -917,7 +917,7 @@ describe('WikiChecklist', () => {
         });
 
         it('should render the tag filter bar', () => {
-          expect(filterBar).to.exist;
+          expect(filterBar).to.not.equal(null);
         });
 
         it('should render a pill for each unique tag', () => {
@@ -939,7 +939,7 @@ describe('WikiChecklist', () => {
         });
 
         it('should not render the tag filter bar', () => {
-          expect(filterBar).to.not.exist;
+          expect(filterBar).to.equal(null);
         });
       });
 
@@ -962,7 +962,7 @@ describe('WikiChecklist', () => {
         });
 
         it('should highlight the active filter pill', () => {
-          expect(activePill).to.exist;
+          expect(activePill).to.not.equal(null);
         });
 
         it('should only render items matching the filter', () => {
@@ -1043,7 +1043,7 @@ describe('WikiChecklist', () => {
         });
 
         it('should show the clear filter button', () => {
-          expect(clearBtn).to.exist;
+          expect(clearBtn).to.not.equal(null);
         });
       });
 
@@ -1090,7 +1090,7 @@ describe('WikiChecklist', () => {
         });
 
         it('should not show the clear filter button', () => {
-          expect(clearBtn).to.not.exist;
+          expect(clearBtn).to.equal(null);
         });
       });
     });
@@ -1113,7 +1113,7 @@ describe('WikiChecklist', () => {
         });
 
         it('should show the clear checked button', () => {
-          expect(clearCheckedBtn).to.exist;
+          expect(clearCheckedBtn).to.not.equal(null);
         });
       });
 
@@ -1133,7 +1133,7 @@ describe('WikiChecklist', () => {
         });
 
         it('should not show the clear checked button', () => {
-          expect(clearCheckedBtn).to.not.exist;
+          expect(clearCheckedBtn).to.equal(undefined);
         });
       });
 
@@ -1249,7 +1249,7 @@ describe('WikiChecklist', () => {
     });
 
     it('should clear loading state', () => {
-      expect(el.loading).to.be.false;
+      expect(el.loading).to.equal(false);
     });
   });
 
@@ -1275,7 +1275,7 @@ describe('WikiChecklist', () => {
     });
 
     it('should clear loading state', () => {
-      expect(el.loading).to.be.false;
+      expect(el.loading).to.equal(false);
     });
   });
 
@@ -1341,7 +1341,7 @@ describe('WikiChecklist', () => {
     });
 
     it('should call mergeFrontmatter', () => {
-      expect(mergeFrontmatterStub).to.have.been.calledOnce;
+      expect(mergeFrontmatterStub.callCount).to.equal(1);
     });
 
     it('should call getFrontmatter before mergeFrontmatter (read-modify-write)', () => {
@@ -1349,7 +1349,7 @@ describe('WikiChecklist', () => {
     });
 
     it('should send the toggled checked state in the merge payload', () => {
-      expect(mergePayloadItems[0]?.['checked']).to.be.true;
+      expect(mergePayloadItems[0]?.['checked']).to.equal(true);
     });
 
     it('should preserve sibling checklists in the merge payload', () => {
@@ -1357,7 +1357,7 @@ describe('WikiChecklist', () => {
     });
 
     it('should clear saving state after completion', () => {
-      expect(el.saving).to.be.false;
+      expect(el.saving).to.equal(false);
     });
   });
 
@@ -1398,7 +1398,7 @@ describe('WikiChecklist', () => {
     });
 
     it('should be in saving state during the merge call', () => {
-      expect(savingDuringMerge).to.be.true;
+      expect(savingDuringMerge).to.equal(true);
     });
   });
 
@@ -1441,7 +1441,7 @@ describe('WikiChecklist', () => {
     });
 
     it('should clear saving state', () => {
-      expect(el.saving).to.be.false;
+      expect(el.saving).to.equal(false);
     });
   });
 
@@ -1550,7 +1550,7 @@ describe('WikiChecklist', () => {
       });
 
       it('should reflect checked state changes from the API after a poll', () => {
-        expect(pollingEl.items[0]?.checked).to.be.true;
+        expect(pollingEl.items[0]?.checked).to.equal(true);
       });
     });
   });
@@ -1952,7 +1952,7 @@ describe('WikiChecklist', () => {
       });
 
       it('should set draggable on the parent row', () => {
-        expect((row as HTMLElement)?.draggable).to.be.true;
+        expect((row as HTMLElement)?.draggable).to.equal(true);
       });
     });
 
@@ -1977,7 +1977,7 @@ describe('WikiChecklist', () => {
       });
 
       it('should clear draggable on the row', () => {
-        expect(row?.draggable).to.be.false;
+        expect(row?.draggable).to.equal(false);
       });
     });
 
@@ -2027,7 +2027,7 @@ describe('WikiChecklist', () => {
         });
 
         it('should call mergeFrontmatter to persist', () => {
-          expect(mergeFrontmatterStub).to.have.been.called;
+          expect(mergeFrontmatterStub.called).to.equal(true);
         });
       });
 
@@ -2043,11 +2043,11 @@ describe('WikiChecklist', () => {
         });
 
         it('should clear drag source index', () => {
-          expect(internal._dragSourceItemIndex).to.be.null;
+          expect(internal._dragSourceItemIndex).to.equal(null);
         });
 
         it('should clear drag over index', () => {
-          expect(internal._dragOverItemIndex).to.be.null;
+          expect(internal._dragOverItemIndex).to.equal(null);
         });
       });
 
@@ -2067,7 +2067,7 @@ describe('WikiChecklist', () => {
         });
 
         it('should not call mergeFrontmatter', () => {
-          expect(mergeFrontmatterStub).not.to.have.been.called;
+          expect(mergeFrontmatterStub.called).to.equal(false);
         });
       });
     });
@@ -2151,7 +2151,7 @@ describe('WikiChecklist', () => {
         });
 
         it('should clear _dragOverItemIndex', () => {
-          expect(internal._dragOverItemIndex).to.be.null;
+          expect(internal._dragOverItemIndex).to.equal(null);
         });
       });
 
@@ -2240,7 +2240,7 @@ describe('WikiChecklist', () => {
       });
 
       it('should start long-press timer', () => {
-        expect(internal._longPressTimerId).to.not.be.null;
+        expect(internal._longPressTimerId).to.not.equal(null);
       });
 
       it('should record the handle index', () => {
@@ -2253,7 +2253,7 @@ describe('WikiChecklist', () => {
       });
 
       it('should not yet activate touch drag', () => {
-        expect(internal._touchDragActive).to.be.false;
+        expect(internal._touchDragActive).to.equal(false);
       });
     });
 
@@ -2264,7 +2264,7 @@ describe('WikiChecklist', () => {
       });
 
       it('should set _touchDragActive to true', () => {
-        expect(internal._touchDragActive).to.be.true;
+        expect(internal._touchDragActive).to.equal(true);
       });
 
       it('should set _dragSourceItemIndex', () => {
@@ -2272,9 +2272,9 @@ describe('WikiChecklist', () => {
       });
 
       it('should create a ghost element in shadow root', () => {
-        expect(internal._touchGhostEl).to.not.be.null;
+        expect(internal._touchGhostEl).to.not.equal(null);
         const ghost = el.shadowRoot?.querySelector('.touch-drag-ghost');
-        expect(ghost).to.not.be.null;
+        expect(ghost).to.not.equal(null);
       });
     });
 
@@ -2289,15 +2289,15 @@ describe('WikiChecklist', () => {
       });
 
       it('should cancel long-press timer', () => {
-        expect(internal._longPressTimerId).to.be.null;
+        expect(internal._longPressTimerId).to.equal(null);
       });
 
       it('should keep _touchDragActive false', () => {
-        expect(internal._touchDragActive).to.be.false;
+        expect(internal._touchDragActive).to.equal(false);
       });
 
       it('should clear _longPressHandleIndex', () => {
-        expect(internal._longPressHandleIndex).to.be.null;
+        expect(internal._longPressHandleIndex).to.equal(null);
       });
     });
 
@@ -2312,7 +2312,7 @@ describe('WikiChecklist', () => {
       });
 
       it('should NOT cancel long-press timer', () => {
-        expect(internal._longPressTimerId).to.not.be.null;
+        expect(internal._longPressTimerId).to.not.equal(null);
       });
 
       it('should keep _longPressHandleIndex set', () => {
@@ -2365,11 +2365,11 @@ describe('WikiChecklist', () => {
       });
 
       it('should set _touchDragActive to false', () => {
-        expect(internal._touchDragActive).to.be.false;
+        expect(internal._touchDragActive).to.equal(false);
       });
 
       it('should remove ghost element', () => {
-        expect(internal._touchGhostEl).to.be.null;
+        expect(internal._touchGhostEl).to.equal(null);
       });
 
       it('should reorder items', () => {
@@ -2377,7 +2377,7 @@ describe('WikiChecklist', () => {
       });
 
       it('should call persistData (mergeFrontmatter)', () => {
-        expect(mergeFrontmatterStub.called).to.be.true;
+        expect(mergeFrontmatterStub.called).to.equal(true);
       });
     });
 
@@ -2401,13 +2401,13 @@ describe('WikiChecklist', () => {
       });
 
       it('should remove ghost element', () => {
-        expect(internal._touchGhostEl).to.be.null;
+        expect(internal._touchGhostEl).to.equal(null);
       });
 
       it('should clear drag state', () => {
-        expect(internal._touchDragActive).to.be.false;
-        expect(internal._dragSourceItemIndex).to.be.null;
-        expect(internal._dragOverItemIndex).to.be.null;
+        expect(internal._touchDragActive).to.equal(false);
+        expect(internal._dragSourceItemIndex).to.equal(null);
+        expect(internal._dragOverItemIndex).to.equal(null);
       });
     });
 
@@ -2421,12 +2421,12 @@ describe('WikiChecklist', () => {
       });
 
       it('should cancel long-press timer', () => {
-        expect(internal._longPressTimerId).to.be.null;
+        expect(internal._longPressTimerId).to.equal(null);
       });
 
       it('should not set any drag state', () => {
-        expect(internal._touchDragActive).to.be.false;
-        expect(internal._dragSourceItemIndex).to.be.null;
+        expect(internal._touchDragActive).to.equal(false);
+        expect(internal._dragSourceItemIndex).to.equal(null);
       });
     });
   });

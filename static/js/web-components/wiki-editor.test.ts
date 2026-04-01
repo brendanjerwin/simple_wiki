@@ -89,7 +89,7 @@ describe('WikiEditor', () => {
   });
 
   it('should exist as a custom element', () => {
-    expect(customElements.get('wiki-editor')).to.exist;
+    expect(customElements.get('wiki-editor')).to.not.equal(null);
   });
 
   describe('when loading content', () => {
@@ -108,11 +108,11 @@ describe('WikiEditor', () => {
     });
 
     it('should show the loading overlay', () => {
-      expect(loadingOverlay).to.exist;
+      expect(loadingOverlay).to.not.equal(null);
     });
 
     it('should not render a textarea', () => {
-      expect(textarea).to.not.exist;
+      expect(textarea).to.equal(null);
     });
   });
 
@@ -129,7 +129,7 @@ describe('WikiEditor', () => {
     });
 
     it('should call readPage with the page name', () => {
-      expect(readPageStub).to.have.been.calledOnce;
+      expect(readPageStub.callCount).to.equal(1);
       const callArgs = readPageStub.firstCall.args[0] as { pageName: string };
       expect(callArgs.pageName).to.equal('test-page');
     });
@@ -150,23 +150,23 @@ describe('WikiEditor', () => {
 
     it('should not show the status bar when idle', () => {
       const statusBar = el.shadowRoot?.querySelector('.status-bar');
-      expect(statusBar).to.exist;
-      expect(statusBar?.classList.contains('visible')).to.be.false;
+      expect(statusBar).to.not.equal(null);
+      expect(statusBar?.classList.contains('visible')).to.equal(false);
     });
 
     it('should not show loading overlay', () => {
       const loading = el.shadowRoot?.querySelector('.loading-overlay');
-      expect(loading).to.not.exist;
+      expect(loading).to.equal(null);
     });
 
     it('should render file-drop-zone', () => {
       const dropZone = el.shadowRoot?.querySelector('file-drop-zone');
-      expect(dropZone).to.exist;
+      expect(dropZone).to.not.equal(null);
     });
 
     it('should render editor-toolbar in shadow DOM', () => {
       const toolbar = el.shadowRoot?.querySelector('editor-toolbar');
-      expect(toolbar).to.exist;
+      expect(toolbar).to.not.equal(null);
     });
   });
 
@@ -186,7 +186,7 @@ describe('WikiEditor', () => {
     });
 
     it('should set _hasSelection to true', () => {
-      expect((el as unknown as WikiEditorInternal)._hasSelection).to.be.true;
+      expect((el as unknown as WikiEditorInternal)._hasSelection).to.equal(true);
     });
   });
 
@@ -206,7 +206,7 @@ describe('WikiEditor', () => {
     });
 
     it('should set _hasSelection to false', () => {
-      expect((el as unknown as WikiEditorInternal)._hasSelection).to.be.false;
+      expect((el as unknown as WikiEditorInternal)._hasSelection).to.equal(false);
     });
   });
 
@@ -261,7 +261,7 @@ describe('WikiEditor', () => {
     });
 
     it('should call readPage a second time', () => {
-      expect(readPageStub).to.have.been.calledTwice;
+      expect(readPageStub.callCount).to.equal(2);
     });
   });
 
@@ -277,16 +277,16 @@ describe('WikiEditor', () => {
     });
 
     it('should set the error', () => {
-      expect((el as unknown as WikiEditorInternal).error).to.not.be.null;
+      expect((el as unknown as WikiEditorInternal).error).to.not.equal(null);
     });
 
     it('should render error-display', () => {
-      expect(errorDisplay).to.exist;
+      expect(errorDisplay).to.not.equal(null);
     });
 
     it('should not render textarea', () => {
       const textarea = el.shadowRoot?.querySelector('textarea');
-      expect(textarea).to.not.exist;
+      expect(textarea).to.equal(null);
     });
   });
 
@@ -342,7 +342,7 @@ describe('WikiEditor', () => {
         });
 
         it('should call updateWholePage', () => {
-          expect(updateStub).to.have.been.calledOnce;
+          expect(updateStub.callCount).to.equal(1);
         });
 
         it('should pass the correct page name and content', () => {
@@ -408,7 +408,7 @@ describe('WikiEditor', () => {
 
       it('should hide the status bar', () => {
         const statusBar = el.shadowRoot?.querySelector('.status-bar');
-        expect(statusBar?.classList.contains('visible')).to.be.false;
+        expect(statusBar?.classList.contains('visible')).to.equal(false);
       });
     });
   });
@@ -448,22 +448,22 @@ describe('WikiEditor', () => {
     });
 
     it('should set the error', () => {
-      expect((el as unknown as WikiEditorInternal).error).to.not.be.null;
+      expect((el as unknown as WikiEditorInternal).error).to.not.equal(null);
     });
 
     it('should hide the status bar during errors', () => {
       const statusBar = el.shadowRoot?.querySelector('.status-bar');
-      expect(statusBar?.classList.contains('visible')).to.be.false;
+      expect(statusBar?.classList.contains('visible')).to.equal(false);
     });
 
     it('should render error-display inline', () => {
       const errorDisplay = el.shadowRoot?.querySelector('error-display');
-      expect(errorDisplay).to.not.be.null;
+      expect(errorDisplay).to.not.equal(null);
     });
 
     it('should render the textarea alongside the error', () => {
       const textarea = el.shadowRoot?.querySelector('textarea');
-      expect(textarea).to.not.be.null;
+      expect(textarea).to.not.equal(null);
     });
 
     it('should clear the error and status when dismiss is clicked', async () => {
@@ -679,7 +679,7 @@ describe('WikiEditor', () => {
     });
 
     it('should pass allow-uploads to file-drop-zone', () => {
-      expect(dropZone?.hasAttribute('allow-uploads')).to.be.true;
+      expect(dropZone?.hasAttribute('allow-uploads')).to.equal(true);
     });
 
     it('should pass max-upload-mb to file-drop-zone', () => {
@@ -707,17 +707,17 @@ describe('WikiEditor', () => {
     });
 
     it('should destroy the save queue', () => {
-      expect(saveQueueDestroySpy).to.have.been.calledOnce;
+      expect(saveQueueDestroySpy.callCount).to.equal(1);
     });
 
     it('should null the save queue', () => {
-      expect((el as unknown as WikiEditorInternal).saveQueue).to.be.null;
+      expect((el as unknown as WikiEditorInternal).saveQueue).to.equal(null);
     });
 
     it('should detach the coordinator if present', () => {
       // Coordinator may not be created if no editor-toolbar is in the shadow DOM
       if (coordinatorDetachSpy.callCount > 0) {
-        expect(coordinatorDetachSpy).to.have.been.calledOnce;
+        expect(coordinatorDetachSpy.callCount).to.equal(1);
       }
     });
   });
@@ -743,7 +743,7 @@ describe('WikiEditor', () => {
     });
 
     it('should not be in loading state', () => {
-      expect((el as unknown as WikiEditorInternal).loading).to.be.false;
+      expect((el as unknown as WikiEditorInternal).loading).to.equal(false);
     });
   });
 
@@ -766,7 +766,7 @@ describe('WikiEditor', () => {
 
     it('should not create a save queue', () => {
       const internal = el as unknown as WikiEditorInternal;
-      expect(internal.saveQueue).to.be.null;
+      expect(internal.saveQueue).to.equal(null);
     });
   });
 

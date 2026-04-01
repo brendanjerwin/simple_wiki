@@ -52,7 +52,7 @@ describe('TitleInput', () => {
 
   it('should exist', async () => {
     el = await fixture(html`<title-input></title-input>`);
-    expect(el).to.exist;
+    expect(el).to.not.equal(null);
   });
 
   describe('when text is entered', () => {
@@ -102,7 +102,7 @@ describe('TitleInput', () => {
     });
 
     it('should disable the input element', () => {
-      expect(input.disabled).to.be.true;
+      expect(input.disabled).to.equal(true);
     });
   });
 

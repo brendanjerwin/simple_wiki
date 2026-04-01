@@ -31,7 +31,7 @@ describe('WikiSearchResults', () => {
   });
 
   it('should exist', () => {
-    expect(el).to.exist;
+    expect(el).to.not.equal(null);
   });
 
   describe('when component is initialized', () => {
@@ -101,7 +101,7 @@ describe('WikiSearchResults', () => {
     });
 
     it('should close the popover', () => {
-      expect(closeSpy).to.have.been.calledOnce;
+      expect(closeSpy.callCount).to.equal(1);
     });
   });
 
@@ -126,7 +126,7 @@ describe('WikiSearchResults', () => {
     });
 
     it('should not close the popover', () => {
-      expect(closeSpy).to.not.have.been.called;
+      expect(closeSpy.called).to.equal(false);
     });
   });
 
@@ -139,12 +139,12 @@ describe('WikiSearchResults', () => {
 
     it('should render the inventory checkbox', () => {
       const checkbox = el.shadowRoot?.querySelector('.inventory-filter input[type="checkbox"]');
-      expect(checkbox).to.exist;
+      expect(checkbox).to.not.equal(null);
     });
 
     it('should render the filter divider', () => {
       const divider = el.shadowRoot?.querySelector('.filter-divider');
-      expect(divider).to.exist;
+      expect(divider).to.not.equal(null);
     });
   });
 
@@ -173,7 +173,7 @@ describe('WikiSearchResults', () => {
     });
 
     it('should emit inventory-filter-changed event', () => {
-      expect(eventSpy).to.have.been.calledOnce;
+      expect(eventSpy.callCount).to.equal(1);
     });
 
     it('should include inventoryOnly in event detail', () => {
@@ -209,7 +209,7 @@ describe('WikiSearchResults', () => {
     });
 
     it('should emit inventory-filter-changed event', () => {
-      expect(eventSpy).to.have.been.calledOnce;
+      expect(eventSpy.callCount).to.equal(1);
     });
 
     it('should include inventoryOnly false in event detail', () => {
@@ -241,7 +241,7 @@ describe('WikiSearchResults', () => {
 
     it('should render the Found In link', () => {
       const foundIn = el.shadowRoot?.querySelector('.found-in');
-      expect(foundIn).to.exist;
+      expect(foundIn).to.not.equal(null);
     });
 
     it('should display "In:" text', () => {
@@ -282,7 +282,7 @@ describe('WikiSearchResults', () => {
 
     it('should render the Found In link', () => {
       const foundIn = el.shadowRoot?.querySelector('.found-in');
-      expect(foundIn).to.exist;
+      expect(foundIn).to.not.equal(null);
     });
 
     it('should display "In:" text', () => {
@@ -324,7 +324,7 @@ describe('WikiSearchResults', () => {
 
     it('should render the Found In section', () => {
       const foundIn = el.shadowRoot?.querySelector('.found-in');
-      expect(foundIn).to.exist;
+      expect(foundIn).to.not.equal(null);
     });
 
     it('should display all path elements', () => {
@@ -507,7 +507,7 @@ describe('WikiSearchResults', () => {
 
     it('should not show ellipsis when path is exactly 4 items', () => {
       const ellipsis = el.shadowRoot?.querySelector('.path-ellipsis');
-      expect(ellipsis).to.not.exist;
+      expect(ellipsis).to.equal(null);
     });
 
     it('should show all 4 items', () => {
@@ -564,7 +564,7 @@ describe('WikiSearchResults', () => {
 
     it('should not render the Found In section', () => {
       const foundIn = el.shadowRoot?.querySelector('.found-in');
-      expect(foundIn).to.not.exist;
+      expect(foundIn).to.equal(null);
     });
   });
 
@@ -583,7 +583,7 @@ describe('WikiSearchResults', () => {
 
     it('should not render the Found In section', () => {
       const foundIn = el.shadowRoot?.querySelector('.found-in');
-      expect(foundIn).to.not.exist;
+      expect(foundIn).to.equal(null);
     });
   });
 
@@ -603,7 +603,7 @@ describe('WikiSearchResults', () => {
 
     it('should not render the Found In section', () => {
       const foundIn = el.shadowRoot?.querySelector('.found-in');
-      expect(foundIn).to.not.exist;
+      expect(foundIn).to.equal(null);
     });
   });
 
@@ -626,7 +626,7 @@ describe('WikiSearchResults', () => {
 
       it('should not display warning message', () => {
         const warning = el.shadowRoot?.querySelector('.filter-warning');
-        expect(warning).to.not.exist;
+        expect(warning).to.equal(null);
       });
     });
 
@@ -648,7 +648,7 @@ describe('WikiSearchResults', () => {
 
       it('should not display warning message', () => {
         const warning = el.shadowRoot?.querySelector('.filter-warning');
-        expect(warning).to.not.exist;
+        expect(warning).to.equal(null);
       });
     });
 
@@ -676,7 +676,7 @@ describe('WikiSearchResults', () => {
 
       it('should display warning message', () => {
         const warning = el.shadowRoot?.querySelector('.filter-warning');
-        expect(warning).to.exist;
+        expect(warning).to.not.equal(null);
       });
 
       it('should show correct count of hidden results', () => {
@@ -691,7 +691,7 @@ describe('WikiSearchResults', () => {
 
       it('should display warning icon', () => {
         const icon = el.shadowRoot?.querySelector('.filter-warning i.fa-triangle-exclamation');
-        expect(icon).to.exist;
+        expect(icon).to.not.equal(null);
       });
     });
 
@@ -753,7 +753,7 @@ describe('WikiSearchResults', () => {
 
       it('should not display warning when all results are shown', () => {
         const warning = el.shadowRoot?.querySelector('.filter-warning');
-        expect(warning).to.not.exist;
+        expect(warning).to.equal(null);
       });
     });
   });

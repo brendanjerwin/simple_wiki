@@ -300,7 +300,7 @@ describe('table-data-extractor', () => {
       });
 
       it('should return null', () => {
-        expect(result).to.be.null;
+        expect(result).to.equal(null);
       });
     });
 
@@ -313,7 +313,7 @@ describe('table-data-extractor', () => {
       });
 
       it('should return null', () => {
-        expect(result).to.be.null;
+        expect(result).to.equal(null);
       });
     });
 
@@ -326,7 +326,7 @@ describe('table-data-extractor', () => {
       });
 
       it('should return null', () => {
-        expect(result).to.be.null;
+        expect(result).to.equal(null);
       });
     });
 

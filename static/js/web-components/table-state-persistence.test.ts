@@ -209,7 +209,7 @@ describe('table-state-persistence', () => {
       });
 
       it('should return the saved state', () => {
-        expect(loaded).to.not.be.null;
+        expect(loaded).to.not.equal(null);
       });
 
       it('should preserve sortColumnIndex', () => {
@@ -233,7 +233,7 @@ describe('table-state-persistence', () => {
       });
 
       it('should return null', () => {
-        expect(loaded).to.be.null;
+        expect(loaded).to.equal(null);
       });
     });
 
@@ -250,11 +250,11 @@ describe('table-state-persistence', () => {
       });
 
       it('should return null', () => {
-        expect(loaded).to.be.null;
+        expect(loaded).to.equal(null);
       });
 
       it('should remove the expired entry from localStorage', () => {
-        expect(localStorage.getItem('wiki-table-state:expired-hash')).to.be.null;
+        expect(localStorage.getItem('wiki-table-state:expired-hash')).to.equal(null);
       });
     });
 
@@ -267,7 +267,7 @@ describe('table-state-persistence', () => {
       });
 
       it('should return null', () => {
-        expect(loaded).to.be.null;
+        expect(loaded).to.equal(null);
       });
     });
 

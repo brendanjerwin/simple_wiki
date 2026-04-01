@@ -397,7 +397,7 @@ describe('table-sorter-filterer', () => {
       });
 
       it('should return true', () => {
-        expect(result).to.be.true;
+        expect(result).to.equal(true);
       });
     });
 
@@ -409,7 +409,7 @@ describe('table-sorter-filterer', () => {
       });
 
       it('should return false', () => {
-        expect(result).to.be.false;
+        expect(result).to.equal(false);
       });
     });
 
@@ -421,7 +421,7 @@ describe('table-sorter-filterer', () => {
       });
 
       it('should return true', () => {
-        expect(result).to.be.true;
+        expect(result).to.equal(true);
       });
     });
 
@@ -433,7 +433,7 @@ describe('table-sorter-filterer', () => {
       });
 
       it('should return true', () => {
-        expect(result).to.be.true;
+        expect(result).to.equal(true);
       });
     });
 
@@ -445,7 +445,7 @@ describe('table-sorter-filterer', () => {
       });
 
       it('should return false', () => {
-        expect(result).to.be.false;
+        expect(result).to.equal(false);
       });
     });
 
@@ -457,7 +457,7 @@ describe('table-sorter-filterer', () => {
       });
 
       it('should return true', () => {
-        expect(result).to.be.true;
+        expect(result).to.equal(true);
       });
     });
 
@@ -469,7 +469,7 @@ describe('table-sorter-filterer', () => {
       });
 
       it('should return false', () => {
-        expect(result).to.be.false;
+        expect(result).to.equal(false);
       });
     });
 
@@ -481,7 +481,7 @@ describe('table-sorter-filterer', () => {
       });
 
       it('should return false', () => {
-        expect(result).to.be.false;
+        expect(result).to.equal(false);
       });
     });
   });
@@ -500,7 +500,7 @@ describe('table-sorter-filterer', () => {
       });
 
       it('should return true', () => {
-        expect(result).to.be.true;
+        expect(result).to.equal(true);
       });
     });
 
@@ -516,7 +516,7 @@ describe('table-sorter-filterer', () => {
       });
 
       it('should return false', () => {
-        expect(result).to.be.false;
+        expect(result).to.equal(false);
       });
     });
 
@@ -528,7 +528,7 @@ describe('table-sorter-filterer', () => {
       });
 
       it('should return false', () => {
-        expect(result).to.be.false;
+        expect(result).to.equal(false);
       });
     });
   });

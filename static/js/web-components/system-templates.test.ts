@@ -13,7 +13,7 @@ describe('system-templates', () => {
 
   describe('SYSTEM_TEMPLATE_IDENTIFIERS', () => {
     it('should exist', () => {
-      expect(SYSTEM_TEMPLATE_IDENTIFIERS).to.exist;
+      expect(SYSTEM_TEMPLATE_IDENTIFIERS).to.not.equal(null);
     });
 
     it('should be a non-empty array', () => {

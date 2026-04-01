@@ -12,11 +12,11 @@ describe('ConfirmationDialog', () => {
   });
 
   it('should exist', () => {
-    expect(el).to.exist;
+    expect(el).to.not.equal(null);
   });
 
   it('should be hidden by default', () => {
-    expect(el.hasAttribute('open')).to.be.false;
+    expect(el.hasAttribute('open')).to.equal(false);
   });
 
   describe('when opening the dialog', () => {
@@ -29,7 +29,7 @@ describe('ConfirmationDialog', () => {
     });
 
     it('should become visible', () => {
-      expect(el.hasAttribute('open')).to.be.true;
+      expect(el.hasAttribute('open')).to.equal(true);
     });
 
     it('should display the configured message', async () => {
@@ -66,7 +66,7 @@ describe('ConfirmationDialog', () => {
 
       it('should apply primary button styling', () => {
         const confirmBtn = el.shadowRoot?.querySelector('.button-primary');
-        expect(confirmBtn).to.exist;
+        expect(confirmBtn).to.not.equal(null);
       });
     });
 
@@ -81,7 +81,7 @@ describe('ConfirmationDialog', () => {
 
       it('should apply warning button styling', () => {
         const confirmBtn = el.shadowRoot?.querySelector('.button-warning');
-        expect(confirmBtn).to.exist;
+        expect(confirmBtn).to.not.equal(null);
       });
     });
 
@@ -96,7 +96,7 @@ describe('ConfirmationDialog', () => {
 
       it('should apply danger button styling', () => {
         const confirmBtn = el.shadowRoot?.querySelector('.button-danger');
-        expect(confirmBtn).to.exist;
+        expect(confirmBtn).to.not.equal(null);
       });
     });
   });
@@ -169,7 +169,7 @@ describe('ConfirmationDialog', () => {
       });
 
       it('should dispatch confirm event', () => {
-        expect(confirmSpy).to.have.been.calledOnce;
+        expect(confirmSpy.callCount).to.equal(1);
       });
 
       it('should include config in event detail', () => {
@@ -185,11 +185,11 @@ describe('ConfirmationDialog', () => {
       });
 
       it('should dispatch cancel event', () => {
-        expect(cancelSpy).to.have.been.calledOnce;
+        expect(cancelSpy.callCount).to.equal(1);
       });
 
       it('should close the dialog', () => {
-        expect(el.hasAttribute('open')).to.be.false;
+        expect(el.hasAttribute('open')).to.equal(false);
       });
     });
 
@@ -201,11 +201,11 @@ describe('ConfirmationDialog', () => {
       });
 
       it('should dispatch cancel event', () => {
-        expect(cancelSpy).to.have.been.calledOnce;
+        expect(cancelSpy.callCount).to.equal(1);
       });
 
       it('should close the dialog', () => {
-        expect(el.hasAttribute('open')).to.be.false;
+        expect(el.hasAttribute('open')).to.equal(false);
       });
     });
   });
@@ -226,12 +226,12 @@ describe('ConfirmationDialog', () => {
 
       it('should disable confirm button', () => {
         const confirmBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-danger');
-        expect(confirmBtn?.disabled).to.be.true;
+        expect(confirmBtn?.disabled).to.equal(true);
       });
 
       it('should disable cancel button', () => {
         const cancelBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-cancel');
-        expect(cancelBtn?.disabled).to.be.true;
+        expect(cancelBtn?.disabled).to.equal(true);
       });
 
       it('should show loading text', () => {
@@ -258,12 +258,12 @@ describe('ConfirmationDialog', () => {
 
     it('should display error component', () => {
       const errorDisplay = el.shadowRoot?.querySelector('error-display');
-      expect(errorDisplay).to.exist;
+      expect(errorDisplay).to.not.equal(null);
     });
 
     it('should not be in loading state', () => {
       const confirmBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-danger');
-      expect(confirmBtn?.disabled).to.be.false;
+      expect(confirmBtn?.disabled).to.equal(false);
     });
   });
 
@@ -278,20 +278,20 @@ describe('ConfirmationDialog', () => {
     });
 
     it('should hide the dialog', () => {
-      expect(el.hasAttribute('open')).to.be.false;
+      expect(el.hasAttribute('open')).to.equal(false);
     });
 
     it('should reset loading state', () => {
       // Re-open to check internal state is reset
       el.openDialog({ message: 'New message' });
-      expect(el.shadowRoot?.querySelector('.button-danger[disabled]')).to.not.exist;
+      expect(el.shadowRoot?.querySelector('.button-danger[disabled]')).to.equal(null);
     });
 
     it('should clear errors', async () => {
       // Re-open to check internal state is reset
       el.openDialog({ message: 'New message' });
       await el.updateComplete;
-      expect(el.shadowRoot?.querySelector('error-display')).to.not.exist;
+      expect(el.shadowRoot?.querySelector('error-display')).to.equal(null);
     });
   });
 
@@ -319,7 +319,7 @@ describe('ConfirmationDialog', () => {
       });
 
       it('should not dispatch confirm event', () => {
-        expect(confirmSpy).to.not.have.been.called;
+        expect(confirmSpy.called).to.equal(false);
       });
     });
 
@@ -330,7 +330,7 @@ describe('ConfirmationDialog', () => {
       });
 
       it('should not dispatch cancel event', () => {
-        expect(cancelSpy).to.not.have.been.called;
+        expect(cancelSpy.called).to.equal(false);
       });
     });
   });

@@ -14,7 +14,7 @@ describe('InventoryItemCreatorMover', () => {
   });
 
   it('should exist', () => {
-    expect(service).to.exist;
+    expect(service).to.not.equal(null);
   });
 
   describe('addItem', () => {
@@ -26,7 +26,7 @@ describe('InventoryItemCreatorMover', () => {
       });
 
       it('should return success false', () => {
-        expect(result.success).to.be.false;
+        expect(result.success).to.equal(false);
       });
 
       it('should return validation error as Error object', () => {
@@ -43,7 +43,7 @@ describe('InventoryItemCreatorMover', () => {
       });
 
       it('should return success false', () => {
-        expect(result.success).to.be.false;
+        expect(result.success).to.equal(false);
       });
 
       it('should return validation error as Error object', () => {
@@ -70,7 +70,7 @@ describe('InventoryItemCreatorMover', () => {
       });
 
       it('should return success true', () => {
-        expect(result.success).to.be.true;
+        expect(result.success).to.equal(true);
       });
 
       it('should return the item identifier', () => {
@@ -82,7 +82,7 @@ describe('InventoryItemCreatorMover', () => {
       });
 
       it('should call client with correct request', () => {
-        expect(clientStub).to.have.been.calledOnce;
+        expect(clientStub.callCount).to.equal(1);
         const request = clientStub.firstCall.args[0];
         expect(request.itemIdentifier).to.equal('screwdriver');
         expect(request.container).to.equal('drawer_kitchen');
@@ -126,7 +126,7 @@ describe('InventoryItemCreatorMover', () => {
       });
 
       it('should return success false', () => {
-        expect(result.success).to.be.false;
+        expect(result.success).to.equal(false);
       });
 
       it('should return the error as Error object', () => {
@@ -147,11 +147,11 @@ describe('InventoryItemCreatorMover', () => {
       });
 
       it('should return success false', () => {
-        expect(result.success).to.be.false;
+        expect(result.success).to.equal(false);
       });
 
       it('should return an error message', () => {
-        expect(result.error).to.exist;
+        expect(result.error).to.not.equal(null);
       });
     });
   });
@@ -169,7 +169,7 @@ describe('InventoryItemCreatorMover', () => {
       });
 
       it('should return isUnique true', () => {
-        expect(result.isUnique).to.be.true;
+        expect(result.isUnique).to.equal(true);
       });
     });
 
@@ -194,18 +194,18 @@ describe('InventoryItemCreatorMover', () => {
       });
 
       it('should return isUnique true', () => {
-        expect(result.isUnique).to.be.true;
+        expect(result.isUnique).to.equal(true);
       });
 
       it('should not have existingPage', () => {
-        expect(result.existingPage).to.be.undefined;
+        expect(result.existingPage).to.equal(undefined);
       });
 
       it('should call client with correct request', () => {
-        expect(clientStub).to.have.been.calledOnce;
+        expect(clientStub.callCount).to.equal(1);
         const request = clientStub.firstCall.args[0];
         expect(request.text).to.equal('Phillips Screwdriver');
-        expect(request.ensureUnique).to.be.false;
+        expect(request.ensureUnique).to.equal(false);
       });
     });
 
@@ -233,7 +233,7 @@ describe('InventoryItemCreatorMover', () => {
       });
 
       it('should return isUnique false', () => {
-        expect(result.isUnique).to.be.false;
+        expect(result.isUnique).to.equal(false);
       });
 
       it('should return existingPage with identifier', () => {
@@ -266,7 +266,7 @@ describe('InventoryItemCreatorMover', () => {
 
       it('should call client with ensureUnique true', () => {
         const request = clientStub.firstCall.args[0];
-        expect(request.ensureUnique).to.be.true;
+        expect(request.ensureUnique).to.equal(true);
       });
     });
 
@@ -286,11 +286,11 @@ describe('InventoryItemCreatorMover', () => {
       });
 
       it('should return isUnique true', () => {
-        expect(result.isUnique).to.be.true;
+        expect(result.isUnique).to.equal(true);
       });
 
       it('should return error message', () => {
-        expect(result.error).to.exist;
+        expect(result.error).to.not.equal(null);
       });
     });
   });
@@ -304,7 +304,7 @@ describe('InventoryItemCreatorMover', () => {
       });
 
       it('should return success false', () => {
-        expect(result.success).to.be.false;
+        expect(result.success).to.equal(false);
       });
 
       it('should return validation error as Error object', () => {
@@ -331,7 +331,7 @@ describe('InventoryItemCreatorMover', () => {
       });
 
       it('should return success true', () => {
-        expect(result.success).to.be.true;
+        expect(result.success).to.equal(true);
       });
 
       it('should return the previous container', () => {
@@ -347,7 +347,7 @@ describe('InventoryItemCreatorMover', () => {
       });
 
       it('should call client with correct request', () => {
-        expect(clientStub).to.have.been.calledOnce;
+        expect(clientStub.callCount).to.equal(1);
         const request = clientStub.firstCall.args[0];
         expect(request.itemIdentifier).to.equal('screwdriver');
         expect(request.newContainer).to.equal('toolbox_garage');
@@ -369,7 +369,7 @@ describe('InventoryItemCreatorMover', () => {
       });
 
       it('should return success false', () => {
-        expect(result.success).to.be.false;
+        expect(result.success).to.equal(false);
       });
 
       it('should return the error as Error object', () => {
@@ -390,11 +390,11 @@ describe('InventoryItemCreatorMover', () => {
       });
 
       it('should return success false', () => {
-        expect(result.success).to.be.false;
+        expect(result.success).to.equal(false);
       });
 
       it('should return an error message', () => {
-        expect(result.error).to.exist;
+        expect(result.error).to.not.equal(null);
       });
     });
   });

@@ -46,7 +46,7 @@ describe('SystemInfo', () => {
   });
 
   it('should exist', () => {
-    expect(el).to.exist;
+    expect(el).to.not.equal(null);
   });
 
   describe('when loading', () => {
@@ -59,8 +59,8 @@ describe('SystemInfo', () => {
 
     it('should display loading message for version', () => {
       const versionComponent = el.shadowRoot!.querySelector('system-info-version');
-      expect(versionComponent).to.exist;
-      expect(versionComponent!.loading).to.be.true;
+      expect(versionComponent).to.not.equal(null);
+      expect(versionComponent!.loading).to.equal(true);
     });
   });
 
@@ -74,7 +74,7 @@ describe('SystemInfo', () => {
 
     it('should display error message', () => {
       const versionComponent = el.shadowRoot!.querySelector('system-info-version');
-      expect(versionComponent).to.exist;
+      expect(versionComponent).to.not.equal(null);
       expect(versionComponent!.error?.message).to.equal('Connection failed');
     });
   });
@@ -99,25 +99,25 @@ describe('SystemInfo', () => {
 
     it('should display version information', () => {
       const versionComponent = el.shadowRoot!.querySelector('system-info-version');
-      expect(versionComponent).to.exist;
-      expect(versionComponent!.version).to.exist;
+      expect(versionComponent).to.not.equal(null);
+      expect(versionComponent!.version).to.not.equal(null);
     });
 
     it('should show commit hash', () => {
       const versionComponent = el.shadowRoot!.querySelector<SystemInfoVersion>('system-info-version');
-      expect(versionComponent).to.exist;
+      expect(versionComponent).to.not.equal(null);
       expect(versionComponent!.version!.commit).to.equal('abc123def456'); // From beforeEach setup
     });
 
     it('should show build time', () => {
       const versionComponent = el.shadowRoot!.querySelector<SystemInfoVersion>('system-info-version');
-      expect(versionComponent).to.exist;
-      expect(versionComponent!.version!.buildTime).to.exist;
+      expect(versionComponent).to.not.equal(null);
+      expect(versionComponent!.version!.buildTime).to.not.equal(null);
     });
 
     it('should not show job info when no jobs are active', () => {
       const indexingInfo = el.shadowRoot!.querySelector('.indexing-info');
-      expect(indexingInfo).to.not.exist;
+      expect(indexingInfo).to.equal(null);
     });
   });
 
@@ -148,30 +148,30 @@ describe('SystemInfo', () => {
 
     it('should show job status component', () => {
       const indexingStatus = el.shadowRoot!.querySelector('system-info-jobs');
-      expect(indexingStatus).to.exist;
+      expect(indexingStatus).to.not.equal(null);
     });
 
     it('should pass correct data to job status component', () => {
       const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus: { jobQueues: unknown[] } }>('system-info-jobs');
-      expect(indexingStatus).to.exist;
-      expect(indexingStatus!.jobStatus).to.exist;
+      expect(indexingStatus).to.not.equal(null);
+      expect(indexingStatus!.jobStatus).to.not.equal(null);
       expect(indexingStatus!.jobStatus.jobQueues).to.have.lengthOf(1);
     });
 
     it('should pass correct job queue data', () => {
       const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus?: { jobQueues: Array<{ name: string; jobsRemaining: number; isActive: boolean; highWaterMark: number }> } }>('system-info-jobs');
       const queue = indexingStatus?.jobStatus?.jobQueues[0];
-      expect(queue).to.exist;
+      expect(queue).to.not.equal(null);
       expect(queue!.name).to.equal('Frontmatter');
       expect(queue!.jobsRemaining).to.equal(25);
-      expect(queue!.isActive).to.be.true;
+      expect(queue!.isActive).to.equal(true);
     });
 
 
     it('should pass high water mark data', () => {
       const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus?: { jobQueues: Array<{ highWaterMark: number }> } }>('system-info-jobs');
       const queue = indexingStatus?.jobStatus?.jobQueues[0];
-      expect(queue).to.exist;
+      expect(queue).to.not.equal(null);
       expect(queue!.highWaterMark).to.equal(100);
     });
   });
@@ -203,7 +203,7 @@ describe('SystemInfo', () => {
 
     it('should show job status component even when idle', () => {
       const indexingStatus = el.shadowRoot!.querySelector('system-info-jobs');
-      expect(indexingStatus).to.exist;
+      expect(indexingStatus).to.not.equal(null);
     });
   });
 
@@ -224,7 +224,7 @@ describe('SystemInfo', () => {
 
       it('should pass full commit hash to version component', () => {
         const versionComponent = el.shadowRoot!.querySelector<SystemInfoVersion>('system-info-version');
-        expect(versionComponent).to.exist;
+        expect(versionComponent).to.not.equal(null);
         expect(versionComponent!.version!.commit).to.equal('abc123def456789');
       });
     });
@@ -245,7 +245,7 @@ describe('SystemInfo', () => {
 
       it('should pass tagged version to component unchanged', () => {
         const versionComponent = el.shadowRoot!.querySelector<SystemInfoVersion>('system-info-version');
-        expect(versionComponent).to.exist;
+        expect(versionComponent).to.not.equal(null);
         expect(versionComponent!.version!.commit).to.equal('v1.2.3 (abc123d)');
       });
     });
@@ -269,7 +269,7 @@ describe('SystemInfo', () => {
       it('should pass correct job count to indexing component', () => {
         const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus?: { jobQueues: Array<{ jobsRemaining: number }> } }>('system-info-jobs');
         const queue = indexingStatus?.jobStatus?.jobQueues[0];
-        expect(queue).to.exist;
+        expect(queue).to.not.equal(null);
         expect(queue!.jobsRemaining).to.equal(1);
       });
     });
@@ -307,21 +307,21 @@ describe('SystemInfo', () => {
       it('should pass correct job remaining count', () => {
         const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus?: { jobQueues: Array<{ jobsRemaining: number }> } }>('system-info-jobs');
         const queue = indexingStatus?.jobStatus?.jobQueues[0];
-        expect(queue).to.exist;
+        expect(queue).to.not.equal(null);
         expect(queue!.jobsRemaining).to.equal(75);
       });
 
       it('should pass correct high water mark', () => {
         const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus?: { jobQueues: Array<{ highWaterMark: number }> } }>('system-info-jobs');
         const queue = indexingStatus?.jobStatus?.jobQueues[0];
-        expect(queue).to.exist;
+        expect(queue).to.not.equal(null);
         expect(queue!.highWaterMark).to.equal(200);
       });
 
       it('should pass correct queue name', () => {
         const indexingStatus = el.shadowRoot!.querySelector<HTMLElement & { jobStatus?: { jobQueues: Array<{ name: string }> } }>('system-info-jobs');
         const queue = indexingStatus?.jobStatus?.jobQueues[0];
-        expect(queue).to.exist;
+        expect(queue).to.not.equal(null);
         expect(queue!.name).to.equal('TestQueue');
       });
     });
@@ -346,23 +346,23 @@ describe('SystemInfo', () => {
     });
 
     it('should start with drawerOpen state as false', () => {
-      expect(el.drawerOpen).to.be.false;
+      expect(el.drawerOpen).to.equal(false);
     });
 
     it('should render drawer tab element', () => {
       const tab = el.shadowRoot!.querySelector('.drawer-tab');
-      expect(tab).to.exist;
+      expect(tab).to.not.equal(null);
     });
 
     it('should render INFO text in drawer tab', () => {
       const tab = el.shadowRoot!.querySelector('.drawer-tab');
-      expect(tab).to.exist;
+      expect(tab).to.not.equal(null);
       expect(tab!.textContent).to.equal('INFO');
     });
 
     it('should not have drawerOpen class when collapsed', () => {
       const panel = el.shadowRoot!.querySelector('.system-panel');
-      expect(panel!.classList.contains('drawerOpen')).to.be.false;
+      expect(panel!.classList.contains('drawerOpen')).to.equal(false);
     });
 
     it('should have drawerOpen class when open', async () => {
@@ -370,50 +370,50 @@ describe('SystemInfo', () => {
       await el.updateComplete;
       
       const panel = el.shadowRoot!.querySelector('.system-panel');
-      expect(panel!.classList.contains('drawerOpen')).to.be.true;
+      expect(panel!.classList.contains('drawerOpen')).to.equal(true);
     });
 
     it('should toggle drawerOpen state on click', async () => {
       const panel = el.shadowRoot!.querySelector<HTMLElement>('.system-panel');
-      expect(el.drawerOpen).to.be.false;
+      expect(el.drawerOpen).to.equal(false);
 
       panel!.click();
       await el.updateComplete;
 
-      expect(el.drawerOpen).to.be.true;
+      expect(el.drawerOpen).to.equal(true);
     });
 
     it('should toggle drawerOpen state on Enter key', async () => {
       const panel = el.shadowRoot!.querySelector<HTMLElement>('.system-panel');
-      expect(el.drawerOpen).to.be.false;
+      expect(el.drawerOpen).to.equal(false);
 
       const event = new KeyboardEvent('keydown', { key: 'Enter' });
       panel!.dispatchEvent(event);
       await el.updateComplete;
 
-      expect(el.drawerOpen).to.be.true;
+      expect(el.drawerOpen).to.equal(true);
     });
 
     it('should toggle drawerOpen state on Space key', async () => {
       const panel = el.shadowRoot!.querySelector<HTMLElement>('.system-panel');
-      expect(el.drawerOpen).to.be.false;
+      expect(el.drawerOpen).to.equal(false);
 
       const event = new KeyboardEvent('keydown', { key: ' ' });
       panel!.dispatchEvent(event);
       await el.updateComplete;
 
-      expect(el.drawerOpen).to.be.true;
+      expect(el.drawerOpen).to.equal(true);
     });
 
     it('should not toggle on other keys', async () => {
       const panel = el.shadowRoot!.querySelector<HTMLElement>('.system-panel');
-      expect(el.drawerOpen).to.be.false;
+      expect(el.drawerOpen).to.equal(false);
 
       const event = new KeyboardEvent('keydown', { key: 'a' });
       panel!.dispatchEvent(event);
       await el.updateComplete;
 
-      expect(el.drawerOpen).to.be.false;
+      expect(el.drawerOpen).to.equal(false);
     });
 
     it('should have role="button"', () => {
@@ -443,13 +443,13 @@ describe('SystemInfo', () => {
 
     it('should render panel-content wrapper', () => {
       const panelContent = el.shadowRoot!.querySelector('.panel-content');
-      expect(panelContent).to.exist;
+      expect(panelContent).to.not.equal(null);
     });
 
     it('should render system-content inside panel-content', () => {
       const panelContent = el.shadowRoot!.querySelector('.panel-content');
       const systemContent = panelContent!.querySelector('.system-content');
-      expect(systemContent).to.exist;
+      expect(systemContent).to.not.equal(null);
     });
   });
 
@@ -479,7 +479,7 @@ describe('SystemInfo', () => {
       const outsideEvent = new MouseEvent('click', { bubbles: true });
       document.dispatchEvent(outsideEvent);
       
-      expect(el.drawerOpen).to.be.false;
+      expect(el.drawerOpen).to.equal(false);
     });
 
     it('should not collapse when clicking inside the panel', async () => {
@@ -492,7 +492,7 @@ describe('SystemInfo', () => {
       await el.updateComplete;
 
       // Should toggle to collapsed then back to expanded
-      expect(el.drawerOpen).to.be.false;
+      expect(el.drawerOpen).to.equal(false);
     });
 
     it('should not change state when clicking outside while collapsed', async () => {
@@ -503,7 +503,7 @@ describe('SystemInfo', () => {
       const outsideEvent = new MouseEvent('click', { bubbles: true });
       document.dispatchEvent(outsideEvent);
 
-      expect(el.drawerOpen).to.be.false;
+      expect(el.drawerOpen).to.equal(false);
     });
 
     it('should handle click events with composed path correctly', async () => {
@@ -519,7 +519,7 @@ describe('SystemInfo', () => {
       // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
       (el as unknown as SystemInfoTestInterface)._handleClickOutside(mockEvent);
 
-      expect(el.drawerOpen).to.be.false;
+      expect(el.drawerOpen).to.equal(false);
     });
   });
 
@@ -533,15 +533,15 @@ describe('SystemInfo', () => {
 
       it('should display error in version component', () => {
         const versionComponent = el.shadowRoot!.querySelector('system-info-version');
-        expect(versionComponent).to.exist;
+        expect(versionComponent).to.not.equal(null);
         expect(versionComponent!.error?.message).to.equal('Test error message');
       });
 
       it('should show error even without version data', () => {
         delete el.version;
         const versionComponent = el.shadowRoot!.querySelector('system-info-version');
-        expect(versionComponent).to.exist;
-        expect(versionComponent!.error).to.exist;
+        expect(versionComponent).to.not.equal(null);
+        expect(versionComponent!.error).to.not.equal(null);
       });
     });
 
@@ -555,8 +555,8 @@ describe('SystemInfo', () => {
 
       it('should no longer show error in version component', () => {
         const versionComponent = el.shadowRoot!.querySelector('system-info-version');
-        expect(versionComponent).to.exist;
-        expect(versionComponent!.error).to.be.null;
+        expect(versionComponent).to.not.equal(null);
+        expect(versionComponent!.error).to.equal(null);
       });
     });
   });
@@ -587,7 +587,7 @@ describe('SystemInfo', () => {
 
       it('should render the system-info-page component', () => {
         const pageInfo = el.shadowRoot!.querySelector('system-info-page');
-        expect(pageInfo).to.exist;
+        expect(pageInfo).to.not.equal(null);
       });
     });
 
@@ -609,13 +609,13 @@ describe('SystemInfo', () => {
       });
 
       it('should still set pageStatus on the component', () => {
-        expect(el.pageStatus).to.exist;
+        expect(el.pageStatus).to.not.equal(null);
         expect(el.pageStatus!.pageName).to.equal('my-page');
       });
 
       it('should render the system-info-page component', () => {
         const pageInfo = el.shadowRoot!.querySelector('system-info-page');
-        expect(pageInfo).to.exist;
+        expect(pageInfo).to.not.equal(null);
       });
     });
 
@@ -630,12 +630,12 @@ describe('SystemInfo', () => {
       });
 
       it('should not set pageStatus on the component', () => {
-        expect(el.pageStatus).to.be.undefined;
+        expect(el.pageStatus).to.equal(undefined);
       });
 
       it('should not render system-info-page component', () => {
         const pageInfo = el.shadowRoot!.querySelector('system-info-page');
-        expect(pageInfo).not.to.exist;
+        expect(pageInfo).to.equal(null);
       });
     });
 
@@ -646,7 +646,7 @@ describe('SystemInfo', () => {
       });
 
       it('should not set pageStatus on the component', () => {
-        expect(el.pageStatus).to.be.undefined;
+        expect(el.pageStatus).to.equal(undefined);
       });
     });
 
@@ -661,7 +661,7 @@ describe('SystemInfo', () => {
       });
 
       it('should not set pageStatus on the component', () => {
-        expect(el.pageStatus).to.be.undefined;
+        expect(el.pageStatus).to.equal(undefined);
       });
     });
 
@@ -676,7 +676,7 @@ describe('SystemInfo', () => {
       });
 
       it('should not set pageStatus on the component', () => {
-        expect(el.pageStatus).to.be.undefined;
+        expect(el.pageStatus).to.equal(undefined);
       });
     });
   });
@@ -690,7 +690,7 @@ describe('SystemInfo', () => {
       });
 
       it('should have hidden attribute', () => {
-        expect(el.hasAttribute('hidden')).to.be.true;
+        expect(el.hasAttribute('hidden')).to.equal(true);
       });
     });
 
@@ -702,7 +702,7 @@ describe('SystemInfo', () => {
       });
 
       it('should not have hidden attribute', () => {
-        expect(el.hasAttribute('hidden')).to.be.false;
+        expect(el.hasAttribute('hidden')).to.equal(false);
       });
     });
 
@@ -714,7 +714,7 @@ describe('SystemInfo', () => {
       });
 
       it('should not have hidden attribute', () => {
-        expect(el.hasAttribute('hidden')).to.be.false;
+        expect(el.hasAttribute('hidden')).to.equal(false);
       });
     });
   });
@@ -809,21 +809,21 @@ describe('SystemInfo error handling', () => {
       });
 
       it('should set the error property', () => {
-        expect(el.error).to.exist;
+        expect(el.error).to.not.equal(null);
         expect(el.error?.message).to.equal('Connection refused');
       });
 
       it('should set loading to false', () => {
-        expect(el.loading).to.be.false;
+        expect(el.loading).to.equal(false);
       });
 
       it('should start auto refresh as fallback', () => {
-        expect(startAutoRefreshStub).to.have.been.called;
+        expect(startAutoRefreshStub.called).to.equal(true);
       });
 
       it('should display error in version component', () => {
         const versionComponent = el.shadowRoot!.querySelector('system-info-version');
-        expect(versionComponent).to.exist;
+        expect(versionComponent).to.not.equal(null);
         expect(versionComponent!.error?.message).to.equal('Connection refused');
       });
     });
@@ -868,16 +868,16 @@ describe('SystemInfo error handling', () => {
       });
 
       it('should set the error property', () => {
-        expect(el.error).to.exist;
+        expect(el.error).to.not.equal(null);
         expect(el.error?.message).to.equal('Server unavailable');
       });
 
       it('should set loading to false', () => {
-        expect(el.loading).to.be.false;
+        expect(el.loading).to.equal(false);
       });
 
       it('should start auto refresh as fallback', () => {
-        expect(startAutoRefreshStub).to.have.been.called;
+        expect(startAutoRefreshStub.called).to.equal(true);
       });
     });
 
@@ -970,13 +970,13 @@ describe('SystemInfo error handling', () => {
       });
 
       it('should set the error property', () => {
-        expect(el.error).to.exist;
+        expect(el.error).to.not.equal(null);
         expect(el.error?.message).to.equal('Network timeout');
       });
 
       it('should display error in version component', () => {
         const versionComponent = el.shadowRoot!.querySelector('system-info-version');
-        expect(versionComponent).to.exist;
+        expect(versionComponent).to.not.equal(null);
         expect(versionComponent!.error?.message).to.equal('Network timeout');
       });
     });
@@ -1078,7 +1078,7 @@ describe('SystemInfo error handling', () => {
 
       it('should clear the refresh timer', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
-        expect((el as any).refreshTimer).to.be.undefined;
+        expect((el as any).refreshTimer).to.equal(undefined);
       });
     });
 
@@ -1128,7 +1128,7 @@ describe('SystemInfo error handling', () => {
 
       it('should not throw', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
-        expect((el as any).refreshTimer).to.be.undefined;
+        expect((el as any).refreshTimer).to.equal(undefined);
       });
     });
   });
@@ -1182,12 +1182,12 @@ describe('SystemInfo error handling', () => {
       });
 
       it('should abort the stream subscription', () => {
-        expect(abortSpy).to.have.been.calledOnce;
+        expect(abortSpy.callCount).to.equal(1);
       });
 
       it('should delete the stream subscription', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
-        expect((el as any).streamSubscription).to.be.undefined;
+        expect((el as any).streamSubscription).to.equal(undefined);
       });
     });
 
@@ -1237,7 +1237,7 @@ describe('SystemInfo error handling', () => {
 
       it('should not throw', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
-        expect((el as any).streamSubscription).to.be.undefined;
+        expect((el as any).streamSubscription).to.equal(undefined);
       });
     });
   });
@@ -1282,7 +1282,7 @@ describe('SystemInfo error handling', () => {
 
       it('should clear the debounce timer', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
-        expect((el as any).debounceTimer).to.be.undefined;
+        expect((el as any).debounceTimer).to.equal(undefined);
       });
     });
 
@@ -1325,7 +1325,7 @@ describe('SystemInfo error handling', () => {
 
       it('should not throw when no debounce timer exists', () => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
-        expect((el as any).debounceTimer).to.be.undefined;
+        expect((el as any).debounceTimer).to.equal(undefined);
       });
     });
   });
@@ -1392,17 +1392,17 @@ describe('SystemInfo error handling', () => {
       });
 
       it('should set the error property', () => {
-        expect(el.error).to.exist;
+        expect(el.error).to.not.equal(null);
         expect(el.error?.message).to.equal('Stream connection failed');
       });
 
       it('should start auto refresh as fallback', () => {
-        expect(startAutoRefreshStub).to.have.been.called;
+        expect(startAutoRefreshStub.called).to.equal(true);
       });
 
       it('should display error in version component', () => {
         const versionComponent = el.shadowRoot!.querySelector('system-info-version');
-        expect(versionComponent).to.exist;
+        expect(versionComponent).to.not.equal(null);
         expect(versionComponent!.error?.message).to.equal('Stream connection failed');
       });
     });
@@ -1469,11 +1469,11 @@ describe('SystemInfo error handling', () => {
       });
 
       it('should not set the error property', () => {
-        expect(el.error).to.be.null;
+        expect(el.error).to.equal(null);
       });
 
       it('should not start auto refresh', () => {
-        expect(startAutoRefreshStub).to.not.have.been.called;
+        expect(startAutoRefreshStub.called).to.equal(false);
       });
     });
 

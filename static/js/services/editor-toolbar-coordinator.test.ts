@@ -159,7 +159,7 @@ describe('EditorToolbarCoordinator', () => {
     });
 
     it('should stop responding to toolbar events', () => {
-      expect(boldSpy).to.not.have.been.called;
+      expect(boldSpy.called).to.equal(false);
       expect(textarea.value).to.equal('Hello world!');
     });
   });

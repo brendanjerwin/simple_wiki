@@ -12,7 +12,7 @@ describe('FrontmatterEditorDialog - Basic Tests', () => {
   });
 
   it('should exist', () => {
-    expect(el).to.exist;
+    expect(el).to.not.equal(null);
   });
 
   it('should be an instance of FrontmatterEditorDialog', () => {
@@ -20,7 +20,7 @@ describe('FrontmatterEditorDialog - Basic Tests', () => {
   });
 
   it('should have workingFrontmatter property', () => {
-    expect(el.workingFrontmatter).to.exist;
+    expect(el.workingFrontmatter).to.not.equal(null);
     expect(el.workingFrontmatter).to.be.an('object');
   });
 

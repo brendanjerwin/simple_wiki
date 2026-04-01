@@ -1,4 +1,4 @@
-import { html, fixture, expect, assert } from '@open-wc/testing';
+import { html, fixture, expect } from '@open-wc/testing';
 import { stub } from 'sinon';
 import { create } from '@bufbuild/protobuf';
 import { SystemInfoJobs } from './system-info-jobs.js';
@@ -35,7 +35,7 @@ describe('SystemInfoJobs', () => {
   });
 
   it('should exist', () => {
-    assert.instanceOf(el, SystemInfoJobs);
+    expect(el).to.be.instanceOf(SystemInfoJobs);
   });
 
   it('should have the correct tag name', () => {
@@ -43,9 +43,9 @@ describe('SystemInfoJobs', () => {
   });
 
   it('should have default property values', () => {
-    expect(el.jobStatus).to.be.undefined;
-    expect(el.loading).to.be.false;
-    expect(el.error).to.be.null;
+    expect(el.jobStatus).to.equal(undefined);
+    expect(el.loading).to.equal(false);
+    expect(el.error).to.equal(null);
   });
 
   describe('when loading is true and no jobStatus', () => {
@@ -57,13 +57,13 @@ describe('SystemInfoJobs', () => {
 
     it('should display loading message', () => {
       const loadingElement = el.shadowRoot?.querySelector('.loading');
-      expect(loadingElement).to.exist;
+      expect(loadingElement).to.not.equal(null);
       expect(loadingElement?.textContent?.trim()).to.equal('Loading...');
     });
 
     it('should not display indexing info', () => {
       const indexingInfo = el.shadowRoot?.querySelector('.indexing-info');
-      expect(indexingInfo).to.not.exist;
+      expect(indexingInfo).to.equal(null);
     });
   });
 
@@ -75,18 +75,18 @@ describe('SystemInfoJobs', () => {
 
     it('should display error message', () => {
       const errorDisplay = el.shadowRoot?.querySelector('error-display');
-      expect(errorDisplay).to.exist;
+      expect(errorDisplay).to.not.equal(null);
       expect((errorDisplay as ErrorDisplay).augmentedError?.message).to.equal('Test error message');
     });
 
     it('should not display indexing info', () => {
       const indexingInfo = el.shadowRoot?.querySelector('.indexing-info');
-      expect(indexingInfo).to.not.exist;
+      expect(indexingInfo).to.equal(null);
     });
 
     it('should not display loading message', () => {
       const loadingElement = el.shadowRoot?.querySelector('.loading');
-      expect(loadingElement).to.not.exist;
+      expect(loadingElement).to.equal(null);
     });
   });
 
@@ -100,13 +100,13 @@ describe('SystemInfoJobs', () => {
 
     it('should display no data message', () => {
       const loadingElement = el.shadowRoot?.querySelector('.loading');
-      expect(loadingElement).to.exist;
+      expect(loadingElement).to.not.equal(null);
       expect(loadingElement?.textContent?.trim()).to.equal('No data');
     });
 
     it('should not display indexing info', () => {
       const indexingInfo = el.shadowRoot?.querySelector('.indexing-info');
-      expect(indexingInfo).to.not.exist;
+      expect(indexingInfo).to.equal(null);
     });
   });
 
@@ -140,13 +140,13 @@ describe('SystemInfoJobs', () => {
     it('should render empty content', () => {
       // Component should render nothing when no active queues
       const indexingInfo = el.shadowRoot?.querySelector('.indexing-info');
-      expect(indexingInfo).to.not.exist;
+      expect(indexingInfo).to.equal(null);
       
       const loadingElement = el.shadowRoot?.querySelector('.loading');
-      expect(loadingElement).to.not.exist;
+      expect(loadingElement).to.equal(null);
       
       const errorDisplay = el.shadowRoot?.querySelector('error-display');
-      expect(errorDisplay).to.not.exist;
+      expect(errorDisplay).to.equal(null);
     });
 
     it('should have empty shadowRoot content', () => {
@@ -186,37 +186,37 @@ describe('SystemInfoJobs', () => {
 
     it('should display indexing info section', () => {
       const indexingInfo = el.shadowRoot?.querySelector('.indexing-info');
-      expect(indexingInfo).to.exist;
+      expect(indexingInfo).to.not.equal(null);
     });
 
     it('should display indexing header with status indicator', () => {
       const header = el.shadowRoot?.querySelector('.indexing-header');
-      expect(header).to.exist;
+      expect(header).to.not.equal(null);
       
       const statusIndicator = el.shadowRoot?.querySelector('.status-indicator');
-      expect(statusIndicator).to.exist;
+      expect(statusIndicator).to.not.equal(null);
     });
 
     it('should display Jobs label', () => {
       const label = el.shadowRoot?.querySelector('.label');
-      expect(label).to.exist;
+      expect(label).to.not.equal(null);
       expect(label?.textContent?.trim()).to.equal('Jobs');
     });
 
     it('should display queue information in correct format', () => {
       const value = el.shadowRoot?.querySelector('.value');
-      expect(value).to.exist;
+      expect(value).to.not.equal(null);
       expect(value?.textContent?.trim()).to.equal('Frontmatter: 5, Bleve: 3');
     });
 
     it('should not display loading message', () => {
       const loadingElement = el.shadowRoot?.querySelector('.loading');
-      expect(loadingElement).to.not.exist;
+      expect(loadingElement).to.equal(null);
     });
 
     it('should not display error message', () => {
       const errorDisplay = el.shadowRoot?.querySelector('error-display');
-      expect(errorDisplay).to.not.exist;
+      expect(errorDisplay).to.equal(null);
     });
   });
 
@@ -255,13 +255,13 @@ describe('SystemInfoJobs', () => {
 
     it('should only display active queues', () => {
       const value = el.shadowRoot?.querySelector('.value');
-      expect(value).to.exist;
+      expect(value).to.not.equal(null);
       expect(value?.textContent?.trim()).to.equal('Frontmatter: 7');
     });
 
     it('should display indexing info section', () => {
       const indexingInfo = el.shadowRoot?.querySelector('.indexing-info');
-      expect(indexingInfo).to.exist;
+      expect(indexingInfo).to.not.equal(null);
     });
   });
 
@@ -300,7 +300,7 @@ describe('SystemInfoJobs', () => {
 
     it('should display all active queues separated by commas', () => {
       const value = el.shadowRoot?.querySelector('.value');
-      expect(value).to.exist;
+      expect(value).to.not.equal(null);
       expect(value?.textContent?.trim()).to.equal('Frontmatter: 12, Bleve: 8, File Scan: 3');
     });
   });
@@ -326,7 +326,7 @@ describe('SystemInfoJobs', () => {
 
     it('should display single queue without comma', () => {
       const value = el.shadowRoot?.querySelector('.value');
-      expect(value).to.exist;
+      expect(value).to.not.equal(null);
       expect(value?.textContent?.trim()).to.equal('Bleve: 25');
     });
   });
@@ -352,16 +352,16 @@ describe('SystemInfoJobs', () => {
 
     it('should display queue information when jobStatus exists', () => {
       const indexingInfo = el.shadowRoot?.querySelector('.indexing-info');
-      expect(indexingInfo).to.exist;
+      expect(indexingInfo).to.not.equal(null);
       
       const value = el.shadowRoot?.querySelector('.value');
-      expect(value).to.exist;
+      expect(value).to.not.equal(null);
       expect(value?.textContent?.trim()).to.equal('Frontmatter: 5');
     });
 
     it('should not display loading message when jobStatus exists', () => {
       const loadingElement = el.shadowRoot?.querySelector('.loading');
-      expect(loadingElement).to.not.exist;
+      expect(loadingElement).to.equal(null);
     });
   });
 
@@ -373,13 +373,13 @@ describe('SystemInfoJobs', () => {
 
     it('should display error message', () => {
       const errorDisplay = el.shadowRoot?.querySelector('error-display');
-      expect(errorDisplay).to.exist;
+      expect(errorDisplay).to.not.equal(null);
       expect((errorDisplay as ErrorDisplay).augmentedError?.message).to.equal('Connection failed');
     });
 
     it('should render error-display element', () => {
       const errorDisplay = el.shadowRoot?.querySelector('error-display');
-      expect(errorDisplay).to.exist;
+      expect(errorDisplay).to.not.equal(null);
     });
   });
 
@@ -504,7 +504,7 @@ describe('SystemInfoJobs', () => {
 
       it('should display error via error-display component', () => {
         const errorDisplay = el.shadowRoot?.querySelector('error-display');
-        expect(errorDisplay).to.exist;
+        expect(errorDisplay).to.not.equal(null);
         expect((errorDisplay as ErrorDisplay).augmentedError?.message).to.equal('Accessibility test error');
       });
     });
@@ -530,11 +530,11 @@ describe('SystemInfoJobs', () => {
 
       it('should have semantic structure with proper labels', () => {
         const label = el.shadowRoot?.querySelector('.label');
-        expect(label).to.exist;
+        expect(label).to.not.equal(null);
         expect(label?.textContent?.trim()).to.equal('Jobs');
         
         const value = el.shadowRoot?.querySelector('.value');
-        expect(value).to.exist;
+        expect(value).to.not.equal(null);
         expect(value?.textContent?.trim()).to.include('Frontmatter: 5');
       });
     });

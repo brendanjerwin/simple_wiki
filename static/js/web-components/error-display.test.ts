@@ -1,4 +1,4 @@
-import { html, fixture, expect, assert } from '@open-wc/testing';
+import { html, fixture, expect } from '@open-wc/testing';
 import { stub, type SinonStub } from 'sinon';
 import { ErrorDisplay, type ErrorAction } from './error-display.js';
 import { AugmentedError, ErrorKind } from './augment-error-service.js';
@@ -31,7 +31,7 @@ describe('ErrorDisplay', () => {
   });
 
   it('should exist', () => {
-    assert.instanceOf(el, ErrorDisplay);
+    expect(el).to.be.instanceOf(ErrorDisplay);
   });
 
   it('should have the correct tag name', () => {
@@ -87,7 +87,7 @@ describe('ErrorDisplay', () => {
     ]);
 
     const expandButton = el.shadowRoot?.querySelector('.expand-button');
-    expect(expandButton).to.exist;
+    expect(expandButton).to.not.equal(null);
   });
 
   it('should expand when button clicked', async () => {
@@ -150,12 +150,12 @@ describe('ErrorDisplay', () => {
 
       it('should not display action button', () => {
         const actionButton = el.shadowRoot?.querySelector('.action-button');
-        expect(actionButton).to.not.exist;
+        expect(actionButton).to.equal(null);
       });
 
       it('should not display actions container', () => {
         const actionsContainer = el.shadowRoot?.querySelector('.error-actions');
-        expect(actionsContainer).to.not.exist;
+        expect(actionsContainer).to.equal(null);
       });
     });
 
@@ -181,7 +181,7 @@ describe('ErrorDisplay', () => {
 
       it('should display action button', () => {
         const actionButton = el.shadowRoot?.querySelector('.action-button');
-        expect(actionButton).to.exist;
+        expect(actionButton).to.not.equal(null);
       });
 
       it('should display action label', () => {
@@ -191,7 +191,7 @@ describe('ErrorDisplay', () => {
 
       it('should display actions container', () => {
         const actionsContainer = el.shadowRoot?.querySelector('.error-actions');
-        expect(actionsContainer).to.exist;
+        expect(actionsContainer).to.not.equal(null);
       });
 
       describe('when action button is clicked', () => {
@@ -205,7 +205,7 @@ describe('ErrorDisplay', () => {
         });
 
         it('should call onClick callback', () => {
-          expect(onClickStub).to.have.been.calledOnce;
+          expect(onClickStub.callCount).to.equal(1);
         });
       });
     });
