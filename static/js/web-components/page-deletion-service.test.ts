@@ -101,9 +101,8 @@ describe('PageDeleter', () => {
       service = new PageDeleter();
     });
 
-    it('should use existing dialog element', () => {
-      expect(service).to.exist;
-      // The existing dialog should be used, not created
+    it('should register event listeners on the existing dialog', () => {
+      expect(existingDialog.addEventListener).to.have.been.called;
     });
   });
 
