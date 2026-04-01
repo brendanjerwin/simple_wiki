@@ -160,7 +160,7 @@ export class AugmentErrorService {
   }
 
   /**
-   * Get icon string for an ErrorIcon (resolves standard icons to emojis)
+   * Get the display string for an error icon identifier (resolves standard icons to emojis)
    */
   static getIconString(icon: string): string {
     if (isStandardErrorIcon(icon)) {
