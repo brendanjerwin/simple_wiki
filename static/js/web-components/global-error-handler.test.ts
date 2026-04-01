@@ -133,48 +133,61 @@ describe('Global Error Handler', () => {
       expect(rejectionHandler).to.be.a('function');
     });
 
-  describe('when handling rejection events', () => {
-    let mockError: Error;
-    let preventDefaultStub: SinonStub;
-    let mockRejectionEvent: PromiseRejectionEvent;
-    let panicEl: KernelPanic | null;
+    describe('when handling rejection events', () => {
+      let mockError: Error;
+      let preventDefaultStub: SinonStub;
+      let mockRejectionEvent: PromiseRejectionEvent;
+      let panicEl: KernelPanic | null;
 
-    beforeEach(() => {
-      mockError = new Error('Promise rejection error');
-      preventDefaultStub = stub();
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock event for testing
-      mockRejectionEvent = {
-        reason: mockError,
-        preventDefault: preventDefaultStub
-      } as unknown as PromiseRejectionEvent;
+      beforeEach(() => {
+        mockError = new Error('Promise rejection error');
+        preventDefaultStub = stub();
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock event for testing
+        mockRejectionEvent = {
+          reason: mockError,
+          preventDefault: preventDefaultStub
+        } as unknown as PromiseRejectionEvent;
 
-      rejectionHandler(mockRejectionEvent);
-      panicEl = document.querySelector('kernel-panic');
+        rejectionHandler(mockRejectionEvent);
+        panicEl = document.querySelector('kernel-panic');
+      });
+
+      it('should show kernel panic', () => {
+        expect(panicEl).to.exist;
+      });
+
+      it('should display the promise rejection error message', () => {
+        expect(panicEl?.augmentedError?.message).to.equal('Promise rejection error');
+      });
+
+      it('should prevent default', () => {
+        expect(preventDefaultStub).to.have.been.calledOnce;
+      });
     });
 
-    it('should show kernel panic', () => {
-      expect(panicEl).to.exist;
-    });
+    describe('when rejection reason is a non-Error value', () => {
+      let preventDefaultStub: SinonStub;
+      let panicEl: KernelPanic | null;
 
-    it('should display the promise rejection error message', () => {
-      expect(panicEl?.augmentedError?.message).to.equal('Promise rejection error');
-    });
+      beforeEach(() => {
+        preventDefaultStub = stub();
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock event for testing
+        const mockRejectionEvent = {
+          reason: 'String rejection reason',
+          preventDefault: preventDefaultStub
+        } as unknown as PromiseRejectionEvent;
 
-    it('should prevent default', () => {
-      expect(preventDefaultStub).to.have.been.calledOnce;
-    });
-  });
+        rejectionHandler(mockRejectionEvent);
+        panicEl = document.querySelector('kernel-panic');
+      });
 
-    it('should handle non-Error rejection reasons', () => {
-      const preventDefaultStub = stub();
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- creating mock event for testing
-      const mockRejectionEvent = {
-        reason: 'String rejection reason',
-        preventDefault: preventDefaultStub
-      } as unknown as PromiseRejectionEvent;
+      it('should prevent default', () => {
+        expect(preventDefaultStub).to.have.been.calledOnce;
+      });
 
-      expect(() => rejectionHandler(mockRejectionEvent)).to.not.throw();
-      expect(preventDefaultStub).to.have.been.calledOnce;
+      it('should show kernel panic', () => {
+        expect(panicEl).to.exist;
+      });
     });
   });
 });
