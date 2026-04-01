@@ -374,7 +374,7 @@ export function showStoredToast(): void {
   if (storedMessage) {
     // Validate the stored type against valid types using type guard
     const storedType = isToastType(storedTypeRaw) ? storedTypeRaw : 'info';
-    const storedTimeout = storedTimeoutRaw ? parseInt(storedTimeoutRaw, 10) : 5;
+    const storedTimeout = storedTimeoutRaw ? Number.parseInt(storedTimeoutRaw, 10) : 5;
     
     sessionStorage.removeItem(STORAGE_KEYS.MESSAGE);
     sessionStorage.removeItem(STORAGE_KEYS.TYPE);
