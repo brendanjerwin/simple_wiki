@@ -11,7 +11,10 @@ import {
 let cachedClient: { url: string; client: Client<typeof PageManagementService> } | null = null;
 
 function getWikiClient(wikiUrl: string): Client<typeof PageManagementService> {
-  const url = wikiUrl.replace(/\/+$/, '');
+  let url = wikiUrl;
+  while (url.endsWith('/')) {
+    url = url.slice(0, -1);
+  }
   if (cachedClient?.url === url) {
     return cachedClient.client;
   }

@@ -116,6 +116,19 @@ describe('readPage', () => {
     });
   });
 
+  describe('when URL has multiple trailing slashes', () => {
+    beforeEach(async () => {
+      mockReadPage.mockResolvedValue({ contentMarkdown: '', versionHash: '' });
+      await readPageFn('https://wiki.example.com///', 'test_page');
+    });
+
+    it('should strip all trailing slashes from base URL', () => {
+      expect(mockCreateGrpcWebTransport).toHaveBeenCalledWith({
+        baseUrl: 'https://wiki.example.com',
+      });
+    });
+  });
+
   describe('when client.readPage rejects', () => {
     let thrownError: Error;
 
