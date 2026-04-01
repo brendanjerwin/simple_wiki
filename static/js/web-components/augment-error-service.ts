@@ -55,11 +55,6 @@ export type StandardErrorIcon =
   ;
 
 /**
- * Icon type can be a standard icon or any custom string (emoji, unicode, etc.)
- */
-export type ErrorIcon = string;
-
-/**
  * Map of standard icons to their emoji representations
  */
 const STANDARD_ICONS: Record<StandardErrorIcon, string> = {
@@ -101,7 +96,7 @@ export class AugmentedError extends Error {
   constructor(
     public readonly originalError: Error,
     public readonly errorKind: ErrorKind,
-    public readonly icon: ErrorIcon,
+    public readonly icon: string,
     public readonly failedGoalDescription?: string
   ) {
     // Call super with no arguments to avoid auto-generating new stack trace
@@ -165,9 +160,9 @@ export class AugmentErrorService {
   }
 
   /**
-   * Get icon string for an ErrorIcon (resolves standard icons to emojis)
+   * Get the display string for an error icon identifier (resolves standard icons to emojis)
    */
-  static getIconString(icon: ErrorIcon): string {
+  static getIconString(icon: string): string {
     if (isStandardErrorIcon(icon)) {
       return STANDARD_ICONS[icon];
     }
