@@ -11,12 +11,12 @@ import {
   Sender,
   type ChatMessage,
   type ChatEvent,
+  type Reaction,
 } from '../gen/api/v1/chat_pb.js';
 import { ChatMarkdownRenderer } from './chat-markdown-renderer.js';
 import { sharedStyles, colorCSS, typographyCSS, zIndexCSS } from './shared-styles.js';
 import { DrawerMixin } from './drawer-mixin.js';
 import { registerAmbientCTA, type AmbientCTA } from './drawer-coordinator.js';
-import type { Reaction } from '../gen/api/v1/chat_pb.js';
 import type { ReactionGroup, ScrollToMessageEventDetail } from './chat-message-bubble.js';
 import './chat-message-bubble.js';
 

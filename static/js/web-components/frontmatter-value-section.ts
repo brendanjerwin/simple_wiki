@@ -5,7 +5,6 @@ import { buttonCSS, foundationCSS, layoutCSS } from './shared-styles.js';
 import './frontmatter-key.js';
 import './frontmatter-value.js';
 import './frontmatter-add-field-button.js';
-import './kernel-panic.js';
 import { showKernelPanic } from './kernel-panic.js';
 import { AugmentErrorService } from './augment-error-service.js';
 import type { SectionChangeEventDetail, AddFieldEventDetail } from './event-types.js';

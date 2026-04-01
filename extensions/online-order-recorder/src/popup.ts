@@ -1,4 +1,3 @@
-import './components/order-list.js';
 import './components/settings-panel.js';
 import { Order } from './merchants/types.js';
 import { OrderList } from './components/order-list.js';
