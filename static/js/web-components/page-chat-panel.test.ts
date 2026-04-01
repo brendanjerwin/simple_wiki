@@ -728,6 +728,90 @@ describe('PageChatPanel', () => {
     });
   });
 
+  describe('stream deferral', () => {
+
+    describe('when connected to DOM with panel closed and page set', () => {
+      let startStreamCallCount: number;
+
+      beforeEach(async () => {
+        startStreamCallCount = startStreamStub.callCount;
+        localStorageStub.getItem.returns(null);
+        await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+      });
+
+      it('should NOT call startStream', () => {
+        expect(startStreamStub.callCount).to.equal(startStreamCallCount);
+      });
+    });
+
+    describe('when panel is opened for the first time with page set', () => {
+      let el: PageChatPanel;
+      let startStreamCallCountBeforeOpen: number;
+
+      beforeEach(async () => {
+        localStorageStub.getItem.returns(null);
+        el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+        startStreamCallCountBeforeOpen = startStreamStub.callCount;
+        el.openDrawer();
+        await el.updateComplete;
+      });
+
+      it('should call startStream', () => {
+        expect(startStreamStub.callCount).to.equal(startStreamCallCountBeforeOpen + 1);
+      });
+    });
+
+    describe('when page changes and panel has never been opened', () => {
+      let el: PageChatPanel;
+      let startStreamCallCountBeforeChange: number;
+
+      beforeEach(async () => {
+        localStorageStub.getItem.returns(null);
+        el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+        startStreamCallCountBeforeChange = startStreamStub.callCount;
+        el.page = 'new-page';
+        await el.updateComplete;
+      });
+
+      it('should NOT call startStream', () => {
+        expect(startStreamStub.callCount).to.equal(startStreamCallCountBeforeChange);
+      });
+    });
+
+    describe('when page changes after panel has been opened', () => {
+      let el: PageChatPanel;
+      let startStreamCallCountBeforeChange: number;
+
+      beforeEach(async () => {
+        localStorageStub.getItem.returns(null);
+        el = await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+        el.openDrawer();
+        await el.updateComplete;
+        startStreamCallCountBeforeChange = startStreamStub.callCount;
+        el.page = 'new-page';
+        await el.updateComplete;
+      });
+
+      it('should call startStream', () => {
+        expect(startStreamStub.callCount).to.equal(startStreamCallCountBeforeChange + 1);
+      });
+    });
+
+    describe('when localStorage restores panel as open', () => {
+      let startStreamCallCount: number;
+
+      beforeEach(async () => {
+        startStreamCallCount = startStreamStub.callCount;
+        localStorageStub.getItem.returns('true');
+        await fixture(html`<page-chat-panel page="test-page"></page-chat-panel>`);
+      });
+
+      it('should call startStream because panel is restored as open', () => {
+        expect(startStreamStub.callCount).to.equal(startStreamCallCount + 1);
+      });
+    });
+  });
+
   describe('Ctrl+Space global keyboard shortcut', () => {
     let el: PageChatPanel;
 
@@ -1230,11 +1314,13 @@ describe('PageChatPanel stream methods', () => {
       startStreamSpy = stub(el as any, 'startStream').resolves();
     });
 
-    describe('when document becomes visible and stream is not connected and page is set', () => {
+    describe('when document becomes visible and stream is not connected and page is set and panel has been opened', () => {
 
       beforeEach(() => {
         el.page = 'test-page';
         el.streamState = 'disconnected';
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- setting private field for testing
+        (el as any)._panelEverOpened = true;
         Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
         (el as any).handleVisibilityChange();
@@ -1246,6 +1332,26 @@ describe('PageChatPanel stream methods', () => {
 
       it('should call startStream', () => {
         expect(startStreamSpy.callCount).to.equal(1);
+      });
+    });
+
+    describe('when document becomes visible but panel has never been opened', () => {
+
+      beforeEach(() => {
+        el.page = 'test-page';
+        el.streamState = 'disconnected';
+        // _panelEverOpened is false by default
+        Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- calling private method for testing
+        (el as any).handleVisibilityChange();
+      });
+
+      afterEach(() => {
+        Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+      });
+
+      it('should not call startStream', () => {
+        expect(startStreamSpy.callCount).to.equal(0);
       });
     });
 
