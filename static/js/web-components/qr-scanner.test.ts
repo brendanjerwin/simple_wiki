@@ -534,11 +534,11 @@ describe('QrScanner', () => {
         await el.updateComplete;
       });
 
-      it('should show unknown error message with type name', () => {
+      it('should show unknown error message with value', () => {
         const errorDisplay = el.shadowRoot?.querySelector<ErrorDisplay>('error-display');
         expect(errorDisplay).to.exist;
         expect(errorDisplay?.augmentedError).to.be.instanceOf(AugmentedError);
-        expect(errorDisplay?.augmentedError?.message).to.include('Unknown error: number value');
+        expect(errorDisplay?.augmentedError?.message).to.include('Unknown error: 42');
       });
 
       it('should emit scanner-error event with Error object', () => {

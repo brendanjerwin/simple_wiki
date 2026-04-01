@@ -227,11 +227,8 @@ export class ToastMessage extends LitElement {
   public show(): void {
     this.visible = true;
     
-    // Disable auto-close by default for error types, unless explicitly enabled
-    const shouldAutoClose = this.type === 'error'
-      ? this.autoClose
-      : this.autoClose;
-    
+    const shouldAutoClose = this.autoClose;
+
     if (shouldAutoClose && this.timeoutSeconds > 0) {
       this.clearTimeout();
       this.timeoutId = window.setTimeout(() => {

@@ -22,8 +22,8 @@ export interface TimerProvider {
  * Default timer provider using browser's native setTimeout/clearTimeout.
  */
 export const defaultTimerProvider: TimerProvider = {
-  setTimeout: (callback, delayMs) => globalThis.setTimeout(callback, delayMs),
-  clearTimeout: (id) => globalThis.clearTimeout(id),
+  setTimeout: (callback, delayMs) => window.setTimeout(callback, delayMs),
+  clearTimeout: (id) => window.clearTimeout(id),
 };
 
 /**

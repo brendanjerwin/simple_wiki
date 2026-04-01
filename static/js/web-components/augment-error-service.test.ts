@@ -284,8 +284,8 @@ describe('AugmentErrorService', () => {
           augmented = AugmentErrorService.augmentError(circularObj);
         });
 
-        it('should use generic message when JSON.stringify fails', () => {
-          expect(augmented.message).to.equal('An unknown error occurred');
+        it('should use toString() fallback when JSON.stringify fails', () => {
+          expect(augmented.message).to.equal('[object Object]');
         });
 
         it('should set errorKind to ERROR', () => {
