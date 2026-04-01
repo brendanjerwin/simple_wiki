@@ -18,7 +18,7 @@ describe('SystemInfoPage', () => {
     });
 
     it('should render nothing', () => {
-      expect(el.shadowRoot!.querySelector('.updated-row')).not.to.exist;
+      expect(el.shadowRoot!.querySelector('.updated-row')).not.to.not.equal(null);
     });
   });
 
@@ -32,7 +32,7 @@ describe('SystemInfoPage', () => {
     });
 
     it('should render nothing', () => {
-      expect(el.shadowRoot!.querySelector('.updated-row')).not.to.exist;
+      expect(el.shadowRoot!.querySelector('.updated-row')).not.to.not.equal(null);
     });
   });
 
@@ -59,18 +59,18 @@ describe('SystemInfoPage', () => {
     });
 
     it('should render the updated row', () => {
-      expect(el.shadowRoot!.querySelector('.updated-row')).to.exist;
+      expect(el.shadowRoot!.querySelector('.updated-row')).to.not.equal(null);
     });
 
     it('should display the label "Page saved:"', () => {
       const label = el.shadowRoot!.querySelector('.label');
-      expect(label).to.exist;
+      expect(label).to.not.equal(null);
       expect(label!.textContent).to.equal('Page saved:');
     });
 
     it('should display "0s ago" immediately after refresh', () => {
       const time = el.shadowRoot!.querySelector('.time');
-      expect(time).to.exist;
+      expect(time).to.not.equal(null);
       expect(time!.textContent).to.equal('0s ago');
     });
 

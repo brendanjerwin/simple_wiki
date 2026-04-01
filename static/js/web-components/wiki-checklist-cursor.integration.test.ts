@@ -50,7 +50,7 @@ describe('WikiChecklist cursor positioning', () => {
     });
 
     it('should NOT have draggable attribute on the item row', () => {
-      expect(row?.draggable).to.be.false;
+      expect(row?.draggable).to.equal(false);
     });
   });
 

@@ -45,7 +45,7 @@ describe('printLabel', () => {
     });
 
     it('should POST to /api/print_label', () => {
-      expect(fetchStub.calledOnce).to.be.true;
+      expect(fetchStub.calledOnce).to.equal(true);
       expect(requestUrl).to.equal('/api/print_label');
       expect(requestMethod).to.equal('POST');
     });
@@ -60,7 +60,7 @@ describe('printLabel', () => {
 
     it('should show a success toast', () => {
       const toast = getToast();
-      expect(toast).to.exist;
+      expect(toast).to.not.equal(null);
       expect(toast!.type).to.equal('success');
     });
 
@@ -167,12 +167,12 @@ describe('printLabel', () => {
     });
 
     it('should not make any fetch calls', () => {
-      expect(fetchStub.called).to.be.false;
+      expect(fetchStub.called).to.equal(false);
     });
 
     it('should show an error toast about missing page name', () => {
       const toast = getToast();
-      expect(toast).to.exist;
+      expect(toast).to.not.equal(null);
       expect(toast!.type).to.equal('error');
       expect(toast!.message).to.include('page name');
     });
@@ -208,7 +208,7 @@ describe('initPrintMenu', () => {
     });
 
     it('should not make any fetch calls', () => {
-      expect(fetchStub.called).to.be.false;
+      expect(fetchStub.called).to.equal(false);
     });
   });
 
@@ -226,7 +226,7 @@ describe('initPrintMenu', () => {
     });
 
     it('should fetch from /api/find_by_key_existence?k=label_printer', () => {
-      expect(fetchStub.calledOnce).to.be.true;
+      expect(fetchStub.calledOnce).to.equal(true);
       expect(fetchStub.firstCall.args[0]).to.equal('/api/find_by_key_existence?k=label_printer');
     });
 
@@ -345,7 +345,7 @@ describe('initPrintMenu', () => {
 
     it('should not set an onclick attribute on the link (uses addEventListener instead)', () => {
       const link = document.querySelector('.pure-menu-link');
-      expect(link?.getAttribute('onclick')).to.be.null;
+      expect(link?.getAttribute('onclick')).to.equal(null);
     });
 
     it('should use the title as link text, not the identifier', () => {
@@ -380,7 +380,7 @@ describe('initPrintMenu', () => {
     });
 
     it('should pass the exact identifier (including special characters) to the print API', () => {
-      expect(fetchStub.calledTwice).to.be.true;
+      expect(fetchStub.calledTwice).to.equal(true);
       const requestBody = JSON.parse((fetchStub.secondCall.args[1] as RequestInit).body as string) as Record<string, unknown>;
       expect(requestBody['template_identifier']).to.equal(specialIdentifier);
     });
@@ -407,7 +407,7 @@ describe('initPrintMenu', () => {
     });
 
     it('should call /api/print_label when link is clicked', () => {
-      expect(fetchStub.calledTwice).to.be.true;
+      expect(fetchStub.calledTwice).to.equal(true);
       expect(fetchStub.secondCall.args[0]).to.equal('/api/print_label');
     });
   });

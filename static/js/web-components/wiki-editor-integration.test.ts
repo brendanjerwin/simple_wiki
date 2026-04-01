@@ -101,7 +101,7 @@ describe('WikiEditor integration with toolbar', () => {
 
   it('should set up the coordinator and render toolbar', () => {
     expect((wikiEditor as unknown as WikiEditorInternal).coordinator).to.not.be.null;
-    expect(getToolbar()).to.exist;
+    expect(getToolbar()).to.not.equal(null);
     expect(getTextarea().value).to.equal('Hello world');
   });
 
@@ -150,7 +150,7 @@ describe('WikiEditor integration with toolbar', () => {
     });
 
     it('should set has-selection attribute on toolbar', () => {
-      expect(toolbar.hasAttribute('has-selection')).to.be.true;
+      expect(toolbar.hasAttribute('has-selection')).to.equal(true);
     });
   });
 
@@ -166,7 +166,7 @@ describe('WikiEditor integration with toolbar', () => {
     });
 
     it('should set has-selection attribute on toolbar', () => {
-      expect(toolbar.hasAttribute('has-selection')).to.be.true;
+      expect(toolbar.hasAttribute('has-selection')).to.equal(true);
     });
   });
 
@@ -188,7 +188,7 @@ describe('WikiEditor integration with toolbar', () => {
     });
 
     it('should remove has-selection attribute from toolbar', () => {
-      expect(toolbar.hasAttribute('has-selection')).to.be.false;
+      expect(toolbar.hasAttribute('has-selection')).to.equal(false);
     });
   });
 
@@ -204,7 +204,7 @@ describe('WikiEditor integration with toolbar', () => {
     });
 
     it('should set has-selection attribute on toolbar', () => {
-      expect(toolbar.hasAttribute('has-selection')).to.be.true;
+      expect(toolbar.hasAttribute('has-selection')).to.equal(true);
     });
   });
 });

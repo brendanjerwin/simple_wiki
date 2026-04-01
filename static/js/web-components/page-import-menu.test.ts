@@ -80,12 +80,12 @@ describe('initPageImportMenu', () => {
 
     it('should inject a link with id page-import-trigger', () => {
       const link = document.getElementById('page-import-trigger');
-      expect(link).to.exist;
+      expect(link).to.not.equal(null);
     });
 
     it('should include a FontAwesome import icon', () => {
       const icon = document.querySelector('#page-import-trigger i.fa-solid.fa-file-import');
-      expect(icon).to.exist;
+      expect(icon).to.not.equal(null);
     });
 
     it('should include the text " Import Pages"', () => {
@@ -100,12 +100,12 @@ describe('initPageImportMenu', () => {
 
     it('should apply pure-menu-link class to the link', () => {
       const link = document.getElementById('page-import-trigger');
-      expect(link?.classList.contains('pure-menu-link')).to.be.true;
+      expect(link?.classList.contains('pure-menu-link')).to.equal(true);
     });
 
     it('should apply pure-menu-item class to the list item', () => {
       const item = document.querySelector('.pure-menu-item');
-      expect(item).to.exist;
+      expect(item).to.not.equal(null);
     });
   });
 
@@ -133,7 +133,7 @@ describe('initPageImportMenu', () => {
     });
 
     it('should call openDialog on the page-import-dialog element', () => {
-      expect(openDialogStub.calledOnce).to.be.true;
+      expect(openDialogStub.calledOnce).to.equal(true);
     });
   });
 
@@ -177,7 +177,7 @@ describe('initPageImportMenu', () => {
     });
 
     it('should prevent the default link navigation', () => {
-      expect(defaultPrevented).to.be.true;
+      expect(defaultPrevented).to.equal(true);
     });
   });
 });

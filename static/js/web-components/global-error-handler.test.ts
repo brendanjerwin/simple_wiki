@@ -83,7 +83,7 @@ describe('Global Error Handler', () => {
       });
 
       it('should show kernel panic', () => {
-        expect(panicEl).to.exist;
+        expect(panicEl).to.not.equal(null);
       });
 
       it('should display the error message', () => {
@@ -110,7 +110,7 @@ describe('Global Error Handler', () => {
       });
 
       it('should show kernel panic', () => {
-        expect(panicEl).to.exist;
+        expect(panicEl).to.not.equal(null);
       });
 
       it('should display the fallback error message', () => {
@@ -153,7 +153,7 @@ describe('Global Error Handler', () => {
       });
 
       it('should show kernel panic', () => {
-        expect(panicEl).to.exist;
+        expect(panicEl).to.not.equal(null);
       });
 
       it('should display the promise rejection error message', () => {
@@ -161,7 +161,7 @@ describe('Global Error Handler', () => {
       });
 
       it('should prevent default', () => {
-        expect(preventDefaultStub).to.have.been.calledOnce;
+        expect(preventDefaultStub.callCount).to.equal(1);
       });
     });
 
@@ -182,11 +182,11 @@ describe('Global Error Handler', () => {
       });
 
       it('should prevent default', () => {
-        expect(preventDefaultStub).to.have.been.calledOnce;
+        expect(preventDefaultStub.callCount).to.equal(1);
       });
 
       it('should show kernel panic', () => {
-        expect(panicEl).to.exist;
+        expect(panicEl).to.not.equal(null);
       });
     });
   });

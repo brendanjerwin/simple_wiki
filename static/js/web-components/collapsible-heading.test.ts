@@ -16,7 +16,7 @@ describe('CollapsibleHeading', () => {
         <p>Content</p>
       </collapsible-heading>
     `);
-    expect(el).to.exist;
+    expect(el).to.not.equal(null);
   });
 
   describe('when rendered with content', () => {
@@ -34,17 +34,17 @@ describe('CollapsibleHeading', () => {
 
     it('should render a toggle button', () => {
       const button = el.shadowRoot?.querySelector('.ch-toggle');
-      expect(button).to.exist;
+      expect(button).to.not.equal(null);
     });
 
     it('should render the heading slot', () => {
       const slot = el.shadowRoot?.querySelector('slot[name="heading"]');
-      expect(slot).to.exist;
+      expect(slot).to.not.equal(null);
     });
 
     it('should render the content slot', () => {
       const slot = el.shadowRoot?.querySelector('slot:not([name])');
-      expect(slot).to.exist;
+      expect(slot).to.not.equal(null);
     });
   });
 

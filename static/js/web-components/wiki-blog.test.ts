@@ -63,7 +63,7 @@ describe('WikiBlog', () => {
     el = buildElement();
     stubListPagesByFrontmatter(el, []);
     document.body.appendChild(el);
-    expect(el).to.exist;
+    expect(el).to.not.equal(null);
   });
 
   describe('when loading posts', () => {
@@ -103,7 +103,7 @@ describe('WikiBlog', () => {
       expect(args.matchKey).to.equal('blog.identifier');
       expect(args.matchValue).to.equal('test-blog');
       expect(args.sortByKey).to.equal('blog.published-date');
-      expect(args.sortAscending).to.be.false;
+      expect(args.sortAscending).to.equal(false);
     });
 
     it('should render blog entries', () => {
@@ -165,7 +165,7 @@ describe('WikiBlog', () => {
 
     it('should show a wiki page link', () => {
       const wikiLink = el.shadowRoot?.querySelector('.wiki-link');
-      expect(wikiLink).to.exist;
+      expect(wikiLink).to.not.equal(null);
       expect(wikiLink?.getAttribute('href')).to.equal('/post_ext');
     });
   });
@@ -184,7 +184,7 @@ describe('WikiBlog', () => {
 
     it('should still show the New Post button', () => {
       const btn = el.shadowRoot?.querySelector('.blog-header .btn');
-      expect(btn).to.exist;
+      expect(btn).to.not.equal(null);
     });
   });
 
@@ -198,12 +198,12 @@ describe('WikiBlog', () => {
 
     it('should not render the New Post button', () => {
       const btn = el.shadowRoot?.querySelector('.blog-header .btn');
-      expect(btn).to.not.exist;
+      expect(btn).to.equal(null);
     });
 
     it('should not render the blog new post dialog', () => {
       const dialog = el.shadowRoot?.querySelector('blog-new-post-dialog');
-      expect(dialog).to.not.exist;
+      expect(dialog).to.equal(null);
     });
   });
 
@@ -237,7 +237,7 @@ describe('WikiBlog', () => {
 
     it('should open the blog new post dialog', () => {
       const dialog = el.shadowRoot?.querySelector('blog-new-post-dialog');
-      expect(dialog?.hasAttribute('open')).to.be.true;
+      expect(dialog?.hasAttribute('open')).to.equal(true);
     });
   });
 });

@@ -50,7 +50,7 @@ describe('PageDeleter', () => {
   });
 
   it('should exist', () => {
-    expect(service).to.exist;
+    expect(service).to.not.equal(null);
   });
 
   describe('dialog initialization', () => {
@@ -63,7 +63,7 @@ describe('PageDeleter', () => {
     });
 
     it('should set dialog as hidden', () => {
-      expect(mockDialog.hidden).to.be.true;
+      expect(mockDialog.hidden).to.equal(true);
     });
 
     it('should append dialog to document body', () => {
@@ -145,7 +145,7 @@ describe('PageDeleter', () => {
       });
 
       it('should throw an error', () => {
-        expect(thrownError).to.exist;
+        expect(thrownError).to.not.equal(null);
       });
 
       it('should throw with correct message', () => {
@@ -153,7 +153,7 @@ describe('PageDeleter', () => {
       });
 
       it('should not open dialog', () => {
-        expect(mockDialog.openDialog).to.not.have.been.called;
+        expect(mockDialog.openDialog.called).to.equal(false);
       });
     });
   });
@@ -176,7 +176,7 @@ describe('PageDeleter', () => {
       });
 
       it('should clear page name from dataset', () => {
-        expect(mockDialog.dataset.pageName).to.be.undefined;
+        expect(mockDialog.dataset.pageName).to.equal(undefined);
       });
     });
 
@@ -197,7 +197,7 @@ describe('PageDeleter', () => {
         });
 
         it('should show error in dialog', () => {
-          expect(mockDialog.showError).to.have.been.called;
+          expect(mockDialog.showError.called).to.equal(true);
         });
 
         it('should show error with correct message', () => {
@@ -227,7 +227,7 @@ describe('PageDeleter', () => {
       });
 
       it('should remove dialog from DOM', () => {
-        expect(mockDialog.remove).to.have.been.called;
+        expect(mockDialog.remove.called).to.equal(true);
       });
     });
   });
