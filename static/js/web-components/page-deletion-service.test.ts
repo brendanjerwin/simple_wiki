@@ -102,7 +102,9 @@ describe('PageDeleter', () => {
     });
 
     it('should register event listeners on the existing dialog', () => {
-      expect(existingDialog.addEventListener).to.have.been.called;
+      expect(existingDialog.addEventListener).to.have.been.calledTwice;
+      expect(existingDialog.addEventListener).to.have.been.calledWith('confirm', sinon.match.func);
+      expect(existingDialog.addEventListener).to.have.been.calledWith('cancel', sinon.match.func);
     });
   });
 
