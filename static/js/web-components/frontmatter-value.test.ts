@@ -18,11 +18,11 @@ async function createFixtureWithTimeout(template: TemplateResult, timeoutMs = 50
 
 describe('coercePrimitive', () => {
   it('should convert "true" to boolean true', () => {
-    expect(coercePrimitive('true')).to.be.true;
+    expect(coercePrimitive('true')).to.equal(true);
   });
 
   it('should convert "false" to boolean false', () => {
-    expect(coercePrimitive('false')).to.be.false;
+    expect(coercePrimitive('false')).to.equal(false);
   });
 
   it('should convert numeric strings to numbers', () => {
@@ -37,9 +37,9 @@ describe('coercePrimitive', () => {
   });
 
   it('should leave non-string values unchanged', () => {
-    expect(coercePrimitive(true)).to.be.true;
+    expect(coercePrimitive(true)).to.equal(true);
     expect(coercePrimitive(42)).to.equal(42);
-    expect(coercePrimitive(null)).to.be.null;
+    expect(coercePrimitive(null)).to.equal(null);
   });
 });
 
@@ -56,7 +56,7 @@ describe('FrontmatterValue', () => {
     });
 
     it('should exist', () => {
-      expect(el).to.exist;
+      expect(el).to.not.equal(null);
     });
 
     it('should be an instance of FrontmatterValue', () => {
@@ -74,11 +74,11 @@ describe('FrontmatterValue', () => {
     });
 
     it('should have null value by default', () => {
-      expect(el.value).to.be.null;
+      expect(el.value).to.equal(null);
     });
 
     it('should not be disabled by default', () => {
-      expect(el.disabled).to.be.false;
+      expect(el.disabled).to.equal(false);
     });
 
     it('should have empty placeholder by default', () => {
@@ -93,14 +93,14 @@ describe('FrontmatterValue', () => {
 
     it('should render frontmatter-value-string component', () => {
       const stringComponent = el.shadowRoot?.querySelector('frontmatter-value-string');
-      expect(stringComponent).to.exist;
+      expect(stringComponent).to.not.equal(null);
     });
 
     it('should not render array or section components', () => {
       const arrayComponent = el.shadowRoot?.querySelector('frontmatter-value-array');
       const sectionComponent = el.shadowRoot?.querySelector('frontmatter-value-section');
-      expect(arrayComponent).to.not.exist;
-      expect(sectionComponent).to.not.exist;
+      expect(arrayComponent).to.equal(null);
+      expect(sectionComponent).to.equal(null);
     });
 
     it('should pass the value to string component', () => {
@@ -126,7 +126,7 @@ describe('FrontmatterValue', () => {
 
       it('should pass disabled state to string component', () => {
         const stringComponent = el.shadowRoot?.querySelector<HTMLElement & { disabled: boolean }>('frontmatter-value-string');
-        expect(stringComponent!.disabled).to.be.true;
+        expect(stringComponent!.disabled).to.equal(true);
       });
     });
   });
@@ -138,14 +138,14 @@ describe('FrontmatterValue', () => {
 
     it('should render frontmatter-value-array component', () => {
       const arrayComponent = el.shadowRoot?.querySelector('frontmatter-value-array');
-      expect(arrayComponent).to.exist;
+      expect(arrayComponent).to.not.equal(null);
     });
 
     it('should not render string or section components', () => {
       const stringComponent = el.shadowRoot?.querySelector('frontmatter-value-string');
       const sectionComponent = el.shadowRoot?.querySelector('frontmatter-value-section');
-      expect(stringComponent).to.not.exist;
-      expect(sectionComponent).to.not.exist;
+      expect(stringComponent).to.equal(null);
+      expect(sectionComponent).to.equal(null);
     });
 
     it('should pass the array to array component', () => {
@@ -171,7 +171,7 @@ describe('FrontmatterValue', () => {
 
       it('should pass disabled state to array component', () => {
         const arrayComponent = el.shadowRoot?.querySelector<HTMLElement & { disabled: boolean }>('frontmatter-value-array');
-        expect(arrayComponent!.disabled).to.be.true;
+        expect(arrayComponent!.disabled).to.equal(true);
       });
     });
   });
@@ -183,14 +183,14 @@ describe('FrontmatterValue', () => {
 
     it('should render frontmatter-value-section component', () => {
       const sectionComponent = el.shadowRoot?.querySelector('frontmatter-value-section');
-      expect(sectionComponent).to.exist;
+      expect(sectionComponent).to.not.equal(null);
     });
 
     it('should not render string or array components', () => {
       const stringComponent = el.shadowRoot?.querySelector('frontmatter-value-string');
       const arrayComponent = el.shadowRoot?.querySelector('frontmatter-value-array');
-      expect(stringComponent).to.not.exist;
-      expect(arrayComponent).to.not.exist;
+      expect(stringComponent).to.equal(null);
+      expect(arrayComponent).to.equal(null);
     });
 
     it('should pass the fields to section component', () => {
@@ -205,7 +205,7 @@ describe('FrontmatterValue', () => {
 
       it('should pass disabled state to section component', () => {
         const sectionComponent = el.shadowRoot?.querySelector<HTMLElement & { disabled: boolean }>('frontmatter-value-section');
-        expect(sectionComponent!.disabled).to.be.true;
+        expect(sectionComponent!.disabled).to.equal(true);
       });
     });
   });
@@ -217,7 +217,7 @@ describe('FrontmatterValue', () => {
 
     it('should render empty state message', () => {
       const emptyMessage = el.shadowRoot?.querySelector('.empty-value-message');
-      expect(emptyMessage).to.exist;
+      expect(emptyMessage).to.not.equal(null);
       expect(emptyMessage?.textContent?.trim()).to.equal('No value to display');
     });
 
@@ -225,9 +225,9 @@ describe('FrontmatterValue', () => {
       const stringComponent = el.shadowRoot?.querySelector('frontmatter-value-string');
       const arrayComponent = el.shadowRoot?.querySelector('frontmatter-value-array');
       const sectionComponent = el.shadowRoot?.querySelector('frontmatter-value-section');
-      expect(stringComponent).to.not.exist;
-      expect(arrayComponent).to.not.exist;
-      expect(sectionComponent).to.not.exist;
+      expect(stringComponent).to.equal(null);
+      expect(arrayComponent).to.equal(null);
+      expect(sectionComponent).to.equal(null);
     });
   });
 
@@ -238,7 +238,7 @@ describe('FrontmatterValue', () => {
 
     it('should render frontmatter-value-string component', () => {
       const stringComponent = el.shadowRoot?.querySelector('frontmatter-value-string');
-      expect(stringComponent).to.exist;
+      expect(stringComponent).to.not.equal(null);
     });
 
     it('should convert number to string for string component', () => {
@@ -254,7 +254,7 @@ describe('FrontmatterValue', () => {
 
     it('should render frontmatter-value-string component', () => {
       const stringComponent = el.shadowRoot?.querySelector('frontmatter-value-string');
-      expect(stringComponent).to.exist;
+      expect(stringComponent).to.not.equal(null);
     });
 
     it('should convert boolean to string for string component', () => {
@@ -288,7 +288,7 @@ describe('FrontmatterValue', () => {
       });
 
       it('should dispatch value-change event', () => {
-        expect(valueChangeEvent).to.exist;
+        expect(valueChangeEvent).to.not.equal(null);
       });
 
       it('should include the new value in event detail', () => {
@@ -325,11 +325,11 @@ describe('FrontmatterValue', () => {
       });
 
       it('should coerce "true" back to boolean true', () => {
-        expect(valueChangeEvent?.detail.newValue).to.be.true;
+        expect(valueChangeEvent?.detail.newValue).to.equal(true);
       });
 
       it('should update the value property as boolean', () => {
-        expect(el.value).to.be.true;
+        expect(el.value).to.equal(true);
       });
     });
 
@@ -354,7 +354,7 @@ describe('FrontmatterValue', () => {
       });
 
       it('should coerce "false" back to boolean false', () => {
-        expect(valueChangeEvent?.detail.newValue).to.be.false;
+        expect(valueChangeEvent?.detail.newValue).to.equal(false);
       });
     });
 
@@ -382,7 +382,7 @@ describe('FrontmatterValue', () => {
       });
 
       it('should dispatch value-change event', () => {
-        expect(valueChangeEvent).to.exist;
+        expect(valueChangeEvent).to.not.equal(null);
       });
 
       it('should include the new array in event detail', () => {
@@ -418,7 +418,7 @@ describe('FrontmatterValue', () => {
       });
 
       it('should dispatch value-change event', () => {
-        expect(valueChangeEvent).to.exist;
+        expect(valueChangeEvent).to.not.equal(null);
       });
 
       it('should include the new fields in event detail', () => {
@@ -445,8 +445,8 @@ describe('FrontmatterValue', () => {
       it('should render array component instead of string component', () => {
         const arrayComponent = el.shadowRoot?.querySelector('frontmatter-value-array');
         const stringComponent = el.shadowRoot?.querySelector('frontmatter-value-string');
-        expect(arrayComponent).to.exist;
-        expect(stringComponent).to.not.exist;
+        expect(arrayComponent).to.not.equal(null);
+        expect(stringComponent).to.equal(null);
       });
     });
 
@@ -459,8 +459,8 @@ describe('FrontmatterValue', () => {
       it('should render section component instead of string component', () => {
         const sectionComponent = el.shadowRoot?.querySelector('frontmatter-value-section');
         const stringComponent = el.shadowRoot?.querySelector('frontmatter-value-string');
-        expect(sectionComponent).to.exist;
-        expect(stringComponent).to.not.exist;
+        expect(sectionComponent).to.not.equal(null);
+        expect(stringComponent).to.equal(null);
       });
     });
   });

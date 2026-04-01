@@ -34,7 +34,7 @@ describe('FrontmatterEditorDialog', () => {
   });
 
   it('should exist', () => {
-    expect(el).to.exist;
+    expect(el).to.not.equal(null);
   });
 
   it('should be an instance of FrontmatterEditorDialog', () => {
@@ -47,7 +47,7 @@ describe('FrontmatterEditorDialog', () => {
 
   describe('when component is initialized', () => {
     it('should not be open by default', () => {
-      expect(el.open).to.be.false;
+      expect(el.open).to.equal(false);
     });
 
     it('should have empty page by default', () => {
@@ -55,11 +55,11 @@ describe('FrontmatterEditorDialog', () => {
     });
 
     it('should not be loading by default', () => {
-      expect(el.loading).to.be.false;
+      expect(el.loading).to.equal(false);
     });
 
     it('should have no error by default', () => {
-      expect(el.augmentedError).to.be.undefined;
+      expect(el.augmentedError).to.equal(undefined);
     });
   });
 
@@ -86,12 +86,12 @@ describe('FrontmatterEditorDialog', () => {
 
       it('should not render error-display', () => {
         const errorDisplay = el.shadowRoot?.querySelector('error-display');
-        expect(errorDisplay).to.be.null;
+        expect(errorDisplay).to.equal(null);
       });
 
       it('should not render frontmatter editor', () => {
         const editor = el.shadowRoot?.querySelector('frontmatter-value-section');
-        expect(editor).to.be.null;
+        expect(editor).to.equal(null);
       });
     });
 
@@ -112,12 +112,12 @@ describe('FrontmatterEditorDialog', () => {
 
       it('should not render loading indicator', () => {
         const loadingEl = el.shadowRoot?.querySelector('.loading');
-        expect(loadingEl).to.be.null;
+        expect(loadingEl).to.equal(null);
       });
 
       it('should not render frontmatter editor', () => {
         const editor = el.shadowRoot?.querySelector('frontmatter-value-section');
-        expect(editor).to.be.null;
+        expect(editor).to.equal(null);
       });
     });
 
@@ -141,12 +141,12 @@ describe('FrontmatterEditorDialog', () => {
 
       it('should not render loading indicator', () => {
         const loadingEl = el.shadowRoot?.querySelector('.loading');
-        expect(loadingEl).to.be.null;
+        expect(loadingEl).to.equal(null);
       });
 
       it('should not render error-display', () => {
         const errorDisplay = el.shadowRoot?.querySelector('error-display');
-        expect(errorDisplay).to.be.null;
+        expect(errorDisplay).to.equal(null);
       });
     });
   });

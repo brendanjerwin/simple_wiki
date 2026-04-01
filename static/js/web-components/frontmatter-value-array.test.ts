@@ -29,7 +29,7 @@ describe('FrontmatterValueArray', () => {
     });
 
     it('should exist', () => {
-      expect(el).to.exist;
+      expect(el).to.not.equal(null);
     });
 
     it('should be an instance of FrontmatterValueArray', () => {
@@ -51,7 +51,7 @@ describe('FrontmatterValueArray', () => {
     });
 
     it('should not be disabled by default', () => {
-      expect(el.disabled).to.be.false;
+      expect(el.disabled).to.equal(false);
     });
 
     it('should have empty placeholder by default', () => {
@@ -103,7 +103,7 @@ describe('FrontmatterValueArray', () => {
 
     it('should display empty array message', () => {
       const emptyMessage = el.shadowRoot?.querySelector('.empty-array-message');
-      expect(emptyMessage).to.exist;
+      expect(emptyMessage).to.not.equal(null);
       expect(emptyMessage?.textContent?.trim()).to.equal('No items in array');
     });
 
@@ -131,7 +131,7 @@ describe('FrontmatterValueArray', () => {
     });
 
     it('should dispatch array-change event', () => {
-      expect(arrayChangeEvent).to.exist;
+      expect(arrayChangeEvent).to.not.equal(null);
     });
 
     it('should include the new array in event detail', () => {
@@ -178,7 +178,7 @@ describe('FrontmatterValueArray', () => {
     });
 
     it('should dispatch array-change event', () => {
-      expect(arrayChangeEvent).to.exist;
+      expect(arrayChangeEvent).to.not.equal(null);
     });
 
     it('should include the new array with item removed', () => {
@@ -231,7 +231,7 @@ describe('FrontmatterValueArray', () => {
     });
 
     it('should dispatch array-change event', () => {
-      expect(arrayChangeEvent).to.exist;
+      expect(arrayChangeEvent).to.not.equal(null);
     });
 
     it('should include the updated array in event detail', () => {
@@ -255,19 +255,19 @@ describe('FrontmatterValueArray', () => {
     it('should disable all string components', () => {
       const stringComponents = el.shadowRoot?.querySelectorAll<HTMLElement & { disabled: boolean }>('frontmatter-value-string');
       stringComponents!.forEach(component => {
-        expect(component.disabled).to.be.true;
+        expect(component.disabled).to.equal(true);
       });
     });
 
     it('should disable the add button', () => {
       const addButton = el.shadowRoot?.querySelector<HTMLButtonElement>('.add-item-button');
-      expect(addButton!.disabled).to.be.true;
+      expect(addButton!.disabled).to.equal(true);
     });
 
     it('should disable all remove buttons', () => {
       const removeButtons = el.shadowRoot?.querySelectorAll<HTMLButtonElement>('.remove-item-button');
       removeButtons!.forEach(button => {
-        expect(button.disabled).to.be.true;
+        expect(button.disabled).to.equal(true);
       });
     });
   });
@@ -326,7 +326,7 @@ describe('FrontmatterValueArray', () => {
 
       it('should show empty array message', () => {
         const emptyMessage = el.shadowRoot?.querySelector('.empty-array-message');
-        expect(emptyMessage).to.exist;
+        expect(emptyMessage).to.not.equal(null);
       });
     });
   });

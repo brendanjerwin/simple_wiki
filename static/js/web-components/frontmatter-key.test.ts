@@ -15,7 +15,7 @@ describe('FrontmatterKey', () => {
     });
 
     it('should exist', () => {
-      expect(el).to.exist;
+      expect(el).to.not.equal(null);
     });
 
     it('should be an instance of FrontmatterKey', () => {
@@ -37,7 +37,7 @@ describe('FrontmatterKey', () => {
     });
 
     it('should not be editable by default', () => {
-      expect(el.editable).to.be.false;
+      expect(el.editable).to.equal(false);
     });
 
     it('should have empty placeholder by default', () => {
@@ -57,7 +57,7 @@ describe('FrontmatterKey', () => {
 
     it('should not display an input field', () => {
       const inputElement = el.shadowRoot?.querySelector('.key-input');
-      expect(inputElement).to.not.exist;
+      expect(inputElement).to.equal(null);
     });
   });
 
@@ -68,12 +68,12 @@ describe('FrontmatterKey', () => {
 
     it('should display an input field', () => {
       const inputElement = el.shadowRoot?.querySelector('.key-input');
-      expect(inputElement).to.exist;
+      expect(inputElement).to.not.equal(null);
     });
 
     it('should not display a static key display', () => {
       const keyElement = el.shadowRoot?.querySelector('.key-display');
-      expect(keyElement).to.not.exist;
+      expect(keyElement).to.equal(null);
     });
 
     it('should set the input value to the key', () => {
@@ -112,7 +112,7 @@ describe('FrontmatterKey', () => {
     });
 
     it('should dispatch key-change event', () => {
-      expect(keyChangeEvent).to.exist;
+      expect(keyChangeEvent).to.not.equal(null);
     });
 
     it('should include old key in event detail', () => {
@@ -147,7 +147,7 @@ describe('FrontmatterKey', () => {
     });
 
     it('should not dispatch key-change event', () => {
-      expect(keyChangeEvent).to.be.null;
+      expect(keyChangeEvent).to.equal(null);
     });
 
     it('should revert the input value to original key', () => {
@@ -179,7 +179,7 @@ describe('FrontmatterKey', () => {
     });
 
     it('should not dispatch key-change event', () => {
-      expect(keyChangeEvent).to.be.null;
+      expect(keyChangeEvent).to.equal(null);
     });
 
     it('should revert the input value to original key', () => {
@@ -211,7 +211,7 @@ describe('FrontmatterKey', () => {
     });
 
     it('should not dispatch key-change event', () => {
-      expect(keyChangeEvent).to.be.null;
+      expect(keyChangeEvent).to.equal(null);
     });
 
     it('should not update the key property unnecessarily', () => {

@@ -15,7 +15,7 @@ describe('FrontmatterValueString', () => {
     });
 
     it('should exist', () => {
-      expect(el).to.exist;
+      expect(el).to.not.equal(null);
     });
 
     it('should be an instance of FrontmatterValueString', () => {
@@ -37,7 +37,7 @@ describe('FrontmatterValueString', () => {
     });
 
     it('should not be disabled by default', () => {
-      expect(el.disabled).to.be.false;
+      expect(el.disabled).to.equal(false);
     });
 
     it('should have empty placeholder by default', () => {
@@ -75,7 +75,7 @@ describe('FrontmatterValueString', () => {
     });
 
     it('should dispatch value-change event', () => {
-      expect(valueChangeEvent).to.exist;
+      expect(valueChangeEvent).to.not.equal(null);
     });
 
     it('should include new value in event detail', () => {
