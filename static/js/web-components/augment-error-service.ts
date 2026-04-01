@@ -57,7 +57,7 @@ export type StandardErrorIcon =
 /**
  * Icon type can be a standard icon or any custom string (emoji, unicode, etc.)
  */
-export type ErrorIcon = StandardErrorIcon | string;
+export type ErrorIcon = string;
 
 /**
  * Map of standard icons to their emoji representations

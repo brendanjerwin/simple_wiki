@@ -8,10 +8,8 @@ import type { Transport } from '@connectrpc/connect';
 let sharedTransport: Transport | null = null;
 
 export function getGrpcWebTransport(): Transport {
-  if (!sharedTransport) {
-    sharedTransport = createGrpcWebTransport({
-      baseUrl: window.location.origin,
-    });
-  }
+  sharedTransport ??= createGrpcWebTransport({
+    baseUrl: window.location.origin,
+  });
   return sharedTransport;
 }

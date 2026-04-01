@@ -257,7 +257,7 @@ export class SystemInfo extends DrawerMixin(LitElement) implements AmbientCTA {
       'isWatching' in obj &&
       typeof (obj as { isWatching: unknown }).isWatching === 'boolean' &&
       (!('versionHash' in obj) ||
-        typeof (obj as { versionHash: unknown }).versionHash === 'undefined' ||
+        (obj as { versionHash: unknown }).versionHash === undefined ||
         typeof (obj as { versionHash: unknown }).versionHash === 'string') &&
       (!('lastRefreshTime' in obj) ||
         (obj as { lastRefreshTime: unknown }).lastRefreshTime === undefined ||

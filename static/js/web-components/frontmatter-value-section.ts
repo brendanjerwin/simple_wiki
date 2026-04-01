@@ -314,9 +314,9 @@ export class FrontmatterValueSection extends LitElement {
     return html`
       <div class="${containerClass}">
         <div class="${headerClass}">
-          ${!this.isRoot ? html`
+          ${this.isRoot ? '' : html`
             <span class="section-title">${this.title} (${fieldCount})</span>
-          ` : ''}
+          `}
           <frontmatter-add-field-button
             .disabled="${this.disabled}"
             @add-field="${this._handleAddField}"

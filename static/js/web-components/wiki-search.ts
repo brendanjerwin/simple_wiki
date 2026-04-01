@@ -17,9 +17,7 @@ export class WikiSearch extends LitElement {
   private client: Client<typeof SearchService> | null = null;
 
   private getClient(): Client<typeof SearchService> {
-    if (!this.client) {
-      this.client = createClient(SearchService, getGrpcWebTransport());
-    }
+    this.client ??= createClient(SearchService, getGrpcWebTransport());
     return this.client;
   }
 
