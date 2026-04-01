@@ -185,7 +185,7 @@ export const themeCSS = css`
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
+    z-index: var(--z-modal);
     backdrop-filter: blur(4px);
   }
 
@@ -729,7 +729,7 @@ export const pillCSS = css`
  * Builds a styles array for dialog components with all common styles included.
  * Ensures responsiveCSS is always last to properly override desktop styles on mobile.
  *
- * Includes: foundationCSS, dialogCSS, buttonCSS, animationCSS, ...componentStyles, responsiveCSS
+ * Includes: foundationCSS, zIndexCSS, dialogCSS, buttonCSS, animationCSS, ...componentStyles, responsiveCSS
  *
  * Usage:
  * ```
@@ -737,6 +737,6 @@ export const pillCSS = css`
  * ```
  */
 export function dialogStyles(...componentStyles: CSSResult[]): CSSResult[] {
-  return [foundationCSS, dialogCSS, buttonCSS, animationCSS, ...componentStyles, responsiveCSS];
+  return [foundationCSS, zIndexCSS, dialogCSS, buttonCSS, animationCSS, ...componentStyles, responsiveCSS];
 }
 

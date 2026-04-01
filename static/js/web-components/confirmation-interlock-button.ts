@@ -1,6 +1,6 @@
 import { html, css, LitElement, nothing } from 'lit';
 import { property, state } from 'lit/decorators.js';
-import { buttonCSS, foundationCSS } from './shared-styles.js';
+import { buttonCSS, foundationCSS, zIndexCSS } from './shared-styles.js';
 
 const DEFAULT_DISARM_TIMEOUT_MS = 5000;
 
@@ -56,6 +56,7 @@ export class ConfirmationInterlockButton extends LitElement {
   static override readonly styles = [
     foundationCSS,
     buttonCSS,
+    zIndexCSS,
     css`
       :host {
         display: inline-block;
@@ -99,7 +100,7 @@ export class ConfirmationInterlockButton extends LitElement {
       .confirm-backdrop {
         position: fixed;
         inset: 0;
-        z-index: 10000;
+        z-index: var(--z-blocker);
         /* Semi-transparent blur to indicate click-to-dismiss */
         background: rgba(0, 0, 0, 0.15);
         backdrop-filter: blur(1px);
@@ -121,7 +122,7 @@ export class ConfirmationInterlockButton extends LitElement {
         border: 1px solid var(--color-border, #555);
         border-radius: 6px;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-        z-index: 10001;
+        z-index: var(--z-blocker);
         white-space: nowrap;
         animation: popupFadeIn 0.15s ease-out;
       }

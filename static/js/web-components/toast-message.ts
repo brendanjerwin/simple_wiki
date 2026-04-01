@@ -1,6 +1,6 @@
 import { html, css, LitElement } from 'lit';
 import { property } from 'lit/decorators.js';
-import { colorCSS, typographyCSS, themeCSS, foundationCSS, buttonCSS } from './shared-styles.js';
+import { colorCSS, typographyCSS, themeCSS, foundationCSS, buttonCSS, zIndexCSS } from './shared-styles.js';
 import type { AugmentedError } from './augment-error-service.js';
 import './error-display.js';
 
@@ -42,12 +42,13 @@ export class ToastMessage extends LitElement {
     themeCSS,
     foundationCSS,
     buttonCSS,
+    zIndexCSS,
     css`
       :host {
         position: fixed;
         top: 12px;
         right: 12px;
-        z-index: 10000;
+        z-index: var(--z-notification);
         display: block;
         max-width: 400px;
         min-width: 280px;
