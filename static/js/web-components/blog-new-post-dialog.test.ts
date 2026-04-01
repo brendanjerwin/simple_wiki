@@ -21,7 +21,7 @@ describe('BlogNewPostDialog', () => {
   it('should exist', () => {
     el = buildElement();
     document.body.appendChild(el);
-    expect(el).to.exist;
+    expect(el).to.not.equal(null);
   });
 
   describe('when closed', () => {
@@ -33,7 +33,7 @@ describe('BlogNewPostDialog', () => {
 
     it('should not render dialog content', () => {
       const dialog = el.shadowRoot?.querySelector('.dialog');
-      expect(dialog).to.not.exist;
+      expect(dialog).to.equal(null);
     });
   });
 
@@ -47,59 +47,59 @@ describe('BlogNewPostDialog', () => {
 
     it('should render the dialog', () => {
       const dialog = el.shadowRoot?.querySelector('.dialog');
-      expect(dialog).to.exist;
+      expect(dialog).to.not.equal(null);
     });
 
     it('should have a title input', () => {
       const input = el.shadowRoot?.querySelector<TitleInput>('#post-title');
-      expect(input).to.exist;
+      expect(input).to.not.equal(null);
       expect(input?.tagName.toLowerCase()).to.equal('title-input');
     });
 
     it('should have a date input defaulting to today', () => {
       const input = el.shadowRoot?.querySelector('#post-date') as HTMLInputElement;
-      expect(input).to.exist;
+      expect(input).to.not.equal(null);
       expect(input.type).to.equal('date');
       expect(input.value).to.equal(new Date().toISOString().slice(0, 10));
     });
 
     it('should have a subtitle input', () => {
       const input = el.shadowRoot?.querySelector('#post-subtitle') as HTMLInputElement;
-      expect(input).to.exist;
+      expect(input).to.not.equal(null);
     });
 
     it('should have date and subtitle on the same row', () => {
       const row = el.shadowRoot?.querySelector('.form-row');
-      expect(row).to.exist;
-      expect(row?.querySelector('#post-date')).to.exist;
-      expect(row?.querySelector('#post-subtitle')).to.exist;
+      expect(row).to.not.equal(null);
+      expect(row?.querySelector('#post-date')).to.not.equal(null);
+      expect(row?.querySelector('#post-subtitle')).to.not.equal(null);
     });
 
     it('should have a Create Post button', () => {
       const btn = el.shadowRoot?.querySelector('.btn-primary');
-      expect(btn).to.exist;
+      expect(btn).to.not.equal(null);
       expect(btn?.textContent?.trim()).to.equal('Create Post');
     });
 
     it('should disable Create Post button when title is empty', () => {
       const btn = el.shadowRoot?.querySelector('.btn-primary') as HTMLButtonElement;
-      expect(btn.disabled).to.be.true;
+      expect(btn.disabled).to.equal(true);
     });
 
     it('should have an embedded wiki-editor', () => {
       const editor = el.shadowRoot?.querySelector('wiki-editor');
-      expect(editor).to.exist;
+      expect(editor).to.not.equal(null);
     });
 
     it('should have a collapsed summary section', () => {
       const toggle = el.shadowRoot?.querySelector('.summary-toggle');
-      expect(toggle).to.exist;
+      expect(toggle).to.not.equal(null);
       expect(toggle?.textContent).to.contain('Summary');
     });
 
     it('should not show the summary textarea when collapsed', () => {
       const textarea = el.shadowRoot?.querySelector('#post-summary');
-      expect(textarea).to.not.exist;
+      expect(textarea).to.equal(null);
     });
   });
 
@@ -117,7 +117,7 @@ describe('BlogNewPostDialog', () => {
 
     it('should show the summary textarea', () => {
       const textarea = el.shadowRoot?.querySelector('#post-summary') as HTMLTextAreaElement;
-      expect(textarea).to.exist;
+      expect(textarea).to.not.equal(null);
     });
   });
 
@@ -134,7 +134,7 @@ describe('BlogNewPostDialog', () => {
     });
 
     it('should close the dialog', () => {
-      expect(el.open).to.be.false;
+      expect(el.open).to.equal(false);
     });
   });
 
@@ -154,7 +154,7 @@ describe('BlogNewPostDialog', () => {
 
     it('should enable the Create Post button', () => {
       const btn = el.shadowRoot?.querySelector('.btn-primary') as HTMLButtonElement;
-      expect(btn.disabled).to.be.false;
+      expect(btn.disabled).to.equal(false);
     });
   });
 });

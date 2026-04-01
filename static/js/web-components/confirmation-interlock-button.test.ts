@@ -56,7 +56,7 @@ describe('ConfirmationInterlockButton', () => {
     });
 
     it('should exist', () => {
-      expect(el).to.exist;
+      expect(el).to.not.equal(null);
     });
 
     it('should have default label', () => {
@@ -76,11 +76,11 @@ describe('ConfirmationInterlockButton', () => {
     });
 
     it('should not be armed initially', () => {
-      expect(el.armed).to.be.false;
+      expect(el.armed).to.equal(false);
     });
 
     it('should not be disabled initially', () => {
-      expect(el.disabled).to.be.false;
+      expect(el.disabled).to.equal(false);
     });
 
     it('should have default disarmTimeoutMs', () => {
@@ -97,13 +97,13 @@ describe('ConfirmationInterlockButton', () => {
 
     it('should render the trigger button', () => {
       const button = el.shadowRoot?.querySelector('button');
-      expect(button).to.exist;
+      expect(button).to.not.equal(null);
       expect(button?.textContent?.trim()).to.equal('Change');
     });
 
     it('should not render confirmation popup', () => {
       const confirmPopup = el.shadowRoot?.querySelector('.confirm-popup');
-      expect(confirmPopup).to.not.exist;
+      expect(confirmPopup).to.equal(null);
     });
   });
 
@@ -118,7 +118,7 @@ describe('ConfirmationInterlockButton', () => {
     });
 
     it('should become armed', () => {
-      expect(el.armed).to.be.true;
+      expect(el.armed).to.equal(true);
     });
 
     it('should still render trigger button', () => {
@@ -126,12 +126,12 @@ describe('ConfirmationInterlockButton', () => {
       const triggerButton = Array.from(buttons || []).find(
         btn => btn.textContent?.trim() === 'Delete'
       );
-      expect(triggerButton).to.exist;
+      expect(triggerButton).to.not.equal(null);
     });
 
     it('should render confirmation popup', () => {
       const confirmPopup = el.shadowRoot?.querySelector('.confirm-popup');
-      expect(confirmPopup).to.exist;
+      expect(confirmPopup).to.not.equal(null);
     });
 
     it('should render confirm label', () => {
@@ -141,13 +141,13 @@ describe('ConfirmationInterlockButton', () => {
 
     it('should render yes button', () => {
       const yesButton = el.shadowRoot?.querySelector('.button-yes');
-      expect(yesButton).to.exist;
+      expect(yesButton).to.not.equal(null);
       expect(yesButton?.textContent?.trim()).to.equal('Yes');
     });
 
     it('should render no button', () => {
       const noButton = el.shadowRoot?.querySelector('.button-no');
-      expect(noButton).to.exist;
+      expect(noButton).to.not.equal(null);
       expect(noButton?.textContent?.trim()).to.equal('No');
     });
   });
@@ -203,16 +203,16 @@ describe('ConfirmationInterlockButton', () => {
     });
 
     it('should dispatch confirmed event', () => {
-      expect(confirmedHandler).to.have.been.calledOnce;
+      expect(confirmedHandler).to.have.callCount(1);
     });
 
     it('should disarm the button', () => {
-      expect(el.armed).to.be.false;
+      expect(el.armed).to.equal(false);
     });
 
     it('should close the popup', () => {
       const confirmPopup = el.shadowRoot?.querySelector('.confirm-popup');
-      expect(confirmPopup).to.not.exist;
+      expect(confirmPopup).to.equal(null);
     });
   });
 
@@ -236,16 +236,16 @@ describe('ConfirmationInterlockButton', () => {
     });
 
     it('should dispatch cancelled event', () => {
-      expect(cancelledHandler).to.have.been.calledOnce;
+      expect(cancelledHandler).to.have.callCount(1);
     });
 
     it('should disarm the button', () => {
-      expect(el.armed).to.be.false;
+      expect(el.armed).to.equal(false);
     });
 
     it('should close the popup', () => {
       const confirmPopup = el.shadowRoot?.querySelector('.confirm-popup');
-      expect(confirmPopup).to.not.exist;
+      expect(confirmPopup).to.equal(null);
     });
   });
 
@@ -258,12 +258,12 @@ describe('ConfirmationInterlockButton', () => {
 
     it('should have disabled trigger button', () => {
       const button = el.shadowRoot?.querySelector('button');
-      expect(button?.disabled).to.be.true;
+      expect(button?.disabled).to.equal(true);
     });
 
     it('should not arm when arm() is called', () => {
       el.arm();
-      expect(el.armed).to.be.false;
+      expect(el.armed).to.equal(false);
     });
   });
 
@@ -279,12 +279,12 @@ describe('ConfirmationInterlockButton', () => {
 
     it('should have disabled yes button', () => {
       const yesButton = el.shadowRoot?.querySelector('.button-yes') as HTMLButtonElement;
-      expect(yesButton?.disabled).to.be.true;
+      expect(yesButton?.disabled).to.equal(true);
     });
 
     it('should have disabled no button', () => {
       const noButton = el.shadowRoot?.querySelector('.button-no') as HTMLButtonElement;
-      expect(noButton?.disabled).to.be.true;
+      expect(noButton?.disabled).to.equal(true);
     });
   });
 
@@ -305,13 +305,13 @@ describe('ConfirmationInterlockButton', () => {
       });
 
       it('should be armed before timer fires', () => {
-        expect(el.armed).to.be.true;
-        expect(testTimer.pendingCallback).to.exist;
+        expect(el.armed).to.equal(true);
+        expect(testTimer.pendingCallback).to.not.equal(null);
       });
 
       it('should auto-disarm when timer fires', () => {
         testTimer.tick();
-        expect(el.armed).to.be.false;
+        expect(el.armed).to.equal(false);
       });
     });
 
@@ -331,11 +331,11 @@ describe('ConfirmationInterlockButton', () => {
       });
 
       it('should not schedule a timer', () => {
-        expect(testTimer.pendingCallback).to.be.null;
+        expect(testTimer.pendingCallback).to.equal(null);
       });
 
       it('should remain armed indefinitely', () => {
-        expect(el.armed).to.be.true;
+        expect(el.armed).to.equal(true);
       });
     });
 
@@ -362,12 +362,12 @@ describe('ConfirmationInterlockButton', () => {
       });
 
       it('should dispatch confirmed event', () => {
-        expect(confirmedHandler).to.have.been.calledOnce;
+        expect(confirmedHandler).to.have.callCount(1);
       });
 
       it('should clear the timer', () => {
-        expect(testTimer.wasCleared).to.be.true;
-        expect(testTimer.pendingCallback).to.be.null;
+        expect(testTimer.wasCleared).to.equal(true);
+        expect(testTimer.pendingCallback).to.equal(null);
       });
     });
   });
@@ -381,7 +381,7 @@ describe('ConfirmationInterlockButton', () => {
 
     it('should set armed to true', () => {
       el.arm();
-      expect(el.armed).to.be.true;
+      expect(el.armed).to.equal(true);
     });
   });
 
@@ -395,7 +395,7 @@ describe('ConfirmationInterlockButton', () => {
 
     it('should set armed to false', () => {
       el.disarm();
-      expect(el.armed).to.be.false;
+      expect(el.armed).to.equal(false);
     });
   });
 
@@ -419,12 +419,12 @@ describe('ConfirmationInterlockButton', () => {
       });
 
       it('should clear disarm timer', () => {
-        expect(testTimer.wasCleared).to.be.true;
+        expect(testTimer.wasCleared).to.equal(true);
       });
 
       it('should remain armed since disconnected', () => {
         // State unchanged since disconnected - timer was cleared before it could fire
-        expect(el.armed).to.be.true;
+        expect(el.armed).to.equal(true);
       });
     });
   });
@@ -452,15 +452,15 @@ describe('ConfirmationInterlockButton', () => {
       });
 
       it('should dispatch confirmed event', () => {
-        expect(confirmedEvent).to.exist;
+        expect(confirmedEvent).to.not.equal(null);
       });
 
       it('should be composed', () => {
-        expect(confirmedEvent?.composed).to.be.true;
+        expect(confirmedEvent?.composed).to.equal(true);
       });
 
       it('should bubble', () => {
-        expect(confirmedEvent?.bubbles).to.be.true;
+        expect(confirmedEvent?.bubbles).to.equal(true);
       });
     });
   });
@@ -480,7 +480,7 @@ describe('ConfirmationInterlockButton', () => {
 
       it('should position popup on left', () => {
         const popup = el.shadowRoot?.querySelector('.confirm-popup');
-        expect(popup?.classList.contains('position-left')).to.be.true;
+        expect(popup?.classList.contains('position-left')).to.equal(true);
       });
     });
 
@@ -498,7 +498,7 @@ describe('ConfirmationInterlockButton', () => {
 
       it('should position popup on right', () => {
         const popup = el.shadowRoot?.querySelector('.confirm-popup');
-        expect(popup?.classList.contains('position-right')).to.be.true;
+        expect(popup?.classList.contains('position-right')).to.equal(true);
       });
     });
 
@@ -518,7 +518,7 @@ describe('ConfirmationInterlockButton', () => {
         const popup = el.shadowRoot?.querySelector('.confirm-popup');
         const hasPositionClass = popup?.classList.contains('position-left') ||
                                   popup?.classList.contains('position-right');
-        expect(hasPositionClass).to.be.true;
+        expect(hasPositionClass).to.equal(true);
       });
     });
   });
@@ -539,12 +539,12 @@ describe('ConfirmationInterlockButton', () => {
       });
 
       it('should disarm the button', () => {
-        expect(el.armed).to.be.false;
+        expect(el.armed).to.equal(false);
       });
 
       it('should close the popup', () => {
         const popup = el.shadowRoot?.querySelector('.confirm-popup');
-        expect(popup).to.not.exist;
+        expect(popup).to.equal(null);
       });
     });
 
@@ -559,7 +559,7 @@ describe('ConfirmationInterlockButton', () => {
 
       it('should render backdrop', () => {
         const backdrop = el.shadowRoot?.querySelector('.confirm-backdrop');
-        expect(backdrop).to.exist;
+        expect(backdrop).to.not.equal(null);
       });
     });
   });
