@@ -121,9 +121,12 @@ export class FrontmatterValue extends LitElement {
     }
 
     // Handle primitive types (string, number, boolean) as strings
+    const primitiveStr = typeof this.value === 'string' || typeof this.value === 'number' || typeof this.value === 'boolean'
+      ? String(this.value)
+      : '';
     return html`
       <frontmatter-value-string
-        .value="${String(this.value)}"
+        .value="${primitiveStr}"
         .disabled="${this.disabled}"
         .placeholder="${this.placeholder}"
         @value-change="${this._handleValueChange}"

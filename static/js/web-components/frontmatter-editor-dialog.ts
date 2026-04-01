@@ -256,7 +256,7 @@ export class FrontmatterEditorDialog extends LitElement {
   };
 
   private refreshPage(): void {
-    window.location.reload();
+    globalThis.location.reload();
   }
 
   private readonly _handleSaveClick = async (): Promise<void> => {
