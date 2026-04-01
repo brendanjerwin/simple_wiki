@@ -39,7 +39,7 @@ describe('InventoryAddItemDialog', () => {
   });
 
   it('should exist', () => {
-    expect(el).to.exist;
+    expect(el).to.not.equal(null);
   });
 
   it('should be an instance of InventoryAddItemDialog', () => {
@@ -52,7 +52,7 @@ describe('InventoryAddItemDialog', () => {
 
   describe('when component is initialized', () => {
     it('should not be open by default', () => {
-      expect(el.open).to.be.false;
+      expect(el.open).to.equal(false);
     });
 
     it('should have empty container by default', () => {
@@ -72,15 +72,15 @@ describe('InventoryAddItemDialog', () => {
     });
 
     it('should not be loading by default', () => {
-      expect(el.loading).to.be.false;
+      expect(el.loading).to.equal(false);
     });
 
     it('should have no error by default', () => {
-      expect(el.error).to.be.null;
+      expect(el.error).to.equal(null);
     });
 
     it('should have isUnique true by default', () => {
-      expect(el.isUnique).to.be.true;
+      expect(el.isUnique).to.equal(true);
     });
 
     it('should have empty searchResults by default', () => {
@@ -95,7 +95,7 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should set open to true', () => {
-        expect(el.open).to.be.true;
+        expect(el.open).to.equal(true);
       });
 
       it('should set container', () => {
@@ -115,11 +115,11 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should clear error', () => {
-        expect(el.error).to.be.null;
+        expect(el.error).to.equal(null);
       });
 
       it('should reset isUnique to true', () => {
-        expect(el.isUnique).to.be.true;
+        expect(el.isUnique).to.equal(true);
       });
 
       it('should clear searchResults', () => {
@@ -138,7 +138,7 @@ describe('InventoryAddItemDialog', () => {
     });
 
     it('should set open to false', () => {
-      expect(el.open).to.be.false;
+      expect(el.open).to.equal(false);
     });
 
     it('should clear itemIdentifier', () => {
@@ -154,11 +154,11 @@ describe('InventoryAddItemDialog', () => {
     });
 
     it('should clear error', () => {
-      expect(el.error).to.be.null;
+      expect(el.error).to.equal(null);
     });
 
     it('should reset isUnique to true', () => {
-      expect(el.isUnique).to.be.true;
+      expect(el.isUnique).to.equal(true);
     });
 
     it('should clear searchResults', () => {
@@ -177,7 +177,7 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should close the dialog', () => {
-        expect(closeSpy).to.have.been.calledOnce;
+        expect(closeSpy.callCount).to.equal(1);
       });
     });
 
@@ -190,7 +190,7 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should not close the dialog', () => {
-        expect(closeSpy).to.not.have.been.called;
+        expect(closeSpy.called).to.equal(false);
       });
     });
   });
@@ -203,7 +203,7 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should have open attribute', () => {
-        expect(el.hasAttribute('open')).to.be.true;
+        expect(el.hasAttribute('open')).to.equal(true);
       });
 
       it('should render dialog title with container', () => {
@@ -213,12 +213,12 @@ describe('InventoryAddItemDialog', () => {
 
       it('should render automagic-identifier-input child component', () => {
         const identifierInput = getIdentifierInput(el);
-        expect(identifierInput).to.exist;
+        expect(identifierInput).to.not.equal(null);
       });
 
       it('should render description field', () => {
         const descriptionInput = el.shadowRoot?.querySelector('textarea[name="description"]');
-        expect(descriptionInput).to.exist;
+        expect(descriptionInput).to.not.equal(null);
       });
 
       it('should render cancel button', () => {
@@ -234,7 +234,7 @@ describe('InventoryAddItemDialog', () => {
 
     describe('when dialog is closed', () => {
       it('should not have open attribute', () => {
-        expect(el.hasAttribute('open')).to.be.false;
+        expect(el.hasAttribute('open')).to.equal(false);
       });
     });
 
@@ -247,7 +247,7 @@ describe('InventoryAddItemDialog', () => {
 
       it('should disable the add button', () => {
         const addBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-primary');
-        expect(addBtn?.disabled).to.be.true;
+        expect(addBtn?.disabled).to.equal(true);
       });
     });
 
@@ -268,7 +268,7 @@ describe('InventoryAddItemDialog', () => {
 
       it('should render error-display component', () => {
         const errorDisplay = el.shadowRoot?.querySelector('error-display');
-        expect(errorDisplay).to.exist;
+        expect(errorDisplay).to.not.equal(null);
       });
 
       it('should pass augmented error to error-display', () => {
@@ -296,12 +296,12 @@ describe('InventoryAddItemDialog', () => {
 
       it('should display search results section', () => {
         const resultsDiv = el.shadowRoot?.querySelector('.search-results');
-        expect(resultsDiv).to.exist;
+        expect(resultsDiv).to.not.equal(null);
       });
 
       it('should display search result item', () => {
         const resultItem = el.shadowRoot?.querySelector('.search-result-item');
-        expect(resultItem).to.exist;
+        expect(resultItem).to.not.equal(null);
       });
 
       it('should display result title', () => {
@@ -329,7 +329,7 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should close the dialog', () => {
-        expect(closeSpy).to.have.been.calledOnce;
+        expect(closeSpy.callCount).to.equal(1);
       });
     });
   });
@@ -347,7 +347,7 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should not close the dialog', () => {
-        expect(closeSpy).to.not.have.been.called;
+        expect(closeSpy.called).to.equal(false);
       });
     });
   });
@@ -365,7 +365,7 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should close the dialog', () => {
-        expect(closeSpy).to.have.been.calledOnce;
+        expect(closeSpy.callCount).to.equal(1);
       });
     });
   });
@@ -407,7 +407,7 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should update isUnique property', () => {
-        expect(el.isUnique).to.be.true;
+        expect(el.isUnique).to.equal(true);
       });
     });
 
@@ -424,7 +424,7 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should update isUnique to false', () => {
-        expect(el.isUnique).to.be.false;
+        expect(el.isUnique).to.equal(false);
       });
     });
   });
@@ -551,7 +551,7 @@ describe('InventoryAddItemDialog', () => {
 
       it('should not display container info', () => {
         const containerDiv = el.shadowRoot?.querySelector('.search-result-container');
-        expect(containerDiv).to.not.exist;
+        expect(containerDiv).to.equal(null);
       });
     });
 
@@ -589,7 +589,7 @@ describe('InventoryAddItemDialog', () => {
 
       it('should disable the add button', () => {
         const addBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-primary');
-        expect(addBtn?.disabled).to.be.true;
+        expect(addBtn?.disabled).to.equal(true);
       });
     });
 
@@ -603,7 +603,7 @@ describe('InventoryAddItemDialog', () => {
 
       it('should disable the add button', () => {
         const addBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-primary');
-        expect(addBtn?.disabled).to.be.true;
+        expect(addBtn?.disabled).to.equal(true);
       });
     });
 
@@ -618,7 +618,7 @@ describe('InventoryAddItemDialog', () => {
 
       it('should disable the add button', () => {
         const addBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-primary');
-        expect(addBtn?.disabled).to.be.true;
+        expect(addBtn?.disabled).to.equal(true);
       });
     });
 
@@ -633,7 +633,7 @@ describe('InventoryAddItemDialog', () => {
 
       it('should enable the add button', () => {
         const addBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-primary');
-        expect(addBtn?.disabled).to.be.false;
+        expect(addBtn?.disabled).to.equal(false);
       });
     });
   });
@@ -716,7 +716,7 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should set searchLoading to false', () => {
-        expect(el.searchLoading).to.be.false;
+        expect(el.searchLoading).to.equal(false);
       });
     });
 
@@ -749,7 +749,7 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should set searchLoading to false', () => {
-        expect(el.searchLoading).to.be.false;
+        expect(el.searchLoading).to.equal(false);
       });
     });
   });
@@ -791,7 +791,7 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should not call searchContent', () => {
-        expect(searchContentStub).to.not.have.been.called;
+        expect(searchContentStub.called).to.equal(false);
       });
     });
   });
@@ -830,7 +830,7 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should not call addItem', () => {
-        expect(addItemStub).to.not.have.been.called;
+        expect(addItemStub.called).to.equal(false);
       });
     });
 
@@ -868,7 +868,7 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should show success message', () => {
-        expect(showSuccessStub).to.have.been.called;
+        expect(showSuccessStub.called).to.equal(true);
       });
 
       it('should use response summary in success message', () => {
@@ -876,11 +876,11 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should close the dialog', () => {
-        expect(closeSpy).to.have.been.calledOnce;
+        expect(closeSpy.callCount).to.equal(1);
       });
 
       it('should set loading to false', () => {
-        expect(el.loading).to.be.false;
+        expect(el.loading).to.equal(false);
       });
     });
 
@@ -967,11 +967,11 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should set loading to false', () => {
-        expect(el.loading).to.be.false;
+        expect(el.loading).to.equal(false);
       });
 
       it('should not close the dialog', () => {
-        expect(el.open).to.be.true;
+        expect(el.open).to.equal(true);
       });
     });
 
@@ -1054,7 +1054,7 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should not call searchContent after disconnect', () => {
-        expect(searchContentStub).to.not.have.been.called;
+        expect(searchContentStub.called).to.equal(false);
       });
     });
 
@@ -1077,7 +1077,7 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should not call searchContent after close', () => {
-        expect(searchContentStub).to.not.have.been.called;
+        expect(searchContentStub.called).to.equal(false);
       });
     });
 
@@ -1112,7 +1112,7 @@ describe('InventoryAddItemDialog', () => {
       });
 
       it('should only call searchContent once with final value', () => {
-        expect(searchContentStub).to.have.been.calledOnce;
+        expect(searchContentStub.callCount).to.equal(1);
       });
     });
   });

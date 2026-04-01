@@ -59,7 +59,7 @@ describe('InventoryQrScanner', () => {
 
     it('should render scanner header', () => {
       const header = el.shadowRoot?.querySelector('.scanner-header');
-      expect(header).to.exist;
+      expect(header).to.not.equal(null);
     });
 
     it('should show "Scan QR Code" title', () => {
@@ -69,24 +69,24 @@ describe('InventoryQrScanner', () => {
 
     it('should show Cancel button', () => {
       const cancelBtn = el.shadowRoot?.querySelector('.cancel-button');
-      expect(cancelBtn).to.exist;
+      expect(cancelBtn).to.not.equal(null);
       expect(cancelBtn?.textContent).to.include('Cancel');
     });
 
     it('should contain embedded qr-scanner', () => {
       const scanner = getInnerScanner(el);
-      expect(scanner).to.exist;
+      expect(scanner).to.not.equal(null);
       expect(scanner?.getAttribute('embedded')).to.not.be.null;
     });
 
     it('should not show error-display', () => {
       const errorDisplay = el.shadowRoot?.querySelector('error-display');
-      expect(errorDisplay).to.not.exist;
+      expect(errorDisplay).to.equal(null);
     });
 
     it('should not show validating spinner', () => {
       const validating = el.shadowRoot?.querySelector('.validating');
-      expect(validating).to.not.exist;
+      expect(validating).to.equal(null);
     });
   });
 
@@ -115,11 +115,11 @@ describe('InventoryQrScanner', () => {
       });
 
       it('should emit cancelled event', () => {
-        expect(cancelledSpy).to.have.been.calledOnce;
+        expect(cancelledSpy.callCount).to.equal(1);
       });
 
       it('should call collapse', () => {
-        expect(collapseStub).to.have.been.calledOnce;
+        expect(collapseStub.callCount).to.equal(1);
       });
     });
   });
@@ -143,7 +143,7 @@ describe('InventoryQrScanner', () => {
       });
 
       it('should call expand on inner qr-scanner', () => {
-        expect(expandStub).to.have.been.calledOnce;
+        expect(expandStub.callCount).to.equal(1);
       });
     });
   });
@@ -167,7 +167,7 @@ describe('InventoryQrScanner', () => {
       });
 
       it('should call collapse on inner qr-scanner', () => {
-        expect(collapseStub).to.have.been.calledOnce;
+        expect(collapseStub.callCount).to.equal(1);
       });
     });
   });
@@ -211,11 +211,11 @@ describe('InventoryQrScanner', () => {
       });
 
       it('should call frontmatter service', () => {
-        expect(mockClient.getFrontmatter).to.have.been.calledOnce;
+        expect(mockClient.getFrontmatter.callCount).to.equal(1);
       });
 
       it('should emit item-scanned event', () => {
-        expect(itemScannedSpy).to.have.been.calledOnce;
+        expect(itemScannedSpy.callCount).to.equal(1);
       });
 
       it('should include identifier in event detail', () => {
@@ -231,11 +231,11 @@ describe('InventoryQrScanner', () => {
       });
 
       it('should include isContainer in event detail', () => {
-        expect(scannedEvent.detail.item.isContainer).to.be.true;
+        expect(scannedEvent.detail.item.isContainer).to.equal(true);
       });
 
       it('should collapse the scanner', () => {
-        expect(collapseStub).to.have.been.called;
+        expect(collapseStub.called).to.equal(true);
       });
     });
 
@@ -255,20 +255,20 @@ describe('InventoryQrScanner', () => {
       });
 
       it('should not emit item-scanned event', () => {
-        expect(itemScannedSpy).to.not.have.been.called;
+        expect(itemScannedSpy.called).to.equal(false);
       });
 
       it('should show error-display', () => {
         const errorDisplay = el.shadowRoot?.querySelector('error-display');
-        expect(errorDisplay).to.exist;
+        expect(errorDisplay).to.not.equal(null);
       });
 
       it('should show Scan Again button via error-display action', () => {
         const errorDisplay = el.shadowRoot?.querySelector('error-display');
-        expect(errorDisplay).to.exist;
+        expect(errorDisplay).to.not.equal(null);
         // The action button is rendered by error-display with the label we provided
         const actionBtn = errorDisplay?.shadowRoot?.querySelector<HTMLButtonElement>('.action-button');
-        expect(actionBtn).to.exist;
+        expect(actionBtn).to.not.equal(null);
         expect(actionBtn?.textContent).to.include('Scan Again');
       });
     });
@@ -296,12 +296,12 @@ describe('InventoryQrScanner', () => {
       });
 
       it('should not emit item-scanned event', () => {
-        expect(itemScannedSpy).to.not.have.been.called;
+        expect(itemScannedSpy.called).to.equal(false);
       });
 
       it('should show error-display', () => {
         const errorDisplay = el.shadowRoot?.querySelector('error-display');
-        expect(errorDisplay).to.exist;
+        expect(errorDisplay).to.not.equal(null);
       });
     });
   });
@@ -336,11 +336,11 @@ describe('InventoryQrScanner', () => {
 
       it('should clear the error', () => {
         const errorDisplay = el.shadowRoot?.querySelector('error-display');
-        expect(errorDisplay).to.not.exist;
+        expect(errorDisplay).to.equal(null);
       });
 
       it('should call expand', () => {
-        expect(expandStub).to.have.been.calledOnce;
+        expect(expandStub.callCount).to.equal(1);
       });
     });
   });
@@ -355,7 +355,7 @@ describe('InventoryQrScanner', () => {
 
       it('should disable Cancel button', () => {
         const cancelBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.cancel-button');
-        expect(cancelBtn?.disabled).to.be.true;
+        expect(cancelBtn?.disabled).to.equal(true);
       });
     });
   });

@@ -25,15 +25,15 @@ describe('Inventory Menu Logic', () => {
       });
 
       it('should return null inventory', () => {
-        expect(result.inventory).to.be.null;
+        expect(result.inventory).to.equal(null);
       });
 
       it('should not be a container', () => {
-        expect(result.isContainer).to.be.false;
+        expect(result.isContainer).to.equal(false);
       });
 
       it('should not be an item', () => {
-        expect(result.isItem).to.be.false;
+        expect(result.isItem).to.equal(false);
       });
 
       it('should have empty currentContainer', () => {
@@ -49,15 +49,15 @@ describe('Inventory Menu Logic', () => {
       });
 
       it('should return null inventory', () => {
-        expect(result.inventory).to.be.null;
+        expect(result.inventory).to.equal(null);
       });
 
       it('should not be a container', () => {
-        expect(result.isContainer).to.be.false;
+        expect(result.isContainer).to.equal(false);
       });
 
       it('should not be an item', () => {
-        expect(result.isItem).to.be.false;
+        expect(result.isItem).to.equal(false);
       });
     });
 
@@ -69,15 +69,15 @@ describe('Inventory Menu Logic', () => {
       });
 
       it('should return null/undefined inventory', () => {
-        expect(result.inventory).to.be.undefined;
+        expect(result.inventory).to.equal(undefined);
       });
 
       it('should not be a container', () => {
-        expect(result.isContainer).to.be.false;
+        expect(result.isContainer).to.equal(false);
       });
 
       it('should not be an item', () => {
-        expect(result.isItem).to.be.false;
+        expect(result.isItem).to.equal(false);
       });
     });
 
@@ -93,11 +93,11 @@ describe('Inventory Menu Logic', () => {
       });
 
       it('should not be a container', () => {
-        expect(result.isContainer).to.be.false;
+        expect(result.isContainer).to.equal(false);
       });
 
       it('should not be an item', () => {
-        expect(result.isItem).to.be.false;
+        expect(result.isItem).to.equal(false);
       });
     });
 
@@ -109,11 +109,11 @@ describe('Inventory Menu Logic', () => {
       });
 
       it('should be a container', () => {
-        expect(result.isContainer).to.be.true;
+        expect(result.isContainer).to.equal(true);
       });
 
       it('should not be an item', () => {
-        expect(result.isItem).to.be.false;
+        expect(result.isItem).to.equal(false);
       });
     });
 
@@ -125,11 +125,11 @@ describe('Inventory Menu Logic', () => {
       });
 
       it('should be a container', () => {
-        expect(result.isContainer).to.be.true;
+        expect(result.isContainer).to.equal(true);
       });
 
       it('should not be an item', () => {
-        expect(result.isItem).to.be.false;
+        expect(result.isItem).to.equal(false);
       });
     });
 
@@ -141,11 +141,11 @@ describe('Inventory Menu Logic', () => {
       });
 
       it('should not be a container', () => {
-        expect(result.isContainer).to.be.false;
+        expect(result.isContainer).to.equal(false);
       });
 
       it('should be an item', () => {
-        expect(result.isItem).to.be.true;
+        expect(result.isItem).to.equal(true);
       });
 
       it('should have currentContainer set', () => {
@@ -161,7 +161,7 @@ describe('Inventory Menu Logic', () => {
       });
 
       it('should not be an item', () => {
-        expect(result.isItem).to.be.false;
+        expect(result.isItem).to.equal(false);
       });
 
       it('should have empty currentContainer', () => {
@@ -182,11 +182,11 @@ describe('Inventory Menu Logic', () => {
       });
 
       it('should be a container', () => {
-        expect(result.isContainer).to.be.true;
+        expect(result.isContainer).to.equal(true);
       });
 
       it('should be an item', () => {
-        expect(result.isItem).to.be.true;
+        expect(result.isItem).to.equal(true);
       });
 
       it('should have currentContainer set', () => {
@@ -202,11 +202,11 @@ describe('Inventory Menu Logic', () => {
       });
 
       it('should return null inventory', () => {
-        expect(result.inventory).to.be.null;
+        expect(result.inventory).to.equal(null);
       });
 
       it('should not be a container', () => {
-        expect(result.isContainer).to.be.false;
+        expect(result.isContainer).to.equal(false);
       });
     });
 
@@ -218,11 +218,11 @@ describe('Inventory Menu Logic', () => {
       });
 
       it('should return null inventory', () => {
-        expect(result.inventory).to.be.null;
+        expect(result.inventory).to.equal(null);
       });
 
       it('should not be a container', () => {
-        expect(result.isContainer).to.be.false;
+        expect(result.isContainer).to.equal(false);
       });
     });
 
@@ -234,7 +234,7 @@ describe('Inventory Menu Logic', () => {
       });
 
       it('should not be an item', () => {
-        expect(result.isItem).to.be.false;
+        expect(result.isItem).to.equal(false);
       });
     });
 
@@ -246,7 +246,7 @@ describe('Inventory Menu Logic', () => {
       });
 
       it('should still be a container (items key exists)', () => {
-        expect(result.isContainer).to.be.true;
+        expect(result.isContainer).to.equal(true);
       });
     });
   });
@@ -254,45 +254,45 @@ describe('Inventory Menu Logic', () => {
   describe('validateInventoryResponse', () => {
     describe('when data is null', () => {
       it('should return false', () => {
-        expect(validateInventoryResponse(null)).to.be.false;
+        expect(validateInventoryResponse(null)).to.equal(false);
       });
     });
 
     describe('when data is undefined', () => {
       it('should return false', () => {
-        expect(validateInventoryResponse(undefined)).to.be.false;
+        expect(validateInventoryResponse(undefined)).to.equal(false);
       });
     });
 
     describe('when data has no ids property', () => {
       it('should return false', () => {
-        expect(validateInventoryResponse({})).to.be.false;
+        expect(validateInventoryResponse({})).to.equal(false);
       });
     });
 
     describe('when data.ids is not an array', () => {
       it('should return false for string', () => {
-        expect(validateInventoryResponse({ ids: 'not array' })).to.be.false;
+        expect(validateInventoryResponse({ ids: 'not array' })).to.equal(false);
       });
 
       it('should return false for object', () => {
-        expect(validateInventoryResponse({ ids: {} })).to.be.false;
+        expect(validateInventoryResponse({ ids: {} })).to.equal(false);
       });
 
       it('should return false for number', () => {
-        expect(validateInventoryResponse({ ids: 123 })).to.be.false;
+        expect(validateInventoryResponse({ ids: 123 })).to.equal(false);
       });
     });
 
     describe('when data.ids is an empty array', () => {
       it('should return true', () => {
-        expect(validateInventoryResponse({ ids: [] })).to.be.true;
+        expect(validateInventoryResponse({ ids: [] })).to.equal(true);
       });
     });
 
     describe('when data.ids is a valid array', () => {
       it('should return true', () => {
-        expect(validateInventoryResponse({ ids: [{ identifier: 'test' }] })).to.be.true;
+        expect(validateInventoryResponse({ ids: [{ identifier: 'test' }] })).to.equal(true);
       });
     });
   });
@@ -300,37 +300,37 @@ describe('Inventory Menu Logic', () => {
   describe('findPageInInventoryList', () => {
     describe('when ids is empty', () => {
       it('should return false', () => {
-        expect(findPageInInventoryList([], 'test_page')).to.be.false;
+        expect(findPageInInventoryList([], 'test_page')).to.equal(false);
       });
     });
 
     describe('when page is not in list', () => {
       it('should return false', () => {
-        expect(findPageInInventoryList([{ identifier: 'other' }], 'test_page')).to.be.false;
+        expect(findPageInInventoryList([{ identifier: 'other' }], 'test_page')).to.equal(false);
       });
     });
 
     describe('when page is in list', () => {
       it('should return true', () => {
-        expect(findPageInInventoryList([{ identifier: 'test_page' }], 'test_page')).to.be.true;
+        expect(findPageInInventoryList([{ identifier: 'test_page' }], 'test_page')).to.equal(true);
       });
     });
 
     describe('when list contains null items', () => {
       it('should handle null gracefully', () => {
-        expect(findPageInInventoryList([null, { identifier: 'test_page' }], 'test_page')).to.be.true;
+        expect(findPageInInventoryList([null, { identifier: 'test_page' }], 'test_page')).to.equal(true);
       });
     });
 
     describe('when list contains undefined items', () => {
       it('should handle undefined gracefully', () => {
-        expect(findPageInInventoryList([undefined, { identifier: 'test_page' }], 'test_page')).to.be.true;
+        expect(findPageInInventoryList([undefined, { identifier: 'test_page' }], 'test_page')).to.equal(true);
       });
     });
 
     describe('when list items have no identifier', () => {
       it('should handle missing identifier gracefully', () => {
-        expect(findPageInInventoryList([{ other: 'prop' }], 'test_page')).to.be.false;
+        expect(findPageInInventoryList([{ other: 'prop' }], 'test_page')).to.equal(false);
       });
     });
   });
@@ -363,7 +363,7 @@ describe('initInventoryMenu', () => {
     });
 
     it('should not make any fetch calls', () => {
-      expect(fetchStub.called).to.be.false;
+      expect(fetchStub.called).to.equal(false);
     });
   });
 
@@ -374,7 +374,7 @@ describe('initInventoryMenu', () => {
     });
 
     it('should not make any fetch calls', () => {
-      expect(fetchStub.called).to.be.false;
+      expect(fetchStub.called).to.equal(false);
     });
   });
 
@@ -385,7 +385,7 @@ describe('initInventoryMenu', () => {
     });
 
     it('should not make any fetch calls', () => {
-      expect(fetchStub.called).to.be.false;
+      expect(fetchStub.called).to.equal(false);
     });
   });
 
@@ -399,7 +399,7 @@ describe('initInventoryMenu', () => {
     });
 
     it('should not inject a submenu', () => {
-      expect(document.getElementById('inventory-submenu')).to.be.null;
+      expect(document.getElementById('inventory-submenu')).to.equal(null);
     });
   });
 
@@ -411,7 +411,7 @@ describe('initInventoryMenu', () => {
     });
 
     it('should not inject a submenu', () => {
-      expect(document.getElementById('inventory-submenu')).to.be.null;
+      expect(document.getElementById('inventory-submenu')).to.equal(null);
     });
   });
 
@@ -423,7 +423,7 @@ describe('initInventoryMenu', () => {
     });
 
     it('should not inject a submenu', () => {
-      expect(document.getElementById('inventory-submenu')).to.be.null;
+      expect(document.getElementById('inventory-submenu')).to.equal(null);
     });
   });
 
@@ -435,7 +435,7 @@ describe('initInventoryMenu', () => {
     });
 
     it('should not inject a submenu (silently ignores)', () => {
-      expect(document.getElementById('inventory-submenu')).to.be.null;
+      expect(document.getElementById('inventory-submenu')).to.equal(null);
     });
   });
 
@@ -447,7 +447,7 @@ describe('initInventoryMenu', () => {
     });
 
     it('should not inject a submenu (silently ignores)', () => {
-      expect(document.getElementById('inventory-submenu')).to.be.null;
+      expect(document.getElementById('inventory-submenu')).to.equal(null);
     });
   });
 
@@ -464,11 +464,11 @@ describe('initInventoryMenu', () => {
     });
 
     it('should inject an inventory submenu', () => {
-      expect(document.getElementById('inventory-submenu')).to.exist;
+      expect(document.getElementById('inventory-submenu')).to.not.equal(null);
     });
 
     it('should include the submenu trigger link', () => {
-      expect(document.getElementById('inventory-submenu-trigger')).to.exist;
+      expect(document.getElementById('inventory-submenu-trigger')).to.not.equal(null);
     });
 
     it('should initialise aria-expanded to false', () => {
@@ -482,7 +482,7 @@ describe('initInventoryMenu', () => {
     });
 
     it('should include the children ul with correct id', () => {
-      expect(document.getElementById('inventory-submenu-children')).to.exist;
+      expect(document.getElementById('inventory-submenu-children')).to.not.equal(null);
     });
 
     it('should set role="menu" on the children ul', () => {
@@ -491,7 +491,7 @@ describe('initInventoryMenu', () => {
     });
 
     it('should include the Add Item Here link', () => {
-      expect(document.getElementById('inventory-add-item')).to.exist;
+      expect(document.getElementById('inventory-add-item')).to.not.equal(null);
     });
 
     it('should set role="menuitem" on the Add Item Here link', () => {
@@ -500,7 +500,7 @@ describe('initInventoryMenu', () => {
     });
 
     it('should not include the Move This Item link for a container page', () => {
-      expect(document.getElementById('inventory-move-item')).to.be.null;
+      expect(document.getElementById('inventory-move-item')).to.equal(null);
     });
   });
 
@@ -517,15 +517,15 @@ describe('initInventoryMenu', () => {
     });
 
     it('should inject an inventory submenu', () => {
-      expect(document.getElementById('inventory-submenu')).to.exist;
+      expect(document.getElementById('inventory-submenu')).to.not.equal(null);
     });
 
     it('should not include the Add Item Here link', () => {
-      expect(document.getElementById('inventory-add-item')).to.be.null;
+      expect(document.getElementById('inventory-add-item')).to.equal(null);
     });
 
     it('should include the Move This Item link', () => {
-      expect(document.getElementById('inventory-move-item')).to.exist;
+      expect(document.getElementById('inventory-move-item')).to.not.equal(null);
     });
 
     it('should set role="menuitem" on the Move This Item link', () => {
@@ -547,11 +547,11 @@ describe('initInventoryMenu', () => {
     });
 
     it('should include the Add Item Here link', () => {
-      expect(document.getElementById('inventory-add-item')).to.exist;
+      expect(document.getElementById('inventory-add-item')).to.not.equal(null);
     });
 
     it('should include the Move This Item link', () => {
-      expect(document.getElementById('inventory-move-item')).to.exist;
+      expect(document.getElementById('inventory-move-item')).to.not.equal(null);
     });
   });
 
@@ -567,7 +567,7 @@ describe('initInventoryMenu', () => {
 
     it('should still inject the submenu with empty inventory data', () => {
       // buildInventoryMenu is called with {} as fallback
-      expect(document.getElementById('inventory-submenu')).to.exist;
+      expect(document.getElementById('inventory-submenu')).to.not.equal(null);
     });
   });
 

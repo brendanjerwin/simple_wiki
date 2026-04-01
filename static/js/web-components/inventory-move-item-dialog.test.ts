@@ -59,7 +59,7 @@ describe('InventoryMoveItemDialog', () => {
   });
 
   it('should exist', () => {
-    expect(el).to.exist;
+    expect(el).to.not.equal(null);
   });
 
   it('should be an instance of InventoryMoveItemDialog', () => {
@@ -72,7 +72,7 @@ describe('InventoryMoveItemDialog', () => {
 
   describe('when component is initialized', () => {
     it('should not be open by default', () => {
-      expect(el.open).to.be.false;
+      expect(el.open).to.equal(false);
     });
 
     it('should have empty itemIdentifier by default', () => {
@@ -92,15 +92,15 @@ describe('InventoryMoveItemDialog', () => {
     });
 
     it('should have searchLoading false by default', () => {
-      expect(el.searchLoading).to.be.false;
+      expect(el.searchLoading).to.equal(false);
     });
 
     it('should have movingTo null by default', () => {
-      expect(el.movingTo).to.be.null;
+      expect(el.movingTo).to.equal(null);
     });
 
     it('should have no error by default', () => {
-      expect(el.error).to.be.null;
+      expect(el.error).to.equal(null);
     });
   });
 
@@ -111,7 +111,7 @@ describe('InventoryMoveItemDialog', () => {
       });
 
       it('should set open to true', () => {
-        expect(el.open).to.be.true;
+        expect(el.open).to.equal(true);
       });
 
       it('should set itemIdentifier', () => {
@@ -131,11 +131,11 @@ describe('InventoryMoveItemDialog', () => {
       });
 
       it('should set movingTo to null', () => {
-        expect(el.movingTo).to.be.null;
+        expect(el.movingTo).to.equal(null);
       });
 
       it('should clear error', () => {
-        expect(el.error).to.be.null;
+        expect(el.error).to.equal(null);
       });
     });
   });
@@ -148,7 +148,7 @@ describe('InventoryMoveItemDialog', () => {
     });
 
     it('should set open to false', () => {
-      expect(el.open).to.be.false;
+      expect(el.open).to.equal(false);
     });
 
     it('should clear searchQuery', () => {
@@ -160,11 +160,11 @@ describe('InventoryMoveItemDialog', () => {
     });
 
     it('should set movingTo to null', () => {
-      expect(el.movingTo).to.be.null;
+      expect(el.movingTo).to.equal(null);
     });
 
     it('should clear error', () => {
-      expect(el.error).to.be.null;
+      expect(el.error).to.equal(null);
     });
   });
 
@@ -179,7 +179,7 @@ describe('InventoryMoveItemDialog', () => {
       });
 
       it('should close the dialog', () => {
-        expect(closeSpy).to.have.been.calledOnce;
+        expect(closeSpy.callCount).to.equal(1);
       });
     });
 
@@ -192,7 +192,7 @@ describe('InventoryMoveItemDialog', () => {
       });
 
       it('should not close the dialog', () => {
-        expect(closeSpy).to.not.have.been.called;
+        expect(closeSpy.called).to.equal(false);
       });
     });
   });
@@ -205,7 +205,7 @@ describe('InventoryMoveItemDialog', () => {
       });
 
       it('should have open attribute', () => {
-        expect(el.hasAttribute('open')).to.be.true;
+        expect(el.hasAttribute('open')).to.equal(true);
       });
 
       it('should render dialog title with item identifier', () => {
@@ -215,7 +215,7 @@ describe('InventoryMoveItemDialog', () => {
 
       it('should render search query field', () => {
         const searchInput = el.shadowRoot?.querySelector('input[name="searchQuery"]');
-        expect(searchInput).to.exist;
+        expect(searchInput).to.not.equal(null);
       });
 
       it('should render cancel button', () => {
@@ -231,7 +231,7 @@ describe('InventoryMoveItemDialog', () => {
 
     describe('when dialog is closed', () => {
       it('should not have open attribute', () => {
-        expect(el.hasAttribute('open')).to.be.false;
+        expect(el.hasAttribute('open')).to.equal(false);
       });
     });
 
@@ -354,17 +354,17 @@ describe('InventoryMoveItemDialog', () => {
 
       it('should disable all Move To buttons', () => {
         const moveButton = el.shadowRoot?.querySelector<HTMLButtonElement>('.move-to-button');
-        expect(moveButton?.disabled).to.be.true;
+        expect(moveButton?.disabled).to.equal(true);
       });
 
       it('should disable search input', () => {
         const searchInput = el.shadowRoot?.querySelector<HTMLInputElement>('input[name="searchQuery"]');
-        expect(searchInput?.disabled).to.be.true;
+        expect(searchInput?.disabled).to.equal(true);
       });
 
       it('should disable cancel button', () => {
         const cancelBtn = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-secondary');
-        expect(cancelBtn?.disabled).to.be.true;
+        expect(cancelBtn?.disabled).to.equal(true);
       });
     });
   });
@@ -391,7 +391,7 @@ describe('InventoryMoveItemDialog', () => {
 
       it('should render inventory QR scanner component', () => {
         const scanner = el.shadowRoot?.querySelector('inventory-qr-scanner');
-        expect(scanner).to.exist;
+        expect(scanner).to.not.equal(null);
       });
     });
 
@@ -423,15 +423,15 @@ describe('InventoryMoveItemDialog', () => {
         });
 
         it('should not set scannedDestination', () => {
-          expect(el.scannedDestination).to.be.null;
+          expect(el.scannedDestination).to.equal(null);
         });
 
         it('should not set scannedResult', () => {
-          expect(el.scannedResult).to.be.null;
+          expect(el.scannedResult).to.equal(null);
         });
 
         it('should exit scanner mode', () => {
-          expect(el.scannerMode).to.be.false;
+          expect(el.scannerMode).to.equal(false);
         });
       });
 
@@ -461,11 +461,11 @@ describe('InventoryMoveItemDialog', () => {
         });
 
         it('should not set scannedDestination', () => {
-          expect(el.scannedDestination).to.be.null;
+          expect(el.scannedDestination).to.equal(null);
         });
 
         it('should exit scanner mode', () => {
-          expect(el.scannerMode).to.be.false;
+          expect(el.scannerMode).to.equal(false);
         });
       });
 
@@ -500,11 +500,11 @@ describe('InventoryMoveItemDialog', () => {
         });
 
         it('should not set scanError', () => {
-          expect(el.scanError).to.be.null;
+          expect(el.scanError).to.equal(null);
         });
 
         it('should exit scanner mode', () => {
-          expect(el.scannerMode).to.be.false;
+          expect(el.scannerMode).to.equal(false);
         });
       });
     });
@@ -579,15 +579,15 @@ describe('InventoryMoveItemDialog', () => {
       });
 
       it('should clear scannedDestination', () => {
-        expect(el.scannedDestination).to.be.null;
+        expect(el.scannedDestination).to.equal(null);
       });
 
       it('should clear scannedResult', () => {
-        expect(el.scannedResult).to.be.null;
+        expect(el.scannedResult).to.equal(null);
       });
 
       it('should clear scanError', () => {
-        expect(el.scanError).to.be.null;
+        expect(el.scanError).to.equal(null);
       });
     });
 
@@ -603,15 +603,15 @@ describe('InventoryMoveItemDialog', () => {
       });
 
       it('should reset scannedDestination', () => {
-        expect(el.scannedDestination).to.be.null;
+        expect(el.scannedDestination).to.equal(null);
       });
 
       it('should reset scannedResult', () => {
-        expect(el.scannedResult).to.be.null;
+        expect(el.scannedResult).to.equal(null);
       });
 
       it('should reset scanError', () => {
-        expect(el.scanError).to.be.null;
+        expect(el.scanError).to.equal(null);
       });
     });
 
@@ -626,15 +626,15 @@ describe('InventoryMoveItemDialog', () => {
       });
 
       it('should reset scannedDestination', () => {
-        expect(el.scannedDestination).to.be.null;
+        expect(el.scannedDestination).to.equal(null);
       });
 
       it('should reset scannedResult', () => {
-        expect(el.scannedResult).to.be.null;
+        expect(el.scannedResult).to.equal(null);
       });
 
       it('should reset scanError', () => {
-        expect(el.scanError).to.be.null;
+        expect(el.scanError).to.equal(null);
       });
     });
   });
