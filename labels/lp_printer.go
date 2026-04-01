@@ -1,7 +1,10 @@
 // Package labels provides functionality for printing labels.
 package labels
 
-import "os/exec"
+import (
+	"fmt"
+	"os/exec"
+)
 
 // GetLPPrinter returns a Printer for an LP printer.
 func GetLPPrinter(config PrinterConfig) (Printer, error) {
@@ -15,7 +18,12 @@ type LPPrinter struct {
 
 // Write writes data to the LP printer.
 func (p *LPPrinter) Write(data []byte) (int, error) {
-	cmd := exec.Command("lp", "-d", p.Name)
+	lpPath, err := exec.LookPath("lp")
+	if err != nil {
+		return 0, fmt.Errorf("lp not found: %w", err)
+	}
+
+	cmd := exec.Command(lpPath, "-d", p.Name)
 
 	// Get a pipe to the command's standard input
 	stdin, err := cmd.StdinPipe()
