@@ -46,11 +46,11 @@ describe('TableFilterPopover', () => {
     });
 
     it('should exist', () => {
-      expect(el).to.exist;
+      expect(el).to.not.equal(null);
     });
 
     it('should be registered as a custom element', () => {
-      expect(customElements.get('table-filter-popover')).to.exist;
+      expect(customElements.get('table-filter-popover')).to.not.equal(null);
     });
   });
 
@@ -104,19 +104,19 @@ describe('TableFilterPopover', () => {
 
     it('should show a close button', () => {
       const closeBtn = el.shadowRoot!.querySelector('.close-btn');
-      expect(closeBtn).to.exist;
+      expect(closeBtn).to.not.equal(null);
     });
 
     it('should show sort controls', () => {
       const sortControls = el.shadowRoot!.querySelector('.sort-controls');
-      expect(sortControls).to.exist;
+      expect(sortControls).to.not.equal(null);
     });
 
     it('should show OK and Cancel buttons', () => {
       const okBtn = el.shadowRoot!.querySelector('[aria-label="Apply"]');
       const cancelBtn = el.shadowRoot!.querySelector('[aria-label="Cancel"]');
-      expect(okBtn).to.exist;
-      expect(cancelBtn).to.exist;
+      expect(okBtn).to.not.equal(null);
+      expect(cancelBtn).to.not.equal(null);
     });
   });
 
@@ -174,7 +174,7 @@ describe('TableFilterPopover', () => {
       });
 
       it('should not emit sort-direction-changed yet', () => {
-        expect(sortSpy).to.not.have.been.called;
+        expect(sortSpy.called).to.equal(false);
       });
     });
 
@@ -223,7 +223,7 @@ describe('TableFilterPopover', () => {
 
       it('should show a clear sort pill', () => {
         const clearBtn = el.shadowRoot!.querySelector('[aria-label="Clear sort"]');
-        expect(clearBtn).to.exist;
+        expect(clearBtn).to.not.equal(null);
       });
     });
   });
@@ -245,7 +245,7 @@ describe('TableFilterPopover', () => {
 
       it('should render checkbox filter', () => {
         const checkboxList = el.shadowRoot!.querySelector('.checkbox-list');
-        expect(checkboxList).to.exist;
+        expect(checkboxList).to.not.equal(null);
       });
 
       it('should render one checkbox per unique value', () => {
@@ -256,7 +256,7 @@ describe('TableFilterPopover', () => {
       it('should have all checkboxes checked by default', () => {
         const inputs = el.shadowRoot!.querySelectorAll('.checkbox-item input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
         const allChecked = Array.from(inputs).every(input => input.checked);
-        expect(allChecked).to.be.true;
+        expect(allChecked).to.equal(true);
       });
 
       it('should show Select All and Select None links', () => {
@@ -289,11 +289,11 @@ describe('TableFilterPopover', () => {
 
       it('should uncheck the checkbox in the UI', () => {
         const inputs = el.shadowRoot!.querySelectorAll('.checkbox-item input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
-        expect(inputs[0]!.checked).to.be.false;
+        expect(inputs[0]!.checked).to.equal(false);
       });
 
       it('should not emit filter-changed before OK is clicked', () => {
-        expect(filterSpy).to.not.have.been.called;
+        expect(filterSpy.called).to.equal(false);
       });
     });
 
@@ -316,7 +316,7 @@ describe('TableFilterPopover', () => {
       it('should uncheck all checkboxes', () => {
         const inputs = el.shadowRoot!.querySelectorAll('.checkbox-item input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
         const allUnchecked = Array.from(inputs).every(input => !input.checked);
-        expect(allUnchecked).to.be.true;
+        expect(allUnchecked).to.equal(true);
       });
     });
 
@@ -340,7 +340,7 @@ describe('TableFilterPopover', () => {
       it('should check all checkboxes', () => {
         const inputs = el.shadowRoot!.querySelectorAll('.checkbox-item input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
         const allChecked = Array.from(inputs).every(input => input.checked);
-        expect(allChecked).to.be.true;
+        expect(allChecked).to.equal(true);
       });
     });
   });
@@ -363,12 +363,12 @@ describe('TableFilterPopover', () => {
 
       it('should render text search input', () => {
         const input = el.shadowRoot!.querySelector('.search-input');
-        expect(input).to.exist;
+        expect(input).to.not.equal(null);
       });
 
       it('should not render checkbox list', () => {
         const checkboxList = el.shadowRoot!.querySelector('.checkbox-list');
-        expect(checkboxList).to.not.exist;
+        expect(checkboxList).to.equal(null);
       });
     });
   });
@@ -391,12 +391,12 @@ describe('TableFilterPopover', () => {
 
       it('should render checkbox filter', () => {
         const checkboxList = el.shadowRoot!.querySelector('.checkbox-list');
-        expect(checkboxList).to.exist;
+        expect(checkboxList).to.not.equal(null);
       });
 
       it('should not render range container', () => {
         const container = el.shadowRoot!.querySelector('.range-container');
-        expect(container).to.not.exist;
+        expect(container).to.equal(null);
       });
     });
 
@@ -416,7 +416,7 @@ describe('TableFilterPopover', () => {
 
       it('should render checkbox filter', () => {
         const checkboxList = el.shadowRoot!.querySelector('.checkbox-list');
-        expect(checkboxList).to.exist;
+        expect(checkboxList).to.not.equal(null);
       });
     });
   });
@@ -440,7 +440,7 @@ describe('TableFilterPopover', () => {
 
       it('should render range container', () => {
         const container = el.shadowRoot!.querySelector('.range-container');
-        expect(container).to.exist;
+        expect(container).to.not.equal(null);
       });
 
       it('should render two range sliders', () => {
@@ -455,7 +455,7 @@ describe('TableFilterPopover', () => {
 
       it('should not render checkbox list', () => {
         const checkboxList = el.shadowRoot!.querySelector('.checkbox-list');
-        expect(checkboxList).to.not.exist;
+        expect(checkboxList).to.equal(null);
       });
 
       it('should use step 1 for integer column sliders', () => {
@@ -491,7 +491,7 @@ describe('TableFilterPopover', () => {
 
       it('should render range container', () => {
         const container = el.shadowRoot!.querySelector('.range-container');
-        expect(container).to.exist;
+        expect(container).to.not.equal(null);
       });
 
       it('should use step any for decimal column sliders', () => {
@@ -518,7 +518,7 @@ describe('TableFilterPopover', () => {
 
       it('should render range filter for currency', () => {
         const container = el.shadowRoot!.querySelector('.range-container');
-        expect(container).to.exist;
+        expect(container).to.not.equal(null);
       });
 
       it('should use step 0.01 for currency column sliders', () => {
@@ -558,15 +558,15 @@ describe('TableFilterPopover', () => {
       });
 
       it('should emit filter-changed with excluded value', () => {
-        expect(filterDetail).to.not.be.null;
-        expect(filterDetail!.filter).to.not.be.null;
+        expect(filterDetail).to.not.equal(null);
+        expect(filterDetail!.filter).to.not.equal(null);
         expect(filterDetail!.filter!.kind).to.equal('checkbox');
         const cbFilter = filterDetail!.filter as { kind: 'checkbox'; excludedValues: Set<string> };
-        expect(cbFilter.excludedValues.has('Apple')).to.be.true;
+        expect(cbFilter.excludedValues.has('Apple')).to.equal(true);
       });
 
       it('should emit popover-closed', () => {
-        expect(closedSpy).to.have.been.calledOnce;
+        expect(closedSpy.calledOnce).to.equal(true);
       });
     });
 
@@ -624,8 +624,8 @@ describe('TableFilterPopover', () => {
       });
 
       it('should emit filter-changed with range filter', () => {
-        expect(filterDetail).to.not.be.null;
-        expect(filterDetail!.filter).to.not.be.null;
+        expect(filterDetail).to.not.equal(null);
+        expect(filterDetail!.filter).to.not.equal(null);
         expect(filterDetail!.filter!.kind).to.equal('range');
         const rFilter = filterDetail!.filter as { kind: 'range'; min: number | null; max: number | null };
         expect(rFilter.min).to.equal(10);
@@ -658,7 +658,7 @@ describe('TableFilterPopover', () => {
       });
 
       it('should not emit filter-changed for NaN-producing input', () => {
-        expect(filterSpy).to.not.have.been.called;
+        expect(filterSpy.called).to.equal(false);
       });
     });
 
@@ -688,7 +688,7 @@ describe('TableFilterPopover', () => {
       });
 
       it('should not emit filter-changed for NaN-producing input', () => {
-        expect(filterSpy).to.not.have.been.called;
+        expect(filterSpy.called).to.equal(false);
       });
     });
 
@@ -717,8 +717,8 @@ describe('TableFilterPopover', () => {
       });
 
       it('should emit filter-changed with text-search filter', () => {
-        expect(filterDetail).to.not.be.null;
-        expect(filterDetail!.filter).to.not.be.null;
+        expect(filterDetail).to.not.equal(null);
+        expect(filterDetail!.filter).to.not.equal(null);
         expect(filterDetail!.filter!.kind).to.equal('text-search');
         const tsFilter = filterDetail!.filter as { kind: 'text-search'; searchText: string };
         expect(tsFilter.searchText).to.equal('hello');
@@ -751,15 +751,15 @@ describe('TableFilterPopover', () => {
       });
 
       it('should emit popover-closed', () => {
-        expect(closedSpy).to.have.been.calledOnce;
+        expect(closedSpy.calledOnce).to.equal(true);
       });
 
       it('should not emit filter-changed', () => {
-        expect(filterSpy).to.not.have.been.called;
+        expect(filterSpy.called).to.equal(false);
       });
 
       it('should not emit sort-direction-changed', () => {
-        expect(sortSpy).to.not.have.been.called;
+        expect(sortSpy.called).to.equal(false);
       });
     });
 
@@ -786,7 +786,7 @@ describe('TableFilterPopover', () => {
       });
 
       it('should emit filter with all values excluded', () => {
-        expect(filterDetail).to.not.be.null;
+        expect(filterDetail).to.not.equal(null);
         const cbFilter = filterDetail!.filter as { kind: 'checkbox'; excludedValues: Set<string> };
         expect(cbFilter.excludedValues.size).to.equal(3);
       });
@@ -816,8 +816,8 @@ describe('TableFilterPopover', () => {
       });
 
       it('should emit null filter (all included)', () => {
-        expect(filterDetail).to.not.be.null;
-        expect(filterDetail!.filter).to.be.null;
+        expect(filterDetail).to.not.equal(null);
+        expect(filterDetail!.filter).to.equal(null);
       });
     });
   });
@@ -854,15 +854,15 @@ describe('TableFilterPopover', () => {
       });
 
       it('should emit popover-closed', () => {
-        expect(closedSpy).to.have.been.calledOnce;
+        expect(closedSpy.calledOnce).to.equal(true);
       });
 
       it('should not emit filter-changed', () => {
-        expect(filterSpy).to.not.have.been.called;
+        expect(filterSpy.called).to.equal(false);
       });
 
       it('should not emit sort-direction-changed', () => {
-        expect(sortSpy).to.not.have.been.called;
+        expect(sortSpy.called).to.equal(false);
       });
     });
   });
@@ -891,11 +891,11 @@ describe('TableFilterPopover', () => {
       });
 
       it('should emit popover-closed event', () => {
-        expect(closedSpy).to.have.been.calledOnce;
+        expect(closedSpy.calledOnce).to.equal(true);
       });
 
       it('should not emit filter-changed', () => {
-        expect(filterSpy).to.not.have.been.called;
+        expect(filterSpy.called).to.equal(false);
       });
     });
 
@@ -922,7 +922,7 @@ describe('TableFilterPopover', () => {
       });
 
       it('should not emit popover-closed event', () => {
-        expect(closedSpy).to.not.have.been.called;
+        expect(closedSpy.called).to.equal(false);
       });
     });
   });
@@ -949,7 +949,7 @@ describe('TableFilterPopover', () => {
       });
 
       it('should emit popover-closed event', () => {
-        expect(closedSpy).to.have.been.calledOnce;
+        expect(closedSpy.calledOnce).to.equal(true);
       });
     });
 
@@ -973,7 +973,7 @@ describe('TableFilterPopover', () => {
       });
 
       it('should not emit popover-closed event', () => {
-        expect(closedSpy).to.not.have.been.called;
+        expect(closedSpy.called).to.equal(false);
       });
     });
   });
@@ -996,19 +996,19 @@ describe('TableFilterPopover', () => {
 
       it('should show checkbox filter', () => {
         const checkboxList = el.shadowRoot!.querySelector('.checkbox-list');
-        expect(checkboxList).to.exist;
+        expect(checkboxList).to.not.equal(null);
       });
 
       it('should have Banana unchecked', () => {
         const inputs = el.shadowRoot!.querySelectorAll('.checkbox-item input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
         const bananaInput = inputs[1]!;
-        expect(bananaInput.checked).to.be.false;
+        expect(bananaInput.checked).to.equal(false);
       });
 
       it('should have Apple and Cherry checked', () => {
         const inputs = el.shadowRoot!.querySelectorAll('.checkbox-item input[type="checkbox"]') as NodeListOf<HTMLInputElement>;
-        expect(inputs[0]!.checked).to.be.true;
-        expect(inputs[2]!.checked).to.be.true;
+        expect(inputs[0]!.checked).to.equal(true);
+        expect(inputs[2]!.checked).to.equal(true);
       });
     });
 
@@ -1030,7 +1030,7 @@ describe('TableFilterPopover', () => {
 
       it('should show range filter', () => {
         const container = el.shadowRoot!.querySelector('.range-container');
-        expect(container).to.exist;
+        expect(container).to.not.equal(null);
       });
 
       it('should pre-populate min input', () => {
@@ -1061,7 +1061,7 @@ describe('TableFilterPopover', () => {
 
       it('should show text search filter', () => {
         const input = el.shadowRoot!.querySelector('.search-input');
-        expect(input).to.exist;
+        expect(input).to.not.equal(null);
       });
 
       it('should pre-populate search text', () => {
@@ -1093,7 +1093,7 @@ describe('TableFilterPopover', () => {
       });
 
       it('should emit popover-closed event', () => {
-        expect(closedSpy).to.have.been.calledOnce;
+        expect(closedSpy.calledOnce).to.equal(true);
       });
     });
   });
@@ -1195,7 +1195,7 @@ describe('TableFilterPopover', () => {
       });
 
       it('should throw an error', () => {
-        expect(thrownError).to.exist;
+        expect(thrownError).to.not.equal(null);
       });
 
       it('should include columnDefinition in the error message', () => {
