@@ -2,7 +2,7 @@ import { html, css, LitElement } from 'lit';
 import { state } from 'lit/decorators.js';
 import { colorCSS, typographyCSS, themeCSS, foundationCSS, dialogCSS, responsiveCSS, buttonCSS, zIndexCSS } from './shared-styles.js';
 import './error-display.js';
-import { type AugmentedError, type ErrorIcon, AugmentErrorService } from './augment-error-service.js';
+import { type AugmentedError, AugmentErrorService } from './augment-error-service.js';
 
 /**
  * Configuration for the confirmation dialog
@@ -19,7 +19,7 @@ export interface ConfirmationConfig {
   /** Style variant for the confirm button (default: "danger") */
   confirmVariant?: 'primary' | 'danger' | 'warning';
   /** Icon to display (default: "warning") */
-  icon?: ErrorIcon;
+  icon?: string;
   /** Whether the action can be undone (affects messaging) */
   irreversible?: boolean;
 }
