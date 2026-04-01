@@ -729,7 +729,7 @@ export const pillCSS = css`
  * Builds a styles array for dialog components with all common styles included.
  * Ensures responsiveCSS is always last to properly override desktop styles on mobile.
  *
- * Includes: foundationCSS, dialogCSS, buttonCSS, animationCSS, ...componentStyles, responsiveCSS
+ * Includes: foundationCSS, zIndexCSS, dialogCSS, buttonCSS, animationCSS, ...componentStyles, responsiveCSS
  *
  * Usage:
  * ```
