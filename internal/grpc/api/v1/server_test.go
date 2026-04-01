@@ -905,7 +905,7 @@ var _ = Describe("Server", func() {
 						},
 					},
 					"metadata": map[string]any{
-						"identifier": "nested-identifier-should-be-allowed", 
+						"identifier": "nested-identifier-should-be-allowed",
 						"version":    "1.0",
 					},
 				}
@@ -923,7 +923,7 @@ var _ = Describe("Server", func() {
 						"version":    "1.0",
 					},
 				}
-				
+
 				mockPageReaderMutator.Frontmatter = existingFrontmatter
 				var err error
 				req.Frontmatter, err = structpb.NewStruct(newFrontmatter)
@@ -940,6 +940,101 @@ var _ = Describe("Server", func() {
 			})
 
 			It("should return the merged frontmatter with nested identifier keys preserved", func() {
+				expectedPb, err := structpb.NewStruct(expectedMergedFm)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(resp.Frontmatter).To(Equal(expectedPb))
+			})
+		})
+
+		When("merging a partial update that only specifies one of multiple sibling nested objects", func() {
+			var expectedMergedFm wikipage.FrontMatter
+
+			BeforeEach(func() {
+				// Existing frontmatter has two sibling checklists
+				mockPageReaderMutator.Frontmatter = wikipage.FrontMatter{
+					"checklists": map[string]any{
+						"todos": map[string]any{
+							"items":       []any{map[string]any{"text": "Old task", "checked": false}},
+							"group_order": []any{"work"},
+						},
+						"confirmations": map[string]any{
+							"items":       []any{map[string]any{"text": "Confirm A", "checked": false}},
+							"group_order": []any{"legal"},
+						},
+					},
+				}
+
+				// The merge request only includes todos — confirmations is intentionally absent
+				partialUpdate := map[string]any{
+					"checklists": map[string]any{
+						"todos": map[string]any{
+							"items": []any{map[string]any{"text": "Updated task", "checked": true}},
+						},
+					},
+				}
+
+				expectedMergedFm = wikipage.FrontMatter{
+					"checklists": map[string]any{
+						"todos": map[string]any{
+							"items":       []any{map[string]any{"text": "Updated task", "checked": true}},
+							"group_order": []any{"work"},
+						},
+						"confirmations": map[string]any{
+							"items":       []any{map[string]any{"text": "Confirm A", "checked": false}},
+							"group_order": []any{"legal"},
+						},
+					},
+				}
+
+				var err error
+				req.Frontmatter, err = structpb.NewStruct(partialUpdate)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should write the updated todos items", func() {
+				written := mockPageReaderMutator.WrittenFrontmatter
+				checklists, ok := written["checklists"].(map[string]any)
+				Expect(ok).To(BeTrue(), "checklists should be map[string]any")
+				todos, ok := checklists["todos"].(map[string]any)
+				Expect(ok).To(BeTrue(), "todos should be map[string]any")
+				items, ok := todos["items"].([]any)
+				Expect(ok).To(BeTrue(), "items should be []any")
+				Expect(items).To(HaveLen(1))
+				item, ok := items[0].(map[string]any)
+				Expect(ok).To(BeTrue(), "item should be map[string]any")
+				Expect(item["text"]).To(Equal("Updated task"))
+				Expect(item["checked"]).To(BeTrue())
+			})
+
+			It("should preserve the todos group_order that was not in the update", func() {
+				written := mockPageReaderMutator.WrittenFrontmatter
+				checklists, ok := written["checklists"].(map[string]any)
+				Expect(ok).To(BeTrue(), "checklists should be map[string]any")
+				todos, ok := checklists["todos"].(map[string]any)
+				Expect(ok).To(BeTrue(), "todos should be map[string]any")
+				Expect(todos["group_order"]).To(Equal([]any{"work"}))
+			})
+
+			It("should preserve the confirmations sibling checklist", func() {
+				written := mockPageReaderMutator.WrittenFrontmatter
+				checklists, ok := written["checklists"].(map[string]any)
+				Expect(ok).To(BeTrue(), "checklists should be map[string]any")
+				Expect(checklists).To(HaveKey("confirmations"))
+				confirmations, ok := checklists["confirmations"].(map[string]any)
+				Expect(ok).To(BeTrue(), "confirmations should be map[string]any")
+				items, ok := confirmations["items"].([]any)
+				Expect(ok).To(BeTrue(), "confirmations items should be []any")
+				Expect(items).To(HaveLen(1))
+				confirmItem, ok := items[0].(map[string]any)
+				Expect(ok).To(BeTrue(), "confirmation item should be map[string]any")
+				Expect(confirmItem["text"]).To(Equal("Confirm A"))
+			})
+
+			It("should return the deep-merged frontmatter", func() {
 				expectedPb, err := structpb.NewStruct(expectedMergedFm)
 				Expect(err).NotTo(HaveOccurred())
 				Expect(resp.Frontmatter).To(Equal(expectedPb))
