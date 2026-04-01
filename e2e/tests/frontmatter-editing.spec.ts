@@ -158,8 +158,8 @@ identifier = "${TEST_PAGE_NAME.toLowerCase()}"
       timeout: DIALOG_TIMEOUT_MS,
     });
 
-    // Click cancel button
-    await page.locator('frontmatter-editor-dialog button.button-cancel').click();
+    // Click cancel button (has class button-secondary, not button-cancel)
+    await page.locator('frontmatter-editor-dialog button.button-secondary').click();
 
     // Dialog should close
     await expect(page.locator('frontmatter-editor-dialog .dialog')).not.toBeVisible();
