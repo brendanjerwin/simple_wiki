@@ -193,6 +193,44 @@ describe('PageAutoRefresh', () => {
       });
     });
 
+    describe('when fetch succeeds with rendered div and hljs is available', () => {
+      let el: PageAutoRefresh;
+      let renderedDiv: HTMLDivElement;
+      let hljsHighlightAllSpy: SinonSpy;
+
+      beforeEach(async () => {
+        const mockHtml = '<html><body><div id="rendered"><p>Updated Content</p></div></body></html>';
+        fetchStub.resolves(new Response(mockHtml, { status: 200 }));
+
+        renderedDiv = document.createElement('div');
+        renderedDiv.id = 'rendered';
+        renderedDiv.innerHTML = '<p>Old Content</p>';
+        document.body.appendChild(renderedDiv);
+
+        // Set up hljs global
+        hljsHighlightAllSpy = sinon.spy();
+        (globalThis as Record<string, unknown>)['hljs'] = { highlightAll: hljsHighlightAllSpy };
+
+        el = document.createElement('page-auto-refresh') as PageAutoRefresh;
+        sinon.stub(el as unknown as { startWatching: () => void }, 'startWatching');
+        document.body.appendChild(el);
+        await el.updateComplete;
+
+        await (el as unknown as { refreshPageContent: () => Promise<void> }).refreshPageContent();
+      });
+
+      afterEach(() => {
+        el.remove();
+        renderedDiv.remove();
+        delete (globalThis as Record<string, unknown>)['hljs'];
+        sinon.restore();
+      });
+
+      it('should call hljs.highlightAll after content update', () => {
+        expect(hljsHighlightAllSpy).to.have.been.called;
+      });
+    });
+
     describe('when fetch succeeds but rendered div not in new content', () => {
       let el: PageAutoRefresh;
       let renderedDiv: HTMLDivElement;
