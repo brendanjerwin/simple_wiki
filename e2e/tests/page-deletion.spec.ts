@@ -8,6 +8,13 @@ const SAVE_TIMEOUT_MS = 10000;
 const COMPONENT_LOAD_TIMEOUT_MS = 15000;
 const PAGE_LOAD_TIMEOUT_MS = 15000;
 
+// Helper function to match frontmatter fields with flexible quote handling
+function frontMatterStringMatcher(key: string, value: string): RegExp {
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escapedValue = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`${escapedKey}\\s*=\\s*['"]${escapedValue}['"]`);
+}
+
 test.describe('Page Deletion E2E Tests', () => {
   test.setTimeout(60000);
 
@@ -124,9 +131,9 @@ identifier = "${TEST_PAGE_FOR_DELETION.toLowerCase()}"
     const textarea = page.locator('wiki-editor textarea');
     await expect(textarea).toBeVisible({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
-    // Verify it shows minimal content
+    // Verify it shows minimal content (TOML may use single or double quotes)
     const currentContent = await textarea.inputValue();
-    expect(currentContent).toContain(`identifier = "${TEST_PAGE_FOR_DELETION.toLowerCase()}"`);
+    expect(currentContent).toMatch(frontMatterStringMatcher('identifier', TEST_PAGE_FOR_DELETION.toLowerCase()));
 
     // Restore the page with new content
     const restoredContent = `+++
