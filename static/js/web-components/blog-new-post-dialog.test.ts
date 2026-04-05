@@ -157,4 +157,32 @@ describe('BlogNewPostDialog', () => {
       expect(btn.disabled).to.be.false;
     });
   });
+
+  describe('identifier preview', () => {
+    describe('when blogId, date, and title are all set', () => {
+      beforeEach(async () => {
+        el = buildElement();
+        document.body.appendChild(el);
+        el.open = true;
+        el.date = '2026-01-15';
+        await el.updateComplete;
+
+        const titleInput = el.shadowRoot?.querySelector<TitleInput>('#post-title');
+        if (!titleInput) throw new Error('title-input not found');
+        titleInput.value = 'My New Post!  Extra---Dashes';
+        titleInput.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+        await el.updateComplete;
+      });
+
+      it('should show the identifier preview', () => {
+        const preview = el.shadowRoot?.querySelector('.identifier-preview');
+        expect(preview).to.exist;
+      });
+
+      it('should sanitize special characters and collapse whitespace/dashes in the slug', () => {
+        const preview = el.shadowRoot?.querySelector('.identifier-preview');
+        expect(preview?.textContent).to.equal('test-blog-2026-01-15-my-new-post-extra-dashes');
+      });
+    });
+  });
 });

@@ -534,7 +534,7 @@ describe('QrScanner', () => {
         await el.updateComplete;
       });
 
-      it('should show unknown error message with stringified value', () => {
+      it('should show unknown error message with value', () => {
         const errorDisplay = el.shadowRoot?.querySelector<ErrorDisplay>('error-display');
         expect(errorDisplay).to.exist;
         expect(errorDisplay?.augmentedError).to.be.instanceOf(AugmentedError);

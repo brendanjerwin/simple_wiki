@@ -469,8 +469,8 @@ export class WikiChecklist extends LitElement {
   formatTitle(listName: string): string {
     if (!listName) return '';
     return listName
-      .replace(/[_-]/g, ' ')
-      .replace(/\b\w/g, c => c.toUpperCase());
+      .replaceAll(/[_-]/g, ' ')
+      .replaceAll(/\b\w/g, c => c.toUpperCase());
   }
 
   /**
@@ -559,7 +559,7 @@ export class WikiChecklist extends LitElement {
     for (let i = 0; i < this.items.length; i++) {
       const item = this.items[i];
       if (!item) continue;
-      if (this.filterTags.length === 0 || this.filterTags.every(ft => item.tags.includes(ft))) {
+      if (this.filterTags.every(ft => item.tags.includes(ft))) {
         result.push({ item, index: i });
       }
     }
@@ -609,7 +609,7 @@ export class WikiChecklist extends LitElement {
       });
       const currentResponse = await this.client.getFrontmatter(getRequest);
       const currentFrontmatter: JsonObject = {
-        ...(currentResponse.frontmatter ?? {}),
+        ...currentResponse.frontmatter,
       };
 
       // Build updated checklist data
@@ -738,7 +738,7 @@ export class WikiChecklist extends LitElement {
     }
 
     // Remove all :tag tokens from the text
-    text = input.replace(/:(\S+)/g, '').replace(/\s+/g, ' ').trim();
+    text = input.replaceAll(/:(\S+)/g, '').replaceAll(/\s+/g, ' ').trim();
 
     return { tags, text };
   }
@@ -919,7 +919,7 @@ export class WikiChecklist extends LitElement {
     // Pre-drag: check if finger moved beyond threshold (user is scrolling)
     const dx = touch.clientX - this._touchStartX;
     const dy = touch.clientY - this._touchStartY;
-    const distancePx = Math.sqrt(dx * dx + dy * dy);
+    const distancePx = Math.hypot(dx, dy);
     if (distancePx > LONG_PRESS_MOVE_THRESHOLD_PX) {
       this._cancelLongPress();
       this._removeDocumentTouchListeners();
