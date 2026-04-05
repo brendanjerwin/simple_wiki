@@ -53,18 +53,26 @@ const (
 	// ChatServiceGetChatStatusProcedure is the fully-qualified name of the ChatService's GetChatStatus
 	// RPC.
 	ChatServiceGetChatStatusProcedure = "/api.v1.ChatService/GetChatStatus"
+	// ChatServiceSubscribePageChatMessagesProcedure is the fully-qualified name of the ChatService's
+	// SubscribePageChatMessages RPC.
+	ChatServiceSubscribePageChatMessagesProcedure = "/api.v1.ChatService/SubscribePageChatMessages"
+	// ChatServiceSubscribeInstanceRequestsProcedure is the fully-qualified name of the ChatService's
+	// SubscribeInstanceRequests RPC.
+	ChatServiceSubscribeInstanceRequestsProcedure = "/api.v1.ChatService/SubscribeInstanceRequests"
 )
 
 // These variables are the protoreflect.Descriptor objects for the RPCs defined in this package.
 var (
-	chatServiceServiceDescriptor                     = v1.File_api_v1_chat_proto.Services().ByName("ChatService")
-	chatServiceSendMessageMethodDescriptor           = chatServiceServiceDescriptor.Methods().ByName("SendMessage")
-	chatServiceSubscribeChatMethodDescriptor         = chatServiceServiceDescriptor.Methods().ByName("SubscribeChat")
-	chatServiceSubscribeChatMessagesMethodDescriptor = chatServiceServiceDescriptor.Methods().ByName("SubscribeChatMessages")
-	chatServiceSendChatReplyMethodDescriptor         = chatServiceServiceDescriptor.Methods().ByName("SendChatReply")
-	chatServiceEditChatMessageMethodDescriptor       = chatServiceServiceDescriptor.Methods().ByName("EditChatMessage")
-	chatServiceReactToMessageMethodDescriptor        = chatServiceServiceDescriptor.Methods().ByName("ReactToMessage")
-	chatServiceGetChatStatusMethodDescriptor         = chatServiceServiceDescriptor.Methods().ByName("GetChatStatus")
+	chatServiceServiceDescriptor                         = v1.File_api_v1_chat_proto.Services().ByName("ChatService")
+	chatServiceSendMessageMethodDescriptor               = chatServiceServiceDescriptor.Methods().ByName("SendMessage")
+	chatServiceSubscribeChatMethodDescriptor             = chatServiceServiceDescriptor.Methods().ByName("SubscribeChat")
+	chatServiceSubscribeChatMessagesMethodDescriptor     = chatServiceServiceDescriptor.Methods().ByName("SubscribeChatMessages")
+	chatServiceSendChatReplyMethodDescriptor             = chatServiceServiceDescriptor.Methods().ByName("SendChatReply")
+	chatServiceEditChatMessageMethodDescriptor           = chatServiceServiceDescriptor.Methods().ByName("EditChatMessage")
+	chatServiceReactToMessageMethodDescriptor            = chatServiceServiceDescriptor.Methods().ByName("ReactToMessage")
+	chatServiceGetChatStatusMethodDescriptor             = chatServiceServiceDescriptor.Methods().ByName("GetChatStatus")
+	chatServiceSubscribePageChatMessagesMethodDescriptor = chatServiceServiceDescriptor.Methods().ByName("SubscribePageChatMessages")
+	chatServiceSubscribeInstanceRequestsMethodDescriptor = chatServiceServiceDescriptor.Methods().ByName("SubscribeInstanceRequests")
 )
 
 // ChatServiceClient is a client for the api.v1.ChatService service.
@@ -90,6 +98,12 @@ type ChatServiceClient interface {
 	// GetChatStatus returns whether Claude is currently connected (a channel subscriber exists).
 	// Used by the chat panel to disable the UI when Claude is unavailable.
 	GetChatStatus(context.Context, *connect.Request[v1.GetChatStatusRequest]) (*connect.Response[v1.GetChatStatusResponse], error)
+	// SubscribePageChatMessages is called by wiki-cli mcp --page at startup.
+	// Streams new user messages for a specific page only.
+	SubscribePageChatMessages(context.Context, *connect.Request[v1.SubscribePageChatMessagesRequest]) (*connect.ServerStreamForClient[v1.ChatMessage], error)
+	// SubscribeInstanceRequests is called by the wiki-cli pool daemon.
+	// Streams page names that need a Claude instance spawned.
+	SubscribeInstanceRequests(context.Context, *connect.Request[v1.SubscribeInstanceRequestsRequest]) (*connect.ServerStreamForClient[v1.InstanceRequest], error)
 }
 
 // NewChatServiceClient constructs a client for the api.v1.ChatService service. By default, it uses
@@ -144,18 +158,32 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(chatServiceGetChatStatusMethodDescriptor),
 			connect.WithClientOptions(opts...),
 		),
+		subscribePageChatMessages: connect.NewClient[v1.SubscribePageChatMessagesRequest, v1.ChatMessage](
+			httpClient,
+			baseURL+ChatServiceSubscribePageChatMessagesProcedure,
+			connect.WithSchema(chatServiceSubscribePageChatMessagesMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
+		subscribeInstanceRequests: connect.NewClient[v1.SubscribeInstanceRequestsRequest, v1.InstanceRequest](
+			httpClient,
+			baseURL+ChatServiceSubscribeInstanceRequestsProcedure,
+			connect.WithSchema(chatServiceSubscribeInstanceRequestsMethodDescriptor),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // chatServiceClient implements ChatServiceClient.
 type chatServiceClient struct {
-	sendMessage           *connect.Client[v1.SendChatMessageRequest, v1.SendChatMessageResponse]
-	subscribeChat         *connect.Client[v1.SubscribeChatRequest, v1.ChatEvent]
-	subscribeChatMessages *connect.Client[v1.SubscribeChatMessagesRequest, v1.ChatMessage]
-	sendChatReply         *connect.Client[v1.SendChatReplyRequest, v1.SendChatReplyResponse]
-	editChatMessage       *connect.Client[v1.EditChatMessageRequest, v1.EditChatMessageResponse]
-	reactToMessage        *connect.Client[v1.ReactToMessageRequest, v1.ReactToMessageResponse]
-	getChatStatus         *connect.Client[v1.GetChatStatusRequest, v1.GetChatStatusResponse]
+	sendMessage               *connect.Client[v1.SendChatMessageRequest, v1.SendChatMessageResponse]
+	subscribeChat             *connect.Client[v1.SubscribeChatRequest, v1.ChatEvent]
+	subscribeChatMessages     *connect.Client[v1.SubscribeChatMessagesRequest, v1.ChatMessage]
+	sendChatReply             *connect.Client[v1.SendChatReplyRequest, v1.SendChatReplyResponse]
+	editChatMessage           *connect.Client[v1.EditChatMessageRequest, v1.EditChatMessageResponse]
+	reactToMessage            *connect.Client[v1.ReactToMessageRequest, v1.ReactToMessageResponse]
+	getChatStatus             *connect.Client[v1.GetChatStatusRequest, v1.GetChatStatusResponse]
+	subscribePageChatMessages *connect.Client[v1.SubscribePageChatMessagesRequest, v1.ChatMessage]
+	subscribeInstanceRequests *connect.Client[v1.SubscribeInstanceRequestsRequest, v1.InstanceRequest]
 }
 
 // SendMessage calls api.v1.ChatService.SendMessage.
@@ -193,6 +221,16 @@ func (c *chatServiceClient) GetChatStatus(ctx context.Context, req *connect.Requ
 	return c.getChatStatus.CallUnary(ctx, req)
 }
 
+// SubscribePageChatMessages calls api.v1.ChatService.SubscribePageChatMessages.
+func (c *chatServiceClient) SubscribePageChatMessages(ctx context.Context, req *connect.Request[v1.SubscribePageChatMessagesRequest]) (*connect.ServerStreamForClient[v1.ChatMessage], error) {
+	return c.subscribePageChatMessages.CallServerStream(ctx, req)
+}
+
+// SubscribeInstanceRequests calls api.v1.ChatService.SubscribeInstanceRequests.
+func (c *chatServiceClient) SubscribeInstanceRequests(ctx context.Context, req *connect.Request[v1.SubscribeInstanceRequestsRequest]) (*connect.ServerStreamForClient[v1.InstanceRequest], error) {
+	return c.subscribeInstanceRequests.CallServerStream(ctx, req)
+}
+
 // ChatServiceHandler is an implementation of the api.v1.ChatService service.
 type ChatServiceHandler interface {
 	// SendMessage sends a user chat message in the context of a page.
@@ -216,6 +254,12 @@ type ChatServiceHandler interface {
 	// GetChatStatus returns whether Claude is currently connected (a channel subscriber exists).
 	// Used by the chat panel to disable the UI when Claude is unavailable.
 	GetChatStatus(context.Context, *connect.Request[v1.GetChatStatusRequest]) (*connect.Response[v1.GetChatStatusResponse], error)
+	// SubscribePageChatMessages is called by wiki-cli mcp --page at startup.
+	// Streams new user messages for a specific page only.
+	SubscribePageChatMessages(context.Context, *connect.Request[v1.SubscribePageChatMessagesRequest], *connect.ServerStream[v1.ChatMessage]) error
+	// SubscribeInstanceRequests is called by the wiki-cli pool daemon.
+	// Streams page names that need a Claude instance spawned.
+	SubscribeInstanceRequests(context.Context, *connect.Request[v1.SubscribeInstanceRequestsRequest], *connect.ServerStream[v1.InstanceRequest]) error
 }
 
 // NewChatServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -266,6 +310,18 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(chatServiceGetChatStatusMethodDescriptor),
 		connect.WithHandlerOptions(opts...),
 	)
+	chatServiceSubscribePageChatMessagesHandler := connect.NewServerStreamHandler(
+		ChatServiceSubscribePageChatMessagesProcedure,
+		svc.SubscribePageChatMessages,
+		connect.WithSchema(chatServiceSubscribePageChatMessagesMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
+	chatServiceSubscribeInstanceRequestsHandler := connect.NewServerStreamHandler(
+		ChatServiceSubscribeInstanceRequestsProcedure,
+		svc.SubscribeInstanceRequests,
+		connect.WithSchema(chatServiceSubscribeInstanceRequestsMethodDescriptor),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/api.v1.ChatService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ChatServiceSendMessageProcedure:
@@ -282,6 +338,10 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 			chatServiceReactToMessageHandler.ServeHTTP(w, r)
 		case ChatServiceGetChatStatusProcedure:
 			chatServiceGetChatStatusHandler.ServeHTTP(w, r)
+		case ChatServiceSubscribePageChatMessagesProcedure:
+			chatServiceSubscribePageChatMessagesHandler.ServeHTTP(w, r)
+		case ChatServiceSubscribeInstanceRequestsProcedure:
+			chatServiceSubscribeInstanceRequestsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -317,4 +377,12 @@ func (UnimplementedChatServiceHandler) ReactToMessage(context.Context, *connect.
 
 func (UnimplementedChatServiceHandler) GetChatStatus(context.Context, *connect.Request[v1.GetChatStatusRequest]) (*connect.Response[v1.GetChatStatusResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ChatService.GetChatStatus is not implemented"))
+}
+
+func (UnimplementedChatServiceHandler) SubscribePageChatMessages(context.Context, *connect.Request[v1.SubscribePageChatMessagesRequest], *connect.ServerStream[v1.ChatMessage]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ChatService.SubscribePageChatMessages is not implemented"))
+}
+
+func (UnimplementedChatServiceHandler) SubscribeInstanceRequests(context.Context, *connect.Request[v1.SubscribeInstanceRequestsRequest], *connect.ServerStream[v1.InstanceRequest]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.ChatService.SubscribeInstanceRequests is not implemented"))
 }

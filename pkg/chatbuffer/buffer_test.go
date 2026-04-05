@@ -727,6 +727,283 @@ var _ = Describe("Manager", func() {
 		})
 	})
 
+	Describe("SubscribeToPageChannel", func() {
+		When("subscribing to a page", func() {
+			var (
+				msgChan <-chan *chatbuffer.Message
+				unsub   func()
+			)
+
+			BeforeEach(func() {
+				msgChan, unsub = manager.SubscribeToPageChannel("test-page")
+				DeferCleanup(unsub)
+			})
+
+			It("should return a non-nil channel", func() {
+				Expect(msgChan).NotTo(BeNil())
+			})
+
+			It("should mark the page as having a subscriber", func() {
+				Expect(manager.HasPageChannelSubscriber("test-page")).To(BeTrue())
+			})
+
+			It("should not affect other pages", func() {
+				Expect(manager.HasPageChannelSubscriber("other-page")).To(BeFalse())
+			})
+		})
+
+		When("a user message is sent to a subscribed page", func() {
+			var msgChan <-chan *chatbuffer.Message
+
+			BeforeEach(func() {
+				var unsub func()
+				msgChan, unsub = manager.SubscribeToPageChannel("test-page")
+				DeferCleanup(unsub)
+
+				_, _ = manager.AddUserMessage("test-page", "Hello", "user1")
+			})
+
+			It("should deliver the message to the page channel", func() {
+				Eventually(msgChan).Should(Receive(HaveField("Content", "Hello")))
+			})
+		})
+
+		When("a user message is sent to a different page", func() {
+			var msgChan <-chan *chatbuffer.Message
+
+			BeforeEach(func() {
+				var unsub func()
+				msgChan, unsub = manager.SubscribeToPageChannel("test-page")
+				DeferCleanup(unsub)
+
+				_, globalUnsub := manager.SubscribeToChannel()
+				DeferCleanup(globalUnsub)
+
+				_, _ = manager.AddUserMessage("other-page", "Hello", "user1")
+			})
+
+			It("should not deliver the message", func() {
+				Consistently(msgChan).ShouldNot(Receive())
+			})
+		})
+
+		When("unsubscribing", func() {
+			var (
+				msgChan <-chan *chatbuffer.Message
+				unsub   func()
+			)
+
+			BeforeEach(func() {
+				msgChan, unsub = manager.SubscribeToPageChannel("test-page")
+				unsub()
+			})
+
+			It("should close the channel", func() {
+				Eventually(msgChan).Should(BeClosed())
+			})
+
+			It("should mark as not having a page channel subscriber", func() {
+				Expect(manager.HasPageChannelSubscriber("test-page")).To(BeFalse())
+			})
+		})
+
+		When("page channel is the only subscriber", func() {
+			When("sending a user message", func() {
+				var (
+					messageID string
+					err       error
+				)
+
+				BeforeEach(func() {
+					_, unsub := manager.SubscribeToPageChannel("test-page")
+					DeferCleanup(unsub)
+
+					messageID, err = manager.AddUserMessage("test-page", "Hello", "user1")
+				})
+
+				It("should succeed without global subscribers", func() {
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("should return a message ID", func() {
+					Expect(messageID).NotTo(BeEmpty())
+				})
+			})
+		})
+	})
+
+	Describe("HasPageChannelSubscriber", func() {
+		When("no subscribers", func() {
+			It("should return false", func() {
+				Expect(manager.HasPageChannelSubscriber("test-page")).To(BeFalse())
+			})
+		})
+
+		When("subscriber exists for the page", func() {
+			BeforeEach(func() {
+				_, unsub := manager.SubscribeToPageChannel("test-page")
+				DeferCleanup(unsub)
+			})
+
+			It("should return true", func() {
+				Expect(manager.HasPageChannelSubscriber("test-page")).To(BeTrue())
+			})
+		})
+
+		When("subscriber exists for a different page", func() {
+			BeforeEach(func() {
+				_, unsub := manager.SubscribeToPageChannel("other-page")
+				DeferCleanup(unsub)
+			})
+
+			It("should return false for the unsubscribed page", func() {
+				Expect(manager.HasPageChannelSubscriber("test-page")).To(BeFalse())
+			})
+		})
+	})
+
+	Describe("RequestInstance", func() {
+		When("no subscribers or requests exist", func() {
+			BeforeEach(func() {
+				manager.RequestInstance("test-page")
+			})
+
+			It("should mark the page as requested", func() {
+				Expect(manager.IsInstanceRequested("test-page")).To(BeTrue())
+			})
+		})
+
+		When("a page channel subscriber already exists", func() {
+			BeforeEach(func() {
+				_, unsub := manager.SubscribeToPageChannel("test-page")
+				DeferCleanup(unsub)
+
+				manager.RequestInstance("test-page")
+			})
+
+			It("should not mark as requested", func() {
+				Expect(manager.IsInstanceRequested("test-page")).To(BeFalse())
+			})
+		})
+
+		When("a global channel subscriber exists", func() {
+			BeforeEach(func() {
+				_, unsub := manager.SubscribeToChannel()
+				DeferCleanup(unsub)
+
+				manager.RequestInstance("test-page")
+			})
+
+			It("should not mark as requested", func() {
+				Expect(manager.IsInstanceRequested("test-page")).To(BeFalse())
+			})
+		})
+
+		When("the page was already requested recently", func() {
+			var requestChan <-chan string
+
+			BeforeEach(func() {
+				var unsub func()
+				requestChan, unsub = manager.SubscribeToInstanceRequests()
+				DeferCleanup(unsub)
+
+				manager.RequestInstance("test-page")
+				Eventually(requestChan).Should(Receive())
+
+				manager.RequestInstance("test-page")
+			})
+
+			It("should not emit a duplicate request", func() {
+				Consistently(requestChan).ShouldNot(Receive())
+			})
+		})
+
+		When("a pool daemon is subscribed to instance requests", func() {
+			var requestChan <-chan string
+
+			BeforeEach(func() {
+				var unsub func()
+				requestChan, unsub = manager.SubscribeToInstanceRequests()
+				DeferCleanup(unsub)
+
+				manager.RequestInstance("test-page")
+			})
+
+			It("should notify the pool daemon", func() {
+				Eventually(requestChan).Should(Receive(Equal("test-page")))
+			})
+		})
+	})
+
+	Describe("SubscribeToInstanceRequests", func() {
+		When("subscribing", func() {
+			var (
+				requestChan <-chan string
+				unsub       func()
+			)
+
+			BeforeEach(func() {
+				requestChan, unsub = manager.SubscribeToInstanceRequests()
+				DeferCleanup(unsub)
+			})
+
+			It("should return a non-nil channel", func() {
+				Expect(requestChan).NotTo(BeNil())
+			})
+
+			It("should mark as having instance request subscribers", func() {
+				Expect(manager.HasInstanceRequestSubscribers()).To(BeTrue())
+			})
+		})
+
+		When("unsubscribing", func() {
+			var requestChan <-chan string
+
+			BeforeEach(func() {
+				var unsub func()
+				requestChan, unsub = manager.SubscribeToInstanceRequests()
+				unsub()
+			})
+
+			It("should close the channel", func() {
+				Eventually(requestChan).Should(BeClosed())
+			})
+
+			It("should mark as not having instance request subscribers", func() {
+				Expect(manager.HasInstanceRequestSubscribers()).To(BeFalse())
+			})
+		})
+	})
+
+	Describe("HasInstanceRequestSubscribers", func() {
+		When("no subscribers", func() {
+			It("should return false", func() {
+				Expect(manager.HasInstanceRequestSubscribers()).To(BeFalse())
+			})
+		})
+	})
+
+	Describe("IsInstanceRequested", func() {
+		When("no requests exist", func() {
+			It("should return false", func() {
+				Expect(manager.IsInstanceRequested("test-page")).To(BeFalse())
+			})
+		})
+
+		When("a page channel subscriber exists for the page", func() {
+			BeforeEach(func() {
+				_, unsub := manager.SubscribeToPageChannel("test-page")
+				DeferCleanup(unsub)
+
+				manager.RequestInstance("test-page")
+			})
+
+			It("should return false even if recorded", func() {
+				Expect(manager.IsInstanceRequested("test-page")).To(BeFalse())
+			})
+		})
+	})
+
 	Describe("Concurrent access", func() {
 		When("multiple goroutines add messages concurrently", func() {
 			var messages []*chatbuffer.Message
