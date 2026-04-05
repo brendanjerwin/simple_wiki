@@ -464,4 +464,40 @@ describe('FrontmatterValue', () => {
       });
     });
   });
+
+  describe('when value is a non-standard type (e.g. Symbol)', () => {
+    beforeEach(async () => {
+      el = await createFixtureWithTimeout(html`<frontmatter-value></frontmatter-value>`);
+      // Set to a Symbol which is not string/number/boolean/null/undefined/array/object
+      // This exercises the defensive else-branch in the primitive renderer
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- intentionally testing unexpected value type
+      el.value = Symbol('test') as unknown;
+      await el.updateComplete;
+    });
+
+    it('should render string component with empty value fallback', () => {
+      const stringComponent = el.shadowRoot?.querySelector<HTMLElement & { value: string }>('frontmatter-value-string');
+      expect(stringComponent).to.exist;
+      expect(stringComponent!.value).to.equal('');
+    });
+  });
+
+  describe('when _handleValueChange receives an unknown event type', () => {
+    beforeEach(async () => {
+      el = await createFixtureWithTimeout(html`<frontmatter-value .value="${'test'}"></frontmatter-value>`);
+    });
+
+    it('should not dispatch value-change event and should not update value', () => {
+      let eventCount = 0;
+      el.addEventListener('value-change', () => { eventCount++; });
+
+      // Access the private handler directly to exercise the defensive return path
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+      const handler = (el as unknown as { _handleValueChange: (e: CustomEvent) => void })._handleValueChange;
+      handler.call(el, new CustomEvent('unknown-event-type', { detail: {} }));
+
+      expect(eventCount).to.equal(0);
+      expect(el.value).to.equal('test');
+    });
+  });
 });
