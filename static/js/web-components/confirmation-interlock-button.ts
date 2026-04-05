@@ -136,6 +136,18 @@ export class ConfirmationInterlockButton extends LitElement {
         right: 0;
       }
 
+      .visually-hidden {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+
       @keyframes popupFadeIn {
         from {
           opacity: 0;
@@ -180,6 +192,7 @@ export class ConfirmationInterlockButton extends LitElement {
   declare _computedPosition: 'left' | 'right';
 
   private _disarmTimerId: number | undefined;
+  private _previouslyFocusedElement: Element | null = null;
 
   constructor() {
     super();
@@ -209,6 +222,22 @@ export class ConfirmationInterlockButton extends LitElement {
 
   private readonly _handleBackdropClick = (): void => {
     this.disarm();
+  };
+
+  private readonly _handlePopupKeydown = (e: KeyboardEvent): void => {
+    switch (e.key) {
+      case 'Escape':
+        e.preventDefault();
+        this._handleNoClick();
+        break;
+      case 'Enter':
+        // Only intercept Enter when focus is not on a button (buttons handle Enter natively via click)
+        if (!(e.target instanceof HTMLButtonElement)) {
+          e.preventDefault();
+          this._handleYesClick();
+        }
+        break;
+    }
   };
 
   /**
@@ -292,20 +321,32 @@ export class ConfirmationInterlockButton extends LitElement {
   /**
    * Arms the button, showing the confirmation prompt.
    * Starts auto-disarm timer if disarmTimeoutMs > 0.
+   * Moves focus to the yes button for keyboard accessibility.
    */
   public arm(): void {
     if (this.disabled) return;
+    this._previouslyFocusedElement = this.shadowRoot?.activeElement ?? document.activeElement;
     this._computedPosition = this._computePopupPosition();
     this.armed = true;
     this._startDisarmTimer();
+    void this.updateComplete.then(() => {
+      const yesButton = this.shadowRoot?.querySelector<HTMLButtonElement>('.button-yes');
+      yesButton?.focus();
+    });
   }
 
   /**
    * Disarms the button, returning to normal state.
+   * Returns focus to the trigger button.
    */
   public disarm(): void {
     this._clearDisarmTimer();
     this.armed = false;
+    void this.updateComplete.then(() => {
+      const triggerButton = this.shadowRoot?.querySelector<HTMLButtonElement>('.button-trigger');
+      triggerButton?.focus();
+      this._previouslyFocusedElement = null;
+    });
   }
 
   private _startDisarmTimer(): void {
@@ -335,9 +376,11 @@ export class ConfirmationInterlockButton extends LitElement {
   private _renderTriggerButton() {
     return html`
       <button
-        class="button-base button-secondary button-small border-radius-small"
+        class="button-base button-secondary button-small border-radius-small button-trigger"
         @click=${this._handleTriggerClick}
         ?disabled=${this.disabled}
+        aria-expanded=${this.armed ? 'true' : 'false'}
+        aria-haspopup="dialog"
       >
         ${this.label}
       </button>
@@ -348,7 +391,13 @@ export class ConfirmationInterlockButton extends LitElement {
     const positionClass = `position-${this._computedPosition}`;
     return html`
       <div class="confirm-backdrop" @pointerdown=${this._handleBackdropClick}></div>
-      <div class="confirm-popup ${positionClass}">
+      <div
+        class="confirm-popup ${positionClass}"
+        role="alertdialog"
+        aria-modal="true"
+        aria-label=${this.confirmLabel}
+        @keydown=${this._handlePopupKeydown}
+      >
         <span class="confirm-label">${this.confirmLabel}</span>
         <div class="confirm-buttons">
           <button
@@ -374,6 +423,9 @@ export class ConfirmationInterlockButton extends LitElement {
     return html`
       ${this._renderTriggerButton()}
       ${this.armed ? this._renderConfirmPopup() : nothing}
+      <div aria-live="polite" aria-atomic="true" class="visually-hidden">
+        ${this.armed ? this.confirmLabel : ''}
+      </div>
     `;
   }
 }

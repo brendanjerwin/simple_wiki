@@ -563,4 +563,202 @@ describe('ConfirmationInterlockButton', () => {
       });
     });
   });
+
+  describe('ARIA attributes', () => {
+    describe('trigger button', () => {
+      describe('when not armed', () => {
+        beforeEach(async () => {
+          el = await fixture(html`
+            <confirmation-interlock-button .disarmTimeoutMs=${0}></confirmation-interlock-button>
+          `);
+        });
+
+        it('should have aria-expanded false', () => {
+          const button = el.shadowRoot?.querySelector('.button-trigger');
+          expect(button?.getAttribute('aria-expanded')).to.equal('false');
+        });
+
+        it('should have aria-haspopup dialog', () => {
+          const button = el.shadowRoot?.querySelector('.button-trigger');
+          expect(button?.getAttribute('aria-haspopup')).to.equal('dialog');
+        });
+      });
+
+      describe('when armed', () => {
+        beforeEach(async () => {
+          el = await fixture(html`
+            <confirmation-interlock-button .disarmTimeoutMs=${0}></confirmation-interlock-button>
+          `);
+          el.arm();
+          await el.updateComplete;
+        });
+
+        it('should have aria-expanded true', () => {
+          const button = el.shadowRoot?.querySelector('.button-trigger');
+          expect(button?.getAttribute('aria-expanded')).to.equal('true');
+        });
+      });
+    });
+
+    describe('confirm popup', () => {
+      beforeEach(async () => {
+        el = await fixture(html`
+          <confirmation-interlock-button
+            confirmLabel="Delete this item?"
+            .disarmTimeoutMs=${0}
+          ></confirmation-interlock-button>
+        `);
+        el.arm();
+        await el.updateComplete;
+      });
+
+      it('should have role alertdialog', () => {
+        const popup = el.shadowRoot?.querySelector('.confirm-popup');
+        expect(popup?.getAttribute('role')).to.equal('alertdialog');
+      });
+
+      it('should have aria-modal true', () => {
+        const popup = el.shadowRoot?.querySelector('.confirm-popup');
+        expect(popup?.getAttribute('aria-modal')).to.equal('true');
+      });
+
+      it('should have aria-label matching confirmLabel', () => {
+        const popup = el.shadowRoot?.querySelector('.confirm-popup');
+        expect(popup?.getAttribute('aria-label')).to.equal('Delete this item?');
+      });
+    });
+  });
+
+  describe('aria-live region', () => {
+    describe('when not armed', () => {
+      beforeEach(async () => {
+        el = await fixture(html`
+          <confirmation-interlock-button
+            confirmLabel="Are you sure?"
+            .disarmTimeoutMs=${0}
+          ></confirmation-interlock-button>
+        `);
+      });
+
+      it('should have an aria-live region', () => {
+        const liveRegion = el.shadowRoot?.querySelector('[aria-live]');
+        expect(liveRegion).to.exist;
+      });
+
+      it('should have empty aria-live region', () => {
+        const liveRegion = el.shadowRoot?.querySelector('[aria-live]');
+        expect(liveRegion?.textContent?.trim()).to.equal('');
+      });
+    });
+
+    describe('when armed', () => {
+      beforeEach(async () => {
+        el = await fixture(html`
+          <confirmation-interlock-button
+            confirmLabel="Are you sure?"
+            .disarmTimeoutMs=${0}
+          ></confirmation-interlock-button>
+        `);
+        el.arm();
+        await el.updateComplete;
+      });
+
+      it('should announce confirmLabel in aria-live region', () => {
+        const liveRegion = el.shadowRoot?.querySelector('[aria-live]');
+        expect(liveRegion?.textContent?.trim()).to.equal('Are you sure?');
+      });
+    });
+  });
+
+  describe('keyboard navigation', () => {
+    describe('when armed and Escape key is pressed on the popup', () => {
+      let cancelledHandler: sinon.SinonStub;
+
+      beforeEach(async () => {
+        cancelledHandler = sinon.stub();
+        el = await fixture(html`
+          <confirmation-interlock-button
+            .disarmTimeoutMs=${0}
+            @cancelled=${cancelledHandler}
+          ></confirmation-interlock-button>
+        `);
+        el.arm();
+        await el.updateComplete;
+
+        const popup = el.shadowRoot?.querySelector('.confirm-popup') as HTMLElement;
+        popup.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true }));
+        await el.updateComplete;
+      });
+
+      it('should disarm', () => {
+        expect(el.armed).to.be.false;
+      });
+
+      it('should dispatch cancelled event', () => {
+        expect(cancelledHandler).to.have.been.calledOnce;
+      });
+    });
+
+    describe('when armed and Enter key is pressed on the popup (not on a button)', () => {
+      let confirmedHandler: sinon.SinonStub;
+
+      beforeEach(async () => {
+        confirmedHandler = sinon.stub();
+        el = await fixture(html`
+          <confirmation-interlock-button
+            .disarmTimeoutMs=${0}
+            @confirmed=${confirmedHandler}
+          ></confirmation-interlock-button>
+        `);
+        el.arm();
+        await el.updateComplete;
+
+        const popup = el.shadowRoot?.querySelector('.confirm-popup') as HTMLElement;
+        popup.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: false, composed: true }));
+        await el.updateComplete;
+      });
+
+      it('should confirm', () => {
+        expect(confirmedHandler).to.have.been.calledOnce;
+      });
+
+      it('should disarm', () => {
+        expect(el.armed).to.be.false;
+      });
+    });
+  });
+
+  describe('focus management', () => {
+    describe('when armed', () => {
+      beforeEach(async () => {
+        el = await fixture(html`
+          <confirmation-interlock-button .disarmTimeoutMs=${0}></confirmation-interlock-button>
+        `);
+        el.arm();
+        await el.updateComplete;
+      });
+
+      it('should focus the yes button', () => {
+        const yesButton = el.shadowRoot?.querySelector('.button-yes');
+        expect(el.shadowRoot?.activeElement).to.equal(yesButton);
+      });
+    });
+
+    describe('when disarmed after being armed', () => {
+      beforeEach(async () => {
+        el = await fixture(html`
+          <confirmation-interlock-button .disarmTimeoutMs=${0}></confirmation-interlock-button>
+        `);
+        el.arm();
+        await el.updateComplete;
+        el.disarm();
+        await el.updateComplete;
+      });
+
+      it('should return focus to the trigger button', () => {
+        const triggerButton = el.shadowRoot?.querySelector('.button-trigger');
+        expect(el.shadowRoot?.activeElement).to.equal(triggerButton);
+      });
+    });
+  });
 });
