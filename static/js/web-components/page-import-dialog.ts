@@ -78,7 +78,7 @@ export class PageImportDialog extends LitElement {
       }
 
       .dialog {
-        background: white;
+        background: var(--color-surface-elevated);
         max-width: 700px;
         width: 90%;
         max-height: 80vh;
@@ -118,13 +118,13 @@ export class PageImportDialog extends LitElement {
         display: flex;
         gap: 12px;
         padding: 16px 20px;
-        border-top: 1px solid #e0e0e0;
+        border-top: 1px solid var(--color-border-subtle);
         justify-content: flex-end;
       }
 
       /* Upload State Styles */
       .drop-zone {
-        border: 2px dashed #ccc;
+        border: 2px dashed var(--color-border-default);
         border-radius: 8px;
         padding: 40px;
         text-align: center;
@@ -133,24 +133,24 @@ export class PageImportDialog extends LitElement {
       }
 
       .drop-zone.drag-over {
-        border-color: #4a90d9;
-        background: rgba(74, 144, 217, 0.05);
+        border-color: var(--color-border-focus);
+        background: color-mix(in srgb, var(--color-border-focus) 5%, transparent);
       }
 
       .drop-zone-icon {
         font-size: 48px;
-        color: #999;
+        color: var(--color-text-muted);
         margin-bottom: 16px;
       }
 
       .drop-zone-text {
-        color: #666;
+        color: var(--color-text-secondary);
         margin-bottom: 8px;
       }
 
       .drop-zone-hint {
         font-size: 12px;
-        color: #999;
+        color: var(--color-text-muted);
       }
 
       /* Hide drag-drop zone on touch devices */
@@ -187,11 +187,11 @@ export class PageImportDialog extends LitElement {
 
       .loading-spinner {
         font-size: 32px;
-        color: #4a90d9;
+        color: var(--color-border-focus);
       }
 
       .loading-text {
-        color: #666;
+        color: var(--color-text-secondary);
         font-size: 16px;
       }
 
@@ -200,8 +200,8 @@ export class PageImportDialog extends LitElement {
         display: flex;
         gap: 16px;
         padding: 12px 16px;
-        background: #f8f9fa;
-        border: 1px solid #e9ecef;
+        background: var(--color-surface-sunken);
+        border: 1px solid var(--color-border-subtle);
         border-radius: 4px;
         margin-bottom: 16px;
         flex-wrap: wrap;
@@ -209,20 +209,20 @@ export class PageImportDialog extends LitElement {
 
       .summary-item {
         font-size: 14px;
-        color: #333;
+        color: var(--color-text-primary);
       }
 
       .summary-item.errors {
-        color: #dc3545;
+        color: var(--color-error);
         font-weight: 500;
       }
 
       .summary-item.creates {
-        color: #28a745;
+        color: var(--color-success);
       }
 
       .summary-item.updates {
-        color: #4a90d9;
+        color: var(--color-border-focus);
       }
 
       .filter-row {
@@ -240,7 +240,7 @@ export class PageImportDialog extends LitElement {
         gap: 8px;
         cursor: pointer;
         font-size: 14px;
-        color: #333;
+        color: var(--color-text-primary);
       }
 
       .navigation {
@@ -251,7 +251,7 @@ export class PageImportDialog extends LitElement {
 
       .nav-info {
         font-size: 14px;
-        color: #666;
+        color: var(--color-text-secondary);
         min-width: 120px;
         text-align: center;
       }
@@ -262,7 +262,7 @@ export class PageImportDialog extends LitElement {
       }
 
       .record-panel {
-        border: 1px solid #e9ecef;
+        border: 1px solid var(--color-border-subtle);
         border-radius: 4px;
         overflow: hidden;
       }
@@ -272,14 +272,14 @@ export class PageImportDialog extends LitElement {
         align-items: center;
         gap: 12px;
         padding: 12px 16px;
-        background: #f8f9fa;
-        border-bottom: 1px solid #e9ecef;
+        background: var(--color-surface-sunken);
+        border-bottom: 1px solid var(--color-border-subtle);
       }
 
       .record-identifier {
         font-weight: 600;
         font-size: 16px;
-        color: #333;
+        color: var(--color-text-primary);
       }
 
       .badge {
@@ -291,13 +291,13 @@ export class PageImportDialog extends LitElement {
       }
 
       .badge-new {
-        background: #d4edda;
-        color: #155724;
+        background: var(--color-success-bg);
+        color: var(--color-success-text);
       }
 
       .badge-update {
-        background: #cce5ff;
-        color: #004085;
+        background: color-mix(in srgb, var(--color-border-focus) 20%, transparent);
+        color: var(--color-border-focus);
       }
 
       .record-body {
@@ -315,7 +315,7 @@ export class PageImportDialog extends LitElement {
       .section-title {
         font-size: 12px;
         font-weight: 600;
-        color: #666;
+        color: var(--color-text-secondary);
         text-transform: uppercase;
         margin-bottom: 8px;
       }
@@ -335,37 +335,37 @@ export class PageImportDialog extends LitElement {
 
       .field-key {
         font-weight: 500;
-        color: #333;
+        color: var(--color-text-primary);
         min-width: 120px;
       }
 
       .field-value {
-        color: #666;
+        color: var(--color-text-secondary);
         word-break: break-word;
       }
 
       .field-delete {
-        color: #dc3545;
+        color: var(--color-error);
         font-weight: 500;
       }
 
       .field-add {
-        color: #28a745;
+        color: var(--color-success);
       }
 
       .field-remove {
-        color: #dc3545;
+        color: var(--color-error);
       }
 
       .validation-errors {
-        background: #fef2f2;
-        border: 1px solid #fecaca;
+        background: var(--color-error-bg);
+        border: 1px solid var(--color-error);
         border-radius: 4px;
         padding: 12px;
       }
 
       .validation-error-item {
-        color: #dc2626;
+        color: var(--color-error-text);
         font-size: 14px;
         margin-bottom: 4px;
       }
@@ -375,14 +375,14 @@ export class PageImportDialog extends LitElement {
       }
 
       .warnings {
-        background: #fffbeb;
-        border: 1px solid #fcd34d;
+        background: var(--color-warning-bg);
+        border: 1px solid var(--color-warning);
         border-radius: 4px;
         padding: 12px;
       }
 
       .warning-item {
-        color: #92400e;
+        color: var(--color-warning-text);
         font-size: 14px;
         margin-bottom: 4px;
       }
@@ -397,8 +397,8 @@ export class PageImportDialog extends LitElement {
       }
 
       .importing-explainer {
-        background: #f8f9fa;
-        border: 1px solid #e9ecef;
+        background: var(--color-surface-sunken);
+        border: 1px solid var(--color-border-subtle);
         border-radius: 4px;
         padding: 16px;
         margin-bottom: 20px;
@@ -406,7 +406,7 @@ export class PageImportDialog extends LitElement {
 
       .importing-explainer p {
         margin: 0 0 12px 0;
-        color: #333;
+        color: var(--color-text-primary);
         font-size: 14px;
         line-height: 1.5;
       }
@@ -423,7 +423,7 @@ export class PageImportDialog extends LitElement {
         display: inline-flex;
         align-items: center;
         gap: 8px;
-        color: #4a90d9;
+        color: var(--color-text-link);
         text-decoration: none;
         font-size: 16px;
       }
@@ -433,8 +433,8 @@ export class PageImportDialog extends LitElement {
       }
 
       .job-status-section {
-        background: #fff;
-        border: 1px solid #e9ecef;
+        background: var(--color-surface-elevated);
+        border: 1px solid var(--color-border-subtle);
         border-radius: 4px;
         padding: 16px;
       }
@@ -442,7 +442,7 @@ export class PageImportDialog extends LitElement {
       .job-status-title {
         font-size: 12px;
         font-weight: 600;
-        color: #666;
+        color: var(--color-text-secondary);
         text-transform: uppercase;
         margin-bottom: 12px;
       }
@@ -452,7 +452,7 @@ export class PageImportDialog extends LitElement {
         justify-content: space-between;
         align-items: center;
         padding: 8px 0;
-        border-bottom: 1px solid #f0f0f0;
+        border-bottom: 1px solid var(--color-border-subtle);
       }
 
       .job-status-row:last-child {
@@ -460,28 +460,28 @@ export class PageImportDialog extends LitElement {
       }
 
       .job-status-label {
-        color: #666;
+        color: var(--color-text-secondary);
         font-size: 14px;
       }
 
       .job-status-value {
         font-weight: 500;
-        color: #333;
+        color: var(--color-text-primary);
         font-size: 14px;
       }
 
       .job-status-value.active {
-        color: #28a745;
+        color: var(--color-success);
       }
 
       .job-status-value.inactive {
-        color: #6c757d;
+        color: var(--color-info);
       }
 
       .job-status-waiting {
         text-align: center;
         padding: 20px;
-        color: #666;
+        color: var(--color-text-secondary);
         font-size: 14px;
       }
 
@@ -492,9 +492,9 @@ export class PageImportDialog extends LitElement {
       .job-status-disconnected {
         text-align: center;
         padding: 16px;
-        color: #6c757d;
+        color: var(--color-info);
         font-size: 14px;
-        background: #f8f9fa;
+        background: var(--color-surface-sunken);
         border-radius: 4px;
       }
 
@@ -505,7 +505,7 @@ export class PageImportDialog extends LitElement {
 
       .parsing-error-title {
         font-weight: 600;
-        color: #dc3545;
+        color: var(--color-error);
         margin-bottom: 8px;
       }
     `

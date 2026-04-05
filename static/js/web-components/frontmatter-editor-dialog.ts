@@ -71,7 +71,7 @@ export class FrontmatterEditorDialog extends LitElement {
       }
 
       .dialog {
-        background: white;
+        background: var(--color-surface-elevated);
         max-width: 600px;
         width: 90%;
         max-height: 80vh;
