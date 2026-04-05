@@ -4,9 +4,10 @@
   "description": "End-to-end tests for Simple Wiki",
   "packageManager": "bun@1.0.0",
   "scripts": {
-    "test": "playwright test",
-    "test:debug": "playwright test --debug",
-    "test:headed": "PLAYWRIGHT_HEADED=true playwright test --headed",
+    "test": "bun test",
+    "test:e2e": "playwright test",
+    "test:e2e:debug": "playwright test --debug",
+    "test:e2e:headed": "PLAYWRIGHT_HEADED=true playwright test --headed",
     "show-report": "playwright show-report",
     "codegen": "PLAYWRIGHT_BROWSERS_PATH=0 playwright codegen --browser=chromium --target typescript"
   },
