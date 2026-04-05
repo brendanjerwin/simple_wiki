@@ -21,10 +21,10 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: Setup Devbox
-        uses: jetify-com/devbox-install-action@v0.14.0
+        uses: jetify-com/devbox-install-action@a0d2d53632934ae004f878c840055956d9f741b0 # v0.14.0
 
       - name: Check if release exists
         id: check_release
@@ -41,7 +41,7 @@ jobs:
 
       - name: Download release asset
         if: steps.check_release.outputs.release_exists == 'true'
-        uses: robinraju/release-downloader@v1.10
+        uses: robinraju/release-downloader@c39a3b234af58f0cf85888573d361fb6fa281534 # v1.10
         with:
           repository: ${{ github.repository }}
           tag: ${{ github.ref_name }}
@@ -67,7 +67,7 @@ jobs:
           fi
 
       - name: Setup Tailscale
-        uses: tailscale/github-action@v2
+        uses: tailscale/github-action@4e4c49acaa9818630ce0bd7a564372c17e33fb4d # v2
         with:
           oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
           oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
@@ -82,7 +82,7 @@ jobs:
           chmod +x deployment-package/deploy.sh
 
       - name: Deploy to server
-        uses: FarisZR/tailscale-ssh-deploy@v1
+        uses: FarisZR/tailscale-ssh-deploy@8bd320c7dfaa9d766843564c47d5ce67f46e17b4 # v1
         with:
           remote_host: ${{ inputs.username }}@${{ inputs.server_host }}
           directory: deployment-package

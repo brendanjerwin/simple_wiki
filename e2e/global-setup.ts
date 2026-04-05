@@ -12,7 +12,13 @@ async function globalSetup(config: FullConfig) {
     stdio: 'inherit',
     cwd: path.join(__dirname, '..')
   });
-  if (result.status !== 0) {
+  if (result.error) {
+    throw new Error(`[E2E Setup] Build failed to start: ${result.error.message}`);
+  }
+  if (result.signal) {
+    throw new Error(`[E2E Setup] Build terminated by signal ${result.signal}`);
+  }
+  if (typeof result.status === 'number' && result.status !== 0) {
     throw new Error(`[E2E Setup] Build failed with exit code ${result.status}`);
   }
   
