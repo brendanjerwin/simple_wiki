@@ -72,6 +72,30 @@ describe('table-state-persistence', () => {
         expect(hash1).to.not.equal(hash2);
       });
     });
+
+    describe('when given data with supplementary Unicode characters (emoji)', () => {
+      let hashEmoji: string;
+      let hashAscii: string;
+
+      beforeEach(() => {
+        // '😀' is U+1F600, a supplementary code point occupying two UTF-16 code units
+        hashEmoji = computeTableHash(['Name'], [['😀']]);
+        hashAscii = computeTableHash(['Name'], [['A']]);
+      });
+
+      it('should return a non-empty string', () => {
+        expect(hashEmoji).to.be.a('string');
+        expect(hashEmoji.length).to.be.greaterThan(0);
+      });
+
+      it('should produce a different hash than an ASCII string', () => {
+        expect(hashEmoji).to.not.equal(hashAscii);
+      });
+
+      it('should produce the same hash when called twice with the same emoji', () => {
+        expect(hashEmoji).to.equal(computeTableHash(['Name'], [['😀']]));
+      });
+    });
   });
 
   describe('serializeFilter', () => {
