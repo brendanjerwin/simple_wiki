@@ -1,25 +1,119 @@
 @import url('https://fonts.googleapis.com/css?family=Montserrat:400,700');
 
+/* ==========================================================================
+   Design Tokens — Light Mode (default)
+   ========================================================================== */
+
+:root {
+  color-scheme: light dark;
+
+  /* Surfaces */
+  --color-surface-primary: #ffffff;
+  --color-surface-elevated: #ffffff;
+  --color-surface-sunken: #f8f9fa;
+  --color-surface-overlay: rgba(0, 0, 0, 0.5);
+
+  /* Text */
+  --color-text-primary: #333333;
+  --color-text-secondary: #666666;
+  --color-text-muted: #999999;
+  --color-text-inverse: #ffffff;
+  --color-text-link: #4078c0;
+
+  /* Borders */
+  --color-border-default: #dddddd;
+  --color-border-subtle: #e0e0e0;
+  --color-border-strong: #cccccc;
+  --color-border-focus: #4a90d9;
+
+  /* Actions */
+  --color-action-primary: #6c757d;
+  --color-action-primary-hover: #5a6268;
+  --color-action-secondary-bg: #ffffff;
+  --color-action-secondary-hover-bg: #f8f9fa;
+  --color-action-link: #0d6efd;
+  --color-action-link-hover: #0b5ed7;
+
+  /* Semantic */
+  --color-success: #28a745;
+  --color-success-bg: #d4edda;
+  --color-success-text: #155724;
+  --color-error: #dc3545;
+  --color-warning: #ffc107;
+  --color-warning-bg: #fff3cd;
+  --color-warning-text: #856404;
+  --color-info: #6c757d;
+
+  /* Shadows */
+  --shadow-subtle: 0 1px 3px rgba(0, 0, 0, 0.12);
+  --shadow-medium: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* ==========================================================================
+   Design Tokens — Dark Mode
+   ========================================================================== */
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Surfaces */
+    --color-surface-primary: #1e1e1e;
+    --color-surface-elevated: #2d2d2d;
+    --color-surface-sunken: #141414;
+    --color-surface-overlay: rgba(0, 0, 0, 0.7);
+
+    /* Text */
+    --color-text-primary: #e9ecef;
+    --color-text-secondary: #adb5bd;
+    --color-text-muted: #6c757d;
+    --color-text-inverse: #1e1e1e;
+    --color-text-link: #6ea8fe;
+
+    /* Borders */
+    --color-border-default: #444444;
+    --color-border-subtle: #333333;
+    --color-border-strong: #555555;
+
+    /* Actions */
+    --color-action-primary: #6c757d;
+    --color-action-primary-hover: #7a858d;
+    --color-action-secondary-bg: #2d2d2d;
+    --color-action-secondary-hover-bg: #3d3d3d;
+    --color-action-link: #6ea8fe;
+    --color-action-link-hover: #9ec5fe;
+
+    /* Semantic */
+    --color-success-bg: #0d2b12;
+    --color-success-text: #75b798;
+    --color-warning-bg: #2d2000;
+    --color-warning-text: #ffda6a;
+
+    /* Shadows */
+    --shadow-subtle: 0 1px 3px rgba(0, 0, 0, 0.4);
+    --shadow-medium: 0 4px 12px rgba(0, 0, 0, 0.5);
+  }
+}
+
 body.ListPage span {
   cursor: pointer;
 }
 
 body {
-  background: #fff;
+  background: var(--color-surface-primary);
+  color: var(--color-text-primary);
 }
 
 .success {
-  color: #5cb85c;
+  color: var(--color-success);
   font-weight: bold;
 }
 
 .failure {
-  color: #d9534f;
+  color: var(--color-error);
   font-weight: bold;
 }
 
 .pure-menu a {
-  color: #777;
+  color: var(--color-text-muted);
   width: auto;
 }
 
@@ -51,19 +145,19 @@ li.tools-menu {
 }
 
 li.pure-menu-selected {
-  background-color: #eeeeee;
+  background-color: var(--color-surface-sunken);
 }
 
 .pure-menu-selected a {
-  border-bottom: 2px solid #6c757d;
+  border-bottom: 2px solid var(--color-action-primary);
 }
 
 .pure-menu-link {
-  color: black !important;
+  color: var(--color-text-primary) !important;
 }
 
 div.pure-menu-horizontal {
-  background-color: lightgrey;
+  background-color: var(--color-surface-sunken);
   height: 2.75em;
   padding-left: 1em;
   font-family: 'Montserrat', sans-serif;
@@ -87,11 +181,12 @@ div.pure-menu-horizontal ul {
 
 div.pure-menu-horizontal ul.pure-menu-children {
   width: auto;
-  border: grey;
+  border: var(--color-border-default);
   border-style: solid;
   border-top-style: none;
   border-bottom-left-radius: 8px;
   border-bottom-right-radius: 8px;
+  background: var(--color-surface-elevated);
 }
 
 ul.pure-menu-list {
@@ -168,11 +263,11 @@ body.EditPage div#wrap {
   top: 0;
   display: none;
   min-width: 150px;
-  background: white;
-  border: grey;
+  background: var(--color-surface-elevated);
+  border: var(--color-border-default);
   border-style: solid;
   border-radius: 8px;
-  box-shadow: 2px 2px 5px rgba(0,0,0,0.15);
+  box-shadow: var(--shadow-medium);
   z-index: 100;
 }
 
@@ -220,11 +315,12 @@ wiki-search#site-search {
 
 /*---- Directory listing error states ----*/
 .directory-error-banner {
-  background: #fff3cd;
-  border: 1px solid #ffc107;
+  background: var(--color-warning-bg);
+  border: 1px solid var(--color-warning);
   border-radius: 4px;
   padding: 12px 16px;
   margin-bottom: 12px;
+  color: var(--color-warning-text);
 }
 
 .directory-error-banner ul {
@@ -233,6 +329,61 @@ wiki-search#site-search {
 }
 
 tr.directory-error-row {
-  color: #856404;
-  background: #fff3cd;
+  color: var(--color-warning-text);
+  background: var(--color-warning-bg);
+}
+
+
+/* ==========================================================================
+   Dark mode overrides for GitHub Markdown (vendor/css/github-markdown.css)
+   ========================================================================== */
+
+@media (prefers-color-scheme: dark) {
+  .markdown-body {
+    color-scheme: dark;
+    color: var(--color-text-primary);
+    background-color: var(--color-surface-primary);
+  }
+
+  .markdown-body a {
+    color: var(--color-text-link);
+  }
+
+  .markdown-body blockquote {
+    color: var(--color-text-muted);
+    border-left-color: var(--color-border-default);
+  }
+
+  .markdown-body hr {
+    background-color: var(--color-border-default);
+  }
+
+  .markdown-body h1,
+  .markdown-body h2 {
+    border-bottom-color: var(--color-border-default);
+  }
+
+  .markdown-body table tr {
+    background-color: var(--color-surface-primary);
+    border-top-color: var(--color-border-default);
+  }
+
+  .markdown-body table tr:nth-child(2n) {
+    background-color: var(--color-surface-elevated);
+  }
+
+  .markdown-body table th,
+  .markdown-body table td {
+    border-color: var(--color-border-default);
+  }
+
+  .markdown-body code,
+  .markdown-body pre {
+    background-color: var(--color-surface-sunken);
+    color: var(--color-text-primary);
+  }
+
+  .markdown-body pre code {
+    background-color: transparent;
+  }
 }

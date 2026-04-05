@@ -61,13 +61,13 @@ export class WikiChecklist extends LitElement {
         display: block;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto',
           'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
-        color: #333;
+        color: var(--color-text-primary);
       }
 
       .checklist-container {
-        border: 1px solid #e0e0e0;
+        border: 1px solid var(--color-border-subtle);
         border-radius: 8px;
-        background: #fff;
+        background: var(--color-surface-primary);
         padding: 16px;
         max-width: 600px;
       }
@@ -83,7 +83,7 @@ export class WikiChecklist extends LitElement {
         font-size: 18px;
         font-weight: 600;
         margin: 0;
-        color: #333;
+        color: var(--color-text-primary);
       }
 
       .header-actions {
@@ -94,7 +94,7 @@ export class WikiChecklist extends LitElement {
 
       .saving-indicator {
         font-size: 12px;
-        color: #6c757d;
+        color: var(--color-info);
       }
 
       .loading {
@@ -102,14 +102,14 @@ export class WikiChecklist extends LitElement {
         align-items: center;
         gap: 8px;
         padding: 16px;
-        color: #666;
+        color: var(--color-text-secondary);
         font-size: 14px;
       }
 
       .empty-state {
         padding: 16px;
         text-align: center;
-        color: #888;
+        color: var(--color-text-muted);
         font-size: 14px;
       }
 
@@ -130,7 +130,7 @@ export class WikiChecklist extends LitElement {
       }
 
       .item-row:hover {
-        background: #f8f9fa;
+        background: var(--color-hover-overlay);
       }
 
       .item-checkbox {
@@ -139,7 +139,7 @@ export class WikiChecklist extends LitElement {
         height: 16px;
         margin-top: 2px;
         cursor: pointer;
-        accent-color: #6c757d;
+        accent-color: var(--color-action-primary);
       }
 
       .item-content {
@@ -157,6 +157,7 @@ export class WikiChecklist extends LitElement {
         font-size: 14px;
         border: none;
         background: transparent;
+        color: var(--color-text-primary);
         padding: 2px 4px;
         border-radius: 3px;
         font-family: inherit;
@@ -165,13 +166,13 @@ export class WikiChecklist extends LitElement {
 
       .item-text:focus {
         outline: none;
-        background: #f0f0f0;
+        background: var(--color-hover-overlay);
       }
 
       .item-checked .item-text {
         text-decoration: line-through;
         opacity: 0.6;
-        color: #888;
+        color: var(--color-text-muted);
       }
 
       .item-display-text {
@@ -184,7 +185,7 @@ export class WikiChecklist extends LitElement {
       }
 
       .item-display-text:focus {
-        outline: 2px solid #6c757d;
+        outline: 2px solid var(--color-action-primary);
         outline-offset: 1px;
         border-radius: 3px;
       }
@@ -192,7 +193,7 @@ export class WikiChecklist extends LitElement {
       .item-checked .item-display-text {
         text-decoration: line-through;
         opacity: 0.6;
-        color: #888;
+        color: var(--color-text-muted);
       }
 
       /* .item-tag-badge styles provided by pillCSS */
@@ -201,7 +202,7 @@ export class WikiChecklist extends LitElement {
         background: none;
         border: none;
         cursor: pointer;
-        color: #ccc;
+        color: var(--color-border-default);
         font-size: 16px;
         padding: 2px 4px;
         border-radius: 3px;
@@ -211,13 +212,13 @@ export class WikiChecklist extends LitElement {
       }
 
       .remove-btn:hover {
-        color: #dc3545;
+        color: var(--color-error);
       }
 
       .drag-handle {
         flex-shrink: 0;
         cursor: grab;
-        color: #ccc;
+        color: var(--color-border-default);
         font-size: 14px;
         padding: 2px 2px;
         margin-top: 2px;
@@ -227,7 +228,7 @@ export class WikiChecklist extends LitElement {
       }
 
       .drag-handle:hover {
-        color: #888;
+        color: var(--color-text-muted);
       }
 
       .drag-handle:active {
@@ -245,7 +246,7 @@ export class WikiChecklist extends LitElement {
         left: 0;
         right: 0;
         height: 2px;
-        background: #0d6efd;
+        background: var(--color-action-link);
         border-radius: 1px;
       }
 
@@ -256,7 +257,7 @@ export class WikiChecklist extends LitElement {
         left: 0;
         right: 0;
         height: 2px;
-        background: #0d6efd;
+        background: var(--color-action-link);
         border-radius: 1px;
       }
 
@@ -266,7 +267,7 @@ export class WikiChecklist extends LitElement {
       }
 
       .drag-handle.long-press-pending {
-        color: #0d6efd;
+        color: var(--color-action-link);
         transform: scale(1.2);
       }
 
@@ -275,8 +276,8 @@ export class WikiChecklist extends LitElement {
         z-index: var(--z-modal);
         pointer-events: none;
         opacity: 0.85;
-        background: #fff;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        background: var(--color-surface-primary);
+        box-shadow: var(--shadow-medium);
         border-radius: 4px;
       }
 
