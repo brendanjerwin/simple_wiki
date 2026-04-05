@@ -14,8 +14,8 @@ export type PopupPosition = 'auto' | 'left' | 'right';
  * Allows tests to control timer behavior deterministically.
  */
 export interface TimerProvider {
-  setTimeout(callback: () => void, delayMs: number): number;
-  clearTimeout(id: number): void;
+  setTimeout(callback: () => void, delayMs: number): ReturnType<typeof setTimeout>;
+  clearTimeout(id: ReturnType<typeof setTimeout>): void;
 }
 
 /**
@@ -179,7 +179,7 @@ export class ConfirmationInterlockButton extends LitElement {
   @state()
   declare _computedPosition: 'left' | 'right';
 
-  private _disarmTimerId: number | undefined;
+  private _disarmTimerId: ReturnType<typeof setTimeout> | undefined;
 
   constructor() {
     super();
