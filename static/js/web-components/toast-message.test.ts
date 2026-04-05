@@ -440,5 +440,23 @@ describe('sessionStorage toast functions', () => {
       expect(toast).to.exist;
       expect(toast.type).to.equal('info');
     });
+
+    describe('when toast-timeout is set in sessionStorage', () => {
+      let toast: ToastMessage;
+
+      beforeEach(() => {
+        sessionStorage.setItem('toast-message', 'Stored message');
+        sessionStorage.setItem('toast-timeout', '10');
+
+        showStoredToast();
+
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- querying for custom element
+        toast = document.querySelector('toast-message') as ToastMessage;
+      });
+
+      it('should use the stored timeout value', () => {
+        expect(toast.timeoutSeconds).to.equal(10);
+      });
+    });
   });
 });

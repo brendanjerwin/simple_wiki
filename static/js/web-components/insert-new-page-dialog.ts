@@ -331,9 +331,9 @@ export class InsertNewPageDialog extends LitElement {
     }
 
     // Filter out system keys - these are set automatically
-    const systemKeys = ['template', 'identifier'];
+    const systemKeys = new Set(['template', 'identifier']);
     this.frontmatter = Object.fromEntries(
-      Object.entries(result.frontmatter).filter(([key]) => !systemKeys.includes(key))
+      Object.entries(result.frontmatter).filter(([key]) => !systemKeys.has(key))
     );
     return true;
   }
