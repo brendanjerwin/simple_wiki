@@ -1,10 +1,10 @@
 import { parseOrders } from './merchants/amazon.js';
 import { Order } from './merchants/types.js';
 
-console.debug('[Simple Wiki Companion] Content script running on', window.location.href);
+console.debug('[Simple Wiki Companion] Content script running on', globalThis.location.href);
 
 function detectAndParse(): Order[] {
-  const hostname = window.location.hostname;
+  const hostname = globalThis.location.hostname;
 
   if (hostname.endsWith('.amazon.com') || hostname === 'amazon.com') {
     console.debug('[Simple Wiki Companion] Amazon page detected, parsing orders...');

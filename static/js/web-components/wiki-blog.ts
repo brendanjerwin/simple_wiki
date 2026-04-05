@@ -281,7 +281,7 @@ export class WikiBlog extends LitElement {
 
   private static isSafeUrl(url: string): boolean {
     try {
-      const parsed = new URL(url, window.location.origin);
+      const parsed = new URL(url, globalThis.location.origin);
       return parsed.protocol === 'http:' || parsed.protocol === 'https:';
     } catch {
       return false;

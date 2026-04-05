@@ -8,11 +8,7 @@ import { PageManagementService, WatchPageRequestSchema, type WatchPageResponse }
 
 // Declare global hljs type from the highlight.js library loaded in the page
 declare global {
-  interface Window {
-    hljs?: {
-      highlightAll(): void;
-    };
-  }
+  var hljs: { highlightAll(): void } | undefined; // eslint-disable-line no-var
 
   interface HTMLElementTagNameMap {
     'page-auto-refresh': PageAutoRefresh;
@@ -185,12 +181,12 @@ export class PageAutoRefresh extends LitElement {
 
   private async refreshPageContent(): Promise<void> {
     // Save current scroll position
-    const scrollY = window.scrollY;
-    const scrollX = window.scrollX;
+    const scrollY = globalThis.scrollY;
+    const scrollX = globalThis.scrollX;
 
     try {
       // Fetch the updated page content
-      const response = await fetch(window.location.href);
+      const response = await fetch(globalThis.location.href);
       if (!response.ok) {
         this._dispatchWatchError(new Error(`Failed to fetch page: ${response.statusText}`));
         return;
@@ -209,11 +205,11 @@ export class PageAutoRefresh extends LitElement {
         oldContent.innerHTML = newContent.innerHTML;
 
         // Restore scroll position
-        window.scrollTo(scrollX, scrollY);
+        globalThis.scrollTo(scrollX, scrollY);
 
         // Re-run syntax highlighting if available
-        if (window.hljs?.highlightAll) {
-          window.hljs.highlightAll();
+        if (globalThis.hljs?.highlightAll) {
+          globalThis.hljs.highlightAll();
         }
 
         // Dispatch updated status

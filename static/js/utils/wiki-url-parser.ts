@@ -48,11 +48,8 @@ export class WikiUrlParser {
       pathPart = pathPart.substring(0, queryIndex);
     }
 
-    // Split path by slashes and filter empty segments
-    const segments = pathPart.split('/').filter(s => s.length > 0);
-
     // First non-empty segment is the page identifier
-    const pageIdentifier = segments[0];
+    const pageIdentifier = pathPart.split('/').find(s => s.length > 0);
 
     if (!pageIdentifier) {
       return { success: false, error: 'No page identifier found in path' };

@@ -38,7 +38,7 @@ showStoredToast();
 const erasePageEl = document.getElementById('erasePage');
 erasePageEl?.addEventListener('click', (e) => {
   e.preventDefault();
-  const pageName = window.simple_wiki?.pageName;
+  const pageName = globalThis.simple_wiki?.pageName;
   if (pageName) {
     pageDeleteService.confirmAndDeletePage(pageName);
   }
@@ -50,7 +50,7 @@ editFrontmatterEl?.addEventListener('click', (e) => {
   e.preventDefault();
   // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- frontmatter-editor-dialog is registered in HTMLElementTagNameMap
   const dialog = document.getElementById('frontmatter-dialog') as FrontmatterEditorDialog | null;
-  dialog?.openDialog(window.simple_wiki?.pageName ?? '');
+  dialog?.openDialog(globalThis.simple_wiki?.pageName ?? '');
 });
 
 // Initialize dynamic menu items
@@ -62,11 +62,11 @@ initPageImportMenu();
 const wikiEditor = document.querySelector('wiki-editor');
 if (wikiEditor) {
   wikiEditor.addEventListener('exit-requested', () => {
-    const pageName = window.simple_wiki?.pageName;
+    const pageName = globalThis.simple_wiki?.pageName;
     if (pageName) {
-      window.location.href = `/${pageName}/view`;
+      globalThis.location.href = `/${pageName}/view`;
     } else {
-      window.location.href = '/';
+      globalThis.location.href = '/';
     }
   });
 }
