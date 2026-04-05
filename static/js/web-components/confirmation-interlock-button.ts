@@ -192,6 +192,7 @@ export class ConfirmationInterlockButton extends LitElement {
   declare _computedPosition: 'left' | 'right';
 
   private _disarmTimerId: number | undefined;
+  private _previouslyFocusedElement: HTMLElement | null = null;
 
   constructor() {
     super();
@@ -236,8 +237,41 @@ export class ConfirmationInterlockButton extends LitElement {
           this._handleYesClick();
         }
         break;
+      case 'Tab':
+        this._trapFocus(e);
+        break;
     }
   };
+
+  /**
+   * Traps keyboard focus within the confirmation popup.
+   * Wraps Tab to the first focusable element when on the last, and
+   * Shift+Tab to the last focusable element when on the first.
+   */
+  private _trapFocus(e: KeyboardEvent): void {
+    const popup = this.shadowRoot?.querySelector('.confirm-popup');
+    if (!popup) return;
+    const focusableElements = Array.from(
+      popup.querySelectorAll<HTMLElement>(
+        'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
+      )
+    );
+    if (focusableElements.length === 0) return;
+    const firstFocusable = focusableElements[0]!;
+    const lastFocusable = focusableElements[focusableElements.length - 1]!;
+    const activeEl = this.shadowRoot?.activeElement;
+    if (e.shiftKey) {
+      if (activeEl === firstFocusable) {
+        e.preventDefault();
+        lastFocusable.focus();
+      }
+    } else {
+      if (activeEl === lastFocusable) {
+        e.preventDefault();
+        firstFocusable.focus();
+      }
+    }
+  }
 
   /**
    * Finds the closest containing element that constrains overflow (dialog, modal, scrollable container).
@@ -321,9 +355,12 @@ export class ConfirmationInterlockButton extends LitElement {
    * Arms the button, showing the confirmation prompt.
    * Starts auto-disarm timer if disarmTimeoutMs > 0.
    * Moves focus to the yes button for keyboard accessibility.
+   * No-op if the button is already armed (re-entrant guard).
    */
   public arm(): void {
     if (this.disabled) return;
+    if (this.armed) return;
+    this._previouslyFocusedElement = this.shadowRoot?.activeElement as HTMLElement | null;
     this._computedPosition = this._computePopupPosition();
     this.armed = true;
     this._startDisarmTimer();
@@ -335,14 +372,15 @@ export class ConfirmationInterlockButton extends LitElement {
 
   /**
    * Disarms the button, returning to normal state.
-   * Returns focus to the trigger button.
+   * Returns focus to the previously focused element.
    */
   public disarm(): void {
     this._clearDisarmTimer();
     this.armed = false;
+    const elementToFocus = this._previouslyFocusedElement;
+    this._previouslyFocusedElement = null;
     void this.updateComplete.then(() => {
-      const triggerButton = this.shadowRoot?.querySelector<HTMLButtonElement>('.button-trigger');
-      triggerButton?.focus();
+      elementToFocus?.focus();
     });
   }
 
@@ -362,6 +400,7 @@ export class ConfirmationInterlockButton extends LitElement {
   private readonly _handleYesClick = (): void => {
     this._clearDisarmTimer();
     this.armed = false;
+    this._previouslyFocusedElement = null;
     this.dispatchEvent(new CustomEvent('confirmed', { bubbles: true, composed: true }));
   };
 
