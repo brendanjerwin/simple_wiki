@@ -209,11 +209,9 @@ hide-new-post = true
       await page.goto(`/${BLOG_HIDE_NEW_POST_PAGE}/view`);
       await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
-      // Wait for wiki-blog to be attached so we know it rendered
-      await expect(page.locator('wiki-blog')).toBeAttached({ timeout: BLOG_LOAD_TIMEOUT_MS });
-
-      // Give the component time to finish rendering
-      await page.waitForTimeout(1000);
+      // Wait for the component's blog-container to appear in the shadow DOM, confirming
+      // Lit has processed the hide-new-post attribute and completed its initial render
+      await expect(page.locator('wiki-blog .blog-container')).toBeAttached({ timeout: BLOG_LOAD_TIMEOUT_MS });
 
       await expect(page.locator('wiki-blog button', { hasText: 'New Post' })).not.toBeAttached();
     });
@@ -221,9 +219,10 @@ hide-new-post = true
     test('should not render blog-new-post-dialog when hide-new-post is true', async ({ page }) => {
       await page.goto(`/${BLOG_HIDE_NEW_POST_PAGE}/view`);
       await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-      await expect(page.locator('wiki-blog')).toBeAttached({ timeout: BLOG_LOAD_TIMEOUT_MS });
 
-      await page.waitForTimeout(1000);
+      // Wait for the component's blog-container to appear in the shadow DOM, confirming
+      // Lit has processed the hide-new-post attribute and completed its initial render
+      await expect(page.locator('wiki-blog .blog-container')).toBeAttached({ timeout: BLOG_LOAD_TIMEOUT_MS });
 
       await expect(page.locator('wiki-blog blog-new-post-dialog')).not.toBeAttached();
     });
