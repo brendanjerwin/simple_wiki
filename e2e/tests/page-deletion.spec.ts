@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { frontMatterStringMatcher } from './helpers/frontmatter.js';
 
 // Test data
 const TEST_PAGE_FOR_DELETION = 'E2EDeletionTest';
@@ -8,14 +9,8 @@ const SAVE_TIMEOUT_MS = 10000;
 const COMPONENT_LOAD_TIMEOUT_MS = 15000;
 const PAGE_LOAD_TIMEOUT_MS = 15000;
 
-// Helper function to match frontmatter fields with flexible quote handling
-function frontMatterStringMatcher(key: string, value: string): RegExp {
-  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const escapedValue = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`${escapedKey}\\s*=\\s*['"]${escapedValue}['"]`);
-}
-
 test.describe('Page Deletion E2E Tests', () => {
+  test.describe.configure({ mode: 'serial' });
   test.setTimeout(60000);
 
   test('should create a page for deletion testing', async ({ page }) => {
@@ -83,30 +78,27 @@ identifier = "${TEST_PAGE_FOR_DELETION.toLowerCase()}"
     });
   });
 
-  test('should verify deleted page no longer appears in page list', async ({ page }) => {
+  test('should show minimal-content page in page list after deletion', async ({ page }) => {
     // Navigate to the page list
     await page.goto('/ls');
 
     await expect(page.locator('h1')).toContainText('ls', { timeout: PAGE_LOAD_TIMEOUT_MS });
 
-    // Verify the page link is no longer visible
-    // Note: The page might still exist as a file but with no content,
-    // so we check if it appears in the normal page list
+    // Verify view links are present
     const pageLinks = page.locator('a[href*="/view"]');
     await expect(pageLinks.first()).toBeVisible({ timeout: PAGE_LOAD_TIMEOUT_MS });
 
     // Get all page link texts
     const allLinks = await pageLinks.allTextContents();
 
-    // The deleted page should not appear in the list (or appear with minimal/no content indicator)
-    // This test verifies the page list behavior after deletion
+    expect(allLinks.length).toBeGreaterThan(0); // At least home page should exist
+
+    // The server lists all .md files regardless of content, so a minimal-content
+    // page still appears in /ls after "deletion" (content-stripping).
     const hasDeletedPage = allLinks.some((text) =>
       text.toLowerCase().includes(TEST_PAGE_FOR_DELETION.toLowerCase()),
     );
-
-    // Depending on implementation, deleted pages might not appear at all
-    // or might appear differently - we just verify the list loads correctly
-    expect(allLinks.length).toBeGreaterThan(0); // At least home page should exist
+    expect(hasDeletedPage).toBe(true);
   });
 
   test('should show minimal content when navigating to deleted page view', async ({ page }) => {

@@ -11,6 +11,7 @@ const PAGE_LOAD_TIMEOUT_MS = 15000;
 const POLL_WAIT_MS = 4000; // Checklist polls every 3s, wait 4s to ensure it completes
 
 test.describe('Checklist E2E Tests', () => {
+  test.describe.configure({ mode: 'serial' });
   test.setTimeout(60000);
 
   // Create a test page with a checklist before all tests

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { frontMatterStringMatcher } from './helpers/frontmatter.js';
 
 // Test data
 const TEST_PAGE_NAME = 'E2EFrontmatterTest';
@@ -8,13 +9,6 @@ const SAVE_TIMEOUT_MS = 10000;
 const COMPONENT_LOAD_TIMEOUT_MS = 15000;
 const PAGE_LOAD_TIMEOUT_MS = 15000;
 const DIALOG_TIMEOUT_MS = 5000;
-
-// Helper function to match frontmatter fields with flexible quote handling
-function frontMatterStringMatcher(key: string, value: string): RegExp {
-  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const escapedValue = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`${escapedKey}\\s*=\\s*['"]${escapedValue}['"]`);
-}
 
 test.describe('Frontmatter Editing E2E Tests', () => {
   test.setTimeout(60000);
@@ -197,7 +191,6 @@ identifier = "${TEST_PAGE_NAME.toLowerCase()}"
 
     // First, add a custom field via the editor to ensure we can test it
     const currentContent = await textarea.inputValue();
-    const frontmatterMatch = currentContent.match(/^\+\+\+[\s\S]*?\+\+\+/);
     const bodyMatch = currentContent.match(/\+\+\+[\s\S]*?\+\+\+([\s\S]*)$/);
     const body = bodyMatch ? bodyMatch[1] : '';
 
