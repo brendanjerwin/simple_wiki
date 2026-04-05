@@ -12,27 +12,23 @@ const Z_LAYERS = {
 
 const COMPONENT_LOAD_TIMEOUT_MS = 15000;
 const MENU_APPEAR_TIMEOUT_MS = 5000;
-const ANIMATION_SETTLE_MS = 400;
 
 /**
  * Reads z-index CSS custom property token values from the system-info element.
  * system-info includes zIndexCSS which defines all 6 tokens on :host, making
  * them accessible via getComputedStyle from outside the shadow DOM.
  */
-async function readTokenValues(page: Page) {
-  return page.evaluate(() => {
+async function readTokenValues(page: Page): Promise<Record<keyof typeof Z_LAYERS, number>> {
+  const names = Object.keys(Z_LAYERS) as Array<keyof typeof Z_LAYERS>;
+  const result = await page.evaluate((tokenNames) => {
     const el = document.querySelector('system-info');
     if (!el) throw new Error('system-info not found — is this a view page?');
     const style = getComputedStyle(el);
-    return {
-      ambient: parseInt(style.getPropertyValue('--z-ambient').trim(), 10),
-      drawer: parseInt(style.getPropertyValue('--z-drawer').trim(), 10),
-      popover: parseInt(style.getPropertyValue('--z-popover').trim(), 10),
-      modal: parseInt(style.getPropertyValue('--z-modal').trim(), 10),
-      notification: parseInt(style.getPropertyValue('--z-notification').trim(), 10),
-      blocker: parseInt(style.getPropertyValue('--z-blocker').trim(), 10),
-    };
-  });
+    return Object.fromEntries(
+      tokenNames.map(name => [name, parseInt(style.getPropertyValue(`--z-${name}`).trim(), 10)])
+    );
+  }, names);
+  return result as Record<keyof typeof Z_LAYERS, number>;
 }
 
 /** Opens the page-import-dialog via the tools menu trigger. */
@@ -40,10 +36,22 @@ async function openPageImportDialog(page: Page): Promise<void> {
   await expect(page.locator('#page-import-trigger')).toBeAttached({ timeout: MENU_APPEAR_TIMEOUT_MS });
   await page.locator('.tools-menu').hover();
   await page.locator('#page-import-trigger').click();
-  await expect(page.locator('page-import-dialog')).toHaveAttribute('open', { timeout: MENU_APPEAR_TIMEOUT_MS });
+  await expect(page.locator('page-import-dialog')).toHaveAttribute('open', '', { timeout: MENU_APPEAR_TIMEOUT_MS });
 }
 
-/** Injects a toast-message into the page and calls show() on the next animation frame. */
+/**
+ * Opens the search results popover by typing a query into the wiki-search input
+ * and waiting for the wiki-search-results element to gain its open attribute.
+ */
+async function openSearchPopover(page: Page): Promise<void> {
+  const searchInput = page.locator('wiki-search input[type="search"]');
+  await expect(searchInput).toBeAttached({ timeout: MENU_APPEAR_TIMEOUT_MS });
+  await searchInput.fill('test');
+  await searchInput.press('Enter');
+  await expect(page.locator('wiki-search-results')).toHaveAttribute('open', '', { timeout: MENU_APPEAR_TIMEOUT_MS });
+}
+
+/** Injects a toast-message into the page and waits for it to be fully slid into view. */
 async function injectToast(page: Page, message: string): Promise<void> {
   await page.evaluate((msg: string) => {
     interface ToastElement extends HTMLElement {
@@ -63,18 +71,54 @@ async function injectToast(page: Page, message: string): Promise<void> {
     document.body.appendChild(toast);
     requestAnimationFrame(() => { toast.show(); });
   }, message);
-  await expect(page.locator('toast-message')).toBeAttached();
+  // Wait for the visible attribute (set by show()), then wait for the slide-in
+  // animation to complete so that getBoundingClientRect() reflects the final position.
+  await expect(page.locator('toast-message')).toHaveAttribute('visible', '', { timeout: MENU_APPEAR_TIMEOUT_MS });
+  // The toast slides in from the right: animation is complete once the right edge
+  // is within the viewport (i.e. no longer translated off-screen by translateX(100%)).
+  await page.waitForFunction(() => {
+    const toast = document.querySelector('toast-message') as HTMLElement;
+    if (!toast) return false;
+    const rect = toast.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0 && rect.right <= window.innerWidth;
+  }, { timeout: MENU_APPEAR_TIMEOUT_MS });
+}
+
+/**
+ * Returns the custom element tag name of the topmost element at (x, y).
+ * Pierces one level of shadow DOM to return the host element's tag when the
+ * hit element lives inside a shadow root.
+ */
+async function getTopmostCustomElementTagAt(page: Page, x: number, y: number): Promise<string> {
+  return page.evaluate(([px, py]: [number, number]) => {
+    const el = document.elementFromPoint(px, py);
+    if (!el) return 'none';
+    const root = el.getRootNode();
+    if (root instanceof ShadowRoot) return root.host.tagName.toLowerCase();
+    let current: Element | null = el;
+    while (current && current !== document.body) {
+      const tag = current.tagName.toLowerCase();
+      if (tag.includes('-')) return tag;
+      current = current.parentElement;
+    }
+    return el.tagName.toLowerCase();
+  }, [x, y] as [number, number]);
 }
 
 test.describe('Z-Index Token System (ADR-0008)', () => {
   test.setTimeout(60000);
 
-  test.describe('CSS custom property token values', () => {
-    test('all z-index tokens should be defined with correct numeric values', async ({ page }) => {
-      await page.goto('/home/view');
-      await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-      await expect(page.locator('system-info')).toBeAttached({ timeout: MENU_APPEAR_TIMEOUT_MS });
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/home/view');
+    await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
+  });
 
+  test.describe('CSS custom property token values', () => {
+    test.beforeEach(async ({ page }) => {
+      await expect(page.locator('system-info')).toBeAttached({ timeout: MENU_APPEAR_TIMEOUT_MS });
+    });
+
+    test('all z-index tokens should be defined with correct numeric values', async ({ page }) => {
       const tokens = await readTokenValues(page);
 
       expect(tokens.ambient).toBe(Z_LAYERS.ambient);
@@ -85,37 +129,16 @@ test.describe('Z-Index Token System (ADR-0008)', () => {
       expect(tokens.blocker).toBe(Z_LAYERS.blocker);
     });
 
-    test('layer tokens should be strictly ordered from lowest to highest', async ({ page }) => {
-      await page.goto('/home/view');
-      await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-      await expect(page.locator('system-info')).toBeAttached({ timeout: MENU_APPEAR_TIMEOUT_MS });
-
-      const tokens = await readTokenValues(page);
-
-      expect(tokens.ambient).toBeLessThan(tokens.drawer);
-      expect(tokens.drawer).toBeLessThan(tokens.popover);
-      expect(tokens.popover).toBeLessThan(tokens.modal);
-      expect(tokens.modal).toBeLessThan(tokens.notification);
-      expect(tokens.notification).toBeLessThan(tokens.blocker);
-    });
-
     test('all six layer tokens should have distinct z-index values', async ({ page }) => {
-      await page.goto('/home/view');
-      await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-      await expect(page.locator('system-info')).toBeAttached({ timeout: MENU_APPEAR_TIMEOUT_MS });
-
       const tokens = await readTokenValues(page);
       const values = Object.values(tokens);
-      const uniqueValues = new Set(values);
 
-      expect(uniqueValues.size).toBe(values.length);
+      expect(new Set(values).size).toBe(values.length);
     });
   });
 
   test.describe('drawer layer (z-index: 200)', () => {
     test('system-info should render at the drawer tier', async ({ page }) => {
-      await page.goto('/home/view');
-      await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
       await expect(page.locator('system-info')).toBeAttached({ timeout: MENU_APPEAR_TIMEOUT_MS });
 
       const zIndex = await page.evaluate(() => {
@@ -130,9 +153,8 @@ test.describe('Z-Index Token System (ADR-0008)', () => {
 
   test.describe('popover layer (z-index: 300)', () => {
     test('search results popover should render at the popover tier', async ({ page }) => {
-      await page.goto('/home/view');
-      await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
       await expect(page.locator('wiki-search')).toBeAttached({ timeout: MENU_APPEAR_TIMEOUT_MS });
+      await openSearchPopover(page);
 
       // wiki-search-results lives inside wiki-search's shadow DOM.
       // It uses --z-popover on its internal .popover element.
@@ -148,23 +170,10 @@ test.describe('Z-Index Token System (ADR-0008)', () => {
 
       expect(zIndex).toBe(Z_LAYERS.popover);
     });
-
-    test('popover layer should appear below the modal layer', async ({ page }) => {
-      await page.goto('/home/view');
-      await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-      await expect(page.locator('system-info')).toBeAttached({ timeout: MENU_APPEAR_TIMEOUT_MS });
-
-      const tokens = await readTokenValues(page);
-
-      expect(tokens.popover).toBeLessThan(tokens.modal);
-    });
   });
 
   test.describe('modal layer (z-index: 400)', () => {
     test('page-import-dialog should render at the modal tier when open', async ({ page }) => {
-      await page.goto('/home/view');
-      await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-
       await openPageImportDialog(page);
 
       const zIndex = await page.evaluate(() => {
@@ -177,30 +186,17 @@ test.describe('Z-Index Token System (ADR-0008)', () => {
     });
 
     test('an open dialog should be the topmost element at the viewport center', async ({ page }) => {
-      await page.goto('/home/view');
-      await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-
       await openPageImportDialog(page);
-      // Allow dialog fade-in animation to complete before checking layout
-      await page.waitForTimeout(ANIMATION_SETTLE_MS);
+      // Wait for the dialog to be visible before reading layout positions
+      await expect(page.locator('page-import-dialog')).toBeVisible({ timeout: MENU_APPEAR_TIMEOUT_MS });
+
+      // Use the Playwright viewport size to compute center coordinates without an extra evaluate call
+      const viewport = page.viewportSize();
+      const centerX = (viewport?.width ?? 1280) / 2;
+      const centerY = (viewport?.height ?? 720) / 2;
 
       // The dialog backdrop covers the full viewport; at center, the dialog should be topmost
-      const topmostTag = await page.evaluate(() => {
-        function getTopmost(x: number, y: number): string {
-          const el = document.elementFromPoint(x, y);
-          if (!el) return 'none';
-          const root = el.getRootNode();
-          if (root instanceof ShadowRoot) return root.host.tagName.toLowerCase();
-          let current: Element | null = el;
-          while (current && current !== document.body) {
-            const tag = current.tagName.toLowerCase();
-            if (tag.includes('-')) return tag;
-            current = current.parentElement;
-          }
-          return el.tagName.toLowerCase();
-        }
-        return getTopmost(window.innerWidth / 2, window.innerHeight / 2);
-      });
+      const topmostTag = await getTopmostCustomElementTagAt(page, centerX, centerY);
 
       expect(topmostTag).toBe('page-import-dialog');
     });
@@ -208,9 +204,6 @@ test.describe('Z-Index Token System (ADR-0008)', () => {
 
   test.describe('notification layer (z-index: 500)', () => {
     test('toast-message should render at the notification tier', async ({ page }) => {
-      await page.goto('/home/view');
-      await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-
       await injectToast(page, 'Z-index notification tier test');
 
       const zIndex = await page.evaluate(() => {
@@ -223,9 +216,6 @@ test.describe('Z-Index Token System (ADR-0008)', () => {
     });
 
     test('toast should have a higher z-index than an open modal dialog', async ({ page }) => {
-      await page.goto('/home/view');
-      await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-
       await openPageImportDialog(page);
       await injectToast(page, 'Notification above dialog');
 
@@ -243,50 +233,29 @@ test.describe('Z-Index Token System (ADR-0008)', () => {
     });
 
     test('toast should be the topmost element at its screen position even when a modal is open', async ({ page }) => {
-      await page.goto('/home/view');
-      await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-
       // Open dialog first — its backdrop covers the full viewport at z-index 400
       await openPageImportDialog(page);
 
-      // Inject toast — it slides in at z-index 500, above the dialog
+      // Inject toast — it slides in at z-index 500, above the dialog;
+      // injectToast waits for the slide-in animation to complete
       await injectToast(page, 'Toast visible above dialog');
 
-      // Wait for toast slide-in animation (300ms) and dialog animation to fully settle
-      await page.waitForTimeout(ANIMATION_SETTLE_MS);
+      const toastRect = await page.locator('toast-message').boundingBox();
+      if (!toastRect) throw new Error('toast-message has no bounding box');
 
       // At the toast's rendered position, toast-message should be the topmost element
-      const topmostAtToastPosition = await page.evaluate(() => {
-        function getTopmost(x: number, y: number): string {
-          const el = document.elementFromPoint(x, y);
-          if (!el) return 'none';
-          const root = el.getRootNode();
-          if (root instanceof ShadowRoot) return root.host.tagName.toLowerCase();
-          let current: Element | null = el;
-          while (current && current !== document.body) {
-            const tag = current.tagName.toLowerCase();
-            if (tag.includes('-')) return tag;
-            current = current.parentElement;
-          }
-          return el.tagName.toLowerCase();
-        }
+      const topmostTag = await getTopmostCustomElementTagAt(
+        page,
+        toastRect.x + toastRect.width / 2,
+        toastRect.y + toastRect.height / 2,
+      );
 
-        const toastEl = document.querySelector('toast-message') as HTMLElement;
-        if (!toastEl) return 'no-toast';
-        const rect = toastEl.getBoundingClientRect();
-        if (rect.width === 0 || rect.height === 0) return 'toast-not-rendered';
-        return getTopmost(rect.left + rect.width / 2, rect.top + rect.height / 2);
-      });
-
-      expect(topmostAtToastPosition).toBe('toast-message');
+      expect(topmostTag).toBe('toast-message');
     });
   });
 
   test.describe('no z-index conflicts between overlapping components', () => {
     test('drawer and modal should have distinct z-index values when both are present', async ({ page }) => {
-      await page.goto('/home/view');
-      await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-
       await openPageImportDialog(page);
 
       const { drawerZ, modalZ } = await page.evaluate(() => {
@@ -304,9 +273,6 @@ test.describe('Z-Index Token System (ADR-0008)', () => {
     });
 
     test('notification and modal should have distinct z-index values when both are present', async ({ page }) => {
-      await page.goto('/home/view');
-      await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-
       await openPageImportDialog(page);
       await injectToast(page, 'Conflict check notification');
 
