@@ -6,39 +6,32 @@ export const sharedStyles = html`
 `;
 
 /* ==========================================================================
-   Color System
+   Color System — Light/Dark Design Token System
    ========================================================================== */
 
 export const colorCSS = css`
   :host {
-    /* Background Colors */
-    --color-background-primary: #2d2d2d;
-    --color-background-overlay: rgba(0, 0, 0, 0.5);
-    --color-border-primary: #404040;
-    --color-border-subtle: rgba(255, 255, 255, 0.1);
-    
-    /* Text Colors */
-    --color-text-primary: #e9ecef;
-    --color-text-muted: #adb5bd;
-    --color-text-inverse: #333;
-    
-    /* Semantic Colors */
-    --color-success: #28a745;
-    --color-error: #dc3545;
-    --color-warning: #ffc107;
-    --color-info: #6c757d;
-    
-    /* Interactive States */
-    --color-hover-light: rgba(255, 255, 255, 0.1);
-    --color-hover-error: #ff6b7a;
-    
-    /* Shadows */
-    --shadow-subtle: 0 1px 3px rgba(0, 0, 0, 0.3);
-    --shadow-medium: 0 4px 12px rgba(0, 0, 0, 0.15);
-    
-    /* Transitions */
-    --transition-opacity: opacity 0.3s ease;
-    --transition-all: all 0.2s ease;
+    color-scheme: light dark;
+
+    /* === Editor Panel (dark-themed by design, adapts slightly per mode) === */
+    /* These are component-specific tokens, not inherited from :root */
+    --color-editor-surface: #2d2d2d;
+    --color-editor-surface-elevated: #3d3d3d;
+    --color-editor-surface-deep: #4a4a4a;
+    --color-editor-surface-hover: #4d4d4d;
+    --color-editor-border: #555555;
+    --color-editor-text: #e9ecef;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :host {
+      /* === Editor Panel (deeper darks in dark mode) === */
+      --color-editor-surface: #1a1a1a;
+      --color-editor-surface-elevated: #252525;
+      --color-editor-surface-deep: #303030;
+      --color-editor-surface-hover: #333333;
+      --color-editor-border: #444444;
+    }
   }
 `;
 
@@ -135,8 +128,8 @@ export const typographyCSS = css`
 export const themeCSS = css`
   /* Container Patterns */
   .container {
-    background: var(--color-background-primary);
-    border: 1px solid var(--color-border-primary);
+    background: var(--color-surface-elevated);
+    border: 1px solid var(--color-border-default);
     border-radius: 4px;
     box-shadow: var(--shadow-subtle);
   }
@@ -181,7 +174,7 @@ export const themeCSS = css`
     left: 0;
     width: 100%;
     height: 100%;
-    background: var(--color-background-overlay);
+    background: var(--color-surface-overlay);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -196,7 +189,7 @@ export const themeCSS = css`
   }
 
   .interactive:hover {
-    background: var(--color-hover-light);
+    background: var(--color-hover-overlay);
   }
 
   /* Spacing */
@@ -269,14 +262,14 @@ export const buttonCSS = css`
   }
 
   .button-primary {
-    background: #6c757d;
-    color: white;
-    border: 1px solid #6c757d;
+    background: var(--color-action-primary);
+    color: var(--color-text-inverse);
+    border: 1px solid var(--color-action-primary);
   }
 
   .button-primary:hover:not(:disabled) {
-    background: #5a6268;
-    border-color: #5a6268;
+    background: var(--color-action-primary-hover);
+    border-color: var(--color-action-primary-hover);
     transform: translateY(-1px);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   }
@@ -286,21 +279,21 @@ export const buttonCSS = css`
   }
 
   .button-primary:disabled {
-    background: #6c757d;
-    border-color: #6c757d;
+    background: var(--color-action-primary);
+    border-color: var(--color-action-primary);
     cursor: not-allowed;
     opacity: 0.6;
   }
 
   .button-secondary {
-    background: white;
-    color: #666;
-    border: 1px solid #ddd;
+    background: var(--color-action-secondary-bg);
+    color: var(--color-text-secondary);
+    border: 1px solid var(--color-border-default);
   }
 
   .button-secondary:hover:not(:disabled) {
-    background: #f8f9fa;
-    border-color: #999;
+    background: var(--color-action-secondary-hover-bg);
+    border-color: var(--color-text-muted);
     transform: translateY(-1px);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
   }
@@ -314,14 +307,14 @@ export const buttonCSS = css`
     border: none;
     font-size: 20px;
     cursor: pointer;
-    color: #666;
+    color: var(--color-text-secondary);
     padding: 4px;
     border-radius: 4px;
     transition: background-color 0.2s;
   }
 
   .button-icon:hover {
-    background-color: #f0f0f0;
+    background-color: var(--color-hover-overlay);
   }
 
   .button-small {
@@ -351,10 +344,10 @@ export const menuCSS = css`
     position: absolute;
     top: 100%;
     right: 0;
-    background: white;
-    border: 1px solid #ddd;
+    background: var(--color-surface-elevated);
+    border: 1px solid var(--color-border-default);
     border-radius: 4px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    box-shadow: var(--shadow-medium);
     z-index: 1000;
     min-width: 150px;
     margin-top: 4px;
@@ -368,12 +361,12 @@ export const menuCSS = css`
     width: 100%;
     text-align: left;
     font-size: 14px;
-    color: #333;
+    color: var(--color-text-primary);
     transition: background-color 0.2s ease;
   }
 
   .dropdown-item:hover {
-    background: #f8f9fa;
+    background: var(--color-hover-overlay);
   }
 
   .dropdown-item:first-child {
@@ -425,13 +418,13 @@ export const dialogCSS = css`
     align-items: center;
     justify-content: space-between;
     padding: 16px 20px;
-    border-bottom: 1px solid #e0e0e0;
+    border-bottom: 1px solid var(--color-border-subtle);
   }
 
   .dialog-title {
     font-size: 18px;
     font-weight: 600;
-    color: #333;
+    color: var(--color-text-primary);
     margin: 0;
   }
 
@@ -447,18 +440,20 @@ export const dialogCSS = css`
     display: block;
     margin-bottom: 6px;
     font-weight: 500;
-    color: #333;
+    color: var(--color-text-primary);
   }
 
   .form-group input,
   .form-group textarea {
     width: 100%;
     padding: 10px 12px;
-    border: 1px solid #ddd;
+    border: 1px solid var(--color-border-default);
     border-radius: 4px;
     font-size: 14px;
     box-sizing: border-box;
     font-family: inherit;
+    background: var(--color-surface-primary);
+    color: var(--color-text-primary);
   }
 
   .form-group textarea {
@@ -469,20 +464,20 @@ export const dialogCSS = css`
   .form-group input:focus,
   .form-group textarea:focus {
     outline: none;
-    border-color: #4a90d9;
-    box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.2);
+    border-color: var(--color-border-focus);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-border-focus) 15%, transparent);
   }
 
   .form-group input[readonly] {
-    background: #f5f5f5;
-    color: #666;
+    background: var(--color-surface-sunken);
+    color: var(--color-text-secondary);
     cursor: not-allowed;
   }
 
   .form-group .help-text {
     margin-top: 4px;
     font-size: 12px;
-    color: #666;
+    color: var(--color-text-secondary);
   }
 `;
 
@@ -493,10 +488,10 @@ export const dialogCSS = css`
 export const layoutCSS = css`
   .section-container {
     border: none;
-    border-left: 1px solid #e0e0e0;
+    border-left: 1px solid var(--color-border-subtle);
     padding-left: 2px;
     padding-top: 4px;
-    background: #f9f9f9;
+    background: var(--color-surface-sunken);
   }
 
   .section-container-root {
@@ -522,7 +517,7 @@ export const layoutCSS = css`
 
   .section-title {
     font-weight: normal;
-    color: #888;
+    color: var(--color-text-muted);
     font-size: 11px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -540,9 +535,9 @@ export const layoutCSS = css`
     gap: 2px;
     padding-left: 2px;
     padding-top: 4px;
-    background: #fff;
+    background: var(--color-surface-primary);
     border: none;
-    border-left: 1px solid #e0e0e0;
+    border-left: 1px solid var(--color-border-subtle);
     position: relative;
   }
 
@@ -554,7 +549,7 @@ export const layoutCSS = css`
 
   .empty-section-message {
     text-align: center;
-    color: #666;
+    color: var(--color-text-secondary);
     font-style: italic;
     padding: 16px;
   }
@@ -569,28 +564,30 @@ export const inputCSS = css`
     width: 100%;
     padding: 8px 12px;
     border: none;
-    border-left: 1px solid #ddd;
+    border-left: 1px solid var(--color-border-default);
     border-radius: 4px;
     font-size: 14px;
     font-family: inherit;
     box-sizing: border-box;
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    background: var(--color-surface-primary);
+    color: var(--color-text-primary);
   }
 
   .input-base:focus {
     outline: none;
-    border-left-color: #007bff;
-    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.1);
+    border-left-color: var(--color-border-focus);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-border-focus) 10%, transparent);
   }
 
   .input-base:disabled {
-    background-color: #f8f9fa;
-    color: #6c757d;
+    background-color: var(--color-surface-sunken);
+    color: var(--color-text-muted);
     cursor: not-allowed;
   }
 
   .input-base::placeholder {
-    color: #999;
+    color: var(--color-text-muted);
   }
 `;
 
@@ -664,38 +661,38 @@ export const pillCSS = css`
   .tag-pill {
     font-size: 12px;
     padding: 3px 10px;
-    background: #e9ecef;
-    border: 1px solid #dee2e6;
+    background: var(--color-surface-sunken);
+    border: 1px solid var(--color-border-subtle);
     border-radius: 16px;
-    color: #555;
+    color: var(--color-text-secondary);
     cursor: pointer;
     font-family: inherit;
     transition: all 0.15s ease;
   }
 
   .tag-pill:hover {
-    background: #d0d0d0;
-    border-color: #aaa;
+    background: var(--color-hover-overlay);
+    border-color: var(--color-text-muted);
   }
 
   .tag-pill-active {
-    background: #0d6efd;
-    color: white;
-    border-color: #0d6efd;
+    background: var(--color-action-link);
+    color: var(--color-text-inverse);
+    border-color: var(--color-action-link);
   }
 
   .tag-pill-active:hover {
-    background: #0b5ed7;
-    border-color: #0b5ed7;
+    background: var(--color-action-link-hover);
+    border-color: var(--color-action-link-hover);
   }
 
   .tag-filter-clear {
     font-size: 12px;
     padding: 3px 7px;
     background: none;
-    border: 1px solid #dee2e6;
+    border: 1px solid var(--color-border-subtle);
     border-radius: 16px;
-    color: #dc3545;
+    color: var(--color-error);
     cursor: pointer;
     font-family: inherit;
     line-height: 1;
@@ -703,17 +700,17 @@ export const pillCSS = css`
   }
 
   .tag-filter-clear:hover {
-    background: #dc3545;
-    color: white;
-    border-color: #dc3545;
+    background: var(--color-error);
+    color: var(--color-text-inverse);
+    border-color: var(--color-error);
   }
 
   .item-tag-badge {
     font-size: 11px;
     padding: 2px 6px;
-    background: #e9ecef;
+    background: var(--color-surface-sunken);
     border-radius: 12px;
-    color: #555;
+    color: var(--color-text-secondary);
     white-space: nowrap;
     border: none;
     font-family: inherit;
@@ -737,6 +734,6 @@ export const pillCSS = css`
  * ```
  */
 export function dialogStyles(...componentStyles: CSSResult[]): CSSResult[] {
-  return [foundationCSS, zIndexCSS, dialogCSS, buttonCSS, animationCSS, ...componentStyles, responsiveCSS];
+  return [foundationCSS, colorCSS, zIndexCSS, dialogCSS, buttonCSS, animationCSS, ...componentStyles, responsiveCSS];
 }
 

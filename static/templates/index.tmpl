@@ -15,7 +15,9 @@
         <link rel="stylesheet" href="/static/vendor/css/base-min.css">
         <link rel="stylesheet" href="/static/vendor/css/highlight.css">
 
-        <meta name="theme-color" content="#fff">
+        <meta name="color-scheme" content="light dark">
+        <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+        <meta name="theme-color" content="#1e1e1e" media="(prefers-color-scheme: dark)">
         <meta name="simple-wiki-url" content="{{ .WikiBaseURL }}">
 
         {{ if and .CustomCSS .ReadPage }}
