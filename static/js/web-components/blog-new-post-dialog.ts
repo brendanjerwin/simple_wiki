@@ -64,7 +64,7 @@ export class BlogNewPostDialog extends LitElement {
       justify-content: space-between;
       align-items: center;
       padding: 16px 20px;
-      border-bottom: 1px solid #eee;
+      border-bottom: 1px solid var(--color-border-subtle);
     }
 
     .header h2 {
@@ -77,7 +77,7 @@ export class BlogNewPostDialog extends LitElement {
       border: none;
       font-size: 1.2em;
       cursor: pointer;
-      color: #666;
+      color: var(--color-text-secondary);
       padding: 4px 8px;
     }
 
@@ -125,12 +125,12 @@ export class BlogNewPostDialog extends LitElement {
 
     .form-group input {
       padding: 8px;
-      border: 1px solid #ddd;
+      border: 1px solid var(--color-border-default);
       border-radius: 4px;
     }
 
     .editor-container {
-      border: 1px solid #ddd;
+      border: 1px solid var(--color-border-default);
       border-radius: 4px;
       height: 250px;
       overflow: hidden;
@@ -145,21 +145,21 @@ export class BlogNewPostDialog extends LitElement {
       justify-content: flex-end;
       gap: 8px;
       padding: 16px 20px;
-      border-top: 1px solid #eee;
+      border-top: 1px solid var(--color-border-subtle);
     }
 
     .btn {
       padding: 8px 16px;
       border-radius: 4px;
-      border: 1px solid #ddd;
+      border: 1px solid var(--color-border-default);
       cursor: pointer;
       font-size: 0.9em;
     }
 
     .btn-primary {
-      background: #337ab7;
+      background: var(--color-action-confirm);
       color: white;
-      border-color: #337ab7;
+      border-color: var(--color-action-confirm);
     }
 
     .btn-primary:disabled {
@@ -177,7 +177,7 @@ export class BlogNewPostDialog extends LitElement {
       cursor: pointer;
       font-size: 0.9em;
       font-weight: 600;
-      color: #555;
+      color: var(--color-text-secondary);
       padding: 0;
       margin-bottom: 4px;
       display: flex;
@@ -194,7 +194,7 @@ export class BlogNewPostDialog extends LitElement {
       width: 100%;
       font-size: 0.9em;
       padding: 8px;
-      border: 1px solid #ddd;
+      border: 1px solid var(--color-border-default);
       border-radius: 4px;
       box-sizing: border-box;
       resize: vertical;
@@ -204,7 +204,7 @@ export class BlogNewPostDialog extends LitElement {
 
     .identifier-preview {
       font-size: 0.8em;
-      color: #999;
+      color: var(--color-text-muted);
       font-family: "Lucida Console", Monaco, monospace;
       margin-top: 4px;
     }
