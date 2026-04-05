@@ -25,6 +25,7 @@ const MAX_INPUT_LENGTH = 2000;
 const INITIAL_RECONNECT_DELAY_MS = 1000;
 const MAX_RECONNECT_DELAY_MS = 30000;
 const STATUS_POLL_INTERVAL_MS = 15000;
+const STATUS_POLL_STARTING_MS = 3000;
 
 export interface ChatMessageState {
   id: string;
@@ -310,6 +311,13 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
   @state()
   declare claudeConnected: boolean;
 
+  @state()
+  declare poolConnected: boolean;
+
+  @state()
+  declare claudeStarting: boolean;
+
+  private pendingMessage: string | null = null;
   private readonly messagesById = new Map<string, ChatMessageState>();
   private streamSubscription: AbortController | undefined;
   private statusPollTimer: ReturnType<typeof setInterval> | undefined;
@@ -333,6 +341,8 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     this.waitingForAssistant = false;
     this.error = null;
     this.claudeConnected = false;
+    this.poolConnected = false;
+    this.claudeStarting = false;
     this.chatClient = createClient(ChatService, getGrpcWebTransport());
     this.markdownRenderer = new ChatMarkdownRenderer();
     this._handleVisibilityChange = this.handleVisibilityChange.bind(this);
@@ -408,10 +418,14 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     return this.persona ? this.persona + ' is thinking' : 'Thinking...';
   }
 
+  private get _chatAvailable(): boolean {
+    return this.poolConnected || this.claudeConnected;
+  }
+
   private _renderFab() {
     if (!this._fabVisible || this.drawerOpen) return nothing;
-    const fabClass = this.claudeConnected ? 'fab' : 'fab disabled';
-    const ariaDisabled = this.claudeConnected ? 'false' : 'true';
+    const fabClass = this._chatAvailable ? 'fab' : 'fab disabled';
+    const ariaDisabled = this._chatAvailable ? 'false' : 'true';
     return html`
       <button
         class="${fabClass}"
@@ -425,9 +439,15 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
   }
 
   private _renderDisconnectedBanner() {
-    if (!this.claudeConnected) {
+    if (this.claudeStarting) {
+      return html`<div class="status-banner reconnecting">Starting assistant...</div>`;
+    }
+    if (!this.poolConnected && !this.claudeConnected) {
       const disconnectedText = this.persona ? this.persona + ' is not connected' : 'Not connected';
       return html`<div class="status-banner disconnected">${disconnectedText}</div>`;
+    }
+    if (this.poolConnected && !this.claudeConnected && !this.claudeStarting) {
+      return html`<div class="status-banner">Send a message to start</div>`;
     }
     if (this.streamState === 'disconnected' && this.error) {
       return html`<div class="status-banner disconnected">${this.error.message}</div>`;
@@ -437,7 +457,8 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
 
   override render() {
     const notConnectedText = this.persona ? this.persona + ' is not connected' : 'Not connected';
-    const placeholder = this.claudeConnected ? 'Type a message...' : notConnectedText;
+    const inputEnabled = this._chatAvailable;
+    const placeholder = inputEnabled ? 'Type a message...' : notConnectedText;
     return html`
       ${sharedStyles}
       ${this._renderFab()}
@@ -498,13 +519,13 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
             maxlength="${MAX_INPUT_LENGTH}"
             rows="2"
             enterkeyhint="send"
-            ?disabled=${!this.claudeConnected}
+            ?disabled=${!inputEnabled}
             @keydown=${this._handleKeydown}
           ></textarea>
           <button
             class="send-button"
             @click=${this._handleSendClick}
-            ?disabled=${!this.claudeConnected}
+            ?disabled=${!inputEnabled}
             aria-label="Send message"
           >
             Send
@@ -587,9 +608,12 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         content,
       });
       await this.chatClient.sendMessage(request);
+      this.pendingMessage = null;
     } catch (err) {
       if (err instanceof ConnectError && err.code === Code.Unavailable) {
-        this.error = err;
+        // Instance may be starting — queue message for auto-retry
+        this.pendingMessage = content;
+        this.error = null;
       } else {
         this.error = err instanceof Error ? err : new Error(String(err));
       }
@@ -608,18 +632,61 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
 
   private async pollChatStatus(): Promise<void> {
     try {
-      const request = create(GetChatStatusRequestSchema, {});
+      const request = create(GetChatStatusRequestSchema, {
+        page: this.page,
+      });
       const response = await this.chatClient.getChatStatus(request);
       const wasConnected = this.claudeConnected;
+      const wasStarting = this.claudeStarting;
       this.claudeConnected = response.connected;
+      this.poolConnected = response.poolConnected;
+      this.claudeStarting = response.starting;
+
+      // Adjust poll rate based on state
+      this.adjustPollRate();
+
+      // If Claude just connected and we have a pending message, auto-send it
+      if (!wasConnected && response.connected && this.pendingMessage) {
+        const content = this.pendingMessage;
+        this.pendingMessage = null;
+        this.waitingForAssistant = true;
+        try {
+          const sendRequest = create(SendChatMessageRequestSchema, {
+            page: this.page,
+            content,
+          });
+          await this.chatClient.sendMessage(sendRequest);
+        } catch (err) {
+          this.pendingMessage = content;
+          this.error = err instanceof Error ? err : new Error(String(err));
+          this.waitingForAssistant = false;
+        }
+      }
 
       // If Claude just connected and panel was open, re-focus input
       if (!wasConnected && response.connected && this.drawerOpen) {
         this.focusInput();
       }
+
+      // Clear starting state message when no longer starting
+      if (wasStarting && !response.starting) {
+        this.error = null;
+      }
     } catch {
       this.claudeConnected = false;
+      this.poolConnected = false;
+      this.claudeStarting = false;
     }
+  }
+
+  private adjustPollRate(): void {
+    const desiredIntervalMs = this.claudeStarting ? STATUS_POLL_STARTING_MS : STATUS_POLL_INTERVAL_MS;
+
+    // Only restart the timer if the interval needs to change
+    if (this.statusPollTimer) {
+      clearInterval(this.statusPollTimer);
+    }
+    this.statusPollTimer = setInterval(() => this.pollChatStatus(), desiredIntervalMs);
   }
 
   private handleViewportResize(): void {
