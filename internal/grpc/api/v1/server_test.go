@@ -5888,6 +5888,7 @@ var _ = Describe("Checklist gRPC round-trip", func() {
 })
 
 var _ = Describe("MergeFrontmatter deep merge E2E behavior", func() {
+	const pageName = "test-page"
 	var (
 		server                *v1.Server
 		ctx                   context.Context
@@ -5926,20 +5927,20 @@ var _ = Describe("MergeFrontmatter deep merge E2E behavior", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				_, mergeErr := server.MergeFrontmatter(ctx, &apiv1.MergeFrontmatterRequest{
-					Page:        "test-page",
+					Page:        pageName,
 					Frontmatter: fmPb,
 				})
 				Expect(mergeErr).NotTo(HaveOccurred())
 
 				getResp, getErr = server.GetFrontmatter(ctx, &apiv1.GetFrontmatterRequest{
-					Page: "test-page",
+					Page: pageName,
 				})
-				if getErr == nil && getResp != nil {
-					fm := getResp.Frontmatter.AsMap()
-					var ok bool
-					metadata, ok = fm["metadata"].(map[string]any)
-					Expect(ok).To(BeTrue(), "metadata should be map[string]any")
-				}
+				Expect(getErr).NotTo(HaveOccurred())
+				Expect(getResp).NotTo(BeNil())
+				fm := getResp.Frontmatter.AsMap()
+				var ok bool
+				metadata, ok = fm["metadata"].(map[string]any)
+				Expect(ok).To(BeTrue(), "metadata should be map[string]any")
 			})
 
 			It("should not error on GetFrontmatter", func() {
@@ -5981,14 +5982,16 @@ var _ = Describe("MergeFrontmatter deep merge E2E behavior", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				_, mergeErr := server.MergeFrontmatter(ctx, &apiv1.MergeFrontmatterRequest{
-					Page:        "test-page",
+					Page:        pageName,
 					Frontmatter: fmPb,
 				})
 				Expect(mergeErr).NotTo(HaveOccurred())
 
 				getResp, getErr = server.GetFrontmatter(ctx, &apiv1.GetFrontmatterRequest{
-					Page: "test-page",
+					Page: pageName,
 				})
+				Expect(getErr).NotTo(HaveOccurred())
+				Expect(getResp).NotTo(BeNil())
 			})
 
 			It("should not error on GetFrontmatter", func() {
@@ -6029,19 +6032,19 @@ var _ = Describe("MergeFrontmatter deep merge E2E behavior", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				_, mergeErr := server.MergeFrontmatter(ctx, &apiv1.MergeFrontmatterRequest{
-					Page:        "test-page",
+					Page:        pageName,
 					Frontmatter: fmPb,
 				})
 				Expect(mergeErr).NotTo(HaveOccurred())
 
 				getResp, getErr = server.GetFrontmatter(ctx, &apiv1.GetFrontmatterRequest{
-					Page: "test-page",
+					Page: pageName,
 				})
-				if getErr == nil && getResp != nil {
-					var ok bool
-					tags, ok = getResp.Frontmatter.AsMap()["tags"].([]any)
-					Expect(ok).To(BeTrue(), "tags should be []any")
-				}
+				Expect(getErr).NotTo(HaveOccurred())
+				Expect(getResp).NotTo(BeNil())
+				var ok bool
+				tags, ok = getResp.Frontmatter.AsMap()["tags"].([]any)
+				Expect(ok).To(BeTrue(), "tags should be []any")
 			})
 
 			It("should not error on GetFrontmatter", func() {
@@ -6053,7 +6056,7 @@ var _ = Describe("MergeFrontmatter deep merge E2E behavior", func() {
 			})
 
 			It("should contain only the new array element", func() {
-				Expect(tags[0]).To(Equal("new-tag"))
+				Expect(tags).To(Equal([]any{"new-tag"}))
 			})
 		})
 	})
@@ -6074,14 +6077,16 @@ var _ = Describe("MergeFrontmatter deep merge E2E behavior", func() {
 				}
 
 				_, mergeErr := server.MergeFrontmatter(ctx, &apiv1.MergeFrontmatterRequest{
-					Page:        "test-page",
+					Page:        pageName,
 					Frontmatter: nil,
 				})
 				Expect(mergeErr).NotTo(HaveOccurred())
 
 				getResp, getErr = server.GetFrontmatter(ctx, &apiv1.GetFrontmatterRequest{
-					Page: "test-page",
+					Page: pageName,
 				})
+				Expect(getErr).NotTo(HaveOccurred())
+				Expect(getResp).NotTo(BeNil())
 			})
 
 			It("should not error on GetFrontmatter", func() {
@@ -6121,7 +6126,7 @@ var _ = Describe("MergeFrontmatter deep merge E2E behavior", func() {
 				Expect(err).NotTo(HaveOccurred())
 
 				_, mergeErr := server.MergeFrontmatter(ctx, &apiv1.MergeFrontmatterRequest{
-					Page:        "test-page",
+					Page:        pageName,
 					Frontmatter: fmPb,
 				})
 				Expect(mergeErr).NotTo(HaveOccurred())
@@ -6130,13 +6135,13 @@ var _ = Describe("MergeFrontmatter deep merge E2E behavior", func() {
 				mockPageReaderMutator.Err = nil
 
 				getResp, getErr = server.GetFrontmatter(ctx, &apiv1.GetFrontmatterRequest{
-					Page: "test-page",
+					Page: pageName,
 				})
-				if getErr == nil && getResp != nil {
-					var ok bool
-					metadata, ok = getResp.Frontmatter.AsMap()["metadata"].(map[string]any)
-					Expect(ok).To(BeTrue(), "metadata should be map[string]any")
-				}
+				Expect(getErr).NotTo(HaveOccurred())
+				Expect(getResp).NotTo(BeNil())
+				var ok bool
+				metadata, ok = getResp.Frontmatter.AsMap()["metadata"].(map[string]any)
+				Expect(ok).To(BeTrue(), "metadata should be map[string]any")
 			})
 
 			It("should not error on GetFrontmatter", func() {
