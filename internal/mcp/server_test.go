@@ -112,6 +112,32 @@ func (noOpChatBufferManager) HasChannelSubscribers() bool {
 	return false
 }
 
+func (noOpChatBufferManager) SubscribeToPageChannel(string) (<-chan *chatbuffer.Message, func()) {
+	ch := make(chan *chatbuffer.Message)
+	close(ch)
+	return ch, func() {}
+}
+
+func (noOpChatBufferManager) HasPageChannelSubscriber(string) bool {
+	return false
+}
+
+func (noOpChatBufferManager) RequestInstance(string) {}
+
+func (noOpChatBufferManager) SubscribeToInstanceRequests() (<-chan string, func()) {
+	ch := make(chan string)
+	close(ch)
+	return ch, func() {}
+}
+
+func (noOpChatBufferManager) HasInstanceRequestSubscribers() bool {
+	return false
+}
+
+func (noOpChatBufferManager) IsInstanceRequested(string) bool {
+	return false
+}
+
 func mustNewAPIServer() *grpcapi.Server {
 	srv, err := grpcapi.NewServer(
 		grpcapi.BuildInfo{Commit: "test-commit", BuildTime: time.Now()},

@@ -495,6 +495,32 @@ func (noOpChatBufferManager) HasChannelSubscribers() bool {
 	return false
 }
 
+func (noOpChatBufferManager) SubscribeToPageChannel(string) (<-chan *chatbuffer.Message, func()) {
+	ch := make(chan *chatbuffer.Message)
+	close(ch)
+	return ch, func() {}
+}
+
+func (noOpChatBufferManager) HasPageChannelSubscriber(string) bool {
+	return false
+}
+
+func (noOpChatBufferManager) RequestInstance(string) {}
+
+func (noOpChatBufferManager) SubscribeToInstanceRequests() (<-chan string, func()) {
+	ch := make(chan string)
+	close(ch)
+	return ch, func() {}
+}
+
+func (noOpChatBufferManager) HasInstanceRequestSubscribers() bool {
+	return false
+}
+
+func (noOpChatBufferManager) IsInstanceRequested(string) bool {
+	return false
+}
+
 // noOpPageReaderMutator is a minimal mock for tests that don't need page operations.
 type noOpPageReaderMutator struct{}
 
