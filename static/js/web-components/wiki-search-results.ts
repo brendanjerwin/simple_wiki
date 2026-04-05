@@ -96,7 +96,7 @@ class WikiSearchResults extends LitElement {
             cursor: pointer;
         }
         .item_content {
-            background-color: var(--color-surface-sunken);
+            background-color: var(--color-surface-elevated);
             font-size: 12px;
             margin: 10px;
             margin-bottom: 10px;
