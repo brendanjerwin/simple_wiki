@@ -125,6 +125,11 @@
     /* Highlight */
     --color-highlight-bg: rgba(255, 255, 0, 0.3);
 
+    /* Chat */
+    --color-chat-user-bg: #4a6a9c;
+    --color-chat-user-bg-hover: #5a7aac;
+    --color-chat-user-text: #ffffff;
+
     /* Shadows */
     --shadow-subtle: 0 1px 3px rgba(0, 0, 0, 0.4);
     --shadow-medium: 0 4px 12px rgba(0, 0, 0, 0.5);
