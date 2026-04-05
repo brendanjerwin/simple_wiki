@@ -13,5 +13,18 @@
       "Bash(go list:*)",
       "Bash(go version:*)"
     ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ". ./scripts/ensure_opengrep.sh && opengrep scan --config .semgrep/rules.yml --error --exclude='gen' --exclude='vendor' --exclude='node_modules' --exclude='.devbox' --quiet ${CLAUDE_FILE_PATHS:-.}"
+          }
+        ]
+      }
+    ]
   }
 }
