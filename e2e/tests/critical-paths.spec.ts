@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { frontMatterStringMatcher } from './helpers/frontmatter.js';
 
 // Test data
 const TEST_PAGE_NAME = 'E2ETestPage';
@@ -11,14 +12,6 @@ const PAGE_LOAD_TIMEOUT_MS = 15000;
 // Helper functions
 function formatTimestamp(): string {
   return new Date().toISOString().slice(0, 19);
-}
-
-// Helper function to match frontmatter fields with flexible quote handling
-function frontMatterStringMatcher(key: string, value: string): RegExp {
-  // Matches: key = "value" or key = 'value'
-  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  const escapedValue = value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`${escapedKey}\\s*=\\s*['"]${escapedValue}['"]`);
 }
 
 // Increase test timeout to handle slow environments (Tailscale WhoIs lookups
