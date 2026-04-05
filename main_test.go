@@ -207,7 +207,7 @@ var _ = Describe("getCommitHash", func() {
 			var err error
 			tmpDir, err = os.MkdirTemp("", "git_test_*")
 			Expect(err).NotTo(HaveOccurred())
-			DeferCleanup(func() { os.RemoveAll(tmpDir) })
+			DeferCleanup(func() { Expect(os.RemoveAll(tmpDir)).To(Succeed()) })
 
 			fakeGit := filepath.Join(tmpDir, "git")
 			err = os.WriteFile(fakeGit, []byte("#!/bin/sh\nexit 1\n"), 0755)
@@ -229,7 +229,7 @@ var _ = Describe("getCommitHash", func() {
 			var err error
 			tmpDir, err = os.MkdirTemp("", "git_test_*")
 			Expect(err).NotTo(HaveOccurred())
-			DeferCleanup(func() { os.RemoveAll(tmpDir) })
+			DeferCleanup(func() { Expect(os.RemoveAll(tmpDir)).To(Succeed()) })
 
 			fakeGit := filepath.Join(tmpDir, "git")
 			err = os.WriteFile(fakeGit, []byte("#!/bin/sh\necho 'abcdef1234567890abcdef1234567890abcdef12'\n"), 0755)

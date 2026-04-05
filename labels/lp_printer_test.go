@@ -18,7 +18,7 @@ var _ = Describe("LPPrinter", func() {
 		var err error
 		tmpDir, err = os.MkdirTemp("", "lp_printer_test_*")
 		Expect(err).NotTo(HaveOccurred())
-		DeferCleanup(func() { os.RemoveAll(tmpDir) })
+		DeferCleanup(func() { Expect(os.RemoveAll(tmpDir)).To(Succeed()) })
 	})
 
 	// setPath temporarily replaces PATH and schedules restoration via DeferCleanup.
