@@ -62,6 +62,18 @@
       "opengrep:lint": [
         "./scripts/run_opengrep_lint.sh"
       ],
+      "sonar:issues": [
+        "./scripts/run_sonar_query.sh issues $@"
+      ],
+      "sonar:gate": [
+        "./scripts/run_sonar_query.sh gate"
+      ],
+      "sonar:coverage": [
+        "./scripts/run_sonar_query.sh coverage"
+      ],
+      "sonar:hotspots": [
+        "./scripts/run_sonar_query.sh hotspots"
+      ],
       "lint:everything": [
         "./scripts/run_lint_everything.sh"
       ],
