@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"time"
 
@@ -172,6 +173,7 @@ var _ = Describe("poolDaemon", func() {
 					maxInstances: 2,
 					claudePath:   "/nonexistent/claude",
 					wikiURL:      "http://localhost:8050",
+					ctx:          context.Background(),
 					instances: map[string]*instanceEntry{
 						"page-a": {
 							page:       "page-a",

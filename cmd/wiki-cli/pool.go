@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -53,6 +54,7 @@ type poolDaemon struct {
 	idleTimeout  time.Duration
 	useSystemd   bool
 
+	ctx       context.Context
 	instances map[string]*instanceEntry
 	mu        sync.Mutex
 }
@@ -133,7 +135,8 @@ The daemon should be run in a directory containing your Claude agent configurati
 				instances:    make(map[string]*instanceEntry),
 			}
 
-			return d.run(context.Background())
+			d.ctx = context.Background()
+			return d.run(d.ctx)
 		},
 	}
 }
@@ -263,7 +266,7 @@ func (d *poolDaemon) evictLeastActive() {
 // spawnInstance starts a Claude Code process for a page.
 // Must be called with d.mu held.
 func (d *poolDaemon) spawnInstance(page string) (*instanceEntry, error) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(d.ctx)
 
 	// Build wiki-cli mcp command for the --mcp-server flag
 	wikiCLIBin, err := os.Executable()
@@ -283,6 +286,7 @@ func (d *poolDaemon) spawnInstance(page string) (*instanceEntry, error) {
 	if d.useSystemd {
 		entry.unitName = "wiki-chat-" + sanitizeUnitName(page)
 		entry.cmd = exec.CommandContext(ctx, "systemd-run",
+			"--user",
 			"--unit="+entry.unitName,
 			"--scope",
 			d.claudePath,
@@ -332,6 +336,16 @@ func (d *poolDaemon) stopInstanceLocked(page string) {
 	}
 
 	entry.cancel()
+
+	// In systemd mode, also stop the transient unit to prevent orphaned processes
+	if entry.unitName != "" {
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer stopCancel()
+		if err := exec.CommandContext(stopCtx, "systemctl", "--user", "stop", entry.unitName+".scope").Run(); err != nil {
+			log.Printf("Failed to stop systemd unit %q: %v", entry.unitName, err)
+		}
+	}
+
 	delete(d.instances, page)
 }
 
@@ -386,27 +400,18 @@ func (pw *prefixWriter) Write(p []byte) (int, error) {
 	pw.buf = append(pw.buf, p...)
 
 	for {
-		idx := indexOf(pw.buf, '\n')
+		idx := bytes.IndexByte(pw.buf, '\n')
 		if idx < 0 {
 			break
 		}
 
 		line := pw.buf[:idx+1]
 		if _, err := fmt.Fprint(pw.w, pw.prefix+string(line)); err != nil {
-			return len(p), err
+			return 0, err
 		}
 		pw.buf = pw.buf[idx+1:]
 	}
 
 	return len(p), nil
-}
-
-func indexOf(b []byte, c byte) int {
-	for i, v := range b {
-		if v == c {
-			return i
-		}
-	}
-	return -1
 }
 
