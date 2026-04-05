@@ -238,27 +238,27 @@ func (m *mockChatBufferManager) HasChannelSubscribers() bool {
 	return len(m.channelSubscribers) > 0
 }
 
-func (m *mockChatBufferManager) SubscribeToPageChannel(string) (<-chan *chatbuffer.Message, func()) {
+func (*mockChatBufferManager) SubscribeToPageChannel(string) (<-chan *chatbuffer.Message, func()) {
 	ch := make(chan *chatbuffer.Message, 10)
 	return ch, func() { close(ch) }
 }
 
-func (m *mockChatBufferManager) HasPageChannelSubscriber(string) bool {
+func (*mockChatBufferManager) HasPageChannelSubscriber(string) bool {
 	return false
 }
 
-func (m *mockChatBufferManager) RequestInstance(string) {}
+func (*mockChatBufferManager) RequestInstance(string) {}
 
-func (m *mockChatBufferManager) SubscribeToInstanceRequests() (<-chan string, func()) {
+func (*mockChatBufferManager) SubscribeToInstanceRequests() (<-chan string, func()) {
 	ch := make(chan string, 10)
 	return ch, func() { close(ch) }
 }
 
-func (m *mockChatBufferManager) HasInstanceRequestSubscribers() bool {
+func (*mockChatBufferManager) HasInstanceRequestSubscribers() bool {
 	return false
 }
 
-func (m *mockChatBufferManager) IsInstanceRequested(string) bool {
+func (*mockChatBufferManager) IsInstanceRequested(string) bool {
 	return false
 }
 

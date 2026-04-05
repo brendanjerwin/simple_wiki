@@ -23,9 +23,10 @@ import (
 )
 
 const (
-	initialBackoffMs  = 1000
-	maxBackoffMs      = 30000
-	backoffMultiplier = 2.0
+	initialBackoffMs         = 1000
+	maxBackoffMs             = 30000
+	backoffMultiplier        = 2.0
+	channelNotificationTopic = "notifications/claude/channel"
 )
 
 // buildMCPCommand creates the `mcp` subcommand that runs a stdio MCP server with channel capability.
@@ -315,7 +316,7 @@ func receiveChatMessages(ctx context.Context, s *mcpserver.MCPServer, stream cha
 		// Emit channel notification to all clients
 		// The notification params include the message content and metadata
 		s.SendNotificationToAllClients(
-			"notifications/claude/channel",
+			channelNotificationTopic,
 			map[string]any{
 				"content": msg.Content,
 				"meta": map[string]any{
@@ -382,7 +383,7 @@ func injectPageContext(ctx context.Context, s *mcpserver.MCPServer, clients *api
 	if err != nil {
 		log.Printf("Failed to fetch frontmatter for page %q: %v", page, err)
 		s.SendNotificationToAllClients(
-			"notifications/claude/channel",
+			channelNotificationTopic,
 			map[string]any{
 				"content": fmt.Sprintf("Failed to fetch frontmatter for page '%s': %v. Page context is unavailable for this session. You should NOT attempt to create or modify the [ai_agent_chat_context] section, as existing data may be present but inaccessible due to this error.", page, err),
 				"meta": map[string]any{
@@ -398,7 +399,7 @@ func injectPageContext(ctx context.Context, s *mcpserver.MCPServer, clients *api
 	agentContext, ok := fm["ai_agent_chat_context"]
 	if !ok {
 		s.SendNotificationToAllClients(
-			"notifications/claude/channel",
+			channelNotificationTopic,
 			map[string]any{
 				"content": fmt.Sprintf("No [ai_agent_chat_context] section found in page '%s' frontmatter. You can create one using the MergeFrontmatter tool to store per-page instructions and memory for future sessions.", page),
 				"meta": map[string]any{
@@ -415,7 +416,7 @@ func injectPageContext(ctx context.Context, s *mcpserver.MCPServer, clients *api
 	if err != nil {
 		log.Printf("Failed to marshal ai_agent_chat_context for page %q: %v", page, err)
 		s.SendNotificationToAllClients(
-			"notifications/claude/channel",
+			channelNotificationTopic,
 			map[string]any{
 				"content": fmt.Sprintf("Failed to format [ai_agent_chat_context] for page '%s': %v. The section exists but could not be serialized.", page, err),
 				"meta": map[string]any{
@@ -428,7 +429,7 @@ func injectPageContext(ctx context.Context, s *mcpserver.MCPServer, clients *api
 	}
 
 	s.SendNotificationToAllClients(
-		"notifications/claude/channel",
+		channelNotificationTopic,
 		map[string]any{
 			"content": fmt.Sprintf("Here is the [ai_agent_chat_context] from page '%s' frontmatter:\n```json\n%s\n```", page, string(contextJSON)),
 			"meta": map[string]any{

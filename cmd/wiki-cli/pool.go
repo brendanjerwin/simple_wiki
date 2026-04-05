@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -15,6 +16,11 @@ import (
 	apiv1 "github.com/brendanjerwin/simple_wiki/gen/go/api/v1"
 	"github.com/brendanjerwin/simple_wiki/gen/go/api/v1/apiv1connect"
 	cli "gopkg.in/urfave/cli.v1"
+)
+
+const (
+	defaultMaxInstances        = 5
+	defaultIdleTimeoutMinutes  = 30
 )
 
 // instanceEntry tracks a running Claude Code instance for a page.
@@ -86,12 +92,12 @@ The daemon should be run in a directory containing your Claude agent configurati
 			urlFlag,
 			cli.IntFlag{
 				Name:  "max-instances",
-				Value: 5,
+				Value: defaultMaxInstances,
 				Usage: "Maximum concurrent Claude instances",
 			},
 			cli.DurationFlag{
 				Name:  "idle-timeout",
-				Value: 30 * time.Minute,
+				Value: defaultIdleTimeoutMinutes * time.Minute,
 				Usage: "Reclaim idle instances after this duration",
 			},
 			cli.StringFlag{
@@ -203,7 +209,7 @@ func (d *poolDaemon) subscribeAndHandle(ctx context.Context) error {
 	if ctx.Err() != nil {
 		return nil
 	}
-	return fmt.Errorf("stream closed by server")
+	return errors.New("stream closed by server")
 }
 
 // ensureInstance spawns a Claude instance for a page if one doesn't already exist.

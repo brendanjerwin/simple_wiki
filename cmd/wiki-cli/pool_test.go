@@ -296,7 +296,7 @@ var _ = Describe("prefixWriter", func() {
 			// Create a temp file to use as the writer target
 			tmpFile, err := os.CreateTemp("", "prefix-test")
 			Expect(err).NotTo(HaveOccurred())
-			DeferCleanup(func() { os.Remove(tmpFile.Name()) })
+			DeferCleanup(func() { _ = os.Remove(tmpFile.Name()) })
 
 			pw := newPrefixWriter(tmpFile, "my-page")
 			_, err = pw.Write([]byte("hello world\n"))
@@ -319,7 +319,7 @@ var _ = Describe("prefixWriter", func() {
 		BeforeEach(func() {
 			tmpFile, err := os.CreateTemp("", "prefix-test")
 			Expect(err).NotTo(HaveOccurred())
-			DeferCleanup(func() { os.Remove(tmpFile.Name()) })
+			DeferCleanup(func() { _ = os.Remove(tmpFile.Name()) })
 
 			pw := newPrefixWriter(tmpFile, "pg")
 			_, err = pw.Write([]byte("line1\nline2\n"))
