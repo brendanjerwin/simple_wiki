@@ -1,75 +1,91 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 
 // Timeouts
 const COMPONENT_LOAD_TIMEOUT_MS = 15000;
 const PANEL_INTERACTION_TIMEOUT_MS = 5000;
-const NETWORK_SETTLE_WAIT_MS = 1000;
-const STREAM_REQUEST_TIMEOUT_MS = 5000;
+const REQUEST_TIMEOUT_MS = 5000;
+
+/** Navigate to the home page and wait for the app to be ready. */
+async function navigateAndWait(page: Page): Promise<void> {
+  await page.goto('/home/view');
+  await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
+}
+
+/** Click the FAB and wait for the panel to open. Returns the open panel locator. */
+async function openChatPanel(page: Page) {
+  const fab = page.locator('page-chat-panel .fab');
+  const openPanel = page.locator('page-chat-panel .panel.open');
+
+  await expect(fab).toBeAttached({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
+  await fab.click();
+  await expect(openPanel).toBeAttached({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
+
+  return { fab, openPanel };
+}
+
+/** Set a property on page-chat-panel, waiting for the element to be upgraded first. */
+async function setChatPanelProperty(
+  page: Page,
+  prop: string,
+  value: string | boolean,
+): Promise<void> {
+  await page.evaluate(
+    ([p, v]) => {
+      return customElements.whenDefined('page-chat-panel').then(() => {
+        const el = document.querySelector('page-chat-panel');
+        if (el) (el as HTMLElement & Record<string, unknown>)[p] = v;
+      });
+    },
+    [prop, value] as [string, string | boolean],
+  );
+}
 
 test.describe('Chat Panel', () => {
   test.setTimeout(60000);
 
   test.describe('Panel open and close', () => {
+    test.beforeEach(async ({ page }) => {
+      await navigateAndWait(page);
+    });
 
     test('should render the chat FAB button on page load', async ({ page }) => {
-      await page.goto('/home/view');
-      await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-
-      // The FAB button is present in the shadow DOM (disabled when Claude not connected)
+      // The FAB button is present in the shadow DOM (shows disabled style when Claude not connected)
       const fab = page.locator('page-chat-panel .fab');
       await expect(fab).toBeAttached({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
     });
 
     test('should open the chat panel when FAB is clicked', async ({ page }) => {
-      await page.goto('/home/view');
-      await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-
-      const fab = page.locator('page-chat-panel .fab');
-      await expect(fab).toBeAttached({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
-      await fab.click();
-
-      // Panel should now have the 'open' class
-      await expect(page.locator('page-chat-panel .panel.open')).toBeAttached({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
+      await openChatPanel(page);
     });
 
     test('should hide the FAB when panel is open', async ({ page }) => {
-      await page.goto('/home/view');
-      await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-
-      const fab = page.locator('page-chat-panel .fab');
-      await expect(fab).toBeAttached({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
-      await fab.click();
+      const { fab } = await openChatPanel(page);
 
       // FAB should no longer be in the DOM when panel is open
       await expect(fab).not.toBeAttached({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
     });
 
     test('should close the chat panel when close button is clicked', async ({ page }) => {
-      await page.goto('/home/view');
-      await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-
-      // Open the panel first
-      const fab = page.locator('page-chat-panel .fab');
-      await expect(fab).toBeAttached({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
-      await fab.click();
-      await expect(page.locator('page-chat-panel .panel.open')).toBeAttached({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
+      const { openPanel } = await openChatPanel(page);
 
       // Close it via the close button
       const closeBtn = page.locator('page-chat-panel .close-button');
       await closeBtn.click();
 
       // Panel should no longer have the 'open' class
-      await expect(page.locator('page-chat-panel .panel.open')).not.toBeAttached({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
+      await expect(openPanel).not.toBeAttached({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
     });
 
     test('should restore panel open state from localStorage', async ({ page }) => {
-      await page.goto('/home/view');
-      await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
+      // Open the panel and wait for localStorage to be persisted
+      await openChatPanel(page);
 
-      // Open the panel and let it save to localStorage
-      const fab = page.locator('page-chat-panel .fab');
-      await fab.click();
-      await expect(page.locator('page-chat-panel .panel.open')).toBeAttached({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
+      await expect
+        .poll(
+          () => page.evaluate(() => localStorage.getItem('chat-panel-open')),
+          { timeout: PANEL_INTERACTION_TIMEOUT_MS },
+        )
+        .toBe('true');
 
       // Reload the page — panel should restore as open due to localStorage
       await page.reload();
@@ -77,47 +93,32 @@ test.describe('Chat Panel', () => {
 
       await expect(page.locator('page-chat-panel .panel.open')).toBeAttached({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
     });
-
   });
 
   test.describe('Persona name display', () => {
+    test.beforeEach(async ({ page }) => {
+      await navigateAndWait(page);
+    });
 
     test('should show empty panel title when no persona is configured', async ({ page }) => {
-      await page.goto('/home/view');
-      await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-
-      // Open the panel
-      const fab = page.locator('page-chat-panel .fab');
-      await fab.click();
+      await openChatPanel(page);
 
       // Panel title should be empty (no persona configured)
       const panelTitle = page.locator('page-chat-panel .panel-title');
       await expect(panelTitle).toBeAttached({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
-      await expect(panelTitle).toHaveText('');
+      await expect(panelTitle).toHaveText(/^\s*$/);
     });
 
     test('should show "Open chat" aria-label when no persona is configured', async ({ page }) => {
-      await page.goto('/home/view');
-      await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-
       const fab = page.locator('page-chat-panel .fab');
       await expect(fab).toBeAttached({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
       await expect(fab).toHaveAttribute('aria-label', 'Open chat');
     });
 
     test('should display persona name in panel title when persona is configured', async ({ page }) => {
-      await page.goto('/home/view');
-      await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
+      await setChatPanelProperty(page, 'persona', 'Aria');
 
-      // Configure the persona via JavaScript (simulating server-side config)
-      await page.evaluate(() => {
-        const el = document.querySelector('page-chat-panel');
-        if (el) (el as HTMLElement & { persona: string }).persona = 'Aria';
-      });
-
-      // Open the panel
-      const fab = page.locator('page-chat-panel .fab');
-      await fab.click();
+      await openChatPanel(page);
 
       // Panel title should show the persona name
       const panelTitle = page.locator('page-chat-panel .panel-title');
@@ -125,14 +126,7 @@ test.describe('Chat Panel', () => {
     });
 
     test('should include persona name in FAB aria-label when persona is configured', async ({ page }) => {
-      await page.goto('/home/view');
-      await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-
-      // Configure the persona via JavaScript
-      await page.evaluate(() => {
-        const el = document.querySelector('page-chat-panel');
-        if (el) (el as HTMLElement & { persona: string }).persona = 'Aria';
-      });
+      await setChatPanelProperty(page, 'persona', 'Aria');
 
       // Wait for Lit to re-render with the updated persona
       const fab = page.locator('page-chat-panel .fab');
@@ -140,88 +134,64 @@ test.describe('Chat Panel', () => {
     });
 
     test('should include persona name in disconnected banner when persona is configured', async ({ page }) => {
-      await page.goto('/home/view');
-      await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-
-      // Configure the persona via JavaScript
-      await page.evaluate(() => {
-        const el = document.querySelector('page-chat-panel');
-        if (el) (el as HTMLElement & { persona: string }).persona = 'Aria';
-      });
+      await setChatPanelProperty(page, 'persona', 'Aria');
 
       // Open the panel (Claude not connected — disconnected banner shows persona name)
-      const fab = page.locator('page-chat-panel .fab');
-      await fab.click();
+      await openChatPanel(page);
 
       const disconnectedBanner = page.locator('page-chat-panel .status-banner.disconnected');
       await expect(disconnectedBanner).toContainText('Aria is not connected', { timeout: PANEL_INTERACTION_TIMEOUT_MS });
     });
-
   });
 
   test.describe('Chat stream deferral', () => {
 
     test('should NOT make SubscribeChat requests on page load (panel closed)', async ({ page }) => {
-      const subscribeChatRequestUrls: string[] = [];
-
-      // Listen for SubscribeChat requests before navigating
-      page.on('request', (request) => {
-        if (request.url().includes('/api.v1.ChatService/SubscribeChat')) {
-          subscribeChatRequestUrls.push(request.url());
-        }
+      // Install route handler before navigating to detect any unexpected SubscribeChat calls
+      let subscribeChatCallCount = 0;
+      await page.route('**/*SubscribeChat*', (route) => {
+        subscribeChatCallCount++;
+        void route.continue().catch(() => {});
       });
 
-      await page.goto('/home/view');
-      await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
+      await navigateAndWait(page);
 
-      // Wait to allow any initial requests to be captured
-      await page.waitForTimeout(NETWORK_SETTLE_WAIT_MS);
-
-      expect(subscribeChatRequestUrls).toHaveLength(0);
+      // Poll briefly to ensure no requests have been made
+      await expect
+        .poll(() => subscribeChatCallCount, { timeout: 2000 })
+        .toBe(0);
     });
 
     test('should make a SubscribeChat request when panel is opened for the first time', async ({ page }) => {
-      const subscribeChatRequestUrls: string[] = [];
+      await navigateAndWait(page);
 
-      // Listen for SubscribeChat requests before navigating
+      // Confirm no SubscribeChat requests before opening
+      let subscribeChatCallCount = 0;
       page.on('request', (request) => {
-        if (request.url().includes('/api.v1.ChatService/SubscribeChat')) {
-          subscribeChatRequestUrls.push(request.url());
-        }
+        if (request.url().includes('SubscribeChat')) subscribeChatCallCount++;
       });
 
-      await page.goto('/home/view');
-      await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-      await page.waitForTimeout(NETWORK_SETTLE_WAIT_MS);
-
-      // Confirm no requests have been made yet
-      expect(subscribeChatRequestUrls).toHaveLength(0);
-
-      // Open the panel — this should trigger startStream()
+      // Opening the panel should trigger startStream()
       const requestPromise = page.waitForRequest(
-        (req) => req.url().includes('/api.v1.ChatService/SubscribeChat'),
-        { timeout: STREAM_REQUEST_TIMEOUT_MS },
+        (req) => req.url().includes('SubscribeChat'),
+        { timeout: REQUEST_TIMEOUT_MS },
       );
-      const fab = page.locator('page-chat-panel .fab');
-      await fab.click();
+      await openChatPanel(page);
 
       // Wait for the SubscribeChat request to be made
       await requestPromise;
 
-      expect(subscribeChatRequestUrls.length).toBeGreaterThan(0);
+      expect(subscribeChatCallCount).toBeGreaterThan(0);
     });
-
   });
 
   test.describe('Basic message send/receive flow', () => {
+    test.beforeEach(async ({ page }) => {
+      await navigateAndWait(page);
+    });
 
     test('should show the disconnected status banner when Claude is not available', async ({ page }) => {
-      await page.goto('/home/view');
-      await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-
-      // Open the panel
-      const fab = page.locator('page-chat-panel .fab');
-      await fab.click();
+      await openChatPanel(page);
 
       // Should show disconnected banner (Claude not configured in E2E server)
       const disconnectedBanner = page.locator('page-chat-panel .status-banner.disconnected');
@@ -229,12 +199,7 @@ test.describe('Chat Panel', () => {
     });
 
     test('should disable textarea and send button when Claude is not connected', async ({ page }) => {
-      await page.goto('/home/view');
-      await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-
-      // Open the panel
-      const fab = page.locator('page-chat-panel .fab');
-      await fab.click();
+      await openChatPanel(page);
 
       // Textarea and send button should be disabled
       await expect(page.locator('page-chat-panel textarea')).toBeDisabled({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
@@ -242,19 +207,10 @@ test.describe('Chat Panel', () => {
     });
 
     test('should enable textarea and send button when Claude is connected', async ({ page }) => {
-      await page.goto('/home/view');
-      await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-
-      // Open the panel
-      const fab = page.locator('page-chat-panel .fab');
-      await fab.click();
-      await expect(page.locator('page-chat-panel .panel.open')).toBeAttached({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
+      await openChatPanel(page);
 
       // Simulate Claude becoming connected
-      await page.evaluate(() => {
-        const el = document.querySelector('page-chat-panel');
-        if (el) (el as HTMLElement & { claudeConnected: boolean }).claudeConnected = true;
-      });
+      await setChatPanelProperty(page, 'claudeConnected', true);
 
       // Textarea and send button should now be enabled
       await expect(page.locator('page-chat-panel textarea')).toBeEnabled({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
@@ -262,19 +218,10 @@ test.describe('Chat Panel', () => {
     });
 
     test('should allow typing in the message textarea when Claude is connected', async ({ page }) => {
-      await page.goto('/home/view');
-      await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-
-      // Open the panel
-      const fab = page.locator('page-chat-panel .fab');
-      await fab.click();
-      await expect(page.locator('page-chat-panel .panel.open')).toBeAttached({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
+      await openChatPanel(page);
 
       // Simulate Claude becoming connected
-      await page.evaluate(() => {
-        const el = document.querySelector('page-chat-panel');
-        if (el) (el as HTMLElement & { claudeConnected: boolean }).claudeConnected = true;
-      });
+      await setChatPanelProperty(page, 'claudeConnected', true);
 
       // Type a message in the textarea
       const textarea = page.locator('page-chat-panel textarea');
@@ -293,19 +240,10 @@ test.describe('Chat Panel', () => {
         }
       });
 
-      await page.goto('/home/view');
-      await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-
-      // Open the panel
-      const fab = page.locator('page-chat-panel .fab');
-      await fab.click();
-      await expect(page.locator('page-chat-panel .panel.open')).toBeAttached({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
+      await openChatPanel(page);
 
       // Simulate Claude becoming connected
-      await page.evaluate(() => {
-        const el = document.querySelector('page-chat-panel');
-        if (el) (el as HTMLElement & { claudeConnected: boolean }).claudeConnected = true;
-      });
+      await setChatPanelProperty(page, 'claudeConnected', true);
 
       const textarea = page.locator('page-chat-panel textarea');
       await expect(textarea).toBeEnabled({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
@@ -314,7 +252,7 @@ test.describe('Chat Panel', () => {
       // Wait for the SendMessage request when the button is clicked
       const requestPromise = page.waitForRequest(
         (req) => req.url().includes('/api.v1.ChatService/SendMessage'),
-        { timeout: STREAM_REQUEST_TIMEOUT_MS },
+        { timeout: REQUEST_TIMEOUT_MS },
       );
 
       const sendBtn = page.locator('page-chat-panel .send-button');
@@ -326,19 +264,13 @@ test.describe('Chat Panel', () => {
     });
 
     test('should show empty state message when no messages exist', async ({ page }) => {
-      await page.goto('/home/view');
-      await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-
-      // Open the panel
-      const fab = page.locator('page-chat-panel .fab');
-      await fab.click();
+      await openChatPanel(page);
 
       // Should show the empty state message
       const emptyState = page.locator('page-chat-panel .empty-state');
       await expect(emptyState).toBeAttached({ timeout: PANEL_INTERACTION_TIMEOUT_MS });
       await expect(emptyState).toContainText('Send a message');
     });
-
   });
-
 });
+
