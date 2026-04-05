@@ -1,0 +1,173 @@
+rules:
+  # ============================================================
+  # Go Rules
+  # ============================================================
+
+  - id: go.no-interface-empty
+    languages: [generic]
+    message: >-
+      Use `any` instead of `interface{}`. See CLAUDE.md: Type Clarity.
+    severity: ERROR
+    pattern-regex: 'interface\{\}'
+    paths:
+      include:
+        - "*.go"
+      exclude:
+        - gen/
+        - vendor/
+
+  - id: go.no-bare-panic
+    languages: [go]
+    message: >-
+      Don't use panic() in library code. Return an error instead.
+      Panics are only acceptable in main.go, tools/, or for invariant
+      assertions (document with an INVARIANT ASSERTION comment).
+      See CLAUDE.md: No Panics.
+    severity: WARNING
+    patterns:
+      - pattern: panic($ERR)
+      - pattern-not-inside: |
+          // INVARIANT ASSERTION: ...
+          panic($ERR)
+    paths:
+      exclude:
+        - main.go
+        - tools/
+        - gen/
+        - vendor/
+
+  - id: go.no-recover
+    languages: [go]
+    message: >-
+      Don't use recover() to hide panics. Write defensive code to prevent
+      panics in the first place. See CLAUDE.md: Do not use recover.
+    severity: WARNING
+    pattern: recover()
+    paths:
+      exclude:
+        - gen/
+        - vendor/
+
+  - id: go.no-bare-haveoccurred
+    languages: [go]
+    message: >-
+      Check for a specific error message, not just that an error occurred.
+      Use Expect(err).To(MatchError("specific message")) instead.
+      See CLAUDE.md: Testing.
+    severity: WARNING
+    pattern: Expect($ERR).To(HaveOccurred())
+    paths:
+      include:
+        - "*_test.go"
+
+  - id: go.no-actions-in-ginkgo-it
+    languages: [go]
+    message: >-
+      Ginkgo It blocks should only contain assertions (Expect/Eventually).
+      Move setup and actions into BeforeEach blocks.
+      See CLAUDE.md: No Actions in It Blocks.
+    severity: WARNING
+    patterns:
+      - pattern: |
+          It($DESC, func() {
+            ...
+            $X := $CALL
+            ...
+          })
+    paths:
+      include:
+        - "*_test.go"
+
+  # ============================================================
+  # TypeScript / JavaScript Rules
+  # ============================================================
+
+  - id: ts.no-console-error-only
+    languages: [typescript, javascript]
+    message: >-
+      Console logging is never sufficient error handling. Errors must be
+      communicated to the user through the UX. See CLAUDE.md: Never Just Log Errors.
+    severity: WARNING
+    pattern: console.error(...)
+    paths:
+      exclude:
+        - "*.test.ts"
+        - "*.test.js"
+        - "*.stories.ts"
+        - e2e/
+        - gen/
+        - node_modules/
+
+  - id: ts.no-string-error-property
+    languages: [typescript]
+    message: >-
+      Error properties should be typed as `Error | null`, not `string`.
+      Keep errors as objects until the UI edge.
+      See CLAUDE.md: Keep Errors as Objects Until the UI Edge.
+    severity: WARNING
+    pattern: "this.error = \"...\""
+    paths:
+      exclude:
+        - "*.test.ts"
+        - gen/
+        - node_modules/
+
+  - id: ts.no-static-properties-in-lit
+    languages: [generic]
+    message: >-
+      Use @property() and @state() decorators instead of static properties
+      in Lit components. See CLAUDE.md: Web Components with Lit.
+    severity: WARNING
+    pattern-regex: 'static\s+properties\s*='
+    paths:
+      include:
+        - "static/js/**/*.ts"
+      exclude:
+        - "*.test.ts"
+        - "*.stories.ts"
+        - gen/
+        - node_modules/
+
+  - id: ts.no-opaque-catch-error-strings
+    languages: [typescript, javascript]
+    message: >-
+      Don't discard the original error. Preserve it with
+      `this.error = err instanceof Error ? err : new Error(String(err))`.
+      See CLAUDE.md: Never Invent Opaque Error Strings.
+    severity: WARNING
+    patterns:
+      - pattern-inside: |
+          catch ($E) {
+            ...
+          }
+      - pattern: "this.error = \"...\""
+    paths:
+      exclude:
+        - "*.test.ts"
+        - "*.test.js"
+        - gen/
+        - node_modules/
+
+  - id: ts.no-actions-in-it-blocks
+    languages: [typescript, javascript]
+    message: >-
+      Test `it` blocks should only contain assertions. Move setup and
+      actions into `beforeEach` blocks. See CLAUDE.md: No Actions in It Blocks.
+    severity: WARNING
+    patterns:
+      - pattern: |
+          it($DESC, () => {
+            ...
+            const $X = $CALL;
+            ...
+          })
+      - pattern: |
+          it($DESC, async () => {
+            ...
+            const $X = await $CALL;
+            ...
+          })
+    paths:
+      include:
+        - "*.test.ts"
+        - "*.test.js"
