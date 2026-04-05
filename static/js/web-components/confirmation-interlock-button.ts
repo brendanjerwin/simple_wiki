@@ -136,18 +136,6 @@ export class ConfirmationInterlockButton extends LitElement {
         right: 0;
       }
 
-      .visually-hidden {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        margin: -1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        white-space: nowrap;
-        border: 0;
-      }
-
       @keyframes popupFadeIn {
         from {
           opacity: 0;
@@ -360,7 +348,11 @@ export class ConfirmationInterlockButton extends LitElement {
   public arm(): void {
     if (this.disabled) return;
     if (this.armed) return;
-    const active = this.shadowRoot?.activeElement;
+    const shadowActive = this.shadowRoot?.activeElement;
+    const lightActive = this.getRootNode() instanceof ShadowRoot
+      ? null
+      : (document.activeElement === this ? this : document.activeElement);
+    const active = shadowActive ?? lightActive;
     this._previouslyFocusedElement = active instanceof HTMLElement ? active : null;
     this._computedPosition = this._computePopupPosition();
     this.armed = true;
