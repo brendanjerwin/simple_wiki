@@ -114,21 +114,21 @@ export class FrontmatterValue extends LitElement {
       return html`
         <frontmatter-value-section
           .fields="${this.value}"
-          .disabled="${this.disabled}"
+          ?disabled=${this.disabled}
           @section-change="${this._handleValueChange}"
         ></frontmatter-value-section>
       `;
     }
 
-    // Handle primitive types (string, number, boolean) as strings
-    const primitiveStr = typeof this.value === 'string' || typeof this.value === 'number' || typeof this.value === 'boolean'
+    // Handle primitive types (string, number, boolean, bigint) as strings
+    const primitiveStr = typeof this.value === 'string' || typeof this.value === 'number' || typeof this.value === 'boolean' || typeof this.value === 'bigint'
       ? String(this.value)
       : '';
     return html`
       <frontmatter-value-string
-        .value="${primitiveStr}"
-        .disabled="${this.disabled}"
-        .placeholder="${this.placeholder}"
+        .value=${primitiveStr}
+        ?disabled=${this.disabled}
+        .placeholder=${this.placeholder}
         @value-change="${this._handleValueChange}"
       ></frontmatter-value-string>
     `;

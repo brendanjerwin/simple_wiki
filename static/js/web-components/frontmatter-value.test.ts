@@ -482,6 +482,21 @@ describe('FrontmatterValue', () => {
     });
   });
 
+  describe('when value is a bigint', () => {
+    beforeEach(async () => {
+      el = await createFixtureWithTimeout(html`<frontmatter-value></frontmatter-value>`);
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- intentionally testing bigint value
+      el.value = BigInt(42) as unknown;
+      await el.updateComplete;
+    });
+
+    it('should render string component with stringified bigint value', () => {
+      const stringComponent = el.shadowRoot?.querySelector<HTMLElement & { value: string }>('frontmatter-value-string');
+      expect(stringComponent).to.exist;
+      expect(stringComponent!.value).to.equal('42');
+    });
+  });
+
   describe('when _handleValueChange receives an unknown event type', () => {
     beforeEach(async () => {
       el = await createFixtureWithTimeout(html`<frontmatter-value .value="${'test'}"></frontmatter-value>`);
