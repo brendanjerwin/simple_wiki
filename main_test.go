@@ -174,8 +174,8 @@ var _ = Describe("getCommitHash", func() {
 
 	setPath := func(newPath string) {
 		original := os.Getenv("PATH")
-		os.Setenv("PATH", newPath)
-		DeferCleanup(func() { os.Setenv("PATH", original) })
+		Expect(os.Setenv("PATH", newPath)).To(Succeed())
+		DeferCleanup(func() { Expect(os.Setenv("PATH", original)).To(Succeed()) })
 	}
 
 	When("commit was set at build time (not 'n/a')", func() {

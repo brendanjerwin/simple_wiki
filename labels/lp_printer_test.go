@@ -24,8 +24,8 @@ var _ = Describe("LPPrinter", func() {
 	// setPath temporarily replaces PATH and schedules restoration via DeferCleanup.
 	setPath := func(newPath string) {
 		original := os.Getenv("PATH")
-		os.Setenv("PATH", newPath)
-		DeferCleanup(func() { os.Setenv("PATH", original) })
+		Expect(os.Setenv("PATH", newPath)).To(Succeed())
+		DeferCleanup(func() { Expect(os.Setenv("PATH", original)).To(Succeed()) })
 	}
 
 	// prependTmpDir prepends tmpDir to PATH so fake executables placed there take priority.
