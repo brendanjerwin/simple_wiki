@@ -65,6 +65,9 @@ CRUSH.md
 node_modules/
 bun.lockb
 
+# Local environment variables (secrets)
+.env
+
 # Local binaries and tools (may contain secrets)
 .local/
 coverage.txt
