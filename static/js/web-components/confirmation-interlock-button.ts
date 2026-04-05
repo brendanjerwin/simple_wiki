@@ -192,7 +192,6 @@ export class ConfirmationInterlockButton extends LitElement {
   declare _computedPosition: 'left' | 'right';
 
   private _disarmTimerId: number | undefined;
-  private _previouslyFocusedElement: Element | null = null;
 
   constructor() {
     super();
@@ -325,7 +324,6 @@ export class ConfirmationInterlockButton extends LitElement {
    */
   public arm(): void {
     if (this.disabled) return;
-    this._previouslyFocusedElement = this.shadowRoot?.activeElement ?? document.activeElement;
     this._computedPosition = this._computePopupPosition();
     this.armed = true;
     this._startDisarmTimer();
@@ -345,7 +343,6 @@ export class ConfirmationInterlockButton extends LitElement {
     void this.updateComplete.then(() => {
       const triggerButton = this.shadowRoot?.querySelector<HTMLButtonElement>('.button-trigger');
       triggerButton?.focus();
-      this._previouslyFocusedElement = null;
     });
   }
 
