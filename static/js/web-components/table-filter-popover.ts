@@ -3,7 +3,7 @@ import { html, css, LitElement, nothing } from 'lit';
 import { property, state } from 'lit/decorators.js';
 import type { TableColumnDefinition } from './table-data-extractor.js';
 import type { SortDirection, ColumnFilterState, CheckboxFilterState } from './table-sorter-filterer.js';
-import { zIndexCSS } from './shared-styles.js';
+import { zIndexCSS, colorCSS } from './shared-styles.js';
 
 const CHECKBOX_THRESHOLD = 15;
 
@@ -18,6 +18,7 @@ export interface FilterChangedEventDetail {
 export class TableFilterPopover extends LitElement {
   static override readonly styles = [
     zIndexCSS,
+    colorCSS,
     css`
       :host {
         display: block;
@@ -35,9 +36,9 @@ export class TableFilterPopover extends LitElement {
         max-height: 80vh;
         width: 90vw;
         z-index: var(--z-popover);
-        background: white;
+        background: var(--color-surface-elevated);
         border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        box-shadow: var(--shadow-medium);
         overflow: hidden;
       }
 
@@ -50,18 +51,18 @@ export class TableFilterPopover extends LitElement {
         align-items: center;
         justify-content: space-between;
         padding: 10px 14px;
-        border-bottom: 1px solid #e0e0e0;
+        border-bottom: 1px solid var(--color-border-subtle);
       }
 
       .popover-title {
         font-size: 14px;
         font-weight: 600;
-        color: #333;
+        color: var(--color-text-primary);
       }
 
       .popover-type {
         font-weight: 400;
-        color: #999;
+        color: var(--color-text-muted);
         font-size: 12px;
         margin-left: 6px;
       }
@@ -71,15 +72,15 @@ export class TableFilterPopover extends LitElement {
         border: none;
         font-size: 18px;
         cursor: pointer;
-        color: #999;
+        color: var(--color-text-muted);
         padding: 2px 6px;
         border-radius: 4px;
         line-height: 1;
       }
 
       .close-btn:hover {
-        background: #f0f0f0;
-        color: #333;
+        background: var(--color-hover-overlay);
+        color: var(--color-text-primary);
       }
 
       .popover-body {
@@ -93,7 +94,7 @@ export class TableFilterPopover extends LitElement {
         justify-content: flex-end;
         gap: 8px;
         padding: 10px 14px;
-        border-top: 1px solid #e0e0e0;
+        border-top: 1px solid var(--color-border-subtle);
       }
 
       .footer-btn {
@@ -102,30 +103,30 @@ export class TableFilterPopover extends LitElement {
         font-size: 13px;
         font-family: inherit;
         cursor: pointer;
-        border: 1px solid #ddd;
-        background: #f5f5f5;
-        color: #333;
+        border: 1px solid var(--color-border-default);
+        background: var(--color-surface-sunken);
+        color: var(--color-text-primary);
       }
 
       .footer-btn:hover {
-        background: #e8e8e8;
+        background: var(--color-hover-overlay);
       }
 
       .footer-btn-primary {
-        background: #0d6efd;
-        color: white;
-        border-color: #0d6efd;
+        background: var(--color-action-link);
+        color: var(--color-text-inverse);
+        border-color: var(--color-action-link);
       }
 
       .footer-btn-primary:hover {
-        background: #0b5ed7;
-        border-color: #0b5ed7;
+        background: var(--color-action-link-hover);
+        border-color: var(--color-action-link-hover);
       }
 
       .section-label {
         font-size: 11px;
         font-weight: 600;
-        color: #888;
+        color: var(--color-text-muted);
         text-transform: uppercase;
         letter-spacing: 0.5px;
         margin-bottom: 6px;
@@ -140,34 +141,34 @@ export class TableFilterPopover extends LitElement {
       .sort-pill {
         font-size: 12px;
         padding: 4px 10px;
-        background: #f0f0f0;
-        border: 1px solid #ddd;
+        background: var(--color-surface-sunken);
+        border: 1px solid var(--color-border-default);
         border-radius: 16px;
         cursor: pointer;
         font-family: inherit;
         transition: all 0.15s ease;
-        color: #555;
+        color: var(--color-text-secondary);
       }
 
       .sort-pill:hover {
-        background: #e0e0e0;
-        border-color: #bbb;
+        background: var(--color-hover-overlay);
+        border-color: var(--color-text-muted);
       }
 
       .sort-pill-active {
-        background: #0d6efd;
-        color: white;
-        border-color: #0d6efd;
+        background: var(--color-action-link);
+        color: var(--color-text-inverse);
+        border-color: var(--color-action-link);
       }
 
       .sort-pill-active:hover {
-        background: #0b5ed7;
-        border-color: #0b5ed7;
+        background: var(--color-action-link-hover);
+        border-color: var(--color-action-link-hover);
       }
 
       .divider {
         border: none;
-        border-top: 1px solid #e0e0e0;
+        border-top: 1px solid var(--color-border-subtle);
         margin: 8px 0;
       }
 
@@ -187,7 +188,7 @@ export class TableFilterPopover extends LitElement {
       }
 
       .checkbox-link {
-        color: #0d6efd;
+        color: var(--color-action-link);
         cursor: pointer;
         background: none;
         border: none;
@@ -206,27 +207,29 @@ export class TableFilterPopover extends LitElement {
         gap: 6px;
         padding: 3px 0;
         font-size: 13px;
-        color: #333;
+        color: var(--color-text-primary);
       }
 
       .checkbox-item input[type="checkbox"] {
         margin: 0;
-        accent-color: #0d6efd;
+        accent-color: var(--color-action-link);
       }
 
       .search-input {
         width: 100%;
         padding: 8px 10px;
-        border: 1px solid #ddd;
+        border: 1px solid var(--color-border-default);
         border-radius: 4px;
         font-size: 13px;
         font-family: inherit;
         box-sizing: border-box;
+        background: var(--color-surface-primary);
+        color: var(--color-text-primary);
       }
 
       .search-input:focus {
         outline: none;
-        border-color: #0d6efd;
+        border-color: var(--color-border-focus);
         box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.15);
       }
 
@@ -245,22 +248,24 @@ export class TableFilterPopover extends LitElement {
       .range-input {
         flex: 1;
         padding: 6px 8px;
-        border: 1px solid #ddd;
+        border: 1px solid var(--color-border-default);
         border-radius: 4px;
         font-size: 13px;
         font-family: inherit;
         box-sizing: border-box;
         min-width: 0;
+        background: var(--color-surface-primary);
+        color: var(--color-text-primary);
       }
 
       .range-input:focus {
         outline: none;
-        border-color: #0d6efd;
+        border-color: var(--color-border-focus);
         box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.15);
       }
 
       .range-separator {
-        color: #999;
+        color: var(--color-text-muted);
         font-size: 12px;
         flex-shrink: 0;
       }
@@ -268,7 +273,7 @@ export class TableFilterPopover extends LitElement {
       .range-slider {
         width: 100%;
         margin: 4px 0;
-        accent-color: #0d6efd;
+        accent-color: var(--color-action-link);
       }
     `,
   ];

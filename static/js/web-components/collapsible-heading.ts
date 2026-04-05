@@ -1,5 +1,6 @@
 import { html, css, LitElement } from 'lit';
 import { property, state } from 'lit/decorators.js';
+import { colorCSS } from './shared-styles.js';
 
 // localStorage value constants for persisted state
 const STATE_EXPANDED = 'expanded';
@@ -20,7 +21,9 @@ const STATE_COLLAPSED = 'collapsed';
  * </collapsible-heading>
  */
 export class CollapsibleHeading extends LitElement {
-  static override readonly styles = css`
+  static override readonly styles = [
+    colorCSS,
+    css`
     :host {
       display: block;
     }
@@ -37,7 +40,7 @@ export class CollapsibleHeading extends LitElement {
       cursor: pointer;
       padding: 0.1em 0.3em;
       font-size: 0.75em;
-      color: #666;
+      color: var(--color-text-secondary);
       line-height: 1;
       flex-shrink: 0;
       border-radius: 3px;
@@ -45,11 +48,11 @@ export class CollapsibleHeading extends LitElement {
     }
 
     .ch-toggle:hover {
-      background-color: rgba(0, 0, 0, 0.07);
+      background-color: var(--color-hover-overlay);
     }
 
     .ch-toggle:focus-visible {
-      outline: 2px solid #0066cc;
+      outline: 2px solid var(--color-text-link);
       outline-offset: 2px;
     }
 
@@ -70,7 +73,7 @@ export class CollapsibleHeading extends LitElement {
     .ch-content[hidden] {
       display: none;
     }
-  `;
+  `];
 
   @property({ type: Number, attribute: 'heading-level' })
   declare headingLevel: number;

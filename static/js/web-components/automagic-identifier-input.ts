@@ -1,6 +1,6 @@
 import { html, css, LitElement, nothing } from 'lit';
 import { property, state } from 'lit/decorators.js';
-import { sharedStyles, dialogCSS } from './shared-styles.js';
+import { sharedStyles, colorCSS, dialogCSS } from './shared-styles.js';
 import type { ExistingPageInfo } from '../gen/api/v1/page_management_pb.js';
 import type { AugmentedError } from './augment-error-service.js';
 import { AugmentErrorService } from './augment-error-service.js';
@@ -37,6 +37,7 @@ export type IdentifierGenerator = (text: string) => Promise<GenerateIdentifierRe
  */
 export class AutomagicIdentifierInput extends LitElement {
   static override readonly styles = [
+    colorCSS,
     dialogCSS,
     css`
       :host {
@@ -55,18 +56,18 @@ export class AutomagicIdentifierInput extends LitElement {
 
       .automagic-button {
         padding: 10px 12px;
-        border: 1px solid #ddd;
+        border: 1px solid var(--color-border-default);
         border-radius: 4px;
-        background: #f5f5f5;
+        background: var(--color-surface-sunken);
         cursor: pointer;
         font-size: 14px;
-        color: #666;
+        color: var(--color-text-secondary);
         transition: all 0.2s;
       }
 
       .automagic-button:hover:not(:disabled) {
-        background: #e8e8e8;
-        border-color: #ccc;
+        background: var(--color-hover-overlay);
+        border-color: var(--color-text-muted);
       }
 
       .automagic-button:disabled {
@@ -81,15 +82,15 @@ export class AutomagicIdentifierInput extends LitElement {
       }
 
       .automagic-button.manual {
-        background: #fff3cd;
-        border-color: #ffc107;
-        color: #856404;
+        background: var(--color-warning-bg);
+        border-color: var(--color-warning);
+        color: var(--color-warning-text);
       }
 
       .conflict-warning {
-        background: #fffbeb;
-        border: 1px solid #fcd34d;
-        color: #92400e;
+        background: var(--color-warning-bg);
+        border: 1px solid var(--color-warning);
+        color: var(--color-warning-text);
         padding: 12px;
         border-radius: 4px;
         margin-top: 8px;
@@ -97,7 +98,7 @@ export class AutomagicIdentifierInput extends LitElement {
       }
 
       .conflict-warning a {
-        color: #92400e;
+        color: var(--color-warning-text);
         font-weight: 500;
       }
     `,

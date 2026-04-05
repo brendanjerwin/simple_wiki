@@ -295,14 +295,14 @@ export class WikiChecklist extends LitElement {
         padding: 3px 8px;
         background: none;
         border: none;
-        color: #888;
+        color: var(--color-text-muted);
         cursor: pointer;
         font-family: inherit;
         transition: color 0.15s ease;
       }
 
       .delete-checked-btn:hover {
-        color: #dc3545;
+        color: var(--color-error);
       }
 
       .add-item {
@@ -315,24 +315,26 @@ export class WikiChecklist extends LitElement {
       .add-text-input {
         flex: 1;
         padding: 6px 10px;
-        border: 1px solid #ddd;
+        border: 1px solid var(--color-border-default);
         border-radius: 4px;
         font-size: 14px;
         font-family: inherit;
         min-width: 0;
         box-sizing: border-box;
+        background: var(--color-surface-primary);
+        color: var(--color-text-primary);
       }
 
       .add-text-input:focus {
         outline: none;
-        border-color: #6c757d;
+        border-color: var(--color-action-primary);
         box-shadow: 0 0 0 2px rgba(108, 117, 125, 0.15);
       }
 
       .add-btn {
         padding: 6px 14px;
-        background: #6c757d;
-        color: white;
+        background: var(--color-action-primary);
+        color: var(--color-text-inverse);
         border: none;
         border-radius: 4px;
         font-size: 14px;
@@ -344,7 +346,7 @@ export class WikiChecklist extends LitElement {
       }
 
       .add-btn:hover:not(:disabled) {
-        background: #5a6268;
+        background: var(--color-action-primary-hover);
       }
 
       .add-btn:disabled {

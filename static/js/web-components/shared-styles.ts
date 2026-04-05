@@ -839,6 +839,6 @@ export const pillCSS = css`
  * ```
  */
 export function dialogStyles(...componentStyles: CSSResult[]): CSSResult[] {
-  return [foundationCSS, zIndexCSS, dialogCSS, buttonCSS, animationCSS, ...componentStyles, responsiveCSS];
+  return [foundationCSS, colorCSS, zIndexCSS, dialogCSS, buttonCSS, animationCSS, ...componentStyles, responsiveCSS];
 }
 
