@@ -1,12 +1,12 @@
 // Test setup file
-import { beforeEach, afterEach } from 'vitest';
+import { afterEach } from 'vitest';
 
 // Clean up the DOM after each test
 afterEach(() => {
   document.body.innerHTML = '';
   // Clear all event listeners from window
-  const newWindow = window.constructor.prototype;
-  for (const key in newWindow) {
+  const proto = window.constructor?.prototype;
+  for (const key in proto) {
     if (key.startsWith('on')) {
       window[key] = null;
     }
