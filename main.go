@@ -40,7 +40,7 @@ func getCommitHash() string {
 	// Try to get commit from git
 	gitPath, err := exec.LookPath("git")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "git not found, using 'dev' as commit hash: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "git not found, using 'dev' as commit hash: %v\n", err)
 		return "dev"
 	}
 
