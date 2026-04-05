@@ -187,7 +187,7 @@ export class PageImportDialog extends LitElement {
 
       .loading-spinner {
         font-size: 32px;
-        color: var(--color-border-focus);
+        color: var(--color-action-link);
       }
 
       .loading-text {
@@ -222,7 +222,7 @@ export class PageImportDialog extends LitElement {
       }
 
       .summary-item.updates {
-        color: var(--color-border-focus);
+        color: var(--color-text-link);
       }
 
       .filter-row {
@@ -296,8 +296,8 @@ export class PageImportDialog extends LitElement {
       }
 
       .badge-update {
-        background: color-mix(in srgb, var(--color-border-focus) 20%, transparent);
-        color: var(--color-border-focus);
+        background: color-mix(in srgb, var(--color-text-link) 20%, transparent);
+        color: var(--color-text-link);
       }
 
       .record-body {
