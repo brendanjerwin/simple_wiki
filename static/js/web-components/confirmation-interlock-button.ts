@@ -238,7 +238,7 @@ export class ConfirmationInterlockButton extends LitElement {
     }
 
     // Fall back to viewport
-    return new DOMRect(0, 0, window.innerWidth, window.innerHeight);
+    return new DOMRect(0, 0, globalThis.innerWidth, globalThis.innerHeight);
   }
 
   /**
