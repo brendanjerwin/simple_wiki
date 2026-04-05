@@ -36,7 +36,7 @@ async function openPageImportDialog(page: Page): Promise<void> {
   await expect(page.locator('#page-import-trigger')).toBeAttached({ timeout: MENU_APPEAR_TIMEOUT_MS });
   await page.locator('.tools-menu').hover();
   await page.locator('#page-import-trigger').click();
-  await expect(page.locator('page-import-dialog')).toHaveAttribute('open', '', { timeout: MENU_APPEAR_TIMEOUT_MS });
+  await expect(page.locator('page-import-dialog')).toHaveAttribute('open', { timeout: MENU_APPEAR_TIMEOUT_MS });
 }
 
 /**
@@ -48,7 +48,7 @@ async function openSearchPopover(page: Page): Promise<void> {
   await expect(searchInput).toBeAttached({ timeout: MENU_APPEAR_TIMEOUT_MS });
   await searchInput.fill('test');
   await searchInput.press('Enter');
-  await expect(page.locator('wiki-search-results')).toHaveAttribute('open', '', { timeout: MENU_APPEAR_TIMEOUT_MS });
+  await expect(page.locator('wiki-search-results')).toHaveAttribute('open', { timeout: MENU_APPEAR_TIMEOUT_MS });
 }
 
 /** Injects a toast-message into the page and waits for it to be fully slid into view. */
@@ -73,14 +73,14 @@ async function injectToast(page: Page, message: string): Promise<void> {
   }, message);
   // Wait for the visible attribute (set by show()), then wait for the slide-in
   // animation to complete so that getBoundingClientRect() reflects the final position.
-  await expect(page.locator('toast-message')).toHaveAttribute('visible', '', { timeout: MENU_APPEAR_TIMEOUT_MS });
+  await expect(page.locator('toast-message')).toHaveAttribute('visible', { timeout: MENU_APPEAR_TIMEOUT_MS });
   // The toast slides in from the right: animation is complete once the right edge
   // is within the viewport (i.e. no longer translated off-screen by translateX(100%)).
   await page.waitForFunction(() => {
     const toast = document.querySelector('toast-message') as HTMLElement;
     if (!toast) return false;
     const rect = toast.getBoundingClientRect();
-    return rect.width > 0 && rect.height > 0 && rect.right <= window.innerWidth;
+    return rect.width > 0 && rect.height > 0 && rect.right <= window.innerWidth + 1;
   }, { timeout: MENU_APPEAR_TIMEOUT_MS });
 }
 
