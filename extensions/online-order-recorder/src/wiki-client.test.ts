@@ -110,7 +110,7 @@ describe('readPage', () => {
     });
 
     it('should strip trailing slash from base URL', () => {
-      expect(mockCreateGrpcWebTransport).toHaveBeenCalledWith({
+      expect(mockCreateGrpcWebTransport).toHaveBeenLastCalledWith({
         baseUrl: 'https://wiki.example.com',
       });
     });
@@ -123,7 +123,7 @@ describe('readPage', () => {
     });
 
     it('should strip all trailing slashes from base URL', () => {
-      expect(mockCreateGrpcWebTransport).toHaveBeenCalledWith({
+      expect(mockCreateGrpcWebTransport).toHaveBeenLastCalledWith({
         baseUrl: 'https://wiki.example.com',
       });
     });
