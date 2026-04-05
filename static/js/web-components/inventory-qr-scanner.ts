@@ -1,6 +1,6 @@
 import { html, css, LitElement, nothing } from 'lit';
 import { property, state } from 'lit/decorators.js';
-import { sharedStyles, foundationCSS, buttonCSS } from './shared-styles.js';
+import { sharedStyles, colorCSS, foundationCSS, buttonCSS } from './shared-styles.js';
 import { createClient } from '@connectrpc/connect';
 import { create } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
@@ -45,6 +45,7 @@ export interface ItemScannedEventDetail {
 export class InventoryQrScanner extends LitElement {
   static override readonly styles = [
     foundationCSS,
+    colorCSS,
     buttonCSS,
     css`
       :host {
@@ -52,7 +53,7 @@ export class InventoryQrScanner extends LitElement {
       }
 
       .scanner-container {
-        border: 1px solid #ddd;
+        border: 1px solid var(--color-border-default);
         border-radius: 8px;
         overflow: hidden;
         background: #000;
@@ -74,8 +75,8 @@ export class InventoryQrScanner extends LitElement {
 
       .cancel-button {
         padding: 4px 10px;
-        background: #dc3545;
-        color: white;
+        background: var(--color-error);
+        color: var(--color-text-inverse);
         border: none;
         border-radius: 4px;
         cursor: pointer;
@@ -83,14 +84,14 @@ export class InventoryQrScanner extends LitElement {
       }
 
       .cancel-button:hover {
-        background: #c82333;
+        background: var(--color-action-danger-hover);
       }
 
       .validating {
         padding: 12px;
-        background: #f3f4f6;
-        border-top: 1px solid #e5e7eb;
-        color: #6b7280;
+        background: var(--color-surface-sunken);
+        border-top: 1px solid var(--color-border-subtle);
+        color: var(--color-text-secondary);
         font-size: 14px;
         display: flex;
         align-items: center;

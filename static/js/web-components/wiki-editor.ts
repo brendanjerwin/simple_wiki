@@ -18,7 +18,7 @@ import {
 import { EditorToolbarCoordinator } from '../services/editor-toolbar-coordinator.js';
 import type { EditorToolbar } from './editor-toolbar.js';
 import './editor-toolbar.js';
-import { foundationCSS, sharedStyles } from './shared-styles.js';
+import { foundationCSS, colorCSS, sharedStyles } from './shared-styles.js';
 import './error-display.js';
 
 interface FileUploadedDetail {
@@ -55,6 +55,7 @@ function isFileUploadedDetail(value: unknown): value is FileUploadedDetail {
 export class WikiEditor extends LitElement {
   static override readonly styles = [
     foundationCSS,
+    colorCSS,
     css`
       :host {
         display: block;
@@ -74,9 +75,9 @@ export class WikiEditor extends LitElement {
         padding: 4px 8px;
         font-size: 0.85em;
         font-family: 'Montserrat', sans-serif;
-        color: #777;
-        background: #f8f8f8;
-        border-bottom: 1px solid #eee;
+        color: var(--color-text-muted, #777);
+        background: var(--color-surface-sunken, #f8f8f8);
+        border-bottom: 1px solid var(--color-border-subtle, #eee);
         opacity: 0;
         transition: opacity 0.3s ease;
       }
@@ -92,16 +93,16 @@ export class WikiEditor extends LitElement {
       }
 
       .status-indicator.saving {
-        color: #f0ad4e;
+        color: var(--color-warning, #f0ad4e);
       }
 
       .status-indicator.saved {
-        color: #5cb85c;
+        color: var(--color-success, #5cb85c);
         font-weight: bold;
       }
 
       .status-indicator.error {
-        color: #d9534f;
+        color: var(--color-error, #d9534f);
         font-weight: bold;
       }
 
@@ -135,6 +136,8 @@ export class WikiEditor extends LitElement {
         padding-right: 2%;
         -webkit-user-select: text;
         user-select: text;
+        background: var(--color-surface-primary);
+        color: var(--color-text-primary);
       }
 
       .loading-overlay {
@@ -143,7 +146,7 @@ export class WikiEditor extends LitElement {
         justify-content: center;
         height: 100%;
         font-size: 1.2em;
-        color: #777;
+        color: var(--color-text-muted, #777);
       }
 
       @media (max-width: 600px) {

@@ -1,15 +1,18 @@
 import { html, css, LitElement } from 'lit';
 import { property } from 'lit/decorators.js';
+import { colorCSS } from './shared-styles.js';
 
 export class FrontmatterKey extends LitElement {
-  static override readonly styles = css`
+  static override readonly styles = [
+    colorCSS,
+    css`
     :host {
       display: inline-block;
     }
 
     .key-input {
       font-weight: 600;
-      color: #333;
+      color: var(--color-text-primary);
       background: transparent;
       border: none;
       border-left: 1px solid transparent;
@@ -26,31 +29,31 @@ export class FrontmatterKey extends LitElement {
     }
 
     .key-input:hover {
-      background: #f8f9fa;
-      border-left-color: #ddd;
-      text-decoration-color: #999;
+      background: var(--color-hover-overlay);
+      border-left-color: var(--color-border-default);
+      text-decoration-color: var(--color-text-muted);
     }
 
     .key-input:focus {
       outline: none;
-      border-left-color: #007bff;
-      box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.1);
-      background: white;
+      border-left-color: var(--color-border-focus);
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-border-focus) 15%, transparent);
+      background: var(--color-surface-primary);
       cursor: text;
       text-decoration: none;
     }
 
     .key-display {
       font-weight: 600;
-      color: #333;
+      color: var(--color-text-primary);
       padding: 8px 12px;
       font-size: 14px;
       font-family: inherit;
       text-decoration: underline;
       text-decoration-style: solid;
-      text-decoration-color: #333;
+      text-decoration-color: var(--color-text-primary);
     }
-  `;
+  `];
 
   @property({ type: String })
   declare key: string;
