@@ -1,5 +1,5 @@
 // Test setup file
-import { beforeEach, afterEach } from 'vitest';
+import { afterEach } from 'vitest';
 
 // Clean up the DOM after each test
 afterEach(() => {
