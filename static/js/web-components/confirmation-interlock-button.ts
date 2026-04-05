@@ -360,7 +360,8 @@ export class ConfirmationInterlockButton extends LitElement {
   public arm(): void {
     if (this.disabled) return;
     if (this.armed) return;
-    this._previouslyFocusedElement = this.shadowRoot?.activeElement as HTMLElement | null;
+    const active = this.shadowRoot?.activeElement;
+    this._previouslyFocusedElement = active instanceof HTMLElement ? active : null;
     this._computedPosition = this._computePopupPosition();
     this.armed = true;
     this._startDisarmTimer();
@@ -398,9 +399,7 @@ export class ConfirmationInterlockButton extends LitElement {
   };
 
   private readonly _handleYesClick = (): void => {
-    this._clearDisarmTimer();
-    this.armed = false;
-    this._previouslyFocusedElement = null;
+    this.disarm();
     this.dispatchEvent(new CustomEvent('confirmed', { bubbles: true, composed: true }));
   };
 
@@ -431,10 +430,10 @@ export class ConfirmationInterlockButton extends LitElement {
         class="confirm-popup ${positionClass}"
         role="alertdialog"
         aria-modal="true"
-        aria-label=${this.confirmLabel}
+        aria-labelledby="confirm-label"
         @keydown=${this._handlePopupKeydown}
       >
-        <span class="confirm-label">${this.confirmLabel}</span>
+        <span id="confirm-label" class="confirm-label">${this.confirmLabel}</span>
         <div class="confirm-buttons">
           <button
             class="button-base button-yes button-small border-radius-small"
@@ -459,9 +458,6 @@ export class ConfirmationInterlockButton extends LitElement {
     return html`
       ${this._renderTriggerButton()}
       ${this.armed ? this._renderConfirmPopup() : nothing}
-      <div aria-live="polite" aria-atomic="true" class="visually-hidden">
-        ${this.armed ? this.confirmLabel : ''}
-      </div>
     `;
   }
 }

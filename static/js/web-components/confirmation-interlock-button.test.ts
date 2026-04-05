@@ -652,51 +652,36 @@ describe('ConfirmationInterlockButton', () => {
         expect(popup?.getAttribute('aria-modal')).to.equal('true');
       });
 
-      it('should have aria-label matching confirmLabel', () => {
+      it('should have aria-labelledby pointing to confirm-label', () => {
         const popup = el.shadowRoot?.querySelector('.confirm-popup');
-        expect(popup?.getAttribute('aria-label')).to.equal('Delete this item?');
+        expect(popup?.getAttribute('aria-labelledby')).to.equal('confirm-label');
+        const labelEl = el.shadowRoot?.querySelector('#confirm-label');
+        expect(labelEl?.textContent).to.equal('Delete this item?');
       });
     });
   });
 
-  describe('aria-live region', () => {
-    describe('when not armed', () => {
-      beforeEach(async () => {
-        el = await fixture(html`
-          <confirmation-interlock-button
-            confirmLabel="Are you sure?"
-            .disarmTimeoutMs=${0}
-          ></confirmation-interlock-button>
-        `);
-      });
+  describe('Enter key on a button does not double-confirm', () => {
+    let confirmedHandler: sinon.SinonStub;
 
-      it('should have an aria-live region', () => {
-        const liveRegion = el.shadowRoot?.querySelector('[aria-live]');
-        expect(liveRegion).to.exist;
-      });
-
-      it('should have empty aria-live region', () => {
-        const liveRegion = el.shadowRoot?.querySelector('[aria-live]');
-        expect(liveRegion?.textContent?.trim()).to.equal('');
-      });
+    beforeEach(async () => {
+      confirmedHandler = sinon.stub();
+      el = await fixture(html`
+        <confirmation-interlock-button
+          .disarmTimeoutMs=${0}
+          @confirmed=${confirmedHandler}
+        ></confirmation-interlock-button>
+      `);
+      el.arm();
+      await el.updateComplete;
     });
 
-    describe('when armed', () => {
-      beforeEach(async () => {
-        el = await fixture(html`
-          <confirmation-interlock-button
-            confirmLabel="Are you sure?"
-            .disarmTimeoutMs=${0}
-          ></confirmation-interlock-button>
-        `);
-        el.arm();
-        await el.updateComplete;
-      });
-
-      it('should announce confirmLabel in aria-live region', () => {
-        const liveRegion = el.shadowRoot?.querySelector('[aria-live]');
-        expect(liveRegion?.textContent?.trim()).to.equal('Are you sure?');
-      });
+    it('should not confirm when Enter bubbles up from the Yes button', () => {
+      const yesButton = el.shadowRoot?.querySelector('.button-yes') as HTMLButtonElement;
+      yesButton.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, composed: true }));
+      // The handler checks instanceof HTMLButtonElement so it should NOT fire _handleYesClick here
+      // (the click event from the button itself is what confirms)
+      expect(confirmedHandler).to.not.have.been.called;
     });
   });
 
@@ -744,7 +729,7 @@ describe('ConfirmationInterlockButton', () => {
         await el.updateComplete;
 
         const popup = el.shadowRoot?.querySelector('.confirm-popup') as HTMLElement;
-        popup.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: false, composed: true }));
+        popup.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, composed: true }));
         await el.updateComplete;
       });
 
