@@ -37,7 +37,7 @@ export class FrontmatterKey extends LitElement {
     .key-input:focus {
       outline: none;
       border-left-color: var(--color-border-focus);
-      box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.1);
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-border-focus) 15%, transparent);
       background: var(--color-surface-primary);
       cursor: text;
       text-decoration: none;

@@ -51,7 +51,7 @@ export class InventoryMoveItemDialog extends LitElement {
       }
 
       .dialog {
-        background: white;
+        background: var(--color-surface-elevated);
         max-width: 500px;
         width: 90%;
         max-height: 90vh;
@@ -125,8 +125,8 @@ export class InventoryMoveItemDialog extends LitElement {
         padding: 6px 12px;
         border: none;
         border-radius: 4px;
-        background: var(--color-border-focus);
-        color: white;
+        background: var(--color-action-confirm);
+        color: var(--color-text-inverse);
         font-size: 13px;
         font-weight: 500;
         cursor: pointer;
@@ -135,7 +135,7 @@ export class InventoryMoveItemDialog extends LitElement {
       }
 
       .move-to-button:hover:not(:disabled) {
-        background: var(--color-action-confirm);
+        background: var(--color-action-confirm-hover);
       }
 
       .move-to-button:disabled {
@@ -185,13 +185,13 @@ export class InventoryMoveItemDialog extends LitElement {
         border: 1px solid var(--color-border-default);
         border-radius: 4px;
         cursor: pointer;
-        color: #333;
+        color: var(--color-text-primary);
         font-size: 16px;
         transition: background-color 0.15s;
       }
 
       .qr-scan-button:hover:not(:disabled) {
-        background: #e8e8e8;
+        background: var(--color-hover-overlay);
       }
 
       .qr-scan-button:disabled {
@@ -201,18 +201,18 @@ export class InventoryMoveItemDialog extends LitElement {
 
       .scanned-result {
         margin-top: 12px;
-        border: 2px solid #10b981;
+        border: 2px solid var(--color-success);
         border-radius: 4px;
-        background: #ecfdf5;
+        background: var(--color-success-bg);
       }
 
       .scanned-result-header {
         padding: 8px 12px;
-        background: #d1fae5;
-        border-bottom: 1px solid #10b981;
+        background: var(--color-success-bg);
+        border-bottom: 1px solid var(--color-success);
         font-size: 12px;
         font-weight: 500;
-        color: #047857;
+        color: var(--color-success-text);
         display: flex;
         align-items: center;
         gap: 6px;

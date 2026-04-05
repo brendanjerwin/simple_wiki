@@ -230,7 +230,7 @@ export class TableFilterPopover extends LitElement {
       .search-input:focus {
         outline: none;
         border-color: var(--color-border-focus);
-        box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.15);
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-border-focus) 15%, transparent);
       }
 
       .range-container {
@@ -261,7 +261,7 @@ export class TableFilterPopover extends LitElement {
       .range-input:focus {
         outline: none;
         border-color: var(--color-border-focus);
-        box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.15);
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-border-focus) 15%, transparent);
       }
 
       .range-separator {

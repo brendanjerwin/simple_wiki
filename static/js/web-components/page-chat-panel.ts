@@ -64,8 +64,8 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         width: 48px;
         height: 48px;
         border-radius: 50%;
-        background: var(--color-background-primary);
-        border: 1px solid var(--color-border-primary);
+        background: var(--color-editor-surface);
+        border: 1px solid var(--color-editor-border);
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
         z-index: var(--z-ambient);
         cursor: pointer;
@@ -93,8 +93,8 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         right: 0;
         bottom: 0;
         width: 350px;
-        background: var(--color-background-primary);
-        border-left: 1px solid var(--color-border-primary);
+        background: var(--color-editor-surface);
+        border-left: 1px solid var(--color-editor-border);
         display: flex;
         flex-direction: column;
         z-index: var(--z-drawer);
@@ -108,7 +108,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
 
       .panel-header {
         padding: 12px 16px;
-        border-bottom: 1px solid var(--color-border-primary);
+        border-bottom: 1px solid var(--color-editor-border);
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -202,7 +202,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
 
       .input-area {
         padding: 8px 12px;
-        border-top: 1px solid var(--color-border-primary);
+        border-top: 1px solid var(--color-editor-border);
         display: flex;
         gap: 8px;
         align-items: flex-end;
@@ -214,7 +214,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         min-width: 0;
         width: 100%;
         resize: none;
-        border: 1px solid var(--color-border-primary);
+        border: 1px solid var(--color-editor-border);
         border-radius: 6px;
         background: rgba(255, 255, 255, 0.05);
         color: var(--color-text-primary);
@@ -235,10 +235,10 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
       }
 
       .send-button {
-        background: #3a5a8c;
+        background: var(--color-action-confirm);
         border: none;
         border-radius: 6px;
-        color: white;
+        color: var(--color-text-inverse);
         padding: 8px 12px;
         cursor: pointer;
         font-size: 0.85rem;
@@ -246,7 +246,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
       }
 
       .send-button:hover:not(:disabled) {
-        background: #4a6a9c;
+        background: var(--color-action-confirm-hover);
       }
 
       .send-button:disabled {

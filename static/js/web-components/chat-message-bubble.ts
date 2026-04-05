@@ -39,10 +39,10 @@ export class ChatMessageBubble extends LitElement {
       }
 
       .bubble.user {
-        background: #3a5a8c;
+        background: var(--color-chat-user-bg, #3a5a8c);
         margin-left: auto;
         border-bottom-right-radius: 2px;
-        color: #ffffff;
+        color: var(--color-chat-user-text, #ffffff);
       }
 
       .bubble.assistant {

@@ -52,7 +52,7 @@ export class CollapsibleHeading extends LitElement {
     }
 
     .ch-toggle:focus-visible {
-      outline: 2px solid var(--color-text-link);
+      outline: 2px solid var(--color-border-focus);
       outline-offset: 2px;
     }
 

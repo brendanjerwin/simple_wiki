@@ -114,7 +114,7 @@ export class InventoryAddItemDialog extends LitElement {
     }
 
     .search-result-container a {
-      color: var(--color-border-focus);
+      color: var(--color-text-link);
     }
 
     .form-group textarea {
