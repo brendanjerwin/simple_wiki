@@ -236,7 +236,7 @@ export class AugmentErrorService {
       } catch {
         // If JSON.stringify fails (e.g. circular reference), fall back to toString()
         // to preserve information from objects with meaningful toString() overrides
-        message = (error as object).toString();
+        message = String(error);
       }
     } else {
       message = 'An unknown error occurred';
