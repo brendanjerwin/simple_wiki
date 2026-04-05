@@ -79,9 +79,9 @@ export class InsertNewPageDialog extends LitElement {
     }
 
     .error-message {
-      background: #fef2f2;
-      border: 1px solid #fecaca;
-      color: #dc2626;
+      background: var(--color-error-bg);
+      border: 1px solid var(--color-error);
+      color: var(--color-error-text);
       padding: 12px;
       border-radius: 4px;
       margin-bottom: 16px;
@@ -97,7 +97,7 @@ export class InsertNewPageDialog extends LitElement {
     .template-row select {
       flex: 1;
       padding: 10px 12px;
-      border: 1px solid #ddd;
+      border: 1px solid var(--color-border-default);
       border-radius: 4px;
       font-size: 14px;
       font-family: inherit;
@@ -105,34 +105,34 @@ export class InsertNewPageDialog extends LitElement {
     }
 
     .template-row select:disabled {
-      background: #f5f5f5;
-      color: #666;
+      background: var(--color-surface-sunken);
+      color: var(--color-text-secondary);
     }
 
     .template-note {
       font-size: 12px;
-      color: #666;
+      color: var(--color-text-secondary);
       margin-top: 4px;
       font-style: italic;
     }
 
     .frontmatter-section {
       margin-top: 16px;
-      border: 1px solid #e5e7eb;
+      border: 1px solid var(--color-border-subtle);
       border-radius: 4px;
       padding: 12px;
-      background: #f9fafb;
+      background: var(--color-surface-sunken);
     }
 
     .frontmatter-header {
       font-size: 14px;
       font-weight: 500;
-      color: #374151;
+      color: var(--color-text-primary);
       margin-bottom: 8px;
     }
 
     .frontmatter-empty {
-      color: #6b7280;
+      color: var(--color-text-secondary);
       font-style: italic;
       font-size: 13px;
       padding: 8px;
@@ -143,7 +143,7 @@ export class InsertNewPageDialog extends LitElement {
       display: flex;
       gap: 12px;
       padding: 16px 20px;
-      border-top: 1px solid #e0e0e0;
+      border-top: 1px solid var(--color-border-subtle);
       justify-content: flex-end;
     }
   `);

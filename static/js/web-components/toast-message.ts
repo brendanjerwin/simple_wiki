@@ -138,7 +138,7 @@ export class ToastMessage extends LitElement {
       }
 
       .close-button:hover {
-        background: var(--color-hover-light);
+        background: var(--color-hover-overlay);
         transform: scale(1.1);
       }
 
