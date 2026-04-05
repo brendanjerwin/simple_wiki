@@ -352,7 +352,7 @@ export class InventoryAddItemDialog extends LitElement {
     if (result.success) {
       this.inventoryItemCreatorMover.showSuccess(
         result.summary || `Added ${this.itemTitle} to ${this.container}`,
-        () => window.location.reload()
+        () => location.reload()
       );
       this.close();
     } else {

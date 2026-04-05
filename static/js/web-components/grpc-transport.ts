@@ -9,7 +9,7 @@ let sharedTransport: Transport | null = null;
 
 export function getGrpcWebTransport(): Transport {
   sharedTransport ??= createGrpcWebTransport({
-    baseUrl: window.location.origin,
+    baseUrl: location.origin,
   });
   return sharedTransport;
 }

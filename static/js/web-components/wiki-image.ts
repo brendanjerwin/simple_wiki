@@ -269,7 +269,7 @@ export class WikiImage extends LitElement {
     e.stopPropagation();
     try {
       // Check for secure context (HTTPS required for Clipboard API)
-      if (!window.isSecureContext) {
+      if (!isSecureContext) {
         throw new Error('Clipboard requires HTTPS. Copy is not available on insecure connections.');
       }
 
@@ -316,7 +316,7 @@ export class WikiImage extends LitElement {
   }
 
   private _canCopyToClipboard(): boolean {
-    return window.isSecureContext &&
+    return isSecureContext &&
            navigator.clipboard !== undefined &&
            'write' in navigator.clipboard;
   }

@@ -155,7 +155,7 @@ export class KernelPanic extends LitElement {
   }
 
   private readonly _handleRefresh = (): void => {
-    window.location.reload();
+    location.reload();
   };
 
   override render() {

@@ -27,8 +27,8 @@ export function setupGlobalErrorHandler(): void {
   };
 
   // Register the handlers
-  window.addEventListener('error', errorHandler);
-  window.addEventListener('unhandledrejection', rejectionHandler);
+  addEventListener('error', errorHandler);
+  addEventListener('unhandledrejection', rejectionHandler);
 }
 
 /**
@@ -37,12 +37,12 @@ export function setupGlobalErrorHandler(): void {
  */
 export function teardownGlobalErrorHandler(): void {
   if (errorHandler) {
-    window.removeEventListener('error', errorHandler);
+    removeEventListener('error', errorHandler);
     errorHandler = null;
   }
-  
+
   if (rejectionHandler) {
-    window.removeEventListener('unhandledrejection', rejectionHandler);
+    removeEventListener('unhandledrejection', rejectionHandler);
     rejectionHandler = null;
   }
 }

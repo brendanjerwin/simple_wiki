@@ -125,13 +125,13 @@ export class EditorUploadService {
     });
   }
 
-  private extractFilename(location: string): string {
+  private extractFilename(urlStr: string): string {
     try {
-      const url = new URL(location, window.location.origin);
+      const url = new URL(urlStr, location.origin);
       return url.searchParams.get('filename') || 'upload';
     } catch {
       // Fallback: try to extract from query string manually
-      const match = /filename=([^&]+)/.exec(location);
+      const match = /filename=([^&]+)/.exec(urlStr);
       if (match?.[1]) {
         return decodeURIComponent(match[1]);
       }
