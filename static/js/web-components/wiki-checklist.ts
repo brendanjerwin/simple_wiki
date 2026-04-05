@@ -328,7 +328,7 @@ export class WikiChecklist extends LitElement {
       .add-text-input:focus {
         outline: none;
         border-color: var(--color-action-primary);
-        box-shadow: 0 0 0 2px rgba(108, 117, 125, 0.15);
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-action-primary) 15%, transparent);
       }
 
       .add-btn {

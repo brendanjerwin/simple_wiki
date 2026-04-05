@@ -93,10 +93,11 @@
     --color-border-default: #444444;
     --color-border-subtle: #333333;
     --color-border-strong: #555555;
+    --color-border-focus: #58a6ff;
 
     /* Actions */
-    --color-action-primary: #6c757d;
-    --color-action-primary-hover: #7a858d;
+    --color-action-primary: #8b949e;
+    --color-action-primary-hover: #a0adb5;
     --color-action-secondary-bg: #2d2d2d;
     --color-action-secondary-hover-bg: #3d3d3d;
     --color-action-danger: #f85149;

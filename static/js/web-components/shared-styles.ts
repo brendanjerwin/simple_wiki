@@ -465,7 +465,7 @@ export const dialogCSS = css`
   .form-group textarea:focus {
     outline: none;
     border-color: var(--color-border-focus);
-    box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.2);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-border-focus) 15%, transparent);
   }
 
   .form-group input[readonly] {
@@ -577,7 +577,7 @@ export const inputCSS = css`
   .input-base:focus {
     outline: none;
     border-left-color: var(--color-border-focus);
-    box-shadow: 0 0 0 2px rgba(74, 144, 217, 0.1);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-border-focus) 10%, transparent);
   }
 
   .input-base:disabled {
