@@ -12,25 +12,31 @@ import (
 )
 
 var _ = Describe("LPPrinter", func() {
-	var (
-		tmpDir       string
-		originalPath string
-	)
+	var tmpDir string
 
 	BeforeEach(func() {
 		var err error
 		tmpDir, err = os.MkdirTemp("", "lp_printer_test_*")
 		Expect(err).NotTo(HaveOccurred())
 		DeferCleanup(func() { os.RemoveAll(tmpDir) })
-
-		originalPath = os.Getenv("PATH")
-		DeferCleanup(func() { os.Setenv("PATH", originalPath) })
 	})
+
+	// setPath temporarily replaces PATH and schedules restoration via DeferCleanup.
+	setPath := func(newPath string) {
+		original := os.Getenv("PATH")
+		os.Setenv("PATH", newPath)
+		DeferCleanup(func() { os.Setenv("PATH", original) })
+	}
+
+	// prependTmpDir prepends tmpDir to PATH so fake executables placed there take priority.
+	prependTmpDir := func() {
+		setPath(tmpDir + ":" + os.Getenv("PATH"))
+	}
 
 	Describe("GetLPPrinter", func() {
 		When("lp is not in PATH", func() {
 			BeforeEach(func() {
-				os.Setenv("PATH", "")
+				setPath("")
 			})
 
 			It("should return an error containing 'lp not found'", func() {
@@ -49,7 +55,7 @@ var _ = Describe("LPPrinter", func() {
 				fakeLp := filepath.Join(tmpDir, "lp")
 				err := os.WriteFile(fakeLp, []byte("#!/bin/sh\n"), 0755)
 				Expect(err).NotTo(HaveOccurred())
-				os.Setenv("PATH", tmpDir+":"+originalPath)
+				prependTmpDir()
 			})
 
 			It("should return a non-nil printer without error", func() {
@@ -77,7 +83,7 @@ var _ = Describe("LPPrinter", func() {
 				script := "#!/bin/sh\ncat > " + logFile + "\n"
 				err := os.WriteFile(fakeLp, []byte(script), 0755)
 				Expect(err).NotTo(HaveOccurred())
-				os.Setenv("PATH", tmpDir+":"+originalPath)
+				prependTmpDir()
 
 				printer, err = labels.GetLPPrinter(labels.PrinterConfig{LPPrinterName: "test_printer"})
 				Expect(err).NotTo(HaveOccurred())
@@ -108,7 +114,7 @@ var _ = Describe("LPPrinter", func() {
 				fakeLp := filepath.Join(tmpDir, "lp")
 				err := os.WriteFile(fakeLp, []byte("#!/bin/sh\nexit 1\n"), 0755)
 				Expect(err).NotTo(HaveOccurred())
-				os.Setenv("PATH", tmpDir+":"+originalPath)
+				prependTmpDir()
 
 				printer, err = labels.GetLPPrinter(labels.PrinterConfig{LPPrinterName: "test_printer"})
 				Expect(err).NotTo(HaveOccurred())
@@ -126,7 +132,7 @@ var _ = Describe("LPPrinter", func() {
 			fakeLp := filepath.Join(tmpDir, "lp")
 			err := os.WriteFile(fakeLp, []byte("#!/bin/sh\n"), 0755)
 			Expect(err).NotTo(HaveOccurred())
-			os.Setenv("PATH", tmpDir+":"+originalPath)
+			prependTmpDir()
 		})
 
 		It("should close without error", func() {

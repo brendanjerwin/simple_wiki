@@ -172,6 +172,12 @@ var _ = Describe("getCommitHash", func() {
 		DeferCleanup(func() { commit = savedCommit })
 	})
 
+	setPath := func(newPath string) {
+		original := os.Getenv("PATH")
+		os.Setenv("PATH", newPath)
+		DeferCleanup(func() { os.Setenv("PATH", original) })
+	}
+
 	When("commit was set at build time (not 'n/a')", func() {
 		BeforeEach(func() {
 			commit = "deadbeef1234"
@@ -185,9 +191,7 @@ var _ = Describe("getCommitHash", func() {
 	When("commit is 'n/a' and git is not in PATH", func() {
 		BeforeEach(func() {
 			commit = "n/a"
-			originalPath := os.Getenv("PATH")
-			os.Setenv("PATH", "")
-			DeferCleanup(func() { os.Setenv("PATH", originalPath) })
+			setPath("")
 		})
 
 		It("should return 'dev'", func() {
@@ -209,9 +213,7 @@ var _ = Describe("getCommitHash", func() {
 			err = os.WriteFile(fakeGit, []byte("#!/bin/sh\nexit 1\n"), 0755)
 			Expect(err).NotTo(HaveOccurred())
 
-			originalPath := os.Getenv("PATH")
-			os.Setenv("PATH", tmpDir)
-			DeferCleanup(func() { os.Setenv("PATH", originalPath) })
+			setPath(tmpDir)
 		})
 
 		It("should return 'dev'", func() {
@@ -233,9 +235,7 @@ var _ = Describe("getCommitHash", func() {
 			err = os.WriteFile(fakeGit, []byte("#!/bin/sh\necho 'abcdef1234567890abcdef1234567890abcdef12'\n"), 0755)
 			Expect(err).NotTo(HaveOccurred())
 
-			originalPath := os.Getenv("PATH")
-			os.Setenv("PATH", tmpDir)
-			DeferCleanup(func() { os.Setenv("PATH", originalPath) })
+			setPath(tmpDir)
 		})
 
 		It("should return the trimmed output from git", func() {
