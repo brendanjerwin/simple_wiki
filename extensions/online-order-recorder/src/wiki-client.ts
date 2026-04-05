@@ -12,11 +12,11 @@ let cachedClient: { url: string; client: Client<typeof PageManagementService> } 
 
 function getWikiClient(wikiUrl: string): Client<typeof PageManagementService> {
   // Intentionally use a loop rather than a regex to avoid regex DoS/security-hotspot scanner findings.
-  let end = wikiUrl.length;
-  while (end > 0 && wikiUrl[end - 1] === '/') {
-    end--;
+  let endIndex = wikiUrl.length;
+  while (endIndex > 0 && wikiUrl[endIndex - 1] === '/') {
+    endIndex--;
   }
-  const url = wikiUrl.slice(0, end);
+  const url = wikiUrl.slice(0, endIndex);
   if (cachedClient?.url === url) {
     return cachedClient.client;
   }
