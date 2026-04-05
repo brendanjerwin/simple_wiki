@@ -75,6 +75,9 @@ func (noOpFrontmatterIndexQueryer) QueryExactMatchSortedBy(wikipage.DottedKeyPat
 // noOpChatBufferManager satisfies grpcapi.ChatBufferManager for tests.
 type noOpChatBufferManager struct{}
 
+// noopUnsubscribe is a no-op unsubscribe function returned by mock subscription methods.
+func noopUnsubscribe() {}
+
 func (noOpChatBufferManager) AddUserMessage(string, string, string) (string, error) {
 	return "", nil
 }
@@ -93,23 +96,17 @@ func (noOpChatBufferManager) GetMessages(string) []*chatbuffer.Message {
 func (noOpChatBufferManager) SubscribeToPage(string) (<-chan chatbuffer.Event, func()) {
 	ch := make(chan chatbuffer.Event)
 	close(ch)
-	return ch, func() {
-		// No-op test stub — unsubscribe is not needed for this test scenario
-	}
+	return ch, noopUnsubscribe
 }
 func (noOpChatBufferManager) SubscribeToPageWithReplay(string) ([]*chatbuffer.Message, <-chan chatbuffer.Event, func()) {
 	ch := make(chan chatbuffer.Event)
 	close(ch)
-	return nil, ch, func() {
-		// No-op test stub — unsubscribe is not needed for this test scenario
-	}
+	return nil, ch, noopUnsubscribe
 }
 func (noOpChatBufferManager) SubscribeToChannel() (<-chan *chatbuffer.Message, func()) {
 	ch := make(chan *chatbuffer.Message)
 	close(ch)
-	return ch, func() {
-		// No-op test stub — unsubscribe is not needed for this test scenario
-	}
+	return ch, noopUnsubscribe
 }
 func (noOpChatBufferManager) HasChannelSubscribers() bool {
 	return false
