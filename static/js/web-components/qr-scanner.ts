@@ -557,8 +557,6 @@ export class QrScanner extends LitElement {
       let message: string;
       if (err === null || err === undefined) {
         message = 'Unknown error (null or undefined)';
-      } else if (typeof err === 'object') {
-        message = `Unknown error: ${Object.prototype.toString.call(err)}`;
       } else {
         message = `Unknown error: ${String(err)}`;
       }
