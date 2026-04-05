@@ -82,13 +82,13 @@ export function parseForType(text: string, columnType: ColumnDataType) {
     case 'currency': return parseCurrencyValue(text);
     case 'percentage': return parsePercentageValue(text);
     case 'date': return parseDateValue(text);
-    default: return NaN;
+    default: return Number.NaN;
   }
 }
 
 export function parseNumericValue(text: string) {
-  const cleaned = text.trim().replace(/,/g, '');
-  if (cleaned === '') return NaN;
+  const cleaned = text.trim().replaceAll(',', '');
+  if (cleaned === '') return Number.NaN;
   return Number(cleaned);
 }
 
@@ -97,36 +97,36 @@ export function parseDateValue(text: string) {
 
   if (isoDatePattern.test(trimmed)) {
     const epochMs = Date.parse(trimmed + 'T00:00:00Z');
-    return Number.isNaN(epochMs) ? NaN : epochMs;
+    return Number.isNaN(epochMs) ? Number.NaN : epochMs;
   }
 
   if (usDatePattern.test(trimmed)) {
     const [month, day, year] = trimmed.split('/');
     if (!month || !day || !year) {
-      return NaN;
+      return Number.NaN;
     }
     const isoStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T00:00:00Z`;
     const epochMs = Date.parse(isoStr);
-    return Number.isNaN(epochMs) ? NaN : epochMs;
+    return Number.isNaN(epochMs) ? Number.NaN : epochMs;
   }
 
   if (humanDatePattern.test(trimmed)) {
     const epochMs = Date.parse(trimmed);
-    return Number.isNaN(epochMs) ? NaN : epochMs;
+    return Number.isNaN(epochMs) ? Number.NaN : epochMs;
   }
 
-  return NaN;
+  return Number.NaN;
 }
 
 export function parseCurrencyValue(text: string) {
   const trimmed = text.trim();
-  if (trimmed === '') return NaN;
+  if (trimmed === '') return Number.NaN;
   const negative = trimmed.startsWith('-') || /^[$€£¥]\s{0,10}-/.test(trimmed);
-  const cleaned = trimmed.replace(/^-?\s{0,10}[$€£¥]\s{0,10}-?/, '').replace(/,/g, '');
-  if (cleaned === '') return NaN;
+  const cleaned = trimmed.replace(/^-?\s{0,10}[$€£¥]\s{0,10}-?/, '').replaceAll(',', '');
+  if (cleaned === '') return Number.NaN;
   const value = Number(cleaned);
   if (Number.isNaN(value)) {
-    return NaN;
+    return Number.NaN;
   }
   return negative ? -value : value;
 }
@@ -134,7 +134,7 @@ export function parseCurrencyValue(text: string) {
 export function parsePercentageValue(text: string) {
   const trimmed = text.trim();
   if (!trimmed.endsWith('%')) {
-    return NaN;
+    return Number.NaN;
   }
   const cleaned = trimmed.slice(0, -1);
   return Number(cleaned);
