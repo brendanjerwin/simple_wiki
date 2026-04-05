@@ -40,6 +40,8 @@ func (s *Server) SendMessage(ctx context.Context, req *apiv1.SendChatMessageRequ
 	messageID, err := s.chatBufferManager.AddUserMessage(req.Page, req.Content, senderName)
 	if err != nil {
 		if errors.Is(err, chatbuffer.ErrNoSubscribers) {
+			// Request an instance from the pool daemon before returning the error
+			s.chatBufferManager.RequestInstance(req.Page)
 			return nil, status.Error(codes.Unavailable, "no channel subscriber connected")
 		}
 		return nil, status.Errorf(codes.Internal, "failed to add message: %v", err)
@@ -256,8 +258,69 @@ func bufferMessageToProto(msg *chatbuffer.Message) *apiv1.ChatMessage {
 
 // GetChatStatus implements the GetChatStatus RPC.
 // Returns whether a Claude channel subscriber is currently connected.
-func (s *Server) GetChatStatus(_ context.Context, _ *apiv1.GetChatStatusRequest) (*apiv1.GetChatStatusResponse, error) {
-	return &apiv1.GetChatStatusResponse{
-		Connected: s.chatBufferManager.HasChannelSubscribers(),
-	}, nil
+// If a page is specified, checks for page-specific subscribers. Otherwise falls back to global check.
+func (s *Server) GetChatStatus(_ context.Context, req *apiv1.GetChatStatusRequest) (*apiv1.GetChatStatusResponse, error) {
+	resp := &apiv1.GetChatStatusResponse{
+		PoolConnected: s.chatBufferManager.HasInstanceRequestSubscribers(),
+	}
+
+	if req.Page != "" {
+		resp.Connected = s.chatBufferManager.HasPageChannelSubscriber(req.Page) || s.chatBufferManager.HasChannelSubscribers()
+		resp.Starting = s.chatBufferManager.IsInstanceRequested(req.Page)
+	} else {
+		resp.Connected = s.chatBufferManager.HasChannelSubscribers()
+	}
+
+	return resp, nil
+}
+
+// SubscribePageChatMessages implements the SubscribePageChatMessages RPC.
+// Streams new user messages for a specific page to per-page Claude instances.
+func (s *Server) SubscribePageChatMessages(req *apiv1.SubscribePageChatMessagesRequest, stream apiv1.ChatService_SubscribePageChatMessagesServer) error {
+	if req.Page == "" {
+		return status.Error(codes.InvalidArgument, errPageRequired)
+	}
+
+	msgChan, unsubscribe := s.chatBufferManager.SubscribeToPageChannel(req.Page)
+	defer unsubscribe()
+
+	for {
+		select {
+		case msg, ok := <-msgChan:
+			if !ok {
+				return nil
+			}
+
+			protoMsg := bufferMessageToProto(msg)
+			if err := stream.Send(protoMsg); err != nil {
+				return err
+			}
+
+		case <-stream.Context().Done():
+			return stream.Context().Err()
+		}
+	}
+}
+
+// SubscribeInstanceRequests implements the SubscribeInstanceRequests RPC.
+// Streams page names that need a Claude instance spawned. Used by the pool daemon.
+func (s *Server) SubscribeInstanceRequests(_ *apiv1.SubscribeInstanceRequestsRequest, stream apiv1.ChatService_SubscribeInstanceRequestsServer) error {
+	pageChan, unsubscribe := s.chatBufferManager.SubscribeToInstanceRequests()
+	defer unsubscribe()
+
+	for {
+		select {
+		case page, ok := <-pageChan:
+			if !ok {
+				return nil
+			}
+
+			if err := stream.Send(&apiv1.InstanceRequest{Page: page}); err != nil {
+				return err
+			}
+
+		case <-stream.Context().Done():
+			return stream.Context().Err()
+		}
+	}
 }

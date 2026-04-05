@@ -2,13 +2,14 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
 	"math"
 	"net/http"
-	"os"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -42,13 +43,23 @@ Claude can respond using the reply, edit_message, and react tools.
 Example:
   wiki-cli mcp --url https://wiki.monster-orfe.ts.net
 
+With page scoping (used by pool daemon):
+  wiki-cli mcp --url https://wiki.monster-orfe.ts.net --page my_page
+
 This command is designed to be spawned as a subprocess by Claude Code via:
   claude --channels wiki-channel:wiki-channel
 `,
-		Flags: []cli.Flag{urlFlag},
+		Flags: []cli.Flag{
+			urlFlag,
+			cli.StringFlag{
+				Name:  "page, p",
+				Usage: "Scope this MCP instance to a specific wiki page",
+			},
+		},
 		Action: func(c *cli.Context) error {
 			baseURL := c.String("url")
-			return runMCPServer(baseURL)
+			page := c.String("page")
+			return runMCPServer(baseURL, page)
 		},
 	}
 }
@@ -58,7 +69,7 @@ This command is designed to be spawned as a subprocess by Claude Code via:
 // onInitialized is called after the MCP init handshake completes — use it to start
 // work that may write to stdout (e.g., channel notifications) so it doesn't race
 // with the init response.
-func setupMCPServer(_ string, onInitialized func()) (*mcpserver.MCPServer, *http.Client, error) {
+func setupMCPServer(_ string, instructions string, onInitialized func()) (*mcpserver.MCPServer, *http.Client, error) {
 	// Add hook to inject claude/channel experimental capability
 	hooks := &mcpserver.Hooks{
 		OnAfterInitialize: []mcpserver.OnAfterInitializeFunc{
@@ -79,7 +90,7 @@ func setupMCPServer(_ string, onInitialized func()) (*mcpserver.MCPServer, *http
 	s := mcpserver.NewMCPServer(
 		"simple-wiki",
 		version,
-		mcpserver.WithInstructions(channelInstructions),
+		mcpserver.WithInstructions(instructions),
 		mcpserver.WithHooks(hooks),
 		mcpserver.WithToolCapabilities(false),
 	)
@@ -94,7 +105,8 @@ func setupMCPServer(_ string, onInitialized func()) (*mcpserver.MCPServer, *http
 
 // runMCPServer starts the stdio MCP server with channel capability and maintains
 // a streaming subscription to the wiki's ChatService.
-func runMCPServer(baseURL string) error {
+// If page is non-empty, the server is scoped to that page only and injects frontmatter context.
+func runMCPServer(baseURL, page string) error {
 	// Defer chat subscription until after MCP init handshake completes.
 	// Starting it earlier would send channel notifications to stdout before
 	// Claude Code has finished the init exchange, breaking the MCP protocol.
@@ -106,12 +118,22 @@ func runMCPServer(baseURL string) error {
 		clients   *apiClients
 	)
 	onInitialized := func() {
-		go maintainChatSubscription(ctx, mcpServer, clients.chat)
+		if page != "" {
+			go injectPageContext(ctx, mcpServer, clients, page)
+			go maintainPageChatSubscription(ctx, mcpServer, clients.chat, page)
+		} else {
+			go maintainChatSubscription(ctx, mcpServer, clients.chat)
+		}
+	}
+
+	instructions := channelInstructions
+	if page != "" {
+		instructions = buildPageScopedInstructions(page)
 	}
 
 	var httpClient *http.Client
 	var err error
-	mcpServer, httpClient, err = setupMCPServer(baseURL, onInitialized)
+	mcpServer, httpClient, err = setupMCPServer(baseURL, instructions, onInitialized)
 	if err != nil {
 		return err
 	}
@@ -330,3 +352,127 @@ const channelInstructions = `Messages arrive as <channel> tags with page, sender
 - api_v1_ChatService_ReactToMessage: Add an emoji reaction to any message by ID.
 
 Use wiki MCP tools to read/edit pages. Keep responses conversational and concise.`
+
+// buildPageScopedInstructions creates instructions for a page-scoped Claude instance.
+func buildPageScopedInstructions(page string) string {
+	return fmt.Sprintf(`You are the assistant for the wiki page '%s'. All messages you receive are about this page.
+
+This page has an [ai_agent_chat_context] section in its frontmatter (TOML). This section
+contains per-page instructions and memory that persist across chat sessions. You should:
+- Read it at the start of each session to understand page-specific context, instructions, and memory.
+- Update it using the api_v1_Frontmatter_MergeFrontmatter tool when you learn something worth
+  remembering for next time, or when the user asks you to remember something about this page.
+- Treat it as YOUR per-page working memory — store instructions, preferences, key facts,
+  and context that will help you be more effective in future conversations about this page.
+
+The [ai_agent_chat_context] section is provided as your initial context via a system notification.
+
+Messages arrive as <channel> tags with page, sender, and message_id attributes. You have three tools for responding:
+- api_v1_ChatService_SendChatReply: Send a new message. Use reply_to_id to thread a response to a specific message.
+- api_v1_ChatService_EditChatMessage: Edit one of your previous messages by ID.
+- api_v1_ChatService_ReactToMessage: Add an emoji reaction to any message by ID.
+
+Use wiki MCP tools to read/edit pages. Keep responses conversational and concise.`, page)
+}
+
+// injectPageContext fetches the page's ai_agent_chat_context frontmatter section and sends
+// it as an initial system channel notification to Claude.
+func injectPageContext(ctx context.Context, s *mcpserver.MCPServer, clients *apiClients, page string) {
+	fmResp, err := clients.frontmatter.GetFrontmatter(ctx, connect.NewRequest(&apiv1.GetFrontmatterRequest{Page: page}))
+	if err != nil {
+		log.Printf("Failed to fetch frontmatter for page %q: %v", page, err)
+		s.SendNotificationToAllClients(
+			"notifications/claude/channel",
+			map[string]any{
+				"content": fmt.Sprintf("No page-specific context is available for page '%s'. You can create an [ai_agent_chat_context] section in the page's frontmatter using the MergeFrontmatter tool to store context for future sessions.", page),
+				"meta": map[string]any{
+					"page":   page,
+					"sender": "system",
+				},
+			},
+		)
+		return
+	}
+
+	fm := fmResp.Msg.Frontmatter.AsMap()
+	agentContext, ok := fm["ai_agent_chat_context"]
+	if !ok {
+		s.SendNotificationToAllClients(
+			"notifications/claude/channel",
+			map[string]any{
+				"content": fmt.Sprintf("No [ai_agent_chat_context] section found in page '%s' frontmatter. You can create one using the MergeFrontmatter tool to store per-page instructions and memory for future sessions.", page),
+				"meta": map[string]any{
+					"page":   page,
+					"sender": "system",
+				},
+			},
+		)
+		return
+	}
+
+	// Format the context as JSON for the notification
+	contextJSON, err := json.MarshalIndent(agentContext, "", "  ")
+	if err != nil {
+		log.Printf("Failed to marshal ai_agent_chat_context for page %q: %v", page, err)
+		return
+	}
+
+	s.SendNotificationToAllClients(
+		"notifications/claude/channel",
+		map[string]any{
+			"content": fmt.Sprintf("Here is the [ai_agent_chat_context] from page '%s' frontmatter:\n```json\n%s\n```", page, string(contextJSON)),
+			"meta": map[string]any{
+				"page":   page,
+				"sender": "system",
+			},
+		},
+	)
+}
+
+// maintainPageChatSubscription maintains a streaming subscription to page-specific chat messages.
+// Same pattern as maintainChatSubscription but uses SubscribePageChatMessages.
+func maintainPageChatSubscription(ctx context.Context, s *mcpserver.MCPServer, client apiv1connect.ChatServiceClient, page string) {
+	backoffMs := initialBackoffMs
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		start := time.Now()
+
+		err := subscribeToPageChatMessages(ctx, s, client, page)
+		if err == nil {
+			return
+		}
+
+		delayMs, nextMs := computeBackoffAfterFailure(backoffMs, time.Since(start))
+		log.Printf("Page chat subscription error for %q: %v. Reconnecting in %dms...", page, err, delayMs)
+
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(time.Duration(delayMs) * time.Millisecond):
+		}
+
+		backoffMs = nextMs
+	}
+}
+
+// subscribeToPageChatMessages establishes a streaming subscription to user messages for a specific page.
+func subscribeToPageChatMessages(ctx context.Context, s *mcpserver.MCPServer, client apiv1connect.ChatServiceClient, page string) error {
+	stream, err := client.SubscribePageChatMessages(ctx, connect.NewRequest(&apiv1.SubscribePageChatMessagesRequest{Page: page}))
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
+		return fmt.Errorf("failed to subscribe to page %q: %w", page, err)
+	}
+	defer func() { _ = stream.Close() }()
+
+	log.Printf("Page chat subscription established for %q", page)
+
+	return receiveChatMessages(ctx, s, stream)
+}
