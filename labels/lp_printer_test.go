@@ -2,6 +2,8 @@
 package labels_test
 
 import (
+	"os/exec"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -15,6 +17,9 @@ var _ = Describe("LPPrinter", func() {
 		var err error
 
 		BeforeEach(func() {
+			if _, lookErr := exec.LookPath("lp"); lookErr != nil {
+				Skip("lp not available in this environment")
+			}
 			config = labels.PrinterConfig{
 				ConnectivityMode: labels.LP,
 				LPPrinterName:    "test_printer",
@@ -31,6 +36,21 @@ var _ = Describe("LPPrinter", func() {
 		})
 	})
 
+	Describe("GetLPPrinter when lp is unavailable", func() {
+		It("should return an error when lp is not in PATH", func() {
+			if _, lookErr := exec.LookPath("lp"); lookErr == nil {
+				Skip("lp is available in this environment")
+			}
+			config := labels.PrinterConfig{
+				ConnectivityMode: labels.LP,
+				LPPrinterName:    "test_printer",
+			}
+			_, err := labels.GetLPPrinter(config)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("lp not found"))
+		})
+	})
+
 	Describe("Close", func() {
 		var config labels.PrinterConfig
 		var printer labels.Printer
@@ -38,12 +58,15 @@ var _ = Describe("LPPrinter", func() {
 		var closeErr error
 
 		BeforeEach(func() {
+			if _, lookErr := exec.LookPath("lp"); lookErr != nil {
+				Skip("lp not available in this environment")
+			}
 			config = labels.PrinterConfig{
 				ConnectivityMode: labels.LP,
 				LPPrinterName:    "test_printer",
 			}
 			printer, setupErr = labels.GetLPPrinter(config)
-			
+
 			// Only proceed if setup succeeded
 			if setupErr == nil {
 				closeErr = printer.Close()

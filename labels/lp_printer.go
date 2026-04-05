@@ -2,53 +2,35 @@
 package labels
 
 import (
+	"bytes"
 	"fmt"
 	"os/exec"
 )
 
 // GetLPPrinter returns a Printer for an LP printer.
 func GetLPPrinter(config PrinterConfig) (Printer, error) {
-	return &LPPrinter{config.LPPrinterName}, nil
+	lpPath, err := exec.LookPath("lp")
+	if err != nil {
+		return nil, fmt.Errorf("lp not found: %w", err)
+	}
+	return &LPPrinter{name: config.LPPrinterName, lpPath: lpPath}, nil
 }
 
 // LPPrinter is a printer that uses the `lp` command.
 type LPPrinter struct {
-	Name string
+	name   string
+	lpPath string
 }
 
 // Write writes data to the LP printer.
 func (p *LPPrinter) Write(data []byte) (int, error) {
-	lpPath, err := exec.LookPath("lp")
-	if err != nil {
-		return 0, fmt.Errorf("lp not found: %w", err)
-	}
+	cmd := exec.Command(p.lpPath, "-d", p.name)
+	cmd.Stdin = bytes.NewReader(data)
 
-	cmd := exec.Command(lpPath, "-d", p.Name)
-
-	// Get a pipe to the command's standard input
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
+	if err := cmd.Run(); err != nil {
 		return 0, err
 	}
-
-	// Write some bytes to the command's standard input
-	_, err = stdin.Write(data)
-	if err != nil {
-		return 0, err
-	}
-
-	// Close the pipe to indicate that you're done writing
-	err = stdin.Close()
-	if err != nil {
-		return 0, err
-	}
-
-	// Run the command
-	err = cmd.Run()
-	if err != nil {
-		return 0, err
-	}
-	return 0, nil
+	return len(data), nil
 }
 
 // Close closes the LP printer.
