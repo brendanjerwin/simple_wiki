@@ -4,7 +4,7 @@ import { createClient } from '@connectrpc/connect';
 import { create } from '@bufbuild/protobuf';
 import { getGrpcWebTransport } from './grpc-transport.js';
 import { SystemInfoService, GetVersionRequestSchema, GetJobStatusRequestSchema, StreamJobStatusRequestSchema, type GetVersionResponse, type GetJobStatusResponse } from '../gen/api/v1/system_info_pb.js';
-import { foundationCSS, zIndexCSS } from './shared-styles.js';
+import { foundationCSS, colorCSS, zIndexCSS } from './shared-styles.js';
 import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
 import { DrawerMixin } from './drawer-mixin.js';
 import { registerAmbientCTA, type AmbientCTA } from './drawer-coordinator.js';
@@ -22,6 +22,7 @@ export class SystemInfo extends DrawerMixin(LitElement) implements AmbientCTA {
 
   static override readonly styles = [
     foundationCSS,
+    colorCSS,
     zIndexCSS,
     css`
       :host {
@@ -49,7 +50,7 @@ export class SystemInfo extends DrawerMixin(LitElement) implements AmbientCTA {
       }
 
       .system-panel:focus-visible {
-        outline: 2px solid #4a9eff;
+        outline: 2px solid var(--color-border-focus);
         outline-offset: 2px;
       }
 
@@ -59,8 +60,8 @@ export class SystemInfo extends DrawerMixin(LitElement) implements AmbientCTA {
 
       .drawer-tab {
         width: 24px;
-        background: #2d2d2d;
-        border: 1px solid #404040;
+        background: var(--color-editor-surface);
+        border: 1px solid var(--color-editor-border);
         border-right: none;
         border-radius: 4px 0 0 4px;
         display: flex;
@@ -71,7 +72,7 @@ export class SystemInfo extends DrawerMixin(LitElement) implements AmbientCTA {
         padding: 6px 2px;
         font-size: 9px;
         font-weight: 600;
-        color: #888;
+        color: var(--color-editor-text);
         letter-spacing: 0.5px;
         box-shadow: -2px 0 3px rgba(0, 0, 0, 0.2);
         flex-shrink: 0;
@@ -83,17 +84,15 @@ export class SystemInfo extends DrawerMixin(LitElement) implements AmbientCTA {
       .system-panel:hover .drawer-tab,
       .system-panel:focus-visible .drawer-tab {
         opacity: 0.6;
-        color: #aaa;
       }
 
       .system-panel.drawerOpen .drawer-tab {
         opacity: 0.9;
-        color: #ccc;
       }
 
       .panel-content {
-        background: #2d2d2d;
-        border: 1px solid #404040;
+        background: var(--color-editor-surface);
+        border: 1px solid var(--color-editor-border);
         border-radius: 0 4px 4px 0;
         padding: 4px 8px;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
@@ -120,7 +119,7 @@ export class SystemInfo extends DrawerMixin(LitElement) implements AmbientCTA {
         display: flex;
         flex-direction: column;
         gap: 4px;
-        color: white;
+        color: var(--color-editor-text);
         white-space: nowrap;
         position: relative;
         z-index: 2;
@@ -129,7 +128,7 @@ export class SystemInfo extends DrawerMixin(LitElement) implements AmbientCTA {
 
 
       .section-divider {
-        border-top: 1px solid #404040;
+        border-top: 1px solid var(--color-editor-border);
         padding-top: 4px;
         margin-top: 2px;
       }
