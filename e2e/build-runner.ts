@@ -20,4 +20,7 @@ export function runBuild(cwd: string, spawnFn: SpawnFn = spawnSync): void {
   if (typeof result.status === 'number' && result.status !== 0) {
     throw new Error(`[E2E Setup] Build failed with exit code ${result.status}: ${invocation}`);
   }
+  if (result.status === null) {
+    throw new Error(`[E2E Setup] Build failed with unknown result: ${invocation}`);
+  }
 }

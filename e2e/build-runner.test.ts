@@ -24,15 +24,22 @@ describe('runBuild', () => {
     expect(() => runBuild('/cwd', mockSpawn(makeResult({ status: 0 })))).not.toThrow();
   });
 
-  it('does not throw when status is null with no error or signal', () => {
-    expect(() => runBuild('/cwd', mockSpawn(makeResult({ status: null })))).not.toThrow();
+  it('throws with unknown result error when status is null with no error or signal', () => {
+    expect(() => runBuild('/cwd', mockSpawn(makeResult({ status: null })))).toThrow(/unknown result/);
   });
 
   it('throws with spawn error details when build fails to start', () => {
     const cause = new Error('ENOENT: devbox not found');
     const spawn = mockSpawn(makeResult({ status: null, error: cause }));
-    expect(() => runBuild('/cwd', spawn)).toThrow(/Build failed to start/);
-    expect(() => runBuild('/cwd', spawn)).toThrow(/ENOENT/);
+    let thrown: Error | null = null;
+    try {
+      runBuild('/cwd', spawn);
+    } catch (e) {
+      thrown = e as Error;
+    }
+    expect(thrown).not.toBeNull();
+    expect((thrown as Error).message).toMatch(/Build failed to start/);
+    expect((thrown as Error).message).toMatch(/ENOENT/);
   });
 
   it('includes cwd in spawn error message', () => {
