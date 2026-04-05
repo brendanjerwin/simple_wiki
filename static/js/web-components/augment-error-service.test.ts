@@ -284,11 +284,24 @@ describe('AugmentErrorService', () => {
           augmented = AugmentErrorService.augmentError(circularObj);
         });
 
-        it('should use toString() fallback when JSON.stringify fails', () => {
+        it('should fall back to String() coercion when JSON.stringify fails', () => {
           expect(augmented.message).to.equal('[object Object]');
         });
 
         it('should set errorKind to ERROR', () => {
+          expect(augmented.errorKind).to.equal(ErrorKind.ERROR);
+        });
+      });
+
+      describe('when error is a function (JSON.stringify returns undefined)', () => {
+        it('should fall back to String() coercion', () => {
+          const fn = function namedFn() { return 42; };
+          const augmented = AugmentErrorService.augmentError(fn);
+          expect(augmented.message).to.include('namedFn');
+        });
+
+        it('should set errorKind to ERROR', () => {
+          const augmented = AugmentErrorService.augmentError(() => 0);
           expect(augmented.errorKind).to.equal(ErrorKind.ERROR);
         });
       });
