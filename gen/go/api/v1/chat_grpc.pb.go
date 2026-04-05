@@ -19,13 +19,15 @@ import (
 const _ = grpc.SupportPackageIsVersion8
 
 const (
-	ChatService_SendMessage_FullMethodName           = "/api.v1.ChatService/SendMessage"
-	ChatService_SubscribeChat_FullMethodName         = "/api.v1.ChatService/SubscribeChat"
-	ChatService_SubscribeChatMessages_FullMethodName = "/api.v1.ChatService/SubscribeChatMessages"
-	ChatService_SendChatReply_FullMethodName         = "/api.v1.ChatService/SendChatReply"
-	ChatService_EditChatMessage_FullMethodName       = "/api.v1.ChatService/EditChatMessage"
-	ChatService_ReactToMessage_FullMethodName        = "/api.v1.ChatService/ReactToMessage"
-	ChatService_GetChatStatus_FullMethodName         = "/api.v1.ChatService/GetChatStatus"
+	ChatService_SendMessage_FullMethodName               = "/api.v1.ChatService/SendMessage"
+	ChatService_SubscribeChat_FullMethodName             = "/api.v1.ChatService/SubscribeChat"
+	ChatService_SubscribeChatMessages_FullMethodName     = "/api.v1.ChatService/SubscribeChatMessages"
+	ChatService_SendChatReply_FullMethodName             = "/api.v1.ChatService/SendChatReply"
+	ChatService_EditChatMessage_FullMethodName           = "/api.v1.ChatService/EditChatMessage"
+	ChatService_ReactToMessage_FullMethodName            = "/api.v1.ChatService/ReactToMessage"
+	ChatService_GetChatStatus_FullMethodName             = "/api.v1.ChatService/GetChatStatus"
+	ChatService_SubscribePageChatMessages_FullMethodName = "/api.v1.ChatService/SubscribePageChatMessages"
+	ChatService_SubscribeInstanceRequests_FullMethodName = "/api.v1.ChatService/SubscribeInstanceRequests"
 )
 
 // ChatServiceClient is the client API for ChatService service.
@@ -57,6 +59,12 @@ type ChatServiceClient interface {
 	// GetChatStatus returns whether Claude is currently connected (a channel subscriber exists).
 	// Used by the chat panel to disable the UI when Claude is unavailable.
 	GetChatStatus(ctx context.Context, in *GetChatStatusRequest, opts ...grpc.CallOption) (*GetChatStatusResponse, error)
+	// SubscribePageChatMessages is called by wiki-cli mcp --page at startup.
+	// Streams new user messages for a specific page only.
+	SubscribePageChatMessages(ctx context.Context, in *SubscribePageChatMessagesRequest, opts ...grpc.CallOption) (ChatService_SubscribePageChatMessagesClient, error)
+	// SubscribeInstanceRequests is called by the wiki-cli pool daemon.
+	// Streams page names that need a Claude instance spawned.
+	SubscribeInstanceRequests(ctx context.Context, in *SubscribeInstanceRequestsRequest, opts ...grpc.CallOption) (ChatService_SubscribeInstanceRequestsClient, error)
 }
 
 type chatServiceClient struct {
@@ -183,6 +191,72 @@ func (c *chatServiceClient) GetChatStatus(ctx context.Context, in *GetChatStatus
 	return out, nil
 }
 
+func (c *chatServiceClient) SubscribePageChatMessages(ctx context.Context, in *SubscribePageChatMessagesRequest, opts ...grpc.CallOption) (ChatService_SubscribePageChatMessagesClient, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &ChatService_ServiceDesc.Streams[2], ChatService_SubscribePageChatMessages_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &chatServiceSubscribePageChatMessagesClient{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type ChatService_SubscribePageChatMessagesClient interface {
+	Recv() (*ChatMessage, error)
+	grpc.ClientStream
+}
+
+type chatServiceSubscribePageChatMessagesClient struct {
+	grpc.ClientStream
+}
+
+func (x *chatServiceSubscribePageChatMessagesClient) Recv() (*ChatMessage, error) {
+	m := new(ChatMessage)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *chatServiceClient) SubscribeInstanceRequests(ctx context.Context, in *SubscribeInstanceRequestsRequest, opts ...grpc.CallOption) (ChatService_SubscribeInstanceRequestsClient, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &ChatService_ServiceDesc.Streams[3], ChatService_SubscribeInstanceRequests_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &chatServiceSubscribeInstanceRequestsClient{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type ChatService_SubscribeInstanceRequestsClient interface {
+	Recv() (*InstanceRequest, error)
+	grpc.ClientStream
+}
+
+type chatServiceSubscribeInstanceRequestsClient struct {
+	grpc.ClientStream
+}
+
+func (x *chatServiceSubscribeInstanceRequestsClient) Recv() (*InstanceRequest, error) {
+	m := new(InstanceRequest)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // ChatServiceServer is the server API for ChatService service.
 // All implementations must embed UnimplementedChatServiceServer
 // for forward compatibility
@@ -212,6 +286,12 @@ type ChatServiceServer interface {
 	// GetChatStatus returns whether Claude is currently connected (a channel subscriber exists).
 	// Used by the chat panel to disable the UI when Claude is unavailable.
 	GetChatStatus(context.Context, *GetChatStatusRequest) (*GetChatStatusResponse, error)
+	// SubscribePageChatMessages is called by wiki-cli mcp --page at startup.
+	// Streams new user messages for a specific page only.
+	SubscribePageChatMessages(*SubscribePageChatMessagesRequest, ChatService_SubscribePageChatMessagesServer) error
+	// SubscribeInstanceRequests is called by the wiki-cli pool daemon.
+	// Streams page names that need a Claude instance spawned.
+	SubscribeInstanceRequests(*SubscribeInstanceRequestsRequest, ChatService_SubscribeInstanceRequestsServer) error
 	mustEmbedUnimplementedChatServiceServer()
 }
 
@@ -239,6 +319,12 @@ func (UnimplementedChatServiceServer) ReactToMessage(context.Context, *ReactToMe
 }
 func (UnimplementedChatServiceServer) GetChatStatus(context.Context, *GetChatStatusRequest) (*GetChatStatusResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetChatStatus not implemented")
+}
+func (UnimplementedChatServiceServer) SubscribePageChatMessages(*SubscribePageChatMessagesRequest, ChatService_SubscribePageChatMessagesServer) error {
+	return status.Errorf(codes.Unimplemented, "method SubscribePageChatMessages not implemented")
+}
+func (UnimplementedChatServiceServer) SubscribeInstanceRequests(*SubscribeInstanceRequestsRequest, ChatService_SubscribeInstanceRequestsServer) error {
+	return status.Errorf(codes.Unimplemented, "method SubscribeInstanceRequests not implemented")
 }
 func (UnimplementedChatServiceServer) mustEmbedUnimplementedChatServiceServer() {}
 
@@ -385,6 +471,48 @@ func _ChatService_GetChatStatus_Handler(srv interface{}, ctx context.Context, de
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ChatService_SubscribePageChatMessages_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(SubscribePageChatMessagesRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ChatServiceServer).SubscribePageChatMessages(m, &chatServiceSubscribePageChatMessagesServer{ServerStream: stream})
+}
+
+type ChatService_SubscribePageChatMessagesServer interface {
+	Send(*ChatMessage) error
+	grpc.ServerStream
+}
+
+type chatServiceSubscribePageChatMessagesServer struct {
+	grpc.ServerStream
+}
+
+func (x *chatServiceSubscribePageChatMessagesServer) Send(m *ChatMessage) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func _ChatService_SubscribeInstanceRequests_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(SubscribeInstanceRequestsRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ChatServiceServer).SubscribeInstanceRequests(m, &chatServiceSubscribeInstanceRequestsServer{ServerStream: stream})
+}
+
+type ChatService_SubscribeInstanceRequestsServer interface {
+	Send(*InstanceRequest) error
+	grpc.ServerStream
+}
+
+type chatServiceSubscribeInstanceRequestsServer struct {
+	grpc.ServerStream
+}
+
+func (x *chatServiceSubscribeInstanceRequestsServer) Send(m *InstanceRequest) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 // ChatService_ServiceDesc is the grpc.ServiceDesc for ChatService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -422,6 +550,16 @@ var ChatService_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "SubscribeChatMessages",
 			Handler:       _ChatService_SubscribeChatMessages_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "SubscribePageChatMessages",
+			Handler:       _ChatService_SubscribePageChatMessages_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "SubscribeInstanceRequests",
+			Handler:       _ChatService_SubscribeInstanceRequests_Handler,
 			ServerStreams: true,
 		},
 	},
