@@ -1,0 +1,347 @@
+import { test, expect, APIRequestContext } from '@playwright/test';
+
+// Tests for inventory management features:
+// 1. Creating an inventory item via the add-item dialog (UI)
+// 2. Creating an inventory item via the CreateInventoryItem gRPC API
+// 3. Listing container contents (ListContainerContents API)
+// 4. Searching for item locations (FindItemLocation API)
+// 5. Moving an inventory item between containers (UI + API verification)
+
+// Timeouts
+const COMPONENT_LOAD_TIMEOUT_MS = 15000;
+const SAVE_TIMEOUT_MS = 10000;
+const DIALOG_APPEAR_TIMEOUT_MS = 5000;
+const MENU_APPEAR_TIMEOUT_MS = 5000;
+const SEARCH_DEBOUNCE_TIMEOUT_MS = 1000;
+
+// Test page identifiers — unique to avoid collisions with other test runs
+const CONTAINER_A = 'e2einvcontainera';
+const CONTAINER_A_TITLE = 'E2E Inventory Container A';
+const CONTAINER_B = 'e2einvcontainerb';
+const CONTAINER_B_TITLE = 'E2E Inventory Container B';
+const API_ITEM = 'e2einvapiitem';
+
+async function callInventoryAPI(
+  request: APIRequestContext,
+  method: string,
+  body: Record<string, unknown>,
+) {
+  return request.post(`/api.v1.InventoryManagementService/${method}`, {
+    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' },
+    data: body,
+  });
+}
+
+test.describe('Inventory Management', () => {
+  // Serial mode: tests share state (item in container, then moved)
+  test.describe.configure({ mode: 'serial' });
+  test.setTimeout(60000);
+
+  test.beforeAll(async ({ browser }) => {
+    // Create two container pages with inventory frontmatter.
+    // is_container = true is set explicitly so the move-item search index
+    // finds them immediately without waiting for the normalization job.
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+
+    try {
+      for (const [identifier, title] of [
+        [CONTAINER_A, CONTAINER_A_TITLE],
+        [CONTAINER_B, CONTAINER_B_TITLE],
+      ] as [string, string][]) {
+        await page.goto(`/${identifier}/edit`);
+        const textarea = page.locator('wiki-editor textarea');
+        await expect(textarea).toBeVisible({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
+        await textarea.fill(`+++
+identifier = "${identifier}"
+title = "${title}"
+
+[inventory]
+items = []
+is_container = true
++++
+
+# ${title}
+
+This is an E2E test inventory container.`);
+        await textarea.press('Space');
+        await expect(page.locator('wiki-editor .status-indicator')).toContainText('Saved', { timeout: SAVE_TIMEOUT_MS });
+      }
+    } finally {
+      await ctx.close();
+    }
+  });
+
+  test.afterAll(async ({ browser }) => {
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+
+    try {
+      for (const identifier of [CONTAINER_A, CONTAINER_B, API_ITEM]) {
+        await page.goto(`/${identifier}/edit`);
+        const textarea = page.locator('wiki-editor textarea');
+        await expect(textarea).toBeVisible({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
+        await textarea.fill(`+++\nidentifier = "${identifier}"\n+++`);
+        await textarea.press('Space');
+        await expect(page.locator('wiki-editor .status-indicator')).toContainText('Saved', { timeout: SAVE_TIMEOUT_MS });
+      }
+    } catch (_) {
+      // Best effort cleanup — failures here should not fail the suite
+    } finally {
+      await ctx.close();
+    }
+  });
+
+  test.describe('Creating an inventory item via the add-item dialog', () => {
+    test('should open the add-item dialog on an inventory container page', async ({ page }) => {
+      await page.goto(`/${CONTAINER_A}/view`);
+      await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
+
+      // initInventoryMenu injects the submenu asynchronously after checking frontmatter
+      await expect(page.locator('#inventory-add-item')).toBeAttached({ timeout: MENU_APPEAR_TIMEOUT_MS });
+
+      // Open the submenu (CSS-hidden) then click "Add Item Here"
+      await page.locator('.tools-menu').hover();
+      await page.locator('#inventory-submenu-trigger').click();
+      await page.locator('#inventory-add-item').click();
+
+      // The dialog web component should receive the `open` attribute
+      await expect(page.locator('inventory-add-item-dialog[open]')).toBeAttached({ timeout: DIALOG_APPEAR_TIMEOUT_MS });
+    });
+
+    test('should create a new item when a title is entered and Add Item is clicked', async ({ page }) => {
+      await page.goto(`/${CONTAINER_A}/view`);
+      await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
+      await expect(page.locator('#inventory-add-item')).toBeAttached({ timeout: MENU_APPEAR_TIMEOUT_MS });
+
+      // Open the add-item dialog
+      await page.locator('.tools-menu').hover();
+      await page.locator('#inventory-submenu-trigger').click();
+      await page.locator('#inventory-add-item').click();
+
+      const dialog = page.locator('inventory-add-item-dialog[open]');
+      await expect(dialog).toBeAttached({ timeout: DIALOG_APPEAR_TIMEOUT_MS });
+
+      // The title input lives in deeply nested shadow DOM:
+      //   inventory-add-item-dialog > automagic-identifier-input > title-input > input
+      // Playwright's chained locators auto-pierce shadow boundaries at each step.
+      const titleInput = dialog
+        .locator('automagic-identifier-input')
+        .locator('title-input')
+        .locator('input');
+      await expect(titleInput).toBeVisible({ timeout: DIALOG_APPEAR_TIMEOUT_MS });
+      await titleInput.fill('E2E Test Screwdriver');
+
+      // The "Add Item" button is disabled until the identifier is auto-generated
+      // (an async gRPC call to GenerateIdentifier). Wait for it to become enabled.
+      const addButton = dialog.locator('button', { hasText: 'Add Item' });
+      await expect(addButton).toBeEnabled({ timeout: 5000 });
+
+      // Submit the form
+      await addButton.click();
+
+      // On success the dialog closes (the `open` attribute is removed)
+      await expect(dialog).not.toHaveAttribute('open', { timeout: SAVE_TIMEOUT_MS });
+    });
+  });
+
+  test.describe('Creating an inventory item via the gRPC API', () => {
+    test('should create an item with CreateInventoryItem', async ({ request }) => {
+      const resp = await callInventoryAPI(request, 'CreateInventoryItem', {
+        itemIdentifier: API_ITEM,
+        container: CONTAINER_A,
+        title: 'E2E API Test Item',
+      });
+
+      expect(resp.status()).toBe(200);
+      const body = await resp.json() as {
+        success: boolean;
+        itemIdentifier: string;
+        summary: string;
+      };
+      expect(body.success).toBe(true);
+      expect(body.itemIdentifier).toBe(API_ITEM);
+      expect(body.summary).toBeTruthy();
+    });
+
+    test('should return success=false when the item already exists', async ({ request }) => {
+      const resp = await callInventoryAPI(request, 'CreateInventoryItem', {
+        itemIdentifier: API_ITEM,
+        container: CONTAINER_A,
+        title: 'Duplicate Item',
+      });
+
+      expect(resp.status()).toBe(200);
+      const body = await resp.json() as { success: boolean; error: string };
+      expect(body.success).toBe(false);
+      expect(body.error).toBeTruthy();
+    });
+  });
+
+  test.describe('Listing container contents', () => {
+    test('should list items in a container with ListContainerContents', async ({ request }) => {
+      const resp = await callInventoryAPI(request, 'ListContainerContents', {
+        containerIdentifier: CONTAINER_A,
+      });
+
+      expect(resp.status()).toBe(200);
+      const body = await resp.json() as {
+        containerIdentifier: string;
+        items: Array<{ identifier: string }>;
+        totalCount: number;
+        summary: string;
+      };
+      expect(body.containerIdentifier).toBe(CONTAINER_A);
+      expect(body.items).toBeDefined();
+      expect(body.items.some(item => item.identifier === API_ITEM)).toBe(true);
+      expect(body.totalCount).toBeGreaterThan(0);
+      expect(body.summary).toBeTruthy();
+    });
+
+    test('should return an empty list for a container with no items', async ({ request }) => {
+      const resp = await callInventoryAPI(request, 'ListContainerContents', {
+        containerIdentifier: CONTAINER_B,
+      });
+
+      expect(resp.status()).toBe(200);
+      const body = await resp.json() as {
+        items: Array<{ identifier: string }>;
+        totalCount: number;
+      };
+      // CONTAINER_B has no items at this point in the serial run
+      expect(body.items.some(item => item.identifier === API_ITEM)).toBe(false);
+      expect(body.totalCount).toBe(0);
+    });
+  });
+
+  test.describe('Searching for item locations (FindItemLocation)', () => {
+    test('should find the container for a known item', async ({ request }) => {
+      const resp = await callInventoryAPI(request, 'FindItemLocation', {
+        itemIdentifier: API_ITEM,
+      });
+
+      expect(resp.status()).toBe(200);
+      const body = await resp.json() as {
+        itemIdentifier: string;
+        found: boolean;
+        locations: Array<{ container: string }>;
+        summary: string;
+      };
+      expect(body.found).toBe(true);
+      expect(body.itemIdentifier).toBe(API_ITEM);
+      expect(body.locations.length).toBeGreaterThan(0);
+      expect(body.locations[0].container).toBe(CONTAINER_A);
+      expect(body.summary).toBeTruthy();
+    });
+
+    test('should return found=false for a non-existent item', async ({ request }) => {
+      const resp = await callInventoryAPI(request, 'FindItemLocation', {
+        itemIdentifier: 'e2enonexistentitemxyz999',
+      });
+
+      expect(resp.status()).toBe(200);
+      const body = await resp.json() as { found: boolean };
+      expect(body.found).toBe(false);
+    });
+
+    test('should include the full hierarchy path when include_hierarchy is true', async ({ request }) => {
+      const resp = await callInventoryAPI(request, 'FindItemLocation', {
+        itemIdentifier: API_ITEM,
+        includeHierarchy: true,
+      });
+
+      expect(resp.status()).toBe(200);
+      const body = await resp.json() as {
+        found: boolean;
+        locations: Array<{ container: string; path: string[] }>;
+      };
+      expect(body.found).toBe(true);
+      expect(body.locations.length).toBeGreaterThan(0);
+      // With hierarchy, the path array should be populated
+      expect(body.locations[0].path).toBeDefined();
+    });
+  });
+
+  test.describe('Moving an inventory item between containers', () => {
+    test('should move an item via the move-item dialog', async ({ page }) => {
+      // Navigate to the item page (created via API in previous describe block)
+      await page.goto(`/${API_ITEM}/view`);
+      await expect(page.locator('#rendered')).toBeAttached({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
+
+      // Items in a container should show "Move This Item" in the inventory menu
+      await expect(page.locator('#inventory-move-item')).toBeAttached({ timeout: MENU_APPEAR_TIMEOUT_MS });
+
+      // Open the submenu and click "Move This Item"
+      await page.locator('.tools-menu').hover();
+      await page.locator('#inventory-submenu-trigger').click();
+      await page.locator('#inventory-move-item').click();
+
+      // The move-item dialog should open
+      const dialog = page.locator('inventory-move-item-dialog[open]');
+      await expect(dialog).toBeAttached({ timeout: DIALOG_APPEAR_TIMEOUT_MS });
+
+      // The search input lives in the dialog's shadow DOM
+      const searchInput = dialog.locator('input[name="searchQuery"]');
+      await expect(searchInput).toBeVisible({ timeout: DIALOG_APPEAR_TIMEOUT_MS });
+      await searchInput.fill(CONTAINER_B_TITLE);
+
+      // Wait for the search debounce and results to load
+      await page.waitForTimeout(SEARCH_DEBOUNCE_TIMEOUT_MS);
+
+      // Click the "Move To" button on the first matching container
+      const moveToButton = dialog.locator('.move-to-button', { hasText: 'Move To' });
+      await expect(moveToButton.first()).toBeVisible({ timeout: 5000 });
+      await moveToButton.first().click();
+
+      // On success the dialog closes (the `open` attribute is removed)
+      await expect(dialog).not.toHaveAttribute('open', { timeout: SAVE_TIMEOUT_MS });
+    });
+
+    test('should reflect the move in FindItemLocation after the dialog move', async ({ request }) => {
+      const resp = await callInventoryAPI(request, 'FindItemLocation', {
+        itemIdentifier: API_ITEM,
+      });
+
+      expect(resp.status()).toBe(200);
+      const body = await resp.json() as {
+        found: boolean;
+        locations: Array<{ container: string }>;
+      };
+      expect(body.found).toBe(true);
+      expect(body.locations.length).toBeGreaterThan(0);
+      expect(body.locations[0].container).toBe(CONTAINER_B);
+    });
+
+    test('should move an item via the MoveInventoryItem gRPC API', async ({ request }) => {
+      // Move the item back to CONTAINER_A via the API to verify the API itself
+      const resp = await callInventoryAPI(request, 'MoveInventoryItem', {
+        itemIdentifier: API_ITEM,
+        newContainer: CONTAINER_A,
+      });
+
+      expect(resp.status()).toBe(200);
+      const body = await resp.json() as {
+        success: boolean;
+        previousContainer: string;
+        newContainer: string;
+        summary: string;
+      };
+      expect(body.success).toBe(true);
+      expect(body.previousContainer).toBe(CONTAINER_B);
+      expect(body.newContainer).toBe(CONTAINER_A);
+      expect(body.summary).toBeTruthy();
+    });
+
+    test('should reflect the API move in ListContainerContents', async ({ request }) => {
+      const resp = await callInventoryAPI(request, 'ListContainerContents', {
+        containerIdentifier: CONTAINER_A,
+      });
+
+      expect(resp.status()).toBe(200);
+      const body = await resp.json() as {
+        items: Array<{ identifier: string }>;
+      };
+      expect(body.items.some(item => item.identifier === API_ITEM)).toBe(true);
+    });
+  });
+});
