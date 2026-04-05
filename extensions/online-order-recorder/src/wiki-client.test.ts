@@ -110,7 +110,20 @@ describe('readPage', () => {
     });
 
     it('should strip trailing slash from base URL', () => {
-      expect(mockCreateGrpcWebTransport).toHaveBeenCalledWith({
+      expect(mockCreateGrpcWebTransport).toHaveBeenLastCalledWith({
+        baseUrl: 'https://wiki.example.com',
+      });
+    });
+  });
+
+  describe('when URL has multiple trailing slashes', () => {
+    beforeEach(async () => {
+      mockReadPage.mockResolvedValue({ contentMarkdown: '', versionHash: '' });
+      await readPageFn('https://wiki.example.com///', 'test_page');
+    });
+
+    it('should strip all trailing slashes from base URL', () => {
+      expect(mockCreateGrpcWebTransport).toHaveBeenLastCalledWith({
         baseUrl: 'https://wiki.example.com',
       });
     });
