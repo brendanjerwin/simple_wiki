@@ -7,6 +7,7 @@ import (
 	"errors"
 	"flag"
 	"os"
+	"path/filepath"
 	"testing"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -159,6 +160,86 @@ var _ = Describe("createSite", func() {
 
 		It("should mention the CSS file in the error", func() {
 			Expect(err.Error()).To(ContainSubstring("custom.css"))
+		})
+	})
+})
+
+var _ = Describe("getCommitHash", func() {
+	var savedCommit string
+
+	BeforeEach(func() {
+		savedCommit = commit
+		DeferCleanup(func() { commit = savedCommit })
+	})
+
+	When("commit was set at build time (not 'n/a')", func() {
+		BeforeEach(func() {
+			commit = "deadbeef1234"
+		})
+
+		It("should return the build-time commit value without invoking git", func() {
+			Expect(getCommitHash()).To(Equal("deadbeef1234"))
+		})
+	})
+
+	When("commit is 'n/a' and git is not in PATH", func() {
+		BeforeEach(func() {
+			commit = "n/a"
+			originalPath := os.Getenv("PATH")
+			os.Setenv("PATH", "")
+			DeferCleanup(func() { os.Setenv("PATH", originalPath) })
+		})
+
+		It("should return 'dev'", func() {
+			Expect(getCommitHash()).To(Equal("dev"))
+		})
+	})
+
+	When("commit is 'n/a' and git is found but rev-parse fails", func() {
+		var tmpDir string
+
+		BeforeEach(func() {
+			commit = "n/a"
+			var err error
+			tmpDir, err = os.MkdirTemp("", "git_test_*")
+			Expect(err).NotTo(HaveOccurred())
+			DeferCleanup(func() { os.RemoveAll(tmpDir) })
+
+			fakeGit := filepath.Join(tmpDir, "git")
+			err = os.WriteFile(fakeGit, []byte("#!/bin/sh\nexit 1\n"), 0755)
+			Expect(err).NotTo(HaveOccurred())
+
+			originalPath := os.Getenv("PATH")
+			os.Setenv("PATH", tmpDir)
+			DeferCleanup(func() { os.Setenv("PATH", originalPath) })
+		})
+
+		It("should return 'dev'", func() {
+			Expect(getCommitHash()).To(Equal("dev"))
+		})
+	})
+
+	When("commit is 'n/a' and git rev-parse succeeds", func() {
+		var tmpDir string
+
+		BeforeEach(func() {
+			commit = "n/a"
+			var err error
+			tmpDir, err = os.MkdirTemp("", "git_test_*")
+			Expect(err).NotTo(HaveOccurred())
+			DeferCleanup(func() { os.RemoveAll(tmpDir) })
+
+			fakeGit := filepath.Join(tmpDir, "git")
+			err = os.WriteFile(fakeGit, []byte("#!/bin/sh\necho 'abcdef1234567890abcdef1234567890abcdef12'\n"), 0755)
+			Expect(err).NotTo(HaveOccurred())
+
+			originalPath := os.Getenv("PATH")
+			os.Setenv("PATH", tmpDir)
+			DeferCleanup(func() { os.Setenv("PATH", originalPath) })
+		})
+
+		It("should return the trimmed output from git", func() {
+			Expect(getCommitHash()).To(Equal("abcdef1234567890abcdef1234567890abcdef12"))
 		})
 	})
 })

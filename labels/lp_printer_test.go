@@ -2,7 +2,8 @@
 package labels_test
 
 import (
-	"os/exec"
+	"os"
+	"path/filepath"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -11,74 +12,127 @@ import (
 )
 
 var _ = Describe("LPPrinter", func() {
-	Describe("GetLPPrinter", func() {
-		var config labels.PrinterConfig
-		var printer labels.Printer
+	var (
+		tmpDir       string
+		originalPath string
+	)
+
+	BeforeEach(func() {
 		var err error
+		tmpDir, err = os.MkdirTemp("", "lp_printer_test_*")
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(func() { os.RemoveAll(tmpDir) })
 
-		BeforeEach(func() {
-			if _, lookErr := exec.LookPath("lp"); lookErr != nil {
-				Skip("lp not available in this environment")
-			}
-			config = labels.PrinterConfig{
-				ConnectivityMode: labels.LP,
-				LPPrinterName:    "test_printer",
-			}
-			printer, err = labels.GetLPPrinter(config)
+		originalPath = os.Getenv("PATH")
+		DeferCleanup(func() { os.Setenv("PATH", originalPath) })
+	})
+
+	Describe("GetLPPrinter", func() {
+		When("lp is not in PATH", func() {
+			BeforeEach(func() {
+				os.Setenv("PATH", "")
+			})
+
+			It("should return an error containing 'lp not found'", func() {
+				config := labels.PrinterConfig{
+					ConnectivityMode: labels.LP,
+					LPPrinterName:    "test_printer",
+				}
+				_, err := labels.GetLPPrinter(config)
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring("lp not found"))
+			})
 		})
 
-		It("should not return an error", func() {
-			Expect(err).NotTo(HaveOccurred())
-		})
+		When("lp is in PATH", func() {
+			BeforeEach(func() {
+				fakeLp := filepath.Join(tmpDir, "lp")
+				err := os.WriteFile(fakeLp, []byte("#!/bin/sh\n"), 0755)
+				Expect(err).NotTo(HaveOccurred())
+				os.Setenv("PATH", tmpDir+":"+originalPath)
+			})
 
-		It("should return a printer instance", func() {
-			Expect(printer).NotTo(BeNil())
+			It("should return a non-nil printer without error", func() {
+				config := labels.PrinterConfig{
+					ConnectivityMode: labels.LP,
+					LPPrinterName:    "test_printer",
+				}
+				printer, err := labels.GetLPPrinter(config)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(printer).NotTo(BeNil())
+			})
 		})
 	})
 
-	Describe("GetLPPrinter when lp is unavailable", func() {
-		It("should return an error when lp is not in PATH", func() {
-			if _, lookErr := exec.LookPath("lp"); lookErr == nil {
-				Skip("lp is available in this environment")
-			}
-			config := labels.PrinterConfig{
-				ConnectivityMode: labels.LP,
-				LPPrinterName:    "test_printer",
-			}
-			_, err := labels.GetLPPrinter(config)
-			Expect(err).To(HaveOccurred())
-			Expect(err.Error()).To(ContainSubstring("lp not found"))
+	Describe("Write", func() {
+		When("lp runs successfully", func() {
+			var (
+				printer labels.Printer
+				logFile string
+			)
+
+			BeforeEach(func() {
+				logFile = filepath.Join(tmpDir, "stdin.log")
+				fakeLp := filepath.Join(tmpDir, "lp")
+				script := "#!/bin/sh\ncat > " + logFile + "\n"
+				err := os.WriteFile(fakeLp, []byte(script), 0755)
+				Expect(err).NotTo(HaveOccurred())
+				os.Setenv("PATH", tmpDir+":"+originalPath)
+
+				printer, err = labels.GetLPPrinter(labels.PrinterConfig{LPPrinterName: "test_printer"})
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return the number of bytes written without error", func() {
+				data := []byte("print job data")
+				n, err := printer.Write(data)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(n).To(Equal(len(data)))
+			})
+
+			It("should pass data to lp via stdin", func() {
+				data := []byte("print job data")
+				_, err := printer.Write(data)
+				Expect(err).NotTo(HaveOccurred())
+
+				content, err := os.ReadFile(logFile)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(content).To(Equal(data))
+			})
+		})
+
+		When("lp exits with a non-zero status", func() {
+			var printer labels.Printer
+
+			BeforeEach(func() {
+				fakeLp := filepath.Join(tmpDir, "lp")
+				err := os.WriteFile(fakeLp, []byte("#!/bin/sh\nexit 1\n"), 0755)
+				Expect(err).NotTo(HaveOccurred())
+				os.Setenv("PATH", tmpDir+":"+originalPath)
+
+				printer, err = labels.GetLPPrinter(labels.PrinterConfig{LPPrinterName: "test_printer"})
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return an error", func() {
+				_, err := printer.Write([]byte("data"))
+				Expect(err).To(HaveOccurred())
+			})
 		})
 	})
 
 	Describe("Close", func() {
-		var config labels.PrinterConfig
-		var printer labels.Printer
-		var setupErr error
-		var closeErr error
-
 		BeforeEach(func() {
-			if _, lookErr := exec.LookPath("lp"); lookErr != nil {
-				Skip("lp not available in this environment")
-			}
-			config = labels.PrinterConfig{
-				ConnectivityMode: labels.LP,
-				LPPrinterName:    "test_printer",
-			}
-			printer, setupErr = labels.GetLPPrinter(config)
-
-			// Only proceed if setup succeeded
-			if setupErr == nil {
-				closeErr = printer.Close()
-			}
-		})
-
-		It("should not error during setup", func() {
-			Expect(setupErr).NotTo(HaveOccurred())
+			fakeLp := filepath.Join(tmpDir, "lp")
+			err := os.WriteFile(fakeLp, []byte("#!/bin/sh\n"), 0755)
+			Expect(err).NotTo(HaveOccurred())
+			os.Setenv("PATH", tmpDir+":"+originalPath)
 		})
 
 		It("should close without error", func() {
-			Expect(closeErr).NotTo(HaveOccurred())
+			printer, err := labels.GetLPPrinter(labels.PrinterConfig{LPPrinterName: "test_printer"})
+			Expect(err).NotTo(HaveOccurred())
+			Expect(printer.Close()).NotTo(HaveOccurred())
 		})
 	})
 })
