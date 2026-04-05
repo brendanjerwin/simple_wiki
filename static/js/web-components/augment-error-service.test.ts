@@ -284,7 +284,7 @@ describe('AugmentErrorService', () => {
           augmented = AugmentErrorService.augmentError(circularObj);
         });
 
-        it('should use toString fallback when JSON.stringify fails', () => {
+        it('should use toString() fallback when JSON.stringify fails', () => {
           expect(augmented.message).to.equal('[object Object]');
         });
 

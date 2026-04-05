@@ -21,6 +21,10 @@ function setupGlobals(hostname: string): void {
       href: `https://${hostname}/orders`,
     },
   };
+  (globalThis as Record<string, unknown>)['location'] = {
+    hostname,
+    href: `https://${hostname}/orders`,
+  };
   // content.ts also references bare `document` in parseOrders(document)
   // Since parseOrders is mocked, we just need it to exist
   if (!('document' in globalThis)) {
