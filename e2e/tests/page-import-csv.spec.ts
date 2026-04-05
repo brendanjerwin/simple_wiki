@@ -239,8 +239,8 @@ test.describe('CSV Page Import', () => {
         timeout: COMPONENT_LOAD_TIMEOUT_MS,
       });
 
-      // Click the Import button (text matches "Import N page(s)")
-      const importButton = dialog.locator('button').filter({ hasText: /^Import/ });
+      // Click the Import button (primary action button in preview state)
+      const importButton = dialog.locator('button.button-primary');
       await expect(importButton).toBeEnabled();
       await importButton.click();
 
