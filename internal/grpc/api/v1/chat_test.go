@@ -293,7 +293,9 @@ func (m *mockChatStreamServer) Context() context.Context {
 
 func (*mockChatStreamServer) SetHeader(metadata.MD) error   { return nil }
 func (*mockChatStreamServer) SendHeader(metadata.MD) error  { return nil }
-func (*mockChatStreamServer) SetTrailer(metadata.MD)        {}
+func (*mockChatStreamServer) SetTrailer(metadata.MD) {
+	// No-op test stub — not needed for this test scenario
+}
 func (*mockChatStreamServer) SendMsg(any) error             { return nil }
 func (*mockChatStreamServer) RecvMsg(any) error             { return nil }
 
@@ -332,7 +334,9 @@ func (m *mockChatMessagesStreamServer) Context() context.Context {
 
 func (*mockChatMessagesStreamServer) SetHeader(metadata.MD) error   { return nil }
 func (*mockChatMessagesStreamServer) SendHeader(metadata.MD) error  { return nil }
-func (*mockChatMessagesStreamServer) SetTrailer(metadata.MD)        {}
+func (*mockChatMessagesStreamServer) SetTrailer(metadata.MD) {
+	// No-op test stub — not needed for this test scenario
+}
 func (*mockChatMessagesStreamServer) SendMsg(any) error             { return nil }
 func (*mockChatMessagesStreamServer) RecvMsg(any) error             { return nil }
 

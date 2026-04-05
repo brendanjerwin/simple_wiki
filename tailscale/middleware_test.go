@@ -250,14 +250,18 @@ var _ = Describe("IdentityHTTPMiddlewareWithMetrics", func() {
 	Describe("constructor validation", func() {
 		When("logger is nil", func() {
 			It("should return an error", func() {
-				_, err := tailscale.IdentityHTTPMiddlewareWithMetrics(nil, nil, &mockMetricsRecorder{}, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+				_, err := tailscale.IdentityHTTPMiddlewareWithMetrics(nil, nil, &mockMetricsRecorder{}, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					// No-op test stub — not needed for this test scenario
+				}))
 				Expect(err).To(MatchError("logger is required"))
 			})
 		})
 
 		When("metrics is nil", func() {
 			It("should return an error", func() {
-				_, err := tailscale.IdentityHTTPMiddlewareWithMetrics(nil, testLogger(), nil, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+				_, err := tailscale.IdentityHTTPMiddlewareWithMetrics(nil, testLogger(), nil, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					// No-op test stub — not needed for this test scenario
+				}))
 				Expect(err).To(MatchError("metrics is required"))
 			})
 		})

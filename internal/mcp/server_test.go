@@ -93,17 +93,23 @@ func (noOpChatBufferManager) GetMessages(string) []*chatbuffer.Message {
 func (noOpChatBufferManager) SubscribeToPage(string) (<-chan chatbuffer.Event, func()) {
 	ch := make(chan chatbuffer.Event)
 	close(ch)
-	return ch, func() {}
+	return ch, func() {
+		// No-op test stub — unsubscribe is not needed for this test scenario
+	}
 }
 func (noOpChatBufferManager) SubscribeToPageWithReplay(string) ([]*chatbuffer.Message, <-chan chatbuffer.Event, func()) {
 	ch := make(chan chatbuffer.Event)
 	close(ch)
-	return nil, ch, func() {}
+	return nil, ch, func() {
+		// No-op test stub — unsubscribe is not needed for this test scenario
+	}
 }
 func (noOpChatBufferManager) SubscribeToChannel() (<-chan *chatbuffer.Message, func()) {
 	ch := make(chan *chatbuffer.Message)
 	close(ch)
-	return ch, func() {}
+	return ch, func() {
+		// No-op test stub — unsubscribe is not needed for this test scenario
+	}
 }
 func (noOpChatBufferManager) HasChannelSubscribers() bool {
 	return false

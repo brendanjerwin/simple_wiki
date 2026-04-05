@@ -645,7 +645,9 @@ var _ = Describe("BuildShowInventoryContentsOf", func() {
 
 		BeforeEach(func() {
 			// Use a function type which cannot be marshaled to JSON
-			unmarshalableFunc := func() {}
+			unmarshalableFunc := func() {
+			// No-op — used only for its type (functions are not JSON-serializable)
+		}
 			
 			// Create container with invalid frontmatter structure
 			mockSite = &mockPageReader{

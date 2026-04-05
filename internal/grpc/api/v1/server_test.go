@@ -343,6 +343,7 @@ func (*MockJobStreamServer) SendHeader(metadata.MD) error {
 }
 
 func (*MockJobStreamServer) SetTrailer(metadata.MD) {
+	// No-op test stub — not needed for this test scenario
 }
 
 func (*MockJobStreamServer) SendMsg(any) error {
@@ -405,7 +406,9 @@ func (*MockPageWatchStreamServer) SendHeader(metadata.MD) error {
 	return nil
 }
 
-func (*MockPageWatchStreamServer) SetTrailer(metadata.MD) {}
+func (*MockPageWatchStreamServer) SetTrailer(metadata.MD) {
+	// No-op test stub — not needed for this test scenario
+}
 
 func (*MockPageWatchStreamServer) SendMsg(any) error {
 	return nil
@@ -473,17 +476,23 @@ func (noOpChatBufferManager) GetMessages(string) []*chatbuffer.Message {
 func (noOpChatBufferManager) SubscribeToPage(string) (<-chan chatbuffer.Event, func()) {
 	ch := make(chan chatbuffer.Event)
 	close(ch)
-	return ch, func() {}
+	return ch, func() {
+		// No-op test stub — unsubscribe is not needed for this test scenario
+	}
 }
 func (noOpChatBufferManager) SubscribeToPageWithReplay(string) ([]*chatbuffer.Message, <-chan chatbuffer.Event, func()) {
 	ch := make(chan chatbuffer.Event)
 	close(ch)
-	return nil, ch, func() {}
+	return nil, ch, func() {
+		// No-op test stub — unsubscribe is not needed for this test scenario
+	}
 }
 func (noOpChatBufferManager) SubscribeToChannel() (<-chan *chatbuffer.Message, func()) {
 	ch := make(chan *chatbuffer.Message)
 	close(ch)
-	return ch, func() {}
+	return ch, func() {
+		// No-op test stub — unsubscribe is not needed for this test scenario
+	}
 }
 func (noOpChatBufferManager) HasChannelSubscribers() bool {
 	return false
@@ -6225,7 +6234,9 @@ func (m *MockJobQueueCoordinator) AsCoordinator() *jobs.JobQueueCoordinator {
 // noOpDispatcher is a dispatcher that does nothing for testing purposes.
 type noOpDispatcher struct{}
 
-func (*noOpDispatcher) Start() {}
+func (*noOpDispatcher) Start() {
+	// No-op test stub — not needed for this test scenario
+}
 
 func (*noOpDispatcher) Dispatch(_ func()) error {
 	return nil
