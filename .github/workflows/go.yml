@@ -23,14 +23,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Install Devbox
         uses: jetify-com/devbox-install-action@v0.14.0
         with:
           enable-cache: 'true'
-      
+
       - name: Run Go linting
         run: devbox run go:lint
+
+  opengrep:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run opengrep convention checks
+        run: ./scripts/run_opengrep_lint.sh
 
   generate-matrix:
     runs-on: ubuntu-latest
