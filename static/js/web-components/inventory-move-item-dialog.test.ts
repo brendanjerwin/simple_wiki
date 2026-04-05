@@ -684,7 +684,7 @@ describe('InventoryMoveItemDialog', () => {
       await el.updateComplete;
 
       // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
-      const creatorMover = (el as unknown as { inventoryItemCreatorMover: { moveItem: () => void; showSuccess: () => void } }).inventoryItemCreatorMover;
+      const creatorMover = (el as unknown as { inventoryItemCreatorMover: { moveItem: (item: string, location: string) => Promise<unknown>; showSuccess: (msg: string, callback?: () => void) => void } }).inventoryItemCreatorMover;
       moveItemStub = sinon.stub(creatorMover, 'moveItem').resolves({
         success: true,
         summary: 'Moved screwdriver to toolbox_garage',

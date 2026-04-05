@@ -219,7 +219,7 @@ describe('PageDeleter', () => {
           // Stub the private gRPC client's deletePage to return a never-resolving promise
           // so we can test the synchronous setup (setLoading) without triggering navigation
           // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
-          const client = (service as unknown as { client: { deletePage: () => void } }).client;
+          const client = (service as unknown as { client: { deletePage: (req: unknown) => Promise<unknown> } }).client;
           sinon.stub(client, 'deletePage').returns(new Promise(() => { /* never resolves */ }));
 
           // Extract the confirm handler and trigger it synchronously
