@@ -6,7 +6,7 @@ import DOMPurify from 'dompurify';
 import { extractTableData, getUniqueColumnValues, getColumnNumericRange } from './table-data-extractor.js';
 import { sortRows, applyAllFilters, hasActiveFilters, isFilterActive } from './table-sorter-filterer.js';
 import { computeTableHash, saveTableState, loadTableState, deserializeFilter } from './table-state-persistence.js';
-import { pillCSS } from './shared-styles.js';
+import { pillCSS, colorCSS } from './shared-styles.js';
 import './table-filter-popover.js';
 import type { SortDirectionChangedEventDetail, FilterChangedEventDetail } from './table-filter-popover.js';
 import type { ExtractedTableData } from './table-data-extractor.js';
@@ -15,6 +15,7 @@ import type { SortDirection, TableFilterState } from './table-sorter-filterer.js
 export class WikiTable extends LitElement {
   static override readonly styles = [
     pillCSS,
+    colorCSS,
     css`
       :host {
         display: block;
@@ -26,8 +27,8 @@ export class WikiTable extends LitElement {
         justify-content: space-between;
         padding: 4px 8px;
         font-size: 12px;
-        color: #888;
-        border-bottom: 1px solid #e0e0e0;
+        color: var(--color-text-muted);
+        border-bottom: 1px solid var(--color-border-subtle);
         container-type: inline-size;
         container-name: status-bar;
       }
@@ -38,7 +39,7 @@ export class WikiTable extends LitElement {
 
       .row-count-filtered {
         font-weight: 600;
-        color: #333;
+        color: var(--color-text-primary);
       }
 
       .status-pills {
@@ -94,7 +95,7 @@ export class WikiTable extends LitElement {
 
       .view-toggle {
         display: inline-flex;
-        border: 1px solid #ddd;
+        border: 1px solid var(--color-border-default);
         border-radius: 16px;
         overflow: hidden;
         cursor: pointer;
@@ -104,14 +105,14 @@ export class WikiTable extends LitElement {
 
       .view-toggle-option {
         padding: 4px 10px;
-        color: #555;
+        color: var(--color-text-secondary);
         transition: all 0.15s ease;
         white-space: nowrap;
       }
 
       .view-toggle-active {
-        background: #0d6efd;
-        color: white;
+        background: var(--color-action-link);
+        color: var(--color-text-inverse);
       }
 
       .pill-icon {
@@ -152,16 +153,16 @@ export class WikiTable extends LitElement {
         position: sticky;
         top: 0;
         z-index: 2;
-        background: #f5f5f5;
+        background: var(--color-surface-sunken);
         padding: 0;
         text-align: left;
-        border-bottom: 2px solid #ddd;
+        border-bottom: 2px solid var(--color-border-default);
         user-select: none;
         white-space: nowrap;
       }
 
       thead th:hover {
-        background: #e8e8e8;
+        background: var(--color-hover-overlay);
       }
 
       .header-cell {
@@ -183,7 +184,7 @@ export class WikiTable extends LitElement {
         width: 6px;
         height: 6px;
         border-radius: 50%;
-        background: #0d6efd;
+        background: var(--color-action-link);
         flex-shrink: 0;
       }
 
@@ -204,11 +205,11 @@ export class WikiTable extends LitElement {
 
       tbody td {
         padding: 8px 12px;
-        border-bottom: 1px solid #eee;
+        border-bottom: 1px solid var(--color-border-subtle);
       }
 
       tbody tr:hover {
-        background: #f9f9f9;
+        background: var(--color-hover-overlay);
       }
 
       .card-view {
@@ -216,22 +217,22 @@ export class WikiTable extends LitElement {
         flex-direction: column;
         gap: 8px;
         padding: 8px;
-        background: #f5f5f5;
+        background: var(--color-surface-sunken);
       }
 
       .card {
-        border: 1px solid #ddd;
+        border: 1px solid var(--color-border-default);
         border-radius: 8px;
         padding: 12px;
-        background: #fff;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+        background: var(--color-surface-primary);
+        box-shadow: var(--shadow-subtle);
       }
 
       .card-row {
         display: flex;
         justify-content: space-between;
         padding: 4px 0;
-        border-bottom: 1px solid #f0f0f0;
+        border-bottom: 1px solid var(--color-border-subtle);
       }
 
       .card-row:last-child {
@@ -242,7 +243,7 @@ export class WikiTable extends LitElement {
         font-weight: bold;
         font-variant: small-caps;
         font-size: 0.85rem;
-        color: #666;
+        color: var(--color-text-secondary);
       }
 
       .card-value {
@@ -252,7 +253,7 @@ export class WikiTable extends LitElement {
       .no-results {
         padding: 16px;
         text-align: center;
-        color: #888;
+        color: var(--color-text-muted);
         font-style: italic;
       }
 
@@ -270,9 +271,9 @@ export class WikiTable extends LitElement {
       }
 
       .column-picker {
-        background: white;
+        background: var(--color-surface-elevated);
         border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        box-shadow: var(--shadow-medium);
         padding: 8px 0;
         min-width: 180px;
         max-height: 60vh;
@@ -283,7 +284,7 @@ export class WikiTable extends LitElement {
         padding: 6px 14px;
         font-size: 11px;
         font-weight: 600;
-        color: #888;
+        color: var(--color-text-muted);
         text-transform: uppercase;
         letter-spacing: 0.5px;
       }
@@ -292,7 +293,7 @@ export class WikiTable extends LitElement {
         padding: 8px 14px;
         cursor: pointer;
         font-size: 13px;
-        color: #333;
+        color: var(--color-text-primary);
         border: none;
         background: none;
         width: 100%;
@@ -301,7 +302,7 @@ export class WikiTable extends LitElement {
       }
 
       .column-picker-item:hover {
-        background: #f0f0f0;
+        background: var(--color-hover-overlay);
       }
     `,
   ];

@@ -62,7 +62,8 @@ export class WikiSearch extends LitElement {
         outline: none;
         font-size: 16px;
         max-width: 100%;
-        background-color: white;
+        background-color: var(--color-surface-primary, white);
+        color: var(--color-text-primary, #333);
     }
 
     input[type="search"]:focus {
@@ -70,23 +71,23 @@ export class WikiSearch extends LitElement {
     }
 
     @keyframes pulse {
-        0% { background-color: white; }
-        25% { background-color: #ffff00; }
-        100% { background-color: white; }
+        0% { background-color: var(--color-surface-primary, white); }
+        25% { background-color: var(--color-highlight-bg, #ffff00); }
+        100% { background-color: var(--color-surface-primary, white); }
     }
 
     button {
         padding: 5px 15px;
         border: none;
-        background-color: #6c757d;
-        color: white;
+        background-color: var(--color-action-primary, #6c757d);
+        color: var(--color-text-inverse, white);
         cursor: pointer;
         border-radius: 0 5px 5px 0;
         font-size: 16px;
         transition: background-color 0.3s ease;
     }
     button:hover {
-        background-color: #9da5ab;
+        background-color: var(--color-action-primary-hover, #9da5ab);
     }
 
     `;

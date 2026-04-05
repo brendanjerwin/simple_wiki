@@ -69,7 +69,7 @@ export class InventoryAddItemDialog extends LitElement {
 
     .search-results {
       margin-top: 16px;
-      border: 1px solid #e5e7eb;
+      border: 1px solid var(--color-border-subtle);
       border-radius: 4px;
       max-height: 200px;
       overflow-y: auto;
@@ -77,17 +77,17 @@ export class InventoryAddItemDialog extends LitElement {
 
     .search-results-header {
       padding: 8px 12px;
-      background: #f9fafb;
-      border-bottom: 1px solid #e5e7eb;
+      background: var(--color-surface-sunken);
+      border-bottom: 1px solid var(--color-border-subtle);
       font-size: 12px;
       font-weight: 500;
-      color: #6b7280;
+      color: var(--color-text-secondary);
     }
 
     .search-result-item {
       display: block;
       padding: 10px 12px;
-      border-bottom: 1px solid #e5e7eb;
+      border-bottom: 1px solid var(--color-border-subtle);
       text-decoration: none;
       color: inherit;
       cursor: pointer;
@@ -99,22 +99,22 @@ export class InventoryAddItemDialog extends LitElement {
     }
 
     .search-result-item:hover {
-      background: #f3f4f6;
+      background: var(--color-surface-sunken);
     }
 
     .search-result-title {
       font-weight: 500;
-      color: #1f2937;
+      color: var(--color-text-primary);
       margin-bottom: 2px;
     }
 
     .search-result-container {
       font-size: 12px;
-      color: #6b7280;
+      color: var(--color-text-secondary);
     }
 
     .search-result-container a {
-      color: #4a90d9;
+      color: var(--color-text-link);
     }
 
     .form-group textarea {
@@ -125,7 +125,7 @@ export class InventoryAddItemDialog extends LitElement {
       display: flex;
       gap: 12px;
       padding: 16px 20px;
-      border-top: 1px solid #e0e0e0;
+      border-top: 1px solid var(--color-border-subtle);
       justify-content: flex-end;
     }
   `);
