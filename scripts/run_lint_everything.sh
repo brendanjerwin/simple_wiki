@@ -22,6 +22,10 @@ echo "Logging to: $LOG_FILE"
     echo 'No changes in api/proto, skipping buf generate.'
   fi
 
+  # Project convention checks (CLAUDE.md rules enforced via opengrep)
+  . ./scripts/ensure_opengrep.sh
+  ./scripts/run_opengrep_lint.sh
+
   go mod tidy
   go vet $(go list ./... | grep -v /gen/)
   staticcheck $(go list ./... | grep -v /gen/)
