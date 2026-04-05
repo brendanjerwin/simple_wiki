@@ -7,9 +7,13 @@ const BLOG_LOAD_TIMEOUT_MS = 10000;
 const DIALOG_APPEAR_TIMEOUT_MS = 5000;
 
 // Test page identifiers
+// Note: the wiki server's identifier munger converts hyphens to underscores
+// (MungeIdentifier), so page identifiers are stored and returned with
+// underscores.  Using underscores here avoids a mismatch between the
+// navigation URL and the href values rendered by wiki-blog.
 const BLOG_PAGE = 'e2etestblog';
-const POST_ONE_ID = 'e2etestblog-2024-01-15-first-post';
-const POST_TWO_ID = 'e2etestblog-2024-01-10-external-post';
+const POST_ONE_ID = 'e2etestblog_2024_01_15_first_post';
+const POST_TWO_ID = 'e2etestblog_2024_01_10_external_post';
 const BLOG_HIDE_NEW_POST_PAGE = 'e2etestblognewpost';
 
 // Captured during "create post" test for afterAll cleanup
