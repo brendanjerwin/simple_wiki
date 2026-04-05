@@ -384,7 +384,7 @@ func injectPageContext(ctx context.Context, s *mcpserver.MCPServer, clients *api
 		s.SendNotificationToAllClients(
 			"notifications/claude/channel",
 			map[string]any{
-				"content": fmt.Sprintf("No page-specific context is available for page '%s'. You can create an [ai_agent_chat_context] section in the page's frontmatter using the MergeFrontmatter tool to store context for future sessions.", page),
+				"content": fmt.Sprintf("Failed to fetch frontmatter for page '%s': %v. Page context is unavailable for this session. You should NOT attempt to create or modify the [ai_agent_chat_context] section, as existing data may be present but inaccessible due to this error.", page, err),
 				"meta": map[string]any{
 					"page":   page,
 					"sender": "system",
@@ -414,6 +414,16 @@ func injectPageContext(ctx context.Context, s *mcpserver.MCPServer, clients *api
 	contextJSON, err := json.MarshalIndent(agentContext, "", "  ")
 	if err != nil {
 		log.Printf("Failed to marshal ai_agent_chat_context for page %q: %v", page, err)
+		s.SendNotificationToAllClients(
+			"notifications/claude/channel",
+			map[string]any{
+				"content": fmt.Sprintf("Failed to format [ai_agent_chat_context] for page '%s': %v. The section exists but could not be serialized.", page, err),
+				"meta": map[string]any{
+					"page":   page,
+					"sender": "system",
+				},
+			},
+		)
 		return
 	}
 

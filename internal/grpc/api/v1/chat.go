@@ -266,7 +266,7 @@ func (s *Server) GetChatStatus(_ context.Context, req *apiv1.GetChatStatusReques
 
 	if req.Page != "" {
 		resp.Connected = s.chatBufferManager.HasPageChannelSubscriber(req.Page) || s.chatBufferManager.HasChannelSubscribers()
-		resp.Starting = s.chatBufferManager.IsInstanceRequested(req.Page)
+		resp.Starting = resp.PoolConnected && s.chatBufferManager.IsInstanceRequested(req.Page)
 	} else {
 		resp.Connected = s.chatBufferManager.HasChannelSubscribers()
 	}

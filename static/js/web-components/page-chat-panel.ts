@@ -656,8 +656,9 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
             content,
           });
           await this.chatClient.sendMessage(sendRequest);
-        } catch {
-          // If it fails again, let the user retry manually
+        } catch (err) {
+          this.pendingMessage = content;
+          this.error = err instanceof Error ? err : new Error(String(err));
           this.waitingForAssistant = false;
         }
       }
