@@ -93,11 +93,11 @@ export class ConfirmationDialog extends LitElement {
       }
 
       .dialog-icon.warning {
-        color: #dc3545;
+        color: var(--color-error);
       }
 
       .dialog-icon.info {
-        color: #6c757d;
+        color: var(--color-info);
       }
 
       .dialog-message {
@@ -113,7 +113,7 @@ export class ConfirmationDialog extends LitElement {
 
       .dialog-description.irreversible {
         font-weight: 600;
-        color: #dc3545;
+        color: var(--color-error);
       }
 
       .dialog-actions {
@@ -148,47 +148,47 @@ export class ConfirmationDialog extends LitElement {
       }
 
       .button-cancel {
-        background: #6c757d;
-        color: white;
-        border: 1px solid #6c757d;
+        background: var(--color-action-primary);
+        color: var(--color-text-inverse);
+        border: 1px solid var(--color-action-primary);
       }
 
       .button-cancel:hover:not(:disabled) {
-        background: #5a6268;
-        border-color: #5a6268;
+        background: var(--color-action-primary-hover);
+        border-color: var(--color-action-primary-hover);
       }
 
       .button-primary {
-        background: #007bff;
-        color: white;
-        border: 1px solid #007bff;
+        background: var(--color-action-confirm);
+        color: var(--color-text-inverse);
+        border: 1px solid var(--color-action-confirm);
       }
 
       .button-primary:hover:not(:disabled) {
-        background: #0056b3;
-        border-color: #0056b3;
+        background: var(--color-action-confirm-hover);
+        border-color: var(--color-action-confirm-hover);
       }
 
       .button-danger {
-        background: #dc3545;
-        color: white;
-        border: 1px solid #dc3545;
+        background: var(--color-action-danger);
+        color: var(--color-text-inverse);
+        border: 1px solid var(--color-action-danger);
       }
 
       .button-danger:hover:not(:disabled) {
-        background: #c82333;
-        border-color: #c82333;
+        background: var(--color-action-danger-hover);
+        border-color: var(--color-action-danger-hover);
       }
 
       .button-warning {
-        background: #ffc107;
-        color: #212529;
-        border: 1px solid #ffc107;
+        background: var(--color-action-warning-btn);
+        color: var(--color-action-warning-btn-text);
+        border: 1px solid var(--color-action-warning-btn);
       }
 
       .button-warning:hover:not(:disabled) {
-        background: #e0a800;
-        border-color: #e0a800;
+        background: var(--color-action-warning-btn-hover);
+        border-color: var(--color-action-warning-btn-hover);
       }
 
       .dialog-box {
