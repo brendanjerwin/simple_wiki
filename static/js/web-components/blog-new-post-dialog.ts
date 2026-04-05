@@ -257,9 +257,9 @@ export class BlogNewPostDialog extends LitElement {
     if (!this.blogId || !this.date || !this.title.trim()) return '';
     const slug = this.title.trim()
       .toLowerCase()
-      .replace(/[^a-z0-9\s-]/g, '')
-      .replace(/\s+/g, '-')
-      .replace(/-+/g, '-');
+      .replaceAll(/[^a-z0-9\s-]/g, '')
+      .replaceAll(/\s+/g, '-')
+      .replaceAll(/-+/g, '-');
     return `${this.blogId}-${this.date}-${slug}`;
   }
 
