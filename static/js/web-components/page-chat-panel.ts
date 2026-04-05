@@ -235,10 +235,10 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
       }
 
       .send-button {
-        background: var(--color-action-confirm);
+        background: var(--color-chat-user-bg);
         border: none;
         border-radius: 6px;
-        color: var(--color-text-inverse);
+        color: var(--color-chat-user-text);
         padding: 8px 12px;
         cursor: pointer;
         font-size: 0.85rem;
@@ -246,7 +246,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
       }
 
       .send-button:hover:not(:disabled) {
-        background: var(--color-action-confirm-hover);
+        background: var(--color-chat-user-bg-hover);
       }
 
       .send-button:disabled {

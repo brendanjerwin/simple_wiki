@@ -57,6 +57,11 @@
   --color-warning-text: #856404;
   --color-info: #6c757d;
 
+  /* Chat */
+  --color-chat-user-bg: #3a5a8c;
+  --color-chat-user-bg-hover: #4a6a9c;
+  --color-chat-user-text: #ffffff;
+
   /* Highlight */
   --color-highlight-bg: #ffff00;
 
