@@ -25,6 +25,7 @@
       ". ./scripts/ensure_staticcheck.sh",
       ". ./scripts/ensure_golangci_lint.sh",
       ". ./scripts/ensure_protoc_gen_go_mcp.sh",
+      ". ./scripts/ensure_opengrep.sh",
       "export PATH=\"${DEVBOX_PROJECT_ROOT:-.}/.devbox/gobin:$PATH\""
     ],
     "scripts": {
@@ -57,6 +58,9 @@
       ],
       "go:deadcode": [
         "./scripts/run_go_deadcode.sh"
+      ],
+      "opengrep:lint": [
+        "./scripts/run_opengrep_lint.sh"
       ],
       "lint:everything": [
         "./scripts/run_lint_everything.sh"
