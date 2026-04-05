@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file api/v1/chat.proto.
  */
 export const file_api_v1_chat: GenFile = /*@__PURE__*/
-  fileDesc("ChFhcGkvdjEvY2hhdC5wcm90bxIGYXBpLnYxIugBCgtDaGF0TWVzc2FnZRIKCgJpZBgBIAEoCRIeCgZzZW5kZXIYAiABKA4yDi5hcGkudjEuU2VuZGVyEg8KB2NvbnRlbnQYAyABKAkSLQoJdGltZXN0YW1wGAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIMCgRwYWdlGAUgASgJEhAKCHNlcXVlbmNlGAYgASgDEhMKC3NlbmRlcl9uYW1lGAcgASgJEhMKC3JlcGx5X3RvX2lkGAggASgJEiMKCXJlYWN0aW9ucxgJIAMoCzIQLmFwaS52MS5SZWFjdGlvbiIqCghSZWFjdGlvbhINCgVlbW9qaRgBIAEoCRIPCgdyZWFjdG9yGAIgASgJIpMBCglDaGF0RXZlbnQSKgoLbmV3X21lc3NhZ2UYASABKAsyEy5hcGkudjEuQ2hhdE1lc3NhZ2VIABInCgRlZGl0GAIgASgLMhcuYXBpLnYxLkNoYXRNZXNzYWdlRWRpdEgAEigKCHJlYWN0aW9uGAMgASgLMhQuYXBpLnYxLkNoYXRSZWFjdGlvbkgAQgcKBWV2ZW50ImkKD0NoYXRNZXNzYWdlRWRpdBISCgptZXNzYWdlX2lkGAEgASgJEhMKC25ld19jb250ZW50GAIgASgJEi0KCXRpbWVzdGFtcBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiQgoMQ2hhdFJlYWN0aW9uEhIKCm1lc3NhZ2VfaWQYASABKAkSDQoFZW1vamkYAiABKAkSDwoHcmVhY3RvchgDIAEoCSI3ChZTZW5kQ2hhdE1lc3NhZ2VSZXF1ZXN0EgwKBHBhZ2UYASABKAkSDwoHY29udGVudBgCIAEoCSItChdTZW5kQ2hhdE1lc3NhZ2VSZXNwb25zZRISCgptZXNzYWdlX2lkGAEgASgJIiQKFFN1YnNjcmliZUNoYXRSZXF1ZXN0EgwKBHBhZ2UYASABKAkiHgocU3Vic2NyaWJlQ2hhdE1lc3NhZ2VzUmVxdWVzdCJKChRTZW5kQ2hhdFJlcGx5UmVxdWVzdBIMCgRwYWdlGAEgASgJEg8KB2NvbnRlbnQYAiABKAkSEwoLcmVwbHlfdG9faWQYAyABKAkiKwoVU2VuZENoYXRSZXBseVJlc3BvbnNlEhIKCm1lc3NhZ2VfaWQYASABKAkiQQoWRWRpdENoYXRNZXNzYWdlUmVxdWVzdBISCgptZXNzYWdlX2lkGAEgASgJEhMKC25ld19jb250ZW50GAIgASgJIhkKF0VkaXRDaGF0TWVzc2FnZVJlc3BvbnNlIjoKFVJlYWN0VG9NZXNzYWdlUmVxdWVzdBISCgptZXNzYWdlX2lkGAEgASgJEg0KBWVtb2ppGAIgASgJIhgKFlJlYWN0VG9NZXNzYWdlUmVzcG9uc2UiFgoUR2V0Q2hhdFN0YXR1c1JlcXVlc3QiKgoVR2V0Q2hhdFN0YXR1c1Jlc3BvbnNlEhEKCWNvbm5lY3RlZBgBIAEoCCo5CgZTZW5kZXISFgoSU0VOREVSX1VOU1BFQ0lGSUVEEAASCAoEVVNFUhABEg0KCUFTU0lTVEFOVBACMsYECgtDaGF0U2VydmljZRJQCgtTZW5kTWVzc2FnZRIeLmFwaS52MS5TZW5kQ2hhdE1lc3NhZ2VSZXF1ZXN0Gh8uYXBpLnYxLlNlbmRDaGF0TWVzc2FnZVJlc3BvbnNlIgASRAoNU3Vic2NyaWJlQ2hhdBIcLmFwaS52MS5TdWJzY3JpYmVDaGF0UmVxdWVzdBoRLmFwaS52MS5DaGF0RXZlbnQiADABElYKFVN1YnNjcmliZUNoYXRNZXNzYWdlcxIkLmFwaS52MS5TdWJzY3JpYmVDaGF0TWVzc2FnZXNSZXF1ZXN0GhMuYXBpLnYxLkNoYXRNZXNzYWdlIgAwARJOCg1TZW5kQ2hhdFJlcGx5EhwuYXBpLnYxLlNlbmRDaGF0UmVwbHlSZXF1ZXN0Gh0uYXBpLnYxLlNlbmRDaGF0UmVwbHlSZXNwb25zZSIAElQKD0VkaXRDaGF0TWVzc2FnZRIeLmFwaS52MS5FZGl0Q2hhdE1lc3NhZ2VSZXF1ZXN0Gh8uYXBpLnYxLkVkaXRDaGF0TWVzc2FnZVJlc3BvbnNlIgASUQoOUmVhY3RUb01lc3NhZ2USHS5hcGkudjEuUmVhY3RUb01lc3NhZ2VSZXF1ZXN0Gh4uYXBpLnYxLlJlYWN0VG9NZXNzYWdlUmVzcG9uc2UiABJOCg1HZXRDaGF0U3RhdHVzEhwuYXBpLnYxLkdldENoYXRTdGF0dXNSZXF1ZXN0Gh0uYXBpLnYxLkdldENoYXRTdGF0dXNSZXNwb25zZSIAQjpaOGdpdGh1Yi5jb20vYnJlbmRhbmplcndpbi9zaW1wbGVfd2lraS9nZW4vZ28vYXBpL3YxO2FwaXYxYgZwcm90bzM", [file_google_protobuf_timestamp]);
+  fileDesc("ChFhcGkvdjEvY2hhdC5wcm90bxIGYXBpLnYxIugBCgtDaGF0TWVzc2FnZRIKCgJpZBgBIAEoCRIeCgZzZW5kZXIYAiABKA4yDi5hcGkudjEuU2VuZGVyEg8KB2NvbnRlbnQYAyABKAkSLQoJdGltZXN0YW1wGAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIMCgRwYWdlGAUgASgJEhAKCHNlcXVlbmNlGAYgASgDEhMKC3NlbmRlcl9uYW1lGAcgASgJEhMKC3JlcGx5X3RvX2lkGAggASgJEiMKCXJlYWN0aW9ucxgJIAMoCzIQLmFwaS52MS5SZWFjdGlvbiIqCghSZWFjdGlvbhINCgVlbW9qaRgBIAEoCRIPCgdyZWFjdG9yGAIgASgJIpMBCglDaGF0RXZlbnQSKgoLbmV3X21lc3NhZ2UYASABKAsyEy5hcGkudjEuQ2hhdE1lc3NhZ2VIABInCgRlZGl0GAIgASgLMhcuYXBpLnYxLkNoYXRNZXNzYWdlRWRpdEgAEigKCHJlYWN0aW9uGAMgASgLMhQuYXBpLnYxLkNoYXRSZWFjdGlvbkgAQgcKBWV2ZW50ImkKD0NoYXRNZXNzYWdlRWRpdBISCgptZXNzYWdlX2lkGAEgASgJEhMKC25ld19jb250ZW50GAIgASgJEi0KCXRpbWVzdGFtcBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiQgoMQ2hhdFJlYWN0aW9uEhIKCm1lc3NhZ2VfaWQYASABKAkSDQoFZW1vamkYAiABKAkSDwoHcmVhY3RvchgDIAEoCSI3ChZTZW5kQ2hhdE1lc3NhZ2VSZXF1ZXN0EgwKBHBhZ2UYASABKAkSDwoHY29udGVudBgCIAEoCSItChdTZW5kQ2hhdE1lc3NhZ2VSZXNwb25zZRISCgptZXNzYWdlX2lkGAEgASgJIiQKFFN1YnNjcmliZUNoYXRSZXF1ZXN0EgwKBHBhZ2UYASABKAkiHgocU3Vic2NyaWJlQ2hhdE1lc3NhZ2VzUmVxdWVzdCJKChRTZW5kQ2hhdFJlcGx5UmVxdWVzdBIMCgRwYWdlGAEgASgJEg8KB2NvbnRlbnQYAiABKAkSEwoLcmVwbHlfdG9faWQYAyABKAkiKwoVU2VuZENoYXRSZXBseVJlc3BvbnNlEhIKCm1lc3NhZ2VfaWQYASABKAkiQQoWRWRpdENoYXRNZXNzYWdlUmVxdWVzdBISCgptZXNzYWdlX2lkGAEgASgJEhMKC25ld19jb250ZW50GAIgASgJIhkKF0VkaXRDaGF0TWVzc2FnZVJlc3BvbnNlIjoKFVJlYWN0VG9NZXNzYWdlUmVxdWVzdBISCgptZXNzYWdlX2lkGAEgASgJEg0KBWVtb2ppGAIgASgJIhgKFlJlYWN0VG9NZXNzYWdlUmVzcG9uc2UiJAoUR2V0Q2hhdFN0YXR1c1JlcXVlc3QSDAoEcGFnZRgBIAEoCSJUChVHZXRDaGF0U3RhdHVzUmVzcG9uc2USEQoJY29ubmVjdGVkGAEgASgIEhAKCHN0YXJ0aW5nGAIgASgIEhYKDnBvb2xfY29ubmVjdGVkGAMgASgIIjAKIFN1YnNjcmliZVBhZ2VDaGF0TWVzc2FnZXNSZXF1ZXN0EgwKBHBhZ2UYASABKAkiIgogU3Vic2NyaWJlSW5zdGFuY2VSZXF1ZXN0c1JlcXVlc3QiHwoPSW5zdGFuY2VSZXF1ZXN0EgwKBHBhZ2UYASABKAkqOQoGU2VuZGVyEhYKElNFTkRFUl9VTlNQRUNJRklFRBAAEggKBFVTRVIQARINCglBU1NJU1RBTlQQAjKKBgoLQ2hhdFNlcnZpY2USUAoLU2VuZE1lc3NhZ2USHi5hcGkudjEuU2VuZENoYXRNZXNzYWdlUmVxdWVzdBofLmFwaS52MS5TZW5kQ2hhdE1lc3NhZ2VSZXNwb25zZSIAEkQKDVN1YnNjcmliZUNoYXQSHC5hcGkudjEuU3Vic2NyaWJlQ2hhdFJlcXVlc3QaES5hcGkudjEuQ2hhdEV2ZW50IgAwARJWChVTdWJzY3JpYmVDaGF0TWVzc2FnZXMSJC5hcGkudjEuU3Vic2NyaWJlQ2hhdE1lc3NhZ2VzUmVxdWVzdBoTLmFwaS52MS5DaGF0TWVzc2FnZSIAMAESTgoNU2VuZENoYXRSZXBseRIcLmFwaS52MS5TZW5kQ2hhdFJlcGx5UmVxdWVzdBodLmFwaS52MS5TZW5kQ2hhdFJlcGx5UmVzcG9uc2UiABJUCg9FZGl0Q2hhdE1lc3NhZ2USHi5hcGkudjEuRWRpdENoYXRNZXNzYWdlUmVxdWVzdBofLmFwaS52MS5FZGl0Q2hhdE1lc3NhZ2VSZXNwb25zZSIAElEKDlJlYWN0VG9NZXNzYWdlEh0uYXBpLnYxLlJlYWN0VG9NZXNzYWdlUmVxdWVzdBoeLmFwaS52MS5SZWFjdFRvTWVzc2FnZVJlc3BvbnNlIgASTgoNR2V0Q2hhdFN0YXR1cxIcLmFwaS52MS5HZXRDaGF0U3RhdHVzUmVxdWVzdBodLmFwaS52MS5HZXRDaGF0U3RhdHVzUmVzcG9uc2UiABJeChlTdWJzY3JpYmVQYWdlQ2hhdE1lc3NhZ2VzEiguYXBpLnYxLlN1YnNjcmliZVBhZ2VDaGF0TWVzc2FnZXNSZXF1ZXN0GhMuYXBpLnYxLkNoYXRNZXNzYWdlIgAwARJiChlTdWJzY3JpYmVJbnN0YW5jZVJlcXVlc3RzEiguYXBpLnYxLlN1YnNjcmliZUluc3RhbmNlUmVxdWVzdHNSZXF1ZXN0GhcuYXBpLnYxLkluc3RhbmNlUmVxdWVzdCIAMAFCOlo4Z2l0aHViLmNvbS9icmVuZGFuamVyd2luL3NpbXBsZV93aWtpL2dlbi9nby9hcGkvdjE7YXBpdjFiBnByb3RvMw", [file_google_protobuf_timestamp]);
 
 /**
  * ChatMessage represents a single chat message.
@@ -443,6 +443,13 @@ export const ReactToMessageResponseSchema: GenMessage<ReactToMessageResponse> = 
  * @generated from message api.v1.GetChatStatusRequest
  */
 export type GetChatStatusRequest = Message<"api.v1.GetChatStatusRequest"> & {
+  /**
+   * Optional page identifier. If set, checks for a page-specific instance.
+   * If empty, falls back to global subscriber check.
+   *
+   * @generated from field: string page = 1;
+   */
+  page: string;
 };
 
 /**
@@ -459,11 +466,25 @@ export const GetChatStatusRequestSchema: GenMessage<GetChatStatusRequest> = /*@_
  */
 export type GetChatStatusResponse = Message<"api.v1.GetChatStatusResponse"> & {
   /**
-   * Whether a Claude channel subscriber is connected.
+   * Whether a Claude channel subscriber is connected for the requested page (or globally).
    *
    * @generated from field: bool connected = 1;
    */
   connected: boolean;
+
+  /**
+   * Whether an instance has been requested but is not yet connected.
+   *
+   * @generated from field: bool starting = 2;
+   */
+  starting: boolean;
+
+  /**
+   * Whether a pool daemon is connected and able to spawn instances on demand.
+   *
+   * @generated from field: bool pool_connected = 3;
+   */
+  poolConnected: boolean;
 };
 
 /**
@@ -472,6 +493,63 @@ export type GetChatStatusResponse = Message<"api.v1.GetChatStatusResponse"> & {
  */
 export const GetChatStatusResponseSchema: GenMessage<GetChatStatusResponse> = /*@__PURE__*/
   messageDesc(file_api_v1_chat, 16);
+
+/**
+ * SubscribePageChatMessagesRequest is the request for SubscribePageChatMessages.
+ *
+ * @generated from message api.v1.SubscribePageChatMessagesRequest
+ */
+export type SubscribePageChatMessagesRequest = Message<"api.v1.SubscribePageChatMessagesRequest"> & {
+  /**
+   * page identifier to scope messages to
+   *
+   * @generated from field: string page = 1;
+   */
+  page: string;
+};
+
+/**
+ * Describes the message api.v1.SubscribePageChatMessagesRequest.
+ * Use `create(SubscribePageChatMessagesRequestSchema)` to create a new message.
+ */
+export const SubscribePageChatMessagesRequestSchema: GenMessage<SubscribePageChatMessagesRequest> = /*@__PURE__*/
+  messageDesc(file_api_v1_chat, 17);
+
+/**
+ * SubscribeInstanceRequestsRequest is the request for SubscribeInstanceRequests.
+ *
+ * @generated from message api.v1.SubscribeInstanceRequestsRequest
+ */
+export type SubscribeInstanceRequestsRequest = Message<"api.v1.SubscribeInstanceRequestsRequest"> & {
+};
+
+/**
+ * Describes the message api.v1.SubscribeInstanceRequestsRequest.
+ * Use `create(SubscribeInstanceRequestsRequestSchema)` to create a new message.
+ */
+export const SubscribeInstanceRequestsRequestSchema: GenMessage<SubscribeInstanceRequestsRequest> = /*@__PURE__*/
+  messageDesc(file_api_v1_chat, 18);
+
+/**
+ * InstanceRequest is streamed by SubscribeInstanceRequests when a page needs a Claude instance.
+ *
+ * @generated from message api.v1.InstanceRequest
+ */
+export type InstanceRequest = Message<"api.v1.InstanceRequest"> & {
+  /**
+   * page identifier that needs an instance
+   *
+   * @generated from field: string page = 1;
+   */
+  page: string;
+};
+
+/**
+ * Describes the message api.v1.InstanceRequest.
+ * Use `create(InstanceRequestSchema)` to create a new message.
+ */
+export const InstanceRequestSchema: GenMessage<InstanceRequest> = /*@__PURE__*/
+  messageDesc(file_api_v1_chat, 19);
 
 /**
  * Sender identifies who sent a chat message.
@@ -585,6 +663,28 @@ export const ChatService: GenService<{
     methodKind: "unary";
     input: typeof GetChatStatusRequestSchema;
     output: typeof GetChatStatusResponseSchema;
+  },
+  /**
+   * SubscribePageChatMessages is called by wiki-cli mcp --page at startup.
+   * Streams new user messages for a specific page only.
+   *
+   * @generated from rpc api.v1.ChatService.SubscribePageChatMessages
+   */
+  subscribePageChatMessages: {
+    methodKind: "server_streaming";
+    input: typeof SubscribePageChatMessagesRequestSchema;
+    output: typeof ChatMessageSchema;
+  },
+  /**
+   * SubscribeInstanceRequests is called by the wiki-cli pool daemon.
+   * Streams page names that need a Claude instance spawned.
+   *
+   * @generated from rpc api.v1.ChatService.SubscribeInstanceRequests
+   */
+  subscribeInstanceRequests: {
+    methodKind: "server_streaming";
+    input: typeof SubscribeInstanceRequestsRequestSchema;
+    output: typeof InstanceRequestSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_api_v1_chat, 0);
