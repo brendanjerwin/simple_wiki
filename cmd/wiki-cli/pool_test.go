@@ -411,6 +411,223 @@ var _ = Describe("poolDaemon", func() {
 			})
 		})
 	})
+
+	Describe("spawnInstance", func() {
+		When("ctx is nil", func() {
+			var (
+				daemon *poolDaemon
+				err    error
+			)
+
+			BeforeEach(func() {
+				daemon = &poolDaemon{
+					spawner:   &fakeSpawner{},
+					instances: make(map[string]*instanceEntry),
+				}
+				daemon.mu.Lock()
+				_, err = daemon.spawnInstance("test-page")
+				daemon.mu.Unlock()
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(MatchError(ContainSubstring("context not initialized")))
+			})
+		})
+
+		When("spawner succeeds", func() {
+			var (
+				daemon  *poolDaemon
+				spawner *fakeSpawner
+				entry   *instanceEntry
+				err     error
+			)
+
+			BeforeEach(func() {
+				spawner = &fakeSpawner{}
+				DeferCleanup(spawner.cleanup)
+				daemon = &poolDaemon{
+					spawner:   spawner,
+					ctx:       context.Background(),
+					instances: make(map[string]*instanceEntry),
+				}
+				daemon.mu.Lock()
+				entry, err = daemon.spawnInstance("test-page")
+				daemon.mu.Unlock()
+			})
+
+			It("should not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return an entry with the page name", func() {
+				Expect(entry.page).To(Equal("test-page"))
+			})
+
+			It("should set lastActive to near now", func() {
+				Expect(entry.lastActive).To(BeTemporally("~", time.Now(), time.Second))
+			})
+
+			It("should have a cancel function", func() {
+				Expect(entry.cancel).NotTo(BeNil())
+			})
+		})
+
+		When("spawner fails", func() {
+			var (
+				daemon *poolDaemon
+				err    error
+			)
+
+			BeforeEach(func() {
+				daemon = &poolDaemon{
+					spawner:   &fakeSpawner{shouldFail: true},
+					ctx:       context.Background(),
+					instances: make(map[string]*instanceEntry),
+				}
+				daemon.mu.Lock()
+				_, err = daemon.spawnInstance("test-page")
+				daemon.mu.Unlock()
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+		})
+	})
+
+	Describe("stopInstanceLocked", func() {
+		When("instance has a systemd unit name", func() {
+			var (
+				daemon   *poolDaemon
+				spawner  *fakeSpawner
+				canceled bool
+			)
+
+			BeforeEach(func() {
+				canceled = false
+				spawner = &fakeSpawner{}
+				daemon = &poolDaemon{
+					spawner: spawner,
+					instances: map[string]*instanceEntry{
+						"page-a": {
+							page:     "page-a",
+							unitName: "wiki-chat-page-a",
+							cancel:   func() { canceled = true },
+						},
+					},
+				}
+				daemon.mu.Lock()
+				daemon.stopInstanceLocked("page-a")
+				daemon.mu.Unlock()
+			})
+
+			It("should cancel the instance", func() {
+				Expect(canceled).To(BeTrue())
+			})
+
+			It("should call StopUnit with the unit name", func() {
+				Expect(spawner.stoppedUnits).To(ContainElement("wiki-chat-page-a"))
+			})
+
+			It("should remove the instance", func() {
+				Expect(daemon.instances).NotTo(HaveKey("page-a"))
+			})
+		})
+
+		When("instance does not exist", func() {
+			var daemon *poolDaemon
+
+			BeforeEach(func() {
+				daemon = &poolDaemon{
+					spawner:   &fakeSpawner{},
+					instances: make(map[string]*instanceEntry),
+				}
+				daemon.mu.Lock()
+				daemon.stopInstanceLocked("nonexistent")
+				daemon.mu.Unlock()
+			})
+
+			It("should not panic", func() {
+				Expect(daemon.instances).To(BeEmpty())
+			})
+		})
+	})
+
+	Describe("reapIdleInstances", func() {
+		When("an instance exceeds idle timeout", func() {
+			var (
+				daemon  *poolDaemon
+				spawner *fakeSpawner
+			)
+
+			BeforeEach(func() {
+				spawner = &fakeSpawner{}
+				daemon = &poolDaemon{
+					idleTimeout: 10 * time.Minute,
+					spawner:     spawner,
+					instances: map[string]*instanceEntry{
+						"idle-page": {
+							page:       "idle-page",
+							lastActive: time.Now().Add(-20 * time.Minute),
+							cancel:     func() {},
+						},
+						"active-page": {
+							page:       "active-page",
+							lastActive: time.Now(),
+							cancel:     func() {},
+						},
+					},
+				}
+
+				// Simulate one reaper tick
+				daemon.mu.Lock()
+				for page, entry := range daemon.instances {
+					if entry.idleSince() > daemon.idleTimeout {
+						daemon.stopInstanceLocked(page)
+					}
+				}
+				daemon.mu.Unlock()
+			})
+
+			It("should reap the idle instance", func() {
+				Expect(daemon.instances).NotTo(HaveKey("idle-page"))
+			})
+
+			It("should keep the active instance", func() {
+				Expect(daemon.instances).To(HaveKey("active-page"))
+			})
+		})
+	})
+
+	Describe("run", func() {
+		When("context is cancelled immediately", func() {
+			var (
+				daemon *poolDaemon
+				err    error
+			)
+
+			BeforeEach(func() {
+				daemon = &poolDaemon{
+					wikiURL:      "http://localhost:1",
+					maxInstances: 5,
+					idleTimeout:  30 * time.Minute,
+					spawner:      &fakeSpawner{},
+					instances:    make(map[string]*instanceEntry),
+				}
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+				err = daemon.run(ctx)
+			})
+
+			It("should return nil", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should set the daemon context", func() {
+				Expect(daemon.ctx).NotTo(BeNil())
+			})
+		})
+	})
 })
 
 var _ = Describe("prefixWriter", func() {
