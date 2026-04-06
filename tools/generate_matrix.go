@@ -21,7 +21,13 @@ type Matrix struct {
 }
 
 func main() {
-	cmd := exec.Command("go", "list", "./...")
+	goPath, err := exec.LookPath("go")
+	if err != nil {
+		_, _ = fmt.Fprintln(os.Stderr, "go not found:", err)
+		os.Exit(1)
+	}
+
+	cmd := exec.Command(goPath, "list", "./...")
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		panic(err)
