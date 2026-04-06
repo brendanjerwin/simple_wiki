@@ -62,11 +62,12 @@ test.describe('Dark Mode E2E Tests', () => {
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
 
-    await page.goto(`/${TEST_PAGE_NAME}/edit`);
-    const textarea = page.locator('wiki-editor textarea');
-    await expect(textarea).toBeVisible({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
+    try {
+      await page.goto(`/${TEST_PAGE_NAME}/edit`);
+      const textarea = page.locator('wiki-editor textarea');
+      await expect(textarea).toBeVisible({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
-    await textarea.fill(`+++
+      await textarea.fill(`+++
 identifier = "${TEST_PAGE_NAME}"
 title = "Dark Mode Test Page"
 +++
@@ -75,12 +76,13 @@ title = "Dark Mode Test Page"
 
 This page contains content for testing dark mode E2E functionality.
 The unique term e2edarkmode_unique_xyz helps search find this page.`);
-    await textarea.press('Space');
-    await expect(page.locator('wiki-editor .status-indicator')).toContainText('Saved', {
-      timeout: SAVE_TIMEOUT_MS,
-    });
-
-    await ctx.close();
+      await textarea.press('Space');
+      await expect(page.locator('wiki-editor .status-indicator')).toContainText('Saved', {
+        timeout: SAVE_TIMEOUT_MS,
+      });
+    } finally {
+      await ctx.close();
+    }
   });
 
   test.afterAll(async ({ browser }) => {
