@@ -1609,9 +1609,13 @@ describe('PageChatPanel pollChatStatus and sendMessage', () => {
         await el.updateComplete;
       });
 
-      it('should set the error', () => {
-        expect(el.error).to.exist;
-        expect(el.error).to.be.instanceof(ConnectError);
+      it('should not set the error (queues for retry instead)', () => {
+        expect(el.error).to.not.exist;
+      });
+
+      it('should queue the message as pendingMessage', () => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- accessing private property for testing
+        expect((el as any).pendingMessage).to.equal('Hello!');
       });
 
       it('should reset waitingForAssistant', () => {

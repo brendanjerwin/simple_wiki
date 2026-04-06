@@ -51,7 +51,7 @@ export class InventoryMoveItemDialog extends LitElement {
       }
 
       .dialog {
-        background: white;
+        background: var(--color-surface-elevated);
         max-width: 500px;
         width: 90%;
         max-height: 90vh;
@@ -71,7 +71,7 @@ export class InventoryMoveItemDialog extends LitElement {
 
       .search-results {
         margin-top: 8px;
-        border: 1px solid #e5e7eb;
+        border: 1px solid var(--color-border-subtle);
         border-radius: 4px;
         max-height: 250px;
         overflow-y: auto;
@@ -79,11 +79,11 @@ export class InventoryMoveItemDialog extends LitElement {
 
       .search-results-header {
         padding: 8px 12px;
-        background: #f9fafb;
-        border-bottom: 1px solid #e5e7eb;
+        background: var(--color-surface-sunken);
+        border-bottom: 1px solid var(--color-border-subtle);
         font-size: 12px;
         font-weight: 500;
-        color: #6b7280;
+        color: var(--color-text-secondary);
       }
 
       .search-result-item {
@@ -91,7 +91,7 @@ export class InventoryMoveItemDialog extends LitElement {
         align-items: center;
         justify-content: space-between;
         padding: 10px 12px;
-        border-bottom: 1px solid #e5e7eb;
+        border-bottom: 1px solid var(--color-border-subtle);
         gap: 12px;
       }
 
@@ -106,7 +106,7 @@ export class InventoryMoveItemDialog extends LitElement {
 
       .result-title {
         font-weight: 500;
-        color: #1f2937;
+        color: var(--color-text-primary);
         margin-bottom: 2px;
         white-space: nowrap;
         overflow: hidden;
@@ -115,7 +115,7 @@ export class InventoryMoveItemDialog extends LitElement {
 
       .result-container {
         font-size: 12px;
-        color: #6b7280;
+        color: var(--color-text-secondary);
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
@@ -125,8 +125,8 @@ export class InventoryMoveItemDialog extends LitElement {
         padding: 6px 12px;
         border: none;
         border-radius: 4px;
-        background: #4a90d9;
-        color: white;
+        background: var(--color-action-confirm);
+        color: var(--color-text-inverse);
         font-size: 13px;
         font-weight: 500;
         cursor: pointer;
@@ -135,18 +135,18 @@ export class InventoryMoveItemDialog extends LitElement {
       }
 
       .move-to-button:hover:not(:disabled) {
-        background: #3a7fc8;
+        background: var(--color-action-confirm-hover);
       }
 
       .move-to-button:disabled {
-        background: #9ca3af;
+        background: var(--color-action-primary);
         cursor: not-allowed;
       }
 
       .no-results {
         padding: 16px 12px;
         text-align: center;
-        color: #6b7280;
+        color: var(--color-text-secondary);
         font-size: 14px;
       }
 
@@ -154,14 +154,14 @@ export class InventoryMoveItemDialog extends LitElement {
         display: flex;
         gap: 12px;
         padding: 16px 20px;
-        border-top: 1px solid #e0e0e0;
+        border-top: 1px solid var(--color-border-subtle);
         justify-content: flex-end;
       }
 
       .footer-hint {
         flex: 1;
         font-size: 13px;
-        color: #6b7280;
+        color: var(--color-text-secondary);
         display: flex;
         align-items: center;
       }
@@ -181,17 +181,17 @@ export class InventoryMoveItemDialog extends LitElement {
         align-items: center;
         justify-content: center;
         padding: 0 12px;
-        background: #f5f5f5;
-        border: 1px solid #ddd;
+        background: var(--color-surface-sunken);
+        border: 1px solid var(--color-border-default);
         border-radius: 4px;
         cursor: pointer;
-        color: #333;
+        color: var(--color-text-primary);
         font-size: 16px;
         transition: background-color 0.15s;
       }
 
       .qr-scan-button:hover:not(:disabled) {
-        background: #e8e8e8;
+        background: var(--color-hover-overlay);
       }
 
       .qr-scan-button:disabled {
@@ -201,18 +201,18 @@ export class InventoryMoveItemDialog extends LitElement {
 
       .scanned-result {
         margin-top: 12px;
-        border: 2px solid #10b981;
+        border: 2px solid var(--color-success);
         border-radius: 4px;
-        background: #ecfdf5;
+        background: var(--color-success-bg);
       }
 
       .scanned-result-header {
         padding: 8px 12px;
-        background: #d1fae5;
-        border-bottom: 1px solid #10b981;
+        background: var(--color-success-bg);
+        border-bottom: 1px solid var(--color-success);
         font-size: 12px;
         font-weight: 500;
-        color: #047857;
+        color: var(--color-success-text);
         display: flex;
         align-items: center;
         gap: 6px;
