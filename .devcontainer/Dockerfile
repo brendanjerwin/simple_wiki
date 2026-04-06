@@ -10,5 +10,5 @@ COPY --chown=${DEVBOX_USER}:${DEVBOX_USER} devbox.lock devbox.lock
 
 
 
-RUN devbox run -- echo "Installed Packages." && nix-store --gc && nix-store --optimise \
-    && devbox shellenv --init-hook >> ~/.profile
+RUN devbox run -- echo "Installed Packages." && nix-store --gc && nix-store --optimise && \
+    devbox shellenv --init-hook >> ~/.profile

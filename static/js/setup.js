@@ -5,10 +5,10 @@ import { afterEach } from 'vitest';
 afterEach(() => {
   document.body.innerHTML = '';
   // Clear all event listeners from window
-  const newWindow = window.constructor.prototype;
+  const newWindow = globalThis.constructor.prototype;
   for (const key in newWindow) {
     if (key.startsWith('on')) {
-      window[key] = null;
+      globalThis[key] = null;
     }
   }
 });
