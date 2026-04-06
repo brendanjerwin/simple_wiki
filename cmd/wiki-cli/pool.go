@@ -292,6 +292,9 @@ func (d *poolDaemon) evictLeastActive() {
 // spawnInstance starts a Claude Code process for a page.
 // Must be called with d.mu held.
 func (d *poolDaemon) spawnInstance(page string) (*instanceEntry, error) {
+	if d.ctx == nil {
+		return nil, errors.New("pool daemon context not initialized")
+	}
 	ctx, cancel := context.WithCancel(d.ctx)
 
 	proc, unitName, err := d.spawner.Spawn(ctx, page)
@@ -353,7 +356,7 @@ func (s *execSpawner) Spawn(ctx context.Context, page string) (processHandle, st
 
 	if s.useSystemd {
 		unitName = "wiki-chat-" + sanitizeUnitName(page)
-		cmd = exec.CommandContext(ctx, "/usr/bin/systemd-run",
+		cmd = exec.CommandContext(ctx, "systemd-run",
 			"--user",
 			"--unit="+unitName,
 			"--scope",
@@ -384,7 +387,7 @@ func (*execSpawner) StopUnit(unitName string) {
 	}
 	stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer stopCancel()
-	if err := exec.CommandContext(stopCtx, "/usr/bin/systemctl", "--user", "stop", unitName+".scope").Run(); err != nil {
+	if err := exec.CommandContext(stopCtx, "systemctl", "--user", "stop", unitName+".scope").Run(); err != nil { //nolint:gosec // binary name is a fixed literal
 		log.Printf("Failed to stop systemd unit %q: %v", unitName, err)
 	}
 }

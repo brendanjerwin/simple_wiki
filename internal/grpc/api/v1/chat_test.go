@@ -1186,8 +1186,10 @@ var _ = Describe("ChatService", func() {
 				)
 			})
 
-			It("should return InvalidArgument error", func() {
-				Expect(err).To(HaveOccurred())
+			It("should return InvalidArgument status code", func() {
+				st, ok := status.FromError(err)
+				Expect(ok).To(BeTrue())
+				Expect(st.Code()).To(Equal(codes.InvalidArgument))
 			})
 		})
 

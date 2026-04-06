@@ -152,6 +152,18 @@ type fakeSpawner struct {
 	shouldFail   bool
 	spawnedPages []string
 	stoppedUnits []string
+	handles      []*fakeProcessHandle
+}
+
+// cleanup closes all spawned process handles to unblock Wait goroutines.
+func (f *fakeSpawner) cleanup() {
+	for _, h := range f.handles {
+		select {
+		case <-h.waitCh:
+		default:
+			close(h.waitCh)
+		}
+	}
 }
 
 func (f *fakeSpawner) Spawn(_ context.Context, page string) (processHandle, string, error) {
@@ -159,7 +171,9 @@ func (f *fakeSpawner) Spawn(_ context.Context, page string) (processHandle, stri
 		return nil, "", errors.New("spawn failed")
 	}
 	f.spawnedPages = append(f.spawnedPages, page)
-	return &fakeProcessHandle{waitCh: make(chan struct{})}, "", nil
+	handle := &fakeProcessHandle{waitCh: make(chan struct{})}
+	f.handles = append(f.handles, handle)
+	return handle, "", nil
 }
 
 func (f *fakeSpawner) StopUnit(unitName string) {
@@ -242,6 +256,7 @@ var _ = Describe("poolDaemon", func() {
 
 			BeforeEach(func() {
 				spawner = &fakeSpawner{}
+				DeferCleanup(spawner.cleanup)
 				daemon = &poolDaemon{
 					maxInstances: 2,
 					spawner:      spawner,
@@ -287,6 +302,7 @@ var _ = Describe("poolDaemon", func() {
 
 			BeforeEach(func() {
 				spawner = &fakeSpawner{}
+				DeferCleanup(spawner.cleanup)
 				daemon = &poolDaemon{
 					maxInstances: 5,
 					spawner:      spawner,
