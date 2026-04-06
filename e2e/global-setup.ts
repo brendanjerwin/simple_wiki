@@ -1,22 +1,14 @@
 import { FullConfig } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
-import { execSync } from 'node:child_process';
+import { runBuild } from './build-runner';
 
 async function globalSetup(config: FullConfig) {
   console.log('[E2E Setup] Preparing test environment...');
-  
+
   // Build the application first
   console.log('[E2E Setup] Building application...');
-  try {
-    execSync('devbox run build', { 
-      stdio: 'inherit',
-      cwd: path.join(__dirname, '..')
-    });
-  } catch (error) {
-    console.error('[E2E Setup] Build failed:', error);
-    throw error;
-  }
+  runBuild(path.join(__dirname, '..'));
   
   // Ensure the binary exists
   const binaryPath = path.join(__dirname, '..', 'simple_wiki-linux-amd64');
