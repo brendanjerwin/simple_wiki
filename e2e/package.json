@@ -4,7 +4,8 @@
   "description": "End-to-end tests for Simple Wiki",
   "packageManager": "bun@1.0.0",
   "scripts": {
-    "test": "bun test",
+    "test": "playwright test",
+    "test:unit": "bun test \"**/*.test.ts\"",
     "test:e2e": "playwright test",
     "test:e2e:debug": "playwright test --debug",
     "test:e2e:headed": "PLAYWRIGHT_HEADED=true playwright test --headed",
