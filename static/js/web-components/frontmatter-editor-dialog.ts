@@ -71,7 +71,7 @@ export class FrontmatterEditorDialog extends LitElement {
       }
 
       .dialog {
-        background: white;
+        background: var(--color-surface-elevated);
         max-width: 600px;
         width: 90%;
         max-height: 80vh;
@@ -114,8 +114,9 @@ export class FrontmatterEditorDialog extends LitElement {
         font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
         font-size: 14px;
         line-height: 1.4;
-        background: #f8f9fa;
-        border: 1px solid #e9ecef;
+        background: var(--color-surface-sunken);
+        border: 1px solid var(--color-border-subtle);
+        color: var(--color-text-primary);
         resize: vertical;
         box-sizing: border-box;
         white-space: pre-wrap;
@@ -132,11 +133,11 @@ export class FrontmatterEditorDialog extends LitElement {
       }
 
       .loading {
-        color: #666;
+        color: var(--color-text-secondary);
       }
 
       .error {
-        color: #dc3545;
+        color: var(--color-error);
         flex-direction: column;
         gap: 8px;
       }
@@ -145,7 +146,7 @@ export class FrontmatterEditorDialog extends LitElement {
         display: flex;
         gap: 12px;
         padding: 16px 20px;
-        border-top: 1px solid #e0e0e0;
+        border-top: 1px solid var(--color-border-subtle);
         justify-content: flex-end;
       }
     `

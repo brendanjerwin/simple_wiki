@@ -1,6 +1,6 @@
 import { html, css, LitElement, nothing } from 'lit';
 import { property, state } from 'lit/decorators.js';
-import { buttonCSS, foundationCSS } from './shared-styles.js';
+import { buttonCSS, colorCSS, foundationCSS } from './shared-styles.js';
 
 /**
  * EditorToolbar provides a horizontal toolbar for mobile editing.
@@ -25,12 +25,13 @@ export class EditorToolbar extends LitElement {
 
   static override readonly styles = [
     foundationCSS,
+    colorCSS,
     buttonCSS,
     css`
       :host {
         display: block;
-        background: var(--color-background-primary, #2d2d2d);
-        border-bottom: 1px solid var(--color-border, #444);
+        background: var(--color-editor-surface);
+        border-bottom: 1px solid var(--color-editor-border);
         padding: 6px 8px;
         box-sizing: border-box;
       }
@@ -50,10 +51,10 @@ export class EditorToolbar extends LitElement {
         min-width: 40px;
         height: 36px;
         padding: 0 12px;
-        border: 1px solid var(--color-border, #555);
+        border: 1px solid var(--color-editor-border);
         border-radius: 4px;
-        background: var(--color-background-secondary, #3d3d3d);
-        color: var(--color-text-primary, #e9ecef);
+        background: var(--color-editor-surface-elevated);
+        color: var(--color-editor-text);
         font-size: 14px;
         cursor: pointer;
         transition: background-color 0.15s ease;
@@ -61,7 +62,7 @@ export class EditorToolbar extends LitElement {
 
       .toolbar-btn:hover,
       .toolbar-btn:active {
-        background: var(--color-background-hover, #4d4d4d);
+        background: var(--color-editor-surface-hover);
       }
 
       .toolbar-btn:active {
@@ -75,18 +76,18 @@ export class EditorToolbar extends LitElement {
 
       .toolbar-btn:disabled:hover,
       .toolbar-btn:disabled:active {
-        background: var(--color-background-secondary, #3d3d3d);
+        background: var(--color-editor-surface-elevated);
         transform: none;
       }
 
       .toolbar-btn.exit-btn {
-        background: var(--color-background-tertiary, #4a4a4a);
+        background: var(--color-editor-surface-deep);
       }
 
       .separator {
         width: 1px;
         height: 24px;
-        background: var(--color-border, #555);
+        background: var(--color-editor-border);
         margin: 0 4px;
       }
 
@@ -106,7 +107,7 @@ export class EditorToolbar extends LitElement {
       .upload-btn-group {
         display: flex;
         align-items: stretch;
-        border: 1px solid var(--color-border, #555);
+        border: 1px solid var(--color-editor-border);
         border-radius: 4px;
         overflow: hidden;
       }
@@ -119,8 +120,8 @@ export class EditorToolbar extends LitElement {
         height: 36px;
         padding: 0 10px;
         border: none;
-        background: var(--color-background-secondary, #3d3d3d);
-        color: var(--color-text-primary, #e9ecef);
+        background: var(--color-editor-surface-elevated);
+        color: var(--color-editor-text);
         font-size: 14px;
         cursor: pointer;
         transition: background-color 0.15s ease;
@@ -128,7 +129,7 @@ export class EditorToolbar extends LitElement {
 
       .upload-btn-main:hover,
       .upload-btn-main:active {
-        background: var(--color-background-hover, #4d4d4d);
+        background: var(--color-editor-surface-hover);
       }
 
       .upload-btn-toggle {
@@ -139,9 +140,9 @@ export class EditorToolbar extends LitElement {
         height: 36px;
         padding: 0;
         border: none;
-        border-left: 1px solid var(--color-border, #555);
-        background: var(--color-background-secondary, #3d3d3d);
-        color: var(--color-text-primary, #e9ecef);
+        border-left: 1px solid var(--color-editor-border);
+        background: var(--color-editor-surface-elevated);
+        color: var(--color-editor-text);
         font-size: 10px;
         cursor: pointer;
         transition: background-color 0.15s ease;
@@ -149,7 +150,7 @@ export class EditorToolbar extends LitElement {
 
       .upload-btn-toggle:hover,
       .upload-btn-toggle:active {
-        background: var(--color-background-hover, #4d4d4d);
+        background: var(--color-editor-surface-hover);
       }
 
       .dropdown-arrow {
@@ -165,8 +166,8 @@ export class EditorToolbar extends LitElement {
         top: 100%;
         left: 0;
         margin-top: 4px;
-        background: var(--color-background-secondary, #3d3d3d);
-        border: 1px solid var(--color-border, #555);
+        background: var(--color-editor-surface-elevated);
+        border: 1px solid var(--color-editor-border);
         border-radius: 4px;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
         z-index: 1000;
@@ -184,12 +185,12 @@ export class EditorToolbar extends LitElement {
         width: 100%;
         text-align: left;
         font-size: 14px;
-        color: var(--color-text-primary, #e9ecef);
+        color: var(--color-editor-text);
         transition: background-color 0.2s ease;
       }
 
       .upload-dropdown-item:hover {
-        background: var(--color-background-hover, #4d4d4d);
+        background: var(--color-editor-surface-hover);
       }
 
       .upload-dropdown-item:first-child {
