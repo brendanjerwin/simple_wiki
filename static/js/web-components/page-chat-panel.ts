@@ -425,13 +425,11 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
   private _renderFab() {
     if (!this._fabVisible || this.drawerOpen) return nothing;
     const fabClass = this._chatAvailable ? 'fab' : 'fab disabled';
-    const ariaDisabled = this._chatAvailable ? 'false' : 'true';
     return html`
       <button
         class="${fabClass}"
         @click=${this.toggleDrawer}
         aria-label=${this.persona ? 'Chat with ' + this.persona : 'Open chat'}
-        aria-disabled=${ariaDisabled}
       >
         <i class="fa-solid fa-robot"></i>
       </button>
