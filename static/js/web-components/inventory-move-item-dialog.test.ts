@@ -673,4 +673,47 @@ describe('InventoryMoveItemDialog', () => {
       });
     });
   });
+
+  describe('_handleMoveToClick success path', () => {
+    let moveItemStub: sinon.SinonStub;
+    let showSuccessStub: sinon.SinonStub;
+    let capturedCallback: (() => void) | undefined;
+
+    beforeEach(async () => {
+      el.openDialog('screwdriver', 'drawer_kitchen');
+      await el.updateComplete;
+
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+      const creatorMover = (el as unknown as { inventoryItemCreatorMover: { moveItem: (item: string, location: string) => Promise<unknown>; showSuccess: (msg: string, callback?: () => void) => void } }).inventoryItemCreatorMover;
+      moveItemStub = sinon.stub(creatorMover, 'moveItem').resolves({
+        success: true,
+        summary: 'Moved screwdriver to toolbox_garage',
+      });
+      capturedCallback = undefined;
+      // Stub showSuccess to capture the reload callback without actually triggering
+      // globalThis.location.reload() (which would reload the test page)
+      showSuccessStub = sinon.stub(creatorMover, 'showSuccess').callsFake((_msg: string, callback?: () => void) => {
+        capturedCallback = callback;
+      });
+    });
+
+    it('should call showSuccess with a reload callback after a successful move', async () => {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+      await (el as unknown as { _handleMoveToClick: (id: string) => Promise<void> })._handleMoveToClick('toolbox_garage');
+
+      expect(moveItemStub).to.have.been.calledWith('screwdriver', 'toolbox_garage');
+      expect(showSuccessStub).to.have.been.calledWith('Moved screwdriver to toolbox_garage', sinon.match.func);
+      expect(capturedCallback).to.be.a('function');
+    });
+
+    it('should close the dialog after a successful move', async () => {
+      el.open = true;
+      await el.updateComplete;
+
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private method for testing
+      await (el as unknown as { _handleMoveToClick: (id: string) => Promise<void> })._handleMoveToClick('toolbox_garage');
+
+      expect(el.open).to.be.false;
+    });
+  });
 });
