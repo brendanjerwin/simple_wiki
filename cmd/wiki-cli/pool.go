@@ -143,6 +143,7 @@ The daemon should be run in a directory containing your Claude agent configurati
 
 // run starts the pool daemon's main loop.
 func (d *poolDaemon) run(ctx context.Context) error {
+	d.ctx = ctx
 	log.Printf("Pool daemon starting (max=%d, idle-timeout=%s, wiki=%s)", d.maxInstances, d.idleTimeout, d.wikiURL)
 
 	// Start the idle reaper
@@ -227,16 +228,17 @@ func (d *poolDaemon) ensureInstance(page string) {
 		return
 	}
 
-	// At capacity? Evict least recently active.
-	if len(d.instances) >= d.maxInstances {
-		d.evictLeastActive()
-	}
-
-	// Spawn new instance
+	// Spawn new instance first, then evict if needed — avoids dropping a working
+	// instance when the spawn fails.
 	entry, err := d.spawnInstance(page)
 	if err != nil {
 		log.Printf("Failed to spawn instance for %q: %v", page, err)
 		return
+	}
+
+	// At capacity? Evict least recently active to make room.
+	if len(d.instances) >= d.maxInstances {
+		d.evictLeastActive()
 	}
 
 	d.instances[page] = entry

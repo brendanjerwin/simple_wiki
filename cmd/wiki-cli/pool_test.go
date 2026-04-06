@@ -165,7 +165,7 @@ var _ = Describe("poolDaemon", func() {
 			})
 		})
 
-		When("at max capacity", func() {
+		When("at max capacity and spawn fails", func() {
 			var daemon *poolDaemon
 
 			BeforeEach(func() {
@@ -187,17 +187,20 @@ var _ = Describe("poolDaemon", func() {
 						},
 					},
 				}
-				// Try to spawn a new instance — the spawn will fail (bad binary)
-				// but eviction should still happen
 				daemon.ensureInstance("page-c")
 			})
 
-			It("should evict the least recently active instance", func() {
-				Expect(daemon.instances).NotTo(HaveKey("page-a"))
+			It("should not evict any instance when spawn fails", func() {
+				Expect(daemon.instances).To(HaveKey("page-a"))
+				Expect(daemon.instances).To(HaveKey("page-b"))
 			})
 
-			It("should keep the more recently active instance", func() {
-				Expect(daemon.instances).To(HaveKey("page-b"))
+			It("should not add the failed instance", func() {
+				Expect(daemon.instances).NotTo(HaveKey("page-c"))
+			})
+
+			It("should preserve capacity", func() {
+				Expect(daemon.instances).To(HaveLen(2))
 			})
 		})
 	})
