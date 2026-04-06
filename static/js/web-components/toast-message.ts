@@ -248,7 +248,7 @@ export class ToastMessage extends LitElement {
   }
 
   private clearTimeout(): void {
-    if (this.timeoutId) {
+    if (this.timeoutId !== undefined) {
       window.clearTimeout(this.timeoutId);
       delete this.timeoutId;
     }
