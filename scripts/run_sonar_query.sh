@@ -10,14 +10,14 @@
 set -e
 
 # Load token from .env if not already set
-if [ -z "$SONAR_TOKEN" ] && [ -f .env ]; then
+if [[ -z "$SONAR_TOKEN" && -f .env ]]; then
   # shellcheck disable=SC2046
   export $(grep -v '^#' .env | xargs)
 fi
 
-if [ -z "$SONAR_TOKEN" ]; then
-  echo "Error: SONAR_TOKEN not set. Create a .env file with your token or export it."
-  echo "Generate one at https://sonarcloud.io/account/security"
+if [[ -z "$SONAR_TOKEN" ]]; then
+  echo "Error: SONAR_TOKEN not set. Create a .env file with your token or export it." >&2
+  echo "Generate one at https://sonarcloud.io/account/security" >&2
   exit 1
 fi
 
@@ -25,7 +25,8 @@ BASE_URL="https://sonarcloud.io/api"
 PROJECT="brendanjerwin_simple_wiki"
 
 sonar_api() {
-  curl -s -H "Authorization: Bearer $SONAR_TOKEN" "$BASE_URL/$1"
+  local endpoint="$1"
+  curl -s -H "Authorization: Bearer $SONAR_TOKEN" "$BASE_URL/$endpoint"
 }
 
 case "${1:-issues}" in
