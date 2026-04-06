@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Locator } from '@playwright/test';
 
 // Test data — unique per run/worker to avoid parallel collision
 const TEST_PAGE_NAME = `e2edarkmodestest-${process.pid}-${Date.now()}`;
@@ -7,8 +7,10 @@ const TEST_PAGE_NAME = `e2edarkmodestest-${process.pid}-${Date.now()}`;
 const SAVE_TIMEOUT_MS = 10000;
 const COMPONENT_LOAD_TIMEOUT_MS = 15000;
 const PAGE_LOAD_TIMEOUT_MS = 15000;
-const SEARCH_TIMEOUT_MS = 10000;
 const DIALOG_TIMEOUT_MS = 5000;
+// Search index is updated asynchronously; allow extra time for the indexer to process the new page.
+const SEARCH_INDEX_UPDATE_TIMEOUT_MS = 30000;
+const SEARCH_INDEX_RETRY_INTERVAL_MS = 2000;
 
 // Design token values from default.css — Light Mode (:root defaults)
 const LIGHT_SURFACE_PRIMARY = '#ffffff';
@@ -21,8 +23,35 @@ const DARK_SURFACE_ELEVATED = '#2d2d2d';
 const DARK_SURFACE_SUNKEN = '#141414';
 const DARK_TEXT_PRIMARY = '#e9ecef';
 
+/**
+ * Retries a search query until at least one result appears in .item_content.
+ *
+ * wiki-search-results uses a position:fixed popover, so its host element has zero height
+ * and cannot be detected with toBeVisible(). We wait for .item_content directly since
+ * that IS visible inside the popover. The search index is updated asynchronously after
+ * saving a page, so retrying is necessary for freshly-created pages.
+ */
+async function searchUntilResultsVisible(
+  searchInput: Locator,
+  itemContentLocator: Locator,
+  term: string,
+): Promise<void> {
+  const retries = Math.ceil(SEARCH_INDEX_UPDATE_TIMEOUT_MS / SEARCH_INDEX_RETRY_INTERVAL_MS);
+  for (let i = 0; i < retries; i++) {
+    await searchInput.fill(term);
+    await searchInput.press('Enter');
+    if (await itemContentLocator.isVisible({ timeout: SEARCH_INDEX_RETRY_INTERVAL_MS }).catch(() => false)) {
+      return;
+    }
+  }
+  throw new Error(
+    `Search results for "${term}" not found within ${SEARCH_INDEX_UPDATE_TIMEOUT_MS}ms. ` +
+    `Search index may not have updated yet.`,
+  );
+}
+
 test.describe('Dark Mode E2E Tests', () => {
-  test.setTimeout(60000);
+  test.setTimeout(90000);
 
   test.beforeAll(async ({ browser }) => {
     const ctx = await browser.newContext();
@@ -417,16 +446,11 @@ identifier = "${TEST_PAGE_NAME}"
         const searchInput = searchComponent.locator('input[type="search"]');
         await expect(searchInput).toBeVisible({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
-        await searchInput.fill('e2edarkmode_unique_xyz');
-        await searchInput.press('Enter');
-
-        // Wait for results to appear
-        const resultsComponent = searchComponent.locator('wiki-search-results');
-        await expect(resultsComponent).toBeVisible({ timeout: SEARCH_TIMEOUT_MS });
-
-        // Verify item_content is visible in results
-        const itemContent = resultsComponent.locator('.item_content').first();
-        await expect(itemContent).toBeVisible({ timeout: SEARCH_TIMEOUT_MS });
+        // wiki-search-results host has zero height (position:fixed popover), so wait for
+        // .item_content directly (which IS visible inside the fixed popover). Retry the
+        // search to handle async index latency after page creation.
+        const itemContent = searchComponent.locator('wiki-search-results .item_content').first();
+        await searchUntilResultsVisible(searchInput, itemContent, 'e2edarkmode_unique_xyz');
 
         // Check computed background color of item_content (uses --color-surface-elevated)
         // Dark surface-elevated #2d2d2d = rgb(45, 45, 45)
@@ -448,14 +472,8 @@ identifier = "${TEST_PAGE_NAME}"
         const searchInput = searchComponent.locator('input[type="search"]');
         await expect(searchInput).toBeVisible({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
-        await searchInput.fill('e2edarkmode_unique_xyz');
-        await searchInput.press('Enter');
-
-        const resultsComponent = searchComponent.locator('wiki-search-results');
-        await expect(resultsComponent).toBeVisible({ timeout: SEARCH_TIMEOUT_MS });
-
-        const itemContent = resultsComponent.locator('.item_content').first();
-        await expect(itemContent).toBeVisible({ timeout: SEARCH_TIMEOUT_MS });
+        const itemContent = searchComponent.locator('wiki-search-results .item_content').first();
+        await searchUntilResultsVisible(searchInput, itemContent, 'e2edarkmode_unique_xyz');
 
         // Light surface-elevated #ffffff = rgb(255, 255, 255)
         await expect(itemContent).toHaveCSS('background-color', 'rgb(255, 255, 255)');
@@ -475,11 +493,9 @@ identifier = "${TEST_PAGE_NAME}"
         await expect(lightPage.locator('#rendered')).toBeVisible({ timeout: PAGE_LOAD_TIMEOUT_MS });
 
         const lightSearch = lightPage.locator('wiki-search#site-search');
-        await lightSearch.locator('input[type="search"]').fill('e2edarkmode_unique_xyz');
-        await lightSearch.locator('input[type="search"]').press('Enter');
-        await expect(lightSearch.locator('wiki-search-results')).toBeVisible({ timeout: SEARCH_TIMEOUT_MS });
+        const lightSearchInput = lightSearch.locator('input[type="search"]');
         const lightItemContent = lightSearch.locator('wiki-search-results .item_content').first();
-        await expect(lightItemContent).toBeVisible({ timeout: SEARCH_TIMEOUT_MS });
+        await searchUntilResultsVisible(lightSearchInput, lightItemContent, 'e2edarkmode_unique_xyz');
         lightBg = await lightItemContent.evaluate(el => getComputedStyle(el).backgroundColor);
       } finally {
         await lightCtx.close();
@@ -492,11 +508,9 @@ identifier = "${TEST_PAGE_NAME}"
         await expect(darkPage.locator('#rendered')).toBeVisible({ timeout: PAGE_LOAD_TIMEOUT_MS });
 
         const darkSearch = darkPage.locator('wiki-search#site-search');
-        await darkSearch.locator('input[type="search"]').fill('e2edarkmode_unique_xyz');
-        await darkSearch.locator('input[type="search"]').press('Enter');
-        await expect(darkSearch.locator('wiki-search-results')).toBeVisible({ timeout: SEARCH_TIMEOUT_MS });
+        const darkSearchInput = darkSearch.locator('input[type="search"]');
         const darkItemContent = darkSearch.locator('wiki-search-results .item_content').first();
-        await expect(darkItemContent).toBeVisible({ timeout: SEARCH_TIMEOUT_MS });
+        await searchUntilResultsVisible(darkSearchInput, darkItemContent, 'e2edarkmode_unique_xyz');
         darkBg = await darkItemContent.evaluate(el => getComputedStyle(el).backgroundColor);
       } finally {
         await darkCtx.close();
