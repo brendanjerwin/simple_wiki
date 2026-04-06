@@ -537,45 +537,51 @@ export class QrScanner extends LitElement {
     this.collapse();
   }
 
-  private _handleError(err: unknown): void {
-    let error: Error;
+  private _describeUnknownObject(err: object): string {
+    const objectTag = Object.prototype.toString.call(err);
+    try {
+      const serialized = JSON.stringify(err);
+      if (serialized && serialized !== '{}') {
+        return `Unknown error: ${objectTag} ${serialized}`;
+      }
+    } catch {
+      // Fall back to the object tag when serialization fails
+    }
+    return `Unknown error: ${objectTag}`;
+  }
 
+  private _buildUnknownErrorMessage(err: unknown): string {
+    if (err === null || err === undefined) {
+      return 'Unknown error (null or undefined)';
+    }
+    if (typeof err === 'object') {
+      return this._describeUnknownObject(err);
+    }
+    return `Unknown error: ${String(err)}`;
+  }
+
+  private _normalizeError(err: unknown): Error {
     if (err instanceof CameraPermissionError || err instanceof NoCameraError) {
       // Already a custom error type
-      error = err;
-    } else if (err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError')) {
-      // Browser permission denied - use DOMException.name (stable API)
-      error = new CameraPermissionError(err);
-    } else if (typeof err === 'string') {
-      // Normalize string errors from external libraries into standard Error instances
-      error = new Error(err);
-    } else if (err instanceof Error) {
-      // Preserve other Error types
-      error = err;
-    } else {
-      // Preserve information from unknown error values
-      let message: string;
-      if (err === null || err === undefined) {
-        message = 'Unknown error (null or undefined)';
-      } else if (typeof err === 'object') {
-        const objectTag = Object.prototype.toString.call(err);
-        let objectDetails = objectTag;
-
-        try {
-          const serialized = JSON.stringify(err);
-          if (serialized && serialized !== '{}') {
-            objectDetails = `${objectTag} ${serialized}`;
-          }
-        } catch {
-          // Fall back to the object tag when serialization fails
-        }
-
-        message = `Unknown error: ${objectDetails}`;
-      } else {
-        message = `Unknown error: ${String(err)}`;
-      }
-      error = new Error(message, { cause: err });
+      return err;
     }
+    if (err instanceof DOMException && (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError')) {
+      // Browser permission denied - use DOMException.name (stable API)
+      return new CameraPermissionError(err);
+    }
+    if (typeof err === 'string') {
+      // Normalize string errors from external libraries into standard Error instances
+      return new Error(err);
+    }
+    if (err instanceof Error) {
+      // Preserve other Error types
+      return err;
+    }
+    return new Error(this._buildUnknownErrorMessage(err), { cause: err });
+  }
+
+  private _handleError(err: unknown): void {
+    const error = this._normalizeError(err);
 
     this.error = AugmentErrorService.augmentError(error, 'start camera');
 
