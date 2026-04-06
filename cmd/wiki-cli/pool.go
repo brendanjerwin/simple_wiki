@@ -286,24 +286,27 @@ func buildMCPServerArg(wikiCLIBin, wikiURL, page string) string {
 	return fmt.Sprintf("%s mcp --url %s --page %s", wikiCLIBin, wikiURL, page)
 }
 
-// buildClaudeArgs builds the argument list for spawning a Claude Code instance.
-// Returns (binary, args, unitName).
-func buildClaudeArgs(claudePath, mcpServerCmd, page string, useSystemd bool) (string, []string, string) {
-	if useSystemd {
-		unitName := "wiki-chat-" + sanitizeUnitName(page)
-		return "systemd-run", []string{
-			"--user",
-			"--unit=" + unitName,
-			"--scope",
-			claudePath,
-			"--channels", "wiki-channel:wiki-channel",
-			"--mcp-server", mcpServerCmd,
-		}, unitName
-	}
+// buildDirectClaudeArgs builds the argument list for spawning Claude directly.
+// Returns (binary, args, unitName="").
+func buildDirectClaudeArgs(claudePath, mcpServerCmd string) (string, []string, string) {
 	return claudePath, []string{
 		"--channels", "wiki-channel:wiki-channel",
 		"--mcp-server", mcpServerCmd,
 	}, ""
+}
+
+// buildSystemdClaudeArgs builds the argument list for spawning Claude via systemd-run.
+// Returns (binary, args, unitName).
+func buildSystemdClaudeArgs(claudePath, mcpServerCmd, page string) (string, []string, string) {
+	unitName := "wiki-chat-" + sanitizeUnitName(page)
+	return "systemd-run", []string{
+		"--user",
+		"--unit=" + unitName,
+		"--scope",
+		claudePath,
+		"--channels", "wiki-channel:wiki-channel",
+		"--mcp-server", mcpServerCmd,
+	}, unitName
 }
 
 // spawnInstance starts a Claude Code process for a page.
@@ -321,7 +324,14 @@ func (d *poolDaemon) spawnInstance(page string) (*instanceEntry, error) {
 	}
 
 	mcpServerCmd := buildMCPServerArg(wikiCLIBin, d.wikiURL, page)
-	binary, args, unitName := buildClaudeArgs(d.claudePath, mcpServerCmd, page, d.useSystemd)
+	var binary string
+	var args []string
+	var unitName string
+	if d.useSystemd {
+		binary, args, unitName = buildSystemdClaudeArgs(d.claudePath, mcpServerCmd, page)
+	} else {
+		binary, args, unitName = buildDirectClaudeArgs(d.claudePath, mcpServerCmd)
+	}
 
 	cmd := d.newCommand(ctx, binary, args...)
 	if err := cmd.Start(); err != nil {

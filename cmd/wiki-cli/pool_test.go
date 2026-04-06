@@ -115,55 +115,53 @@ var _ = Describe("buildPoolCommand", func() {
 	})
 })
 
-var _ = Describe("buildClaudeArgs", func() {
-	When("not using systemd", func() {
-		var (
-			binary   string
-			args     []string
-			unitName string
-		)
+var _ = Describe("buildDirectClaudeArgs", func() {
+	var (
+		binary   string
+		args     []string
+		unitName string
+	)
 
-		BeforeEach(func() {
-			binary, args, unitName = buildClaudeArgs("/usr/bin/claude", "/usr/bin/wiki-cli mcp --url http://localhost --page test", "test", false)
-		})
-
-		It("should use the claude path as binary", func() {
-			Expect(binary).To(Equal("/usr/bin/claude"))
-		})
-
-		It("should include --channels and --mcp-server", func() {
-			Expect(args).To(ContainElement("--channels"))
-			Expect(args).To(ContainElement("--mcp-server"))
-		})
-
-		It("should return empty unit name", func() {
-			Expect(unitName).To(BeEmpty())
-		})
+	BeforeEach(func() {
+		binary, args, unitName = buildDirectClaudeArgs("/usr/bin/claude", "/usr/bin/wiki-cli mcp --url http://localhost --page test")
 	})
 
-	When("using systemd", func() {
-		var (
-			binary   string
-			args     []string
-			unitName string
-		)
+	It("should use the claude path as binary", func() {
+		Expect(binary).To(Equal("/usr/bin/claude"))
+	})
 
-		BeforeEach(func() {
-			binary, args, unitName = buildClaudeArgs("/usr/bin/claude", "/usr/bin/wiki-cli mcp --url http://localhost --page my_page", "my_page", true)
-		})
+	It("should include --channels and --mcp-server", func() {
+		Expect(args).To(ContainElement("--channels"))
+		Expect(args).To(ContainElement("--mcp-server"))
+	})
 
-		It("should use systemd-run as binary", func() {
-			Expect(binary).To(Equal("systemd-run"))
-		})
+	It("should return empty unit name", func() {
+		Expect(unitName).To(BeEmpty())
+	})
+})
 
-		It("should include --user and --scope", func() {
-			Expect(args).To(ContainElement("--user"))
-			Expect(args).To(ContainElement("--scope"))
-		})
+var _ = Describe("buildSystemdClaudeArgs", func() {
+	var (
+		binary   string
+		args     []string
+		unitName string
+	)
 
-		It("should return a sanitized unit name", func() {
-			Expect(unitName).To(Equal("wiki-chat-my-page"))
-		})
+	BeforeEach(func() {
+		binary, args, unitName = buildSystemdClaudeArgs("/usr/bin/claude", "/usr/bin/wiki-cli mcp --url http://localhost --page my_page", "my_page")
+	})
+
+	It("should use systemd-run as binary", func() {
+		Expect(binary).To(Equal("systemd-run"))
+	})
+
+	It("should include --user and --scope", func() {
+		Expect(args).To(ContainElement("--user"))
+		Expect(args).To(ContainElement("--scope"))
+	})
+
+	It("should return a sanitized unit name", func() {
+		Expect(unitName).To(Equal("wiki-chat-my-page"))
 	})
 })
 
