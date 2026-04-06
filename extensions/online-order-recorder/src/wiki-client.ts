@@ -11,7 +11,7 @@ import {
 let cachedClient: { url: string; client: Client<typeof PageManagementService> } | null = null;
 
 function getWikiClient(wikiUrl: string): Client<typeof PageManagementService> {
-  const url = wikiUrl.replace(/\/+$/, ''); // NOSONAR - false positive: single char class + quantifier + anchor is immune to ReDoS
+  const url = wikiUrl.replace(/\/+$/, ''); // NOSONAR - false positive: literal token + quantifier + anchor is immune to ReDoS
   if (cachedClient?.url === url) {
     return cachedClient.client;
   }
