@@ -90,15 +90,26 @@ type Manager struct {
 	mu                   sync.RWMutex
 	channelSubscribers   []chan *Message
 	channelSubscribersMu sync.RWMutex
-	done                 chan struct{}
+
+	pageChannelSubscribers   map[string][]chan *Message // page → per-page MCP subscribers
+	pageChannelSubscribersMu sync.RWMutex
+
+	instanceRequests     map[string]time.Time // page → request timestamp
+	instanceRequestChans []chan string         // pool daemon subscribers
+	instanceMu           sync.RWMutex
+
+	done chan struct{}
 }
 
 // NewManager creates a new chat buffer manager.
 func NewManager() *Manager {
 	m := &Manager{
-		buffers:            make(map[string]*pageBuffer),
-		channelSubscribers: make([]chan *Message, 0),
-		done:               make(chan struct{}),
+		buffers:                make(map[string]*pageBuffer),
+		channelSubscribers:     make([]chan *Message, 0),
+		pageChannelSubscribers: make(map[string][]chan *Message),
+		instanceRequests:       make(map[string]time.Time),
+		instanceRequestChans:   make([]chan string, 0),
+		done:                   make(chan struct{}),
 	}
 
 	// Start background goroutine to reclaim stale buffers
@@ -137,6 +148,15 @@ func (m *Manager) reclaimStaleBuffers() {
 				}
 			}
 			m.mu.Unlock()
+
+			// Clear stale instance requests (older than 2 minutes)
+			m.instanceMu.Lock()
+			for page, ts := range m.instanceRequests {
+				if now.Sub(ts) > 2*time.Minute {
+					delete(m.instanceRequests, page)
+				}
+			}
+			m.instanceMu.Unlock()
 		}
 	}
 }
@@ -165,18 +185,20 @@ func (m *Manager) getOrCreateBuffer(page string) *pageBuffer {
 }
 
 // AddUserMessage adds a user message to the buffer and notifies subscribers.
-// Returns ErrNoSubscribers if no channel subscribers are connected; in that case
-// the message is NOT stored and page subscribers are NOT notified.
+// Returns ErrNoSubscribers if no channel subscribers (global or page-level) are connected;
+// in that case the message is NOT stored and page subscribers are NOT notified.
 func (m *Manager) AddUserMessage(page, content, senderName string) (string, error) {
 	// Check for channel subscribers BEFORE writing to the buffer so that if
 	// ErrNoSubscribers is returned, the message was never stored and page
 	// subscribers were never notified.
+	// Allow sending if there are global subscribers OR page-specific subscribers.
 	m.channelSubscribersMu.RLock()
-	if len(m.channelSubscribers) == 0 {
-		m.channelSubscribersMu.RUnlock()
+	hasGlobal := len(m.channelSubscribers) > 0
+	m.channelSubscribersMu.RUnlock()
+
+	if !hasGlobal && !m.HasPageChannelSubscriber(page) {
 		return "", ErrNoSubscribers
 	}
-	m.channelSubscribersMu.RUnlock()
 
 	buf := m.getOrCreateBuffer(page)
 	buf.mu.Lock()
@@ -207,7 +229,7 @@ func (m *Manager) AddUserMessage(page, content, senderName string) (string, erro
 		Message: &msgCopy,
 	})
 
-	// Publish to channel subscribers (wiki-cli mcp).
+	// Publish to global channel subscribers (wiki-cli mcp without --page).
 	// Acquire channelSubscribersMu after releasing buf.mu to maintain
 	// a consistent lock ordering and avoid deadlock.
 	m.channelSubscribersMu.RLock()
@@ -220,6 +242,20 @@ func (m *Manager) AddUserMessage(page, content, senderName string) (string, erro
 		}
 	}
 	m.channelSubscribersMu.RUnlock()
+
+	// Publish to page-specific channel subscribers (wiki-cli mcp --page).
+	m.pageChannelSubscribersMu.RLock()
+	if subs, ok := m.pageChannelSubscribers[page]; ok {
+		msgCopy3 := *msg
+		for _, subscriber := range subs {
+			select {
+			case subscriber <- &msgCopy3:
+			default:
+				// Don't block if subscriber is slow
+			}
+		}
+	}
+	m.pageChannelSubscribersMu.RUnlock()
 
 	return messageID, nil
 }
@@ -492,4 +528,122 @@ func (m *Manager) GetMessageByID(messageID string) (*Message, error) {
 	}
 
 	return nil, fmt.Errorf("message %s: %w", messageID, ErrMessageNotFound)
+}
+
+// SubscribeToPageChannel subscribes to user messages for a specific page only.
+// Used by wiki-cli mcp --page to receive messages for a single page's Claude instance.
+// Returns a channel that receives messages and an unsubscribe function.
+func (m *Manager) SubscribeToPageChannel(page string) (<-chan *Message, func()) {
+	m.pageChannelSubscribersMu.Lock()
+	defer m.pageChannelSubscribersMu.Unlock()
+
+	msgChan := make(chan *Message, 100)
+	m.pageChannelSubscribers[page] = append(m.pageChannelSubscribers[page], msgChan)
+
+	unsubscribe := func() {
+		m.pageChannelSubscribersMu.Lock()
+		defer m.pageChannelSubscribersMu.Unlock()
+
+		subs := m.pageChannelSubscribers[page]
+		for i, subscriber := range subs {
+			if subscriber == msgChan {
+				m.pageChannelSubscribers[page] = append(subs[:i], subs[i+1:]...)
+				close(msgChan)
+				break
+			}
+		}
+		if len(m.pageChannelSubscribers[page]) == 0 {
+			delete(m.pageChannelSubscribers, page)
+		}
+	}
+
+	return msgChan, unsubscribe
+}
+
+// HasPageChannelSubscriber returns true if a per-page channel subscriber exists for the given page.
+func (m *Manager) HasPageChannelSubscriber(page string) bool {
+	m.pageChannelSubscribersMu.RLock()
+	defer m.pageChannelSubscribersMu.RUnlock()
+	return len(m.pageChannelSubscribers[page]) > 0
+}
+
+// RequestInstance records that a page needs a Claude instance and notifies pool daemon subscribers.
+// Deduplicates: if the page already has a subscriber or was recently requested, this is a no-op.
+func (m *Manager) RequestInstance(page string) {
+	// Don't request if page already has a subscriber
+	if m.HasPageChannelSubscriber(page) {
+		return
+	}
+
+	m.channelSubscribersMu.RLock()
+	hasGlobal := len(m.channelSubscribers) > 0
+	m.channelSubscribersMu.RUnlock()
+	if hasGlobal {
+		return
+	}
+
+	m.instanceMu.Lock()
+	defer m.instanceMu.Unlock()
+
+	// Deduplicate: don't re-request if already requested within the last 2 minutes
+	if ts, ok := m.instanceRequests[page]; ok && time.Since(ts) < 2*time.Minute {
+		return
+	}
+
+	m.instanceRequests[page] = time.Now()
+
+	// Notify all pool daemon subscribers
+	for _, ch := range m.instanceRequestChans {
+		select {
+		case ch <- page:
+		default:
+			// Don't block if subscriber is slow
+		}
+	}
+}
+
+// SubscribeToInstanceRequests subscribes to instance request notifications.
+// Used by the wiki-cli pool daemon to know when to spawn Claude instances.
+// Returns a channel that receives page names and an unsubscribe function.
+func (m *Manager) SubscribeToInstanceRequests() (<-chan string, func()) {
+	m.instanceMu.Lock()
+	defer m.instanceMu.Unlock()
+
+	ch := make(chan string, 100)
+	m.instanceRequestChans = append(m.instanceRequestChans, ch)
+
+	unsubscribe := func() {
+		m.instanceMu.Lock()
+		defer m.instanceMu.Unlock()
+
+		for i, subscriber := range m.instanceRequestChans {
+			if subscriber == ch {
+				m.instanceRequestChans = append(m.instanceRequestChans[:i], m.instanceRequestChans[i+1:]...)
+				close(ch)
+				break
+			}
+		}
+	}
+
+	return ch, unsubscribe
+}
+
+// HasInstanceRequestSubscribers returns true if any pool daemon is subscribed to instance requests.
+func (m *Manager) HasInstanceRequestSubscribers() bool {
+	m.instanceMu.RLock()
+	defer m.instanceMu.RUnlock()
+	return len(m.instanceRequestChans) > 0
+}
+
+// IsInstanceRequested returns true if a Claude instance has been requested for the given page
+// but has not yet connected (no page channel subscriber exists).
+func (m *Manager) IsInstanceRequested(page string) bool {
+	if m.HasPageChannelSubscriber(page) {
+		return false
+	}
+
+	m.instanceMu.RLock()
+	defer m.instanceMu.RUnlock()
+	_, ok := m.instanceRequests[page]
+	return ok
 }
