@@ -38,7 +38,13 @@ func getCommitHash() string {
 	}
 
 	// Try to get commit from git
-	cmd := exec.Command("git", "rev-parse", "HEAD")
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "git not found, using 'dev' as commit hash: %v\n", err)
+		return "dev"
+	}
+
+	cmd := exec.Command(gitPath, "rev-parse", "HEAD")
 	output, err := cmd.Output()
 	if err != nil {
 		return "dev"
