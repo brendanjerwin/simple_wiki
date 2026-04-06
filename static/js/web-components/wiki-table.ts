@@ -347,7 +347,7 @@ export class WikiTable extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this._parseSourceTable();
-    this._mediaQuery = window.matchMedia('(max-width: 600px)');
+    this._mediaQuery = globalThis.matchMedia('(max-width: 600px)');
     this._mediaQuery.addEventListener('change', this._handleMediaChange);
     this.cardViewActive = this._mediaQuery.matches;
   }
