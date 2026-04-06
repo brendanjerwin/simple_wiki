@@ -287,7 +287,7 @@ func (d *poolDaemon) spawnInstance(page string) (*instanceEntry, error) {
 
 	if d.useSystemd {
 		entry.unitName = "wiki-chat-" + sanitizeUnitName(page)
-		entry.cmd = exec.CommandContext(ctx, "systemd-run",
+		entry.cmd = exec.CommandContext(ctx, "/usr/bin/systemd-run",
 			"--user",
 			"--unit="+entry.unitName,
 			"--scope",
@@ -343,7 +343,7 @@ func (d *poolDaemon) stopInstanceLocked(page string) {
 	if entry.unitName != "" {
 		stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer stopCancel()
-		if err := exec.CommandContext(stopCtx, "systemctl", "--user", "stop", entry.unitName+".scope").Run(); err != nil {
+		if err := exec.CommandContext(stopCtx, "/usr/bin/systemctl", "--user", "stop", entry.unitName+".scope").Run(); err != nil { //nolint:gosec // systemctl path is fixed
 			log.Printf("Failed to stop systemd unit %q: %v", entry.unitName, err)
 		}
 	}
