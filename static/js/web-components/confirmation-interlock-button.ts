@@ -347,7 +347,7 @@ export class ConfirmationInterlockButton extends LitElement {
     if (this.disabled) return;
     if (this.armed) return;
     const shadowActive = this.shadowRoot?.activeElement;
-    const resolvedDocumentActive = document.activeElement === this ? this : document.activeElement;
+    const resolvedDocumentActive = document.activeElement;
     const lightActive = this.getRootNode() instanceof ShadowRoot
       ? null
       : resolvedDocumentActive;

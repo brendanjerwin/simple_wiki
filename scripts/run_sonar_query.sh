@@ -27,7 +27,6 @@ PROJECT="brendanjerwin_simple_wiki"
 sonar_api() {
   local endpoint="$1"
   curl -s -H "Authorization: Bearer $SONAR_TOKEN" "$BASE_URL/$endpoint"
-  return
 }
 
 case "${1:-issues}" in
