@@ -53,7 +53,7 @@ export default defineConfig({
    * Port 8090 is chosen to avoid conflicts with the default dev server (8050)
    * and its auto-assigned TLS port (8051) when Tailscale is detected. */
   webServer: {
-    command: 'cd .. && ./simple_wiki-linux-amd64 --port 8090 --data e2e/test-data --debug',
+    command: 'cd .. && ./simple_wiki-linux-amd64 --port 8090 --data e2e/test-data --debug --chat-persona ""',
     url: 'http://localhost:8090',
     reuseExistingServer: !process.env.CI,
     stdout: 'pipe',
