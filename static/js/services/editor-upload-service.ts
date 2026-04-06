@@ -127,7 +127,7 @@ export class EditorUploadService {
 
   private extractFilename(location: string): string {
     try {
-      const url = new URL(location, window.location.origin);
+      const url = new URL(location, globalThis.location.origin);
       return url.searchParams.get('filename') || 'upload';
     } catch {
       // Fallback: try to extract from query string manually
