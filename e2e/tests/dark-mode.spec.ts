@@ -211,8 +211,8 @@ identifier = "${TEST_PAGE_NAME}"
 
   test.describe('design token contrast between light and dark modes', () => {
     test('should use different surface-primary values in light and dark mode', async ({ browser }) => {
-      let lightToken: string;
-      let darkToken: string;
+      let lightToken = '';
+      let darkToken = '';
 
       const lightCtx = await browser.newContext({ colorScheme: 'light' });
       try {
@@ -238,14 +238,14 @@ identifier = "${TEST_PAGE_NAME}"
         await darkCtx.close();
       }
 
-      expect(lightToken!).toBe(LIGHT_SURFACE_PRIMARY);
-      expect(darkToken!).toBe(DARK_SURFACE_PRIMARY);
-      expect(lightToken!).not.toBe(darkToken!);
+      expect(lightToken).toBe(LIGHT_SURFACE_PRIMARY);
+      expect(darkToken).toBe(DARK_SURFACE_PRIMARY);
+      expect(lightToken).not.toBe(darkToken);
     });
 
     test('should use different text-primary values in light and dark mode', async ({ browser }) => {
-      let lightToken: string;
-      let darkToken: string;
+      let lightToken = '';
+      let darkToken = '';
 
       const lightCtx = await browser.newContext({ colorScheme: 'light' });
       try {
@@ -271,14 +271,14 @@ identifier = "${TEST_PAGE_NAME}"
         await darkCtx.close();
       }
 
-      expect(lightToken!).toBe(LIGHT_TEXT_PRIMARY);
-      expect(darkToken!).toBe(DARK_TEXT_PRIMARY);
-      expect(lightToken!).not.toBe(darkToken!);
+      expect(lightToken).toBe(LIGHT_TEXT_PRIMARY);
+      expect(darkToken).toBe(DARK_TEXT_PRIMARY);
+      expect(lightToken).not.toBe(darkToken);
     });
 
     test('should use different surface-sunken values in light and dark mode', async ({ browser }) => {
-      let lightToken: string;
-      let darkToken: string;
+      let lightToken = '';
+      let darkToken = '';
 
       const lightCtx = await browser.newContext({ colorScheme: 'light' });
       try {
@@ -304,9 +304,9 @@ identifier = "${TEST_PAGE_NAME}"
         await darkCtx.close();
       }
 
-      expect(lightToken!).toBe(LIGHT_SURFACE_SUNKEN);
-      expect(darkToken!).toBe(DARK_SURFACE_SUNKEN);
-      expect(lightToken!).not.toBe(darkToken!);
+      expect(lightToken).toBe(LIGHT_SURFACE_SUNKEN);
+      expect(darkToken).toBe(DARK_SURFACE_SUNKEN);
+      expect(lightToken).not.toBe(darkToken);
     });
   });
 
@@ -465,8 +465,8 @@ identifier = "${TEST_PAGE_NAME}"
     });
 
     test('should show different item_content contrast between light and dark mode', async ({ browser }) => {
-      let lightBg: string;
-      let darkBg: string;
+      let lightBg = '';
+      let darkBg = '';
 
       const lightCtx = await browser.newContext({ colorScheme: 'light' });
       try {
@@ -502,16 +502,16 @@ identifier = "${TEST_PAGE_NAME}"
         await darkCtx.close();
       }
 
-      expect(lightBg!).not.toBe(darkBg!);
-      expect(darkBg!).toBe('rgb(45, 45, 45)');
-      expect(lightBg!).toBe('rgb(255, 255, 255)');
+      expect(lightBg).not.toBe(darkBg);
+      expect(darkBg).toBe('rgb(45, 45, 45)');
+      expect(lightBg).toBe('rgb(255, 255, 255)');
     });
   });
 
   test.describe('dark mode surface-elevated token', () => {
     test('should apply different surface-elevated token values in light and dark mode', async ({ browser }) => {
-      let lightToken: string;
-      let darkToken: string;
+      let lightToken = '';
+      let darkToken = '';
 
       const lightCtx = await browser.newContext({ colorScheme: 'light' });
       try {
@@ -537,8 +537,8 @@ identifier = "${TEST_PAGE_NAME}"
         await darkCtx.close();
       }
 
-      expect(darkToken!).toBe(DARK_SURFACE_ELEVATED);
-      expect(lightToken!).not.toBe(darkToken!);
+      expect(darkToken).toBe(DARK_SURFACE_ELEVATED);
+      expect(lightToken).not.toBe(darkToken);
     });
   });
 });
