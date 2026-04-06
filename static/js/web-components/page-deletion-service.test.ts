@@ -208,7 +208,31 @@ describe('PageDeleter', () => {
       });
 
       // Note: Testing actual gRPC calls would require more complex mocking
-      // For now, we test the basic validation and error handling
+      // The redirect (location.href) and reload() calls use browser navigation APIs
+      // that cannot be mocked without actually navigating the test page.
+      // We test the synchronous pre-await logic (setLoading) here.
+
+      describe('when page name is stored and gRPC call is initiated', () => {
+        beforeEach(() => {
+          mockDialog.dataset.pageName = 'test-page';
+
+          // Stub the private gRPC client's deletePage to return a never-resolving promise
+          // so we can test the synchronous setup (setLoading) without triggering navigation
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion -- accessing private property for testing
+          const client = (service as unknown as { client: { deletePage: (req: unknown) => Promise<unknown> } }).client;
+          sinon.stub(client, 'deletePage').returns(new Promise(() => { /* never resolves */ }));
+
+          // Extract the confirm handler and trigger it synchronously
+          const confirmCall = mockDialog.addEventListener.getCalls().find(call => call.args[0] === 'confirm');
+          const handler: unknown = confirmCall?.args[1];
+          const confirmHandler = typeof handler === 'function' ? (handler as () => void) : undefined;
+          confirmHandler?.();
+        });
+
+        it('should set loading state before making the gRPC call', () => {
+          expect(mockDialog.setLoading).to.have.been.calledWith(true);
+        });
+      });
     });
   });
 
