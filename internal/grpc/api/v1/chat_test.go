@@ -360,6 +360,35 @@ func (*mockChatMessagesStreamServer) SetTrailer(metadata.MD)        {}
 func (*mockChatMessagesStreamServer) SendMsg(any) error             { return nil }
 func (*mockChatMessagesStreamServer) RecvMsg(any) error             { return nil }
 
+// mockInstanceRequestStreamServer mocks the SubscribeInstanceRequests stream server.
+type mockInstanceRequestStreamServer struct {
+	mu          sync.Mutex
+	requests    []*apiv1.InstanceRequest
+	contextDone bool
+}
+
+func (m *mockInstanceRequestStreamServer) Send(req *apiv1.InstanceRequest) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.requests = append(m.requests, req)
+	return nil
+}
+
+func (m *mockInstanceRequestStreamServer) Context() context.Context {
+	if m.contextDone {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		return ctx
+	}
+	return context.Background()
+}
+
+func (*mockInstanceRequestStreamServer) SetHeader(metadata.MD) error   { return nil }
+func (*mockInstanceRequestStreamServer) SendHeader(metadata.MD) error  { return nil }
+func (*mockInstanceRequestStreamServer) SetTrailer(metadata.MD)        {}
+func (*mockInstanceRequestStreamServer) SendMsg(any) error             { return nil }
+func (*mockInstanceRequestStreamServer) RecvMsg(any) error             { return nil }
+
 var _ = Describe("ChatService", func() {
 	var (
 		server      *v1.Server
@@ -1015,6 +1044,33 @@ var _ = Describe("ChatService", func() {
 				Expect(resp.Connected).To(BeFalse())
 			})
 		})
+
+		When("called with a page parameter", func() {
+			var (
+				resp *apiv1.GetChatStatusResponse
+				err  error
+			)
+
+			BeforeEach(func() {
+				resp, err = server.GetChatStatus(ctx, &apiv1.GetChatStatusRequest{Page: "test-page"})
+			})
+
+			It("should not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return connected false when no subscribers", func() {
+				Expect(resp.Connected).To(BeFalse())
+			})
+
+			It("should return pool_connected false when no pool daemon", func() {
+				Expect(resp.PoolConnected).To(BeFalse())
+			})
+
+			It("should return starting false when no instance requested", func() {
+				Expect(resp.Starting).To(BeFalse())
+			})
+		})
 	})
 
 	Describe("SubscribeChatMessages", func() {
@@ -1114,6 +1170,74 @@ var _ = Describe("ChatService", func() {
 
 			It("should handle send error", func() {
 				// Test passes if no panic occurs
+				Expect(true).To(BeTrue())
+			})
+		})
+	})
+
+	Describe("SubscribePageChatMessages", func() {
+		When("page is empty", func() {
+			var err error
+
+			BeforeEach(func() {
+				err = server.SubscribePageChatMessages(
+					&apiv1.SubscribePageChatMessagesRequest{},
+					&mockChatMessagesStreamServer{},
+				)
+			})
+
+			It("should return InvalidArgument error", func() {
+				Expect(err).To(HaveOccurred())
+			})
+		})
+
+		When("context is cancelled", func() {
+			var (
+				streamServer *mockChatMessagesStreamServer
+				doneCh       chan struct{}
+			)
+
+			BeforeEach(func() {
+				streamServer = &mockChatMessagesStreamServer{contextDone: true}
+				doneCh = make(chan struct{})
+
+				go func() {
+					defer close(doneCh)
+					_ = server.SubscribePageChatMessages(
+						&apiv1.SubscribePageChatMessagesRequest{Page: "test-page"},
+						streamServer,
+					)
+				}()
+
+				Eventually(doneCh, "1s", "10ms").Should(BeClosed())
+			})
+
+			It("should exit cleanly", func() {
+				Expect(true).To(BeTrue())
+			})
+		})
+	})
+
+	Describe("SubscribeInstanceRequests", func() {
+		When("context is cancelled", func() {
+			var doneCh chan struct{}
+
+			BeforeEach(func() {
+				streamServer := &mockInstanceRequestStreamServer{contextDone: true}
+				doneCh = make(chan struct{})
+
+				go func() {
+					defer close(doneCh)
+					_ = server.SubscribeInstanceRequests(
+						&apiv1.SubscribeInstanceRequestsRequest{},
+						streamServer,
+					)
+				}()
+
+				Eventually(doneCh, "1s", "10ms").Should(BeClosed())
+			})
+
+			It("should exit cleanly", func() {
 				Expect(true).To(BeTrue())
 			})
 		})
