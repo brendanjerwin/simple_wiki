@@ -5,8 +5,8 @@ import { afterEach } from 'vitest';
 afterEach(() => {
   document.body.innerHTML = '';
   // Clear all event listeners from window
-  const newWindow = globalThis.constructor.prototype;
-  for (const key in newWindow) {
+  const proto = globalThis.constructor?.prototype || {};
+  for (const key in proto) {
     if (key.startsWith('on')) {
       globalThis[key] = null;
     }
