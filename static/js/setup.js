@@ -5,7 +5,7 @@ import { afterEach } from 'vitest';
 afterEach(() => {
   document.body.innerHTML = '';
   // Clear all event listeners from window
-  const proto = window.constructor?.prototype;
+  const proto = window.constructor?.prototype || {};
   for (const key in proto) {
     if (key.startsWith('on')) {
       window[key] = null;
