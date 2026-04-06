@@ -12,7 +12,6 @@ const COMPONENT_LOAD_TIMEOUT_MS = 15000;
 const SAVE_TIMEOUT_MS = 10000;
 const DIALOG_APPEAR_TIMEOUT_MS = 5000;
 const MENU_APPEAR_TIMEOUT_MS = 5000;
-const SEARCH_DEBOUNCE_TIMEOUT_MS = 1000;
 
 // Test page identifiers — unique to avoid collisions with other test runs
 const CONTAINER_A = 'e2einvcontainera';
@@ -24,6 +23,17 @@ const API_ITEM = 'e2einvapiitem';
 // 'E2E Test Screwdriver' → TitleInput applies toTitleCase → 'E2e Test Screwdriver'
 // → MungeIdentifier → 'e2e_test_screwdriver'
 const UI_ITEM_IDENTIFIER = 'e2e_test_screwdriver';
+
+async function callPageAPI(
+  request: APIRequestContext,
+  method: string,
+  body: Record<string, unknown>,
+) {
+  return request.post(`/api.v1.PageManagementService/${method}`, {
+    headers: { 'Content-Type': 'application/json', 'Connect-Protocol-Version': '1' },
+    data: body,
+  });
+}
 
 async function callInventoryAPI(
   request: APIRequestContext,
@@ -76,23 +86,17 @@ This is an E2E test inventory container.`);
     }
   });
 
-  test.afterAll(async ({ browser }) => {
-    const ctx = await browser.newContext();
-    const page = await ctx.newPage();
-
-    try {
-      for (const identifier of [CONTAINER_A, CONTAINER_B, API_ITEM, UI_ITEM_IDENTIFIER]) {
-        await page.goto(`/${identifier}/edit`);
-        const textarea = page.locator('wiki-editor textarea');
-        await expect(textarea).toBeVisible({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
-        await textarea.fill(`+++\nidentifier = "${identifier}"\n+++`);
-        await textarea.press('Space');
-        await expect(page.locator('wiki-editor .status-indicator')).toContainText('Saved', { timeout: SAVE_TIMEOUT_MS });
+  test.afterAll(async ({ request }) => {
+    // Delete all test pages so their identifiers become available again on retries.
+    // Stripping frontmatter leaves the page file on disk, so GenerateIdentifier still
+    // treats the identifier as taken (isUnique=false). Calling DeletePage removes the
+    // file entirely, freeing the identifier for subsequent runs.
+    for (const identifier of [CONTAINER_A, CONTAINER_B, API_ITEM, UI_ITEM_IDENTIFIER]) {
+      try {
+        await callPageAPI(request, 'DeletePage', { pageName: identifier });
+      } catch (_) {
+        // Best effort cleanup — failures here should not fail the suite
       }
-    } catch (_) {
-      // Best effort cleanup — failures here should not fail the suite
-    } finally {
-      await ctx.close();
     }
   });
 
@@ -251,7 +255,7 @@ This is an E2E test inventory container.`);
       expect(body.found).toBe(false);
     });
 
-    test('should include the full hierarchy path when include_hierarchy is true', async ({ request }) => {
+    test('should include the full hierarchy path when includeHierarchy is true', async ({ request }) => {
       const resp = await callInventoryAPI(request, 'FindItemLocation', {
         itemIdentifier: API_ITEM,
         includeHierarchy: true,
@@ -290,10 +294,10 @@ This is an E2E test inventory container.`);
       // The search input lives in the dialog's shadow DOM
       const searchInput = dialog.locator('input[name="searchQuery"]');
       await expect(searchInput).toBeVisible({ timeout: DIALOG_APPEAR_TIMEOUT_MS });
+      // Fill the search input and wait for results to appear.
+      // The component debounces input; waiting for the move-to-button to become visible
+      // is a deterministic signal that covers both the debounce delay and the API response.
       await searchInput.fill(CONTAINER_B_TITLE);
-
-      // Wait for the search debounce and results to load
-      await page.waitForTimeout(SEARCH_DEBOUNCE_TIMEOUT_MS);
 
       // Click the "Move To" button on the first matching container
       const moveToButton = dialog.locator('.move-to-button', { hasText: 'Move To' });
