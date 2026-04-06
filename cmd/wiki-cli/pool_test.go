@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"os"
 	"time"
 
@@ -136,6 +137,37 @@ var _ = Describe("instanceEntry", func() {
 	})
 })
 
+// fakeProcessHandle is a test double for processHandle.
+type fakeProcessHandle struct {
+	waitCh chan struct{}
+}
+
+func (f *fakeProcessHandle) Wait() error {
+	<-f.waitCh
+	return nil
+}
+
+// fakeSpawner is a test double for instanceSpawner.
+type fakeSpawner struct {
+	shouldFail   bool
+	spawnedPages []string
+	stoppedUnits []string
+}
+
+func (f *fakeSpawner) Spawn(_ context.Context, page string) (processHandle, string, error) {
+	if f.shouldFail {
+		return nil, "", errors.New("spawn failed")
+	}
+	f.spawnedPages = append(f.spawnedPages, page)
+	return &fakeProcessHandle{waitCh: make(chan struct{})}, "", nil
+}
+
+func (f *fakeSpawner) StopUnit(unitName string) {
+	if unitName != "" {
+		f.stoppedUnits = append(f.stoppedUnits, unitName)
+	}
+}
+
 var _ = Describe("poolDaemon", func() {
 	Describe("ensureInstance", func() {
 		When("an instance already exists for the page", func() {
@@ -144,14 +176,13 @@ var _ = Describe("poolDaemon", func() {
 			BeforeEach(func() {
 				daemon = &poolDaemon{
 					maxInstances: 5,
+					spawner:      &fakeSpawner{},
 					instances: map[string]*instanceEntry{
 						"existing-page": {
 							page:       "existing-page",
 							lastActive: time.Now().Add(-10 * time.Minute),
 						},
 					},
-					// Use a non-existent claude path so spawn would fail if attempted
-					claudePath: "/nonexistent/claude",
 				}
 				daemon.ensureInstance("existing-page")
 			})
@@ -171,8 +202,7 @@ var _ = Describe("poolDaemon", func() {
 			BeforeEach(func() {
 				daemon = &poolDaemon{
 					maxInstances: 2,
-					claudePath:   "/nonexistent/claude",
-					wikiURL:      "http://localhost:8050",
+					spawner:      &fakeSpawner{shouldFail: true},
 					ctx:          context.Background(),
 					instances: map[string]*instanceEntry{
 						"page-a": {
@@ -203,6 +233,77 @@ var _ = Describe("poolDaemon", func() {
 				Expect(daemon.instances).To(HaveLen(2))
 			})
 		})
+
+		When("at max capacity and spawn succeeds", func() {
+			var (
+				daemon  *poolDaemon
+				spawner *fakeSpawner
+			)
+
+			BeforeEach(func() {
+				spawner = &fakeSpawner{}
+				daemon = &poolDaemon{
+					maxInstances: 2,
+					spawner:      spawner,
+					ctx:          context.Background(),
+					instances: map[string]*instanceEntry{
+						"page-a": {
+							page:       "page-a",
+							lastActive: time.Now().Add(-20 * time.Minute),
+							cancel:     func() {},
+						},
+						"page-b": {
+							page:       "page-b",
+							lastActive: time.Now().Add(-5 * time.Minute),
+							cancel:     func() {},
+						},
+					},
+				}
+				daemon.ensureInstance("page-c")
+			})
+
+			It("should evict the least recently active instance", func() {
+				Expect(daemon.instances).NotTo(HaveKey("page-a"))
+			})
+
+			It("should add the new instance", func() {
+				Expect(daemon.instances).To(HaveKey("page-c"))
+			})
+
+			It("should keep the more recently active instance", func() {
+				Expect(daemon.instances).To(HaveKey("page-b"))
+			})
+
+			It("should have spawned the new page", func() {
+				Expect(spawner.spawnedPages).To(ContainElement("page-c"))
+			})
+		})
+
+		When("spawning a new instance with available capacity", func() {
+			var (
+				daemon  *poolDaemon
+				spawner *fakeSpawner
+			)
+
+			BeforeEach(func() {
+				spawner = &fakeSpawner{}
+				daemon = &poolDaemon{
+					maxInstances: 5,
+					spawner:      spawner,
+					ctx:          context.Background(),
+					instances:    make(map[string]*instanceEntry),
+				}
+				daemon.ensureInstance("new-page")
+			})
+
+			It("should add the instance", func() {
+				Expect(daemon.instances).To(HaveKey("new-page"))
+			})
+
+			It("should have spawned the page", func() {
+				Expect(spawner.spawnedPages).To(Equal([]string{"new-page"}))
+			})
+		})
 	})
 
 	Describe("evictLeastActive", func() {
@@ -211,6 +312,7 @@ var _ = Describe("poolDaemon", func() {
 
 			BeforeEach(func() {
 				daemon = &poolDaemon{
+					spawner: &fakeSpawner{},
 					instances: map[string]*instanceEntry{
 						"new-page": {
 							page:       "new-page",
@@ -249,6 +351,7 @@ var _ = Describe("poolDaemon", func() {
 
 			BeforeEach(func() {
 				daemon = &poolDaemon{
+					spawner:   &fakeSpawner{},
 					instances: make(map[string]*instanceEntry),
 				}
 				daemon.mu.Lock()
@@ -272,6 +375,7 @@ var _ = Describe("poolDaemon", func() {
 			BeforeEach(func() {
 				canceled = false
 				daemon = &poolDaemon{
+					spawner: &fakeSpawner{},
 					instances: map[string]*instanceEntry{
 						"page-a": {
 							page:   "page-a",

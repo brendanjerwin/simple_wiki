@@ -24,11 +24,27 @@ const (
 	defaultIdleTimeoutMinutes  = 30
 )
 
+// processHandle represents a running Claude Code process that can be waited on.
+type processHandle interface {
+	// Wait blocks until the process exits and returns any error.
+	Wait() error
+}
+
+// instanceSpawner creates Claude Code processes for pages.
+type instanceSpawner interface {
+	// Spawn starts a Claude Code process for the given page.
+	// Returns a process handle and an optional systemd unit name.
+	Spawn(ctx context.Context, page string) (processHandle, string, error)
+
+	// StopUnit stops a systemd transient unit. No-op if unitName is empty.
+	StopUnit(unitName string)
+}
+
 // instanceEntry tracks a running Claude Code instance for a page.
 type instanceEntry struct {
 	page       string
 	unitName   string
-	cmd        *exec.Cmd
+	process    processHandle
 	cancel     context.CancelFunc
 	lastActive time.Time
 	mu         sync.Mutex
@@ -49,14 +65,20 @@ func (e *instanceEntry) idleSince() time.Duration {
 // poolDaemon manages per-page Claude Code instances.
 type poolDaemon struct {
 	wikiURL      string
-	claudePath   string
 	maxInstances int
 	idleTimeout  time.Duration
-	useSystemd   bool
+	spawner      instanceSpawner
 
 	ctx       context.Context
 	instances map[string]*instanceEntry
 	mu        sync.Mutex
+}
+
+// execSpawner is the production implementation of instanceSpawner that runs real processes.
+type execSpawner struct {
+	wikiURL    string
+	claudePath string
+	useSystemd bool
 }
 
 // sanitizeUnitName converts a page identifier into a valid systemd unit name suffix.
@@ -128,15 +150,17 @@ The daemon should be run in a directory containing your Claude agent configurati
 
 			d := &poolDaemon{
 				wikiURL:      normalizedURL,
-				claudePath:   c.String("claude-path"),
 				maxInstances: c.Int("max-instances"),
 				idleTimeout:  c.Duration("idle-timeout"),
-				useSystemd:   useSystemd,
-				instances:    make(map[string]*instanceEntry),
+				spawner: &execSpawner{
+					wikiURL:    normalizedURL,
+					claudePath: c.String("claude-path"),
+					useSystemd: useSystemd,
+				},
+				instances: make(map[string]*instanceEntry),
 			}
 
-			d.ctx = context.Background()
-			return d.run(d.ctx)
+			return d.run(context.Background())
 		},
 	}
 }
@@ -270,49 +294,23 @@ func (d *poolDaemon) evictLeastActive() {
 func (d *poolDaemon) spawnInstance(page string) (*instanceEntry, error) {
 	ctx, cancel := context.WithCancel(d.ctx)
 
-	// Build wiki-cli mcp command for the --mcp-server flag
-	wikiCLIBin, err := os.Executable()
+	proc, unitName, err := d.spawner.Spawn(ctx, page)
 	if err != nil {
-		cancel()
-		return nil, fmt.Errorf("failed to find wiki-cli binary: %w", err)
-	}
-
-	mcpServerCmd := fmt.Sprintf("%s mcp --url %s --page %s", wikiCLIBin, d.wikiURL, page)
-
-	entry := &instanceEntry{
-		page:       page,
-		lastActive: time.Now(),
-		cancel:     cancel,
-	}
-
-	if d.useSystemd {
-		entry.unitName = "wiki-chat-" + sanitizeUnitName(page)
-		entry.cmd = exec.CommandContext(ctx, "/usr/bin/systemd-run",
-			"--user",
-			"--unit="+entry.unitName,
-			"--scope",
-			d.claudePath,
-			"--channels", "wiki-channel:wiki-channel",
-			"--mcp-server", mcpServerCmd,
-		)
-	} else {
-		entry.cmd = exec.CommandContext(ctx, d.claudePath,
-			"--channels", "wiki-channel:wiki-channel",
-			"--mcp-server", mcpServerCmd,
-		)
-		// In non-systemd mode, prefix stdout/stderr with page name
-		entry.cmd.Stdout = newPrefixWriter(os.Stdout, page)
-		entry.cmd.Stderr = newPrefixWriter(os.Stderr, page)
-	}
-
-	if err := entry.cmd.Start(); err != nil {
 		cancel()
 		return nil, fmt.Errorf("failed to start claude for page %q: %w", page, err)
 	}
 
+	entry := &instanceEntry{
+		page:       page,
+		unitName:   unitName,
+		process:    proc,
+		lastActive: time.Now(),
+		cancel:     cancel,
+	}
+
 	// Monitor process exit in background
 	go func() {
-		waitErr := entry.cmd.Wait()
+		waitErr := proc.Wait()
 		if waitErr != nil {
 			log.Printf("Claude instance for %q exited: %v", page, waitErr)
 		} else {
@@ -320,7 +318,6 @@ func (d *poolDaemon) spawnInstance(page string) (*instanceEntry, error) {
 		}
 
 		d.mu.Lock()
-		// Only remove if this is still the same entry (not replaced by a new spawn)
 		if current, ok := d.instances[page]; ok && current == entry {
 			delete(d.instances, page)
 		}
@@ -338,17 +335,58 @@ func (d *poolDaemon) stopInstanceLocked(page string) {
 	}
 
 	entry.cancel()
+	d.spawner.StopUnit(entry.unitName)
+	delete(d.instances, page)
+}
 
-	// In systemd mode, also stop the transient unit to prevent orphaned processes
-	if entry.unitName != "" {
-		stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer stopCancel()
-		if err := exec.CommandContext(stopCtx, "/usr/bin/systemctl", "--user", "stop", entry.unitName+".scope").Run(); err != nil { //nolint:gosec // systemctl path is fixed
-			log.Printf("Failed to stop systemd unit %q: %v", entry.unitName, err)
-		}
+// Spawn implements instanceSpawner for real process execution.
+func (s *execSpawner) Spawn(ctx context.Context, page string) (processHandle, string, error) {
+	wikiCLIBin, err := os.Executable()
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to find wiki-cli binary: %w", err)
 	}
 
-	delete(d.instances, page)
+	mcpServerCmd := fmt.Sprintf("%s mcp --url %s --page %s", wikiCLIBin, s.wikiURL, page)
+
+	var cmd *exec.Cmd
+	var unitName string
+
+	if s.useSystemd {
+		unitName = "wiki-chat-" + sanitizeUnitName(page)
+		cmd = exec.CommandContext(ctx, "/usr/bin/systemd-run",
+			"--user",
+			"--unit="+unitName,
+			"--scope",
+			s.claudePath,
+			"--channels", "wiki-channel:wiki-channel",
+			"--mcp-server", mcpServerCmd,
+		)
+	} else {
+		cmd = exec.CommandContext(ctx, s.claudePath,
+			"--channels", "wiki-channel:wiki-channel",
+			"--mcp-server", mcpServerCmd,
+		)
+		cmd.Stdout = newPrefixWriter(os.Stdout, page)
+		cmd.Stderr = newPrefixWriter(os.Stderr, page)
+	}
+
+	if err := cmd.Start(); err != nil {
+		return nil, "", err
+	}
+
+	return cmd, unitName, nil
+}
+
+// StopUnit implements instanceSpawner for real systemd unit cleanup.
+func (*execSpawner) StopUnit(unitName string) {
+	if unitName == "" {
+		return
+	}
+	stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer stopCancel()
+	if err := exec.CommandContext(stopCtx, "/usr/bin/systemctl", "--user", "stop", unitName+".scope").Run(); err != nil {
+		log.Printf("Failed to stop systemd unit %q: %v", unitName, err)
+	}
 }
 
 // stopAll stops all running instances.
