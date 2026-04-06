@@ -9,7 +9,7 @@ import {
   type FrontmatterQueryResult,
 } from '../gen/api/v1/search_pb.js';
 import { AugmentErrorService, type AugmentedError } from './augment-error-service.js';
-import { foundationCSS, sharedStyles, buttonCSS } from './shared-styles.js';
+import { foundationCSS, colorCSS, sharedStyles, buttonCSS } from './shared-styles.js';
 import './error-display.js';
 import './blog-new-post-dialog.js';
 import type { BlogNewPostDialog } from './blog-new-post-dialog.js';
@@ -40,6 +40,7 @@ function blogPostFromResult(result: FrontmatterQueryResult): BlogPost {
 export class WikiBlog extends LitElement {
   static override readonly styles = [
     foundationCSS,
+    colorCSS,
     buttonCSS,
     css`
       :host {
@@ -68,7 +69,7 @@ export class WikiBlog extends LitElement {
 
       .blog-entry {
         padding: 12px 0;
-        border-bottom: 1px solid #eee;
+        border-bottom: 1px solid var(--color-border-subtle);
       }
 
       .blog-entry:last-child {
@@ -81,7 +82,7 @@ export class WikiBlog extends LitElement {
       }
 
       .entry-title a {
-        color: #337ab7;
+        color: var(--color-text-link);
         text-decoration: none;
       }
 
@@ -91,24 +92,24 @@ export class WikiBlog extends LitElement {
 
       .wiki-link {
         font-size: 0.8em;
-        color: #999;
+        color: var(--color-text-muted);
         margin-left: 8px;
       }
 
       .entry-subtitle {
-        color: #666;
+        color: var(--color-text-secondary);
         font-size: 0.9em;
         margin-top: 2px;
       }
 
       .entry-date {
-        color: #999;
+        color: var(--color-text-muted);
         font-size: 0.85em;
         margin-top: 2px;
       }
 
       .entry-snippet {
-        color: #555;
+        color: var(--color-text-secondary);
         font-size: 0.9em;
         margin-top: 4px;
         line-height: 1.4;
@@ -121,21 +122,21 @@ export class WikiBlog extends LitElement {
 
       .load-more-btn {
         background: none;
-        border: 1px solid #ddd;
+        border: 1px solid var(--color-border-default);
         border-radius: 4px;
         padding: 6px 16px;
-        color: #337ab7;
+        color: var(--color-text-link);
         cursor: pointer;
         font-size: 0.9em;
       }
 
       .load-more-btn:hover {
-        background: #f5f5f5;
-        border-color: #ccc;
+        background: var(--color-hover-overlay);
+        border-color: var(--color-border-strong);
       }
 
       .empty-state {
-        color: #999;
+        color: var(--color-text-muted);
         font-style: italic;
         padding: 12px 0;
       }

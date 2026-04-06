@@ -37,6 +37,14 @@ service ChatService {
   // GetChatStatus returns whether Claude is currently connected (a channel subscriber exists).
   // Used by the chat panel to disable the UI when Claude is unavailable.
   rpc GetChatStatus(GetChatStatusRequest) returns (GetChatStatusResponse) {}
+
+  // SubscribePageChatMessages is called by wiki-cli mcp --page at startup.
+  // Streams new user messages for a specific page only.
+  rpc SubscribePageChatMessages(SubscribePageChatMessagesRequest) returns (stream ChatMessage) {}
+
+  // SubscribeInstanceRequests is called by the wiki-cli pool daemon.
+  // Streams page names that need a Claude instance spawned.
+  rpc SubscribeInstanceRequests(SubscribeInstanceRequestsRequest) returns (stream InstanceRequest) {}
 }
 
 // Sender identifies who sent a chat message.
@@ -138,10 +146,31 @@ message ReactToMessageRequest {
 message ReactToMessageResponse {}
 
 // GetChatStatusRequest is the request for GetChatStatus.
-message GetChatStatusRequest {}
+message GetChatStatusRequest {
+  // Optional page identifier. If set, checks for a page-specific instance.
+  // If empty, falls back to global subscriber check.
+  string page = 1;
+}
 
 // GetChatStatusResponse is the response for GetChatStatus.
 message GetChatStatusResponse {
-  // Whether a Claude channel subscriber is connected.
+  // Whether a Claude channel subscriber is connected for the requested page (or globally).
   bool connected = 1;
+  // Whether an instance has been requested but is not yet connected.
+  bool starting = 2;
+  // Whether a pool daemon is connected and able to spawn instances on demand.
+  bool pool_connected = 3;
+}
+
+// SubscribePageChatMessagesRequest is the request for SubscribePageChatMessages.
+message SubscribePageChatMessagesRequest {
+  string page = 1;  // page identifier to scope messages to
+}
+
+// SubscribeInstanceRequestsRequest is the request for SubscribeInstanceRequests.
+message SubscribeInstanceRequestsRequest {}
+
+// InstanceRequest is streamed by SubscribeInstanceRequests when a page needs a Claude instance.
+message InstanceRequest {
+  string page = 1;  // page identifier that needs an instance
 }
