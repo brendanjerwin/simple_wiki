@@ -124,12 +124,12 @@ export class WikiSearch extends LitElement {
 
   override connectedCallback() {
     super.connectedCallback();
-    window.addEventListener('keydown', this._handleKeydown);
+    globalThis.addEventListener('keydown', this._handleKeydown);
   }
 
   override disconnectedCallback() {
     super.disconnectedCallback();
-    window.removeEventListener('keydown', this._handleKeydown);
+    globalThis.removeEventListener('keydown', this._handleKeydown);
   }
 
   // Exposed for event wiring verification in tests

@@ -118,7 +118,7 @@ export class PageDeleter {
         
         // Use showToastAfter to handle the toast display after redirect
         showToastAfter('Page deleted successfully', 'success', 5, () => {
-          window.location.href = '/';
+          globalThis.location.href = '/';
         });
       } else {
         // Handle server-side error response
