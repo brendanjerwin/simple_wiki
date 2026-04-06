@@ -253,11 +253,9 @@ export class ConfirmationInterlockButton extends LitElement {
         e.preventDefault();
         lastFocusable.focus();
       }
-    } else {
-      if (activeEl === lastFocusable) {
-        e.preventDefault();
-        firstFocusable.focus();
-      }
+    } else if (activeEl === lastFocusable) {
+      e.preventDefault();
+      firstFocusable.focus();
     }
   }
 
@@ -349,9 +347,10 @@ export class ConfirmationInterlockButton extends LitElement {
     if (this.disabled) return;
     if (this.armed) return;
     const shadowActive = this.shadowRoot?.activeElement;
+    const resolvedDocumentActive = document.activeElement === this ? this : document.activeElement;
     const lightActive = this.getRootNode() instanceof ShadowRoot
       ? null
-      : (document.activeElement === this ? this : document.activeElement);
+      : resolvedDocumentActive;
     const active = shadowActive ?? lightActive;
     this._previouslyFocusedElement = active instanceof HTMLElement ? active : null;
     this._computedPosition = this._computePopupPosition();
