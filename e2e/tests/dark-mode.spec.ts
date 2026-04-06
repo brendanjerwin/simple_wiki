@@ -36,12 +36,17 @@ async function searchUntilResultsVisible(
   itemContentLocator: Locator,
   term: string,
 ): Promise<void> {
-  const retries = Math.ceil(SEARCH_INDEX_UPDATE_TIMEOUT_MS / SEARCH_INDEX_RETRY_INTERVAL_MS);
-  for (let i = 0; i < retries; i++) {
+  const maxAttempts = Math.ceil(SEARCH_INDEX_UPDATE_TIMEOUT_MS / SEARCH_INDEX_RETRY_INTERVAL_MS);
+  for (let i = 0; i < maxAttempts; i++) {
     await searchInput.fill(term);
     await searchInput.press('Enter');
-    if (await itemContentLocator.isVisible({ timeout: SEARCH_INDEX_RETRY_INTERVAL_MS }).catch(() => false)) {
+    try {
+      await itemContentLocator.waitFor({ state: 'visible', timeout: SEARCH_INDEX_RETRY_INTERVAL_MS });
       return;
+    } catch (e) {
+      // Timeout waiting for results — search index may not have updated yet; retry
+      if (i < maxAttempts - 1) continue;
+      throw e;
     }
   }
   throw new Error(
