@@ -385,6 +385,36 @@ describe('ConfirmationInterlockButton', () => {
     });
   });
 
+  describe('re-entrant arm guard', () => {
+    describe('when arm() is called while already armed', () => {
+      let testTimer: ReturnType<typeof createTestTimerProvider>;
+
+      beforeEach(async () => {
+        testTimer = createTestTimerProvider();
+        el = await fixture(html`
+          <confirmation-interlock-button
+            .disarmTimeoutMs=${2000}
+            .timerProvider=${testTimer}
+          ></confirmation-interlock-button>
+        `);
+        el.arm();
+        await el.updateComplete;
+      });
+
+      it('should remain armed', () => {
+        el.arm();
+        expect(el.armed).to.be.true;
+      });
+
+      it('should not reset the disarm timer', () => {
+        const pendingBeforeSecondArm = testTimer.pendingCallback;
+        el.arm();
+        // With the guard, the second arm() is a no-op and the pending callback is unchanged
+        expect(testTimer.pendingCallback).to.equal(pendingBeforeSecondArm);
+      });
+    });
+  });
+
   describe('disarm() method', () => {
     beforeEach(async () => {
       el = await fixture(html`
@@ -560,6 +590,255 @@ describe('ConfirmationInterlockButton', () => {
       it('should render backdrop', () => {
         const backdrop = el.shadowRoot?.querySelector('.confirm-backdrop');
         expect(backdrop).to.exist;
+      });
+    });
+  });
+
+  describe('ARIA attributes', () => {
+    describe('trigger button', () => {
+      describe('when not armed', () => {
+        beforeEach(async () => {
+          el = await fixture(html`
+            <confirmation-interlock-button .disarmTimeoutMs=${0}></confirmation-interlock-button>
+          `);
+        });
+
+        it('should have aria-expanded false', () => {
+          const button = el.shadowRoot?.querySelector('.button-trigger');
+          expect(button?.getAttribute('aria-expanded')).to.equal('false');
+        });
+
+        it('should have aria-haspopup dialog', () => {
+          const button = el.shadowRoot?.querySelector('.button-trigger');
+          expect(button?.getAttribute('aria-haspopup')).to.equal('dialog');
+        });
+      });
+
+      describe('when armed', () => {
+        beforeEach(async () => {
+          el = await fixture(html`
+            <confirmation-interlock-button .disarmTimeoutMs=${0}></confirmation-interlock-button>
+          `);
+          el.arm();
+          await el.updateComplete;
+        });
+
+        it('should have aria-expanded true', () => {
+          const button = el.shadowRoot?.querySelector('.button-trigger');
+          expect(button?.getAttribute('aria-expanded')).to.equal('true');
+        });
+      });
+    });
+
+    describe('confirm popup', () => {
+      beforeEach(async () => {
+        el = await fixture(html`
+          <confirmation-interlock-button
+            confirmLabel="Delete this item?"
+            .disarmTimeoutMs=${0}
+          ></confirmation-interlock-button>
+        `);
+        el.arm();
+        await el.updateComplete;
+      });
+
+      it('should have role alertdialog', () => {
+        const popup = el.shadowRoot?.querySelector('.confirm-popup');
+        expect(popup?.getAttribute('role')).to.equal('alertdialog');
+      });
+
+      it('should have aria-modal true', () => {
+        const popup = el.shadowRoot?.querySelector('.confirm-popup');
+        expect(popup?.getAttribute('aria-modal')).to.equal('true');
+      });
+
+      it('should have aria-labelledby pointing to confirm-label', () => {
+        const popup = el.shadowRoot?.querySelector('.confirm-popup');
+        expect(popup?.getAttribute('aria-labelledby')).to.equal('confirm-label');
+        const labelEl = el.shadowRoot?.querySelector('#confirm-label');
+        expect(labelEl?.textContent).to.equal('Delete this item?');
+      });
+    });
+  });
+
+  describe('Enter key on a button does not double-confirm', () => {
+    let confirmedHandler: sinon.SinonStub;
+
+    beforeEach(async () => {
+      confirmedHandler = sinon.stub();
+      el = await fixture(html`
+        <confirmation-interlock-button
+          .disarmTimeoutMs=${0}
+          @confirmed=${confirmedHandler}
+        ></confirmation-interlock-button>
+      `);
+      el.arm();
+      await el.updateComplete;
+    });
+
+    it('should not confirm when Enter bubbles up from the Yes button', () => {
+      const yesButton = el.shadowRoot?.querySelector('.button-yes') as HTMLButtonElement;
+      yesButton.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, composed: true }));
+      // The handler checks instanceof HTMLButtonElement so it should NOT fire _handleYesClick here
+      // (the click event from the button itself is what confirms)
+      expect(confirmedHandler).to.not.have.been.called;
+    });
+  });
+
+  describe('keyboard navigation', () => {
+    describe('when armed and Escape key is pressed on the popup', () => {
+      let cancelledHandler: sinon.SinonStub;
+
+      beforeEach(async () => {
+        cancelledHandler = sinon.stub();
+        el = await fixture(html`
+          <confirmation-interlock-button
+            .disarmTimeoutMs=${0}
+            @cancelled=${cancelledHandler}
+          ></confirmation-interlock-button>
+        `);
+        el.arm();
+        await el.updateComplete;
+
+        const popup = el.shadowRoot?.querySelector('.confirm-popup') as HTMLElement;
+        popup.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true }));
+        await el.updateComplete;
+      });
+
+      it('should disarm', () => {
+        expect(el.armed).to.be.false;
+      });
+
+      it('should dispatch cancelled event', () => {
+        expect(cancelledHandler).to.have.been.calledOnce;
+      });
+    });
+
+    describe('when armed and Enter key is pressed on the popup (not on a button)', () => {
+      let confirmedHandler: sinon.SinonStub;
+
+      beforeEach(async () => {
+        confirmedHandler = sinon.stub();
+        el = await fixture(html`
+          <confirmation-interlock-button
+            .disarmTimeoutMs=${0}
+            @confirmed=${confirmedHandler}
+          ></confirmation-interlock-button>
+        `);
+        el.arm();
+        await el.updateComplete;
+
+        const popup = el.shadowRoot?.querySelector('.confirm-popup') as HTMLElement;
+        popup.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, composed: true }));
+        await el.updateComplete;
+      });
+
+      it('should confirm', () => {
+        expect(confirmedHandler).to.have.been.calledOnce;
+      });
+
+      it('should disarm', () => {
+        expect(el.armed).to.be.false;
+      });
+    });
+
+    describe('focus trap', () => {
+      describe('when Tab is pressed while the last focusable element is active', () => {
+        beforeEach(async () => {
+          el = await fixture(html`
+            <confirmation-interlock-button .disarmTimeoutMs=${0}></confirmation-interlock-button>
+          `);
+          el.arm();
+          await el.updateComplete;
+          // Focus the No button (last focusable element in the popup)
+          const noButton = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-no');
+          noButton?.focus();
+        });
+
+        it('should wrap focus to the first focusable element (Yes button)', () => {
+          const popup = el.shadowRoot?.querySelector('.confirm-popup') as HTMLElement;
+          popup.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true }));
+          const yesButton = el.shadowRoot?.querySelector('.button-yes');
+          expect(el.shadowRoot?.activeElement).to.equal(yesButton);
+        });
+      });
+
+      describe('when Shift+Tab is pressed while the first focusable element is active', () => {
+        beforeEach(async () => {
+          el = await fixture(html`
+            <confirmation-interlock-button .disarmTimeoutMs=${0}></confirmation-interlock-button>
+          `);
+          el.arm();
+          await el.updateComplete;
+          // Focus the Yes button (first focusable element in the popup)
+          const yesButton = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-yes');
+          yesButton?.focus();
+        });
+
+        it('should wrap focus to the last focusable element (No button)', () => {
+          const popup = el.shadowRoot?.querySelector('.confirm-popup') as HTMLElement;
+          popup.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true }));
+          const noButton = el.shadowRoot?.querySelector('.button-no');
+          expect(el.shadowRoot?.activeElement).to.equal(noButton);
+        });
+      });
+
+      describe('when Tab is pressed while a middle focusable element is active', () => {
+        beforeEach(async () => {
+          el = await fixture(html`
+            <confirmation-interlock-button .disarmTimeoutMs=${0}></confirmation-interlock-button>
+          `);
+          el.arm();
+          await el.updateComplete;
+          // Focus the Yes button (first, not last)
+          const yesButton = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-yes');
+          yesButton?.focus();
+        });
+
+        it('should not prevent default Tab navigation', () => {
+          const popup = el.shadowRoot?.querySelector('.confirm-popup') as HTMLElement;
+          const event = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+          popup.dispatchEvent(event);
+          // Event should NOT have been prevented (natural focus movement allowed)
+          expect(event.defaultPrevented).to.be.false;
+        });
+      });
+    });
+  });
+
+  describe('focus management', () => {
+    describe('when armed', () => {
+      beforeEach(async () => {
+        el = await fixture(html`
+          <confirmation-interlock-button .disarmTimeoutMs=${0}></confirmation-interlock-button>
+        `);
+        el.arm();
+        await el.updateComplete;
+      });
+
+      it('should focus the yes button', () => {
+        const yesButton = el.shadowRoot?.querySelector('.button-yes');
+        expect(el.shadowRoot?.activeElement).to.equal(yesButton);
+      });
+    });
+
+    describe('when disarmed after being armed', () => {
+      beforeEach(async () => {
+        el = await fixture(html`
+          <confirmation-interlock-button .disarmTimeoutMs=${0}></confirmation-interlock-button>
+        `);
+        // Focus the trigger button first so arm() captures it as _previouslyFocusedElement
+        const triggerButton = el.shadowRoot?.querySelector<HTMLButtonElement>('.button-trigger');
+        triggerButton?.focus();
+        el.arm();
+        await el.updateComplete;
+        el.disarm();
+        await el.updateComplete;
+      });
+
+      it('should return focus to the previously focused element', () => {
+        const triggerButton = el.shadowRoot?.querySelector('.button-trigger');
+        expect(el.shadowRoot?.activeElement).to.equal(triggerButton);
       });
     });
   });

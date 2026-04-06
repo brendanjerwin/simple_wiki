@@ -1,6 +1,6 @@
 import { html, css, LitElement } from 'lit';
 import { property } from 'lit/decorators.js';
-import { sharedStyles, foundationCSS, zIndexCSS } from './shared-styles.js';
+import { sharedStyles, colorCSS, foundationCSS, zIndexCSS } from './shared-styles.js';
 import type { SearchResult, HighlightSpan, ContainerPathElement } from '../gen/api/v1/search_pb.js';
 
 /**
@@ -13,6 +13,7 @@ interface DisplayPathElement extends Partial<ContainerPathElement> {
 class WikiSearchResults extends LitElement {
   static override readonly styles = [
     foundationCSS,
+    colorCSS,
     zIndexCSS,
     css`
       :host {
@@ -30,7 +31,7 @@ class WikiSearchResults extends LitElement {
         width: 400px;
         max-width: 97%;
         z-index: var(--z-popover);
-        background-color: white;
+        background-color: var(--color-surface-elevated);
       }
       :host([open]) .popover {
         display: flex;
@@ -52,10 +53,10 @@ class WikiSearchResults extends LitElement {
         text-overflow: ellipsis;
         }
         .popover:not(:hover) a:focus {
-            outline: 2px solid #4d90fe;
+            outline: 2px solid var(--color-border-focus);
         }
         a:hover {
-            outline: 2px solid #4d90fe;
+            outline: 2px solid var(--color-border-focus);
         }
         .title-bar {
             display: flex;
@@ -63,9 +64,9 @@ class WikiSearchResults extends LitElement {
             align-items: center;
             border-top-right-radius: 10px;
             border-top-left-radius: 10px;
-            background-color: #f8f8f8;
+            background-color: var(--color-surface-sunken);
             padding: 10px;
-            border-bottom: 1px solid #e8e8e8;
+            border-bottom: 1px solid var(--color-border-subtle);
         }
         .title-bar h2 {
             font-size: 16px;
@@ -79,7 +80,7 @@ class WikiSearchResults extends LitElement {
             padding: 0;
         }
         .filter-divider {
-            color: #ccc;
+            color: var(--color-border-default);
             margin: 0 8px;
         }
         .inventory-filter {
@@ -87,7 +88,7 @@ class WikiSearchResults extends LitElement {
             align-items: center;
             gap: 4px;
             font-size: 13px;
-            color: #666;
+            color: var(--color-text-secondary);
             cursor: pointer;
             white-space: nowrap;
         }
@@ -95,7 +96,7 @@ class WikiSearchResults extends LitElement {
             cursor: pointer;
         }
         .item_content {
-            background-color: #e8e8e8;
+            background-color: var(--color-surface-elevated);
             font-size: 12px;
             margin: 10px;
             margin-bottom: 10px;
@@ -111,8 +112,8 @@ class WikiSearchResults extends LitElement {
             margin-top: 2px;
         }
         mark {
-            background-color: #ffff00;
-            color: black;
+            background-color: var(--color-highlight-bg);
+            color: var(--color-text-primary);
             font-weight: bold;
             border-radius: 4px;
             padding: 2px 3px;
@@ -120,7 +121,7 @@ class WikiSearchResults extends LitElement {
         .found-in {
             font-size: 12px;
             margin-bottom: 4px;
-            color: #666;
+            color: var(--color-text-secondary);
             display: flex;
             flex-direction: row;
             align-items: baseline;
@@ -128,10 +129,10 @@ class WikiSearchResults extends LitElement {
             flex-wrap: wrap;
         }
         .found-in strong {
-            color: #333;
+            color: var(--color-text-primary);
         }
         .found-in a {
-            color: #0066cc;
+            color: var(--color-text-link);
             text-decoration: none;
             font-weight: normal;
         }
@@ -139,34 +140,34 @@ class WikiSearchResults extends LitElement {
             text-decoration: underline;
         }
         .path-separator {
-            color: #999;
+            color: var(--color-text-muted);
             margin: 0 2px;
         }
         .path-ellipsis {
-            color: #999;
+            color: var(--color-text-muted);
             font-weight: normal;
             user-select: none;
         }
         .no-results {
             text-align: center;
             padding: 20px;
-            color: #666;
+            color: var(--color-text-secondary);
             font-style: italic;
         }
         .filter-warning {
-            background-color: #fff3cd;
-            border: 1px solid #ffc107;
+            background-color: var(--color-warning-bg);
+            border: 1px solid var(--color-warning);
             border-radius: 5px;
             padding: 8px 10px;
             margin: 10px;
             font-size: 13px;
-            color: #856404;
+            color: var(--color-warning-text);
             display: flex;
             align-items: center;
             gap: 8px;
         }
         .filter-warning i {
-            color: #ffc107;
+            color: var(--color-warning);
         }
 
         @media (max-width: 410px) {

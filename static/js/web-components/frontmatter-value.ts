@@ -1,5 +1,6 @@
 import { html, css, LitElement } from 'lit';
 import { property } from 'lit/decorators.js';
+import { colorCSS } from './shared-styles.js';
 import './frontmatter-value-string.js';
 import './frontmatter-value-array.js';
 import './frontmatter-value-section.js';
@@ -20,20 +21,22 @@ export function coercePrimitive(value: unknown) {
 }
 
 export class FrontmatterValue extends LitElement {
-  static override readonly styles = css`
+  static override readonly styles = [
+    colorCSS,
+    css`
     :host {
       display: block;
     }
 
     .empty-value-message {
       text-align: center;
-      color: #666;
+      color: var(--color-text-secondary);
       font-style: italic;
       padding: 16px;
-      border: 1px dashed #ddd;
+      border: 1px dashed var(--color-border-default);
       border-radius: 4px;
     }
-  `;
+  `];
 
   @property({ type: Object })
   declare value: unknown;

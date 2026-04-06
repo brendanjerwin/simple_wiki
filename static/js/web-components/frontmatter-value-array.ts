@@ -1,11 +1,12 @@
 import { html, css, LitElement } from 'lit';
 import { property } from 'lit/decorators.js';
-import { buttonCSS, foundationCSS } from './shared-styles.js';
+import { buttonCSS, colorCSS, foundationCSS } from './shared-styles.js';
 import './frontmatter-value-string.js';
 
 export class FrontmatterValueArray extends LitElement {
   static override readonly styles = [
     foundationCSS,
+    colorCSS,
     buttonCSS,
     css`
       :host {
@@ -14,10 +15,10 @@ export class FrontmatterValueArray extends LitElement {
 
       .array-container {
         border: none;
-        border-left: 1px solid #e0e0e0;
+        border-left: 1px solid var(--color-border-subtle);
         padding-left: 2px;
         padding-top: 4px;
-        background: #f9f9f9;
+        background: var(--color-surface-sunken);
         margin-left: 2px;
       }
 
@@ -32,7 +33,7 @@ export class FrontmatterValueArray extends LitElement {
 
       .array-title {
         font-weight: normal;
-        color: #888;
+        color: var(--color-text-muted);
         font-size: 11px;
         text-transform: uppercase;
         letter-spacing: 0.5px;
@@ -50,9 +51,9 @@ export class FrontmatterValueArray extends LitElement {
       gap: 4px;
       padding-left: 2px;
       padding-top: 3px;
-      background: #fff;
+      background: var(--color-surface-primary);
       border: none;
-      border-left: 1px solid #e0e0e0;
+      border-left: 1px solid var(--color-border-subtle);
       border-radius: 2px;
     }
 
@@ -62,7 +63,7 @@ export class FrontmatterValueArray extends LitElement {
 
     .empty-array-message {
       text-align: center;
-      color: #666;
+      color: var(--color-text-secondary);
       font-style: italic;
       padding: 16px;
     }

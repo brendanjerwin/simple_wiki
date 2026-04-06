@@ -56,8 +56,8 @@ func main() {
 		},
 	}
 	app.Before = func(c *cli.Context) error {
-		// Skip version check for mcp command (it needs to start quickly as a subprocess)
-		if c.Args().First() == "mcp" {
+		// Skip version check for mcp and pool commands (they need to start quickly)
+		if c.Args().First() == "mcp" || c.Args().First() == "pool" {
 			return nil
 		}
 		if err := checkVersionCompatibility(c.GlobalString("url")); err != nil {
@@ -279,6 +279,7 @@ describe that type too to see its nested structure.`,
 		},
 		buildCallCommand(urlFlag),
 		buildMCPCommand(urlFlag),
+		buildPoolCommand(urlFlag),
 	}
 }
 
