@@ -12,6 +12,44 @@ import (
 	cli "gopkg.in/urfave/cli.v1"
 )
 
+// fakeCmd is a test double satisfying commandStarter (same interface as *exec.Cmd).
+type fakeCmd struct {
+	startErr error
+	waitCh   chan struct{}
+}
+
+func (f *fakeCmd) Start() error { return f.startErr }
+
+func (f *fakeCmd) Wait() error {
+	<-f.waitCh
+	return nil
+}
+
+// fakeCommandTracker tracks commands created by the fake builder and allows cleanup.
+type fakeCommandTracker struct {
+	shouldFailStart bool
+	cmds            []*fakeCmd
+}
+
+func (t *fakeCommandTracker) builder(_ context.Context, _ string, _ ...string) commandStarter {
+	cmd := &fakeCmd{waitCh: make(chan struct{})}
+	if t.shouldFailStart {
+		cmd.startErr = errors.New("start failed")
+	}
+	t.cmds = append(t.cmds, cmd)
+	return cmd
+}
+
+func (t *fakeCommandTracker) cleanup() {
+	for _, c := range t.cmds {
+		select {
+		case <-c.waitCh:
+		default:
+			close(c.waitCh)
+		}
+	}
+}
+
 var _ = Describe("sanitizeUnitName", func() {
 	When("given a simple identifier", func() {
 		var result string
@@ -77,6 +115,70 @@ var _ = Describe("buildPoolCommand", func() {
 	})
 })
 
+var _ = Describe("buildClaudeArgs", func() {
+	When("not using systemd", func() {
+		var (
+			binary   string
+			args     []string
+			unitName string
+		)
+
+		BeforeEach(func() {
+			binary, args, unitName = buildClaudeArgs("/usr/bin/claude", "/usr/bin/wiki-cli mcp --url http://localhost --page test", "test", false)
+		})
+
+		It("should use the claude path as binary", func() {
+			Expect(binary).To(Equal("/usr/bin/claude"))
+		})
+
+		It("should include --channels and --mcp-server", func() {
+			Expect(args).To(ContainElement("--channels"))
+			Expect(args).To(ContainElement("--mcp-server"))
+		})
+
+		It("should return empty unit name", func() {
+			Expect(unitName).To(BeEmpty())
+		})
+	})
+
+	When("using systemd", func() {
+		var (
+			binary   string
+			args     []string
+			unitName string
+		)
+
+		BeforeEach(func() {
+			binary, args, unitName = buildClaudeArgs("/usr/bin/claude", "/usr/bin/wiki-cli mcp --url http://localhost --page my_page", "my_page", true)
+		})
+
+		It("should use systemd-run as binary", func() {
+			Expect(binary).To(Equal("systemd-run"))
+		})
+
+		It("should include --user and --scope", func() {
+			Expect(args).To(ContainElement("--user"))
+			Expect(args).To(ContainElement("--scope"))
+		})
+
+		It("should return a sanitized unit name", func() {
+			Expect(unitName).To(Equal("wiki-chat-my-page"))
+		})
+	})
+})
+
+var _ = Describe("buildMCPServerArg", func() {
+	var result string
+
+	BeforeEach(func() {
+		result = buildMCPServerArg("/usr/bin/wiki-cli", "http://localhost:8050", "my_page")
+	})
+
+	It("should build the correct command string", func() {
+		Expect(result).To(Equal("/usr/bin/wiki-cli mcp --url http://localhost:8050 --page my_page"))
+	})
+})
+
 var _ = Describe("instanceEntry", func() {
 	Describe("touch", func() {
 		When("called", func() {
@@ -98,16 +200,10 @@ var _ = Describe("instanceEntry", func() {
 
 	Describe("idleSince", func() {
 		When("entry was recently active", func() {
-			var (
-				entry *instanceEntry
-				idle  time.Duration
-			)
+			var idle time.Duration
 
 			BeforeEach(func() {
-				entry = &instanceEntry{
-					page:       "test-page",
-					lastActive: time.Now(),
-				}
+				entry := &instanceEntry{page: "test-page", lastActive: time.Now()}
 				idle = entry.idleSince()
 			})
 
@@ -117,16 +213,10 @@ var _ = Describe("instanceEntry", func() {
 		})
 
 		When("entry has been idle for a while", func() {
-			var (
-				entry *instanceEntry
-				idle  time.Duration
-			)
+			var idle time.Duration
 
 			BeforeEach(func() {
-				entry = &instanceEntry{
-					page:       "test-page",
-					lastActive: time.Now().Add(-5 * time.Minute),
-				}
+				entry := &instanceEntry{page: "test-page", lastActive: time.Now().Add(-5 * time.Minute)}
 				idle = entry.idleSince()
 			})
 
@@ -137,60 +227,16 @@ var _ = Describe("instanceEntry", func() {
 	})
 })
 
-// fakeProcessHandle is a test double for processHandle.
-type fakeProcessHandle struct {
-	waitCh chan struct{}
-}
-
-func (f *fakeProcessHandle) Wait() error {
-	<-f.waitCh
-	return nil
-}
-
-// fakeSpawner is a test double for instanceSpawner.
-type fakeSpawner struct {
-	shouldFail   bool
-	spawnedPages []string
-	stoppedUnits []string
-	handles      []*fakeProcessHandle
-}
-
-// cleanup closes all spawned process handles to unblock Wait goroutines.
-func (f *fakeSpawner) cleanup() {
-	for _, h := range f.handles {
-		select {
-		case <-h.waitCh:
-		default:
-			close(h.waitCh)
-		}
-	}
-}
-
-func (f *fakeSpawner) Spawn(_ context.Context, page string) (processHandle, string, error) {
-	if f.shouldFail {
-		return nil, "", errors.New("spawn failed")
-	}
-	f.spawnedPages = append(f.spawnedPages, page)
-	handle := &fakeProcessHandle{waitCh: make(chan struct{})}
-	f.handles = append(f.handles, handle)
-	return handle, "", nil
-}
-
-func (f *fakeSpawner) StopUnit(unitName string) {
-	if unitName != "" {
-		f.stoppedUnits = append(f.stoppedUnits, unitName)
-	}
-}
-
 var _ = Describe("poolDaemon", func() {
 	Describe("ensureInstance", func() {
 		When("an instance already exists for the page", func() {
 			var daemon *poolDaemon
 
 			BeforeEach(func() {
+				tracker := &fakeCommandTracker{}
 				daemon = &poolDaemon{
 					maxInstances: 5,
-					spawner:      &fakeSpawner{},
+					newCommand:   tracker.builder,
 					instances: map[string]*instanceEntry{
 						"existing-page": {
 							page:       "existing-page",
@@ -216,7 +262,7 @@ var _ = Describe("poolDaemon", func() {
 			BeforeEach(func() {
 				daemon = &poolDaemon{
 					maxInstances: 2,
-					spawner:      &fakeSpawner{shouldFail: true},
+					newCommand:   (&fakeCommandTracker{shouldFailStart: true}).builder,
 					ctx:          context.Background(),
 					instances: map[string]*instanceEntry{
 						"page-a": {
@@ -249,17 +295,14 @@ var _ = Describe("poolDaemon", func() {
 		})
 
 		When("at max capacity and spawn succeeds", func() {
-			var (
-				daemon  *poolDaemon
-				spawner *fakeSpawner
-			)
+			var daemon *poolDaemon
 
 			BeforeEach(func() {
-				spawner = &fakeSpawner{}
-				DeferCleanup(spawner.cleanup)
+				tracker := &fakeCommandTracker{}
+				DeferCleanup(tracker.cleanup)
 				daemon = &poolDaemon{
 					maxInstances: 2,
-					spawner:      spawner,
+					newCommand:   tracker.builder,
 					ctx:          context.Background(),
 					instances: map[string]*instanceEntry{
 						"page-a": {
@@ -288,24 +331,17 @@ var _ = Describe("poolDaemon", func() {
 			It("should keep the more recently active instance", func() {
 				Expect(daemon.instances).To(HaveKey("page-b"))
 			})
-
-			It("should have spawned the new page", func() {
-				Expect(spawner.spawnedPages).To(ContainElement("page-c"))
-			})
 		})
 
 		When("spawning a new instance with available capacity", func() {
-			var (
-				daemon  *poolDaemon
-				spawner *fakeSpawner
-			)
+			var daemon *poolDaemon
 
 			BeforeEach(func() {
-				spawner = &fakeSpawner{}
-				DeferCleanup(spawner.cleanup)
+				tracker := &fakeCommandTracker{}
+				DeferCleanup(tracker.cleanup)
 				daemon = &poolDaemon{
 					maxInstances: 5,
-					spawner:      spawner,
+					newCommand:   tracker.builder,
 					ctx:          context.Background(),
 					instances:    make(map[string]*instanceEntry),
 				}
@@ -315,9 +351,80 @@ var _ = Describe("poolDaemon", func() {
 			It("should add the instance", func() {
 				Expect(daemon.instances).To(HaveKey("new-page"))
 			})
+		})
+	})
 
-			It("should have spawned the page", func() {
-				Expect(spawner.spawnedPages).To(Equal([]string{"new-page"}))
+	Describe("spawnInstance", func() {
+		When("ctx is nil", func() {
+			var err error
+
+			BeforeEach(func() {
+				daemon := &poolDaemon{
+					newCommand: (&fakeCommandTracker{}).builder,
+					instances:  make(map[string]*instanceEntry),
+				}
+				daemon.mu.Lock()
+				_, err = daemon.spawnInstance("test-page")
+				daemon.mu.Unlock()
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(MatchError(ContainSubstring("context not initialized")))
+			})
+		})
+
+		When("command starts successfully", func() {
+			var (
+				entry *instanceEntry
+				err   error
+			)
+
+			BeforeEach(func() {
+				tracker := &fakeCommandTracker{}
+				DeferCleanup(tracker.cleanup)
+				daemon := &poolDaemon{
+					newCommand: tracker.builder,
+					ctx:        context.Background(),
+					instances:  make(map[string]*instanceEntry),
+				}
+				daemon.mu.Lock()
+				entry, err = daemon.spawnInstance("test-page")
+				daemon.mu.Unlock()
+			})
+
+			It("should not error", func() {
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("should return an entry with the page name", func() {
+				Expect(entry.page).To(Equal("test-page"))
+			})
+
+			It("should set lastActive to near now", func() {
+				Expect(entry.lastActive).To(BeTemporally("~", time.Now(), time.Second))
+			})
+
+			It("should have a cancel function", func() {
+				Expect(entry.cancel).NotTo(BeNil())
+			})
+		})
+
+		When("command fails to start", func() {
+			var err error
+
+			BeforeEach(func() {
+				daemon := &poolDaemon{
+					newCommand: (&fakeCommandTracker{shouldFailStart: true}).builder,
+					ctx:        context.Background(),
+					instances:  make(map[string]*instanceEntry),
+				}
+				daemon.mu.Lock()
+				_, err = daemon.spawnInstance("test-page")
+				daemon.mu.Unlock()
+			})
+
+			It("should return an error", func() {
+				Expect(err).To(HaveOccurred())
 			})
 		})
 	})
@@ -328,7 +435,7 @@ var _ = Describe("poolDaemon", func() {
 
 			BeforeEach(func() {
 				daemon = &poolDaemon{
-					spawner: &fakeSpawner{},
+					newCommand: (&fakeCommandTracker{}).builder,
 					instances: map[string]*instanceEntry{
 						"new-page": {
 							page:       "new-page",
@@ -367,11 +474,70 @@ var _ = Describe("poolDaemon", func() {
 
 			BeforeEach(func() {
 				daemon = &poolDaemon{
-					spawner:   &fakeSpawner{},
-					instances: make(map[string]*instanceEntry),
+					newCommand: (&fakeCommandTracker{}).builder,
+					instances:  make(map[string]*instanceEntry),
 				}
 				daemon.mu.Lock()
 				daemon.evictLeastActive()
+				daemon.mu.Unlock()
+			})
+
+			It("should not panic", func() {
+				Expect(daemon.instances).To(BeEmpty())
+			})
+		})
+	})
+
+	Describe("stopInstanceLocked", func() {
+		When("instance has a systemd unit name", func() {
+			var (
+				daemon  *poolDaemon
+				tracker *fakeCommandTracker
+				canceled bool
+			)
+
+			BeforeEach(func() {
+				canceled = false
+				tracker = &fakeCommandTracker{}
+				DeferCleanup(tracker.cleanup)
+				daemon = &poolDaemon{
+					newCommand: tracker.builder,
+					instances: map[string]*instanceEntry{
+						"page-a": {
+							page:     "page-a",
+							unitName: "wiki-chat-page-a",
+							cancel:   func() { canceled = true },
+						},
+					},
+				}
+				daemon.mu.Lock()
+				daemon.stopInstanceLocked("page-a")
+				daemon.mu.Unlock()
+			})
+
+			It("should cancel the instance", func() {
+				Expect(canceled).To(BeTrue())
+			})
+
+			It("should invoke systemctl stop via newCommand", func() {
+				Expect(tracker.cmds).To(HaveLen(1))
+			})
+
+			It("should remove the instance", func() {
+				Expect(daemon.instances).NotTo(HaveKey("page-a"))
+			})
+		})
+
+		When("instance does not exist", func() {
+			var daemon *poolDaemon
+
+			BeforeEach(func() {
+				daemon = &poolDaemon{
+					newCommand: (&fakeCommandTracker{}).builder,
+					instances:  make(map[string]*instanceEntry),
+				}
+				daemon.mu.Lock()
+				daemon.stopInstanceLocked("nonexistent")
 				daemon.mu.Unlock()
 			})
 
@@ -391,7 +557,7 @@ var _ = Describe("poolDaemon", func() {
 			BeforeEach(func() {
 				canceled = false
 				daemon = &poolDaemon{
-					spawner: &fakeSpawner{},
+					newCommand: (&fakeCommandTracker{}).builder,
 					instances: map[string]*instanceEntry{
 						"page-a": {
 							page:   "page-a",
@@ -412,159 +578,14 @@ var _ = Describe("poolDaemon", func() {
 		})
 	})
 
-	Describe("spawnInstance", func() {
-		When("ctx is nil", func() {
-			var (
-				daemon *poolDaemon
-				err    error
-			)
-
-			BeforeEach(func() {
-				daemon = &poolDaemon{
-					spawner:   &fakeSpawner{},
-					instances: make(map[string]*instanceEntry),
-				}
-				daemon.mu.Lock()
-				_, err = daemon.spawnInstance("test-page")
-				daemon.mu.Unlock()
-			})
-
-			It("should return an error", func() {
-				Expect(err).To(MatchError(ContainSubstring("context not initialized")))
-			})
-		})
-
-		When("spawner succeeds", func() {
-			var (
-				daemon  *poolDaemon
-				spawner *fakeSpawner
-				entry   *instanceEntry
-				err     error
-			)
-
-			BeforeEach(func() {
-				spawner = &fakeSpawner{}
-				DeferCleanup(spawner.cleanup)
-				daemon = &poolDaemon{
-					spawner:   spawner,
-					ctx:       context.Background(),
-					instances: make(map[string]*instanceEntry),
-				}
-				daemon.mu.Lock()
-				entry, err = daemon.spawnInstance("test-page")
-				daemon.mu.Unlock()
-			})
-
-			It("should not error", func() {
-				Expect(err).NotTo(HaveOccurred())
-			})
-
-			It("should return an entry with the page name", func() {
-				Expect(entry.page).To(Equal("test-page"))
-			})
-
-			It("should set lastActive to near now", func() {
-				Expect(entry.lastActive).To(BeTemporally("~", time.Now(), time.Second))
-			})
-
-			It("should have a cancel function", func() {
-				Expect(entry.cancel).NotTo(BeNil())
-			})
-		})
-
-		When("spawner fails", func() {
-			var (
-				daemon *poolDaemon
-				err    error
-			)
-
-			BeforeEach(func() {
-				daemon = &poolDaemon{
-					spawner:   &fakeSpawner{shouldFail: true},
-					ctx:       context.Background(),
-					instances: make(map[string]*instanceEntry),
-				}
-				daemon.mu.Lock()
-				_, err = daemon.spawnInstance("test-page")
-				daemon.mu.Unlock()
-			})
-
-			It("should return an error", func() {
-				Expect(err).To(HaveOccurred())
-			})
-		})
-	})
-
-	Describe("stopInstanceLocked", func() {
-		When("instance has a systemd unit name", func() {
-			var (
-				daemon   *poolDaemon
-				spawner  *fakeSpawner
-				canceled bool
-			)
-
-			BeforeEach(func() {
-				canceled = false
-				spawner = &fakeSpawner{}
-				daemon = &poolDaemon{
-					spawner: spawner,
-					instances: map[string]*instanceEntry{
-						"page-a": {
-							page:     "page-a",
-							unitName: "wiki-chat-page-a",
-							cancel:   func() { canceled = true },
-						},
-					},
-				}
-				daemon.mu.Lock()
-				daemon.stopInstanceLocked("page-a")
-				daemon.mu.Unlock()
-			})
-
-			It("should cancel the instance", func() {
-				Expect(canceled).To(BeTrue())
-			})
-
-			It("should call StopUnit with the unit name", func() {
-				Expect(spawner.stoppedUnits).To(ContainElement("wiki-chat-page-a"))
-			})
-
-			It("should remove the instance", func() {
-				Expect(daemon.instances).NotTo(HaveKey("page-a"))
-			})
-		})
-
-		When("instance does not exist", func() {
+	Describe("reapIdleInstances", func() {
+		When("an instance exceeds idle timeout", func() {
 			var daemon *poolDaemon
 
 			BeforeEach(func() {
 				daemon = &poolDaemon{
-					spawner:   &fakeSpawner{},
-					instances: make(map[string]*instanceEntry),
-				}
-				daemon.mu.Lock()
-				daemon.stopInstanceLocked("nonexistent")
-				daemon.mu.Unlock()
-			})
-
-			It("should not panic", func() {
-				Expect(daemon.instances).To(BeEmpty())
-			})
-		})
-	})
-
-	Describe("reapIdleInstances", func() {
-		When("an instance exceeds idle timeout", func() {
-			var (
-				daemon  *poolDaemon
-				spawner *fakeSpawner
-			)
-
-			BeforeEach(func() {
-				spawner = &fakeSpawner{}
-				daemon = &poolDaemon{
 					idleTimeout: 10 * time.Minute,
-					spawner:     spawner,
+					newCommand:  (&fakeCommandTracker{}).builder,
 					instances: map[string]*instanceEntry{
 						"idle-page": {
 							page:       "idle-page",
@@ -611,7 +632,7 @@ var _ = Describe("poolDaemon", func() {
 					wikiURL:      "http://localhost:1",
 					maxInstances: 5,
 					idleTimeout:  30 * time.Minute,
-					spawner:      &fakeSpawner{},
+					newCommand:   (&fakeCommandTracker{}).builder,
 					instances:    make(map[string]*instanceEntry),
 				}
 				ctx, cancel := context.WithCancel(context.Background())
@@ -635,7 +656,6 @@ var _ = Describe("prefixWriter", func() {
 		var buf bytes.Buffer
 
 		BeforeEach(func() {
-			// Create a temp file to use as the writer target
 			tmpFile, err := os.CreateTemp("", "prefix-test")
 			Expect(err).NotTo(HaveOccurred())
 			DeferCleanup(func() { _ = os.Remove(tmpFile.Name()) })
@@ -644,7 +664,6 @@ var _ = Describe("prefixWriter", func() {
 			_, err = pw.Write([]byte("hello world\n"))
 			Expect(err).NotTo(HaveOccurred())
 
-			// Read back what was written
 			content, err := os.ReadFile(tmpFile.Name())
 			Expect(err).NotTo(HaveOccurred())
 			buf.Write(content)
