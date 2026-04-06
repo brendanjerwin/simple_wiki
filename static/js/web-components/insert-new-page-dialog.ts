@@ -223,11 +223,11 @@ export class InsertNewPageDialog extends LitElement {
     this.open = true;
     await this._loadTemplates();
 
-    // Focus the title input after render (use optional chaining for method in case element not upgraded)
-    this.updateComplete.then(() => {
-      const identifierInput = this.shadowRoot?.querySelector<AutomagicIdentifierInput>('automagic-identifier-input');
-      identifierInput?.focusTitleInput();
-    });
+    // Focus the title input after render. Use `?.()` in case the custom element isn't
+    // upgraded yet (e.g. in tests where automagic-identifier-input isn't registered).
+    await this.updateComplete;
+    const identifierInput = this.shadowRoot?.querySelector<AutomagicIdentifierInput>('automagic-identifier-input');
+    identifierInput?.focusTitleInput?.();
   }
 
   public close(): void {
