@@ -148,6 +148,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         font-size: 0.8rem;
         text-align: center;
         flex-shrink: 0;
+        color: var(--color-text-muted);
       }
 
       .status-banner.reconnecting {
