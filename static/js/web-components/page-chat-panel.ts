@@ -96,6 +96,10 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         width: 350px;
         background: var(--color-editor-surface);
         border-left: 1px solid var(--color-editor-border);
+        /* Force dark-mode text tokens within the always-dark panel */
+        color: var(--color-editor-text);
+        --color-text-primary: var(--color-editor-text);
+        --color-text-muted: color-mix(in srgb, var(--color-editor-text) 60%, transparent);
         display: flex;
         flex-direction: column;
         z-index: var(--z-drawer);
