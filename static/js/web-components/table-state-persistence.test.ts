@@ -96,6 +96,28 @@ describe('table-state-persistence', () => {
         expect(hashEmoji).to.equal(computeTableHash(['Name'], [['😀']]));
       });
     });
+
+    describe('when an emoji is followed by an ASCII character', () => {
+      let hashEmojiThenA: string;
+      let hashEmojiOnly: string;
+      let hashAsciiOnly: string;
+
+      beforeEach(() => {
+        // If the index fails to advance by 2 for the surrogate pair, the 'A'
+        // after '😀' would be skipped, making the hash equal to '😀' alone.
+        hashEmojiThenA = computeTableHash(['Name'], [['😀A']]);
+        hashEmojiOnly = computeTableHash(['Name'], [['😀']]);
+        hashAsciiOnly = computeTableHash(['Name'], [['A']]);
+      });
+
+      it('should differ from the emoji-only hash', () => {
+        expect(hashEmojiThenA).to.not.equal(hashEmojiOnly);
+      });
+
+      it('should differ from the ASCII-only hash', () => {
+        expect(hashEmojiThenA).to.not.equal(hashAsciiOnly);
+      });
+    });
   });
 
   describe('serializeFilter', () => {
