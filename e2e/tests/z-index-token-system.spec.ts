@@ -36,7 +36,7 @@ async function openPageImportDialog(page: Page): Promise<void> {
   await expect(page.locator('#page-import-trigger')).toBeAttached({ timeout: MENU_APPEAR_TIMEOUT_MS });
   await page.locator('.tools-menu').hover();
   await page.locator('#page-import-trigger').click();
-  await expect(page.locator('page-import-dialog')).toHaveAttribute('open', { timeout: MENU_APPEAR_TIMEOUT_MS });
+  await expect(page.locator('page-import-dialog')).toHaveAttribute('open', '', { timeout: MENU_APPEAR_TIMEOUT_MS });
 }
 
 /**
@@ -45,10 +45,10 @@ async function openPageImportDialog(page: Page): Promise<void> {
  */
 async function openSearchPopover(page: Page): Promise<void> {
   const searchInput = page.locator('wiki-search input[type="search"]');
-  await expect(searchInput).toBeAttached({ timeout: MENU_APPEAR_TIMEOUT_MS });
+  await expect(searchInput).toBeVisible({ timeout: MENU_APPEAR_TIMEOUT_MS });
   await searchInput.fill('test');
   await searchInput.press('Enter');
-  await expect(page.locator('wiki-search-results')).toHaveAttribute('open', { timeout: MENU_APPEAR_TIMEOUT_MS });
+  await expect(page.locator('wiki-search-results')).toHaveAttribute('open', '', { timeout: MENU_APPEAR_TIMEOUT_MS });
 }
 
 /** Injects a toast-message into the page and waits for it to be fully slid into view. */
@@ -73,7 +73,7 @@ async function injectToast(page: Page, message: string): Promise<void> {
   }, message);
   // Wait for the visible attribute (set by show()), then wait for the slide-in
   // animation to complete so that getBoundingClientRect() reflects the final position.
-  await expect(page.locator('toast-message')).toHaveAttribute('visible', { timeout: MENU_APPEAR_TIMEOUT_MS });
+  await expect(page.locator('toast-message')).toHaveAttribute('visible', '', { timeout: MENU_APPEAR_TIMEOUT_MS });
   // The toast slides in from the right: animation is complete once the right edge
   // is within the viewport (i.e. no longer translated off-screen by translateX(100%)).
   await page.waitForFunction(() => {
@@ -85,23 +85,22 @@ async function injectToast(page: Page, message: string): Promise<void> {
 }
 
 /**
- * Returns the custom element tag name of the topmost element at (x, y).
- * Pierces one level of shadow DOM to return the host element's tag when the
- * hit element lives inside a shadow root.
+ * Returns the custom element tag name of the topmost element at (x, y),
+ * or 'none' if neither the hit element nor any ancestor is a custom element.
+ * If the hit element lives inside a shadow root, the search starts from the host.
  */
 async function getTopmostCustomElementTagAt(page: Page, x: number, y: number): Promise<string> {
   return page.evaluate(([px, py]: [number, number]) => {
     const el = document.elementFromPoint(px, py);
     if (!el) return 'none';
     const root = el.getRootNode();
-    if (root instanceof ShadowRoot) return root.host.tagName.toLowerCase();
-    let current: Element | null = el;
+    let current: Element | null = root instanceof ShadowRoot ? root.host : el;
     while (current && current !== document.body) {
       const tag = current.tagName.toLowerCase();
       if (tag.includes('-')) return tag;
       current = current.parentElement;
     }
-    return el.tagName.toLowerCase();
+    return 'none';
   }, [x, y] as [number, number]);
 }
 
@@ -160,11 +159,13 @@ test.describe('Z-Index Token System (ADR-0008)', () => {
       // It uses --z-popover on its internal .popover element.
       const zIndex = await page.evaluate(() => {
         const searchEl = document.querySelector('wiki-search');
-        if (!searchEl?.shadowRoot) return null;
+        if (!searchEl) throw new Error('wiki-search not found');
+        if (!searchEl.shadowRoot) throw new Error('wiki-search shadowRoot not found');
         const resultsEl = searchEl.shadowRoot.querySelector('wiki-search-results');
-        if (!resultsEl?.shadowRoot) return null;
+        if (!resultsEl) throw new Error('wiki-search-results not found inside wiki-search shadowRoot');
+        if (!resultsEl.shadowRoot) throw new Error('wiki-search-results shadowRoot not found');
         const popover = resultsEl.shadowRoot.querySelector('.popover');
-        if (!popover) return null;
+        if (!popover) throw new Error('.popover not found inside wiki-search-results shadowRoot');
         return parseInt(getComputedStyle(popover).zIndex, 10);
       });
 
