@@ -31,7 +31,7 @@ class WikiSearchResults extends LitElement {
         width: 400px;
         max-width: 97%;
         z-index: var(--z-popover);
-        background-color: var(--color-surface-elevated);
+        background-color: var(--color-surface-primary);
       }
       :host([open]) .popover {
         display: flex;
