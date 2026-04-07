@@ -55,9 +55,9 @@ describe('PageChatPanel', () => {
       expect(fab!.classList.contains('disabled')).to.equal(true);
     });
 
-    it('should have aria-disabled on the FAB', () => {
+    it('should not have aria-disabled on the FAB (FAB is always clickable to view status)', () => {
       const fab = el.shadowRoot!.querySelector('.fab');
-      expect(fab!.getAttribute('aria-disabled')).to.equal('true');
+      expect(fab!.hasAttribute('aria-disabled')).to.equal(false);
     });
 
     it('should show disconnected banner when panel is open', async () => {

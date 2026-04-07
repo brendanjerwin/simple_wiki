@@ -343,6 +343,7 @@ func (*MockJobStreamServer) SendHeader(metadata.MD) error {
 }
 
 func (*MockJobStreamServer) SetTrailer(metadata.MD) {
+	// No-op test stub — not needed for this test scenario
 }
 
 func (*MockJobStreamServer) SendMsg(any) error {
@@ -355,12 +356,12 @@ func (*MockJobStreamServer) RecvMsg(any) error {
 
 // MockPageWatchStreamServer is a mock implementation of apiv1.PageManagementService_WatchPageServer for testing.
 type MockPageWatchStreamServer struct {
-	SentMessages       []*apiv1.WatchPageResponse
-	SendErr            error
-	SendErrAfterCount  int // if > 0, returns SendErr only after this many successful sends
-	ContextDone        bool
-	ctx                context.Context    // if set, overrides ContextDone behavior
-	cancelFunc         context.CancelFunc // cancels ctx
+	SentMessages      []*apiv1.WatchPageResponse
+	SendErr           error
+	SendErrAfterCount int // if > 0, returns SendErr only after this many successful sends
+	ContextDone       bool
+	ctx               context.Context    // if set, overrides ContextDone behavior
+	cancelFunc        context.CancelFunc // cancels ctx
 }
 
 // newCancellableMockPageWatchStreamServer creates a MockPageWatchStreamServer with a controllable context.
@@ -405,7 +406,9 @@ func (*MockPageWatchStreamServer) SendHeader(metadata.MD) error {
 	return nil
 }
 
-func (*MockPageWatchStreamServer) SetTrailer(metadata.MD) {}
+func (*MockPageWatchStreamServer) SetTrailer(metadata.MD) {
+	// No-op test stub — not needed for this test scenario
+}
 
 func (*MockPageWatchStreamServer) SendMsg(any) error {
 	return nil
@@ -452,6 +455,11 @@ type noOpBleveIndexQueryer struct{}
 
 func (noOpBleveIndexQueryer) Query(string) ([]bleve.SearchResult, error) { return nil, nil }
 
+// noopUnsubscribe is a no-op unsubscribe function returned by mock subscription methods.
+func noopUnsubscribe() {
+	// No-op — intentionally empty test stub.
+}
+
 // noOpChatBufferManager is a minimal mock for tests that don't need chat functionality.
 type noOpChatBufferManager struct{}
 
@@ -473,17 +481,17 @@ func (noOpChatBufferManager) GetMessages(string) []*chatbuffer.Message {
 func (noOpChatBufferManager) SubscribeToPage(string) (<-chan chatbuffer.Event, func()) {
 	ch := make(chan chatbuffer.Event)
 	close(ch)
-	return ch, func() {}
+	return ch, noopUnsubscribe
 }
 func (noOpChatBufferManager) SubscribeToPageWithReplay(string) ([]*chatbuffer.Message, <-chan chatbuffer.Event, func()) {
 	ch := make(chan chatbuffer.Event)
 	close(ch)
-	return nil, ch, func() {}
+	return nil, ch, noopUnsubscribe
 }
 func (noOpChatBufferManager) SubscribeToChannel() (<-chan *chatbuffer.Message, func()) {
 	ch := make(chan *chatbuffer.Message)
 	close(ch)
-	return ch, func() {}
+	return ch, noopUnsubscribe
 }
 func (noOpChatBufferManager) HasChannelSubscribers() bool {
 	return false
@@ -684,7 +692,7 @@ var _ = Describe("Server", func() {
 					"tags":  []any{"test", "ginkgo"},
 				}
 				mockPageReaderMutator.Frontmatter = expectedFm
-				
+
 				var structErr error
 				expectedStruct, structErr = structpb.NewStruct(expectedFm)
 				Expect(structErr).NotTo(HaveOccurred())
@@ -732,7 +740,7 @@ var _ = Describe("Server", func() {
 					"tags":  []any{"test", "ginkgo"},
 				}
 				mockPageReaderMutator.Frontmatter = frontmatterWithIdentifier
-				
+
 				var structErr error
 				expectedStruct, structErr = structpb.NewStruct(expectedFilteredFm)
 				Expect(structErr).NotTo(HaveOccurred())
@@ -767,7 +775,7 @@ var _ = Describe("Server", func() {
 					},
 				}
 				mockPageReaderMutator.Frontmatter = frontmatterWithNestedIdentifier
-				
+
 				// Nested identifier keys should be preserved, only root-level filtered
 				var structErr error
 				expectedStruct, structErr = structpb.NewStruct(frontmatterWithNestedIdentifier)
@@ -787,11 +795,11 @@ var _ = Describe("Server", func() {
 
 	Describe("MergeFrontmatter", func() {
 		var (
-			req                *apiv1.MergeFrontmatterRequest
-			resp               *apiv1.MergeFrontmatterResponse
-			err                error
+			req                   *apiv1.MergeFrontmatterRequest
+			resp                  *apiv1.MergeFrontmatterResponse
+			err                   error
 			mockPageReaderMutator *MockPageReaderMutator
-			pageName           string
+			pageName              string
 		)
 
 		BeforeEach(func() {
@@ -1070,13 +1078,13 @@ var _ = Describe("Server", func() {
 
 	Describe("ReplaceFrontmatter", func() {
 		var (
-			req                *apiv1.ReplaceFrontmatterRequest
-			resp               *apiv1.ReplaceFrontmatterResponse
-			err                error
+			req                   *apiv1.ReplaceFrontmatterRequest
+			resp                  *apiv1.ReplaceFrontmatterResponse
+			err                   error
 			mockPageReaderMutator *MockPageReaderMutator
-			pageName           string
-			newFrontmatter     wikipage.FrontMatter
-			newFrontmatterPb   *structpb.Struct
+			pageName              string
+			newFrontmatter        wikipage.FrontMatter
+			newFrontmatterPb      *structpb.Struct
 		)
 
 		BeforeEach(func() {
@@ -1267,11 +1275,11 @@ var _ = Describe("Server", func() {
 
 	Describe("RemoveKeyAtPath", func() {
 		var (
-			req                *apiv1.RemoveKeyAtPathRequest
-			resp               *apiv1.RemoveKeyAtPathResponse
-			err                error
+			req                   *apiv1.RemoveKeyAtPathRequest
+			resp                  *apiv1.RemoveKeyAtPathResponse
+			err                   error
 			mockPageReaderMutator *MockPageReaderMutator
-			pageName           string
+			pageName              string
 		)
 
 		BeforeEach(func() {
@@ -1346,7 +1354,7 @@ var _ = Describe("Server", func() {
 			})
 		})
 
-				When("removing a key successfully", func() {
+		When("removing a key successfully", func() {
 			var initialFm wikipage.FrontMatter
 			BeforeEach(func() {
 				initialFm = wikipage.FrontMatter{
@@ -1447,7 +1455,6 @@ var _ = Describe("Server", func() {
 					Expect(resp.Frontmatter).To(Equal(expectedPb))
 				})
 			})
-
 
 			When("a nested key within a slice element", func() {
 				var expectedFm wikipage.FrontMatter
@@ -1602,7 +1609,7 @@ var _ = Describe("Server", func() {
 				})
 			})
 
-						When("traversing through a primitive value", func() {
+			When("traversing through a primitive value", func() {
 				BeforeEach(func() {
 					req.KeyPath = []*apiv1.PathComponent{
 						{Component: &apiv1.PathComponent_Key{Key: "a"}},
@@ -1920,9 +1927,9 @@ var _ = Describe("Server", func() {
 
 	Describe("DeletePage", func() {
 		var (
-			req                *apiv1.DeletePageRequest
-			resp               *apiv1.DeletePageResponse
-			err                error
+			req                   *apiv1.DeletePageRequest
+			resp                  *apiv1.DeletePageResponse
+			err                   error
 			mockPageReaderMutator *MockPageReaderMutator
 		)
 
@@ -2065,7 +2072,6 @@ var _ = Describe("Server", func() {
 			})
 		})
 	})
-
 
 	Describe("UpdatePageContent", func() {
 		var (
@@ -3453,8 +3459,8 @@ var _ = Describe("Server", func() {
 				// Frontmatter index stores identifiers in munged format (lowercase snake_case)
 				// Note: "My-Inventory-Item" becomes "my_inventory_item" when munged
 				mockFrontmatterIndexQueryer.KeyExistsResults = []wikipage.PageIdentifier{
-					"my_inventory_item",    // munged version of "My-Inventory-Item"
-					"another_item",         // munged version of "Another-Item"
+					"my_inventory_item", // munged version of "My-Inventory-Item"
+					"another_item",      // munged version of "Another-Item"
 				}
 				req.FrontmatterKeyIncludeFilters = []string{"inventory.container"}
 			})
@@ -3681,14 +3687,14 @@ var _ = Describe("Server", func() {
 				mockBleveIndexQueryer.Results = searchResults
 				// Page has multiple frontmatter fields
 				mockFrontmatterIndexQueryer.GetValueResults["test_page"] = map[string]string{
-					"author":      "John Doe",
-					"category":    "Technology",
-					"tags":        "golang,testing",
-					"draft":       "false",
+					"author":   "John Doe",
+					"category": "Technology",
+					"tags":     "golang,testing",
+					"draft":    "false",
 				}
 				// Request specific frontmatter keys to return
 				req = &apiv1.SearchContentRequest{
-					Query:                             "test",
+					Query:                            "test",
 					FrontmatterKeysToReturnInResults: []string{"author", "category", "missing_key"},
 				}
 			})
@@ -3806,16 +3812,16 @@ var _ = Describe("Server", func() {
 					Expect(resp.Results).To(HaveLen(1))
 					Expect(resp.Results[0].InventoryContext).NotTo(BeNil())
 					Expect(resp.Results[0].InventoryContext.Path).To(HaveLen(3))
-					
+
 					// Path should be: house > garage > toolbox
 					Expect(resp.Results[0].InventoryContext.Path[0].Identifier).To(Equal("house"))
 					Expect(resp.Results[0].InventoryContext.Path[0].Title).To(Equal("My House"))
 					Expect(resp.Results[0].InventoryContext.Path[0].Depth).To(Equal(int32(0)))
-					
+
 					Expect(resp.Results[0].InventoryContext.Path[1].Identifier).To(Equal("garage"))
 					Expect(resp.Results[0].InventoryContext.Path[1].Title).To(Equal("Main Garage"))
 					Expect(resp.Results[0].InventoryContext.Path[1].Depth).To(Equal(int32(1)))
-					
+
 					Expect(resp.Results[0].InventoryContext.Path[2].Identifier).To(Equal("toolbox"))
 					Expect(resp.Results[0].InventoryContext.Path[2].Title).To(Equal("My Toolbox"))
 					Expect(resp.Results[0].InventoryContext.Path[2].Depth).To(Equal(int32(2)))
@@ -3841,10 +3847,10 @@ var _ = Describe("Server", func() {
 					Expect(resp.Results).To(HaveLen(1))
 					Expect(resp.Results[0].InventoryContext).NotTo(BeNil())
 					Expect(resp.Results[0].InventoryContext.Path).To(HaveLen(2))
-					
+
 					Expect(resp.Results[0].InventoryContext.Path[0].Identifier).To(Equal("garage"))
 					Expect(resp.Results[0].InventoryContext.Path[0].Title).To(Equal("Main Garage"))
-					
+
 					Expect(resp.Results[0].InventoryContext.Path[1].Identifier).To(Equal("toolbox"))
 					Expect(resp.Results[0].InventoryContext.Path[1].Title).To(Equal(""))
 				})
@@ -3875,7 +3881,7 @@ var _ = Describe("Server", func() {
 					Expect(resp).NotTo(BeNil())
 					Expect(resp.Results).To(HaveLen(1))
 					Expect(resp.Results[0].InventoryContext).NotTo(BeNil())
-					
+
 					// Should have stopped when it detected the circular reference
 					// Path built from immediate container to root, so order is: container_c, container_b, container_a
 					Expect(resp.Results[0].InventoryContext.Path).To(HaveLen(3))
@@ -3910,10 +3916,10 @@ var _ = Describe("Server", func() {
 					Expect(resp).NotTo(BeNil())
 					Expect(resp.Results).To(HaveLen(1))
 					Expect(resp.Results[0].InventoryContext).NotTo(BeNil())
-					
+
 					// Should have stopped at maxDepth (20)
 					Expect(resp.Results[0].InventoryContext.Path).To(HaveLen(20))
-					
+
 					// Verify depth values are correct (0 to 19)
 					for i := range 20 {
 						Expect(resp.Results[0].InventoryContext.Path[i].Depth).To(Equal(int32(i)))
@@ -3958,12 +3964,12 @@ var _ = Describe("Server", func() {
 
 	Describe("ReadPage", func() {
 		var (
-			req                      *apiv1.ReadPageRequest
-			resp                     *apiv1.ReadPageResponse
-			err                      error
-			mockPageReaderMutator    *MockPageReaderMutator
-			mockMarkdownRenderer     *MockMarkdownRenderer
-			mockTemplateExecutor     *MockTemplateExecutor
+			req                         *apiv1.ReadPageRequest
+			resp                        *apiv1.ReadPageResponse
+			err                         error
+			mockPageReaderMutator       *MockPageReaderMutator
+			mockMarkdownRenderer        *MockMarkdownRenderer
+			mockTemplateExecutor        *MockTemplateExecutor
 			mockFrontmatterIndexQueryer *MockFrontmatterIndexQueryer
 		)
 
@@ -5724,10 +5730,10 @@ var _ = Describe("Checklist gRPC round-trip", func() {
 
 		When("performing a read-modify-write to update one of multiple checklists", func() {
 			var (
-				finalChecklists  map[string]any
-				shoppingItems    []any
-				tasksItems       []any
-				firstTaskItem    map[string]any
+				finalChecklists map[string]any
+				shoppingItems   []any
+				tasksItems      []any
+				firstTaskItem   map[string]any
 			)
 
 			BeforeEach(func() {
@@ -5908,6 +5914,238 @@ var _ = Describe("Checklist gRPC round-trip", func() {
 
 			It("should preserve non-checklist frontmatter", func() {
 				Expect(finalFm["title"]).To(Equal("My Page"))
+			})
+		})
+	})
+})
+
+var _ = Describe("MergeFrontmatter deep merge integration behavior", func() {
+	const pageName = "test-page"
+	var (
+		server                *v1.Server
+		ctx                   context.Context
+		mockPageReaderMutator *MockPageReaderMutator
+	)
+
+	BeforeEach(func() {
+		ctx = context.Background()
+		mockPageReaderMutator = &MockPageReaderMutator{}
+		server = mustNewServer(mockPageReaderMutator, nil, nil)
+	})
+
+	Describe("deep merge preserves nested keys not in the merge payload", func() {
+		var (
+			getResp  *apiv1.GetFrontmatterResponse
+			getErr   error
+			metadata map[string]any
+		)
+
+		When("merging a partial nested object into existing frontmatter with sibling keys", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Frontmatter = map[string]any{
+					"title": "My Page",
+					"metadata": map[string]any{
+						"author":  "alice",
+						"version": "1.0",
+					},
+				}
+
+				partialFm := map[string]any{
+					"metadata": map[string]any{
+						"version": "2.0",
+					},
+				}
+				fmPb, err := structpb.NewStruct(partialFm)
+				Expect(err).NotTo(HaveOccurred())
+
+				_, mergeErr := server.MergeFrontmatter(ctx, &apiv1.MergeFrontmatterRequest{
+					Page:        pageName,
+					Frontmatter: fmPb,
+				})
+				Expect(mergeErr).NotTo(HaveOccurred())
+
+				getResp, getErr = server.GetFrontmatter(ctx, &apiv1.GetFrontmatterRequest{
+					Page: pageName,
+				})
+				Expect(getErr).NotTo(HaveOccurred())
+				Expect(getResp).NotTo(BeNil())
+				fm := getResp.Frontmatter.AsMap()
+				var ok bool
+				metadata, ok = fm["metadata"].(map[string]any)
+				Expect(ok).To(BeTrue(), "metadata should be map[string]any")
+			})
+
+			It("should merge nested frontmatter while preserving sibling keys", func() {
+				Expect(metadata["version"]).To(Equal("2.0"))
+				Expect(metadata["author"]).To(Equal("alice"))
+				Expect(getResp.Frontmatter.AsMap()["title"]).To(Equal("My Page"))
+			})
+		})
+	})
+
+	Describe("shallow keys merge correctly", func() {
+		var (
+			getResp *apiv1.GetFrontmatterResponse
+			getErr  error
+		)
+
+		When("merging new and updated scalar keys into existing frontmatter", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Frontmatter = map[string]any{
+					"title":  "Old Title",
+					"author": "alice",
+				}
+
+				mergeFm := map[string]any{
+					"title": "New Title",
+					"extra": "added",
+				}
+				fmPb, err := structpb.NewStruct(mergeFm)
+				Expect(err).NotTo(HaveOccurred())
+
+				_, mergeErr := server.MergeFrontmatter(ctx, &apiv1.MergeFrontmatterRequest{
+					Page:        pageName,
+					Frontmatter: fmPb,
+				})
+				Expect(mergeErr).NotTo(HaveOccurred())
+
+				getResp, getErr = server.GetFrontmatter(ctx, &apiv1.GetFrontmatterRequest{
+					Page: pageName,
+				})
+				Expect(getErr).NotTo(HaveOccurred())
+				Expect(getResp).NotTo(BeNil())
+			})
+
+			It("should overwrite updated keys, add new keys, and preserve untouched keys", func() {
+				fm := getResp.Frontmatter.AsMap()
+				Expect(fm["title"]).To(Equal("New Title"))
+				Expect(fm["extra"]).To(Equal("added"))
+				Expect(fm["author"]).To(Equal("alice"))
+			})
+		})
+	})
+
+	Describe("arrays are replaced, not merged", func() {
+		var (
+			getResp *apiv1.GetFrontmatterResponse
+			getErr  error
+			tags    []any
+		)
+
+		When("merging a payload with an array value over an existing array", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Frontmatter = map[string]any{
+					"tags": []any{"old-tag-1", "old-tag-2", "old-tag-3"},
+				}
+
+				mergeFm := map[string]any{
+					"tags": []any{"new-tag"},
+				}
+				fmPb, err := structpb.NewStruct(mergeFm)
+				Expect(err).NotTo(HaveOccurred())
+
+				_, mergeErr := server.MergeFrontmatter(ctx, &apiv1.MergeFrontmatterRequest{
+					Page:        pageName,
+					Frontmatter: fmPb,
+				})
+				Expect(mergeErr).NotTo(HaveOccurred())
+
+				getResp, getErr = server.GetFrontmatter(ctx, &apiv1.GetFrontmatterRequest{
+					Page: pageName,
+				})
+				Expect(getErr).NotTo(HaveOccurred())
+				Expect(getResp).NotTo(BeNil())
+				var ok bool
+				tags, ok = getResp.Frontmatter.AsMap()["tags"].([]any)
+				Expect(ok).To(BeTrue(), "tags should be []any")
+			})
+
+			It("should replace the array entirely with only the new element", func() {
+				Expect(tags).To(Equal([]any{"new-tag"}))
+			})
+		})
+	})
+
+	Describe("edge case: empty merge payload", func() {
+		var (
+			getResp *apiv1.GetFrontmatterResponse
+			getErr  error
+		)
+
+		When("MergeFrontmatter is called with an empty Frontmatter struct", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Frontmatter = map[string]any{
+					"title": "Existing Title",
+					"metadata": map[string]any{
+						"author": "alice",
+					},
+				}
+
+				_, mergeErr := server.MergeFrontmatter(ctx, &apiv1.MergeFrontmatterRequest{
+					Page:        pageName,
+					Frontmatter: &structpb.Struct{},
+				})
+				Expect(mergeErr).NotTo(HaveOccurred())
+
+				getResp, getErr = server.GetFrontmatter(ctx, &apiv1.GetFrontmatterRequest{
+					Page: pageName,
+				})
+				Expect(getErr).NotTo(HaveOccurred())
+				Expect(getResp).NotTo(BeNil())
+			})
+
+			It("should preserve all existing frontmatter when merging an empty payload", func() {
+				fm := getResp.Frontmatter.AsMap()
+				Expect(fm["title"]).To(Equal("Existing Title"))
+				metadata, ok := fm["metadata"].(map[string]any)
+				Expect(ok).To(BeTrue(), "metadata should be map[string]any")
+				Expect(metadata["author"]).To(Equal("alice"))
+			})
+		})
+	})
+
+	Describe("edge case: merging into empty frontmatter", func() {
+		var (
+			getResp  *apiv1.GetFrontmatterResponse
+			getErr   error
+			metadata map[string]any
+		)
+
+		When("the page has no existing frontmatter", func() {
+			BeforeEach(func() {
+				mockPageReaderMutator.Err = os.ErrNotExist
+
+				newFm := map[string]any{
+					"title": "Brand New Page",
+					"metadata": map[string]any{
+						"author": "bob",
+					},
+				}
+				fmPb, err := structpb.NewStruct(newFm)
+				Expect(err).NotTo(HaveOccurred())
+
+				_, mergeErr := server.MergeFrontmatter(ctx, &apiv1.MergeFrontmatterRequest{
+					Page:        pageName,
+					Frontmatter: fmPb,
+				})
+				Expect(mergeErr).NotTo(HaveOccurred())
+
+				// Reset error so GetFrontmatter can read the written data
+				mockPageReaderMutator.Err = nil
+
+				getResp, getErr = server.GetFrontmatter(ctx, &apiv1.GetFrontmatterRequest{
+					Page: pageName,
+				})
+				Expect(getErr).NotTo(HaveOccurred())
+				Expect(getResp).NotTo(BeNil())
+				var ok bool
+				metadata, ok = getResp.Frontmatter.AsMap()["metadata"].(map[string]any)
+				Expect(ok).To(BeTrue(), "metadata should be map[string]any")
+			})
+
+			It("should write the full merge payload as the initial frontmatter", func() {
+				Expect(getResp.Frontmatter.AsMap()["title"]).To(Equal("Brand New Page"))
+				Expect(metadata["author"]).To(Equal("bob"))
 			})
 		})
 	})
@@ -6251,7 +6489,9 @@ func (m *MockJobQueueCoordinator) AsCoordinator() *jobs.JobQueueCoordinator {
 // noOpDispatcher is a dispatcher that does nothing for testing purposes.
 type noOpDispatcher struct{}
 
-func (*noOpDispatcher) Start() {}
+func (*noOpDispatcher) Start() {
+	// No-op test stub — not needed for this test scenario
+}
 
 func (*noOpDispatcher) Dispatch(_ func()) error {
 	return nil
@@ -6497,7 +6737,7 @@ func (m *callbackObservingMutator) isReportWritten() bool {
 
 var _ = Describe("makeReportJobCallback execution", func() {
 	var (
-		ctx             context.Context
+		ctx              context.Context
 		observingMutator *callbackObservingMutator
 	)
 
@@ -6583,4 +6823,3 @@ var _ = Describe("makeReportJobCallback", func() {
 		})
 	})
 })
-
