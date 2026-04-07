@@ -199,7 +199,7 @@ var _ = Describe("Handlers", func() {
 				dataDir := customSite.PathToData
 				info, _ := os.Stat(dataDir)
 				originalMode = info.Mode()
-				_ = os.Chmod(dataDir, 0555) // read + execute, but no write
+				_ = os.Chmod(dataDir, 0550) // read + execute, but no write
 
 				body, _ := json.Marshal(map[string]any{
 					"page":       pageName,
@@ -328,7 +328,7 @@ var _ = Describe("Handlers", func() {
 				dirInfo, err := os.Stat(tmpDir)
 				Expect(err).NotTo(HaveOccurred())
 				originalPermissions = dirInfo.Mode()
-				err = os.Chmod(tmpDir, 0555)
+				err = os.Chmod(tmpDir, 0550)
 				Expect(err).NotTo(HaveOccurred())
 
 				body, _ := json.Marshal(map[string]any{
@@ -373,7 +373,7 @@ var _ = Describe("Handlers", func() {
 				// Create a read-only directory to cause save failure
 				readOnlyDir, err := os.MkdirTemp("", "readonly")
 				Expect(err).NotTo(HaveOccurred())
-				err = os.Chmod(readOnlyDir, 0555) // Read + execute, but no write
+				err = os.Chmod(readOnlyDir, 0550) // Read + execute, but no write
 				Expect(err).NotTo(HaveOccurred())
 
 				// Change data path to read-only directory
@@ -503,7 +503,7 @@ var _ = Describe("handlePageRequest directory listing", func() {
 
 	AfterEach(func() {
 		// Ensure directory is writable before removal
-		_ = os.Chmod(tmpDir, 0755)
+		_ = os.Chmod(tmpDir, 0750)
 		_ = os.RemoveAll(tmpDir)
 	})
 
@@ -1195,7 +1195,7 @@ var _ = Describe("ReadOrInitPageForTesting", func() {
 			var mkdirErr error
 			readOnlyDir, mkdirErr = os.MkdirTemp("", "readonly_init_test")
 			Expect(mkdirErr).NotTo(HaveOccurred())
-			Expect(os.Chmod(readOnlyDir, 0555)).To(Succeed()) // read + execute, no write
+			Expect(os.Chmod(readOnlyDir, 0550)).To(Succeed()) // read + execute, no write
 
 			originalPath = site.PathToData
 			site.PathToData = readOnlyDir
@@ -1207,7 +1207,7 @@ var _ = Describe("ReadOrInitPageForTesting", func() {
 
 		AfterEach(func() {
 			site.PathToData = originalPath
-			_ = os.Chmod(readOnlyDir, 0755)
+			_ = os.Chmod(readOnlyDir, 0750)
 			_ = os.RemoveAll(readOnlyDir)
 		})
 
