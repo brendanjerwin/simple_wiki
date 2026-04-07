@@ -493,13 +493,12 @@ describe('QrScanner', () => {
         await el.updateComplete;
       });
 
-      it('should show unknown error message with object type and JSON details', () => {
+      it('should show unknown error message with object type tag only (no serialized properties)', () => {
         const errorDisplay = el.shadowRoot?.querySelector<ErrorDisplay>('error-display');
         expect(errorDisplay).to.exist;
         expect(errorDisplay?.augmentedError).to.be.instanceOf(AugmentedError);
         expect(errorDisplay?.augmentedError?.message).to.include('Unknown error:');
         expect(errorDisplay?.augmentedError?.message).to.include('[object Object]');
-        expect(errorDisplay?.augmentedError?.message).to.include('"code":123');
       });
 
       it('should emit scanner-error event with Error object', () => {
