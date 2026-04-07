@@ -5913,7 +5913,7 @@ var _ = Describe("Checklist gRPC round-trip", func() {
 	})
 })
 
-var _ = Describe("MergeFrontmatter deep merge E2E behavior", func() {
+var _ = Describe("MergeFrontmatter deep merge integration behavior", func() {
 	const pageName = "test-page"
 	var (
 		server                *v1.Server
@@ -5969,19 +5969,9 @@ var _ = Describe("MergeFrontmatter deep merge E2E behavior", func() {
 				Expect(ok).To(BeTrue(), "metadata should be map[string]any")
 			})
 
-			It("should not error on GetFrontmatter", func() {
-				Expect(getErr).NotTo(HaveOccurred())
-			})
-
-			It("should update the merged nested key", func() {
+			It("should merge nested frontmatter while preserving sibling keys", func() {
 				Expect(metadata["version"]).To(Equal("2.0"))
-			})
-
-			It("should preserve the unmerged nested key", func() {
 				Expect(metadata["author"]).To(Equal("alice"))
-			})
-
-			It("should preserve the top-level sibling key not in the merge payload", func() {
 				Expect(getResp.Frontmatter.AsMap()["title"]).To(Equal("My Page"))
 			})
 		})
@@ -6020,20 +6010,11 @@ var _ = Describe("MergeFrontmatter deep merge E2E behavior", func() {
 				Expect(getResp).NotTo(BeNil())
 			})
 
-			It("should not error on GetFrontmatter", func() {
-				Expect(getErr).NotTo(HaveOccurred())
-			})
-
-			It("should overwrite the updated scalar key", func() {
-				Expect(getResp.Frontmatter.AsMap()["title"]).To(Equal("New Title"))
-			})
-
-			It("should add the new scalar key", func() {
-				Expect(getResp.Frontmatter.AsMap()["extra"]).To(Equal("added"))
-			})
-
-			It("should preserve the existing key not in the merge payload", func() {
-				Expect(getResp.Frontmatter.AsMap()["author"]).To(Equal("alice"))
+			It("should overwrite updated keys, add new keys, and preserve untouched keys", func() {
+				fm := getResp.Frontmatter.AsMap()
+				Expect(fm["title"]).To(Equal("New Title"))
+				Expect(fm["extra"]).To(Equal("added"))
+				Expect(fm["author"]).To(Equal("alice"))
 			})
 		})
 	})
@@ -6073,15 +6054,7 @@ var _ = Describe("MergeFrontmatter deep merge E2E behavior", func() {
 				Expect(ok).To(BeTrue(), "tags should be []any")
 			})
 
-			It("should not error on GetFrontmatter", func() {
-				Expect(getErr).NotTo(HaveOccurred())
-			})
-
-			It("should replace the array entirely, not append to it", func() {
-				Expect(tags).To(HaveLen(1))
-			})
-
-			It("should contain only the new array element", func() {
+			It("should replace the array entirely with only the new element", func() {
 				Expect(tags).To(Equal([]any{"new-tag"}))
 			})
 		})
@@ -6093,7 +6066,7 @@ var _ = Describe("MergeFrontmatter deep merge E2E behavior", func() {
 			getErr  error
 		)
 
-		When("MergeFrontmatter is called with a nil Frontmatter field", func() {
+		When("MergeFrontmatter is called with an empty Frontmatter struct", func() {
 			BeforeEach(func() {
 				mockPageReaderMutator.Frontmatter = map[string]any{
 					"title": "Existing Title",
@@ -6104,7 +6077,7 @@ var _ = Describe("MergeFrontmatter deep merge E2E behavior", func() {
 
 				_, mergeErr := server.MergeFrontmatter(ctx, &apiv1.MergeFrontmatterRequest{
 					Page:        pageName,
-					Frontmatter: nil,
+					Frontmatter: &structpb.Struct{},
 				})
 				Expect(mergeErr).NotTo(HaveOccurred())
 
@@ -6115,16 +6088,10 @@ var _ = Describe("MergeFrontmatter deep merge E2E behavior", func() {
 				Expect(getResp).NotTo(BeNil())
 			})
 
-			It("should not error on GetFrontmatter", func() {
-				Expect(getErr).NotTo(HaveOccurred())
-			})
-
-			It("should preserve all existing top-level keys", func() {
-				Expect(getResp.Frontmatter.AsMap()["title"]).To(Equal("Existing Title"))
-			})
-
-			It("should preserve all existing nested keys", func() {
-				metadata, ok := getResp.Frontmatter.AsMap()["metadata"].(map[string]any)
+			It("should preserve all existing frontmatter when merging an empty payload", func() {
+				fm := getResp.Frontmatter.AsMap()
+				Expect(fm["title"]).To(Equal("Existing Title"))
+				metadata, ok := fm["metadata"].(map[string]any)
 				Expect(ok).To(BeTrue(), "metadata should be map[string]any")
 				Expect(metadata["author"]).To(Equal("alice"))
 			})
@@ -6170,15 +6137,8 @@ var _ = Describe("MergeFrontmatter deep merge E2E behavior", func() {
 				Expect(ok).To(BeTrue(), "metadata should be map[string]any")
 			})
 
-			It("should not error on GetFrontmatter", func() {
-				Expect(getErr).NotTo(HaveOccurred())
-			})
-
-			It("should write the scalar key from the merge payload", func() {
+			It("should write the full merge payload as the initial frontmatter", func() {
 				Expect(getResp.Frontmatter.AsMap()["title"]).To(Equal("Brand New Page"))
-			})
-
-			It("should write the nested key from the merge payload", func() {
 				Expect(metadata["author"]).To(Equal("bob"))
 			})
 		})
