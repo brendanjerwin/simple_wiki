@@ -736,7 +736,7 @@ test content to be soft deleted`
 				dirInfo, statErr = os.Stat(tempDir)
 				Expect(statErr).NotTo(HaveOccurred())
 				originalPerms = dirInfo.Mode()
-				chmodErr := os.Chmod(tempDir, 0444)
+				chmodErr := os.Chmod(tempDir, 0440)
 				Expect(chmodErr).NotTo(HaveOccurred())
 
 				p, err = s.readOrInitPage(pageToCreate, req)
