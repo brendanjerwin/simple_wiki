@@ -539,13 +539,18 @@ export class QrScanner extends LitElement {
 
   private _describeUnknownObject(err: object): string {
     const objectTag = Object.prototype.toString.call(err);
-    try {
-      const serialized = JSON.stringify(err);
-      if (serialized && serialized !== '{}') {
-        return `Unknown error: ${objectTag} ${serialized}`;
-      }
-    } catch {
-      // Fall back to the object tag when serialization fails
+    const details: string[] = [];
+    const errorLike = err as { name?: unknown; message?: unknown };
+
+    if (typeof errorLike.name === 'string' && errorLike.name) {
+      details.push(`Name: ${errorLike.name}`);
+    }
+    if (typeof errorLike.message === 'string' && errorLike.message) {
+      details.push(`Message: ${errorLike.message}`);
+    }
+
+    if (details.length > 0) {
+      return `Unknown error: ${objectTag} ${details.join(' ')}`;
     }
     return `Unknown error: ${objectTag}`;
   }
