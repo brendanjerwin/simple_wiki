@@ -26,10 +26,11 @@ export function computeTableHash(headerTexts: string[], cellValues: string[][]):
   const content = headerTexts.join('\0') + '\0\0' +
     cellValues.map(row => row.join('\0')).join('\n');
   const buf = new Int32Array(1);
-  for (let i = 0; i < content.length; i++) {
-    const char = content.charCodeAt(i);
+  for (let i = 0; i < content.length; ) {
+    const char = content.codePointAt(i) ?? 0;
     const prev = buf[0] ?? 0;
     buf[0] = (prev << 5) - prev + char;
+    i += char > 0xFFFF ? 2 : 1;
   }
   return ((buf[0] ?? 0) >>> 0).toString(36);
 }
