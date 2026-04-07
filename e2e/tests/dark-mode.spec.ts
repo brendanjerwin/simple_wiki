@@ -1,4 +1,4 @@
-import { test, expect, type Locator } from '@playwright/test';
+import { test, expect, type Browser, type Locator, type Page } from '@playwright/test';
 
 // Test data — unique per run/worker to avoid parallel collision
 const TEST_PAGE_NAME = `e2edarkmodestest-${process.pid}-${Date.now()}`;
@@ -52,6 +52,34 @@ async function searchUntilResultsVisible(
   throw new Error(
     `Search results for "${term}" not found within ${SEARCH_INDEX_UPDATE_TIMEOUT_MS}ms. ` +
     `Search index may not have updated yet.`,
+  );
+}
+
+/**
+ * Opens the test page in a fresh browser context with the given colorScheme, waits for
+ * #rendered to be visible, then runs the callback. The context is always closed when done.
+ */
+async function withViewPage<T>(
+  browser: Browser,
+  colorScheme: 'light' | 'dark',
+  fn: (page: Page) => Promise<T>,
+): Promise<T> {
+  const ctx = await browser.newContext({ colorScheme });
+  const page = await ctx.newPage();
+  try {
+    await page.goto(`/${TEST_PAGE_NAME}/view`);
+    await expect(page.locator('#rendered')).toBeVisible({ timeout: PAGE_LOAD_TIMEOUT_MS });
+    return await fn(page);
+  } finally {
+    await ctx.close();
+  }
+}
+
+/** Reads a CSS custom property value from :root. */
+async function getCssVar(page: Page, varName: string): Promise<string> {
+  return page.evaluate(
+    (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim(),
+    varName,
   );
 }
 
@@ -111,235 +139,80 @@ identifier = "${TEST_PAGE_NAME}"
 
   test.describe('design token application in light mode', () => {
     test('should apply light surface-primary token to :root', async ({ browser }) => {
-      const ctx = await browser.newContext({ colorScheme: 'light' });
-      const page = await ctx.newPage();
-
-      try {
-        await page.goto(`/${TEST_PAGE_NAME}/view`);
-        await expect(page.locator('#rendered')).toBeVisible({ timeout: PAGE_LOAD_TIMEOUT_MS });
-
-        const token = await page.evaluate(() =>
-          getComputedStyle(document.documentElement).getPropertyValue('--color-surface-primary').trim()
-        );
-
-        expect(token).toBe(LIGHT_SURFACE_PRIMARY);
-      } finally {
-        await ctx.close();
-      }
+      await withViewPage(browser, 'light', async (page) => {
+        expect(await getCssVar(page, '--color-surface-primary')).toBe(LIGHT_SURFACE_PRIMARY);
+      });
     });
 
     test('should apply light text-primary token to :root', async ({ browser }) => {
-      const ctx = await browser.newContext({ colorScheme: 'light' });
-      const page = await ctx.newPage();
-
-      try {
-        await page.goto(`/${TEST_PAGE_NAME}/view`);
-        await expect(page.locator('#rendered')).toBeVisible({ timeout: PAGE_LOAD_TIMEOUT_MS });
-
-        const token = await page.evaluate(() =>
-          getComputedStyle(document.documentElement).getPropertyValue('--color-text-primary').trim()
-        );
-
-        expect(token).toBe(LIGHT_TEXT_PRIMARY);
-      } finally {
-        await ctx.close();
-      }
+      await withViewPage(browser, 'light', async (page) => {
+        expect(await getCssVar(page, '--color-text-primary')).toBe(LIGHT_TEXT_PRIMARY);
+      });
     });
 
     test('should use light surface token as body background color', async ({ browser }) => {
-      const ctx = await browser.newContext({ colorScheme: 'light' });
-      const page = await ctx.newPage();
-
-      try {
-        await page.goto(`/${TEST_PAGE_NAME}/view`);
-        await expect(page.locator('#rendered')).toBeVisible({ timeout: PAGE_LOAD_TIMEOUT_MS });
-
+      await withViewPage(browser, 'light', async (page) => {
         // Light surface-primary #ffffff = rgb(255, 255, 255)
         await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(255, 255, 255)');
-      } finally {
-        await ctx.close();
-      }
+      });
     });
 
     test('should apply light surface-sunken token to navigation bar', async ({ browser }) => {
-      const ctx = await browser.newContext({ colorScheme: 'light' });
-      const page = await ctx.newPage();
-
-      try {
-        await page.goto(`/${TEST_PAGE_NAME}/view`);
-        await expect(page.locator('#rendered')).toBeVisible({ timeout: PAGE_LOAD_TIMEOUT_MS });
-
+      await withViewPage(browser, 'light', async (page) => {
         // Light surface-sunken #f8f9fa = rgb(248, 249, 250)
         await expect(page.locator('div.pure-menu-horizontal')).toHaveCSS('background-color', 'rgb(248, 249, 250)');
-      } finally {
-        await ctx.close();
-      }
+      });
     });
   });
 
   test.describe('design token application in dark mode', () => {
     test('should apply dark surface-primary token to :root', async ({ browser }) => {
-      const ctx = await browser.newContext({ colorScheme: 'dark' });
-      const page = await ctx.newPage();
-
-      try {
-        await page.goto(`/${TEST_PAGE_NAME}/view`);
-        await expect(page.locator('#rendered')).toBeVisible({ timeout: PAGE_LOAD_TIMEOUT_MS });
-
-        const token = await page.evaluate(() =>
-          getComputedStyle(document.documentElement).getPropertyValue('--color-surface-primary').trim()
-        );
-
-        expect(token).toBe(DARK_SURFACE_PRIMARY);
-      } finally {
-        await ctx.close();
-      }
+      await withViewPage(browser, 'dark', async (page) => {
+        expect(await getCssVar(page, '--color-surface-primary')).toBe(DARK_SURFACE_PRIMARY);
+      });
     });
 
     test('should apply dark text-primary token to :root', async ({ browser }) => {
-      const ctx = await browser.newContext({ colorScheme: 'dark' });
-      const page = await ctx.newPage();
-
-      try {
-        await page.goto(`/${TEST_PAGE_NAME}/view`);
-        await expect(page.locator('#rendered')).toBeVisible({ timeout: PAGE_LOAD_TIMEOUT_MS });
-
-        const token = await page.evaluate(() =>
-          getComputedStyle(document.documentElement).getPropertyValue('--color-text-primary').trim()
-        );
-
-        expect(token).toBe(DARK_TEXT_PRIMARY);
-      } finally {
-        await ctx.close();
-      }
+      await withViewPage(browser, 'dark', async (page) => {
+        expect(await getCssVar(page, '--color-text-primary')).toBe(DARK_TEXT_PRIMARY);
+      });
     });
 
     test('should use dark surface token as body background color', async ({ browser }) => {
-      const ctx = await browser.newContext({ colorScheme: 'dark' });
-      const page = await ctx.newPage();
-
-      try {
-        await page.goto(`/${TEST_PAGE_NAME}/view`);
-        await expect(page.locator('#rendered')).toBeVisible({ timeout: PAGE_LOAD_TIMEOUT_MS });
-
+      await withViewPage(browser, 'dark', async (page) => {
         // Dark surface-primary #1e1e1e = rgb(30, 30, 30)
         await expect(page.locator('body')).toHaveCSS('background-color', 'rgb(30, 30, 30)');
-      } finally {
-        await ctx.close();
-      }
+      });
     });
 
     test('should apply dark surface-sunken token to navigation bar', async ({ browser }) => {
-      const ctx = await browser.newContext({ colorScheme: 'dark' });
-      const page = await ctx.newPage();
-
-      try {
-        await page.goto(`/${TEST_PAGE_NAME}/view`);
-        await expect(page.locator('#rendered')).toBeVisible({ timeout: PAGE_LOAD_TIMEOUT_MS });
-
+      await withViewPage(browser, 'dark', async (page) => {
         // Dark surface-sunken #141414 = rgb(20, 20, 20)
         await expect(page.locator('div.pure-menu-horizontal')).toHaveCSS('background-color', 'rgb(20, 20, 20)');
-      } finally {
-        await ctx.close();
-      }
+      });
     });
   });
 
   test.describe('design token contrast between light and dark modes', () => {
     test('should use different surface-primary values in light and dark mode', async ({ browser }) => {
-      let lightToken = '';
-      let darkToken = '';
-
-      const lightCtx = await browser.newContext({ colorScheme: 'light' });
-      try {
-        const lightPage = await lightCtx.newPage();
-        await lightPage.goto(`/${TEST_PAGE_NAME}/view`);
-        await expect(lightPage.locator('#rendered')).toBeVisible({ timeout: PAGE_LOAD_TIMEOUT_MS });
-        lightToken = await lightPage.evaluate(() =>
-          getComputedStyle(document.documentElement).getPropertyValue('--color-surface-primary').trim()
-        );
-      } finally {
-        await lightCtx.close();
-      }
-
-      const darkCtx = await browser.newContext({ colorScheme: 'dark' });
-      try {
-        const darkPage = await darkCtx.newPage();
-        await darkPage.goto(`/${TEST_PAGE_NAME}/view`);
-        await expect(darkPage.locator('#rendered')).toBeVisible({ timeout: PAGE_LOAD_TIMEOUT_MS });
-        darkToken = await darkPage.evaluate(() =>
-          getComputedStyle(document.documentElement).getPropertyValue('--color-surface-primary').trim()
-        );
-      } finally {
-        await darkCtx.close();
-      }
-
+      const lightToken = await withViewPage(browser, 'light', (page) => getCssVar(page, '--color-surface-primary'));
+      const darkToken = await withViewPage(browser, 'dark', (page) => getCssVar(page, '--color-surface-primary'));
       expect(lightToken).toBe(LIGHT_SURFACE_PRIMARY);
       expect(darkToken).toBe(DARK_SURFACE_PRIMARY);
       expect(lightToken).not.toBe(darkToken);
     });
 
     test('should use different text-primary values in light and dark mode', async ({ browser }) => {
-      let lightToken = '';
-      let darkToken = '';
-
-      const lightCtx = await browser.newContext({ colorScheme: 'light' });
-      try {
-        const lightPage = await lightCtx.newPage();
-        await lightPage.goto(`/${TEST_PAGE_NAME}/view`);
-        await expect(lightPage.locator('#rendered')).toBeVisible({ timeout: PAGE_LOAD_TIMEOUT_MS });
-        lightToken = await lightPage.evaluate(() =>
-          getComputedStyle(document.documentElement).getPropertyValue('--color-text-primary').trim()
-        );
-      } finally {
-        await lightCtx.close();
-      }
-
-      const darkCtx = await browser.newContext({ colorScheme: 'dark' });
-      try {
-        const darkPage = await darkCtx.newPage();
-        await darkPage.goto(`/${TEST_PAGE_NAME}/view`);
-        await expect(darkPage.locator('#rendered')).toBeVisible({ timeout: PAGE_LOAD_TIMEOUT_MS });
-        darkToken = await darkPage.evaluate(() =>
-          getComputedStyle(document.documentElement).getPropertyValue('--color-text-primary').trim()
-        );
-      } finally {
-        await darkCtx.close();
-      }
-
+      const lightToken = await withViewPage(browser, 'light', (page) => getCssVar(page, '--color-text-primary'));
+      const darkToken = await withViewPage(browser, 'dark', (page) => getCssVar(page, '--color-text-primary'));
       expect(lightToken).toBe(LIGHT_TEXT_PRIMARY);
       expect(darkToken).toBe(DARK_TEXT_PRIMARY);
       expect(lightToken).not.toBe(darkToken);
     });
 
     test('should use different surface-sunken values in light and dark mode', async ({ browser }) => {
-      let lightToken = '';
-      let darkToken = '';
-
-      const lightCtx = await browser.newContext({ colorScheme: 'light' });
-      try {
-        const lightPage = await lightCtx.newPage();
-        await lightPage.goto(`/${TEST_PAGE_NAME}/view`);
-        await expect(lightPage.locator('#rendered')).toBeVisible({ timeout: PAGE_LOAD_TIMEOUT_MS });
-        lightToken = await lightPage.evaluate(() =>
-          getComputedStyle(document.documentElement).getPropertyValue('--color-surface-sunken').trim()
-        );
-      } finally {
-        await lightCtx.close();
-      }
-
-      const darkCtx = await browser.newContext({ colorScheme: 'dark' });
-      try {
-        const darkPage = await darkCtx.newPage();
-        await darkPage.goto(`/${TEST_PAGE_NAME}/view`);
-        await expect(darkPage.locator('#rendered')).toBeVisible({ timeout: PAGE_LOAD_TIMEOUT_MS });
-        darkToken = await darkPage.evaluate(() =>
-          getComputedStyle(document.documentElement).getPropertyValue('--color-surface-sunken').trim()
-        );
-      } finally {
-        await darkCtx.close();
-      }
-
+      const lightToken = await withViewPage(browser, 'light', (page) => getCssVar(page, '--color-surface-sunken'));
+      const darkToken = await withViewPage(browser, 'dark', (page) => getCssVar(page, '--color-surface-sunken'));
       expect(lightToken).toBe(LIGHT_SURFACE_SUNKEN);
       expect(darkToken).toBe(DARK_SURFACE_SUNKEN);
       expect(lightToken).not.toBe(darkToken);
@@ -348,64 +221,35 @@ identifier = "${TEST_PAGE_NAME}"
 
   test.describe('dark mode persistence', () => {
     test('should maintain dark mode tokens after page reload', async ({ browser }) => {
-      const ctx = await browser.newContext({ colorScheme: 'dark' });
-      const page = await ctx.newPage();
-
-      try {
-        await page.goto(`/${TEST_PAGE_NAME}/view`);
-        await expect(page.locator('#rendered')).toBeVisible({ timeout: PAGE_LOAD_TIMEOUT_MS });
-
+      await withViewPage(browser, 'dark', async (page) => {
         await page.reload();
         await expect(page.locator('#rendered')).toBeVisible({ timeout: PAGE_LOAD_TIMEOUT_MS });
-
-        const token = await page.evaluate(() =>
-          getComputedStyle(document.documentElement).getPropertyValue('--color-surface-primary').trim()
-        );
-
-        expect(token).toBe(DARK_SURFACE_PRIMARY);
-      } finally {
-        await ctx.close();
-      }
+        expect(await getCssVar(page, '--color-surface-primary')).toBe(DARK_SURFACE_PRIMARY);
+      });
     });
 
     test('should maintain dark mode tokens when navigating from view to edit page', async ({ browser }) => {
-      const ctx = await browser.newContext({ colorScheme: 'dark' });
-      const page = await ctx.newPage();
-
-      try {
-        await page.goto(`/${TEST_PAGE_NAME}/view`);
-        await expect(page.locator('#rendered')).toBeVisible({ timeout: PAGE_LOAD_TIMEOUT_MS });
-
-        const viewToken = await page.evaluate(() =>
-          getComputedStyle(document.documentElement).getPropertyValue('--color-surface-primary').trim()
-        );
+      await withViewPage(browser, 'dark', async (page) => {
+        const viewToken = await getCssVar(page, '--color-surface-primary');
 
         await page.goto(`/${TEST_PAGE_NAME}/edit`);
         await expect(page.locator('wiki-editor textarea')).toBeVisible({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
-        const editToken = await page.evaluate(() =>
-          getComputedStyle(document.documentElement).getPropertyValue('--color-surface-primary').trim()
-        );
+        const editToken = await getCssVar(page, '--color-surface-primary');
 
         expect(viewToken).toBe(DARK_SURFACE_PRIMARY);
         expect(editToken).toBe(DARK_SURFACE_PRIMARY);
-      } finally {
-        await ctx.close();
-      }
+      });
     });
   });
 
   test.describe('dialog backgrounds in dark mode', () => {
     test('should render frontmatter dialog with dark elevated surface background in dark mode', async ({ browser }) => {
-      const ctx = await browser.newContext({ colorScheme: 'dark' });
-      const page = await ctx.newPage();
-
-      try {
-        await page.goto(`/${TEST_PAGE_NAME}/view`);
-        await expect(page.locator('#rendered')).toBeVisible({ timeout: PAGE_LOAD_TIMEOUT_MS });
-
+      await withViewPage(browser, 'dark', async (page) => {
         await page.locator('.tools-menu').hover();
-        await page.click('#editFrontmatter');
+        const editFrontmatterBtn = page.locator('#editFrontmatter');
+        await expect(editFrontmatterBtn).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
+        await editFrontmatterBtn.click();
 
         const dialog = page.locator('frontmatter-editor-dialog').locator('.dialog');
         await expect(dialog).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
@@ -413,48 +257,34 @@ identifier = "${TEST_PAGE_NAME}"
         // Verify dialog uses dark elevated surface token (CSS variable inherited from :root)
         // Dark surface-elevated #2d2d2d = rgb(45, 45, 45)
         await expect(dialog).toHaveCSS('background-color', 'rgb(45, 45, 45)');
-      } finally {
-        await ctx.close();
-      }
+      });
     });
 
     test('should render frontmatter dialog with light elevated surface background in light mode', async ({ browser }) => {
-      const ctx = await browser.newContext({ colorScheme: 'light' });
-      const page = await ctx.newPage();
-
-      try {
-        await page.goto(`/${TEST_PAGE_NAME}/view`);
-        await expect(page.locator('#rendered')).toBeVisible({ timeout: PAGE_LOAD_TIMEOUT_MS });
-
+      await withViewPage(browser, 'light', async (page) => {
         await page.locator('.tools-menu').hover();
-        await page.click('#editFrontmatter');
+        const editFrontmatterBtn = page.locator('#editFrontmatter');
+        await expect(editFrontmatterBtn).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
+        await editFrontmatterBtn.click();
 
         const dialog = page.locator('frontmatter-editor-dialog').locator('.dialog');
         await expect(dialog).toBeVisible({ timeout: DIALOG_TIMEOUT_MS });
 
         // Light surface-elevated #ffffff = rgb(255, 255, 255)
         await expect(dialog).toHaveCSS('background-color', 'rgb(255, 255, 255)');
-      } finally {
-        await ctx.close();
-      }
+      });
     });
   });
 
   test.describe('item_content contrast in search results', () => {
     test('should use dark elevated surface for item_content background in dark mode', async ({ browser }) => {
-      const ctx = await browser.newContext({ colorScheme: 'dark' });
-      const page = await ctx.newPage();
-
-      try {
-        await page.goto(`/${TEST_PAGE_NAME}/view`);
-        await expect(page.locator('#rendered')).toBeVisible({ timeout: PAGE_LOAD_TIMEOUT_MS });
-
+      await withViewPage(browser, 'dark', async (page) => {
         const searchComponent = page.locator('wiki-search#site-search');
         const searchInput = searchComponent.locator('input[type="search"]');
         await expect(searchInput).toBeVisible({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
 
         // wiki-search-results host has zero height (position:fixed popover), so wait for
-        // .item_content directly (which IS visible inside the fixed popover). Retry the
+        // .item_content directly (which IS visible inside the popover). Retry the
         // search to handle async index latency after page creation.
         const itemContent = searchComponent.locator('wiki-search-results .item_content').first();
         await searchUntilResultsVisible(searchInput, itemContent, 'e2edarkmode_unique_xyz');
@@ -462,19 +292,11 @@ identifier = "${TEST_PAGE_NAME}"
         // Check computed background color of item_content (uses --color-surface-elevated)
         // Dark surface-elevated #2d2d2d = rgb(45, 45, 45)
         await expect(itemContent).toHaveCSS('background-color', 'rgb(45, 45, 45)');
-      } finally {
-        await ctx.close();
-      }
+      });
     });
 
     test('should use light elevated surface for item_content background in light mode', async ({ browser }) => {
-      const ctx = await browser.newContext({ colorScheme: 'light' });
-      const page = await ctx.newPage();
-
-      try {
-        await page.goto(`/${TEST_PAGE_NAME}/view`);
-        await expect(page.locator('#rendered')).toBeVisible({ timeout: PAGE_LOAD_TIMEOUT_MS });
-
+      await withViewPage(browser, 'light', async (page) => {
         const searchComponent = page.locator('wiki-search#site-search');
         const searchInput = searchComponent.locator('input[type="search"]');
         await expect(searchInput).toBeVisible({ timeout: COMPONENT_LOAD_TIMEOUT_MS });
@@ -484,44 +306,25 @@ identifier = "${TEST_PAGE_NAME}"
 
         // Light surface-elevated #ffffff = rgb(255, 255, 255)
         await expect(itemContent).toHaveCSS('background-color', 'rgb(255, 255, 255)');
-      } finally {
-        await ctx.close();
-      }
+      });
     });
 
     test('should show different item_content contrast between light and dark mode', async ({ browser }) => {
-      let lightBg = '';
-      let darkBg = '';
+      const lightBg = await withViewPage(browser, 'light', async (page) => {
+        const searchComponent = page.locator('wiki-search#site-search');
+        const searchInput = searchComponent.locator('input[type="search"]');
+        const itemContent = searchComponent.locator('wiki-search-results .item_content').first();
+        await searchUntilResultsVisible(searchInput, itemContent, 'e2edarkmode_unique_xyz');
+        return itemContent.evaluate((el) => getComputedStyle(el).backgroundColor);
+      });
 
-      const lightCtx = await browser.newContext({ colorScheme: 'light' });
-      try {
-        const lightPage = await lightCtx.newPage();
-        await lightPage.goto(`/${TEST_PAGE_NAME}/view`);
-        await expect(lightPage.locator('#rendered')).toBeVisible({ timeout: PAGE_LOAD_TIMEOUT_MS });
-
-        const lightSearch = lightPage.locator('wiki-search#site-search');
-        const lightSearchInput = lightSearch.locator('input[type="search"]');
-        const lightItemContent = lightSearch.locator('wiki-search-results .item_content').first();
-        await searchUntilResultsVisible(lightSearchInput, lightItemContent, 'e2edarkmode_unique_xyz');
-        lightBg = await lightItemContent.evaluate(el => getComputedStyle(el).backgroundColor);
-      } finally {
-        await lightCtx.close();
-      }
-
-      const darkCtx = await browser.newContext({ colorScheme: 'dark' });
-      try {
-        const darkPage = await darkCtx.newPage();
-        await darkPage.goto(`/${TEST_PAGE_NAME}/view`);
-        await expect(darkPage.locator('#rendered')).toBeVisible({ timeout: PAGE_LOAD_TIMEOUT_MS });
-
-        const darkSearch = darkPage.locator('wiki-search#site-search');
-        const darkSearchInput = darkSearch.locator('input[type="search"]');
-        const darkItemContent = darkSearch.locator('wiki-search-results .item_content').first();
-        await searchUntilResultsVisible(darkSearchInput, darkItemContent, 'e2edarkmode_unique_xyz');
-        darkBg = await darkItemContent.evaluate(el => getComputedStyle(el).backgroundColor);
-      } finally {
-        await darkCtx.close();
-      }
+      const darkBg = await withViewPage(browser, 'dark', async (page) => {
+        const searchComponent = page.locator('wiki-search#site-search');
+        const searchInput = searchComponent.locator('input[type="search"]');
+        const itemContent = searchComponent.locator('wiki-search-results .item_content').first();
+        await searchUntilResultsVisible(searchInput, itemContent, 'e2edarkmode_unique_xyz');
+        return itemContent.evaluate((el) => getComputedStyle(el).backgroundColor);
+      });
 
       expect(lightBg).not.toBe(darkBg);
       expect(darkBg).toBe('rgb(45, 45, 45)');
@@ -531,33 +334,8 @@ identifier = "${TEST_PAGE_NAME}"
 
   test.describe('dark mode surface-elevated token', () => {
     test('should apply different surface-elevated token values in light and dark mode', async ({ browser }) => {
-      let lightToken = '';
-      let darkToken = '';
-
-      const lightCtx = await browser.newContext({ colorScheme: 'light' });
-      try {
-        const lightPage = await lightCtx.newPage();
-        await lightPage.goto(`/${TEST_PAGE_NAME}/view`);
-        await expect(lightPage.locator('#rendered')).toBeVisible({ timeout: PAGE_LOAD_TIMEOUT_MS });
-        lightToken = await lightPage.evaluate(() =>
-          getComputedStyle(document.documentElement).getPropertyValue('--color-surface-elevated').trim()
-        );
-      } finally {
-        await lightCtx.close();
-      }
-
-      const darkCtx = await browser.newContext({ colorScheme: 'dark' });
-      try {
-        const darkPage = await darkCtx.newPage();
-        await darkPage.goto(`/${TEST_PAGE_NAME}/view`);
-        await expect(darkPage.locator('#rendered')).toBeVisible({ timeout: PAGE_LOAD_TIMEOUT_MS });
-        darkToken = await darkPage.evaluate(() =>
-          getComputedStyle(document.documentElement).getPropertyValue('--color-surface-elevated').trim()
-        );
-      } finally {
-        await darkCtx.close();
-      }
-
+      const lightToken = await withViewPage(browser, 'light', (page) => getCssVar(page, '--color-surface-elevated'));
+      const darkToken = await withViewPage(browser, 'dark', (page) => getCssVar(page, '--color-surface-elevated'));
       expect(darkToken).toBe(DARK_SURFACE_ELEVATED);
       expect(lightToken).not.toBe(darkToken);
     });
