@@ -343,6 +343,7 @@ func (*MockJobStreamServer) SendHeader(metadata.MD) error {
 }
 
 func (*MockJobStreamServer) SetTrailer(metadata.MD) {
+	// No-op test stub — not needed for this test scenario
 }
 
 func (*MockJobStreamServer) SendMsg(any) error {
@@ -355,12 +356,12 @@ func (*MockJobStreamServer) RecvMsg(any) error {
 
 // MockPageWatchStreamServer is a mock implementation of apiv1.PageManagementService_WatchPageServer for testing.
 type MockPageWatchStreamServer struct {
-	SentMessages       []*apiv1.WatchPageResponse
-	SendErr            error
-	SendErrAfterCount  int // if > 0, returns SendErr only after this many successful sends
-	ContextDone        bool
-	ctx                context.Context    // if set, overrides ContextDone behavior
-	cancelFunc         context.CancelFunc // cancels ctx
+	SentMessages      []*apiv1.WatchPageResponse
+	SendErr           error
+	SendErrAfterCount int // if > 0, returns SendErr only after this many successful sends
+	ContextDone       bool
+	ctx               context.Context    // if set, overrides ContextDone behavior
+	cancelFunc        context.CancelFunc // cancels ctx
 }
 
 // newCancellableMockPageWatchStreamServer creates a MockPageWatchStreamServer with a controllable context.
@@ -405,7 +406,9 @@ func (*MockPageWatchStreamServer) SendHeader(metadata.MD) error {
 	return nil
 }
 
-func (*MockPageWatchStreamServer) SetTrailer(metadata.MD) {}
+func (*MockPageWatchStreamServer) SetTrailer(metadata.MD) {
+	// No-op test stub — not needed for this test scenario
+}
 
 func (*MockPageWatchStreamServer) SendMsg(any) error {
 	return nil
@@ -452,6 +455,11 @@ type noOpBleveIndexQueryer struct{}
 
 func (noOpBleveIndexQueryer) Query(string) ([]bleve.SearchResult, error) { return nil, nil }
 
+// noopUnsubscribe is a no-op unsubscribe function returned by mock subscription methods.
+func noopUnsubscribe() {
+	// No-op — intentionally empty test stub.
+}
+
 // noOpChatBufferManager is a minimal mock for tests that don't need chat functionality.
 type noOpChatBufferManager struct{}
 
@@ -473,17 +481,17 @@ func (noOpChatBufferManager) GetMessages(string) []*chatbuffer.Message {
 func (noOpChatBufferManager) SubscribeToPage(string) (<-chan chatbuffer.Event, func()) {
 	ch := make(chan chatbuffer.Event)
 	close(ch)
-	return ch, func() {}
+	return ch, noopUnsubscribe
 }
 func (noOpChatBufferManager) SubscribeToPageWithReplay(string) ([]*chatbuffer.Message, <-chan chatbuffer.Event, func()) {
 	ch := make(chan chatbuffer.Event)
 	close(ch)
-	return nil, ch, func() {}
+	return nil, ch, noopUnsubscribe
 }
 func (noOpChatBufferManager) SubscribeToChannel() (<-chan *chatbuffer.Message, func()) {
 	ch := make(chan *chatbuffer.Message)
 	close(ch)
-	return ch, func() {}
+	return ch, noopUnsubscribe
 }
 func (noOpChatBufferManager) HasChannelSubscribers() bool {
 	return false
@@ -684,7 +692,7 @@ var _ = Describe("Server", func() {
 					"tags":  []any{"test", "ginkgo"},
 				}
 				mockPageReaderMutator.Frontmatter = expectedFm
-				
+
 				var structErr error
 				expectedStruct, structErr = structpb.NewStruct(expectedFm)
 				Expect(structErr).NotTo(HaveOccurred())
@@ -732,7 +740,7 @@ var _ = Describe("Server", func() {
 					"tags":  []any{"test", "ginkgo"},
 				}
 				mockPageReaderMutator.Frontmatter = frontmatterWithIdentifier
-				
+
 				var structErr error
 				expectedStruct, structErr = structpb.NewStruct(expectedFilteredFm)
 				Expect(structErr).NotTo(HaveOccurred())
@@ -767,7 +775,7 @@ var _ = Describe("Server", func() {
 					},
 				}
 				mockPageReaderMutator.Frontmatter = frontmatterWithNestedIdentifier
-				
+
 				// Nested identifier keys should be preserved, only root-level filtered
 				var structErr error
 				expectedStruct, structErr = structpb.NewStruct(frontmatterWithNestedIdentifier)
@@ -787,11 +795,11 @@ var _ = Describe("Server", func() {
 
 	Describe("MergeFrontmatter", func() {
 		var (
-			req                *apiv1.MergeFrontmatterRequest
-			resp               *apiv1.MergeFrontmatterResponse
-			err                error
+			req                   *apiv1.MergeFrontmatterRequest
+			resp                  *apiv1.MergeFrontmatterResponse
+			err                   error
 			mockPageReaderMutator *MockPageReaderMutator
-			pageName           string
+			pageName              string
 		)
 
 		BeforeEach(func() {
@@ -1070,13 +1078,13 @@ var _ = Describe("Server", func() {
 
 	Describe("ReplaceFrontmatter", func() {
 		var (
-			req                *apiv1.ReplaceFrontmatterRequest
-			resp               *apiv1.ReplaceFrontmatterResponse
-			err                error
+			req                   *apiv1.ReplaceFrontmatterRequest
+			resp                  *apiv1.ReplaceFrontmatterResponse
+			err                   error
 			mockPageReaderMutator *MockPageReaderMutator
-			pageName           string
-			newFrontmatter     wikipage.FrontMatter
-			newFrontmatterPb   *structpb.Struct
+			pageName              string
+			newFrontmatter        wikipage.FrontMatter
+			newFrontmatterPb      *structpb.Struct
 		)
 
 		BeforeEach(func() {
@@ -1267,11 +1275,11 @@ var _ = Describe("Server", func() {
 
 	Describe("RemoveKeyAtPath", func() {
 		var (
-			req                *apiv1.RemoveKeyAtPathRequest
-			resp               *apiv1.RemoveKeyAtPathResponse
-			err                error
+			req                   *apiv1.RemoveKeyAtPathRequest
+			resp                  *apiv1.RemoveKeyAtPathResponse
+			err                   error
 			mockPageReaderMutator *MockPageReaderMutator
-			pageName           string
+			pageName              string
 		)
 
 		BeforeEach(func() {
@@ -1346,7 +1354,7 @@ var _ = Describe("Server", func() {
 			})
 		})
 
-				When("removing a key successfully", func() {
+		When("removing a key successfully", func() {
 			var initialFm wikipage.FrontMatter
 			BeforeEach(func() {
 				initialFm = wikipage.FrontMatter{
@@ -1447,7 +1455,6 @@ var _ = Describe("Server", func() {
 					Expect(resp.Frontmatter).To(Equal(expectedPb))
 				})
 			})
-
 
 			When("a nested key within a slice element", func() {
 				var expectedFm wikipage.FrontMatter
@@ -1602,7 +1609,7 @@ var _ = Describe("Server", func() {
 				})
 			})
 
-						When("traversing through a primitive value", func() {
+			When("traversing through a primitive value", func() {
 				BeforeEach(func() {
 					req.KeyPath = []*apiv1.PathComponent{
 						{Component: &apiv1.PathComponent_Key{Key: "a"}},
@@ -1920,9 +1927,9 @@ var _ = Describe("Server", func() {
 
 	Describe("DeletePage", func() {
 		var (
-			req                *apiv1.DeletePageRequest
-			resp               *apiv1.DeletePageResponse
-			err                error
+			req                   *apiv1.DeletePageRequest
+			resp                  *apiv1.DeletePageResponse
+			err                   error
 			mockPageReaderMutator *MockPageReaderMutator
 		)
 
@@ -2065,7 +2072,6 @@ var _ = Describe("Server", func() {
 			})
 		})
 	})
-
 
 	Describe("UpdatePageContent", func() {
 		var (
@@ -3453,8 +3459,8 @@ var _ = Describe("Server", func() {
 				// Frontmatter index stores identifiers in munged format (lowercase snake_case)
 				// Note: "My-Inventory-Item" becomes "my_inventory_item" when munged
 				mockFrontmatterIndexQueryer.KeyExistsResults = []wikipage.PageIdentifier{
-					"my_inventory_item",    // munged version of "My-Inventory-Item"
-					"another_item",         // munged version of "Another-Item"
+					"my_inventory_item", // munged version of "My-Inventory-Item"
+					"another_item",      // munged version of "Another-Item"
 				}
 				req.FrontmatterKeyIncludeFilters = []string{"inventory.container"}
 			})
@@ -3681,14 +3687,14 @@ var _ = Describe("Server", func() {
 				mockBleveIndexQueryer.Results = searchResults
 				// Page has multiple frontmatter fields
 				mockFrontmatterIndexQueryer.GetValueResults["test_page"] = map[string]string{
-					"author":      "John Doe",
-					"category":    "Technology",
-					"tags":        "golang,testing",
-					"draft":       "false",
+					"author":   "John Doe",
+					"category": "Technology",
+					"tags":     "golang,testing",
+					"draft":    "false",
 				}
 				// Request specific frontmatter keys to return
 				req = &apiv1.SearchContentRequest{
-					Query:                             "test",
+					Query:                            "test",
 					FrontmatterKeysToReturnInResults: []string{"author", "category", "missing_key"},
 				}
 			})
@@ -3806,16 +3812,16 @@ var _ = Describe("Server", func() {
 					Expect(resp.Results).To(HaveLen(1))
 					Expect(resp.Results[0].InventoryContext).NotTo(BeNil())
 					Expect(resp.Results[0].InventoryContext.Path).To(HaveLen(3))
-					
+
 					// Path should be: house > garage > toolbox
 					Expect(resp.Results[0].InventoryContext.Path[0].Identifier).To(Equal("house"))
 					Expect(resp.Results[0].InventoryContext.Path[0].Title).To(Equal("My House"))
 					Expect(resp.Results[0].InventoryContext.Path[0].Depth).To(Equal(int32(0)))
-					
+
 					Expect(resp.Results[0].InventoryContext.Path[1].Identifier).To(Equal("garage"))
 					Expect(resp.Results[0].InventoryContext.Path[1].Title).To(Equal("Main Garage"))
 					Expect(resp.Results[0].InventoryContext.Path[1].Depth).To(Equal(int32(1)))
-					
+
 					Expect(resp.Results[0].InventoryContext.Path[2].Identifier).To(Equal("toolbox"))
 					Expect(resp.Results[0].InventoryContext.Path[2].Title).To(Equal("My Toolbox"))
 					Expect(resp.Results[0].InventoryContext.Path[2].Depth).To(Equal(int32(2)))
@@ -3841,10 +3847,10 @@ var _ = Describe("Server", func() {
 					Expect(resp.Results).To(HaveLen(1))
 					Expect(resp.Results[0].InventoryContext).NotTo(BeNil())
 					Expect(resp.Results[0].InventoryContext.Path).To(HaveLen(2))
-					
+
 					Expect(resp.Results[0].InventoryContext.Path[0].Identifier).To(Equal("garage"))
 					Expect(resp.Results[0].InventoryContext.Path[0].Title).To(Equal("Main Garage"))
-					
+
 					Expect(resp.Results[0].InventoryContext.Path[1].Identifier).To(Equal("toolbox"))
 					Expect(resp.Results[0].InventoryContext.Path[1].Title).To(Equal(""))
 				})
@@ -3875,7 +3881,7 @@ var _ = Describe("Server", func() {
 					Expect(resp).NotTo(BeNil())
 					Expect(resp.Results).To(HaveLen(1))
 					Expect(resp.Results[0].InventoryContext).NotTo(BeNil())
-					
+
 					// Should have stopped when it detected the circular reference
 					// Path built from immediate container to root, so order is: container_c, container_b, container_a
 					Expect(resp.Results[0].InventoryContext.Path).To(HaveLen(3))
@@ -3910,10 +3916,10 @@ var _ = Describe("Server", func() {
 					Expect(resp).NotTo(BeNil())
 					Expect(resp.Results).To(HaveLen(1))
 					Expect(resp.Results[0].InventoryContext).NotTo(BeNil())
-					
+
 					// Should have stopped at maxDepth (20)
 					Expect(resp.Results[0].InventoryContext.Path).To(HaveLen(20))
-					
+
 					// Verify depth values are correct (0 to 19)
 					for i := range 20 {
 						Expect(resp.Results[0].InventoryContext.Path[i].Depth).To(Equal(int32(i)))
@@ -3958,12 +3964,12 @@ var _ = Describe("Server", func() {
 
 	Describe("ReadPage", func() {
 		var (
-			req                      *apiv1.ReadPageRequest
-			resp                     *apiv1.ReadPageResponse
-			err                      error
-			mockPageReaderMutator    *MockPageReaderMutator
-			mockMarkdownRenderer     *MockMarkdownRenderer
-			mockTemplateExecutor     *MockTemplateExecutor
+			req                         *apiv1.ReadPageRequest
+			resp                        *apiv1.ReadPageResponse
+			err                         error
+			mockPageReaderMutator       *MockPageReaderMutator
+			mockMarkdownRenderer        *MockMarkdownRenderer
+			mockTemplateExecutor        *MockTemplateExecutor
 			mockFrontmatterIndexQueryer *MockFrontmatterIndexQueryer
 		)
 
@@ -5724,10 +5730,10 @@ var _ = Describe("Checklist gRPC round-trip", func() {
 
 		When("performing a read-modify-write to update one of multiple checklists", func() {
 			var (
-				finalChecklists  map[string]any
-				shoppingItems    []any
-				tasksItems       []any
-				firstTaskItem    map[string]any
+				finalChecklists map[string]any
+				shoppingItems   []any
+				tasksItems      []any
+				firstTaskItem   map[string]any
 			)
 
 			BeforeEach(func() {
@@ -6483,7 +6489,9 @@ func (m *MockJobQueueCoordinator) AsCoordinator() *jobs.JobQueueCoordinator {
 // noOpDispatcher is a dispatcher that does nothing for testing purposes.
 type noOpDispatcher struct{}
 
-func (*noOpDispatcher) Start() {}
+func (*noOpDispatcher) Start() {
+	// No-op test stub — not needed for this test scenario
+}
 
 func (*noOpDispatcher) Dispatch(_ func()) error {
 	return nil
@@ -6729,7 +6737,7 @@ func (m *callbackObservingMutator) isReportWritten() bool {
 
 var _ = Describe("makeReportJobCallback execution", func() {
 	var (
-		ctx             context.Context
+		ctx              context.Context
 		observingMutator *callbackObservingMutator
 	)
 
@@ -6815,4 +6823,3 @@ var _ = Describe("makeReportJobCallback", func() {
 		})
 	})
 })
-

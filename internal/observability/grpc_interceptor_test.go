@@ -19,12 +19,25 @@ type mockGRPCCounter struct {
 	grpcErrors   int
 }
 
-func (*mockGRPCCounter) RecordHTTPRequest()                                          {}
-func (*mockGRPCCounter) RecordHTTPError()                                            {}
-func (m *mockGRPCCounter) RecordGRPCRequest()                                        { m.grpcRequests++ }
-func (m *mockGRPCCounter) RecordGRPCError()                                          { m.grpcErrors++ }
-func (*mockGRPCCounter) RecordTailscaleLookup(_ observability.IdentityLookupResult)  {}
-func (*mockGRPCCounter) RecordHeaderExtraction()                                     {}
+func (*mockGRPCCounter) RecordHTTPRequest() {
+	// No-op test stub — not needed for this test scenario
+}
+
+func (*mockGRPCCounter) RecordHTTPError() {
+	// No-op test stub — not needed for this test scenario
+}
+
+func (m *mockGRPCCounter) RecordGRPCRequest() { m.grpcRequests++ }
+
+func (m *mockGRPCCounter) RecordGRPCError() { m.grpcErrors++ }
+
+func (*mockGRPCCounter) RecordTailscaleLookup(_ observability.IdentityLookupResult) {
+	// No-op test stub — not needed for this test scenario
+}
+
+func (*mockGRPCCounter) RecordHeaderExtraction() {
+	// No-op test stub — not needed for this test scenario
+}
 
 // mockServerStream implements grpc.ServerStream for testing.
 type mockServerStream struct {
