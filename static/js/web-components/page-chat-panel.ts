@@ -440,7 +440,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     if (this.claudeStarting) {
       return html`<div class="status-banner reconnecting">Starting assistant...</div>`;
     }
-    if (!this.poolConnected && !this.claudeConnected) {
+    if (!this._chatAvailable) {
       const disconnectedText = this.persona ? this.persona + ' is not connected' : 'Not connected';
       return html`<div class="status-banner disconnected">${disconnectedText}</div>`;
     }
