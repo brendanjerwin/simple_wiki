@@ -35,13 +35,19 @@ test.describe('confirmation-interlock-button', () => {
     // Inject the component into the DOM for isolated testing
     await page.evaluate(() => {
       const el = document.createElement('confirmation-interlock-button') as HTMLElement & {
+        label: string;
+        confirmLabel: string;
+        yesLabel: string;
+        noLabel: string;
         disarmTimeoutMs: number;
       };
       el.id = 'e2e-test-cib';
-      el.setAttribute('label', 'Delete');
-      el.setAttribute('confirmLabel', 'Are you sure?');
-      el.setAttribute('yesLabel', 'Yes');
-      el.setAttribute('noLabel', 'No');
+      // Set properties directly (not via setAttribute) so Lit's camelCase property names
+      // are used instead of the lowercased attribute names that the browser would produce.
+      el.label = 'Delete';
+      el.confirmLabel = 'Are you sure?';
+      el.yesLabel = 'Yes';
+      el.noLabel = 'No';
       // Disable auto-disarm so popup stays open for testing
       el.disarmTimeoutMs = 0;
       el.style.position = 'fixed';
@@ -198,8 +204,11 @@ test.describe('confirmation-interlock-button', () => {
       await page.evaluate(({ timeoutMs }: { timeoutMs: number }) => {
         const target = document.getElementById('e2e-test-cib');
         (window as E2EWindow).__e2eCancelledPromise = new Promise<boolean>((resolve) => {
-          target?.addEventListener('cancelled', () => resolve(true), { once: true });
-          setTimeout(() => resolve(false), timeoutMs);
+          const timeoutId = setTimeout(() => resolve(false), timeoutMs);
+          target?.addEventListener('cancelled', () => {
+            clearTimeout(timeoutId);
+            resolve(true);
+          }, { once: true });
         });
       }, { timeoutMs: EVENT_TIMEOUT_MS });
 
@@ -223,8 +232,11 @@ test.describe('confirmation-interlock-button', () => {
       await page.evaluate(({ timeoutMs }: { timeoutMs: number }) => {
         const target = document.getElementById('e2e-test-cib');
         (window as E2EWindow).__e2eConfirmedPromise = new Promise<boolean>((resolve) => {
-          target?.addEventListener('confirmed', () => resolve(true), { once: true });
-          setTimeout(() => resolve(false), timeoutMs);
+          const timeoutId = setTimeout(() => resolve(false), timeoutMs);
+          target?.addEventListener('confirmed', () => {
+            clearTimeout(timeoutId);
+            resolve(true);
+          }, { once: true });
         });
       }, { timeoutMs: EVENT_TIMEOUT_MS });
 
@@ -248,8 +260,11 @@ test.describe('confirmation-interlock-button', () => {
       await page.evaluate(({ timeoutMs }: { timeoutMs: number }) => {
         const target = document.getElementById('e2e-test-cib');
         (window as E2EWindow).__e2eCancelledPromise = new Promise<boolean>((resolve) => {
-          target?.addEventListener('cancelled', () => resolve(true), { once: true });
-          setTimeout(() => resolve(false), timeoutMs);
+          const timeoutId = setTimeout(() => resolve(false), timeoutMs);
+          target?.addEventListener('cancelled', () => {
+            clearTimeout(timeoutId);
+            resolve(true);
+          }, { once: true });
         });
       }, { timeoutMs: EVENT_TIMEOUT_MS });
 
@@ -276,8 +291,12 @@ test.describe('confirmation-interlock-button', () => {
     });
 
     test('should close the popup when the backdrop is clicked', async ({ page }) => {
-      // Dispatch pointerdown on the backdrop directly — the component uses @pointerdown for dismissal
-      await page.locator('#e2e-test-cib .confirm-backdrop').dispatchEvent('pointerdown');
+      // Dispatch pointerdown on the backdrop — the component uses @pointerdown for dismissal.
+      // Use bubbles+composed to match real pointer interaction behaviour.
+      await page.locator('#e2e-test-cib .confirm-backdrop').dispatchEvent('pointerdown', {
+        bubbles: true,
+        composed: true,
+      });
       await expect(page.locator('#e2e-test-cib .confirm-popup')).not.toBeAttached({
         timeout: POPUP_APPEAR_TIMEOUT_MS,
       });
@@ -289,21 +308,21 @@ test.describe('confirmation-interlock-button', () => {
       // Make the popup div focusable and focus it to exercise the non-button Enter path.
       // The popup keydown handler intercepts Enter only when e.target is not a button;
       // buttons handle Enter natively via their click event.
-      await page.evaluate(() => {
-        const el = document.getElementById('e2e-test-cib');
-        const popup = el?.shadowRoot?.querySelector<HTMLElement>('.confirm-popup');
-        if (popup) {
-          popup.tabIndex = -1;
-          popup.focus();
-        }
+      const popup = page.locator('#e2e-test-cib .confirm-popup');
+      await popup.evaluate((element) => {
+        element.tabIndex = -1;
       });
+      await popup.focus();
 
       // Register listener before pressing Enter to ensure deterministic attachment
       await page.evaluate(({ timeoutMs }: { timeoutMs: number }) => {
         const target = document.getElementById('e2e-test-cib');
         (window as E2EWindow).__e2eConfirmedPromise = new Promise<boolean>((resolve) => {
-          target?.addEventListener('confirmed', () => resolve(true), { once: true });
-          setTimeout(() => resolve(false), timeoutMs);
+          const timeoutId = setTimeout(() => resolve(false), timeoutMs);
+          target?.addEventListener('confirmed', () => {
+            clearTimeout(timeoutId);
+            resolve(true);
+          }, { once: true });
         });
       }, { timeoutMs: EVENT_TIMEOUT_MS });
 
@@ -326,11 +345,14 @@ test.describe('confirmation-interlock-button', () => {
         timeout: POPUP_APPEAR_TIMEOUT_MS,
       });
 
-      // After arming, the Yes button should receive focus
-      const yesFocused = await page.locator('#e2e-test-cib .button-yes').evaluate(
-        el => (el.getRootNode() as ShadowRoot).activeElement === el
-      );
-      expect(yesFocused).toBe(true);
+      // After arming, the Yes button should receive focus.
+      // Focus is applied inside updateComplete.then(), so poll until it lands.
+      await expect.poll(
+        () => page.locator('#e2e-test-cib .button-yes').evaluate(
+          el => (el.getRootNode() as ShadowRoot).activeElement === el
+        ),
+        { timeout: POPUP_APPEAR_TIMEOUT_MS },
+      ).toBe(true);
     });
 
     test('should return focus to the trigger button when disarmed via No button', async ({
@@ -349,10 +371,13 @@ test.describe('confirmation-interlock-button', () => {
         timeout: POPUP_APPEAR_TIMEOUT_MS,
       });
 
-      const triggerFocused = await page.locator('#e2e-test-cib .button-trigger').evaluate(
-        el => (el.getRootNode() as ShadowRoot).activeElement === el
-      );
-      expect(triggerFocused).toBe(true);
+      // Focus returns inside updateComplete.then(), so poll until it lands.
+      await expect.poll(
+        () => page.locator('#e2e-test-cib .button-trigger').evaluate(
+          el => (el.getRootNode() as ShadowRoot).activeElement === el
+        ),
+        { timeout: POPUP_APPEAR_TIMEOUT_MS },
+      ).toBe(true);
     });
 
     test('should return focus to the trigger button when disarmed via Escape', async ({
@@ -371,10 +396,13 @@ test.describe('confirmation-interlock-button', () => {
         timeout: POPUP_APPEAR_TIMEOUT_MS,
       });
 
-      const triggerFocused = await page.locator('#e2e-test-cib .button-trigger').evaluate(
-        el => (el.getRootNode() as ShadowRoot).activeElement === el
-      );
-      expect(triggerFocused).toBe(true);
+      // Focus returns inside updateComplete.then(), so poll until it lands.
+      await expect.poll(
+        () => page.locator('#e2e-test-cib .button-trigger').evaluate(
+          el => (el.getRootNode() as ShadowRoot).activeElement === el
+        ),
+        { timeout: POPUP_APPEAR_TIMEOUT_MS },
+      ).toBe(true);
     });
   });
 
@@ -404,11 +432,14 @@ test.describe('confirmation-interlock-button', () => {
     test('should wrap Shift+Tab from the first focusable element back to the last (No button)', async ({
       page,
     }) => {
-      // The Yes button should already be focused after arming (from beforeEach)
-      const yesFocusedInitially = await page.locator('#e2e-test-cib .button-yes').evaluate(
-        el => (el.getRootNode() as ShadowRoot).activeElement === el
-      );
-      expect(yesFocusedInitially).toBe(true);
+      // The Yes button should already be focused after arming (from beforeEach).
+      // Focus is applied inside updateComplete.then(), so poll until it lands.
+      await expect.poll(
+        () => page.locator('#e2e-test-cib .button-yes').evaluate(
+          el => (el.getRootNode() as ShadowRoot).activeElement === el
+        ),
+        { timeout: POPUP_APPEAR_TIMEOUT_MS },
+      ).toBe(true);
 
       // Press Shift+Tab — the focus trap should wrap to the No button
       await page.keyboard.press('Shift+Tab');
