@@ -134,6 +134,13 @@
     --shadow-subtle: 0 1px 3px rgba(0, 0, 0, 0.4);
     --shadow-medium: 0 4px 12px rgba(0, 0, 0, 0.5);
   }
+
+  /* Override PureCSS hardcoded #eee hover — keeps text readable in dark mode */
+  .pure-menu-active > .pure-menu-link,
+  .pure-menu-link:focus,
+  .pure-menu-link:hover {
+    background-color: var(--color-action-secondary-hover-bg) !important;
+  }
 }
 
 body.ListPage span {
