@@ -456,7 +456,9 @@ type noOpBleveIndexQueryer struct{}
 func (noOpBleveIndexQueryer) Query(string) ([]bleve.SearchResult, error) { return nil, nil }
 
 // noopUnsubscribe is a no-op unsubscribe function returned by mock subscription methods.
-func noopUnsubscribe() {}
+func noopUnsubscribe() {
+	// No-op — intentionally empty test stub.
+}
 
 // noOpChatBufferManager is a minimal mock for tests that don't need chat functionality.
 type noOpChatBufferManager struct{}

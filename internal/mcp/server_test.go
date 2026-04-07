@@ -76,7 +76,9 @@ func (noOpFrontmatterIndexQueryer) QueryExactMatchSortedBy(wikipage.DottedKeyPat
 type noOpChatBufferManager struct{}
 
 // noopUnsubscribe is a no-op unsubscribe function returned by mock subscription methods.
-func noopUnsubscribe() {}
+func noopUnsubscribe() {
+	// No-op — intentionally empty test stub.
+}
 
 func (noOpChatBufferManager) AddUserMessage(string, string, string) (string, error) {
 	return "", nil
