@@ -550,7 +550,7 @@ export class QrScanner extends LitElement {
     }
 
     if (details.length > 0) {
-      return `Unknown error: ${objectTag} ${details.join(' ')}`;
+      return `Unknown error: ${objectTag} (${details.join(', ')})`;
     }
     return `Unknown error: ${objectTag}`;
   }

@@ -493,7 +493,7 @@ describe('QrScanner', () => {
         await el.updateComplete;
       });
 
-      it('should show unknown error message with object type tag', () => {
+      it('should show unknown error message with object type tag only (no serialized properties)', () => {
         const errorDisplay = el.shadowRoot?.querySelector<ErrorDisplay>('error-display');
         expect(errorDisplay).to.exist;
         expect(errorDisplay?.augmentedError).to.be.instanceOf(AugmentedError);
