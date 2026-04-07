@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -23,11 +24,26 @@ const (
 	defaultIdleTimeoutMinutes  = 30
 )
 
+// commandStarter starts and waits on commands. *exec.Cmd satisfies this interface.
+type commandStarter interface {
+	Start() error
+	Wait() error
+}
+
+// commandBuilder creates a command for the given arguments. Injected for testing.
+// In production this is exec.CommandContext.
+type commandBuilder func(ctx context.Context, name string, arg ...string) commandStarter
+
+// execCommandBuilder is the production commandBuilder wrapping exec.CommandContext.
+func execCommandBuilder(ctx context.Context, name string, arg ...string) commandStarter {
+	return exec.CommandContext(ctx, name, arg...)
+}
+
 // instanceEntry tracks a running Claude Code instance for a page.
 type instanceEntry struct {
 	page       string
 	unitName   string
-	cmd        *exec.Cmd
+	cmd        commandStarter
 	cancel     context.CancelFunc
 	lastActive time.Time
 	mu         sync.Mutex
@@ -49,10 +65,12 @@ func (e *instanceEntry) idleSince() time.Duration {
 type poolDaemon struct {
 	wikiURL      string
 	claudePath   string
+	useSystemd   bool
 	maxInstances int
 	idleTimeout  time.Duration
-	useSystemd   bool
+	newCommand   commandBuilder
 
+	ctx       context.Context
 	instances map[string]*instanceEntry
 	mu        sync.Mutex
 }
@@ -127,9 +145,10 @@ The daemon should be run in a directory containing your Claude agent configurati
 			d := &poolDaemon{
 				wikiURL:      normalizedURL,
 				claudePath:   c.String("claude-path"),
+				useSystemd:   useSystemd,
 				maxInstances: c.Int("max-instances"),
 				idleTimeout:  c.Duration("idle-timeout"),
-				useSystemd:   useSystemd,
+				newCommand:   execCommandBuilder,
 				instances:    make(map[string]*instanceEntry),
 			}
 
@@ -140,6 +159,7 @@ The daemon should be run in a directory containing your Claude agent configurati
 
 // run starts the pool daemon's main loop.
 func (d *poolDaemon) run(ctx context.Context) error {
+	d.ctx = ctx
 	log.Printf("Pool daemon starting (max=%d, idle-timeout=%s, wiki=%s)", d.maxInstances, d.idleTimeout, d.wikiURL)
 
 	// Start the idle reaper
@@ -224,16 +244,17 @@ func (d *poolDaemon) ensureInstance(page string) {
 		return
 	}
 
-	// At capacity? Evict least recently active.
-	if len(d.instances) >= d.maxInstances {
-		d.evictLeastActive()
-	}
-
-	// Spawn new instance
+	// Spawn new instance first, then evict if needed — avoids dropping a working
+	// instance when the spawn fails.
 	entry, err := d.spawnInstance(page)
 	if err != nil {
 		log.Printf("Failed to spawn instance for %q: %v", page, err)
 		return
+	}
+
+	// At capacity? Evict least recently active to make room.
+	if len(d.instances) >= d.maxInstances {
+		d.evictLeastActive()
 	}
 
 	d.instances[page] = entry
@@ -260,53 +281,75 @@ func (d *poolDaemon) evictLeastActive() {
 	}
 }
 
+// buildMCPServerArg builds the --mcp-server flag value for a page-scoped wiki-cli MCP instance.
+func buildMCPServerArg(wikiCLIBin, wikiURL, page string) string {
+	return fmt.Sprintf("%s mcp --url %s --page %s", wikiCLIBin, wikiURL, page)
+}
+
+// buildDirectClaudeArgs builds the argument list for spawning Claude directly.
+// Returns (binary, args, unitName="").
+func buildDirectClaudeArgs(claudePath, mcpServerCmd string) (string, []string, string) {
+	return claudePath, []string{
+		"--channels", "wiki-channel:wiki-channel",
+		"--mcp-server", mcpServerCmd,
+	}, ""
+}
+
+// buildSystemdClaudeArgs builds the argument list for spawning Claude via systemd-run.
+// Returns (binary, args, unitName).
+func buildSystemdClaudeArgs(claudePath, mcpServerCmd, page string) (string, []string, string) {
+	unitName := "wiki-chat-" + sanitizeUnitName(page)
+	return "systemd-run", []string{
+		"--user",
+		"--unit=" + unitName,
+		"--scope",
+		claudePath,
+		"--channels", "wiki-channel:wiki-channel",
+		"--mcp-server", mcpServerCmd,
+	}, unitName
+}
+
 // spawnInstance starts a Claude Code process for a page.
 // Must be called with d.mu held.
 func (d *poolDaemon) spawnInstance(page string) (*instanceEntry, error) {
-	ctx, cancel := context.WithCancel(context.Background())
+	if d.ctx == nil {
+		return nil, errors.New("pool daemon context not initialized")
+	}
+	ctx, cancel := context.WithCancel(d.ctx)
 
-	// Build wiki-cli mcp command for the --mcp-server flag
 	wikiCLIBin, err := os.Executable()
 	if err != nil {
 		cancel()
 		return nil, fmt.Errorf("failed to find wiki-cli binary: %w", err)
 	}
 
-	mcpServerCmd := fmt.Sprintf("%s mcp --url %s --page %s", wikiCLIBin, d.wikiURL, page)
-
-	entry := &instanceEntry{
-		page:       page,
-		lastActive: time.Now(),
-		cancel:     cancel,
-	}
-
+	mcpServerCmd := buildMCPServerArg(wikiCLIBin, d.wikiURL, page)
+	var binary string
+	var args []string
+	var unitName string
 	if d.useSystemd {
-		entry.unitName = "wiki-chat-" + sanitizeUnitName(page)
-		entry.cmd = exec.CommandContext(ctx, "systemd-run",
-			"--unit="+entry.unitName,
-			"--scope",
-			d.claudePath,
-			"--channels", "wiki-channel:wiki-channel",
-			"--mcp-server", mcpServerCmd,
-		)
+		binary, args, unitName = buildSystemdClaudeArgs(d.claudePath, mcpServerCmd, page)
 	} else {
-		entry.cmd = exec.CommandContext(ctx, d.claudePath,
-			"--channels", "wiki-channel:wiki-channel",
-			"--mcp-server", mcpServerCmd,
-		)
-		// In non-systemd mode, prefix stdout/stderr with page name
-		entry.cmd.Stdout = newPrefixWriter(os.Stdout, page)
-		entry.cmd.Stderr = newPrefixWriter(os.Stderr, page)
+		binary, args, unitName = buildDirectClaudeArgs(d.claudePath, mcpServerCmd)
 	}
 
-	if err := entry.cmd.Start(); err != nil {
+	cmd := d.newCommand(ctx, binary, args...)
+	if err := cmd.Start(); err != nil {
 		cancel()
 		return nil, fmt.Errorf("failed to start claude for page %q: %w", page, err)
 	}
 
+	entry := &instanceEntry{
+		page:       page,
+		unitName:   unitName,
+		cmd:        cmd,
+		lastActive: time.Now(),
+		cancel:     cancel,
+	}
+
 	// Monitor process exit in background
 	go func() {
-		waitErr := entry.cmd.Wait()
+		waitErr := cmd.Wait()
 		if waitErr != nil {
 			log.Printf("Claude instance for %q exited: %v", page, waitErr)
 		} else {
@@ -314,7 +357,6 @@ func (d *poolDaemon) spawnInstance(page string) (*instanceEntry, error) {
 		}
 
 		d.mu.Lock()
-		// Only remove if this is still the same entry (not replaced by a new spawn)
 		if current, ok := d.instances[page]; ok && current == entry {
 			delete(d.instances, page)
 		}
@@ -332,6 +374,24 @@ func (d *poolDaemon) stopInstanceLocked(page string) {
 	}
 
 	entry.cancel()
+
+	if entry.unitName != "" {
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		stopCmd := d.newCommand(stopCtx, "systemctl", "--user", "stop", entry.unitName+".scope")
+		if err := stopCmd.Start(); err != nil {
+			log.Printf("Failed to start systemctl stop for %q: %v", entry.unitName, err)
+			stopCancel()
+		} else {
+			// Wait in background so we don't block while holding d.mu
+			go func() {
+				defer stopCancel()
+				if err := stopCmd.Wait(); err != nil {
+					log.Printf("Failed to stop systemd unit %q: %v", entry.unitName, err)
+				}
+			}()
+		}
+	}
+
 	delete(d.instances, page)
 }
 
@@ -386,27 +446,18 @@ func (pw *prefixWriter) Write(p []byte) (int, error) {
 	pw.buf = append(pw.buf, p...)
 
 	for {
-		idx := indexOf(pw.buf, '\n')
+		idx := bytes.IndexByte(pw.buf, '\n')
 		if idx < 0 {
 			break
 		}
 
 		line := pw.buf[:idx+1]
 		if _, err := fmt.Fprint(pw.w, pw.prefix+string(line)); err != nil {
-			return len(p), err
+			return 0, err
 		}
 		pw.buf = pw.buf[idx+1:]
 	}
 
 	return len(p), nil
-}
-
-func indexOf(b []byte, c byte) int {
-	for i, v := range b {
-		if v == c {
-			return i
-		}
-	}
-	return -1
 }
 

@@ -636,7 +636,7 @@ func (m *Manager) HasInstanceRequestSubscribers() bool {
 }
 
 // IsInstanceRequested returns true if a Claude instance has been requested for the given page
-// but has not yet connected (no page channel subscriber exists).
+// within the last 2 minutes and has not yet connected (no page channel subscriber exists).
 func (m *Manager) IsInstanceRequested(page string) bool {
 	if m.HasPageChannelSubscriber(page) {
 		return false
@@ -644,6 +644,6 @@ func (m *Manager) IsInstanceRequested(page string) bool {
 
 	m.instanceMu.RLock()
 	defer m.instanceMu.RUnlock()
-	_, ok := m.instanceRequests[page]
-	return ok
+	ts, ok := m.instanceRequests[page]
+	return ok && time.Since(ts) < 2*time.Minute
 }
