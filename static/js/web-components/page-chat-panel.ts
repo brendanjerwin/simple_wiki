@@ -14,7 +14,7 @@ import {
   type Reaction,
 } from '../gen/api/v1/chat_pb.js';
 import { ChatMarkdownRenderer } from './chat-markdown-renderer.js';
-import { sharedStyles, colorCSS, typographyCSS, zIndexCSS } from './shared-styles.js';
+import { sharedStyles, colorCSS, typographyCSS, zIndexCSS, forceDarkTokensCSS } from './shared-styles.js';
 import { DrawerMixin } from './drawer-mixin.js';
 import { registerAmbientCTA, type AmbientCTA } from './drawer-coordinator.js';
 import type { ReactionGroup, ScrollToMessageEventDetail } from './chat-message-bubble.js';
@@ -53,6 +53,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     colorCSS,
     typographyCSS,
     zIndexCSS,
+    forceDarkTokensCSS,
     css`
       :host {
         display: block;
@@ -96,10 +97,6 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
         width: 350px;
         background: var(--color-editor-surface);
         border-left: 1px solid var(--color-editor-border);
-        /* Force dark-mode text tokens within the always-dark panel */
-        color: var(--color-editor-text);
-        --color-text-primary: var(--color-editor-text);
-        --color-text-muted: color-mix(in srgb, var(--color-editor-text) 60%, transparent);
         display: flex;
         flex-direction: column;
         z-index: var(--z-drawer);
@@ -466,7 +463,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
       ${sharedStyles}
       ${this._renderFab()}
 
-      <div class="panel ${this.drawerOpen ? 'open' : ''}" ?inert=${!this.drawerOpen}>
+      <div class="panel force-dark ${this.drawerOpen ? 'open' : ''}" ?inert=${!this.drawerOpen}>
         <div class="panel-header">
           <span class="panel-title">${this.persona}</span>
           <button class="close-button" @click=${this.closeDrawer} aria-label="Close chat">
@@ -540,6 +537,7 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
 
   override openDrawer(): void {
     super.openDrawer();
+    this.resizePanel();
     try { localStorage.setItem(STORAGE_KEY, 'true'); } catch { /* */ }
     if (!this._panelEverOpened) {
       this._panelEverOpened = true;
@@ -692,17 +690,20 @@ export class PageChatPanel extends DrawerMixin(LitElement) implements AmbientCTA
     this.statusPollTimer = setInterval(() => this.pollChatStatus(), desiredIntervalMs);
   }
 
-  private handleViewportResize(): void {
-    const viewport = window.visualViewport;
-    if (!viewport) return;
-
-    // On mobile, when the keyboard opens, visualViewport.height shrinks but
-    // CSS 100dvh may not update immediately. Force the panel height to match
-    // the actual visual viewport so it doesn't extend behind the keyboard.
+  private resizePanel(): void {
     const panel = this.shadowRoot?.querySelector<HTMLElement>('.panel');
-    if (panel) {
+    if (!panel) return;
+
+    const viewport = window.visualViewport;
+    if (viewport) {
       panel.style.height = `${viewport.height}px`;
+      panel.style.top = `${viewport.offsetTop}px`;
     }
+  }
+
+  private handleViewportResize(): void {
+    if (!window.visualViewport) return;
+    this.resizePanel();
   }
 
   private handleVisibilityChange(): void {
